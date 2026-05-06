@@ -18,6 +18,7 @@ use graphshell_core::pane::PaneId;
 use graphshell_core::persistence::GraphSnapshot;
 use serde::{Deserialize, Serialize};
 
+pub mod composition;
 pub mod graph_runtime;
 pub mod intent_system;
 pub mod workspace_routing;
