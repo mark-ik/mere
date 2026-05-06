@@ -1,0 +1,34 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+//! `graph-canvas` — framework-agnostic graph-view canvas for Graphshell.
+//!
+//! Owns scene derivation, camera and projection rules, interaction and hit
+//! testing, LOD and culling policy, render-packet derivation, and backend
+//! selection. Emits typed packets and actions rather than rendering directly
+//! or mutating application state.
+//!
+//! Sibling crates:
+//! - `graphshell-core` — portable graph data model (graph truth)
+//! - `graph-tree` — framework-agnostic workbench/navigator tree and layout
+
+pub mod backend;
+pub mod camera;
+pub mod derive;
+pub mod engine;
+pub mod hit_test;
+pub mod input;
+pub mod interaction;
+pub mod layout;
+pub mod lod;
+pub mod navigation;
+pub mod node_style;
+pub mod packet;
+pub mod physics_config;
+pub mod projection;
+pub mod scene;
+pub mod scene_composition;
+pub mod scene_physics;
+pub mod scene_region;
+pub mod scripting;

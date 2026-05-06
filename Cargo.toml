@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mere/mere",
+    "crates/mere/mere-identity",
+    "crates/mere/mere-transport",
+    "crates/graph/graph-canvas",
+    "crates/graph/graph-memory",
+    "crates/graph/graph-tree",
+    "crates/registry/register-diagnostics",
+    "crates/shell/graphshell-core",
+    "crates/shell/graphshell-runtime",
+    "crates/graphshell",
+    "crates/verso-tile",
+    "crates/inker",
+    "crates/platen",
+    "crates/nematic",
+    "crates/murm/murm",
+    "crates/murm/murmuring",
+    "crates/moothold/moothold",
+    "crates/moothold/mooting",
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+# repository = "https://github.com/<your-org>/mere"  # set before publishing
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+
+[workspace.lints.clippy]
+all = "warn"

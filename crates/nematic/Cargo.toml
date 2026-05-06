@@ -1,0 +1,11 @@
+[package]
+name = "nematic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Portable smolweb engine for the Mere browser — Gemini, Gopher, static HTML, Markdown, RSS/Atom."
+keywords = ["smolweb", "gemini", "gopher", "rendering", "engine"]
+categories = ["web-programming", "rendering"]
+
+[lib]
+path = "src/lib.rs"

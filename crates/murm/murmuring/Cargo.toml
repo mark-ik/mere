@@ -1,0 +1,29 @@
+[package]
+name = "murmuring"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Protocol core for bilateral chat-protocol selection — inner layer of murm for the Mere browser."
+keywords = ["protocol", "p2p", "messaging", "chat"]
+categories = ["network-programming"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Path + version: path for local workspace builds; version for `cargo publish`.
+mere-identity = { path = "../../mere/mere-identity", version = "0.0.1" }
+# `blake2` is the standard digest-trait crate; we use it for `hash_cabal_id`
+# (plain BLAKE2b-256). `blake2b_simd` is added because the standard `blake2`
+# crate doesn't expose unkeyed-with-salt-personal construction directly,
+# and Cable's post-hash spec requires those parameters.
+blake2 = "0.10"
+blake2b_simd = "1"
+# Persistent cabal store. We store posts as their canonical wire bytes
+# (no separate serde format), so redb is sufficient — no rkyv needed at
+# this layer.
+redb = "2"
+thiserror = "1"
+
+[dev-dependencies]
+tempfile = "3"

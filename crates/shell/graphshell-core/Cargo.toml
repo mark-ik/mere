@@ -1,0 +1,37 @@
+[package]
+name = "graphshell-core"
+version = "0.0.1"
+authors = ["@mark-ik"]
+license = "MPL-2.0"
+edition = "2024"
+publish = false
+rust-version = "1.92.0"
+description = "Portable identity, authority, and mutation kernel for Graphshell"
+
+[features]
+test-utils = []
+
+[dependencies]
+graph-canvas = { path = "../../graph/graph-canvas" }
+graph-memory = { path = "../../graph/graph-memory" }
+graph-tree = { path = "../../graph/graph-tree" }
+crossbeam-channel = "0.5"
+futures-util = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+rkyv = { version = "0.8", features = ["std"] }
+time = { version = "0.3", features = ["formatting"] }
+url = "2.5"
+mime_guess = "2.0"
+infer = "0.19"
+petgraph = { version = "0.8.3", features = ["serde-1"] }
+uuid = { version = "1", features = ["serde"] }
+euclid = "0.22"
+serde_json = "1.0"
+accesskit = { version = "0.24.0", features = ["serde"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+uuid = { version = "1", features = ["serde", "v4"] }
+
+[dev-dependencies]
+futures-util = { version = "0.3", features = ["std"] }
+tempfile = "3"

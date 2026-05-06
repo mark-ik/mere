@@ -1,0 +1,11 @@
+[package]
+name = "inker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Modular engine/renderer controller for the Mere browser — selects and orchestrates content engines."
+keywords = ["engine", "renderer", "controller", "browser", "modular"]
+categories = ["web-programming"]
+
+[lib]
+path = "src/lib.rs"

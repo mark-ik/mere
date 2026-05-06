@@ -1,0 +1,11 @@
+[package]
+name = "mere"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A spatial browser for the web — knowledge as a graph, browsing as etching."
+keywords = ["browser", "graph", "spatial", "knowledge", "navigator"]
+categories = ["gui", "web-programming"]
+
+[lib]
+path = "src/lib.rs"

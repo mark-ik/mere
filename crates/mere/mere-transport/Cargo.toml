@@ -1,0 +1,29 @@
+[package]
+name = "mere-transport"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Peer transport layer for the Mere browser — iroh-based authenticated encrypted QUIC streams between known peers."
+keywords = ["transport", "iroh", "p2p", "quic", "browser"]
+categories = ["network-programming"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Path + version: path is used during local workspace builds; version is
+# required for `cargo publish` to record the crates.io dependency.
+mere-identity = { path = "../mere-identity", version = "0.0.1" }
+tokio = { version = "1", features = ["io-util", "sync", "rt", "macros"] }
+thiserror = "1"
+# iroh 0.98 wraps quinn QUIC; ed25519-dalek =3.0.0-pre.6 internally.
+# We cross the dalek-version boundary via raw 32-byte seeds so mere-identity
+# (on dalek 2.x) does not need to track iroh's pre-release dalek dep.
+iroh = "0.98"
+iroh-blobs = "0.100"
+iroh-gossip = "0.98"
+bytes = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["io-util", "sync", "macros", "rt", "rt-multi-thread", "time"] }
+tokio-stream = "0.1"

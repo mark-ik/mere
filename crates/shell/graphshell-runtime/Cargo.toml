@@ -1,0 +1,34 @@
+[package]
+name = "graphshell-runtime"
+version = "0.0.1"
+authors = ["@mark-ik"]
+license = "MPL-2.0"
+edition = "2024"
+publish = false
+rust-version = "1.92.0"
+description = "Portable runtime boundary traits for Graphshell hosts"
+
+[dependencies]
+graphshell-core = { path = "../graphshell-core" }
+# 2026-04-25 servo-into-verso S3a: graphshell-runtime now owns the
+# host-port trait surface (HostInputPort, HostPaintPort,
+# HostSurfacePort, HostTexturePort, HostAccessibilityPort), so it
+# needs `graph-canvas::packet` types (Stroke, Color) and `accesskit`
+# (TreeUpdate, NodeId) at the trait signature level. These are
+# already pulled in by graphshell main's default deps; no new
+# transitive surface for downstream crates.
+graph-canvas = { path = "../../graph/graph-canvas" }
+accesskit = { version = "0.24.0", features = ["serde"] }
+# 2026-04-25 graphshell-runtime extraction Slice 2 (graph_runtime
+# layout cache projection): `OwnedTreeRow`, `TabEntry`, and
+# `SplitBoundary` come from `graph-tree`. Already a dep of
+# graphshell main and graphshell-core's frame_model.
+graph-tree = { path = "../../graph/graph-tree" }
+# 2026-05-04 Slice 51 (Phase 2): system/signal_bus consolidation
+# from shell/desktop/runtime/registries/signal_routing.rs. The
+# signal bus emits diagnostics on the lagged-receiver channel
+# (`register_diagnostics::channels::CHANNEL_REGISTER_SIGNAL_ROUTING_LAGGED`)
+# and uses tokio broadcast for async fan-out.
+register-diagnostics = { path = "../../registry/register-diagnostics" }
+tokio = { version = "1", features = ["sync", "rt", "macros"] }
+log = "0.4.29"
