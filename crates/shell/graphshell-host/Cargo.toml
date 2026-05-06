@@ -11,3 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 graphshell-core = { path = "../graphshell-core" }
+
+[dev-dependencies]
+graphshell-runtime = { path = "../graphshell-runtime" }
+verso-tile = { path = "../../verso-tile" }

@@ -1416,6 +1416,8 @@ name = "graphshell-host"
 version = "0.0.1"
 dependencies = [
  "graphshell-core",
+ "graphshell-runtime",
+ "verso-tile",
 ]
 
 [[package]]
