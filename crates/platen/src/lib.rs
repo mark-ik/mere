@@ -27,7 +27,9 @@ pub mod workbench;
 
 pub use canvas_scene::{CanvasSceneOptions, build_canvas_scene_input, graph_view_id_to_canvas};
 pub use workbench::{
-    FrameId, FrameState, PaneBinding, select_active_frame, select_active_root_view,
+    FrameId, FrameState, PaneBinding, assign_frame_pane, clear_frame_pane, remove_pane_binding,
+    select_active_frame, select_active_root_view, set_binding_surface_host, set_frame_root_view,
+    upsert_pane_binding,
 };
 
 /// Crate version.

@@ -12,10 +12,13 @@
 use graph_tree::{NavAction, Provenance};
 use graphshell_core::graph::{GraphViewId, NodeKey};
 use graphshell_core::pane::PaneId;
-
-use super::{
-    FrameId, GraphWorkspace, PaneBinding, SurfaceEffect, SurfaceHostId, WorkspaceEffect,
+use platen::workbench::{
+    assign_frame_pane, clear_frame_pane, remove_pane_binding, set_binding_surface_host,
+    upsert_pane_binding,
 };
+use verso_tile::surface::SurfaceCommand;
+
+use super::{FrameId, GraphWorkspace, PaneBinding, SurfaceHostId, WorkspaceEffect};
 
 /// Host-neutral workspace routing intent.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -117,7 +120,8 @@ fn route_node_to_pane(
         node,
         surface_host: surface_host.clone(),
     };
-    let mut state_changed = projection_changed | upsert_binding(&mut view.panes, binding.clone());
+    let mut state_changed =
+        projection_changed | upsert_pane_binding(&mut view.panes, binding.clone());
 
     if let Some(frame_id) = frame_id.as_ref() {
         let frame = workspace
@@ -125,11 +129,7 @@ fn route_node_to_pane(
             .frames
             .get_mut(frame_id)
             .expect("frame existence checked");
-        if frame.root_view != Some(view_id) {
-            frame.root_view = Some(view_id);
-            state_changed = true;
-        }
-        state_changed |= upsert_binding(&mut frame.panes, binding);
+        state_changed |= assign_frame_pane(frame, view_id, binding);
     }
 
     if state_changed {
@@ -138,7 +138,7 @@ fn route_node_to_pane(
 
     let mut effects_emitted = 0;
     if let Some(host) = surface_host {
-        workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceEffect::present(
+        workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceCommand::present(
             host,
             Some(view_id),
             Some(pane_id),
@@ -163,7 +163,7 @@ fn remove_pane_route(
         .graph_views
         .get_mut(&view_id)
         .ok_or(WorkspaceRoutingError::MissingGraphView(view_id))?;
-    let removed_view_binding = remove_binding(&mut view.panes, pane_id);
+    let removed_view_binding = remove_pane_binding(&mut view.panes, pane_id);
     let Some(removed_view_binding) = removed_view_binding else {
         return Err(WorkspaceRoutingError::MissingPane(pane_id));
     };
@@ -180,13 +180,13 @@ fn remove_pane_route(
             .frames
             .get_mut(frame_id)
             .ok_or_else(|| WorkspaceRoutingError::MissingFrame(frame_id.clone()))?;
-        state_changed |= remove_binding(&mut frame.panes, pane_id).is_some();
+        state_changed |= clear_frame_pane(frame, pane_id);
     }
     workspace.workbench.has_unsaved_changes = true;
 
     let mut effects_emitted = 0;
     if let Some(host) = removed_view_binding.surface_host {
-        workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceEffect::retire(
+        workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceCommand::retire(
             host,
             Some(view_id),
             Some(pane_id),
@@ -228,15 +228,10 @@ fn set_pane_surface_host(
             .frames
             .get_mut(frame_id)
             .ok_or_else(|| WorkspaceRoutingError::MissingFrame(frame_id.clone()))?;
-        if let Some(frame_binding) = frame
-            .panes
-            .iter_mut()
-            .find(|binding| binding.pane_id == pane_id)
-            && frame_binding.surface_host != surface_host
-        {
-            frame_binding.surface_host = surface_host.clone();
-            state_changed = true;
-        }
+        let frame_changed =
+            set_binding_surface_host(&mut frame.panes, pane_id, surface_host.clone())
+                .ok_or(WorkspaceRoutingError::MissingPane(pane_id))?;
+        state_changed |= frame_changed;
     }
 
     if state_changed {
@@ -247,28 +242,6 @@ fn set_pane_surface_host(
         state_changed,
         effects_emitted: 0,
     })
-}
-
-fn upsert_binding(bindings: &mut Vec<PaneBinding>, binding: PaneBinding) -> bool {
-    if let Some(existing) = bindings
-        .iter_mut()
-        .find(|existing| existing.pane_id == binding.pane_id)
-    {
-        if existing == &binding {
-            return false;
-        }
-        *existing = binding;
-        return true;
-    }
-    bindings.push(binding);
-    true
-}
-
-fn remove_binding(bindings: &mut Vec<PaneBinding>, pane_id: PaneId) -> Option<PaneBinding> {
-    let index = bindings
-        .iter()
-        .position(|binding| binding.pane_id == pane_id)?;
-    Some(bindings.remove(index))
 }
 
 #[cfg(test)]
@@ -347,11 +320,11 @@ mod tests {
         assert_eq!(workspace.workbench.frames[&frame_id].panes.len(), 1);
         assert!(workspace.workbench.has_unsaved_changes);
         let effects = workspace.drain_effects();
-        let WorkspaceEffect::RequestSurface(effect) = &effects[0] else {
+        let WorkspaceEffect::RequestSurface(command) = &effects[0] else {
             panic!("expected surface effect");
         };
-        assert_eq!(effect.host, host);
-        assert_eq!(effect.request, SurfaceRequest::Present);
+        assert_eq!(command.host(), &host);
+        assert_eq!(command.request(), SurfaceRequest::Present);
     }
 
     #[test]
@@ -417,11 +390,11 @@ mod tests {
         assert_eq!(outcome.effects_emitted, 1);
         assert!(workspace.views.graph_views[&view_id].panes.is_empty());
         let effects = workspace.drain_effects();
-        let WorkspaceEffect::RequestSurface(effect) = &effects[0] else {
+        let WorkspaceEffect::RequestSurface(command) = &effects[0] else {
             panic!("expected retire effect");
         };
-        assert_eq!(effect.host, host);
-        assert_eq!(effect.request, SurfaceRequest::Retire);
+        assert_eq!(command.host(), &host);
+        assert_eq!(command.request(), SurfaceRequest::Retire);
     }
 
     #[test]

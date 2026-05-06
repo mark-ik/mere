@@ -22,7 +22,7 @@ pub use inker::routing::{
 };
 pub use platen::workbench::{FrameId, FrameState, PaneBinding};
 use serde::{Deserialize, Serialize};
-pub use verso_tile::surface::{SurfaceEffect, SurfaceHostId, SurfaceRequest};
+pub use verso_tile::surface::{SurfaceCommand, SurfaceEffect, SurfaceHostId, SurfaceRequest};
 
 pub mod app_ux;
 pub mod composition;
@@ -269,7 +269,7 @@ pub enum WorkspaceEffect {
     PersistPreferences { preferences: WorkspacePreferences },
     AppendGraphMutation(GraphMutationRecord),
     RequestMnem(mnem::MnemRequest),
-    RequestSurface(SurfaceEffect),
+    RequestSurface(SurfaceCommand),
     RouteEngine(EngineRouteRequest),
     EmitDiagnostic(DiagnosticRecord),
     RunTask(TaskRequest),
@@ -422,9 +422,9 @@ pub trait EngineRouter {
     ) -> WorkspaceServiceResult<EngineRouteDecision>;
 }
 
-/// Host/adapter sink for surface effects emitted by reducers.
+/// Host/adapter sink for surface commands emitted by reducers.
 pub trait SurfaceHost {
-    fn apply_surface_effect(&mut self, effect: &SurfaceEffect) -> WorkspaceServiceResult<()>;
+    fn apply_surface_command(&mut self, command: &SurfaceCommand) -> WorkspaceServiceResult<()>;
 }
 
 /// Runtime diagnostics sink for app-state and reducer tests.

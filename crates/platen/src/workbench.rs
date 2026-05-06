@@ -49,6 +49,64 @@ pub fn select_active_frame<'a>(
     active_frame.and_then(|frame_id| frames.get(frame_id))
 }
 
+pub fn upsert_pane_binding(bindings: &mut Vec<PaneBinding>, binding: PaneBinding) -> bool {
+    if let Some(existing) = bindings
+        .iter_mut()
+        .find(|existing| existing.pane_id == binding.pane_id)
+    {
+        if existing == &binding {
+            return false;
+        }
+        *existing = binding;
+        return true;
+    }
+    bindings.push(binding);
+    true
+}
+
+pub fn remove_pane_binding(
+    bindings: &mut Vec<PaneBinding>,
+    pane_id: PaneId,
+) -> Option<PaneBinding> {
+    let index = bindings
+        .iter()
+        .position(|binding| binding.pane_id == pane_id)?;
+    Some(bindings.remove(index))
+}
+
+pub fn set_binding_surface_host(
+    bindings: &mut [PaneBinding],
+    pane_id: PaneId,
+    surface_host: Option<SurfaceHostId>,
+) -> Option<bool> {
+    let binding = bindings
+        .iter_mut()
+        .find(|binding| binding.pane_id == pane_id)?;
+    let changed = binding.surface_host != surface_host;
+    binding.surface_host = surface_host;
+    Some(changed)
+}
+
+pub fn set_frame_root_view(frame: &mut FrameState, root_view: Option<GraphViewId>) -> bool {
+    let changed = frame.root_view != root_view;
+    frame.root_view = root_view;
+    changed
+}
+
+pub fn assign_frame_pane(
+    frame: &mut FrameState,
+    view_id: GraphViewId,
+    binding: PaneBinding,
+) -> bool {
+    let root_changed = set_frame_root_view(frame, Some(view_id));
+    let pane_changed = upsert_pane_binding(&mut frame.panes, binding);
+    root_changed || pane_changed
+}
+
+pub fn clear_frame_pane(frame: &mut FrameState, pane_id: PaneId) -> bool {
+    remove_pane_binding(&mut frame.panes, pane_id).is_some()
+}
+
 /// Select the active root view for workbench-aware composition.
 pub fn select_active_root_view(
     frames: &HashMap<FrameId, FrameState>,
@@ -105,5 +163,40 @@ mod tests {
             select_active_root_view(&frames, Some(&frame_id)),
             Some(root_view)
         );
+    }
+
+    #[test]
+    fn upsert_pane_binding_replaces_existing_pane() {
+        let pane_id = PaneId::from_uuid(uuid::Uuid::from_u128(9));
+        let first = PaneBinding {
+            pane_id,
+            node: NodeKey::new(1),
+            surface_host: None,
+        };
+        let second = PaneBinding {
+            pane_id,
+            node: NodeKey::new(2),
+            surface_host: Some(SurfaceHostId::new("desktop")),
+        };
+        let mut bindings = vec![first];
+
+        assert!(upsert_pane_binding(&mut bindings, second.clone()));
+        assert_eq!(bindings, vec![second]);
+    }
+
+    #[test]
+    fn assign_frame_pane_sets_root_view_and_binding() {
+        let pane_id = PaneId::from_uuid(uuid::Uuid::from_u128(10));
+        let root_view = GraphViewId::from_uuid(uuid::Uuid::from_u128(11));
+        let binding = PaneBinding {
+            pane_id,
+            node: NodeKey::new(3),
+            surface_host: None,
+        };
+        let mut frame = FrameState::default();
+
+        assert!(assign_frame_pane(&mut frame, root_view, binding.clone()));
+        assert_eq!(frame.root_view, Some(root_view));
+        assert_eq!(frame.panes, vec![binding]);
     }
 }

@@ -14,7 +14,7 @@ use graphshell_core::graph::{GraphViewId, NodeKey};
 
 use super::{
     ChromeState, DiagnosticRecord, EngineRouteRequest, FrameId, FrameState, GraphWorkspace,
-    SurfaceEffect, WorkspaceEffect, WorkspaceId, WorkspacePreferences,
+    SurfaceCommand, WorkspaceEffect, WorkspaceId, WorkspacePreferences,
 };
 
 /// Pure app-state intent accepted by [`reduce_workspace_intent`].
@@ -59,7 +59,7 @@ pub enum WorkspaceIntent {
         request: EngineRouteRequest,
     },
     RequestSurface {
-        effect: SurfaceEffect,
+        command: SurfaceCommand,
     },
     EmitDiagnostic {
         record: DiagnosticRecord,
@@ -200,8 +200,8 @@ pub fn reduce_workspace_intent(
                 effects_emitted: 1,
             })
         }
-        WorkspaceIntent::RequestSurface { effect } => {
-            workspace.push_effect(WorkspaceEffect::RequestSurface(effect));
+        WorkspaceIntent::RequestSurface { command } => {
+            workspace.push_effect(WorkspaceEffect::RequestSurface(command));
             Ok(ReducerOutcome {
                 state_changed: false,
                 effects_emitted: 1,

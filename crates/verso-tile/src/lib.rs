@@ -24,7 +24,7 @@
 /// Portable rendering-surface identity types.
 pub mod surface;
 
-pub use surface::{SurfaceEffect, SurfaceHostId, SurfaceRequest, SurfaceTargetId};
+pub use surface::{SurfaceCommand, SurfaceEffect, SurfaceHostId, SurfaceRequest, SurfaceTargetId};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
