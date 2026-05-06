@@ -21,6 +21,9 @@
 /// Portable reducer-owned app-state and service-boundary contracts.
 pub mod app_state;
 
+/// Private local memory vocabulary and service helpers.
+pub mod mnem;
+
 /// Framework-agnostic graph-view canvas primitives migrated from the previous
 /// Graphshell tree.
 pub use graph_canvas as canvas;

@@ -12,8 +12,10 @@
 use graphshell_core::graph::GraphViewId;
 use serde::{Deserialize, Serialize};
 
+use crate::mnem::{MnemRequest, MnemResponse, MnemStore, dispatch_mnem_request};
+
 use super::{
-    GraphMutationJournal, GraphWorkspace, JournalCursor, MnemStore, MutationPayload, SettingsStore,
+    GraphMutationJournal, GraphWorkspace, JournalCursor, MutationPayload, SettingsStore,
     WorkspaceEffect, WorkspaceId, WorkspacePreferences, WorkspaceRepository, WorkspaceServiceError,
     WorkspaceServiceResult,
     graph_runtime::{GraphRuntimeIntent, reduce_graph_runtime_intent},
@@ -32,18 +34,6 @@ pub enum PersistenceIntent {
 pub struct PersistenceOutcome {
     pub state_changed: bool,
     pub effects_emitted: usize,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MnemRequest {
-    LoadBlob { key: String },
-    SaveBlob { key: String, value: Vec<u8> },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum MnemResponse {
-    BlobLoaded { key: String, value: Option<Vec<u8>> },
-    BlobSaved { key: String },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -276,22 +266,6 @@ pub fn list_named_workspace_layouts(
     repository: &mut dyn WorkspaceRepository,
 ) -> WorkspaceServiceResult<Vec<WorkspaceLayoutName>> {
     repository.list_workspace_layouts()
-}
-
-pub fn dispatch_mnem_request(
-    store: &mut dyn MnemStore,
-    request: &MnemRequest,
-) -> WorkspaceServiceResult<MnemResponse> {
-    match request {
-        MnemRequest::LoadBlob { key } => Ok(MnemResponse::BlobLoaded {
-            key: key.clone(),
-            value: store.load_blob(key)?,
-        }),
-        MnemRequest::SaveBlob { key, value } => {
-            store.save_blob(key, value)?;
-            Ok(MnemResponse::BlobSaved { key: key.clone() })
-        }
-    }
 }
 
 pub fn consume_persistence_effects(

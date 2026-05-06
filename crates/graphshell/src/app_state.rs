@@ -12,6 +12,7 @@
 
 use std::collections::HashMap;
 
+use crate::mnem;
 use graph_tree::{GraphTree, LayoutMode, ProjectionLens};
 use graphshell_core::graph::{Graph, GraphViewId, NodeKey};
 use graphshell_core::pane::PaneId;
@@ -307,7 +308,7 @@ pub enum WorkspaceEffect {
     PersistWorkspace { workspace_id: WorkspaceId },
     PersistPreferences { preferences: WorkspacePreferences },
     AppendGraphMutation(GraphMutationRecord),
-    RequestMnem(persistence::MnemRequest),
+    RequestMnem(mnem::MnemRequest),
     RequestSurface(SurfaceEffect),
     RouteEngine(EngineRouteRequest),
     EmitDiagnostic(DiagnosticRecord),
@@ -484,14 +485,6 @@ pub trait GraphMutationJournal {
         &mut self,
         cursor: Option<JournalCursor>,
     ) -> WorkspaceServiceResult<Vec<GraphMutationRecord>>;
-}
-
-/// Private local browsing memory lane. This is distinct from Mere transport
-/// state and Moothold/moot community state.
-pub trait MnemStore {
-    fn load_blob(&mut self, key: &str) -> WorkspaceServiceResult<Option<Vec<u8>>>;
-
-    fn save_blob(&mut self, key: &str, value: &[u8]) -> WorkspaceServiceResult<()>;
 }
 
 /// Typed settings persistence for chrome and workspace preferences.
