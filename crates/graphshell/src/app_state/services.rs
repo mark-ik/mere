@@ -12,8 +12,9 @@ use crate::mnem::{MnemResponse, MnemStore, dispatch_mnem_request};
 
 use super::{
     DiagnosticsSink, EngineRouteDecision, EngineRouter, GraphMutationJournal, GraphWorkspace,
-    SettingsStore, SurfaceCommandOutcome, SurfaceHost, TaskRuntime, WorkspaceEffect,
-    WorkspaceRepository, WorkspaceServiceResult,
+    SettingsStore, SurfaceCommandOutcome, SurfaceCommandSchedule, SurfaceHost,
+    SurfaceLifecycleState, TaskRuntime, WorkspaceEffect, WorkspaceRepository,
+    WorkspaceServiceResult,
     persistence::{checkpoint_workspace, save_preferences},
 };
 
@@ -112,13 +113,27 @@ impl<'a> WorkspaceServices<'a> {
 
         Ok(report)
     }
+
+    pub fn dispatch_surface_schedule(
+        &mut self,
+        lifecycle: &mut SurfaceLifecycleState,
+        schedule: &SurfaceCommandSchedule,
+    ) -> WorkspaceServiceResult<Vec<SurfaceCommandOutcome>> {
+        let mut outcomes = Vec::new();
+        for command in schedule.commands() {
+            let outcome = self.surface_host.apply_surface_command(command)?;
+            lifecycle.record_outcome(command, &outcome);
+            outcomes.push(outcome);
+        }
+        Ok(outcomes)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
-    use graphshell_core::graph::GraphViewId;
+    use graphshell_core::{graph::GraphViewId, pane::PaneId};
     use inker::routing::{SurfaceContract, SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId};
     use uuid::Uuid;
 
@@ -126,7 +141,8 @@ mod tests {
         app_state::{
             DiagnosticRecord, GraphMutationRecord, GraphWorkspaceSnapshot, JournalCursor,
             MutationPayload, NavigatorSidebarPreference, SurfaceCommand, SurfaceCommandSink,
-            SurfaceCommandStatus, SurfaceHostId, TaskRequest, ThemeModePreference, WorkspaceId,
+            SurfaceCommandStatus, SurfaceHostId, SurfaceLifecycleState, SurfacePlacementPlan,
+            SurfaceSlotPlacement, TaskRequest, ThemeModePreference, TileSlot, WorkspaceId,
             WorkspacePreferences, WorkspaceServiceError,
             persistence::{GraphTreeDocument, WorkspaceLayoutDocument, WorkspaceLayoutName},
         },
@@ -277,6 +293,7 @@ mod tests {
     #[derive(Default)]
     struct FakeSurfaceHost {
         commands: Vec<SurfaceCommand>,
+        statuses: Vec<SurfaceCommandStatus>,
     }
 
     impl SurfaceCommandSink for FakeSurfaceHost {
@@ -287,7 +304,12 @@ mod tests {
             command: &SurfaceCommand,
         ) -> Result<SurfaceCommandOutcome, Self::Error> {
             self.commands.push(command.clone());
-            Ok(command.outcome(SurfaceCommandStatus::AlreadySatisfied))
+            let status = if self.statuses.is_empty() {
+                SurfaceCommandStatus::AlreadySatisfied
+            } else {
+                self.statuses.remove(0)
+            };
+            Ok(command.outcome(status))
         }
     }
 
@@ -412,5 +434,66 @@ mod tests {
         assert_eq!(surface_host.commands.len(), 1);
         assert_eq!(diagnostics.records.len(), 1);
         assert_eq!(task_runtime.tasks.len(), 1);
+    }
+
+    #[test]
+    fn surface_schedule_dispatch_records_deferred_outcomes_for_retry() {
+        let view = GraphViewId::from_uuid(Uuid::from_u128(80));
+        let host = SurfaceHostId::new("desktop");
+        let first_pane = PaneId::from_uuid(Uuid::from_u128(81));
+        let second_pane = PaneId::from_uuid(Uuid::from_u128(82));
+        let mut plan = SurfacePlacementPlan::default();
+        plan.push(SurfaceSlotPlacement::new(
+            host.clone(),
+            Some(view),
+            first_pane,
+            TileSlot::primary(),
+        ));
+        plan.push(SurfaceSlotPlacement::new(
+            host,
+            Some(view),
+            second_pane,
+            TileSlot::secondary(1),
+        ));
+        let mut lifecycle = SurfaceLifecycleState::default();
+        let schedule = lifecycle.schedule_placements(plan);
+
+        let mut repository = FakeWorkspaceRepository::default();
+        let mut settings = FakeSettingsStore::default();
+        let mut journal = FakeGraphMutationJournal::default();
+        let mut mnem = FakeMnemStore::default();
+        let mut engine_router = FakeEngineRouter::default();
+        let mut surface_host = FakeSurfaceHost {
+            statuses: vec![
+                SurfaceCommandStatus::Deferred,
+                SurfaceCommandStatus::AlreadySatisfied,
+            ],
+            ..FakeSurfaceHost::default()
+        };
+        let mut diagnostics = FakeDiagnosticsSink::default();
+        let mut task_runtime = FakeTaskRuntime::default();
+
+        let outcomes = {
+            let mut services = WorkspaceServices::new(
+                &mut repository,
+                &mut settings,
+                &mut journal,
+                &mut mnem,
+                &mut engine_router,
+                &mut surface_host,
+                &mut diagnostics,
+                &mut task_runtime,
+            );
+            services
+                .dispatch_surface_schedule(&mut lifecycle, &schedule)
+                .unwrap()
+        };
+
+        assert_eq!(outcomes.len(), 2);
+        assert_eq!(surface_host.commands.len(), 2);
+        assert_eq!(lifecycle.backlog().len(), 1);
+        let retry = lifecycle.schedule_retries();
+        assert_eq!(retry.retries, 1);
+        assert_eq!(retry.commands(), &[surface_host.commands[0].clone()]);
     }
 }

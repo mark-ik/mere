@@ -129,7 +129,7 @@ surface area to own the behavior directly.
 | --- | --- | --- | --- |
 | `graphshell-core` | Portable graph/domain model, shell identities, pane IDs, address/content classifications, serializable shell state primitives | App reducers, concrete hosts, engine routing policy, persistence stores | Keep graph truth and stable IDs here when they are reusable below the app layer |
 | `graph-canvas` / `graph-tree` | Canvas scene packet types, projection math inputs, tree topology/navigation primitives | `GraphWorkspace`, product chrome, engine/host decisions | Graphshell may select state into these types; these crates should not learn Graphshell app state |
-| `graphshell::app_state` | Reducer-owned `GraphWorkspace`, pure reducers, transient/durable UI state, typed effects, temporary service traits | Concrete services, renderer handles, task runtimes, host widgets, engine lifecycle, storage implementations | Keep Phase 3 code here only while it is pure state/reducer/selector logic; `app_state::services` now proves the full pending-effect queue can dispatch through traits without importing donor `GraphBrowserApp` |
+| `graphshell::app_state` | Reducer-owned `GraphWorkspace`, pure reducers, transient/durable UI state, typed effects, temporary service traits | Concrete services, renderer handles, task runtimes, host widgets, engine lifecycle, storage implementations | Keep Phase 3 code here only while it is pure state/reducer/selector logic; `app_state::services` now proves the full pending-effect queue and surface lifecycle schedules can dispatch through traits without importing donor `GraphBrowserApp` |
 | `graphshell` host crates | Native/desktop/mobile host adapters, event translation, surface command application, accessibility bridge | Graph truth mutation, engine selection policy, private memory persistence | Hosts emit intents/effects and consume projections; they do not bypass reducers |
 | `inker` | Engine choice, URI/content routing policy, engine lifecycle, engine-output contracts | Graphshell chrome, GraphWorkspace mutation, tile placement | `inker::routing` now owns the portable engine-route request/decision vocabulary and a default scheme-based `EngineRoutePolicy`; concrete engine implementations still remain outside the policy |
 | `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | `platen::canvas_scene` and `platen::workbench` now own the extracted graph-to-canvas derivation core, frame/pane model, active-frame/root-view selectors, pane/frame binding helpers, active-workbench projection packets, frame arrangement snapshots, and the projection from arrangements into hosted surface placements; Graphshell should keep shrinking toward wrappers around those selectors/helpers |
@@ -335,7 +335,9 @@ Primary next slices:
 5. Extend the trait-backed `GraphWorkspace` service container only when new
     pending-effect kinds appear; do not import concrete donor `GraphBrowserApp`
     code until each method has been classified as reducer, service glue, host
-    adapter, or obsolete.
+    adapter, or obsolete. Surface schedule dispatch is covered by the service
+    seam, so the next service work should be concrete implementation wiring,
+    not more app-state vocabulary.
 6. Run `cargo test --workspace` from `repos/mere` after every narrow move.
 
 Fruitful sidequests:
@@ -473,3 +475,5 @@ host/runtime surfaces.
 - Verification: `cargo test -p graphshell -p platen -p verso-tile` passed with 49 Graphshell tests, 14 Platen tests, and 12 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
 - Added `verso_tile::surface::SurfaceLifecycleState` and `SurfaceCommandSchedule` so a portable surface lifecycle can accept a `SurfacePlacementPlan`, emit present-command schedules, record deferred host outcomes, and produce retry schedules without importing host widgets or renderer handles. `graphshell::app_state` re-exports the scheduler vocabulary but does not own its state.
 - Verification: `cargo test -p graphshell -p platen -p verso-tile` passed with 49 Graphshell tests, 14 Platen tests, and 13 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
+- Added `WorkspaceServices::dispatch_surface_schedule`, which applies a `SurfaceCommandSchedule` through the existing `SurfaceHost` trait and records deferred outcomes back into `SurfaceLifecycleState`. This keeps retry bookkeeping in the portable surface lifecycle while leaving concrete host widgets outside `graphshell::app_state`.
+- Verification: `cargo test -p graphshell -p platen -p verso-tile` passed with 50 Graphshell tests, 14 Platen tests, and 13 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
