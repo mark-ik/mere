@@ -135,11 +135,9 @@ fn route_node_to_pane(
 
     let mut effects_emitted = 0;
     if let Some(host) = surface_host {
-        workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceCommand::present(
-            host,
-            Some(view_id),
-            Some(pane_id),
-        )));
+        workspace.push_effect(WorkspaceEffect::RequestSurface(
+            SurfaceCommand::present_pane(host, view_id, pane_id),
+        ));
         effects_emitted = 1;
     }
 
@@ -186,11 +184,9 @@ fn remove_pane_route(
 
     let mut effects_emitted = 0;
     if let Some(host) = removed_view_binding.surface_host {
-        workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceCommand::retire(
-            host,
-            Some(view_id),
-            Some(pane_id),
-        )));
+        workspace.push_effect(WorkspaceEffect::RequestSurface(
+            SurfaceCommand::retire_pane(host, view_id, pane_id),
+        ));
         effects_emitted = 1;
     }
 
@@ -314,7 +310,7 @@ mod tests {
         assert!(workspace.workbench.has_unsaved_changes);
         let effects = workspace.drain_effects();
         let WorkspaceEffect::RequestSurface(command) = &effects[0] else {
-            panic!("expected surface effect");
+            panic!("expected surface command");
         };
         assert_eq!(command.host(), &host);
         assert_eq!(command.request(), SurfaceRequest::Present);
@@ -384,7 +380,7 @@ mod tests {
         assert!(workspace.views.graph_views[&view_id].panes.is_empty());
         let effects = workspace.drain_effects();
         let WorkspaceEffect::RequestSurface(command) = &effects[0] else {
-            panic!("expected retire effect");
+            panic!("expected retire command");
         };
         assert_eq!(command.host(), &host);
         assert_eq!(command.request(), SurfaceRequest::Retire);

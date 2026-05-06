@@ -87,6 +87,18 @@ impl SurfaceCommand {
         Self::Focus { host, view, pane }
     }
 
+    pub fn present_pane(host: SurfaceHostId, view: GraphViewId, pane: PaneId) -> Self {
+        Self::present(host, Some(view), Some(pane))
+    }
+
+    pub fn retire_pane(host: SurfaceHostId, view: GraphViewId, pane: PaneId) -> Self {
+        Self::retire(host, Some(view), Some(pane))
+    }
+
+    pub fn focus_pane(host: SurfaceHostId, view: GraphViewId, pane: PaneId) -> Self {
+        Self::focus(host, Some(view), Some(pane))
+    }
+
     pub fn host(&self) -> &SurfaceHostId {
         match self {
             Self::Present { host, .. } | Self::Retire { host, .. } | Self::Focus { host, .. } => {
@@ -188,6 +200,17 @@ mod tests {
         let command = SurfaceCommand::present(SurfaceHostId::new("desktop"), None, None);
 
         assert_eq!(command.request(), SurfaceRequest::Present);
+    }
+
+    #[test]
+    fn pane_command_helpers_set_view_and_pane() {
+        let view = GraphViewId::new();
+        let pane = PaneId::new();
+        let command = SurfaceCommand::present_pane(SurfaceHostId::new("desktop"), view, pane);
+
+        assert_eq!(command.request(), SurfaceRequest::Present);
+        assert_eq!(command.view(), Some(view));
+        assert_eq!(command.pane(), Some(pane));
     }
 
     #[test]
