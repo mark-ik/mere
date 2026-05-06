@@ -16,7 +16,6 @@ pub struct SurfaceScheduleApplyReport {
     pub allocated: usize,
     pub retired: usize,
     pub already_satisfied: usize,
-    pub already_present: usize,
     pub deferred: usize,
     pub unsupported: usize,
 }
@@ -25,18 +24,6 @@ pub struct SurfaceScheduleApplyReport {
 pub enum SurfaceScheduleApplyError {
     MissingPlacement(SurfaceCommand),
     Viewer(ViewerSurfaceError),
-}
-
-pub fn apply_present_surface_schedule<Registry, Host>(
-    lifecycle: &mut SurfaceLifecycleState,
-    schedule: &SurfaceCommandSchedule,
-    registry: &mut Registry,
-    host: &mut Host,
-) -> Result<SurfaceScheduleApplyReport, SurfaceScheduleApplyError>
-where
-    Host: ViewerSurfaceHost<Registry>,
-{
-    apply_viewer_surface_schedule(lifecycle, schedule, registry, host)
 }
 
 pub fn apply_viewer_surface_schedule<Registry, Host>(
@@ -77,9 +64,6 @@ impl SurfaceScheduleApplyReport {
             SurfaceCommandStatus::Applied => {}
             SurfaceCommandStatus::AlreadySatisfied => {
                 self.already_satisfied += 1;
-                if command.request() == SurfaceRequest::Present {
-                    self.already_present += 1;
-                }
             }
             SurfaceCommandStatus::Deferred => {
                 self.deferred += 1;
@@ -193,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn present_schedule_reports_already_present_without_reallocating() {
+    fn present_schedule_reports_already_satisfied_without_reallocating() {
         let view = GraphViewId::new();
         let node = NodeKey::new(4);
         let pane = PaneId::new();
@@ -215,7 +199,6 @@ mod tests {
             apply_viewer_surface_schedule(&mut lifecycle, &schedule, &mut registry, &mut host)
                 .unwrap();
 
-        assert_eq!(report.already_present, 1);
         assert_eq!(report.already_satisfied, 1);
         assert_eq!(
             report.outcomes[0].status,

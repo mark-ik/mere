@@ -64,8 +64,7 @@ pub use graphshell_core::shell_state::frame_model::{
 };
 pub use rendering_context_producer::RenderingContextProducer;
 pub use surface_schedule::{
-    SurfaceScheduleApplyError, SurfaceScheduleApplyReport, apply_present_surface_schedule,
-    apply_viewer_surface_schedule,
+    SurfaceScheduleApplyError, SurfaceScheduleApplyReport, apply_viewer_surface_schedule,
 };
 pub use webview_backpressure::{
     NodePaneAttachAttemptMetadata, RuntimeWebviewBackpressureMetadataSource,
