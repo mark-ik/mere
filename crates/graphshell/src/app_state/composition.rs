@@ -2,11 +2,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Pure workspace composition selectors.
+//! Pure workspace-to-canvas selectors.
 //!
 //! This module is the first portable subset of the donor `composition` seam. It
 //! derives canvas-facing scene input from reducer-owned workspace state without
 //! importing host adapters, renderer backends, or desktop widget types.
+//!
+//! This is deliberately not the owner of graph-aware layout policy. If this
+//! code starts deciding tile placement, split topology, engine surfaces, or
+//! render scheduling, that behavior belongs in `platen`, `verso-tile`, `inker`,
+//! or host glue instead.
 
 use std::collections::HashSet;
 

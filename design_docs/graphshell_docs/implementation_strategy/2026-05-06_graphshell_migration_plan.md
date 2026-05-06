@@ -117,6 +117,31 @@ Graphshell does not absorb protocol runtime again.
 - `moothold` / `mooting` own community/federation/primitive moot nodes.
 - Graphshell owns the UI shell and applets that consume those crates.
 
+### 1.9 Ownership Boundaries During Migration
+
+The migration should preserve donor module seams, but the seams are not all
+long-term owners. Treat the first Mere-side app-state modules as proof slices
+and anti-corruption boundaries until the destination crate has enough real
+surface area to own the behavior directly.
+
+| Owner | Owns | Must not own | Migration implication |
+| --- | --- | --- | --- |
+| `graphshell-core` | Portable graph/domain model, shell identities, pane IDs, address/content classifications, serializable shell state primitives | App reducers, concrete hosts, engine routing policy, persistence stores | Keep graph truth and stable IDs here when they are reusable below the app layer |
+| `graph-canvas` / `graph-tree` | Canvas scene packet types, projection math inputs, tree topology/navigation primitives | `GraphWorkspace`, product chrome, engine/host decisions | Graphshell may select state into these types; these crates should not learn Graphshell app state |
+| `graphshell::app_state` | Reducer-owned `GraphWorkspace`, pure reducers, transient/durable UI state, typed effects, temporary service traits | Concrete services, renderer handles, task runtimes, host widgets, engine lifecycle, storage implementations | Keep Phase 3 code here only while it is pure state/reducer/selector logic |
+| `graphshell` host crates | Native/desktop/mobile host adapters, event translation, surface effect application, accessibility bridge | Graph truth mutation, engine selection policy, private memory persistence | Hosts emit intents/effects and consume projections; they do not bypass reducers |
+| `inker` | Engine choice, URI/content routing policy, engine lifecycle, engine-output contracts | Graphshell chrome, GraphWorkspace mutation, tile placement | Current `EngineRouter` types are a Graphshell-side seam; move or mirror real policy types into `inker` once implementation begins |
+| `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | The donor arrangement graph bridge and richer composition logic should graduate here, not stay in `app_state::composition` |
+| `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | Replace opaque `SurfaceHostId` with narrower verso-tile surface contracts when the surface layer becomes real |
+| `mnem` | Private local memory: graph snapshots, traversal logs, settings/cache/index persistence | Mere transport state, Moothold community flora, host UI state | `MnemStore` is temporary vocabulary until a concrete `mnem` module/crate owns the contract |
+| `mere` | Product entrypoint, top-level service wiring, crate orchestration, feature assembly | Low-level graph primitives, renderer internals, protocol implementations | `mere` composes the system; it should not become the old root-crate catch-all |
+
+Naming warning: the donor `composition` module is broader than the long-term
+Mere owner. The initial `graphshell::app_state::composition` module should stay
+limited to pure selectors such as workspace-to-canvas scene input. Anything
+that decides arrangement, split topology, surface placement, or renderable
+workbench layout should move toward `platen` / `verso-tile` instead.
+
 ---
 
 ## 2. Migration Sequence
