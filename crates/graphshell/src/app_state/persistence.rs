@@ -9,6 +9,7 @@
 //! glue to execute through `WorkspaceRepository`, `GraphMutationJournal`,
 //! `SettingsStore`, and `MnemStore` implementations.
 
+use graphshell_core::graph::GraphViewId;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -59,6 +60,61 @@ pub struct HydratedWorkspaceState {
     pub workspace: GraphWorkspace,
     pub journal_cursor: JournalCursor,
     pub replayed_records: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkbenchPersistenceState {
+    pub workbench_view_id: Option<GraphViewId>,
+    pub active_layout: Option<WorkspaceLayoutName>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PersistenceDocumentFormat {
+    #[default]
+    Json,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct WorkspaceLayoutName(pub String);
+
+impl WorkspaceLayoutName {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GraphTreeDocument {
+    pub format: PersistenceDocumentFormat,
+    pub body: String,
+}
+
+impl GraphTreeDocument {
+    pub fn json(body: impl Into<String>) -> Self {
+        Self {
+            format: PersistenceDocumentFormat::Json,
+            body: body.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceLayoutDocument {
+    pub format: PersistenceDocumentFormat,
+    pub body: String,
+}
+
+impl WorkspaceLayoutDocument {
+    pub fn json(body: impl Into<String>) -> Self {
+        Self {
+            format: PersistenceDocumentFormat::Json,
+            body: body.into(),
+        }
+    }
 }
 
 pub fn reduce_persistence_intent(
@@ -156,6 +212,70 @@ pub fn save_preferences(
     preferences: &WorkspacePreferences,
 ) -> WorkspaceServiceResult<()> {
     settings.save_preferences(preferences)
+}
+
+pub fn ensure_workbench_view_id(
+    repository: &mut dyn WorkspaceRepository,
+    workspace_id: &WorkspaceId,
+    workspace: &mut GraphWorkspace,
+) -> WorkspaceServiceResult<GraphViewId> {
+    if let Some(view_id) = workspace.workbench.persistence.workbench_view_id {
+        return Ok(view_id);
+    }
+
+    let view_id = repository.load_or_create_workbench_view_id(workspace_id)?;
+    workspace.workbench.persistence.workbench_view_id = Some(view_id);
+    Ok(view_id)
+}
+
+pub fn load_workbench_graph_tree(
+    repository: &mut dyn WorkspaceRepository,
+    workspace_id: &WorkspaceId,
+    workspace: &mut GraphWorkspace,
+) -> WorkspaceServiceResult<Option<GraphTreeDocument>> {
+    let view_id = ensure_workbench_view_id(repository, workspace_id, workspace)?;
+    repository.load_graph_tree(&view_id)
+}
+
+pub fn save_workbench_graph_tree(
+    repository: &mut dyn WorkspaceRepository,
+    workspace_id: &WorkspaceId,
+    workspace: &mut GraphWorkspace,
+    document: &GraphTreeDocument,
+) -> WorkspaceServiceResult<GraphViewId> {
+    let view_id = ensure_workbench_view_id(repository, workspace_id, workspace)?;
+    repository.save_graph_tree(&view_id, document)?;
+    Ok(view_id)
+}
+
+pub fn load_named_workspace_layout(
+    repository: &mut dyn WorkspaceRepository,
+    workspace: &mut GraphWorkspace,
+    name: &WorkspaceLayoutName,
+) -> WorkspaceServiceResult<Option<WorkspaceLayoutDocument>> {
+    let document = repository.load_workspace_layout(name)?;
+    if document.is_some() {
+        workspace.workbench.persistence.active_layout = Some(name.clone());
+    }
+    Ok(document)
+}
+
+pub fn save_named_workspace_layout(
+    repository: &mut dyn WorkspaceRepository,
+    workspace: &mut GraphWorkspace,
+    name: &WorkspaceLayoutName,
+    document: &WorkspaceLayoutDocument,
+) -> WorkspaceServiceResult<()> {
+    repository.save_workspace_layout(name, document)?;
+    workspace.workbench.persistence.active_layout = Some(name.clone());
+    workspace.workbench.has_unsaved_changes = false;
+    Ok(())
+}
+
+pub fn list_named_workspace_layouts(
+    repository: &mut dyn WorkspaceRepository,
+) -> WorkspaceServiceResult<Vec<WorkspaceLayoutName>> {
+    repository.list_workspace_layouts()
 }
 
 pub fn dispatch_mnem_request(
@@ -281,6 +401,9 @@ mod tests {
     struct FakeWorkspaceRepository {
         snapshot: Option<GraphWorkspaceSnapshot>,
         saved_snapshot: Option<GraphWorkspaceSnapshot>,
+        workbench_view_id: Option<GraphViewId>,
+        graph_trees: HashMap<GraphViewId, GraphTreeDocument>,
+        layouts: HashMap<WorkspaceLayoutName, WorkspaceLayoutDocument>,
     }
 
     impl WorkspaceRepository for FakeWorkspaceRepository {
@@ -298,6 +421,55 @@ mod tests {
         ) -> WorkspaceServiceResult<()> {
             self.saved_snapshot = Some(snapshot.clone());
             Ok(())
+        }
+
+        fn load_or_create_workbench_view_id(
+            &mut self,
+            _workspace_id: &WorkspaceId,
+        ) -> WorkspaceServiceResult<GraphViewId> {
+            let view_id = self
+                .workbench_view_id
+                .unwrap_or_else(|| GraphViewId::from_uuid(Uuid::from_u128(900)));
+            self.workbench_view_id = Some(view_id);
+            Ok(view_id)
+        }
+
+        fn load_graph_tree(
+            &mut self,
+            view_id: &GraphViewId,
+        ) -> WorkspaceServiceResult<Option<GraphTreeDocument>> {
+            Ok(self.graph_trees.get(view_id).cloned())
+        }
+
+        fn save_graph_tree(
+            &mut self,
+            view_id: &GraphViewId,
+            document: &GraphTreeDocument,
+        ) -> WorkspaceServiceResult<()> {
+            self.graph_trees.insert(*view_id, document.clone());
+            Ok(())
+        }
+
+        fn load_workspace_layout(
+            &mut self,
+            name: &WorkspaceLayoutName,
+        ) -> WorkspaceServiceResult<Option<WorkspaceLayoutDocument>> {
+            Ok(self.layouts.get(name).cloned())
+        }
+
+        fn save_workspace_layout(
+            &mut self,
+            name: &WorkspaceLayoutName,
+            document: &WorkspaceLayoutDocument,
+        ) -> WorkspaceServiceResult<()> {
+            self.layouts.insert(name.clone(), document.clone());
+            Ok(())
+        }
+
+        fn list_workspace_layouts(&mut self) -> WorkspaceServiceResult<Vec<WorkspaceLayoutName>> {
+            let mut names = self.layouts.keys().cloned().collect::<Vec<_>>();
+            names.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+            Ok(names)
         }
     }
 
@@ -477,6 +649,7 @@ mod tests {
         let mut repository = FakeWorkspaceRepository {
             snapshot: Some(original.to_snapshot()),
             saved_snapshot: None,
+            ..FakeWorkspaceRepository::default()
         };
         let mut settings = FakeSettingsStore {
             preferences: WorkspacePreferences {
@@ -736,5 +909,117 @@ mod tests {
 
         assert!(error.message.contains("opaque graph mutation payload"));
         assert!(workspace.pending_effects.effects.is_empty());
+    }
+
+    #[test]
+    fn ensure_workbench_view_id_caches_repository_identity_in_workspace_state() {
+        let expected = GraphViewId::from_uuid(Uuid::from_u128(44));
+        let mut repository = FakeWorkspaceRepository {
+            workbench_view_id: Some(expected),
+            ..FakeWorkspaceRepository::default()
+        };
+        let mut workspace = GraphWorkspace::new();
+
+        let first =
+            ensure_workbench_view_id(&mut repository, &WorkspaceId::new("main"), &mut workspace)
+                .unwrap();
+        repository.workbench_view_id = Some(GraphViewId::from_uuid(Uuid::from_u128(55)));
+        let second =
+            ensure_workbench_view_id(&mut repository, &WorkspaceId::new("main"), &mut workspace)
+                .unwrap();
+
+        assert_eq!(first, expected);
+        assert_eq!(second, expected);
+        assert_eq!(
+            workspace.workbench.persistence.workbench_view_id,
+            Some(expected)
+        );
+    }
+
+    #[test]
+    fn workbench_graph_tree_round_trips_through_repository_contract() {
+        let view_id = GraphViewId::from_uuid(Uuid::from_u128(66));
+        let mut repository = FakeWorkspaceRepository {
+            workbench_view_id: Some(view_id),
+            ..FakeWorkspaceRepository::default()
+        };
+        let mut workspace = GraphWorkspace::new();
+        let tree = GraphTreeDocument::json("{\"tree\":\"tabs\"}");
+
+        let saved_view = save_workbench_graph_tree(
+            &mut repository,
+            &WorkspaceId::new("main"),
+            &mut workspace,
+            &tree,
+        )
+        .unwrap();
+        let loaded =
+            load_workbench_graph_tree(&mut repository, &WorkspaceId::new("main"), &mut workspace)
+                .unwrap();
+
+        assert_eq!(saved_view, view_id);
+        assert_eq!(loaded, Some(tree));
+        assert_eq!(
+            workspace.workbench.persistence.workbench_view_id,
+            Some(view_id)
+        );
+    }
+
+    #[test]
+    fn named_workspace_layout_helpers_track_active_layout_and_clear_dirty_state() {
+        let mut repository = FakeWorkspaceRepository::default();
+        let mut workspace = GraphWorkspace::new();
+        workspace.workbench.has_unsaved_changes = true;
+        let name = WorkspaceLayoutName::new("daily");
+        let document = WorkspaceLayoutDocument::json("{\"layout\":1}");
+
+        save_named_workspace_layout(&mut repository, &mut workspace, &name, &document).unwrap();
+        let loaded = load_named_workspace_layout(&mut repository, &mut workspace, &name).unwrap();
+
+        assert_eq!(loaded, Some(document));
+        assert_eq!(workspace.workbench.persistence.active_layout, Some(name));
+        assert!(!workspace.workbench.has_unsaved_changes);
+    }
+
+    #[test]
+    fn list_named_workspace_layouts_returns_stable_names() {
+        let mut repository = FakeWorkspaceRepository::default();
+        repository.layouts.insert(
+            WorkspaceLayoutName::new("zebra"),
+            WorkspaceLayoutDocument::json("{}"),
+        );
+        repository.layouts.insert(
+            WorkspaceLayoutName::new("alpha"),
+            WorkspaceLayoutDocument::json("{}"),
+        );
+
+        let names = list_named_workspace_layouts(&mut repository).unwrap();
+
+        assert_eq!(
+            names,
+            vec![
+                WorkspaceLayoutName::new("alpha"),
+                WorkspaceLayoutName::new("zebra")
+            ]
+        );
+    }
+
+    #[test]
+    fn workspace_snapshot_roundtrips_workbench_persistence_state() {
+        let mut workspace = GraphWorkspace::new();
+        workspace.workbench.persistence.workbench_view_id =
+            Some(GraphViewId::from_uuid(Uuid::from_u128(77)));
+        workspace.workbench.persistence.active_layout = Some(WorkspaceLayoutName::new("focus"));
+
+        let restored = GraphWorkspace::from_snapshot(&workspace.to_snapshot());
+
+        assert_eq!(
+            restored.workbench.persistence.workbench_view_id,
+            Some(GraphViewId::from_uuid(Uuid::from_u128(77)))
+        );
+        assert_eq!(
+            restored.workbench.persistence.active_layout,
+            Some(WorkspaceLayoutName::new("focus"))
+        );
     }
 }

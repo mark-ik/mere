@@ -233,6 +233,7 @@ pub struct PaneBinding {
 /// Workbench/frame state that is independent of any concrete host widget tree.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkbenchState {
+    pub persistence: persistence::WorkbenchPersistenceState,
     pub frames: HashMap<FrameId, FrameState>,
     pub active_frame: Option<FrameId>,
     pub has_unsaved_changes: bool,
@@ -442,6 +443,37 @@ pub trait WorkspaceRepository {
         workspace_id: &WorkspaceId,
         snapshot: &GraphWorkspaceSnapshot,
     ) -> WorkspaceServiceResult<()>;
+
+    fn load_or_create_workbench_view_id(
+        &mut self,
+        workspace_id: &WorkspaceId,
+    ) -> WorkspaceServiceResult<GraphViewId>;
+
+    fn load_graph_tree(
+        &mut self,
+        view_id: &GraphViewId,
+    ) -> WorkspaceServiceResult<Option<persistence::GraphTreeDocument>>;
+
+    fn save_graph_tree(
+        &mut self,
+        view_id: &GraphViewId,
+        document: &persistence::GraphTreeDocument,
+    ) -> WorkspaceServiceResult<()>;
+
+    fn load_workspace_layout(
+        &mut self,
+        name: &persistence::WorkspaceLayoutName,
+    ) -> WorkspaceServiceResult<Option<persistence::WorkspaceLayoutDocument>>;
+
+    fn save_workspace_layout(
+        &mut self,
+        name: &persistence::WorkspaceLayoutName,
+        document: &persistence::WorkspaceLayoutDocument,
+    ) -> WorkspaceServiceResult<()>;
+
+    fn list_workspace_layouts(
+        &mut self,
+    ) -> WorkspaceServiceResult<Vec<persistence::WorkspaceLayoutName>>;
 }
 
 /// Append/replay lane for typed graph mutations and traversal events.
