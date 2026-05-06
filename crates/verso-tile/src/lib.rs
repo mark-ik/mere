@@ -26,7 +26,8 @@ pub mod surface;
 
 pub use surface::{
     SurfaceCommand, SurfaceCommandBacklog, SurfaceCommandOutcome, SurfaceCommandSink,
-    SurfaceCommandStatus, SurfaceEffect, SurfaceHostId, SurfaceRequest, SurfaceTargetId,
+    SurfaceCommandStatus, SurfaceEffect, SurfaceHostId, SurfacePlacementPlan, SurfaceRequest,
+    SurfaceSlotPlacement, SurfaceTargetId, TileSlot,
 };
 
 /// Crate version.

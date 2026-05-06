@@ -29,10 +29,11 @@ pub use canvas_scene::{CanvasSceneOptions, build_canvas_scene_input, graph_view_
 pub use workbench::{
     ArrangementContainer, ArrangementMember, ArrangementSnapshot, FrameId, FrameState, PaneBinding,
     ProjectedPane, TileSlot, WorkbenchProjection, assign_frame_pane, assign_view_and_frame_pane,
-    clear_frame_pane, project_active_workbench, project_frame, remove_pane_binding,
-    remove_view_and_frame_pane, select_active_frame, select_active_root_view,
-    set_binding_surface_host, set_frame_root_view, set_view_and_frame_surface_host,
-    snapshot_active_arrangement, snapshot_frame_arrangement, upsert_pane_binding,
+    clear_frame_pane, project_active_surface_placements, project_active_workbench, project_frame,
+    project_surface_placements, remove_pane_binding, remove_view_and_frame_pane,
+    select_active_frame, select_active_root_view, set_binding_surface_host, set_frame_root_view,
+    set_view_and_frame_surface_host, slot_for_index, snapshot_active_arrangement,
+    snapshot_frame_arrangement, upsert_pane_binding,
 };
 
 /// Crate version.

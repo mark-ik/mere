@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use graphshell_core::graph::{GraphViewId, NodeKey};
 use graphshell_core::pane::PaneId;
 use serde::{Deserialize, Serialize};
-use verso_tile::surface::SurfaceHostId;
+pub use verso_tile::surface::TileSlot;
+use verso_tile::surface::{SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FrameId(pub String);
@@ -80,12 +81,6 @@ pub struct ArrangementMember {
     pub slot: TileSlot,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct TileSlot {
-    pub index: usize,
-    pub is_primary: bool,
-}
-
 /// Select the currently active frame when it exists in the frame map.
 pub fn select_active_frame<'a>(
     frames: &'a HashMap<FrameId, FrameState>,
@@ -137,12 +132,17 @@ pub fn snapshot_frame_arrangement(frame: &FrameState) -> ArrangementSnapshot {
                 pane_id: binding.pane_id,
                 node: binding.node,
                 surface_host: binding.surface_host.clone(),
-                slot: TileSlot {
-                    index,
-                    is_primary: index == 0,
-                },
+                slot: slot_for_index(index),
             })
             .collect(),
+    }
+}
+
+pub fn slot_for_index(index: usize) -> TileSlot {
+    if index == 0 {
+        TileSlot::primary()
+    } else {
+        TileSlot::secondary(index)
     }
 }
 
@@ -151,6 +151,32 @@ pub fn snapshot_active_arrangement(
     active_frame: Option<&FrameId>,
 ) -> Option<ArrangementSnapshot> {
     select_active_frame(frames, active_frame).map(snapshot_frame_arrangement)
+}
+
+pub fn project_surface_placements(snapshot: &ArrangementSnapshot) -> SurfacePlacementPlan {
+    let view = match &snapshot.container {
+        ArrangementContainer::Frame { root_view, .. } => *root_view,
+    };
+    let mut plan = SurfacePlacementPlan::default();
+    for member in &snapshot.members {
+        if let Some(host) = member.surface_host.clone() {
+            plan.push(SurfaceSlotPlacement::new(
+                host,
+                view,
+                member.pane_id,
+                member.slot,
+            ));
+        }
+    }
+    plan
+}
+
+pub fn project_active_surface_placements(
+    frames: &HashMap<FrameId, FrameState>,
+    active_frame: Option<&FrameId>,
+) -> Option<SurfacePlacementPlan> {
+    snapshot_active_arrangement(frames, active_frame)
+        .map(|snapshot| project_surface_placements(&snapshot))
 }
 
 pub fn upsert_pane_binding(bindings: &mut Vec<PaneBinding>, binding: PaneBinding) -> bool {
@@ -384,6 +410,36 @@ mod tests {
         assert_eq!(snapshot.members[1].pane_id, second.pane_id);
         assert_eq!(snapshot.members[1].slot.index, 1);
         assert!(!snapshot.members[1].slot.is_primary);
+    }
+
+    #[test]
+    fn project_active_surface_placements_filters_unhosted_members() {
+        let frame_id = FrameId::new("main");
+        let root_view = GraphViewId::from_uuid(uuid::Uuid::from_u128(22));
+        let first = PaneBinding {
+            pane_id: PaneId::from_uuid(uuid::Uuid::from_u128(23)),
+            node: NodeKey::new(12),
+            surface_host: Some(SurfaceHostId::new("desktop")),
+        };
+        let second = PaneBinding {
+            pane_id: PaneId::from_uuid(uuid::Uuid::from_u128(24)),
+            node: NodeKey::new(13),
+            surface_host: None,
+        };
+        let frame = FrameState {
+            id: frame_id.clone(),
+            label: "Main".to_string(),
+            root_view: Some(root_view),
+            panes: vec![first.clone(), second],
+        };
+        let frames = HashMap::from([(frame_id.clone(), frame)]);
+
+        let plan = project_active_surface_placements(&frames, Some(&frame_id)).unwrap();
+
+        assert_eq!(plan.len(), 1);
+        let placement = plan.placement_for_pane(first.pane_id).unwrap();
+        assert_eq!(placement.view, Some(root_view));
+        assert_eq!(placement.slot, TileSlot::primary());
     }
 
     #[test]

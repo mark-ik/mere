@@ -22,12 +22,13 @@ pub use inker::routing::{
 };
 pub use platen::workbench::{
     ArrangementContainer, ArrangementMember, ArrangementSnapshot, FrameId, FrameState, PaneBinding,
-    ProjectedPane, TileSlot, WorkbenchProjection,
+    ProjectedPane, WorkbenchProjection,
 };
 use serde::{Deserialize, Serialize};
 pub use verso_tile::surface::{
     SurfaceCommand, SurfaceCommandBacklog, SurfaceCommandOutcome, SurfaceCommandSink,
-    SurfaceCommandStatus, SurfaceHostId, SurfaceRequest,
+    SurfaceCommandStatus, SurfaceHostId, SurfacePlacementPlan, SurfaceRequest,
+    SurfaceSlotPlacement, TileSlot,
 };
 
 pub mod app_ux;

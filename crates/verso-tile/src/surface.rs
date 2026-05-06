@@ -98,6 +98,25 @@ pub struct SurfaceCommandBacklog {
     deferred: Vec<SurfaceCommand>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TileSlot {
+    pub index: usize,
+    pub is_primary: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceSlotPlacement {
+    pub host: SurfaceHostId,
+    pub view: Option<GraphViewId>,
+    pub pane: PaneId,
+    pub slot: TileSlot,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfacePlacementPlan {
+    placements: Vec<SurfaceSlotPlacement>,
+}
+
 impl SurfaceCommand {
     pub fn present(host: SurfaceHostId, view: Option<GraphViewId>, pane: Option<PaneId>) -> Self {
         Self::Present { host, view, pane }
@@ -260,6 +279,71 @@ impl SurfaceCommandBacklog {
     }
 }
 
+impl TileSlot {
+    pub fn new(index: usize, is_primary: bool) -> Self {
+        Self { index, is_primary }
+    }
+
+    pub fn primary() -> Self {
+        Self::new(0, true)
+    }
+
+    pub fn secondary(index: usize) -> Self {
+        Self::new(index, false)
+    }
+}
+
+impl SurfaceSlotPlacement {
+    pub fn new(
+        host: SurfaceHostId,
+        view: Option<GraphViewId>,
+        pane: PaneId,
+        slot: TileSlot,
+    ) -> Self {
+        Self {
+            host,
+            view,
+            pane,
+            slot,
+        }
+    }
+
+    pub fn present_command(&self) -> SurfaceCommand {
+        SurfaceCommand::present(self.host.clone(), self.view, Some(self.pane))
+    }
+}
+
+impl SurfacePlacementPlan {
+    pub fn len(&self) -> usize {
+        self.placements.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.placements.is_empty()
+    }
+
+    pub fn placements(&self) -> &[SurfaceSlotPlacement] {
+        &self.placements
+    }
+
+    pub fn push(&mut self, placement: SurfaceSlotPlacement) {
+        self.placements.push(placement);
+    }
+
+    pub fn placement_for_pane(&self, pane: PaneId) -> Option<&SurfaceSlotPlacement> {
+        self.placements
+            .iter()
+            .find(|placement| placement.pane == pane)
+    }
+
+    pub fn present_commands(&self) -> Vec<SurfaceCommand> {
+        self.placements
+            .iter()
+            .map(SurfaceSlotPlacement::present_command)
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -349,6 +433,34 @@ mod tests {
         assert_eq!(backlog.len(), 1);
         assert_eq!(backlog.take_next(), Some(command));
         assert!(backlog.is_empty());
+    }
+
+    #[test]
+    fn tile_slot_constructors_mark_primary_slot() {
+        assert_eq!(TileSlot::primary(), TileSlot::new(0, true));
+        assert_eq!(TileSlot::secondary(2), TileSlot::new(2, false));
+    }
+
+    #[test]
+    fn placement_plan_exposes_present_commands_by_slot() {
+        let view = GraphViewId::new();
+        let pane = PaneId::new();
+        let host = SurfaceHostId::new("desktop");
+        let placement =
+            SurfaceSlotPlacement::new(host.clone(), Some(view), pane, TileSlot::primary());
+        let mut plan = SurfacePlacementPlan::default();
+
+        plan.push(placement);
+
+        assert_eq!(plan.len(), 1);
+        assert_eq!(
+            plan.placement_for_pane(pane).unwrap().slot,
+            TileSlot::primary()
+        );
+        assert_eq!(
+            plan.present_commands(),
+            vec![SurfaceCommand::present_pane(host, view, pane)]
+        );
     }
 
     #[test]

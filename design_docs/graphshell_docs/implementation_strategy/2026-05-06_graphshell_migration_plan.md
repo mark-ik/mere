@@ -132,8 +132,8 @@ surface area to own the behavior directly.
 | `graphshell::app_state` | Reducer-owned `GraphWorkspace`, pure reducers, transient/durable UI state, typed effects, temporary service traits | Concrete services, renderer handles, task runtimes, host widgets, engine lifecycle, storage implementations | Keep Phase 3 code here only while it is pure state/reducer/selector logic; `app_state::services` now proves the full pending-effect queue can dispatch through traits without importing donor `GraphBrowserApp` |
 | `graphshell` host crates | Native/desktop/mobile host adapters, event translation, surface command application, accessibility bridge | Graph truth mutation, engine selection policy, private memory persistence | Hosts emit intents/effects and consume projections; they do not bypass reducers |
 | `inker` | Engine choice, URI/content routing policy, engine lifecycle, engine-output contracts | Graphshell chrome, GraphWorkspace mutation, tile placement | `inker::routing` now owns the portable engine-route request/decision vocabulary and a default scheme-based `EngineRoutePolicy`; concrete engine implementations still remain outside the policy |
-| `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | `platen::canvas_scene` and `platen::workbench` now own the extracted graph-to-canvas derivation core, frame/pane model, active-frame/root-view selectors, pane/frame binding helpers, active-workbench projection packets, and frame arrangement snapshots; Graphshell should keep shrinking toward wrappers around those selectors/helpers |
-| `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, `SurfaceCommand`, `SurfaceCommandOutcome`, `SurfaceCommandBacklog`, and the generic `SurfaceCommandSink` host seam now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
+| `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | `platen::canvas_scene` and `platen::workbench` now own the extracted graph-to-canvas derivation core, frame/pane model, active-frame/root-view selectors, pane/frame binding helpers, active-workbench projection packets, frame arrangement snapshots, and the projection from arrangements into hosted surface placements; Graphshell should keep shrinking toward wrappers around those selectors/helpers |
+| `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, `SurfaceCommand`, `SurfaceCommandOutcome`, `SurfaceCommandBacklog`, `TileSlot`, `SurfaceSlotPlacement`, `SurfacePlacementPlan`, and the generic `SurfaceCommandSink` host seam now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
 | `mnem` | Private local memory: graph snapshots, traversal logs, settings/cache/index persistence | Mere transport state, Moothold community flora, host UI state | The contract now lives in the dedicated `graphshell::mnem` module; a narrower crate boundary can come later if it proves necessary |
 | `mere` | Product entrypoint, top-level service wiring, crate orchestration, feature assembly | Low-level graph primitives, renderer internals, protocol implementations | `mere` composes the system; it should not become the old root-crate catch-all |
 
@@ -318,22 +318,23 @@ crates that own those domains.
 Primary next slices:
 
 1. Grow `verso-tile` from command vocabulary into surface lifecycle reporting:
-  host acknowledgement and deferred-command backlog semantics are in place, so
-  the next edge is surface-slot placement.
+    host acknowledgement, deferred-command backlog semantics, and portable
+    surface-slot placement packets are in place, so the next edge is host
+    allocation/retry scheduling.
 2. Keep route policy in `inker`: the default scheme policy is in place, and the
    next route-policy move should add content/runtime signals only when a real
    engine implementation needs them.
 3. Continue extracting renderable workbench selectors into `platen`: active
-  frame projection and frame arrangement snapshots are in place, and the next
-  edge is tile-slot projection that can replace donor arrangement bridge
-  helpers.
+    frame projection, frame arrangement snapshots, and surface-placement
+    projection are in place; the next edge is reducer-safe arrangement
+    reconciliation if a real donor method needs it.
 4. Use the donor inventory as the `GraphBrowserApp` import gate: each old method
    must be classified before migration, and obsolete renderer/service residue
    should be replaced rather than copied.
 5. Extend the trait-backed `GraphWorkspace` service container only when new
-  pending-effect kinds appear; do not import concrete donor `GraphBrowserApp`
-  code until each method has been classified as reducer, service glue, host
-  adapter, or obsolete.
+    pending-effect kinds appear; do not import concrete donor `GraphBrowserApp`
+    code until each method has been classified as reducer, service glue, host
+    adapter, or obsolete.
 6. Run `cargo test --workspace` from `repos/mere` after every narrow move.
 
 Fruitful sidequests:
@@ -465,3 +466,7 @@ host/runtime surfaces.
 - Added `platen::workbench::ArrangementSnapshot`, `ArrangementContainer`, `ArrangementMember`, and `TileSlot`, with active-frame snapshot helpers. This preserves the donor arrangement bridge's useful plain-data boundary while moving the snapshot vocabulary to Platen and leaving graph mutation/reconciliation out of the projection layer.
 - `graphshell::app_state::composition` now wraps Platen's active arrangement snapshot just like it wraps active workbench projection. Graphshell remains the reducer-owned workspace selector, not the owner of the arrangement packet shape.
 - Verification: `cargo test -p graphshell -p platen -p verso-tile` passed with 48 Graphshell tests, 13 Platen tests, and 10 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
+- Moved `TileSlot` into `verso_tile::surface` and added `SurfaceSlotPlacement` / `SurfacePlacementPlan` so tile-slot placement has a portable surface-layer packet instead of living as a Platen-local index. Placement plans can expose hosted placements and derive present commands without owning host widgets.
+- Added `platen::workbench::project_surface_placements` and `project_active_surface_placements` so Platen maps frame arrangement snapshots into Verso-Tile placement plans while filtering unhosted members. `graphshell::app_state::composition` remains a thin wrapper over that projection for reducer-owned workspace state.
+- Updated the root workspace members to follow the relocated `moothold` and `mooting` crates under `crates/moot/`; this preserves the user's crate move and restores Cargo workspace loading.
+- Verification: `cargo test -p graphshell -p platen -p verso-tile` passed with 49 Graphshell tests, 14 Platen tests, and 12 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.

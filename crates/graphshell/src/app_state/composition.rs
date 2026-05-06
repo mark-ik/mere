@@ -17,7 +17,9 @@ use graph_canvas::scene::CanvasSceneInput;
 use graphshell_core::graph::{GraphViewId, NodeKey};
 pub use platen::canvas_scene::{CanvasSceneOptions, graph_view_id_to_canvas};
 
-use super::{ArrangementSnapshot, FrameState, GraphWorkspace, WorkbenchProjection};
+use super::{
+    ArrangementSnapshot, FrameState, GraphWorkspace, SurfacePlacementPlan, WorkbenchProjection,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompositionError {
@@ -68,6 +70,16 @@ pub fn project_active_workbench(workspace: &GraphWorkspace) -> WorkbenchProjecti
 /// Snapshot the active frame arrangement as plain Platen-owned data.
 pub fn snapshot_active_arrangement(workspace: &GraphWorkspace) -> Option<ArrangementSnapshot> {
     platen::workbench::snapshot_active_arrangement(
+        &workspace.workbench.frames,
+        workspace.workbench.active_frame.as_ref(),
+    )
+}
+
+/// Project hosted active-frame members into Verso-Tile slot placements.
+pub fn project_active_surface_placements(
+    workspace: &GraphWorkspace,
+) -> Option<SurfacePlacementPlan> {
+    platen::workbench::project_active_surface_placements(
         &workspace.workbench.frames,
         workspace.workbench.active_frame.as_ref(),
     )
@@ -285,5 +297,29 @@ mod tests {
         );
         assert_eq!(snapshot.members[0].pane_id, pane.pane_id);
         assert_eq!(snapshot.members[0].slot.index, 0);
+    }
+
+    #[test]
+    fn active_surface_placements_use_verso_tile_slots() {
+        let pane = PaneBinding {
+            pane_id: PaneId::from_uuid(Uuid::from_u128(46)),
+            node: NodeKey::new(9),
+            surface_host: Some(SurfaceHostId::new("desktop")),
+        };
+        let frame = FrameState {
+            id: FrameId::new("main"),
+            label: "Main".to_string(),
+            root_view: Some(view_id(47)),
+            panes: vec![pane.clone()],
+        };
+        let mut workspace = GraphWorkspace::new();
+        workspace.workbench.frames = HashMap::from([(frame.id.clone(), frame)]);
+        workspace.workbench.active_frame = Some(FrameId::new("main"));
+
+        let plan = project_active_surface_placements(&workspace).unwrap();
+
+        assert_eq!(plan.len(), 1);
+        assert!(plan.placements()[0].slot.is_primary);
+        assert_eq!(plan.placements()[0].pane, pane.pane_id);
     }
 }

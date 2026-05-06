@@ -17,8 +17,8 @@ members = [
     "crates/nematic",
     "crates/murm/murm",
     "crates/murm/murmuring",
-    "crates/moothold/moothold",
-    "crates/moothold/mooting",
+    "crates/moot/moothold",
+    "crates/moot/mooting",
 ]
 
 [workspace.package]
