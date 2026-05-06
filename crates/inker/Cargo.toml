@@ -13,3 +13,4 @@ path = "src/lib.rs"
 [dependencies]
 graphshell-core = { path = "../shell/graphshell-core" }
 serde = { version = "1.0", features = ["derive"] }
+verso-tile = { path = "../verso-tile" }

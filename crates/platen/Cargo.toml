@@ -9,3 +9,8 @@ categories = ["gui"]
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+graph-canvas = { path = "../graph/graph-canvas" }
+graphshell-core = { path = "../shell/graphshell-core" }
+uuid = { version = "1", features = ["serde"] }

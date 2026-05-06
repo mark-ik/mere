@@ -1381,6 +1381,7 @@ dependencies = [
  "graphshell-core",
  "graphshell-runtime",
  "inker",
+ "platen",
  "serde",
  "serde_json",
  "uuid",
@@ -1891,6 +1892,7 @@ version = "0.0.1"
 dependencies = [
  "graphshell-core",
  "serde",
+ "verso-tile",
 ]
 
 [[package]]
@@ -3136,6 +3138,11 @@ dependencies = [
 [[package]]
 name = "platen"
 version = "0.0.1"
+dependencies = [
+ "graph-canvas",
+ "graphshell-core",
+ "uuid",
+]
 
 [[package]]
 name = "plist"
@@ -4791,6 +4798,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "verso-tile"
 version = "0.0.1"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "wait-timeout"

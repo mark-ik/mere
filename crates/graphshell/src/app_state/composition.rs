@@ -13,44 +13,11 @@
 //! render scheduling, that behavior belongs in `platen`, `verso-tile`, `inker`,
 //! or host glue instead.
 
-use std::collections::HashSet;
-
-use graph_canvas::projection::{ProjectionMode, ViewDimension};
-use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, SceneMode, ViewId};
+use graph_canvas::scene::CanvasSceneInput;
 use graphshell_core::graph::{GraphViewId, NodeKey};
+pub use platen::canvas_scene::{CanvasSceneOptions, graph_view_id_to_canvas};
 
 use super::GraphWorkspace;
-
-/// Canvas projection options for one graph view.
-#[derive(Clone, Debug, PartialEq)]
-pub struct CanvasSceneOptions {
-    pub view_id: GraphViewId,
-    pub scene_mode: SceneMode,
-    pub dimension: ViewDimension,
-    pub visible_nodes: Option<Vec<NodeKey>>,
-    pub default_node_radius: f32,
-}
-
-impl CanvasSceneOptions {
-    pub fn new(view_id: GraphViewId) -> Self {
-        Self {
-            view_id,
-            ..Self::default()
-        }
-    }
-}
-
-impl Default for CanvasSceneOptions {
-    fn default() -> Self {
-        Self {
-            view_id: GraphViewId::from_uuid(uuid::Uuid::nil()),
-            scene_mode: SceneMode::Browse,
-            dimension: ViewDimension::TwoD,
-            visible_nodes: None,
-            default_node_radius: 18.0,
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompositionError {
@@ -68,59 +35,16 @@ pub fn build_canvas_scene_input(
         return Err(CompositionError::MissingGraphView(options.view_id));
     }
 
-    let visible_nodes = options
-        .visible_nodes
-        .as_ref()
-        .map(|nodes| nodes.iter().copied().collect::<HashSet<_>>());
-    let nodes = workspace
-        .domain
-        .graph
-        .nodes()
-        .filter(|(key, _)| visible_nodes.as_ref().is_none_or(|mask| mask.contains(key)))
-        .map(|(key, node)| CanvasNode {
-            id: key,
-            position: node.projected_position(),
-            radius: options.default_node_radius,
-            label: Some(node.title.clone()),
-        })
-        .collect();
-    let edges = workspace
-        .domain
-        .graph
-        .edges()
-        .filter(|edge| {
-            visible_nodes
-                .as_ref()
-                .is_none_or(|mask| mask.contains(&edge.from) && mask.contains(&edge.to))
-        })
-        .map(|edge| CanvasEdge {
-            source: edge.from,
-            target: edge.to,
-            weight: 1.0,
-        })
-        .collect();
-
-    Ok(CanvasSceneInput {
-        view_id: graph_view_id_to_canvas(options.view_id),
-        nodes,
-        edges,
-        scene_objects: Vec::new(),
-        overlays: Vec::new(),
-        scene_mode: options.scene_mode,
-        projection: ProjectionMode::from_view_dimension(&options.dimension),
-    })
-}
-
-pub fn graph_view_id_to_canvas(id: GraphViewId) -> ViewId {
-    let uuid = id.as_uuid();
-    let bytes = uuid.as_bytes();
-    let lower = u64::from_le_bytes(bytes[8..16].try_into().expect("uuid lower bytes"));
-    ViewId(lower)
+    Ok(platen::canvas_scene::build_canvas_scene_input(
+        &workspace.domain.graph,
+        options,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
-    use graph_canvas::projection::{ThreeDMode, ZSource};
+    use graph_canvas::projection::{ProjectionMode, ThreeDMode, ViewDimension, ZSource};
+    use graph_canvas::scene::SceneMode;
     use graphshell_core::geometry::PortablePoint;
     use graphshell_core::graph::EdgeType;
     use uuid::Uuid;

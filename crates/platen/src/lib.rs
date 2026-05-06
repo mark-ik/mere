@@ -19,6 +19,11 @@
 
 #![doc(html_root_url = "https://docs.rs/platen/0.0.1")]
 
+/// Graph-aware scene derivation for canvas-facing composition.
+pub mod canvas_scene;
+
+pub use canvas_scene::{CanvasSceneOptions, build_canvas_scene_input, graph_view_id_to_canvas};
+
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

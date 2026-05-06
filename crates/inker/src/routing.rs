@@ -6,24 +6,12 @@
 
 use graphshell_core::graph::{GraphViewId, NodeKey};
 use serde::{Deserialize, Serialize};
+pub use verso_tile::SurfaceTargetId;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WorkspaceRouteId(pub String);
 
 impl WorkspaceRouteId {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct SurfaceTargetId(pub String);
-
-impl SurfaceTargetId {
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }

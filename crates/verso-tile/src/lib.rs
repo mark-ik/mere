@@ -21,6 +21,11 @@
 
 #![doc(html_root_url = "https://docs.rs/verso-tile/0.0.1")]
 
+/// Portable rendering-surface identity types.
+pub mod surface;
+
+pub use surface::SurfaceTargetId;
+
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
