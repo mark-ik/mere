@@ -41,12 +41,56 @@ pub struct FrameState {
     pub panes: Vec<PaneBinding>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkbenchProjection {
+    pub active_frame: Option<FrameId>,
+    pub frame_label: Option<String>,
+    pub root_view: Option<GraphViewId>,
+    pub panes: Vec<ProjectedPane>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectedPane {
+    pub pane_id: PaneId,
+    pub node: NodeKey,
+    pub surface_host: Option<SurfaceHostId>,
+    pub is_primary: bool,
+}
+
 /// Select the currently active frame when it exists in the frame map.
 pub fn select_active_frame<'a>(
     frames: &'a HashMap<FrameId, FrameState>,
     active_frame: Option<&FrameId>,
 ) -> Option<&'a FrameState> {
     active_frame.and_then(|frame_id| frames.get(frame_id))
+}
+
+pub fn project_frame(frame: &FrameState) -> WorkbenchProjection {
+    WorkbenchProjection {
+        active_frame: Some(frame.id.clone()),
+        frame_label: Some(frame.label.clone()),
+        root_view: frame.root_view,
+        panes: frame
+            .panes
+            .iter()
+            .enumerate()
+            .map(|(index, binding)| ProjectedPane {
+                pane_id: binding.pane_id,
+                node: binding.node,
+                surface_host: binding.surface_host.clone(),
+                is_primary: index == 0,
+            })
+            .collect(),
+    }
+}
+
+pub fn project_active_workbench(
+    frames: &HashMap<FrameId, FrameState>,
+    active_frame: Option<&FrameId>,
+) -> WorkbenchProjection {
+    select_active_frame(frames, active_frame)
+        .map(project_frame)
+        .unwrap_or_default()
 }
 
 pub fn upsert_pane_binding(bindings: &mut Vec<PaneBinding>, binding: PaneBinding) -> bool {
@@ -203,6 +247,42 @@ mod tests {
             select_active_root_view(&frames, Some(&frame_id)),
             Some(root_view)
         );
+    }
+
+    #[test]
+    fn project_active_workbench_returns_plain_frame_packet() {
+        let frame_id = FrameId::new("main");
+        let root_view = GraphViewId::from_uuid(uuid::Uuid::from_u128(8));
+        let pane = PaneBinding {
+            pane_id: PaneId::from_uuid(uuid::Uuid::from_u128(18)),
+            node: NodeKey::new(9),
+            surface_host: Some(SurfaceHostId::new("desktop")),
+        };
+        let frame = FrameState {
+            id: frame_id.clone(),
+            label: "Main".to_string(),
+            root_view: Some(root_view),
+            panes: vec![pane.clone()],
+        };
+        let frames = HashMap::from([(frame_id.clone(), frame)]);
+
+        let projection = project_active_workbench(&frames, Some(&frame_id));
+
+        assert_eq!(projection.active_frame, Some(frame_id));
+        assert_eq!(projection.root_view, Some(root_view));
+        assert_eq!(projection.panes.len(), 1);
+        assert_eq!(projection.panes[0].pane_id, pane.pane_id);
+        assert!(projection.panes[0].is_primary);
+    }
+
+    #[test]
+    fn project_active_workbench_is_empty_when_frame_missing() {
+        let frames = HashMap::new();
+        let frame_id = FrameId::new("missing");
+
+        let projection = project_active_workbench(&frames, Some(&frame_id));
+
+        assert_eq!(projection, WorkbenchProjection::default());
     }
 
     #[test]

@@ -17,7 +17,7 @@ use graph_canvas::scene::CanvasSceneInput;
 use graphshell_core::graph::{GraphViewId, NodeKey};
 pub use platen::canvas_scene::{CanvasSceneOptions, graph_view_id_to_canvas};
 
-use super::{FrameState, GraphWorkspace};
+use super::{FrameState, GraphWorkspace, WorkbenchProjection};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompositionError {
@@ -57,6 +57,14 @@ pub fn select_active_root_view(workspace: &GraphWorkspace) -> Option<GraphViewId
     )
 }
 
+/// Project the active workbench frame into host-neutral pane packets.
+pub fn project_active_workbench(workspace: &GraphWorkspace) -> WorkbenchProjection {
+    platen::workbench::project_active_workbench(
+        &workspace.workbench.frames,
+        workspace.workbench.active_frame.as_ref(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -65,11 +73,12 @@ mod tests {
     use graph_canvas::scene::SceneMode;
     use graphshell_core::geometry::PortablePoint;
     use graphshell_core::graph::EdgeType;
+    use graphshell_core::pane::PaneId;
     use uuid::Uuid;
 
     use super::*;
-    use crate::app_state::FrameId;
     use crate::app_state::graph_runtime::{GraphRuntimeIntent, reduce_graph_runtime_intent};
+    use crate::app_state::{FrameId, PaneBinding, SurfaceHostId};
 
     fn view_id(value: u128) -> GraphViewId {
         GraphViewId::from_uuid(Uuid::from_u128(value))
@@ -212,5 +221,30 @@ mod tests {
         let selected = select_active_root_view(&workspace);
 
         assert_eq!(selected, frame.root_view);
+    }
+
+    #[test]
+    fn active_workbench_projection_uses_platen_packet() {
+        let pane = PaneBinding {
+            pane_id: PaneId::from_uuid(Uuid::from_u128(42)),
+            node: NodeKey::new(7),
+            surface_host: Some(SurfaceHostId::new("desktop")),
+        };
+        let frame = FrameState {
+            id: FrameId::new("main"),
+            label: "Main".to_string(),
+            root_view: Some(view_id(43)),
+            panes: vec![pane.clone()],
+        };
+        let mut workspace = GraphWorkspace::new();
+        workspace.workbench.frames = HashMap::from([(frame.id.clone(), frame.clone())]);
+        workspace.workbench.active_frame = Some(frame.id.clone());
+
+        let projection = project_active_workbench(&workspace);
+
+        assert_eq!(projection.active_frame, Some(frame.id));
+        assert_eq!(projection.root_view, frame.root_view);
+        assert_eq!(projection.panes[0].pane_id, pane.pane_id);
+        assert!(projection.panes[0].is_primary);
     }
 }

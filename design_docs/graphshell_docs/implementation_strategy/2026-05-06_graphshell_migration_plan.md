@@ -12,6 +12,7 @@
 - Inherited: [`../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/2026-05-01_workspace_architecture_proposal.md`](../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/2026-05-01_workspace_architecture_proposal.md) — current root-crate decomposition plan and registrar/system-layer receipts
 - Inherited: [`../../../../serval/docs/2026-05-05_serval_netrender_cut_plan.md`](../../../../serval/docs/2026-05-05_serval_netrender_cut_plan.md) — Serval/Netrender imposed renderer shape
 - Inherited: [`../../../../netrender/netrender-notes/2026-05-04_feature_roadmap.md`](../../../../netrender/netrender-notes/2026-05-04_feature_roadmap.md) — Netrender compositor handoff roadmap
+- [`2026-05-06_graphbrowserapp_donor_inventory.md`](2026-05-06_graphbrowserapp_donor_inventory.md) — migration gate for classifying donor `GraphBrowserApp` methods before import
 
 ---
 
@@ -130,8 +131,8 @@ surface area to own the behavior directly.
 | `graph-canvas` / `graph-tree` | Canvas scene packet types, projection math inputs, tree topology/navigation primitives | `GraphWorkspace`, product chrome, engine/host decisions | Graphshell may select state into these types; these crates should not learn Graphshell app state |
 | `graphshell::app_state` | Reducer-owned `GraphWorkspace`, pure reducers, transient/durable UI state, typed effects, temporary service traits | Concrete services, renderer handles, task runtimes, host widgets, engine lifecycle, storage implementations | Keep Phase 3 code here only while it is pure state/reducer/selector logic; `app_state::services` now proves the full pending-effect queue can dispatch through traits without importing donor `GraphBrowserApp` |
 | `graphshell` host crates | Native/desktop/mobile host adapters, event translation, surface command application, accessibility bridge | Graph truth mutation, engine selection policy, private memory persistence | Hosts emit intents/effects and consume projections; they do not bypass reducers |
-| `inker` | Engine choice, URI/content routing policy, engine lifecycle, engine-output contracts | Graphshell chrome, GraphWorkspace mutation, tile placement | `inker::routing` now owns the portable engine-route request/decision vocabulary; concrete routing policy still remains to be implemented there |
-| `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | `platen::canvas_scene` and `platen::workbench` now own the extracted graph-to-canvas derivation core, frame/pane model, active-frame/root-view selectors, and pane/frame binding helpers; Graphshell should keep shrinking toward wrappers around those selectors/helpers |
+| `inker` | Engine choice, URI/content routing policy, engine lifecycle, engine-output contracts | Graphshell chrome, GraphWorkspace mutation, tile placement | `inker::routing` now owns the portable engine-route request/decision vocabulary and a default scheme-based `EngineRoutePolicy`; concrete engine implementations still remain outside the policy |
+| `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | `platen::canvas_scene` and `platen::workbench` now own the extracted graph-to-canvas derivation core, frame/pane model, active-frame/root-view selectors, pane/frame binding helpers, and active-workbench projection packets; Graphshell should keep shrinking toward wrappers around those selectors/helpers |
 | `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, `SurfaceCommand`, `SurfaceCommandOutcome`, and the generic `SurfaceCommandSink` host seam now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
 | `mnem` | Private local memory: graph snapshots, traversal logs, settings/cache/index persistence | Mere transport state, Moothold community flora, host UI state | The contract now lives in the dedicated `graphshell::mnem` module; a narrower crate boundary can come later if it proves necessary |
 | `mere` | Product entrypoint, top-level service wiring, crate orchestration, feature assembly | Low-level graph primitives, renderer internals, protocol implementations | `mere` composes the system; it should not become the old root-crate catch-all |
@@ -317,25 +318,30 @@ crates that own those domains.
 Primary next slices:
 
 1. Grow `verso-tile` from command vocabulary into surface lifecycle reporting:
-   command outcomes, host acknowledgement semantics, deferred work, and later
-   surface-slot placement.
-2. Move concrete engine-route policy into `inker`; keep Graphshell asking for
-   route decisions through a trait rather than owning policy vocabulary.
-3. Continue extracting renderable workbench selectors into `platen`, especially
-   frame-root arrangement and tile-slot projection once the data shape is clear.
-4. Extend the trait-backed `GraphWorkspace` service container only when new
+   host acknowledgement semantics are in place, so the next edge is deferred
+   work handling and later surface-slot placement.
+2. Keep route policy in `inker`: the default scheme policy is in place, and the
+   next route-policy move should add content/runtime signals only when a real
+   engine implementation needs them.
+3. Continue extracting renderable workbench selectors into `platen`: active
+   frame projection is in place, and the next edge is arrangement snapshots /
+   tile-slot projection that can replace donor arrangement bridge helpers.
+4. Use the donor inventory as the `GraphBrowserApp` import gate: each old method
+   must be classified before migration, and obsolete renderer/service residue
+   should be replaced rather than copied.
+5. Extend the trait-backed `GraphWorkspace` service container only when new
   pending-effect kinds appear; do not import concrete donor `GraphBrowserApp`
   code until each method has been classified as reducer, service glue, host
   adapter, or obsolete.
-5. Run `cargo test --workspace` from `repos/mere` after every narrow move.
+6. Run `cargo test --workspace` from `repos/mere` after every narrow move.
 
 Fruitful sidequests:
 
 - Audit the protocol architecture plan against this migration: the
   `verso-tile` / server-self-hosting language still needs a concrete boundary
   with `mere-transport`, `moothold`, and host crates.
-- Start a small `GraphBrowserApp` donor inventory that labels each remaining
-  method as reducer, service glue, host adapter, or obsolete prototype residue.
+- Grow the `GraphBrowserApp` donor inventory only as methods are touched, so it
+  stays a migration gate instead of becoming a stale catalog.
 - Decompose only oversized portable files touched by these slices; do not let
   file-size cleanup interrupt the ownership migration unless a touched file is
   actively blocking comprehension.
@@ -450,3 +456,7 @@ host/runtime surfaces.
 - Added `graphshell::app_state::services` as the first trait-backed `GraphWorkspace` service container. It dispatches every current `WorkspaceEffect` variant through `WorkspaceRepository`, `SettingsStore`, `GraphMutationJournal`, `MnemStore`, `EngineRouter`, `SurfaceHost`, `DiagnosticsSink`, and `TaskRuntime`, returning a report with route decisions, surface outcomes, Mnem responses, and side-effect counts.
 - This completes the plan's immediate service-container proof before donor `GraphBrowserApp` import: reducers can emit a full pending-effect queue, and composition/service glue can execute that queue without concrete stores, host widgets, renderer handles, or engine implementations entering `app_state`.
 - Verification: `cargo test -p graphshell app_state::services` passed; `cargo test -p graphshell -p platen -p verso-tile` passed with 46 Graphshell tests, 10 Platen tests, and 8 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
+- Added `inker::routing::EngineRoutePolicy` and `EngineRouteRule` as the first concrete route-policy home outside Graphshell. The default policy sends full web schemes to `serval.web`, smolweb schemes to `nematic.smolweb`, local files to `nematic.file`, internal Mere/Graphshell routes to a headless internal engine, and unknown protocols to a headless external-protocol handoff instead of guessing a webview.
+- Added `platen::workbench::WorkbenchProjection` and `ProjectedPane` plus `project_frame` / `project_active_workbench` so active frame/pane projection is plain data owned by Platen. `graphshell::app_state::composition` now wraps that projection instead of owning the packet shape.
+- Added `2026-05-06_graphbrowserapp_donor_inventory.md` as the import gate for old `GraphBrowserApp` methods. The seed inventory classifies runtime lifecycle, arrangement bridge, persistence facade, sync/storage handles, clip capture, and history areas as reducer, service glue, host adapter, Platen projection, Inker policy, Verso-Tile lifecycle, or obsolete residue before any method body can be copied into Mere.
+- Verification: `cargo test -p inker -p platen -p graphshell` passed with 5 Inker tests, 12 Platen tests, and 47 Graphshell tests; `cargo fmt` completed; `cargo test -p inker -p platen -p graphshell -p verso-tile` passed with 5 Inker tests, 12 Platen tests, 47 Graphshell tests, and 8 Verso-Tile tests; `cargo test --workspace` passed across Mere.

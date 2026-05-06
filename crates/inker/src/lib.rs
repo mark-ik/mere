@@ -24,8 +24,8 @@
 pub mod routing;
 
 pub use routing::{
-    EngineRouteDecision, EngineRouteRequest, SurfaceContract, SurfaceContractMode, SurfaceTargetId,
-    WorkspaceRouteId,
+    EngineRouteDecision, EngineRoutePolicy, EngineRouteRequest, EngineRouteRule, SurfaceContract,
+    SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId,
 };
 
 /// Crate version.
