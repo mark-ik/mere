@@ -26,9 +26,9 @@ pub use platen::workbench::{
 };
 use serde::{Deserialize, Serialize};
 pub use verso_tile::surface::{
-    SurfaceCommand, SurfaceCommandBacklog, SurfaceCommandOutcome, SurfaceCommandSink,
-    SurfaceCommandStatus, SurfaceHostId, SurfacePlacementPlan, SurfaceRequest,
-    SurfaceSlotPlacement, TileSlot,
+    SurfaceCommand, SurfaceCommandBacklog, SurfaceCommandOutcome, SurfaceCommandSchedule,
+    SurfaceCommandSink, SurfaceCommandStatus, SurfaceHostId, SurfaceLifecycleState,
+    SurfacePlacementPlan, SurfaceRequest, SurfaceSlotPlacement, TileSlot,
 };
 
 pub mod app_ux;

@@ -117,6 +117,19 @@ pub struct SurfacePlacementPlan {
     placements: Vec<SurfaceSlotPlacement>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceCommandSchedule {
+    commands: Vec<SurfaceCommand>,
+    pub placements: usize,
+    pub retries: usize,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceLifecycleState {
+    placements: SurfacePlacementPlan,
+    backlog: SurfaceCommandBacklog,
+}
+
 impl SurfaceCommand {
     pub fn present(host: SurfaceHostId, view: Option<GraphViewId>, pane: Option<PaneId>) -> Self {
         Self::Present { host, view, pane }
@@ -344,6 +357,59 @@ impl SurfacePlacementPlan {
     }
 }
 
+impl SurfaceCommandSchedule {
+    pub fn len(&self) -> usize {
+        self.commands.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.commands.is_empty()
+    }
+
+    pub fn commands(&self) -> &[SurfaceCommand] {
+        &self.commands
+    }
+}
+
+impl SurfaceLifecycleState {
+    pub fn placements(&self) -> &SurfacePlacementPlan {
+        &self.placements
+    }
+
+    pub fn backlog(&self) -> &SurfaceCommandBacklog {
+        &self.backlog
+    }
+
+    pub fn schedule_placements(&mut self, plan: SurfacePlacementPlan) -> SurfaceCommandSchedule {
+        let commands = plan.present_commands();
+        let placements = plan.len();
+        self.placements = plan;
+        SurfaceCommandSchedule {
+            commands,
+            placements,
+            retries: 0,
+        }
+    }
+
+    pub fn record_outcome(
+        &mut self,
+        command: &SurfaceCommand,
+        outcome: &SurfaceCommandOutcome,
+    ) -> bool {
+        self.backlog.record_outcome(command, outcome)
+    }
+
+    pub fn schedule_retries(&mut self) -> SurfaceCommandSchedule {
+        let commands = self.backlog.drain();
+        let retries = commands.len();
+        SurfaceCommandSchedule {
+            commands,
+            placements: 0,
+            retries,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -461,6 +527,52 @@ mod tests {
             plan.present_commands(),
             vec![SurfaceCommand::present_pane(host, view, pane)]
         );
+    }
+
+    #[test]
+    fn lifecycle_state_schedules_placements_and_retries_deferred_commands() {
+        let view = GraphViewId::new();
+        let first_pane = PaneId::new();
+        let second_pane = PaneId::new();
+        let host = SurfaceHostId::new("desktop");
+        let mut plan = SurfacePlacementPlan::default();
+        plan.push(SurfaceSlotPlacement::new(
+            host.clone(),
+            Some(view),
+            first_pane,
+            TileSlot::primary(),
+        ));
+        plan.push(SurfaceSlotPlacement::new(
+            host.clone(),
+            Some(view),
+            second_pane,
+            TileSlot::secondary(1),
+        ));
+        let mut lifecycle = SurfaceLifecycleState::default();
+
+        let schedule = lifecycle.schedule_placements(plan);
+
+        assert_eq!(schedule.placements, 2);
+        assert_eq!(schedule.retries, 0);
+        assert_eq!(schedule.len(), 2);
+        assert_eq!(lifecycle.placements().len(), 2);
+        let first_command = schedule.commands()[0].clone();
+        let second_command = schedule.commands()[1].clone();
+        assert!(lifecycle.record_outcome(
+            &first_command,
+            &first_command.outcome(SurfaceCommandStatus::Deferred)
+        ));
+        assert!(!lifecycle.record_outcome(
+            &second_command,
+            &second_command.outcome(SurfaceCommandStatus::Applied)
+        ));
+
+        let retry = lifecycle.schedule_retries();
+
+        assert_eq!(retry.placements, 0);
+        assert_eq!(retry.retries, 1);
+        assert_eq!(retry.commands(), &[first_command]);
+        assert!(lifecycle.backlog().is_empty());
     }
 
     #[test]

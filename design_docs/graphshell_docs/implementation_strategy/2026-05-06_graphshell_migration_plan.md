@@ -133,7 +133,7 @@ surface area to own the behavior directly.
 | `graphshell` host crates | Native/desktop/mobile host adapters, event translation, surface command application, accessibility bridge | Graph truth mutation, engine selection policy, private memory persistence | Hosts emit intents/effects and consume projections; they do not bypass reducers |
 | `inker` | Engine choice, URI/content routing policy, engine lifecycle, engine-output contracts | Graphshell chrome, GraphWorkspace mutation, tile placement | `inker::routing` now owns the portable engine-route request/decision vocabulary and a default scheme-based `EngineRoutePolicy`; concrete engine implementations still remain outside the policy |
 | `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | `platen::canvas_scene` and `platen::workbench` now own the extracted graph-to-canvas derivation core, frame/pane model, active-frame/root-view selectors, pane/frame binding helpers, active-workbench projection packets, frame arrangement snapshots, and the projection from arrangements into hosted surface placements; Graphshell should keep shrinking toward wrappers around those selectors/helpers |
-| `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, `SurfaceCommand`, `SurfaceCommandOutcome`, `SurfaceCommandBacklog`, `TileSlot`, `SurfaceSlotPlacement`, `SurfacePlacementPlan`, and the generic `SurfaceCommandSink` host seam now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
+| `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, `SurfaceCommand`, `SurfaceCommandOutcome`, `SurfaceCommandBacklog`, `TileSlot`, `SurfaceSlotPlacement`, `SurfacePlacementPlan`, `SurfaceCommandSchedule`, `SurfaceLifecycleState`, and the generic `SurfaceCommandSink` host seam now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
 | `mnem` | Private local memory: graph snapshots, traversal logs, settings/cache/index persistence | Mere transport state, Moothold community flora, host UI state | The contract now lives in the dedicated `graphshell::mnem` module; a narrower crate boundary can come later if it proves necessary |
 | `mere` | Product entrypoint, top-level service wiring, crate orchestration, feature assembly | Low-level graph primitives, renderer internals, protocol implementations | `mere` composes the system; it should not become the old root-crate catch-all |
 
@@ -319,8 +319,9 @@ Primary next slices:
 
 1. Grow `verso-tile` from command vocabulary into surface lifecycle reporting:
     host acknowledgement, deferred-command backlog semantics, and portable
-    surface-slot placement packets are in place, so the next edge is host
-    allocation/retry scheduling.
+    surface-slot placement packets are in place. Portable placement/retry
+    scheduling is now in place too, so the next edge is concrete host adapter
+    application of those schedules.
 2. Keep route policy in `inker`: the default scheme policy is in place, and the
    next route-policy move should add content/runtime signals only when a real
    engine implementation needs them.
@@ -470,3 +471,5 @@ host/runtime surfaces.
 - Added `platen::workbench::project_surface_placements` and `project_active_surface_placements` so Platen maps frame arrangement snapshots into Verso-Tile placement plans while filtering unhosted members. `graphshell::app_state::composition` remains a thin wrapper over that projection for reducer-owned workspace state.
 - Updated the root workspace members to follow the relocated `moothold` and `mooting` crates under `crates/moot/`; this preserves the user's crate move and restores Cargo workspace loading.
 - Verification: `cargo test -p graphshell -p platen -p verso-tile` passed with 49 Graphshell tests, 14 Platen tests, and 12 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
+- Added `verso_tile::surface::SurfaceLifecycleState` and `SurfaceCommandSchedule` so a portable surface lifecycle can accept a `SurfacePlacementPlan`, emit present-command schedules, record deferred host outcomes, and produce retry schedules without importing host widgets or renderer handles. `graphshell::app_state` re-exports the scheduler vocabulary but does not own its state.
+- Verification: `cargo test -p graphshell -p platen -p verso-tile` passed with 49 Graphshell tests, 14 Platen tests, and 13 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
