@@ -170,10 +170,11 @@ pub fn reduce_workspace_intent(
             })
         }
         WorkspaceIntent::SetCommandPaletteOpen { open } => {
-            let changed = workspace.chrome.command_palette_open != open;
-            workspace.chrome.command_palette_open = open;
+            let flag_changed = workspace.chrome.command_palette_open != open;
+            let app_ux_changed =
+                super::app_ux::set_legacy_command_palette_visibility(workspace, open);
             Ok(ReducerOutcome {
-                state_changed: changed,
+                state_changed: flag_changed || app_ux_changed,
                 effects_emitted: 0,
             })
         }

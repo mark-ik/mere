@@ -18,6 +18,7 @@ use graphshell_core::pane::PaneId;
 use graphshell_core::persistence::GraphSnapshot;
 use serde::{Deserialize, Serialize};
 
+pub mod app_ux;
 pub mod composition;
 pub mod graph_runtime;
 pub mod intent_system;
@@ -248,6 +249,7 @@ pub struct FrameState {
 /// Runtime chrome state plus durable user preferences.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChromeState {
+    pub app_ux: app_ux::AppUxState,
     pub command_palette_open: bool,
     pub settings_route: Option<String>,
     pub preferences: WorkspacePreferences,
