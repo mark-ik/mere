@@ -132,7 +132,7 @@ surface area to own the behavior directly.
 | `graphshell` host crates | Native/desktop/mobile host adapters, event translation, surface command application, accessibility bridge | Graph truth mutation, engine selection policy, private memory persistence | Hosts emit intents/effects and consume projections; they do not bypass reducers |
 | `inker` | Engine choice, URI/content routing policy, engine lifecycle, engine-output contracts | Graphshell chrome, GraphWorkspace mutation, tile placement | `inker::routing` now owns the portable engine-route request/decision vocabulary; concrete routing policy still remains to be implemented there |
 | `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | `platen::canvas_scene` and `platen::workbench` now own the extracted graph-to-canvas derivation core, frame/pane model, active-frame/root-view selectors, and pane/frame binding helpers; Graphshell should keep shrinking toward wrappers around those selectors/helpers |
-| `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, and the narrower host-facing `SurfaceCommand` now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
+| `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, `SurfaceCommand`, and the generic `SurfaceCommandSink` host seam now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
 | `mnem` | Private local memory: graph snapshots, traversal logs, settings/cache/index persistence | Mere transport state, Moothold community flora, host UI state | The contract now lives in the dedicated `graphshell::mnem` module; a narrower crate boundary can come later if it proves necessary |
 | `mere` | Product entrypoint, top-level service wiring, crate orchestration, feature assembly | Low-level graph primitives, renderer internals, protocol implementations | `mere` composes the system; it should not become the old root-crate catch-all |
 
@@ -255,8 +255,9 @@ implementations:
 - `EngineRouter`: Inker-facing route decision contract. Graphshell asks for an
   engine decision and receives a host-neutral surface contract; it does not own
   Servo/WebRender/GL compatibility plumbing.
-- `SurfaceHost`: host/adapter surface command sink. Hosts consume reducer
-  surface commands and emit intents; they do not mutate graph truth directly.
+- `SurfaceHost`: Graphshell specialization of `verso-tile`'s surface command
+  sink. Hosts consume reducer surface commands and emit intents; they do not
+  mutate graph truth directly.
 - `DiagnosticsSink`, `Clock`, and `TaskRuntime`: small runtime services needed
   for deterministic app-state tests.
 
@@ -405,3 +406,6 @@ renderer adapters in this slice.
 - Moved the next view/frame synchronization recipes into `platen::workbench` with `assign_view_and_frame_pane` and `remove_view_and_frame_pane`. `graphshell::app_state::workspace_routing` now keeps GraphTree/projection mutation locally but delegates the remaining pane-binding synchronization across view and frame state to `platen`.
 - Tightened the Graphshell-facing surface seam one step further by removing raw `SurfaceEffect` from `graphshell::app_state` re-exports. Graphshell reducers and hosts now speak `SurfaceCommand`, `SurfaceHostId`, and `SurfaceRequest`, while the raw effect envelope stays internal to `verso-tile`.
 - Verification: `cargo fmt` completed; `cargo test -p graphshell -p platen -p verso-tile` passed with 45 Graphshell tests, 9 Platen tests, and 5 Verso-Tile tests; `cargo test --workspace` passed across Mere.
+- Moved the final pane surface-host synchronization helper out of `graphshell::app_state::workspace_routing` and into `platen::workbench` as `set_view_and_frame_surface_host`. Workspace routing now delegates all view/frame pane-binding synchronization to `platen`, keeping only graph truth validation, GraphTree/projection mutation, and surface command emission locally.
+- Added `verso_tile::surface::SurfaceCommandSink` as the generic host-side command application seam. `graphshell::app_state::SurfaceHost` is now a Graphshell error-specialized marker over that `verso-tile` trait instead of owning the command application method itself.
+- Verification: `cargo fmt` completed; `cargo test -p graphshell -p platen -p verso-tile` passed with 45 Graphshell tests, 10 Platen tests, and 6 Verso-Tile tests; `cargo test --workspace` passed across Mere.

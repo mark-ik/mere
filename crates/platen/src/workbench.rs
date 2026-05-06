@@ -87,6 +87,21 @@ pub fn set_binding_surface_host(
     Some(changed)
 }
 
+pub fn set_view_and_frame_surface_host(
+    view_bindings: &mut [PaneBinding],
+    frame: Option<&mut FrameState>,
+    pane_id: PaneId,
+    surface_host: Option<SurfaceHostId>,
+) -> Option<bool> {
+    let view_changed = set_binding_surface_host(view_bindings, pane_id, surface_host.clone())?;
+    let frame_changed = if let Some(frame) = frame {
+        set_binding_surface_host(&mut frame.panes, pane_id, surface_host)?
+    } else {
+        false
+    };
+    Some(view_changed || frame_changed)
+}
+
 pub fn set_frame_root_view(frame: &mut FrameState, root_view: Option<GraphViewId>) -> bool {
     let changed = frame.root_view != root_view;
     frame.root_view = root_view;
@@ -267,5 +282,32 @@ mod tests {
         assert_eq!(removed, Some(binding));
         assert!(view_bindings.is_empty());
         assert!(frame.panes.is_empty());
+    }
+
+    #[test]
+    fn set_view_and_frame_surface_host_keeps_bindings_in_sync() {
+        let pane_id = PaneId::from_uuid(uuid::Uuid::from_u128(15));
+        let binding = PaneBinding {
+            pane_id,
+            node: NodeKey::new(6),
+            surface_host: None,
+        };
+        let host = SurfaceHostId::new("desktop");
+        let mut view_bindings = vec![binding.clone()];
+        let mut frame = FrameState {
+            panes: vec![binding],
+            ..FrameState::default()
+        };
+
+        let changed = set_view_and_frame_surface_host(
+            &mut view_bindings,
+            Some(&mut frame),
+            pane_id,
+            Some(host.clone()),
+        );
+
+        assert_eq!(changed, Some(true));
+        assert_eq!(view_bindings[0].surface_host, Some(host.clone()));
+        assert_eq!(frame.panes[0].surface_host, Some(host));
     }
 }

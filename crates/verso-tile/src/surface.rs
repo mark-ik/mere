@@ -68,6 +68,12 @@ pub enum SurfaceCommand {
     },
 }
 
+pub trait SurfaceCommandSink {
+    type Error;
+
+    fn apply_surface_command(&mut self, command: &SurfaceCommand) -> Result<(), Self::Error>;
+}
+
 impl SurfaceCommand {
     pub fn present(host: SurfaceHostId, view: Option<GraphViewId>, pane: Option<PaneId>) -> Self {
         Self::Present { host, view, pane }
@@ -192,5 +198,32 @@ mod tests {
 
         assert_eq!(effect.request, SurfaceRequest::Retire);
         assert_eq!(effect.host, SurfaceHostId::new("desktop"));
+    }
+
+    #[test]
+    fn command_sink_accepts_surface_commands() {
+        #[derive(Default)]
+        struct RecordingSink {
+            commands: Vec<SurfaceCommand>,
+        }
+
+        impl SurfaceCommandSink for RecordingSink {
+            type Error = ();
+
+            fn apply_surface_command(
+                &mut self,
+                command: &SurfaceCommand,
+            ) -> Result<(), Self::Error> {
+                self.commands.push(command.clone());
+                Ok(())
+            }
+        }
+
+        let mut sink = RecordingSink::default();
+        let command = SurfaceCommand::focus(SurfaceHostId::new("desktop"), None, None);
+
+        sink.apply_surface_command(&command).unwrap();
+
+        assert_eq!(sink.commands, vec![command]);
     }
 }

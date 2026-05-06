@@ -22,7 +22,7 @@ pub use inker::routing::{
 };
 pub use platen::workbench::{FrameId, FrameState, PaneBinding};
 use serde::{Deserialize, Serialize};
-pub use verso_tile::surface::{SurfaceCommand, SurfaceHostId, SurfaceRequest};
+pub use verso_tile::surface::{SurfaceCommand, SurfaceCommandSink, SurfaceHostId, SurfaceRequest};
 
 pub mod app_ux;
 pub mod composition;
@@ -422,10 +422,10 @@ pub trait EngineRouter {
     ) -> WorkspaceServiceResult<EngineRouteDecision>;
 }
 
-/// Host/adapter sink for surface commands emitted by reducers.
-pub trait SurfaceHost {
-    fn apply_surface_command(&mut self, command: &SurfaceCommand) -> WorkspaceServiceResult<()>;
-}
+/// Graphshell host/adapter sink specialization for surface commands emitted by reducers.
+pub trait SurfaceHost: SurfaceCommandSink<Error = WorkspaceServiceError> {}
+
+impl<T> SurfaceHost for T where T: SurfaceCommandSink<Error = WorkspaceServiceError> {}
 
 /// Runtime diagnostics sink for app-state and reducer tests.
 pub trait DiagnosticsSink {

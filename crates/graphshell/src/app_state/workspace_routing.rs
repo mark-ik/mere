@@ -13,7 +13,7 @@ use graph_tree::{NavAction, Provenance};
 use graphshell_core::graph::{GraphViewId, NodeKey};
 use graphshell_core::pane::PaneId;
 use platen::workbench::{
-    assign_view_and_frame_pane, remove_view_and_frame_pane, set_binding_surface_host,
+    assign_view_and_frame_pane, remove_view_and_frame_pane, set_view_and_frame_surface_host,
 };
 use verso_tile::surface::SurfaceCommand;
 
@@ -212,27 +212,20 @@ fn set_pane_surface_host(
         .graph_views
         .get_mut(&view_id)
         .ok_or(WorkspaceRoutingError::MissingGraphView(view_id))?;
-    let Some(view_binding) = view
-        .panes
-        .iter_mut()
-        .find(|binding| binding.pane_id == pane_id)
-    else {
-        return Err(WorkspaceRoutingError::MissingPane(pane_id));
+    let frame = if let Some(frame_id) = frame_id.as_ref() {
+        Some(
+            workspace
+                .workbench
+                .frames
+                .get_mut(frame_id)
+                .ok_or_else(|| WorkspaceRoutingError::MissingFrame(frame_id.clone()))?,
+        )
+    } else {
+        None
     };
-    let mut state_changed = view_binding.surface_host != surface_host;
-    view_binding.surface_host = surface_host.clone();
-
-    if let Some(frame_id) = frame_id.as_ref() {
-        let frame = workspace
-            .workbench
-            .frames
-            .get_mut(frame_id)
-            .ok_or_else(|| WorkspaceRoutingError::MissingFrame(frame_id.clone()))?;
-        let frame_changed =
-            set_binding_surface_host(&mut frame.panes, pane_id, surface_host.clone())
-                .ok_or(WorkspaceRoutingError::MissingPane(pane_id))?;
-        state_changed |= frame_changed;
-    }
+    let state_changed =
+        set_view_and_frame_surface_host(&mut view.panes, frame, pane_id, surface_host)
+            .ok_or(WorkspaceRoutingError::MissingPane(pane_id))?;
 
     if state_changed {
         workspace.workbench.has_unsaved_changes = true;
