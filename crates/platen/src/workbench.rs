@@ -164,6 +164,7 @@ pub fn project_surface_placements(snapshot: &ArrangementSnapshot) -> SurfacePlac
                 host,
                 view,
                 member.pane_id,
+                member.node,
                 member.slot,
             ));
         }

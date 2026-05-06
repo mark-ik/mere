@@ -5,6 +5,7 @@
 //! Portable surface identity contracts.
 
 use graphshell_core::graph::GraphViewId;
+use graphshell_core::graph::NodeKey;
 use graphshell_core::pane::PaneId;
 use serde::{Deserialize, Serialize};
 
@@ -109,6 +110,7 @@ pub struct SurfaceSlotPlacement {
     pub host: SurfaceHostId,
     pub view: Option<GraphViewId>,
     pub pane: PaneId,
+    pub node: NodeKey,
     pub slot: TileSlot,
 }
 
@@ -311,12 +313,14 @@ impl SurfaceSlotPlacement {
         host: SurfaceHostId,
         view: Option<GraphViewId>,
         pane: PaneId,
+        node: NodeKey,
         slot: TileSlot,
     ) -> Self {
         Self {
             host,
             view,
             pane,
+            node,
             slot,
         }
     }
@@ -349,6 +353,14 @@ impl SurfacePlacementPlan {
             .find(|placement| placement.pane == pane)
     }
 
+    pub fn placement_for_command(&self, command: &SurfaceCommand) -> Option<&SurfaceSlotPlacement> {
+        self.placements.iter().find(|placement| {
+            placement.host == *command.host()
+                && placement.view == command.view()
+                && Some(placement.pane) == command.pane()
+        })
+    }
+
     pub fn present_commands(&self) -> Vec<SurfaceCommand> {
         self.placements
             .iter()
@@ -374,6 +386,10 @@ impl SurfaceCommandSchedule {
 impl SurfaceLifecycleState {
     pub fn placements(&self) -> &SurfacePlacementPlan {
         &self.placements
+    }
+
+    pub fn placement_for_command(&self, command: &SurfaceCommand) -> Option<&SurfaceSlotPlacement> {
+        self.placements.placement_for_command(command)
     }
 
     pub fn backlog(&self) -> &SurfaceCommandBacklog {
@@ -511,9 +527,10 @@ mod tests {
     fn placement_plan_exposes_present_commands_by_slot() {
         let view = GraphViewId::new();
         let pane = PaneId::new();
+        let node = NodeKey::new(4);
         let host = SurfaceHostId::new("desktop");
         let placement =
-            SurfaceSlotPlacement::new(host.clone(), Some(view), pane, TileSlot::primary());
+            SurfaceSlotPlacement::new(host.clone(), Some(view), pane, node, TileSlot::primary());
         let mut plan = SurfacePlacementPlan::default();
 
         plan.push(placement);
@@ -522,6 +539,12 @@ mod tests {
         assert_eq!(
             plan.placement_for_pane(pane).unwrap().slot,
             TileSlot::primary()
+        );
+        assert_eq!(
+            plan.placement_for_command(&SurfaceCommand::present_pane(host.clone(), view, pane))
+                .unwrap()
+                .node,
+            node
         );
         assert_eq!(
             plan.present_commands(),
@@ -534,18 +557,22 @@ mod tests {
         let view = GraphViewId::new();
         let first_pane = PaneId::new();
         let second_pane = PaneId::new();
+        let first_node = NodeKey::new(6);
+        let second_node = NodeKey::new(7);
         let host = SurfaceHostId::new("desktop");
         let mut plan = SurfacePlacementPlan::default();
         plan.push(SurfaceSlotPlacement::new(
             host.clone(),
             Some(view),
             first_pane,
+            first_node,
             TileSlot::primary(),
         ));
         plan.push(SurfaceSlotPlacement::new(
             host.clone(),
             Some(view),
             second_pane,
+            second_node,
             TileSlot::secondary(1),
         ));
         let mut lifecycle = SurfaceLifecycleState::default();
@@ -558,6 +585,13 @@ mod tests {
         assert_eq!(lifecycle.placements().len(), 2);
         let first_command = schedule.commands()[0].clone();
         let second_command = schedule.commands()[1].clone();
+        assert_eq!(
+            lifecycle
+                .placement_for_command(&first_command)
+                .unwrap()
+                .node,
+            first_node
+        );
         assert!(lifecycle.record_outcome(
             &first_command,
             &first_command.outcome(SurfaceCommandStatus::Deferred)

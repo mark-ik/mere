@@ -1422,6 +1422,7 @@ dependencies = [
  "log",
  "register-diagnostics",
  "tokio",
+ "verso-tile",
 ]
 
 [[package]]

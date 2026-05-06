@@ -447,12 +447,14 @@ mod tests {
             host.clone(),
             Some(view),
             first_pane,
+            graphshell_core::graph::NodeKey::new(80),
             TileSlot::primary(),
         ));
         plan.push(SurfaceSlotPlacement::new(
             host,
             Some(view),
             second_pane,
+            graphshell_core::graph::NodeKey::new(81),
             TileSlot::secondary(1),
         ));
         let mut lifecycle = SurfaceLifecycleState::default();

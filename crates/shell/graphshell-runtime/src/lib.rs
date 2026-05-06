@@ -17,6 +17,7 @@ pub mod frame_projection;
 pub mod portable_time;
 pub mod ports;
 pub mod rendering_context_producer;
+pub mod surface_schedule;
 pub mod system;
 pub mod webview_backpressure;
 
@@ -62,6 +63,9 @@ pub use graphshell_core::shell_state::frame_model::{
     ThumbnailFormatView, ThumbnailSettingsView, ToastSeverity, ToastSpec, ToolbarViewModel,
 };
 pub use rendering_context_producer::RenderingContextProducer;
+pub use surface_schedule::{
+    SurfaceScheduleApplyError, SurfaceScheduleApplyReport, apply_present_surface_schedule,
+};
 pub use webview_backpressure::{
     NodePaneAttachAttemptMetadata, RuntimeWebviewBackpressureMetadataSource,
     WebviewAttachRetryState, WebviewCreationBackpressureState, WebviewCreationProbeState,
