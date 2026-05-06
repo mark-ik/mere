@@ -106,8 +106,14 @@ mod tests {
 
     fn graph_with_edge() -> (Graph, NodeKey, NodeKey) {
         let mut graph = Graph::new();
-        let first = graph.add_node("https://example.test/1".into(), PortablePoint::new(1.0, 2.0));
-        let second = graph.add_node("https://example.test/2".into(), PortablePoint::new(3.0, 4.0));
+        let first = graph.add_node(
+            "https://example.test/1".into(),
+            PortablePoint::new(1.0, 2.0),
+        );
+        let second = graph.add_node(
+            "https://example.test/2".into(),
+            PortablePoint::new(3.0, 4.0),
+        );
         graph
             .add_edge(first, second, EdgeType::Hyperlink, None)
             .unwrap();

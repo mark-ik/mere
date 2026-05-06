@@ -1385,6 +1385,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+ "verso-tile",
 ]
 
 [[package]]
@@ -3141,7 +3142,9 @@ version = "0.0.1"
 dependencies = [
  "graph-canvas",
  "graphshell-core",
+ "serde",
  "uuid",
+ "verso-tile",
 ]
 
 [[package]]
@@ -4799,6 +4802,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "verso-tile"
 version = "0.0.1"
 dependencies = [
+ "graphshell-core",
  "serde",
 ]
 

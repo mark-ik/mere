@@ -17,7 +17,7 @@ use graph_canvas::scene::CanvasSceneInput;
 use graphshell_core::graph::{GraphViewId, NodeKey};
 pub use platen::canvas_scene::{CanvasSceneOptions, graph_view_id_to_canvas};
 
-use super::GraphWorkspace;
+use super::{FrameState, GraphWorkspace};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompositionError {
@@ -41,8 +41,18 @@ pub fn build_canvas_scene_input(
     ))
 }
 
+/// Select the active frame for workbench-aware composition.
+pub fn select_active_frame(workspace: &GraphWorkspace) -> Option<&FrameState> {
+    platen::workbench::select_active_frame(
+        &workspace.workbench.frames,
+        workspace.workbench.active_frame.as_ref(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use graph_canvas::projection::{ProjectionMode, ThreeDMode, ViewDimension, ZSource};
     use graph_canvas::scene::SceneMode;
     use graphshell_core::geometry::PortablePoint;
@@ -50,6 +60,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+    use crate::app_state::FrameId;
     use crate::app_state::graph_runtime::{GraphRuntimeIntent, reduce_graph_runtime_intent};
 
     fn view_id(value: u128) -> GraphViewId {
@@ -159,5 +170,22 @@ mod tests {
             build_canvas_scene_input(&workspace, CanvasSceneOptions::new(missing)).unwrap_err();
 
         assert_eq!(error, CompositionError::MissingGraphView(missing));
+    }
+
+    #[test]
+    fn active_frame_selection_uses_workbench_state() {
+        let frame = FrameState {
+            id: FrameId::new("main"),
+            label: "Main".to_string(),
+            root_view: Some(view_id(40)),
+            panes: Vec::new(),
+        };
+        let mut workspace = GraphWorkspace::new();
+        workspace.workbench.frames = HashMap::from([(frame.id.clone(), frame.clone())]);
+        workspace.workbench.active_frame = Some(frame.id.clone());
+
+        let selected = select_active_frame(&workspace);
+
+        assert_eq!(selected, Some(&frame));
     }
 }

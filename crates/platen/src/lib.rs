@@ -22,7 +22,11 @@
 /// Graph-aware scene derivation for canvas-facing composition.
 pub mod canvas_scene;
 
+/// Portable workbench/frame model and selectors.
+pub mod workbench;
+
 pub use canvas_scene::{CanvasSceneOptions, build_canvas_scene_input, graph_view_id_to_canvas};
+pub use workbench::{FrameId, FrameState, PaneBinding, select_active_frame};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

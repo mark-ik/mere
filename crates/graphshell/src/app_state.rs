@@ -15,13 +15,14 @@ use std::collections::HashMap;
 use crate::mnem;
 use graph_tree::{GraphTree, LayoutMode, ProjectionLens};
 use graphshell_core::graph::{Graph, GraphViewId, NodeKey};
-use graphshell_core::pane::PaneId;
 use graphshell_core::persistence::GraphSnapshot;
 pub use inker::routing::{
     EngineRouteDecision, EngineRouteRequest, SurfaceContract, SurfaceContractMode, SurfaceTargetId,
     WorkspaceRouteId,
 };
+pub use platen::workbench::{FrameId, FrameState, PaneBinding};
 use serde::{Deserialize, Serialize};
+pub use verso_tile::surface::{SurfaceEffect, SurfaceHostId, SurfaceRequest};
 
 pub mod app_ux;
 pub mod composition;
@@ -38,34 +39,6 @@ pub type WorkspaceServiceResult<T> = Result<T, WorkspaceServiceError>;
 pub struct WorkspaceId(pub String);
 
 impl WorkspaceId {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-/// Opaque host-surface identity. Hosts mint these; reducers only route by key.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct SurfaceHostId(pub String);
-
-impl SurfaceHostId {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-/// Opaque frame/workbench snapshot identity.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct FrameId(pub String);
-
-impl FrameId {
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
@@ -227,14 +200,6 @@ pub struct ViewProjectionState {
     pub active_node: Option<NodeKey>,
 }
 
-/// Stable pane-to-graph binding consumed by hosts and frame projections.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PaneBinding {
-    pub pane_id: PaneId,
-    pub node: NodeKey,
-    pub surface_host: Option<SurfaceHostId>,
-}
-
 /// Workbench/frame state that is independent of any concrete host widget tree.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkbenchState {
@@ -242,15 +207,6 @@ pub struct WorkbenchState {
     pub frames: HashMap<FrameId, FrameState>,
     pub active_frame: Option<FrameId>,
     pub has_unsaved_changes: bool,
-}
-
-/// One named frame/workbench composition.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FrameState {
-    pub id: FrameId,
-    pub label: String,
-    pub root_view: Option<GraphViewId>,
-    pub panes: Vec<PaneBinding>,
 }
 
 /// Runtime chrome state plus durable user preferences.
@@ -332,21 +288,6 @@ pub struct GraphMutationRecord {
 pub enum MutationPayload {
     TypedJson(String),
     OpaqueBytes(Vec<u8>),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SurfaceEffect {
-    pub host: SurfaceHostId,
-    pub view: Option<GraphViewId>,
-    pub pane: Option<PaneId>,
-    pub request: SurfaceRequest,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SurfaceRequest {
-    Present,
-    Retire,
-    Focus,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

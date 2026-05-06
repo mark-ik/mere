@@ -13,4 +13,6 @@ path = "src/lib.rs"
 [dependencies]
 graph-canvas = { path = "../graph/graph-canvas" }
 graphshell-core = { path = "../shell/graphshell-core" }
+serde = { version = "1.0", features = ["derive"] }
 uuid = { version = "1", features = ["serde"] }
+verso-tile = { path = "../verso-tile" }
