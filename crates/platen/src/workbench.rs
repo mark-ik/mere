@@ -57,6 +57,35 @@ pub struct ProjectedPane {
     pub is_primary: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArrangementSnapshot {
+    pub container: ArrangementContainer,
+    pub members: Vec<ArrangementMember>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ArrangementContainer {
+    Frame {
+        id: FrameId,
+        label: String,
+        root_view: Option<GraphViewId>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArrangementMember {
+    pub pane_id: PaneId,
+    pub node: NodeKey,
+    pub surface_host: Option<SurfaceHostId>,
+    pub slot: TileSlot,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TileSlot {
+    pub index: usize,
+    pub is_primary: bool,
+}
+
 /// Select the currently active frame when it exists in the frame map.
 pub fn select_active_frame<'a>(
     frames: &'a HashMap<FrameId, FrameState>,
@@ -91,6 +120,37 @@ pub fn project_active_workbench(
     select_active_frame(frames, active_frame)
         .map(project_frame)
         .unwrap_or_default()
+}
+
+pub fn snapshot_frame_arrangement(frame: &FrameState) -> ArrangementSnapshot {
+    ArrangementSnapshot {
+        container: ArrangementContainer::Frame {
+            id: frame.id.clone(),
+            label: frame.label.clone(),
+            root_view: frame.root_view,
+        },
+        members: frame
+            .panes
+            .iter()
+            .enumerate()
+            .map(|(index, binding)| ArrangementMember {
+                pane_id: binding.pane_id,
+                node: binding.node,
+                surface_host: binding.surface_host.clone(),
+                slot: TileSlot {
+                    index,
+                    is_primary: index == 0,
+                },
+            })
+            .collect(),
+    }
+}
+
+pub fn snapshot_active_arrangement(
+    frames: &HashMap<FrameId, FrameState>,
+    active_frame: Option<&FrameId>,
+) -> Option<ArrangementSnapshot> {
+    select_active_frame(frames, active_frame).map(snapshot_frame_arrangement)
 }
 
 pub fn upsert_pane_binding(bindings: &mut Vec<PaneBinding>, binding: PaneBinding) -> bool {
@@ -283,6 +343,47 @@ mod tests {
         let projection = project_active_workbench(&frames, Some(&frame_id));
 
         assert_eq!(projection, WorkbenchProjection::default());
+    }
+
+    #[test]
+    fn snapshot_active_arrangement_returns_plain_membership_packet() {
+        let frame_id = FrameId::new("main");
+        let root_view = GraphViewId::from_uuid(uuid::Uuid::from_u128(19));
+        let first = PaneBinding {
+            pane_id: PaneId::from_uuid(uuid::Uuid::from_u128(20)),
+            node: NodeKey::new(10),
+            surface_host: Some(SurfaceHostId::new("desktop")),
+        };
+        let second = PaneBinding {
+            pane_id: PaneId::from_uuid(uuid::Uuid::from_u128(21)),
+            node: NodeKey::new(11),
+            surface_host: None,
+        };
+        let frame = FrameState {
+            id: frame_id.clone(),
+            label: "Main".to_string(),
+            root_view: Some(root_view),
+            panes: vec![first.clone(), second.clone()],
+        };
+        let frames = HashMap::from([(frame_id.clone(), frame)]);
+
+        let snapshot = snapshot_active_arrangement(&frames, Some(&frame_id)).unwrap();
+
+        assert_eq!(
+            snapshot.container,
+            ArrangementContainer::Frame {
+                id: frame_id,
+                label: "Main".to_string(),
+                root_view: Some(root_view),
+            }
+        );
+        assert_eq!(snapshot.members.len(), 2);
+        assert_eq!(snapshot.members[0].pane_id, first.pane_id);
+        assert_eq!(snapshot.members[0].slot.index, 0);
+        assert!(snapshot.members[0].slot.is_primary);
+        assert_eq!(snapshot.members[1].pane_id, second.pane_id);
+        assert_eq!(snapshot.members[1].slot.index, 1);
+        assert!(!snapshot.members[1].slot.is_primary);
     }
 
     #[test]

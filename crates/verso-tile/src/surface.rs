@@ -93,6 +93,11 @@ pub struct SurfaceCommandOutcome {
     pub status: SurfaceCommandStatus,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceCommandBacklog {
+    deferred: Vec<SurfaceCommand>,
+}
+
 impl SurfaceCommand {
     pub fn present(host: SurfaceHostId, view: Option<GraphViewId>, pane: Option<PaneId>) -> Self {
         Self::Present { host, view, pane }
@@ -199,6 +204,62 @@ impl SurfaceEffect {
     }
 }
 
+impl SurfaceCommandOutcome {
+    pub fn is_deferred(&self) -> bool {
+        self.status == SurfaceCommandStatus::Deferred
+    }
+
+    pub fn matches_command(&self, command: &SurfaceCommand) -> bool {
+        self.host == *command.host()
+            && self.view == command.view()
+            && self.pane == command.pane()
+            && self.request == command.request()
+    }
+}
+
+impl SurfaceCommandBacklog {
+    pub fn len(&self) -> usize {
+        self.deferred.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.deferred.is_empty()
+    }
+
+    pub fn deferred_commands(&self) -> &[SurfaceCommand] {
+        &self.deferred
+    }
+
+    pub fn push_deferred(&mut self, command: SurfaceCommand) {
+        self.deferred.push(command);
+    }
+
+    pub fn record_outcome(
+        &mut self,
+        command: &SurfaceCommand,
+        outcome: &SurfaceCommandOutcome,
+    ) -> bool {
+        if outcome.is_deferred() && outcome.matches_command(command) {
+            self.push_deferred(command.clone());
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn take_next(&mut self) -> Option<SurfaceCommand> {
+        if self.deferred.is_empty() {
+            None
+        } else {
+            Some(self.deferred.remove(0))
+        }
+    }
+
+    pub fn drain(&mut self) -> Vec<SurfaceCommand> {
+        std::mem::take(&mut self.deferred)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,6 +322,33 @@ mod tests {
         assert_eq!(outcome.request, SurfaceRequest::Focus);
         assert_eq!(outcome.status, SurfaceCommandStatus::Applied);
         assert_eq!(outcome.host, SurfaceHostId::new("desktop"));
+    }
+
+    #[test]
+    fn outcome_matches_its_source_command() {
+        let command = SurfaceCommand::present(SurfaceHostId::new("desktop"), None, None);
+        let outcome = command.outcome(SurfaceCommandStatus::Deferred);
+
+        assert!(outcome.is_deferred());
+        assert!(outcome.matches_command(&command));
+    }
+
+    #[test]
+    fn backlog_records_only_matching_deferred_outcomes() {
+        let command = SurfaceCommand::present(SurfaceHostId::new("desktop"), None, None);
+        let applied = command.outcome(SurfaceCommandStatus::Applied);
+        let deferred = command.outcome(SurfaceCommandStatus::Deferred);
+        let mismatched = SurfaceCommand::retire(SurfaceHostId::new("desktop"), None, None)
+            .outcome(SurfaceCommandStatus::Deferred);
+        let mut backlog = SurfaceCommandBacklog::default();
+
+        assert!(!backlog.record_outcome(&command, &applied));
+        assert!(!backlog.record_outcome(&command, &mismatched));
+        assert!(backlog.record_outcome(&command, &deferred));
+
+        assert_eq!(backlog.len(), 1);
+        assert_eq!(backlog.take_next(), Some(command));
+        assert!(backlog.is_empty());
     }
 
     #[test]

@@ -20,11 +20,14 @@ pub use inker::routing::{
     EngineRouteDecision, EngineRouteRequest, SurfaceContract, SurfaceContractMode, SurfaceTargetId,
     WorkspaceRouteId,
 };
-pub use platen::workbench::{FrameId, FrameState, PaneBinding, ProjectedPane, WorkbenchProjection};
+pub use platen::workbench::{
+    ArrangementContainer, ArrangementMember, ArrangementSnapshot, FrameId, FrameState, PaneBinding,
+    ProjectedPane, TileSlot, WorkbenchProjection,
+};
 use serde::{Deserialize, Serialize};
 pub use verso_tile::surface::{
-    SurfaceCommand, SurfaceCommandOutcome, SurfaceCommandSink, SurfaceCommandStatus, SurfaceHostId,
-    SurfaceRequest,
+    SurfaceCommand, SurfaceCommandBacklog, SurfaceCommandOutcome, SurfaceCommandSink,
+    SurfaceCommandStatus, SurfaceHostId, SurfaceRequest,
 };
 
 pub mod app_ux;

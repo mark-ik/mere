@@ -17,7 +17,7 @@ use graph_canvas::scene::CanvasSceneInput;
 use graphshell_core::graph::{GraphViewId, NodeKey};
 pub use platen::canvas_scene::{CanvasSceneOptions, graph_view_id_to_canvas};
 
-use super::{FrameState, GraphWorkspace, WorkbenchProjection};
+use super::{ArrangementSnapshot, FrameState, GraphWorkspace, WorkbenchProjection};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CompositionError {
@@ -65,6 +65,14 @@ pub fn project_active_workbench(workspace: &GraphWorkspace) -> WorkbenchProjecti
     )
 }
 
+/// Snapshot the active frame arrangement as plain Platen-owned data.
+pub fn snapshot_active_arrangement(workspace: &GraphWorkspace) -> Option<ArrangementSnapshot> {
+    platen::workbench::snapshot_active_arrangement(
+        &workspace.workbench.frames,
+        workspace.workbench.active_frame.as_ref(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -78,7 +86,7 @@ mod tests {
 
     use super::*;
     use crate::app_state::graph_runtime::{GraphRuntimeIntent, reduce_graph_runtime_intent};
-    use crate::app_state::{FrameId, PaneBinding, SurfaceHostId};
+    use crate::app_state::{ArrangementContainer, FrameId, PaneBinding, SurfaceHostId};
 
     fn view_id(value: u128) -> GraphViewId {
         GraphViewId::from_uuid(Uuid::from_u128(value))
@@ -246,5 +254,36 @@ mod tests {
         assert_eq!(projection.root_view, frame.root_view);
         assert_eq!(projection.panes[0].pane_id, pane.pane_id);
         assert!(projection.panes[0].is_primary);
+    }
+
+    #[test]
+    fn active_arrangement_snapshot_uses_platen_packet() {
+        let pane = PaneBinding {
+            pane_id: PaneId::from_uuid(Uuid::from_u128(44)),
+            node: NodeKey::new(8),
+            surface_host: Some(SurfaceHostId::new("desktop")),
+        };
+        let frame = FrameState {
+            id: FrameId::new("main"),
+            label: "Main".to_string(),
+            root_view: Some(view_id(45)),
+            panes: vec![pane.clone()],
+        };
+        let mut workspace = GraphWorkspace::new();
+        workspace.workbench.frames = HashMap::from([(frame.id.clone(), frame.clone())]);
+        workspace.workbench.active_frame = Some(frame.id.clone());
+
+        let snapshot = snapshot_active_arrangement(&workspace).unwrap();
+
+        assert_eq!(
+            snapshot.container,
+            ArrangementContainer::Frame {
+                id: frame.id,
+                label: frame.label,
+                root_view: frame.root_view,
+            }
+        );
+        assert_eq!(snapshot.members[0].pane_id, pane.pane_id);
+        assert_eq!(snapshot.members[0].slot.index, 0);
     }
 }
