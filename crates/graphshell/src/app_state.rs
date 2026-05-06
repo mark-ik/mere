@@ -22,6 +22,7 @@ pub mod app_ux;
 pub mod composition;
 pub mod graph_runtime;
 pub mod intent_system;
+pub mod persistence;
 pub mod workspace_routing;
 
 /// Result type used by portable app-state service traits.
@@ -303,7 +304,9 @@ pub struct PendingEffects {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkspaceEffect {
     PersistWorkspace { workspace_id: WorkspaceId },
+    PersistPreferences { preferences: WorkspacePreferences },
     AppendGraphMutation(GraphMutationRecord),
+    RequestMnem(persistence::MnemRequest),
     RequestSurface(SurfaceEffect),
     RouteEngine(EngineRouteRequest),
     EmitDiagnostic(DiagnosticRecord),
