@@ -14,14 +14,15 @@ This is a Cargo workspace organizing Mere into modular crates. Most crates ship 
 | [`mere-identity`](crates/mere/mere-identity) | Identity management — master Ed25519 keypair, keychain integration, per-protocol derivation |
 | [`mere-transport`](crates/mere/mere-transport) | Peer transport layer — iroh-based authenticated streams between known peers |
 | [`graphshell`](crates/graphshell) | Portable shell layer — host GUI integration (iced / gpui / html-css / other) and Navigator surface |
+| [`graphshell-host`](crates/shell/graphshell-host) | Host-side adapters for Graphshell surface lifecycle seams |
 | [`verso-tile`](crates/verso-tile) | Rendering-surface management — receives engine output and places it into GraphTree tiles (Verso brand) |
 | [`inker`](crates/inker) | Engine controller — selects and orchestrates content engines |
 | [`platen`](crates/platen) | Composition surface — graph-aware layout, the press to verso's page |
 | [`nematic`](crates/nematic) | Smolweb engine — Gemini, Gopher, static HTML, Markdown, RSS/Atom |
 | [`murm`](crates/murm/murm) | Bilateral peer-to-peer comms supercrate |
 | [`murmuring`](crates/murm/murmuring) | Protocol core for bilateral chat-protocol selection — inner layer of `murm` |
-| [`moothold`](crates/moothold/moothold) | Community / federation supercrate (will switch to `moot` if that name frees up) |
-| [`mooting`](crates/moothold/mooting) | Protocol core for community social-primitives selection — inner layer of `moothold` |
+| [`moothold`](crates/moot/moothold) | Community / federation supercrate (will switch to `moot` if that name frees up) |
+| [`mooting`](crates/moot/mooting) | Protocol core for community social-primitives selection — inner layer of `moothold` |
 
 ## The printing-press metaphor
 

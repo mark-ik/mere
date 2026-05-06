@@ -1412,6 +1412,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "graphshell-host"
+version = "0.0.1"
+dependencies = [
+ "graphshell-core",
+]
+
+[[package]]
 name = "graphshell-runtime"
 version = "0.0.1"
 dependencies = [

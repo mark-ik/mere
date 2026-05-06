@@ -9,6 +9,7 @@ members = [
     "crates/graph/graph-tree",
     "crates/registry/register-diagnostics",
     "crates/shell/graphshell-core",
+    "crates/shell/graphshell-host",
     "crates/shell/graphshell-runtime",
     "crates/graphshell",
     "crates/verso-tile",
