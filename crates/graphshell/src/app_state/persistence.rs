@@ -6,14 +6,16 @@
 //!
 //! This module does not call concrete stores. It expresses workspace,
 //! preference, and private local-memory requests as typed effects for service
-//! glue to execute through `WorkspaceRepository`, `SettingsStore`, and
-//! `MnemStore` implementations.
+//! glue to execute through `WorkspaceRepository`, `GraphMutationJournal`,
+//! `SettingsStore`, and `MnemStore` implementations.
 
 use serde::{Deserialize, Serialize};
 
 use super::{
-    GraphWorkspace, MnemStore, SettingsStore, WorkspaceEffect, WorkspaceId, WorkspacePreferences,
-    WorkspaceRepository, WorkspaceServiceResult,
+    GraphMutationJournal, GraphWorkspace, JournalCursor, MnemStore, MutationPayload, SettingsStore,
+    WorkspaceEffect, WorkspaceId, WorkspacePreferences, WorkspaceRepository, WorkspaceServiceError,
+    WorkspaceServiceResult,
+    graph_runtime::{GraphRuntimeIntent, reduce_graph_runtime_intent},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,6 +43,22 @@ pub enum MnemRequest {
 pub enum MnemResponse {
     BlobLoaded { key: String, value: Option<Vec<u8>> },
     BlobSaved { key: String },
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PersistenceDispatchReport {
+    pub persisted_workspaces: usize,
+    pub persisted_preferences: usize,
+    pub appended_mutations: usize,
+    pub mnem_responses: Vec<MnemResponse>,
+    pub deferred_effects: usize,
+}
+
+#[derive(Clone)]
+pub struct HydratedWorkspaceState {
+    pub workspace: GraphWorkspace,
+    pub journal_cursor: JournalCursor,
+    pub replayed_records: usize,
 }
 
 pub fn reduce_persistence_intent(
@@ -105,6 +123,24 @@ pub fn hydrate_workspace(
     Ok(workspace)
 }
 
+pub fn hydrate_workspace_with_replay(
+    repository: &mut dyn WorkspaceRepository,
+    settings: &mut dyn SettingsStore,
+    journal: &mut dyn GraphMutationJournal,
+    workspace_id: &WorkspaceId,
+    cursor: Option<JournalCursor>,
+) -> WorkspaceServiceResult<HydratedWorkspaceState> {
+    let mut workspace = hydrate_workspace(repository, settings, workspace_id)?;
+    let replayed_records = replay_graph_journal(journal, &mut workspace, cursor)?;
+    Ok(HydratedWorkspaceState {
+        journal_cursor: JournalCursor {
+            next_sequence: workspace.domain.next_mutation_sequence,
+        },
+        workspace,
+        replayed_records,
+    })
+}
+
 pub fn checkpoint_workspace(
     repository: &mut dyn WorkspaceRepository,
     workspace_id: &WorkspaceId,
@@ -138,6 +174,95 @@ pub fn dispatch_mnem_request(
     }
 }
 
+pub fn consume_persistence_effects(
+    workspace: &mut GraphWorkspace,
+    repository: &mut dyn WorkspaceRepository,
+    settings: &mut dyn SettingsStore,
+    journal: &mut dyn GraphMutationJournal,
+    mnem: &mut dyn MnemStore,
+) -> WorkspaceServiceResult<PersistenceDispatchReport> {
+    let mut report = PersistenceDispatchReport::default();
+    let mut deferred_effects = Vec::new();
+
+    for effect in workspace.drain_effects() {
+        match effect {
+            WorkspaceEffect::PersistWorkspace { workspace_id } => {
+                checkpoint_workspace(repository, &workspace_id, workspace)?;
+                report.persisted_workspaces += 1;
+            }
+            WorkspaceEffect::PersistPreferences { preferences } => {
+                save_preferences(settings, &preferences)?;
+                report.persisted_preferences += 1;
+            }
+            WorkspaceEffect::AppendGraphMutation(record) => {
+                journal.append_mutation(&record)?;
+                report.appended_mutations += 1;
+            }
+            WorkspaceEffect::RequestMnem(request) => {
+                report
+                    .mnem_responses
+                    .push(dispatch_mnem_request(mnem, &request)?);
+            }
+            other => deferred_effects.push(other),
+        }
+    }
+
+    report.deferred_effects = deferred_effects.len();
+    workspace.pending_effects.effects = deferred_effects;
+    Ok(report)
+}
+
+pub fn replay_graph_journal(
+    journal: &mut dyn GraphMutationJournal,
+    workspace: &mut GraphWorkspace,
+    cursor: Option<JournalCursor>,
+) -> WorkspaceServiceResult<usize> {
+    let records = journal.replay_from(cursor)?;
+    for record in &records {
+        let intent = decode_graph_runtime_intent(record)?;
+        let prior_effect_len = workspace.pending_effects.effects.len();
+        reduce_graph_runtime_intent(workspace, intent).map_err(|error| {
+            WorkspaceServiceError::new(format!(
+                "failed to replay graph mutation {}: {error:?}",
+                record.sequence
+            ))
+        })?;
+
+        let replay_effects = workspace
+            .pending_effects
+            .effects
+            .split_off(prior_effect_len);
+        if !replay_effects
+            .iter()
+            .all(|effect| matches!(effect, WorkspaceEffect::AppendGraphMutation(_)))
+        {
+            return Err(WorkspaceServiceError::new(format!(
+                "graph mutation replay emitted non-journal effects for sequence {}",
+                record.sequence
+            )));
+        }
+    }
+
+    Ok(records.len())
+}
+
+fn decode_graph_runtime_intent(
+    record: &super::GraphMutationRecord,
+) -> WorkspaceServiceResult<GraphRuntimeIntent> {
+    match &record.payload {
+        MutationPayload::TypedJson(json) => serde_json::from_str(json).map_err(|error| {
+            WorkspaceServiceError::new(format!(
+                "failed to decode graph mutation {}: {error}",
+                record.sequence
+            ))
+        }),
+        MutationPayload::OpaqueBytes(_) => Err(WorkspaceServiceError::new(format!(
+            "opaque graph mutation payload is not replayable for sequence {}",
+            record.sequence
+        ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -148,8 +273,8 @@ mod tests {
 
     use super::*;
     use crate::app_state::{
-        GraphWorkspaceSnapshot, NavigatorSidebarPreference, ThemeModePreference,
-        WorkspaceServiceError,
+        DiagnosticRecord, GraphMutationRecord, GraphWorkspaceSnapshot, NavigatorSidebarPreference,
+        ThemeModePreference, WorkspaceServiceError,
     };
 
     #[derive(Default)]
@@ -199,6 +324,45 @@ mod tests {
     #[derive(Default)]
     struct FakeMnemStore {
         blobs: HashMap<String, Vec<u8>>,
+    }
+
+    #[derive(Default)]
+    struct FakeGraphMutationJournal {
+        appended: Vec<GraphMutationRecord>,
+        replay: Vec<GraphMutationRecord>,
+    }
+
+    impl GraphMutationJournal for FakeGraphMutationJournal {
+        fn append_mutation(&mut self, record: &GraphMutationRecord) -> WorkspaceServiceResult<()> {
+            self.appended.push(record.clone());
+            Ok(())
+        }
+
+        fn replay_from(
+            &mut self,
+            _cursor: Option<JournalCursor>,
+        ) -> WorkspaceServiceResult<Vec<GraphMutationRecord>> {
+            Ok(self.replay.clone())
+        }
+    }
+
+    fn node_id(value: u128) -> Uuid {
+        Uuid::from_u128(value)
+    }
+
+    fn add_node_record(sequence: u64, id: u128, url: &str) -> GraphMutationRecord {
+        GraphMutationRecord {
+            sequence,
+            label: "graph.add_node".to_string(),
+            payload: MutationPayload::TypedJson(
+                serde_json::to_string(&GraphRuntimeIntent::AddNode {
+                    id: node_id(id),
+                    url: url.to_string(),
+                    position: PortablePoint::new(3.0, 4.0),
+                })
+                .unwrap(),
+            ),
+        }
     }
 
     impl MnemStore for FakeMnemStore {
@@ -446,5 +610,131 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(error.message, "load failed");
+    }
+
+    #[test]
+    fn consume_persistence_effects_dispatches_and_preserves_non_persistence_effects() {
+        let mut workspace = GraphWorkspace::new();
+        workspace.workbench.has_unsaved_changes = true;
+        workspace.chrome.preferences = WorkspacePreferences {
+            theme_mode: ThemeModePreference::Light,
+            navigator_sidebar: NavigatorSidebarPreference::End,
+        };
+        workspace.push_effect(WorkspaceEffect::EmitDiagnostic(DiagnosticRecord {
+            channel: "graphshell.test".to_string(),
+            message: "keep me".to_string(),
+        }));
+        workspace.push_effect(WorkspaceEffect::PersistWorkspace {
+            workspace_id: WorkspaceId::new("main"),
+        });
+        workspace.push_effect(WorkspaceEffect::PersistPreferences {
+            preferences: workspace.chrome.preferences.clone(),
+        });
+        workspace.push_effect(WorkspaceEffect::AppendGraphMutation(add_node_record(
+            0,
+            11,
+            "https://journal.example",
+        )));
+        workspace.push_effect(WorkspaceEffect::RequestMnem(MnemRequest::SaveBlob {
+            key: "private/cache".to_string(),
+            value: vec![5, 4, 3],
+        }));
+
+        let mut repository = FakeWorkspaceRepository::default();
+        let mut settings = FakeSettingsStore::default();
+        let mut journal = FakeGraphMutationJournal::default();
+        let mut mnem = FakeMnemStore::default();
+
+        let report = consume_persistence_effects(
+            &mut workspace,
+            &mut repository,
+            &mut settings,
+            &mut journal,
+            &mut mnem,
+        )
+        .unwrap();
+
+        assert_eq!(report.persisted_workspaces, 1);
+        assert_eq!(report.persisted_preferences, 1);
+        assert_eq!(report.appended_mutations, 1);
+        assert_eq!(report.deferred_effects, 1);
+        assert_eq!(
+            report.mnem_responses,
+            vec![MnemResponse::BlobSaved {
+                key: "private/cache".to_string(),
+            }]
+        );
+        assert!(!workspace.workbench.has_unsaved_changes);
+        assert_eq!(journal.appended.len(), 1);
+        assert_eq!(
+            settings.saved_preferences,
+            Some(WorkspacePreferences {
+                theme_mode: ThemeModePreference::Light,
+                navigator_sidebar: NavigatorSidebarPreference::End,
+            })
+        );
+        assert_eq!(workspace.pending_effects.effects.len(), 1);
+        assert!(matches!(
+            workspace.pending_effects.effects[0],
+            WorkspaceEffect::EmitDiagnostic(_)
+        ));
+    }
+
+    #[test]
+    fn hydrate_workspace_with_replay_applies_graph_mutations_without_requeueing() {
+        let mut repository = FakeWorkspaceRepository::default();
+        let mut settings = FakeSettingsStore {
+            preferences: WorkspacePreferences {
+                theme_mode: ThemeModePreference::Dark,
+                navigator_sidebar: NavigatorSidebarPreference::Start,
+            },
+            saved_preferences: None,
+        };
+        let mut journal = FakeGraphMutationJournal {
+            appended: Vec::new(),
+            replay: vec![add_node_record(0, 22, "https://replay.example")],
+        };
+
+        let hydrated = hydrate_workspace_with_replay(
+            &mut repository,
+            &mut settings,
+            &mut journal,
+            &WorkspaceId::new("main"),
+            Some(JournalCursor { next_sequence: 0 }),
+        )
+        .unwrap();
+
+        assert_eq!(hydrated.replayed_records, 1);
+        assert_eq!(hydrated.workspace.domain.graph.node_count(), 1);
+        assert_eq!(hydrated.workspace.domain.next_mutation_sequence, 1);
+        assert_eq!(hydrated.journal_cursor.next_sequence, 1);
+        assert!(hydrated.workspace.pending_effects.effects.is_empty());
+        assert_eq!(
+            hydrated.workspace.chrome.preferences.theme_mode,
+            ThemeModePreference::Dark
+        );
+    }
+
+    #[test]
+    fn replay_graph_journal_rejects_opaque_payloads() {
+        let mut journal = FakeGraphMutationJournal {
+            appended: Vec::new(),
+            replay: vec![GraphMutationRecord {
+                sequence: 4,
+                label: "graph.opaque".to_string(),
+                payload: MutationPayload::OpaqueBytes(vec![1, 2, 3]),
+            }],
+        };
+        let mut workspace = GraphWorkspace::new();
+
+        let error = replay_graph_journal(
+            &mut journal,
+            &mut workspace,
+            Some(JournalCursor { next_sequence: 4 }),
+        )
+        .unwrap_err();
+
+        assert!(error.message.contains("opaque graph mutation payload"));
+        assert!(workspace.pending_effects.effects.is_empty());
     }
 }
