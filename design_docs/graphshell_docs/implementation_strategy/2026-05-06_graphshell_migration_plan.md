@@ -132,7 +132,7 @@ surface area to own the behavior directly.
 | `graphshell` host crates | Native/desktop/mobile host adapters, event translation, surface command application, accessibility bridge | Graph truth mutation, engine selection policy, private memory persistence | Hosts emit intents/effects and consume projections; they do not bypass reducers |
 | `inker` | Engine choice, URI/content routing policy, engine lifecycle, engine-output contracts | Graphshell chrome, GraphWorkspace mutation, tile placement | `inker::routing` now owns the portable engine-route request/decision vocabulary; concrete routing policy still remains to be implemented there |
 | `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | `platen::canvas_scene` and `platen::workbench` now own the extracted graph-to-canvas derivation core, frame/pane model, active-frame/root-view selectors, and pane/frame binding helpers; Graphshell should keep shrinking toward wrappers around those selectors/helpers |
-| `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, `SurfaceCommand`, and the generic `SurfaceCommandSink` host seam now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
+| `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, `SurfaceCommand`, `SurfaceCommandOutcome`, and the generic `SurfaceCommandSink` host seam now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
 | `mnem` | Private local memory: graph snapshots, traversal logs, settings/cache/index persistence | Mere transport state, Moothold community flora, host UI state | The contract now lives in the dedicated `graphshell::mnem` module; a narrower crate boundary can come later if it proves necessary |
 | `mere` | Product entrypoint, top-level service wiring, crate orchestration, feature assembly | Low-level graph primitives, renderer internals, protocol implementations | `mere` composes the system; it should not become the old root-crate catch-all |
 
@@ -305,25 +305,57 @@ Acceptance: host crates depend on `graphshell` and `inker`/`verso-tile`, not on 
 
 ---
 
-## 3. Near-Term Next Slice
+## 3. Current Position and Next Slices
 
-The portable spine slice is complete enough to make the next slice app-state
-and reducer work. Move code in this order:
+The original app-state/reducer slice is no longer future work; it has landed in
+Mere and is covered by reducer, persistence, `platen`, `inker`, and
+`verso-tile` tests. The active migration edge is Phase 5 ownership: keep
+shrinking `graphshell::app_state` toward reducer orchestration while moving
+surface lifecycle, workbench composition, and engine route vocabulary into the
+crates that own those domains.
 
-1. Introduce the `GraphWorkspace` target state and trait vocabulary in Mere,
-   using placeholder/stub implementations where needed.
-2. Move the pure reducer seams in their current module-cut shape:
-   `intent_system`, `graph_runtime`, `workspace_routing`, `composition`, and
-   `app_ux`.
-3. Move only the persistence-facing types needed by those seams. Concrete
-   stores and old `PersistenceFacade` methods stay behind traits until the Mnem
-   lane is explicit.
-4. Add app-state tests that exercise reducers and persistence trait fakes
-   without launching a host.
-5. Run `cargo test --workspace` from `repos/mere` after each narrow move.
+Primary next slices:
 
-Do **not** move `GraphBrowserApp`, host adapters, old `verso`, `middlenet-*`, or
-renderer adapters in this slice.
+1. Grow `verso-tile` from command vocabulary into surface lifecycle reporting:
+   command outcomes, host acknowledgement semantics, deferred work, and later
+   surface-slot placement.
+2. Move concrete engine-route policy into `inker`; keep Graphshell asking for
+   route decisions through a trait rather than owning policy vocabulary.
+3. Continue extracting renderable workbench selectors into `platen`, especially
+   frame-root arrangement and tile-slot projection once the data shape is clear.
+4. Keep persistence/Mnem honest by wiring one trait-backed service container
+   around `GraphWorkspace` before importing any concrete donor `GraphBrowserApp`
+   code.
+5. Run `cargo test --workspace` from `repos/mere` after every narrow move.
+
+Fruitful sidequests:
+
+- Audit the protocol architecture plan against this migration: the
+  `verso-tile` / server-self-hosting language still needs a concrete boundary
+  with `mere-transport`, `moothold`, and host crates.
+- Start a small `GraphBrowserApp` donor inventory that labels each remaining
+  method as reducer, service glue, host adapter, or obsolete prototype residue.
+- Decompose only oversized portable files touched by these slices; do not let
+  file-size cleanup interrupt the ownership migration unless a touched file is
+  actively blocking comprehension.
+
+Pitfalls:
+
+- Do not split Navigator into multiple instances; maintain the single surface
+  with configurable scope/form factor.
+- Do not let host adapters mutate graph truth directly while implementing
+  surface command outcomes.
+- Do not import concrete desktop/webview/renderer dependencies into
+  `graphshell::app_state`, `platen`, `inker`, or `verso-tile` while proving the
+  portable contracts.
+- Do not treat `verso-tile` as old `verso`; engine routing belongs in `inker`,
+  and graph-aware composition belongs in `platen`.
+
+Closest-to-completion plan: this Graphshell migration plan is closest. Its
+portable spine, app-state reducers, persistence/Mnem boundary, and first Phase
+5 ownership moves are already compiling in Mere. The protocol architecture and
+iced jump-ship plans remain broader programs with larger unimplemented
+host/runtime surfaces.
 
 ---
 
@@ -411,3 +443,6 @@ renderer adapters in this slice.
 - Verification: `cargo fmt` completed; `cargo test -p graphshell -p platen -p verso-tile` passed with 45 Graphshell tests, 10 Platen tests, and 6 Verso-Tile tests; `cargo test --workspace` passed across Mere.
 - Moved pane-scoped surface-command construction into `verso_tile::surface` with `SurfaceCommand::present_pane`, `retire_pane`, and `focus_pane`. `graphshell::app_state::workspace_routing` now emits prebuilt pane commands from `verso-tile` instead of wrapping `GraphViewId` and `PaneId` into optional command fields locally.
 - Verification: `cargo fmt` completed; `cargo test -p graphshell -p platen -p verso-tile` passed with 45 Graphshell tests, 10 Platen tests, and 7 Verso-Tile tests; `cargo test --workspace` passed across Mere.
+- Added `verso_tile::surface::SurfaceCommandOutcome` and `SurfaceCommandStatus` so hosts can report applied / already-satisfied / deferred command results with the same surface identity vocabulary as the command. `SurfaceCommandSink::apply_surface_command` now returns the outcome instead of `()`, and Graphshell re-exports the outcome/status without owning the lifecycle vocabulary.
+- Refactored this plan's stale near-term section into a current position map covering where the migration stands, where it is going, fruitful sidequests, pitfalls, and closest-to-completion status. The Graphshell migration plan is currently the closest to completion among the active attached plans because its portable spine, reducers, persistence/Mnem boundary, and first Phase 5 ownership moves all compile in Mere.
+- Verification: `cargo test -p graphshell -p platen -p verso-tile` passed with 45 Graphshell tests, 10 Platen tests, and 8 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.

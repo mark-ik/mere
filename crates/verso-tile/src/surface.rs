@@ -71,7 +71,26 @@ pub enum SurfaceCommand {
 pub trait SurfaceCommandSink {
     type Error;
 
-    fn apply_surface_command(&mut self, command: &SurfaceCommand) -> Result<(), Self::Error>;
+    fn apply_surface_command(
+        &mut self,
+        command: &SurfaceCommand,
+    ) -> Result<SurfaceCommandOutcome, Self::Error>;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SurfaceCommandStatus {
+    Applied,
+    AlreadySatisfied,
+    Deferred,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SurfaceCommandOutcome {
+    pub host: SurfaceHostId,
+    pub view: Option<GraphViewId>,
+    pub pane: Option<PaneId>,
+    pub request: SurfaceRequest,
+    pub status: SurfaceCommandStatus,
 }
 
 impl SurfaceCommand {
@@ -137,6 +156,16 @@ impl SurfaceCommand {
             view: self.view(),
             pane: self.pane(),
             request: self.request(),
+        }
+    }
+
+    pub fn outcome(&self, status: SurfaceCommandStatus) -> SurfaceCommandOutcome {
+        SurfaceCommandOutcome {
+            host: self.host().clone(),
+            view: self.view(),
+            pane: self.pane(),
+            request: self.request(),
+            status,
         }
     }
 }
@@ -224,10 +253,21 @@ mod tests {
     }
 
     #[test]
+    fn command_builds_host_reportable_outcome() {
+        let command = SurfaceCommand::focus(SurfaceHostId::new("desktop"), None, None);
+
+        let outcome = command.outcome(SurfaceCommandStatus::Applied);
+
+        assert_eq!(outcome.request, SurfaceRequest::Focus);
+        assert_eq!(outcome.status, SurfaceCommandStatus::Applied);
+        assert_eq!(outcome.host, SurfaceHostId::new("desktop"));
+    }
+
+    #[test]
     fn command_sink_accepts_surface_commands() {
         #[derive(Default)]
         struct RecordingSink {
-            commands: Vec<SurfaceCommand>,
+            outcomes: Vec<SurfaceCommandOutcome>,
         }
 
         impl SurfaceCommandSink for RecordingSink {
@@ -236,17 +276,19 @@ mod tests {
             fn apply_surface_command(
                 &mut self,
                 command: &SurfaceCommand,
-            ) -> Result<(), Self::Error> {
-                self.commands.push(command.clone());
-                Ok(())
+            ) -> Result<SurfaceCommandOutcome, Self::Error> {
+                let outcome = command.outcome(SurfaceCommandStatus::Applied);
+                self.outcomes.push(outcome.clone());
+                Ok(outcome)
             }
         }
 
         let mut sink = RecordingSink::default();
         let command = SurfaceCommand::focus(SurfaceHostId::new("desktop"), None, None);
 
-        sink.apply_surface_command(&command).unwrap();
+        let outcome = sink.apply_surface_command(&command).unwrap();
 
-        assert_eq!(sink.commands, vec![command]);
+        assert_eq!(outcome.status, SurfaceCommandStatus::Applied);
+        assert_eq!(sink.outcomes, vec![outcome]);
     }
 }
