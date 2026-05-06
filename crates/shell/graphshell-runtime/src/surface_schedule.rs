@@ -14,6 +14,8 @@ use verso_tile::surface::{
 pub struct SurfaceScheduleApplyReport {
     pub outcomes: Vec<SurfaceCommandOutcome>,
     pub allocated: usize,
+    pub retired: usize,
+    pub already_satisfied: usize,
     pub already_present: usize,
     pub deferred: usize,
     pub unsupported: usize,
@@ -34,26 +36,56 @@ pub fn apply_present_surface_schedule<Registry, Host>(
 where
     Host: ViewerSurfaceHost<Registry>,
 {
+    apply_viewer_surface_schedule(lifecycle, schedule, registry, host)
+}
+
+pub fn apply_viewer_surface_schedule<Registry, Host>(
+    lifecycle: &mut SurfaceLifecycleState,
+    schedule: &SurfaceCommandSchedule,
+    registry: &mut Registry,
+    host: &mut Host,
+) -> Result<SurfaceScheduleApplyReport, SurfaceScheduleApplyError>
+where
+    Host: ViewerSurfaceHost<Registry>,
+{
     let mut report = SurfaceScheduleApplyReport::default();
     for command in schedule.commands() {
         let outcome = match command.request() {
             SurfaceRequest::Present => apply_present_command(lifecycle, command, registry, host)?,
+            SurfaceRequest::Retire => apply_retire_command(lifecycle, command, registry, host)?,
             _ => {
                 report.unsupported += 1;
                 command.outcome(SurfaceCommandStatus::Deferred)
             }
         };
-        if outcome.status == SurfaceCommandStatus::Applied {
-            report.allocated += 1;
-        } else if outcome.status == SurfaceCommandStatus::AlreadySatisfied {
-            report.already_present += 1;
-        } else if outcome.status == SurfaceCommandStatus::Deferred {
-            report.deferred += 1;
-        }
+        report.record(command, &outcome);
         lifecycle.record_outcome(command, &outcome);
         report.outcomes.push(outcome);
     }
     Ok(report)
+}
+
+impl SurfaceScheduleApplyReport {
+    fn record(&mut self, command: &SurfaceCommand, outcome: &SurfaceCommandOutcome) {
+        match outcome.status {
+            SurfaceCommandStatus::Applied if command.request() == SurfaceRequest::Present => {
+                self.allocated += 1;
+            }
+            SurfaceCommandStatus::Applied if command.request() == SurfaceRequest::Retire => {
+                self.retired += 1;
+            }
+            SurfaceCommandStatus::Applied => {}
+            SurfaceCommandStatus::AlreadySatisfied => {
+                self.already_satisfied += 1;
+                if command.request() == SurfaceRequest::Present {
+                    self.already_present += 1;
+                }
+            }
+            SurfaceCommandStatus::Deferred => {
+                self.deferred += 1;
+            }
+        }
+    }
 }
 
 fn apply_present_command<Registry, Host>(
@@ -73,6 +105,25 @@ where
     }
     host.allocate_surface(registry, placement.node)
         .map_err(SurfaceScheduleApplyError::Viewer)?;
+    Ok(command.outcome(SurfaceCommandStatus::Applied))
+}
+
+fn apply_retire_command<Registry, Host>(
+    lifecycle: &SurfaceLifecycleState,
+    command: &SurfaceCommand,
+    registry: &mut Registry,
+    host: &mut Host,
+) -> Result<SurfaceCommandOutcome, SurfaceScheduleApplyError>
+where
+    Host: ViewerSurfaceHost<Registry>,
+{
+    let placement = lifecycle
+        .placement_for_command(command)
+        .ok_or_else(|| SurfaceScheduleApplyError::MissingPlacement(command.clone()))?;
+    if !host.has_surface(registry, placement.node) {
+        return Ok(command.outcome(SurfaceCommandStatus::AlreadySatisfied));
+    }
+    host.retire_surface(registry, placement.node);
     Ok(command.outcome(SurfaceCommandStatus::Applied))
 }
 
@@ -133,7 +184,7 @@ mod tests {
         let mut host = MockHost;
 
         let report =
-            apply_present_surface_schedule(&mut lifecycle, &schedule, &mut registry, &mut host)
+            apply_viewer_surface_schedule(&mut lifecycle, &schedule, &mut registry, &mut host)
                 .unwrap();
 
         assert_eq!(report.allocated, 1);
@@ -161,13 +212,74 @@ mod tests {
         let mut host = MockHost;
 
         let report =
-            apply_present_surface_schedule(&mut lifecycle, &schedule, &mut registry, &mut host)
+            apply_viewer_surface_schedule(&mut lifecycle, &schedule, &mut registry, &mut host)
                 .unwrap();
 
         assert_eq!(report.already_present, 1);
+        assert_eq!(report.already_satisfied, 1);
         assert_eq!(
             report.outcomes[0].status,
             SurfaceCommandStatus::AlreadySatisfied
         );
+    }
+
+    #[test]
+    fn retire_schedule_retires_existing_surface_and_clears_placement() {
+        let view = GraphViewId::new();
+        let node = NodeKey::new(5);
+        let pane = PaneId::new();
+        let mut plan = SurfacePlacementPlan::default();
+        plan.push(SurfaceSlotPlacement::new(
+            SurfaceHostId::new("desktop"),
+            Some(view),
+            pane,
+            node,
+            TileSlot::primary(),
+        ));
+        let mut lifecycle = SurfaceLifecycleState::default();
+        lifecycle.schedule_placements(plan);
+        let schedule = lifecycle.schedule_retire_pane(pane).unwrap();
+        let mut registry = MockRegistry::default();
+        registry.nodes.insert(node);
+        let mut host = MockHost;
+
+        let report =
+            apply_viewer_surface_schedule(&mut lifecycle, &schedule, &mut registry, &mut host)
+                .unwrap();
+
+        assert_eq!(report.retired, 1);
+        assert!(!registry.nodes.contains(&node));
+        assert!(lifecycle.placements().placement_for_pane(pane).is_none());
+    }
+
+    #[test]
+    fn retire_schedule_reports_already_satisfied_for_absent_surface() {
+        let view = GraphViewId::new();
+        let node = NodeKey::new(6);
+        let pane = PaneId::new();
+        let mut plan = SurfacePlacementPlan::default();
+        plan.push(SurfaceSlotPlacement::new(
+            SurfaceHostId::new("desktop"),
+            Some(view),
+            pane,
+            node,
+            TileSlot::primary(),
+        ));
+        let mut lifecycle = SurfaceLifecycleState::default();
+        lifecycle.schedule_placements(plan);
+        let schedule = lifecycle.schedule_retire_pane(pane).unwrap();
+        let mut registry = MockRegistry::default();
+        let mut host = MockHost;
+
+        let report =
+            apply_viewer_surface_schedule(&mut lifecycle, &schedule, &mut registry, &mut host)
+                .unwrap();
+
+        assert_eq!(report.already_satisfied, 1);
+        assert_eq!(
+            report.outcomes[0].status,
+            SurfaceCommandStatus::AlreadySatisfied
+        );
+        assert!(lifecycle.placements().placement_for_pane(pane).is_none());
     }
 }

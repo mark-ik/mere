@@ -328,6 +328,10 @@ impl SurfaceSlotPlacement {
     pub fn present_command(&self) -> SurfaceCommand {
         SurfaceCommand::present(self.host.clone(), self.view, Some(self.pane))
     }
+
+    pub fn retire_command(&self) -> SurfaceCommand {
+        SurfaceCommand::retire(self.host.clone(), self.view, Some(self.pane))
+    }
 }
 
 impl SurfacePlacementPlan {
@@ -359,6 +363,23 @@ impl SurfacePlacementPlan {
                 && placement.view == command.view()
                 && Some(placement.pane) == command.pane()
         })
+    }
+
+    pub fn retire_command_for_pane(&self, pane: PaneId) -> Option<SurfaceCommand> {
+        self.placement_for_pane(pane)
+            .map(SurfaceSlotPlacement::retire_command)
+    }
+
+    pub fn remove_placement_for_command(
+        &mut self,
+        command: &SurfaceCommand,
+    ) -> Option<SurfaceSlotPlacement> {
+        let index = self.placements.iter().position(|placement| {
+            placement.host == *command.host()
+                && placement.view == command.view()
+                && Some(placement.pane) == command.pane()
+        })?;
+        Some(self.placements.remove(index))
     }
 
     pub fn present_commands(&self) -> Vec<SurfaceCommand> {
@@ -407,12 +428,31 @@ impl SurfaceLifecycleState {
         }
     }
 
+    pub fn schedule_retire_pane(&self, pane: PaneId) -> Option<SurfaceCommandSchedule> {
+        let command = self.placements.retire_command_for_pane(pane)?;
+        Some(SurfaceCommandSchedule {
+            commands: vec![command],
+            placements: 0,
+            retries: 0,
+        })
+    }
+
     pub fn record_outcome(
         &mut self,
         command: &SurfaceCommand,
         outcome: &SurfaceCommandOutcome,
     ) -> bool {
-        self.backlog.record_outcome(command, outcome)
+        let recorded = self.backlog.record_outcome(command, outcome);
+        if outcome.matches_command(command)
+            && command.request() == SurfaceRequest::Retire
+            && matches!(
+                outcome.status,
+                SurfaceCommandStatus::Applied | SurfaceCommandStatus::AlreadySatisfied
+            )
+        {
+            self.placements.remove_placement_for_command(command);
+        }
+        recorded
     }
 
     pub fn schedule_retries(&mut self) -> SurfaceCommandSchedule {
@@ -550,6 +590,14 @@ mod tests {
             plan.present_commands(),
             vec![SurfaceCommand::present_pane(host, view, pane)]
         );
+        assert_eq!(
+            plan.retire_command_for_pane(pane),
+            Some(SurfaceCommand::retire_pane(
+                SurfaceHostId::new("desktop"),
+                view,
+                pane
+            ))
+        );
     }
 
     #[test]
@@ -607,6 +655,36 @@ mod tests {
         assert_eq!(retry.retries, 1);
         assert_eq!(retry.commands(), &[first_command]);
         assert!(lifecycle.backlog().is_empty());
+    }
+
+    #[test]
+    fn lifecycle_state_schedules_retire_and_removes_applied_placement() {
+        let view = GraphViewId::new();
+        let pane = PaneId::new();
+        let host = SurfaceHostId::new("desktop");
+        let mut plan = SurfacePlacementPlan::default();
+        plan.push(SurfaceSlotPlacement::new(
+            host.clone(),
+            Some(view),
+            pane,
+            NodeKey::new(9),
+            TileSlot::primary(),
+        ));
+        let mut lifecycle = SurfaceLifecycleState::default();
+        lifecycle.schedule_placements(plan);
+
+        let retire = lifecycle.schedule_retire_pane(pane).unwrap();
+
+        assert_eq!(retire.len(), 1);
+        assert_eq!(
+            retire.commands(),
+            &[SurfaceCommand::retire_pane(host, view, pane)]
+        );
+        assert!(!lifecycle.record_outcome(
+            &retire.commands()[0],
+            &retire.commands()[0].outcome(SurfaceCommandStatus::Applied)
+        ));
+        assert!(lifecycle.placements().placement_for_pane(pane).is_none());
     }
 
     #[test]

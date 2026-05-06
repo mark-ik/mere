@@ -321,8 +321,8 @@ Primary next slices:
 1. Grow `verso-tile` from command vocabulary into surface lifecycle reporting:
     host acknowledgement, deferred-command backlog semantics, and portable
     surface-slot placement packets are in place. Portable placement/retry
-    scheduling and runtime schedule application are now in place too, so the
-    next edge is concrete egui/iced/wry host implementation.
+    scheduling, retire scheduling, and runtime schedule application are now in
+    place too, so the next edge is concrete egui/iced/wry host implementation.
 2. Keep route policy in `inker`: the default scheme policy is in place, and the
    next route-policy move should add content/runtime signals only when a real
    engine implementation needs them.
@@ -481,3 +481,6 @@ host/runtime surfaces.
 - Added `NodeKey` to `verso_tile::surface::SurfaceSlotPlacement` so surface placement schedules carry the graph identity required by host viewer allocation, not just pane/slot identity. `platen::workbench::project_surface_placements` now forwards the arrangement member node into the placement packet.
 - Added `graphshell_runtime::surface_schedule::apply_present_surface_schedule`, a portable runtime adapter that applies Verso-Tile present schedules to `graphshell_core::viewer_host::ViewerSurfaceHost`, reports applied/already-present/deferred outcomes, and leaves concrete egui/iced/wry surface resources outside portable app state.
 - Verification: `cargo test -p graphshell-runtime -p graphshell -p platen -p verso-tile` passed with 51 Graphshell Runtime tests, 50 Graphshell tests, 14 Platen tests, and 13 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
+- Added retire scheduling to `verso_tile::surface::SurfaceLifecycleState`: existing pane placements can now produce retire schedules, and applied/already-satisfied retire outcomes remove the placement from lifecycle state.
+- Generalized the runtime viewer-surface adapter as `graphshell_runtime::surface_schedule::apply_viewer_surface_schedule`, preserving the present-only wrapper while adding retire handling through `ViewerSurfaceHost::retire_surface`.
+- Verification: `cargo test -p graphshell-runtime -p graphshell -p platen -p verso-tile` passed with 53 Graphshell Runtime tests, 50 Graphshell tests, 14 Platen tests, and 14 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
