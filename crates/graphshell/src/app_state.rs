@@ -22,7 +22,7 @@ pub use inker::routing::{
 };
 pub use platen::workbench::{FrameId, FrameState, PaneBinding};
 use serde::{Deserialize, Serialize};
-pub use verso_tile::surface::{SurfaceCommand, SurfaceEffect, SurfaceHostId, SurfaceRequest};
+pub use verso_tile::surface::{SurfaceCommand, SurfaceHostId, SurfaceRequest};
 
 pub mod app_ux;
 pub mod composition;

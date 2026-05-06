@@ -103,8 +103,33 @@ pub fn assign_frame_pane(
     root_changed || pane_changed
 }
 
+pub fn assign_view_and_frame_pane(
+    view_bindings: &mut Vec<PaneBinding>,
+    frame: Option<&mut FrameState>,
+    view_id: GraphViewId,
+    binding: PaneBinding,
+) -> bool {
+    let view_changed = upsert_pane_binding(view_bindings, binding.clone());
+    let frame_changed = frame
+        .map(|frame| assign_frame_pane(frame, view_id, binding))
+        .unwrap_or(false);
+    view_changed || frame_changed
+}
+
 pub fn clear_frame_pane(frame: &mut FrameState, pane_id: PaneId) -> bool {
     remove_pane_binding(&mut frame.panes, pane_id).is_some()
+}
+
+pub fn remove_view_and_frame_pane(
+    view_bindings: &mut Vec<PaneBinding>,
+    frame: Option<&mut FrameState>,
+    pane_id: PaneId,
+) -> Option<PaneBinding> {
+    let removed = remove_pane_binding(view_bindings, pane_id)?;
+    if let Some(frame) = frame {
+        clear_frame_pane(frame, pane_id);
+    }
+    Some(removed)
 }
 
 /// Select the active root view for workbench-aware composition.
@@ -198,5 +223,49 @@ mod tests {
         assert!(assign_frame_pane(&mut frame, root_view, binding.clone()));
         assert_eq!(frame.root_view, Some(root_view));
         assert_eq!(frame.panes, vec![binding]);
+    }
+
+    #[test]
+    fn assign_view_and_frame_pane_keeps_view_and_frame_in_sync() {
+        let pane_id = PaneId::from_uuid(uuid::Uuid::from_u128(12));
+        let root_view = GraphViewId::from_uuid(uuid::Uuid::from_u128(13));
+        let binding = PaneBinding {
+            pane_id,
+            node: NodeKey::new(4),
+            surface_host: Some(SurfaceHostId::new("desktop")),
+        };
+        let mut view_bindings = Vec::new();
+        let mut frame = FrameState::default();
+
+        assert!(assign_view_and_frame_pane(
+            &mut view_bindings,
+            Some(&mut frame),
+            root_view,
+            binding.clone(),
+        ));
+        assert_eq!(view_bindings, vec![binding.clone()]);
+        assert_eq!(frame.root_view, Some(root_view));
+        assert_eq!(frame.panes, vec![binding]);
+    }
+
+    #[test]
+    fn remove_view_and_frame_pane_removes_from_both_collections() {
+        let pane_id = PaneId::from_uuid(uuid::Uuid::from_u128(14));
+        let binding = PaneBinding {
+            pane_id,
+            node: NodeKey::new(5),
+            surface_host: None,
+        };
+        let mut view_bindings = vec![binding.clone()];
+        let mut frame = FrameState {
+            panes: vec![binding.clone()],
+            ..FrameState::default()
+        };
+
+        let removed = remove_view_and_frame_pane(&mut view_bindings, Some(&mut frame), pane_id);
+
+        assert_eq!(removed, Some(binding));
+        assert!(view_bindings.is_empty());
+        assert!(frame.panes.is_empty());
     }
 }

@@ -6,15 +6,14 @@
 //!
 //! This is the first portable subset of the donor `workspace_routing` seam. It
 //! binds graph nodes to portable pane IDs, keeps view and frame state aligned,
-//! updates the GraphTree projection, and emits surface effects for host
+//! updates the GraphTree projection, and emits surface commands for host
 //! adapters to consume later.
 
 use graph_tree::{NavAction, Provenance};
 use graphshell_core::graph::{GraphViewId, NodeKey};
 use graphshell_core::pane::PaneId;
 use platen::workbench::{
-    assign_frame_pane, clear_frame_pane, remove_pane_binding, set_binding_surface_host,
-    upsert_pane_binding,
+    assign_view_and_frame_pane, remove_view_and_frame_pane, set_binding_surface_host,
 };
 use verso_tile::surface::SurfaceCommand;
 
@@ -120,17 +119,15 @@ fn route_node_to_pane(
         node,
         surface_host: surface_host.clone(),
     };
-    let mut state_changed =
-        projection_changed | upsert_pane_binding(&mut view.panes, binding.clone());
-
-    if let Some(frame_id) = frame_id.as_ref() {
-        let frame = workspace
+    let frame = frame_id.as_ref().map(|frame_id| {
+        workspace
             .workbench
             .frames
             .get_mut(frame_id)
-            .expect("frame existence checked");
-        state_changed |= assign_frame_pane(frame, view_id, binding);
-    }
+            .expect("frame existence checked")
+    });
+    let state_changed =
+        projection_changed | assign_view_and_frame_pane(&mut view.panes, frame, view_id, binding);
 
     if state_changed {
         workspace.workbench.has_unsaved_changes = true;
@@ -163,8 +160,19 @@ fn remove_pane_route(
         .graph_views
         .get_mut(&view_id)
         .ok_or(WorkspaceRoutingError::MissingGraphView(view_id))?;
-    let removed_view_binding = remove_pane_binding(&mut view.panes, pane_id);
-    let Some(removed_view_binding) = removed_view_binding else {
+    let frame = if let Some(frame_id) = frame_id.as_ref() {
+        Some(
+            workspace
+                .workbench
+                .frames
+                .get_mut(frame_id)
+                .ok_or_else(|| WorkspaceRoutingError::MissingFrame(frame_id.clone()))?,
+        )
+    } else {
+        None
+    };
+    let Some(removed_view_binding) = remove_view_and_frame_pane(&mut view.panes, frame, pane_id)
+    else {
         return Err(WorkspaceRoutingError::MissingPane(pane_id));
     };
     view.tree
@@ -173,15 +181,7 @@ fn remove_pane_route(
         view.projection.active_node = None;
     }
 
-    let mut state_changed = true;
-    if let Some(frame_id) = frame_id.as_ref() {
-        let frame = workspace
-            .workbench
-            .frames
-            .get_mut(frame_id)
-            .ok_or_else(|| WorkspaceRoutingError::MissingFrame(frame_id.clone()))?;
-        state_changed |= clear_frame_pane(frame, pane_id);
-    }
+    let state_changed = true;
     workspace.workbench.has_unsaved_changes = true;
 
     let mut effects_emitted = 0;
@@ -276,7 +276,7 @@ mod tests {
     }
 
     #[test]
-    fn routes_node_to_view_frame_and_surface_effect() {
+    fn routes_node_to_view_frame_and_surface_command() {
         let mut workspace = GraphWorkspace::new();
         let node = add_node(&mut workspace, 1);
         workspace.drain_effects();
