@@ -130,11 +130,11 @@ surface area to own the behavior directly.
 | `graphshell-core` | Portable graph/domain model, shell identities, pane IDs, address/content classifications, serializable shell state primitives | App reducers, concrete hosts, engine routing policy, persistence stores | Keep graph truth and stable IDs here when they are reusable below the app layer |
 | `graph-canvas` / `graph-tree` | Canvas scene packet types, projection math inputs, tree topology/navigation primitives | `GraphWorkspace`, product chrome, engine/host decisions | Graphshell may select state into these types; these crates should not learn Graphshell app state |
 | `graphshell::app_state` | Reducer-owned `GraphWorkspace`, pure reducers, transient/durable UI state, typed effects, temporary service traits | Concrete services, renderer handles, task runtimes, host widgets, engine lifecycle, storage implementations | Keep Phase 3 code here only while it is pure state/reducer/selector logic; `app_state::services` now proves the full pending-effect queue and surface lifecycle schedules can dispatch through traits without importing donor `GraphBrowserApp` |
-| `graphshell` host crates | Native/desktop/mobile host adapters, event translation, surface command application, accessibility bridge | Graph truth mutation, engine selection policy, private memory persistence | Hosts emit intents/effects and consume projections; they do not bypass reducers. `graphshell-host` now owns the registry-backed viewer-surface host adapter without importing a concrete GUI toolkit |
+| `graphshell` host crates | Native/desktop/mobile host adapters, event translation, surface command application, accessibility bridge | Graph truth mutation, engine selection policy, private memory persistence | Hosts emit intents/effects and consume projections; they do not bypass reducers. `graphshell-host` owns the registry-backed viewer-surface host adapter and fresh-host toolkit order; `graphshell-host-iced` starts the first new host boundary without importing old GraphBrowserApp mutation assumptions |
 | `inker` | Engine choice, URI/content routing policy, engine lifecycle, engine-output contracts | Graphshell chrome, GraphWorkspace mutation, tile placement | `inker::routing` now owns the portable engine-route request/decision vocabulary and a default scheme-based `EngineRoutePolicy`; concrete engine implementations still remain outside the policy |
 | `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | `platen::canvas_scene` and `platen::workbench` now own the extracted graph-to-canvas derivation core, frame/pane model, active-frame/root-view selectors, pane/frame binding helpers, active-workbench projection packets, frame arrangement snapshots, and the projection from arrangements into hosted surface placements; Graphshell should keep shrinking toward wrappers around those selectors/helpers |
 | `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, `SurfaceCommand`, `SurfaceCommandOutcome`, `SurfaceCommandBacklog`, `TileSlot`, node-carrying `SurfaceSlotPlacement`, `SurfacePlacementPlan`, `SurfaceCommandSchedule`, `SurfaceLifecycleState`, and the generic `SurfaceCommandSink` host seam now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
-| `graphshell-runtime` | Portable host/runtime adapters, schedule application helpers, frame projections, runtime ports | Reducer-owned graph truth, concrete desktop widgets, engine routing policy | `surface_schedule` now applies Verso-Tile present schedules to the existing `ViewerSurfaceHost` seam by placement `NodeKey`, giving future egui/iced/wry hosts a portable adapter point instead of making app state allocate viewer surfaces |
+| `graphshell-runtime` | Portable host/runtime adapters, schedule application helpers, frame projections, runtime ports | Reducer-owned graph truth, concrete desktop widgets, engine routing policy | `surface_schedule` now applies Verso-Tile present schedules to the existing `ViewerSurfaceHost` seam by placement `NodeKey`, giving future fresh host crates a portable adapter point instead of making app state allocate viewer surfaces |
 | `mnem` | Private local memory: graph snapshots, traversal logs, settings/cache/index persistence | Mere transport state, Moothold community flora, host UI state | The contract now lives in the dedicated `graphshell::mnem` module; a narrower crate boundary can come later if it proves necessary |
 | `mere` | Product entrypoint, top-level service wiring, crate orchestration, feature assembly | Low-level graph primitives, renderer internals, protocol implementations | `mere` composes the system; it should not become the old root-crate catch-all |
 
@@ -143,6 +143,26 @@ Mere owner. The initial `graphshell::app_state::composition` module should stay
 limited to pure selectors such as workspace-to-canvas scene input. Anything
 that decides arrangement, split topology, surface placement, or renderable
 workbench layout should move toward `platen` / `verso-tile` instead.
+
+### 1.10 Crate Structure Efficiency
+
+The donor Graphshell was a prototype. Its code is evidence about behavior and
+failure modes, not a crate map to photocopy. Efficient Mere crate boundaries
+must earn their existence by reducing one of these costs:
+
+- dependency cost: isolate expensive or optional toolkit/engine/backend crates;
+- ownership cost: keep one durable owner for graph truth, route policy,
+  workbench composition, surface lifecycle, and host resources;
+- validation cost: make contracts small enough to test without booting a GUI or
+  renderer;
+- change cost: keep prototype residue out of stable portable APIs so hosts can
+  be rebuilt rather than patched around inherited assumptions.
+
+Do not create a crate just because the prototype had a module. Do not merge a
+crate just to reduce file count if that would force portable code to depend on a
+host toolkit, engine backend, task runtime, renderer ID type, or persistence
+implementation. The efficient shape is the smallest dependency graph that keeps
+responsibility honest.
 
 ---
 
@@ -297,13 +317,24 @@ Acceptance: Graphshell can ask Inker for an engine decision and receive a host-n
 
 ### Phase 6 — Host Adapters
 
-Only after portable/app layers compile:
+Only after portable/app layers compile, build fresh host crates in this order:
 
-- iced host
-- Wry host overlay adapter
-- future GPUI/html-css/mobile hosts
+1. iced
+2. GPUI
+3. HTML/CSS
+4. Makepad
+5. egui
 
-Acceptance: host crates depend on `graphshell` and `inker`/`verso-tile`, not on old root crate internals.
+Donor host modules are reference material only. Take lessons, not photocopies.
+Do not pull in old mixed mutation assumptions, direct `GraphBrowserApp` state
+edits, no-op lifecycle adapters, renderer ID maps in app state, stale prototype
+UI contracts, or toolkit-specific shortcuts that bypass reducer intents/effects.
+
+Acceptance: host crates depend on the narrow Graphshell crates they need
+(`graphshell-core`, `graphshell-runtime`, `graphshell-host`) plus
+`inker`/`verso-tile` only when they consume route or surface contracts; they do
+not depend on old root crate internals or drag toolkit dependencies into
+portable crates.
 
 ---
 
@@ -323,7 +354,8 @@ Primary next slices:
     surface-slot placement packets are in place. Portable placement/retry
     scheduling, retire scheduling, runtime schedule application, and the first
     registry-backed host adapter are now in place too, so the next edge is a
-    concrete egui/iced/wry host crate.
+    fresh concrete host crate starting with iced, then GPUI, HTML/CSS, Makepad,
+    and egui last.
 2. Keep route policy in `inker`: the default scheme policy is in place, and the
    next route-policy move should add content/runtime signals only when a real
    engine implementation needs them.
@@ -368,8 +400,9 @@ Pitfalls:
 Closest-to-completion plan: this Graphshell migration plan is closest. Its
 portable spine, app-state reducers, persistence/Mnem boundary, and first Phase
 5 ownership moves are already compiling in Mere. The protocol architecture and
-iced jump-ship plans remain broader programs with larger unimplemented
-host/runtime surfaces.
+fresh host plans remain broader programs with larger unimplemented
+host/runtime surfaces; the preferred host order is iced, GPUI, HTML/CSS,
+Makepad, then egui.
 
 ---
 
@@ -394,9 +427,9 @@ host/runtime surfaces.
 - `graph-memory` and `graph-tree` migrated into `crates/graph/`.
 - `graph-canvas` migrated into `crates/graph/`.
 - Removed the donor-side optional Vello/Rapier adapter dependencies from migrated `graph-canvas`; Cargo resolves optional dependencies into the workspace lock even with `--no-default-features`, so renderer and rigid-body adapters need future sibling crates instead of feature flags inside the portable canvas authority.
-- `graphshell-core` migrated into `crates/shell/`.
+- `graphshell-core` migrated into `crates/graphshell/core`.
 - `register-diagnostics` migrated into `crates/registry/` to unblock runtime without preserving the old `registrar/*` donor path.
-- `graphshell-runtime` migrated into `crates/shell/`.
+- `graphshell-runtime` migrated into `crates/graphshell/runtime`.
 - `crates/graphshell` now re-exports the migrated surfaces as `graphshell::canvas`, `graphshell::core`, `graphshell::memory`, `graphshell::runtime`, and `graphshell::tree`.
 - Full `cargo test --workspace` passed after the first portable Graphshell spine landed in Mere.
 - Phase 3 preparatory `GraphWorkspace` target shape and service/persistence trait boundaries recorded. Next implementation work should start with the app-state/reducer slice, not host adapters.
@@ -491,3 +524,9 @@ host/runtime surfaces.
 - Verification: `cargo test -p graphshell-host -p graphshell-runtime -p verso-tile` passed with 2 Graphshell Host tests, 53 Graphshell Runtime tests, and 14 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
 - Added a `graphshell-host` integration test proving `SurfaceFactoryHost` applies real `verso_tile::surface::SurfaceLifecycleState` present/retire schedules through `graphshell_runtime::apply_viewer_surface_schedule`, while keeping runtime and surface crates as test-only dependencies of the host adapter crate.
 - Verification: `cargo test -p graphshell-host -p graphshell-runtime -p verso-tile` passed with 2 Graphshell Host unit tests, 1 Graphshell Host integration test, 53 Graphshell Runtime tests, and 14 Verso-Tile tests; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
+- Added `graphshell_host::HostToolkit` and `NEW_HOST_TOOLKIT_ORDER` to make fresh host work explicit: iced first, then GPUI, HTML/CSS, Makepad, and egui last. The order is data in the host seam crate, not a donor-import side effect.
+- Verification: `cargo test -p graphshell-host` passed with 4 Graphshell Host unit tests and 1 Graphshell Host integration test; `cargo fmt` completed; `cargo test --workspace` passed across Mere.
+- Added `graphshell-host-iced` as the first fresh host crate. It implements an iced-shaped `HostSurfacePort` boundary with explicit present/retire request queues and content callback registration, but does not import iced, the old `GraphBrowserApp`, renderer IDs, or direct graph mutation paths.
+- Verification: `cargo test -p graphshell-host -p graphshell-host-iced` passed with 4 Graphshell Host unit tests, 1 Graphshell Host integration test, and 4 Graphshell Host Iced tests; after relocating the support crates, `cargo test --workspace` passed, including the Graphshell family crates and doctests; `cargo fmt` completed.
+- Removed the stale `crates/shell/` directory. Graphshell support crates now live under the Graphshell family root: `crates/graphshell/core`, `crates/graphshell/runtime`, `crates/graphshell/host`, and `crates/graphshell/host-iced`.
+- Added crate-structure efficiency rules: prototype modules are behavioral evidence, not final boundaries; new crates must reduce dependency, ownership, validation, or change cost, and portable crates must stay free of host toolkit, renderer, task-runtime, and persistence implementation dependencies.

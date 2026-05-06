@@ -4,6 +4,8 @@
 
 //! Host-side adapters for Graphshell surface lifecycle seams.
 
+pub mod host_toolkit;
 pub mod viewer_surface_host;
 
+pub use host_toolkit::{HostToolkit, NEW_HOST_TOOLKIT_ORDER, preferred_host_toolkits};
 pub use viewer_surface_host::{SurfaceFactoryHost, ViewerSurfaceRegistryHost};

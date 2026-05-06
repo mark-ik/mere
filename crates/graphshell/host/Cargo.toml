@@ -10,8 +10,8 @@ description = "Host-side adapters for Graphshell surfaces"
 path = "src/lib.rs"
 
 [dependencies]
-graphshell-core = { path = "../graphshell-core" }
+graphshell-core = { path = "../core" }
 
 [dev-dependencies]
-graphshell-runtime = { path = "../graphshell-runtime" }
+graphshell-runtime = { path = "../runtime" }
 verso-tile = { path = "../../verso-tile" }

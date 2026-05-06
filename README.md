@@ -14,7 +14,10 @@ This is a Cargo workspace organizing Mere into modular crates. Most crates ship 
 | [`mere-identity`](crates/mere/mere-identity) | Identity management — master Ed25519 keypair, keychain integration, per-protocol derivation |
 | [`mere-transport`](crates/mere/mere-transport) | Peer transport layer — iroh-based authenticated streams between known peers |
 | [`graphshell`](crates/graphshell) | Portable shell layer — host GUI integration (iced / gpui / html-css / other) and Navigator surface |
-| [`graphshell-host`](crates/shell/graphshell-host) | Host-side adapters for Graphshell surface lifecycle seams |
+| [`graphshell-core`](crates/graphshell/core) | Portable Graphshell identity, authority, graph, pane, and shell-state contracts |
+| [`graphshell-runtime`](crates/graphshell/runtime) | Portable runtime adapters, frame projections, host ports, and surface schedule application |
+| [`graphshell-host`](crates/graphshell/host) | Host-side adapters and toolkit ordering for fresh Graphshell surface hosts |
+| [`graphshell-host-iced`](crates/graphshell/host-iced) | Fresh iced host boundary — queues surface lifecycle requests without old GraphBrowserApp mutation assumptions |
 | [`verso-tile`](crates/verso-tile) | Rendering-surface management — receives engine output and places it into GraphTree tiles (Verso brand) |
 | [`inker`](crates/inker) | Engine controller — selects and orchestrates content engines |
 | [`platen`](crates/platen) | Composition surface — graph-aware layout, the press to verso's page |
@@ -47,6 +50,10 @@ Vocabulary used in user-facing language:
 ## Status
 
 Pre-1.0 development. The 0.0.x releases reserve crate names and document intent; implementation is in progress.
+
+## Crate Boundary Rule
+
+The old Graphshell codebase is prototype evidence, not a final crate map. Mere keeps a crate boundary only when it lowers dependency, ownership, validation, or change cost: optional toolkits and engines stay isolated, graph truth has one owner, contracts can be tested without booting a GUI, and prototype shortcuts do not become stable API.
 
 ## License
 

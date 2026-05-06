@@ -11,5 +11,5 @@ categories = ["gui", "rendering"]
 path = "src/lib.rs"
 
 [dependencies]
-graphshell-core = { path = "../shell/graphshell-core" }
+graphshell-core = { path = "../graphshell/core" }
 serde = { version = "1.0", features = ["derive"] }

@@ -14,8 +14,8 @@ path = "src/lib.rs"
 graph-canvas = { path = "../graph/graph-canvas" }
 graph-memory = { path = "../graph/graph-memory" }
 graph-tree = { path = "../graph/graph-tree" }
-graphshell-core = { path = "../shell/graphshell-core" }
-graphshell-runtime = { path = "../shell/graphshell-runtime" }
+graphshell-core = { path = "core" }
+graphshell-runtime = { path = "runtime" }
 inker = { path = "../inker" }
 platen = { path = "../platen" }
 serde = { version = "1.0", features = ["derive"] }

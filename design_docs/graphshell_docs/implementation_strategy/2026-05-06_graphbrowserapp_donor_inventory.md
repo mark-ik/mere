@@ -4,7 +4,11 @@
 **Status**: Seed inventory / migration gate
 **Scope**: Classify old `repos/graphshell` `GraphBrowserApp` methods before any concrete `GraphBrowserApp` import into Mere.
 
-This document is intentionally skeptical: old methods are evidence, not destiny. A method should migrate only when its durable responsibility fits a Mere owner and when the target boundary keeps portable crates free of concrete host, renderer, storage, or task-runtime handles.
+This document is intentionally skeptical: old methods are evidence, not destiny. The donor app was a prototype, so migrate lessons, not photocopies. A method should migrate only when its durable responsibility fits a Mere owner and when the target boundary keeps portable crates free of concrete host, renderer, storage, or task-runtime handles.
+
+New host adapters should be built fresh in preference order: iced, GPUI, HTML/CSS, Makepad, then egui. Donor host code can explain old behavior, but it must not carry mixed mutation assumptions, direct `GraphBrowserApp` edits, no-op lifecycle placeholders, prototype UI contract failures, or renderer/webview identity maps into portable Mere state.
+
+Efficient crate structure is not donor folder parity. A boundary is worth keeping when it isolates an expensive optional dependency, gives a domain one durable owner, makes a contract testable without booting host infrastructure, or prevents prototype assumptions from becoming stable API. Otherwise prefer the nearest existing owner.
 
 ## Classification Rules
 
@@ -17,6 +21,7 @@ This document is intentionally skeptical: old methods are evidence, not destiny.
 | Inker policy | Chooses engines or surface contracts from URI/content/runtime context | Move policy to `inker`; Graphshell should ask through `EngineRouter` |
 | Verso-Tile lifecycle | Allocates, focuses, retires, or acknowledges rendering surfaces | Move identity/lifecycle vocabulary to `verso-tile`; hosts apply commands |
 | Obsolete residue | Exists only for old renderer ownership, compatibility plumbing, or direct desktop coupling | Do not migrate; replace with the new owner boundary |
+| Prototype shape | Encodes how the prototype happened to be wired, including broad modules, mixed state mutation, or UI shortcuts | Do not migrate as structure; extract only the contract or invariant that still fits a Mere owner |
 
 ## Seed Inventory
 
