@@ -49,6 +49,14 @@ pub fn select_active_frame<'a>(
     active_frame.and_then(|frame_id| frames.get(frame_id))
 }
 
+/// Select the active root view for workbench-aware composition.
+pub fn select_active_root_view(
+    frames: &HashMap<FrameId, FrameState>,
+    active_frame: Option<&FrameId>,
+) -> Option<GraphViewId> {
+    select_active_frame(frames, active_frame).and_then(|frame| frame.root_view)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -79,5 +87,23 @@ mod tests {
 
         assert_eq!(select_active_frame(&frames, Some(&frame_id)), None);
         assert_eq!(select_active_frame(&frames, None), None);
+    }
+
+    #[test]
+    fn select_active_root_view_returns_frame_root_view() {
+        let frame_id = FrameId::new("main");
+        let root_view = GraphViewId::from_uuid(uuid::Uuid::from_u128(7));
+        let frame = FrameState {
+            id: frame_id.clone(),
+            label: "Main".to_string(),
+            root_view: Some(root_view),
+            panes: Vec::new(),
+        };
+        let frames = HashMap::from([(frame_id.clone(), frame)]);
+
+        assert_eq!(
+            select_active_root_view(&frames, Some(&frame_id)),
+            Some(root_view)
+        );
     }
 }

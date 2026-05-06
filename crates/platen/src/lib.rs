@@ -26,7 +26,9 @@ pub mod canvas_scene;
 pub mod workbench;
 
 pub use canvas_scene::{CanvasSceneOptions, build_canvas_scene_input, graph_view_id_to_canvas};
-pub use workbench::{FrameId, FrameState, PaneBinding, select_active_frame};
+pub use workbench::{
+    FrameId, FrameState, PaneBinding, select_active_frame, select_active_root_view,
+};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

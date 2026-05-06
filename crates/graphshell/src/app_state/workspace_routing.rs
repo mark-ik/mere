@@ -14,8 +14,7 @@ use graphshell_core::graph::{GraphViewId, NodeKey};
 use graphshell_core::pane::PaneId;
 
 use super::{
-    FrameId, GraphWorkspace, PaneBinding, SurfaceEffect, SurfaceHostId, SurfaceRequest,
-    WorkspaceEffect,
+    FrameId, GraphWorkspace, PaneBinding, SurfaceEffect, SurfaceHostId, WorkspaceEffect,
 };
 
 /// Host-neutral workspace routing intent.
@@ -139,12 +138,11 @@ fn route_node_to_pane(
 
     let mut effects_emitted = 0;
     if let Some(host) = surface_host {
-        workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceEffect {
+        workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceEffect::present(
             host,
-            view: Some(view_id),
-            pane: Some(pane_id),
-            request: SurfaceRequest::Present,
-        }));
+            Some(view_id),
+            Some(pane_id),
+        )));
         effects_emitted = 1;
     }
 
@@ -188,12 +186,11 @@ fn remove_pane_route(
 
     let mut effects_emitted = 0;
     if let Some(host) = removed_view_binding.surface_host {
-        workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceEffect {
+        workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceEffect::retire(
             host,
-            view: Some(view_id),
-            pane: Some(pane_id),
-            request: SurfaceRequest::Retire,
-        }));
+            Some(view_id),
+            Some(pane_id),
+        )));
         effects_emitted = 1;
     }
 

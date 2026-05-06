@@ -49,6 +49,14 @@ pub fn select_active_frame(workspace: &GraphWorkspace) -> Option<&FrameState> {
     )
 }
 
+/// Select the active frame's root view for workbench-aware composition.
+pub fn select_active_root_view(workspace: &GraphWorkspace) -> Option<GraphViewId> {
+    platen::workbench::select_active_root_view(
+        &workspace.workbench.frames,
+        workspace.workbench.active_frame.as_ref(),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -187,5 +195,22 @@ mod tests {
         let selected = select_active_frame(&workspace);
 
         assert_eq!(selected, Some(&frame));
+    }
+
+    #[test]
+    fn active_root_view_selection_uses_workbench_state() {
+        let frame = FrameState {
+            id: FrameId::new("main"),
+            label: "Main".to_string(),
+            root_view: Some(view_id(41)),
+            panes: Vec::new(),
+        };
+        let mut workspace = GraphWorkspace::new();
+        workspace.workbench.frames = HashMap::from([(frame.id.clone(), frame.clone())]);
+        workspace.workbench.active_frame = Some(frame.id.clone());
+
+        let selected = select_active_root_view(&workspace);
+
+        assert_eq!(selected, frame.root_view);
     }
 }
