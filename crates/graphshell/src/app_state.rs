@@ -32,6 +32,7 @@ pub mod composition;
 pub mod graph_runtime;
 pub mod intent_system;
 pub mod persistence;
+pub mod services;
 pub mod workspace_routing;
 
 /// Result type used by portable app-state service traits.
