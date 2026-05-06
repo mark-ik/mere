@@ -1380,6 +1380,7 @@ dependencies = [
  "graph-tree",
  "graphshell-core",
  "graphshell-runtime",
+ "inker",
  "serde",
  "serde_json",
  "uuid",
@@ -1887,6 +1888,10 @@ dependencies = [
 [[package]]
 name = "inker"
 version = "0.0.1"
+dependencies = [
+ "graphshell-core",
+ "serde",
+]
 
 [[package]]
 name = "inout"

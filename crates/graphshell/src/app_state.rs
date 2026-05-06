@@ -17,6 +17,10 @@ use graph_tree::{GraphTree, LayoutMode, ProjectionLens};
 use graphshell_core::graph::{Graph, GraphViewId, NodeKey};
 use graphshell_core::pane::PaneId;
 use graphshell_core::persistence::GraphSnapshot;
+pub use inker::routing::{
+    EngineRouteDecision, EngineRouteRequest, SurfaceContract, SurfaceContractMode, SurfaceTargetId,
+    WorkspaceRouteId,
+};
 use serde::{Deserialize, Serialize};
 
 pub mod app_ux;
@@ -343,34 +347,6 @@ pub enum SurfaceRequest {
     Present,
     Retire,
     Focus,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EngineRouteRequest {
-    pub workspace_id: WorkspaceId,
-    pub view: Option<GraphViewId>,
-    pub node: Option<NodeKey>,
-    pub address: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EngineRouteDecision {
-    pub engine_id: String,
-    pub surface_contract: SurfaceContract,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SurfaceContract {
-    pub host: SurfaceHostId,
-    pub mode: SurfaceContractMode,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum SurfaceContractMode {
-    CompositedTexture,
-    NativeOverlay,
-    EmbeddedHost,
-    Headless,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -20,6 +20,14 @@
 
 #![doc(html_root_url = "https://docs.rs/inker/0.0.1")]
 
+/// Host-neutral engine routing contracts.
+pub mod routing;
+
+pub use routing::{
+    EngineRouteDecision, EngineRouteRequest, SurfaceContract, SurfaceContractMode, SurfaceTargetId,
+    WorkspaceRouteId,
+};
+
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
