@@ -11,6 +11,7 @@ categories = ["gui"]
 path = "src/lib.rs"
 
 [dependencies]
+eidetic = { path = "../eidetic" }
 graph-canvas = { path = "../graph/graph-canvas" }
 graph-memory = { path = "../graph/graph-memory" }
 graph-tree = { path = "../graph/graph-tree" }

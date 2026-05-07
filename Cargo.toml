@@ -17,6 +17,7 @@ members = [
     "crates/inker",
     "crates/platen",
     "crates/nematic",
+    "crates/eidetic",
     "crates/murm/murm",
     "crates/murm/murmuring",
     "crates/moot/moothold",
@@ -27,7 +28,7 @@ members = [
 version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"
-# repository = "https://github.com/<your-org>/mere"  # set before publishing
+repository = "https://github.com/mark-ik/mere"
 
 [workspace.lints.rust]
 unsafe_code = "warn"

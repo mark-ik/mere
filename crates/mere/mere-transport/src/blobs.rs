@@ -4,7 +4,7 @@
 //! [`mere/design_docs/mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md`](../../../../../../design_docs/mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md)
 //! §2.1 — `iroh-blobs` is a sibling iroh primitive that lives in
 //! `mere-transport`. Consumers (murm Cable attachments, moothold engram
-//! payloads, mnem large artifacts) put bytes and get a stable BLAKE3
+//! payloads, eidetic large artifacts) put bytes and get a stable BLAKE3
 //! [`BlobHash`]; future network transfer (one peer fetches a hash from
 //! another) lands with the first concrete consumer.
 //!

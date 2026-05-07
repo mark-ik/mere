@@ -135,7 +135,7 @@ surface area to own the behavior directly.
 | `platen` | Graph-aware composition/layout policy, frame/tile arrangement projection, layout constraints, renderable workbench model | Engine lifecycle, host widget handles, durable graph mutation | `platen::canvas_scene` and `platen::workbench` now own the extracted graph-to-canvas derivation core, frame/pane model, active-frame/root-view selectors, pane/frame binding helpers, active-workbench projection packets, frame arrangement snapshots, and the projection from arrangements into hosted surface placements; Graphshell should keep shrinking toward wrappers around those selectors/helpers |
 | `verso-tile` | Rendering surface identity, tile-slot placement, surface receiving/lifecycle between inker/platen/host | Engine selection, GraphWorkspace graph mutation, product chrome | `SurfaceTargetId`, `SurfaceHostId`, `SurfaceEffect`, `SurfaceRequest`, `SurfaceCommand`, `SurfaceCommandOutcome`, `SurfaceCommandBacklog`, `TileSlot`, node-carrying `SurfaceSlotPlacement`, `SurfacePlacementPlan`, `SurfaceCommandSchedule`, `SurfaceLifecycleState`, and the generic `SurfaceCommandSink` host seam now live here; grow richer surface lifecycle/types here instead of pushing them back into `inker` or Graphshell |
 | `graphshell-runtime` | Portable host/runtime adapters, schedule application helpers, frame projections, runtime ports | Reducer-owned graph truth, concrete desktop widgets, engine routing policy | `surface_schedule` now applies Verso-Tile present schedules to the existing `ViewerSurfaceHost` seam by placement `NodeKey`, giving future fresh host crates a portable adapter point instead of making app state allocate viewer surfaces |
-| `mnem` | Private local memory: graph snapshots, traversal logs, settings/cache/index persistence | Mere transport state, Moothold community flora, host UI state | The contract now lives in the dedicated `graphshell::mnem` module; a narrower crate boundary can come later if it proves necessary |
+| `eidetic` | Private local memory: graph snapshots, traversal logs, settings/cache/index persistence | Mere transport state, Moothold community flora, host UI state | Extracted as a top-level crate 2026-05-06. Defines `eidetic::Request`/`Response`/`Store`/`dispatch` plus an owned `Error` type that downstream crates `From`-convert into their own service errors. Storage backends (fjall, redb, IndexedDB, in-memory) implement `Store` outside this crate. |
 | `mere` | Product entrypoint, top-level service wiring, crate orchestration, feature assembly | Low-level graph primitives, renderer internals, protocol implementations | `mere` composes the system; it should not become the old root-crate catch-all |
 
 Naming warning: the donor `composition` module is broader than the long-term
@@ -144,25 +144,129 @@ limited to pure selectors such as workspace-to-canvas scene input. Anything
 that decides arrangement, split topology, surface placement, or renderable
 workbench layout should move toward `platen` / `verso-tile` instead.
 
-### 1.10 Crate Structure Efficiency
+### 1.10 The Verb Test
 
 The donor Graphshell was a prototype. Its code is evidence about behavior and
-failure modes, not a crate map to photocopy. Efficient Mere crate boundaries
-must earn their existence by reducing one of these costs:
+failure modes, not a crate map to photocopy. The crate graph is efficient when
+each crate owns a *product verb* — a question the application has to answer.
+Asking "which crate owns this?" should resolve to a single predictable answer.
 
-- dependency cost: isolate expensive or optional toolkit/engine/backend crates;
-- ownership cost: keep one durable owner for graph truth, route policy,
-  workbench composition, surface lifecycle, and host resources;
-- validation cost: make contracts small enough to test without booting a GUI or
-  renderer;
-- change cost: keep prototype residue out of stable portable APIs so hosts can
-  be rebuilt rather than patched around inherited assumptions.
+Mere's product verbs (so far): browse, route content to engine, compose graph
+layout, place renderable surfaces, host through a concrete GUI, remember
+locally, identify, transport, converse bilaterally, federate.
+
+A crate is healthy when:
+
+- It owns one product verb, or one tightly-coupled cluster of verbs. The
+  printing-press stack (`inker` / `platen` / `verso-tile`) is a coupled cluster,
+  not three independent verbs; that is fine.
+- The verb is product-language, not prototype-language: "remember locally"
+  rather than "blob store"; "host through iced" rather than "iced adapter."
+- A reader who knows the verbs can predict the crate's contents without
+  opening it.
+
+A crate is suspicious when:
+
+- Its name is a noun the prototype happened to use (`core`, `app`, `shell`,
+  `host`) without a verb attached.
+- Multiple crates plausibly own the same verb — the verb is split.
+- It is "where things go that don't fit elsewhere."
+- Its public surface re-exports another crate's public surface as a convenience.
+  That bakes the other crate into this crate's vocabulary and quietly hardens
+  into architecture.
+
+Cost reduction (dependency, validation, change) is *downstream* of verb
+clarity. A crate that owns a clear verb almost always has a small dependency
+surface and a testable contract; a crate that doesn't, almost never does. Lead
+with the verb; the costs follow.
 
 Do not create a crate just because the prototype had a module. Do not merge a
-crate just to reduce file count if that would force portable code to depend on a
-host toolkit, engine backend, task runtime, renderer ID type, or persistence
-implementation. The efficient shape is the smallest dependency graph that keeps
-responsibility honest.
+crate just to reduce file count if that would force portable code to depend on
+a host toolkit, engine backend, task runtime, renderer ID type, or persistence
+implementation.
+
+### 1.11 Verb-Test Audit (2026-05-06)
+
+Applying §1.10 to the current Mere crate graph surfaces seven friction points.
+None blocks the migration; they shape the next slice planning.
+
+**1. `graphshell-core` is doing three jobs.** Its 30 source files split roughly
+half portable vocabulary (geometry, color, time, address, pane IDs, content,
+graph primitives, action catalogue, persistence schemas), one third shell
+session state (`shell_state/*`, `ux_*`, `routing.rs`, focus authorities,
+modal/action surfaces), one fifth runtime/host ports (`host_event`,
+`viewer_host`, `async_host`, `signal_router`, `frame_model`-adjacent types).
+Three verbs share one building. Splitting candidate (not yet a commitment):
+
+- `graphshell-vocab` for portable primitives only;
+- `graphshell-shell-state` for portable shell session state;
+- the host-port leaves fold into `graphshell-runtime`, which already owns the
+  rest of the host-port trait surface.
+
+**2. `graphshell-runtime` and `verso-tile` both touch surface lifecycle.**
+`runtime/surface_schedule.rs` and `runtime/webview_backpressure.rs` apply
+schedules whose shape is owned by `verso-tile`. The verb "manage surface
+lifecycle" is currently split between two crates. Long-term: `verso-tile`
+should own the schedule type *and* the apply algorithm; `graphshell-runtime`
+provides only the host port trait the apply algorithm needs.
+
+**3. `graphshell-host` is a shared catalogue, not a host.** Its current
+contents are toolkit-vocab (`HostToolkit`, `NEW_HOST_TOOLKIT_ORDER`) and a
+registry-shaped trait adapter. The crate name promises something it does not
+yet deliver. Either rename it to clarify (e.g., `graphshell-host-shared`), or
+move the toolkit enum into vocab and let the crate become genuinely host-side
+once a real adapter consolidates here. As-is the name lies.
+
+**4. `graphshell` (the meta crate) co-locates two verbs.** It both *composes
+the portable Graphshell crates for downstream consumption* (the `lib.rs`
+re-exports) and *owns the application reducer* (`app_state/`). Fine while Mere
+is the only consumer; needs to split when a second consumer wants the shell
+vocabulary without the reducer. Watch for the trigger; do not split
+preemptively.
+
+**5. "Remember locally" is a first-class verb hiding as an internal module.**
+~~It sits alongside identify / transport / converse / federate as a top-level
+lane.~~ **Resolved 2026-05-06.** Extracted to a top-level crate at
+[`crates/eidetic/`](../../../crates/eidetic/). The bundled rename + extraction
+slice replaced the in-tree `graphshell::mnem` module with the new crate; types
+went from `MnemRequest` / `MnemResponse` / `MnemStore` / `dispatch_mnem_request`
+to `eidetic::Request` / `eidetic::Response` / `eidetic::Store` /
+`eidetic::dispatch`, and the `WorkspaceEffect::RequestMnem` /
+`PersistenceIntent::RequestMnemBlobLoad` etc. variants and the `mnem_responses`
+report field were renamed to their `Eidetic` / `eidetic_responses` equivalents.
+A `From<eidetic::Error> for WorkspaceServiceError` impl bridges the upstream
+error type into graphshell's existing service-error vocabulary.
+
+Naming decision history: the prototype name `mnem` is unavailable on
+crates.io. `eidetic` was chosen (evokes eidetic memory; available on
+crates.io and GitHub). Runners-up: `idyl` (resting/idle storage), `eido`
+(shorter root). `eidetic` won on recognisability.
+
+Publication: extraction landed and the workspace tests pass; `cargo publish`
+is pending the workspace repository URL being set and Mark's crates.io login.
+
+**6. The "route content to engine" verb is split.** `inker::routing` defines
+the route-decision vocabulary; `graphshell::app_state` re-exports
+`EngineRouteDecision`, `EngineRouteRequest`, `SurfaceContract`, and friends as
+if it owned them. Drop the `pub use inker::routing::*` line in
+[`crates/graphshell/src/app_state.rs`](../../../crates/graphshell/src/app_state.rs);
+require downstream to import from `inker` directly. This is the cheapest fix
+on the list and applies §1.10's "convenience re-exports harden into
+architecture" rule.
+
+**7. `graphshell::canvas` re-exports `graph_canvas`.** Same pattern as #6, in
+[`crates/graphshell/src/lib.rs`](../../../crates/graphshell/src/lib.rs).
+Long-term `graph_canvas` likely belongs *under* `platen` (which already owns
+workspace→canvas projection), not next to `graphshell`. The re-export makes
+the canvas crate look like part of the shell vocabulary; that is exactly the
+kind of seam that quietly hardens into architecture. Watch for promotion when
+a non-graphshell consumer of `graph_canvas` appears.
+
+These findings inform the next migration slice but do not preempt it. The
+active edge remains Phase 5 ownership consolidation per §3. The cheapest
+single move on the list is #6 (drop the inker re-export); the highest-leverage
+move is #1 (split graphshell-core), but only after a concrete consumer makes
+the split useful — premature splits invert the verb test.
 
 ---
 
@@ -288,9 +392,9 @@ to wire concrete stores, runtime services, engine routers, and host adapters to
 the reducer-owned `GraphWorkspace` contract, then shrink as side effects move
 behind traits.
 
-### Phase 4 — Persistence and Mnem Boundary
+### Phase 4 — Persistence and Eidetic Boundary
 
-Separate private local memory/persistence into the Mnem lane:
+Private local memory/persistence flows through the [`eidetic`](../../../crates/eidetic/) crate:
 
 - graph snapshots
 - traversal/archive logs
@@ -298,7 +402,7 @@ Separate private local memory/persistence into the Mnem lane:
 - local browsing memory
 - cache/index persistence where private-user-scoped
 
-`mnem` may start as a module inside `mere` or `graphshell`, but the plan should keep the concept distinct from moot flora and protocol state.
+The crate (extracted 2026-05-06) owns the typed `Request`/`Response`/`Store` vocabulary and the `dispatch` helper. The concept stays distinct from moot flora and protocol state.
 
 Acceptance: `graphshell` can construct a workspace from a trait-backed persistence provider; concrete fjall/redb/rkyv storage is not hardwired into UI shell state.
 
@@ -322,8 +426,9 @@ Only after portable/app layers compile, build fresh host crates in this order:
 1. iced
 2. GPUI
 3. HTML/CSS
-4. Makepad
-5. egui
+4. Xilem
+5. Makepad
+6. egui
 
 Donor host modules are reference material only. Take lessons, not photocopies.
 Do not pull in old mixed mutation assumptions, direct `GraphBrowserApp` state
@@ -415,6 +520,30 @@ Makepad, then egui.
 - Old `repos/graphshell` is a donor, not the proof root. Its root workspace is in active decomposition and still contains stale Servo/Serval path assumptions.
 - The current app module cuts in old Graphshell are good migration seams and should be preserved.
 - The most important architectural refinement is not to carry old `verso` forward as-is. It must be split across `inker`, `platen`, and `verso-tile`.
+
+### 2026-05-06 — Verb-Test Audit (graphshell + graphshell-core)
+
+A full verb-test pass over `graphshell-core/src/` (30 files), `graphshell-runtime/src/` (11 files), `graphshell/src/` (10 files), and the `graphshell-host` / `graphshell-host-iced` adapter crates produced the seven friction points captured in §1.11. Headlines:
+
+- `graphshell-core` is the largest mismatch: it carries portable vocabulary, shell session state, and runtime/host ports under one name. Three verbs, one crate.
+- `graphshell-runtime` and `verso-tile` both touch surface lifecycle; the apply algorithm should consolidate inside `verso-tile` with the runtime providing only the host-port trait.
+- `graphshell-host` is currently a shared catalogue, not a host adapter — the name promises what it does not yet deliver.
+- `graphshell::app_state` re-exporting `inker::routing::*` and `graphshell::canvas` re-exporting `graph_canvas` are the two convenience re-exports most likely to harden into architecture.
+- "Remember locally" is a top-level product verb, not an internal helper; the target crate name is `eidetic` (the prototype name `mnem` is unavailable on crates.io); promote when real persistence shape arrives.
+
+The audit is recorded as authoritative input for the next slice planning. It is not a backlog: items #6 and #7 (drop the convenience re-exports) are the only cheap moves; the rest should wait for a concrete consumer to make the split useful.
+
+### 2026-05-06 — "Remember Locally" Crate Naming
+
+The verb-test audit's friction point #5 ("`mnem` is a first-class verb hiding as an internal module") prompted a crate-name decision.
+
+- **Chosen target**: `eidetic` (evokes eidetic memory; available on crates.io and GitHub).
+- **Runners-up**: `idyl` (resting/idle storage; phonetically pleasant), `eido` (shorter root of the same Greek stem). Kept as backups if `eidetic` becomes unsuitable later.
+- **Rejected**: `mnem` — the prototype name. Unavailable on crates.io.
+
+Rationale: `eidetic` immediately reads as "remembered with high fidelity" without explanation. `idyl` is cute but loads weaker semantics. `eido` is too short / too generic. `mnem` is unavailable.
+
+Implication: when friction point #5 is acted on (promote local-memory module to a top-level crate), the crate goes to `crates/eidetic/` and the in-tree types (`MnemRequest`, `MnemResponse`, `MnemStore`, `dispatch_mnem_request`, the `WorkspaceEffect::RequestMnem` variant, `mnem_responses` report fields) all rename in the same slice. Bundled rename + extraction is one slice; no name-only refactor today.
 
 ---
 
@@ -530,3 +659,9 @@ Makepad, then egui.
 - Verification: `cargo test -p graphshell-host -p graphshell-host-iced` passed with 4 Graphshell Host unit tests, 1 Graphshell Host integration test, and 4 Graphshell Host Iced tests; after relocating the support crates, `cargo test --workspace` passed, including the Graphshell family crates and doctests; `cargo fmt` completed.
 - Removed the stale `crates/shell/` directory. Graphshell support crates now live under the Graphshell family root: `crates/graphshell/core`, `crates/graphshell/runtime`, `crates/graphshell/host`, and `crates/graphshell/host-iced`.
 - Added crate-structure efficiency rules: prototype modules are behavioral evidence, not final boundaries; new crates must reduce dependency, ownership, validation, or change cost, and portable crates must stay free of host toolkit, renderer, task-runtime, and persistence implementation dependencies.
+- Reframed §1.10 from cost-gate "Crate Structure Efficiency" to product-verb "The Verb Test." The lens is now: each crate must own a product question; cost reduction follows verb clarity, not the other way around.
+- Added §1.11 Verb-Test Audit recording the seven friction points found in `graphshell-core` (three jobs in one crate), `graphshell-runtime` ↔ `verso-tile` (split surface lifecycle), `graphshell-host` (catalogue not host), the `graphshell` meta crate (compose + reduce co-located), `mnem` (verb-hiding-as-module), and two convenience re-exports (`inker::routing` from `app_state`, `graph_canvas` from `graphshell::lib`). Recorded the cheapest moves (#6, #7) and the highest-leverage move that should wait for a real trigger (#1).
+- Findings updated with a 2026-05-06 audit summary.
+- Resolved the "remember locally" crate name: target is `eidetic` (the prototype name `mnem` is unavailable on crates.io). Runners-up `idyl` and `eido` documented as backups. §1.9 ownership table, §1.11 friction point #5, Phase 4 title and body, and §3 next-slice bullet all updated to use `eidetic` as the forward-looking crate name. In-tree module + types stay under `Mnem*` names until the bundled rename + crate-extraction slice — no name-only refactor today.
+- **Extracted `eidetic` as a first-class top-level crate** at `crates/eidetic/`. Defines `Request` / `Response` / `Store` / `Error` / `Result` / `dispatch` as the public surface, with serde-derived request/response types and an owned error vocabulary. Bundled rename: `MnemRequest`→`eidetic::Request`, `MnemResponse`→`eidetic::Response`, `MnemStore`→`eidetic::Store`, `dispatch_mnem_request`→`eidetic::dispatch`, `WorkspaceEffect::RequestMnem`→`RequestEidetic`, `PersistenceIntent::RequestMnemBlobLoad/Save`→`RequestEideticBlobLoad/Save`, `mnem_responses`→`eidetic_responses`, `WorkspaceServices::mnem`→`eidetic`, `FakeMnemStore`→`FakeEideticStore`. Added `From<eidetic::Error> for WorkspaceServiceError` so existing `?` propagation in graphshell works unchanged. Deleted `crates/graphshell/src/mnem.rs` and removed `pub mod mnem;` from `graphshell::lib`. Cleaned up doc-comment references in `mere-identity` and `mere-transport`. Friction point #5 from §1.11 is resolved.
+- Verification: `cargo fmt --all` clean; `cargo check --workspace --all-targets` clean (zero warnings); `cargo test --workspace` passes (eidetic 3 tests + full workspace, no failures); `cargo publish --dry-run --allow-dirty -p eidetic` packages 5 files at 9.3 KiB. Crates.io publication pending workspace `repository` field being set and Mark's `cargo login`.

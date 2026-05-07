@@ -962,6 +962,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "eidetic"
+version = "0.0.1"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1375,6 +1382,7 @@ dependencies = [
 name = "graphshell"
 version = "0.0.1"
 dependencies = [
+ "eidetic",
  "graph-canvas",
  "graph-memory",
  "graph-tree",

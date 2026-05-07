@@ -8,8 +8,6 @@
 //! without importing the donor `GraphBrowserApp`, concrete stores, host widget
 //! handles, or engine implementations.
 
-use crate::mnem::{MnemResponse, MnemStore, dispatch_mnem_request};
-
 use super::{
     DiagnosticsSink, EngineRouteDecision, EngineRouter, GraphMutationJournal, GraphWorkspace,
     SettingsStore, SurfaceCommandOutcome, SurfaceCommandSchedule, SurfaceHost,
@@ -23,7 +21,7 @@ pub struct WorkspaceServiceDispatchReport {
     pub persisted_workspaces: usize,
     pub persisted_preferences: usize,
     pub appended_mutations: usize,
-    pub mnem_responses: Vec<MnemResponse>,
+    pub eidetic_responses: Vec<eidetic::Response>,
     pub engine_route_decisions: Vec<EngineRouteDecision>,
     pub surface_outcomes: Vec<SurfaceCommandOutcome>,
     pub diagnostics_emitted: usize,
@@ -34,7 +32,7 @@ pub struct WorkspaceServices<'a> {
     pub repository: &'a mut dyn WorkspaceRepository,
     pub settings: &'a mut dyn SettingsStore,
     pub journal: &'a mut dyn GraphMutationJournal,
-    pub mnem: &'a mut dyn MnemStore,
+    pub eidetic: &'a mut dyn eidetic::Store,
     pub engine_router: &'a mut dyn EngineRouter,
     pub surface_host: &'a mut dyn SurfaceHost,
     pub diagnostics: &'a mut dyn DiagnosticsSink,
@@ -47,7 +45,7 @@ impl<'a> WorkspaceServices<'a> {
         repository: &'a mut dyn WorkspaceRepository,
         settings: &'a mut dyn SettingsStore,
         journal: &'a mut dyn GraphMutationJournal,
-        mnem: &'a mut dyn MnemStore,
+        eidetic: &'a mut dyn eidetic::Store,
         engine_router: &'a mut dyn EngineRouter,
         surface_host: &'a mut dyn SurfaceHost,
         diagnostics: &'a mut dyn DiagnosticsSink,
@@ -57,7 +55,7 @@ impl<'a> WorkspaceServices<'a> {
             repository,
             settings,
             journal,
-            mnem,
+            eidetic,
             engine_router,
             surface_host,
             diagnostics,
@@ -85,10 +83,10 @@ impl<'a> WorkspaceServices<'a> {
                     self.journal.append_mutation(&record)?;
                     report.appended_mutations += 1;
                 }
-                WorkspaceEffect::RequestMnem(request) => {
+                WorkspaceEffect::RequestEidetic(request) => {
                     report
-                        .mnem_responses
-                        .push(dispatch_mnem_request(self.mnem, &request)?);
+                        .eidetic_responses
+                        .push(eidetic::dispatch(self.eidetic, &request)?);
                 }
                 WorkspaceEffect::RouteEngine(request) => {
                     report
@@ -137,18 +135,14 @@ mod tests {
     use inker::routing::{SurfaceContract, SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId};
     use uuid::Uuid;
 
-    use crate::{
-        app_state::{
-            DiagnosticRecord, GraphMutationRecord, GraphWorkspaceSnapshot, JournalCursor,
-            MutationPayload, NavigatorSidebarPreference, SurfaceCommand, SurfaceCommandSink,
-            SurfaceCommandStatus, SurfaceHostId, SurfaceLifecycleState, SurfacePlacementPlan,
-            SurfaceSlotPlacement, TaskRequest, ThemeModePreference, TileSlot, WorkspaceId,
-            WorkspacePreferences, WorkspaceServiceError,
-            persistence::{GraphTreeDocument, WorkspaceLayoutDocument, WorkspaceLayoutName},
-        },
-        mnem::MnemRequest,
+    use crate::app_state::{
+        DiagnosticRecord, GraphMutationRecord, GraphWorkspaceSnapshot, JournalCursor,
+        MutationPayload, NavigatorSidebarPreference, SurfaceCommand, SurfaceCommandSink,
+        SurfaceCommandStatus, SurfaceHostId, SurfaceLifecycleState, SurfacePlacementPlan,
+        SurfaceSlotPlacement, TaskRequest, ThemeModePreference, TileSlot, WorkspaceId,
+        WorkspacePreferences, WorkspaceServiceError,
+        persistence::{GraphTreeDocument, WorkspaceLayoutDocument, WorkspaceLayoutName},
     };
-
     use super::*;
 
     #[derive(Default)]
@@ -254,16 +248,16 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct FakeMnemStore {
+    struct FakeEideticStore {
         blobs: HashMap<String, Vec<u8>>,
     }
 
-    impl MnemStore for FakeMnemStore {
-        fn load_blob(&mut self, key: &str) -> WorkspaceServiceResult<Option<Vec<u8>>> {
+    impl eidetic::Store for FakeEideticStore {
+        fn load_blob(&mut self, key: &str) -> eidetic::Result<Option<Vec<u8>>> {
             Ok(self.blobs.get(key).cloned())
         }
 
-        fn save_blob(&mut self, key: &str, value: &[u8]) -> WorkspaceServiceResult<()> {
+        fn save_blob(&mut self, key: &str, value: &[u8]) -> eidetic::Result<()> {
             self.blobs.insert(key.to_string(), value.to_vec());
             Ok(())
         }
@@ -355,10 +349,12 @@ mod tests {
             label: "graph.test".to_string(),
             payload: MutationPayload::OpaqueBytes(vec![1, 2, 3]),
         }));
-        workspace.push_effect(WorkspaceEffect::RequestMnem(MnemRequest::SaveBlob {
-            key: "private/cache".to_string(),
-            value: vec![4, 5, 6],
-        }));
+        workspace.push_effect(WorkspaceEffect::RequestEidetic(
+            eidetic::Request::SaveBlob {
+                key: "private/cache".to_string(),
+                value: vec![4, 5, 6],
+            },
+        ));
         workspace.push_effect(WorkspaceEffect::RouteEngine(
             super::super::EngineRouteRequest {
                 workspace_id: WorkspaceRouteId::new("main"),
@@ -384,7 +380,7 @@ mod tests {
         let mut repository = FakeWorkspaceRepository::default();
         let mut settings = FakeSettingsStore::default();
         let mut journal = FakeGraphMutationJournal::default();
-        let mut mnem = FakeMnemStore::default();
+        let mut store = FakeEideticStore::default();
         let mut engine_router = FakeEngineRouter::default();
         let mut surface_host = FakeSurfaceHost::default();
         let mut diagnostics = FakeDiagnosticsSink::default();
@@ -395,7 +391,7 @@ mod tests {
                 &mut repository,
                 &mut settings,
                 &mut journal,
-                &mut mnem,
+                &mut store,
                 &mut engine_router,
                 &mut surface_host,
                 &mut diagnostics,
@@ -408,7 +404,7 @@ mod tests {
         assert_eq!(report.persisted_workspaces, 1);
         assert_eq!(report.persisted_preferences, 1);
         assert_eq!(report.appended_mutations, 1);
-        assert_eq!(report.mnem_responses.len(), 1);
+        assert_eq!(report.eidetic_responses.len(), 1);
         assert_eq!(
             report.engine_route_decisions[0].engine_id,
             "nematic.markdown"
@@ -463,7 +459,7 @@ mod tests {
         let mut repository = FakeWorkspaceRepository::default();
         let mut settings = FakeSettingsStore::default();
         let mut journal = FakeGraphMutationJournal::default();
-        let mut mnem = FakeMnemStore::default();
+        let mut store = FakeEideticStore::default();
         let mut engine_router = FakeEngineRouter::default();
         let mut surface_host = FakeSurfaceHost {
             statuses: vec![
@@ -480,7 +476,7 @@ mod tests {
                 &mut repository,
                 &mut settings,
                 &mut journal,
-                &mut mnem,
+                &mut store,
                 &mut engine_router,
                 &mut surface_host,
                 &mut diagnostics,

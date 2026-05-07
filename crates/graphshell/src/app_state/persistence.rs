@@ -7,12 +7,10 @@
 //! This module does not call concrete stores. It expresses workspace,
 //! preference, and private local-memory requests as typed effects for service
 //! glue to execute through `WorkspaceRepository`, `GraphMutationJournal`,
-//! `SettingsStore`, and `MnemStore` implementations.
+//! `SettingsStore`, and `eidetic::Store` implementations.
 
 use graphshell_core::graph::GraphViewId;
 use serde::{Deserialize, Serialize};
-
-use crate::mnem::{MnemRequest, MnemResponse, MnemStore, dispatch_mnem_request};
 
 use super::{
     GraphMutationJournal, GraphWorkspace, JournalCursor, MutationPayload, SettingsStore,
@@ -26,8 +24,8 @@ pub enum PersistenceIntent {
     RequestWorkspaceSave { workspace_id: WorkspaceId },
     MarkWorkspaceSaved,
     RequestPreferencesSave,
-    RequestMnemBlobLoad { key: String },
-    RequestMnemBlobSave { key: String, value: Vec<u8> },
+    RequestEideticBlobLoad { key: String },
+    RequestEideticBlobSave { key: String, value: Vec<u8> },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -41,7 +39,7 @@ pub struct PersistenceDispatchReport {
     pub persisted_workspaces: usize,
     pub persisted_preferences: usize,
     pub appended_mutations: usize,
-    pub mnem_responses: Vec<MnemResponse>,
+    pub eidetic_responses: Vec<eidetic::Response>,
     pub deferred_effects: usize,
 }
 
@@ -136,18 +134,19 @@ pub fn reduce_persistence_intent(
                 effects_emitted: 1,
             }
         }
-        PersistenceIntent::RequestMnemBlobLoad { key } => {
-            workspace.push_effect(WorkspaceEffect::RequestMnem(MnemRequest::LoadBlob { key }));
+        PersistenceIntent::RequestEideticBlobLoad { key } => {
+            workspace.push_effect(WorkspaceEffect::RequestEidetic(
+                eidetic::Request::LoadBlob { key },
+            ));
             PersistenceOutcome {
                 state_changed: false,
                 effects_emitted: 1,
             }
         }
-        PersistenceIntent::RequestMnemBlobSave { key, value } => {
-            workspace.push_effect(WorkspaceEffect::RequestMnem(MnemRequest::SaveBlob {
-                key,
-                value,
-            }));
+        PersistenceIntent::RequestEideticBlobSave { key, value } => {
+            workspace.push_effect(WorkspaceEffect::RequestEidetic(
+                eidetic::Request::SaveBlob { key, value },
+            ));
             PersistenceOutcome {
                 state_changed: false,
                 effects_emitted: 1,
@@ -273,7 +272,7 @@ pub fn consume_persistence_effects(
     repository: &mut dyn WorkspaceRepository,
     settings: &mut dyn SettingsStore,
     journal: &mut dyn GraphMutationJournal,
-    mnem: &mut dyn MnemStore,
+    store: &mut dyn eidetic::Store,
 ) -> WorkspaceServiceResult<PersistenceDispatchReport> {
     let mut report = PersistenceDispatchReport::default();
     let mut deferred_effects = Vec::new();
@@ -292,10 +291,10 @@ pub fn consume_persistence_effects(
                 journal.append_mutation(&record)?;
                 report.appended_mutations += 1;
             }
-            WorkspaceEffect::RequestMnem(request) => {
+            WorkspaceEffect::RequestEidetic(request) => {
                 report
-                    .mnem_responses
-                    .push(dispatch_mnem_request(mnem, &request)?);
+                    .eidetic_responses
+                    .push(eidetic::dispatch(store, &request)?);
             }
             other => deferred_effects.push(other),
         }
@@ -368,7 +367,7 @@ mod tests {
     use super::*;
     use crate::app_state::{
         DiagnosticRecord, GraphMutationRecord, GraphWorkspaceSnapshot, NavigatorSidebarPreference,
-        ThemeModePreference, WorkspaceServiceError,
+        ThemeModePreference,
     };
 
     #[derive(Default)]
@@ -468,7 +467,7 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct FakeMnemStore {
+    struct FakeEideticStore {
         blobs: HashMap<String, Vec<u8>>,
     }
 
@@ -511,12 +510,12 @@ mod tests {
         }
     }
 
-    impl MnemStore for FakeMnemStore {
-        fn load_blob(&mut self, key: &str) -> WorkspaceServiceResult<Option<Vec<u8>>> {
+    impl eidetic::Store for FakeEideticStore {
+        fn load_blob(&mut self, key: &str) -> eidetic::Result<Option<Vec<u8>>> {
             Ok(self.blobs.get(key).cloned())
         }
 
-        fn save_blob(&mut self, key: &str, value: &[u8]) -> WorkspaceServiceResult<()> {
+        fn save_blob(&mut self, key: &str, value: &[u8]) -> eidetic::Result<()> {
             self.blobs.insert(key.to_string(), value.to_vec());
             Ok(())
         }
@@ -577,19 +576,19 @@ mod tests {
     }
 
     #[test]
-    fn mnem_blob_requests_emit_private_memory_effects() {
+    fn eidetic_blob_requests_emit_private_memory_effects() {
         let mut workspace = GraphWorkspace::new();
 
         reduce_persistence_intent(
             &mut workspace,
-            PersistenceIntent::RequestMnemBlobSave {
+            PersistenceIntent::RequestEideticBlobSave {
                 key: "clip-cache/example".to_string(),
                 value: vec![1, 2, 3],
             },
         );
         reduce_persistence_intent(
             &mut workspace,
-            PersistenceIntent::RequestMnemBlobLoad {
+            PersistenceIntent::RequestEideticBlobLoad {
                 key: "clip-cache/example".to_string(),
             },
         );
@@ -597,11 +596,11 @@ mod tests {
         assert_eq!(
             workspace.drain_effects(),
             vec![
-                WorkspaceEffect::RequestMnem(MnemRequest::SaveBlob {
+                WorkspaceEffect::RequestEidetic(eidetic::Request::SaveBlob {
                     key: "clip-cache/example".to_string(),
                     value: vec![1, 2, 3],
                 }),
-                WorkspaceEffect::RequestMnem(MnemRequest::LoadBlob {
+                WorkspaceEffect::RequestEidetic(eidetic::Request::LoadBlob {
                     key: "clip-cache/example".to_string(),
                 }),
             ]
@@ -700,20 +699,20 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_mnem_request_round_trips_private_blob() {
-        let mut store = FakeMnemStore::default();
+    fn eidetic_dispatch_round_trips_private_blob() {
+        let mut store = FakeEideticStore::default();
 
-        let saved = dispatch_mnem_request(
+        let saved = eidetic::dispatch(
             &mut store,
-            &MnemRequest::SaveBlob {
+            &eidetic::Request::SaveBlob {
                 key: "private/history".to_string(),
                 value: vec![9, 8, 7],
             },
         )
         .unwrap();
-        let loaded = dispatch_mnem_request(
+        let loaded = eidetic::dispatch(
             &mut store,
-            &MnemRequest::LoadBlob {
+            &eidetic::Request::LoadBlob {
                 key: "private/history".to_string(),
             },
         )
@@ -721,13 +720,13 @@ mod tests {
 
         assert_eq!(
             saved,
-            MnemResponse::BlobSaved {
+            eidetic::Response::BlobSaved {
                 key: "private/history".to_string(),
             }
         );
         assert_eq!(
             loaded,
-            MnemResponse::BlobLoaded {
+            eidetic::Response::BlobLoaded {
                 key: "private/history".to_string(),
                 value: Some(vec![9, 8, 7]),
             }
@@ -735,22 +734,22 @@ mod tests {
     }
 
     #[test]
-    fn mnem_dispatch_propagates_trait_errors() {
-        struct BrokenMnemStore;
+    fn eidetic_dispatch_propagates_trait_errors() {
+        struct BrokenEideticStore;
 
-        impl MnemStore for BrokenMnemStore {
-            fn load_blob(&mut self, _key: &str) -> WorkspaceServiceResult<Option<Vec<u8>>> {
-                Err(WorkspaceServiceError::new("load failed"))
+        impl eidetic::Store for BrokenEideticStore {
+            fn load_blob(&mut self, _key: &str) -> eidetic::Result<Option<Vec<u8>>> {
+                Err(eidetic::Error::new("load failed"))
             }
 
-            fn save_blob(&mut self, _key: &str, _value: &[u8]) -> WorkspaceServiceResult<()> {
-                Err(WorkspaceServiceError::new("save failed"))
+            fn save_blob(&mut self, _key: &str, _value: &[u8]) -> eidetic::Result<()> {
+                Err(eidetic::Error::new("save failed"))
             }
         }
 
-        let error = dispatch_mnem_request(
-            &mut BrokenMnemStore,
-            &MnemRequest::LoadBlob {
+        let error = eidetic::dispatch(
+            &mut BrokenEideticStore,
+            &eidetic::Request::LoadBlob {
                 key: "missing".to_string(),
             },
         )
@@ -782,22 +781,24 @@ mod tests {
             11,
             "https://journal.example",
         )));
-        workspace.push_effect(WorkspaceEffect::RequestMnem(MnemRequest::SaveBlob {
-            key: "private/cache".to_string(),
-            value: vec![5, 4, 3],
-        }));
+        workspace.push_effect(WorkspaceEffect::RequestEidetic(
+            eidetic::Request::SaveBlob {
+                key: "private/cache".to_string(),
+                value: vec![5, 4, 3],
+            },
+        ));
 
         let mut repository = FakeWorkspaceRepository::default();
         let mut settings = FakeSettingsStore::default();
         let mut journal = FakeGraphMutationJournal::default();
-        let mut mnem = FakeMnemStore::default();
+        let mut store = FakeEideticStore::default();
 
         let report = consume_persistence_effects(
             &mut workspace,
             &mut repository,
             &mut settings,
             &mut journal,
-            &mut mnem,
+            &mut store,
         )
         .unwrap();
 
@@ -806,8 +807,8 @@ mod tests {
         assert_eq!(report.appended_mutations, 1);
         assert_eq!(report.deferred_effects, 1);
         assert_eq!(
-            report.mnem_responses,
-            vec![MnemResponse::BlobSaved {
+            report.eidetic_responses,
+            vec![eidetic::Response::BlobSaved {
                 key: "private/cache".to_string(),
             }]
         );

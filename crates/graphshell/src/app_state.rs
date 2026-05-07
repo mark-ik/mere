@@ -12,7 +12,6 @@
 
 use std::collections::HashMap;
 
-use crate::mnem;
 use graph_tree::{GraphTree, LayoutMode, ProjectionLens};
 use graphshell_core::graph::{Graph, GraphViewId, NodeKey};
 use graphshell_core::persistence::GraphSnapshot;
@@ -276,7 +275,7 @@ pub enum WorkspaceEffect {
     PersistWorkspace { workspace_id: WorkspaceId },
     PersistPreferences { preferences: WorkspacePreferences },
     AppendGraphMutation(GraphMutationRecord),
-    RequestMnem(mnem::MnemRequest),
+    RequestEidetic(eidetic::Request),
     RequestSurface(SurfaceCommand),
     RouteEngine(EngineRouteRequest),
     EmitDiagnostic(DiagnosticRecord),
@@ -356,6 +355,14 @@ impl std::fmt::Display for WorkspaceServiceError {
 }
 
 impl std::error::Error for WorkspaceServiceError {}
+
+impl From<eidetic::Error> for WorkspaceServiceError {
+    fn from(error: eidetic::Error) -> Self {
+        Self {
+            message: error.message,
+        }
+    }
+}
 
 /// Durable workspace snapshot repository.
 pub trait WorkspaceRepository {

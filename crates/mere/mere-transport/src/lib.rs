@@ -33,7 +33,7 @@
 //!   streams (per inherited Cable spec §2.1)
 //! - [`moothold`](https://crates.io/crates/moothold) — community/federation
 //!   sync (planned)
-//! - Future: mnem sync, co-op session orchestration
+//! - Future: [`eidetic`](https://crates.io/crates/eidetic) sync, co-op session orchestration
 
 #![doc(html_root_url = "https://docs.rs/mere-transport/0.0.1")]
 #![warn(missing_docs)]
