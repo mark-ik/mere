@@ -23,9 +23,9 @@
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
-use crate::async_request::AsyncRequestState;
-use crate::graph::NodeKey;
-use crate::time::PortableInstant;
+use graphshell_core::async_request::AsyncRequestState;
+use graphshell_core::graph::NodeKey;
+use graphshell_core::time::PortableInstant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OmnibarSessionKind {

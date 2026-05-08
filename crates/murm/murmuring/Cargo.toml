@@ -3,7 +3,10 @@ name = "murmuring"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Protocol core for bilateral chat-protocol selection — inner layer of murm for the Mere browser."
+documentation = "https://docs.rs/murmuring"
+readme = "README.md"
 keywords = ["protocol", "p2p", "messaging", "chat"]
 categories = ["network-programming"]
 

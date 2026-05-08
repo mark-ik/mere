@@ -3,7 +3,10 @@ name = "verso-tile"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Tile-rendering-surface management for the Mere browser — Verso brand layer that places engine output into GraphTree tiles."
+documentation = "https://docs.rs/verso-tile"
+readme = "README.md"
 keywords = ["tile", "rendering", "graph", "surface", "browser"]
 categories = ["gui", "rendering"]
 

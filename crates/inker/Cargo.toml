@@ -3,7 +3,10 @@ name = "inker"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Modular engine/renderer controller for the Mere browser — selects and orchestrates content engines."
+documentation = "https://docs.rs/inker"
+readme = "README.md"
 keywords = ["engine", "renderer", "controller", "browser", "modular"]
 categories = ["web-programming"]
 

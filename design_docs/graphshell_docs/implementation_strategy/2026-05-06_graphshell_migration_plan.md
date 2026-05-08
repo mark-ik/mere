@@ -190,32 +190,66 @@ implementation.
 Applying §1.10 to the current Mere crate graph surfaces seven friction points.
 None blocks the migration; they shape the next slice planning.
 
-**1. `graphshell-core` is doing three jobs.** Its 30 source files split roughly
-half portable vocabulary (geometry, color, time, address, pane IDs, content,
-graph primitives, action catalogue, persistence schemas), one third shell
-session state (`shell_state/*`, `ux_*`, `routing.rs`, focus authorities,
-modal/action surfaces), one fifth runtime/host ports (`host_event`,
-`viewer_host`, `async_host`, `signal_router`, `frame_model`-adjacent types).
-Three verbs share one building. Splitting candidate (not yet a commitment):
+**1. `graphshell-core` is doing three jobs.** ~~Its 30 source files split roughly
+half portable vocabulary…~~ **Partially resolved 2026-05-06.** Two-way split
+landed instead of the three-way candidate from the original audit:
 
-- `graphshell-vocab` for portable primitives only;
-- `graphshell-shell-state` for portable shell session state;
-- the host-port leaves fold into `graphshell-runtime`, which already owns the
-  rest of the host-port trait surface.
+- New crate [`graphshell-shell-state`](../../../crates/graphshell/shell-state/)
+  owns the (a) shell session state: `authorities`, `command_palette`,
+  `command_surface_telemetry`, `frame_model`, `host_intent`, `omnibar`,
+  `toolbar`, plus `routing` and the three `ux_*` modules.
+- `graphshell-core` keeps the (b) portable vocabulary AND the (c) port-trait
+  definitions (`viewer_host`, `host_event`, `async_host`, `signal_router`,
+  `async_request`).
+
+Why two-way instead of three-way: the audit's plan to fold the (c) port traits
+into `graphshell-runtime` runs into a dep-direction wrinkle. `verso-tile`'s
+apply algorithm (moved from runtime in friction point #2) uses
+`ViewerSurfaceHost` as a trait bound. If that trait moved into
+`graphshell-runtime`, `verso-tile` would have to depend on `graphshell-runtime`
+— an unwanted back-edge in the press-stack peering. Keeping trait *definitions*
+in `graphshell-core` (treating them as cross-consumer vocabulary, not host
+machinery) preserves the dep direction. Concrete host *implementations* of
+those traits still live in host-side crates (`graphshell-host`,
+`graphshell-runtime::ports`).
+
+`SurfaceId` was lifted from `ux_observability` (now in shell-state) into
+`graphshell-core::accessibility` to keep the `accessibility` module's
+descriptor table self-contained. `ux_observability` re-exports it for
+back-compat.
+
+Remaining open question for a future slice: whether `graphshell-core` still
+benefits from a vocab/ports rename (it now hosts ~24 modules cleanly across
+two job clusters — primitives and trait definitions — which is more
+defensible than the prior three).
 
 **2. `graphshell-runtime` and `verso-tile` both touch surface lifecycle.**
-`runtime/surface_schedule.rs` and `runtime/webview_backpressure.rs` apply
-schedules whose shape is owned by `verso-tile`. The verb "manage surface
-lifecycle" is currently split between two crates. Long-term: `verso-tile`
-should own the schedule type *and* the apply algorithm; `graphshell-runtime`
-provides only the host port trait the apply algorithm needs.
+~~`runtime/surface_schedule.rs` and `runtime/webview_backpressure.rs`…~~
+**Resolved 2026-05-06.** `apply_viewer_surface_schedule` (and its
+`SurfaceScheduleApplyReport` / `SurfaceScheduleApplyError` types + tests)
+moved from `graphshell-runtime/src/surface_schedule.rs` into
+[`verso-tile/src/apply.rs`](../../../crates/verso-tile/src/apply.rs). Verso-tile
+now owns the schedule shape AND the apply algorithm. `graphshell-runtime`
+dropped the `verso-tile` dev-dep on `graphshell-host` since the test path no
+longer rides through runtime.
 
-**3. `graphshell-host` is a shared catalogue, not a host.** Its current
-contents are toolkit-vocab (`HostToolkit`, `NEW_HOST_TOOLKIT_ORDER`) and a
-registry-shaped trait adapter. The crate name promises something it does not
-yet deliver. Either rename it to clarify (e.g., `graphshell-host-shared`), or
-move the toolkit enum into vocab and let the crate become genuinely host-side
-once a real adapter consolidates here. As-is the name lies.
+`webview_backpressure.rs` did *not* move — on closer inspection it's
+host-runtime retry/cooldown state for webview *creation*, not a verso-tile
+schedule application. It uses `ViewerSurfaceId` from `graphshell-runtime::ports`
+and stays where its host-runtime peers live. The audit conflated the two
+files; this slice corrects that distinction.
+
+**3. `graphshell-host` is a shared catalogue, not a host.** ~~Its current
+contents are toolkit-vocab + a registry-shaped trait adapter…~~ **Resolved
+2026-05-06.** Moved `HostToolkit`, `NEW_HOST_TOOLKIT_ORDER`, and
+`preferred_host_toolkits` from `graphshell-host` into
+[`crates/graphshell/core/src/host_toolkit.rs`](../../../crates/graphshell/core/src/host_toolkit.rs)
+— the toolkit catalogue is cross-consumer vocabulary, not host-side machinery.
+`graphshell-host` now only contains the genuinely host-side
+`viewer_surface_host` adapter (`SurfaceFactoryHost`,
+`ViewerSurfaceRegistryHost`); the crate's name and contents now match.
+`graphshell-host-iced` dropped its `graphshell-host` dep and imports
+`HostToolkit` from `graphshell-core::host_toolkit` directly.
 
 **4. `graphshell` (the meta crate) co-locates two verbs.** It both *composes
 the portable Graphshell crates for downstream consumption* (the `lib.rs`
@@ -245,28 +279,30 @@ crates.io and GitHub). Runners-up: `idyl` (resting/idle storage), `eido`
 Publication: extraction landed and the workspace tests pass; `cargo publish`
 is pending the workspace repository URL being set and Mark's crates.io login.
 
-**6. The "route content to engine" verb is split.** `inker::routing` defines
-the route-decision vocabulary; `graphshell::app_state` re-exports
-`EngineRouteDecision`, `EngineRouteRequest`, `SurfaceContract`, and friends as
-if it owned them. Drop the `pub use inker::routing::*` line in
+**6. The "route content to engine" verb is split.** ~~`inker::routing` defines
+the route-decision vocabulary…~~ **Resolved 2026-05-06.** Dropped
+`pub use inker::routing::{EngineRouteDecision, EngineRouteRequest, SurfaceContract,
+SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId}` from
 [`crates/graphshell/src/app_state.rs`](../../../crates/graphshell/src/app_state.rs);
-require downstream to import from `inker` directly. This is the cheapest fix
-on the list and applies §1.10's "convenience re-exports harden into
-architecture" rule.
+the file now does a private `use inker::routing::{EngineRouteDecision,
+EngineRouteRequest}` for its own internal references. Submodules
+`app_state/services.rs` and `app_state/intent_system.rs` updated to import
+from `inker::routing` directly rather than reaching through `super::`.
 
-**7. `graphshell::canvas` re-exports `graph_canvas`.** Same pattern as #6, in
-[`crates/graphshell/src/lib.rs`](../../../crates/graphshell/src/lib.rs).
-Long-term `graph_canvas` likely belongs *under* `platen` (which already owns
-workspace→canvas projection), not next to `graphshell`. The re-export makes
-the canvas crate look like part of the shell vocabulary; that is exactly the
-kind of seam that quietly hardens into architecture. Watch for promotion when
-a non-graphshell consumer of `graph_canvas` appears.
+**7. `graphshell::canvas` re-exports `graph_canvas`.** ~~Same pattern as #6…~~
+**Resolved 2026-05-06.** Dropped `pub use graph_canvas as canvas;` from
+[`crates/graphshell/src/lib.rs`](../../../crates/graphshell/src/lib.rs). No
+external code consumed it. `graphshell` still depends on `graph_canvas`
+internally (via `app_state/composition.rs`), so the dep stays — only the
+public re-export is gone.
 
-These findings inform the next migration slice but do not preempt it. The
-active edge remains Phase 5 ownership consolidation per §3. The cheapest
-single move on the list is #6 (drop the inker re-export); the highest-leverage
-move is #1 (split graphshell-core), but only after a concrete consumer makes
-the split useful — premature splits invert the verb test.
+**Status 2026-05-06**: friction points #6, #7, #2, #1, #3, and #5 all landed
+in one session. Friction point #1 landed as a two-way split (shell-state
+extraction) instead of the original three-way candidate, after the
+dep-direction analysis showed that lifting port traits into runtime would
+break the verso-tile peering. Friction point #4 deferred per its original
+guidance — needs a second consumer of the shell vocabulary before splitting
+the meta-crate. The audit is now historical except for #4's gated trigger.
 
 ---
 
@@ -545,6 +581,27 @@ Rationale: `eidetic` immediately reads as "remembered with high fidelity" withou
 
 Implication: when friction point #5 is acted on (promote local-memory module to a top-level crate), the crate goes to `crates/eidetic/` and the in-tree types (`MnemRequest`, `MnemResponse`, `MnemStore`, `dispatch_mnem_request`, the `WorkspaceEffect::RequestMnem` variant, `mnem_responses` report fields) all rename in the same slice. Bundled rename + extraction is one slice; no name-only refactor today.
 
+### 2026-05-06 — All four verb-test friction points resolved
+
+Friction points #6, #7, #2, #1 all landed in one session, alongside the eidetic extraction (#5) that shipped earlier in the day.
+
+- **#6 (drop `inker::routing` re-export)** — small, mechanical. The re-export was only consumed inside graphshell itself via `super::`; submodules `app_state/services.rs` and `app_state/intent_system.rs` now import from `inker::routing` directly.
+- **#7 (drop `graph_canvas` re-export)** — no external consumers; one-line removal.
+- **#2 (consolidate surface schedule)** — `apply_viewer_surface_schedule` and helpers moved from `graphshell-runtime` into a new `verso-tile/src/apply.rs`. Closer reading distinguished `surface_schedule.rs` (verso-tile's verb, moved) from `webview_backpressure.rs` (host-runtime retry/cooldown, stayed). The audit conflated the two; the corrected framing is now in §1.11.
+- **#1 (split `graphshell-core`)** — landed as a *two-way* split: a new `graphshell-shell-state` crate owns the (a) session state (12 modules: `shell_state/*` flattened, `ux_*`, `routing`); `graphshell-core` keeps both (b) vocabulary AND (c) port-trait *definitions*. The audit's three-way split (with port traits folded into runtime) was rejected mid-flight because it would have forced `verso-tile` to depend on `graphshell-runtime` (since verso-tile's apply algorithm uses `ViewerSurfaceHost` as a trait bound). Treating trait *definitions* as cross-consumer vocabulary preserves the press-stack peering.
+- One small refactor along the way: `SurfaceId` lifted from `ux_observability` (now in shell-state) into `graphshell-core::accessibility`, since the `accessibility` descriptor table in core needs it. `ux_observability` re-exports it for back-compat.
+
+All four moves verified by `cargo check --workspace --all-targets` (zero warnings) + `cargo test --workspace` (no failures across the full suite).
+
+### 2026-05-06 — Friction point #3 (`graphshell-host` rename-by-content)
+
+After the four-friction-point session above, walked through the two remaining open friction points:
+
+- **#3** landed as a content move rather than a rename: `HostToolkit` / `NEW_HOST_TOOLKIT_ORDER` / `preferred_host_toolkits` migrated from `graphshell-host` into `graphshell-core::host_toolkit`. The toolkit catalogue is cross-consumer vocabulary, not host-side adapter machinery — its presence in `graphshell-host` was the source of the name mismatch. With the vocab gone, `graphshell-host` is now genuinely host-side (just the `viewer_surface_host` registry adapter).
+- **#4** deferred per the audit's own guidance. The `graphshell` crate co-locates "compose portable crates for downstream consumption" and "own the application reducer." Splitting requires a second consumer wanting one without the other; Mere is currently the only consumer. Watching for the trigger.
+
+Verification: `cargo check --workspace --all-targets` clean; `cargo fmt --all` clean; `cargo test --workspace` no failures.
+
 ---
 
 ## 5. Progress
@@ -662,6 +719,8 @@ Implication: when friction point #5 is acted on (promote local-memory module to 
 - Reframed §1.10 from cost-gate "Crate Structure Efficiency" to product-verb "The Verb Test." The lens is now: each crate must own a product question; cost reduction follows verb clarity, not the other way around.
 - Added §1.11 Verb-Test Audit recording the seven friction points found in `graphshell-core` (three jobs in one crate), `graphshell-runtime` ↔ `verso-tile` (split surface lifecycle), `graphshell-host` (catalogue not host), the `graphshell` meta crate (compose + reduce co-located), `mnem` (verb-hiding-as-module), and two convenience re-exports (`inker::routing` from `app_state`, `graph_canvas` from `graphshell::lib`). Recorded the cheapest moves (#6, #7) and the highest-leverage move that should wait for a real trigger (#1).
 - Findings updated with a 2026-05-06 audit summary.
+- **Resolved all four verb-test friction points (#6, #7, #2, #1) in one session.** Code changes: dropped two convenience re-exports (#6, #7); moved `apply_viewer_surface_schedule` from `graphshell-runtime` into a new `verso-tile/src/apply.rs` (#2); extracted shell session state into a new `graphshell-shell-state` crate (#1, two-way split rather than the three-way audit candidate, after dep-direction analysis). Lifted `SurfaceId` from `ux_observability` into `graphshell-core::accessibility` to keep the accessibility descriptor table self-contained. All verified: `cargo check --workspace --all-targets` zero warnings; `cargo test --workspace` no failures.
+- **Also resolved friction point #3.** Moved the toolkit catalogue (`HostToolkit`, `NEW_HOST_TOOLKIT_ORDER`, `preferred_host_toolkits`) from `graphshell-host` into `graphshell-core::host_toolkit` — that catalogue is cross-consumer vocabulary, not host-side machinery. `graphshell-host` is now genuinely host-side (just the `viewer_surface_host` registry adapter); name and contents match. `graphshell-host-iced` dropped its `graphshell-host` dep and imports `HostToolkit` from `graphshell-core` directly. Friction point #4 explicitly deferred per its own audit guidance — needs a second consumer of the shell vocabulary before splitting `graphshell` into meta-crate + reducer. Verified clean.
 - Resolved the "remember locally" crate name: target is `eidetic` (the prototype name `mnem` is unavailable on crates.io). Runners-up `idyl` and `eido` documented as backups. §1.9 ownership table, §1.11 friction point #5, Phase 4 title and body, and §3 next-slice bullet all updated to use `eidetic` as the forward-looking crate name. In-tree module + types stay under `Mnem*` names until the bundled rename + crate-extraction slice — no name-only refactor today.
 - **Extracted `eidetic` as a first-class top-level crate** at `crates/eidetic/`. Defines `Request` / `Response` / `Store` / `Error` / `Result` / `dispatch` as the public surface, with serde-derived request/response types and an owned error vocabulary. Bundled rename: `MnemRequest`→`eidetic::Request`, `MnemResponse`→`eidetic::Response`, `MnemStore`→`eidetic::Store`, `dispatch_mnem_request`→`eidetic::dispatch`, `WorkspaceEffect::RequestMnem`→`RequestEidetic`, `PersistenceIntent::RequestMnemBlobLoad/Save`→`RequestEideticBlobLoad/Save`, `mnem_responses`→`eidetic_responses`, `WorkspaceServices::mnem`→`eidetic`, `FakeMnemStore`→`FakeEideticStore`. Added `From<eidetic::Error> for WorkspaceServiceError` so existing `?` propagation in graphshell works unchanged. Deleted `crates/graphshell/src/mnem.rs` and removed `pub mod mnem;` from `graphshell::lib`. Cleaned up doc-comment references in `mere-identity` and `mere-transport`. Friction point #5 from §1.11 is resolved.
 - Verification: `cargo fmt --all` clean; `cargo check --workspace --all-targets` clean (zero warnings); `cargo test --workspace` passes (eidetic 3 tests + full workspace, no failures); `cargo publish --dry-run --allow-dirty -p eidetic` packages 5 files at 9.3 KiB. Crates.io publication pending workspace `repository` field being set and Mark's `cargo login`.

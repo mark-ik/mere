@@ -56,8 +56,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::actions::ActionId;
 use crate::ux_observability::{DismissReason, SurfaceId, UxEvent, UxObserver};
+use graphshell_core::actions::ActionId;
 
 /// One rule violation reported by a probe.
 #[derive(Debug, Clone, PartialEq)]
@@ -720,7 +720,7 @@ mod tests {
         let mut observers = UxObservers::new();
         observers.register(probe_as_observer(Arc::clone(&probe) as Arc<dyn UxProbe>));
 
-        let dummy = crate::graph::NodeKey::new(0);
+        let dummy = graphshell_core::graph::NodeKey::new(0);
         observers.emit(UxEvent::SurfaceDismissed {
             surface: SurfaceId::NodeFinder,
             reason: DismissReason::Confirmed,

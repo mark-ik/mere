@@ -11,10 +11,11 @@
 
 use graph_tree::ProjectionLens;
 use graphshell_core::graph::{GraphViewId, NodeKey};
+use inker::routing::EngineRouteRequest;
 
 use super::{
-    ChromeState, DiagnosticRecord, EngineRouteRequest, FrameId, FrameState, GraphWorkspace,
-    SurfaceCommand, WorkspaceEffect, WorkspaceId, WorkspacePreferences,
+    ChromeState, DiagnosticRecord, FrameId, FrameState, GraphWorkspace, SurfaceCommand,
+    WorkspaceEffect, WorkspaceId, WorkspacePreferences,
 };
 
 /// Pure app-state intent accepted by [`reduce_workspace_intent`].

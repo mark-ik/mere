@@ -37,9 +37,9 @@
 //!
 //! [`latch_ring`]: FocusAuthorityMut::latch_ring
 
-use crate::graph::NodeKey;
-use crate::shell_state::command_palette::{CommandPaletteSession, SearchPaletteScope};
-use crate::time::PortableInstant;
+use crate::command_palette::{CommandPaletteSession, SearchPaletteScope};
+use graphshell_core::graph::NodeKey;
+use graphshell_core::time::PortableInstant;
 
 /// Host-facing mutation handle for graph-search session state.
 ///

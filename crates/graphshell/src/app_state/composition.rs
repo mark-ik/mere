@@ -89,7 +89,7 @@ pub fn project_active_surface_placements(
 mod tests {
     use std::collections::HashMap;
 
-    use graph_canvas::projection::{ProjectionMode, ThreeDMode, ViewDimension, ZSource};
+    use graph_canvas::projection::{ProjectionMode, TwoPointFiveProjection, ViewDimension};
     use graph_canvas::scene::SceneMode;
     use graphshell_core::geometry::PortablePoint;
     use graphshell_core::graph::EdgeType;
@@ -137,7 +137,7 @@ mod tests {
         assert_eq!(scene.nodes.len(), 2);
         assert_eq!(scene.edges.len(), 1);
         assert_eq!(scene.scene_mode, SceneMode::Browse);
-        assert_eq!(scene.projection, ProjectionMode::TwoD);
+        assert_eq!(scene.projection, ProjectionMode::default());
     }
 
     #[test]
@@ -180,9 +180,9 @@ mod tests {
             CanvasSceneOptions {
                 view_id,
                 scene_mode: SceneMode::Arrange,
-                dimension: ViewDimension::ThreeD {
-                    mode: ThreeDMode::TwoPointFive,
-                    z_source: ZSource::Recency { max_depth: 8.0 },
+                dimension: ViewDimension::TwoPointFive {
+                    projection: TwoPointFiveProjection::MildPerspective { focal: 333.0 },
+                    z_field: None,
                 },
                 ..CanvasSceneOptions::default()
             },
@@ -193,7 +193,8 @@ mod tests {
         assert!(matches!(
             scene.projection,
             ProjectionMode::TwoPointFive {
-                z_source: ZSource::Recency { max_depth: 8.0 }
+                projection: TwoPointFiveProjection::MildPerspective { .. },
+                z_field: None,
             }
         ));
     }

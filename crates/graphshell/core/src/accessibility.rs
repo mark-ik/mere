@@ -38,8 +38,40 @@
 //! the same against their respective AccessKit bridges.
 
 use accesskit::Role;
+use serde::{Deserialize, Serialize};
 
-use crate::ux_observability::SurfaceId;
+/// Identifier for a chrome surface that emits UX events. Adding a new
+/// surface (e.g., a future "Inspector" pane) is one new variant here
+/// and one new emission site at the surface's open/dismiss seams.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SurfaceId {
+    Omnibar,
+    CommandPalette,
+    NodeFinder,
+    ContextMenu,
+    ConfirmDialog,
+    /// Modal that prompts the user for a URL when an action like
+    /// `NodeNew` fires from a non-omnibar surface (palette, context
+    /// menu, programmatic).
+    NodeCreate,
+    /// Modal that prompts the user for a new label when the
+    /// `FrameRename` action fires.
+    FrameRename,
+    StatusBar,
+    TreeSpine,
+    NavigatorHost,
+    /// A tile pane (tile-tabs + body). The variant is the granular
+    /// surface; per-pane discrimination (PaneId) is host-side state
+    /// and not carried in the `UxEvent` payload today — extending
+    /// `UxEvent::SurfaceOpened` with a target field is queued as a
+    /// future enrichment when downstream observers need it.
+    TilePane,
+    /// A canvas pane. Same per-pane discrimination caveat as
+    /// [`Self::TilePane`].
+    CanvasPane,
+    /// The canvas base layer (empty Frame fallback).
+    BaseLayer,
+}
 
 /// A surface's accessibility metadata. Carries the AccessKit role
 /// plus the visible label, an optional longer description (used as

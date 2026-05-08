@@ -27,14 +27,14 @@ use std::time::Duration;
 
 use graph_tree::{OwnedTreeRow, SplitBoundary, TabEntry};
 
-use crate::content::ContentLoadState;
-use crate::geometry::{PortablePoint, PortableRect, PortableSize};
-use crate::graph::NodeKey;
-use crate::host_event::{HostEvent, ModifiersState};
-use crate::overlay::OverlayStrokePass;
-use crate::pane::{PaneId, TileRenderMode};
-use crate::shell_state::toolbar::ToolbarDraft;
-use crate::time::PortableInstant;
+use crate::toolbar::ToolbarDraft;
+use graphshell_core::content::ContentLoadState;
+use graphshell_core::geometry::{PortablePoint, PortableRect, PortableSize};
+use graphshell_core::graph::NodeKey;
+use graphshell_core::host_event::{HostEvent, ModifiersState};
+use graphshell_core::overlay::OverlayStrokePass;
+use graphshell_core::pane::{PaneId, TileRenderMode};
+use graphshell_core::time::PortableInstant;
 
 // ---------------------------------------------------------------------------
 // FrameViewModel — aggregate per-frame host-painting snapshot
@@ -475,7 +475,7 @@ pub struct FrameHostInput {
     /// Runtime drain order: `apply_host_intents` runs immediately
     /// after `ingest_frame_input` so any view-model the tick
     /// projects reflects the applied intents.
-    pub host_intents: Vec<crate::shell_state::host_intent::HostIntent>,
+    pub host_intents: Vec<crate::host_intent::HostIntent>,
 }
 
 #[cfg(test)]

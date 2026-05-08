@@ -19,8 +19,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::graph::{GraphViewId, NodeKey};
-use crate::pane::ToolPaneState;
+use graphshell_core::graph::{GraphViewId, NodeKey};
+use graphshell_core::pane::ToolPaneState;
 
 /// Where focus / visibility should return after an overlay dismisses.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

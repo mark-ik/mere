@@ -40,7 +40,7 @@ use graphshell_core::geometry::{PortablePoint, PortableRect};
 use graphshell_core::graph::NodeKey;
 use graphshell_core::host_event::{HostEvent, ModifiersState};
 use graphshell_core::overlay::GlyphOverlay;
-use graphshell_core::shell_state::frame_model::{ToastSeverity, ToastSpec};
+use graphshell_shell_state::frame_model::{ToastSeverity, ToastSpec};
 
 // ---------------------------------------------------------------------------
 // Identity vocabulary

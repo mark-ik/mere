@@ -3,7 +3,10 @@ name = "murm"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Bilateral peer-to-peer comms supercrate for the Mere browser — one-to-one messaging across protocols."
+documentation = "https://docs.rs/murm"
+readme = "README.md"
 keywords = ["p2p", "messaging", "bilateral", "comms", "browser"]
 categories = ["network-programming"]
 

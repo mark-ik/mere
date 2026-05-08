@@ -21,7 +21,7 @@
 //! `CommandPaletteSession` / `SearchPaletteScope` call sites resolve
 //! unchanged.
 
-use crate::actions::ActionCategory;
+use graphshell_core::actions::ActionCategory;
 
 /// Scope filter for command-palette search results.
 ///

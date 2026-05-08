@@ -13,6 +13,7 @@ members = [
     "crates/graphshell/host",
     "crates/graphshell/host-iced",
     "crates/graphshell/runtime",
+    "crates/graphshell/shell-state",
     "crates/verso-tile",
     "crates/inker",
     "crates/platen",

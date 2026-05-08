@@ -191,7 +191,7 @@ mod tests {
             }],
             overlays: vec![],
             scene_mode: SceneMode::Arrange,
-            projection: ProjectionMode::TwoD,
+            projection: ProjectionMode::default(),
         };
         let json = serde_json::to_string(&input).unwrap();
         let back: CanvasSceneInput<u32> = serde_json::from_str(&json).unwrap();

@@ -199,8 +199,9 @@ pub fn derive_scene<N: Clone + Eq + Hash>(
 /// - `input`: the scene input for one graph view
 /// - `camera`: current camera state (pan, zoom)
 /// - `viewport`: the pane rectangle and scale factor
-/// - `z_values`: per-node z values derived by the host from `ZSource`.
-///   Nodes not present in this map get z=0.
+/// - `z_values`: per-node z values derived by the host from the active
+///   z-field (see `FieldProjection::z_field`). Nodes not present in this
+///   map get z=0.
 /// - `node_overrides`: per-node visual overrides (colors, strokes).
 ///   Indexed by position in `input.nodes`.
 /// - `overlay_inputs`: per-frame overlay hints (frame regions, scene
@@ -717,7 +718,7 @@ fn derive_edges<N: Clone + Eq + Hash>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projection::ZSource;
+    use crate::projection::TwoPointFiveProjection;
     use crate::scene::{SceneMode, ViewId};
     use crate::scripting::{SceneObjectHitShape, SceneObjectId};
 
@@ -759,7 +760,7 @@ mod tests {
             scene_objects: vec![],
             overlays: vec![],
             scene_mode: SceneMode::Browse,
-            projection: ProjectionMode::TwoD,
+            projection: ProjectionMode::default(),
         }
     }
 
@@ -881,7 +882,8 @@ mod tests {
     fn derive_scene_twopointfive_shifts_deep_nodes() {
         let mut input = simple_input();
         input.projection = ProjectionMode::TwoPointFive {
-            z_source: ZSource::Recency { max_depth: 100.0 },
+            projection: TwoPointFiveProjection::MildPerspective { focal: 333.0 },
+            z_field: None,
         };
         // Give node 1 a z value of 50.
         let z_fn = |id: &u32| if *id == 1 { 50.0 } else { 0.0 };
@@ -1209,7 +1211,7 @@ mod tests {
             scene_objects: Vec::new(),
             overlays: Vec::new(),
             scene_mode: crate::scene::SceneMode::Browse,
-            projection: ProjectionMode::TwoD,
+            projection: ProjectionMode::default(),
         };
         let viewport = CanvasViewport::new(Point2D::origin(), Size2D::new(1000.0, 800.0), 1.0);
         (

@@ -734,7 +734,7 @@ mod tests {
             scene_objects: Vec::new(),
             overlays: Vec::new(),
             scene_mode: SceneMode::Browse,
-            projection: ProjectionMode::TwoD,
+            projection: ProjectionMode::default(),
         }
     }
 

@@ -3,7 +3,10 @@ name = "eidetic"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Private local-memory lane for the Mere browser — typed blob request/response vocabulary and store trait, host-agnostic and storage-backend-agnostic."
+documentation = "https://docs.rs/eidetic"
+readme = "README.md"
 keywords = ["memory", "storage", "blob", "browser", "mere"]
 categories = ["data-structures"]
 

@@ -3,7 +3,10 @@ name = "graphshell"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Portable shell layer for the Mere browser — host GUI integration and Navigator surface."
+documentation = "https://docs.rs/graphshell"
+readme = "README.md"
 keywords = ["shell", "gui", "navigator", "tiling", "browser"]
 categories = ["gui"]
 

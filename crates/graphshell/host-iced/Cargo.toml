@@ -11,5 +11,4 @@ path = "src/lib.rs"
 
 [dependencies]
 graphshell-core = { path = "../core" }
-graphshell-host = { path = "../host" }
 graphshell-runtime = { path = "../runtime" }

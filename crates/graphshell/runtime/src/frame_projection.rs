@@ -17,14 +17,14 @@ use graphshell_core::geometry::PortableRect;
 use graphshell_core::graph::NodeKey;
 use graphshell_core::overlay::OverlayStrokePass;
 use graphshell_core::pane::{PaneId, TileRenderMode};
-use graphshell_core::shell_state::frame_model::{
+use graphshell_core::time::PortableInstant;
+use graphshell_shell_state::frame_model::{
     AccessibilityViewModel, CommandPaletteScopeView, CommandPaletteViewModel, DegradedReceiptSpec,
     DialogsViewModel, FocusRingSettingsView, FocusRingSpec, FocusViewModel, GraphSearchViewModel,
     OmnibarProviderStatusView, OmnibarSessionKindView, OmnibarViewModel, SettingsViewModel,
     ThumbnailSettingsView, ToastSpec, ToolbarViewModel,
 };
-use graphshell_core::shell_state::toolbar::ToolbarDraft;
-use graphshell_core::time::PortableInstant;
+use graphshell_shell_state::toolbar::ToolbarDraft;
 
 /// Portable inputs needed to shape the focus section of `FrameViewModel`.
 pub struct FocusProjectionInput<'a> {
@@ -344,7 +344,7 @@ pub fn project_transient_frame_outputs(
 
 #[cfg(test)]
 mod tests {
-    use graphshell_core::shell_state::frame_model::FocusRingCurve;
+    use graphshell_shell_state::frame_model::FocusRingCurve;
 
     use super::*;
 
@@ -542,7 +542,7 @@ mod tests {
 
     #[test]
     fn settings_projection_preserves_focus_and_thumbnail_settings() {
-        use graphshell_core::shell_state::frame_model::{
+        use graphshell_shell_state::frame_model::{
             ThumbnailAspectView, ThumbnailFilterView, ThumbnailFormatView,
         };
 

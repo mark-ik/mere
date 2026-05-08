@@ -30,9 +30,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::actions::ActionId;
-use crate::geometry::PortablePoint;
-use crate::graph::NodeKey;
+use graphshell_core::actions::ActionId;
+use graphshell_core::geometry::PortablePoint;
+use graphshell_core::graph::NodeKey;
 
 /// Portable intent a host can push into `FrameHostInput.host_intents`
 /// for the runtime to translate and apply during its tick.

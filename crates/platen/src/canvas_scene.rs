@@ -34,7 +34,7 @@ impl Default for CanvasSceneOptions {
         Self {
             view_id: GraphViewId::from_uuid(uuid::Uuid::nil()),
             scene_mode: SceneMode::Browse,
-            dimension: ViewDimension::TwoD,
+            dimension: ViewDimension::default(),
             visible_nodes: None,
             default_node_radius: 18.0,
         }

@@ -2,10 +2,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Runtime adapter for applying portable surface schedules to host viewers.
+//! Apply algorithm for [`SurfaceCommandSchedule`].
+//!
+//! Lives next to the schedule type so "manage surface lifecycle" has one
+//! owner. Hosts provide a [`ViewerSurfaceHost`] implementation; the apply
+//! algorithm walks each command, allocates or retires the corresponding
+//! viewer surface, and records the outcome on the lifecycle state.
 
 use graphshell_core::viewer_host::{ViewerSurfaceError, ViewerSurfaceHost};
-use verso_tile::surface::{
+
+use crate::surface::{
     SurfaceCommand, SurfaceCommandOutcome, SurfaceCommandSchedule, SurfaceCommandStatus,
     SurfaceLifecycleState, SurfaceRequest,
 };
@@ -116,11 +122,9 @@ mod tests {
     use std::collections::HashSet;
 
     use graphshell_core::{graph::GraphViewId, graph::NodeKey, pane::PaneId};
-    use verso_tile::surface::{
-        SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement, TileSlot,
-    };
 
     use super::*;
+    use crate::surface::{SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement, TileSlot};
 
     #[derive(Default)]
     struct MockRegistry {

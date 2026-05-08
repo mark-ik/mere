@@ -8,11 +8,12 @@
 //! without importing the donor `GraphBrowserApp`, concrete stores, host widget
 //! handles, or engine implementations.
 
+use inker::routing::EngineRouteDecision;
+
 use super::{
-    DiagnosticsSink, EngineRouteDecision, EngineRouter, GraphMutationJournal, GraphWorkspace,
-    SettingsStore, SurfaceCommandOutcome, SurfaceCommandSchedule, SurfaceHost,
-    SurfaceLifecycleState, TaskRuntime, WorkspaceEffect, WorkspaceRepository,
-    WorkspaceServiceResult,
+    DiagnosticsSink, EngineRouter, GraphMutationJournal, GraphWorkspace, SettingsStore,
+    SurfaceCommandOutcome, SurfaceCommandSchedule, SurfaceHost, SurfaceLifecycleState, TaskRuntime,
+    WorkspaceEffect, WorkspaceRepository, WorkspaceServiceResult,
     persistence::{checkpoint_workspace, save_preferences},
 };
 
@@ -132,9 +133,12 @@ mod tests {
     use std::collections::HashMap;
 
     use graphshell_core::{graph::GraphViewId, pane::PaneId};
-    use inker::routing::{SurfaceContract, SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId};
+    use inker::routing::{
+        EngineRouteRequest, SurfaceContract, SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId,
+    };
     use uuid::Uuid;
 
+    use super::*;
     use crate::app_state::{
         DiagnosticRecord, GraphMutationRecord, GraphWorkspaceSnapshot, JournalCursor,
         MutationPayload, NavigatorSidebarPreference, SurfaceCommand, SurfaceCommandSink,
@@ -143,7 +147,6 @@ mod tests {
         WorkspacePreferences, WorkspaceServiceError,
         persistence::{GraphTreeDocument, WorkspaceLayoutDocument, WorkspaceLayoutName},
     };
-    use super::*;
 
     #[derive(Default)]
     struct FakeWorkspaceRepository {
@@ -271,7 +274,7 @@ mod tests {
     impl EngineRouter for FakeEngineRouter {
         fn route(
             &mut self,
-            request: &super::super::EngineRouteRequest,
+            request: &EngineRouteRequest,
         ) -> WorkspaceServiceResult<EngineRouteDecision> {
             self.routed_addresses.push(request.address.clone());
             Ok(EngineRouteDecision {
@@ -355,14 +358,12 @@ mod tests {
                 value: vec![4, 5, 6],
             },
         ));
-        workspace.push_effect(WorkspaceEffect::RouteEngine(
-            super::super::EngineRouteRequest {
-                workspace_id: WorkspaceRouteId::new("main"),
-                view: None,
-                node: None,
-                address: "gemini://example.test".to_string(),
-            },
-        ));
+        workspace.push_effect(WorkspaceEffect::RouteEngine(EngineRouteRequest {
+            workspace_id: WorkspaceRouteId::new("main"),
+            view: None,
+            node: None,
+            address: "gemini://example.test".to_string(),
+        }));
         workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceCommand::focus(
             SurfaceHostId::new("desktop"),
             None,

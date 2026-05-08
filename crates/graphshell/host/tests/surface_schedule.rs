@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use graphshell_core::graph::{GraphViewId, NodeKey};
 use graphshell_core::pane::PaneId;
 use graphshell_host::SurfaceFactoryHost;
-use graphshell_runtime::apply_viewer_surface_schedule;
+use verso_tile::apply_viewer_surface_schedule;
 use verso_tile::surface::{
     SurfaceHostId, SurfaceLifecycleState, SurfacePlacementPlan, SurfaceSlotPlacement, TileSlot,
 };

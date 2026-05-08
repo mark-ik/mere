@@ -3,7 +3,10 @@ name = "mere-transport"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Peer transport layer for the Mere browser — iroh-based authenticated encrypted QUIC streams between known peers."
+documentation = "https://docs.rs/mere-transport"
+readme = "README.md"
 keywords = ["transport", "iroh", "p2p", "quic", "browser"]
 categories = ["network-programming"]
 

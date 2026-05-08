@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use graphshell_core::graph::NodeKey;
-use graphshell_host::HostToolkit;
+use graphshell_core::host_toolkit::HostToolkit;
 use graphshell_runtime::{BackendViewportInPixels, HostSurfacePort};
 
 pub const TOOLKIT: HostToolkit = HostToolkit::Iced;

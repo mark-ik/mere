@@ -10,6 +10,7 @@ description = "Portable runtime boundary traits for Graphshell hosts"
 
 [dependencies]
 graphshell-core = { path = "../core" }
+graphshell-shell-state = { path = "../shell-state" }
 verso-tile = { path = "../../verso-tile" }
 # 2026-04-25 servo-into-verso S3a: graphshell-runtime now owns the
 # host-port trait surface (HostInputPort, HostPaintPort,

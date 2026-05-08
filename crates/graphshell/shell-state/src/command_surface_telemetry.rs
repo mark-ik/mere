@@ -24,9 +24,9 @@
 
 use std::sync::Mutex;
 
-use crate::graph::NodeKey;
-use crate::pane::PaneId;
 use crate::routing::ToolSurfaceReturnTarget;
+use graphshell_core::graph::NodeKey;
+use graphshell_core::pane::PaneId;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CommandBarSemanticMetadata {

@@ -10,7 +10,7 @@
 
 use crate::ports::{RuntimeClipboardPort, RuntimeToastPort};
 use graphshell_core::graph::NodeKey;
-use graphshell_core::shell_state::frame_model::ToastSeverity;
+use graphshell_shell_state::frame_model::ToastSeverity;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClipboardCopyKind {
@@ -219,7 +219,7 @@ pub fn clipboard_copy_missing_node_failure_text() -> String {
 mod tests {
     use std::collections::VecDeque;
 
-    use graphshell_core::shell_state::frame_model::ToastSpec;
+    use graphshell_shell_state::frame_model::ToastSpec;
 
     use super::*;
 

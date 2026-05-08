@@ -15,10 +15,7 @@ use std::collections::HashMap;
 use graph_tree::{GraphTree, LayoutMode, ProjectionLens};
 use graphshell_core::graph::{Graph, GraphViewId, NodeKey};
 use graphshell_core::persistence::GraphSnapshot;
-pub use inker::routing::{
-    EngineRouteDecision, EngineRouteRequest, SurfaceContract, SurfaceContractMode, SurfaceTargetId,
-    WorkspaceRouteId,
-};
+use inker::routing::{EngineRouteDecision, EngineRouteRequest};
 pub use platen::workbench::{
     ArrangementContainer, ArrangementMember, ArrangementSnapshot, FrameId, FrameState, PaneBinding,
     ProjectedPane, WorkbenchProjection,

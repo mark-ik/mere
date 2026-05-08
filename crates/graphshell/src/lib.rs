@@ -21,10 +21,6 @@
 /// Portable reducer-owned app-state and service-boundary contracts.
 pub mod app_state;
 
-/// Framework-agnostic graph-view canvas primitives migrated from the previous
-/// Graphshell tree.
-pub use graph_canvas as canvas;
-
 /// Portable identity, authority, and mutation kernel migrated from the
 /// previous Graphshell tree.
 pub use graphshell_core as core;

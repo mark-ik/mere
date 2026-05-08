@@ -1,7 +1,10 @@
 # Protocol Architecture Plan
 
 **Date**: 2026-05-05
-**Status**: Draft / canonical direction (architecture-level; per-protocol module plans branch off)
+**Status**: Draft / canonical direction (architecture-level; per-protocol module plans branch off). **Partially superseded by the 2026-05-07 briefs:**
+
+- [`2026-05-07_event_dag_substrate_brief.md`](2026-05-07_event_dag_substrate_brief.md) reframes wire-format / sync-layer / schema-locality / privacy-transport / persona-design decisions. §2 (iroh layering), §3 (identity vault), §4 (self-host-with-fallback) of *this* plan remain authoritative.
+- [`2026-05-07_moot_tiers_and_voluntary_hosting_brief.md`](2026-05-07_moot_tiers_and_voluntary_hosting_brief.md) reframes §5 (Protocol Mods and Primitive Moot Nodes) through a four-tier scale (orrery → moot → moothold → demesne) with voluntary hosting, cheesecloth pinning, and ILL-shaped reciprocity. Notable lexicon shift: *moothold* now means t3 (federation of moots), *demesne* now means t4 (sovereign coalition of mootholds). The earlier "demesne = federation of moots" framing in this plan is superseded.
 **Scope**: Cross-cutting plan governing how Mere composes peer-to-peer transports, identity, identity-discovery (WebFinger), and protocol mods (Cable, Matrix, Nostr, IRC, ATproto, ActivityPub, Misfin, …) into a coherent whole. Defines the layered relationship between Cable and the iroh toolkit, the multi-protocol identity vault, the self-host-with-fallback pattern for identity publication, and the "primitive node" pattern by which any protocol — whether the user's mod is installed or not — can appear in the orrery.
 
 **Drives**: The Mere Phase 2C → Phase 3 work program, plus per-protocol mod specs that branch from this plan.

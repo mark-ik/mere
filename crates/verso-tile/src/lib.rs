@@ -21,9 +21,14 @@
 
 #![doc(html_root_url = "https://docs.rs/verso-tile/0.0.1")]
 
+/// Apply algorithm for `SurfaceCommandSchedule`.
+pub mod apply;
 /// Portable rendering-surface identity types.
 pub mod surface;
 
+pub use apply::{
+    SurfaceScheduleApplyError, SurfaceScheduleApplyReport, apply_viewer_surface_schedule,
+};
 pub use surface::{
     SurfaceCommand, SurfaceCommandBacklog, SurfaceCommandOutcome, SurfaceCommandSchedule,
     SurfaceCommandSink, SurfaceCommandStatus, SurfaceEffect, SurfaceHostId, SurfaceLifecycleState,

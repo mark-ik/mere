@@ -802,7 +802,7 @@ mod tests {
             scene_objects: vec![],
             overlays: vec![],
             scene_mode: SceneMode::Browse,
-            projection: ProjectionMode::TwoD,
+            projection: ProjectionMode::default(),
         };
         let deltas = layout.step_dyn(&scene, &mut state, 0.0, &viewport, &LayoutExtras::default());
         assert!(!deltas.is_empty(), "grid should produce deltas");
