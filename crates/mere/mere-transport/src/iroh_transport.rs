@@ -208,12 +208,22 @@ impl IrohTransport {
     ///
     /// Convenience over [`builder`](Self::builder) for callers that
     /// don't need iroh-blobs / iroh-gossip.
+    #[tracing::instrument(
+        level = "info",
+        skip(master, alpns),
+        fields(alpn_count = alpns.len()),
+    )]
     pub async fn bind(master: &Ed25519Keypair, alpns: Vec<Alpn>) -> Result<Self, TransportError> {
         Self::builder(master).alpns(alpns).bind().await
     }
 
     /// Bind a new iroh transport with the given Mere ALPNs and serve
     /// iroh-blobs against the provided store.
+    #[tracing::instrument(
+        level = "info",
+        skip(master, alpns, blobs),
+        fields(alpn_count = alpns.len(), with_blobs = blobs.is_some()),
+    )]
     pub async fn bind_with_blobs(
         master: &Ed25519Keypair,
         alpns: Vec<Alpn>,
@@ -346,6 +356,7 @@ impl IrohTransport {
     /// (ours, plus iroh-blobs / iroh-gossip / any other protocol that
     /// uses the endpoint's address book) can resolve the peer by NodeId
     /// alone.
+    #[tracing::instrument(level = "debug", skip(self, addr))]
     pub fn add_peer(&self, addr: EndpointAddr) -> Result<(), TransportError> {
         self.address_book.add_endpoint_info(addr);
         Ok(())
@@ -357,6 +368,11 @@ impl IrohTransport {
     /// `iroh::Connection` directly so callers can drive it however the
     /// target protocol requires. Used by [`BlobStore::fetch_from`] to
     /// run iroh-blobs' multi-stream fetch dance.
+    #[tracing::instrument(
+        level = "debug",
+        skip(self),
+        fields(?peer, alpn_len = alpn.len()),
+    )]
     pub async fn connect_raw(
         &self,
         peer: NodeId,

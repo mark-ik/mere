@@ -23,11 +23,11 @@ pub mod app_state;
 
 /// Portable identity, authority, and mutation kernel migrated from the
 /// previous Graphshell tree.
-pub use graphshell_core as core;
+pub use mere_kernel as core;
 
 /// Portable runtime-boundary vocabulary migrated from the previous Graphshell
 /// tree.
-pub use graphshell_runtime as runtime;
+pub use mere_host_contract as runtime;
 
 /// Owner-scoped graph memory model migrated from the previous Graphshell tree.
 pub use graph_memory as memory;

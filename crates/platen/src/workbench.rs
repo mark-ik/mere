@@ -6,8 +6,8 @@
 
 use std::collections::HashMap;
 
-use graphshell_core::graph::{GraphViewId, NodeKey};
-use graphshell_core::pane::PaneId;
+use mere_kernel::graph::{GraphViewId, NodeKey};
+use mere_kernel::pane::PaneId;
 use serde::{Deserialize, Serialize};
 pub use verso_tile::surface::TileSlot;
 use verso_tile::surface::{SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement};
@@ -180,6 +180,7 @@ pub fn project_active_surface_placements(
         .map(|snapshot| project_surface_placements(&snapshot))
 }
 
+#[tracing::instrument(level = "debug", skip(bindings), fields(pane_id = ?binding.pane_id))]
 pub fn upsert_pane_binding(bindings: &mut Vec<PaneBinding>, binding: PaneBinding) -> bool {
     if let Some(existing) = bindings
         .iter_mut()
@@ -195,6 +196,7 @@ pub fn upsert_pane_binding(bindings: &mut Vec<PaneBinding>, binding: PaneBinding
     true
 }
 
+#[tracing::instrument(level = "debug", skip(bindings), fields(?pane_id))]
 pub fn remove_pane_binding(
     bindings: &mut Vec<PaneBinding>,
     pane_id: PaneId,
@@ -218,6 +220,11 @@ pub fn set_binding_surface_host(
     Some(changed)
 }
 
+#[tracing::instrument(
+    level = "debug",
+    skip(view_bindings, frame),
+    fields(?pane_id, has_surface_host = surface_host.is_some()),
+)]
 pub fn set_view_and_frame_surface_host(
     view_bindings: &mut [PaneBinding],
     frame: Option<&mut FrameState>,
@@ -233,6 +240,7 @@ pub fn set_view_and_frame_surface_host(
     Some(view_changed || frame_changed)
 }
 
+#[tracing::instrument(level = "debug", skip(frame), fields(?root_view))]
 pub fn set_frame_root_view(frame: &mut FrameState, root_view: Option<GraphViewId>) -> bool {
     let changed = frame.root_view != root_view;
     frame.root_view = root_view;
@@ -249,6 +257,11 @@ pub fn assign_frame_pane(
     root_changed || pane_changed
 }
 
+#[tracing::instrument(
+    level = "debug",
+    skip(view_bindings, frame),
+    fields(?view_id, pane_id = ?binding.pane_id),
+)]
 pub fn assign_view_and_frame_pane(
     view_bindings: &mut Vec<PaneBinding>,
     frame: Option<&mut FrameState>,
@@ -266,6 +279,7 @@ pub fn clear_frame_pane(frame: &mut FrameState, pane_id: PaneId) -> bool {
     remove_pane_binding(&mut frame.panes, pane_id).is_some()
 }
 
+#[tracing::instrument(level = "debug", skip(view_bindings, frame), fields(?pane_id))]
 pub fn remove_view_and_frame_pane(
     view_bindings: &mut Vec<PaneBinding>,
     frame: Option<&mut FrameState>,

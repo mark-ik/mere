@@ -9,7 +9,7 @@
 //! algorithm walks each command, allocates or retires the corresponding
 //! viewer surface, and records the outcome on the lifecycle state.
 
-use graphshell_core::viewer_host::{ViewerSurfaceError, ViewerSurfaceHost};
+use mere_kernel::viewer_host::{ViewerSurfaceError, ViewerSurfaceHost};
 
 use crate::surface::{
     SurfaceCommand, SurfaceCommandOutcome, SurfaceCommandSchedule, SurfaceCommandStatus,
@@ -121,7 +121,7 @@ where
 mod tests {
     use std::collections::HashSet;
 
-    use graphshell_core::{graph::GraphViewId, graph::NodeKey, pane::PaneId};
+    use mere_kernel::{graph::GraphViewId, graph::NodeKey, pane::PaneId};
 
     use super::*;
     use crate::surface::{SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement, TileSlot};

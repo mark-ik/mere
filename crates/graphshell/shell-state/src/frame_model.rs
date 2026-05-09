@@ -28,13 +28,13 @@ use std::time::Duration;
 use graph_tree::{OwnedTreeRow, SplitBoundary, TabEntry};
 
 use crate::toolbar::ToolbarDraft;
-use graphshell_core::content::ContentLoadState;
-use graphshell_core::geometry::{PortablePoint, PortableRect, PortableSize};
-use graphshell_core::graph::NodeKey;
-use graphshell_core::host_event::{HostEvent, ModifiersState};
-use graphshell_core::overlay::OverlayStrokePass;
-use graphshell_core::pane::{PaneId, TileRenderMode};
-use graphshell_core::time::PortableInstant;
+use mere_kernel::content::ContentLoadState;
+use mere_kernel::geometry::{PortablePoint, PortableRect, PortableSize};
+use mere_kernel::graph::NodeKey;
+use mere_kernel::host_event::{HostEvent, ModifiersState};
+use mere_kernel::overlay::OverlayStrokePass;
+use mere_kernel::pane::{PaneId, TileRenderMode};
+use mere_kernel::time::PortableInstant;
 
 // ---------------------------------------------------------------------------
 // FrameViewModel — aggregate per-frame host-painting snapshot
@@ -615,7 +615,7 @@ mod tests {
 /// `chrome_ui.focus_ring_settings` directly. The canonical settings
 /// types live in `app/settings_persistence.rs` (graphshell crate);
 /// this module mirrors the read-side shape with POD types so the
-/// graphshell-core kernel stays independent of the app crate.
+/// mere-kernel kernel stays independent of the app crate.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SettingsViewModel {
     /// Focus-ring animation behavior (enabled toggle, fade duration,

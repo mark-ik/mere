@@ -16,7 +16,7 @@ the workbench is arranged) and presses that knowledge into renderable form.
 - **`canvas_scene`** — graph-to-canvas scene derivation.
   - `CanvasSceneOptions` — input options (view ID, scene mode, 2D/3D
     dimension, visible-node mask, default node radius).
-  - `build_canvas_scene_input()` — turns a `graphshell_core::graph::Graph`
+  - `build_canvas_scene_input()` — turns a `mere_kernel::graph::Graph`
     into a `CanvasSceneInput` packet for the canvas layer.
   - `graph_view_id_to_canvas()` — utility to map `GraphViewId` to the
     canvas's `ViewId`.
@@ -72,7 +72,7 @@ surface placements) that downstream layers consume.
   `canvas_scene::build_canvas_scene_input()` returns
   `graph_canvas::scene::CanvasSceneInput<NodeKey>`; the canvas crate handles
   drawing.
-- **`graphshell-core`** (workspace-internal) — platen consumes the portable
+- **`mere-kernel`** (workspace-internal) — platen consumes the portable
   graph (`Graph`, `GraphViewId`, `NodeKey`) and pane (`PaneId`) types.
 
 ## Status

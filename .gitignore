@@ -1,4 +1,43 @@
-/target/
+# Cargo build artifacts.
+# Use `target/` (not `/target/`) so the rule catches nested workspaces too
+# — `crates/probes/` is a separate workspace whose target/ is multi-GB.
+target/
+
+# Backup / swap files
 **/*.rs.bk
+*.swp
+*.swo
+*~
+
+# IDE / editor configs
+.vscode/
+.idea/
+*.iml
+
+# OS noise
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Local env / secrets
+.env
+.env.local
+.env.*.local
+
+# Coverage / profiling output
+*.profraw
+*.profdata
+flamegraph.svg
+perf.data*
+
+# Test / debug log directories (project convention: logs go here, not
+# alongside source)
+logs/
+.test-logs/
+
+# Locally-downloaded model weights (e.g. all-MiniLM-L6-v2 fetched via
+# `huggingface_hub.snapshot_download` for intelligence-embeddings BERT
+# validation). Multi-MB binaries; do not commit. Devs set MERE_MINILM_DIR
+# to point at this directory after running the download recipe in
+# crates/intelligence-embeddings/README.md.
+models/

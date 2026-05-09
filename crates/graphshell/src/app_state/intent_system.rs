@@ -10,8 +10,8 @@
 //! effects for composition glue to consume.
 
 use graph_tree::ProjectionLens;
-use graphshell_core::graph::{GraphViewId, NodeKey};
 use inker::routing::EngineRouteRequest;
+use mere_kernel::graph::{GraphViewId, NodeKey};
 
 use super::{
     ChromeState, DiagnosticRecord, FrameId, FrameState, GraphWorkspace, SurfaceCommand,
@@ -220,7 +220,7 @@ pub fn reduce_workspace_intent(
 
 #[cfg(test)]
 mod tests {
-    use graphshell_core::graph::GraphViewId;
+    use mere_kernel::graph::GraphViewId;
 
     use super::*;
     use crate::app_state::{NavigatorSidebarPreference, ThemeModePreference};

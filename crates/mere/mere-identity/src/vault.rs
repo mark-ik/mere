@@ -296,6 +296,7 @@ pub struct IdentityVault<S: IdentityStorage> {
 
 impl<S: IdentityStorage> IdentityVault<S> {
     /// Open a vault loading the named profile from storage.
+    #[tracing::instrument(level = "debug", skip(storage), fields(?id))]
     pub fn open(storage: S, id: &ProfileId) -> Result<Self, IdentityError> {
         let current = storage.load_profile(id)?;
         Ok(Self { storage, current })
@@ -323,12 +324,14 @@ impl<S: IdentityStorage> IdentityVault<S> {
 
     /// Add or replace a slot in the current profile, persisting the
     /// updated profile to storage.
+    #[tracing::instrument(level = "debug", skip(self, slot), fields(?key))]
     pub fn add_slot(&mut self, key: ProtocolKey, slot: IdentitySlot) -> Result<(), IdentityError> {
         self.current.slots.insert(key, slot);
         self.storage.save_profile(&self.current)
     }
 
     /// Remove a slot from the current profile, persisting.
+    #[tracing::instrument(level = "debug", skip(self), fields(?key))]
     pub fn remove_slot(&mut self, key: &ProtocolKey) -> Result<bool, IdentityError> {
         let removed = self.current.slots.remove(key).is_some();
         if removed {

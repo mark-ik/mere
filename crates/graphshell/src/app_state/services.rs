@@ -132,10 +132,10 @@ impl<'a> WorkspaceServices<'a> {
 mod tests {
     use std::collections::HashMap;
 
-    use graphshell_core::{graph::GraphViewId, pane::PaneId};
     use inker::routing::{
         EngineRouteRequest, SurfaceContract, SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId,
     };
+    use mere_kernel::{graph::GraphViewId, pane::PaneId};
     use uuid::Uuid;
 
     use super::*;
@@ -363,6 +363,8 @@ mod tests {
             view: None,
             node: None,
             address: "gemini://example.test".to_string(),
+            content_type: None,
+            pinned_engine: None,
         }));
         workspace.push_effect(WorkspaceEffect::RequestSurface(SurfaceCommand::focus(
             SurfaceHostId::new("desktop"),
@@ -444,14 +446,14 @@ mod tests {
             host.clone(),
             Some(view),
             first_pane,
-            graphshell_core::graph::NodeKey::new(80),
+            mere_kernel::graph::NodeKey::new(80),
             TileSlot::primary(),
         ));
         plan.push(SurfaceSlotPlacement::new(
             host,
             Some(view),
             second_pane,
-            graphshell_core::graph::NodeKey::new(81),
+            mere_kernel::graph::NodeKey::new(81),
             TileSlot::secondary(1),
         ));
         let mut lifecycle = SurfaceLifecycleState::default();

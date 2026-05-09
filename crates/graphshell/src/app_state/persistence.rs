@@ -9,7 +9,7 @@
 //! glue to execute through `WorkspaceRepository`, `GraphMutationJournal`,
 //! `SettingsStore`, and `eidetic::Store` implementations.
 
-use graphshell_core::graph::GraphViewId;
+use mere_kernel::graph::GraphViewId;
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -360,8 +360,8 @@ fn decode_graph_runtime_intent(
 mod tests {
     use std::collections::HashMap;
 
-    use graphshell_core::geometry::PortablePoint;
-    use graphshell_core::graph::Graph;
+    use mere_kernel::geometry::PortablePoint;
+    use mere_kernel::graph::Graph;
     use uuid::Uuid;
 
     use super::*;

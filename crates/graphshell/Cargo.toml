@@ -18,8 +18,8 @@ eidetic = { path = "../eidetic" }
 graph-canvas = { path = "../graph/graph-canvas" }
 graph-memory = { path = "../graph/graph-memory" }
 graph-tree = { path = "../graph/graph-tree" }
-graphshell-core = { path = "core" }
-graphshell-runtime = { path = "runtime" }
+mere-kernel = { path = "../mere-kernel" }
+mere-host-contract = { path = "../mere-host-contract" }
 inker = { path = "../inker" }
 platen = { path = "../platen" }
 serde = { version = "1.0", features = ["derive"] }

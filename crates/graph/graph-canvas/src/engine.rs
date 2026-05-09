@@ -12,6 +12,20 @@
 use euclid::default::{Point2D, Vector2D};
 use std::hash::Hash;
 
+/// Compact tag for tracing — keeps span field cardinality low so subscribers
+/// can filter by event kind without paying the cost of formatting full
+/// event payloads.
+fn event_kind_label(event: &CanvasInputEvent) -> &'static str {
+    match event {
+        CanvasInputEvent::PointerMoved { .. } => "pointer_moved",
+        CanvasInputEvent::PointerPressed { .. } => "pointer_pressed",
+        CanvasInputEvent::PointerReleased { .. } => "pointer_released",
+        CanvasInputEvent::PointerDoubleClick { .. } => "pointer_double_click",
+        CanvasInputEvent::Scroll { .. } => "scroll",
+        CanvasInputEvent::PointerLeft => "pointer_left",
+    }
+}
+
 use crate::camera::{CanvasCamera, CanvasViewport};
 use crate::hit_test::{HitTestResult, hit_test_point, nodes_in_screen_rect};
 use crate::input::{CanvasInputEvent, Modifiers, PointerButton};
@@ -131,6 +145,14 @@ impl<N: Clone + Eq + Hash> InteractionEngine<N> {
     /// The caller provides the current frame's hit proxies (from the most
     /// recent `ProjectedScene`), camera, and viewport so the engine can
     /// resolve pointer positions against the scene.
+    #[tracing::instrument(
+        level = "trace",
+        skip(self, hit_proxies, camera, viewport),
+        fields(
+            event_kind = event_kind_label(event),
+            hit_proxy_count = hit_proxies.len(),
+        ),
+    )]
     pub fn process_event(
         &mut self,
         event: &CanvasInputEvent,
@@ -223,6 +245,13 @@ impl<N: Clone + Eq + Hash> InteractionEngine<N> {
             }
         }
 
+        if !actions.is_empty() {
+            tracing::debug!(
+                action_count = actions.len(),
+                event_kind = event_kind_label(event),
+                "interaction emitted actions"
+            );
+        }
         actions
     }
 

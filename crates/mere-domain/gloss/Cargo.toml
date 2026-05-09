@@ -1,0 +1,20 @@
+[package]
+name = "mere-gloss"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Gloss domain layer for the Mere browser — peripheral content-commentary strip; v0 projects an EngineDocument outline."
+documentation = "https://docs.rs/mere-gloss"
+readme = "README.md"
+keywords = ["gloss", "outline", "mere", "uxtree"]
+categories = ["accessibility", "gui"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+accesskit = "0.24"
+inker = { path = "../../inker" }
+tracing = "0.1"
+uxtree = { path = "../../uxtree" }

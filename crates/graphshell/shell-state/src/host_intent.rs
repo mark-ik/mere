@@ -12,7 +12,7 @@
 //! runtime translates them to internal reducer actions during its
 //! `tick` pass.
 //!
-//! `HostIntent` lives in `graphshell-core` so `FrameHostInput` (also
+//! `HostIntent` lives in `mere-kernel` so `FrameHostInput` (also
 //! core) can carry a `Vec<HostIntent>`. This is deliberately a
 //! **parallel portable enum** — not a move of the shell crate's
 //! `GraphIntent` into core. Hosts only need a small surface of intent
@@ -30,9 +30,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use graphshell_core::actions::ActionId;
-use graphshell_core::geometry::PortablePoint;
-use graphshell_core::graph::NodeKey;
+use mere_kernel::actions::ActionId;
+use mere_kernel::geometry::PortablePoint;
+use mere_kernel::graph::NodeKey;
 
 /// Portable intent a host can push into `FrameHostInput.host_intents`
 /// for the runtime to translate and apply during its tick.

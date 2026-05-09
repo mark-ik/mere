@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+
+[package]
+name = "mere-host"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+description = "gpui host crate for the Mere browser — Application bootstrap, window lifecycle, accesskit bridge, PlatformSurface impls."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "mere-host"
+path = "src/main.rs"
+
+[dependencies]
+# gpui (Glass-HQ fork) — sibling repo at ../../../glass-gpui.
+gpui = { path = "../../../glass-gpui/crates/gpui" }
+gpui_platform = { path = "../../../glass-gpui/crates/gpui_platform", features = ["font-kit"] }
+
+# Mere portable layer.
+accesskit = "0.24"
+euclid = "0.22"
+inker = { path = "../inker" }
+mere-apparatus = { path = "../mere-domain/apparatus" }
+mere-frame = { path = "../mere-domain/frame" }
+mere-gloss = { path = "../mere-domain/gloss" }
+mere-kernel = { path = "../mere-kernel" }
+mere-orrery = { path = "../mere-domain/orrery" }
+mere-workbench = { path = "../mere-domain/workbench" }
+nematic = { path = "../nematic" }
+platen = { path = "../platen" }
+uxtree = { path = "../uxtree" }
+uuid = "1"
+verso-tile = { path = "../verso-tile" }
+
+# Diagnostics.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

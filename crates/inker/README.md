@@ -18,6 +18,22 @@ ready to ink the platen.
 
 ## What's in the crate
 
+- **`engine`** — the engine trait, document model, and registry.
+  - `Engine` trait — concrete content engines implement
+    `engine_id() -> &str` and `render(&EngineInput) -> Result<EngineDocument,
+    EngineError>`. Implementations live in protocol-specific crates
+    (`nematic` for markdown / smolweb / file lanes; `serval` for full web).
+  - `EngineDocument` / `DocumentBlock` / `InlineSpan` — portable,
+    serializable, host-neutral document model. No layout coordinates;
+    `platen` adds those once a real surface is bound.
+  - `EngineInput` — already-fetched content. Network and disk I/O are the
+    host's job, not the engine's; this keeps engines portable to wasm32
+    targets.
+  - `EngineRegistry` — engine ID → instance dispatch. Pair with
+    `EngineRoutePolicy` to go from address → decision → registered engine →
+    rendered document.
+  - `EngineError` — owned error vocabulary (`EngineNotFound`,
+    `Unsupported`, `InvalidContent`, `NotFound`, `Io`, `Network`).
 - **`routing`** — the route-decision vocabulary and default policy.
   - `EngineRouteRequest` / `EngineRouteDecision` — input / output types.
   - `WorkspaceRouteId` — opaque workspace identity carried with each request.
@@ -65,9 +81,10 @@ inker hands back.
 - [`verso-tile`](https://crates.io/crates/verso-tile) — `SurfaceContract.target`
   is `verso_tile::SurfaceTargetId`, re-exported through `inker::routing` for
   convenience.
-- [`nematic`](https://crates.io/crates/nematic) — referenced by engine ID
-  (`nematic.smolweb`, `nematic.file`); concrete dispatch happens in host
-  glue.
+- [`nematic`](https://crates.io/crates/nematic) — implements concrete
+  `Engine`s for markdown, smolweb (gemini/gopher), and file lanes; engine
+  IDs `nematic.markdown`, `nematic.smolweb`, `nematic.file`. Hosts register
+  these with `EngineRegistry` and dispatch through the registry.
 - **Serval** (Servo/wgpu fork) — referenced by engine ID `serval.web`; lives
   outside the mere workspace.
 - **Wry** (system webview, third-party) — available as an alternative engine;

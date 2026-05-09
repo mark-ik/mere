@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 use graph_canvas::projection::{ProjectionMode, ViewDimension};
 use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, SceneMode, ViewId};
-use graphshell_core::graph::{Graph, GraphViewId, NodeKey};
+use mere_kernel::graph::{Graph, GraphViewId, NodeKey};
 
 /// Canvas projection options for one graph view.
 #[derive(Clone, Debug, PartialEq)]
@@ -94,8 +94,8 @@ pub fn graph_view_id_to_canvas(id: GraphViewId) -> ViewId {
 
 #[cfg(test)]
 mod tests {
-    use graphshell_core::geometry::PortablePoint;
-    use graphshell_core::graph::EdgeType;
+    use mere_kernel::geometry::PortablePoint;
+    use mere_kernel::graph::EdgeType;
     use uuid::Uuid;
 
     use super::*;

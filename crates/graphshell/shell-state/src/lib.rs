@@ -10,13 +10,13 @@
 //! view-models, return-target routing, and UX diagnostics/observability/probes.
 //!
 //! Each module is WASM-clean (no egui, no servo, no tokio, no platform I/O)
-//! and testable without booting a host. Consumers (graphshell-runtime,
+//! and testable without booting a host. Consumers (mere-host-contract,
 //! graphshell-side reducers, future host adapters) reach for these types
 //! when they need to project, restore, or mutate session state.
 //!
 //! The vocabulary primitives (`geometry`, `time`, `pane`, `content`, etc.)
 //! and the host-port trait definitions live in
-//! [`graphshell-core`](https://crates.io/crates/graphshell-core); this crate
+//! [`mere-kernel`](https://crates.io/crates/mere-kernel); this crate
 //! depends on those.
 
 pub mod authorities;

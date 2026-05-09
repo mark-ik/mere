@@ -1,0 +1,412 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+//! Feed engine — parses RSS 2.0 and Atom 1.0 feeds into a portable
+//! document.
+//!
+//! Handles both formats with one event-driven walker. The two formats
+//! differ in element names but share the same logical shape: a feed-level
+//! title plus a sequence of entries, each carrying a title, link, and
+//! summary. RSS expresses links as element text; Atom uses `<link href=…>`
+//! attributes.
+//!
+//! The output layout is:
+//!
+//! 1. Feed title becomes [`EngineDocument::title`].
+//! 2. Each entry projects as a level-2 heading (entry title) followed by a
+//!    paragraph containing the entry link. If a summary / description /
+//!    content body is present, a third paragraph holds the de-tagged
+//!    summary text.
+//!
+//! Summary handling is deliberately lossy in v1: HTML in `<description>` /
+//! `<content>` is stripped to plain text. A future slice can add a real
+//! HTML parse path that preserves emphasis / links inside summaries.
+
+use inker::{
+    DocumentBlock, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, Engine,
+    EngineDocument, EngineError, EngineInput,
+};
+use quick_xml::Reader;
+use quick_xml::escape::unescape;
+use quick_xml::events::Event;
+
+/// Stable engine identifier.
+pub const ENGINE_ID: &str = "nematic.feed";
+
+/// RSS / Atom feed engine.
+pub struct FeedEngine;
+
+impl FeedEngine {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for FeedEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Engine for FeedEngine {
+    fn engine_id(&self) -> &str {
+        ENGINE_ID
+    }
+
+    fn render(&self, input: &EngineInput) -> Result<EngineDocument, EngineError> {
+        let parsed = parse(&input.body)?;
+        let title = parsed.feed_title.clone();
+        let lang = parsed.feed_lang.clone();
+        let (blocks, diagnostics) = build_document_blocks(parsed);
+
+        Ok(EngineDocument {
+            address: input.address.clone(),
+            title,
+            content_type: input
+                .content_type
+                .clone()
+                .unwrap_or_else(|| "application/feed+xml".to_string()),
+            lang,
+            provenance: DocumentProvenance::for_engine(self.engine_id(), &input.address),
+            trust: DocumentTrustState::Unknown,
+            diagnostics,
+            blocks,
+        })
+    }
+}
+
+#[derive(Default)]
+struct Parsed {
+    feed_title: Option<String>,
+    feed_subtitle: Option<String>,
+    feed_link: Option<String>,
+    feed_lang: Option<String>,
+    entries: Vec<Entry>,
+    /// Count of entry summaries / contents that contained HTML tags we
+    /// stripped. Surfaces as a `DegradedRendering` diagnostic on the doc.
+    html_stripped_count: usize,
+}
+
+#[derive(Default)]
+struct Entry {
+    title: Option<String>,
+    link: Option<String>,
+    date: Option<String>,
+    summary: Option<String>,
+}
+
+fn parse(body: &str) -> Result<Parsed, EngineError> {
+    let mut reader = Reader::from_str(body);
+    // Don't enable trim_text: quick-xml splits text events around entity
+    // references (`&lt;`, `&gt;`, etc.), and trimming each chunk eats the
+    // spaces *between* them. Element-level trimming happens at commit.
+    let mut buf = Vec::new();
+    let mut state = State::default();
+
+    loop {
+        match reader.read_event_into(&mut buf) {
+            Ok(Event::Start(e)) => {
+                let local = local_name(e.name().as_ref());
+                state.start_element(local.clone());
+                if local == "link" {
+                    if let Some(href) = atom_href(&e) {
+                        if state.in_entry() {
+                            state.set_entry_link(href);
+                        } else if state.parsed.feed_link.is_none() {
+                            state.parsed.feed_link = Some(href);
+                        }
+                    }
+                }
+            }
+            Ok(Event::Empty(e)) => {
+                // Atom self-closing <link href="..." rel="alternate"/>.
+                let local = local_name(e.name().as_ref());
+                if local == "link" {
+                    if let Some(href) = atom_href(&e) {
+                        if state.in_entry() {
+                            state.set_entry_link(href);
+                        } else if state.parsed.feed_link.is_none() {
+                            state.parsed.feed_link = Some(href);
+                        }
+                    }
+                }
+            }
+            Ok(Event::Text(t)) => {
+                let raw =
+                    std::str::from_utf8(t.as_ref()).map_err(|e| invalid_xml(e.to_string()))?;
+                let unescaped = unescape(raw).map_err(invalid_xml)?.into_owned();
+                state.append_text(&unescaped);
+            }
+            Ok(Event::GeneralRef(r)) => {
+                // quick-xml 0.39 emits XML entity references (`&lt;`, `&gt;`,
+                // `&amp;`, numeric refs, etc.) as their own event, splitting
+                // them out of surrounding Text. Resolve to the actual
+                // character(s) and append to the current text accumulator
+                // so descriptions / summaries see the same string the
+                // author wrote.
+                let name =
+                    std::str::from_utf8(r.as_ref()).map_err(|e| invalid_xml(e.to_string()))?;
+                let unescaped = unescape(&format!("&{name};"))
+                    .map_err(invalid_xml)?
+                    .into_owned();
+                state.append_text(&unescaped);
+            }
+            Ok(Event::CData(c)) => {
+                let raw = std::str::from_utf8(c.as_ref())
+                    .map_err(|err| EngineError::InvalidContent(err.to_string()))?;
+                state.append_text(raw);
+            }
+            Ok(Event::End(e)) => {
+                let local = local_name(e.name().as_ref());
+                state.end_element(&local);
+            }
+            Ok(Event::Eof) => {
+                // Truncated content leaves elements on the path stack. Treat
+                // that as InvalidContent rather than silently returning a
+                // partial document — feed parsers that swallow truncation
+                // hide bugs in the upstream fetch pipeline.
+                if !state.path.is_empty() {
+                    return Err(EngineError::InvalidContent(format!(
+                        "feed truncated; unclosed element <{}>",
+                        state.path.last().map(String::as_str).unwrap_or("?")
+                    )));
+                }
+                break;
+            }
+            Err(err) => return Err(invalid_xml(err)),
+            _ => {}
+        }
+        buf.clear();
+    }
+
+    Ok(state.into_parsed())
+}
+
+#[derive(Default)]
+struct State {
+    path: Vec<String>,
+    pending_text: String,
+    current_entry: Option<Entry>,
+    parsed: Parsed,
+}
+
+impl State {
+    fn in_entry(&self) -> bool {
+        self.path.iter().any(|p| p == "item" || p == "entry")
+    }
+
+    fn start_element(&mut self, name: String) {
+        self.pending_text.clear();
+        if name == "item" || name == "entry" {
+            self.current_entry = Some(Entry::default());
+        }
+        self.path.push(name);
+    }
+
+    fn end_element(&mut self, name: &str) {
+        let text = std::mem::take(&mut self.pending_text);
+        let trimmed = text.trim();
+
+        // Path snapshot before pop: parent is path[-2].
+        let parent = self.path.iter().rev().nth(1).map(String::as_str);
+
+        if !trimmed.is_empty() {
+            if let Some(entry) = &mut self.current_entry {
+                match name {
+                    "title" => {
+                        if entry.title.is_none() {
+                            entry.title = Some(trimmed.to_string());
+                        }
+                    }
+                    "link" => {
+                        if entry.link.is_none() {
+                            // Atom emits an empty <link/> with href; only RSS-style
+                            // text content reaches this branch.
+                            entry.link = Some(trimmed.to_string());
+                        }
+                    }
+                    "pubDate" | "published" | "updated" => {
+                        // RSS 2.0 uses `<pubDate>` (RFC 822); Atom uses
+                        // `<published>` and `<updated>` (RFC 3339). Take
+                        // whichever surfaces first.
+                        if entry.date.is_none() {
+                            entry.date = Some(trimmed.to_string());
+                        }
+                    }
+                    "description" | "summary" | "content" => {
+                        if entry.summary.is_none() {
+                            let had_tags = trimmed.contains('<');
+                            entry.summary = Some(strip_tags(trimmed));
+                            if had_tags {
+                                self.parsed.html_stripped_count += 1;
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            } else {
+                match name {
+                    "title" => {
+                        if matches!(parent, Some("channel") | Some("feed"))
+                            && self.parsed.feed_title.is_none()
+                        {
+                            self.parsed.feed_title = Some(trimmed.to_string());
+                        }
+                    }
+                    "subtitle" | "description" => {
+                        // Atom `<subtitle>` and RSS channel `<description>`
+                        // both populate the feed subtitle slot.
+                        if matches!(parent, Some("channel") | Some("feed"))
+                            && self.parsed.feed_subtitle.is_none()
+                        {
+                            self.parsed.feed_subtitle = Some(strip_tags(trimmed));
+                        }
+                    }
+                    "link" => {
+                        // RSS channel `<link>https://…</link>` (text content).
+                        // Atom feed-level link handled in start/empty
+                        // element via `atom_href` because the URL lives in
+                        // attributes.
+                        if matches!(parent, Some("channel")) && self.parsed.feed_link.is_none() {
+                            self.parsed.feed_link = Some(trimmed.to_string());
+                        }
+                    }
+                    "language" => {
+                        if matches!(parent, Some("channel")) && self.parsed.feed_lang.is_none() {
+                            self.parsed.feed_lang = Some(trimmed.to_string());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        let popped = self.path.pop();
+        if popped.as_deref() == Some("item") || popped.as_deref() == Some("entry") {
+            if let Some(entry) = self.current_entry.take() {
+                if entry.title.is_some() || entry.link.is_some() || entry.summary.is_some() {
+                    self.parsed.entries.push(entry);
+                }
+            }
+        }
+    }
+
+    fn append_text(&mut self, text: &str) {
+        self.pending_text.push_str(text);
+    }
+
+    fn set_entry_link(&mut self, url: String) {
+        if let Some(entry) = &mut self.current_entry {
+            if entry.link.is_none() {
+                entry.link = Some(url);
+            }
+        }
+    }
+
+    fn into_parsed(self) -> Parsed {
+        self.parsed
+    }
+}
+
+fn local_name(qualified: &[u8]) -> String {
+    let s = std::str::from_utf8(qualified).unwrap_or("");
+    s.rsplit(':').next().unwrap_or(s).to_string()
+}
+
+fn atom_href(element: &quick_xml::events::BytesStart<'_>) -> Option<String> {
+    for attr in element.attributes().flatten() {
+        if attr.key.local_name().as_ref() == b"href" {
+            return attr
+                .unescape_value()
+                .ok()
+                .map(|v| v.into_owned())
+                .filter(|s| !s.is_empty());
+        }
+    }
+    None
+}
+
+fn invalid_xml<E: std::fmt::Display>(err: E) -> EngineError {
+    EngineError::InvalidContent(err.to_string())
+}
+
+/// Naively strip HTML tags from a fragment, preserving text content. Used
+/// for v1 summary rendering where preserving tag structure isn't worth the
+/// complexity. A future slice can replace this with a real HTML parse.
+fn strip_tags(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut in_tag = false;
+    for ch in input.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    // Collapse runs of whitespace introduced by tag stripping.
+    let mut collapsed = String::with_capacity(out.len());
+    let mut prev_ws = false;
+    for ch in out.chars() {
+        if ch.is_whitespace() {
+            if !prev_ws {
+                collapsed.push(' ');
+            }
+            prev_ws = true;
+        } else {
+            collapsed.push(ch);
+            prev_ws = false;
+        }
+    }
+    collapsed.trim().to_string()
+}
+
+/// Build the block list and any diagnostics from a parsed feed.
+///
+/// Emits one [`DocumentBlock::FeedHeader`] when the feed carries any
+/// channel-level metadata, then one [`DocumentBlock::FeedEntry`] per item.
+/// These semantic blocks preserve RSS / Atom intent (a feed entry is
+/// distinct from "a paragraph with a link in it") so downstream
+/// intelligence can match on type, not just text.
+fn build_document_blocks(parsed: Parsed) -> (Vec<DocumentBlock>, Vec<DocumentDiagnostic>) {
+    let mut blocks = Vec::with_capacity(parsed.entries.len() + 1);
+
+    // Feed-level header — only emit if anything is populated beyond the
+    // `EngineDocument.title` itself.
+    let header_has_content =
+        parsed.feed_title.is_some() || parsed.feed_subtitle.is_some() || parsed.feed_link.is_some();
+    if header_has_content {
+        blocks.push(DocumentBlock::FeedHeader {
+            title: parsed.feed_title.clone().unwrap_or_default(),
+            subtitle: parsed.feed_subtitle,
+            summary: None,
+            source_url: parsed.feed_link,
+        });
+    }
+
+    for entry in parsed.entries {
+        blocks.push(DocumentBlock::FeedEntry {
+            title: entry.title.unwrap_or_default(),
+            date: entry.date,
+            summary: entry.summary,
+            article_url: entry.link,
+            source_url: None,
+        });
+    }
+
+    let mut diagnostics = Vec::new();
+    if parsed.html_stripped_count > 0 {
+        let n = parsed.html_stripped_count;
+        let entries = if n == 1 { "entry" } else { "entries" };
+        diagnostics.push(DocumentDiagnostic::DegradedRendering(format!(
+            "stripped HTML from {n} {entries}"
+        )));
+    }
+
+    (blocks, diagnostics)
+}
+
+// Tests live in `feed/tests.rs` to keep this file under the 600-LOC ceiling.
+#[cfg(test)]
+mod tests;

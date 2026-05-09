@@ -14,6 +14,7 @@ categories = ["web-programming"]
 path = "src/lib.rs"
 
 [dependencies]
-graphshell-core = { path = "../graphshell/core" }
+mere-kernel = { path = "../mere-kernel" }
 serde = { version = "1.0", features = ["derive"] }
+tracing = "0.1"
 verso-tile = { path = "../verso-tile" }

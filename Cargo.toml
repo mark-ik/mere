@@ -9,21 +9,27 @@ members = [
     "crates/graph/graph-tree",
     "crates/registry/register-diagnostics",
     "crates/graphshell",
-    "crates/graphshell/core",
-    "crates/graphshell/host",
-    "crates/graphshell/host-iced",
-    "crates/graphshell/runtime",
+    "crates/mere-kernel",
+    "crates/mere-host-contract",
     "crates/graphshell/shell-state",
     "crates/verso-tile",
     "crates/inker",
     "crates/platen",
     "crates/nematic",
     "crates/eidetic",
+    "crates/intelligence-embeddings",
+    "crates/uxtree",
+    "crates/mere-domain/workbench",
+    "crates/mere-domain/orrery",
+    "crates/mere-domain/frame",
+    "crates/mere-domain/gloss",
+    "crates/mere-domain/apparatus",
     "crates/murm/murm",
     "crates/murm/murmuring",
     "crates/moot/moothold",
     "crates/moot/mooting",
 ]
+exclude = ["crates/probes", "crates/mere-host"]
 
 [workspace.package]
 version = "0.0.1"

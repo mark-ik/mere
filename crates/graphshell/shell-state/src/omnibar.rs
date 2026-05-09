@@ -12,7 +12,7 @@
 //! session state is driven from a host-side `ProviderSuggestionDriver`.
 //! Slice 5b (this module, 2026-04-22) replaces the remaining
 //! `std::time::Instant` with [`PortableInstant`](crate::time::PortableInstant)
-//! so the whole omnibar session can move to graphshell-core.
+//! so the whole omnibar session can move to mere-kernel.
 //!
 //! The concrete receiver + generation tag still live in a shell-side
 //! `ProviderSuggestionDriver`; this module defines only the portable
@@ -23,9 +23,9 @@
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
-use graphshell_core::async_request::AsyncRequestState;
-use graphshell_core::graph::NodeKey;
-use graphshell_core::time::PortableInstant;
+use mere_kernel::async_request::AsyncRequestState;
+use mere_kernel::graph::NodeKey;
+use mere_kernel::time::PortableInstant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OmnibarSessionKind {

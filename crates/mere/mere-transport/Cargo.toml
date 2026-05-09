@@ -19,6 +19,7 @@ path = "src/lib.rs"
 mere-identity = { path = "../mere-identity", version = "0.0.1" }
 tokio = { version = "1", features = ["io-util", "sync", "rt", "macros"] }
 thiserror = "1"
+tracing = "0.1"
 # iroh 0.98 wraps quinn QUIC; ed25519-dalek =3.0.0-pre.6 internally.
 # We cross the dalek-version boundary via raw 32-byte seeds so mere-identity
 # (on dalek 2.x) does not need to track iroh's pre-release dalek dep.

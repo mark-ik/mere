@@ -1,0 +1,328 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+//! # mere-frame
+//!
+//! Frame domain layer — defines the savable layout of resizable panes
+//! and projects it into a uxtree subtree.
+//!
+//! See the crate README for the conceptual scope and the relationship
+//! to legacy `platen::FrameState` / `graphshell-shell-state`.
+
+#![doc(html_root_url = "https://docs.rs/mere-frame/0.0.1")]
+
+use accesskit::{Node, Role};
+use serde::{Deserialize, Serialize};
+use uxtree::{UxTree, node_id_for_path};
+
+/// Crate version.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Lifecycle stage marker.
+pub const STAGE: &str = "pre-alpha";
+
+/// Stable identifier for a saved frame layout.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct FrameId(pub String);
+
+impl FrameId {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// Stable identifier for an individual pane within a frame layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PaneId(pub u64);
+
+/// Direction of a split between two child panes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SplitAxis {
+    /// Children are arranged side-by-side; ratio applies to width.
+    Horizontal,
+    /// Children are stacked vertically; ratio applies to height.
+    Vertical,
+}
+
+/// What a leaf pane shows. Extension point: `Custom` carries a
+/// host-defined content kind for content not yet promoted to a
+/// dedicated mere-domain module.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PaneContent {
+    Workbench,
+    Orrery,
+    Gloss,
+    Apparatus,
+    System,
+    Custom(String),
+}
+
+impl PaneContent {
+    /// Compact tag suitable for tracing fields and accessible names.
+    pub fn tag(&self) -> &str {
+        match self {
+            PaneContent::Workbench => "workbench",
+            PaneContent::Orrery => "orrery",
+            PaneContent::Gloss => "gloss",
+            PaneContent::Apparatus => "apparatus",
+            PaneContent::System => "system",
+            PaneContent::Custom(s) => s.as_str(),
+        }
+    }
+}
+
+/// One node in the layout tree: either a split (two children at a
+/// given axis + ratio) or a leaf (one pane showing a content kind).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum PaneNode {
+    Split {
+        axis: SplitAxis,
+        /// Fraction of the parent occupied by `first`; `second` takes
+        /// `1.0 - ratio`. Clamped by consumers to a sane minimum.
+        ratio: f32,
+        first: Box<PaneNode>,
+        second: Box<PaneNode>,
+    },
+    Leaf {
+        pane_id: PaneId,
+        content: PaneContent,
+    },
+}
+
+/// A complete frame: identity, label, and the layout tree.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FrameLayout {
+    pub id: FrameId,
+    pub label: String,
+    pub root: PaneNode,
+}
+
+/// Project a [`FrameLayout`] into a uxtree subtree describing the
+/// pane structure.
+///
+/// Splits become `Role::Group` nodes annotated with axis + ratio in
+/// their description. Leaves become `Role::Group` nodes labeled by
+/// their `PaneContent` tag. The leaf nodes are addressable by stable
+/// id (derived from their `PaneId`); the host can use those ids to
+/// stitch each leaf's content subtree (workbench / orrery / …) under
+/// the corresponding leaf node, or render content separately while
+/// keeping uxtree structurally aware of the layout.
+pub fn project_frame(layout: &FrameLayout) -> UxTree {
+    project_frame_with(layout, |_, _| None)
+}
+
+/// Project a frame layout, calling `content_for` at each leaf to ask
+/// for a content subtree to attach. The returned subtree's root becomes
+/// the leaf's accesskit child; its nodes are merged into the frame's
+/// node list. Resolver returning `None` leaves the leaf empty (same as
+/// [`project_frame`]).
+///
+/// Use this when the host wants the frame's leaf nodes to actually
+/// carry their content's a11y / automation tree (workbench in pane 1,
+/// orrery in pane 2, …) rather than tracking parallel subtrees.
+pub fn project_frame_with<F>(layout: &FrameLayout, mut content_for: F) -> UxTree
+where
+    F: FnMut(&PaneContent, PaneId) -> Option<UxTree>,
+{
+    let mut nodes = Vec::new();
+    let root_path = format!("frame/{}", layout.id.as_str());
+    let root_id = node_id_for_path(&root_path);
+
+    let root_child = project_node(&layout.root, &root_path, &mut nodes, &mut content_for);
+
+    let mut root = Node::new(Role::Group);
+    root.set_label(layout.label.clone());
+    root.set_children(vec![root_child]);
+    nodes.push((root_id, root));
+
+    tracing::debug!(
+        frame_id = %layout.id.as_str(),
+        node_count = nodes.len(),
+        "projected FrameLayout into uxtree subtree"
+    );
+
+    UxTree {
+        root: root_id,
+        nodes,
+    }
+}
+
+fn project_node<F>(
+    node: &PaneNode,
+    path: &str,
+    nodes: &mut Vec<(accesskit::NodeId, Node)>,
+    content_for: &mut F,
+) -> accesskit::NodeId
+where
+    F: FnMut(&PaneContent, PaneId) -> Option<UxTree>,
+{
+    match node {
+        PaneNode::Split {
+            axis,
+            ratio,
+            first,
+            second,
+        } => {
+            let split_path = format!("{path}/split");
+            let split_id = node_id_for_path(&split_path);
+            let first_id = project_node(first, &format!("{split_path}/first"), nodes, content_for);
+            let second_id =
+                project_node(second, &format!("{split_path}/second"), nodes, content_for);
+
+            let mut split_node = Node::new(Role::Group);
+            split_node.set_description(format!("split {:?} ratio={ratio:.2}", axis));
+            split_node.set_children(vec![first_id, second_id]);
+            nodes.push((split_id, split_node));
+            split_id
+        }
+        PaneNode::Leaf { pane_id, content } => {
+            let leaf_path = format!("{path}/pane/{}", pane_id.0);
+            let leaf_id = node_id_for_path(&leaf_path);
+
+            let mut leaf_children = Vec::new();
+            if let Some(content_tree) = content_for(content, *pane_id) {
+                leaf_children.push(content_tree.root);
+                nodes.extend(content_tree.nodes);
+            }
+
+            let mut leaf_node = Node::new(Role::Group);
+            leaf_node.set_label(content.tag().to_string());
+            leaf_node.set_children(leaf_children);
+            nodes.push((leaf_id, leaf_node));
+            leaf_id
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture_three_pane_frame() -> FrameLayout {
+        // Layout:
+        //   ┌──────────┬─────────┐
+        //   │          │ orrery  │
+        //   │ workbench├─────────┤
+        //   │          │apparatus│
+        //   └──────────┴─────────┘
+        FrameLayout {
+            id: FrameId::new("reading"),
+            label: "Reading".to_string(),
+            root: PaneNode::Split {
+                axis: SplitAxis::Horizontal,
+                ratio: 0.6,
+                first: Box::new(PaneNode::Leaf {
+                    pane_id: PaneId(1),
+                    content: PaneContent::Workbench,
+                }),
+                second: Box::new(PaneNode::Split {
+                    axis: SplitAxis::Vertical,
+                    ratio: 0.5,
+                    first: Box::new(PaneNode::Leaf {
+                        pane_id: PaneId(2),
+                        content: PaneContent::Orrery,
+                    }),
+                    second: Box::new(PaneNode::Leaf {
+                        pane_id: PaneId(3),
+                        content: PaneContent::Apparatus,
+                    }),
+                }),
+            },
+        }
+    }
+
+    #[test]
+    fn root_carries_frame_label() {
+        let layout = fixture_three_pane_frame();
+        let tree = project_frame(&layout);
+        let (_, root) = tree.nodes.iter().find(|(id, _)| *id == tree.root).unwrap();
+        assert_eq!(root.role(), Role::Group);
+        assert_eq!(root.label(), Some("Reading"));
+    }
+
+    #[test]
+    fn each_leaf_emits_a_pane_node_with_content_tag_label() {
+        let layout = fixture_three_pane_frame();
+        let tree = project_frame(&layout);
+        let labels: Vec<_> = tree
+            .nodes
+            .iter()
+            .filter_map(|(_, n)| n.label().map(|s| s.to_string()))
+            .collect();
+        assert!(labels.contains(&"workbench".to_string()));
+        assert!(labels.contains(&"orrery".to_string()));
+        assert!(labels.contains(&"apparatus".to_string()));
+    }
+
+    #[test]
+    fn split_nodes_carry_axis_and_ratio_in_description() {
+        let layout = fixture_three_pane_frame();
+        let tree = project_frame(&layout);
+        let split_descriptions: Vec<_> = tree
+            .nodes
+            .iter()
+            .filter_map(|(_, n)| n.description().map(|s| s.to_string()))
+            .collect();
+        assert!(
+            split_descriptions
+                .iter()
+                .any(|d| d.contains("Horizontal") && d.contains("0.60")),
+            "expected horizontal split with ratio 0.60, got {split_descriptions:?}"
+        );
+        assert!(
+            split_descriptions
+                .iter()
+                .any(|d| d.contains("Vertical") && d.contains("0.50"))
+        );
+    }
+
+    #[test]
+    fn ids_are_deterministic_across_runs() {
+        let layout = fixture_three_pane_frame();
+        let a = project_frame(&layout);
+        let b = project_frame(&layout);
+        assert_eq!(a.root, b.root);
+        let a_ids: Vec<_> = a.nodes.iter().map(|(id, _)| *id).collect();
+        let b_ids: Vec<_> = b.nodes.iter().map(|(id, _)| *id).collect();
+        assert_eq!(a_ids, b_ids);
+    }
+
+    #[test]
+    fn project_frame_with_attaches_subtree_to_matching_leaf() {
+        let layout = fixture_three_pane_frame();
+
+        let tree = project_frame_with(&layout, |content, _| match content {
+            PaneContent::Workbench => {
+                // Build a fresh subtree on each call so the closure can be
+                // FnMut without needing Clone on UxTree.
+                let mut sub_root = Node::new(Role::Group);
+                sub_root.set_label("workbench-content");
+                Some(UxTree {
+                    root: node_id_for_path("workbench-content-fixture"),
+                    nodes: vec![(node_id_for_path("workbench-content-fixture"), sub_root)],
+                })
+            }
+            _ => None,
+        });
+
+        assert!(
+            tree.nodes
+                .iter()
+                .any(|(_, n)| n.label() == Some("workbench-content")),
+            "expected attached workbench subtree to merge into frame"
+        );
+    }
+
+    #[test]
+    fn frame_layout_round_trips_through_serde() {
+        let layout = fixture_three_pane_frame();
+        let json = serde_json::to_string(&layout).expect("serialize");
+        let restored: FrameLayout = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(layout, restored);
+    }
+}

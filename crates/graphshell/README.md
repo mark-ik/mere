@@ -20,9 +20,9 @@ desktop, browser-extension, browser-tab/PWA, and mobile envelopes.
 
 - **Re-exports of the workspace-internal shell-substrate crates** (consumed
   inside the mere workspace; not separately published):
-  - `graphshell::core` ← `graphshell-core` — portable vocabulary + port-trait
+  - `graphshell::core` ← `mere-kernel` — portable vocabulary + port-trait
     definitions.
-  - `graphshell::runtime` ← `graphshell-runtime` — runtime + host-port
+  - `graphshell::runtime` ← `mere-host-contract` — runtime + host-port
     surface, frame projections, finalize-action plumbing.
   - `graphshell::memory` ← `graph-memory` — owner-scoped graph memory model.
   - `graphshell::tree` ← `graph-tree` — graphlet-native tile tree.
@@ -36,7 +36,7 @@ press-stack peers below; host adapters plug in from the side.
                             mere
                               │ composes
                               ▼
-       host adapters  ──→  graphshell  ──→  graphshell-core / -runtime
+       host adapters  ──→  graphshell  ──→  mere-kernel / -runtime
        (iced, gpui, …)         │            (workspace-internal substrate)
                 ┌──────────────┼──────────────┐
                 ▼              ▼              ▼

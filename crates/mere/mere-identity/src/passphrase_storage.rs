@@ -208,6 +208,7 @@ impl PassphraseEncryptedStorage {
     /// indistinguishable from a correct one — the file just appears
     /// empty. The first `save_profile` call commits the KEK to a
     /// decryption-checkable state.
+    #[tracing::instrument(level = "info", skip_all, name = "passphrase_storage.open")]
     pub fn open(path: impl Into<PathBuf>, passphrase: &[u8]) -> Result<Self, IdentityError> {
         let path: PathBuf = path.into();
         let (salt, kek, _existing) = if path.exists() {

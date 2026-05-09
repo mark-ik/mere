@@ -12,3 +12,9 @@ categories = ["web-programming", "rendering"]
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+inker = { path = "../inker" }
+pulldown-cmark = { version = "0.13", default-features = false }
+quick-xml = "0.39"
+tracing = "0.1"

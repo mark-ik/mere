@@ -100,8 +100,10 @@ impl BlobStore {
     }
 
     /// Put bytes into the store and return the BLAKE3 hash.
+    #[tracing::instrument(level = "debug", skip(self, bytes))]
     pub async fn put_bytes(&self, bytes: impl Into<Bytes>) -> Result<BlobHash, BlobError> {
         let bytes: Bytes = bytes.into();
+        let byte_count = bytes.len();
         let tag = self
             .store
             .blobs()
@@ -109,11 +111,14 @@ impl BlobStore {
             .with_tag()
             .await
             .map_err(|e| BlobError::Backend(format!("add_bytes: {e:?}")))?;
-        Ok(BlobHash(tag.hash))
+        let hash = BlobHash(tag.hash);
+        tracing::debug!(byte_count, ?hash, "blob stored");
+        Ok(hash)
     }
 
     /// Read all bytes for a hash. Errors if the blob is not in the
     /// local store.
+    #[tracing::instrument(level = "debug", skip(self), fields(?hash))]
     pub async fn get_bytes(&self, hash: BlobHash) -> Result<Bytes, BlobError> {
         // Existence check first → returns the right error variant for
         // a missing blob, instead of the generic backend error
@@ -129,6 +134,7 @@ impl BlobStore {
     }
 
     /// Whether the given hash is present in the local store.
+    #[tracing::instrument(level = "debug", skip(self), fields(?hash))]
     pub async fn has(&self, hash: BlobHash) -> Result<bool, BlobError> {
         self.store
             .blobs()
@@ -146,6 +152,11 @@ impl BlobStore {
     ///
     /// On success the bytes are persisted into this local store; you
     /// can then call [`get_bytes`](Self::get_bytes) on the same hash.
+    #[tracing::instrument(
+        level = "debug",
+        skip(self, transport),
+        fields(?peer, ?hash),
+    )]
     pub async fn fetch_from(
         &self,
         transport: &crate::IrohTransport,

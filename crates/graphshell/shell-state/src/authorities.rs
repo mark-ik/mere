@@ -38,8 +38,8 @@
 //! [`latch_ring`]: FocusAuthorityMut::latch_ring
 
 use crate::command_palette::{CommandPaletteSession, SearchPaletteScope};
-use graphshell_core::graph::NodeKey;
-use graphshell_core::time::PortableInstant;
+use mere_kernel::graph::NodeKey;
+use mere_kernel::time::PortableInstant;
 
 /// Host-facing mutation handle for graph-search session state.
 ///

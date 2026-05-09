@@ -14,7 +14,7 @@
 //! or host glue instead.
 
 use graph_canvas::scene::CanvasSceneInput;
-use graphshell_core::graph::{GraphViewId, NodeKey};
+use mere_kernel::graph::{GraphViewId, NodeKey};
 pub use platen::canvas_scene::{CanvasSceneOptions, graph_view_id_to_canvas};
 
 use super::{
@@ -91,9 +91,9 @@ mod tests {
 
     use graph_canvas::projection::{ProjectionMode, TwoPointFiveProjection, ViewDimension};
     use graph_canvas::scene::SceneMode;
-    use graphshell_core::geometry::PortablePoint;
-    use graphshell_core::graph::EdgeType;
-    use graphshell_core::pane::PaneId;
+    use mere_kernel::geometry::PortablePoint;
+    use mere_kernel::graph::EdgeType;
+    use mere_kernel::pane::PaneId;
     use uuid::Uuid;
 
     use super::*;

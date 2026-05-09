@@ -22,9 +22,18 @@ tries to align the molecules and let the light through.
 
 ## What's in the crate
 
-Pre-1.0 placeholder. Currently exposes only `VERSION` and `STAGE` constants.
-Concrete protocol viewers (Gemini parser, Gopher menu renderer, Markdown
-layout, feed reader, file viewer) land in subsequent slices.
+- **`markdown`** — `MarkdownEngine` implements [`inker::Engine`] for
+  CommonMark via [`pulldown-cmark`]. Engine ID: `nematic.markdown`. Parses
+  headings, paragraphs (with emphasis / strong / links / inline code / soft
+  and hard breaks), block quotes (recursive), ordered and unordered lists,
+  fenced and indented code blocks, horizontal rules. Image alt text is
+  preserved as plain text in v1; HTML, footnotes, tables, math, and metadata
+  blocks are dropped.
+
+Smolweb (gemini, gopher, spartan, finger), file, and feed (RSS/Atom) lanes
+follow the same shape and land in subsequent slices.
+
+[`pulldown-cmark`]: https://crates.io/crates/pulldown-cmark
 
 ## How it relates to other workspace crates
 
@@ -54,8 +63,8 @@ dispatches to for smolweb URI schemes; rendered output is presented through
 
 ## Status
 
-Pre-1.0. The crate name is reserved and the engine-ID slots are wired into
-inker's default policy. Implementation is in progress within the
+Pre-1.0. Markdown lane shipped; smolweb (gemini/gopher), file, and feed
+lanes pending. Implementation is in progress within the
 [mere workspace](https://github.com/mark-ik/mere).
 
 ## Fun Fact

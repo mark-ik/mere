@@ -9,7 +9,7 @@
 //! host. Renderer-scoped clip capture, diagnostics emission, focus restoration,
 //! and node creation remain outside this module.
 
-use graphshell_core::graph::{GraphViewId, NodeKey};
+use mere_kernel::graph::{GraphViewId, NodeKey};
 use serde::{Deserialize, Serialize};
 
 use super::{FrameId, GraphWorkspace};

@@ -24,7 +24,7 @@
 //!   built-in [`RecordingChannelSink`] to assert mapping; the
 //!   built-in [`NoopChannelSink`] is the default for environments
 //!   that don't yet have a registry wired.
-//! - **Avoid coupling `graphshell-core` to any host's internal
+//! - **Avoid coupling `mere-kernel` to any host's internal
 //!   registry types.** Hosts implement the trait against their
 //!   registry; nothing in core has to know that registry's shape.
 
@@ -269,8 +269,8 @@ impl DiagnosticsChannelSink for RecordingChannelSink {
 mod tests {
     use super::*;
     use crate::ux_observability::UxObservers;
-    use graphshell_core::actions::ActionId;
-    use graphshell_core::graph::NodeKey;
+    use mere_kernel::actions::ActionId;
+    use mere_kernel::graph::NodeKey;
     use std::sync::Arc;
 
     #[test]

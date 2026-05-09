@@ -13,7 +13,7 @@ test-utils = []
 path = "src/lib.rs"
 
 [dependencies]
-graphshell-core = { path = "../core" }
+mere-kernel = { path = "../../mere-kernel" }
 graph-tree = { path = "../../graph/graph-tree" }
 serde = { version = "1.0", features = ["derive"] }
 

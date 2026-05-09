@@ -570,7 +570,7 @@ version = "3.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "519bd3116aeeb42d5372c29d982d16d0170d3d4a5ed85fc7dd91642ffff3c67c"
 dependencies = [
- "darling 0.20.11",
+ "darling 0.23.0",
  "ident_case",
  "prettyplease",
  "proc-macro2",
@@ -1104,7 +1104,7 @@ dependencies = [
  "rayon",
  "safetensors 0.7.0",
  "thiserror 2.0.18",
- "tokenizers",
+ "tokenizers 0.22.2",
  "yoke",
  "zip 7.2.0",
 ]
@@ -3330,6 +3330,7 @@ dependencies = [
  "rhai",
  "serde",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -3360,9 +3361,9 @@ dependencies = [
  "graph-canvas",
  "graph-memory",
  "graph-tree",
- "graphshell-core",
- "graphshell-runtime",
  "inker",
+ "mere-host-contract",
+ "mere-kernel",
  "platen",
  "serde",
  "serde_json",
@@ -3371,65 +3372,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "graphshell-core"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "crossbeam-channel",
- "euclid",
- "futures-util",
- "graph-canvas",
- "graph-memory",
- "graph-tree",
- "infer",
- "mime_guess",
- "petgraph",
- "rkyv",
- "serde",
- "serde_json",
- "tempfile",
- "time",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "graphshell-host"
-version = "0.0.1"
-dependencies = [
- "graphshell-core",
- "verso-tile",
-]
-
-[[package]]
-name = "graphshell-host-iced"
-version = "0.0.1"
-dependencies = [
- "graphshell-core",
- "graphshell-runtime",
-]
-
-[[package]]
-name = "graphshell-runtime"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "graph-canvas",
- "graph-tree",
- "graphshell-core",
- "graphshell-shell-state",
- "log",
- "register-diagnostics",
- "tokio",
- "verso-tile",
-]
-
-[[package]]
 name = "graphshell-shell-state"
 version = "0.0.1"
 dependencies = [
  "graph-tree",
- "graphshell-core",
+ "mere-kernel",
  "serde",
  "serde_json",
 ]
@@ -3996,8 +3943,9 @@ checksum = "a257582fdcde896fd96463bf2d40eefea0580021c0712a0e2b028b60b47a837a"
 name = "inker"
 version = "0.0.1"
 dependencies = [
- "graphshell-core",
+ "mere-kernel",
  "serde",
+ "tracing",
  "verso-tile",
 ]
 
@@ -4017,6 +3965,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf64c2edc8226891a71f127587a2861b132d2b942310843814d5001d99a1d307"
 dependencies = [
  "smallvec",
+]
+
+[[package]]
+name = "intelligence-embeddings"
+version = "0.0.1"
+dependencies = [
+ "burn",
+ "eidetic",
+ "graph-canvas",
+ "safetensors 0.4.5",
+ "serde",
+ "serde_json",
+ "tokenizers 0.20.4",
 ]
 
 [[package]]
@@ -4347,6 +4308,24 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "itertools"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
+dependencies = [
+ "either",
+]
+
+[[package]]
+name = "itertools"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
 ]
 
 [[package]]
@@ -4755,6 +4734,51 @@ name = "mere"
 version = "0.0.1"
 
 [[package]]
+name = "mere-apparatus"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "tracing",
+ "uxtree",
+]
+
+[[package]]
+name = "mere-frame"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uxtree",
+]
+
+[[package]]
+name = "mere-gloss"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "inker",
+ "tracing",
+ "uxtree",
+]
+
+[[package]]
+name = "mere-host-contract"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "graph-canvas",
+ "graph-tree",
+ "graphshell-shell-state",
+ "log",
+ "mere-kernel",
+ "register-diagnostics",
+ "tokio",
+ "verso-tile",
+]
+
+[[package]]
 name = "mere-identity"
 version = "0.0.1"
 dependencies = [
@@ -4768,7 +4792,43 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
+ "tracing",
  "zeroize",
+]
+
+[[package]]
+name = "mere-kernel"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "crossbeam-channel",
+ "euclid",
+ "futures-util",
+ "graph-canvas",
+ "graph-memory",
+ "graph-tree",
+ "infer",
+ "mime_guess",
+ "petgraph",
+ "rkyv",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "time",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "mere-orrery"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "euclid",
+ "mere-kernel",
+ "tracing",
+ "uuid",
+ "uxtree",
 ]
 
 [[package]]
@@ -4783,6 +4843,20 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
+ "tracing",
+]
+
+[[package]]
+name = "mere-workbench"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "mere-kernel",
+ "platen",
+ "tracing",
+ "uuid",
+ "uxtree",
+ "verso-tile",
 ]
 
 [[package]]
@@ -5077,6 +5151,12 @@ dependencies = [
 [[package]]
 name = "nematic"
 version = "0.0.1"
+dependencies = [
+ "inker",
+ "pulldown-cmark",
+ "quick-xml",
+ "tracing",
+]
 
 [[package]]
 name = "nested_enum_utils"
@@ -5840,8 +5920,9 @@ name = "platen"
 version = "0.0.1"
 dependencies = [
  "graph-canvas",
- "graphshell-core",
+ "mere-kernel",
  "serde",
+ "tracing",
  "uuid",
  "verso-tile",
 ]
@@ -6135,6 +6216,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c3a14896dfa883796f1cb410461aef38810ea05f2b2c33c5aded3649095fdad"
+dependencies = [
+ "bitflags",
+ "memchr",
+ "unicase",
 ]
 
 [[package]]
@@ -6496,6 +6588,17 @@ checksum = "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d"
 dependencies = [
  "either",
  "rayon-core",
+]
+
+[[package]]
+name = "rayon-cond"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "059f538b55efd2309c9794130bc149c6a553db90e9d99c2030785c82f0bd7df9"
+dependencies = [
+ "either",
+ "itertools 0.11.0",
+ "rayon",
 ]
 
 [[package]]
@@ -7015,6 +7118,16 @@ name = "safetensors"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d93279b86b3de76f820a8854dd06cbc33cfa57a417b19c47f6a25280112fb1df"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "safetensors"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44560c11236a6130a46ce36c836a62936dc81ebf8c36a37947423571be0e55b6"
 dependencies = [
  "serde",
  "serde_json",
@@ -7836,6 +7949,37 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokenizers"
+version = "0.20.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3b08cc37428a476fc9e20ac850132a513a2e1ce32b6a31addf2b74fa7033b905"
+dependencies = [
+ "aho-corasick",
+ "derive_builder",
+ "esaxx-rs",
+ "getrandom 0.2.17",
+ "itertools 0.12.1",
+ "lazy_static",
+ "log",
+ "macro_rules_attribute",
+ "monostate",
+ "onig",
+ "paste",
+ "rand 0.8.6",
+ "rayon",
+ "rayon-cond 0.3.0",
+ "regex",
+ "regex-syntax",
+ "serde",
+ "serde_json",
+ "spm_precompiled",
+ "thiserror 1.0.69",
+ "unicode-normalization-alignments",
+ "unicode-segmentation",
+ "unicode_categories",
+]
+
+[[package]]
+name = "tokenizers"
 version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b238e22d44a15349529690fb07bd645cf58149a1b1e44d6cb5bd1641ff1a6223"
@@ -7855,7 +7999,7 @@ dependencies = [
  "paste",
  "rand 0.9.4",
  "rayon",
- "rayon-cond",
+ "rayon-cond 0.4.0",
  "regex",
  "regex-syntax",
  "serde",
@@ -8385,6 +8529,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "uxtree"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "inker",
+ "tracing",
+]
+
+[[package]]
 name = "v_frame"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8470,7 +8623,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "verso-tile"
 version = "0.0.1"
 dependencies = [
- "graphshell-core",
+ "mere-kernel",
  "serde",
 ]
 

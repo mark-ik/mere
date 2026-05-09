@@ -131,6 +131,7 @@ impl GraphPhysicsExtensionConfig {
 /// Pure-data → pure-data: copies the four tuning coefficients onto
 /// the corresponding force-directed-state fields. The state's other
 /// fields (k_scale, dt, max_step) are independent and unchanged.
+#[tracing::instrument(level = "debug", skip(state, tuning))]
 pub fn apply_graph_physics_tuning(state: &mut ForceDirectedState, tuning: GraphPhysicsTuning) {
     state.c_repulse = tuning.repulsion_strength;
     state.c_attract = tuning.attraction_strength;

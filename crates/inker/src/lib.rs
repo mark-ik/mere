@@ -23,6 +23,17 @@
 /// Host-neutral engine routing contracts.
 pub mod routing;
 
+/// Portable document model — what engines produce.
+pub mod document;
+
+/// Engine trait and registry.
+pub mod engine;
+
+pub use document::{
+    DocumentBlock, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, EngineDocument,
+    InlineSpan, inline_text,
+};
+pub use engine::{Engine, EngineError, EngineInput, EngineRegistry};
 pub use routing::{
     EngineRouteDecision, EngineRoutePolicy, EngineRouteRequest, EngineRouteRule, SurfaceContract,
     SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId,

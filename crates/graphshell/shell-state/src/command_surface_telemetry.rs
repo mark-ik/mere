@@ -12,7 +12,7 @@
 //! - M4 slice 6 (2026-04-22) removed the `OnceLock<CommandSurfaceTelemetry>`
 //!   crate-global and made production call sites take a
 //!   `&CommandSurfaceTelemetry` reference.
-//! - M4 slice 10 (2026-04-22) moved the whole module to graphshell-core
+//! - M4 slice 10 (2026-04-22) moved the whole module to mere-kernel
 //!   once its data-shape dependencies (`PaneId`,
 //!   `ToolSurfaceReturnTarget`) became portable. Confirmed empirically
 //!   that `std::sync::Mutex` compiles to `wasm32-unknown-unknown`
@@ -25,8 +25,8 @@
 use std::sync::Mutex;
 
 use crate::routing::ToolSurfaceReturnTarget;
-use graphshell_core::graph::NodeKey;
-use graphshell_core::pane::PaneId;
+use mere_kernel::graph::NodeKey;
+use mere_kernel::pane::PaneId;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CommandBarSemanticMetadata {

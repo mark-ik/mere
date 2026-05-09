@@ -10,7 +10,7 @@
 //! or mutating application state.
 //!
 //! Sibling crates:
-//! - `graphshell-core` — portable graph data model (graph truth)
+//! - `mere-kernel` — portable graph data model (graph truth)
 //! - `graph-tree` — framework-agnostic workbench/navigator tree and layout
 
 pub mod backend;

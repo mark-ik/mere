@@ -5,11 +5,11 @@
 //! Pure graph-runtime reducer slice for `GraphWorkspace`.
 //!
 //! This is the first portable subset of the donor `graph_runtime` seam. It
-//! applies durable node-level graph changes through `graphshell-core::graph`
+//! applies durable node-level graph changes through `mere-kernel::graph`
 //! APIs and emits mutation-journal effects for services to persist later.
 
-use graphshell_core::geometry::PortablePoint;
-use graphshell_core::graph::NodeKey;
+use mere_kernel::geometry::PortablePoint;
+use mere_kernel::graph::NodeKey;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -181,7 +181,7 @@ pub fn reduce_graph_runtime_intent(
 
 #[cfg(test)]
 mod tests {
-    use graphshell_core::geometry::PortablePoint;
+    use mere_kernel::geometry::PortablePoint;
 
     use super::*;
     use crate::app_state::{MutationPayload, WorkspaceEffect};

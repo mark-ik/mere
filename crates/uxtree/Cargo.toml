@@ -1,0 +1,19 @@
+[package]
+name = "uxtree"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Portable a11y / automation tree for the Mere browser — projects mere structural elements into AccessKit nodes."
+documentation = "https://docs.rs/uxtree"
+readme = "README.md"
+keywords = ["accessibility", "a11y", "accesskit", "automation", "tree"]
+categories = ["accessibility"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+accesskit = "0.24"
+inker = { path = "../inker" }
+tracing = "0.1"
