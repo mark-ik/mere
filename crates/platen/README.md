@@ -21,6 +21,13 @@ the workbench is arranged) and presses that knowledge into renderable form.
   - `graph_view_id_to_canvas()` — utility to map `GraphViewId` to the
     canvas's `ViewId`.
 
+- **`document_scene`** — engine-document-to-canvas wrapper. Pairs an
+  `inker::EngineDocument` with a viewport + `StyleConfig` and runs
+  `document_canvas::layout_document` to produce a `DocumentRenderPacket`.
+  The two scene helpers (canvas + document) are siblings in the
+  canvas-swatches taxonomy: the workbench composer can place a graph
+  swatch in one pane and a document swatch in another.
+
 - **`workbench`** — frame / pane model and selectors over reducer-owned
   state.
   - **Frame model**: `FrameId`, `FrameState`, `PaneBinding`, `ProjectedPane`,
@@ -72,6 +79,10 @@ surface placements) that downstream layers consume.
   `canvas_scene::build_canvas_scene_input()` returns
   `graph_canvas::scene::CanvasSceneInput<NodeKey>`; the canvas crate handles
   drawing.
+- [`document-canvas`](https://crates.io/crates/document-canvas) —
+  `document_scene` wraps `document_canvas::layout_document` so platen can
+  hand a `DocumentRenderPacket` to a netrender / gpui consumer with the
+  same shape as a graph-canvas scene.
 - **`mere-kernel`** (workspace-internal) — platen consumes the portable
   graph (`Graph`, `GraphViewId`, `NodeKey`) and pane (`PaneId`) types.
 

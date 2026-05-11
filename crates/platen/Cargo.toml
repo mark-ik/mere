@@ -14,7 +14,10 @@ categories = ["gui"]
 path = "src/lib.rs"
 
 [dependencies]
+cartography = { path = "../cartography", features = ["graph-canvas-adapters"] }
 graph-canvas = { path = "../graph/graph-canvas" }
+document-canvas = { path = "../document/document-canvas" }
+inker = { path = "../inker" }
 mere-kernel = { path = "../mere-kernel" }
 serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
