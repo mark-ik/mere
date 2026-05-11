@@ -56,7 +56,7 @@ mod expand;
 #[cfg(test)]
 mod tests;
 
-pub use expand::build_clip_knot;
+pub use expand::{build_clip_knot, build_clip_knot_with_block_provenance};
 
 /// Stable engine identifier.
 pub const ENGINE_ID: &str = "nematic.knot";

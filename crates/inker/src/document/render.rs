@@ -10,7 +10,7 @@
 //! and surfaces inline links as separate `=> url label` lines after the
 //! paragraph, matching gemtext's link-line model.
 
-use super::{DocumentBlock, EngineDocument, InlineSpan, inline_text};
+use super::{DocumentBlock, DocumentTrustState, EngineDocument, InlineSpan, inline_text};
 
 impl EngineDocument {
     /// Render the document as CommonMark.
@@ -36,19 +36,82 @@ impl EngineDocument {
         out
     }
 
-    /// Render the document as a knot body (CommonMark + protocol fences).
+    /// Render the document as a knot file (frontmatter + body).
     ///
-    /// Structural blocks (Heading / Paragraph / List / Quote / etc.)
-    /// render as standard CommonMark, same as [`Self::to_markdown`].
-    /// Semantic block variants (`FeedHeader`, `FeedEntry`, `MetadataRow`,
-    /// `Badge`) render as fenced code blocks with their protocol language
-    /// tag, so they round-trip through `nematic::KnotEngine` losslessly.
+    /// Frontmatter is written when the document has any of: a title,
+    /// `provenance.canonical_uri` / `fetched_at` / `source_label`, or a
+    /// non-`Unknown` trust state. The body is the same shape as
+    /// `to_markdown()` for structural blocks, with semantic variants
+    /// (`FeedHeader`, `FeedEntry`, `MetadataRow`, `Badge`) rendered as
+    /// fenced code blocks with their protocol language tag — so they
+    /// round-trip through `nematic::KnotEngine`'s polyglot fence
+    /// expansion without losing semantic intent.
+    ///
+    /// Round-trip: `parse → to_knot → parse → equivalent document` for
+    /// the document-level metadata + every structural and semantic block.
+    /// `note_kind` and `tags` MetadataRow blocks are NOT re-extracted
+    /// to frontmatter on re-render — they stay as MetadataRow blocks in
+    /// the body, preserving their content but shifting their storage
+    /// location. (Asymmetry by design; the reverse-extraction would be
+    /// fragile against user-authored MetadataRows that happen to use
+    /// `kind` / `tags` labels.)
     pub fn to_knot(&self) -> String {
         let mut out = String::new();
-        for block in &self.blocks {
-            block.write_knot(&mut out);
+        if self.has_frontmatter_content() {
+            self.write_knot_frontmatter(&mut out);
         }
+        self.write_knot_body(&mut out);
         out
+    }
+
+    /// Append the knot body (blocks only — no frontmatter) to `out`.
+    ///
+    /// Companion to [`Self::to_knot`] for callers that emit their own
+    /// frontmatter and just want the rendered block stream. Used by
+    /// `nematic::knot::build_clip_knot` so the clip-aware frontmatter
+    /// (which carries `note_kind` and other knot-format extensions
+    /// outside [`EngineDocument`]'s shape) isn't doubled by the
+    /// document-level frontmatter `to_knot` would otherwise emit.
+    pub fn write_knot_body(&self, out: &mut String) {
+        for block in &self.blocks {
+            block.write_knot(out);
+        }
+    }
+
+    /// True when [`Self::to_knot`] should emit a frontmatter block.
+    fn has_frontmatter_content(&self) -> bool {
+        self.title.is_some()
+            || self.provenance.canonical_uri.is_some()
+            || self.provenance.fetched_at.is_some()
+            || self.provenance.source_label.is_some()
+            || !matches!(self.trust, DocumentTrustState::Unknown)
+    }
+
+    fn write_knot_frontmatter(&self, out: &mut String) {
+        out.push_str("---\n");
+        if let Some(title) = &self.title {
+            out.push_str(&format!("title: {title}\n"));
+        }
+        if let Some(source) = &self.provenance.canonical_uri {
+            out.push_str(&format!("source: {source}\n"));
+        }
+        if let Some(captured) = &self.provenance.fetched_at {
+            out.push_str(&format!("captured: {captured}\n"));
+        }
+        if let Some(label) = &self.provenance.source_label {
+            out.push_str(&format!("source_label: {label}\n"));
+        }
+        let trust_str = match self.trust {
+            DocumentTrustState::Trusted => Some("trusted"),
+            DocumentTrustState::Tofu => Some("tofu"),
+            DocumentTrustState::Insecure => Some("insecure"),
+            DocumentTrustState::Broken => Some("broken"),
+            DocumentTrustState::Unknown => None,
+        };
+        if let Some(s) = trust_str {
+            out.push_str(&format!("trust: {s}\n"));
+        }
+        out.push_str("---\n\n");
     }
 }
 
@@ -469,88 +532,6 @@ fn collect_link_targets(span: &InlineSpan, out: &mut Vec<(String, String)>) {
     }
 }
 
+// Tests live in `render/tests.rs` to keep this file under the 600-LOC ceiling.
 #[cfg(test)]
-mod tests {
-    use super::super::{
-        DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
-    };
-
-    fn doc(blocks: Vec<DocumentBlock>) -> EngineDocument {
-        EngineDocument {
-            address: "doc:1".into(),
-            title: None,
-            content_type: "text/plain".into(),
-            lang: None,
-            provenance: DocumentProvenance::default(),
-            trust: DocumentTrustState::Unknown,
-            diagnostics: Vec::new(),
-            blocks,
-        }
-    }
-
-    #[test]
-    fn to_markdown_renders_heading_paragraph_and_link() {
-        let document = doc(vec![
-            DocumentBlock::Heading {
-                level: 1,
-                spans: vec![InlineSpan::Text("Hello".into())],
-            },
-            DocumentBlock::Paragraph {
-                spans: vec![
-                    InlineSpan::Text("see ".into()),
-                    InlineSpan::Link {
-                        url: "https://x.test/".into(),
-                        title: None,
-                        spans: vec![InlineSpan::Text("docs".into())],
-                    },
-                ],
-            },
-        ]);
-        let md = document.to_markdown();
-        assert!(md.contains("# Hello"));
-        assert!(md.contains("[docs](https://x.test/)"));
-    }
-
-    #[test]
-    fn to_gemini_renders_paragraph_with_link_lines() {
-        let document = doc(vec![DocumentBlock::Paragraph {
-            spans: vec![
-                InlineSpan::Text("see ".into()),
-                InlineSpan::Link {
-                    url: "https://x.test/".into(),
-                    title: None,
-                    spans: vec![InlineSpan::Text("docs".into())],
-                },
-                InlineSpan::Text(" please".into()),
-            ],
-        }]);
-        let gem = document.to_gemini();
-        assert!(gem.contains("see docs please\n"));
-        assert!(gem.contains("=> https://x.test/ docs\n"));
-    }
-
-    #[test]
-    fn to_markdown_renders_feed_entry_as_h2_block() {
-        let document = doc(vec![DocumentBlock::FeedEntry {
-            title: "Title".into(),
-            date: Some("2026-05-08".into()),
-            summary: Some("Summary text.".into()),
-            article_url: Some("https://feed.test/x".into()),
-            source_url: None,
-        }]);
-        let md = document.to_markdown();
-        assert!(md.contains("## Title"));
-        assert!(md.contains("*2026-05-08*"));
-        assert!(md.contains("Summary text."));
-        assert!(md.contains("[Open article](https://feed.test/x)"));
-    }
-
-    #[test]
-    fn to_gemini_renders_metadata_row_as_label_value() {
-        let document = doc(vec![DocumentBlock::MetadataRow {
-            label: "Login".into(),
-            value: "alice".into(),
-        }]);
-        assert_eq!(document.to_gemini(), "Login: alice\n");
-    }
-}
+mod tests;

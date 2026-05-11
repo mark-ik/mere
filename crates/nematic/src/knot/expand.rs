@@ -15,7 +15,8 @@
 use std::mem;
 
 use inker::{
-    DocumentBlock, DocumentProvenance, DocumentTrustState, Engine, EngineInput, InlineSpan,
+    BlockProvenanceMap, DocumentBlock, DocumentProvenance, DocumentTrustState, Engine,
+    EngineInput, InlineSpan,
 };
 
 use crate::{GemtextEngine, GopherEngine, NexEngine};
@@ -456,6 +457,48 @@ pub fn build_clip_knot(
     trust: DocumentTrustState,
     note_kind: Option<&str>,
 ) -> String {
+    build_clip_knot_inner(blocks, source, trust, note_kind, None)
+}
+
+/// Like [`build_clip_knot`], but additionally records per-block
+/// provenance overrides into a `block_sources:` frontmatter list.
+///
+/// Use when the clipped blocks came from heterogeneous sources — e.g.
+/// a clip composer that glues paragraphs from several documents into
+/// one knot. The `block_provenance` sidecar (see
+/// [`BlockProvenanceMap`]) maps block-index → override; only indices
+/// whose `canonical_uri` differs from `source.canonical_uri` are
+/// emitted (single-source documents emit no list at all).
+///
+/// The frontmatter shape:
+///
+/// ```text
+/// block_sources: ["<index>|<uri>[|<anchor>]", ...]
+/// ```
+///
+/// Round-trip: the knot engine's frontmatter parser will surface this
+/// list as a `block_sources` MetadataRow on re-render — full
+/// per-block-provenance restoration through the engine is gated on a
+/// concrete consumer (intelligence-embeddings cross-source matching,
+/// citation overlays). The producer side documents the shape so
+/// downstream consumers can read it directly.
+pub fn build_clip_knot_with_block_provenance(
+    blocks: &[DocumentBlock],
+    source: &DocumentProvenance,
+    trust: DocumentTrustState,
+    note_kind: Option<&str>,
+    block_provenance: &BlockProvenanceMap,
+) -> String {
+    build_clip_knot_inner(blocks, source, trust, note_kind, Some(block_provenance))
+}
+
+fn build_clip_knot_inner(
+    blocks: &[DocumentBlock],
+    source: &DocumentProvenance,
+    trust: DocumentTrustState,
+    note_kind: Option<&str>,
+    block_provenance: Option<&BlockProvenanceMap>,
+) -> String {
     use inker::EngineDocument;
 
     let mut out = String::new();
@@ -476,9 +519,27 @@ pub fn build_clip_knot(
     if let Some(kind) = note_kind {
         out.push_str(&format!("note_kind: {kind}\n"));
     }
+    if let Some(map) = block_provenance {
+        let entries = collect_block_source_entries(map, source);
+        if !entries.is_empty() {
+            out.push_str("block_sources: [");
+            for (i, entry) in entries.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                out.push('"');
+                out.push_str(entry);
+                out.push('"');
+            }
+            out.push_str("]\n");
+        }
+    }
     out.push_str("---\n\n");
 
-    // Use to_knot for the body so semantic blocks render as fences.
+    // Use write_knot_body for the body so semantic blocks render as
+    // fences. Calling to_knot() here would double the frontmatter
+    // because the document-level frontmatter overlaps the clip-aware
+    // frontmatter we just wrote.
     let document = EngineDocument {
         address: source
             .canonical_uri
@@ -492,8 +553,40 @@ pub fn build_clip_knot(
         diagnostics: Vec::new(),
         blocks: blocks.to_vec(),
     };
-    out.push_str(&document.to_knot());
+    document.write_knot_body(&mut out);
     out
+}
+
+/// Collect the per-block source overrides that differ from the
+/// document-level source, encoded as `"<index>|<uri>[|<anchor>]"`
+/// strings ready to drop into the `block_sources:` frontmatter list.
+///
+/// Entries are emitted in ascending index order so a downstream
+/// consumer parsing the list gets stable, deterministic output.
+fn collect_block_source_entries(
+    map: &BlockProvenanceMap,
+    document_source: &DocumentProvenance,
+) -> Vec<String> {
+    let mut entries: Vec<(usize, String)> = map
+        .iter()
+        .filter_map(|(index, block_prov)| {
+            // Skip entries that match the document-level source with no
+            // anchor — no real override, no list line.
+            let same_uri =
+                block_prov.provenance.canonical_uri == document_source.canonical_uri;
+            if same_uri && block_prov.anchor.is_none() {
+                return None;
+            }
+            let uri = block_prov.provenance.canonical_uri.as_deref()?;
+            let encoded = match block_prov.anchor.as_deref() {
+                Some(anchor) => format!("{index}|{uri}|{anchor}"),
+                None => format!("{index}|{uri}"),
+            };
+            Some((index, encoded))
+        })
+        .collect();
+    entries.sort_by_key(|(i, _)| *i);
+    entries.into_iter().map(|(_, s)| s).collect()
 }
 
 fn trust_to_string(trust: DocumentTrustState) -> &'static str {

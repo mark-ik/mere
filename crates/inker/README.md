@@ -18,40 +18,91 @@ ready to ink the platen.
 
 ## What's in the crate
 
-- **`engine`** — the engine trait, document model, and registry.
-  - `Engine` trait — concrete content engines implement
-    `engine_id() -> &str` and `render(&EngineInput) -> Result<EngineDocument,
-    EngineError>`. Implementations live in protocol-specific crates
-    (`nematic` for markdown / smolweb / file lanes; `serval` for full web).
-  - `EngineDocument` / `DocumentBlock` / `InlineSpan` — portable,
-    serializable, host-neutral document model. No layout coordinates;
-    `platen` adds those once a real surface is bound.
-  - `EngineInput` — already-fetched content. Network and disk I/O are the
-    host's job, not the engine's; this keeps engines portable to wasm32
-    targets.
-  - `EngineRegistry` — engine ID → instance dispatch. Pair with
-    `EngineRoutePolicy` to go from address → decision → registered engine →
-    rendered document.
+- **`document`** — the portable document model engines produce.
+  - `EngineDocument` carrying `address`, `title`, `content_type`, `lang`
+    (BCP 47), `provenance` (`source_kind` / `canonical_uri` / `fetched_at`
+    / `source_label`), `trust` (`Trusted` / `Tofu` / `Insecure` / `Broken`
+    / `Unknown`), `diagnostics` (`UnsupportedConstruct` / `DegradedRendering`
+    / `ParseWarning` / `RawSourceFallback`), and `blocks`.
+  - `DocumentBlock` variants — structural (`Heading`, `Paragraph`,
+    `CodeBlock`, `Quote`, `List`, `Image`, `Preformatted`, `Rule`) plus
+    semantic (`FeedHeader`, `FeedEntry`, `MetadataRow`, `Badge`). Each
+    documents an AccessKit role; `uxtree` projects them into a real
+    `TreeUpdate`.
+  - `InlineSpan` (Text / Code / Emphasis / Strong / Link / SoftBreak /
+    LineBreak), `inline_text` flattening helper, `outgoing_links` walker
+    (covers structural inline links + semantic-block URL fields).
+  - **Round-trip rendering** in `document::render` (`impl EngineDocument`):
+    `to_markdown()`, `to_gemini()`, `to_knot()`. Knot rendering emits
+    semantic blocks as fenced code blocks with their language tag so they
+    round-trip through `nematic::KnotEngine`'s polyglot parser; `to_knot()`
+    additionally emits a YAML frontmatter block when the document carries
+    a `title`, any non-default provenance field, or a known trust state.
+  - **Per-block provenance** — `BlockProvenance` + `BlockProvenanceMap`
+    sidecar in `document::block_provenance` for documents whose blocks
+    came from heterogeneous sources (clips, federated feed merges,
+    citation overlays). Sparse: lookup falls back to the document-level
+    provenance when no per-block override is recorded, so single-source
+    documents pay nothing.
+- **`engine`** — the engine trait, input/error vocabulary, and registry.
+  - `Engine` trait — `engine_id() -> &str` and
+    `render(&EngineInput) -> Result<EngineDocument, EngineError>`.
+    Implementations live in protocol-specific crates (`nematic` ships 12;
+    `serval` for full web).
+  - `EngineInput` — already-fetched content with optional `content_type`.
+    Network / disk I/O is the host's job; engines stay wasm32-portable.
+  - `EngineRegistry` — engine ID → instance dispatch with `register`,
+    `engine`, `contains`, `engine_ids`, and `dispatch` (which honors the
+    decision's `engine_id` and emits a `tracing::warn` if the engine is
+    unregistered).
   - `EngineError` — owned error vocabulary (`EngineNotFound`,
     `Unsupported`, `InvalidContent`, `NotFound`, `Io`, `Network`).
-- **`routing`** — the route-decision vocabulary and default policy.
-  - `EngineRouteRequest` / `EngineRouteDecision` — input / output types.
-  - `WorkspaceRouteId` — opaque workspace identity carried with each request.
-  - `EngineRoutePolicy` + `EngineRouteRule` — pluggable rule set with a
-    fallback. Today's rules are scheme-based (one engine per scheme); richer
-    selection (availability filtering, content-type, per-domain / per-node
-    user preference) lands behind this same vocabulary.
+- **`routing`** — the route-decision vocabulary, default policy, and the
+  full priority chain.
+  - `EngineRouteRequest` carries `workspace_id`, `view`, `node`, `address`,
+    optional `content_type` (server-claimed MIME), and optional
+    `pinned_engine` (per-node engine pin — most authoritative signal).
+  - `EngineRouteDecision` — `engine_id` + `SurfaceContract`.
+  - `EngineRoutePolicy` — rules vector, fallback rule, plus
+    `per_host_overrides: HashMap<String, String>` mapping a
+    case-insensitive host to an engine ID.
+  - `EngineRouteRule` — schemes + content_types + engine_id + mode. Build
+    scheme rules with `EngineRouteRule::new(...)`; build content-type rules
+    with `EngineRouteRule::content_type(...)`.
+  - **Priority chain (in `route_filtered`)**: pin → content-type → per-host
+    → scheme → fallback, all gated by an availability filter (typically
+    `|id| registry.contains(id)`). Every step skips engines the filter
+    rejects, falling through to the next.
   - `SurfaceContract` / `SurfaceContractMode` — host-neutral handoff
     (`CompositedTexture`, `NativeOverlay`, `EmbeddedHost`, `Headless`).
-  - `address_scheme()` — utility to extract a scheme from a URI.
-- **Engine ID constants**: `ENGINE_SERVAL_WEB`, `ENGINE_NEMATIC_SMOLWEB`,
-  `ENGINE_NEMATIC_FILE`, `ENGINE_GRAPHSHELL_INTERNAL`,
-  `ENGINE_EXTERNAL_PROTOCOL`.
-- **Default policy routing** (the current single-engine-per-scheme slice):
-  `http`/`https` → Serval; smolweb schemes (`gemini`, `gopher`, `finger`,
-  `spartan`) → nematic; `file` → nematic file viewer; internal schemes
-  (`about`, `graphshell`, `mere`) → headless internal; everything else →
-  headless external-protocol handoff (unknown schemes never get guessed at).
+  - Helpers: `address_scheme()`, `host_from_address()`.
+- **`sniff`** — best-effort content-type sniffing for unlabelled byte
+  streams (file://, gopher item-1, finger replies, drag-and-drop,
+  on-disk knot files). `sniff_content_type(bytes) -> Option<&'static str>`
+  matches PNG / JPEG / GIF / WebP / SVG signatures, XML / HTML / Atom /
+  RSS roots, knot frontmatter, gemtext link lines, markdown markers, and
+  falls through to `text/plain` when the head window has no NUL bytes.
+  Reads at most the first 1 KiB.
+- **Engine ID constants**: `ENGINE_SERVAL_WEB`, `ENGINE_NEMATIC_FEED`,
+  `ENGINE_NEMATIC_FILE`, `ENGINE_NEMATIC_FINGER`, `ENGINE_NEMATIC_GEMTEXT`,
+  `ENGINE_NEMATIC_GOPHER`, `ENGINE_NEMATIC_GUPPY`, `ENGINE_NEMATIC_KNOT`,
+  `ENGINE_NEMATIC_MARKDOWN`, `ENGINE_NEMATIC_MISFIN`, `ENGINE_NEMATIC_NEX`,
+  `ENGINE_NEMATIC_SCROLL`, `ENGINE_NEMATIC_TEXT`, `ENGINE_NEMATIC_SMOLWEB`
+  (umbrella, kept for back-compat — no protocol routes to it any more),
+  `ENGINE_GRAPHSHELL_INTERNAL`, `ENGINE_EXTERNAL_PROTOCOL`.
+- **Default policy** (full set):
+  - Scheme rules: `http`/`https` → Serval; `gemini`/`spartan` →
+    `nematic.gemtext`; `gopher` → `nematic.gopher`; `finger` →
+    `nematic.finger`; `scroll` → `nematic.scroll`; `misfin` →
+    `nematic.misfin`; `nex` → `nematic.nex`; `guppy` → `nematic.guppy`;
+    `file` → `nematic.file`; internal schemes (`about`, `graphshell`,
+    `mere`) → headless internal; everything else → headless
+    external-protocol fallback.
+  - Content-type rules (win over scheme): `text/markdown` /
+    `text/x-markdown` → `nematic.markdown`; `text/gemini` →
+    `nematic.gemtext`; `text/plain` → `nematic.text`; `application/rss+xml`
+    / `application/atom+xml` / `application/feed+xml` → `nematic.feed`;
+    `text/x-knot` / `application/x-knot` → `nematic.knot`.
 
 ## How it relates to other workspace crates
 
@@ -81,28 +132,46 @@ inker hands back.
 - [`verso-tile`](https://crates.io/crates/verso-tile) — `SurfaceContract.target`
   is `verso_tile::SurfaceTargetId`, re-exported through `inker::routing` for
   convenience.
-- [`nematic`](https://crates.io/crates/nematic) — implements concrete
-  `Engine`s for markdown, smolweb (gemini/gopher), and file lanes; engine
-  IDs `nematic.markdown`, `nematic.smolweb`, `nematic.file`. Hosts register
-  these with `EngineRegistry` and dispatch through the registry.
+- [`nematic`](https://crates.io/crates/nematic) — implements 12 concrete
+  `Engine`s: `markdown`, `gemtext`, `gopher`, `feed`, `text`, `file`,
+  `finger`, `knot`, `scroll`, `misfin`, `nex`, `guppy`. Hosts register them
+  in one call via `nematic::engines()` and dispatch through the registry.
+- [`uxtree`](https://crates.io/crates/uxtree) — projects `EngineDocument`
+  into an AccessKit `TreeUpdate` for OS a11y APIs and inspector overlays;
+  every `DocumentBlock` and `InlineSpan` variant maps to an AccessKit role.
 - **Serval** (Servo/wgpu fork) — referenced by engine ID `serval.web`; lives
-  outside the mere workspace.
+  outside the mere workspace. The future "three-head Hekate" mode (smolweb
+  extract / middlenet / fullweb negotiator for the same HTML input) is
+  Serval's evolution; nematic explicitly does not own an HTML reader-mode
+  engine.
 - **Wry** (system webview, third-party) — available as an alternative engine;
-  not in the default policy but a custom `EngineRouteRule` can target it.
+  not in the default policy but a custom `EngineRouteRule` (or per-host
+  override / per-node pin) can target it.
 
 ## Status
 
-Pre-1.0. The route-decision vocabulary and default scheme policy are in
-place. Planned expansions, in roughly the order they'll matter:
+Pre-1.0 but feature-complete for the engine-controller layer:
 
-- **Engine availability filtering** — drop candidates whose engine isn't
-  built / installed on this host before applying preference.
-- **Multi-engine arbitration** — when both Wry and Serval can serve `https`,
-  pick by user preference (default + per-domain / per-node override).
-- **Content-type / MIME dispatch** — route by Content-Type once the response
-  is known, not just by URI scheme.
-- **Per-node engine pinning** — let the user lock a specific node to a
-  specific engine.
+- ✓ Engine trait + registry + dispatch
+- ✓ Portable document model with provenance / trust / diagnostics
+- ✓ Round-trip rendering (markdown / gemini / knot)
+- ✓ Engine availability filtering (`route_filtered` skips unregistered engines)
+- ✓ Content-type / MIME dispatch (server-claimed type wins over scheme)
+- ✓ Per-domain / per-host overrides (user preference at host granularity)
+- ✓ Per-node engine pinning (most authoritative signal)
+- ✓ 12-engine default policy with full nematic coverage
+- ✓ Content-type sniffing for unlabelled byte streams (`sniff` module)
+- ✓ Per-block provenance sidecar
+- ✓ Knot frontmatter round-trip
+
+Planned expansions left:
+
+- **Pinned-engine surface mode lookup** — currently defaults
+  `CompositedTexture`; should consult the engine's preferred mode for
+  pinned routes targeting headless engines.
+- **Serval "head" preference** — when Serval becomes the three-head
+  negotiator, route decisions may need to carry a "preferred head"
+  (smolweb extract / middlenet / fullweb) along with the `engine_id`.
 
 ## License
 

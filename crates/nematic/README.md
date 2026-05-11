@@ -6,9 +6,12 @@ protocols where layout cost is minimal and the document is mostly text:
 Gemini, Gopher, Spartan, Finger, plain text, Markdown, static-HTML files,
 RSS/Atom feeds, and local files.
 
-For fullweb rendering (CSS, JS, embedded media), mere routes through a
-serval, a system webview, or nematic can attempt to simplify well-structured
-fullweb content into a reader mode presentation.
+For fullweb rendering (CSS, JS, embedded media), mere routes through Serval
+(the Servo/wgpu fork) or a system webview. **Nematic does not own an HTML
+reader-mode lane** — that's Serval's future "three-head Hekate" mode
+(smolweb extract / middlenet / fullweb negotiator for the same HTML input).
+Nematic stays for protocols whose grammar the engine can fully parse
+natively.
 
 ## Naming
 
@@ -20,18 +23,95 @@ nematic crystals coherently, and that's the basis of LCDs.
 If the web is a lenticular soup of pixels, then nematic is the engine that
 tries to align the molecules and let the light through.
 
-## What's in the crate
+## Engines
 
-- **`markdown`** — `MarkdownEngine` implements [`inker::Engine`] for
-  CommonMark via [`pulldown-cmark`]. Engine ID: `nematic.markdown`. Parses
-  headings, paragraphs (with emphasis / strong / links / inline code / soft
-  and hard breaks), block quotes (recursive), ordered and unordered lists,
-  fenced and indented code blocks, horizontal rules. Image alt text is
-  preserved as plain text in v1; HTML, footnotes, tables, math, and metadata
-  blocks are dropped.
+Twelve concrete `inker::Engine` implementations, each spec-faithful to its
+source format. Use [`engines()`](src/lib.rs) to register all twelve in one
+call.
 
-Smolweb (gemini, gopher, spartan, finger), file, and feed (RSS/Atom) lanes
-follow the same shape and land in subsequent slices.
+| Engine | ID | Module | Notes |
+| --- | --- | --- | --- |
+| Markdown | `nematic.markdown` | [`markdown`](src/markdown.rs) | CommonMark via [`pulldown-cmark`] |
+| Gemtext | `nematic.gemtext` | [`gemtext`](src/gemtext.rs) | Gemini's `text/gemini` line-oriented format |
+| Gopher | `nematic.gopher` | [`gopher`](src/gopher.rs) | RFC 1436 menu parser; synthesised `gopher://` URLs per RFC 4266 |
+| Feed | `nematic.feed` | [`feed`](src/feed.rs) | RSS 2.0 + Atom 1.0 via `quick-xml`; emits `FeedHeader` + `FeedEntry` semantic blocks |
+| Text | `nematic.text` | [`text`](src/text.rs) | Plain text with paragraph splitting |
+| File | `nematic.file` | [`file`](src/file.rs) | Extension-based dispatch for `file://` content (`.md`/`.gmi`/`.gophermap`/`.xml`/`.knot`/…) |
+| Finger | `nematic.finger` | [`finger`](src/finger.rs) | RFC 1288 finger responses; tags `text/x-finger` |
+| Knot | `nematic.knot` | [`knot`](src/knot.rs) | Mere's native note / clip format (frontmatter + polyglot markdown) |
+| Scroll | `nematic.scroll` | [`scroll`](src/scroll.rs) | scroll.mozz.us body engine; delegates to gemtext or markdown by content-type |
+| Misfin | `nematic.misfin` | [`misfin`](src/misfin.rs) | misfin.org gemini-style mail body |
+| Nex | `nematic.nex` | [`nex`](src/nex.rs) | Nex directory listings + plain text content |
+| Guppy | `nematic.guppy` | [`guppy`](src/guppy.rs) | UDP-smolweb body (gemtext shape) |
+
+All engines populate `EngineDocument.provenance` with their own engine ID
+and the request address; trust state defaults to `Unknown` (the host
+overrides after transport verification).
+
+## Knot: the native note / clip format
+
+**Knot** (`nematic.knot`) is Mere's polyglot note format and the load-bearing
+output of the clip workflow. A knot body is CommonMark with fenced code
+blocks whose language tag dispatches to a real engine:
+
+```text
+---
+title: Mixed Clip
+source: https://blog.test/article
+captured: 2026-05-08T14:23:00Z
+trust: tofu
+note_kind: clip
+tags: [research, semantics]
+---
+
+User prose with [[wikilinks]] and #hashtags.
+
+` ` `gemtext
+=> gemini://capsule.test/ a capsule
+* a bullet
+` ` `
+
+` ` `feed-entry
+title: Linked article
+url: https://blog.test/post
+date: 2026-05-08
+` ` `
+
+` ` `gopher
+0README<TAB>/readme.txt<TAB>example.org<TAB>70
+` ` `
+```
+
+- **Frontmatter** (YAML subset) populates `provenance` (`source`,
+  `captured`, `source_label`), `trust` state, and emits `note_kind` /
+  `tags` as `MetadataRow` blocks.
+- **Fenced protocol blocks** (`gemtext`, `gopher`, `nex`, `feed-entry`,
+  `feed-header`, `metadata-row`, `badge`) are expanded into real semantic
+  blocks by `nematic::knot::expand`. Unknown languages (e.g. `python`,
+  `rust`) pass through as code blocks unchanged.
+- **Wikilinks** `[[name]]` rewrite to `mere://node/<slug>` (slug is
+  lowercased, whitespace → `-`); display text preserves the original.
+- **Hashtags** `#tag` at word boundaries are extracted from paragraph text
+  and emitted as `Badge` sibling blocks (so search / intelligence layers
+  see them as semantic markers).
+- **`build_clip_knot(blocks, provenance, trust, note_kind)`** assembles a
+  ready-to-save `.knot` string from selected blocks plus the source's
+  provenance. The host's clip gesture wires up to this once the clip UI
+  lands.
+- **`build_clip_knot_with_block_provenance(...)`** is the multi-source
+  variant: takes an additional `inker::BlockProvenanceMap` sidecar and
+  emits a `block_sources: ["<index>|<uri>[|<anchor>]", ...]` frontmatter
+  list for blocks whose source differs from the document. Use this when
+  composing a clip from heterogeneous sources (federated feed merge,
+  citation overlay, multi-tab clip). Round-trip restoration through
+  `KnotEngine` is gated on a concrete consumer; the producer side
+  documents the shape so downstream readers can parse it directly.
+- **Round-trip**: `EngineDocument::to_knot()` (in `inker`) re-emits semantic
+  blocks as fenced code blocks with their language tag, so a parsed knot
+  serialises back into an equivalent knot.
+
+See [`design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md`](../../design_docs/nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md)
+for the full design.
 
 [`pulldown-cmark`]: https://crates.io/crates/pulldown-cmark
 

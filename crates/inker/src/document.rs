@@ -38,7 +38,10 @@
 
 use serde::{Deserialize, Serialize};
 
+mod block_provenance;
 mod render;
+
+pub use block_provenance::{BlockProvenance, BlockProvenanceMap, ResolvedProvenance};
 
 /// A rendered document.
 ///

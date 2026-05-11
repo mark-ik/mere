@@ -558,3 +558,130 @@ fn build_clip_knot_assembles_frontmatter_plus_blocks() {
     );
     assert_eq!(doc.trust, DocumentTrustState::Tofu);
 }
+
+#[test]
+fn build_clip_knot_does_not_double_emit_frontmatter() {
+    // Regression: EngineDocument::to_knot now emits frontmatter when the
+    // document has provenance / trust set. build_clip_knot must use the
+    // body-only render path so its own clip-aware frontmatter isn't
+    // duplicated.
+    let mut prov = DocumentProvenance::default();
+    prov.canonical_uri = Some("https://x.test/".to_string());
+    let blocks = vec![DocumentBlock::Paragraph {
+        spans: vec![InlineSpan::Text("Body".to_string())],
+    }];
+    let knot = build_clip_knot(&blocks, &prov, DocumentTrustState::Tofu, None);
+    // Exactly two `---` lines (opener + closer of the one frontmatter
+    // block), then body. A double-frontmatter regression would produce
+    // four or more.
+    let dash_lines = knot.lines().filter(|l| *l == "---").count();
+    assert_eq!(dash_lines, 2, "expected one frontmatter block, got:\n{knot}");
+}
+
+#[test]
+fn build_clip_knot_with_block_provenance_emits_block_sources_list() {
+    use inker::{BlockProvenance, BlockProvenanceMap};
+
+    let mut doc_prov = DocumentProvenance::default();
+    doc_prov.canonical_uri = Some("https://blog.test/composite".to_string());
+
+    let mut other_prov = DocumentProvenance::default();
+    other_prov.canonical_uri = Some("gopher://other.test/0/file".to_string());
+
+    let mut map = BlockProvenanceMap::new();
+    // Block 0 came from the document's own source — should NOT appear
+    // in block_sources.
+    map.insert(0, BlockProvenance::from_document(doc_prov.clone()));
+    // Block 1 came from a different source with an anchor.
+    map.insert(
+        1,
+        BlockProvenance::from_document(other_prov.clone()).with_anchor("L42-L58"),
+    );
+
+    let blocks = vec![
+        DocumentBlock::Paragraph {
+            spans: vec![InlineSpan::Text("From the composite source.".into())],
+        },
+        DocumentBlock::Paragraph {
+            spans: vec![InlineSpan::Text("From the gopher source.".into())],
+        },
+    ];
+
+    let knot = build_clip_knot_with_block_provenance(
+        &blocks,
+        &doc_prov,
+        DocumentTrustState::Tofu,
+        None,
+        &map,
+    );
+
+    assert!(knot.contains("block_sources: ["));
+    assert!(knot.contains("\"1|gopher://other.test/0/file|L42-L58\""));
+    // Block 0 matched the document source with no anchor — must not
+    // appear in the list.
+    assert!(
+        !knot.contains("\"0|"),
+        "block 0 should not appear in block_sources:\n{knot}"
+    );
+}
+
+#[test]
+fn build_clip_knot_with_block_provenance_emits_no_list_when_all_match_document() {
+    use inker::{BlockProvenance, BlockProvenanceMap};
+
+    let mut doc_prov = DocumentProvenance::default();
+    doc_prov.canonical_uri = Some("https://blog.test/".to_string());
+
+    let mut map = BlockProvenanceMap::new();
+    map.insert(0, BlockProvenance::from_document(doc_prov.clone()));
+    map.insert(2, BlockProvenance::from_document(doc_prov.clone()));
+
+    let blocks = vec![DocumentBlock::Paragraph {
+        spans: vec![InlineSpan::Text("body".into())],
+    }];
+    let knot = build_clip_knot_with_block_provenance(
+        &blocks,
+        &doc_prov,
+        DocumentTrustState::Unknown,
+        None,
+        &map,
+    );
+    assert!(
+        !knot.contains("block_sources:"),
+        "expected no block_sources list when every override matches the document source:\n{knot}"
+    );
+}
+
+#[test]
+fn build_clip_knot_with_block_provenance_sorts_entries_by_index() {
+    use inker::{BlockProvenance, BlockProvenanceMap};
+
+    let doc_prov = DocumentProvenance::default();
+    let mut a = DocumentProvenance::default();
+    a.canonical_uri = Some("gemini://a.test/".to_string());
+    let mut b = DocumentProvenance::default();
+    b.canonical_uri = Some("gemini://b.test/".to_string());
+    let mut c = DocumentProvenance::default();
+    c.canonical_uri = Some("gemini://c.test/".to_string());
+
+    let mut map = BlockProvenanceMap::new();
+    // Insert in scrambled order; output must still be sorted.
+    map.insert(5, BlockProvenance::from_document(c));
+    map.insert(1, BlockProvenance::from_document(a));
+    map.insert(3, BlockProvenance::from_document(b));
+
+    let blocks = vec![DocumentBlock::Paragraph {
+        spans: vec![InlineSpan::Text("x".into())],
+    }];
+    let knot = build_clip_knot_with_block_provenance(
+        &blocks,
+        &doc_prov,
+        DocumentTrustState::Unknown,
+        None,
+        &map,
+    );
+    let a_pos = knot.find("\"1|gemini://a.test/\"").expect("a entry");
+    let b_pos = knot.find("\"3|gemini://b.test/\"").expect("b entry");
+    let c_pos = knot.find("\"5|gemini://c.test/\"").expect("c entry");
+    assert!(a_pos < b_pos && b_pos < c_pos, "entries not sorted by index");
+}

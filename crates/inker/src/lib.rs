@@ -29,11 +29,15 @@ pub mod document;
 /// Engine trait and registry.
 pub mod engine;
 
+/// Content-type sniffing for unlabelled byte streams.
+pub mod sniff;
+
 pub use document::{
-    DocumentBlock, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, EngineDocument,
-    InlineSpan, inline_text,
+    BlockProvenance, BlockProvenanceMap, DocumentBlock, DocumentDiagnostic, DocumentProvenance,
+    DocumentTrustState, EngineDocument, InlineSpan, ResolvedProvenance, inline_text,
 };
 pub use engine::{Engine, EngineError, EngineInput, EngineRegistry};
+pub use sniff::sniff_content_type;
 pub use routing::{
     EngineRouteDecision, EngineRoutePolicy, EngineRouteRequest, EngineRouteRule, SurfaceContract,
     SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId,
