@@ -40,6 +40,35 @@ impl FrameId {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PaneId(pub u64);
 
+/// Stable identifier for a graph at app scope. Every leaf in a
+/// `FrameLayout` carries one so the host can resolve "which graph
+/// does this panel render?" against the app's `GraphRegistry`.
+///
+/// Frame layouts persist with serialized graph IDs so a saved
+/// arrangement reattaches to the right graphs on next launch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GraphId(pub uuid::Uuid);
+
+impl GraphId {
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+
+    pub fn from_uuid(uuid: uuid::Uuid) -> Self {
+        Self(uuid)
+    }
+
+    pub fn as_uuid(&self) -> &uuid::Uuid {
+        &self.0
+    }
+}
+
+impl Default for GraphId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Direction of a split between two child panes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SplitAxis {
@@ -77,7 +106,8 @@ impl PaneContent {
 }
 
 /// One node in the layout tree: either a split (two children at a
-/// given axis + ratio) or a leaf (one pane showing a content kind).
+/// given axis + ratio) or a leaf (one pane showing a content kind
+/// bound to a graph).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum PaneNode {
     Split {
@@ -91,8 +121,31 @@ pub enum PaneNode {
     Leaf {
         pane_id: PaneId,
         content: PaneContent,
+        /// Which graph this panel renders. The host resolves the
+        /// `GraphId` against its `GraphRegistry` to get the live
+        /// `Entity<Graph>`. Multiple leaves carrying the same
+        /// `graph_id` share a graph; differing IDs in one frame =
+        /// multi-graph window.
+        ///
+        /// `#[serde(default)]` allows pre-`graph_id` layouts saved
+        /// to disk to deserialize — they come back as a nil UUID,
+        /// which the host stamps with the window's primary graph
+        /// on load.
+        #[serde(default)]
+        graph_id: GraphId,
     },
 }
+
+/// One step into a [`PaneNode::Split`] when walking the layout tree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SplitChoice {
+    First,
+    Second,
+}
+
+/// Path through the layout tree to a specific split, expressed as
+/// `First`/`Second` choices at each branch. Empty path = root.
+pub type SplitPath = Vec<SplitChoice>;
 
 /// A complete frame: identity, label, and the layout tree.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -100,6 +153,206 @@ pub struct FrameLayout {
     pub id: FrameId,
     pub label: String,
     pub root: PaneNode,
+}
+
+/// Where to insert a new leaf relative to an existing leaf at a
+/// `SplitPath`. Used by [`FrameLayout::summon_leaf`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InsertSide {
+    /// New leaf goes left of the existing leaf (horizontal split).
+    Left,
+    /// New leaf goes right of the existing leaf.
+    Right,
+    /// New leaf goes above the existing leaf (vertical split).
+    Above,
+    /// New leaf goes below the existing leaf.
+    Below,
+}
+
+impl InsertSide {
+    fn split_axis(self) -> SplitAxis {
+        match self {
+            Self::Left | Self::Right => SplitAxis::Horizontal,
+            Self::Above | Self::Below => SplitAxis::Vertical,
+        }
+    }
+
+    /// True when the new leaf goes in `first` position (left / above);
+    /// false when it goes in `second` (right / below).
+    fn new_is_first(self) -> bool {
+        matches!(self, Self::Left | Self::Above)
+    }
+}
+
+impl FrameLayout {
+    /// Find the split node at `path` and overwrite its ratio. Returns
+    /// `true` if the path resolved to a `Split`. The new ratio is
+    /// clamped to `[0.05, 0.95]` so panes can't fully collapse.
+    pub fn set_split_ratio(&mut self, path: &[SplitChoice], new_ratio: f32) -> bool {
+        let mut node = &mut self.root;
+        for step in path {
+            let PaneNode::Split { first, second, .. } = node else {
+                return false;
+            };
+            node = match step {
+                SplitChoice::First => first.as_mut(),
+                SplitChoice::Second => second.as_mut(),
+            };
+        }
+        if let PaneNode::Split { ratio, .. } = node {
+            *ratio = new_ratio.clamp(0.05, 0.95);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Read-only lookup of a split's `(axis, ratio)` at `path`.
+    pub fn split_at(&self, path: &[SplitChoice]) -> Option<(SplitAxis, f32)> {
+        let mut node = &self.root;
+        for step in path {
+            let PaneNode::Split { first, second, .. } = node else {
+                return None;
+            };
+            node = match step {
+                SplitChoice::First => first.as_ref(),
+                SplitChoice::Second => second.as_ref(),
+            };
+        }
+        if let PaneNode::Split { axis, ratio, .. } = node {
+            Some((*axis, *ratio))
+        } else {
+            None
+        }
+    }
+
+    /// Summon a new leaf adjacent to an existing leaf. Walks `path`
+    /// to the target leaf, replaces it with a split whose two
+    /// children are the original leaf and the new one (in the order
+    /// dictated by `side`). The new split inherits a default 50/50
+    /// ratio.
+    ///
+    /// Returns `true` when the path resolved to a leaf; `false`
+    /// otherwise (the layout is unchanged). Panel-summon buttons in
+    /// the shellbar call this with `path = []` (anchor at root)
+    /// and `side = InsertSide::Right` to add panels along the
+    /// right edge by default.
+    pub fn summon_leaf(
+        &mut self,
+        path: &[SplitChoice],
+        side: InsertSide,
+        new_leaf: PaneNode,
+    ) -> bool {
+        debug_assert!(matches!(new_leaf, PaneNode::Leaf { .. }));
+        // Walk to the parent of the target so we can swap the child in place.
+        let target = walk_mut(&mut self.root, path);
+        let Some(target) = target else {
+            return false;
+        };
+        if !matches!(target, PaneNode::Leaf { .. }) {
+            // The path lands on a split. Conventionally, summon
+            // wants a leaf anchor so the user's mental model of
+            // "summon next to *this*" stays consistent.
+            return false;
+        }
+        let placeholder = PaneNode::Leaf {
+            pane_id: PaneId(0),
+            content: PaneContent::Custom("__placeholder__".to_string()),
+            graph_id: GraphId(uuid::Uuid::nil()),
+        };
+        let original = std::mem::replace(target, placeholder);
+        let (first, second) = if side.new_is_first() {
+            (Box::new(new_leaf), Box::new(original))
+        } else {
+            (Box::new(original), Box::new(new_leaf))
+        };
+        *target = PaneNode::Split {
+            axis: side.split_axis(),
+            ratio: 0.5,
+            first,
+            second,
+        };
+        true
+    }
+
+    /// Close (remove) the leaf at `path`. Walks to the parent split,
+    /// promotes the sibling leaf in its place — so the surrounding
+    /// layout collapses naturally. Returns `true` if a leaf was
+    /// removed; `false` if the path didn't resolve to a leaf or if
+    /// the target is the root (a frame must have at least one leaf).
+    pub fn close_leaf(&mut self, path: &[SplitChoice]) -> bool {
+        if path.is_empty() {
+            // Root leaf can't be removed (frame must keep a panel).
+            return false;
+        }
+        let (parent_path, last_step) = path.split_at(path.len() - 1);
+        let parent = walk_mut(&mut self.root, parent_path);
+        let Some(parent) = parent else {
+            return false;
+        };
+        let PaneNode::Split { first, second, .. } = parent else {
+            return false;
+        };
+        let removed_first = last_step[0];
+        let keeper = match removed_first {
+            SplitChoice::First => std::mem::replace(
+                second.as_mut(),
+                PaneNode::Leaf {
+                    pane_id: PaneId(0),
+                    content: PaneContent::Custom("__placeholder__".to_string()),
+                    graph_id: GraphId(uuid::Uuid::nil()),
+                },
+            ),
+            SplitChoice::Second => std::mem::replace(
+                first.as_mut(),
+                PaneNode::Leaf {
+                    pane_id: PaneId(0),
+                    content: PaneContent::Custom("__placeholder__".to_string()),
+                    graph_id: GraphId(uuid::Uuid::nil()),
+                },
+            ),
+        };
+        // Replace the parent split entirely with the surviving sibling.
+        *parent = keeper;
+        true
+    }
+
+    /// Iterate every leaf in the layout in depth-first order
+    /// (first-child before second-child). Yields `(pane_id, content,
+    /// graph_id)` triples. Used by the host to assemble per-pane
+    /// state + verify which graphs are referenced in this window.
+    pub fn iter_leaves(&self) -> impl Iterator<Item = (PaneId, &PaneContent, GraphId)> {
+        let mut out: Vec<(PaneId, &PaneContent, GraphId)> = Vec::new();
+        fn walk<'a>(node: &'a PaneNode, out: &mut Vec<(PaneId, &'a PaneContent, GraphId)>) {
+            match node {
+                PaneNode::Leaf {
+                    pane_id,
+                    content,
+                    graph_id,
+                } => out.push((*pane_id, content, *graph_id)),
+                PaneNode::Split { first, second, .. } => {
+                    walk(first, out);
+                    walk(second, out);
+                }
+            }
+        }
+        walk(&self.root, &mut out);
+        out.into_iter()
+    }
+}
+
+fn walk_mut<'a>(node: &'a mut PaneNode, path: &[SplitChoice]) -> Option<&'a mut PaneNode> {
+    let mut current = node;
+    for step in path {
+        let PaneNode::Split { first, second, .. } = current else {
+            return None;
+        };
+        current = match step {
+            SplitChoice::First => first.as_mut(),
+            SplitChoice::Second => second.as_mut(),
+        };
+    }
+    Some(current)
 }
 
 /// Project a [`FrameLayout`] into a uxtree subtree describing the
@@ -180,7 +433,9 @@ where
             nodes.push((split_id, split_node));
             split_id
         }
-        PaneNode::Leaf { pane_id, content } => {
+        PaneNode::Leaf {
+            pane_id, content, ..
+        } => {
             let leaf_path = format!("{path}/pane/{}", pane_id.0);
             let leaf_id = node_id_for_path(&leaf_path);
 
@@ -210,6 +465,7 @@ mod tests {
         //   │ workbench├─────────┤
         //   │          │apparatus│
         //   └──────────┴─────────┘
+        let g = GraphId::from_uuid(uuid::Uuid::from_u128(0xc01));
         FrameLayout {
             id: FrameId::new("reading"),
             label: "Reading".to_string(),
@@ -219,6 +475,7 @@ mod tests {
                 first: Box::new(PaneNode::Leaf {
                     pane_id: PaneId(1),
                     content: PaneContent::Workbench,
+                    graph_id: g,
                 }),
                 second: Box::new(PaneNode::Split {
                     axis: SplitAxis::Vertical,
@@ -226,10 +483,12 @@ mod tests {
                     first: Box::new(PaneNode::Leaf {
                         pane_id: PaneId(2),
                         content: PaneContent::Orrery,
+                        graph_id: g,
                     }),
                     second: Box::new(PaneNode::Leaf {
                         pane_id: PaneId(3),
                         content: PaneContent::Apparatus,
+                        graph_id: g,
                     }),
                 }),
             },
@@ -316,6 +575,36 @@ mod tests {
                 .any(|(_, n)| n.label() == Some("workbench-content")),
             "expected attached workbench subtree to merge into frame"
         );
+    }
+
+    #[test]
+    fn set_split_ratio_clamps_and_finds_path() {
+        let mut layout = fixture_three_pane_frame();
+        // Root split is horizontal, ratio 0.6
+        assert_eq!(layout.split_at(&[]), Some((SplitAxis::Horizontal, 0.6)));
+        assert!(layout.set_split_ratio(&[], 0.3));
+        assert_eq!(layout.split_at(&[]), Some((SplitAxis::Horizontal, 0.3)));
+
+        // Inner vertical split is at root.second
+        assert_eq!(
+            layout.split_at(&[SplitChoice::Second]),
+            Some((SplitAxis::Vertical, 0.5))
+        );
+        assert!(layout.set_split_ratio(&[SplitChoice::Second], 0.75));
+        assert_eq!(
+            layout.split_at(&[SplitChoice::Second]),
+            Some((SplitAxis::Vertical, 0.75))
+        );
+
+        // Out-of-range ratios clamp.
+        assert!(layout.set_split_ratio(&[], 5.0));
+        assert_eq!(layout.split_at(&[]), Some((SplitAxis::Horizontal, 0.95)));
+        assert!(layout.set_split_ratio(&[], -1.0));
+        assert_eq!(layout.split_at(&[]), Some((SplitAxis::Horizontal, 0.05)));
+
+        // Path into a leaf returns None / no-op.
+        assert!(!layout.set_split_ratio(&[SplitChoice::First], 0.5));
+        assert_eq!(layout.split_at(&[SplitChoice::First]), None);
     }
 
     #[test]

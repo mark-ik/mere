@@ -64,7 +64,7 @@ impl<'a> WorkspaceServices<'a> {
         }
     }
 
-    pub fn dispatch_pending_effects(
+    pub async fn dispatch_pending_effects(
         &mut self,
         workspace: &mut GraphWorkspace,
     ) -> WorkspaceServiceResult<WorkspaceServiceDispatchReport> {
@@ -87,7 +87,7 @@ impl<'a> WorkspaceServices<'a> {
                 WorkspaceEffect::RequestEidetic(request) => {
                     report
                         .eidetic_responses
-                        .push(eidetic::dispatch(self.eidetic, &request)?);
+                        .push(eidetic::dispatch(self.eidetic, &request).await?);
                 }
                 WorkspaceEffect::RouteEngine(request) => {
                     report
@@ -255,12 +255,13 @@ mod tests {
         blobs: HashMap<String, Vec<u8>>,
     }
 
+    #[async_trait::async_trait(?Send)]
     impl eidetic::Store for FakeEideticStore {
-        fn load_blob(&mut self, key: &str) -> eidetic::Result<Option<Vec<u8>>> {
+        async fn load_blob(&mut self, key: &str) -> eidetic::Result<Option<Vec<u8>>> {
             Ok(self.blobs.get(key).cloned())
         }
 
-        fn save_blob(&mut self, key: &str, value: &[u8]) -> eidetic::Result<()> {
+        async fn save_blob(&mut self, key: &str, value: &[u8]) -> eidetic::Result<()> {
             self.blobs.insert(key.to_string(), value.to_vec());
             Ok(())
         }
@@ -401,7 +402,7 @@ mod tests {
                 &mut task_runtime,
             );
 
-            services.dispatch_pending_effects(&mut workspace).unwrap()
+            pollster::block_on(services.dispatch_pending_effects(&mut workspace)).unwrap()
         };
 
         assert_eq!(report.persisted_workspaces, 1);

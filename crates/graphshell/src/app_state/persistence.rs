@@ -267,7 +267,7 @@ pub fn list_named_workspace_layouts(
     repository.list_workspace_layouts()
 }
 
-pub fn consume_persistence_effects(
+pub async fn consume_persistence_effects(
     workspace: &mut GraphWorkspace,
     repository: &mut dyn WorkspaceRepository,
     settings: &mut dyn SettingsStore,
@@ -294,7 +294,7 @@ pub fn consume_persistence_effects(
             WorkspaceEffect::RequestEidetic(request) => {
                 report
                     .eidetic_responses
-                    .push(eidetic::dispatch(store, &request)?);
+                    .push(eidetic::dispatch(store, &request).await?);
             }
             other => deferred_effects.push(other),
         }
@@ -510,12 +510,13 @@ mod tests {
         }
     }
 
+    #[async_trait::async_trait(?Send)]
     impl eidetic::Store for FakeEideticStore {
-        fn load_blob(&mut self, key: &str) -> eidetic::Result<Option<Vec<u8>>> {
+        async fn load_blob(&mut self, key: &str) -> eidetic::Result<Option<Vec<u8>>> {
             Ok(self.blobs.get(key).cloned())
         }
 
-        fn save_blob(&mut self, key: &str, value: &[u8]) -> eidetic::Result<()> {
+        async fn save_blob(&mut self, key: &str, value: &[u8]) -> eidetic::Result<()> {
             self.blobs.insert(key.to_string(), value.to_vec());
             Ok(())
         }
@@ -700,62 +701,70 @@ mod tests {
 
     #[test]
     fn eidetic_dispatch_round_trips_private_blob() {
-        let mut store = FakeEideticStore::default();
+        pollster::block_on(async {
+            let mut store = FakeEideticStore::default();
 
-        let saved = eidetic::dispatch(
-            &mut store,
-            &eidetic::Request::SaveBlob {
-                key: "private/history".to_string(),
-                value: vec![9, 8, 7],
-            },
-        )
-        .unwrap();
-        let loaded = eidetic::dispatch(
-            &mut store,
-            &eidetic::Request::LoadBlob {
-                key: "private/history".to_string(),
-            },
-        )
-        .unwrap();
+            let saved = eidetic::dispatch(
+                &mut store,
+                &eidetic::Request::SaveBlob {
+                    key: "private/history".to_string(),
+                    value: vec![9, 8, 7],
+                },
+            )
+            .await
+            .unwrap();
+            let loaded = eidetic::dispatch(
+                &mut store,
+                &eidetic::Request::LoadBlob {
+                    key: "private/history".to_string(),
+                },
+            )
+            .await
+            .unwrap();
 
-        assert_eq!(
-            saved,
-            eidetic::Response::BlobSaved {
-                key: "private/history".to_string(),
-            }
-        );
-        assert_eq!(
-            loaded,
-            eidetic::Response::BlobLoaded {
-                key: "private/history".to_string(),
-                value: Some(vec![9, 8, 7]),
-            }
-        );
+            assert_eq!(
+                saved,
+                eidetic::Response::BlobSaved {
+                    key: "private/history".to_string(),
+                }
+            );
+            assert_eq!(
+                loaded,
+                eidetic::Response::BlobLoaded {
+                    key: "private/history".to_string(),
+                    value: Some(vec![9, 8, 7]),
+                }
+            );
+        });
     }
 
     #[test]
     fn eidetic_dispatch_propagates_trait_errors() {
         struct BrokenEideticStore;
 
+        #[async_trait::async_trait(?Send)]
         impl eidetic::Store for BrokenEideticStore {
-            fn load_blob(&mut self, _key: &str) -> eidetic::Result<Option<Vec<u8>>> {
+            async fn load_blob(&mut self, _key: &str) -> eidetic::Result<Option<Vec<u8>>> {
                 Err(eidetic::Error::new("load failed"))
             }
 
-            fn save_blob(&mut self, _key: &str, _value: &[u8]) -> eidetic::Result<()> {
+            async fn save_blob(&mut self, _key: &str, _value: &[u8]) -> eidetic::Result<()> {
                 Err(eidetic::Error::new("save failed"))
             }
         }
 
-        let error = eidetic::dispatch(
-            &mut BrokenEideticStore,
-            &eidetic::Request::LoadBlob {
-                key: "missing".to_string(),
-            },
-        )
-        .unwrap_err();
+        pollster::block_on(async {
+            let error = eidetic::dispatch(
+                &mut BrokenEideticStore,
+                &eidetic::Request::LoadBlob {
+                    key: "missing".to_string(),
+                },
+            )
+            .await
+            .unwrap_err();
 
-        assert_eq!(error.message, "load failed");
+            assert_eq!(error.message, "load failed");
+        });
     }
 
     #[test]
@@ -793,13 +802,13 @@ mod tests {
         let mut journal = FakeGraphMutationJournal::default();
         let mut store = FakeEideticStore::default();
 
-        let report = consume_persistence_effects(
+        let report = pollster::block_on(consume_persistence_effects(
             &mut workspace,
             &mut repository,
             &mut settings,
             &mut journal,
             &mut store,
-        )
+        ))
         .unwrap();
 
         assert_eq!(report.persisted_workspaces, 1);
