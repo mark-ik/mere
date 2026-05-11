@@ -1,0 +1,365 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+//! Node + edge CRUD, lifecycle, and iterator tests.
+
+use super::super::*;
+
+
+#[test]
+fn test_graph_new() {
+    let graph = Graph::new();
+    assert_eq!(graph.node_count(), 0);
+    assert_eq!(graph.edge_count(), 0);
+}
+
+#[test]
+fn test_add_node() {
+    let mut graph = Graph::new();
+    let pos = Point2D::new(100.0, 200.0);
+    let key = graph.add_node("https://example.com".to_string(), pos);
+
+    let node = graph.get_node(key).unwrap();
+    assert_eq!(node.url(), "https://example.com");
+    assert_eq!(node.title, "https://example.com");
+    assert_eq!(node.position.x, 100.0);
+    assert_eq!(node.position.y, 200.0);
+    assert_eq!(node.committed_position.x, 100.0);
+    assert_eq!(node.committed_position.y, 200.0);
+    assert_eq!(node.velocity.x, 0.0);
+    assert_eq!(node.velocity.y, 0.0);
+    assert!(!node.is_pinned);
+    assert_eq!(node.lifecycle, NodeLifecycle::Cold);
+}
+
+#[test]
+fn test_add_multiple_nodes() {
+    let mut graph = Graph::new();
+    let key1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let key2 = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+    let key3 = graph.add_node("https://c.com".to_string(), Point2D::new(2.0, 2.0));
+
+    assert_eq!(graph.node_count(), 3);
+    assert!(graph.get_node(key1).is_some());
+    assert!(graph.get_node(key2).is_some());
+    assert!(graph.get_node(key3).is_some());
+}
+
+#[test]
+fn test_duplicate_url_nodes_have_distinct_ids() {
+    let mut graph = Graph::new();
+    let key1 = graph.add_node("https://same.com".to_string(), Point2D::new(0.0, 0.0));
+    let key2 = graph.add_node("https://same.com".to_string(), Point2D::new(10.0, 10.0));
+
+    assert_ne!(key1, key2);
+    let node1 = graph.get_node(key1).unwrap();
+    let node2 = graph.get_node(key2).unwrap();
+    assert_ne!(node1.id, node2.id);
+    assert_eq!(graph.get_nodes_by_url("https://same.com").len(), 2);
+}
+
+#[test]
+fn test_get_node_by_url() {
+    let mut graph = Graph::new();
+    graph.add_node("https://example.com".to_string(), Point2D::new(0.0, 0.0));
+
+    let (_, node) = graph.get_node_by_url("https://example.com").unwrap();
+    assert_eq!(node.url(), "https://example.com");
+
+    assert!(graph.get_node_by_url("https://notfound.com").is_none());
+}
+
+#[test]
+fn test_get_node_mut() {
+    let mut graph = Graph::new();
+    let key = graph.add_node("https://example.com".to_string(), Point2D::new(0.0, 0.0));
+
+    {
+        let node = graph.get_node_mut(key).unwrap();
+        node.position = Point2D::new(100.0, 200.0);
+        node.is_pinned = true;
+    }
+
+    let node = graph.get_node(key).unwrap();
+    assert_eq!(node.position.x, 100.0);
+    assert_eq!(node.position.y, 200.0);
+    assert!(node.is_pinned);
+}
+
+#[test]
+fn test_projected_position_does_not_change_committed_snapshot_position() {
+    let mut graph = Graph::new();
+    let key = graph.add_node("https://example.com".to_string(), Point2D::new(10.0, 20.0));
+
+    assert!(graph.set_node_projected_position(key, Point2D::new(150.0, 250.0)));
+
+    let node = graph.get_node(key).unwrap();
+    assert_eq!(node.position, Point2D::new(150.0, 250.0));
+    assert_eq!(node.committed_position, Point2D::new(10.0, 20.0));
+
+    let snapshot = graph.to_snapshot();
+    assert_eq!(snapshot.nodes[0].position_x, 10.0);
+    assert_eq!(snapshot.nodes[0].position_y, 20.0);
+}
+
+#[test]
+fn test_projected_helpers_expose_projected_and_committed_positions() {
+    let mut graph = Graph::new();
+    let key = graph.add_node("https://example.com".to_string(), Point2D::new(10.0, 20.0));
+
+    assert!(graph.set_node_projected_position(key, Point2D::new(40.0, 60.0)));
+
+    assert_eq!(
+        graph.node_projected_position(key),
+        Some(Point2D::new(40.0, 60.0))
+    );
+    assert_eq!(
+        graph.node_committed_position(key),
+        Some(Point2D::new(10.0, 20.0))
+    );
+    assert_eq!(graph.projected_centroid(), Some(Point2D::new(40.0, 60.0)));
+}
+
+#[test]
+fn test_add_edge() {
+    let mut graph = Graph::new();
+    let node1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let node2 = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+
+    graph
+        .add_edge(node1, node2, EdgeType::Hyperlink, None)
+        .unwrap();
+
+    // Check adjacency via graph methods
+    assert!(graph.has_edge_between(node1, node2));
+    assert!(!graph.has_edge_between(node2, node1));
+    assert_eq!(graph.out_neighbors(node1).count(), 1);
+    assert_eq!(graph.in_neighbors(node2).count(), 1);
+}
+
+#[test]
+fn test_add_edge_invalid_nodes() {
+    let mut graph = Graph::new();
+    let node1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+
+    let invalid_key = NodeIndex::new(999);
+
+    assert!(
+        graph
+            .add_edge(invalid_key, node1, EdgeType::Hyperlink, None)
+            .is_none()
+    );
+    assert!(
+        graph
+            .add_edge(node1, invalid_key, EdgeType::Hyperlink, None)
+            .is_none()
+    );
+}
+
+#[test]
+fn test_add_multiple_edges() {
+    let mut graph = Graph::new();
+    let node1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let node2 = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+    let node3 = graph.add_node("https://c.com".to_string(), Point2D::new(2.0, 2.0));
+
+    graph
+        .add_edge(node1, node2, EdgeType::Hyperlink, None)
+        .unwrap();
+    graph
+        .add_edge(node1, node3, EdgeType::Hyperlink, None)
+        .unwrap();
+    graph
+        .add_edge(node2, node3, EdgeType::Hyperlink, None)
+        .unwrap();
+
+    assert_eq!(graph.edge_count(), 3);
+
+    // Check node1 has 2 outgoing neighbors
+    assert_eq!(graph.out_neighbors(node1).count(), 2);
+
+    // Check node3 has 2 incoming neighbors
+    assert_eq!(graph.in_neighbors(node3).count(), 2);
+}
+
+#[test]
+fn test_remove_edges_by_type_between_nodes() {
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let b = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+
+    graph.add_edge(a, b, EdgeType::Hyperlink, None).unwrap();
+    graph.add_edge(a, b, EdgeType::UserGrouped, None).unwrap();
+
+    let removed = graph.remove_edges(a, b, EdgeType::UserGrouped);
+    assert_eq!(removed, 1);
+    assert_eq!(graph.edge_count(), 1);
+    let edge_key = graph.find_edge_key(a, b).expect("remaining hyperlink edge");
+    let payload = graph.get_edge(edge_key).expect("remaining edge payload");
+    assert!(payload.has_relation(RelationSelector::Semantic(SemanticSubKind::Hyperlink)));
+    assert!(!payload.has_relation(RelationSelector::Semantic(SemanticSubKind::UserGrouped)));
+}
+
+#[test]
+fn test_add_edge_merges_semantics_on_single_stored_edge() {
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let b = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+
+    graph.add_edge(a, b, EdgeType::Hyperlink, None).unwrap();
+    graph
+        .add_edge(a, b, EdgeType::UserGrouped, Some("tab-group".to_string()))
+        .unwrap();
+
+    assert_eq!(graph.edge_count(), 1);
+    let edge_key = graph.find_edge_key(a, b).unwrap();
+    let payload = graph.get_edge(edge_key).unwrap();
+    assert!(payload.has_edge_kind(EdgeType::Hyperlink));
+    assert!(payload.has_edge_kind(EdgeType::UserGrouped));
+    assert_eq!(payload.label(), Some("tab-group"));
+    assert_eq!(graph.edges().count(), 2);
+}
+
+#[test]
+fn test_assert_relation_preserves_generic_semantic_subkind() {
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let b = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+
+    graph
+        .assert_relation(
+            a,
+            b,
+            EdgeAssertion::Semantic {
+                sub_kind: SemanticSubKind::SameEntityAs,
+                label: Some("identity".to_string()),
+                decay_progress: None,
+            },
+        )
+        .expect("semantic relation should be asserted");
+
+    let edge_key = graph
+        .find_edge_key(a, b)
+        .expect("semantic edge should exist");
+    let payload = graph
+        .get_edge(edge_key)
+        .expect("semantic payload should exist");
+    assert!(payload.has_relation(RelationSelector::Semantic(SemanticSubKind::SameEntityAs)));
+    assert_eq!(payload.label(), Some("identity"));
+
+    let semantic_edges = graph.semantic_edges().collect::<Vec<_>>();
+    assert!(semantic_edges.iter().any(|edge| {
+        edge.from == a
+            && edge.to == b
+            && edge.sub_kind == SemanticSubKind::SameEntityAs
+            && edge.label.as_deref() == Some("identity")
+    }));
+}
+
+#[test]
+fn test_remove_node() {
+    let mut graph = Graph::new();
+    let n1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let n2 = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+    graph.add_edge(n1, n2, EdgeType::Hyperlink, None);
+
+    assert_eq!(graph.node_count(), 2);
+    assert_eq!(graph.edge_count(), 1);
+
+    assert!(graph.remove_node(n1));
+    assert_eq!(graph.node_count(), 1);
+    assert_eq!(graph.edge_count(), 0); // edge auto-removed
+    assert!(graph.get_node(n1).is_none());
+    assert!(graph.get_node_by_url("https://a.com").is_none());
+
+    // n2 still exists
+    assert!(graph.get_node(n2).is_some());
+}
+
+#[test]
+fn test_remove_nonexistent_node() {
+    let mut graph = Graph::new();
+    assert!(!graph.remove_node(NodeIndex::new(999)));
+}
+
+#[test]
+fn test_nodes_iterator() {
+    let mut graph = Graph::new();
+    graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+    graph.add_node("https://c.com".to_string(), Point2D::new(2.0, 2.0));
+
+    let urls: Vec<String> = graph.nodes().map(|(_, n)| n.url().to_string()).collect();
+    assert_eq!(urls.len(), 3);
+    assert!(urls.contains(&"https://a.com".to_string()));
+    assert!(urls.contains(&"https://b.com".to_string()));
+    assert!(urls.contains(&"https://c.com".to_string()));
+}
+
+#[test]
+fn test_edges_iterator() {
+    let mut graph = Graph::new();
+    let node1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let node2 = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+    let node3 = graph.add_node("https://c.com".to_string(), Point2D::new(2.0, 2.0));
+
+    graph.add_edge(node1, node2, EdgeType::Hyperlink, None);
+    graph.add_edge(node1, node3, EdgeType::Hyperlink, None);
+
+    let edge_count = graph.edges().count();
+    assert_eq!(edge_count, 2);
+
+    assert!(graph.inner.edge_references().all(|edge| {
+        edge.weight()
+            .has_relation(RelationSelector::Semantic(SemanticSubKind::Hyperlink))
+    }));
+}
+
+#[test]
+fn test_node_lifecycle_default() {
+    let mut graph = Graph::new();
+    let key = graph.add_node("https://example.com".to_string(), Point2D::new(0.0, 0.0));
+
+    let node = graph.get_node(key).unwrap();
+    assert_eq!(node.lifecycle, NodeLifecycle::Cold);
+}
+
+#[test]
+fn test_empty_graph_operations() {
+    let graph = Graph::new();
+
+    assert_eq!(graph.node_count(), 0);
+    assert_eq!(graph.edge_count(), 0);
+    assert!(graph.get_node_by_url("https://example.com").is_none());
+
+    let invalid_key = NodeIndex::new(999);
+    assert!(graph.get_node(invalid_key).is_none());
+}
+
+#[test]
+fn test_node_count() {
+    let mut graph = Graph::new();
+    assert_eq!(graph.node_count(), 0);
+
+    graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    assert_eq!(graph.node_count(), 1);
+
+    graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+    assert_eq!(graph.node_count(), 2);
+}
+
+#[test]
+fn test_edge_count() {
+    let mut graph = Graph::new();
+    let node1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let node2 = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
+
+    assert_eq!(graph.edge_count(), 0);
+
+    graph.add_edge(node1, node2, EdgeType::Hyperlink, None);
+    assert_eq!(graph.edge_count(), 1);
+
+    graph.add_edge(node2, node1, EdgeType::Hyperlink, None);
+    assert_eq!(graph.edge_count(), 2);
+}

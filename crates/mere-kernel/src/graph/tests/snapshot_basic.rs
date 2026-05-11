@@ -1,0 +1,312 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+//! Snapshot round-trip basics — graph, edges, edge types, semantic
+//! sub-kinds, favicon, thumbnail, UUID, duplicate-URL handling.
+
+use super::super::*;
+
+#[test]
+fn test_snapshot_roundtrip() {
+    let mut graph = Graph::new();
+    let n1 = graph.add_node("https://a.com".to_string(), Point2D::new(10.0, 20.0));
+    let n2 = graph.add_node("https://b.com".to_string(), Point2D::new(30.0, 40.0));
+    graph.add_edge(n1, n2, EdgeType::Hyperlink, None);
+
+    graph.get_node_mut(n1).unwrap().title = "Site A".to_string();
+    graph.get_node_mut(n2).unwrap().is_pinned = true;
+
+    let snapshot = graph.to_snapshot();
+    let restored = Graph::from_snapshot(&snapshot);
+
+    assert_eq!(restored.node_count(), 2);
+    assert_eq!(restored.edge_count(), 1);
+
+    let (_, ra) = restored.get_node_by_url("https://a.com").unwrap();
+    assert_eq!(ra.title, "Site A");
+    assert_eq!(ra.position.x, 10.0);
+    assert_eq!(ra.position.y, 20.0);
+
+    let (_, rb) = restored.get_node_by_url("https://b.com").unwrap();
+    assert!(rb.is_pinned);
+    assert_eq!(rb.position.x, 30.0);
+}
+
+#[test]
+fn test_snapshot_empty_graph() {
+    let graph = Graph::new();
+    let snapshot = graph.to_snapshot();
+    let restored = Graph::from_snapshot(&snapshot);
+
+    assert_eq!(restored.node_count(), 0);
+    assert_eq!(restored.edge_count(), 0);
+}
+
+#[test]
+fn test_snapshot_preserves_edge_types() {
+    let mut graph = Graph::new();
+    let n1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let n2 = graph.add_node("https://b.com".to_string(), Point2D::new(100.0, 0.0));
+    let n3 = graph.add_node("https://c.com".to_string(), Point2D::new(200.0, 0.0));
+    graph.add_edge(n1, n2, EdgeType::Hyperlink, None);
+    graph.add_edge(n2, n1, EdgeType::History, None);
+    graph.add_edge(n1, n3, EdgeType::UserGrouped, None);
+
+    let snapshot = graph.to_snapshot();
+    let restored = Graph::from_snapshot(&snapshot);
+
+    assert_eq!(restored.edge_count(), 3);
+
+    let has_hyperlink = restored
+        .find_edge_key(n1, n2)
+        .and_then(|edge_key| restored.get_edge(edge_key))
+        .is_some_and(|payload| {
+            payload.has_relation(RelationSelector::Semantic(SemanticSubKind::Hyperlink))
+        });
+    let has_history = restored
+        .find_edge_key(n2, n1)
+        .and_then(|edge_key| restored.get_edge(edge_key))
+        .is_some_and(|payload| {
+            payload.has_relation(RelationSelector::Family(EdgeFamily::Traversal))
+        });
+    let has_user_grouped = restored
+        .find_edge_key(n1, n3)
+        .and_then(|edge_key| restored.get_edge(edge_key))
+        .is_some_and(|payload| {
+            payload.has_relation(RelationSelector::Semantic(SemanticSubKind::UserGrouped))
+        });
+    assert!(has_hyperlink);
+    assert!(has_history);
+    assert!(has_user_grouped);
+}
+
+#[test]
+fn test_snapshot_preserves_user_grouped_edge_label() {
+    let mut graph = Graph::new();
+    let from = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let to = graph.add_node("https://b.com".to_string(), Point2D::new(100.0, 0.0));
+    graph
+        .add_edge(
+            from,
+            to,
+            EdgeType::UserGrouped,
+            Some("tab-group".to_string()),
+        )
+        .unwrap();
+
+    let snapshot = graph.to_snapshot();
+    let restored = Graph::from_snapshot(&snapshot);
+    let edge_key = restored.find_edge_key(from, to).unwrap();
+    let payload = restored.get_edge(edge_key).unwrap();
+    assert_eq!(payload.label(), Some("tab-group"));
+}
+
+#[test]
+fn test_snapshot_preserves_generic_semantic_relations() {
+    let mut graph = Graph::new();
+    let from = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let to = graph.add_node("https://b.com".to_string(), Point2D::new(100.0, 0.0));
+    graph
+        .assert_relation(
+            from,
+            to,
+            EdgeAssertion::Semantic {
+                sub_kind: SemanticSubKind::CanonicalMirrorOf,
+                label: Some("profile".to_string()),
+                decay_progress: None,
+            },
+        )
+        .expect("canonical mirror relation should be asserted");
+
+    let snapshot = graph.to_snapshot();
+    let restored = Graph::from_snapshot(&snapshot);
+    let edge_key = restored
+        .find_edge_key(from, to)
+        .expect("semantic edge should restore");
+    let payload = restored
+        .get_edge(edge_key)
+        .expect("semantic payload should restore");
+    assert!(payload.has_relation(RelationSelector::Semantic(
+        SemanticSubKind::CanonicalMirrorOf,
+    )));
+    assert_eq!(payload.label(), Some("profile"));
+}
+
+#[test]
+fn test_snapshot_preserves_favicon_data() {
+    let mut graph = Graph::new();
+    let key = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let favicon = vec![255, 0, 0, 255];
+    if let Some(node) = graph.get_node_mut(key) {
+        node.favicon_rgba = Some(favicon.clone());
+        node.favicon_width = 1;
+        node.favicon_height = 1;
+    }
+
+    let snapshot = graph.to_snapshot();
+    let restored = Graph::from_snapshot(&snapshot);
+    let (_, restored_node) = restored.get_node_by_url("https://a.com").unwrap();
+    assert_eq!(restored_node.favicon_rgba.as_ref(), Some(&favicon));
+    assert_eq!(restored_node.favicon_width, 1);
+    assert_eq!(restored_node.favicon_height, 1);
+}
+
+#[test]
+fn test_snapshot_preserves_thumbnail_data() {
+    let mut graph = Graph::new();
+    let key = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let thumbnail = vec![137, 80, 78, 71];
+    if let Some(node) = graph.get_node_mut(key) {
+        node.thumbnail_png = Some(thumbnail.clone());
+        node.thumbnail_width = 64;
+        node.thumbnail_height = 48;
+    }
+
+    let snapshot = graph.to_snapshot();
+    let restored = Graph::from_snapshot(&snapshot);
+    let (_, restored_node) = restored.get_node_by_url("https://a.com").unwrap();
+    assert_eq!(restored_node.thumbnail_png.as_ref(), Some(&thumbnail));
+    assert_eq!(restored_node.thumbnail_width, 64);
+    assert_eq!(restored_node.thumbnail_height, 48);
+}
+
+#[test]
+fn test_snapshot_preserves_uuid_identity() {
+    let mut graph = Graph::new();
+    let key = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let node_id = graph.get_node(key).unwrap().id;
+
+    let snapshot = graph.to_snapshot();
+    let restored = Graph::from_snapshot(&snapshot);
+    let (_, restored_node) = restored.get_node_by_id(node_id).unwrap();
+    assert_eq!(restored_node.url(), "https://a.com");
+}
+
+// --- TEST-3: from_snapshot edge cases ---
+
+#[test]
+fn test_snapshot_edge_with_missing_url_is_dropped() {
+    use crate::persistence::{GraphSnapshot, PersistedAddress, PersistedEdge, PersistedNode};
+
+    let snapshot = GraphSnapshot {
+        nodes: vec![PersistedNode {
+            node_id: Uuid::new_v4().to_string(),
+            url: "https://a.com".to_string(),
+            cached_host: None,
+            title: String::new(),
+            position_x: 0.0,
+            position_y: 0.0,
+            tags: vec![],
+            tag_presentation: NodeTagPresentationState::default(),
+            import_provenance: vec![],
+            is_pinned: false,
+            navigation_memory: NodeNavigationMemory::empty(),
+            thumbnail_png: None,
+            thumbnail_width: 0,
+            thumbnail_height: 0,
+            favicon_rgba: None,
+            favicon_width: 0,
+            favicon_height: 0,
+            session_state: None,
+            mime_hint: None,
+            address: PersistedAddress::Http("https://a.com".to_string()),
+            classifications: Vec::new(),
+            frame_layout_hints: Vec::new(),
+            frame_split_offer_suppressed: false,
+        }],
+        edges: vec![PersistedEdge {
+            from_node_id: Uuid::new_v4().to_string(),
+            to_node_id: Uuid::new_v4().to_string(),
+            families: vec![PersistedEdgeFamily::Semantic],
+            semantic: Some(PersistedSemanticEdgeData {
+                sub_kinds: vec![PersistedSemanticSubKind::Hyperlink],
+                label: None,
+                agent_decay_progress: None,
+            }),
+            traversal: None,
+            containment: None,
+            arrangement: None,
+            imported: None,
+            provenance: None,
+        }],
+        import_records: vec![],
+        timestamp_secs: 0,
+    };
+
+    let graph = Graph::from_snapshot(&snapshot);
+
+    // Node should be restored, edge should be silently dropped
+    assert_eq!(graph.node_count(), 1);
+    assert_eq!(graph.edge_count(), 0);
+}
+
+#[test]
+fn test_snapshot_duplicate_urls_last_wins() {
+    use crate::persistence::{GraphSnapshot, PersistedAddress, PersistedNode};
+
+    let snapshot = GraphSnapshot {
+        nodes: vec![
+            PersistedNode {
+                node_id: Uuid::new_v4().to_string(),
+                url: "https://same.com".to_string(),
+                cached_host: None,
+                title: "First".to_string(),
+                position_x: 0.0,
+                position_y: 0.0,
+                tags: vec![],
+                tag_presentation: NodeTagPresentationState::default(),
+                import_provenance: vec![],
+                is_pinned: false,
+                navigation_memory: NodeNavigationMemory::empty(),
+                thumbnail_png: None,
+                thumbnail_width: 0,
+                thumbnail_height: 0,
+                favicon_rgba: None,
+                favicon_width: 0,
+                favicon_height: 0,
+                session_state: None,
+                mime_hint: None,
+                address: PersistedAddress::Http("https://same.com".to_string()),
+                classifications: Vec::new(),
+                frame_layout_hints: Vec::new(),
+                frame_split_offer_suppressed: false,
+            },
+            PersistedNode {
+                node_id: Uuid::new_v4().to_string(),
+                url: "https://same.com".to_string(),
+                cached_host: None,
+                title: "Second".to_string(),
+                position_x: 100.0,
+                position_y: 100.0,
+                tags: vec![],
+                tag_presentation: NodeTagPresentationState::default(),
+                import_provenance: vec![],
+                is_pinned: false,
+                navigation_memory: NodeNavigationMemory::empty(),
+                thumbnail_png: None,
+                thumbnail_width: 0,
+                thumbnail_height: 0,
+                favicon_rgba: None,
+                favicon_width: 0,
+                favicon_height: 0,
+                session_state: None,
+                mime_hint: None,
+                address: PersistedAddress::Http("https://same.com".to_string()),
+                classifications: Vec::new(),
+                frame_layout_hints: Vec::new(),
+                frame_split_offer_suppressed: false,
+            },
+        ],
+        edges: vec![],
+        import_records: vec![],
+        timestamp_secs: 0,
+    };
+
+    let graph = Graph::from_snapshot(&snapshot);
+
+    // Both nodes are created and lookup keeps last inserted semantics.
+    assert_eq!(graph.node_count(), 2);
+    let (_, node) = graph.get_node_by_url("https://same.com").unwrap();
+    assert_eq!(node.title, "Second");
+}
