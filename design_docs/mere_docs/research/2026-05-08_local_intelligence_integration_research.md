@@ -26,17 +26,17 @@
 
 **Yes, Mere can host AI models. The question is sequencing.**
 
-The 2026-02-24 graphshell research already concluded that **Burn (with wgpu)** is the right inference engine for a consumer desktop product, on the grounds of universal hardware support — not Nvidia-only. That conclusion is **stronger now**, because Mere has additionally committed to a browser/PWA target where Burn-wgpu (via WebGPU) ships in browsers but Wasmtime / candle / libtorch / llama.cpp do not.
+The 2026-02-24 graphshell research already concluded that **Burn (with wgpu)** is the right first engine for consumer-device statistical intelligence, on the grounds of universal hardware support — not Nvidia-only. That conclusion is **stronger now** for embeddings and field-algebra-adjacent tensor work, because Mere has additionally committed to a browser/PWA target where Burn-wgpu (via WebGPU) ships in browsers but Wasmtime / candle / libtorch / llama.cpp do not. It should not be stretched into a blanket commitment that Burn is the LLM-serving or LoRA-training runtime.
 
 The key Mere-specific updates to the older research:
 
-1. **Burn is no longer hypothetical** — it shipped in `graph-canvas` for the field-algebra evaluator at version 0.21 with ndarray and optional wgpu backends. Adding `burn-nn` + `burn-import` to host model architectures is incremental, not a new architectural decision.
+1. **Burn is no longer hypothetical** — it shipped in `graph-canvas` for the field-algebra evaluator at version 0.21 with ndarray and optional wgpu backends. Burn-backed BERT embeddings are mechanically wired in `intelligence-embeddings`; real MiniLM fixture validation is the remaining empirical gate.
 2. **The first-class integration site is now the field algebra**, not the agent runtime. An embedding model produces `Vec<f32>` per node; that's a vector field that plugs into the existing `Sample(FieldId)` indirection. Force-directed-by-meaning, semantic neighbor search, and content clustering all fall out of one wiring.
-3. **Eidetic is the right home for the vector index** — private local memory, with the same `Request`/`Response`/`Store`/`dispatch` discipline already in use, not a new "intelligence agent" crate.
+3. **Eidetic is the right persistence substrate, not the embedding owner** — `intelligence-embeddings` owns providers, vector index, search facade, and field bridge; eidetic owns typed persistence, model manifests, content-addressed blobs, and future memory-domain APIs.
 4. **Distribution is no longer "Verse" — it's moothold + iroh blobs.** The model-as-engram framing carries forward; the transport layer changed.
 5. **Agentic intelligence is genuinely deferred** — Distillation Boundary, AWAL, typed artifact promotion, and supervised-agent runtime are real prerequisites the older research correctly identified, and Mere has not built them yet. Generation-first chat-with-graph features will be premature.
 
-**The strongest first slice is structural intelligence powered by Burn-evaluated embeddings**: a small embedding model (MiniLM-class), a vector index in eidetic, and an embedding-as-vector-field coupling so semantic similarity becomes an attractor in the existing layout system. **No LLM needed for the first horizon.**
+**The strongest first slice is structural intelligence powered by Burn-evaluated embeddings**: a small embedding model (MiniLM-class), a vector index persisted through eidetic, and an embedding-as-vector-field coupling so semantic similarity becomes an attractor in the existing layout system. **No LLM needed for the first horizon.**
 
 ---
 
@@ -48,7 +48,7 @@ The graphshell taxonomy stands. Five mechanism categories, with Mere-natural nam
 | --- | --- | --- |
 | **Structural** | Graph thinking about itself. Graph topology, traversal history, frame affinity, graphlets, force-directed layout | Strong substrate already in `graph-canvas` + `graph-tree` |
 | **Semantic** | Symbolic — UDC, tags, edge families, classifications | Migrated; tag/UDC systems live in graphshell donor docs and must come over |
-| **Statistical** | Embeddings, similarity, learned ranking | **Not yet built; first-target tier** |
+| **Statistical** | Embeddings, similarity, learned ranking | **Mechanically shipped through Tier 2; real MiniLM empirical validation still pending** |
 | **Generative** | Summaries, extraction, synthesis text | Deferred (LLM cost + trust gates) |
 | **Agentic** | Orchestration over time — observe, plan, act, evaluate | Deferred (needs Distillery + AWAL) |
 | **Collective / transfer** | Engrams, FLora, federated/shared artifacts | Carries through `moothold` + `mooting` once distillery exists |
@@ -66,7 +66,7 @@ Adopting the older 6-tier ladder, with Mere-current readiness:
 - **Tier 0 — Descriptive structural**: explain this graphlet, graph diff, current-thread reconstruction. *No new dependencies.* **Ready when graphlet/explanation surfaces are migrated.**
 - **Tier 1 — Semantic assistance**: tag/UDC suggestions with provenance, accept/reject flows. *Existing dependencies.* **Blocked on durable semantic-record migration from graphshell.**
 - **Tier 2 — Statistical retrieval**: embeddings, vector index, semantic search, semantic clustering. **First model-assisted target.**
-- **Tier 3 — Generative local**: bounded summaries, extraction, "explain this selection". *Adds small LLMs (Qwen 0.5B / Phi 3.5 / SmolLM2).* **Deferred until Tier 2 lands and trust surfaces exist.**
+- **Tier 3 — Generative local**: bounded summaries, extraction, "explain this selection". *Adds small LLMs behind a provider seam (`mistral.rs`, `llama.cpp`, candle, Burn, or future runtime depending on the feature).* **Deferred until Tier 2 is empirically validated and trust surfaces exist.**
 - **Tier 4 — Supervised agentic**: AWAL, Distillery, typed artifacts, background agents. **Needs all of §6's prerequisites.**
 - **Tier 5 — Transfer / collective**: engrams shared via moothold, community-fine-tuned LoRAs. **Needs Tier 4 plus federation.**
 
@@ -90,19 +90,20 @@ The graphshell research's sequencing rule still applies: **structural and semant
 | `burn-tensor` | transitive | ✅ via burn |
 | `burn-nn` (Linear, attention, embeddings, transformer blocks) | transitive | ✅ via burn |
 | `burn-autodiff` | transitive | ✅ via burn (we don't use it for inference) |
-| `burn-import` (PyTorch / safetensors / ONNX → Burn module) | feature flag | ❌ — add when needed |
-| `tokenizers` (HF Rust) | new dep | ❌ — needed for any text model |
-| Vector index | new — `hnsw_rs` or `lance` candidates | ❌ — should live in eidetic |
-| Model manifest + weight cache | new — manifest+blob store | ❌ — see §7 |
+| `burn-import` (PyTorch / safetensors / ONNX → Burn module) | feature flag | ⚠️ not used yet; current BERT path manually maps safetensors |
+| `tokenizers` (HF Rust) | optional dep | ✅ behind `intelligence-embeddings/bert` |
+| Vector index | `intelligence-embeddings` | ✅ flat index; HNSW deferred |
+| Model manifest + weight cache | `eidetic::models` | ✅ content-addressed `ModelManifest` + component resolution |
 
 ### 4.3 Burn vs the alternatives, revisited
 
-The graphshell research preferred Burn over candle on hardware-support grounds (universal wgpu vs Nvidia-CUDA-required). That holds. Two caveats worth recording:
+The graphshell research preferred Burn over candle on hardware-support grounds (universal wgpu vs Nvidia-CUDA-required). That holds for the statistical tier. Three caveats are now load-bearing:
 
 1. **Burn's model zoo is smaller than candle's.** For Llama-class models, candle has plug-and-play implementations; Burn requires manual architecture definition. For embedding models (BERT) the gap is small; for LLMs it's real.
 2. **For LLM-class hot inference, llama.cpp / mistral.rs are stronger.** If a future tier-3 generative feature lands, evaluating `mistral.rs` (or candle for that one path) alongside Burn is reasonable. Burn doesn't have to win every axis.
+3. **For LoRA training and multi-adapter serving, Burn is not the default assumption.** PEFT/Axolotl, `mistral.rs`, `llama.cpp`/GGUF, and LoRAX have more direct adapter affordances today. Mere should define a provider/capability contract, not embed the LLM runtime choice into the substrate.
 
-For Mere's first-target tier (embeddings), Burn is decisively right. **No change to the engine decision.**
+For Mere's first-target tier (embeddings), Burn is still the right path. For Tier 3+, the decision is **provider seam first, runtime later**.
 
 ---
 
@@ -247,7 +248,7 @@ Per the Mere memory `project_browser_pwa_shapes_scripting`, browser/PWA delivery
 - **MiniLM-L6 in-browser** is realistic — ~22 MB weight, ~384 dims, sub-100ms per batch on consumer GPUs.
 - **Tokenizers**: the `tokenizers` crate compiles to wasm32 with some friction (regex backends matter); `tokenizers-wasm` already exists.
 - **HNSW indexes**: pure-Rust crates compile to wasm fine; in-memory indexes are limited by browser memory budgets but a few thousand nodes is comfortable.
-- **LLM-class models in-browser**: infeasible today. ~600 MB weight + slow wgpu inference + browser memory limits = bad UX. Defer to native paths.
+- **LLM-class models in-browser**: infeasible for the product-grade path today. Even if tiny demos work, ~600 MB weights, slow wgpu inference, and browser memory limits make this a poor default UX. Defer to native paths.
 - **Wasmtime / mistral.rs / llama.cpp / ONNX Runtime**: none ship in browser. If any of these become a hot path, native-only is the constraint.
 
 **Implication**: Tier 2 (embeddings) is browser-deliverable. Tier 3+ (LLMs, agentic) is native-only for the foreseeable future. Plan accordingly.
@@ -261,7 +262,7 @@ The graphshell research described "Verse Intelligence" — model distribution an
 - **Verse → Mere/moothold + iroh blobs**: model manifests live as engrams (specifically `AdapterWeights` / `ModelManifest`-class engrams; see §5.6), weights live as iroh blobs.
 - **LoRA adapters as engrams**: the engram framing fits adapters perfectly — small, signed, peer-distributable, optionally signed by validators. The schema makes adapter-engrams distinguishable from memory-engrams or behavior-profile-engrams at the moothold level, so subscription routing and trust review can branch on type before payload inspection.
 - **Community fine-tuning**: a moot can curate a dataset (their flora) and produce an adapter targeting MiniLM/Qwen/etc.; the adapter is a schema-typed engram exchanged via murm or moothold.
-- **Capability contracts**: the `CapabilityContract` from `self_hosted_model_spec.md` carries forward — features declare requirements, the local runtime checks satisfiability, providers (local or peer-served via murm) bid.
+- **Capability contracts**: the `CapabilityContract` from `self_hosted_model_spec.md` carries forward — features declare requirements, the local runtime checks satisfiability, providers (local or peer-served via murm) bid. For Tier 3+, the capability contract is the boundary that keeps Burn, `mistral.rs`, `llama.cpp`, PEFT/Axolotl, and LoRAX swappable.
 
 **For the first horizon, federation is out of scope.** Bundle one MiniLM, ship a flat-index in eidetic, prove the field-algebra integration, then layer adapters and federation later.
 
@@ -285,8 +286,9 @@ The graphshell research described "Verse Intelligence" — model distribution an
    - Semantic neighbor search (command palette → vector index → highlighted nodes).
    - Semantic clustering layout (force-directed-by-embedding via field coupling).
    - Heatmap background (TwoDPreset::Heatmap with embedding-similarity field).
-5. **Tier 3 entry point — bounded generation**:
+5. **Tier 3 entry point — bounded generation behind a provider seam**:
    - This is where Distillery becomes load-bearing. Plan + scope before any LLM ships.
+   - Define `GenerateProvider` / `LocalModelRuntime` capability surface before binding to Burn, `mistral.rs`, `llama.cpp`, candle, or an API provider.
    - Likely first feature: graphlet digest with explicit `BuildArrangementScaffold` artifact.
 6. **Tier 4 — agentic**: Defer. Real prerequisite list: Distillation Boundary in runtime, AWAL durability, typed artifact promotion, supervised-agent execution with capability contracts. Each is its own plan.
 7. **Tier 5 — federation / collective**: Defer. Maps onto moothold + iroh blob distribution; LoRA adapters as engrams.
@@ -301,7 +303,8 @@ The graphshell research described "Verse Intelligence" — model distribution an
 4. **Weight format on-disk**: safetensors is the cross-framework standard. eidetic's blob store should treat them as opaque blobs with manifest metadata.
 5. **Vector index persistence**: HNSW indexes are large per-node; rebuilding from raw embeddings on cold start is acceptable for small graphs (<10k nodes), painful for larger. Decide when scale becomes real.
 6. **Capability-contract layer**: the `self_hosted_model_spec.md` contract framing is sound but the implementation cost is real. Defer until at least three capability classes exist (embedding + summarization + classification) — until then a flat provider trait is enough.
-7. **Browser model fetching**: in-browser, blobs come from CDN or peer (iroh-over-wasm is a research probe). Bundling weights into the wasm package bloats the package; on-demand fetch with IndexedDB cache is the natural pattern.
+7. **Browser model fetching**: in-browser, blobs come from CDN or peer (iroh-over-wasm is a research probe). Bundling weights into the wasm package bloats the package; on-demand fetch with OPFS cache is the natural path if eidetic-opfs lands, with IndexedDB only as a fallback.
+8. **Hash agility vs current code.** The substrate brief's §13 says digest fields should be multihash-aware. Current `eidetic::schema::Hash` is raw BLAKE3 `[u8; 32]`. Either migrate it early to a multihash-aware type or explicitly document that hash agility is a design target not yet reflected in the implementation.
 
 ---
 
@@ -333,6 +336,12 @@ The intelligence-embeddings crate has shipped through Tier-2 (statistical retrie
 - **§5 BERT-via-Burn** — DONE mechanically. Full layer stack (`BertEmbeddings`/`BertSelfAttention`/`BertSelfOutput`/`BertAttention`/`BertIntermediate`/`BertOutput`/`BertLayer`/`BertEncoder`/`BertModel`) implemented in Burn 0.21 with `from_loaded` constructors. `BertEmbeddingProvider::<B>::load(model_dir, device)` is the one-shot entry point. PyTorch `[out, in]` → Burn `[in, out]` Linear-weight transpose handled at the safetensors-extraction boundary. HF `LayerNorm.weight/bias` → Burn `gamma/beta` mapped at the construct boundary.
 - **§5 BERT validation** — TIERED, AWAITING EMPIRICAL RUN. Tier-1 (cheap fixture comparison) runnable as soon as fixtures populate; helper at `scripts/capture_minilm_fixtures.py`. Tier-2 (continuous candle-or-ort comparison) gated behind `bert-validation` feature, structurally ready. First empirical run reveals whether numerical adjustments are needed at three known sites: Linear transpose direction, GELU variant, attention scale factor.
 - **§6 Distillery** — UNCHANGED. Genuinely deferred until Tier-3+ work begins.
-- **§9 sequencing** — Steps 1–4 (Tier-2 first/second/third slices) all landed. Step 5 (Tier-3 entry / generative bounded summaries) blocked behind Distillery as planned.
+- **§9 sequencing** — Steps 1–4 (Tier-2 first/second/third slices) all landed. Step 5 (Tier-3 entry / generative bounded summaries) blocked behind Distillery and the provider-runtime contract as planned.
 
 The remaining BERT work is environmental — a developer with `MERE_MINILM_DIR` and either `sentence-transformers` (Python) or `candle-transformers` (Rust) populates `FIXTURES`, runs the tier-1 test, and either confirms or fixes the three known empirical sites. The mechanical pipeline is done.
+
+### 2026-05-11 audit adjustment
+
+- Burn remains the Tier-2 embedding / tensor path, but the document no longer treats it as the Tier-3+ LLM or LoRA runtime by default.
+- `eidetic` has moved beyond the early blob-only description: manifest, typed-payload, schema-engram, engram, bundle, and model-storage layers are present in code. Future updates should treat eidetic as the persistence substrate for typed intelligence artifacts, while keeping model/provider logic in sibling intelligence crates.
+- Hash-agility is now called out as a current code/design mismatch: the design wants multihash discipline, while the implementation still uses raw BLAKE3 hashes.

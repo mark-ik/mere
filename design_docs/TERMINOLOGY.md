@@ -16,7 +16,21 @@ For terms not addressed here, defer to the inherited [`graphshell/design_docs/TE
 - **Platen** — graph-aware composition surface. Knows graph semantics; presses node-data into renderable form for the verso-tile layer to receive.
 - **Verso-tile** — rendering-surface manager. Receives engine output (via inker) and places it into GraphTree tile slots. *Verso* is the brand-level concept (the page that catches the impression); *verso-tile* is the crate.
 - **Graphshell** — portable shell layer + host GUI manager. Owns the workbench, tile tree, Navigator surface, and integration to whichever GUI framework hosts the app (iced / gpui / html-css / other).
-- **Mnem** — private local accumulated browsing memory. Persistence layer (fjall/redb/rkyv). Distinct from any moot's flora.
+- **Eidetic** — private local memory crate (formerly *Mnem*). Persistence layer for graph snapshots, traversal logs, settings, browsing memory. Distinct from any moot's flora. Name evokes eidetic memory ("remembered with high fidelity"). The substrate engrams are distilled from.
+
+## Engine layer (inker / nematic / document model)
+
+- **Engine** — concrete content parser implementing `inker::Engine` (`engine_id() -> &str`, `render(&EngineInput) -> Result<EngineDocument, EngineError>`). Twelve nematic engines ship today: `markdown`, `gemtext`, `gopher`, `feed`, `text`, `file`, `finger`, `knot`, `scroll`, `misfin`, `nex`, `guppy`. Plus `serval.web` (external) and `host.external-protocol` / `graphshell.internal` (host-side).
+- **Protocol-faithfulness rule** — protocol engines (gemini, gopher, RSS/Atom, finger, scroll, misfin, nex, guppy) populate document blocks only with what the source spec actually says. They do not invent semantic structure the spec doesn't define. RSS `<item>` becomes `FeedEntry`; finger plain text stays plain text; gopher menu items use the `gopher://` URL synthesis from RFC 4266. The only Mere-defined format that's allowed to be richer is **knot**.
+- **Semantic-block intent** — the four `DocumentBlock` variants beyond structural shape that name *what content means*, not just *how it's laid out*: `FeedHeader`, `FeedEntry`, `MetadataRow`, `Badge`. Intelligence layers (search, summarise, recommend, recall) match on these intents. Adopting them in protocol engines is *more* spec-faithful (RSS / Atom literally have entry-typed items), not an invention.
+- **Trust ladder** — the `DocumentTrustState` enum: **Trusted** (verified through a chain of trust — TLS root, signed envelope), **Tofu** (first-contact-accepted, "trust on first use"), **Insecure** (unauthenticated transport — plain HTTP, file://), **Broken** (verification attempted and failed — cert mismatch, sig invalid), **Unknown** (default; not yet evaluated).
+- **Provenance** — `DocumentProvenance` carries `source_kind` (engine ID), `canonical_uri`, `fetched_at` (RFC 3339), `source_label`. Engines populate `source_kind` + `canonical_uri`; the host fills in `fetched_at` after transport.
+- **Knot** — Mere's native note / clip format. Frontmatter (YAML subset) + polyglot CommonMark body where fenced code blocks with protocol language tags (`gemtext`, `gopher`, `nex`, `feed-entry`, `feed-header`, `metadata-row`, `badge`) expand into real semantic blocks. Wikilinks `[[name]]` rewrite to `mere://node/<slug>`; hashtags `#tag` extract to `Badge` siblings. The only Mere-defined content format. Engine ID `nematic.knot`; default content-type `text/x-knot`.
+- **Three-head Hekate** — Serval's planned evolution into a smolweb-extract / middlenet / fullweb negotiator for the same HTML input. Not yet built; locks in that nematic does not own an HTML reader-mode engine — HTML in any rendering depth is Serval's job. Hekate = three-headed Greek goddess of crossroads.
+
+## Memory naming retired
+
+- **Mnem** — replaced by **Eidetic**. The prototype name `mnem` was unavailable on crates.io.
 
 ## Comms layers
 
@@ -51,6 +65,9 @@ For terms not addressed here, defer to the inherited [`graphshell/design_docs/TE
 | Mootcore | **Moothold** | Rename within this conversation |
 | Verso *(as engine-controller)* | split: **verso-tile** (rendering surface) + **inker** (engine controller) | Two distinct concerns |
 | Middlenet | **Nematic** | Better metaphor (aligned-but-flowing threads) |
+| Mnem | **Eidetic** | Prototype name unavailable on crates.io; eidetic evokes "remembered with high fidelity" |
+| `nematic.smolweb` *(umbrella engine ID)* | Per-protocol IDs (`nematic.gemtext`, `nematic.gopher`, `nematic.finger`) | Concrete engines now exist for each smolweb protocol |
+| HTML reader-mode in nematic | Future Serval head (three-head Hekate negotiator) | HTML in any rendering depth is Serval's job, not nematic's |
 
 ## Status
 

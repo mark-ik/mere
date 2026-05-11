@@ -1,13 +1,14 @@
 # Polyglot Knot Design — Protocol-Faithful Clip Composition
 
 **Date**: 2026-05-08
-**Status**: Active design / pre-implementation
+**Status**: Implemented 2026-05-08 / 2026-05-09. Doc retained as the design rationale + format spec; consult [`../../../crates/nematic/src/knot/expand.rs`](../../../crates/nematic/src/knot/expand.rs) and [`../../../crates/inker/src/document/render.rs`](../../../crates/inker/src/document/render.rs) for the live behavior, [`../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md`](../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md) §2.4 for follow-ups.
 **Scope**: Extend the [`nematic.knot`](https://crates.io/crates/nematic) note format from "frontmatter + markdown body" to a polyglot composition where every other `nematic.*` protocol's blocks can embed inside a knot, fenced-code-block-style, and round-trip back to the source protocol's native syntax.
 
 **Related**:
 
 - [`../../mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md`](../../mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md) — protocol architecture
-- [`../../graphshell_docs/implementation_strategy/2026-05-06_graphshell_migration_plan.md`](../../graphshell_docs/implementation_strategy/2026-05-06_graphshell_migration_plan.md) — engine layer + smolweb stub history
+- [`../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md`](../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md) — current forward-looking plan
+- Archived: [`../../archive_docs/2026-05-09_engine_layer_complete/2026-05-06_graphshell_migration_plan.md`](../../archive_docs/2026-05-09_engine_layer_complete/2026-05-06_graphshell_migration_plan.md) — engine layer + smolweb stub history
 - Inherited: [`SemanticDocument`](../../../../graphshell/crates/middlenet-core/src/document.rs) — donor's universal document model that this plan generalises
 
 ---
@@ -21,7 +22,7 @@ The 2026-05-08 design conversation surfaced a richer use of knots than the v1 fr
 Two things follow from that:
 
 1. A clip taken from a protocol-rendered tile must preserve that protocol's representation in the knot, not flatten it to plain markdown. Gopher menu items stay gopher items. Gemtext links stay gemtext links. Feed entries stay feed entries.
-2. A knot is an *aggregate* — it can mix markdown prose authored by the user with protocol blocks clipped from any number of sources. The knot is the only Mere-defined format; the protocol blocks inside it stay spec-faithful per the [protocol-faithfulness rule](../../graphshell_docs/implementation_strategy/2026-05-06_graphshell_migration_plan.md) the migration plan locks in.
+2. A knot is an *aggregate* — it can mix markdown prose authored by the user with protocol blocks clipped from any number of sources. The knot is the only Mere-defined format; the protocol blocks inside it stay spec-faithful per the protocol-faithfulness rule established during the engine-layer slice (now captured in [`../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md`](../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md) §3).
 
 The existing v1 knot engine already uses [`DocumentBlock`](../../../crates/inker/src/document.rs)'s semantic variants (`FeedEntry`, `MetadataRow`, etc.) for the *output* of parsing. What's missing is a way for those variants — or raw gemtext / gopher / nex content — to *appear in the knot's body* and round-trip cleanly.
 
@@ -40,7 +41,7 @@ The body is CommonMark. Fenced code blocks (` ``` `) whose language tag matches 
 Recognised fence languages:
 
 | Tag | Expands to | Producer |
-|---|---|---|
+| --- | --- | --- |
 | `gemtext` | Heading / Paragraph / Link / Quote / List / CodeBlock blocks | `nematic::gemtext::GemtextEngine` |
 | `gopher` | Paragraph (info merge) + Link blocks | `nematic::gopher::GopherEngine` |
 | `nex` | List of Link blocks (directory) or Paragraphs (content) | `nematic::nex::NexEngine` |
@@ -127,7 +128,7 @@ Recursive expansion: `expand_fenced_blocks` walks into `Quote.blocks` and `List.
 The dual of expansion. New method on `EngineDocument` that mirrors `to_markdown()` but emits fenced code blocks for protocol-specific variants instead of flattening them.
 
 | Block | `to_knot()` output |
-|---|---|
+| --- | --- |
 | Heading / Paragraph / List / Quote / CodeBlock / Image / Preformatted / Rule | Same as `to_markdown()` |
 | `FeedHeader { … }` | ` ``` `feed-header\n…key:value lines…\n` ``` ` |
 | `FeedEntry { … }` | ` ``` `feed-entry\n…key:value lines…\n` ``` ` |
