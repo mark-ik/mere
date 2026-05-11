@@ -26,6 +26,7 @@ pub mod host_event;
 pub mod host_toolkit;
 pub mod intents;
 pub mod overlay;
+pub mod paint;
 pub mod pane;
 pub mod persistence;
 pub mod signal_router;

@@ -13,41 +13,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::scripting::SceneObjectId;
 
-/// A color in linear RGBA, 0.0–1.0 per channel.
-///
-/// Framework-agnostic color type. Conversion to/from backend-specific colors
-/// (egui `Color32`, iced `Color`, renderer-specific colors) happens at the
-/// host bridge.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Color {
-    pub r: f32,
-    pub g: f32,
-    pub b: f32,
-    pub a: f32,
-}
-
-impl Color {
-    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
-        Self { r, g, b, a }
-    }
-
-    pub const WHITE: Self = Self::new(1.0, 1.0, 1.0, 1.0);
-    pub const BLACK: Self = Self::new(0.0, 0.0, 0.0, 1.0);
-    pub const TRANSPARENT: Self = Self::new(0.0, 0.0, 0.0, 0.0);
-}
-
-impl Default for Color {
-    fn default() -> Self {
-        Self::WHITE
-    }
-}
-
-/// Stroke style for lines and shape outlines.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct Stroke {
-    pub color: Color,
-    pub width: f32,
-}
+// `Color` and `Stroke` moved into mere-kernel's `paint` module
+// (2026-05-11) so the kernel no longer depends on graph-canvas — the
+// reversed dependency direction unlocks the cartography layer's
+// graph-layout extraction (see the cartography brief's revised §9
+// step 4). Re-exported here to keep graph-canvas's public API stable
+// for downstream consumers.
+pub use mere_kernel::paint::{Color, Stroke};
 
 /// A single drawable primitive in screen space.
 ///

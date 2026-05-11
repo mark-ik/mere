@@ -23,12 +23,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::geometry::PortableRect;
 use crate::graph::NodeKey;
+use crate::paint::Stroke;
 use crate::pane::TileRenderMode;
 
 /// One overlay stroke pass the host painter renders over a pane.
 ///
 /// Fields use portable types throughout (`PortableRect`,
-/// `graph_canvas::packet::Stroke`) so the descriptor flows across the
+/// `mere_kernel::paint::Stroke`) so the descriptor flows across the
 /// host boundary without egui leakage. Egui painters convert at the
 /// draw-call boundary via `egui_rect_from_portable` /
 /// `egui_stroke_from_portable` in `compositor_adapter`; iced painters
@@ -38,7 +39,7 @@ pub struct OverlayStrokePass {
     pub node_key: NodeKey,
     pub tile_rect: PortableRect,
     pub rounding: f32,
-    pub stroke: graph_canvas::packet::Stroke,
+    pub stroke: Stroke,
     pub glyph_overlays: Vec<GlyphOverlay>,
     pub style: OverlayAffordanceStyle,
     pub render_mode: TileRenderMode,

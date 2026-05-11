@@ -12,7 +12,6 @@ description = "Portable identity, authority, and mutation kernel for the Mere br
 test-utils = []
 
 [dependencies]
-graph-canvas = { path = "../graph/graph-canvas" }
 graph-memory = { path = "../graph/graph-memory" }
 graph-tree = { path = "../graph/graph-tree" }
 crossbeam-channel = "0.5"
