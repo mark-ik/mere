@@ -1,0 +1,17 @@
+[package]
+name = "mere-host-apparatus"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+description = "gpui renderer for mere's apparatus pane — system inspector. Owns the tracing capture layer + uxtree dump rendering."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+accesskit = { workspace = true }
+gpui = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uxtree = { workspace = true }

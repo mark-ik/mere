@@ -1,0 +1,18 @@
+[package]
+name = "mere-host-graphshell"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+description = "gpui renderer for mere's graphshell — root toolbar / omnibar / nav buttons row above the frame layout."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+gpui = { workspace = true }
+mere-graphshell = { workspace = true }
+# Grapheme-aware cursor motion in the omnibar text input. Same crate
+# gpui's bundled input example uses, kept off the workspace table since
+# only this crate consumes it.
+unicode-segmentation = "1"

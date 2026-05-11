@@ -1,12 +1,35 @@
 [workspace]
 resolver = "2"
+members = ["workbench", "orrery", "gloss", "apparatus", "graphshell"]
+
+# Shared deps across mere-host's sub-crates so versions stay aligned and
+# every renderer points at the same gpui checkout.
+[workspace.dependencies]
+accesskit = "0.24"
+gpui = { path = "../../../glass-gpui/crates/gpui" }
+gpui_platform = { path = "../../../glass-gpui/crates/gpui_platform", features = ["font-kit"] }
+graph-canvas = { path = "../graph/graph-canvas" }
+inker = { path = "../inker" }
+mere-apparatus = { path = "../mere-domain/apparatus" }
+mere-frame = { path = "../mere-domain/frame" }
+mere-gloss = { path = "../mere-domain/gloss" }
+mere-graphshell = { path = "../mere-domain/graphshell" }
+mere-kernel = { path = "../mere-kernel" }
+mere-orrery = { path = "../mere-domain/orrery" }
+mere-workbench = { path = "../mere-domain/workbench" }
+nematic = { path = "../nematic" }
+platen = { path = "../platen" }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uxtree = { path = "../uxtree" }
+uuid = "1"
 
 [package]
 name = "mere-host"
 version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"
-description = "gpui host crate for the Mere browser — Application bootstrap, window lifecycle, accesskit bridge, PlatformSurface impls."
+description = "gpui host orchestrator for the Mere browser — Application bootstrap, window lifecycle, frame traversal, dispatch to per-domain renderer crates."
 publish = false
 
 [lib]
@@ -17,26 +40,60 @@ name = "mere-host"
 path = "src/main.rs"
 
 [dependencies]
-# gpui (Glass-HQ fork) — sibling repo at ../../../glass-gpui.
-gpui = { path = "../../../glass-gpui/crates/gpui" }
-gpui_platform = { path = "../../../glass-gpui/crates/gpui_platform", features = ["font-kit"] }
+gpui = { workspace = true }
+gpui_platform = { workspace = true }
 
-# Mere portable layer.
-accesskit = "0.24"
+# Mere portable layer (data + a11y projection). The orchestrator
+# composes the application uxtree by calling project_* on each
+# domain crate; the actual gpui rendering for each lives in the
+# matching mere-host-* renderer below.
+accesskit = { workspace = true }
 euclid = "0.22"
-inker = { path = "../inker" }
-mere-apparatus = { path = "../mere-domain/apparatus" }
-mere-frame = { path = "../mere-domain/frame" }
-mere-gloss = { path = "../mere-domain/gloss" }
-mere-kernel = { path = "../mere-kernel" }
-mere-orrery = { path = "../mere-domain/orrery" }
-mere-workbench = { path = "../mere-domain/workbench" }
-nematic = { path = "../nematic" }
-platen = { path = "../platen" }
-uxtree = { path = "../uxtree" }
-uuid = "1"
-verso-tile = { path = "../verso-tile" }
+graph-canvas = { workspace = true }
+inker = { workspace = true }
+mere-apparatus = { workspace = true }
+mere-frame = { workspace = true }
+mere-gloss = { workspace = true }
+mere-graphshell = { workspace = true }
+mere-kernel = { workspace = true }
+mere-orrery = { workspace = true }
+mere-workbench = { workspace = true }
+nematic = { workspace = true }
+platen = { workspace = true }
+uxtree = { workspace = true }
+uuid = { workspace = true }
 
-# Diagnostics.
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Per-domain renderers — each owns one domain's gpui rendering.
+mere-host-apparatus = { path = "apparatus" }
+mere-host-gloss = { path = "gloss" }
+mere-host-graphshell = { path = "graphshell" }
+mere-host-orrery = { path = "orrery" }
+mere-host-workbench = { path = "workbench" }
+
+# Tracing capture lives in mere-host-apparatus; the orchestrator wires
+# the subscriber + passes the buffer through.
+tracing = { workspace = true }
+
+# Frame layout persistence (~/.local/share/mere/mere-host/ on Linux,
+# %LOCALAPPDATA%\mere\mere-host\ on Windows, similar on macOS).
+dirs = "5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+# raw_window_handle is re-exported by gpui (Glass-HQ fork's `Window`
+# impls `HasWindowHandle`); we depend on it directly so we can match
+# on platform variants when constructing the accesskit OS adapter.
+raw-window-handle = "0.6"
+
+# Per-platform a11y adapters. The portable layer (uxtree) already
+# produces `accesskit::TreeUpdate`; these crates ship it to the OS
+# (UIA on Windows, AT-SPI on Linux, NSAccessibility on macOS) so
+# screen readers + automation tools can consume Mere's tree.
+[target.'cfg(windows)'.dependencies]
+accesskit_windows = "0.32"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+accesskit_unix = "0.21"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+accesskit_macos = "0.26"

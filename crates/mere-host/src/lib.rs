@@ -4,779 +4,520 @@
 
 //! # mere-host
 //!
-//! gpui host crate for the Mere browser. See README.md for the full role
-//! description and v0 scope.
+//! gpui host orchestrator for the Mere browser. Owns:
+//! - Application bootstrap + window lifecycle
+//! - Frame layout traversal
+//! - Application uxtree composition (frame + per-domain subtrees)
+//! - Demo fixtures (markdown, graph, frame layout) for the v0 demo
 //!
-//! v0 surface area:
-//! - [`init_diagnostics`] — install the tracing subscriber.
-//! - [`run`] — bootstrap a gpui application with a single window
-//!   rendering a hardcoded `EngineDocument`. Returns when the user
-//!   closes the window.
+//! Per-domain rendering lives in companion crates:
+//! [`mere_host_workbench`], [`mere_host_orrery`], [`mere_host_gloss`],
+//! [`mere_host_apparatus`]. Each takes its portable input and returns
+//! a gpui element. Diagnostics (tracing capture) lives in
+//! `mere-host-apparatus` since the apparatus pane is its consumer.
 //!
-//! Subsequent rounds add `accesskit_winit` integration, mere-workbench
-//! projection, and `PlatformSurface` impls.
+//! ## Internal module layout
+//!
+//! - [`actions`] — gpui action types + default keymap + JSON loader
+//! - [`loader`] — address → fetch → sniff → route → engine pipeline
+//! - [`tiles`] — workbench-tile state (per-node document cache)
+//! - [`demo`] — throwaway fixtures the v0 shell boots against
+//! - [`persistence`] — frame-layout JSON load/save
+//! - [`ticks`] — background tasks (apparatus refresh, orrery inertia)
+//! - [`orrery_input`] — orrery pointer-event wiring → CanvasActions
+//! - [`panes`] — pane-tree recursion + splitter + per-pane rendering
+//! - [`host_helpers`] — graph find-or-create, tile labels, error doc
 
-use accesskit::{Node, NodeId, Role};
-use euclid::default::Point2D;
+pub mod actions;
+pub mod loader;
+pub mod tiles;
+
+mod a11y;
+mod bootstrap;
+mod demo;
+mod graph_registry;
+mod graph_switcher;
+mod host_helpers;
+mod host_navigation;
+mod layout_config;
+mod orrery_input;
+mod pane_state;
+mod panes;
+mod persistence;
+mod tearout;
+mod ticks;
+
+pub use bootstrap::run;
+
+use std::collections::HashMap;
+
 use gpui::{
-    AnyElement, App, Bounds, Context, Render, Window, WindowBounds, WindowOptions, div,
-    prelude::*, px, relative, rgb, size,
+    App, Context, Entity, FocusHandle, Focusable, MouseButton, MouseMoveEvent, MouseUpEvent,
+    Render, Window, div, prelude::*, rgb,
 };
-use gpui_platform::application;
-use inker::{DocumentBlock, Engine, EngineDocument, EngineInput, InlineSpan};
-use mere_frame::{FrameLayout, PaneContent, PaneNode, SplitAxis};
-use mere_kernel::graph::{Graph, NodeKey};
-use mere_kernel::pane::PaneId;
-use nematic::MarkdownEngine;
-use platen::{FrameId, ProjectedPane, WorkbenchProjection};
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
-use tracing::field::{Field, Visit};
-use tracing::{Event, Subscriber};
-use tracing_subscriber::layer::Context as LayerContext;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
+use inker::{EngineRegistry, EngineRoutePolicy};
+use mere_frame::{FrameLayout, GraphId, PaneContent, PaneId, SplitAxis};
+use mere_graphshell::frame_model::ToolbarViewModel;
+use mere_host_apparatus::{CapturedEvent, EventBuffer};
+use mere_host_graphshell::{OmnibarInput, Palette, ShellbarOrientation};
+use mere_kernel::graph::Graph;
 use uxtree::UxTree;
 
-const DEMO_MARKDOWN: &str = r#"# mere-host v0
+use crate::graph_registry::GraphRegistry;
+use crate::layout_config::{ChromeLayoutConfig, EdgePosition};
+use crate::panes::{PaneRenderCtx, SplitterDrag, compute_container_size, render_pane_node};
+use crate::persistence::save_frame_layout;
+use crate::tiles::TileManager;
 
-This window is opened by `mere-host::run()`. The host bootstraps gpui,
-parses an `EngineDocument` via `nematic::markdown`, and renders blocks
-using gpui's element tree. Inline span styling is flattened in v0.
-
-## Next steps for the host
-
-- `accesskit_winit` integration consuming `uxtree` subtrees
-- `mere-workbench` projection rendered alongside this document
-- `tracing-subscriber` → `register-diagnostics` bridge
-- `PlatformSurface` impls for Windows / Linux
-"#;
-
-/// In-memory ring buffer of recently-captured tracing events. Shared
-/// between the tracing subscriber's capture layer and the host's
-/// apparatus pane. Bounded so long-running sessions don't grow it
-/// unbounded.
-pub type EventBuffer = Arc<Mutex<VecDeque<CapturedEvent>>>;
-
-const EVENT_BUFFER_CAPACITY: usize = 200;
-
-/// One tracing event, captured at emit time.
-#[derive(Clone, Debug)]
-pub struct CapturedEvent {
-    pub level: tracing::Level,
-    pub target: String,
-    pub fields: String,
+pub(crate) struct HostRoot {
+    /// Per-pane state, keyed by `PaneId`. Each leaf in `frame_layout`
+    /// has an entry created on first paint. Closing a leaf drops the
+    /// corresponding `PaneState`.
+    pub(crate) panes: HashMap<PaneId, pane_state::PaneState>,
+    /// The most recently focused workbench pane. omnibar submit /
+    /// reload / back / forward target this workbench's tile list and
+    /// graph. `None` when no workbench is open in this window.
+    pub(crate) active_workbench: Option<PaneId>,
+    /// First orrery pane in layout order. v0 single-orrery cut: all
+    /// mouse handling routes here. Phase 1B Part 2 will key
+    /// handlers by `pane_id` so multiple orreries in one window
+    /// can each be interactive.
+    pub(crate) primary_orrery_pane: Option<PaneId>,
+    /// Monotonic counter for minting fresh `PaneId`s when summoning
+    /// panels at runtime. Seeded high (1000) so it doesn't collide
+    /// with the demo fixture's small PaneIds.
+    pub(crate) next_pane_id: u64,
+    /// This window's **primary graph** — the one new panels summoned
+    /// from the shellbar default to. Held as a direct
+    /// `Entity<Graph>` clone for fast-path reads of the active
+    /// workbench's graph; `registry` is the source of truth across
+    /// every window.
+    pub(crate) graph: Entity<Graph>,
+    /// Identity of the primary graph (key into `registry`).
+    pub(crate) graph_id: GraphId,
+    /// App-scope graph registry, shared by every window. Used to
+    /// resolve `graph_id`s on leaves (Phase 1B Part 2) and to
+    /// register new graphs created via `Cmd-N` or "summon orrery
+    /// for new graph" gestures.
+    pub(crate) registry: Entity<GraphRegistry>,
+    pub(crate) frame_layout: FrameLayout,
+    /// Where the shellbar + workbench tile strip live. Persisted
+    /// independently of `frame_layout` so the user can rotate the
+    /// chrome without touching their split arrangement.
+    pub(crate) chrome_layout: ChromeLayoutConfig,
+    pub(crate) app_tree: UxTree,
+    pub(crate) event_buffer: EventBuffer,
+    pub(crate) toolbar: ToolbarViewModel,
+    pub(crate) omnibar_input: Entity<OmnibarInput>,
+    pub(crate) palette: Entity<Palette>,
+    pub(crate) engine_registry: EngineRegistry,
+    pub(crate) engine_policy: EngineRoutePolicy,
+    /// Visited addresses, oldest first. Submit pushes onto this
+    /// (truncating anything past `history_cursor` first); Reload
+    /// reloads `history[history_cursor]`; Go Back / Go Forward move
+    /// the cursor and re-fetch.
+    pub(crate) history: Vec<String>,
+    pub(crate) history_cursor: usize,
+    /// Top-level focus point so app-global keybindings dispatch even
+    /// when no pane has focus.
+    pub(crate) focus_handle: FocusHandle,
+    /// Set by the palette-close subscription so the next `render`
+    /// (which has a `Window` handle) can move focus back here.
+    pub(crate) refocus_root_on_next_render: bool,
+    /// Raw window handle captured on the first paint. Cheap +
+    /// side-effect-free to read; the real platform a11y adapter
+    /// lives inside the `install_a11y_push` spawn task and reads
+    /// this field once on its first iteration. Keeping the adapter
+    /// itself out of the entity is deliberate — accesskit calls
+    /// pump platform messages and would re-enter gpui's wndproc.
+    pub(crate) a11y_handle: Option<a11y::RawHandle>,
+    pub(crate) dragging_splitter: Option<SplitterDrag>,
+    /// Whether the graph-switcher dropdown is currently visible.
+    /// Toggled by the "Graphs" button in the shellbar.
+    pub(crate) graph_switcher_open: bool,
 }
 
-/// Custom tracing-subscriber layer that pushes formatted event metadata
-/// onto the shared [`EventBuffer`]. Pairs with the regular fmt layer:
-/// fmt writes to stderr for human reading, this captures for the
-/// in-app apparatus pane.
-struct CaptureLayer {
-    buffer: EventBuffer,
-}
-
-impl<S: Subscriber> Layer<S> for CaptureLayer {
-    fn on_event(&self, event: &Event<'_>, _ctx: LayerContext<'_, S>) {
-        let metadata = event.metadata();
-        let mut visitor = FieldVisitor::default();
-        event.record(&mut visitor);
-        let captured = CapturedEvent {
-            level: *metadata.level(),
-            target: metadata.target().to_string(),
-            fields: visitor.into_string(),
-        };
-        if let Ok(mut buf) = self.buffer.lock() {
-            if buf.len() >= EVENT_BUFFER_CAPACITY {
-                buf.pop_front();
+impl HostRoot {
+    /// Ensure every leaf in `frame_layout` has a corresponding entry
+    /// in `panes` (lazy init). Drops entries whose `PaneId` no
+    /// longer appears in the layout (a leaf was closed).
+    ///
+    /// Also nominates an `active_workbench` if none is set — the
+    /// first workbench in layout order becomes default.
+    pub(crate) fn reconcile_panes(&mut self) {
+        let mut live_ids: std::collections::HashSet<PaneId> = std::collections::HashSet::new();
+        let mut first_workbench: Option<PaneId> = None;
+        let mut first_orrery: Option<PaneId> = None;
+        for (pane_id, content, _graph_id) in self.frame_layout.iter_leaves() {
+            live_ids.insert(pane_id);
+            self.panes
+                .entry(pane_id)
+                .or_insert_with(|| pane_state::PaneState::for_content(content));
+            if matches!(content, PaneContent::Workbench) && first_workbench.is_none() {
+                first_workbench = Some(pane_id);
             }
-            buf.push_back(captured);
-        }
-    }
-}
-
-#[derive(Default)]
-struct FieldVisitor {
-    message: Option<String>,
-    other: Vec<(String, String)>,
-}
-
-impl FieldVisitor {
-    fn into_string(self) -> String {
-        let mut out = String::new();
-        if let Some(msg) = self.message {
-            out.push_str(&msg);
-        }
-        for (k, v) in self.other {
-            if !out.is_empty() {
-                out.push(' ');
+            if matches!(content, PaneContent::Orrery) && first_orrery.is_none() {
+                first_orrery = Some(pane_id);
             }
-            out.push_str(&k);
-            out.push('=');
-            out.push_str(&v);
         }
-        out
-    }
-}
-
-impl Visit for FieldVisitor {
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        let formatted = format!("{value:?}");
-        if field.name() == "message" {
-            // Strip surrounding quotes from Debug-formatted strings so
-            // the buffer entry reads like the original message text.
-            let stripped = formatted
-                .strip_prefix('"')
-                .and_then(|s| s.strip_suffix('"'))
-                .map(|s| s.to_string())
-                .unwrap_or(formatted);
-            self.message = Some(stripped);
-        } else {
-            self.other.push((field.name().to_string(), formatted));
+        self.panes.retain(|id, _| live_ids.contains(id));
+        if self
+            .active_workbench
+            .map(|id| !live_ids.contains(&id))
+            .unwrap_or(false)
+        {
+            self.active_workbench = None;
         }
-    }
-
-    fn record_str(&mut self, field: &Field, value: &str) {
-        if field.name() == "message" {
-            self.message = Some(value.to_string());
-        } else {
-            self.other.push((field.name().to_string(), value.to_string()));
+        if self.active_workbench.is_none() {
+            self.active_workbench = first_workbench;
+        }
+        if self
+            .primary_orrery_pane
+            .map(|id| !live_ids.contains(&id))
+            .unwrap_or(false)
+        {
+            self.primary_orrery_pane = None;
+        }
+        if self.primary_orrery_pane.is_none() {
+            self.primary_orrery_pane = first_orrery;
         }
     }
-}
 
-/// Install the host's tracing subscriber. Honors `RUST_LOG`; defaults to
-/// `debug` so portable-crate spans (inker, nematic, platen, mere-identity,
-/// mere-transport, graph-canvas) surface during development.
-///
-/// Returns a shared [`EventBuffer`] that the apparatus pane reads from.
-/// Idempotent within a process — calling more than once is a no-op
-/// (later calls log a warning and return an empty buffer).
-pub fn init_diagnostics() -> EventBuffer {
-    let buffer: EventBuffer = Arc::new(Mutex::new(VecDeque::with_capacity(EVENT_BUFFER_CAPACITY)));
-    let capture = CaptureLayer {
-        buffer: buffer.clone(),
-    };
-    let _ = tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("debug")),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .with(capture)
-        .try_init();
-    buffer
-}
+    /// Borrow the active workbench's tile manager, if any.
+    pub(crate) fn active_tiles(&self) -> Option<&TileManager> {
+        let pane_id = self.active_workbench?;
+        self.panes.get(&pane_id)?.as_workbench().map(|w| &w.tiles)
+    }
 
-/// Bootstrap a gpui application and open the v0 demo window.
-pub fn run() {
-    let event_buffer = init_diagnostics();
-    let document = render_demo_document();
-    let graph = render_demo_graph_state();
-    let frame_layout = render_demo_frame_layout();
-    let app_tree = build_demo_application_tree(&document, &graph, &frame_layout);
-    open_window(document, graph, frame_layout, app_tree, event_buffer);
-}
+    pub(crate) fn active_tiles_mut(&mut self) -> Option<&mut TileManager> {
+        let pane_id = self.active_workbench?;
+        self.panes
+            .get_mut(&pane_id)?
+            .as_workbench_mut()
+            .map(|w| &mut w.tiles)
+    }
 
-/// Project the frame layout, attaching each mere-domain subtree
-/// (workbench / orrery / gloss / apparatus) at its corresponding leaf,
-/// then stitch the result under a single application-root node.
-fn build_demo_application_tree(
-    document: &EngineDocument,
-    graph: &Graph,
-    layout: &FrameLayout,
-) -> UxTree {
-    let frame_tree = mere_frame::project_frame_with(layout, |content, _pane_id| match content {
-        PaneContent::Workbench => Some(render_demo_workbench()),
-        PaneContent::Orrery => Some(mere_orrery::project_graph(graph)),
-        PaneContent::Gloss => Some(mere_gloss::project_outline(document)),
-        PaneContent::Apparatus => Some(mere_apparatus::project_skeleton()),
-        _ => None,
-    });
+    /// Borrow the primary orrery pane's state (camera/engine/bounds),
+    /// if any. v0: this is the orrery handling all mouse events.
+    pub(crate) fn primary_orrery(&self) -> Option<&pane_state::OrreryPaneState> {
+        let pane_id = self.primary_orrery_pane?;
+        self.panes.get(&pane_id)?.as_orrery()
+    }
 
-    let mut app_root = Node::new(Role::Window);
-    app_root.set_label("mere-host (demo)");
-    uxtree::stitch("application", app_root, vec![frame_tree])
-}
-
-/// Hardcoded 4-quadrant frame layout: workbench top-left, gloss
-/// bottom-left, orrery top-right, apparatus bottom-right.
-fn render_demo_frame_layout() -> mere_frame::FrameLayout {
-    use mere_frame::{FrameId, FrameLayout, PaneContent, PaneId, PaneNode, SplitAxis};
-    FrameLayout {
-        id: FrameId::new("reading"),
-        label: "Reading".to_string(),
-        root: PaneNode::Split {
-            axis: SplitAxis::Horizontal,
-            ratio: 0.5,
-            first: Box::new(PaneNode::Split {
-                axis: SplitAxis::Vertical,
-                ratio: 0.5,
-                first: Box::new(PaneNode::Leaf {
-                    pane_id: PaneId(1),
-                    content: PaneContent::Workbench,
-                }),
-                second: Box::new(PaneNode::Leaf {
-                    pane_id: PaneId(2),
-                    content: PaneContent::Gloss,
-                }),
-            }),
-            second: Box::new(PaneNode::Split {
-                axis: SplitAxis::Vertical,
-                ratio: 0.5,
-                first: Box::new(PaneNode::Leaf {
-                    pane_id: PaneId(3),
-                    content: PaneContent::Orrery,
-                }),
-                second: Box::new(PaneNode::Leaf {
-                    pane_id: PaneId(4),
-                    content: PaneContent::Apparatus,
-                }),
-            }),
-        },
+    pub(crate) fn primary_orrery_mut(
+        &mut self,
+    ) -> Option<&mut pane_state::OrreryPaneState> {
+        let pane_id = self.primary_orrery_pane?;
+        self.panes.get_mut(&pane_id)?.as_orrery_mut()
     }
 }
 
 
-fn render_demo_document() -> EngineDocument {
-    let engine = MarkdownEngine::new();
-    let input = EngineInput::new("mere-host:demo", DEMO_MARKDOWN);
-    engine
-        .render(&input)
-        .expect("MarkdownEngine should not fail on the demo doc")
-}
-
-fn render_demo_workbench() -> UxTree {
-    // Hardcoded fixture so the host can demonstrate the full projection
-    // chain without needing a real reducer. Replaced by live state once
-    // the host wires platen's selectors.
-    let projection = WorkbenchProjection {
-        active_frame: Some(FrameId::new("frame-demo")),
-        frame_label: Some("Reading".to_string()),
-        root_view: None,
-        panes: vec![
-            ProjectedPane {
-                pane_id: PaneId::from_uuid(uuid::Uuid::from_u128(0xa1)),
-                node: NodeKey::default(),
-                surface_host: None,
-                is_primary: true,
-            },
-            ProjectedPane {
-                pane_id: PaneId::from_uuid(uuid::Uuid::from_u128(0xa2)),
-                node: NodeKey::default(),
-                surface_host: None,
-                is_primary: false,
-            },
-            ProjectedPane {
-                pane_id: PaneId::from_uuid(uuid::Uuid::from_u128(0xa3)),
-                node: NodeKey::default(),
-                surface_host: None,
-                is_primary: false,
-            },
-        ],
-    };
-    mere_workbench::project_workbench(&projection)
-}
-
-/// Hardcoded demo graph: three nodes with stable UUIDs so the projected
-/// uxtree IDs are deterministic across runs.
-fn render_demo_graph_state() -> Graph {
-    let mut graph = Graph::new();
-    graph.add_node_with_id(
-        uuid::Uuid::from_u128(0xb1),
-        "https://mere.test/intro".to_string(),
-        Point2D::new(0.0, 0.0),
-    );
-    graph.add_node_with_id(
-        uuid::Uuid::from_u128(0xb2),
-        "https://mere.test/architecture".to_string(),
-        Point2D::new(20.0, 0.0),
-    );
-    graph.add_node_with_id(
-        uuid::Uuid::from_u128(0xb3),
-        "https://mere.test/probes".to_string(),
-        Point2D::new(40.0, 0.0),
-    );
-    graph
-}
-
-fn open_window(
-    document: EngineDocument,
-    graph: Graph,
-    frame_layout: FrameLayout,
-    app_tree: UxTree,
-    event_buffer: EventBuffer,
-) {
-    application().run(move |cx: &mut App| {
-        let bounds = Bounds::centered(None, size(px(1200.0), px(800.0)), cx);
-        cx.open_window(
-            WindowOptions {
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
-                ..Default::default()
-            },
-            |_, cx| {
-                cx.new(|_| HostRoot {
-                    document,
-                    graph,
-                    frame_layout,
-                    app_tree,
-                    event_buffer,
-                })
-            },
-        )
-        .expect("open_window failed");
-        cx.activate(true);
-    });
-}
-
-/// The host's root entity: holds the demo document and the projected
-/// workbench tree. v0.5: real platen selectors replace the hardcoded
-/// projection.
-struct HostRoot {
-    document: EngineDocument,
-    graph: Graph,
-    frame_layout: FrameLayout,
-    app_tree: UxTree,
-    event_buffer: EventBuffer,
+impl Focusable for HostRoot {
+    fn focus_handle(&self, _: &App) -> FocusHandle {
+        self.focus_handle.clone()
+    }
 }
 
 impl Render for HostRoot {
-    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
-        // Snapshot tracing events at render time. Apparatus refreshes
-        // when the entity re-renders (which doesn't happen automatically
-        // — a future round can add a periodic timer or push-on-event).
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // First paint: claim focus so action handlers on the root
+        // div are in the dispatch chain immediately. Subsequent
+        // renders only re-focus if a subsystem (e.g. the palette
+        // closing) explicitly asked for it.
+        if !self.focus_handle.contains_focused(window, cx)
+            && (self.refocus_root_on_next_render || window.focused(cx).is_none())
+        {
+            window.focus(&self.focus_handle, cx);
+            self.refocus_root_on_next_render = false;
+        }
+
+        // Capture the raw window handle on first paint so the
+        // a11y push tick (see `install_a11y_push`) can construct
+        // its `Adapter` from a spawn-task body where no `App`
+        // borrow is live. The capture itself is just reading
+        // `raw_window_handle` — no side effects, safe in render.
+        if self.a11y_handle.is_none() {
+            self.a11y_handle = a11y::A11yAdapter::capture_handle(window);
+        }
+
         let events: Vec<CapturedEvent> = self
             .event_buffer
             .lock()
             .map(|buf| buf.iter().cloned().collect())
             .unwrap_or_default();
 
-        div()
+        // Make sure every leaf in the (possibly just-mutated) frame
+        // has a PaneState entry; drop entries for removed leaves.
+        self.reconcile_panes();
+
+        // Build live-graph snapshots indexed by GraphId. Each leaf
+        // looks up its graph by id when rendering.
+        let registry_ref = self.registry.read(cx);
+        let graphs: HashMap<GraphId, &Graph> = registry_ref
+            .iter()
+            .map(|(id, entity)| (id, entity.read(cx)))
+            .collect();
+
+        let pctx = PaneRenderCtx {
+            workbench_strip_position: self.chrome_layout.workbench_strip.0,
+            app_tree: &self.app_tree,
+            events: &events,
+            frame_layout: &self.frame_layout,
+            panes: &self.panes,
+            graphs,
+            active_workbench: self.active_workbench,
+        };
+
+        let pane_tree = render_pane_node(&self.frame_layout.root, Vec::new(), &pctx, cx);
+
+        let on_mouse_move = cx.listener(
+            |this, ev: &MouseMoveEvent, window: &mut Window, cx: &mut Context<Self>| {
+                let Some(drag) = this.dragging_splitter.clone() else {
+                    return;
+                };
+                let window_size = window.viewport_size();
+                let container =
+                    compute_container_size(&this.frame_layout, &drag.path, window_size);
+                let (extent, delta_px) = match drag.axis {
+                    SplitAxis::Horizontal => (container.width, ev.position.x - drag.start_cursor.x),
+                    SplitAxis::Vertical => (container.height, ev.position.y - drag.start_cursor.y),
+                };
+                let extent_f = extent.as_f32();
+                if extent_f <= 0.0 {
+                    return;
+                }
+                let new_ratio =
+                    (drag.start_ratio + (delta_px.as_f32() / extent_f)).clamp(0.05, 0.95);
+                if this.frame_layout.set_split_ratio(&drag.path, new_ratio) {
+                    // Rebuild app_tree from the mutated layout so the
+                    // apparatus pane and any uxtree consumers see the
+                    // new split ratio.
+                    this.rebuild_app_tree(cx);
+                    cx.notify();
+                }
+            },
+        );
+        let on_mouse_up = cx.listener(
+            |this, _ev: &MouseUpEvent, _window: &mut Window, cx: &mut Context<Self>| {
+                if this.dragging_splitter.take().is_some() {
+                    // Persist the new ratios so the layout survives
+                    // across sessions. Save on mouse-up rather than
+                    // on every move so we don't write per-pixel.
+                    save_frame_layout(&this.frame_layout);
+                    cx.notify();
+                }
+            },
+        );
+
+        let focus_omnibar = cx.listener(
+            |this, _: &actions::FocusOmnibar, window: &mut Window, cx: &mut Context<Self>| {
+                this.omnibar_input
+                    .update(cx, |input, cx| input.focus_and_select_all(window, cx));
+            },
+        );
+        let open_palette = cx.listener(
+            |this, _: &actions::OpenPalette, window: &mut Window, cx: &mut Context<Self>| {
+                this.palette
+                    .update(cx, |palette, cx| palette.toggle(window, cx));
+            },
+        );
+        let go_back = cx.listener(
+            |this, _: &actions::GoBack, _window: &mut Window, cx: &mut Context<Self>| {
+                this.go_back(cx);
+            },
+        );
+        let go_forward = cx.listener(
+            |this, _: &actions::GoForward, _window: &mut Window, cx: &mut Context<Self>| {
+                this.go_forward(cx);
+            },
+        );
+        let reload = cx.listener(
+            |this, _: &actions::Reload, _window: &mut Window, cx: &mut Context<Self>| {
+                this.reload(cx);
+            },
+        );
+        let cycle_shellbar = cx.listener(
+            |this,
+             _: &actions::CycleShellbarPosition,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                this.cycle_shellbar_position(cx);
+            },
+        );
+        let cycle_workbench_strip = cx.listener(
+            |this,
+             _: &actions::CycleWorkbenchStripPosition,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                this.cycle_workbench_strip_position(cx);
+            },
+        );
+        let open_new_window = cx.listener(
+            |this, _: &actions::OpenNewWindow, _window: &mut Window, cx: &mut Context<Self>| {
+                this.open_new_window(cx);
+            },
+        );
+        let toggle_workbench_action = cx.listener(
+            |this,
+             _: &actions::ToggleWorkbench,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                this.toggle_panel(PaneContent::Workbench, cx);
+            },
+        );
+        let toggle_gloss_action = cx.listener(
+            |this,
+             _: &actions::ToggleGloss,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                this.toggle_panel(PaneContent::Gloss, cx);
+            },
+        );
+        let toggle_apparatus_action = cx.listener(
+            |this,
+             _: &actions::ToggleApparatus,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                this.toggle_panel(PaneContent::Apparatus, cx);
+            },
+        );
+        let summon_orrery_new_graph_action = cx.listener(
+            |this,
+             _: &actions::SummonOrreryForNewGraph,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                this.summon_orrery_for_new_graph(cx);
+            },
+        );
+        let toggle_graph_switcher_action = cx.listener(
+            |this,
+             _: &actions::ToggleGraphSwitcher,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                this.toggle_graph_switcher(cx);
+            },
+        );
+        let tearout_new_graph_min_action = cx.listener(
+            |this,
+             _: &actions::TearOutTileToNewGraphMinimized,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                this.tear_out_tile_to_new_graph(true, cx);
+            },
+        );
+        let tearout_new_graph_vis_action = cx.listener(
+            |this,
+             _: &actions::TearOutTileToNewGraphVisible,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                this.tear_out_tile_to_new_graph(false, cx);
+            },
+        );
+        let tearout_sticky_note_action = cx.listener(
+            |this,
+             _: &actions::TearOutTileAsStickyNote,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                this.tear_out_tile_sticky_note(cx);
+            },
+        );
+
+        let shellbar_pos = self.chrome_layout.shellbar;
+        let orientation = if shellbar_pos.is_vertical() {
+            ShellbarOrientation::Vertical
+        } else {
+            ShellbarOrientation::Horizontal
+        };
+        // Compute which panel kinds are currently in the layout so
+        // the toggle buttons can render with an "active" highlight.
+        let mut panel_state = mere_host_graphshell::panel_buttons::PanelButtonState::default();
+        for (_, content, _) in self.frame_layout.iter_leaves() {
+            match content {
+                PaneContent::Workbench => panel_state.workbench_summoned = true,
+                PaneContent::Gloss => panel_state.gloss_summoned = true,
+                PaneContent::Apparatus => panel_state.apparatus_summoned = true,
+                _ => {}
+            }
+        }
+        let shellbar = mere_host_graphshell::render(
+            &self.toolbar,
+            None,
+            self.omnibar_input.clone(),
+            orientation,
+            panel_state,
+            self.graph_switcher_open,
+            cx.listener(|this, _: &MouseUpEvent, _, cx| this.go_back(cx)),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| this.go_forward(cx)),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| this.reload(cx)),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                this.toggle_panel(PaneContent::Workbench, cx)
+            }),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| this.toggle_panel(PaneContent::Gloss, cx)),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                this.toggle_panel(PaneContent::Apparatus, cx)
+            }),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| this.summon_orrery_for_new_graph(cx)),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| this.toggle_graph_switcher(cx)),
+        );
+        let body = div().flex().flex_1().overflow_hidden().child(pane_tree);
+
+        // Outer flex direction + child order varies with the
+        // shellbar's edge. Top/Bottom use a column; Left/Right use a
+        // row. Top/Left put the shellbar first; Bottom/Right put it
+        // last.
+        let container_row = shellbar_pos.is_vertical();
+        let shellbar_first = matches!(shellbar_pos, EdgePosition::Top | EdgePosition::Left);
+        let mut frame = div()
+            .id("host-root")
+            .relative()
             .flex()
-            .flex_col()
             .size_full()
             .bg(rgb(0x1e1e1e))
             .text_color(rgb(0xe0e0e0))
             .text_sm()
-            .child(render_title_bar(&self.frame_layout))
-            .child(
-                div()
-                    .flex()
-                    .flex_1()
-                    .overflow_hidden()
-                    .child(render_pane_node(
-                        &self.frame_layout.root,
-                        &self.document,
-                        &self.graph,
-                        &self.app_tree,
-                        &events,
-                    )),
-            )
-    }
-}
+            .track_focus(&self.focus_handle)
+            .on_action(focus_omnibar)
+            .on_action(open_palette)
+            .on_action(go_back)
+            .on_action(go_forward)
+            .on_action(reload)
+            .on_action(cycle_shellbar)
+            .on_action(cycle_workbench_strip)
+            .on_action(open_new_window)
+            .on_action(toggle_workbench_action)
+            .on_action(toggle_gloss_action)
+            .on_action(toggle_apparatus_action)
+            .on_action(summon_orrery_new_graph_action)
+            .on_action(toggle_graph_switcher_action)
+            .on_action(tearout_new_graph_min_action)
+            .on_action(tearout_new_graph_vis_action)
+            .on_action(tearout_sticky_note_action)
+            .on_mouse_move(on_mouse_move)
+            .on_mouse_up(MouseButton::Left, on_mouse_up);
+        frame = if container_row {
+            frame.flex_row()
+        } else {
+            frame.flex_col()
+        };
+        let with_chrome = if shellbar_first {
+            frame.child(shellbar).child(body)
+        } else {
+            frame.child(body).child(shellbar)
+        };
+        // Palette renders as an absolute overlay on top of the
+        // chrome + pane tree. It paints nothing when closed, so
+        // unconditionally including it in the tree is fine.
+        let with_palette = with_chrome.child(self.palette.clone());
 
-fn render_title_bar(layout: &FrameLayout) -> AnyElement {
-    div()
-        .flex()
-        .flex_row()
-        .items_center()
-        .gap_3()
-        .px_4()
-        .py_2()
-        .bg(rgb(0x141414))
-        .border_b_1()
-        .border_color(rgb(0x2a2a2a))
-        .child(
-            div()
-                .text_color(rgb(0xe0e0e0))
-                .child(format!("mere-host (demo) — {} frame", layout.label)),
-        )
-        .into_any_element()
-}
-
-/// Recursively render a [`PaneNode`]: splits become flex containers
-/// honoring the ratio + axis; leaves dispatch on `PaneContent` to the
-/// matching domain renderer.
-fn render_pane_node(
-    node: &PaneNode,
-    document: &EngineDocument,
-    graph: &Graph,
-    app_tree: &UxTree,
-    events: &[CapturedEvent],
-) -> AnyElement {
-    match node {
-        PaneNode::Split {
-            axis,
-            ratio,
-            first,
-            second,
-        } => {
-            let first_child = render_pane_node(first, document, graph, app_tree, events);
-            let second_child = render_pane_node(second, document, graph, app_tree, events);
-            let first_basis = relative(*ratio);
-            let second_basis = relative(1.0 - *ratio);
-            match axis {
-                SplitAxis::Horizontal => div()
-                    .flex()
-                    .flex_row()
-                    .size_full()
-                    .child(div().h_full().flex_basis(first_basis).child(first_child))
-                    .child(div().h_full().flex_basis(second_basis).child(second_child))
-                    .into_any_element(),
-                SplitAxis::Vertical => div()
-                    .flex()
-                    .flex_col()
-                    .size_full()
-                    .child(div().w_full().flex_basis(first_basis).child(first_child))
-                    .child(div().w_full().flex_basis(second_basis).child(second_child))
-                    .into_any_element(),
-            }
+        // Graph switcher overlay — rendered conditionally on top
+        // of everything. Clicking outside the panel closes it;
+        // clicking an entry summons that graph's orrery.
+        if self.graph_switcher_open {
+            with_palette.child(self.render_graph_switcher(cx))
+        } else {
+            with_palette
         }
-        PaneNode::Leaf { content, .. } => render_leaf(content, document, graph, app_tree, events),
     }
 }
 
-/// Wrap a leaf's content in a chrome (border + tag header + scrollable body).
-fn render_leaf(
-    content: &PaneContent,
-    document: &EngineDocument,
-    graph: &Graph,
-    app_tree: &UxTree,
-    events: &[CapturedEvent],
-) -> AnyElement {
-    let body = match content {
-        PaneContent::Workbench => render_document_inner(document),
-        PaneContent::Orrery => render_graph_inner(graph),
-        PaneContent::Gloss => render_gloss_inner(document),
-        PaneContent::Apparatus => render_apparatus_inner(app_tree, events),
-        _ => div()
-            .text_color(rgb(0x707070))
-            .child("(empty pane)")
-            .into_any_element(),
-    };
-    let scroll_id: gpui::ElementId = gpui::SharedString::from(format!("pane-scroll-{}", content.tag())).into();
-    div()
-        .flex()
-        .flex_col()
-        .size_full()
-        .border_1()
-        .border_color(rgb(0x2a2a2a))
-        .child(
-            div()
-                .px_3()
-                .py_1()
-                .text_xs()
-                .text_color(rgb(0x808080))
-                .bg(rgb(0x141414))
-                .border_b_1()
-                .border_color(rgb(0x2a2a2a))
-                .child(content.tag().to_string()),
-        )
-        .child(
-            div()
-                .id(scroll_id)
-                .flex_1()
-                .overflow_y_scroll()
-                .p_3()
-                .child(body),
-        )
-        .into_any_element()
-}
-
-fn render_document_inner(document: &EngineDocument) -> AnyElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap_3()
-        .children(document.blocks.iter().map(render_block))
-        .into_any_element()
-}
-
-/// v0 graph view: cards listing each node with title + address. Real
-/// graph-canvas viz (camera / scene / hit-testing) lands later.
-fn render_graph_inner(graph: &Graph) -> AnyElement {
-    let cards: Vec<AnyElement> = graph
-        .nodes()
-        .map(|(_, node)| {
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .p_3()
-                .rounded_md()
-                .bg(rgb(0x252525))
-                .border_1()
-                .border_color(rgb(0x3a3a3a))
-                .child(
-                    div()
-                        .text_color(rgb(0xffffff))
-                        .child(node.title.clone()),
-                )
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(0xa0ffa0))
-                        .child(node.address.as_url_str().to_string()),
-                )
-                .into_any_element()
-        })
-        .collect();
-
-    div()
-        .flex()
-        .flex_col()
-        .gap_2()
-        .children(cards)
-        .into_any_element()
-}
-
-fn render_gloss_inner(document: &EngineDocument) -> AnyElement {
-    let outline_tree = mere_gloss::project_outline(document);
-    div()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(render_uxtree_node(&outline_tree, outline_tree.root, 0))
-        .into_any_element()
-}
-
-fn render_apparatus_inner(app_tree: &UxTree, events: &[CapturedEvent]) -> AnyElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap_4()
-        .child(render_apparatus_section_tracing(events))
-        .child(render_apparatus_section_uxtree(app_tree))
-        .into_any_element()
-}
-
-fn render_apparatus_section_tracing(events: &[CapturedEvent]) -> AnyElement {
-    let rows: Vec<AnyElement> = events
-        .iter()
-        .rev()
-        .take(40)
-        .map(|ev| {
-            let level_color = match ev.level {
-                tracing::Level::ERROR => rgb(0xff8080),
-                tracing::Level::WARN => rgb(0xffd080),
-                tracing::Level::INFO => rgb(0xa0d0ff),
-                tracing::Level::DEBUG => rgb(0xa0a0a0),
-                tracing::Level::TRACE => rgb(0x707070),
-            };
-            div()
-                .flex()
-                .flex_row()
-                .gap_2()
-                .text_xs()
-                .child(
-                    div()
-                        .w(px(48.0))
-                        .text_color(level_color)
-                        .child(ev.level.to_string()),
-                )
-                .child(
-                    div()
-                        .w(px(220.0))
-                        .text_color(rgb(0x808080))
-                        .child(ev.target.clone()),
-                )
-                .child(
-                    div()
-                        .text_color(rgb(0xd0d0d0))
-                        .child(ev.fields.clone()),
-                )
-                .into_any_element()
-        })
-        .collect();
-
-    div()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(0x707070))
-                .pb_1()
-                .child(format!(
-                    "tracing events (most recent first, {} captured)",
-                    events.len()
-                )),
-        )
-        .children(rows)
-        .into_any_element()
-}
-
-fn render_apparatus_section_uxtree(app_tree: &UxTree) -> AnyElement {
-    div()
-        .flex()
-        .flex_col()
-        .gap_1()
-        .child(
-            div()
-                .text_xs()
-                .text_color(rgb(0x707070))
-                .pb_1()
-                .child("application uxtree (live)"),
-        )
-        .child(render_uxtree_node(app_tree, app_tree.root, 0))
-        .into_any_element()
-}
-
-
-/// Walk a uxtree from a node id, rendering each node as an indented row.
-/// Each row shows the role + label so the projection structure is visible.
-fn render_uxtree_node(tree: &UxTree, node_id: NodeId, depth: usize) -> AnyElement {
-    let Some((_, node)) = tree.nodes.iter().find(|(id, _)| *id == node_id) else {
-        return div().into_any_element();
-    };
-    let indent = px((depth as f32) * 12.0);
-    let role_label = format!("{:?}", node.role());
-    let label = node.label().unwrap_or("").to_string();
-    let descr = node.description();
-
-    let header_color = match node.role() {
-        Role::Window => rgb(0xffffff),
-        Role::Group => rgb(0xb0d0ff),
-        Role::Link => rgb(0xa0ffa0),
-        Role::ListItem => rgb(0xffd0a0),
-        _ => rgb(0xe0e0e0),
-    };
-
-    let mut row = div()
-        .flex()
-        .flex_col()
-        .child(
-            div()
-                .flex()
-                .flex_row()
-                .gap_2()
-                .pl(indent)
-                .child(
-                    div()
-                        .text_xs()
-                        .text_color(rgb(0x707070))
-                        .child(role_label),
-                )
-                .child(
-                    div()
-                        .text_color(header_color)
-                        .child(label),
-                ),
-        );
-    if let Some(d) = descr {
-        row = row.child(
-            div()
-                .pl(px((depth as f32) * 12.0 + 16.0))
-                .text_xs()
-                .text_color(rgb(0x808080))
-                .child(format!("({d})")),
-        );
-    }
-
-    let children: Vec<NodeId> = node.children().to_vec();
-    let child_count = children.len();
-    let row = row.children(
-        children
-            .into_iter()
-            .map(|child_id| render_uxtree_node(tree, child_id, depth + 1)),
-    );
-
-    if child_count == 0 && depth > 0 {
-        row.into_any_element()
-    } else {
-        row.into_any_element()
-    }
-}
-
-fn render_block(block: &DocumentBlock) -> AnyElement {
-    match block {
-        DocumentBlock::Heading { level, spans } => div()
-            .when(*level == 1, |d| d.text_2xl())
-            .when(*level == 2, |d| d.text_xl())
-            .when(*level >= 3, |d| d.text_lg())
-            .text_color(rgb(0xffffff))
-            .child(flatten_inline(spans))
-            .into_any_element(),
-
-        DocumentBlock::Paragraph { spans } => {
-            div().child(flatten_inline(spans)).into_any_element()
-        }
-
-        DocumentBlock::CodeBlock { text, .. } => div()
-            .bg(rgb(0x2a2a2a))
-            .text_color(rgb(0xb0d0ff))
-            .p_2()
-            .rounded_sm()
-            .child(text.clone())
-            .into_any_element(),
-
-        DocumentBlock::Quote { blocks } => div()
-            .pl_4()
-            .border_l_2()
-            .border_color(rgb(0x555555))
-            .text_color(rgb(0xb0b0b0))
-            .flex()
-            .flex_col()
-            .gap_2()
-            .children(blocks.iter().map(render_block))
-            .into_any_element(),
-
-        DocumentBlock::List { ordered, items } => div()
-            .flex()
-            .flex_col()
-            .gap_1()
-            .children(items.iter().enumerate().map(|(i, item_blocks)| {
-                let prefix = if *ordered {
-                    format!("{}.", i + 1)
-                } else {
-                    "•".to_string()
-                };
-                div()
-                    .flex()
-                    .gap_2()
-                    .child(div().w(px(20.0)).child(prefix))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .gap_1()
-                            .children(item_blocks.iter().map(render_block)),
-                    )
-                    .into_any_element()
-            }))
-            .into_any_element(),
-
-        DocumentBlock::Image { alt, url } => div()
-            .text_color(rgb(0x888888))
-            .child(format!("[image: {alt} ({url})]"))
-            .into_any_element(),
-
-        DocumentBlock::Preformatted { text } => div()
-            .bg(rgb(0x2a2a2a))
-            .p_2()
-            .rounded_sm()
-            .child(text.clone())
-            .into_any_element(),
-
-        DocumentBlock::Rule => div().h(px(1.0)).bg(rgb(0x444444)).into_any_element(),
-
-        // Variants outside markdown's range (FeedHeader/FeedEntry/
-        // MetadataRow/Badge from feed engines) get a placeholder. v0
-        // doesn't render feed content; subsequent rounds add real
-        // styling per variant when a feed engine probe lands.
-        other => div()
-            .bg(rgb(0x331111))
-            .text_color(rgb(0xffaaaa))
-            .p_2()
-            .rounded_sm()
-            .child(format!("[unrendered block variant: {other:?}]"))
-            .into_any_element(),
-    }
-}
-
-fn flatten_inline(spans: &[InlineSpan]) -> String {
-    inker::inline_text(spans)
-}
