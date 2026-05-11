@@ -1,0 +1,23 @@
+[package]
+name = "aether"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+description = "rapier-backed body/field simulation for Mere — bodies bound to graph nodes, themable forces, plug-in field types."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# rapier2d is the dynamics + collision substrate. Mere's spatial
+# behavior (node exclusion, edge springs, themable moot fields) all
+# resolve through this simulation, so the dep lands as a foundational
+# layer alongside vello and petgraph rather than a feature bolt-on.
+rapier2d = "0.22"
+mere-kernel = { path = "../mere-kernel" }
+euclid = "0.22"
+tracing = "0.1"
+
+[dev-dependencies]
+uuid = "1"

@@ -33,7 +33,7 @@
 
 use std::hash::{Hash, Hasher};
 
-use accesskit::{Node, NodeId, Role};
+use accesskit::{Node, NodeId, Role, Tree, TreeId, TreeUpdate};
 use inker::{DocumentBlock, EngineDocument, InlineSpan, inline_text};
 
 /// Crate version.
@@ -52,6 +52,32 @@ pub const STAGE: &str = "pre-alpha";
 pub struct UxTree {
     pub root: NodeId,
     pub nodes: Vec<(NodeId, Node)>,
+}
+
+impl UxTree {
+    /// Convert this tree into an [`accesskit::TreeUpdate`] suitable for
+    /// pushing to AccessKit's platform adapters
+    /// (`accesskit_windows::Adapter`, `accesskit_unix::Adapter`,
+    /// `accesskit_macos::Adapter`) — the same shape accesskit_winit
+    /// would emit if the host were winit-based.
+    ///
+    /// The host provides `focus` (the currently-focused node) so OS a11y
+    /// APIs can announce the active element. `None` means no focused
+    /// node — useful for inspector dumps and tests.
+    ///
+    /// Note on OS integration: gpui doesn't currently expose window
+    /// handles publicly, so `accesskit_windows::Adapter::with_hwnd`
+    /// and equivalents on other platforms can't be constructed without
+    /// a gpui patch. Producing the [`TreeUpdate`] is the foundation;
+    /// pushing it to the OS is a separate piece of work.
+    pub fn to_tree_update(&self, focus: Option<NodeId>) -> TreeUpdate {
+        TreeUpdate {
+            nodes: self.nodes.iter().map(|(id, n)| (*id, n.clone())).collect(),
+            tree: Some(Tree::new(self.root)),
+            tree_id: TreeId::ROOT,
+            focus: focus.unwrap_or(self.root),
+        }
+    }
 }
 
 /// Hash a domain path to a stable [`NodeId`]. The same path always
@@ -429,6 +455,32 @@ mod tests {
             .filter(|(_, n)| n.role() == Role::ListItem)
             .count();
         assert_eq!(list_items, 2);
+    }
+
+    #[test]
+    fn to_tree_update_preserves_root_and_node_count() {
+        let mut root_node = Node::new(Role::Window);
+        root_node.set_label("app");
+        let root_id = node_id_for_path("app-root");
+        let mut child_node = Node::new(Role::Group);
+        child_node.set_label("child");
+        let child_id = node_id_for_path("app-root/child");
+        root_node.set_children(vec![child_id]);
+
+        let tree = UxTree {
+            root: root_id,
+            nodes: vec![(child_id, child_node), (root_id, root_node)],
+        };
+        let update = tree.to_tree_update(None);
+
+        assert_eq!(update.nodes.len(), 2);
+        let tree_root = update.tree.as_ref().expect("tree present").root;
+        assert_eq!(tree_root, root_id);
+        // No focus override → focus defaults to root.
+        assert_eq!(update.focus, root_id);
+
+        let with_focus = tree.to_tree_update(Some(child_id));
+        assert_eq!(with_focus.focus, child_id);
     }
 
     #[test]

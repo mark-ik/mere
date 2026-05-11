@@ -44,8 +44,30 @@ impl BertTokenizer {
         max_seq_len: usize,
         pad_token_id: u32,
     ) -> Result<Self, EmbedError> {
-        let mut inner = Tokenizer::from_file(path)
+        let inner = Tokenizer::from_file(path)
             .map_err(|e| EmbedError::InvalidConfig(format!("tokenizer load failed: {e}")))?;
+        Self::configure(inner, max_seq_len, pad_token_id)
+    }
+
+    /// Load from a HuggingFace `tokenizer.json` byte buffer. Useful when
+    /// the tokenizer artifact is held in memory (e.g. resolved through
+    /// eidetic) rather than on the local filesystem. Configures the same
+    /// batch padding and truncation as [`Self::from_file`].
+    pub fn from_bytes(
+        bytes: &[u8],
+        max_seq_len: usize,
+        pad_token_id: u32,
+    ) -> Result<Self, EmbedError> {
+        let inner = Tokenizer::from_bytes(bytes)
+            .map_err(|e| EmbedError::InvalidConfig(format!("tokenizer parse failed: {e}")))?;
+        Self::configure(inner, max_seq_len, pad_token_id)
+    }
+
+    fn configure(
+        mut inner: Tokenizer,
+        max_seq_len: usize,
+        pad_token_id: u32,
+    ) -> Result<Self, EmbedError> {
         inner.with_padding(Some(PaddingParams {
             strategy: PaddingStrategy::BatchLongest,
             direction: tokenizers::PaddingDirection::Right,

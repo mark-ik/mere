@@ -121,11 +121,48 @@ pub fn load_artifacts(model_dir: impl AsRef<Path>) -> Result<ModelArtifacts, Loa
     }
 
     let config_bytes = std::fs::read(&config_path)?;
-    let config: BertConfig = serde_json::from_slice(&config_bytes)
+    let tokenizer_bytes = std::fs::read(&tokenizer_path)?;
+    let weights_bytes = std::fs::read(&weights_path)?;
+
+    artifacts_from_bytes_with_weights_path(
+        &config_bytes,
+        &tokenizer_bytes,
+        &weights_bytes,
+        weights_path,
+    )
+}
+
+/// Build [`ModelArtifacts`] from in-memory bytes — the path through which
+/// eidetic-resolved model blobs flow.
+///
+/// Accepts the three HuggingFace artifacts (config.json, tokenizer.json,
+/// model.safetensors) as byte buffers. The returned `ModelArtifacts` carries
+/// an empty `weights_path`; weight injection ([`load_into_model_from_bytes`])
+/// works directly off the buffer rather than re-reading from disk.
+pub fn artifacts_from_bytes(
+    config_bytes: &[u8],
+    tokenizer_bytes: &[u8],
+    weights_bytes: &[u8],
+) -> Result<ModelArtifacts, LoaderError> {
+    artifacts_from_bytes_with_weights_path(
+        config_bytes,
+        tokenizer_bytes,
+        weights_bytes,
+        PathBuf::new(),
+    )
+}
+
+fn artifacts_from_bytes_with_weights_path(
+    config_bytes: &[u8],
+    tokenizer_bytes: &[u8],
+    weights_bytes: &[u8],
+    weights_path: PathBuf,
+) -> Result<ModelArtifacts, LoaderError> {
+    let config: BertConfig = serde_json::from_slice(config_bytes)
         .map_err(|e| LoaderError::InvalidConfig(format!("{e}")))?;
 
-    let tokenizer = BertTokenizer::from_file(
-        &tokenizer_path,
+    let tokenizer = BertTokenizer::from_bytes(
+        tokenizer_bytes,
         config.max_position_embeddings,
         config.pad_token_id as u32,
     )
@@ -134,8 +171,7 @@ pub fn load_artifacts(model_dir: impl AsRef<Path>) -> Result<ModelArtifacts, Loa
         other => LoaderError::InvalidTokenizer(format!("{other:?}")),
     })?;
 
-    let weights_bytes = std::fs::read(&weights_path)?;
-    let safetensors = SafeTensors::deserialize(&weights_bytes)
+    let safetensors = SafeTensors::deserialize(weights_bytes)
         .map_err(|e| LoaderError::InvalidWeights(format!("{e}")))?;
     let tensor_names = safetensors.names().into_iter().map(String::from).collect();
 
@@ -266,12 +302,25 @@ pub enum ValidationIssue {
 /// Validate a safetensors weights file against the expected tensor
 /// list for a config. Returns the list of issues; an empty list means
 /// the file is structurally compatible.
+///
+/// Path-based wrapper: reads `artifacts.weights_path` from disk, then
+/// delegates to [`validate_weights_from_bytes`].
 pub fn validate_weights(artifacts: &ModelArtifacts) -> Result<Vec<ValidationIssue>, LoaderError> {
     let bytes = std::fs::read(&artifacts.weights_path)?;
-    let safetensors = SafeTensors::deserialize(&bytes)
+    validate_weights_from_bytes(&artifacts.config, &bytes)
+}
+
+/// Validate a safetensors weights byte buffer against the expected tensor
+/// list for a config. Returns the list of issues; an empty list means the
+/// buffer is structurally compatible.
+pub fn validate_weights_from_bytes(
+    config: &BertConfig,
+    weights_bytes: &[u8],
+) -> Result<Vec<ValidationIssue>, LoaderError> {
+    let safetensors = SafeTensors::deserialize(weights_bytes)
         .map_err(|e| LoaderError::InvalidWeights(format!("{e}")))?;
 
-    let expected = expected_tensors(&artifacts.config);
+    let expected = expected_tensors(config);
     let mut issues = Vec::new();
     for spec in &expected {
         let view = match safetensors.tensor(&spec.name) {
@@ -330,7 +379,19 @@ pub fn load_into_model<B: burn::tensor::backend::Backend>(
     artifacts: &ModelArtifacts,
     device: &B::Device,
 ) -> Result<super::model::BertModel<B>, LoaderError> {
-    let issues = validate_weights(artifacts)?;
+    let bytes = std::fs::read(&artifacts.weights_path)?;
+    load_into_model_from_bytes::<B>(&artifacts.config, &bytes, device)
+}
+
+/// Same as [`load_into_model`] but takes the safetensors weights as an
+/// in-memory byte buffer. The path eidetic-resolved model blobs flow
+/// through.
+pub fn load_into_model_from_bytes<B: burn::tensor::backend::Backend>(
+    config: &BertConfig,
+    weights_bytes: &[u8],
+    device: &B::Device,
+) -> Result<super::model::BertModel<B>, LoaderError> {
+    let issues = validate_weights_from_bytes(config, weights_bytes)?;
     if !issues.is_empty() {
         return Err(LoaderError::InvalidWeights(format!(
             "weights file does not match config — {} issues: {:?}",
@@ -338,7 +399,7 @@ pub fn load_into_model<B: burn::tensor::backend::Backend>(
             issues.iter().take(5).collect::<Vec<_>>()
         )));
     }
-    let loaded = super::loaded::extract_all_tensors::<B>(artifacts, device)?;
+    let loaded = super::loaded::extract_all_tensors_from_bytes::<B>(config, weights_bytes, device)?;
     Ok(loaded.into_model(device))
 }
 

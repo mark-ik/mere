@@ -13,6 +13,7 @@ categories = ["data-structures"]
 path = "src/lib.rs"
 
 [dependencies]
+async-trait = "0.1"
 burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
 eidetic = { path = "../eidetic" }
 graph-canvas = { path = "../graph/graph-canvas" }
@@ -36,4 +37,5 @@ bert = ["dep:burn", "dep:tokenizers", "dep:safetensors"]
 bert-validation = ["bert"]
 
 [dev-dependencies]
+pollster = "0.4"
 serde_json = "1.0"

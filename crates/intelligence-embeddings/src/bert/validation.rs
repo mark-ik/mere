@@ -68,9 +68,45 @@ pub struct Fixture {
 /// The cheap fixture tests below use these values to validate the Burn-side
 /// implementation.
 pub const FIXTURES: &[Fixture] = &[
-    Fixture { text: "This is a sample sentence.", first_8: [7.7806376e-02, 7.6462477e-02, 3.7708830e-02, 6.0939007e-02, 4.8807576e-02, 7.1116691e-03, 2.0636778e-02, 2.8646398e-02] },
-    Fixture { text: "The quick brown fox jumps over the lazy dog.", first_8: [4.3933518e-02, 5.8934364e-02, 4.8178360e-02, 7.7548020e-02, 2.6744412e-02, -3.7629616e-02, -2.6051262e-03, -5.9943009e-02] },
-    Fixture { text: "Embeddings encode meaning into vector space.", first_8: [-2.6420949e-03, -6.0402106e-02, 1.4868819e-02, -8.7817144e-03, -3.9719609e-03, 6.0110290e-02, 1.2573278e-02, -1.8567182e-02] },
+    Fixture {
+        text: "This is a sample sentence.",
+        first_8: [
+            7.7806376e-02,
+            7.6462477e-02,
+            3.7708830e-02,
+            6.0939007e-02,
+            4.8807576e-02,
+            7.1116691e-03,
+            2.0636778e-02,
+            2.8646398e-02,
+        ],
+    },
+    Fixture {
+        text: "The quick brown fox jumps over the lazy dog.",
+        first_8: [
+            4.3933518e-02,
+            5.8934364e-02,
+            4.8178360e-02,
+            7.7548020e-02,
+            2.6744412e-02,
+            -3.7629616e-02,
+            -2.6051262e-03,
+            -5.9943009e-02,
+        ],
+    },
+    Fixture {
+        text: "Embeddings encode meaning into vector space.",
+        first_8: [
+            -2.6420949e-03,
+            -6.0402106e-02,
+            1.4868819e-02,
+            -8.7817144e-03,
+            -3.9719609e-03,
+            6.0110290e-02,
+            1.2573278e-02,
+            -1.8567182e-02,
+        ],
+    },
 ];
 
 /// Tolerance for fixture comparison. 1e-4 is generous enough to absorb

@@ -88,14 +88,28 @@ impl<B: Backend> LoadedBert<B> {
 /// Extract every expected tensor from a loaded safetensors file into a
 /// typed [`LoadedBert<B>`]. Validates dtype and shape per tensor; returns
 /// the first error encountered.
+///
+/// Path-based wrapper: reads `artifacts.weights_path` from disk, then
+/// delegates to [`extract_all_tensors_from_bytes`].
 pub fn extract_all_tensors<B: Backend>(
     artifacts: &ModelArtifacts,
     device: &B::Device,
 ) -> Result<LoadedBert<B>, LoaderError> {
     let bytes = std::fs::read(&artifacts.weights_path)?;
-    let st = SafeTensors::deserialize(&bytes)
+    extract_all_tensors_from_bytes::<B>(&artifacts.config, &bytes, device)
+}
+
+/// Extract every expected tensor directly from in-memory weights bytes.
+/// Used when the model artifact flowed through eidetic rather than the
+/// filesystem.
+pub fn extract_all_tensors_from_bytes<B: Backend>(
+    config: &super::config::BertConfig,
+    weights_bytes: &[u8],
+    device: &B::Device,
+) -> Result<LoadedBert<B>, LoaderError> {
+    let st = SafeTensors::deserialize(weights_bytes)
         .map_err(|e| LoaderError::InvalidWeights(format!("{e}")))?;
-    let cfg = &artifacts.config;
+    let cfg = config;
     let h = cfg.hidden_size;
     let inter = cfg.intermediate_size;
 

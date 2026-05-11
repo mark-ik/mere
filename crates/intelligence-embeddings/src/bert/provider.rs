@@ -20,7 +20,7 @@ use std::path::Path;
 use burn::tensor::{Int, Tensor, TensorData, backend::Backend};
 
 use crate::bert::config::BertConfig;
-use crate::bert::loader::{load_artifacts, load_into_model};
+use crate::bert::loader::{load_artifacts, load_into_model, load_into_model_from_bytes};
 use crate::bert::model::{BertModel, Pooling};
 use crate::bert::tokenizer::BertTokenizer;
 use crate::provider::{EmbedError, EmbeddingProvider, SimilarityMetric};
@@ -117,6 +117,31 @@ impl<B: Backend> BertEmbeddingProvider<B> {
             artifacts.tokenizer,
             device,
         ))
+    }
+
+    /// In-memory constructor: build a fully-wired provider from already-
+    /// loaded byte buffers. The path through which eidetic-resolved model
+    /// artifacts flow into a working provider, with no filesystem touch.
+    ///
+    /// `config_bytes` must be a HuggingFace-style `config.json`,
+    /// `tokenizer_bytes` a HuggingFace `tokenizer.json`, and `weights_bytes`
+    /// a `model.safetensors` buffer that satisfies the config's expected
+    /// tensor shape (validated before injection).
+    pub fn from_bytes(
+        config_bytes: &[u8],
+        tokenizer_bytes: &[u8],
+        weights_bytes: &[u8],
+        device: B::Device,
+    ) -> Result<Self, EmbedError> {
+        let config: BertConfig = serde_json::from_slice(config_bytes)
+            .map_err(|e| EmbedError::InvalidConfig(format!("config parse failed: {e}")))?;
+        let tokenizer = BertTokenizer::from_bytes(
+            tokenizer_bytes,
+            config.max_position_embeddings,
+            config.pad_token_id as u32,
+        )?;
+        let model = load_into_model_from_bytes::<B>(&config, weights_bytes, &device)?;
+        Ok(Self::new_with_components(config, model, tokenizer, device))
     }
 }
 

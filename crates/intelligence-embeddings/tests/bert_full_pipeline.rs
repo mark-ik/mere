@@ -23,12 +23,62 @@
 
 #![cfg(feature = "bert")]
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
+use async_trait::async_trait;
+use eidetic::{
+    ModelLibrary, ModerationState, NoFetcher, PrivacyClass, ProvenanceOrigin, ProvenanceRecord,
+    Store, Timestamp, TrustEnvelope, TrustLevel,
+};
+use graph_canvas::fields::eval::eval_scalar;
+use graph_canvas::fields::projection::FieldProjection;
+use graph_canvas::fields::registry::FieldRegistry;
 use intelligence_embeddings::bert::BertEmbeddingProvider;
-use intelligence_embeddings::{EmbeddingProvider, SemanticSearch};
+use intelligence_embeddings::{
+    EmbeddingProvider, SemanticSearch, SimilarityMetric, VectorIndex,
+    register_query_similarity_field,
+};
 
 type B = burn::backend::NdArray<f32>;
+
+/// Minimal in-memory store used by the eidetic round-trip test below.
+/// Mirrors the shape of `eidetic::ModelLibrary` tests' helper without
+/// pulling in a storage backend (fjall is a separate crate).
+#[derive(Default)]
+struct InMemoryStore {
+    blobs: HashMap<String, Vec<u8>>,
+}
+
+#[async_trait(?Send)]
+impl Store for InMemoryStore {
+    async fn load_blob(&mut self, key: &str) -> eidetic::Result<Option<Vec<u8>>> {
+        Ok(self.blobs.get(key).cloned())
+    }
+    async fn save_blob(&mut self, key: &str, value: &[u8]) -> eidetic::Result<()> {
+        self.blobs.insert(key.to_string(), value.to_vec());
+        Ok(())
+    }
+}
+
+fn test_provenance() -> ProvenanceRecord {
+    ProvenanceRecord {
+        origin: ProvenanceOrigin::Imported {
+            source: "hf:sentence-transformers/all-MiniLM-L6-v2".to_string(),
+        },
+        upstream: Vec::new(),
+        tooling: Some("intelligence-embeddings::bert_full_pipeline".to_string()),
+        generated_at: Timestamp(0),
+    }
+}
+
+fn test_trust() -> TrustEnvelope {
+    TrustEnvelope {
+        level: TrustLevel::SelfAsserted,
+        signatures: Vec::new(),
+        moderation_state: ModerationState::Unreviewed,
+    }
+}
 
 fn minilm_dir() -> Option<PathBuf> {
     std::env::var("MERE_MINILM_DIR").ok().map(PathBuf::from)
@@ -117,5 +167,202 @@ fn semantic_search_with_real_minilm_clusters_similar_topics() {
     assert!(
         cooking_count <= 1,
         "expected at most 1 cooking topic in top-3, got {cooking_count}"
+    );
+}
+
+/// **Field-bridge with real BERT** — proves the trait abstraction holds:
+/// `register_query_similarity_field` (which the `field_bridge` unit tests
+/// already exercise with `HashedEmbeddingProvider`) produces a field that
+/// peaks at semantically-similar nodes when fed real BERT embeddings.
+///
+/// Setup: 6 nodes, 3 about rust (left side of canvas) + 3 about cooking
+/// (right side). Query embedding for "rust language features" should
+/// produce a field whose value at left-side positions is higher than at
+/// right-side positions.
+#[test]
+#[ignore = "requires MERE_MINILM_DIR pointing at a real all-MiniLM-L6-v2 directory"]
+fn field_bridge_with_real_bert_separates_similar_from_dissimilar() {
+    let dir = minilm_dir().expect("MERE_MINILM_DIR must be set");
+    let provider: BertEmbeddingProvider<B> =
+        BertEmbeddingProvider::load(&dir, Default::default()).expect("load");
+
+    // Lay out 6 nodes on a canvas: rust topics on the left (x < 0),
+    // cooking topics on the right (x > 0). The y-axis is irrelevant
+    // here; we're testing the x-axis cluster separation.
+    let nodes: &[(u32, &str, (f32, f32))] = &[
+        (1, "rust async programming", (-200.0, 0.0)),
+        (2, "tokio runtime internals", (-200.0, 100.0)),
+        (3, "rust ownership and borrowing", (-200.0, -100.0)),
+        (4, "cooking pasta with garlic", (200.0, 0.0)),
+        (5, "baking bread recipes", (200.0, 100.0)),
+        (6, "italian dinner ideas", (200.0, -100.0)),
+    ];
+
+    let texts: Vec<&str> = nodes.iter().map(|(_, t, _)| *t).collect();
+    let vectors = provider.embed(&texts).expect("embed batch");
+
+    let mut index = VectorIndex::<u32>::new(provider.dimensions(), provider.metric());
+    let mut positions = HashMap::new();
+    for ((id, _, pos), vec) in nodes.iter().zip(vectors.into_iter()) {
+        index.insert(*id, vec).unwrap();
+        positions.insert(*id, *pos);
+    }
+
+    let query_vec = provider.embed_one("rust language features").unwrap();
+
+    // Build the query-similarity field via the same path
+    // graph-canvas hosts use. Sigma chosen ~half the inter-node spacing.
+    let mut projection = FieldProjection::new();
+    let _id = register_query_similarity_field(
+        &mut projection,
+        "rust_focus",
+        &query_vec,
+        &index,
+        &positions,
+        80.0,
+    );
+
+    // Evaluate the field at each node's position.
+    let registry = FieldRegistry::new();
+    let field = projection.registry.get(_id).expect("field registered");
+    let graph_canvas::fields::registry::FieldDef::Scalar(field) = field else {
+        panic!("expected scalar field");
+    };
+
+    let mut rust_total = 0.0_f32;
+    let mut cooking_total = 0.0_f32;
+    for (id, _, (x, y)) in nodes {
+        let v = eval_scalar(field, &registry, *x, *y, 0.0);
+        if (*id) <= 3 {
+            rust_total += v;
+        } else {
+            cooking_total += v;
+        }
+    }
+
+    // Field should peak on the rust side (positive cosine similarity to
+    // the query) and be lower on the cooking side. We don't require
+    // cooking_total < 0 because some cosine spillover is normal — but the
+    // rust-side total should clearly exceed the cooking-side total.
+    assert!(
+        rust_total > cooking_total,
+        "rust side ({rust_total}) should exceed cooking side ({cooking_total}) — \
+         indicates real semantic separation in the field"
+    );
+
+    // Sanity: at least one rust-side node should have field > 0.5 (the
+    // query is semantically similar to its embedding, modulo gaussian
+    // leakage from neighbours).
+    let rust_peak = nodes
+        .iter()
+        .filter(|(id, _, _)| *id <= 3)
+        .map(|(_, _, (x, y))| eval_scalar(field, &registry, *x, *y, 0.0))
+        .fold(f32::MIN, f32::max);
+    assert!(
+        rust_peak > 0.5,
+        "expected at least one rust-side node with field > 0.5, peak was {rust_peak}"
+    );
+}
+
+/// **Phase 5 done condition** — closes the eidetic↔intelligence-embeddings
+/// boundary with real MiniLM bytes.
+///
+/// Reads `config.json` / `tokenizer.json` / `model.safetensors` from
+/// `MERE_MINILM_DIR`, saves them through `eidetic::ModelLibrary`,
+/// resolves them back via `resolve_components`, and builds a
+/// `BertEmbeddingProvider` from the resolved bytes. Embedding output
+/// must match a directly-loaded provider over the same model dir to
+/// within float-rounding tolerance — proving the eidetic round-trip is
+/// byte-faithful end to end (BLAKE3 hash check on weights + tokenizer,
+/// inline JSON config preserved through serde round-trip).
+#[test]
+#[ignore = "requires MERE_MINILM_DIR pointing at a real all-MiniLM-L6-v2 directory"]
+fn minilm_round_trips_through_eidetic_and_inference_matches_direct_load() {
+    let dir = minilm_dir().expect("MERE_MINILM_DIR must be set");
+
+    // Reference: build a provider directly from the model dir, embed a
+    // sentence. The eidetic-resolved provider must reproduce this output.
+    let direct: BertEmbeddingProvider<B> =
+        BertEmbeddingProvider::load(&dir, Default::default()).expect("direct load");
+    let reference = direct
+        .embed_one("This is a sample sentence.")
+        .expect("reference embedding");
+
+    // Read the three artifacts as bytes — the format eidetic stores them in.
+    let config_bytes = std::fs::read(dir.join("config.json")).expect("read config.json");
+    let tokenizer_bytes = std::fs::read(dir.join("tokenizer.json")).expect("read tokenizer.json");
+    let weights_bytes =
+        std::fs::read(dir.join("model.safetensors")).expect("read model.safetensors");
+
+    // Save through the layered stack: weight + tokenizer get content-addressed
+    // opaque-blob manifests, the ModelManifest engram references both.
+    let config_value: serde_json::Value =
+        serde_json::from_slice(&config_bytes).expect("parse config.json");
+    let mut store = InMemoryStore::default();
+    let mut fetcher = NoFetcher;
+    let manifest_id = pollster::block_on(ModelLibrary::save_model_with_components(
+        &mut store,
+        "sentence-transformers/all-MiniLM-L6-v2",
+        "bert",
+        "Apache-2.0",
+        config_value,
+        &weights_bytes,
+        &tokenizer_bytes,
+        Vec::new(),
+        Vec::new(),
+        PrivacyClass::LocalOnly,
+        test_provenance(),
+        test_trust(),
+        Timestamp(0),
+    ))
+    .expect("save model through eidetic");
+
+    // Resolve back — runs Layer 2 BLAKE3 verification on each blob.
+    let components = pollster::block_on(ModelLibrary::resolve_components(
+        &mut store,
+        &mut fetcher,
+        manifest_id,
+    ))
+    .expect("resolve_components ok")
+    .expect("components present after save");
+
+    assert_eq!(
+        components.manifest.model_id,
+        "sentence-transformers/all-MiniLM-L6-v2"
+    );
+    assert_eq!(components.manifest.architecture, "bert");
+    assert_eq!(components.manifest.license, "Apache-2.0");
+    assert_eq!(components.weights, weights_bytes, "weight bytes preserved");
+    assert_eq!(
+        components.tokenizer, tokenizer_bytes,
+        "tokenizer bytes preserved"
+    );
+
+    // Build a provider from the eidetic-resolved bytes.
+    let resolved: BertEmbeddingProvider<B> = BertEmbeddingProvider::from_bytes(
+        &components.config_bytes,
+        &components.tokenizer,
+        &components.weights,
+        Default::default(),
+    )
+    .expect("from_bytes via eidetic-resolved bytes");
+    assert_eq!(resolved.dimensions(), 384);
+
+    // Inference must match the directly-loaded reference. Same input,
+    // same weights, same config → same output (modulo float determinism
+    // within a single backend, which is exact here).
+    let via_eidetic = resolved
+        .embed_one("This is a sample sentence.")
+        .expect("embedding via eidetic-resolved provider");
+    assert_eq!(reference.len(), via_eidetic.len());
+    let max_diff = reference
+        .iter()
+        .zip(via_eidetic.iter())
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0_f32, f32::max);
+    assert!(
+        max_diff < 1.0e-5,
+        "eidetic round-trip changed embedding output: max_diff = {max_diff} \
+         (expected ~0 — same model bytes, same input)"
     );
 }

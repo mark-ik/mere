@@ -63,7 +63,7 @@ pub mod tokenizer;
 pub mod validation;
 
 pub use attention::{BertAttention, BertSelfAttention, BertSelfOutput};
-pub use config::{BertConfig, MINILM_L6_V2};
+pub use config::{BGE_MICRO_V2, BertConfig, MINILM_L6_V2, SNOWFLAKE_ARCTIC_EMBED_XS};
 pub use embeddings::BertEmbeddings;
 pub use encoder::BertEncoder;
 pub use feed_forward::{BertIntermediate, BertOutput};

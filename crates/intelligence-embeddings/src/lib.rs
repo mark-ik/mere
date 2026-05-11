@@ -42,6 +42,7 @@
 
 #[cfg(feature = "bert")]
 pub mod bert;
+pub mod canvas_search;
 pub mod field_bridge;
 pub mod hashed;
 pub mod index;
@@ -50,7 +51,10 @@ pub mod provider;
 pub mod search;
 
 #[cfg(feature = "bert")]
-pub use bert::{BertConfig, BertEmbeddingProvider, MINILM_L6_V2};
+pub use bert::{
+    BGE_MICRO_V2, BertConfig, BertEmbeddingProvider, MINILM_L6_V2, SNOWFLAKE_ARCTIC_EMBED_XS,
+};
+pub use canvas_search::CanvasSearchSurface;
 pub use field_bridge::{build_query_similarity_field, register_query_similarity_field};
 pub use hashed::HashedEmbeddingProvider;
 pub use index::{IndexError, VectorIndex};
