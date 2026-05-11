@@ -7,6 +7,7 @@ members = [
     "crates/graph/graph-canvas",
     "crates/graph/graph-memory",
     "crates/graph/graph-tree",
+    "crates/document/document-canvas",
     "crates/registry/register-diagnostics",
     "crates/graphshell",
     "crates/mere-kernel",
@@ -17,6 +18,9 @@ members = [
     "crates/platen",
     "crates/nematic",
     "crates/eidetic",
+    "crates/eidetic-fjall",
+    "crates/eidetic-https-fetcher",
+    "crates/eidetic-iroh-fetcher",
     "crates/intelligence-embeddings",
     "crates/uxtree",
     "crates/mere-domain/workbench",
@@ -24,10 +28,14 @@ members = [
     "crates/mere-domain/frame",
     "crates/mere-domain/gloss",
     "crates/mere-domain/apparatus",
+    "crates/mere-domain/graphshell",
+    "crates/mere-ux-events",
     "crates/murm/murm",
     "crates/murm/murmuring",
     "crates/moot/moothold",
     "crates/moot/mooting",
+    "crates/aether",
+    "crates/cartography",
 ]
 exclude = ["crates/probes", "crates/mere-host"]
 
