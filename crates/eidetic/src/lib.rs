@@ -10,12 +10,23 @@
 //! over time" in Mere's printing-press metaphor (engines → inker → platen →
 //! verso-tile → eidetic).
 //!
-//! Eidetic defines typed [`Request`] / [`Response`] enums, a [`Store`] trait
-//! that storage backends implement (fjall, redb, IndexedDB, …), and a
+//! Eidetic defines typed [`Request`] / [`Response`] enums, an async [`Store`]
+//! trait that storage backends implement (fjall, redb, OPFS, …), and a
 //! [`dispatch`] helper that routes requests to a store. Eidetic does not pick
 //! a storage backend, mount filesystems, or know about graphs — it is the
 //! pure boundary between reducer-emitted memory requests and concrete blob
 //! storage.
+//!
+//! ## Why async
+//!
+//! Browser-side stores (OPFS via `FileSystemSyncAccessHandle` in workers,
+//! or other wasm-bindgen-backed implementations) cannot expose a synchronous
+//! I/O surface from Rust — there is no `block_on` in wasm32-unknown-unknown.
+//! The trait is therefore async, with native fjall/redb implementations
+//! returning ready futures (no actual async work) and browser implementations
+//! actually awaiting JS Promises. The trait uses `?Send` so it works on both
+//! single-threaded wasm and multi-threaded native; consumers `.await`
+//! eidetic calls in their existing context rather than spawning them.
 //!
 //! Eidetic is distinct from:
 //!
@@ -27,7 +38,35 @@
 
 #![doc(html_root_url = "https://docs.rs/eidetic/0.0.1")]
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+
+pub mod bundle;
+pub mod engram;
+pub mod manifest;
+pub mod models;
+pub mod schema;
+pub mod schema_def;
+pub mod typed;
+
+pub use bundle::{
+    BUNDLE_SCHEMA_REF, Bundle, BundleMember, bundle_schema_ref, load_bundle, save_bundle,
+    verify_required_members,
+};
+pub use engram::{Engram, TimeBounds};
+pub use manifest::{BlobFetcher, BlobManifest, BlobSource, NoFetcher};
+pub use models::{ModelComponents, ModelLibrary, ModelManifest};
+pub use schema::{
+    Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaRef,
+    SignatureRef, Timestamp, TrustEnvelope, TrustLevel,
+};
+pub use schema_def::{
+    JsonLdValidator, JsonSchemaValidator, META_SCHEMA_REF, MereNativeFieldSpec,
+    MereNativeSchemaBody, MereNativeSchemaBuilder, MereNativeValidator, SchemaDefinition,
+    SchemaFormat, SchemaValidator, bootstrap_meta_schema, find_schema_by_id, load_schema,
+    meta_schema_engram, meta_schema_ref, save_schema, validate_against_schema, validate_payload,
+};
+pub use typed::{TypedPayload, list_typed, load_typed, save_typed};
 
 /// Request emitted by reducers and routed to a [`Store`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,25 +115,58 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Owner-scoped private blob store.
 ///
-/// Implementations decide where blobs live (fjall, redb, IndexedDB, in-memory,
-/// …). The trait surface is intentionally narrow: load by key, save by key.
-/// Index/snapshot/journal concerns belong to higher-level seams that may
-/// build on top of `Store`.
+/// Implementations decide where blobs live (fjall, redb, OPFS, in-memory,
+/// …). The trait surface is intentionally narrow: load by key, save by key,
+/// enumerate by key prefix. Index/snapshot/journal concerns belong to
+/// higher-level seams that may build on top of `Store`.
+///
+/// The trait is `?Send` so single-threaded wasm impls (browser OPFS) can
+/// satisfy it without contortions; native multi-threaded consumers that need
+/// `Send` futures can add the bound at the call site.
+///
+/// ## `iter_keys`
+///
+/// Backends that don't support enumeration return an error (the default
+/// impl). Higher layers that need listing (`list_manifests`, `list_typed`)
+/// will surface that error to the consumer. Most real backends — fjall,
+/// redb, OPFS, and the test in-memory stores — can answer enumeration
+/// cheaply.
+#[async_trait(?Send)]
 pub trait Store {
-    fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>>;
+    async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>>;
 
-    fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()>;
+    async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()>;
+
+    /// Return all keys that begin with `prefix`. Order is implementation-
+    /// defined; consumers that need a stable order should sort the
+    /// returned vector.
+    async fn iter_keys(&mut self, _prefix: &str) -> Result<Vec<String>> {
+        Err(Error::new(
+            "Store implementation does not support iter_keys",
+        ))
+    }
+}
+
+/// Idempotent first-init seeding for any [`Store`].
+///
+/// Currently equivalent to [`bootstrap_meta_schema`]; in the future will
+/// also seed any other well-known schemas eidetic itself ships with
+/// (e.g. the `OpaqueBlob` schema). Higher-layer consumers that ship their
+/// own schemas (model storage, vector indices, browsing memory) should
+/// follow this pattern with their own `bootstrap_*` helpers.
+pub async fn bootstrap(store: &mut dyn Store) -> Result<()> {
+    bootstrap_meta_schema(store).await
 }
 
 /// Route a [`Request`] to a [`Store`] and produce the matching [`Response`].
-pub fn dispatch(store: &mut dyn Store, request: &Request) -> Result<Response> {
+pub async fn dispatch(store: &mut dyn Store, request: &Request) -> Result<Response> {
     match request {
         Request::LoadBlob { key } => Ok(Response::BlobLoaded {
             key: key.clone(),
-            value: store.load_blob(key)?,
+            value: store.load_blob(key).await?,
         }),
         Request::SaveBlob { key, value } => {
-            store.save_blob(key, value)?;
+            store.save_blob(key, value).await?;
             Ok(Response::BlobSaved { key: key.clone() })
         }
     }
@@ -110,77 +182,100 @@ mod tests {
         blobs: HashMap<String, Vec<u8>>,
     }
 
+    #[async_trait(?Send)]
     impl Store for InMemoryStore {
-        fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
+        async fn load_blob(&mut self, key: &str) -> Result<Option<Vec<u8>>> {
             Ok(self.blobs.get(key).cloned())
         }
 
-        fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
+        async fn save_blob(&mut self, key: &str, value: &[u8]) -> Result<()> {
             self.blobs.insert(key.to_string(), value.to_vec());
             Ok(())
+        }
+
+        async fn iter_keys(&mut self, prefix: &str) -> Result<Vec<String>> {
+            Ok(self
+                .blobs
+                .keys()
+                .filter(|k| k.starts_with(prefix))
+                .cloned()
+                .collect())
         }
     }
 
     #[test]
     fn dispatch_round_trips_save_then_load() {
-        let mut store = InMemoryStore::default();
-        let saved = dispatch(
-            &mut store,
-            &Request::SaveBlob {
-                key: "k".into(),
-                value: b"hello".to_vec(),
-            },
-        )
-        .unwrap();
-        assert_eq!(
-            saved,
-            Response::BlobSaved {
-                key: "k".to_string()
-            }
-        );
+        pollster::block_on(async {
+            let mut store = InMemoryStore::default();
+            let saved = dispatch(
+                &mut store,
+                &Request::SaveBlob {
+                    key: "k".into(),
+                    value: b"hello".to_vec(),
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                saved,
+                Response::BlobSaved {
+                    key: "k".to_string()
+                }
+            );
 
-        let loaded = dispatch(&mut store, &Request::LoadBlob { key: "k".into() }).unwrap();
-        assert_eq!(
-            loaded,
-            Response::BlobLoaded {
-                key: "k".to_string(),
-                value: Some(b"hello".to_vec()),
-            }
-        );
+            let loaded = dispatch(&mut store, &Request::LoadBlob { key: "k".into() })
+                .await
+                .unwrap();
+            assert_eq!(
+                loaded,
+                Response::BlobLoaded {
+                    key: "k".to_string(),
+                    value: Some(b"hello".to_vec()),
+                }
+            );
+        });
     }
 
     #[test]
     fn dispatch_load_returns_none_for_unknown_key() {
-        let mut store = InMemoryStore::default();
-        let loaded = dispatch(
-            &mut store,
-            &Request::LoadBlob {
-                key: "missing".into(),
-            },
-        )
-        .unwrap();
-        assert_eq!(
-            loaded,
-            Response::BlobLoaded {
-                key: "missing".to_string(),
-                value: None,
-            }
-        );
+        pollster::block_on(async {
+            let mut store = InMemoryStore::default();
+            let loaded = dispatch(
+                &mut store,
+                &Request::LoadBlob {
+                    key: "missing".into(),
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                loaded,
+                Response::BlobLoaded {
+                    key: "missing".to_string(),
+                    value: None,
+                }
+            );
+        });
     }
 
     #[test]
     fn dispatch_propagates_store_errors() {
         struct FailingStore;
+        #[async_trait(?Send)]
         impl Store for FailingStore {
-            fn load_blob(&mut self, _key: &str) -> Result<Option<Vec<u8>>> {
+            async fn load_blob(&mut self, _key: &str) -> Result<Option<Vec<u8>>> {
                 Err(Error::new("disk on fire"))
             }
-            fn save_blob(&mut self, _key: &str, _value: &[u8]) -> Result<()> {
+            async fn save_blob(&mut self, _key: &str, _value: &[u8]) -> Result<()> {
                 Err(Error::new("disk on fire"))
             }
         }
 
-        let err = dispatch(&mut FailingStore, &Request::LoadBlob { key: "k".into() }).unwrap_err();
-        assert_eq!(err.message, "disk on fire");
+        pollster::block_on(async {
+            let err = dispatch(&mut FailingStore, &Request::LoadBlob { key: "k".into() })
+                .await
+                .unwrap_err();
+            assert_eq!(err.message, "disk on fire");
+        });
     }
 }

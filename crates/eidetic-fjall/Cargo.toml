@@ -1,0 +1,23 @@
+[package]
+name = "eidetic-fjall"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Fjall LSM Store implementation for eidetic — production-default native backend persisting blobs and manifests under a single keyspace partition."
+readme = "README.md"
+keywords = ["eidetic", "fjall", "lsm", "storage", "mere"]
+categories = ["database-implementations"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = "0.1"
+eidetic = { path = "../eidetic" }
+fjall = "2"
+
+[dev-dependencies]
+pollster = "0.4"
+serde_json = "1.0"
+tempfile = "3"
