@@ -48,7 +48,15 @@ actions!(
         Paste,
         Cut,
         Copy,
+        /// Submit the omnibar's text. Default Enter binding. Emits
+        /// `OmnibarSubmitted { text, new_tile: false }` — host
+        /// extends the active tile's history (within-tile nav).
         Submit,
+        /// Submit the omnibar's text *as a new tile*. Bound to
+        /// `Ctrl/Cmd-Enter`. Emits `OmnibarSubmitted { text,
+        /// new_tile: true }` — host mints a new anchor node and
+        /// opens it as a new tile (see `mere_host_runtime::NavigateMode`).
+        SubmitNewTile,
         Cancel,
     ]
 );
@@ -58,11 +66,18 @@ actions!(
 /// focused.
 pub const KEY_CONTEXT: &str = "Omnibar";
 
-/// Emitted when the user presses Enter in the omnibar. Subscribers
-/// (the host) decide what to do with the text — navigate, search,
-/// run a command, etc.
+/// Emitted when the user presses Enter (or `Ctrl/Cmd-Enter`) in
+/// the omnibar. Subscribers (the host) decide what to do with the
+/// text — navigate, search, run a command, etc.
+///
+/// `new_tile` is `true` when the user submitted with the new-tile
+/// modifier (`Ctrl/Cmd-Enter`); host should mint a new anchor node
+/// and open it as a new tile. `false` for plain Enter — host
+/// extends the active tile's within-tile history without minting a
+/// new node.
 pub struct OmnibarSubmitted {
     pub text: String,
+    pub new_tile: bool,
 }
 
 /// Emitted when the user presses Escape. The host typically uses
@@ -209,6 +224,19 @@ impl OmnibarInput {
     fn submit(&mut self, _: &Submit, _: &mut Window, cx: &mut Context<Self>) {
         cx.emit(OmnibarSubmitted {
             text: self.content.to_string(),
+            new_tile: false,
+        });
+    }
+
+    fn submit_new_tile(
+        &mut self,
+        _: &SubmitNewTile,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.emit(OmnibarSubmitted {
+            text: self.content.to_string(),
+            new_tile: true,
         });
     }
 
@@ -478,9 +506,12 @@ impl EntityInputHandler for OmnibarInput {
     fn submit_text_input(&mut self, _: &mut Window, cx: &mut Context<Self>) {
         // Mirrors the explicit `Submit` action so platform IMEs that
         // surface "commit on return" (e.g. mac's confirm-marked-text)
-        // produce the same event the keybind does.
+        // produce the same event the keybind does. IME path defaults
+        // to within-tile — there's no modifier-key signal at the IME
+        // boundary.
         cx.emit(OmnibarSubmitted {
             text: self.content.to_string(),
+            new_tile: false,
         });
     }
 }
@@ -508,6 +539,7 @@ impl Render for OmnibarInput {
             .on_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::submit))
+            .on_action(cx.listener(Self::submit_new_tile))
             .on_action(cx.listener(Self::cancel))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
@@ -540,6 +572,12 @@ pub fn bindings() -> Vec<KeyBinding> {
         KeyBinding::new("home", Home, Some(KEY_CONTEXT)),
         KeyBinding::new("end", End, Some(KEY_CONTEXT)),
         KeyBinding::new("enter", Submit, Some(KEY_CONTEXT)),
+        // New-tile modifier: Cmd-Enter on Mac, Ctrl-Enter elsewhere.
+        // Triggers `NavigateMode::NewTile` per the node-per-tile
+        // design (see `design_docs/mere_docs/implementation_strategy/
+        // 2026-05-11_node_per_tile_lineage_plan.md` §3.3).
+        KeyBinding::new("cmd-enter", SubmitNewTile, Some(KEY_CONTEXT)),
+        KeyBinding::new("ctrl-enter", SubmitNewTile, Some(KEY_CONTEXT)),
         KeyBinding::new("escape", Cancel, Some(KEY_CONTEXT)),
         // Cross-platform clipboard + select-all: bind both the mac
         // and the win/linux modifier so the bindings work everywhere

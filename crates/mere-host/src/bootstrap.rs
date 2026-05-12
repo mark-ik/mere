@@ -19,6 +19,7 @@ use inker::EngineRoutePolicy;
 use mere_frame::{FrameLayout, GraphId, PaneNode};
 use mere_host_apparatus::EventBuffer;
 use mere_host_graphshell::{OmnibarInput, OmnibarSubmitted, Palette, PaletteInvoke, omnibar_bindings, palette_bindings};
+use mere_host_runtime::{ManifestStore, session_graph_store};
 use mere_kernel::graph::Graph;
 
 use crate::actions;
@@ -61,29 +62,146 @@ pub fn run() {
         // `Entity<Graph>` instances keyed by fresh `GraphId`s.
         let registry = cx.new(|_| GraphRegistry::new());
 
-        // Seed the first graph. Initial node = intro page so the
-        // first window's workbench has a tile waiting.
-        let initial_graph_id = GraphId::new();
-        let initial_graph = cx.new(|_| {
-            let mut g = render_demo_graph_state();
-            ensure_node_for_address(&mut g, "mere://intro");
-            g
-        });
-        registry.update(cx, |reg, _| {
-            reg.insert(initial_graph_id, initial_graph);
+        // Manifest store — durable session identity. Bound to the
+        // sessions directory; loads existing manifests on start so
+        // we can rehydrate sessions from a previous run.
+        let manifests = cx.new(|_| {
+            let mut store = ManifestStore::new();
+            if let Some(dir) = crate::persistence::sessions_dir() {
+                match store.load_from_disk(&dir) {
+                    Ok(report) => {
+                        tracing::info!(
+                            loaded = report.loaded.len(),
+                            failed = report.failed.len(),
+                            "session.restore_report"
+                        );
+                        for failure in &report.failed {
+                            tracing::warn!(
+                                dir = %failure.dir_name,
+                                reason = %failure.reason,
+                                "session.restore_missing"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "manifest_store.load failed");
+                    }
+                }
+            } else {
+                tracing::warn!("no data_local_dir; manifest persistence disabled");
+            }
+            store
         });
 
-        open_host_window(cx, registry, initial_graph_id, event_buffer.clone());
+        // Hydrate graphs for each restored manifest, or seed a
+        // default session if the manifest store is empty (fresh
+        // install / first run / missing data dir).
+        let initial_graph_id = restore_or_seed(&registry, &manifests, cx);
+
+        // Register app-quit handler — best-effort flush of every
+        // session's graph snapshot + dirty manifests. Final
+        // safety net beyond the per-mutation flushes triggered by
+        // `session_persist::flush_session` on new-tile creation.
+        let registry_for_quit = registry.clone();
+        let manifests_for_quit = manifests.clone();
+        cx.on_app_quit(move |cx: &mut App| {
+            crate::session_persist::flush_all(&registry_for_quit, &manifests_for_quit, cx);
+            async {}
+        })
+        .detach();
+
+        open_host_window(
+            cx,
+            registry,
+            manifests,
+            initial_graph_id,
+            event_buffer.clone(),
+        );
     });
+}
+
+/// Inspect `manifests`; for each session, try to load its graph
+/// from disk + register an `Entity<Graph>` in `registry`. If the
+/// store is empty (fresh install) or graph data is missing for
+/// every manifest, seed a default session with the intro node.
+/// Returns the `GraphId` to use as the first window's primary.
+fn restore_or_seed(
+    registry: &Entity<GraphRegistry>,
+    manifests: &Entity<ManifestStore>,
+    cx: &mut App,
+) -> GraphId {
+    let manifest_snapshot: Vec<(mere_frame::SessionId, GraphId)> = manifests
+        .read(cx)
+        .iter()
+        .map(|(sid, m)| (sid, m.root_graph_id))
+        .collect();
+
+    if manifest_snapshot.is_empty() {
+        // No prior sessions — seed default. Mints a fresh
+        // (SessionId, GraphId) pair and registers a manifest so
+        // the next run finds it.
+        let (sid, gid, _graph) = GraphRegistry::create_graph_seeded(
+            registry,
+            Some(manifests),
+            cx,
+            |g, _| {
+                *g = render_demo_graph_state();
+                ensure_node_for_address(g, "mere://intro");
+            },
+        );
+        tracing::info!(?sid, ?gid, "session.created (default seed)");
+        return gid;
+    }
+
+    let sessions_root = crate::persistence::sessions_dir();
+    let mut primary: Option<GraphId> = None;
+    for (sid, gid) in manifest_snapshot {
+        let session_dir = sessions_root
+            .as_ref()
+            .map(|d| d.join(sid.as_uuid().to_string()));
+        let graph = session_dir
+            .as_ref()
+            .and_then(|dir| match session_graph_store::load_graph(dir) {
+                Ok(Some(g)) => Some(g),
+                Ok(None) => {
+                    tracing::info!(
+                        ?sid,
+                        "graph file missing; seeding intro-only graph"
+                    );
+                    None
+                }
+                Err(e) => {
+                    tracing::warn!(?sid, error = %e, "session.restore_missing");
+                    None
+                }
+            })
+            .unwrap_or_else(|| {
+                let mut g = Graph::new();
+                ensure_node_for_address(&mut g, "mere://intro");
+                g
+            });
+        let entity = cx.new(|_| graph);
+        registry.update(cx, |reg, rcx| {
+            reg.insert_with_session(gid, entity, sid);
+            rcx.notify();
+        });
+        tracing::info!(?sid, ?gid, "session.restored");
+        if primary.is_none() {
+            primary = Some(gid);
+        }
+    }
+    primary.expect("restored at least one session")
 }
 
 /// Open one host window referencing `graph_id` as its **primary**
 /// graph. Fresh per-window state (frame layout, tile list, omnibar,
 /// palette, history) is allocated; the graph itself lives in the
-/// shared `GraphRegistry`.
+/// shared `GraphRegistry`, and session identity in the shared
+/// `Entity<ManifestStore>`.
 pub(crate) fn open_host_window(
     cx: &mut App,
     registry: Entity<GraphRegistry>,
+    manifests: Entity<ManifestStore>,
     graph_id: GraphId,
     event_buffer: EventBuffer,
 ) {
@@ -116,7 +234,7 @@ pub(crate) fn open_host_window(
         });
     let intro_node = graph.update(cx, |g, _| ensure_node_for_address(g, intro_address));
     let mut tiles = TileManager::new();
-    tiles.open_or_focus(intro_node, intro_doc);
+    tiles.open_or_focus(intro_node, intro_address.to_string(), intro_doc);
 
     let app_tree = build_demo_application_tree(
         tiles.active_document(),
@@ -129,6 +247,7 @@ pub(crate) fn open_host_window(
         graph,
         graph_id,
         registry,
+        manifests,
         frame_layout,
         chrome_layout,
         app_tree,
@@ -154,6 +273,7 @@ pub(crate) fn open_host_window(
 pub(crate) fn open_tearout_window(
     cx: &mut App,
     registry: Entity<GraphRegistry>,
+    manifests: Entity<ManifestStore>,
     graph_id: GraphId,
     graph: Entity<Graph>,
     frame_layout: FrameLayout,
@@ -174,6 +294,7 @@ pub(crate) fn open_tearout_window(
         graph,
         graph_id,
         registry,
+        manifests,
         frame_layout,
         chrome_layout,
         app_tree,
@@ -209,6 +330,7 @@ fn open_window(
     graph: Entity<Graph>,
     graph_id: GraphId,
     registry: Entity<GraphRegistry>,
+    manifests: Entity<ManifestStore>,
     frame_layout: FrameLayout,
     chrome_layout: crate::layout_config::ChromeLayoutConfig,
     app_tree: uxtree::UxTree,
@@ -265,7 +387,15 @@ fn open_window(
                 cx.subscribe(
                     &omnibar_input,
                     |host: &mut HostRoot, _input, ev: &OmnibarSubmitted, cx| {
-                        host.navigate_to(ev.text.clone(), true, cx);
+                        // `new_tile` flag (Ctrl/Cmd-Enter) picks
+                        // NavigateMode::NewTile; default Enter is
+                        // WithinTile. Per the node-per-tile design.
+                        let mode = if ev.new_tile {
+                            mere_host_runtime::NavigateMode::NewTile
+                        } else {
+                            mere_host_runtime::NavigateMode::WithinTile
+                        };
+                        host.navigate_to(ev.text.clone(), mode, cx);
                     },
                 )
                 .detach();
@@ -307,6 +437,7 @@ fn open_window(
                     graph,
                     graph_id,
                     registry,
+                    manifests,
                     frame_layout,
                     chrome_layout,
                     app_tree,
@@ -316,13 +447,12 @@ fn open_window(
                     palette,
                     engine_registry,
                     engine_policy,
-                    history: vec![initial_address.clone()],
-                    history_cursor: 0,
                     focus_handle: cx.focus_handle(),
                     refocus_root_on_next_render: false,
                     a11y_handle: None,
                     dragging_splitter: None,
                     graph_switcher_open: false,
+                    permission_gate: Box::new(mere_host_runtime::PermitEverythingGate),
                 };
                 host.reconcile_panes();
                 if let Some(active_tiles) = host.active_tiles_mut() {

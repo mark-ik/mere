@@ -21,6 +21,7 @@ use euclid::default::Vector2D;
 use gpui::{Bounds, Pixels};
 use graph_canvas::camera::CanvasCamera;
 use graph_canvas::engine::{InteractionConfig, InteractionEngine};
+use graph_tree::{GraphTree, LayoutMode, ProjectionLens};
 use mere_frame::PaneContent;
 use mere_kernel::graph::NodeKey;
 
@@ -54,12 +55,25 @@ impl Default for OrreryPaneState {
 
 pub(crate) struct WorkbenchPaneState {
     pub tiles: TileManager,
+    /// Per-workbench **lineage facet** — graph-tree view of which
+    /// anchor nodes are in this workbench plus how the user got
+    /// from one to another (`Provenance::Traversal`). New-tile
+    /// creation populates this in `host_navigation::navigate_to`'s
+    /// NewTile branch.
+    ///
+    /// Per the node-per-tile + lineage facet design (see
+    /// `design_docs/mere_docs/implementation_strategy/2026-05-11_node_per_tile_lineage_plan.md`
+    /// §5.1): each workbench owns its own tree. Same graph, two
+    /// workbenches = two independent lineage views over the same
+    /// nodes. Phase 3's `Branch` operation adds graphlets here.
+    pub tree: GraphTree<NodeKey>,
 }
 
 impl Default for WorkbenchPaneState {
     fn default() -> Self {
         Self {
             tiles: TileManager::new(),
+            tree: GraphTree::new(LayoutMode::default(), ProjectionLens::default()),
         }
     }
 }

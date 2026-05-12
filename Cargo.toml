@@ -12,6 +12,7 @@ members = [
     "crates/graphshell",
     "crates/mere-kernel",
     "crates/mere-host-contract",
+    "crates/mere-host-runtime",
     "crates/graphshell/shell-state",
     "crates/verso-tile",
     "crates/inker",

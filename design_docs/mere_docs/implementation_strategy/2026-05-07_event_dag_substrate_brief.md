@@ -178,7 +178,7 @@ Each candidate evaluated as: "can it carry MereEvents, and at what cost?"
 
 → Best fit for: **engram publishing and cross-moot exchange**, where typed schemas earn their cost. Not for local event DAG storage.
 
-**Willow (revised 2026-05-10).** 3D namespace/subspace/path data model, capability-based access (meadowcap), Range-Based Set Reconciliation, optional Confidential Sync handshake. Pros: meadowcap is the most thoughtful design for capability delegation at scale; namespace/subspace/path maps cleanly to moot organization (and even more cleanly to graph-cluster-derived paths — see §14). willow-rs is BLAKE3-default today, fully PD-generic, and integrates over arbitrary byte transports. Cons: 3D data model is more machinery than flat K/V if we don't actually use the path dimension; iroh-willow (the existing iroh-bound integration) is dormant pre-alpha (last meaningful commit 2025-10-27, open correctness bug in capability delegation, [issue #5](https://github.com/n0-computer/iroh-willow/issues/5)) — we'd build our own willow-rs-on-iroh integration in `mere-namespace` rather than depend on it; meadowcap is design-stable but not actively evolving — Keyhive (see §8.8) is the live research alternative.
+**Willow (revised 2026-05-10/11).** 3D namespace/subspace/path data model, capability-based access (meadowcap), Range-Based Set Reconciliation, optional Confidential Sync handshake. Pros: meadowcap is the most thoughtful design for structural namespace delegation at scale; namespace/subspace/path maps cleanly to moot organization (and even more cleanly to graph-cluster-derived paths — see §14). willow-rs is BLAKE3-default today, fully PD-generic, and integrates over arbitrary byte transports. Cons: 3D data model is more machinery than flat K/V if we don't actually use the path dimension; iroh-willow (the existing iroh-bound integration) is dormant pre-alpha (last meaningful commit 2025-10-27, open correctness bug in capability delegation, [issue #5](https://github.com/n0-computer/iroh-willow/issues/5)) — we'd build our own willow-rs-on-iroh integration in `mere-namespace` rather than depend on it; meadowcap is design-stable but not an expressive moot-policy layer. §8.8 now treats Biscuit as the policy-token candidate and Keyhive as the live group/key-state eval, not as a direct Willow replacement.
 
 → Best fit for: **`mere-namespace`** (a new crate). Adopt for the data model + meadowcap + WGPS sync over iroh streams. The substrate-level RBSR efficiency is *not* a reason to adopt — iroh-docs already does RBSR (verified against `n0-computer/iroh-docs` v0.99.0, 2026-05-08). Adopt for the 3D data model, path-keyed range queries, and meadowcap-style capability scoping; or skip if those are not load-bearing. Per §14 (graph-cluster namespaces) they likely are.
 
@@ -398,28 +398,51 @@ This is essentially "the user is a one-member moot" — same protocol, scoped to
 
 **Intuition:** intrigued by Willow's meadowcap.
 
-**Reaction (revised 2026-05-10):** meadowcap is a strong choice with two viable instantiations, and there is one live alternative (Keyhive) worth weighing before committing.
+**Reaction (revised 2026-05-11):** this is no longer one flat "meadowcap vs Keyhive" choice. The capability surface splits into three layers:
 
-**Option A — meadowcap via willow-rs.** If mere adopts Willow's data model (see §5 and §14), willow-rs's `meadowcap` crate provides the capability layer natively, fully PD-generic over BLAKE3. Zero design re-derivation; we get path-prefix delegation, time-interval bounds, recursive delegation, and signed credentials directly. Lowest implementation cost.
+1. **Structural namespace capabilities** — read/write/delegate authority over event areas: namespace, subspace/author, path/cluster, logical timestamp range.
+2. **Moot policy authorization** — "is this action allowed under current moot facts?" Tessera thresholds, pin quotas, heartbeat freshness, roles, event types, bridge-publish windows.
+3. **Live group/key state** — membership, device enrollment, key rotation, encrypted sync, pull access, and post-compromise recovery.
 
-**Option B — meadowcap-shaped, mere-native.** If we don't adopt the Willow data model, we still implement caps in the meadowcap shape (signed credentials over `(subspace_set, path_prefix, time_interval, mode)` with recursive delegation). This is the original §8.8 plan and remains valid as a fallback.
+Treating those as one decision hides the real architecture. Meadowcap, Biscuit, UCAN, and Keyhive cover different parts of the stack.
 
-**Option C — Keyhive.** [Keyhive](https://www.inkandswitch.com/keyhive/notebook/) (Ink & Switch, open-sourced 2025) is the active research frontier for capability+sync as of 2026: CGKA-based access control with post-compromise security, designed around Automerge-style authorship, with explicit defense-in-depth against unauthorized replicas. More sophisticated access semantics than meadowcap; pre-alpha but actively developed where meadowcap is design-stable-but-not-evolving. Cost: no Willow-native binding (we'd integrate ourselves); the Automerge-author shape needs translation to mere's event-DAG author model; pre-alpha maturity adds risk.
+**Option A — meadowcap via willow-rs (structural namespace layer).** If mere adopts Willow's data model (see §5 and §14), willow-rs's `meadowcap` crate provides the structural capability layer natively, fully PD-generic over BLAKE3. Zero design re-derivation; we get path-prefix delegation, logical time-interval bounds, recursive delegation, and signed credentials directly. Lowest implementation cost.
 
-**Shape (under any option):**
+Pros: purpose-built for Willow entries; maps cleanly to graph-cluster-derived paths; simple deterministic verification for "does this cap authorize this event area?"; good fit for `mere-namespace`.
 
-- Capabilities are signed credentials over a scope (path-prefix under A/B; group-membership-derived under C), a mode (read / write / delegate), a time interval, and a delegation chain.
-- Delegation is recursive — a holder can grant a strict subset of their capability to another.
-- Revocation is via shorter time intervals or capability replacement (under A/B); via group-removal events (under C).
+Cons: not an expressive policy language; does not naturally encode tessera thresholds, host quotas, moderation state, heartbeat freshness, or bridge-publish rules; revocation is expiry/replacement/external state rather than a rich live model; read access still depends on replication cooperation unless paired with encryption. Meadowcap timestamp bounds constrain the logical timestamp claimed by an Entry, not the wall-clock moment at which a hostile peer creates it.
+
+**Option B — meadowcap-shaped, mere-native (structural fallback).** If we do not adopt the Willow data model, we can still implement caps in the meadowcap shape (signed credentials over `(subspace_set, path_prefix, time_interval, mode)` with recursive delegation). This keeps the storage-scope semantics without importing Willow's full 3D data model. It remains valid as a fallback, but it means re-deriving correctness that meadowcap already gives us.
+
+**Option C — Biscuit / `biscuit-rust` (moot policy layer).** [Biscuit](https://doc.biscuitsec.org/reference/specifications) is a bearer authorization token with offline attenuation and Datalog-style checks. This is the missing candidate for moothold policy: tessera gates, pin/hosting quotas, heartbeat freshness, event-type constraints, scoped bridge publishing, moderator powers, "can this contributor vouch for this newcomer?", and "can this host pin this cluster under current moot rules?"
+
+Pros: expressive enough for governance rules; verifiable by any peer with the root public key plus the current authorizer facts; holders can attenuate tokens offline; Rust implementation exists in [`biscuit-rust`](https://github.com/eclipse-biscuit/biscuit-rust).
+
+Cons: not a storage model, sync model, encryption layer, or group-membership CRDT; revocation still needs external state; token theft matters unless Mere binds use to the request signer/device key in the authorizer facts; the predicate vocabulary becomes a protocol surface and must stay small, stable, and auditable. Biscuit can encode path/resource scopes, but it does not inherently understand Willow/Mere Entry semantics.
+
+**Option D — Keyhive (live group/key-state layer).** [Keyhive](https://www.inkandswitch.com/project/keyhive/) is not just another capability-token format. It is a lower-level local-first access system: convergent capabilities, group-management CRDTs, device/person/document groups, encrypted-at-rest data, and BeeKEM/Beelay work for group keys and auth-enabled sync. This is the serious candidate for dynamic membership, device enrollment, key rotation, pull access, and encrypted local-first sharing.
+
+Pros: targets exactly the class of local-first access problems that static certificate capabilities punt on; handles concurrent/offline membership updates as state, not as a token-only chain; gives Mere a plausible path for future encrypted group sync and post-compromise recovery.
+
+Cons: pre-alpha, unaudited, and API-unstable as of the current upstream release; shaped around Automerge documents and Beelay, so Mere would need a real translation layer into event-DAG authors, graph-cluster namespaces, and iroh/Willow projections; adopting it too early risks letting its storage/sync assumptions leak into Mere's core. It also does not replace moot policy — it can answer who belongs to a group and who should receive keys, not whether current tessera/hosting/governance facts permit a specific moot action.
+
+**UCAN disposition.** UCAN remains useful as an interoperability and delegation envelope, especially for portable session/capsule sharing and external agents. It is less compelling as the internal authorization brain: too coarse for moothold policy, not a namespace model, and not a live group/key-state system.
+
+**Layered shape:**
+
+- Structural caps are signed credentials over a scope (path-prefix / graph-cluster prefix), a mode (read / write / delegate), a logical time interval, and a delegation chain.
+- Policy tokens evaluate a requested action against current moot facts: tessera, roles, quotas, heartbeats, event type, bridge target, and local revocation lists.
+- Group/key state controls who is in which group/device set, who should receive encrypted material, and how future access changes propagate under offline concurrency.
 
 **Apply to mere:**
 
-- Tessera issuance is a capability grant.
+- Tessera issuance is a governance event plus policy fact; vouching can be represented as delegated policy authority with abuse flowing back to the voucher's reputation.
 - Moot moderator status is a capability over the moot's namespace.
-- "Share this graph view with Alice for 30 days" is a time-bounded read capability — over `/personal/graphs/<view-id>/...` under Options A/B, or scoped to a graph-cluster ID under §14.
-- Bridge-publish authorization is a capability constrained to `event_type: EngramSubmission` in a bounded time window.
+- "Share this graph view with Alice for 30 days" is a structural read cap over `/personal/graphs/<view-id>/...` or a graph-cluster prefix under §14; if private bytes are involved, a group/key layer must also deliver the relevant decryption material.
+- Bridge-publish authorization is better as a policy token constrained by `event_type`, destination, wall-clock expiry, and current governance facts.
+- Pinning/hosting authority is structural scope plus policy facts: which cluster may be pinned, by whom, under which quota, with what heartbeat and handoff expectations.
 
-**Live decision.** Option A vs C is the open question; Option B is the fallback if neither stack-integration works. A focused Keyhive-vs-meadowcap evaluation should settle it before `mere-namespace` lands. Option A is the path of least resistance and probably the right v1 choice; Option C deserves a real eval before we lock in.
+**Live decision.** The v1 default should be meadowcap for structural namespace caps (Option A if Willow lands, Option B if Mere stays native), with Biscuit evaluated as the moothold policy-token layer. Keyhive should move to a focused lower-layer eval for dynamic groups, device/key management, encrypted sync, and pull-access defense-in-depth. The eval is therefore three small spikes, not one winner-take-all comparison: (1) meadowcap over graph-cluster paths, (2) Biscuit policy proof for tessera-gated hosting, (3) Keyhive translation proof against Mere event-DAG authors and group membership.
 
 ### 8.9 Spam resistance
 
@@ -457,7 +480,7 @@ Concrete moves implied by this brief, in rough order:
 Open questions, deferred:
 
 - **Concrete sync-backend choice for cross-moot federation.** iroh-docs is the baseline (and already does RBSR — this is no longer a discriminator). Whether Willow's data model + meadowcap (via `mere-namespace`) earn adoption, or p2panda earns a slot for engram publishing, is now a near-term decision rather than a deferred one — see §5 (revised) and §14.
-- **Capability layer choice: meadowcap vs Keyhive.** See §8.8. Live decision pending a focused eval before `mere-namespace` lands.
+- **Capability stack proof.** See §8.8. Live decision is now layered, not "meadowcap vs Keyhive": structural namespace caps (meadowcap / meadowcap-shaped), moothold policy tokens (Biscuit candidate), and live group/key state (Keyhive candidate) each need a focused proof before `mere-namespace` and `moothold` lock their surfaces.
 - **Recovery default.** Backup-code vs Shamir-shards vs cypherpunk-loss. Probably product-driven, not architecturally forced.
 - **WebRTC / calls strategy.** Element Call as a Matrix-bridge service, LiveKit over iroh, or something else. Independent of the substrate decisions here.
 - **The Distillery's first concrete shape.** Where it lives (mere-side vs eidetic-side vs new crate), what its first transform pipelines are. Out of scope for this brief; covered by the inherited STM/LTM/Engrams plan.
@@ -564,7 +587,7 @@ Research dispatch (four parallel agents on iroh-docs sync, iroh-willow status, w
 - **WILLIAM3 was not a current cost.** willow-rs is BLAKE3-default (`willow_25::PayloadDigest25 = blake3::Hash` newtype), and every crate (`data-model`, `meadowcap`, `wgps`, `store_simple_sled`, `sideload`) is fully PD-generic. The eventual WILLIAM3 swap is for partial-payload verification — a guarantee mere does not need (iroh-blobs' BAO already provides logarithmic-proof verifiable streaming under BLAKE3).
 - **iroh-docs already does RBSR.** The "no RBSR-style sync efficiency at large scale" concern in the original §5 iroh-docs entry was wrong — it has done RBSR per [Meyer 2022](https://arxiv.org/abs/2212.13567) all along, verified at v0.99.0 (2026-05-08). Willow adoption is therefore not justified by sync efficiency; it must be justified by the data model + meadowcap.
 - **iroh-willow is dormant.** Pre-alpha (0.0.1, never released), last meaningful commit 2025-10-27, open correctness bug in capability delegation ([issue #5](https://github.com/n0-computer/iroh-willow/issues/5)). We'd build our own willow-rs-on-iroh integration in `mere-namespace` rather than depend on it.
-- **Capability layer is now a live decision.** Three options enumerated in §8.8: (A) meadowcap via willow-rs, (B) meadowcap-shaped mere-native, (C) Keyhive (Ink & Switch's CGKA-based research frontier, open-sourced 2025). Worth a focused Keyhive-vs-meadowcap eval before `mere-namespace` lands. Option A is the path of least resistance.
+- **Capability layer is now a capability stack.** §8.8 now separates structural namespace caps (meadowcap via willow-rs, or meadowcap-shaped Mere-native), moothold policy authorization (Biscuit / `biscuit-rust` candidate for tessera, quotas, roles, heartbeats, bridge-publish rules), and live group/key state (Keyhive for dynamic membership, devices, encrypted sync, pull access). The eval is three proof spikes, not one meadowcap-vs-Keyhive choice.
 - **Loro added** as preferred CRDT projection over Yjs/Automerge — Rust-native with version-DAG-and-frontiers as first-class primitives.
 - **NextGraph reframed** from "research branch" to "engram-layer interop candidate" — has shipped real users and SPARQL APIs as of FOSDEM 2026.
 - **Snapchain (Farcaster) abandoned CRDT for BFT in April 2025** — negative signal worth examining before locking eventual-consistency assumptions for moot scale. Mere's moot-scale topology likely doesn't hit Farcaster's wall, but the failure mode deserves understanding.
@@ -588,9 +611,15 @@ Research dispatch (four parallel agents on iroh-docs sync, iroh-willow status, w
 
 - §2 rewritten: WILLIAM3 cost framing removed; willow-rs is BLAKE3-default and PD-generic.
 - §5 entries revised: iroh-docs (RBSR confirmed), Willow (full re-evaluation), NextGraph (matured), Loro (added). Practical-decision footer revised.
-- §8.8 reframed as a three-option capability-layer decision (meadowcap-via-willow-rs, meadowcap-shaped-native, Keyhive); Option A vs C live.
-- §10 open questions updated: WILLIAM3 disposition resolved; meadowcap-vs-Keyhive added.
+- §8.8 initially reframed as a three-option capability-layer decision (meadowcap-via-willow-rs, meadowcap-shaped-native, Keyhive); this intermediate framing is superseded by the 2026-05-11 stack split below.
+- §10 open questions updated: WILLIAM3 disposition resolved; the initial meadowcap-vs-Keyhive question is superseded by the 2026-05-11 capability-stack proof.
 - §13 added: hash agility / multihash discipline.
 - §14 added: graph-cluster-derived namespaces (pointer to separate design brief).
 - 2026-05-10 Findings entry consolidates research outcomes.
 - DOC_README index updated alongside the new namespace brief.
+
+### 2026-05-11
+
+- §8.8 corrected from a flat meadowcap-vs-Keyhive comparison into a layered capability stack: structural namespace caps, moothold policy authorization, and live group/key state.
+- Biscuit / `biscuit-rust` added as the missing moothold policy-token candidate for tessera-gated hosting, quotas, roles, heartbeat freshness, and event-type/bridge-publish constraints.
+- §10 open question updated to require three proof spikes: meadowcap over graph-cluster paths, Biscuit policy proof for tessera-gated hosting, Keyhive translation proof for Mere event-DAG authors and group membership.

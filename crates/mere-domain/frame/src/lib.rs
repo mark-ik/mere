@@ -69,6 +69,41 @@ impl Default for GraphId {
     }
 }
 
+/// Durable session identity. Wraps the runtime/session shape: a
+/// session owns a root graph (and may grow sub-graph references),
+/// holds the worker manifest, engine profile binding, and policy
+/// overrides. v0 of session-persistence maps one `SessionId` 1:1
+/// to one root `GraphId`; the type distinction is enforced from
+/// day one so later phases (sub-graphs, fork-on-divergence,
+/// multi-graph-per-session) don't require a painful retrofit.
+///
+/// See `design_docs/mere_docs/research/2026-05-11_browser_multiplexer_framing.md`
+/// §2 (identity matrix) for the broader identity model and
+/// `design_docs/mere_docs/implementation_strategy/2026-05-11_graph_session_manifest_plan.md`
+/// for storage / lifecycle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SessionId(pub uuid::Uuid);
+
+impl SessionId {
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+
+    pub fn from_uuid(uuid: uuid::Uuid) -> Self {
+        Self(uuid)
+    }
+
+    pub fn as_uuid(&self) -> &uuid::Uuid {
+        &self.0
+    }
+}
+
+impl Default for SessionId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Direction of a split between two child panes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SplitAxis {

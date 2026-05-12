@@ -2,19 +2,21 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Navigation + tile + chrome action methods on `HostRoot`.
+//! Navigation + chrome + panel-summon action methods on `HostRoot`.
 //!
-//! Pulled out of `lib.rs` so the file stays under the size ceiling
-//! and the "what does pressing Enter / Reload / Cmd-N / a tile click
-//! actually do?" logic lives in one focused module.
+//! Pulled out of `lib.rs` so the file stays under the size ceiling.
+//! Sibling module [`crate::tile_ops`] owns the focus-tile /
+//! close-tile / app-tree-rebuild operations; this file keeps the
+//! navigation flow, history cursor, chrome cycling, new-window, and
+//! panel-summon methods.
 
 use gpui::Context;
+use graph_tree::{NavAction, Provenance};
 use mere_frame::{
     GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitChoice,
 };
-use mere_kernel::graph::Graph;
+use mere_host_runtime::NavigateMode;
 
-use crate::demo::build_demo_application_tree;
 use crate::graph_registry::GraphRegistry;
 use crate::host_helpers::{ensure_node_for_address, ensure_node_for_address_near, error_document};
 use crate::layout_config::save_chrome_layout;
@@ -22,63 +24,45 @@ use crate::loader;
 use crate::HostRoot;
 
 impl HostRoot {
-    /// Drive a navigation. The single funnel every navigation source
-    /// flows through — omnibar submit, Reload, Go Back, Go Forward,
-    /// future link clicks. Loads the address, updates the omnibar
-    /// text, optionally pushes onto history, refreshes the app tree.
+    /// Drive a navigation. The single funnel every navigation
+    /// source flows through — omnibar submit, link clicks, future
+    /// drop-on-tile gestures.
+    ///
+    /// `mode` picks the semantics:
+    /// - [`NavigateMode::WithinTile`] (default): extend the active
+    ///   tile's history; no new kernel node. Falls through to
+    ///   `NewTile` if no tile is active.
+    /// - [`NavigateMode::NewTile`]: mint a new anchor node and open
+    ///   it as a new tile.
+    ///
+    /// Per the node-per-tile design committed 2026-05-11. Reload /
+    /// back / forward bypass this and operate directly on the
+    /// active tile's history (see [`Self::go_back`], etc.).
     pub(crate) fn navigate_to(
         &mut self,
         address: String,
-        push_history: bool,
+        mode: NavigateMode,
         cx: &mut Context<Self>,
     ) {
-        self.toolbar.location = address.clone();
-        let mirror = address.clone();
-        self.omnibar_input
-            .update(cx, |input, cx| input.set_content(mirror, cx));
-
-        // Find the active workbench's graph_id so the new node
-        // lands in the right graph (not always the window's
-        // primary). If no workbench is active, fall back to
-        // primary.
-        let target_graph_id = self
-            .active_workbench
-            .and_then(|pid| {
-                self.frame_layout
-                    .iter_leaves()
-                    .find(|(p, _, _)| *p == pid)
-                    .map(|(_, _, gid)| gid)
-            })
-            .unwrap_or(self.graph_id);
-        let Some(graph_entity) = self.registry.read(cx).get(target_graph_id).cloned() else {
-            tracing::warn!(?target_graph_id, "navigate_to: target graph not in registry");
-            return;
+        let resolved_mode = if mode == NavigateMode::WithinTile
+            && self
+                .active_tiles()
+                .and_then(|t| t.active_node())
+                .is_none()
+        {
+            // No active tile means there's nothing to push history
+            // into. Escalate to new-tile so the user's first omnibar
+            // submit creates a tile.
+            NavigateMode::NewTile
+        } else {
+            mode
         };
-
-        // Anchor new nodes to whatever tile is currently active so
-        // the graph reflects the navigation path. When no tile is
-        // open (last close, fresh start), the new node lands at the
-        // origin with no edge.
-        let anchor = self.active_tiles().and_then(|t| t.active_node());
-        let (node, created) = graph_entity.update(cx, |g, gcx| {
-            let result = ensure_node_for_address_near(g, &address, anchor);
-            gcx.notify();
-            result
-        });
-        if created {
-            tracing::debug!(
-                ?node,
-                ?anchor,
-                ?target_graph_id,
-                address = %address,
-                "created graph node for new address"
-            );
-        }
 
         let document = match loader::load(&self.engine_registry, &self.engine_policy, &address) {
             Ok(doc) => {
                 tracing::info!(
                     address = %address,
+                    mode = ?resolved_mode,
                     engine = %doc.provenance.source_kind.as_deref().unwrap_or("?"),
                     "loaded document"
                 );
@@ -89,153 +73,211 @@ impl HostRoot {
                 error_document(&address, &e)
             }
         };
-        if let Some(tiles) = self.active_tiles_mut() {
-            tiles.open_or_focus(node, document);
-        } else {
-            tracing::warn!("navigate_to with no active workbench; document discarded");
-        }
 
-        if push_history {
-            self.history.truncate(self.history_cursor + 1);
-            let last_matches = self.history.last().map(|s| s == &address).unwrap_or(false);
-            if !last_matches {
-                self.history.push(address);
-                self.history_cursor = self.history.len() - 1;
+        match resolved_mode {
+            NavigateMode::WithinTile => {
+                if let Some(tiles) = self.active_tiles_mut() {
+                    tiles.push_history(address.clone(), document);
+                    tracing::debug!(address = %address, "tile.navigated_within");
+                } else {
+                    tracing::warn!("within-tile navigate with no active workbench; discarded");
+                }
+            }
+            NavigateMode::NewTile => {
+                let target_graph_id = self
+                    .active_workbench
+                    .and_then(|pid| {
+                        self.frame_layout
+                            .iter_leaves()
+                            .find(|(p, _, _)| *p == pid)
+                            .map(|(_, _, gid)| gid)
+                    })
+                    .unwrap_or(self.graph_id);
+                let Some(graph_entity) =
+                    self.registry.read(cx).get(target_graph_id).cloned()
+                else {
+                    tracing::warn!(
+                        ?target_graph_id,
+                        "navigate_to: target graph not in registry"
+                    );
+                    return;
+                };
+                // Anchor new nodes to whatever tile is currently
+                // active so the graph reflects the navigation path.
+                let anchor = self.active_tiles().and_then(|t| t.active_node());
+                let (node, created) = graph_entity.update(cx, |g, gcx| {
+                    let result = ensure_node_for_address_near(g, &address, anchor);
+                    gcx.notify();
+                    result
+                });
+                if created {
+                    tracing::debug!(
+                        ?node,
+                        ?anchor,
+                        ?target_graph_id,
+                        address = %address,
+                        reason = "new_tile",
+                        "node.created"
+                    );
+                }
+                let active_pane = self.active_workbench;
+                if let Some(workbench) = active_pane
+                    .and_then(|pid| self.panes.get_mut(&pid))
+                    .and_then(|s| s.as_workbench_mut())
+                {
+                    workbench
+                        .tiles
+                        .open_or_focus(node, address.clone(), document);
+                    tracing::debug!(?node, address = %address, "tile.opened");
+
+                    // v1 — lineage facet. Record this new anchor in
+                    // the workbench's graph-tree, with provenance
+                    // reflecting how the user got here.
+                    let provenance = match anchor {
+                        Some(source) if source != node => Provenance::Traversal {
+                            source,
+                            edge_kind: Some("user-spawned-tile".to_string()),
+                        },
+                        // First tile of the session, or a re-anchor
+                        // on an existing node — both register as
+                        // anchors in the tree.
+                        _ => Provenance::Anchor,
+                    };
+                    let result = workbench.tree.apply(NavAction::Attach {
+                        member: node,
+                        provenance: provenance.clone(),
+                    });
+                    if result.structure_changed {
+                        tracing::debug!(
+                            to = ?node,
+                            from = ?anchor,
+                            edge_kind = "user-spawned-tile",
+                            ?provenance,
+                            "lineage.edge_added"
+                        );
+                    }
+                } else {
+                    tracing::warn!(
+                        "new-tile navigate with no active workbench; document discarded"
+                    );
+                }
+
+                // Persist the session — new anchor minted, lineage
+                // updated. Cheap (JSON write, debounced is a future
+                // optimisation); important so a crash doesn't lose
+                // the user's tile work.
+                let registry = self.registry.clone();
+                let manifests = self.manifests.clone();
+                crate::session_persist::flush_session(
+                    &registry,
+                    &manifests,
+                    target_graph_id,
+                    cx,
+                );
             }
         }
-        self.toolbar.can_go_back = self.history_cursor > 0;
-        self.toolbar.can_go_forward = self.history_cursor + 1 < self.history.len();
 
-        self.rebuild_app_tree(cx);
-        cx.notify();
-    }
-
-    /// Switch the active workbench to the tile at `index`. Syncs
-    /// the omnibar / toolbar to that tile's address.
-    pub(crate) fn focus_tile(&mut self, index: usize, cx: &mut Context<Self>) {
-        let Some(pane_id) = self.active_workbench else {
-            return;
-        };
-        self.focus_tile_in(pane_id, index, cx);
-    }
-
-    /// Switch the workbench at `pane_id` to its tile at `index`.
-    /// Used by tile clicks in any workbench (the click handler
-    /// captures the pane_id explicitly).
-    pub(crate) fn focus_tile_in(
-        &mut self,
-        pane_id: PaneId,
-        index: usize,
-        cx: &mut Context<Self>,
-    ) {
-        let node = self
-            .panes
-            .get_mut(&pane_id)
-            .and_then(|s| s.as_workbench_mut())
-            .and_then(|w| w.tiles.focus_index(index));
-        let Some(node) = node else {
-            return;
-        };
-        let graph_id = self
-            .frame_layout
-            .iter_leaves()
-            .find(|(pid, _, _)| *pid == pane_id)
-            .map(|(_, _, gid)| gid);
-        let url = graph_id
-            .and_then(|gid| self.registry.read(cx).get(gid).cloned())
-            .and_then(|graph| graph.read(cx).get_node(node).map(|n| n.url().to_string()));
-        if let Some(url) = url {
-            self.toolbar.location = url.clone();
-            self.omnibar_input
-                .update(cx, |input, cx| input.set_content(url, cx));
-        }
-        self.active_workbench = Some(pane_id);
-        self.rebuild_app_tree(cx);
-        cx.notify();
-    }
-
-    /// Close the tile at `index` in the active workbench.
-    pub(crate) fn close_tile(&mut self, index: usize, cx: &mut Context<Self>) {
-        let Some(pane_id) = self.active_workbench else {
-            return;
-        };
-        self.close_tile_in(pane_id, index, cx);
-    }
-
-    /// Close the tile at `index` in the workbench at `pane_id`.
-    pub(crate) fn close_tile_in(
-        &mut self,
-        pane_id: PaneId,
-        index: usize,
-        cx: &mut Context<Self>,
-    ) {
-        let Some(workbench) = self
-            .panes
-            .get_mut(&pane_id)
-            .and_then(|s| s.as_workbench_mut())
-        else {
-            return;
-        };
-        let new_active = workbench.tiles.close_index(index);
-        let url = new_active.and_then(|node| {
-            self.graph
-                .read(cx)
-                .get_node(node)
-                .map(|n| n.url().to_string())
-        });
-        if let Some(url) = url {
-            self.toolbar.location = url.clone();
-            self.omnibar_input
-                .update(cx, |input, cx| input.set_content(url, cx));
-        } else if new_active.is_none() {
-            self.toolbar.location.clear();
-            self.omnibar_input
-                .update(cx, |input, cx| input.set_content("", cx));
-        }
-        self.rebuild_app_tree(cx);
-        cx.notify();
-    }
-
-    /// Recompute `app_tree` from the current shared graph snapshot
-    /// + per-window state. Centralised here so the borrow dance
-    /// around `self.graph.read(cx)` lives in one place.
-    pub(crate) fn rebuild_app_tree(&mut self, cx: &mut Context<Self>) {
-        let active_doc = self
+        // Toolbar reflects the active tile's current URL +
+        // back/forward availability.
+        let (location, can_back, can_forward) = self
             .active_tiles()
-            .and_then(|t| t.active_document())
-            .cloned();
-        let frame_layout = &self.frame_layout;
-        let graph_snapshot: &Graph = self.graph.read(cx);
-        self.app_tree =
-            build_demo_application_tree(active_doc.as_ref(), graph_snapshot, frame_layout);
+            .map(|t| {
+                (
+                    t.active_url().unwrap_or(&address).to_string(),
+                    t.active_can_go_back(),
+                    t.active_can_go_forward(),
+                )
+            })
+            .unwrap_or_else(|| (address.clone(), false, false));
+        self.toolbar.location = location.clone();
+        self.omnibar_input
+            .update(cx, |input, cx| input.set_content(location, cx));
+        self.toolbar.can_go_back = can_back;
+        self.toolbar.can_go_forward = can_forward;
+
+        self.rebuild_app_tree(cx);
+        cx.notify();
     }
 
+    /// Move the active tile back one entry in its within-tile
+    /// history. v0: pre-fetched documents are still cached, so this
+    /// is free; if we evict caches later, we'd re-fetch here.
     pub(crate) fn go_back(&mut self, cx: &mut Context<Self>) {
-        if self.history_cursor == 0 {
-            tracing::debug!("go-back: at oldest entry, no-op");
+        let Some(tiles) = self.active_tiles_mut() else {
             return;
-        }
-        self.history_cursor -= 1;
-        let addr = self.history[self.history_cursor].clone();
-        self.navigate_to(addr, false, cx);
+        };
+        let Some(new_url) = tiles.active_go_back() else {
+            tracing::debug!("go-back: tile at oldest entry, no-op");
+            return;
+        };
+        self.sync_omnibar_to_active_tile(cx);
+        tracing::debug!(url = %new_url, "tile.history_back");
+        self.rebuild_app_tree(cx);
+        cx.notify();
     }
 
+    /// Move the active tile forward one entry in its within-tile
+    /// history.
     pub(crate) fn go_forward(&mut self, cx: &mut Context<Self>) {
-        if self.history_cursor + 1 >= self.history.len() {
-            tracing::debug!("go-forward: at newest entry, no-op");
+        let Some(tiles) = self.active_tiles_mut() else {
             return;
-        }
-        self.history_cursor += 1;
-        let addr = self.history[self.history_cursor].clone();
-        self.navigate_to(addr, false, cx);
+        };
+        let Some(new_url) = tiles.active_go_forward() else {
+            tracing::debug!("go-forward: tile at newest entry, no-op");
+            return;
+        };
+        self.sync_omnibar_to_active_tile(cx);
+        tracing::debug!(url = %new_url, "tile.history_forward");
+        self.rebuild_app_tree(cx);
+        cx.notify();
     }
 
+    /// Reload the active tile's current URL — re-fetches the
+    /// document and replaces the cached one at the current cursor.
+    /// Does **not** mint a new node.
     pub(crate) fn reload(&mut self, cx: &mut Context<Self>) {
-        if self.history.is_empty() {
+        let Some(url) = self
+            .active_tiles()
+            .and_then(|t| t.active_url().map(|s| s.to_string()))
+        else {
+            tracing::debug!("reload: no active tile, no-op");
             return;
+        };
+        let document = match loader::load(&self.engine_registry, &self.engine_policy, &url) {
+            Ok(doc) => doc,
+            Err(e) => {
+                tracing::warn!(address = %url, error = %e, "reload failed");
+                error_document(&url, &e)
+            }
+        };
+        if let Some(tiles) = self.active_tiles_mut() {
+            tiles.refresh_active(document);
         }
-        let addr = self.history[self.history_cursor].clone();
-        self.navigate_to(addr, false, cx);
+        tracing::debug!(%url, "tile.reloaded");
+        self.rebuild_app_tree(cx);
+        cx.notify();
+    }
+
+    /// Sync the omnibar text + back/forward toolbar state to the
+    /// active tile's current URL + history availability. Called
+    /// after any operation that may have shifted the active tile's
+    /// cursor (back, forward, focus_tile, close_tile).
+    pub(crate) fn sync_omnibar_to_active_tile(&mut self, cx: &mut Context<Self>) {
+        let (location, can_back, can_forward) = self
+            .active_tiles()
+            .map(|t| {
+                (
+                    t.active_url().map(|s| s.to_string()).unwrap_or_default(),
+                    t.active_can_go_back(),
+                    t.active_can_go_forward(),
+                )
+            })
+            .unwrap_or_default();
+        self.toolbar.location = location.clone();
+        self.omnibar_input
+            .update(cx, |input, cx| input.set_content(location, cx));
+        self.toolbar.can_go_back = can_back;
+        self.toolbar.can_go_forward = can_forward;
     }
 
     pub(crate) fn cycle_shellbar_position(&mut self, cx: &mut Context<Self>) {
@@ -265,12 +307,18 @@ impl HostRoot {
     /// (Phase 2).
     pub(crate) fn open_new_window(&mut self, cx: &mut Context<Self>) {
         let registry = self.registry.clone();
+        let manifests = self.manifests.clone();
         let event_buffer = self.event_buffer.clone();
-        let (graph_id, _) = GraphRegistry::create_graph_seeded(&registry, cx, |g, _| {
-            ensure_node_for_address(g, "mere://intro");
-        });
+        let (_session_id, graph_id, _) = GraphRegistry::create_graph_seeded(
+            &registry,
+            Some(&manifests),
+            cx,
+            |g, _| {
+                ensure_node_for_address(g, "mere://intro");
+            },
+        );
         tracing::info!(?graph_id, "opening host window with fresh graph");
-        crate::bootstrap::open_host_window(cx, registry, graph_id, event_buffer);
+        crate::bootstrap::open_host_window(cx, registry, manifests, graph_id, event_buffer);
     }
 
     /// Toggle a panel of the given content kind in this window. If
@@ -303,9 +351,15 @@ impl HostRoot {
         cx: &mut Context<Self>,
     ) {
         let registry = self.registry.clone();
-        let (graph_id, _) = GraphRegistry::create_graph_seeded(&registry, cx, |g, _| {
-            ensure_node_for_address(g, "mere://intro");
-        });
+        let manifests = self.manifests.clone();
+        let (_session_id, graph_id, _) = GraphRegistry::create_graph_seeded(
+            &registry,
+            Some(&manifests),
+            cx,
+            |g, _| {
+                ensure_node_for_address(g, "mere://intro");
+            },
+        );
         tracing::info!(?graph_id, "summoning orrery for fresh graph in current window");
         self.summon_panel(PaneContent::Orrery, graph_id);
         self.rebuild_app_tree(cx);

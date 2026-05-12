@@ -286,10 +286,32 @@ fn render_workbench_pane(
                 },
             ))
                 as Box<dyn Fn(&MouseUpEvent, &mut Window, &mut App)>;
+            // Tear-out drag: starting a drag on this tile-row
+            // packages up `(pane_id, tile_index)` as a
+            // `TileDragPayload`. The drag visual is a small chip
+            // showing the tile's label. The host root's
+            // `on_drop<TileDragPayload>` handler picks the
+            // gesture's tear-out semantics (Phase 2 Part 2 v0:
+            // sticky-note / leaf).
+            let drag_label = label.clone();
+            let drag_apply: mere_host_workbench::DragApply = Box::new(move |row| {
+                row.on_drag(
+                    crate::tearout::TileDragPayload {
+                        pane_id,
+                        tile_index: i,
+                    },
+                    move |_payload, _offset, _window, cx| {
+                        cx.new(|_| crate::tearout::DraggedTileLabel {
+                            text: drag_label.clone(),
+                        })
+                    },
+                )
+            });
             mere_host_workbench::WorkbenchTile {
                 label,
                 on_select,
                 on_close,
+                drag_apply: Some(drag_apply),
             }
         })
         .collect();

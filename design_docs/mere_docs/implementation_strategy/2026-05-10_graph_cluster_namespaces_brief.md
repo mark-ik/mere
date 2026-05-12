@@ -217,7 +217,10 @@ Per the substrate brief §5 (revised): a new crate that integrates willow-rs (wi
 
 **Out of scope for v1:**
 
-- Keyhive integration (deferred to substrate-brief §8.8 Option C eval).
+- Biscuit policy-token wiring for tessera/quota/heartbeat rules
+  (deferred to substrate-brief §8.8 Option C eval).
+- Keyhive group/key-state integration (deferred to substrate-brief
+  §8.8 Option D eval).
 - §3.2(c) cluster-as-event governance (deferred until a real space demands it).
 - §6(c) secondary-index sync (deferred until query patterns demand it).
 - §4(b)/(c) strict cluster-binding cap semantics (deferred until a security-sensitive use case demands it).

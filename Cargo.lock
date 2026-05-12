@@ -5277,6 +5277,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mere-host-runtime"
+version = "0.0.1"
+dependencies = [
+ "euclid",
+ "inker",
+ "mere-frame",
+ "mere-kernel",
+ "serde",
+ "serde_json",
+ "uuid",
+]
+
+[[package]]
 name = "mere-identity"
 version = "0.0.1"
 dependencies = [

@@ -171,13 +171,14 @@ pub(crate) fn apply_orrery_actions(
                         .get_mut(&target_workbench)
                         .and_then(|s| s.as_workbench_mut())
                     {
-                        workbench.tiles.open_or_focus(node, document);
+                        workbench.tiles.open_or_focus(
+                            node,
+                            address.clone(),
+                            document,
+                        );
                     }
                     this.active_workbench = Some(target_workbench);
-                    this.toolbar.location = address.clone();
-                    let mirror = address;
-                    this.omnibar_input
-                        .update(cx, |input, cx| input.set_content(mirror, cx));
+                    this.sync_omnibar_to_active_tile(cx);
                     this.rebuild_app_tree(cx);
                 }
             }

@@ -18,6 +18,14 @@ pub fn frame_layout_path() -> Option<std::path::PathBuf> {
     dirs::data_local_dir().map(|d| d.join("mere").join("mere-host").join("frame_layout.json"))
 }
 
+/// Root of the per-session directory tree managed by
+/// `mere_host_runtime::ManifestStore` + `session_graph_store`.
+/// Resolves to `<data_local_dir>/mere/mere-host/sessions/` so it
+/// sits alongside `frame_layout.json` + `keymap.json`.
+pub fn sessions_dir() -> Option<std::path::PathBuf> {
+    dirs::data_local_dir().map(|d| d.join("mere").join("mere-host").join("sessions"))
+}
+
 pub fn load_frame_layout() -> Option<FrameLayout> {
     let path = frame_layout_path()?;
     let bytes = std::fs::read(&path).ok()?;

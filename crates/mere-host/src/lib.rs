@@ -30,13 +30,19 @@
 
 pub mod actions;
 pub mod loader;
-pub mod tiles;
+
+/// Re-export of [`mere_host_runtime::tiles`] so existing call sites
+/// using `mere_host::tiles::TileManager` continue to resolve. The
+/// type itself moved to `mere-host-runtime` as part of the
+/// 2026-05-11 portability extraction.
+pub use mere_host_runtime::tiles;
 
 mod a11y;
 mod bootstrap;
 mod demo;
 mod graph_registry;
 mod graph_switcher;
+mod host_action_bus;
 mod host_helpers;
 mod host_navigation;
 mod layout_config;
@@ -44,8 +50,10 @@ mod orrery_input;
 mod pane_state;
 mod panes;
 mod persistence;
+mod session_persist;
 mod tearout;
 mod ticks;
+mod tile_ops;
 
 pub use bootstrap::run;
 
@@ -100,6 +108,12 @@ pub(crate) struct HostRoot {
     /// register new graphs created via `Cmd-N` or "summon orrery
     /// for new graph" gestures.
     pub(crate) registry: Entity<GraphRegistry>,
+    /// App-scope durable session manifests. Shared by every window
+    /// alongside `registry`. Session creation paths (Cmd-N, summon-
+    /// orrery-for-new-graph, fork tear-out) write here; the store
+    /// flushes manifests on mutation (auto-marked dirty) and at
+    /// shutdown.
+    pub(crate) manifests: Entity<mere_host_runtime::ManifestStore>,
     pub(crate) frame_layout: FrameLayout,
     /// Where the shellbar + workbench tile strip live. Persisted
     /// independently of `frame_layout` so the user can rotate the
@@ -112,12 +126,11 @@ pub(crate) struct HostRoot {
     pub(crate) palette: Entity<Palette>,
     pub(crate) engine_registry: EngineRegistry,
     pub(crate) engine_policy: EngineRoutePolicy,
-    /// Visited addresses, oldest first. Submit pushes onto this
-    /// (truncating anything past `history_cursor` first); Reload
-    /// reloads `history[history_cursor]`; Go Back / Go Forward move
-    /// the cursor and re-fetch.
-    pub(crate) history: Vec<String>,
-    pub(crate) history_cursor: usize,
+    // Note: app-wide history was removed 2026-05-11 with the
+    // node-per-tile semantics shift. Back/forward/reload operate on
+    // the *active tile's* within-tile history (`TileState.history`
+    // in `mere-host-runtime`). Cross-tile navigation is the
+    // tile-strip switcher.
     /// Top-level focus point so app-global keybindings dispatch even
     /// when no pane has focus.
     pub(crate) focus_handle: FocusHandle,
@@ -135,6 +148,11 @@ pub(crate) struct HostRoot {
     /// Whether the graph-switcher dropdown is currently visible.
     /// Toggled by the "Graphs" button in the shellbar.
     pub(crate) graph_switcher_open: bool,
+    /// Permission gate the bus checks every action against. v0:
+    /// `PermitEverythingGate` — behaviour identical to pre-bus
+    /// dispatch. The capability-gate catalogue plan plugs in a
+    /// real `SessionPolicyGate` driven by `manifest.policy.overrides`.
+    pub(crate) permission_gate: Box<dyn mere_host_runtime::PermissionGate>,
 }
 
 impl HostRoot {
@@ -310,6 +328,12 @@ impl Render for HostRoot {
             },
         );
 
+        // Keybinding listeners — every action routes through the
+        // host-side bus (`host_action_bus::dispatch_kind`) which
+        // checks the permission gate + emits a diagnostic. Two
+        // actions (FocusOmnibar, OpenPalette) keep their direct
+        // listener bodies because they need a `&mut Window` handle
+        // that the bus's `Context`-only execute path doesn't have.
         let focus_omnibar = cx.listener(
             |this, _: &actions::FocusOmnibar, window: &mut Window, cx: &mut Context<Self>| {
                 this.omnibar_input
@@ -324,17 +348,17 @@ impl Render for HostRoot {
         );
         let go_back = cx.listener(
             |this, _: &actions::GoBack, _window: &mut Window, cx: &mut Context<Self>| {
-                this.go_back(cx);
+                host_action_bus::dispatch_kind(this, mere_host_runtime::ActionKind::GoBack, cx);
             },
         );
         let go_forward = cx.listener(
             |this, _: &actions::GoForward, _window: &mut Window, cx: &mut Context<Self>| {
-                this.go_forward(cx);
+                host_action_bus::dispatch_kind(this, mere_host_runtime::ActionKind::GoForward, cx);
             },
         );
         let reload = cx.listener(
             |this, _: &actions::Reload, _window: &mut Window, cx: &mut Context<Self>| {
-                this.reload(cx);
+                host_action_bus::dispatch_kind(this, mere_host_runtime::ActionKind::Reload, cx);
             },
         );
         let cycle_shellbar = cx.listener(
@@ -342,7 +366,11 @@ impl Render for HostRoot {
              _: &actions::CycleShellbarPosition,
              _window: &mut Window,
              cx: &mut Context<Self>| {
-                this.cycle_shellbar_position(cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::CycleShellbarPosition,
+                    cx,
+                );
             },
         );
         let cycle_workbench_strip = cx.listener(
@@ -350,12 +378,20 @@ impl Render for HostRoot {
              _: &actions::CycleWorkbenchStripPosition,
              _window: &mut Window,
              cx: &mut Context<Self>| {
-                this.cycle_workbench_strip_position(cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::CycleWorkbenchStripPosition,
+                    cx,
+                );
             },
         );
         let open_new_window = cx.listener(
             |this, _: &actions::OpenNewWindow, _window: &mut Window, cx: &mut Context<Self>| {
-                this.open_new_window(cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::OpenNewWindow,
+                    cx,
+                );
             },
         );
         let toggle_workbench_action = cx.listener(
@@ -363,7 +399,11 @@ impl Render for HostRoot {
              _: &actions::ToggleWorkbench,
              _window: &mut Window,
              cx: &mut Context<Self>| {
-                this.toggle_panel(PaneContent::Workbench, cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::ToggleWorkbench,
+                    cx,
+                );
             },
         );
         let toggle_gloss_action = cx.listener(
@@ -371,7 +411,11 @@ impl Render for HostRoot {
              _: &actions::ToggleGloss,
              _window: &mut Window,
              cx: &mut Context<Self>| {
-                this.toggle_panel(PaneContent::Gloss, cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::ToggleGloss,
+                    cx,
+                );
             },
         );
         let toggle_apparatus_action = cx.listener(
@@ -379,7 +423,11 @@ impl Render for HostRoot {
              _: &actions::ToggleApparatus,
              _window: &mut Window,
              cx: &mut Context<Self>| {
-                this.toggle_panel(PaneContent::Apparatus, cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::ToggleApparatus,
+                    cx,
+                );
             },
         );
         let summon_orrery_new_graph_action = cx.listener(
@@ -387,7 +435,11 @@ impl Render for HostRoot {
              _: &actions::SummonOrreryForNewGraph,
              _window: &mut Window,
              cx: &mut Context<Self>| {
-                this.summon_orrery_for_new_graph(cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::SummonOrreryForNewGraph,
+                    cx,
+                );
             },
         );
         let toggle_graph_switcher_action = cx.listener(
@@ -395,7 +447,11 @@ impl Render for HostRoot {
              _: &actions::ToggleGraphSwitcher,
              _window: &mut Window,
              cx: &mut Context<Self>| {
-                this.toggle_graph_switcher(cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::ToggleGraphSwitcher,
+                    cx,
+                );
             },
         );
         let tearout_new_graph_min_action = cx.listener(
@@ -403,7 +459,13 @@ impl Render for HostRoot {
              _: &actions::TearOutTileToNewGraphMinimized,
              _window: &mut Window,
              cx: &mut Context<Self>| {
-                this.tear_out_tile_to_new_graph(true, cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::TearOutTile {
+                        mode: mere_host_runtime::TearOutMode::ForkMinimized,
+                    },
+                    cx,
+                );
             },
         );
         let tearout_new_graph_vis_action = cx.listener(
@@ -411,7 +473,13 @@ impl Render for HostRoot {
              _: &actions::TearOutTileToNewGraphVisible,
              _window: &mut Window,
              cx: &mut Context<Self>| {
-                this.tear_out_tile_to_new_graph(false, cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::TearOutTile {
+                        mode: mere_host_runtime::TearOutMode::ForkVisible,
+                    },
+                    cx,
+                );
             },
         );
         let tearout_sticky_note_action = cx.listener(
@@ -419,7 +487,13 @@ impl Render for HostRoot {
              _: &actions::TearOutTileAsStickyNote,
              _window: &mut Window,
              cx: &mut Context<Self>| {
-                this.tear_out_tile_sticky_note(cx);
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::TearOutTile {
+                        mode: mere_host_runtime::TearOutMode::Leaf,
+                    },
+                    cx,
+                );
             },
         );
 
@@ -468,6 +542,26 @@ impl Render for HostRoot {
         // last.
         let container_row = shellbar_pos.is_vertical();
         let shellbar_first = matches!(shellbar_pos, EdgePosition::Top | EdgePosition::Left);
+        // Drop handler for tear-out drags. Phase 2 Part 2 v0
+        // scaffold: drops fire a leaf (sticky-note) tear-out for the
+        // payload's exact pane + tile index. Modifier-keyed variants
+        // (Shift = branch, Ctrl+Shift = fork) wire up once Phase 3's
+        // branch/fork actions land (see the
+        // 2026-05-11_tearout_operations_brief.md gesture model).
+        let on_tile_drop = cx.listener(
+            |this,
+             payload: &crate::tearout::TileDragPayload,
+             _window: &mut Window,
+             cx: &mut Context<Self>| {
+                tracing::info!(
+                    pane_id = ?payload.pane_id,
+                    tile_index = payload.tile_index,
+                    "tile drag dropped — firing sticky-note tear-out (v0 scaffold)"
+                );
+                this.tear_out_tile_sticky_note_for(payload.pane_id, payload.tile_index, cx);
+            },
+        );
+
         let mut frame = div()
             .id("host-root")
             .relative()
@@ -477,6 +571,7 @@ impl Render for HostRoot {
             .text_color(rgb(0xe0e0e0))
             .text_sm()
             .track_focus(&self.focus_handle)
+            .on_drop::<crate::tearout::TileDragPayload>(on_tile_drop)
             .on_action(focus_omnibar)
             .on_action(open_palette)
             .on_action(go_back)

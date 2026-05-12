@@ -3602,6 +3602,7 @@ dependencies = [
  "gpui",
  "gpui_platform",
  "graph-canvas",
+ "graph-tree",
  "inker",
  "mere-apparatus",
  "mere-frame",
@@ -3611,6 +3612,7 @@ dependencies = [
  "mere-host-gloss",
  "mere-host-graphshell",
  "mere-host-orrery",
+ "mere-host-runtime",
  "mere-host-workbench",
  "mere-kernel",
  "mere-orrery",
@@ -3662,6 +3664,18 @@ dependencies = [
  "graph-canvas",
  "mere-kernel",
  "platen",
+ "uuid",
+]
+
+[[package]]
+name = "mere-host-runtime"
+version = "0.0.1"
+dependencies = [
+ "inker",
+ "mere-frame",
+ "mere-kernel",
+ "serde",
+ "serde_json",
  "uuid",
 ]
 

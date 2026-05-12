@@ -553,7 +553,13 @@ pub struct PersistedEdge {
 }
 
 /// Full graph snapshot for periodic saves.
-#[derive(Archive, Serialize, Deserialize, Clone, Debug)]
+///
+/// Carries both `rkyv` derives (for compact binary persistence —
+/// the original intent) and `serde` derives (added 2026-05-11 so
+/// `mere-host-runtime::session_graph_store` can persist sessions
+/// as hand-inspectable JSON). All sub-types (`PersistedNode`,
+/// `PersistedEdge`, `ImportRecord`) already carry both.
+#[derive(Archive, Serialize, Deserialize, Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct GraphSnapshot {
     pub nodes: Vec<PersistedNode>,
     pub edges: Vec<PersistedEdge>,

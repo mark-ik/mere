@@ -9,11 +9,13 @@ accesskit = "0.24"
 gpui = { path = "../../../glass-gpui/crates/gpui" }
 gpui_platform = { path = "../../../glass-gpui/crates/gpui_platform", features = ["font-kit"] }
 graph-canvas = { path = "../graph/graph-canvas" }
+graph-tree = { path = "../graph/graph-tree" }
 inker = { path = "../inker" }
 mere-apparatus = { path = "../mere-domain/apparatus" }
 mere-frame = { path = "../mere-domain/frame" }
 mere-gloss = { path = "../mere-domain/gloss" }
 mere-graphshell = { path = "../mere-domain/graphshell" }
+mere-host-runtime = { path = "../mere-host-runtime" }
 mere-kernel = { path = "../mere-kernel" }
 mere-orrery = { path = "../mere-domain/orrery" }
 mere-workbench = { path = "../mere-domain/workbench" }
@@ -50,11 +52,13 @@ gpui_platform = { workspace = true }
 accesskit = { workspace = true }
 euclid = "0.22"
 graph-canvas = { workspace = true }
+graph-tree = { workspace = true }
 inker = { workspace = true }
 mere-apparatus = { workspace = true }
 mere-frame = { workspace = true }
 mere-gloss = { workspace = true }
 mere-graphshell = { workspace = true }
+mere-host-runtime = { workspace = true }
 mere-kernel = { workspace = true }
 mere-orrery = { workspace = true }
 mere-workbench = { workspace = true }

@@ -223,9 +223,11 @@ Mechanics that make the stick real:
   successor without rep penalty. Walk away cleanly = small or no rep hit;
   ghost = real rep hit.
 - **Tessera-gated capability scopes.** What you can pin (or host) is
-  capped by your capability scope, which is determined by your tessera.
-  Caps prevent rug-pulls (someone with high rep committing to host
-  everything, then walking away with no fallback).
+  capped by structural scope plus policy authorization. Structural caps
+  say which cluster/path a member may touch; policy facts say whether
+  current tessera, quota, heartbeat, role, and handoff state permit the
+  action. Caps prevent rug-pulls (someone with high rep committing to
+  host everything, then walking away with no fallback).
 
 ---
 
@@ -380,7 +382,10 @@ Smaller, cleaner responsibilities than the protocol-translation framing.
 - Pin-tracking ledger (signed commitments + heartbeats, per-member).
 - Tessera ledger (reputation per chain root, depreciating across persona
   forks per the substrate brief §8.7).
-- Capability scoping layer (meadowcap-shaped tokens).
+- Capability stack: structural namespace caps
+  (meadowcap / meadowcap-shaped), moot policy authorization
+  (Biscuit candidate), and the group/key-state integration seam
+  (Keyhive eval), per the substrate brief §8.8.
 - Foreign-resource node type (URL + protocol tag + optional
   content-addressed archive).
 - Reciprocity ledger (at t3 and above; ILL-shaped credits between
