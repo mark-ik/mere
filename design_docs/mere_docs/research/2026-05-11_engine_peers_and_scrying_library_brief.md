@@ -22,21 +22,37 @@ in the [browser multiplexer framing brief](2026-05-11_browser_multiplexer_framin
 **Mere is the engine manager. Engines are content production functions.
 Scrying is a library, not a peer engine.**
 
-Three engine peers under mere:
+Engine peers under mere:
 
 - `serval.*` — Servo rendering. One sub-engine today (`serval.web`); future
   sub-engines per the [Hekate framing memory](memory) (`serval.smolweb` for
   reader-mode extract; etc.).
 - `nematic.*` — 12 protocol engines (markdown, gemtext, gopher, feed, text,
   file, finger, knot, scroll, misfin, nex, guppy).
-- `wry.compat` — mere-managed system-WebView tile, driven by scrying as a
-  library. Frame capture via `webview2-com` (Win) / `objc2-web-kit` + SCK
-  (macOS) / WebKitGTK+DMABUF (Linux, skeletal).
+- **`scrying.web`** — mere-managed system-WebView tile driven by the
+  in-house scrying library (the preferred non-Servo path). Embeddable
+  frame capture via `webview2-com` (Win) / `objc2-web-kit` + SCK
+  (macOS) / WebKitGTK+DMABUF (Linux, skeletal). Frames are composited
+  *into* mere's host surface — not floated as overlays.
+- **`wry.web`** — optional separate engine, overlay-based, driven by the
+  upstream `wry` crate. Different composition model from `scrying.web`
+  (overlay window, not embedded frame), so it deserves its own engine
+  ID rather than being a "mode" of the scrying one. Not a fork of Wry;
+  we just call it. Offered for users who want it; not in the default
+  routing policy.
+
+`scrying.web` is the *preferred* non-Servo path — it gives embeddable
+frames the host composites alongside other content, which is the whole
+point. `wry.web` exists because Wry is its own thing and works without
+fork shenanigans; making it available as a per-tile choice is cheap and
+sidesteps the "overlay vs. embedded" architectural question without
+forcing it.
 
 Scrying is **not on the engine taxonomy**. It's the texture-extraction
-primitive `wry.compat` (and anyone else who needs it later) pulls in. The
-engine name `wry.compat` covers the tile-engine *role*; the scrying crate
-covers the *library* that makes that role's frame production work.
+*library* `scrying.web` (and anyone else who needs it later) pulls in.
+The engine name `scrying.web` covers the tile-engine *role*; the
+scrying crate covers the library that makes that role's frame
+production work. Different layer of abstraction.
 
 ## Why this shape
 
@@ -53,18 +69,20 @@ The cleanest mental model:
   - DOM/CSSOM, JS heap, GPU textures, paint cache.
 - **Engines never see graph truth directly.** Mere passes them
   `(address, view_intent)`; engines return `EngineDocument` (nematic)
-  or paint frames into a `SurfaceContract` (serval, `wry.compat`).
+  or paint frames into a `SurfaceContract` (serval, `scrying.web`,
+  `wry.web`).
 
 ### Scrying as library, not engine
 
 Library boundaries should match abstraction levels. Scrying is a
-*primitive* — "given a WebView2/WKWebView control, capture its frames
-into wgpu-importable textures." It doesn't carry navigation semantics,
-session identity, or routing rules. The *engine* — the thing inker
-selects, the thing the host wires into a tile — is `wry.compat`.
-Anyone who wants a Wry-shaped tile path uses scrying; if a different
-"WebView-shaped" engine appears later (a Tauri-managed tile, an SDL2
-WebView tile, etc.), it also uses scrying. Engine ≠ library.
+*primitive* — "given a WebView2/WKWebView/WebKitGTK control, capture
+its frames into wgpu-importable textures." It doesn't carry navigation
+semantics, session identity, or routing rules. The *engine* — the
+thing inker selects, the thing the host wires into a tile — is
+`scrying.web`. Anyone who wants the scrying-shaped tile path uses
+the library; if a different "system-WebView-shaped" engine appears
+later (a Tauri-managed tile, an SDL2 WebView tile, etc.), it also
+uses scrying or a sibling primitive. Engine ≠ library.
 
 ### Why no `serval.compat` internal mode
 
@@ -81,16 +99,29 @@ serval a meta-engine that quietly orchestrates scrying, which:
 
 The simpler shape: **serval is pure Servo rendering.** When Servo can't
 render, serval reports rendering failure upward; mere offers a tile-
-engine switch from `serval.web` to `wry.compat`. The compat-flip
-becomes a regular engine-selection event, using existing inker
-machinery, not a parallel decision system.
+engine switch from `serval.web` to `scrying.web`. The flip becomes a
+regular engine-selection event, using existing inker machinery, not
+a parallel decision system.
+
+### `scrying.web` is preferred, not "compat"
+
+Earlier framings called this "compat mode" — that undersells it.
+Scrying's role isn't just fallback for broken sites; it's also the
+only practical path for DRM (Widevine), MediaSession integration,
+certain CSS features Servo doesn't have, platform-native gestures,
+and other features the system WebView offers that Servo doesn't (or
+doesn't yet). Treating `scrying.web` as a first-class engine — *one
+of the preferred non-Servo paths*, not strictly a fallback — keeps
+the framing honest. The auto-fallback rule (§follow-up) is one
+trigger for proposing it; explicit user pinning is another;
+per-domain rules are a third.
 
 ## Cookie / session continuity
 
 The key insight: **scrying inherits serval's session state via a shared
 persona-scoped UDF**, not via engine-to-engine handoff.
 
-When mere flips a tile from `serval.web` to `wry.compat`, both engines
+When mere flips a tile from `serval.web` to `scrying.web`, both engines
 bind the same persona-scoped UDF (see multiplexer brief §5.4):
 
 ```text
@@ -152,23 +183,37 @@ nematic.scroll              → scroll://
 nematic.misfin              → misfin://
 nematic.nex                 → nex://
 nematic.guppy               → guppy://
-wry.compat                  → mere-managed system WebView; opt-in per tile
+scrying.web                 → mere-managed system WebView via scrying;
+                              embedded-frame composition; opt-in per tile
+wry.web                     → optional overlay-based Wry tile; not in
+                              default policy; per-tile choice only
 
 graphshell.internal         → about://, mere://, graphshell:// (unchanged)
 external.protocol           → fallback (unchanged)
 ```
 
-The deprecated `wry.webview` peer is dropped — its role is now
-`wry.compat`, which differs in two ways: it explicitly belongs to the
-"compat / fallback" semantic (not the default for http(s)), and it's
-mere-managed (no internal-to-serval indirection).
+The previous `wry.webview` peer is replaced by **two** engines with
+different composition models:
+
+- `scrying.web` — the preferred non-Servo path. Embedded frame
+  capture; composited into mere's host surface alongside other
+  content.
+- `wry.web` — overlay-based, upstream-Wry-backed. Different impl,
+  different composition (overlay native window, not embedded frame).
+  Offered as a user-selectable choice, not in the default policy. We
+  don't fork Wry; we just call it.
+
+Two engines with different composition models, not one engine with
+modes — they're genuinely different things from the host's perspective
+(one composites into the wgpu surface; the other is a separate native
+window). Picking either is a per-tile decision.
 
 ### Auto-fallback rule (future, not v1)
 
 A planned inker policy: when `serval.web` reports a rendering failure
 (layout never settled / paint errored / JS exception flood / explicit
 "this site requires a different engine" signal), the host offers
-`wry.compat` for that tile via the user's existing engine-pin
+`scrying.web` for that tile via the user's existing engine-pin
 machinery. Implementation lands later; the routing surface already
 supports per-node engine pins (`pinned_engine` in `EngineRouteRequest`),
 so no new machinery needed in inker — just a new offer-the-switch UI
@@ -178,41 +223,44 @@ gesture in mere-host.
 
 Small surface:
 
-1. **`inker::routing`**: engine ID constants gain `wry.compat`, drop
-   `wry.webview` (or rename in place — the latter is a smaller diff
-   if `wry.webview` isn't referenced by any default rule).
+1. **`inker::routing`**: engine ID constants gain `scrying.web` and
+   (optional) `wry.web`. Drop `wry.webview` (or rename in place — the
+   latter is a smaller diff if `wry.webview` isn't referenced by any
+   default rule).
 2. **`scrying` dependency**: pulled into `mere-host` (or a thin
    `mere-host-scrying-tile` crate). Not pulled into `serval`.
 3. **`serval`**: no change. Servo rendering only; reports failure
    upward through the existing `SurfaceContract` failure path (which
    already exists for crashed webviews per the current code).
-4. **`mere-host`**: gains a `wry-compat-tile` module structurally
+4. **`mere-host`**: gains a `scrying-web-tile` module structurally
    analogous to existing tile types — bootstraps a WebView2/WKWebView
    via scrying's producer trait, captures frames, hands a wgpu
-   texture into the surface placement plan.
+   texture into the surface placement plan. If `wry.web` ships, a
+   sibling `wry-web-tile` module is its own thing (different impl).
 5. **`mere-kernel::graph::Node`**: no schema change. The existing
    `viewer_override` field already supports per-node engine pinning.
 6. **Persona-scoped UDF binding**: documented as a contract that
-   `serval.web` and `wry.compat` both honor. Where the UDF path comes
-   from is a host-config concern (multiplexer brief §5.4).
+   `serval.web` and `scrying.web` both honor. Where the UDF path
+   comes from is a host-config concern (multiplexer brief §5.4).
+   `wry.web`, if shipped, also binds the same UDF.
 7. **`TileSnapshot` (deferred)**: small new type for v2 continuity;
    serializable view state at engine-flip time, stored in the
    `ViewIntent` sidecar.
 
 Estimated landing size: low hundreds of LOC for the v1 path
-(`wry.compat` engine wiring + UDF binding + inker rename). The
+(`scrying.web` engine wiring + UDF binding + inker rename). The
 `TileSnapshot` v2 path is its own small slice when continuity becomes
-worth the work.
+worth the work. `wry.web`, if added, is its own small module — same
+shape, different impl (overlay rather than embedded frame).
 
 ## Open questions left for follow-up
 
-1. **`wry.compat` vs. naming the broader role.** Today the engine is
-   Wry-shaped because that's where scrying's WebView producers are
-   wired. If future surfaces (a hypothetical Tauri-tile or SDL2-tile)
-   land, the engine name space needs rethinking. Probably `system.web`
-   (engine kind) + per-platform sub-engine (`system.web.webview2`,
-   `system.web.wkwebview`, `system.web.webkitgtk`). Defer until a
-   second non-Wry system-tile actually appears.
+1. **Future engine-name space.** `scrying.web` and `wry.web` cover the
+   system-WebView and Wry-overlay paths. If a third "system-shaped"
+   engine appears (Tauri-managed tile, SDL2 WebView tile, etc.), the
+   naming should generalize — possibly `system.web` (engine kind) +
+   per-platform sub-engine. Defer until a third such engine actually
+   wants to land.
 2. **Sub-engine sub-modes.** `serval` may eventually grow
    `serval.smolweb` (reader extract) as a peer to `serval.web`. The
    `engine.sub-engine` shape supports this without churning the

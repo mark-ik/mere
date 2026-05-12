@@ -9,6 +9,28 @@ use serde::{Deserialize, Serialize};
 pub use verso_tile::SurfaceTargetId;
 
 pub const ENGINE_SERVAL_WEB: &str = "serval.web";
+/// Mere-managed system-WebView tile driven by the in-house `scrying`
+/// library. Embedded-frame composition into the host's wgpu surface
+/// (frames captured via `webview2-com` on Windows / `objc2-web-kit` +
+/// ScreenCaptureKit on macOS / WebKitGTK+DMABUF on Linux).
+///
+/// Preferred non-Servo path. Not in the default routing policy —
+/// opt-in per tile via `EngineRouteRequest::pinned_engine` or a
+/// per-host override. Auto-fallback rule (serval rendering failure
+/// → propose `scrying.web`) is a follow-up; the routing surface
+/// already supports it via `pinned_engine`.
+///
+/// See `design_docs/mere_docs/research/2026-05-11_engine_peers_and_scrying_library_brief.md`.
+pub const ENGINE_SCRYING_WEB: &str = "scrying.web";
+/// Optional overlay-based Wry tile driven by the upstream `wry` crate.
+/// Different composition model from [`ENGINE_SCRYING_WEB`] (overlay
+/// native window, not embedded frame), so it's a separate engine
+/// rather than a mode of the scrying one. Not in the default routing
+/// policy; offered as a user-selectable per-tile choice for cases
+/// where the overlay model is wanted.
+///
+/// See the same brief as `ENGINE_SCRYING_WEB`.
+pub const ENGINE_WRY_WEB: &str = "wry.web";
 pub const ENGINE_NEMATIC_FEED: &str = "nematic.feed";
 pub const ENGINE_NEMATIC_FILE: &str = "nematic.file";
 pub const ENGINE_NEMATIC_FINGER: &str = "nematic.finger";

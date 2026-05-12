@@ -83,13 +83,21 @@ ready to ink the platen.
   RSS roots, knot frontmatter, gemtext link lines, markdown markers, and
   falls through to `text/plain` when the head window has no NUL bytes.
   Reads at most the first 1 KiB.
-- **Engine ID constants**: `ENGINE_SERVAL_WEB`, `ENGINE_NEMATIC_FEED`,
-  `ENGINE_NEMATIC_FILE`, `ENGINE_NEMATIC_FINGER`, `ENGINE_NEMATIC_GEMTEXT`,
+- **Engine ID constants**: `ENGINE_SERVAL_WEB`, `ENGINE_SCRYING_WEB`,
+  `ENGINE_WRY_WEB`, `ENGINE_NEMATIC_FEED`, `ENGINE_NEMATIC_FILE`,
+  `ENGINE_NEMATIC_FINGER`, `ENGINE_NEMATIC_GEMTEXT`,
   `ENGINE_NEMATIC_GOPHER`, `ENGINE_NEMATIC_GUPPY`, `ENGINE_NEMATIC_KNOT`,
   `ENGINE_NEMATIC_MARKDOWN`, `ENGINE_NEMATIC_MISFIN`, `ENGINE_NEMATIC_NEX`,
   `ENGINE_NEMATIC_SCROLL`, `ENGINE_NEMATIC_TEXT`, `ENGINE_NEMATIC_SMOLWEB`
   (umbrella, kept for back-compat — no protocol routes to it any more),
   `ENGINE_GRAPHSHELL_INTERNAL`, `ENGINE_EXTERNAL_PROTOCOL`.
+
+  `ENGINE_SCRYING_WEB` and `ENGINE_WRY_WEB` are **opt-in per tile** —
+  not in the default policy. Pinning either via `EngineRouteRequest::pinned_engine`
+  (or a per-host override) routes the tile through that engine. See
+  `design_docs/mere_docs/research/2026-05-11_engine_peers_and_scrying_library_brief.md`
+  for the design rationale (preferred non-Servo path; embedded-frame
+  vs overlay composition models).
 - **Default policy** (full set):
   - Scheme rules: `http`/`https` → Serval; `gemini`/`spartan` →
     `nematic.gemtext`; `gopher` → `nematic.gopher`; `finger` →
@@ -119,7 +127,7 @@ inker hands back.
               │             (engine_id + SurfaceContract)
               │
               ▼
-       engine_id selects: serval | nematic | wry | internal
+       engine_id selects: serval | scrying | nematic | wry | internal
                                                        │
                                                        ▼
                                                   verso-tile
