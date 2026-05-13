@@ -16,6 +16,7 @@ use mere_frame::{
     GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitChoice,
 };
 use mere_host_runtime::NavigateMode;
+use crate::persistence::save_frame_layout;
 
 use crate::graph_registry::GraphRegistry;
 use crate::host_helpers::{ensure_node_for_address, ensure_node_for_address_near, error_document};
@@ -435,6 +436,46 @@ impl HostRoot {
     /// was the only one), the underlying `close_leaf` refuses to
     /// remove it — the window keeps its last panel. The user can
     /// close the window through the OS to fully release the graph.
+    /// Move `source` to be adjacent to `target` on `side`. Wraps
+    /// `FrameLayout::reparent_leaf` with path-by-pane-id lookup
+    /// + app-tree rebuild + layout save. v0 of pane drag-rearrange
+    /// per the pane-UX brief §1.
+    pub(crate) fn reparent_pane(
+        &mut self,
+        source: PaneId,
+        target: PaneId,
+        side: InsertSide,
+        cx: &mut Context<Self>,
+    ) {
+        if source == target {
+            return;
+        }
+        let Some(source_path) = self.path_for_pane(source) else {
+            tracing::warn!(?source, "reparent_pane: source not in layout");
+            return;
+        };
+        let Some(target_path) = self.path_for_pane(target) else {
+            tracing::warn!(?target, "reparent_pane: target not in layout");
+            return;
+        };
+        let ok = self
+            .frame_layout
+            .reparent_leaf(&source_path, &target_path, side);
+        if !ok {
+            tracing::debug!(
+                ?source,
+                ?target,
+                ?side,
+                "reparent_pane: frame layout refused the move"
+            );
+            return;
+        }
+        tracing::info!(?source, ?target, ?side, "pane.reparented");
+        save_frame_layout(&self.frame_layout);
+        self.rebuild_app_tree(cx);
+        cx.notify();
+    }
+
     pub(crate) fn close_pane(&mut self, pane_id: PaneId, cx: &mut Context<Self>) {
         let Some((content, graph_id)) = self
             .frame_layout

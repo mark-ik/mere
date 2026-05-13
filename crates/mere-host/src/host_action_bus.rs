@@ -104,6 +104,7 @@ pub(crate) fn current_target_for_kind(this: &HostRoot, kind: &ActionKind) -> Act
         | FocusTile { .. }
         | CloseTile { .. }
         | ClosePane
+        | ReparentPane { .. }
         | TearOutTile { .. }
         | PromoteLeafToBranch
         | PromoteLeafToFork
@@ -205,11 +206,21 @@ fn execute(
             }
         }
 
-        TearOutTile { mode } => {
-            // Resolve the donor pane + tile index from target +
-            // active state. Bus-driven tear-out (drag-drop) sets
-            // both explicitly via PromoteLeafTo*; keyboard-driven
-            // tear-out uses the active tile.
+        ReparentPane { source, side } => {
+            // Target = the dispatch's `ActionTarget::Pane`; source
+            // = where the user grabbed; side = which side of the
+            // target to attach (Right by default — drop-zone
+            // refinement is a follow-up).
+            if let ActionTarget::Pane(target_pane) = target {
+                this.reparent_pane(source, target_pane, side, cx);
+            } else {
+                tracing::debug!(?source, ?side, "ReparentPane: non-Pane target");
+            }
+        }
+
+        TearOutTile { mode, tile_index } => {
+            // Resolve donor pane: explicit `Pane(_)` target wins;
+            // otherwise fall back to the active workbench.
             let donor = match target {
                 ActionTarget::Pane(pid) => Some(pid),
                 _ => this.active_workbench,
@@ -218,13 +229,18 @@ fn execute(
                 tracing::debug!(?mode, "TearOutTile: no donor pane resolvable");
                 return;
             };
-            let active_idx = this
-                .panes
-                .get(&donor_pane)
-                .and_then(|s| s.as_workbench())
-                .and_then(|w| w.tiles.active_index());
-            let Some(idx) = active_idx else {
-                tracing::debug!(?mode, ?donor_pane, "TearOutTile: no active tile");
+            // Resolve tile index: explicit `tile_index` wins
+            // (drag-drop / right-click on a specific tile);
+            // otherwise use the donor's active tile (keyboard
+            // shortcut path).
+            let idx = tile_index.or_else(|| {
+                this.panes
+                    .get(&donor_pane)
+                    .and_then(|s| s.as_workbench())
+                    .and_then(|w| w.tiles.active_index())
+            });
+            let Some(idx) = idx else {
+                tracing::debug!(?mode, ?donor_pane, "TearOutTile: no tile resolvable");
                 return;
             };
             match mode {
@@ -238,19 +254,50 @@ fn execute(
                     this.tear_out_tile_to_new_graph(false, cx);
                 }
                 TearOutMode::Branch => {
-                    // Phase 3 branch — wired in the same turn as
-                    // this bus migration; routes to the new
-                    // host-side method.
                     this.tear_out_tile_as_branch_for(donor_pane, idx, cx);
                 }
             }
         }
 
         PromoteLeafToBranch | PromoteLeafToFork => {
-            // Toast-button actions. Implemented in Phase 3's toast
-            // UI slice. v0: log and bail — the actions exist for
-            // the bus to be complete; behaviour lands with the UI.
-            tracing::debug!(?kind, "promote-leaf action received; toast UI not yet wired");
+            // Toast-button actions. The toast records the donor
+            // pane + tile index in `TearoutToastState`; target =
+            // Pane(donor_pane), and execute pulls those out via
+            // the target. Promote-to-branch/fork then dispatches
+            // the equivalent TearOutTile action so the existing
+            // tear-out path handles everything (mints graphlet /
+            // session, opens window, persists).
+            let Some(toast) = this.tearout_toast else {
+                tracing::debug!("promote-leaf: no toast state to act on");
+                return;
+            };
+            let promote_mode = if matches!(kind, PromoteLeafToBranch) {
+                TearOutMode::Branch
+            } else {
+                TearOutMode::Fork
+            };
+            tracing::info!(
+                ?promote_mode,
+                donor = ?toast.donor_pane,
+                tile_index = toast.tile_index,
+                "promote_leaf via toast"
+            );
+            // Reuse the existing tear-out infrastructure — same
+            // donor pane + tile index, just a different mode.
+            // Synthesises a TearOutTile bus action so all gates +
+            // diagnostics apply uniformly.
+            let next = BusAction::pane(
+                toast.donor_pane,
+                ActionKind::TearOutTile {
+                    mode: promote_mode,
+                    tile_index: Some(toast.tile_index),
+                },
+            );
+            // Direct recursive dispatch — gate already passed for
+            // PromoteLeafTo*; the synthetic tear-out re-runs the
+            // gate against its own kind so policy still applies
+            // separately if branch / fork are gated differently.
+            crate::host_action_bus::dispatch(this, next, cx);
         }
 
         ForkStickyNoteSession

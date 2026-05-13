@@ -29,6 +29,10 @@ pub mod document;
 /// Engine trait and registry.
 pub mod engine;
 
+/// Surface-engine traits and registry — parallel dispatch path for
+/// long-lived, frame-streaming engines (e.g. `scrying.web`).
+pub mod surface_engine;
+
 /// Content-type sniffing for unlabelled byte streams.
 pub mod sniff;
 
@@ -37,6 +41,12 @@ pub use document::{
     DocumentTrustState, EngineDocument, InlineSpan, ResolvedProvenance, inline_text,
 };
 pub use engine::{Engine, EngineError, EngineInput, EngineRegistry};
+pub use surface_engine::{
+    CursorShape, EngineProfileBinding, FocusReason, KeyboardEvent, KeyboardModifiers, MouseButton,
+    MouseEvent, MouseEventKind, NativeTextureHandle, NavigationEvent, PhysicalPosition,
+    PointerEvent, SurfaceEngine, SurfaceEngineRegistry, SurfaceError, SurfaceFrame,
+    SurfaceProducer, SurfaceSettings, SurfaceSpawnRequest, SurfaceSyncHandle, WebMessage,
+};
 pub use sniff::sniff_content_type;
 pub use routing::{
     EngineRouteDecision, EngineRoutePolicy, EngineRouteRequest, EngineRouteRule, SurfaceContract,

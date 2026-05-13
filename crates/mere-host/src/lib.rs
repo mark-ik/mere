@@ -39,6 +39,7 @@ pub use mere_host_runtime::tiles;
 
 mod a11y;
 mod bootstrap;
+mod context_menu;
 mod demo;
 mod graph_registry;
 mod graph_switcher;
@@ -52,6 +53,7 @@ mod panes;
 mod persistence;
 mod session_persist;
 mod tearout;
+mod tearout_toast;
 mod ticks;
 mod tile_ops;
 
@@ -153,6 +155,16 @@ pub(crate) struct HostRoot {
     /// dispatch. The capability-gate catalogue plan plugs in a
     /// real `SessionPolicyGate` driven by `manifest.policy.overrides`.
     pub(crate) permission_gate: Box<dyn mere_host_runtime::PermissionGate>,
+    /// Currently-open right-click context menu, if any. `Some` =
+    /// visible at the recorded position with the recorded entries;
+    /// `None` = hidden. Only one menu can be open per window — see
+    /// [`crate::context_menu`].
+    pub(crate) context_menu: Option<context_menu::ContextMenuState>,
+    /// Tear-out promotion toast — shown on no-modifier tile drops
+    /// so the user can promote the resulting leaf to a branch or
+    /// fork. `Some` = visible; `None` = hidden. See
+    /// [`crate::tearout_toast`].
+    pub(crate) tearout_toast: Option<tearout_toast::TearoutToastState>,
 }
 
 impl HostRoot {
@@ -463,6 +475,7 @@ impl Render for HostRoot {
                     this,
                     mere_host_runtime::ActionKind::TearOutTile {
                         mode: mere_host_runtime::TearOutMode::ForkMinimized,
+                        tile_index: None,
                     },
                     cx,
                 );
@@ -477,6 +490,7 @@ impl Render for HostRoot {
                     this,
                     mere_host_runtime::ActionKind::TearOutTile {
                         mode: mere_host_runtime::TearOutMode::ForkVisible,
+                        tile_index: None,
                     },
                     cx,
                 );
@@ -491,6 +505,7 @@ impl Render for HostRoot {
                     this,
                     mere_host_runtime::ActionKind::TearOutTile {
                         mode: mere_host_runtime::TearOutMode::Leaf,
+                        tile_index: None,
                     },
                     cx,
                 );
@@ -521,18 +536,53 @@ impl Render for HostRoot {
             orientation,
             panel_state,
             self.graph_switcher_open,
-            cx.listener(|this, _: &MouseUpEvent, _, cx| this.go_back(cx)),
-            cx.listener(|this, _: &MouseUpEvent, _, cx| this.go_forward(cx)),
-            cx.listener(|this, _: &MouseUpEvent, _, cx| this.reload(cx)),
+            // Shellbar mouse handlers — bus-routed so the same
+            // permission gate + diagnostics + (future) capability
+            // catalogue apply uniformly with keybinding paths.
             cx.listener(|this, _: &MouseUpEvent, _, cx| {
-                this.toggle_panel(PaneContent::Workbench, cx)
+                host_action_bus::dispatch_kind(this, mere_host_runtime::ActionKind::GoBack, cx);
             }),
-            cx.listener(|this, _: &MouseUpEvent, _, cx| this.toggle_panel(PaneContent::Gloss, cx)),
             cx.listener(|this, _: &MouseUpEvent, _, cx| {
-                this.toggle_panel(PaneContent::Apparatus, cx)
+                host_action_bus::dispatch_kind(this, mere_host_runtime::ActionKind::GoForward, cx);
             }),
-            cx.listener(|this, _: &MouseUpEvent, _, cx| this.summon_orrery_for_new_graph(cx)),
-            cx.listener(|this, _: &MouseUpEvent, _, cx| this.toggle_graph_switcher(cx)),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                host_action_bus::dispatch_kind(this, mere_host_runtime::ActionKind::Reload, cx);
+            }),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::ToggleWorkbench,
+                    cx,
+                );
+            }),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::ToggleGloss,
+                    cx,
+                );
+            }),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::ToggleApparatus,
+                    cx,
+                );
+            }),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::SummonOrreryForNewGraph,
+                    cx,
+                );
+            }),
+            cx.listener(|this, _: &MouseUpEvent, _, cx| {
+                host_action_bus::dispatch_kind(
+                    this,
+                    mere_host_runtime::ActionKind::ToggleGraphSwitcher,
+                    cx,
+                );
+            }),
         );
         let body = div().flex().flex_1().overflow_hidden().child(pane_tree);
 
@@ -543,11 +593,12 @@ impl Render for HostRoot {
         let container_row = shellbar_pos.is_vertical();
         let shellbar_first = matches!(shellbar_pos, EdgePosition::Top | EdgePosition::Left);
         // Drop handler for tear-out drags. Phase 2 Part 2 v0
-        // scaffold: drops fire a leaf (sticky-note) tear-out for the
-        // payload's exact pane + tile index. Modifier-keyed variants
-        // (Shift = branch, Ctrl+Shift = fork) wire up once Phase 3's
-        // branch/fork actions land (see the
-        // 2026-05-11_tearout_operations_brief.md gesture model).
+        // scaffold: drops fire a leaf tear-out for the payload's
+        // exact pane + tile index. Modifier-keyed variants (Shift =
+        // branch, Ctrl+Shift = fork) wire up once toast UI lands
+        // (see 2026-05-11_tearout_operations_brief.md). Routed
+        // through the bus so the active payload's pane_id is the
+        // dispatch target (not whatever's "active" at drop time).
         let on_tile_drop = cx.listener(
             |this,
              payload: &crate::tearout::TileDragPayload,
@@ -556,9 +607,34 @@ impl Render for HostRoot {
                 tracing::info!(
                     pane_id = ?payload.pane_id,
                     tile_index = payload.tile_index,
-                    "tile drag dropped — firing sticky-note tear-out (v0 scaffold)"
+                    "tile drag dropped \u{2014} firing leaf tear-out + promotion toast"
                 );
-                this.tear_out_tile_sticky_note_for(payload.pane_id, payload.tile_index, cx);
+                host_action_bus::dispatch(
+                    this,
+                    mere_host_runtime::BusAction::pane(
+                        payload.pane_id,
+                        mere_host_runtime::ActionKind::TearOutTile {
+                            mode: mere_host_runtime::TearOutMode::Leaf,
+                            // Tear out the *grabbed* tile (drag
+                            // payload), not whatever's active at
+                            // drop time.
+                            tile_index: Some(payload.tile_index),
+                        },
+                    ),
+                    cx,
+                );
+                // Show the promotion toast so the user can escalate
+                // to branch / fork. Toast appears on the *donor*
+                // window (this one) since the new leaf window
+                // shares its session — promoting routes back
+                // through the donor's HostRoot context anyway.
+                this.show_tearout_toast(
+                    crate::tearout_toast::TearoutToastState {
+                        donor_pane: payload.pane_id,
+                        tile_index: payload.tile_index,
+                    },
+                    cx,
+                );
             },
         );
 
@@ -606,12 +682,31 @@ impl Render for HostRoot {
         let with_palette = with_chrome.child(self.palette.clone());
 
         // Graph switcher overlay — rendered conditionally on top
-        // of everything. Clicking outside the panel closes it;
-        // clicking an entry summons that graph's orrery.
-        if self.graph_switcher_open {
+        // of palette. Clicking outside closes it; clicking an
+        // entry summons that graph's orrery.
+        let with_switcher = if self.graph_switcher_open {
             with_palette.child(self.render_graph_switcher(cx))
         } else {
             with_palette
+        };
+
+        // Tear-out promotion toast — appears on no-modifier tile
+        // drops so the user can promote leaf → branch / fork.
+        // Rendered above switcher, below context menu.
+        let with_toast = if let Some(toast) = self.render_tearout_toast_overlay(cx) {
+            with_switcher.child(toast)
+        } else {
+            with_switcher
+        };
+
+        // Context menu — rendered last so it's the topmost
+        // interactive overlay (right-click should win over anything
+        // else open). `render_context_menu_overlay` returns `None`
+        // when no menu is active.
+        if let Some(menu) = self.render_context_menu_overlay(cx) {
+            with_toast.child(menu)
+        } else {
+            with_toast
         }
     }
 }

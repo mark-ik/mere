@@ -372,11 +372,26 @@ pub(crate) fn render_orrery_with_interactivity(
             let Some(button) = pointer_button(ev.button) else {
                 return;
             };
+            // Double-click on a node: open as a *new tile*
+            // (NewTile mode). Single-click falls through to the
+            // engine which emits SelectNode → "open or focus in
+            // active workbench" (existing semantics). Per the
+            // pane-UX brief §4.1 click hierarchy: left=manipulate,
+            // double=strong-intent.
+            if button == PointerButton::Primary && ev.click_count >= 2 {
+                if let Some(node) =
+                    orrery_state(this, pane_id).and_then(|o| o.engine.state.hovered_node)
+                {
+                    tracing::debug!(?node, ?pane_id, "orrery node double-clicked");
+                    open_node_as_new_tile(this, graph_id, node, cx);
+                    return;
+                }
+            }
             if button == PointerButton::Primary {
                 if let Some(node) =
                     orrery_state(this, pane_id).and_then(|o| o.engine.state.hovered_node)
                 {
-                    tracing::info!(?node, ?pane_id, "orrery node clicked");
+                    tracing::debug!(?node, ?pane_id, "orrery node clicked");
                 }
             }
             dispatch_to_engine(
@@ -460,6 +475,22 @@ pub(crate) fn render_orrery_with_interactivity(
         },
     );
 
+    // Right-click → context menu for the hovered node (or the
+    // orrery background if no node is under the cursor).
+    let on_right_down = cx.listener(
+        move |this, ev: &MouseDownEvent, _window: &mut Window, cx: &mut Context<HostRoot>| {
+            let hovered = orrery_state(this, pane_id).and_then(|o| o.engine.state.hovered_node);
+            if let Some(node) = hovered {
+                open_node_context_menu(this, pane_id, graph_id, node, ev.position, cx);
+            } else {
+                // No-node right-click: orrery-background menu —
+                // reserved for future entries (Fit to graph, Reset
+                // camera, Open empty tile, etc.). v0: do nothing.
+                tracing::debug!(?pane_id, "orrery background right-click (no menu yet)");
+            }
+        },
+    );
+
     div()
         .id(gpui::SharedString::from(format!("orrery-interactive-{}", pane_id.0)))
         .size_full()
@@ -467,8 +498,147 @@ pub(crate) fn render_orrery_with_interactivity(
         .on_scroll_wheel(on_scroll)
         .on_mouse_down(MouseButton::Middle, on_middle_down)
         .on_mouse_down(MouseButton::Left, on_left_down)
+        .on_mouse_down(MouseButton::Right, on_right_down)
         .on_mouse_up(MouseButton::Middle, on_middle_up)
         .on_mouse_up(MouseButton::Left, on_left_up)
         .child(inner)
         .into_any_element()
+}
+
+/// Pop a context menu for a right-clicked orrery node. Entries
+/// per the [pane-UX brief](../../../design_docs/mere_docs/design/2026-05-11_pane_ux_design_pass_brief.md)
+/// §4.3 node menu: open in tile, open as branch/fork; future
+/// entries (pin, rename, delete) appear disabled.
+fn open_node_context_menu(
+    this: &mut HostRoot,
+    pane_id: PaneId,
+    graph_id: GraphId,
+    node: NodeKey,
+    position: Point<Pixels>,
+    cx: &mut Context<HostRoot>,
+) {
+    use crate::context_menu::ContextMenuEntry;
+    use mere_host_runtime::{ActionKind, BusAction, TearOutMode};
+
+    // Resolve the URL for the right-clicked node so NavigateTo can
+    // carry it as its address. Without a URL the open-in-tile
+    // entries don't have meaningful targets.
+    let url = this
+        .registry
+        .read(cx)
+        .get(graph_id)
+        .and_then(|g| g.read(cx).get_node(node).map(|n| n.url().to_string()));
+    let Some(url) = url else {
+        tracing::warn!(?node, ?graph_id, "node context menu: no URL for node");
+        return;
+    };
+
+    let mut entries = vec![
+        ContextMenuEntry::new(
+            "Open in tile",
+            BusAction::app(ActionKind::NavigateTo {
+                address: url.clone(),
+                new_tile: false,
+            }),
+        ),
+        ContextMenuEntry::new(
+            "Open in new tile",
+            BusAction::app(ActionKind::NavigateTo {
+                address: url.clone(),
+                new_tile: true,
+            }),
+        )
+        .with_shortcut("dbl-click")
+        .with_separator(),
+        ContextMenuEntry::new(
+            "Tear out as leaf",
+            BusAction::pane(
+                pane_id,
+                ActionKind::TearOutTile {
+                    mode: TearOutMode::Leaf,
+                    tile_index: None,
+                },
+            ),
+        ),
+        ContextMenuEntry::new(
+            "Tear out as branch",
+            BusAction::pane(
+                pane_id,
+                ActionKind::TearOutTile {
+                    mode: TearOutMode::Branch,
+                    tile_index: None,
+                },
+            ),
+        ),
+        ContextMenuEntry::new(
+            "Tear out as fork",
+            BusAction::pane(
+                pane_id,
+                ActionKind::TearOutTile {
+                    mode: TearOutMode::Fork,
+                    tile_index: None,
+                },
+            ),
+        )
+        .with_separator(),
+    ];
+    // Reserved entries — surface what's coming, greyed until the
+    // backing actions exist.
+    entries.push(
+        ContextMenuEntry::new("Pin node", BusAction::app(ActionKind::Quit))
+            .disabled("not yet implemented"),
+    );
+    entries.push(
+        ContextMenuEntry::new("Rename node", BusAction::app(ActionKind::Quit))
+            .disabled("not yet implemented"),
+    );
+    entries.push(
+        ContextMenuEntry::new("Delete node", BusAction::app(ActionKind::Quit))
+            .disabled("not yet implemented"),
+    );
+
+    this.open_context_menu(position, entries, cx);
+}
+
+/// Double-click on an orrery node → open the node as a **new tile**.
+///
+/// Per the [pane-UX brief](../../../design_docs/mere_docs/design/2026-05-11_pane_ux_design_pass_brief.md)
+/// §4.1: single-click stays "open or focus in active workbench"
+/// (current SelectNode handler); double-click commits to a fresh
+/// tile entry under `NavigateMode::NewTile`. The node already
+/// exists in the graph, so `ensure_node_for_address_near` is a
+/// find-or-create that returns the existing node — no duplicate
+/// minting. The lineage facet records a Traversal edge from the
+/// previously-active anchor.
+fn open_node_as_new_tile(
+    this: &mut HostRoot,
+    graph_id: GraphId,
+    node: NodeKey,
+    cx: &mut Context<HostRoot>,
+) {
+    // Pick a workbench in the same graph (mirrors SelectNode's
+    // target-finding); set it active so navigate_to lands here.
+    let target_workbench = this
+        .frame_layout
+        .iter_leaves()
+        .find(|(_, content, gid)| {
+            matches!(content, mere_frame::PaneContent::Workbench) && *gid == graph_id
+        })
+        .map(|(pid, _, _)| pid);
+    let Some(target_workbench) = target_workbench else {
+        tracing::debug!(?graph_id, "double-click: no workbench for this graph");
+        return;
+    };
+    let Some(graph_entity) = this.registry.read(cx).get(graph_id).cloned() else {
+        return;
+    };
+    let Some(url) = graph_entity
+        .read(cx)
+        .get_node(node)
+        .map(|n| n.url().to_string())
+    else {
+        return;
+    };
+    this.active_workbench = Some(target_workbench);
+    this.navigate_to(url, mere_host_runtime::NavigateMode::NewTile, cx);
 }

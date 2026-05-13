@@ -53,5 +53,5 @@ pub use manifest::{
     SessionPolicy, SessionPolicyOverride, WorkerKind,
 };
 pub use manifest_store::{LoadFailure, LoadReport, MANIFEST_FILE, ManifestStore, TRASH_DIR};
-pub use tearout::TileDragPayload;
+pub use tearout::{PaneDragPayload, TileDragPayload};
 pub use tiles::{HistoryEntry, NavigateMode, TileManager, TileState};

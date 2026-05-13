@@ -273,16 +273,32 @@ fn render_workbench_pane(
             let label = tile_label(node, graph, workbench_tiles.document_for(node));
             // Capture pane_id so the click routes to THIS
             // workbench, not whichever happens to be "active."
+            // Bus-routed: target = Pane(pane_id), kind carries the
+            // tile index.
             let on_select = Box::new(cx.listener(
                 move |this, _: &MouseUpEvent, _window: &mut Window, cx: &mut Context<HostRoot>| {
                     this.active_workbench = Some(pane_id);
-                    this.focus_tile_in(pane_id, i, cx);
+                    crate::host_action_bus::dispatch(
+                        this,
+                        mere_host_runtime::BusAction::pane(
+                            pane_id,
+                            mere_host_runtime::ActionKind::FocusTile { index: i },
+                        ),
+                        cx,
+                    );
                 },
             ))
                 as Box<dyn Fn(&MouseUpEvent, &mut Window, &mut App)>;
             let on_close = Box::new(cx.listener(
                 move |this, _: &MouseUpEvent, _window: &mut Window, cx: &mut Context<HostRoot>| {
-                    this.close_tile_in(pane_id, i, cx);
+                    crate::host_action_bus::dispatch(
+                        this,
+                        mere_host_runtime::BusAction::pane(
+                            pane_id,
+                            mere_host_runtime::ActionKind::CloseTile { index: i },
+                        ),
+                        cx,
+                    );
                 },
             ))
                 as Box<dyn Fn(&MouseUpEvent, &mut Window, &mut App)>;
@@ -447,13 +463,43 @@ fn render_leaf(
                 .into_any_element()
         }
     };
+    // Pane wrapper accepts `PaneDragPayload` drops — the source
+    // pane gets reparented as a right-sibling of THIS pane. v0:
+    // hardcoded `InsertSide::Right`; quadrant-based side inference
+    // (top/bottom/left/right zones) is a follow-up.
+    let target_pane = pane_id;
+    let on_pane_drop = cx.listener(
+        move |this,
+              payload: &mere_host_runtime::PaneDragPayload,
+              _window: &mut Window,
+              cx: &mut Context<HostRoot>| {
+            if payload.pane_id == target_pane {
+                return; // self-drop: no-op
+            }
+            crate::host_action_bus::dispatch(
+                this,
+                mere_host_runtime::BusAction::pane(
+                    target_pane,
+                    mere_host_runtime::ActionKind::ReparentPane {
+                        source: payload.pane_id,
+                        side: mere_frame::InsertSide::Right,
+                    },
+                ),
+                cx,
+            );
+        },
+    );
+    let wrapper_id: gpui::ElementId =
+        gpui::SharedString::from(format!("pane-wrapper-{}", pane_id.0)).into();
     div()
+        .id(wrapper_id)
         .flex()
         .flex_col()
         .size_full()
         .overflow_hidden()
         .border_1()
         .border_color(rgb(0x2a2a2a))
+        .on_drop::<mere_host_runtime::PaneDragPayload>(on_pane_drop)
         .child(render_pane_header(pane_id, content, cx))
         .child(body_container)
         .into_any_element()
@@ -468,12 +514,99 @@ fn render_pane_header(
     content: &PaneContent,
     cx: &Context<HostRoot>,
 ) -> AnyElement {
+    // Bus-routed close-pane: target = Pane(pane_id); execute path
+    // calls HostRoot::close_pane.
     let close = cx.listener(
         move |this, _: &MouseUpEvent, _window: &mut Window, cx: &mut Context<HostRoot>| {
-            this.close_pane(pane_id, cx);
+            crate::host_action_bus::dispatch(
+                this,
+                mere_host_runtime::BusAction::pane(
+                    pane_id,
+                    mere_host_runtime::ActionKind::ClosePane,
+                ),
+                cx,
+            );
         },
     );
+    // Right-click on the pane header opens the pane context menu.
+    // Per the pane-UX brief §4.3: close pane + tear-out modes +
+    // reparent (reserved until drag-rearrange lands).
+    let content_is_workbench = matches!(content, PaneContent::Workbench);
+    let on_right_click = cx.listener(
+        move |this, ev: &gpui::MouseDownEvent, _window: &mut Window, cx: &mut Context<HostRoot>| {
+            use crate::context_menu::ContextMenuEntry;
+            use mere_host_runtime::{ActionKind, BusAction, TearOutMode};
+            let mut entries = vec![
+                ContextMenuEntry::new(
+                    "Close pane",
+                    BusAction::pane(pane_id, ActionKind::ClosePane),
+                )
+                .with_separator(),
+            ];
+            // Tear-out only makes sense for workbenches (the source
+            // of tile state). Other pane kinds get a simpler menu.
+            if content_is_workbench {
+                entries.push(
+                    ContextMenuEntry::new(
+                        "Tear out as leaf",
+                        BusAction::pane(
+                            pane_id,
+                            ActionKind::TearOutTile {
+                                mode: TearOutMode::Leaf,
+                                tile_index: None,
+                            },
+                        ),
+                    ),
+                );
+                entries.push(
+                    ContextMenuEntry::new(
+                        "Tear out as branch",
+                        BusAction::pane(
+                            pane_id,
+                            ActionKind::TearOutTile {
+                                mode: TearOutMode::Branch,
+                                tile_index: None,
+                            },
+                        ),
+                    ),
+                );
+                entries.push(
+                    ContextMenuEntry::new(
+                        "Tear out as fork",
+                        BusAction::pane(
+                            pane_id,
+                            ActionKind::TearOutTile {
+                                mode: TearOutMode::Fork,
+                                tile_index: None,
+                            },
+                        ),
+                    )
+                    .with_separator(),
+                );
+            }
+            // Drag-to-reparent is wired on the pane header itself
+            // (see `render_pane_header`'s `on_drag`). The context
+            // menu surfaces the affordance as a hint — disabled
+            // because clicking does nothing; the user drags the
+            // header to invoke it.
+            entries.push(
+                ContextMenuEntry::new(
+                    "Move pane \u{2014} drag the header",
+                    BusAction::app(ActionKind::Quit),
+                )
+                .disabled("drag the pane header to relocate"),
+            );
+            this.open_context_menu(ev.position, entries, cx);
+        },
+    );
+    // Make the header a drag source: dragging it carries a
+    // `PaneDragPayload { pane_id }`; the drop handler on any pane
+    // wrapper resolves the target and fires `ReparentPane`.
+    let drag_label = content.tag().to_string();
+    let header_id: gpui::ElementId =
+        gpui::SharedString::from(format!("pane-header-{}", pane_id.0)).into();
     div()
+        .id(header_id)
         .flex()
         .flex_row()
         .items_center()
@@ -484,6 +617,16 @@ fn render_pane_header(
         .bg(rgb(0x141414))
         .border_b_1()
         .border_color(rgb(0x2a2a2a))
+        .cursor(gpui::CursorStyle::OpenHand)
+        .on_drag(
+            mere_host_runtime::PaneDragPayload { pane_id },
+            move |_payload, _offset, _window, cx| {
+                cx.new(|_| crate::tearout::DraggedPaneLabel {
+                    text: drag_label.clone(),
+                })
+            },
+        )
+        .on_mouse_down(MouseButton::Right, on_right_click)
         .child(div().flex_1().child(content.tag().to_string()))
         .child(
             div()

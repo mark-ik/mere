@@ -31,3 +31,16 @@ pub struct TileDragPayload {
     pub pane_id: PaneId,
     pub tile_index: usize,
 }
+
+/// Payload carried by a pane-header drag gesture. Identifies the
+/// source pane being relocated; the drop handler computes which
+/// pane was the target + which side, then dispatches
+/// `ActionKind::ReparentPane`.
+///
+/// Per the [pane-UX brief](../../../../design_docs/mere_docs/design/2026-05-11_pane_ux_design_pass_brief.md)
+/// §1: drag a pane header to rearrange the frame without losing
+/// per-pane state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PaneDragPayload {
+    pub pane_id: PaneId,
+}

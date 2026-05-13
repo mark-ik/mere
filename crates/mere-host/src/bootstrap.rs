@@ -453,6 +453,8 @@ fn open_window(
                     dragging_splitter: None,
                     graph_switcher_open: false,
                     permission_gate: Box::new(mere_host_runtime::PermitEverythingGate),
+                    context_menu: None,
+                    tearout_toast: None,
                 };
                 host.reconcile_panes();
                 if let Some(active_tiles) = host.active_tiles_mut() {

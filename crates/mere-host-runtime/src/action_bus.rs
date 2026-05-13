@@ -55,7 +55,7 @@
 //! bus is the explicit next slice; this module's API is what that
 //! migration targets.
 
-use mere_frame::{FrameId, GraphId, PaneId, SessionId};
+use mere_frame::{FrameId, GraphId, InsertSide, PaneId, SessionId};
 use mere_kernel::graph::NodeKey;
 
 use crate::manifest::PersonaId;
@@ -147,6 +147,14 @@ pub enum ActionKind {
 
     // ---- Pane management (target = Frame / Pane)
     ClosePane,
+    /// Move the `source` pane to sit adjacent to the *target* pane
+    /// (target = the dispatch's `ActionTarget::Pane`) on `side`.
+    /// Source's content + pane_id + per-pane state survive the
+    /// move. Per the pane-UX brief §1.
+    ReparentPane {
+        source: PaneId,
+        side: InsertSide,
+    },
     ToggleWorkbench,
     ToggleGloss,
     ToggleApparatus,
@@ -154,9 +162,18 @@ pub enum ActionKind {
     SummonOrreryForGraph(GraphId),
     ToggleGraphSwitcher,
 
-    // ---- Tear-out (target = Pane, with mode)
+    // ---- Tear-out (target = Pane; mode picks leaf/branch/fork)
+    /// Tear out a tile from a workbench. `tile_index = None` means
+    /// "use the donor pane's currently-active tile" (the usual
+    /// case for keybinding-driven tear-out). `tile_index = Some(i)`
+    /// names a specific tile in the donor's strip — drag-drop
+    /// gestures and right-click-on-tile-row use this so the
+    /// torn-out tile is the one the user *grabbed*, not whatever
+    /// happens to be active at drop time.
     TearOutTile {
         mode: TearOutMode,
+        #[allow(dead_code)]
+        tile_index: Option<usize>,
     },
     /// Toast button — promote an existing leaf window to a branch
     /// or fork. Target is the leaf window's workbench pane.
@@ -346,9 +363,27 @@ mod tests {
 
     #[test]
     fn tear_out_mode_distinguishes_three_operations() {
-        let leaf = BusAction::pane(fixture_pane(1), ActionKind::TearOutTile { mode: TearOutMode::Leaf });
-        let branch = BusAction::pane(fixture_pane(1), ActionKind::TearOutTile { mode: TearOutMode::Branch });
-        let fork = BusAction::pane(fixture_pane(1), ActionKind::TearOutTile { mode: TearOutMode::Fork });
+        let leaf = BusAction::pane(
+            fixture_pane(1),
+            ActionKind::TearOutTile {
+                mode: TearOutMode::Leaf,
+                tile_index: None,
+            },
+        );
+        let branch = BusAction::pane(
+            fixture_pane(1),
+            ActionKind::TearOutTile {
+                mode: TearOutMode::Branch,
+                tile_index: None,
+            },
+        );
+        let fork = BusAction::pane(
+            fixture_pane(1),
+            ActionKind::TearOutTile {
+                mode: TearOutMode::Fork,
+                tile_index: None,
+            },
+        );
         assert_ne!(leaf, branch);
         assert_ne!(branch, fork);
         assert_ne!(leaf, fork);
@@ -406,6 +441,7 @@ mod tests {
                 fixture_pane(1),
                 ActionKind::TearOutTile {
                     mode: TearOutMode::Leaf,
+                    tile_index: None,
                 },
             ),
             BusAction::session(fixture_session(1), ActionKind::KillSession),

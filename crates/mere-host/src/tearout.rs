@@ -49,6 +49,34 @@ pub struct DraggedTileLabel {
     pub text: String,
 }
 
+/// Drag visual for a pane being relocated. Same shape as
+/// `DraggedTileLabel`, just visually distinct (pane chrome darker
+/// + label = pane kind tag) so users see which gesture is active.
+pub struct DraggedPaneLabel {
+    pub text: String,
+}
+
+impl gpui::Render for DraggedPaneLabel {
+    fn render(
+        &mut self,
+        _window: &mut gpui::Window,
+        _cx: &mut gpui::Context<Self>,
+    ) -> impl gpui::IntoElement {
+        use gpui::prelude::*;
+        gpui::div()
+            .bg(gpui::rgb(0x3a4060))
+            .text_color(gpui::rgb(0xf0f0f0))
+            .px_3()
+            .py(gpui::px(4.0))
+            .text_xs()
+            .border_1()
+            .border_color(gpui::rgb(0x6090d0))
+            .rounded_md()
+            .shadow_lg()
+            .child(format!("\u{2630} {}", self.text))
+    }
+}
+
 impl Render for DraggedTileLabel {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()

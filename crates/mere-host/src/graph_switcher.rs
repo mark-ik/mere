@@ -48,12 +48,33 @@ impl HostRoot {
 
         let mut list = div().flex().flex_col().w_full();
         for (graph_id, name, already_here) in graphs {
+            // Bus-routed: SummonOrreryForGraph carries the graph_id
+            // payload; target inference resolves to Frame.
             let on_select = cx.listener(
                 move |this, _: &MouseUpEvent, _window: &mut Window, cx: &mut Context<Self>| {
-                    this.summon_orrery_for_graph(graph_id, cx);
+                    crate::host_action_bus::dispatch_kind(
+                        this,
+                        mere_host_runtime::ActionKind::SummonOrreryForGraph(graph_id),
+                        cx,
+                    );
                 },
             );
-            list = list.child(render_graph_row(graph_id, name, already_here, on_select));
+            let row_name = name.clone();
+            let on_right_click = cx.listener(
+                move |this,
+                      ev: &gpui::MouseDownEvent,
+                      _window: &mut Window,
+                      cx: &mut Context<Self>| {
+                    open_session_row_context_menu(this, graph_id, row_name.clone(), ev.position, cx);
+                },
+            );
+            list = list.child(render_graph_row(
+                graph_id,
+                name,
+                already_here,
+                on_select,
+                on_right_click,
+            ));
         }
 
         // Anchor near the top-left (under where the panel buttons
@@ -113,6 +134,7 @@ fn render_graph_row(
     name: String,
     already_here: bool,
     on_click: impl Fn(&MouseUpEvent, &mut Window, &mut App) + 'static,
+    on_right_click: impl Fn(&gpui::MouseDownEvent, &mut Window, &mut App) + 'static,
 ) -> gpui::AnyElement {
     let (bg, fg) = if already_here {
         (rgb(0x223a55), rgb(0xf0f0f0))
@@ -139,6 +161,7 @@ fn render_graph_row(
         .border_color(rgb(0x222222))
         .hover(|s| s.bg(rgb(0x2a2a2a)))
         .on_mouse_up(MouseButton::Left, on_click)
+        .on_mouse_down(MouseButton::Right, on_right_click)
         .child(div().flex_1().min_w(px(0.0)).child(name))
         .child(
             div()
@@ -153,4 +176,35 @@ fn render_graph_row(
                 .child(badge),
         )
         .into_any_element()
+}
+
+/// Context menu builder for a graph-switcher row. Mirrors the
+/// [pane-UX brief](../../../design_docs/mere_docs/design/2026-05-11_pane_ux_design_pass_brief.md)
+/// §4.3 session-switcher-row entries: Attach here (today's
+/// left-click); reserved entries for rename, kill, show-on-disk
+/// surface what's coming.
+fn open_session_row_context_menu(
+    this: &mut HostRoot,
+    graph_id: GraphId,
+    _row_name: String,
+    position: gpui::Point<gpui::Pixels>,
+    cx: &mut Context<HostRoot>,
+) {
+    use crate::context_menu::ContextMenuEntry;
+    use mere_host_runtime::{ActionKind, BusAction};
+
+    let entries = vec![
+        ContextMenuEntry::new(
+            "Attach here",
+            BusAction::app(ActionKind::SummonOrreryForGraph(graph_id)),
+        )
+        .with_separator(),
+        ContextMenuEntry::new("Rename session", BusAction::app(ActionKind::Quit))
+            .disabled("manifest.display_name editing not yet wired"),
+        ContextMenuEntry::new("Kill session", BusAction::app(ActionKind::Quit))
+            .disabled("manifest-store host wiring pending"),
+        ContextMenuEntry::new("Show on disk", BusAction::app(ActionKind::Quit))
+            .disabled("not yet implemented"),
+    ];
+    this.open_context_menu(position, entries, cx);
 }
