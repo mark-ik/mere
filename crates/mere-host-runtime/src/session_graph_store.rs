@@ -108,11 +108,14 @@ mod tests {
         let mut g = Graph::new();
         let a = g.add_node("mere://intro".to_string(), Point2D::new(0.0, 0.0));
         let b = g.add_node("mere://probes".to_string(), Point2D::new(80.0, 40.0));
-        let _ = g.add_edge(
+        let _ = g.assert_relation(
             a,
             b,
-            mere_kernel::graph::EdgeType::Hyperlink,
-            None,
+            mere_kernel::graph::EdgeAssertion::Semantic {
+                sub_kind: mere_kernel::graph::SemanticSubKind::Hyperlink,
+                label: None,
+                decay_progress: None,
+            },
         );
         g
     }

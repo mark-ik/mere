@@ -180,6 +180,18 @@ pub enum ActionKind {
     PromoteLeafToBranch,
     PromoteLeafToFork,
 
+    /// Pin a graph node as a standalone tile leaf in the frame —
+    /// renders the document body without a workbench strip. Per
+    /// the pane-UX brief §3 frametree side-by-side rendering.
+    /// Source: the active workbench's active tile (or explicit
+    /// node when called from a context-menu builder). The new
+    /// `PaneContent::Tile(LeafNodeRef)` leaf summons to the right
+    /// of the target pane.
+    PinTileToFrame {
+        node: mere_frame::LeafNodeRef,
+        graph_id: GraphId,
+    },
+
     // ---- Phase 3 fork machinery (target = Session)
     ForkStickyNoteSession,
 

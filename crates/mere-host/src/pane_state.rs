@@ -84,6 +84,9 @@ impl PaneState {
         match content {
             PaneContent::Orrery => Self::Orrery(OrreryPaneState::default()),
             PaneContent::Workbench => Self::Workbench(WorkbenchPaneState::default()),
+            // Pinned-tile leaves don't carry per-instance state —
+            // the document lives in whatever workbench has the
+            // tile open (looked up at render time).
             _ => Self::Other,
         }
     }

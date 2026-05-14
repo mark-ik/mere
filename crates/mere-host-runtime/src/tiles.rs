@@ -24,8 +24,10 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
 
-use inker::EngineDocument;
+use inker::{EngineDocument, SurfaceProducer};
 use mere_kernel::graph::NodeKey;
+
+use crate::surface_tile::SurfaceTileState;
 
 /// One entry in a tile's within-tile navigation history. Records
 /// the URL visited and the timestamp it was loaded. The document
@@ -190,6 +192,11 @@ pub struct TileManager {
     open: Vec<NodeKey>,
     active: Option<usize>,
     state: HashMap<NodeKey, TileState>,
+    /// Parallel state map for surface-engine tiles (e.g. `scrying.web`).
+    /// A given anchor is always one flavor or the other — the routing
+    /// decision picks which at open time (slice 5 of the scrying plan).
+    /// Slice 3 just makes both flavors addressable from the same manager.
+    surface: HashMap<NodeKey, SurfaceTileState>,
 }
 
 impl TileManager {
@@ -332,16 +339,91 @@ impl TileManager {
         self.active_node()
     }
 
+    // ── Surface-tile API ────────────────────────────────────────────────
+
+    /// Open a new surface tile anchored at `node`, or focus the existing
+    /// one if `node` already has a surface tile. The `producer` is a live
+    /// [`SurfaceProducer`] (already spawned by the engine); `engine_id`
+    /// identifies which engine produced it (e.g. `"scrying.web"`).
+    ///
+    /// Returns `true` when a fresh tile was added; `false` when the
+    /// existing surface tile was re-focused (in which case `producer` is
+    /// dropped — the existing producer is kept).
+    pub fn open_or_focus_surface(
+        &mut self,
+        node: NodeKey,
+        anchor_url: String,
+        producer: Box<dyn SurfaceProducer>,
+        engine_id: impl Into<String>,
+    ) -> bool {
+        if let Some(i) = self.open.iter().position(|n| *n == node) {
+            self.active = Some(i);
+            // Existing surface tile keeps its producer; the freshly-passed
+            // one drops here. Existing document tile would coexist —
+            // routing should not normally call this for a doc-tile
+            // anchor, but if it does, we leave the doc state alone and
+            // start tracking surface state too. Same-anchor flavor flip
+            // is policy elsewhere.
+            let _ = producer;
+            false
+        } else {
+            self.open.push(node);
+            self.surface.insert(
+                node,
+                SurfaceTileState::spawned(engine_id, producer, anchor_url),
+            );
+            self.active = Some(self.open.len() - 1);
+            true
+        }
+    }
+
+    /// Borrow the surface state for `node`, if it has one.
+    pub fn surface_state(&self, node: NodeKey) -> Option<&SurfaceTileState> {
+        self.surface.get(&node)
+    }
+
+    /// Mutably borrow the surface state for `node`, if it has one.
+    pub fn surface_state_mut(&mut self, node: NodeKey) -> Option<&mut SurfaceTileState> {
+        self.surface.get_mut(&node)
+    }
+
+    /// Borrow the active tile's surface state, if any.
+    pub fn active_surface_state(&self) -> Option<&SurfaceTileState> {
+        let node = self.active_node()?;
+        self.surface.get(&node)
+    }
+
+    /// Mutably borrow the active tile's surface state, if any.
+    pub fn active_surface_state_mut(&mut self) -> Option<&mut SurfaceTileState> {
+        let node = self.active.and_then(|i| self.open.get(i).copied())?;
+        self.surface.get_mut(&node)
+    }
+
+    /// Whether `node` is anchored by a surface-engine tile. False both for
+    /// document-engine tiles and for unknown anchors.
+    pub fn is_surface_tile(&self, node: NodeKey) -> bool {
+        self.surface.contains_key(&node)
+    }
+
+    /// Iterator over all open surface-tile anchors. Useful for the host's
+    /// per-tick `step()` driver, which needs to poll every active producer.
+    pub fn surface_tile_anchors(&self) -> impl Iterator<Item = NodeKey> + '_ {
+        self.surface.keys().copied()
+    }
+
     /// Close the tile at `index`. The tile's per-anchor state (and
-    /// its document cache) is dropped — the underlying graph node
-    /// stays alive for other tiles / the orrery. Returns the new
-    /// active `NodeKey` if any.
+    /// its document cache, or surface producer) is dropped — the
+    /// underlying graph node stays alive for other tiles / the orrery.
+    /// Returns the new active `NodeKey` if any.
     pub fn close_index(&mut self, index: usize) -> Option<NodeKey> {
         if index >= self.open.len() {
             return self.active_node();
         }
         let removed = self.open.remove(index);
         self.state.remove(&removed);
+        // Dropping the surface state drops the producer, which tears
+        // down its underlying WebView control.
+        self.surface.remove(&removed);
         if self.open.is_empty() {
             self.active = None;
         } else if let Some(active) = self.active {

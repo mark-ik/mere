@@ -257,7 +257,11 @@ pub trait SurfaceEngine: Send + Sync {
 /// All methods take `&mut self`: the producer is single-owner, driven
 /// sequentially by the host's render loop. Input flows in through `send_*`
 /// and `move_focus`; output flows out through `acquire_frame` and `poll_*`.
-pub trait SurfaceProducer: Send {
+///
+/// Not `Send`: producers may be STA-bound (Windows WebView2 COM) or
+/// main-thread-only (macOS WKWebView, gpui main thread). The host drives them
+/// from a single thread per producer.
+pub trait SurfaceProducer {
     // ── Layout ──────────────────────────────────────────────────────────────
     fn resize(&mut self, width: u32, height: u32) -> Result<(), SurfaceError>;
     fn set_offset(&mut self, x: i32, y: i32) -> Result<(), SurfaceError>;

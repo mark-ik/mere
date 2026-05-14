@@ -529,6 +529,16 @@ pub enum PersistedNavigationTrigger {
     AddressBarEntry,
     PanePromotion,
     Programmatic,
+    /// Server redirect (3xx) or meta-refresh.
+    Redirect,
+    /// Navigation re-issued by session restore.
+    ReopenSession,
+    /// In-document anchor / fragment jump.
+    JumpAnchor,
+    /// Find-in-page-style within-document search jump.
+    InPageSearchJump,
+    /// Imported from another browser's history database.
+    ImportedHistory,
 }
 
 /// Persisted edge.

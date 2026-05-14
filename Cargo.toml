@@ -16,6 +16,7 @@ members = [
     "crates/graphshell/shell-state",
     "crates/verso-tile",
     "crates/inker",
+    "crates/scrying-tile-engine",
     "crates/platen",
     "crates/nematic",
     "crates/eidetic",

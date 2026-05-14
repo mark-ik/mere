@@ -92,7 +92,15 @@ mod tests {
     use graph_canvas::projection::{ProjectionMode, TwoPointFiveProjection, ViewDimension};
     use graph_canvas::scene::SceneMode;
     use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::EdgeType;
+    use mere_kernel::graph::{EdgeAssertion, SemanticSubKind};
+
+    fn hyperlink() -> EdgeAssertion {
+        EdgeAssertion::Semantic {
+            sub_kind: SemanticSubKind::Hyperlink,
+            label: None,
+            decay_progress: None,
+        }
+    }
     use mere_kernel::pane::PaneId;
     use uuid::Uuid;
 
@@ -126,7 +134,7 @@ mod tests {
         workspace
             .domain
             .graph
-            .add_edge(first, second, EdgeType::Hyperlink, None)
+            .assert_relation(first, second, hyperlink())
             .unwrap();
         let view_id = view_id(3);
         workspace.views.ensure_view(view_id);
@@ -148,7 +156,7 @@ mod tests {
         workspace
             .domain
             .graph
-            .add_edge(first, second, EdgeType::Hyperlink, None)
+            .assert_relation(first, second, hyperlink())
             .unwrap();
         let view_id = view_id(12);
         workspace.views.ensure_view(view_id);

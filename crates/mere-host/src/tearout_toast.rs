@@ -25,6 +25,8 @@
 //! - No auto-dismiss timer yet — manual dismiss only. Adding the
 //!   timer is a polish slice.
 
+use std::time::{Duration, Instant};
+
 use gpui::{
     Context, IntoElement, MouseButton, MouseUpEvent, Window, div, prelude::*, px, rgb,
 };
@@ -32,26 +34,67 @@ use mere_host_runtime::{ActionKind, BusAction};
 
 use crate::HostRoot;
 
+/// Default auto-dismiss interval for the tear-out promotion toast.
+/// Per the [pane-UX brief](../../../design_docs/mere_docs/design/2026-05-11_pane_ux_design_pass_brief.md)
+/// §3.2: 8 seconds. Configurable target — exposed for the future
+/// `omnibar.toast.auto_dismiss_ms` setting.
+pub const TOAST_AUTO_DISMISS: Duration = Duration::from_secs(8);
+
 /// Live state for an open tear-out promotion toast. Records the
 /// donor pane + tile index in case the execute path needs them
 /// (e.g. when "Promote to branch" needs the originating workbench
 /// to mint its graphlet against).
+///
+/// `shown_at` is a generation marker. When `show_tearout_toast`
+/// spawns the auto-dismiss timer, it captures this instant; the
+/// timer checks that the **current** state's `shown_at` still
+/// matches before dismissing — so a re-show (or user-driven
+/// dismiss followed by a fresh show) within 8s doesn't get
+/// cancelled by the original timer.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct TearoutToastState {
     pub donor_pane: mere_frame::PaneId,
     pub tile_index: usize,
+    pub shown_at: Instant,
 }
 
 impl HostRoot {
     /// Show the tear-out promotion toast. Replaces any existing
-    /// toast (only one visible at a time per window).
+    /// toast (only one visible at a time per window). Caller passes
+    /// `donor_pane` + `tile_index`; `shown_at` is stamped here.
+    /// Also schedules an auto-dismiss timer (8s default).
     pub(crate) fn show_tearout_toast(
         &mut self,
-        state: TearoutToastState,
+        donor_pane: mere_frame::PaneId,
+        tile_index: usize,
         cx: &mut Context<Self>,
     ) {
-        self.tearout_toast = Some(state);
+        let shown_at = Instant::now();
+        self.tearout_toast = Some(TearoutToastState {
+            donor_pane,
+            tile_index,
+            shown_at,
+        });
         cx.notify();
+
+        // Auto-dismiss timer. Captures the `shown_at` generation;
+        // when it fires, only dismisses if the current state's
+        // `shown_at` still matches — so a fresh show within the
+        // window doesn't get killed by the original timer.
+        cx.spawn(async move |this, cx| {
+            let mut cx = cx.clone();
+            cx.background_executor().timer(TOAST_AUTO_DISMISS).await;
+            let _ = this.update(&mut cx, |this, cx| {
+                if let Some(state) = this.tearout_toast {
+                    if state.shown_at == shown_at {
+                        this.tearout_toast = None;
+                        cx.notify();
+                        tracing::debug!("tearout_toast: auto-dismissed");
+                    }
+                }
+            });
+        })
+        .detach();
     }
 
     /// Dismiss the toast. No-op when none is showing.

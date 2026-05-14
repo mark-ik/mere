@@ -14,7 +14,7 @@ use euclid::default::Point2D;
 use inker::{Engine, EngineDocument, EngineInput};
 use mere_frame::{FrameLayout, GraphId, PaneContent, PaneNode, SplitAxis};
 use mere_graphshell::frame_model::ToolbarViewModel;
-use mere_kernel::graph::{EdgeType, Graph, NodeKey};
+use mere_kernel::graph::{EdgeAssertion, Graph, NodeKey, SemanticSubKind};
 use mere_kernel::pane::PaneId;
 use nematic::MarkdownEngine;
 use platen::{FrameId, ProjectedPane, WorkbenchProjection};
@@ -59,9 +59,14 @@ pub fn render_demo_graph_state() -> Graph {
         "https://mere.test/probes".to_string(),
         Point2D::new(0.0, 80.0),
     );
-    let _ = graph.add_edge(intro, arch, EdgeType::Hyperlink, None);
-    let _ = graph.add_edge(arch, probes, EdgeType::Hyperlink, None);
-    let _ = graph.add_edge(intro, probes, EdgeType::Hyperlink, None);
+    let hyperlink = || EdgeAssertion::Semantic {
+        sub_kind: SemanticSubKind::Hyperlink,
+        label: None,
+        decay_progress: None,
+    };
+    let _ = graph.assert_relation(intro, arch, hyperlink());
+    let _ = graph.assert_relation(arch, probes, hyperlink());
+    let _ = graph.assert_relation(intro, probes, hyperlink());
     graph
 }
 

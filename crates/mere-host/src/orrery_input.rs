@@ -582,12 +582,22 @@ fn open_node_context_menu(
         )
         .with_separator(),
     ];
+    // Pin node → open as a `PaneContent::Tile` leaf in the frame.
+    entries.push(
+        ContextMenuEntry::new(
+            "Pin to frame",
+            BusAction::pane(
+                pane_id,
+                ActionKind::PinTileToFrame {
+                    node: mere_frame::LeafNodeRef(node.index() as u32),
+                    graph_id,
+                },
+            ),
+        )
+        .with_separator(),
+    );
     // Reserved entries — surface what's coming, greyed until the
     // backing actions exist.
-    entries.push(
-        ContextMenuEntry::new("Pin node", BusAction::app(ActionKind::Quit))
-            .disabled("not yet implemented"),
-    );
     entries.push(
         ContextMenuEntry::new("Rename node", BusAction::app(ActionKind::Quit))
             .disabled("not yet implemented"),

@@ -323,10 +323,24 @@ fn render_workbench_pane(
                     },
                 )
             });
+            // Right-click → tile-strip-row context menu. Per the
+            // pane-UX brief §4.3: Focus / Close / Tear out (Leaf/
+            // Branch/Fork) / Pin to frame (reserved).
+            let on_right_click: Box<
+                dyn Fn(&gpui::MouseDownEvent, &mut Window, &mut App) + 'static,
+            > = Box::new(cx.listener(
+                move |this,
+                      ev: &gpui::MouseDownEvent,
+                      _window: &mut Window,
+                      cx: &mut Context<HostRoot>| {
+                    open_tile_row_context_menu(this, pane_id, i, ev.position, cx);
+                },
+            ));
             mere_host_workbench::WorkbenchTile {
                 label,
                 on_select,
                 on_close,
+                on_right_click: Some(on_right_click),
                 drag_apply: Some(drag_apply),
             }
         })
@@ -424,6 +438,9 @@ fn render_leaf(
                 .into_any_element(),
         },
         PaneContent::Apparatus => mere_host_apparatus::render(pctx.app_tree, pctx.events),
+        PaneContent::Tile(leaf_node_ref) => {
+            render_pinned_tile_pane(*leaf_node_ref, graph_id, pctx)
+        }
         _ => div()
             .text_color(rgb(0x707070))
             .child("(empty pane)")
@@ -644,4 +661,150 @@ fn render_pane_header(
                 .child("×"),
         )
         .into_any_element()
+}
+
+/// Render a **pinned tile** leaf — a single tile's document
+/// surface without the workbench strip. Per the pane-UX brief §3
+/// frametree side-by-side rendering: lets users keep a reference
+/// tile visible while navigating in a sibling workbench.
+///
+/// Document lookup v0: walks every workbench pane in this window;
+/// uses the first one whose TileState has the node cached. When
+/// no workbench has it (closed all relevant tiles), renders a
+/// placeholder. A later slice could re-fetch via `inker::loader`
+/// to make pinned tiles self-sufficient.
+fn render_pinned_tile_pane(
+    leaf_node_ref: mere_frame::LeafNodeRef,
+    graph_id: GraphId,
+    pctx: &PaneRenderCtx,
+) -> AnyElement {
+    let node = mere_kernel::graph::NodeKey::new(leaf_node_ref.0 as usize);
+    // Walk every workbench in the window with matching graph_id;
+    // first hit's TileState.documents wins.
+    let mut found_doc = None;
+    for (other_pid, other_content, other_gid) in pctx.frame_layout.iter_leaves() {
+        if !matches!(other_content, PaneContent::Workbench) || other_gid != graph_id {
+            continue;
+        }
+        if let Some(workbench) = pctx.panes.get(&other_pid).and_then(|s| s.as_workbench()) {
+            if let Some(doc) = workbench.tiles.document_for(node) {
+                found_doc = Some(doc);
+                break;
+            }
+        }
+    }
+    match found_doc {
+        Some(doc) => {
+            // Render just the document body — no strip. Reuse the
+            // gloss renderer which already takes &EngineDocument
+            // and produces a clean body view.
+            mere_host_gloss::render(doc)
+        }
+        None => div()
+            .flex()
+            .flex_col()
+            .items_center()
+            .justify_center()
+            .size_full()
+            .text_color(rgb(0x707070))
+            .text_sm()
+            .child("Pinned tile not loaded")
+            .child(
+                div()
+                    .text_xs()
+                    .mt_2()
+                    .child("open the tile in a workbench to populate"),
+            )
+            .into_any_element(),
+    }
+}
+
+/// Context menu builder for a tile-strip row. Per the
+/// [pane-UX brief](../../../design_docs/mere_docs/design/2026-05-11_pane_ux_design_pass_brief.md)
+/// §4.3 tile-strip-tile entries: Focus / Close / Tear-out
+/// Leaf/Branch/Fork / Pin to frame (reserved).
+fn open_tile_row_context_menu(
+    this: &mut HostRoot,
+    pane_id: PaneId,
+    tile_index: usize,
+    position: gpui::Point<gpui::Pixels>,
+    cx: &mut Context<HostRoot>,
+) {
+    use crate::context_menu::ContextMenuEntry;
+    use mere_host_runtime::{ActionKind, BusAction, TearOutMode};
+
+    // Resolve (node, graph_id) for the "Pin to frame" entry.
+    let tile_anchor = this
+        .frame_layout
+        .iter_leaves()
+        .find(|(p, _, _)| *p == pane_id)
+        .map(|(_, _, gid)| gid)
+        .and_then(|gid| {
+            this.panes
+                .get(&pane_id)
+                .and_then(|s| s.as_workbench())
+                .and_then(|w| w.tiles.open_tiles().get(tile_index).copied())
+                .map(|node| (node, gid))
+        });
+
+    let mut entries = vec![
+        ContextMenuEntry::new(
+            "Focus tile",
+            BusAction::pane(pane_id, ActionKind::FocusTile { index: tile_index }),
+        ),
+        ContextMenuEntry::new(
+            "Close tile",
+            BusAction::pane(pane_id, ActionKind::CloseTile { index: tile_index }),
+        )
+        .with_separator(),
+        ContextMenuEntry::new(
+            "Tear out as leaf",
+            BusAction::pane(
+                pane_id,
+                ActionKind::TearOutTile {
+                    mode: TearOutMode::Leaf,
+                    tile_index: Some(tile_index),
+                },
+            ),
+        ),
+        ContextMenuEntry::new(
+            "Tear out as branch",
+            BusAction::pane(
+                pane_id,
+                ActionKind::TearOutTile {
+                    mode: TearOutMode::Branch,
+                    tile_index: Some(tile_index),
+                },
+            ),
+        ),
+        ContextMenuEntry::new(
+            "Tear out as fork",
+            BusAction::pane(
+                pane_id,
+                ActionKind::TearOutTile {
+                    mode: TearOutMode::Fork,
+                    tile_index: Some(tile_index),
+                },
+            ),
+        )
+        .with_separator(),
+    ];
+    if let Some((node, graph_id)) = tile_anchor {
+        entries.push(ContextMenuEntry::new(
+            "Pin to frame",
+            BusAction::pane(
+                pane_id,
+                ActionKind::PinTileToFrame {
+                    node: mere_frame::LeafNodeRef(node.index() as u32),
+                    graph_id,
+                },
+            ),
+        ));
+    } else {
+        entries.push(
+            ContextMenuEntry::new("Pin to frame", BusAction::app(ActionKind::Quit))
+                .disabled("could not resolve tile node"),
+        );
+    }
+    this.open_context_menu(position, entries, cx);
 }

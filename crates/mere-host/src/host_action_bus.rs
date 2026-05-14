@@ -108,6 +108,7 @@ pub(crate) fn current_target_for_kind(this: &HostRoot, kind: &ActionKind) -> Act
         | TearOutTile { .. }
         | PromoteLeafToBranch
         | PromoteLeafToFork
+        | PinTileToFrame { .. }
             => this
                 .active_workbench
                 .map(ActionTarget::Pane)
@@ -257,6 +258,20 @@ fn execute(
                     this.tear_out_tile_as_branch_for(donor_pane, idx, cx);
                 }
             }
+        }
+
+        PinTileToFrame { node, graph_id } => {
+            // Target = anchor pane (the one the user invoked from);
+            // fall back to active workbench when target is App.
+            let anchor = match target {
+                ActionTarget::Pane(pid) => Some(pid),
+                _ => this.active_workbench,
+            };
+            let Some(anchor_pane) = anchor else {
+                tracing::debug!(?node, "PinTileToFrame: no anchor pane");
+                return;
+            };
+            this.pin_tile_to_frame(anchor_pane, node, graph_id, cx);
         }
 
         PromoteLeafToBranch | PromoteLeafToFork => {

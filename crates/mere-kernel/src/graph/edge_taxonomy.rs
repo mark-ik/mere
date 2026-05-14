@@ -318,6 +318,14 @@ pub enum RelationSelector {
 }
 
 /// Trigger classification for a traversal event.
+///
+/// Expanded per the 2026-05-11 relation-taxonomy-and-edge-mutation
+/// plan §2: `Traversal` stays the one family without sub-kinds;
+/// temporal nuance instead lives here in the trigger vocabulary.
+/// Five additions to cover the cases the prior plan called out:
+/// HTTP / meta redirects, session-restore navigations, in-document
+/// fragment jumps, find-in-page-style jumps, and imported-history
+/// hypotheses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
 pub enum NavigationTrigger {
     Unknown,
@@ -327,11 +335,82 @@ pub enum NavigationTrigger {
     AddressBarEntry,
     PanePromotion,
     Programmatic,
+    /// Server redirect (3xx) or meta-refresh — the user didn't
+    /// directly initiate this hop.
+    Redirect,
+    /// Navigation re-issued by a session restore (window reopen,
+    /// "restore previous tabs," persisted-session rehydration).
+    ReopenSession,
+    /// In-document anchor jump (fragment / `#section`) — same
+    /// document, scroll destination changes.
+    JumpAnchor,
+    /// "Find in page" or analogous within-document search jumps
+    /// that surface as a navigation event.
+    InPageSearchJump,
+    /// Imported from another browser's history database. Distinct
+    /// from `Unknown` so importers can tag confidence-bounded
+    /// traversal hypotheses without conflating them with native
+    /// user navigation.
+    ImportedHistory,
 }
 
 impl NavigationTrigger {
+    #[allow(dead_code)]
     fn contributes_to_forward_count(self) -> bool {
         !matches!(self, Self::Back)
+    }
+}
+
+/// Canonical read-side classifier for an edge's relation. Combines
+/// family + sub-kind into one enum that callers reaching for "what
+/// kind of relation is this?" can match on without touching the
+/// write-side `EdgeAssertion` payload.
+///
+/// Per the 2026-05-11 relation-taxonomy plan §3: `RelationKind`
+/// is the discriminant shape (`RelationKind ≈
+/// discriminant(EdgeAssertion)`), used by canvas hit-tests, render
+/// policy, filter UIs, action-target inference, and view-local
+/// hide keys. `EdgeAssertion` remains the write contract — it
+/// carries construction-time payload (labels, decay state, etc.)
+/// that read sites don't need.
+///
+/// `Traversal` is the one variant without a sub-kind: traversal
+/// is event-shaped, with temporal nuance in [`NavigationTrigger`]
+/// rather than a `TraversalSubKind` enum.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Archive,
+    Serialize,
+    Deserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub enum RelationKind {
+    Semantic(SemanticSubKind),
+    Traversal,
+    Containment(ContainmentSubKind),
+    Arrangement(ArrangementSubKind),
+    Imported(ImportedSubKind),
+    Provenance(ProvenanceSubKind),
+}
+
+impl RelationKind {
+    /// Project to the relation's family. Pure function — no payload
+    /// access required.
+    pub fn family(self) -> EdgeFamily {
+        match self {
+            RelationKind::Semantic(_) => EdgeFamily::Semantic,
+            RelationKind::Traversal => EdgeFamily::Traversal,
+            RelationKind::Containment(_) => EdgeFamily::Containment,
+            RelationKind::Arrangement(_) => EdgeFamily::Arrangement,
+            RelationKind::Imported(_) => EdgeFamily::Imported,
+            RelationKind::Provenance(_) => EdgeFamily::Provenance,
+        }
     }
 }
 

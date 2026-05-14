@@ -26,7 +26,7 @@ use super::identity::{EdgeKey, NodeKey};
 use super::node::Node;
 use super::snapshot::containment_parent_url;
 use super::{
-    ArrangementEdgeView, ContainmentEdgeView, EdgeView, Graph, SemanticEdgeView,
+    ArrangementEdgeView, ContainmentEdgeView, EdgeView, Graph, RelationView, SemanticEdgeView,
 };
 
 impl Graph {
@@ -67,6 +67,85 @@ impl Graph {
         self.inner
             .node_indices()
             .map(move |idx| (idx, &self.inner[idx]))
+    }
+
+    /// Iterate over all stored relations, one row per
+    /// (from, to, [`RelationKind`]) tuple. A multi-relation edge
+    /// (an `EdgePayload` carrying multiple typed sidecars between
+    /// the same node pair) yields multiple rows.
+    ///
+    /// This is the canonical read surface per the 2026-05-11
+    /// relation-taxonomy plan §2. It coexists with [`Self::edges`]
+    /// (legacy [`EdgeType`]-flavoured) until stage 3 callers
+    /// migrate and stage 4 removes `edges()` entirely.
+    pub fn relations(&self) -> impl Iterator<Item = RelationView> + '_ {
+        use super::edge_taxonomy::RelationKind;
+        self.inner.edge_references().flat_map(|edge| {
+            let from = edge.source();
+            let to = edge.target();
+            let payload = edge.weight();
+            let mut out: Vec<RelationView> = Vec::new();
+            if let Some(sem) = payload.semantic_data() {
+                for &sub_kind in &sem.sub_kinds {
+                    out.push(RelationView {
+                        from,
+                        to,
+                        kind: RelationKind::Semantic(sub_kind),
+                    });
+                }
+            }
+            // Traversal is event-shaped, no sub-kind. Presence of
+            // any traversal data (events or metrics) yields one
+            // row. Family-aware view callers reach for the
+            // typed payload for actual events.
+            if let Some(traversal) = payload.traversal_data()
+                && (!traversal.traversals.is_empty()
+                    || traversal.metrics.total_navigations > 0)
+            {
+                out.push(RelationView {
+                    from,
+                    to,
+                    kind: RelationKind::Traversal,
+                });
+            }
+            if let Some(containment) = payload.containment_data() {
+                for &sub_kind in &containment.sub_kinds {
+                    out.push(RelationView {
+                        from,
+                        to,
+                        kind: RelationKind::Containment(sub_kind),
+                    });
+                }
+            }
+            if let Some(arrangement) = payload.arrangement_data() {
+                for &sub_kind in &arrangement.sub_kinds {
+                    out.push(RelationView {
+                        from,
+                        to,
+                        kind: RelationKind::Arrangement(sub_kind),
+                    });
+                }
+            }
+            if let Some(imported) = payload.imported_data() {
+                for &sub_kind in &imported.sub_kinds {
+                    out.push(RelationView {
+                        from,
+                        to,
+                        kind: RelationKind::Imported(sub_kind),
+                    });
+                }
+            }
+            if let Some(prov) = payload.provenance_data() {
+                for &sub_kind in &prov.sub_kinds {
+                    out.push(RelationView {
+                        from,
+                        to,
+                        kind: RelationKind::Provenance(sub_kind),
+                    });
+                }
+            }
+            out.into_iter()
+        })
     }
 
     /// Iterate over all edges as EdgeView

@@ -40,6 +40,7 @@ pub mod action_bus;
 pub mod manifest;
 pub mod manifest_store;
 pub mod session_graph_store;
+pub mod surface_tile;
 pub mod tearout;
 pub mod tiles;
 
@@ -53,5 +54,6 @@ pub use manifest::{
     SessionPolicy, SessionPolicyOverride, WorkerKind,
 };
 pub use manifest_store::{LoadFailure, LoadReport, MANIFEST_FILE, ManifestStore, TRASH_DIR};
+pub use surface_tile::{SurfaceTileState, SurfaceTileStep};
 pub use tearout::{PaneDragPayload, TileDragPayload};
 pub use tiles::{HistoryEntry, NavigateMode, TileManager, TileState};

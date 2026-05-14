@@ -20,8 +20,8 @@
 #![doc(html_root_url = "https://docs.rs/mere-host-workbench/0.0.1")]
 
 use gpui::{
-    AnyElement, App, CursorStyle, Div, MouseButton, MouseUpEvent, Stateful, Window, div,
-    prelude::*, px, rgb,
+    AnyElement, App, CursorStyle, Div, MouseButton, MouseDownEvent, MouseUpEvent, Stateful, Window,
+    div, prelude::*, px, rgb,
 };
 use inker::{DocumentBlock, EngineDocument, InlineSpan};
 
@@ -50,6 +50,11 @@ pub struct WorkbenchTile {
     pub on_select: Box<dyn Fn(&MouseUpEvent, &mut Window, &mut App) + 'static>,
     /// Click handler for the row's close affordance.
     pub on_close: Box<dyn Fn(&MouseUpEvent, &mut Window, &mut App) + 'static>,
+    /// Optional right-click handler — opens the tile's context
+    /// menu (focus / close / tear-out modes / pin). When `None`
+    /// the row ignores right-clicks. Mouse-DOWN (not Up) so the
+    /// menu pops on the press, matching OS conventions.
+    pub on_right_click: Option<Box<dyn Fn(&MouseDownEvent, &mut Window, &mut App) + 'static>>,
     /// Optional drag wiring. When `Some`, the workbench applies the
     /// closure to the tile row's stateful div so the user can drag
     /// this tile out to trigger a tear-out gesture. Type-erased
@@ -179,8 +184,9 @@ fn render_tile_row(
     let close_handler = tile.on_close;
     let select_handler = tile.on_select;
     let drag_apply = tile.drag_apply;
+    let right_click = tile.on_right_click;
 
-    let row = div()
+    let mut row = div()
         .id(gpui::SharedString::from(format!("tile-row-{index}")))
         .flex()
         .flex_row()
@@ -192,6 +198,9 @@ fn render_tile_row(
         .cursor(CursorStyle::PointingHand)
         .hover(|s| s.bg(rgb(0x2a2a2a)))
         .on_mouse_up(MouseButton::Left, select_handler);
+    if let Some(rc) = right_click {
+        row = row.on_mouse_down(MouseButton::Right, rc);
+    }
     let row = if let Some(apply) = drag_apply {
         apply(row)
     } else {

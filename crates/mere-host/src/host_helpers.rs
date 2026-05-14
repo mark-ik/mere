@@ -41,11 +41,19 @@ pub(crate) fn ensure_node_for_address_near(
     let key = create_node(graph, address, position);
     if let Some(anchor_key) = anchor {
         if anchor_key != key {
-            let _ = graph.add_edge(
+            // Per 2026-05-11 relation-taxonomy plan: callers use
+            // `assert_relation(EdgeAssertion::Semantic { ... })`
+            // instead of `add_edge(EdgeType::Hyperlink)`. Same
+            // resulting Semantic(Hyperlink) sub-kind, typed write
+            // contract.
+            let _ = graph.assert_relation(
                 anchor_key,
                 key,
-                mere_kernel::graph::EdgeType::Hyperlink,
-                None,
+                mere_kernel::graph::EdgeAssertion::Semantic {
+                    sub_kind: mere_kernel::graph::SemanticSubKind::Hyperlink,
+                    label: None,
+                    decay_progress: None,
+                },
             );
         }
     }

@@ -280,6 +280,21 @@ impl Graph {
                                     PersistedNavigationTrigger::Programmatic => {
                                         NavigationTrigger::Programmatic
                                     }
+                                    PersistedNavigationTrigger::Redirect => {
+                                        NavigationTrigger::Redirect
+                                    }
+                                    PersistedNavigationTrigger::ReopenSession => {
+                                        NavigationTrigger::ReopenSession
+                                    }
+                                    PersistedNavigationTrigger::JumpAnchor => {
+                                        NavigationTrigger::JumpAnchor
+                                    }
+                                    PersistedNavigationTrigger::InPageSearchJump => {
+                                        NavigationTrigger::InPageSearchJump
+                                    }
+                                    PersistedNavigationTrigger::ImportedHistory => {
+                                        NavigationTrigger::ImportedHistory
+                                    }
                                 },
                             })
                             .collect();

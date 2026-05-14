@@ -367,4 +367,28 @@ impl Graph {
         let _ = self.inner.add_edge(from, to, payload);
         true
     }
+
+    /// Append a traversal event by `(trigger, timestamp_ms?)`.
+    /// Thin wrapper over [`Self::push_traversal`] matching the
+    /// 2026-05-11 relation-taxonomy plan §7 signature — callers
+    /// that just have a `NavigationTrigger` don't need to build a
+    /// `Traversal` struct themselves. `timestamp_ms = None` stamps
+    /// now-via-`Traversal::now`; `Some(t)` uses the supplied
+    /// timestamp (importers, replay).
+    pub fn append_traversal(
+        &mut self,
+        from: NodeKey,
+        to: NodeKey,
+        trigger: super::edge_taxonomy::NavigationTrigger,
+        timestamp_ms: Option<u64>,
+    ) -> bool {
+        let traversal = match timestamp_ms {
+            Some(timestamp_ms) => Traversal {
+                timestamp_ms,
+                trigger,
+            },
+            None => Traversal::now(trigger),
+        };
+        self.push_traversal(from, to, traversal)
+    }
 }

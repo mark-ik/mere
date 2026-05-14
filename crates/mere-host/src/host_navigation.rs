@@ -436,6 +436,40 @@ impl HostRoot {
     /// was the only one), the underlying `close_leaf` refuses to
     /// remove it — the window keeps its last panel. The user can
     /// close the window through the OS to fully release the graph.
+    /// Pin a graph node as a `PaneContent::Tile` leaf in the frame,
+    /// summoned to the right of `anchor`. Per the pane-UX brief §3
+    /// frametree side-by-side rendering: a standalone always-
+    /// visible reference tile distinct from the workbench's
+    /// active-one-at-a-time semantics.
+    pub(crate) fn pin_tile_to_frame(
+        &mut self,
+        anchor: PaneId,
+        node: mere_frame::LeafNodeRef,
+        graph_id: GraphId,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(anchor_path) = self.path_for_pane(anchor) else {
+            tracing::warn!(?anchor, "pin_tile_to_frame: anchor not in layout");
+            return;
+        };
+        let new_leaf = PaneNode::Leaf {
+            pane_id: self.mint_pane_id(),
+            content: PaneContent::Tile(node),
+            graph_id,
+        };
+        let ok = self
+            .frame_layout
+            .summon_leaf(&anchor_path, InsertSide::Right, new_leaf);
+        if !ok {
+            tracing::warn!(?anchor, "pin_tile_to_frame: summon_leaf refused");
+            return;
+        }
+        tracing::info!(?anchor, ?node, ?graph_id, "tile.pinned");
+        crate::persistence::save_frame_layout(&self.frame_layout);
+        self.rebuild_app_tree(cx);
+        cx.notify();
+    }
+
     /// Move `source` to be adjacent to `target` on `side`. Wraps
     /// `FrameLayout::reparent_leaf` with path-by-pane-id lookup
     /// + app-tree rebuild + layout save. v0 of pane drag-rearrange

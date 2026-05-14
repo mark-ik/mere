@@ -88,8 +88,8 @@ pub use edge_payload::EdgePayload;
 pub use edge_taxonomy::{
     ArrangementData, ArrangementSubKind, ContainmentData, ContainmentSubKind, EdgeAssertion,
     EdgeFamily, EdgeKind, EdgeMetrics, EdgeType, ImportedData, ImportedSubKind, NavigationTrigger,
-    ProvenanceData, ProvenanceSubKind, RelationDurability, RelationSelector, SemanticData,
-    SemanticSubKind, Traversal, TraversalData, UserGroupedData,
+    ProvenanceData, ProvenanceSubKind, RelationDurability, RelationKind, RelationSelector,
+    SemanticData, SemanticSubKind, Traversal, TraversalData, UserGroupedData,
 };
 
 /// Traversal archive payload emitted when dissolving a node.
@@ -181,6 +181,24 @@ pub struct EdgeView {
     pub from: NodeKey,
     pub to: NodeKey,
     pub edge_type: EdgeType,
+}
+
+/// Canonical read-side relation view. One row per (from, to,
+/// [`RelationKind`]) — a multi-relation node pair yields multiple
+/// rows. Replaces the `EdgeType`-flavoured [`EdgeView`] in stage 4
+/// of the 2026-05-11 relation-taxonomy plan; introduced as a pure
+/// addition in stage 1 so the discriminant is callable before any
+/// migration.
+///
+/// This is the **classifier shape** — it carries no per-relation
+/// payload (labels, decay, traversal events). Callers needing
+/// payload reach for the typed `EdgePayload` sidecar via the
+/// kernel's per-family query methods.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RelationView {
+    pub from: NodeKey,
+    pub to: NodeKey,
+    pub kind: RelationKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

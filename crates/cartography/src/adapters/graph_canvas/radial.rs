@@ -182,7 +182,7 @@ mod tests {
     use crate::request::ViewIntent;
     use crate::signals::IntelligenceSignals;
     use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::{EdgeType, Graph};
+    use mere_kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
     use uuid::Uuid;
 
     fn star_graph() -> (Graph, [NodeKey; 5]) {
@@ -213,10 +213,15 @@ mod tests {
             "test://e".into(),
             PortablePoint::new(0.0, 0.0),
         );
-        graph.add_edge(a, b, EdgeType::Hyperlink, None);
-        graph.add_edge(a, c, EdgeType::Hyperlink, None);
-        graph.add_edge(a, d, EdgeType::Hyperlink, None);
-        graph.add_edge(a, e, EdgeType::Hyperlink, None);
+        let hyperlink = || EdgeAssertion::Semantic {
+            sub_kind: SemanticSubKind::Hyperlink,
+            label: None,
+            decay_progress: None,
+        };
+        graph.assert_relation(a, b, hyperlink());
+        graph.assert_relation(a, c, hyperlink());
+        graph.assert_relation(a, d, hyperlink());
+        graph.assert_relation(a, e, hyperlink());
         (graph, [a, b, c, d, e])
     }
 

@@ -628,13 +628,8 @@ impl Render for HostRoot {
                 // window (this one) since the new leaf window
                 // shares its session — promoting routes back
                 // through the donor's HostRoot context anyway.
-                this.show_tearout_toast(
-                    crate::tearout_toast::TearoutToastState {
-                        donor_pane: payload.pane_id,
-                        tile_index: payload.tile_index,
-                    },
-                    cx,
-                );
+                // Auto-dismisses after 8s.
+                this.show_tearout_toast(payload.pane_id, payload.tile_index, cx);
             },
         );
 
