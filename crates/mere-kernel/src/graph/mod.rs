@@ -80,16 +80,18 @@ pub use history::{
     NodeHistoryOwner, NodeHistoryProjection, NodeHistorySemanticSummary, NodeNavigationMemory,
 };
 
-// Edge taxonomy (kind/family/sub-kind enums, family-specific data
-// structs) and `EdgePayload` extracted to their own modules
-// (2026-05-11 kernel-mod decomposition pass). Re-exported so external
-// callers (`mere_kernel::graph::EdgeType`, etc.) keep resolving.
+// Edge taxonomy (family/sub-kind enums, family-specific data structs)
+// and `EdgePayload` extracted to their own modules (2026-05-11
+// kernel-mod decomposition pass). Stage 4 of the 2026-05-11
+// relation-taxonomy plan removed `EdgeType` and `EdgeKind`; reads go
+// through [`RelationKind`] + [`RelationSelector`], writes through
+// [`EdgeAssertion`].
 pub use edge_payload::EdgePayload;
 pub use edge_taxonomy::{
     ArrangementData, ArrangementSubKind, ContainmentData, ContainmentSubKind, EdgeAssertion,
-    EdgeFamily, EdgeKind, EdgeMetrics, EdgeType, ImportedData, ImportedSubKind, NavigationTrigger,
-    ProvenanceData, ProvenanceSubKind, RelationDurability, RelationKind, RelationSelector,
-    SemanticData, SemanticSubKind, Traversal, TraversalData, UserGroupedData,
+    EdgeFamily, EdgeMetrics, ImportedData, ImportedSubKind, NavigationTrigger, ProvenanceData,
+    ProvenanceSubKind, RelationDurability, RelationKind, RelationSelector, SemanticData,
+    SemanticSubKind, Traversal, TraversalData,
 };
 
 /// Traversal archive payload emitted when dissolving a node.
@@ -175,20 +177,10 @@ pub(crate) fn current_unix_timestamp_secs() -> u64 {
 // here so external paths (`mere_kernel::graph::Node`, etc.)
 // resolve unchanged.
 
-/// Read-only view of an edge (built from petgraph edge references)
-#[derive(Debug, Clone, Copy)]
-pub struct EdgeView {
-    pub from: NodeKey,
-    pub to: NodeKey,
-    pub edge_type: EdgeType,
-}
-
 /// Canonical read-side relation view. One row per (from, to,
 /// [`RelationKind`]) — a multi-relation node pair yields multiple
-/// rows. Replaces the `EdgeType`-flavoured [`EdgeView`] in stage 4
-/// of the 2026-05-11 relation-taxonomy plan; introduced as a pure
-/// addition in stage 1 so the discriminant is callable before any
-/// migration.
+/// rows. Replaces the `EdgeType`-flavoured `EdgeView` removed in
+/// stage 4 of the 2026-05-11 relation-taxonomy plan.
 ///
 /// This is the **classifier shape** — it carries no per-relation
 /// payload (labels, decay, traversal events). Callers needing

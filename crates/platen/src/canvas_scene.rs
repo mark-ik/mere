@@ -61,7 +61,7 @@ pub fn build_canvas_scene_input(
         })
         .collect();
     let edges = graph
-        .edges()
+        .relations()
         .filter(|edge| {
             visible_nodes
                 .as_ref()
@@ -95,7 +95,7 @@ pub fn graph_view_id_to_canvas(id: GraphViewId) -> ViewId {
 #[cfg(test)]
 mod tests {
     use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::EdgeType;
+    use mere_kernel::graph::{EdgeAssertion, SemanticSubKind};
     use uuid::Uuid;
 
     use super::*;
@@ -115,7 +115,15 @@ mod tests {
             PortablePoint::new(3.0, 4.0),
         );
         graph
-            .add_edge(first, second, EdgeType::Hyperlink, None)
+            .assert_relation(
+                first,
+                second,
+                EdgeAssertion::Semantic {
+                    sub_kind: SemanticSubKind::Hyperlink,
+                    label: None,
+                    decay_progress: None,
+                },
+            )
             .unwrap();
         (graph, first, second)
     }

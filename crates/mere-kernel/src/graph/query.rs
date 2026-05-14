@@ -20,13 +20,13 @@ use petgraph::visit::{EdgeRef, IntoEdgeReferences, UndirectedAdaptor};
 use uuid::Uuid;
 
 use super::edge_taxonomy::{
-    ArrangementSubKind, ContainmentSubKind, EdgeKind, EdgeType, SemanticSubKind,
+    ContainmentSubKind, EdgeAssertion, RelationSelector,
 };
 use super::identity::{EdgeKey, NodeKey};
 use super::node::Node;
 use super::snapshot::containment_parent_url;
 use super::{
-    ArrangementEdgeView, ContainmentEdgeView, EdgeView, Graph, RelationView, SemanticEdgeView,
+    ArrangementEdgeView, ContainmentEdgeView, Graph, RelationView, SemanticEdgeView,
 };
 
 impl Graph {
@@ -74,10 +74,9 @@ impl Graph {
     /// (an `EdgePayload` carrying multiple typed sidecars between
     /// the same node pair) yields multiple rows.
     ///
-    /// This is the canonical read surface per the 2026-05-11
-    /// relation-taxonomy plan §2. It coexists with [`Self::edges`]
-    /// (legacy [`EdgeType`]-flavoured) until stage 3 callers
-    /// migrate and stage 4 removes `edges()` entirely.
+    /// Canonical read surface per the 2026-05-11 relation-taxonomy
+    /// plan §2. Stage 4 removed the legacy `EdgeType`-flavoured
+    /// `edges()` iterator that this replaces.
     pub fn relations(&self) -> impl Iterator<Item = RelationView> + '_ {
         use super::edge_taxonomy::RelationKind;
         self.inner.edge_references().flat_map(|edge| {
@@ -143,74 +142,6 @@ impl Graph {
                         kind: RelationKind::Provenance(sub_kind),
                     });
                 }
-            }
-            out.into_iter()
-        })
-    }
-
-    /// Iterate over all edges as EdgeView
-    pub fn edges(&self) -> impl Iterator<Item = EdgeView> + '_ {
-        self.inner.edge_references().flat_map(|e| {
-            let from = e.source();
-            let to = e.target();
-            let payload = e.weight();
-            let mut out = Vec::with_capacity(7);
-            if payload.has_kind(EdgeKind::Hyperlink) {
-                out.push(EdgeView {
-                    from,
-                    to,
-                    edge_type: EdgeType::Hyperlink,
-                });
-            }
-            if payload.has_kind(EdgeKind::TraversalDerived) {
-                out.push(EdgeView {
-                    from,
-                    to,
-                    edge_type: EdgeType::History,
-                });
-            }
-            if payload.has_kind(EdgeKind::UserGrouped) {
-                out.push(EdgeView {
-                    from,
-                    to,
-                    edge_type: EdgeType::UserGrouped,
-                });
-            }
-            if let Some(arrangement) = payload.arrangement_data() {
-                for sub_kind in &arrangement.sub_kinds {
-                    out.push(EdgeView {
-                        from,
-                        to,
-                        edge_type: EdgeType::ArrangementRelation(*sub_kind),
-                    });
-                }
-            }
-            if let Some(containment) = payload.containment_data() {
-                for sub_kind in &containment.sub_kinds {
-                    out.push(EdgeView {
-                        from,
-                        to,
-                        edge_type: EdgeType::ContainmentRelation(*sub_kind),
-                    });
-                }
-            }
-            if payload.has_kind(EdgeKind::ImportedRelation) {
-                out.push(EdgeView {
-                    from,
-                    to,
-                    edge_type: EdgeType::ImportedRelation,
-                });
-            }
-            if payload.has_kind(EdgeKind::AgentDerived) {
-                out.push(EdgeView {
-                    from,
-                    to,
-                    // decay_progress will be populated from EdgePayload data when AgentDerived
-                    // payload storage is implemented; 0.0 = freshly asserted in the interim.
-                    edge_type: EdgeType::AgentDerived {
-                        decay_progress: 0.0,
-                    },
-                });
             }
             out.into_iter()
         })
@@ -284,10 +215,12 @@ impl Graph {
         for edge_id in edge_ids {
             if let Some(payload) = self.inner.edge_weight_mut(edge_id) {
                 let mut removed_any = false;
-                removed_any |= payload
-                    .remove_edge_type(EdgeType::ContainmentRelation(ContainmentSubKind::UrlPath));
-                removed_any |= payload
-                    .remove_edge_type(EdgeType::ContainmentRelation(ContainmentSubKind::Domain));
+                removed_any |= payload.retract_relation(RelationSelector::Containment(
+                    ContainmentSubKind::UrlPath,
+                ));
+                removed_any |= payload.retract_relation(RelationSelector::Containment(
+                    ContainmentSubKind::Domain,
+                ));
                 if removed_any && payload.is_empty() {
                     empty_edges.push(edge_id);
                 }
@@ -348,19 +281,21 @@ impl Graph {
         }
 
         for (from, to) in url_parent_edges {
-            let _ = self.add_edge(
+            let _ = self.assert_relation(
                 from,
                 to,
-                EdgeType::ContainmentRelation(ContainmentSubKind::UrlPath),
-                None,
+                EdgeAssertion::Containment {
+                    sub_kind: ContainmentSubKind::UrlPath,
+                },
             );
         }
         for (from, to) in domain_edges {
-            let _ = self.add_edge(
+            let _ = self.assert_relation(
                 from,
                 to,
-                EdgeType::ContainmentRelation(ContainmentSubKind::Domain),
-                None,
+                EdgeAssertion::Containment {
+                    sub_kind: ContainmentSubKind::Domain,
+                },
             );
         }
     }

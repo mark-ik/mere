@@ -2,13 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Edge operations — add, assert, replay, dissolve, retract,
-//! traversal recording.
+//! Edge operations — assert, replay, dissolve, retract, traversal
+//! recording.
 //!
 //! Extracted from `graph/mod.rs` per the 2026-05-11 kernel
-//! decomposition pass. Contains the methods that mutate the edge set
-//! and the persistence-replay paths that reapply edge changes on
-//! snapshot rehydration.
+//! decomposition pass. Stage 4 of the 2026-05-11 relation-taxonomy
+//! plan removed the legacy `add_edge` / `remove_edges` /
+//! `replay_add_edge_by_ids` / `replay_remove_edges_by_ids` paths and
+//! their `EdgeType`-shaped helpers; everything goes through
+//! [`EdgeAssertion`] / [`RelationSelector`] now.
 
 use euclid::default::Point2D;
 use petgraph::Direction;
@@ -16,34 +18,11 @@ use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use uuid::Uuid;
 
 use super::edge_payload::EdgePayload;
-use super::edge_taxonomy::{
-    EdgeAssertion, EdgeKind, EdgeType, RelationSelector, Traversal,
-};
+use super::edge_taxonomy::{EdgeAssertion, RelationSelector, Traversal};
 use super::identity::{EdgeKey, NodeKey};
 use super::{DissolvedTraversalRecord, Graph};
 
 impl Graph {
-    /// Add an edge between two nodes
-    pub fn add_edge(
-        &mut self,
-        from: NodeKey,
-        to: NodeKey,
-        edge_type: EdgeType,
-        label: Option<String>,
-    ) -> Option<EdgeKey> {
-        if !self.inner.contains_node(from) || !self.inner.contains_node(to) {
-            return None;
-        }
-        if let Some(edge_key) = self.find_edge_key(from, to) {
-            let payload = self.inner.edge_weight_mut(edge_key)?;
-            return payload.add_edge_kind(edge_type, label).then_some(edge_key);
-        }
-        Some(
-            self.inner
-                .add_edge(from, to, EdgePayload::from_edge_type(edge_type, label)),
-        )
-    }
-
     pub fn assert_relation(
         &mut self,
         from: NodeKey,
@@ -77,41 +56,12 @@ impl Graph {
         Some(self.add_node_with_id(id, url, position))
     }
 
-    /// Replay helper: add edge using stable node UUIDs.
-    pub fn replay_add_edge_by_ids(
-        &mut self,
-        from_id: Uuid,
-        to_id: Uuid,
-        edge_type: EdgeType,
-        label: Option<String>,
-    ) -> Option<EdgeKey> {
-        let from_key = self.get_node_key_by_id(from_id)?;
-        let to_key = self.get_node_key_by_id(to_id)?;
-        self.add_edge(from_key, to_key, edge_type, label)
-    }
-
     /// Replay helper: remove node by stable UUID.
     pub fn replay_remove_node_by_id(&mut self, node_id: Uuid) -> bool {
         let Some(key) = self.get_node_key_by_id(node_id) else {
             return false;
         };
         self.remove_node(key)
-    }
-
-    /// Replay helper: remove edges between stable node UUIDs.
-    pub fn replay_remove_edges_by_ids(
-        &mut self,
-        from_id: Uuid,
-        to_id: Uuid,
-        edge_type: EdgeType,
-    ) -> usize {
-        let Some(from_key) = self.get_node_key_by_id(from_id) else {
-            return 0;
-        };
-        let Some(to_key) = self.get_node_key_by_id(to_id) else {
-            return 0;
-        };
-        self.remove_edges(from_key, to_key, edge_type)
     }
 
     pub fn replay_retract_relations_by_ids(
@@ -194,113 +144,6 @@ impl Graph {
         }
 
         Some(records)
-    }
-
-    /// Dissolve helper: collect traversals for matching edges and remove them.
-    pub fn dissolve_remove_edges_collect_traversals(
-        &mut self,
-        from: NodeKey,
-        to: NodeKey,
-        edge_type: EdgeType,
-    ) -> Option<(usize, Vec<DissolvedTraversalRecord>)> {
-        if edge_type == EdgeType::History {
-            let _ = self.get_node(from)?;
-            let _ = self.get_node(to)?;
-        }
-
-        let from_node_id = self.get_node(from).map(|n| n.id);
-        let to_node_id = self.get_node(to).map(|n| n.id);
-        let mut records = Vec::new();
-
-        if let (Some(from_node_id), Some(to_node_id)) = (from_node_id, to_node_id) {
-            for edge in self.inner.edge_references().filter(|edge| {
-                edge.source() == from
-                    && edge.target() == to
-                    && edge.weight().has_edge_type(edge_type)
-            }) {
-                if edge.weight().traversals().is_empty() {
-                    continue;
-                }
-
-                records.push(DissolvedTraversalRecord {
-                    from_node_id,
-                    to_node_id,
-                    traversals: edge.weight().traversals().to_vec(),
-                });
-            }
-        }
-
-        let removed = self.remove_edges(from, to, edge_type);
-        Some((removed, records))
-    }
-
-    /// Collect traversals for matching edges without mutating graph state.
-    pub fn collect_edge_traversals(
-        &self,
-        from: NodeKey,
-        to: NodeKey,
-        edge_type: EdgeType,
-    ) -> Option<Vec<DissolvedTraversalRecord>> {
-        if edge_type == EdgeType::History {
-            let _ = self.get_node(from)?;
-            let _ = self.get_node(to)?;
-        }
-
-        let from_node_id = self.get_node(from).map(|n| n.id);
-        let to_node_id = self.get_node(to).map(|n| n.id);
-        let mut records = Vec::new();
-
-        if let (Some(from_node_id), Some(to_node_id)) = (from_node_id, to_node_id) {
-            for edge in self.inner.edge_references().filter(|edge| {
-                edge.source() == from
-                    && edge.target() == to
-                    && edge.weight().has_edge_type(edge_type)
-            }) {
-                if edge.weight().traversals().is_empty() {
-                    continue;
-                }
-
-                records.push(DissolvedTraversalRecord {
-                    from_node_id,
-                    to_node_id,
-                    traversals: edge.weight().traversals().to_vec(),
-                });
-            }
-        }
-
-        Some(records)
-    }
-
-    /// Remove all directed edges from `from` to `to` with the given type.
-    /// Returns how many edges were removed.
-    pub fn remove_edges(&mut self, from: NodeKey, to: NodeKey, edge_type: EdgeType) -> usize {
-        let edge_ids: Vec<EdgeKey> = self
-            .inner
-            .edge_references()
-            .filter(|edge| {
-                edge.source() == from
-                    && edge.target() == to
-                    && edge.weight().has_edge_type(edge_type)
-            })
-            .map(|edge| edge.id())
-            .collect();
-
-        let mut removed = 0usize;
-        let mut edges_to_delete = Vec::new();
-        for edge_id in edge_ids {
-            if let Some(payload) = self.inner.edge_weight_mut(edge_id)
-                && payload.remove_edge_type(edge_type)
-            {
-                removed += 1;
-                if payload.is_empty() {
-                    edges_to_delete.push(edge_id);
-                }
-            }
-        }
-        for edge_id in edges_to_delete {
-            let _ = self.inner.remove_edge(edge_id);
-        }
-        removed
     }
 
     pub fn retract_relations(

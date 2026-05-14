@@ -155,9 +155,9 @@ impl Graph {
                             .unwrap_or_default(),
                         label: payload.semantic_data().and_then(|data| data.label.clone()),
                         agent_decay_progress: payload
-                            .has_edge_type(EdgeType::AgentDerived {
-                                decay_progress: 0.0,
-                            })
+                            .has_relation(RelationSelector::Semantic(
+                                SemanticSubKind::AgentDerived,
+                            ))
                             .then_some(0.0),
                     })
                     .filter(|data| !data.sub_kinds.is_empty() || data.label.is_some()),

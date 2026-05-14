@@ -25,7 +25,7 @@ use euclid::default::{Point2D, Rect, Size2D};
 use graph_canvas::camera::CanvasViewport;
 use graph_canvas::layout::LayoutExtras;
 use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
-use mere_kernel::graph::{EdgeType, NodeKey};
+use mere_kernel::graph::{NodeKey, RelationKind};
 
 use crate::projection::{PositionedEdge, Projection};
 use crate::request::ProjectionRequest;
@@ -54,18 +54,18 @@ pub fn build_scene_input(
         })
         .collect();
 
-    // The kernel's `edges()` iterator emits one `EdgeView` per edge-
-    // kind on the same underlying edge (Hyperlink + History +
-    // Provenance on the same pair, etc.). For force-attraction
-    // purposes that's fine — each kind is a spring.
+    // The kernel's `relations()` iterator emits one `RelationView`
+    // per relation on the same underlying edge (Hyperlink + Traversal
+    // + Provenance on the same pair, etc.). For force-attraction
+    // purposes that's fine — each relation is a spring.
     let edges: Vec<CanvasEdge<NodeKey>> = request
         .graph
-        .edges()
+        .relations()
         .filter(|view| view.from != view.to)
         .map(|view| CanvasEdge {
             source: view.from,
             target: view.to,
-            weight: edge_weight(view.edge_type),
+            weight: edge_weight(view.kind),
         })
         .collect();
 
@@ -80,10 +80,10 @@ pub fn build_scene_input(
     }
 }
 
-/// Edge weight per `EdgeType`. v0 returns 1.0 for every kind — a
-/// future strategy that wants kind-weighted springs can swap this for
-/// a richer mapping.
-pub fn edge_weight(_kind: EdgeType) -> f32 {
+/// Edge weight per [`RelationKind`]. v0 returns 1.0 for every
+/// relation — a future strategy that wants family-weighted springs
+/// can swap this for a richer mapping.
+pub fn edge_weight(_kind: RelationKind) -> f32 {
     1.0
 }
 
@@ -198,7 +198,7 @@ pub fn build_positioned_edges(
 ) -> Vec<PositionedEdge> {
     request
         .graph
-        .edges()
+        .relations()
         .filter(|view| view.from != view.to)
         .map(|view| {
             let from_pos = positions.get(&view.from).copied().unwrap_or_default();
@@ -268,7 +268,7 @@ where
     }
     let edges: Vec<CanvasEdge<NodeKey>> = request
         .graph
-        .edges()
+        .relations()
         .filter(|view| view.from != view.to)
         .map(|view| CanvasEdge {
             source: view.from,

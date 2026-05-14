@@ -85,7 +85,7 @@ pub fn facet_projection_for_node(graph: &Graph, key: NodeKey) -> Option<FacetPro
     let mut edge_kind_labels: HashSet<&'static str> = HashSet::new();
     for e in out_edges.iter().chain(in_edges.iter()) {
         for family in e.weight().families() {
-            edge_kind_labels.insert(edge_family_label(*family));
+            edge_kind_labels.insert(edge_family_label(family));
         }
     }
 

@@ -1,7 +1,7 @@
 # Relation taxonomy cleanup + edge mutation MVP — implementation plan
 
 **Date**: 2026-05-11
-**Status**: Implementation plan — pre-build
+**Status**: In progress — Stages 1–4 landed (taxonomy + API removal complete); Stage 5 (edge mutation MVP) pending
 **Scope**: Make `mere-kernel`'s graph the source of truth for relation taxonomy before building edge create/delete UI. Remove the legacy `EdgeType` / `EdgeKind` path instead of extending it. Keep the six families (`Semantic`, `Traversal`, `Containment`, `Arrangement`, `Imported`, `Provenance`). Land an MVP of edge create / hide / retract on top, with derived/imported/provenance/document-hyperlink/traversal-history as hide-only (never retract). Treat "navigatory" as a projection over node navigation memory, semantic hyperlinks, and traversal events — **not** as a durable edge family.
 
 **Related**:
@@ -219,11 +219,11 @@ The kernel snapshot format already keeps typed persisted fields (`PersistedSeman
 
 Stage as five PRs/commits, each leaving the codebase green:
 
-1. **Add new types.** `RelationKind`, expanded `NavigationTrigger`, per-sub-kind metadata slots on `EdgePayload`. Pure additions. No callers migrated. Existing `EdgeType` path still works.
-2. **Add new write API.** `Graph::retract_relations`, `Graph::append_traversal`, `Graph::relations()` → `RelationView`. `Graph::assert_relation` already exists; keep it. Old API stays.
-3. **Migrate Mere-owned callers off old API.** `mere-host` (2 sites), `mere-host-runtime` test fixture, `cartography` test fixtures. ~8–10 call sites total.
-4. **Remove old API.** `EdgeType`, `EdgeKind`, `Graph::add_edge`, `Graph::remove_edges`, matching `GraphDelta` variants. Internal `EdgePayload` refactor: typed sidecars authoritative, `families` computed, `kinds` gone. Snapshot reader/writer cleaned up.
-5. **Edge mutation MVP.** `AssertRelation` / `RetractRelation` / `HideRelation` / `AppendTraversal` bus actions, hit-test extension to `(from, to, RelationKind)`, host wiring (orrery edge context menu's "Hide edge" entry, node menu's "Delete node" / "Create node here", etc.). Per-orrery `hidden_relations` state.
+1. **Add new types.** ✅ Landed. `RelationKind`, expanded `NavigationTrigger`, per-sub-kind metadata slots on `EdgePayload`. Pure additions. No callers migrated.
+2. **Add new write API.** ✅ Landed. `Graph::retract_relations`, `Graph::append_traversal`, `Graph::relations()` → `RelationView`. `Graph::assert_relation` already existed.
+3. **Migrate Mere-owned callers off old API.** ✅ Landed. `mere-host` (`host_helpers`, `demo`), `mere-host-runtime` test fixture, `cartography` test fixtures, `graphshell` composition tests.
+4. **Remove old API.** ✅ Landed. `EdgeType`, `EdgeKind`, `UserGroupedData`, `Graph::add_edge`, `Graph::remove_edges`, `Graph::edges()`, `EdgeView`, and the `GraphDelta::{AddEdge, RemoveEdges, ReplayAddEdgeByIds, ReplayRemoveEdgesByIds}` variants are gone. `EdgePayload` refactored: typed sidecars authoritative, `families()` computed on demand, `kinds` field removed. `apply.rs` / snapshot reader+writer / `cartography` / `platen` migrated. `cargo test --workspace --exclude mere-host` + `cargo test -p mere-kernel` + `cargo check --manifest-path crates/mere-host/Cargo.toml` all green.
+5. **Edge mutation MVP.** Pending. `AssertRelation` / `RetractRelation` / `HideRelation` / `AppendTraversal` bus actions, hit-test extension to `(from, to, RelationKind)`, host wiring (orrery edge context menu's "Hide edge" entry, node menu's "Delete node" / "Create node here", etc.). Per-orrery `hidden_relations` state.
 
 ## 13. Test plan
 

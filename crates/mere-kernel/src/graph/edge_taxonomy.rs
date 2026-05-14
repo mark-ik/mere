@@ -16,33 +16,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rkyv::{Archive, Deserialize, Serialize};
 
-/// Type of edge connection
-#[derive(Debug, Clone, Copy, PartialEq, Archive, Serialize, Deserialize)]
-pub enum EdgeType {
-    /// Hyperlink from one page to another
-    Hyperlink,
-
-    /// Browser history traversal
-    History,
-
-    /// Explicit user grouping association
-    UserGrouped,
-
-    /// Workbench/layout arrangement relation.
-    ArrangementRelation(ArrangementSubKind),
-
-    /// URL-derived containment hierarchy relation.
-    ContainmentRelation(ContainmentSubKind),
-
-    /// Relation imported from an external system (bookmarks folder, RSS feed, etc.).
-    /// Derived-readonly at import time; promoted to durable only by explicit user action.
-    ImportedRelation,
-
-    /// Agent-inferred relation; provisional until accepted or evicted by decay.
-    /// `decay_progress` is in [0.0, 1.0] — 0.0 = freshly asserted, 1.0 = at eviction threshold.
-    AgentDerived { decay_progress: f32 },
-}
-
 #[derive(
     Debug,
     Clone,
@@ -259,21 +232,6 @@ impl ArrangementSubKind {
     }
 }
 
-/// Canonical edge kind set entry — internal index tag inside [`EdgePayload`].
-/// Callers outside this module should use [`EdgeType`] with [`EdgePayload::has_edge_type`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Archive, Serialize, Deserialize)]
-#[rkyv(compare(PartialEq, PartialOrd), derive(PartialEq, Eq, PartialOrd, Ord))]
-pub enum EdgeKind {
-    SemanticRelation,
-    Hyperlink,
-    TraversalDerived,
-    UserGrouped,
-    AgentDerived,
-    ArrangementRelation,
-    ContainmentRelation,
-    ImportedRelation,
-}
-
 #[derive(Debug, Clone, PartialEq, Archive, Serialize, Deserialize)]
 pub enum EdgeAssertion {
     Semantic {
@@ -468,11 +426,6 @@ impl Default for EdgeMetrics {
     fn default() -> Self {
         Self::new()
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize, Default)]
-pub struct UserGroupedData {
-    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize, Default)]

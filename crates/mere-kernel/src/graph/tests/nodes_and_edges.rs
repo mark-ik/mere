@@ -6,6 +6,21 @@
 
 use super::super::*;
 
+fn hyperlink() -> EdgeAssertion {
+    EdgeAssertion::Semantic {
+        sub_kind: SemanticSubKind::Hyperlink,
+        label: None,
+        decay_progress: None,
+    }
+}
+
+fn user_grouped(label: Option<&str>) -> EdgeAssertion {
+    EdgeAssertion::Semantic {
+        sub_kind: SemanticSubKind::UserGrouped,
+        label: label.map(str::to_string),
+        decay_progress: None,
+    }
+}
 
 #[test]
 fn test_graph_new() {
@@ -122,14 +137,12 @@ fn test_projected_helpers_expose_projected_and_committed_positions() {
 }
 
 #[test]
-fn test_add_edge() {
+fn test_assert_relation() {
     let mut graph = Graph::new();
     let node1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
     let node2 = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
 
-    graph
-        .add_edge(node1, node2, EdgeType::Hyperlink, None)
-        .unwrap();
+    graph.assert_relation(node1, node2, hyperlink()).unwrap();
 
     // Check adjacency via graph methods
     assert!(graph.has_edge_between(node1, node2));
@@ -139,7 +152,7 @@ fn test_add_edge() {
 }
 
 #[test]
-fn test_add_edge_invalid_nodes() {
+fn test_assert_relation_invalid_nodes() {
     let mut graph = Graph::new();
     let node1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
 
@@ -147,32 +160,26 @@ fn test_add_edge_invalid_nodes() {
 
     assert!(
         graph
-            .add_edge(invalid_key, node1, EdgeType::Hyperlink, None)
+            .assert_relation(invalid_key, node1, hyperlink())
             .is_none()
     );
     assert!(
         graph
-            .add_edge(node1, invalid_key, EdgeType::Hyperlink, None)
+            .assert_relation(node1, invalid_key, hyperlink())
             .is_none()
     );
 }
 
 #[test]
-fn test_add_multiple_edges() {
+fn test_assert_multiple_relations() {
     let mut graph = Graph::new();
     let node1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
     let node2 = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
     let node3 = graph.add_node("https://c.com".to_string(), Point2D::new(2.0, 2.0));
 
-    graph
-        .add_edge(node1, node2, EdgeType::Hyperlink, None)
-        .unwrap();
-    graph
-        .add_edge(node1, node3, EdgeType::Hyperlink, None)
-        .unwrap();
-    graph
-        .add_edge(node2, node3, EdgeType::Hyperlink, None)
-        .unwrap();
+    graph.assert_relation(node1, node2, hyperlink()).unwrap();
+    graph.assert_relation(node1, node3, hyperlink()).unwrap();
+    graph.assert_relation(node2, node3, hyperlink()).unwrap();
 
     assert_eq!(graph.edge_count(), 3);
 
@@ -184,15 +191,19 @@ fn test_add_multiple_edges() {
 }
 
 #[test]
-fn test_remove_edges_by_type_between_nodes() {
+fn test_retract_relation_by_sub_kind_between_nodes() {
     let mut graph = Graph::new();
     let a = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
     let b = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
 
-    graph.add_edge(a, b, EdgeType::Hyperlink, None).unwrap();
-    graph.add_edge(a, b, EdgeType::UserGrouped, None).unwrap();
+    graph.assert_relation(a, b, hyperlink()).unwrap();
+    graph.assert_relation(a, b, user_grouped(None)).unwrap();
 
-    let removed = graph.remove_edges(a, b, EdgeType::UserGrouped);
+    let removed = graph.retract_relations(
+        a,
+        b,
+        RelationSelector::Semantic(SemanticSubKind::UserGrouped),
+    );
     assert_eq!(removed, 1);
     assert_eq!(graph.edge_count(), 1);
     let edge_key = graph.find_edge_key(a, b).expect("remaining hyperlink edge");
@@ -202,23 +213,24 @@ fn test_remove_edges_by_type_between_nodes() {
 }
 
 #[test]
-fn test_add_edge_merges_semantics_on_single_stored_edge() {
+fn test_assert_relation_merges_semantics_on_single_stored_edge() {
     let mut graph = Graph::new();
     let a = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
     let b = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
 
-    graph.add_edge(a, b, EdgeType::Hyperlink, None).unwrap();
+    graph.assert_relation(a, b, hyperlink()).unwrap();
     graph
-        .add_edge(a, b, EdgeType::UserGrouped, Some("tab-group".to_string()))
+        .assert_relation(a, b, user_grouped(Some("tab-group")))
         .unwrap();
 
     assert_eq!(graph.edge_count(), 1);
     let edge_key = graph.find_edge_key(a, b).unwrap();
     let payload = graph.get_edge(edge_key).unwrap();
-    assert!(payload.has_edge_kind(EdgeType::Hyperlink));
-    assert!(payload.has_edge_kind(EdgeType::UserGrouped));
+    assert!(payload.has_relation(RelationSelector::Semantic(SemanticSubKind::Hyperlink)));
+    assert!(payload.has_relation(RelationSelector::Semantic(SemanticSubKind::UserGrouped)));
     assert_eq!(payload.label(), Some("tab-group"));
-    assert_eq!(graph.edges().count(), 2);
+    // Two semantic sub-kinds on the same stored edge → two relation rows.
+    assert_eq!(graph.relations().count(), 2);
 }
 
 #[test]
@@ -262,7 +274,7 @@ fn test_remove_node() {
     let mut graph = Graph::new();
     let n1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
     let n2 = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
-    graph.add_edge(n1, n2, EdgeType::Hyperlink, None);
+    let _ = graph.assert_relation(n1, n2, hyperlink());
 
     assert_eq!(graph.node_count(), 2);
     assert_eq!(graph.edge_count(), 1);
@@ -298,17 +310,17 @@ fn test_nodes_iterator() {
 }
 
 #[test]
-fn test_edges_iterator() {
+fn test_relations_iterator() {
     let mut graph = Graph::new();
     let node1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
     let node2 = graph.add_node("https://b.com".to_string(), Point2D::new(1.0, 1.0));
     let node3 = graph.add_node("https://c.com".to_string(), Point2D::new(2.0, 2.0));
 
-    graph.add_edge(node1, node2, EdgeType::Hyperlink, None);
-    graph.add_edge(node1, node3, EdgeType::Hyperlink, None);
+    let _ = graph.assert_relation(node1, node2, hyperlink());
+    let _ = graph.assert_relation(node1, node3, hyperlink());
 
-    let edge_count = graph.edges().count();
-    assert_eq!(edge_count, 2);
+    let relation_count = graph.relations().count();
+    assert_eq!(relation_count, 2);
 
     assert!(graph.inner.edge_references().all(|edge| {
         edge.weight()
@@ -357,9 +369,9 @@ fn test_edge_count() {
 
     assert_eq!(graph.edge_count(), 0);
 
-    graph.add_edge(node1, node2, EdgeType::Hyperlink, None);
+    let _ = graph.assert_relation(node1, node2, hyperlink());
     assert_eq!(graph.edge_count(), 1);
 
-    graph.add_edge(node2, node1, EdgeType::Hyperlink, None);
+    let _ = graph.assert_relation(node2, node1, hyperlink());
     assert_eq!(graph.edge_count(), 2);
 }

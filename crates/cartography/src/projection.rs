@@ -70,9 +70,10 @@ pub struct PositionedNode {
 /// `edge` is `Option<EdgeKey>` because some strategies derive edges
 /// from node identity rather than from a stable graph edge (e.g.
 /// analytic strategies that draw spring connections without going
-/// through the graph's edge table; the kernel graph's `edges()`
-/// iterator yields `EdgeView`s that don't carry an `EdgeKey` because
-/// one `EdgeKey` can project to multiple `EdgeView`s by edge-kind).
+/// through the graph's edge table; the kernel graph's `relations()`
+/// iterator yields `RelationView`s that don't carry an `EdgeKey`
+/// because one `EdgeKey` can project to multiple `RelationView`s
+/// when an edge payload carries several typed sidecars).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PositionedEdge {
     pub edge: Option<EdgeKey>,

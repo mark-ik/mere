@@ -7,12 +7,28 @@
 
 use super::super::*;
 
+fn hyperlink() -> EdgeAssertion {
+    EdgeAssertion::Semantic {
+        sub_kind: SemanticSubKind::Hyperlink,
+        label: None,
+        decay_progress: None,
+    }
+}
+
+fn user_grouped(label: Option<&str>) -> EdgeAssertion {
+    EdgeAssertion::Semantic {
+        sub_kind: SemanticSubKind::UserGrouped,
+        label: label.map(str::to_string),
+        decay_progress: None,
+    }
+}
+
 #[test]
 fn test_snapshot_roundtrip() {
     let mut graph = Graph::new();
     let n1 = graph.add_node("https://a.com".to_string(), Point2D::new(10.0, 20.0));
     let n2 = graph.add_node("https://b.com".to_string(), Point2D::new(30.0, 40.0));
-    graph.add_edge(n1, n2, EdgeType::Hyperlink, None);
+    let _ = graph.assert_relation(n1, n2, hyperlink());
 
     graph.get_node_mut(n1).unwrap().title = "Site A".to_string();
     graph.get_node_mut(n2).unwrap().is_pinned = true;
@@ -49,9 +65,9 @@ fn test_snapshot_preserves_edge_types() {
     let n1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
     let n2 = graph.add_node("https://b.com".to_string(), Point2D::new(100.0, 0.0));
     let n3 = graph.add_node("https://c.com".to_string(), Point2D::new(200.0, 0.0));
-    graph.add_edge(n1, n2, EdgeType::Hyperlink, None);
-    graph.add_edge(n2, n1, EdgeType::History, None);
-    graph.add_edge(n1, n3, EdgeType::UserGrouped, None);
+    let _ = graph.assert_relation(n1, n2, hyperlink());
+    let _ = graph.append_traversal(n2, n1, NavigationTrigger::LinkClick, Some(1_000_000));
+    let _ = graph.assert_relation(n1, n3, user_grouped(None));
 
     let snapshot = graph.to_snapshot();
     let restored = Graph::from_snapshot(&snapshot);
@@ -87,12 +103,7 @@ fn test_snapshot_preserves_user_grouped_edge_label() {
     let from = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
     let to = graph.add_node("https://b.com".to_string(), Point2D::new(100.0, 0.0));
     graph
-        .add_edge(
-            from,
-            to,
-            EdgeType::UserGrouped,
-            Some("tab-group".to_string()),
-        )
+        .assert_relation(from, to, user_grouped(Some("tab-group")))
         .unwrap();
 
     let snapshot = graph.to_snapshot();

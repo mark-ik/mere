@@ -106,7 +106,7 @@ impl LayoutStrategy for RadialAdapter {
         }
         let edges: Vec<CanvasEdge<NodeKey>> = request
             .graph
-            .edges()
+            .relations()
             .filter(|view| view.from != view.to)
             .map(|view| CanvasEdge {
                 source: view.from,

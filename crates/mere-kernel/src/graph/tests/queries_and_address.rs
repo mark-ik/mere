@@ -8,6 +8,14 @@
 
 use super::super::*;
 
+fn hyperlink() -> EdgeAssertion {
+    EdgeAssertion::Semantic {
+        sub_kind: SemanticSubKind::Hyperlink,
+        label: None,
+        decay_progress: None,
+    }
+}
+
 // --- MIME / address-kind detection tests ---
 
 #[test]
@@ -115,8 +123,8 @@ fn hop_distances_shortest_path_and_reachability_use_undirected_connectivity() {
     let c = graph.add_node("https://c.com".to_string(), Point2D::new(2.0, 0.0));
     let d = graph.add_node("https://d.com".to_string(), Point2D::new(3.0, 0.0));
 
-    let _ = graph.add_edge(a, b, EdgeType::Hyperlink, None);
-    let _ = graph.add_edge(b, c, EdgeType::Hyperlink, None);
+    let _ = graph.assert_relation(a, b, hyperlink());
+    let _ = graph.assert_relation(b, c, hyperlink());
 
     let hops = graph.hop_distances_from(a);
     assert_eq!(hops.get(&a).copied(), Some(0));
@@ -141,8 +149,8 @@ fn orphan_and_weak_component_accessors_report_expected_partitions() {
     let d = graph.add_node("https://d.com".to_string(), Point2D::new(3.0, 0.0));
     let e = graph.add_node("https://e.com".to_string(), Point2D::new(4.0, 0.0));
 
-    let _ = graph.add_edge(a, b, EdgeType::Hyperlink, None);
-    let _ = graph.add_edge(d, e, EdgeType::Hyperlink, None);
+    let _ = graph.assert_relation(a, b, hyperlink());
+    let _ = graph.assert_relation(d, e, hyperlink());
 
     let mut orphans = graph.orphan_node_keys();
     orphans.sort_by_key(|k| k.index());
@@ -178,10 +186,10 @@ fn sorted_neighbor_and_connected_import_accessors_are_stable() {
         Point2D::new(3.0, 0.0),
     );
 
-    let _ = graph.add_edge(seed, right, EdgeType::Hyperlink, None);
-    let _ = graph.add_edge(left, seed, EdgeType::Hyperlink, None);
-    let _ = graph.add_edge(left, shared, EdgeType::Hyperlink, None);
-    let _ = graph.add_edge(right, shared, EdgeType::Hyperlink, None);
+    let _ = graph.assert_relation(seed, right, hyperlink());
+    let _ = graph.assert_relation(left, seed, hyperlink());
+    let _ = graph.assert_relation(left, shared, hyperlink());
+    let _ = graph.assert_relation(right, shared, hyperlink());
 
     let sorted_neighbors = graph.neighbors_undirected_sorted(seed);
     assert_eq!(sorted_neighbors, vec![left, right]);
@@ -206,10 +214,10 @@ fn strongly_connected_components_reports_cycle_partition() {
     let c = graph.add_node("https://c.com".to_string(), Point2D::new(2.0, 0.0));
     let d = graph.add_node("https://d.com".to_string(), Point2D::new(3.0, 0.0));
 
-    let _ = graph.add_edge(a, b, EdgeType::Hyperlink, None);
-    let _ = graph.add_edge(b, c, EdgeType::Hyperlink, None);
-    let _ = graph.add_edge(c, a, EdgeType::Hyperlink, None);
-    let _ = graph.add_edge(c, d, EdgeType::Hyperlink, None);
+    let _ = graph.assert_relation(a, b, hyperlink());
+    let _ = graph.assert_relation(b, c, hyperlink());
+    let _ = graph.assert_relation(c, a, hyperlink());
+    let _ = graph.assert_relation(c, d, hyperlink());
 
     let mut sizes: Vec<usize> = graph
         .strongly_connected_components()

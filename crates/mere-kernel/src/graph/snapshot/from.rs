@@ -143,35 +143,35 @@ impl Graph {
                 }
                 if let Some(arrangement) = &pedge.arrangement {
                     for sub_kind in &arrangement.sub_kinds {
-                        let edge_type = match sub_kind {
-                            PersistedArrangementSubKind::FrameMember => {
-                                EdgeType::ArrangementRelation(ArrangementSubKind::FrameMember)
-                            }
-                            PersistedArrangementSubKind::TileGroup => {
-                                EdgeType::ArrangementRelation(ArrangementSubKind::TileGroup)
-                            }
-                            PersistedArrangementSubKind::SplitPair => {
-                                EdgeType::ArrangementRelation(ArrangementSubKind::SplitPair)
-                            }
+                        let assertion = match sub_kind {
+                            PersistedArrangementSubKind::FrameMember => EdgeAssertion::Arrangement {
+                                sub_kind: ArrangementSubKind::FrameMember,
+                            },
+                            PersistedArrangementSubKind::TileGroup => EdgeAssertion::Arrangement {
+                                sub_kind: ArrangementSubKind::TileGroup,
+                            },
+                            PersistedArrangementSubKind::SplitPair => EdgeAssertion::Arrangement {
+                                sub_kind: ArrangementSubKind::SplitPair,
+                            },
                             PersistedArrangementSubKind::TabNeighbor
                             | PersistedArrangementSubKind::ActiveTab
                             | PersistedArrangementSubKind::PinnedInFrame => continue,
                         };
-                        let _ = graph.add_edge(from, to, edge_type, None);
+                        let _ = graph.assert_relation(from, to, assertion);
                     }
                 }
                 if let Some(containment) = &pedge.containment {
                     for sub_kind in &containment.sub_kinds {
-                        let edge_type = match sub_kind {
-                            PersistedContainmentSubKind::UrlPath => {
-                                EdgeType::ContainmentRelation(ContainmentSubKind::UrlPath)
-                            }
-                            PersistedContainmentSubKind::Domain => {
-                                EdgeType::ContainmentRelation(ContainmentSubKind::Domain)
-                            }
+                        let assertion = match sub_kind {
+                            PersistedContainmentSubKind::UrlPath => EdgeAssertion::Containment {
+                                sub_kind: ContainmentSubKind::UrlPath,
+                            },
+                            PersistedContainmentSubKind::Domain => EdgeAssertion::Containment {
+                                sub_kind: ContainmentSubKind::Domain,
+                            },
                             _ => continue,
                         };
-                        let _ = graph.add_edge(from, to, edge_type, None);
+                        let _ = graph.assert_relation(from, to, assertion);
                     }
                 }
                 if let Some(imported) = &pedge.imported {
@@ -250,11 +250,16 @@ impl Graph {
                     }
                 }
                 if let Some(traversal) = &pedge.traversal {
-                    let _ = graph.add_edge(from, to, EdgeType::History, None);
-                    if let Some(edge_key) = graph.find_edge_key(from, to)
-                        && let Some(payload) = graph.inner.edge_weight_mut(edge_key)
-                        && let Some(data) = payload.traversal.as_mut()
-                    {
+                    // Ensure a payload exists for from→to, then
+                    // overwrite its traversal sidecar with the persisted
+                    // events + metrics.
+                    let edge_key = graph
+                        .find_edge_key(from, to)
+                        .unwrap_or_else(|| graph.inner.add_edge(from, to, EdgePayload::new()));
+                    if let Some(payload) = graph.inner.edge_weight_mut(edge_key) {
+                        let data = payload
+                            .traversal
+                            .get_or_insert_with(TraversalData::default);
                         data.traversals = traversal
                             .traversals
                             .iter()

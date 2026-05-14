@@ -6,7 +6,7 @@ use euclid::default::Point2D;
 use uuid::Uuid;
 
 use super::{
-    EdgeAssertion, EdgeKey, EdgeType, FrameLayoutHint, Graph, NodeKey, RelationSelector, Traversal,
+    EdgeAssertion, EdgeKey, FrameLayoutHint, Graph, NodeKey, RelationSelector, Traversal,
 };
 
 #[derive(Debug, Clone)]
@@ -15,12 +15,6 @@ pub enum GraphDelta {
         id: Option<Uuid>,
         url: String,
         position: Point2D<f32>,
-    },
-    AddEdge {
-        from: NodeKey,
-        to: NodeKey,
-        edge_type: EdgeType,
-        edge_label: Option<String>,
     },
     AssertRelation {
         from: NodeKey,
@@ -35,12 +29,6 @@ pub enum GraphDelta {
         url: String,
         position: Point2D<f32>,
     },
-    ReplayAddEdgeByIds {
-        from_id: Uuid,
-        to_id: Uuid,
-        edge_type: EdgeType,
-        edge_label: Option<String>,
-    },
     ReplayAssertRelationByIds {
         from_id: Uuid,
         to_id: Uuid,
@@ -49,20 +37,10 @@ pub enum GraphDelta {
     ReplayRemoveNodeById {
         node_id: Uuid,
     },
-    ReplayRemoveEdgesByIds {
-        from_id: Uuid,
-        to_id: Uuid,
-        edge_type: EdgeType,
-    },
     ReplayRetractRelationsByIds {
         from_id: Uuid,
         to_id: Uuid,
         selector: RelationSelector,
-    },
-    RemoveEdges {
-        from: NodeKey,
-        to: NodeKey,
-        edge_type: EdgeType,
     },
     RetractRelations {
         from: NodeKey,
@@ -164,12 +142,6 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
             };
             GraphDeltaResult::NodeAdded(key)
         }
-        GraphDelta::AddEdge {
-            from,
-            to,
-            edge_type,
-            edge_label,
-        } => GraphDeltaResult::EdgeAdded(graph.add_edge(from, to, edge_type, edge_label)),
         GraphDelta::AssertRelation {
             from,
             to,
@@ -181,14 +153,6 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
                 graph.replay_add_node_with_id_if_missing(id, url, position),
             )
         }
-        GraphDelta::ReplayAddEdgeByIds {
-            from_id,
-            to_id,
-            edge_type,
-            edge_label,
-        } => GraphDeltaResult::EdgeAdded(
-            graph.replay_add_edge_by_ids(from_id, to_id, edge_type, edge_label),
-        ),
         GraphDelta::ReplayAssertRelationByIds {
             from_id,
             to_id,
@@ -199,13 +163,6 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
         GraphDelta::ReplayRemoveNodeById { node_id } => {
             GraphDeltaResult::NodeRemoved(graph.replay_remove_node_by_id(node_id))
         }
-        GraphDelta::ReplayRemoveEdgesByIds {
-            from_id,
-            to_id,
-            edge_type,
-        } => GraphDeltaResult::EdgesRemoved(
-            graph.replay_remove_edges_by_ids(from_id, to_id, edge_type),
-        ),
         GraphDelta::ReplayRetractRelationsByIds {
             from_id,
             to_id,
@@ -213,11 +170,6 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
         } => GraphDeltaResult::EdgesRemoved(
             graph.replay_retract_relations_by_ids(from_id, to_id, selector),
         ),
-        GraphDelta::RemoveEdges {
-            from,
-            to,
-            edge_type,
-        } => GraphDeltaResult::EdgesRemoved(graph.remove_edges(from, to, edge_type)),
         GraphDelta::RetractRelations { from, to, selector } => {
             GraphDeltaResult::EdgesRemoved(graph.retract_relations(from, to, selector))
         }
