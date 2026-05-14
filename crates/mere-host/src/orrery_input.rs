@@ -43,6 +43,23 @@ fn orrery_state_mut(
     this.panes.get_mut(&pane_id)?.as_orrery_mut()
 }
 
+/// Resolve a pane's UUID-keyed hide set into the `NodeKey`-keyed set
+/// the orrery renderer + scene derivation consume. Stale entries
+/// (a node was removed) are silently dropped.
+fn resolve_hidden_relations(
+    graph: &mere_kernel::graph::Graph,
+    hidden: &std::collections::HashSet<crate::pane_state::HiddenRelationKey>,
+) -> mere_host_orrery::HiddenRelations {
+    hidden
+        .iter()
+        .filter_map(|(from_id, to_id, kind)| {
+            let from = graph.get_node_key_by_id(*from_id)?;
+            let to = graph.get_node_key_by_id(*to_id)?;
+            Some((from, to, *kind))
+        })
+        .collect()
+}
+
 /// Convert a gpui mouse-button into the graph-canvas vocabulary.
 fn pointer_button(b: MouseButton) -> Option<PointerButton> {
     match b {
@@ -263,8 +280,15 @@ fn dispatch_to_engine(
     let Some(graph_entity) = this.registry.read(cx).get(graph_id).cloned() else {
         return;
     };
-    let scene =
-        mere_host_orrery::derive_scene_for_bounds(graph_entity.read(cx), &camera, bounds);
+    let hidden = orrery_state(this, pane_id)
+        .map(|o| resolve_hidden_relations(graph_entity.read(cx), &o.hidden_relations))
+        .unwrap_or_default();
+    let scene = mere_host_orrery::derive_scene_for_bounds(
+        graph_entity.read(cx),
+        &camera,
+        bounds,
+        &hidden,
+    );
     let viewport = viewport_for(bounds);
     let Some(orrery) = orrery_state_mut(this, pane_id) else {
         return;
@@ -312,8 +336,10 @@ pub(crate) fn render_orrery_with_interactivity(
 
     let bounds_sink = this_orrery.bounds_sink.clone();
     let camera = this_orrery.camera.clone();
+    let hidden = resolve_hidden_relations(graph, &this_orrery.hidden_relations);
 
-    let inner = mere_host_orrery::render(graph, camera, display, bounds_sink.clone());
+    let inner =
+        mere_host_orrery::render(graph, camera, display, bounds_sink.clone(), &hidden);
 
     let bounds_sink_move = bounds_sink.clone();
     let on_mouse_move = cx.listener(
@@ -475,13 +501,26 @@ pub(crate) fn render_orrery_with_interactivity(
         },
     );
 
-    // Right-click → context menu for the hovered node (or the
-    // orrery background if no node is under the cursor).
+    // Right-click → context menu for the hovered node, else the
+    // hovered edge, else the orrery background.
     let on_right_down = cx.listener(
         move |this, ev: &MouseDownEvent, _window: &mut Window, cx: &mut Context<HostRoot>| {
-            let hovered = orrery_state(this, pane_id).and_then(|o| o.engine.state.hovered_node);
-            if let Some(node) = hovered {
+            let hovered_node =
+                orrery_state(this, pane_id).and_then(|o| o.engine.state.hovered_node);
+            let hovered_edge = orrery_state(this, pane_id)
+                .and_then(|o| o.engine.state.hovered_edge.clone());
+            if let Some(node) = hovered_node {
                 open_node_context_menu(this, pane_id, graph_id, node, ev.position, cx);
+            } else if let Some(edge) = hovered_edge {
+                open_edge_context_menu(
+                    this,
+                    pane_id,
+                    graph_id,
+                    edge.source,
+                    edge.target,
+                    ev.position,
+                    cx,
+                );
             } else {
                 // No-node right-click: orrery-background menu —
                 // reserved for future entries (Fit to graph, Reset
@@ -596,18 +635,127 @@ fn open_node_context_menu(
         )
         .with_separator(),
     );
-    // Reserved entries — surface what's coming, greyed until the
-    // backing actions exist.
+    // Rename stays reserved — needs an in-menu text affordance that
+    // doesn't exist yet.
     entries.push(
         ContextMenuEntry::new("Rename node", BusAction::app(ActionKind::Quit))
             .disabled("not yet implemented"),
     );
-    entries.push(
-        ContextMenuEntry::new("Delete node", BusAction::app(ActionKind::Quit))
-            .disabled("not yet implemented"),
-    );
+    // Delete removes the node + all its incident edges from graph
+    // truth. Per the relation-taxonomy plan §6.1, node deletion is
+    // a deliberate authorship gesture (unlike per-relation hide).
+    entries.push(ContextMenuEntry::new(
+        "Delete node",
+        BusAction::app(ActionKind::RemoveNode { graph_id, node }),
+    ));
 
     this.open_context_menu(position, entries, cx);
+}
+
+/// Pop a context menu for a right-clicked orrery **edge**. One stored
+/// edge between a node pair can carry several typed relations; the
+/// menu lists every relation on `(from, to)` with a "Hide" entry
+/// (view-local, always offered) and — for user-authored relations
+/// only — a "Delete" entry that retracts from graph truth. Per the
+/// 2026-05-11 relation-taxonomy plan §6.1 authorship table.
+fn open_edge_context_menu(
+    this: &mut HostRoot,
+    pane_id: PaneId,
+    graph_id: GraphId,
+    from: NodeKey,
+    to: NodeKey,
+    position: Point<Pixels>,
+    cx: &mut Context<HostRoot>,
+) {
+    use crate::context_menu::ContextMenuEntry;
+    use mere_host_runtime::{ActionKind, BusAction};
+    use mere_kernel::graph::RelationKind;
+
+    // Collect the relations carried on this node pair.
+    let relations: Vec<RelationKind> = {
+        let Some(graph_entity) = this.registry.read(cx).get(graph_id).cloned() else {
+            return;
+        };
+        graph_entity
+            .read(cx)
+            .relations()
+            .filter(|view| view.from == from && view.to == to)
+            .map(|view| view.kind)
+            .collect()
+    };
+    if relations.is_empty() {
+        tracing::debug!(?from, ?to, "edge context menu: no relations on pair");
+        return;
+    }
+
+    let mut entries = Vec::new();
+    for kind in relations {
+        let label = relation_kind_label(kind);
+        entries.push(ContextMenuEntry::new(
+            format!("Hide {label}"),
+            BusAction::pane(
+                pane_id,
+                ActionKind::HideRelation {
+                    graph_id,
+                    from,
+                    to,
+                    kind,
+                },
+            ),
+        ));
+        if let Some(selector) = retractable_selector(kind) {
+            entries.push(ContextMenuEntry::new(
+                format!("Delete {label}"),
+                BusAction::app(ActionKind::RetractRelation {
+                    graph_id,
+                    from,
+                    to,
+                    selector,
+                }),
+            ));
+        }
+    }
+    this.open_context_menu(position, entries, cx);
+}
+
+/// Human-readable label for a [`RelationKind`] menu row.
+fn relation_kind_label(kind: mere_kernel::graph::RelationKind) -> String {
+    use mere_kernel::graph::RelationKind;
+    match kind {
+        RelationKind::Semantic(sub_kind) => format!("{sub_kind:?} link"),
+        RelationKind::Traversal => "traversal".to_string(),
+        RelationKind::Containment(sub_kind) => format!("{sub_kind:?} containment"),
+        RelationKind::Arrangement(sub_kind) => format!("{sub_kind:?} arrangement"),
+        RelationKind::Imported(sub_kind) => format!("{sub_kind:?} import"),
+        RelationKind::Provenance(sub_kind) => format!("{sub_kind:?} provenance"),
+    }
+}
+
+/// Map a [`RelationKind`] to the [`RelationSelector`] that retracts
+/// it — but only when the relation is **user-authored** and therefore
+/// retractable. Returns `None` for document / derived / imported /
+/// provenance / traversal relations, which are hide-only. Per the
+/// 2026-05-11 relation-taxonomy plan §6.1.
+fn retractable_selector(
+    kind: mere_kernel::graph::RelationKind,
+) -> Option<mere_kernel::graph::RelationSelector> {
+    use mere_kernel::graph::{ContainmentSubKind, RelationKind, RelationSelector, SemanticSubKind};
+    match kind {
+        // Document hyperlinks are document-authored — hide-only.
+        RelationKind::Semantic(SemanticSubKind::Hyperlink) => None,
+        // Every other semantic sub-kind is user- or agent-authored.
+        RelationKind::Semantic(sub_kind) => Some(RelationSelector::Semantic(sub_kind)),
+        // Stored containment (folders, notebooks, collections) is
+        // user-authored; URL/domain containment is derived → hide-only.
+        RelationKind::Containment(
+            sub_kind @ (ContainmentSubKind::UserFolder
+            | ContainmentSubKind::NotebookSection
+            | ContainmentSubKind::CollectionMember),
+        ) => Some(RelationSelector::Containment(sub_kind)),
+        // Derived containment, arrangement, imported, provenance,
+        // traversal — hide-only.
+        _ => None,
+    }
 }
 
 /// Double-click on an orrery node → open the node as a **new tile**.

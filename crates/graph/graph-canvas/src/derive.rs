@@ -264,6 +264,7 @@ pub fn derive_scene_with_overlays<N: Clone + Eq + Hash>(
         z_values,
         config,
         &mut world_items,
+        &mut hit_proxies,
     );
 
     // ── Nodes ────────────────────────────────────────────────────────────
@@ -672,6 +673,7 @@ fn derive_edges<N: Clone + Eq + Hash>(
     z_values: &dyn Fn(&N) -> f32,
     config: &DeriveConfig,
     world_items: &mut Vec<SceneDrawItem>,
+    hit_proxies: &mut Vec<HitProxy<N>>,
 ) {
     // Build a position lookup from node id to index for edge endpoint resolution.
     // This avoids O(n*m) lookups when there are many edges.
@@ -712,6 +714,26 @@ fn derive_edges<N: Clone + Eq + Hash>(
                 width,
             },
         });
+
+        // Emit an edge hit proxy centred on the line midpoint. The
+        // box hit-test in `hit_test.rs` uses `half_width` as a
+        // square radius around the midpoint — keep it generously
+        // larger than the stroke so a thin line is still a usable
+        // right-click target, but not so large it swallows the
+        // endpoint nodes.
+        if config.emit_hit_proxies {
+            let midpoint = Point2D::new(
+                (src_screen.x + tgt_screen.x) * 0.5,
+                (src_screen.y + tgt_screen.y) * 0.5,
+            );
+            let half_width = (width * 1.5).clamp(8.0, 16.0);
+            hit_proxies.push(HitProxy::Edge {
+                source: edge.source.clone(),
+                target: edge.target.clone(),
+                midpoint,
+                half_width,
+            });
+        }
     }
 }
 
@@ -830,7 +852,19 @@ mod tests {
             &no_overrides,
             &DeriveConfig::default(),
         );
-        assert_eq!(scene.hit_proxies.len(), 3);
+        // 3 node proxies + 2 edge proxies for the 3-node, 2-edge input.
+        let node_proxies = scene
+            .hit_proxies
+            .iter()
+            .filter(|p| matches!(p, HitProxy::Node { .. }))
+            .count();
+        let edge_proxies = scene
+            .hit_proxies
+            .iter()
+            .filter(|p| matches!(p, HitProxy::Edge { .. }))
+            .count();
+        assert_eq!(node_proxies, 3);
+        assert_eq!(edge_proxies, 2);
     }
 
     #[test]
@@ -996,7 +1030,15 @@ mod tests {
             .filter(|item| matches!(item, SceneDrawItem::Circle { .. }))
             .collect();
         assert_eq!(circles.len(), 2);
-        assert_eq!(scene.hit_proxies.len(), 2);
+        // 2 node proxies for the 2 visible nodes. Edge proxies still
+        // emit when at least one endpoint is on-screen, so both
+        // edges (0→1 fully visible, 1→2 partly visible) survive.
+        let node_proxies = scene
+            .hit_proxies
+            .iter()
+            .filter(|p| matches!(p, HitProxy::Node { .. }))
+            .count();
+        assert_eq!(node_proxies, 2);
     }
 
     #[test]

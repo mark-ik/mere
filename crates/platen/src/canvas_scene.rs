@@ -8,7 +8,13 @@ use std::collections::HashSet;
 
 use graph_canvas::projection::{ProjectionMode, ViewDimension};
 use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, SceneMode, ViewId};
-use mere_kernel::graph::{Graph, GraphViewId, NodeKey};
+use mere_kernel::graph::{Graph, GraphViewId, NodeKey, RelationKind};
+
+/// View-local relation-hide key. One stored edge between a node pair
+/// can carry several typed relations; the key names the specific
+/// `(from, to, kind)` tuple so a Hyperlink line and a Cites line on
+/// the same pair hide independently.
+pub type HiddenRelationKey = (NodeKey, NodeKey, RelationKind);
 
 /// Canvas projection options for one graph view.
 #[derive(Clone, Debug, PartialEq)]
@@ -18,6 +24,11 @@ pub struct CanvasSceneOptions {
     pub dimension: ViewDimension,
     pub visible_nodes: Option<Vec<NodeKey>>,
     pub default_node_radius: f32,
+    /// Relations the consuming view has hidden. View-local policy —
+    /// graph truth is untouched; these `(from, to, kind)` tuples are
+    /// simply dropped from the derived scene's edges. Per the
+    /// 2026-05-11 relation-taxonomy plan §6.2.
+    pub hidden_relations: HashSet<HiddenRelationKey>,
 }
 
 impl CanvasSceneOptions {
@@ -37,6 +48,7 @@ impl Default for CanvasSceneOptions {
             dimension: ViewDimension::default(),
             visible_nodes: None,
             default_node_radius: 18.0,
+            hidden_relations: HashSet::new(),
         }
     }
 }
@@ -66,6 +78,11 @@ pub fn build_canvas_scene_input(
             visible_nodes
                 .as_ref()
                 .is_none_or(|mask| mask.contains(&edge.from) && mask.contains(&edge.to))
+        })
+        .filter(|edge| {
+            !options
+                .hidden_relations
+                .contains(&(edge.from, edge.to, edge.kind))
         })
         .map(|edge| CanvasEdge {
             source: edge.from,
@@ -158,5 +175,52 @@ mod tests {
         assert_eq!(scene.nodes.len(), 1);
         assert_eq!(scene.nodes[0].id, first);
         assert!(scene.edges.is_empty());
+    }
+
+    #[test]
+    fn hidden_relations_drop_edge_without_touching_graph_truth() {
+        let (graph, first, second) = graph_with_edge();
+        let hidden: HashSet<HiddenRelationKey> = HashSet::from([(
+            first,
+            second,
+            RelationKind::Semantic(SemanticSubKind::Hyperlink),
+        )]);
+
+        let scene = build_canvas_scene_input(
+            &graph,
+            CanvasSceneOptions {
+                view_id: view_id(5),
+                hidden_relations: hidden,
+                ..CanvasSceneOptions::default()
+            },
+        );
+
+        // The hidden relation is dropped from the derived scene...
+        assert_eq!(scene.nodes.len(), 2);
+        assert!(scene.edges.is_empty());
+        // ...but graph truth is untouched — `relations()` still yields it.
+        assert_eq!(graph.relations().count(), 1);
+    }
+
+    #[test]
+    fn non_matching_hidden_key_leaves_edge_visible() {
+        let (graph, first, second) = graph_with_edge();
+        // Same node pair, wrong kind — must not match the Hyperlink edge.
+        let hidden: HashSet<HiddenRelationKey> = HashSet::from([(
+            first,
+            second,
+            RelationKind::Semantic(SemanticSubKind::Cites),
+        )]);
+
+        let scene = build_canvas_scene_input(
+            &graph,
+            CanvasSceneOptions {
+                view_id: view_id(6),
+                hidden_relations: hidden,
+                ..CanvasSceneOptions::default()
+            },
+        );
+
+        assert_eq!(scene.edges.len(), 1);
     }
 }

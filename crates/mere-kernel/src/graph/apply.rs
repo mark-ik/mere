@@ -6,7 +6,7 @@ use euclid::default::Point2D;
 use uuid::Uuid;
 
 use super::{
-    EdgeAssertion, EdgeKey, FrameLayoutHint, Graph, NodeKey, RelationSelector, Traversal,
+    EdgeAssertion, EdgeKey, FrameLayoutHint, Graph, NavigationTrigger, NodeKey, RelationSelector,
 };
 
 #[derive(Debug, Clone)]
@@ -47,10 +47,14 @@ pub enum GraphDelta {
         to: NodeKey,
         selector: RelationSelector,
     },
+    /// Append a traversal event to the `from → to` edge (creating the
+    /// edge if absent). `timestamp_ms = None` stamps now-via-the-kernel;
+    /// `Some(t)` uses the supplied timestamp (importers, replay).
     AppendTraversal {
         from: NodeKey,
         to: NodeKey,
-        traversal: Traversal,
+        trigger: NavigationTrigger,
+        timestamp_ms: Option<u64>,
     },
     SetNodeTitle {
         key: NodeKey,
@@ -176,8 +180,14 @@ pub fn apply_graph_delta(graph: &mut Graph, delta: GraphDelta) -> GraphDeltaResu
         GraphDelta::AppendTraversal {
             from,
             to,
-            traversal,
-        } => GraphDeltaResult::TraversalAppended(graph.push_traversal(from, to, traversal)),
+            trigger,
+            timestamp_ms,
+        } => GraphDeltaResult::TraversalAppended(graph.append_traversal(
+            from,
+            to,
+            trigger,
+            timestamp_ms,
+        )),
         GraphDelta::SetNodeTitle { key, title } => {
             GraphDeltaResult::NodeMetadataUpdated(graph.set_node_title(key, title))
         }

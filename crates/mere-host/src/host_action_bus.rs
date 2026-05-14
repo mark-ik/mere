@@ -19,13 +19,27 @@
 //! `manifest.policy.overrides`.
 
 use gpui::Context;
-use mere_frame::PaneContent;
+use mere_frame::{GraphId, PaneContent};
 use mere_host_runtime::{
     ActionKind, ActionTarget, BusAction, PermissionDecision, PermissionGate, TearOutMode,
     check_permission,
 };
 
 use crate::HostRoot;
+
+/// Resolve `graph_id` against the shared registry and run `f` against
+/// the live `Graph` entity. Returns `None` when the graph isn't
+/// registered (stale id, closed session). `f` owns deciding whether
+/// to `notify()`.
+fn with_graph<R>(
+    this: &HostRoot,
+    graph_id: GraphId,
+    cx: &mut Context<HostRoot>,
+    f: impl FnOnce(&mut mere_kernel::graph::Graph, &mut Context<mere_kernel::graph::Graph>) -> R,
+) -> Option<R> {
+    let graph_entity = this.registry.read(cx).get(graph_id).cloned()?;
+    Some(graph_entity.update(cx, f))
+}
 
 /// Run a kind through target inference + dispatch in one call.
 /// Most keybinding handlers route here.
@@ -113,6 +127,24 @@ pub(crate) fn current_target_for_kind(this: &HostRoot, kind: &ActionKind) -> Act
                 .active_workbench
                 .map(ActionTarget::Pane)
                 .unwrap_or(ActionTarget::App),
+
+        // Graph-truth mutation — the kind carries `graph_id`, so the
+        // dispatch target is App (graph truth is shared across
+        // windows, not pane-scoped).
+        AssertRelation { .. }
+        | RetractRelation { .. }
+        | AppendTraversal { .. }
+        | RemoveNode { .. }
+            => ActionTarget::App,
+
+        // View-local relation hide — scoped to the orrery leaf whose
+        // view should suppress the relation. Context-menu dispatch
+        // carries an explicit `Pane` target; this fallback only
+        // applies to a (currently non-existent) keybinding path.
+        HideRelation { .. } => this
+            .primary_orrery_pane
+            .map(ActionTarget::Pane)
+            .unwrap_or(ActionTarget::App),
 
         // Session-scoped — reserved for manifest/fork machinery.
         // v0 falls back to App; real wiring lands with the
@@ -313,6 +345,99 @@ fn execute(
             // gate against its own kind so policy still applies
             // separately if branch / fork are gated differently.
             crate::host_action_bus::dispatch(this, next, cx);
+        }
+
+        AssertRelation {
+            graph_id,
+            from,
+            to,
+            assertion,
+        } => {
+            with_graph(this, graph_id, cx, |g, gcx| {
+                if g.assert_relation(from, to, assertion).is_some() {
+                    gcx.notify();
+                }
+            });
+        }
+
+        RetractRelation {
+            graph_id,
+            from,
+            to,
+            selector,
+        } => {
+            with_graph(this, graph_id, cx, |g, gcx| {
+                if g.retract_relations(from, to, selector) > 0 {
+                    gcx.notify();
+                }
+            });
+        }
+
+        AppendTraversal {
+            graph_id,
+            from,
+            to,
+            trigger,
+        } => {
+            with_graph(this, graph_id, cx, |g, gcx| {
+                if g.append_traversal(from, to, trigger, None) {
+                    gcx.notify();
+                }
+            });
+        }
+
+        RemoveNode { graph_id, node } => {
+            let removed = with_graph(this, graph_id, cx, |g, gcx| {
+                let removed = g.remove_node(node);
+                if removed {
+                    gcx.notify();
+                }
+                removed
+            })
+            .unwrap_or(false);
+            if removed {
+                this.rebuild_app_tree(cx);
+            }
+        }
+
+        HideRelation {
+            graph_id,
+            from,
+            to,
+            kind,
+        } => {
+            let ActionTarget::Pane(pane_id) = target else {
+                tracing::debug!(?kind, "HideRelation: non-Pane target");
+                return;
+            };
+            // Resolve the stable UUID key from the graph — orrery
+            // hide state is keyed by UUID, not petgraph `NodeKey`.
+            let key = this
+                .registry
+                .read(cx)
+                .get(graph_id)
+                .and_then(|graph_entity| {
+                    let graph = graph_entity.read(cx);
+                    let from_id = graph.get_node(from)?.id;
+                    let to_id = graph.get_node(to)?.id;
+                    Some((from_id, to_id, kind))
+                });
+            let Some(key) = key else {
+                tracing::debug!(?from, ?to, "HideRelation: endpoint node missing");
+                return;
+            };
+            if let Some(orrery) = this
+                .panes
+                .get_mut(&pane_id)
+                .and_then(|s| s.as_orrery_mut())
+            {
+                // Toggle — a second invocation on the same relation
+                // un-hides it.
+                if !orrery.hidden_relations.remove(&key) {
+                    orrery.hidden_relations.insert(key);
+                }
+                cx.notify();
+            }
         }
 
         ForkStickyNoteSession

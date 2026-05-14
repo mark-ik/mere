@@ -34,7 +34,12 @@ use graph_canvas::camera::{CanvasCamera, CanvasViewport};
 use graph_canvas::derive::{DeriveConfig, NodeVisualOverride, derive_scene};
 use graph_canvas::packet::{Color, HitProxy, ProjectedScene, SceneDrawItem, Stroke};
 use mere_kernel::graph::{Graph, GraphViewId, NodeKey};
-use platen::{CanvasSceneOptions, build_canvas_scene_input};
+use platen::{CanvasSceneOptions, HiddenRelationKey, build_canvas_scene_input};
+
+/// Set of relations the host wants this orrery view to suppress.
+/// Resolved host-side from per-orrery hide state (which is keyed by
+/// stable node UUIDs) into `NodeKey` keys for scene derivation.
+pub type HiddenRelations = std::collections::HashSet<HiddenRelationKey>;
 
 /// Per-node display state the host computes and the orrery reads.
 ///
@@ -72,11 +77,9 @@ pub fn render(
     camera: CanvasCamera,
     state: OrreryDisplayState,
     bounds_sink: Rc<Cell<Option<Bounds<Pixels>>>>,
+    hidden_relations: &HiddenRelations,
 ) -> AnyElement {
-    let scene_input = build_canvas_scene_input(
-        graph,
-        CanvasSceneOptions::new(GraphViewId::from_uuid(uuid::Uuid::nil())),
-    );
+    let scene_input = build_canvas_scene_input(graph, scene_options(hidden_relations));
     let node_count = scene_input.nodes.len();
     let edge_count = scene_input.edges.len();
 
@@ -132,17 +135,26 @@ pub fn render(
 
 /// Derive a `ProjectedScene` for given graph + camera + bounds. Exposed
 /// so the host can do hit-testing on the same projected positions
-/// without duplicating the projection.
+/// without duplicating the projection. `hidden_relations` are dropped
+/// from the derived edges so a hidden relation can't be hovered or
+/// right-clicked.
 pub fn derive_scene_for_bounds(
     graph: &Graph,
     camera: &CanvasCamera,
     bounds: Bounds<Pixels>,
+    hidden_relations: &HiddenRelations,
 ) -> ProjectedScene<NodeKey> {
-    let scene_input = build_canvas_scene_input(
-        graph,
-        CanvasSceneOptions::new(GraphViewId::from_uuid(uuid::Uuid::nil())),
-    );
+    let scene_input = build_canvas_scene_input(graph, scene_options(hidden_relations));
     derive_for_bounds(&scene_input, camera, bounds, None)
+}
+
+/// Scene options for the orrery's nil-UUID v0 view, carrying the
+/// host-supplied hidden-relation filter.
+fn scene_options(hidden_relations: &HiddenRelations) -> CanvasSceneOptions {
+    CanvasSceneOptions {
+        hidden_relations: hidden_relations.clone(),
+        ..CanvasSceneOptions::new(GraphViewId::from_uuid(uuid::Uuid::nil()))
+    }
 }
 
 fn derive_for_bounds(

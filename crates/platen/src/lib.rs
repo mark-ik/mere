@@ -73,7 +73,9 @@ pub mod document_scene;
 /// given pane.
 pub mod workbench;
 
-pub use canvas_scene::{CanvasSceneOptions, build_canvas_scene_input, graph_view_id_to_canvas};
+pub use canvas_scene::{
+    CanvasSceneOptions, HiddenRelationKey, build_canvas_scene_input, graph_view_id_to_canvas,
+};
 pub use cartography_scene::{
     CartographySceneOptions, build_projection_request, project_with, step_with,
 };

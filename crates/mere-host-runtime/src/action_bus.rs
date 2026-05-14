@@ -56,7 +56,9 @@
 //! migration targets.
 
 use mere_frame::{FrameId, GraphId, InsertSide, PaneId, SessionId};
-use mere_kernel::graph::NodeKey;
+use mere_kernel::graph::{
+    EdgeAssertion, NavigationTrigger, NodeKey, RelationKind, RelationSelector,
+};
 
 use crate::manifest::PersonaId;
 
@@ -194,6 +196,50 @@ pub enum ActionKind {
 
     // ---- Phase 3 fork machinery (target = Session)
     ForkStickyNoteSession,
+
+    // ---- Graph mutation (target = App; the kind carries graph_id
+    // because graph truth is shared across windows, not pane-scoped)
+    /// Add a typed relation to the `from → to` edge in `graph_id`.
+    AssertRelation {
+        graph_id: GraphId,
+        from: NodeKey,
+        to: NodeKey,
+        assertion: EdgeAssertion,
+    },
+    /// Remove a relation matching `selector` from the `from → to`
+    /// edge — mutates graph truth. Per the relation-taxonomy plan
+    /// §6.1 only user-authored Semantic / AgentDerived relations are
+    /// retractable; the host gates which menu entries offer this.
+    RetractRelation {
+        graph_id: GraphId,
+        from: NodeKey,
+        to: NodeKey,
+        selector: RelationSelector,
+    },
+    /// Append a traversal event to the `from → to` edge.
+    AppendTraversal {
+        graph_id: GraphId,
+        from: NodeKey,
+        to: NodeKey,
+        trigger: NavigationTrigger,
+    },
+    /// Remove a node and all its incident edges from `graph_id`.
+    RemoveNode {
+        graph_id: GraphId,
+        node: NodeKey,
+    },
+
+    // ---- View-local relation policy (target = Pane; the orrery
+    // leaf whose view should hide the relation)
+    /// Toggle a relation's hidden state in one orrery pane's view.
+    /// View-local — never mutates graph truth. Per the
+    /// relation-taxonomy plan §6.2 the host stores this per-orrery.
+    HideRelation {
+        graph_id: GraphId,
+        from: NodeKey,
+        to: NodeKey,
+        kind: RelationKind,
+    },
 
     // ---- Manifest / session lifecycle (target = Session)
     KillSession,

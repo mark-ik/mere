@@ -15,6 +15,7 @@
 //! (gloss, apparatus) get `PaneState::Other`.
 
 use std::cell::Cell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use euclid::default::Vector2D;
@@ -23,9 +24,17 @@ use graph_canvas::camera::CanvasCamera;
 use graph_canvas::engine::{InteractionConfig, InteractionEngine};
 use graph_tree::{GraphTree, LayoutMode, ProjectionLens};
 use mere_frame::PaneContent;
-use mere_kernel::graph::NodeKey;
+use mere_kernel::graph::{NodeKey, RelationKind};
+use uuid::Uuid;
 
 use crate::tiles::TileManager;
+
+/// View-local relation-hide key, keyed by **stable node UUIDs** (not
+/// petgraph `NodeKey`, which isn't stable across save/load). Per the
+/// 2026-05-11 relation-taxonomy plan §6.2: v0 hide state is
+/// in-memory per-orrery; v1 migrates it to the on-disk `ViewIntent`
+/// sidecar with this same key shape.
+pub(crate) type HiddenRelationKey = (Uuid, Uuid, RelationKind);
 
 pub(crate) enum PaneState {
     Orrery(OrreryPaneState),
@@ -40,6 +49,10 @@ pub(crate) struct OrreryPaneState {
     pub zoom_target: f32,
     pub engine: InteractionEngine<NodeKey>,
     pub bounds_sink: Rc<Cell<Option<Bounds<Pixels>>>>,
+    /// Relations this orrery view has hidden. View-local policy —
+    /// `HideRelation` toggles entries here; graph truth is untouched.
+    /// Keyed by stable node UUIDs (see [`HiddenRelationKey`]).
+    pub hidden_relations: HashSet<HiddenRelationKey>,
 }
 
 impl Default for OrreryPaneState {
@@ -49,6 +62,7 @@ impl Default for OrreryPaneState {
             zoom_target: 1.0,
             engine: InteractionEngine::new(InteractionConfig::default()),
             bounds_sink: Rc::new(Cell::new(None)),
+            hidden_relations: HashSet::new(),
         }
     }
 }

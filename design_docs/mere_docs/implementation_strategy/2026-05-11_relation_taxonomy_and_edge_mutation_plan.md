@@ -1,7 +1,7 @@
 # Relation taxonomy cleanup + edge mutation MVP — implementation plan
 
 **Date**: 2026-05-11
-**Status**: In progress — Stages 1–4 landed (taxonomy + API removal complete); Stage 5 (edge mutation MVP) pending
+**Status**: Stages 1–5 landed (MVP). Follow-ups noted in §12 step 5.
 **Scope**: Make `mere-kernel`'s graph the source of truth for relation taxonomy before building edge create/delete UI. Remove the legacy `EdgeType` / `EdgeKind` path instead of extending it. Keep the six families (`Semantic`, `Traversal`, `Containment`, `Arrangement`, `Imported`, `Provenance`). Land an MVP of edge create / hide / retract on top, with derived/imported/provenance/document-hyperlink/traversal-history as hide-only (never retract). Treat "navigatory" as a projection over node navigation memory, semantic hyperlinks, and traversal events — **not** as a durable edge family.
 
 **Related**:
@@ -223,7 +223,13 @@ Stage as five PRs/commits, each leaving the codebase green:
 2. **Add new write API.** ✅ Landed. `Graph::retract_relations`, `Graph::append_traversal`, `Graph::relations()` → `RelationView`. `Graph::assert_relation` already existed.
 3. **Migrate Mere-owned callers off old API.** ✅ Landed. `mere-host` (`host_helpers`, `demo`), `mere-host-runtime` test fixture, `cartography` test fixtures, `graphshell` composition tests.
 4. **Remove old API.** ✅ Landed. `EdgeType`, `EdgeKind`, `UserGroupedData`, `Graph::add_edge`, `Graph::remove_edges`, `Graph::edges()`, `EdgeView`, and the `GraphDelta::{AddEdge, RemoveEdges, ReplayAddEdgeByIds, ReplayRemoveEdgesByIds}` variants are gone. `EdgePayload` refactored: typed sidecars authoritative, `families()` computed on demand, `kinds` field removed. `apply.rs` / snapshot reader+writer / `cartography` / `platen` migrated. `cargo test --workspace --exclude mere-host` + `cargo test -p mere-kernel` + `cargo check --manifest-path crates/mere-host/Cargo.toml` all green.
-5. **Edge mutation MVP.** Pending. `AssertRelation` / `RetractRelation` / `HideRelation` / `AppendTraversal` bus actions, hit-test extension to `(from, to, RelationKind)`, host wiring (orrery edge context menu's "Hide edge" entry, node menu's "Delete node" / "Create node here", etc.). Per-orrery `hidden_relations` state.
+5. **Edge mutation MVP.** ✅ Landed. `ActionKind::{AssertRelation, RetractRelation, HideRelation, AppendTraversal, RemoveNode}` bus actions + host execute wiring. `GraphDelta::AppendTraversal` signature is now `{ from, to, trigger, timestamp_ms }` per §7. `graph-canvas::derive_edges` emits `HitProxy::Edge` so the engine's `hovered_edge` populates. `OrreryPaneState.hidden_relations` (UUID-keyed) + `CanvasSceneOptions.hidden_relations` (NodeKey-keyed) filter; orrery `render` / `derive_scene_for_bounds` thread the set through. Orrery edge right-click → context menu listing every relation on the pair with "Hide …" (always) + "Delete …" (user-authored only, per §6.1). Node menu's "Delete node" is enabled → `RemoveNode`.
+
+   **Deviations from the plan as written, all deliberate v0 simplifications:**
+   - `HideRelation` is scoped via `ActionTarget::Pane(pane_id)` instead of a `view_id: ViewId` field — the orrery pane *is* the view in v0. The `ViewIntent` sidecar (§5.3) will reintroduce an explicit view id.
+   - Hit-test was **not** extended to carry `RelationKind`, and edges still render as one line per pair (not per-family-coloured lines). Instead the edge context menu lists *all* relations on the `(from, to)` pair and the user picks. Cheaper, no rendering rework, and good enough until multi-relation pairs are common. The §6.3 per-family rendering + RelationKind-carrying hit-test is the natural follow-up.
+   - "Create node here" is **deferred** — it needs an in-menu text-input affordance for the address, which the context-menu component doesn't have yet. `CreateNode` was not added as a dead `ActionKind`.
+   - `ActionKind::AppendTraversal` exists with a correct execute arm but no UI caller yet; navigation-emits-traversal is a separate wiring slice.
 
 ## 13. Test plan
 
