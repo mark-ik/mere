@@ -84,15 +84,31 @@ pub enum EngineProfileBinding {
     GraphScoped,
 }
 
-/// A background worker the session has declared. v0 enum is empty
-/// (no workers exist yet); `SessionServiceRunner` plan populates
-/// the variants.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// A background worker the session has declared. Real worker
+/// implementations land alongside their workloads — `WorkerKind` is
+/// the *vocabulary* the manifest persists, not a guarantee that a
+/// runner can service every variant. Per the
+/// [SessionServiceRunner plan](../../../../design_docs/mere_docs/implementation_strategy/2026-05-14_session_service_runner_plan.md)
+/// §3, a runner returns `WorkerStartError::Unsupported` for kinds it
+/// can't handle.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum WorkerKind {
-    /// No worker declared. Placeholder so the enum can be
+    /// No worker declared. Placeholder retained so the enum can be
     /// serialised before any real worker kinds land.
     #[default]
     None,
+    /// Background URL fetcher pool — populates document caches and
+    /// surfaces preview content for tiles. v0b adds the implementation.
+    FetcherPool,
+    /// Embedding producer (BERT-class model) — runs on demand to
+    /// populate the intelligence-embeddings store.
+    Embedder,
+    /// Indexer that walks document content into the `SearchIndex`
+    /// engram referenced by the framing brief §3.
+    Indexer,
+    /// Intelligence-signal producer — clusters, affinity, recency
+    /// signals consumed by cartography strategies.
+    IntelligenceSignalProducer,
 }
 
 /// Capability overrides for this session. v0 ships an empty struct

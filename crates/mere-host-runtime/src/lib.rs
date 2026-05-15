@@ -41,6 +41,7 @@ pub mod engine_profile_store;
 pub mod manifest;
 pub mod manifest_store;
 pub mod session_graph_store;
+pub mod session_service_runner;
 pub mod surface_tile;
 pub mod tearout;
 pub mod tiles;
@@ -61,6 +62,10 @@ pub use tearout::{PaneDragPayload, TileDragPayload};
 pub use engine_profile_store::{
     ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
     engine_profile_path, engine_profile_path_for_session,
+};
+pub use session_service_runner::{
+    InMemoryRunner, NullRunner, SessionServiceRunner, WorkerHandle, WorkerStartError, WorkerState,
+    WorkerStatus, WorkerStopError,
 };
 pub use tiles::{HistoryEntry, NavigateMode, TileManager, TileState};
 pub use view_intent_store::{HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
