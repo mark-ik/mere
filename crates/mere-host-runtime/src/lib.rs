@@ -43,6 +43,7 @@ pub mod manifest_store;
 pub mod session_graph_store;
 pub mod session_service_runner;
 pub mod surface_tile;
+pub mod switcher_thumbnail;
 pub mod tearout;
 pub mod tiles;
 pub mod view_intent_store;
@@ -66,6 +67,10 @@ pub use engine_profile_store::{
 pub use session_service_runner::{
     InMemoryRunner, NullRunner, SessionServiceRunner, WorkerHandle, WorkerStartError, WorkerState,
     WorkerStatus, WorkerStopError,
+};
+pub use switcher_thumbnail::{
+    SwitcherThumbnail, SwitcherThumbnailOptions, ThumbnailEdge, ThumbnailNode,
+    build_switcher_thumbnail,
 };
 pub use tiles::{HistoryEntry, NavigateMode, TileManager, TileState};
 pub use view_intent_store::{HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
