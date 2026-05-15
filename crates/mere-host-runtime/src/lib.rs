@@ -37,6 +37,7 @@
 #![doc(html_root_url = "https://docs.rs/mere-host-runtime/0.0.1")]
 
 pub mod action_bus;
+pub mod engine_profile_store;
 pub mod manifest;
 pub mod manifest_store;
 pub mod session_graph_store;
@@ -57,5 +58,9 @@ pub use manifest::{
 pub use manifest_store::{LoadFailure, LoadReport, MANIFEST_FILE, ManifestStore, TRASH_DIR};
 pub use surface_tile::{SurfaceTileState, SurfaceTileStep};
 pub use tearout::{PaneDragPayload, TileDragPayload};
+pub use engine_profile_store::{
+    ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
+    engine_profile_path, engine_profile_path_for_session,
+};
 pub use tiles::{HistoryEntry, NavigateMode, TileManager, TileState};
 pub use view_intent_store::{HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
