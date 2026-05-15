@@ -241,9 +241,9 @@ fn execute(
 
         ReparentPane { source, side } => {
             // Target = the dispatch's `ActionTarget::Pane`; source
-            // = where the user grabbed; side = which side of the
-            // target to attach (Right by default — drop-zone
-            // refinement is a follow-up).
+            // = where the user grabbed; side = which edge of the
+            // target to attach. The drop-zone gutter rule lives in
+            // `crate::drop_zone::infer_drop_side`.
             if let ActionTarget::Pane(target_pane) = target {
                 this.reparent_pane(source, target_pane, side, cx);
             } else {

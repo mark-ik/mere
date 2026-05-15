@@ -41,6 +41,7 @@ mod a11y;
 mod bootstrap;
 mod context_menu;
 mod demo;
+mod drop_zone;
 mod graph_registry;
 mod graph_switcher;
 mod host_action_bus;

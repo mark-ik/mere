@@ -10,11 +10,13 @@
 //! module just wires the rendered orrery element into the right leaf
 //! slot.
 
+use std::cell::Cell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use gpui::{
     AnyElement, App, Bounds, Context, MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point,
-    Size, Window, div, prelude::*, px, relative, rgb,
+    Size, Window, canvas, div, prelude::*, px, relative, rgb,
 };
 use mere_frame::{
     FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice, SplitPath,
@@ -480,36 +482,59 @@ fn render_leaf(
                 .into_any_element()
         }
     };
-    // Pane wrapper accepts `PaneDragPayload` drops — the source
-    // pane gets reparented as a right-sibling of THIS pane. v0:
-    // hardcoded `InsertSide::Right`; quadrant-based side inference
-    // (top/bottom/left/right zones) is a follow-up.
+    // Pane wrapper accepts `PaneDragPayload` drops. The cursor's
+    // position within the target pane infers which edge the source
+    // attaches to: left / right / above / below. Drops landing in
+    // the central zone default to Right (the v0 fallback) since the
+    // gesture is ambiguous.
     let target_pane = pane_id;
+    let wrapper_bounds: Rc<Cell<Option<Bounds<Pixels>>>> = Rc::new(Cell::new(None));
+    let bounds_for_drop = wrapper_bounds.clone();
     let on_pane_drop = cx.listener(
         move |this,
               payload: &mere_host_runtime::PaneDragPayload,
-              _window: &mut Window,
+              window: &mut Window,
               cx: &mut Context<HostRoot>| {
             if payload.pane_id == target_pane {
                 return; // self-drop: no-op
             }
+            let side = bounds_for_drop
+                .get()
+                .map(|bounds| {
+                    crate::drop_zone::infer_drop_side(
+                        window.mouse_position_in_window(),
+                        bounds,
+                    )
+                })
+                .unwrap_or(mere_frame::InsertSide::Right);
             crate::host_action_bus::dispatch(
                 this,
                 mere_host_runtime::BusAction::pane(
                     target_pane,
                     mere_host_runtime::ActionKind::ReparentPane {
                         source: payload.pane_id,
-                        side: mere_frame::InsertSide::Right,
+                        side,
                     },
                 ),
                 cx,
             );
         },
     );
+    // Invisible canvas paints over the wrapper to capture its
+    // window-local bounds on every paint — the drop handler reads
+    // these to convert the cursor position into a quadrant.
+    let bounds_for_canvas = wrapper_bounds;
+    let bounds_capture = canvas(
+        |_, _, _| {},
+        move |bounds, _, _, _| bounds_for_canvas.set(Some(bounds)),
+    )
+    .absolute()
+    .size_full();
     let wrapper_id: gpui::ElementId =
         gpui::SharedString::from(format!("pane-wrapper-{}", pane_id.0)).into();
     div()
         .id(wrapper_id)
+        .relative()
         .flex()
         .flex_col()
         .size_full()
@@ -517,10 +542,12 @@ fn render_leaf(
         .border_1()
         .border_color(rgb(0x2a2a2a))
         .on_drop::<mere_host_runtime::PaneDragPayload>(on_pane_drop)
+        .child(bounds_capture)
         .child(render_pane_header(pane_id, content, cx))
         .child(body_container)
         .into_any_element()
 }
+
 
 /// Tag header for a pane: the content's tag on the left, a `×`
 /// close affordance on the right. Clicking × routes to
