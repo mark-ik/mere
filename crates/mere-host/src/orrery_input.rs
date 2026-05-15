@@ -518,6 +518,7 @@ pub(crate) fn render_orrery_with_interactivity(
                     graph_id,
                     edge.source,
                     edge.target,
+                    edge.tag,
                     ev.position,
                     cx,
                 );
@@ -652,18 +653,25 @@ fn open_node_context_menu(
     this.open_context_menu(position, entries, cx);
 }
 
-/// Pop a context menu for a right-clicked orrery **edge**. One stored
-/// edge between a node pair can carry several typed relations; the
-/// menu lists every relation on `(from, to)` with a "Hide" entry
-/// (view-local, always offered) and — for user-authored relations
-/// only — a "Delete" entry that retracts from graph truth. Per the
-/// 2026-05-11 relation-taxonomy plan §6.1 authorship table.
+/// Pop a context menu for a right-clicked orrery **edge**. When the
+/// hit-test produced a `tag` ([`mere_kernel::graph::RelationKind`]
+/// ordinal via [`mere_kernel::graph::RelationKind::tag`]), the menu
+/// shows entries for *just that one relation* — multi-relation pairs
+/// disambiguate via their per-lane hit proxy. When no tag was
+/// produced (defensive fallback for legacy / untagged hit-tests), the
+/// menu lists every relation on `(from, to)`.
+///
+/// Each relation gets a "Hide …" entry (view-local, always offered);
+/// user-authored relations also get a "Delete …" entry that retracts
+/// from graph truth. Per the 2026-05-11 relation-taxonomy plan §6.1
+/// authorship table.
 fn open_edge_context_menu(
     this: &mut HostRoot,
     pane_id: PaneId,
     graph_id: GraphId,
     from: NodeKey,
     to: NodeKey,
+    hit_tag: Option<u32>,
     position: Point<Pixels>,
     cx: &mut Context<HostRoot>,
 ) {
@@ -671,17 +679,21 @@ fn open_edge_context_menu(
     use mere_host_runtime::{ActionKind, BusAction};
     use mere_kernel::graph::RelationKind;
 
-    // Collect the relations carried on this node pair.
-    let relations: Vec<RelationKind> = {
-        let Some(graph_entity) = this.registry.read(cx).get(graph_id).cloned() else {
-            return;
-        };
-        graph_entity
-            .read(cx)
-            .relations()
-            .filter(|view| view.from == from && view.to == to)
-            .map(|view| view.kind)
-            .collect()
+    let relations: Vec<RelationKind> = match hit_tag.and_then(RelationKind::from_tag) {
+        Some(kind) => vec![kind],
+        None => {
+            // Tag absent or unrecognised — defensive fallback to
+            // listing every relation on the pair.
+            let Some(graph_entity) = this.registry.read(cx).get(graph_id).cloned() else {
+                return;
+            };
+            graph_entity
+                .read(cx)
+                .relations()
+                .filter(|view| view.from == from && view.to == to)
+                .map(|view| view.kind)
+                .collect()
+        }
     };
     if relations.is_empty() {
         tracing::debug!(?from, ?to, "edge context menu: no relations on pair");

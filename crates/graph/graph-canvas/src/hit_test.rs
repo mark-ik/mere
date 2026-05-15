@@ -17,7 +17,12 @@ use crate::scripting::SceneObjectId;
 #[derive(Debug, Clone, PartialEq)]
 pub enum HitTestResult<N> {
     Node(N),
-    Edge { source: N, target: N },
+    Edge {
+        source: N,
+        target: N,
+        /// Mirrors [`crate::packet::HitProxy::Edge::tag`] — see there.
+        tag: Option<u32>,
+    },
     SceneObject(SceneObjectId),
     None,
 }
@@ -45,6 +50,7 @@ pub fn hit_test_point<N: Clone + Eq + Hash>(
                 target,
                 midpoint,
                 half_width,
+                tag,
             } => {
                 let dx = screen_pos.x - midpoint.x;
                 let dy = screen_pos.y - midpoint.y;
@@ -52,6 +58,7 @@ pub fn hit_test_point<N: Clone + Eq + Hash>(
                     return HitTestResult::Edge {
                         source: source.clone(),
                         target: target.clone(),
+                        tag: *tag,
                     };
                 }
             }

@@ -40,6 +40,13 @@ pub struct DeriveConfig {
     pub default_edge_color: Color,
     /// Default edge stroke width in world units.
     pub default_edge_width: f32,
+    /// World-unit spacing between parallel "lanes" when multiple
+    /// edges share the same `(source, target)` pair (a multi-relation
+    /// kernel edge between two nodes). At runtime the value is scaled
+    /// by `camera.zoom` so the lane separation stays visible at low
+    /// zoom and doesn't bloat at high zoom. Solo edges (no lane
+    /// neighbours) ignore this.
+    pub edge_lane_spacing: f32,
     /// Whether to emit hit proxies (can be disabled for thumbnail/offscreen).
     pub emit_hit_proxies: bool,
     /// Projection tuning parameters.
@@ -53,6 +60,7 @@ impl Default for DeriveConfig {
             default_node_color: Color::new(0.4, 0.6, 0.9, 1.0),
             default_edge_color: Color::new(0.5, 0.5, 0.5, 0.6),
             default_edge_width: 1.5,
+            edge_lane_spacing: 6.0,
             emit_hit_proxies: true,
             projection: ProjectionConfig::default(),
         }
@@ -680,7 +688,34 @@ fn derive_edges<N: Clone + Eq + Hash>(
     let node_index: std::collections::HashMap<&N, usize> =
         nodes.iter().enumerate().map(|(i, n)| (&n.id, i)).collect();
 
+    // First pass: assign each edge a deterministic "lane" within its
+    // (source, target) group so multi-relation pairs render as
+    // parallel lines instead of stacking. The lane order follows the
+    // caller's iteration order over `edges`, so a stable input from
+    // `platen::build_canvas_scene_input` (which walks `Graph::relations()`
+    // in payload order) keeps the visual order stable across frames.
+    let mut group_total: std::collections::HashMap<(usize, usize), usize> =
+        std::collections::HashMap::new();
+    let mut lane_index: Vec<usize> = Vec::with_capacity(edges.len());
     for edge in edges {
+        match (
+            node_index.get(&edge.source),
+            node_index.get(&edge.target),
+        ) {
+            (Some(&src_idx), Some(&tgt_idx)) => {
+                let entry = group_total.entry((src_idx, tgt_idx)).or_insert(0);
+                lane_index.push(*entry);
+                *entry += 1;
+            }
+            _ => {
+                // Endpoint missing — lane doesn't matter, this edge
+                // is skipped below.
+                lane_index.push(0);
+            }
+        }
+    }
+
+    for (edge_i, edge) in edges.iter().enumerate() {
         let (Some(&src_idx), Some(&tgt_idx)) =
             (node_index.get(&edge.source), node_index.get(&edge.target))
         else {
@@ -706,32 +741,63 @@ fn derive_edges<N: Clone + Eq + Hash>(
         let tgt_screen = camera.world_to_screen(tgt_proj.to_point(), viewport);
 
         let width = config.default_edge_width * camera.zoom * edge.weight.max(0.1);
+
+        // Lane-based perpendicular offset for multi-relation pairs.
+        // total=1 → centered (offset 0). total=2 → ±half_spacing.
+        // total=N → lane i shifted by (i - (N-1)/2) * spacing.
+        let total = *group_total.get(&(src_idx, tgt_idx)).unwrap_or(&1);
+        let lane = lane_index[edge_i];
+        let (offset_x, offset_y) = if total > 1 {
+            let lane_spacing = config.edge_lane_spacing * camera.zoom;
+            let lane_offset = lane as f32 - (total as f32 - 1.0) * 0.5;
+            let dx = tgt_screen.x - src_screen.x;
+            let dy = tgt_screen.y - src_screen.y;
+            let len = (dx * dx + dy * dy).sqrt().max(1.0);
+            // Perpendicular unit vector (rotate edge dir 90° CCW).
+            let nx = -dy / len;
+            let ny = dx / len;
+            (nx * lane_offset * lane_spacing, ny * lane_offset * lane_spacing)
+        } else {
+            (0.0, 0.0)
+        };
+        let src_offset = Point2D::new(src_screen.x + offset_x, src_screen.y + offset_y);
+        let tgt_offset = Point2D::new(tgt_screen.x + offset_x, tgt_screen.y + offset_y);
+
+        let color = edge.color.unwrap_or(config.default_edge_color);
+
         world_items.push(SceneDrawItem::Line {
-            from: src_screen,
-            to: tgt_screen,
-            stroke: Stroke {
-                color: config.default_edge_color,
-                width,
-            },
+            from: src_offset,
+            to: tgt_offset,
+            stroke: Stroke { color, width },
         });
 
-        // Emit an edge hit proxy centred on the line midpoint. The
+        // Emit an edge hit proxy centred on this lane's midpoint. The
         // box hit-test in `hit_test.rs` uses `half_width` as a
         // square radius around the midpoint — keep it generously
         // larger than the stroke so a thin line is still a usable
-        // right-click target, but not so large it swallows the
-        // endpoint nodes.
+        // right-click target, but not so large it swallows neighbour
+        // lanes or the endpoint nodes.
         if config.emit_hit_proxies {
             let midpoint = Point2D::new(
-                (src_screen.x + tgt_screen.x) * 0.5,
-                (src_screen.y + tgt_screen.y) * 0.5,
+                (src_offset.x + tgt_offset.x) * 0.5,
+                (src_offset.y + tgt_offset.y) * 0.5,
             );
-            let half_width = (width * 1.5).clamp(8.0, 16.0);
+            // Tighter half-width when lanes are packed so adjacent
+            // relations don't both win the hit on a single pointer
+            // position. Falls back to the v0 8..16 range for solo
+            // edges.
+            let half_width = if total > 1 {
+                let lane_spacing = config.edge_lane_spacing * camera.zoom;
+                (width * 1.2).clamp(4.0, (lane_spacing * 0.45).max(4.0))
+            } else {
+                (width * 1.5).clamp(8.0, 16.0)
+            };
             hit_proxies.push(HitProxy::Edge {
                 source: edge.source.clone(),
                 target: edge.target.clone(),
                 midpoint,
                 half_width,
+                tag: edge.tag,
             });
         }
     }
@@ -768,15 +834,10 @@ mod tests {
                 },
             ],
             edges: vec![
+                CanvasEdge::untagged(0, 1),
                 CanvasEdge {
-                    source: 0,
-                    target: 1,
-                    weight: 1.0,
-                },
-                CanvasEdge {
-                    source: 0,
-                    target: 2,
                     weight: 0.5,
+                    ..CanvasEdge::untagged(0, 2)
                 },
             ],
             scene_objects: vec![],
@@ -865,6 +926,205 @@ mod tests {
             .count();
         assert_eq!(node_proxies, 3);
         assert_eq!(edge_proxies, 2);
+    }
+
+    #[test]
+    fn multi_relation_pair_renders_as_parallel_lanes_with_per_edge_color() {
+        // Two nodes, three edges between the same pair — each
+        // carrying its own colour + tag. The lane logic should
+        // render three distinct lines and emit three distinct hit
+        // proxies whose midpoints are offset perpendicularly.
+        let input = CanvasSceneInput::<u32> {
+            view_id: ViewId(0),
+            nodes: vec![
+                CanvasNode {
+                    id: 0,
+                    position: Point2D::new(0.0, 0.0),
+                    radius: 16.0,
+                    label: None,
+                },
+                CanvasNode {
+                    id: 1,
+                    position: Point2D::new(100.0, 0.0),
+                    radius: 16.0,
+                    label: None,
+                },
+            ],
+            edges: vec![
+                CanvasEdge {
+                    color: Some(Color::new(1.0, 0.0, 0.0, 1.0)),
+                    tag: Some(101),
+                    ..CanvasEdge::untagged(0u32, 1)
+                },
+                CanvasEdge {
+                    color: Some(Color::new(0.0, 1.0, 0.0, 1.0)),
+                    tag: Some(202),
+                    ..CanvasEdge::untagged(0u32, 1)
+                },
+                CanvasEdge {
+                    color: Some(Color::new(0.0, 0.0, 1.0, 1.0)),
+                    tag: Some(303),
+                    ..CanvasEdge::untagged(0u32, 1)
+                },
+            ],
+            scene_objects: Vec::new(),
+            overlays: Vec::new(),
+            scene_mode: SceneMode::Browse,
+            projection: ProjectionMode::default(),
+        };
+        let scene = derive_scene(
+            &input,
+            &default_camera(),
+            &default_viewport(),
+            &zero_z,
+            &no_overrides,
+            &DeriveConfig::default(),
+        );
+
+        // Three lines drawn; their stroke colours should match what
+        // each CanvasEdge declared.
+        let line_colors: Vec<Color> = scene
+            .world
+            .iter()
+            .filter_map(|item| match item {
+                SceneDrawItem::Line { stroke, .. } => Some(stroke.color),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(line_colors.len(), 3);
+        assert!(line_colors.contains(&Color::new(1.0, 0.0, 0.0, 1.0)));
+        assert!(line_colors.contains(&Color::new(0.0, 1.0, 0.0, 1.0)));
+        assert!(line_colors.contains(&Color::new(0.0, 0.0, 1.0, 1.0)));
+
+        // Three edge hit-proxies, each carrying its tag.
+        let edge_proxies: Vec<&HitProxy<u32>> = scene
+            .hit_proxies
+            .iter()
+            .filter(|p| matches!(p, HitProxy::Edge { .. }))
+            .collect();
+        assert_eq!(edge_proxies.len(), 3);
+        let tags: std::collections::HashSet<u32> = edge_proxies
+            .iter()
+            .filter_map(|p| match p {
+                HitProxy::Edge { tag, .. } => *tag,
+                _ => None,
+            })
+            .collect();
+        let expected: std::collections::HashSet<u32> = [101, 202, 303].into_iter().collect();
+        assert_eq!(tags, expected);
+
+        // The edge runs horizontally (world y=0), so the centerline
+        // midpoint is whatever the default camera maps y=0 to in
+        // screen space. The lane offsets should spread perpendicular
+        // to the edge — three lanes therefore three distinct y
+        // coordinates evenly spread around the centerline.
+        let solo_centerline = solo_horizontal_centerline_y();
+        let mut midpoint_ys: Vec<f32> = edge_proxies
+            .iter()
+            .filter_map(|p| match p {
+                HitProxy::Edge { midpoint, .. } => Some(midpoint.y),
+                _ => None,
+            })
+            .collect();
+        midpoint_ys.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert!(midpoint_ys[0] < solo_centerline);
+        assert!((midpoint_ys[1] - solo_centerline).abs() < 0.001);
+        assert!(midpoint_ys[2] > solo_centerline);
+    }
+
+    /// Where a solo horizontal edge's midpoint sits on screen under
+    /// the default camera+viewport. The numbers depend on the
+    /// projection but we want the test to assert *relative* to it.
+    fn solo_horizontal_centerline_y() -> f32 {
+        let input = CanvasSceneInput::<u32> {
+            view_id: ViewId(0),
+            nodes: vec![
+                CanvasNode {
+                    id: 0,
+                    position: Point2D::new(0.0, 0.0),
+                    radius: 16.0,
+                    label: None,
+                },
+                CanvasNode {
+                    id: 1,
+                    position: Point2D::new(100.0, 0.0),
+                    radius: 16.0,
+                    label: None,
+                },
+            ],
+            edges: vec![CanvasEdge::untagged(0u32, 1)],
+            scene_objects: Vec::new(),
+            overlays: Vec::new(),
+            scene_mode: SceneMode::Browse,
+            projection: ProjectionMode::default(),
+        };
+        let scene = derive_scene(
+            &input,
+            &default_camera(),
+            &default_viewport(),
+            &zero_z,
+            &no_overrides,
+            &DeriveConfig::default(),
+        );
+        scene
+            .hit_proxies
+            .iter()
+            .find_map(|p| match p {
+                HitProxy::Edge { midpoint, .. } => Some(midpoint.y),
+                _ => None,
+            })
+            .expect("solo edge proxy")
+    }
+
+    #[test]
+    fn solo_edge_renders_at_centerline_with_no_lane_offset() {
+        let input = CanvasSceneInput::<u32> {
+            view_id: ViewId(0),
+            nodes: vec![
+                CanvasNode {
+                    id: 0,
+                    position: Point2D::new(0.0, 0.0),
+                    radius: 16.0,
+                    label: None,
+                },
+                CanvasNode {
+                    id: 1,
+                    position: Point2D::new(100.0, 0.0),
+                    radius: 16.0,
+                    label: None,
+                },
+            ],
+            edges: vec![CanvasEdge::untagged(0u32, 1)],
+            scene_objects: Vec::new(),
+            overlays: Vec::new(),
+            scene_mode: SceneMode::Browse,
+            projection: ProjectionMode::default(),
+        };
+        let scene = derive_scene(
+            &input,
+            &default_camera(),
+            &default_viewport(),
+            &zero_z,
+            &no_overrides,
+            &DeriveConfig::default(),
+        );
+        let edge_proxies: Vec<&HitProxy<u32>> = scene
+            .hit_proxies
+            .iter()
+            .filter(|p| matches!(p, HitProxy::Edge { .. }))
+            .collect();
+        assert_eq!(edge_proxies.len(), 1);
+        let midpoint_y = match edge_proxies[0] {
+            HitProxy::Edge { midpoint, .. } => midpoint.y,
+            _ => unreachable!(),
+        };
+        // Solo edge runs along the horizontal centerline — match the
+        // same projection the multi-relation test compares against.
+        let expected = solo_horizontal_centerline_y();
+        assert!(
+            (midpoint_y - expected).abs() < 0.001,
+            "solo midpoint y was {midpoint_y}, expected {expected}"
+        );
     }
 
     #[test]
@@ -1072,11 +1332,7 @@ mod tests {
     fn derive_scene_edges_skip_missing_endpoints() {
         let mut input = simple_input();
         // Add an edge referencing a non-existent node.
-        input.edges.push(CanvasEdge {
-            source: 0,
-            target: 99,
-            weight: 1.0,
-        });
+        input.edges.push(CanvasEdge::untagged(0, 99));
 
         let scene = derive_scene(
             &input,

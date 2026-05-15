@@ -83,6 +83,11 @@ pub enum HitProxy<N> {
         target: N,
         midpoint: Point2D<f32>,
         half_width: f32,
+        /// Mirrors [`crate::scene::CanvasEdge::tag`] — opaque
+        /// discriminant the host can use to identify *which* relation
+        /// on a multi-relation pair was hit. `None` for layout-adapter
+        /// edges that don't carry tagged kernel relations.
+        tag: Option<u32>,
     },
     /// A scripted scene object's interaction surface.
     SceneObject {

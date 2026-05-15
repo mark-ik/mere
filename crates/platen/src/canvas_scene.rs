@@ -6,9 +6,10 @@
 
 use std::collections::HashSet;
 
+use graph_canvas::packet::Color;
 use graph_canvas::projection::{ProjectionMode, ViewDimension};
 use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, SceneMode, ViewId};
-use mere_kernel::graph::{Graph, GraphViewId, NodeKey, RelationKind};
+use mere_kernel::graph::{EdgeFamily, Graph, GraphViewId, NodeKey, RelationKind};
 
 /// View-local relation-hide key. One stored edge between a node pair
 /// can carry several typed relations; the key names the specific
@@ -88,6 +89,8 @@ pub fn build_canvas_scene_input(
             source: edge.from,
             target: edge.to,
             weight: 1.0,
+            color: Some(family_color(edge.kind.family())),
+            tag: Some(edge.kind.tag()),
         })
         .collect();
 
@@ -99,6 +102,22 @@ pub fn build_canvas_scene_input(
         overlays: Vec::new(),
         scene_mode: options.scene_mode,
         projection: ProjectionMode::from_view_dimension(&options.dimension),
+    }
+}
+
+/// Stroke colour for a relation family. Chosen so the six families
+/// stay visually distinct on a dark canvas background (~`0x1c1c1c`),
+/// with semantic — the most common — at the brightest end and the
+/// derived/imported families muted further. Per the 2026-05-11
+/// relation-taxonomy plan §6.3.
+pub fn family_color(family: EdgeFamily) -> Color {
+    match family {
+        EdgeFamily::Semantic => Color::new(0.65, 0.72, 0.88, 0.85),
+        EdgeFamily::Traversal => Color::new(0.85, 0.68, 0.42, 0.78),
+        EdgeFamily::Containment => Color::new(0.48, 0.78, 0.72, 0.70),
+        EdgeFamily::Arrangement => Color::new(0.72, 0.60, 0.88, 0.72),
+        EdgeFamily::Imported => Color::new(0.80, 0.76, 0.46, 0.72),
+        EdgeFamily::Provenance => Color::new(0.84, 0.60, 0.72, 0.72),
     }
 }
 
@@ -200,6 +219,23 @@ mod tests {
         assert!(scene.edges.is_empty());
         // ...but graph truth is untouched — `relations()` still yields it.
         assert_eq!(graph.relations().count(), 1);
+    }
+
+    #[test]
+    fn scene_edges_carry_family_color_and_relation_tag() {
+        let (graph, _, _) = graph_with_edge();
+        let scene = build_canvas_scene_input(&graph, CanvasSceneOptions::new(view_id(7)));
+        assert_eq!(scene.edges.len(), 1);
+        let edge = &scene.edges[0];
+        // Hyperlink → Semantic family palette entry.
+        let expected_color = family_color(EdgeFamily::Semantic);
+        assert_eq!(edge.color, Some(expected_color));
+        // Tag round-trips back to the relation it came from.
+        let tag = edge.tag.expect("relation tag should be set");
+        assert_eq!(
+            RelationKind::from_tag(tag),
+            Some(RelationKind::Semantic(SemanticSubKind::Hyperlink))
+        );
     }
 
     #[test]

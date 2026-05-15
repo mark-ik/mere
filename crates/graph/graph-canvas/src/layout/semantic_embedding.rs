@@ -431,11 +431,7 @@ mod tests {
                 .collect(),
             edges: edges
                 .into_iter()
-                .map(|(s, t)| CanvasEdge {
-                    source: s,
-                    target: t,
-                    weight: 1.0,
-                })
+                .map(|(s, t)| CanvasEdge::untagged(s, t))
                 .collect(),
             scene_objects: Vec::new(),
             overlays: Vec::new(),

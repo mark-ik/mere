@@ -475,10 +475,15 @@ impl<N: Clone + Eq + Hash> InteractionEngine<N> {
                     actions.push(CanvasAction::HoverNode(Some(id.clone())));
                 }
             }
-            HitTestResult::Edge { source, target } => {
+            HitTestResult::Edge {
+                source,
+                target,
+                tag,
+            } => {
                 let edge_ref = EdgeRef {
                     source: source.clone(),
                     target: target.clone(),
+                    tag: *tag,
                 };
                 if self.state.hovered_edge.as_ref() != Some(&edge_ref) {
                     self.state.hovered_node = None;

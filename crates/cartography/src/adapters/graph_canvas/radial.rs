@@ -108,11 +108,7 @@ impl LayoutStrategy for RadialAdapter {
             .graph
             .relations()
             .filter(|view| view.from != view.to)
-            .map(|view| CanvasEdge {
-                source: view.from,
-                target: view.to,
-                weight: 1.0,
-            })
+            .map(|view| CanvasEdge::untagged(view.from, view.to))
             .collect();
 
         let scene = CanvasSceneInput {

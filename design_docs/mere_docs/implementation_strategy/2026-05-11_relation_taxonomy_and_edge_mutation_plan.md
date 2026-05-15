@@ -1,7 +1,7 @@
 # Relation taxonomy cleanup + edge mutation MVP — implementation plan
 
 **Date**: 2026-05-11
-**Status**: Stages 1–5 landed (MVP). Follow-ups noted in §12 step 5.
+**Status**: Stages 1–5 landed plus the §6.3 hit-test + per-family rendering follow-up. Outstanding deferrals: §5.3 `ViewIntent` sidecar (hide-state durability) and "Create node here" UX.
 **Scope**: Make `mere-kernel`'s graph the source of truth for relation taxonomy before building edge create/delete UI. Remove the legacy `EdgeType` / `EdgeKind` path instead of extending it. Keep the six families (`Semantic`, `Traversal`, `Containment`, `Arrangement`, `Imported`, `Provenance`). Land an MVP of edge create / hide / retract on top, with derived/imported/provenance/document-hyperlink/traversal-history as hide-only (never retract). Treat "navigatory" as a projection over node navigation memory, semantic hyperlinks, and traversal events — **not** as a durable edge family.
 
 **Related**:
@@ -227,7 +227,7 @@ Stage as five PRs/commits, each leaving the codebase green:
 
    **Deviations from the plan as written, all deliberate v0 simplifications:**
    - `HideRelation` is scoped via `ActionTarget::Pane(pane_id)` instead of a `view_id: ViewId` field — the orrery pane *is* the view in v0. The `ViewIntent` sidecar (§5.3) will reintroduce an explicit view id.
-   - Hit-test was **not** extended to carry `RelationKind`, and edges still render as one line per pair (not per-family-coloured lines). Instead the edge context menu lists *all* relations on the `(from, to)` pair and the user picks. Cheaper, no rendering rework, and good enough until multi-relation pairs are common. The §6.3 per-family rendering + RelationKind-carrying hit-test is the natural follow-up.
+   - ~~Hit-test was **not** extended to carry `RelationKind`, and edges still render as one line per pair (not per-family-coloured lines).~~ **Landed as a follow-up commit.** Multi-relation pairs now render as parallel family-coloured lanes; each lane carries an opaque `tag: Option<u32>` (the `RelationKind::tag()` ordinal) through `CanvasEdge` → `HitProxy::Edge` → `EdgeRef`; the orrery edge menu reads the tag for precise relation targeting and falls back to "list all on pair" when absent.
    - "Create node here" is **deferred** — it needs an in-menu text-input affordance for the address, which the context-menu component doesn't have yet. `CreateNode` was not added as a dead `ActionKind`.
    - `ActionKind::AppendTraversal` exists with a correct execute arm but no UI caller yet; navigation-emits-traversal is a separate wiring slice.
 

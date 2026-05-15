@@ -24,11 +24,17 @@ pub struct LassoState {
     pub current: Point2D<f32>,
 }
 
-/// Reference to a graph edge by its endpoint node identifiers.
+/// Reference to a graph edge by its endpoint node identifiers, plus
+/// an opaque caller-defined `tag` that disambiguates relations on
+/// multi-relation pairs (see [`crate::packet::HitProxy::Edge::tag`]).
+/// `tag = None` means "no disambiguation" — e.g. layout adapters that
+/// don't carry tagged relations.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EdgeRef<N> {
     pub source: N,
     pub target: N,
+    #[serde(default)]
+    pub tag: Option<u32>,
 }
 
 /// Interaction state for one graph view.

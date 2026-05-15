@@ -53,6 +53,36 @@ pub struct CanvasEdge<N> {
     pub target: N,
     /// Edge weight (used for visual thickness, opacity, etc.).
     pub weight: f32,
+    /// Optional per-edge stroke override. `None` falls back to
+    /// [`crate::derive::DeriveConfig::default_edge_color`]. Hosts that
+    /// want family-coloured edges (one stored kernel edge between two
+    /// nodes can carry several typed relations) supply a colour per
+    /// emitted `CanvasEdge`.
+    #[serde(default)]
+    pub color: Option<crate::packet::Color>,
+    /// Opaque caller-defined discriminant. Propagates through derive
+    /// into [`crate::packet::HitProxy::Edge`] so right-click handlers
+    /// can identify *which* relation on a multi-relation pair was hit.
+    /// Hosts assign tag values from their own domain vocabulary
+    /// (Mere uses `RelationKind` ordinals); graph-canvas treats it as
+    /// opaque.
+    #[serde(default)]
+    pub tag: Option<u32>,
+}
+
+impl<N> CanvasEdge<N> {
+    /// Construct an untagged edge with the default weight (1.0) and
+    /// no colour override — the common shape for layout adapters
+    /// that only care about graph topology.
+    pub fn untagged(source: N, target: N) -> Self {
+        Self {
+            source,
+            target,
+            weight: 1.0,
+            color: None,
+            tag: None,
+        }
+    }
 }
 
 /// A scene object that is not a graph node or edge (e.g. scripted avatar,
@@ -177,11 +207,7 @@ mod tests {
                     label: Some("node-1".into()),
                 },
             ],
-            edges: vec![CanvasEdge {
-                source: 0,
-                target: 1,
-                weight: 1.0,
-            }],
+            edges: vec![CanvasEdge::untagged(0, 1)],
             scene_objects: vec![CanvasSceneObject {
                 id: SceneObjectId(10),
                 position: Point2D::new(30.0, 40.0),
