@@ -43,6 +43,7 @@ pub mod session_graph_store;
 pub mod surface_tile;
 pub mod tearout;
 pub mod tiles;
+pub mod view_intent_store;
 
 pub use action_bus::{
     ActionKind, ActionTarget, BusAction, BusDispatchOutcome, DenyReason, PermissionDecision,
@@ -57,3 +58,4 @@ pub use manifest_store::{LoadFailure, LoadReport, MANIFEST_FILE, ManifestStore, 
 pub use surface_tile::{SurfaceTileState, SurfaceTileStep};
 pub use tearout::{PaneDragPayload, TileDragPayload};
 pub use tiles::{HistoryEntry, NavigateMode, TileManager, TileState};
+pub use view_intent_store::{HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
