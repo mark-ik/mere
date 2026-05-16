@@ -38,6 +38,8 @@ members = [
     "crates/moot/mooting",
     "crates/aether",
     "crates/cartography",
+    "crates/mere-renderer-registry",
+    "crates/mere-renderer-registry-types",
 ]
 exclude = ["crates/probes", "crates/mere-host"]
 

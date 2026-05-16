@@ -4925,12 +4925,13 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kurbo"
-version = "0.13.0"
+version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7564e90fe3c0d5771e1f0bc95322b21baaeaa0d9213fa6a0b61c99f8b17b3bfb"
+checksum = "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2"
 dependencies = [
  "arrayvec",
  "euclid",
+ "polycool",
  "smallvec",
 ]
 
@@ -5357,6 +5358,23 @@ dependencies = [
  "tracing",
  "uuid",
  "uxtree",
+]
+
+[[package]]
+name = "mere-renderer-registry"
+version = "0.0.1"
+dependencies = [
+ "kurbo",
+ "mere-renderer-registry-types",
+ "vello 0.9.0",
+ "wgpu",
+]
+
+[[package]]
+name = "mere-renderer-registry-types"
+version = "0.0.1"
+dependencies = [
+ "kurbo",
 ]
 
 [[package]]
@@ -5848,7 +5866,7 @@ dependencies = [
  "log",
  "netrender_device",
  "skrifa",
- "vello",
+ "vello 0.8.0",
  "wgpu",
 ]
 
@@ -6770,9 +6788,9 @@ dependencies = [
 
 [[package]]
 name = "peniko"
-version = "0.6.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a2b6aadb221872732e87d465213e9be5af2849b0e8cc5300a8ba98fffa2e00a"
+checksum = "839c8299360d2e998bdb106dc0a6cd71dcc5f4df51df1b620361bf50e283cca6"
 dependencies = [
  "color",
  "kurbo",
@@ -6923,6 +6941,15 @@ dependencies = [
  "cpufeatures 0.2.17",
  "opaque-debug",
  "universal-hash",
+]
+
+[[package]]
+name = "polycool"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50596ddc09eb5ad5f75cacd40209568e66df71baf86e1499a0e99c4cff12a5a6"
+dependencies = [
+ "arrayvec",
 ]
 
 [[package]]
@@ -9725,8 +9752,27 @@ dependencies = [
  "skrifa",
  "static_assertions",
  "thiserror 2.0.18",
- "vello_encoding",
- "vello_shaders",
+ "vello_encoding 0.8.0",
+ "vello_shaders 0.8.0",
+ "wgpu",
+]
+
+[[package]]
+name = "vello"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "261359dbef879f8110ef7e1c442246c838d33d3d91cb05e0ea9288d432760c9f"
+dependencies = [
+ "bytemuck",
+ "futures-intrusive",
+ "log",
+ "peniko",
+ "png",
+ "skrifa",
+ "static_assertions",
+ "thiserror 2.0.18",
+ "vello_encoding 0.9.0",
+ "vello_shaders 0.9.0",
  "wgpu",
 ]
 
@@ -9734,6 +9780,19 @@ dependencies = [
 name = "vello_encoding"
 version = "0.8.0"
 source = "git+https://github.com/linebender/vello?branch=main#1b24e77ba4e01d12f5db86a9b1b5f2cf828a6a33"
+dependencies = [
+ "bytemuck",
+ "guillotiere",
+ "peniko",
+ "skrifa",
+ "smallvec",
+]
+
+[[package]]
+name = "vello_encoding"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2346f5f0d7dccb3582fcd397b4a57b43165209f1424e0d76e85dd814db164af7"
 dependencies = [
  "bytemuck",
  "guillotiere",
@@ -9751,7 +9810,20 @@ dependencies = [
  "log",
  "naga",
  "thiserror 2.0.18",
- "vello_encoding",
+ "vello_encoding 0.8.0",
+]
+
+[[package]]
+name = "vello_shaders"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dd38937516fa4b47423d9255bb5e4a65e839ec9d57c38c4af6189ce56bf46b7"
+dependencies = [
+ "bytemuck",
+ "log",
+ "naga",
+ "thiserror 2.0.18",
+ "vello_encoding 0.9.0",
 ]
 
 [[package]]

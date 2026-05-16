@@ -1,0 +1,18 @@
+[package]
+name = "mere-renderer-registry"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+description = "Trait + dispatch contract for renderers (mere-masonry, scrying-tile-engine, future serval/wry adapters) co-resident in Mere's spatial chrome IR substrate. Vello/wgpu-bound half of the contract; data-only types live in mere-renderer-registry-types so wasm32-clean consumers (mere-host-runtime) can use them without pulling vello/wgpu."
+rust-version = "1.92.0"
+
+[dependencies]
+mere-renderer-registry-types = { path = "../mere-renderer-registry-types" }
+# All load-bearing pins live in mere/Cargo.toml's [workspace.dependencies].
+kurbo.workspace = true
+vello.workspace = true
+wgpu.workspace = true
+
+[lints]
+workspace = true

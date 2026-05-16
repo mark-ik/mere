@@ -1,0 +1,45 @@
+// Copyright 2026 the Mere authors
+// SPDX-License-Identifier: MPL-2.0
+
+//! mere-renderer-registry-types — wasm-friendly data types for the renderer
+//! registry contract.
+//!
+//! Split from [`mere-renderer-registry`](https://docs.rs/mere-renderer-registry)
+//! so wasm32-clean consumers (notably `mere-host-runtime`) can consume the
+//! input vocabulary + scene contract + renderer-identity types without
+//! pulling vello / wgpu deps.
+//!
+//! See [README](../README.md) for the split rationale.
+//!
+//! ## Re-export shape
+//!
+//! `mere-renderer-registry` re-exports everything from this crate, so
+//! consumers of the full registry can `use mere_renderer_registry::*` and
+//! get the data types too. Direct consumers of *just* this crate use
+//! `use mere_renderer_registry_types::*`.
+
+#![warn(unused_crate_dependencies)]
+#![warn(clippy::print_stdout, clippy::print_stderr)]
+
+mod composition;
+mod handles;
+mod identity;
+mod input;
+mod scene;
+
+pub use composition::CompositionMode;
+pub use handles::{OverlayHandle, ProducerHandle};
+pub use identity::{
+    ProfileBindingExpectation, RendererCapabilities, RendererId, ScreenRect,
+};
+pub use input::{
+    ImeEvent, InputDisposition, InputEvent, KeyCode, KeyEventKind, ModifiersState, NamedKey,
+    PointerButton, PointerEventKind,
+};
+pub use scene::{
+    LodLevel, NodeContentKind, NodeContentKindSet, NodeIdentity, Placement, SceneNodeRef,
+};
+
+// Re-export kurbo so consumers of the data types share a version with the
+// registry crate.
+pub use kurbo;
