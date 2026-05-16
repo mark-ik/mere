@@ -85,11 +85,18 @@
 //!    it to cross-wgpu-*version* sharing is platform-specific work each
 //!    OS. Significant.
 //!
-//! Until (1) or (2) lands, [`MasonryTile::render`] and
-//! [`MasonryEmbeddedRenderer::next_frame`] are both effectively no-op
-//! placeholders: the trait surfaces are wired, the texture is allocated,
-//! the AccessKit tree update drains correctly, but no pixels reach the
-//! host scene.
+//! [`MasonryTile::render`]'s scene-merge step still depends on a
+//! resolution path landing — neither (1) nor (2) currently exists. It
+//! remains a documented no-op.
+//!
+//! [`MasonryEmbeddedRenderer`] takes path (5): **rasterize on CPU via
+//! vello_cpu (no wgpu touching), upload the buffer to a wgpu-29 texture
+//! via `queue.write_texture`.** vello_cpu is a different crate from
+//! vello — no version conflict — and CPU pixels are a wgpu-version-neutral
+//! bridge. Trade-off: CPU rasterization is materially slower than GPU,
+//! acceptable for prototype-sized panels. When (1) or (2) lands, the
+//! renderer's `fill_texture` can switch to `imaging_vello`'s GPU path
+//! and reclaim the performance.
 
 #![warn(unused_crate_dependencies)]
 #![warn(clippy::print_stdout, clippy::print_stderr)]
@@ -115,7 +122,8 @@ pub use mere_renderer_registry;
 pub use ui_events;
 pub use vello;
 
-// `masonry_imaging` is a runtime backend dep (provides `imaging_vello`
-// against masonry_core's imaging trait surface); nothing in this crate
-// imports it directly, but it must link to satisfy masonry's backend.
-use masonry_imaging as _;
+// `masonry_imaging` provides the `imaging_vello_cpu` backend +
+// PreparedFrame type that `MasonryEmbeddedRenderer::next_frame` uses
+// directly. Re-exported so downstream callers can name the imaging
+// types if they need to.
+pub use masonry_imaging;
