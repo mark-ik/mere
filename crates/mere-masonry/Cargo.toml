@@ -26,6 +26,7 @@ masonry_core = { path = "../../../xilem/masonry_core" }
 # workspace's [workspace.dependencies] versions even though this crate
 # is excluded (path-deps on xilem keep it out of the workspace tree).
 vello = "0.9"
+wgpu = "29"
 kurbo = "0.13"
 accesskit = "0.24"
 ui-events = "0.3"
