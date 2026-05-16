@@ -1,0 +1,36 @@
+[package]
+name = "mere-masonry"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://github.com/mark-ik/mere"
+description = "Mere-substrate driver for the Masonry widget engine. Renderer-registry tenant for `NodeContentKind::Panel` nodes."
+publish = false
+rust-version = "1.92.0"
+
+# This crate is excluded from the parent mere workspace because it depends on
+# upstream xilem via path deps to a local clone (which is outside the workspace
+# tree). When xilem stabilises (post-1.0), switch to crates.io deps and join
+# the workspace.
+
+[dependencies]
+mere-renderer-registry = { path = "../mere-renderer-registry" }
+
+# Upstream Linebender stack — driven by this crate, not modified.
+# Path deps to the local xilem clone for development convenience; switch to
+# crates.io versions once xilem stabilises (it's pre-1.0 today).
+masonry_core = { path = "../../../xilem/masonry_core" }
+
+# All load-bearing deps declared directly — no transitive resolution
+# through mere-renderer-registry's re-exports. Pinned to match the mere
+# workspace's [workspace.dependencies] versions even though this crate
+# is excluded (path-deps on xilem keep it out of the workspace tree).
+vello = "0.9"
+kurbo = "0.13"
+accesskit = "0.24"
+ui-events = "0.3"
+dpi = "0.1.2"
+
+# Pulled in for the imaging_vello backend feature on masonry_imaging; see
+# `use masonry_imaging as _;` in lib.rs.
+masonry_imaging = { path = "../../../xilem/masonry_imaging", default-features = false, features = ["imaging_vello"] }

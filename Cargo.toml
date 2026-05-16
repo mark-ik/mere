@@ -41,7 +41,7 @@ members = [
     "crates/mere-renderer-registry",
     "crates/mere-renderer-registry-types",
 ]
-exclude = ["crates/probes", "crates/mere-host"]
+exclude = ["crates/probes", "crates/mere-host", "crates/mere-masonry"]
 
 [workspace.package]
 version = "0.0.1"
