@@ -8,21 +8,31 @@
 //! per-frame reports surface what dispatched, what didn't, and why — the
 //! diagnostic surface §8 of the contract brief expects.
 
+use std::collections::HashMap;
+
 use mere_renderer_registry::{
-    DispatchError, InputDisposition, InputEvent, NodeIdentity, PaintCtx, PaintError,
-    RendererId, RendererRegistry,
+    CompositionMode, DispatchError, InputDisposition, InputEvent, NodeIdentity, PaintCtx,
+    PaintError, ProducerHandle, RendererId, RendererRegistry,
 };
 
+use crate::external_texture::{CompositorError, ExternalTextureCompositor};
 use crate::scene::SubstrateScene;
 
 /// Substrate host: registry + per-frame dispatch.
 pub struct SubstrateHost {
     registry: RendererRegistry,
+    /// Cached producer handles for embedded-frame renderers. Keyed by
+    /// node identity; value pairs the renderer id (so we can detect
+    /// renderer swap-out) with the producer handle the renderer minted.
+    producers: HashMap<NodeIdentity, (RendererId, ProducerHandle)>,
 }
 
 impl SubstrateHost {
     pub fn new(registry: RendererRegistry) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            producers: HashMap::new(),
+        }
     }
 
     pub fn with_default_registry() -> Self {
@@ -70,6 +80,159 @@ impl SubstrateHost {
         report
     }
 
+    /// Render `scene` into `target`, dispatching each node through the
+    /// composition-mode path its registered renderer claims.
+    ///
+    /// `compositor` + `vello_renderer` are required for the EmbeddedFrame
+    /// branch — the compositor calls `vello_renderer.register_texture` on
+    /// new producer textures. InScene nodes paint directly into `target`
+    /// and don't touch the compositor; pure-InScene scenes can use
+    /// [`Self::paint_scene`] instead and avoid the vello::Renderer
+    /// dependency.
+    ///
+    /// Overlay-mode nodes are skipped — out-of-band OS surfaces are owned
+    /// by a different dispatch path (not yet wired in v0a).
+    pub fn render_scene(
+        &mut self,
+        scene: &SubstrateScene,
+        target: &mut vello::Scene,
+        compositor: &mut ExternalTextureCompositor,
+        vello_renderer: &mut vello::Renderer,
+        scale_factor: f64,
+    ) -> FrameReport {
+        let mut report = FrameReport::default();
+        for node in scene.iter() {
+            self.dispatch_node(node.as_ref(), target, compositor, vello_renderer, scale_factor, &mut report);
+        }
+        report
+    }
+
+    fn dispatch_node(
+        &mut self,
+        node_ref: mere_renderer_registry::SceneNodeRef,
+        target: &mut vello::Scene,
+        compositor: &mut ExternalTextureCompositor,
+        vello_renderer: &mut vello::Renderer,
+        scale_factor: f64,
+        report: &mut FrameReport,
+    ) {
+        let Some(id) = self.registry.select(&node_ref) else {
+            report.missing_renderer += 1;
+            return;
+        };
+        // composition_mode() is the renderer's *self-declared* mode; the
+        // sub-trait downcast (`as_in_scene_paint` / `as_embedded_frame`)
+        // is what actually proves it. A mismatch counts as wrong_mode.
+        let mode = self
+            .registry
+            .get(&id)
+            .expect("selector returned id not in registry")
+            .composition_mode();
+        match mode {
+            CompositionMode::InScenePaint => {
+                let mut ctx = PaintCtx {
+                    scene: target,
+                    node_transform: node_ref.placement.transform,
+                    scale_factor,
+                };
+                match self.registry.paint_node(&node_ref, &mut ctx) {
+                    Ok(None) => report.missing_renderer += 1,
+                    Ok(Some(Ok(()))) => report.painted += 1,
+                    Ok(Some(Err(PaintError::NotReady))) => report.not_ready += 1,
+                    Ok(Some(Err(PaintError::RendererFailed(msg)))) => {
+                        report.renderer_failed.push(msg);
+                    }
+                    Err(DispatchError::WrongCompositionMode { id }) => {
+                        report.wrong_mode.push(id);
+                    }
+                }
+            }
+            CompositionMode::EmbeddedFrame => {
+                self.dispatch_embedded(
+                    &node_ref,
+                    id,
+                    target,
+                    compositor,
+                    vello_renderer,
+                    report,
+                );
+            }
+            CompositionMode::Overlay => {
+                report.overlay_skipped += 1;
+            }
+        }
+    }
+
+    fn dispatch_embedded(
+        &mut self,
+        node_ref: &mere_renderer_registry::SceneNodeRef,
+        id: RendererId,
+        target: &mut vello::Scene,
+        compositor: &mut ExternalTextureCompositor,
+        vello_renderer: &mut vello::Renderer,
+        report: &mut FrameReport,
+    ) {
+        let renderer = self
+            .registry
+            .get_mut(&id)
+            .expect("selector returned id not in registry");
+        let Some(producer) = renderer.as_embedded_frame() else {
+            report.wrong_mode.push(id);
+            return;
+        };
+        // Ensure a ProducerHandle for this node. If the selector swapped
+        // renderers under us mid-session, drop the cached handle and ask
+        // the new renderer for a fresh one.
+        let handle = match self.producers.get(&node_ref.identity) {
+            Some(&(ref cached_id, h)) if cached_id == &id => h,
+            _ => {
+                let h = producer.ensure_producer(node_ref);
+                self.producers.insert(node_ref.identity, (id.clone(), h));
+                h
+            }
+        };
+        // Pull this frame's texture (None = no new frame; we composite
+        // last-known content via whatever's already registered).
+        let new_texture = producer.next_frame(handle);
+        if let Some(texture) = new_texture {
+            compositor.register(vello_renderer, node_ref.identity, texture);
+        }
+        match compositor.compose(
+            target,
+            node_ref.identity,
+            node_ref.placement.transform,
+            node_ref.size,
+        ) {
+            Ok(()) => report.painted += 1,
+            Err(CompositorError::NotRegistered(_)) => report.not_ready += 1,
+            Err(CompositorError::ZeroSizedTexture(_) | CompositorError::ZeroSizedNode(_)) => {
+                report
+                    .renderer_failed
+                    .push(format!("compositor rejected node {}", node_ref.identity.as_u64()));
+            }
+        }
+    }
+
+    /// Release any per-node state the host holds for an embedded-frame
+    /// node — the renderer's producer handle and the compositor's
+    /// texture registration. Call before dropping a node from the scene
+    /// to keep vello's image-override table tidy.
+    pub fn release_node(
+        &mut self,
+        node_identity: NodeIdentity,
+        compositor: &mut ExternalTextureCompositor,
+        vello_renderer: &mut vello::Renderer,
+    ) {
+        if let Some((id, handle)) = self.producers.remove(&node_identity) {
+            if let Some(renderer) = self.registry.get_mut(&id) {
+                if let Some(producer) = renderer.as_embedded_frame() {
+                    producer.release(handle);
+                }
+            }
+        }
+        compositor.unregister(vello_renderer, node_identity);
+    }
+
     /// Deliver an input event to a specific node by identity.
     ///
     /// The hit-test layer that resolves host coordinates to a node
@@ -99,19 +262,26 @@ impl SubstrateHost {
 /// the host action bus is the integration point.
 #[derive(Debug, Default, Clone)]
 pub struct FrameReport {
-    /// Nodes whose renderer reported `Ok(())` paint.
+    /// Nodes that painted successfully — InScene `paint() = Ok` *or*
+    /// EmbeddedFrame compositor `compose() = Ok`.
     pub painted: usize,
-    /// Nodes whose resolved renderer returned `PaintError::NotReady`.
+    /// Nodes whose renderer returned `PaintError::NotReady`, or whose
+    /// EmbeddedFrame producer hasn't yet produced a first texture
+    /// (compositor `NotRegistered`).
     pub not_ready: usize,
     /// Nodes whose content kind matched no registered renderer.
     pub missing_renderer: usize,
-    /// Renderers that returned `PaintError::RendererFailed(_)`; one
-    /// entry per failure.
+    /// Renderer-or-compositor failures with a human-readable reason.
+    /// One entry per failure.
     pub renderer_failed: Vec<String>,
-    /// Renderers resolved by the selector that don't implement
-    /// `InScenePaintRenderer` — bug in the renderer registration or
-    /// selector. One entry per occurrence.
+    /// Renderers resolved by the selector whose claimed composition
+    /// mode doesn't match what `as_in_scene_paint` / `as_embedded_frame`
+    /// returns. Bug in the renderer impl.
     pub wrong_mode: Vec<RendererId>,
+    /// Overlay-mode nodes skipped by `render_scene` — overlays are
+    /// out-of-band OS surfaces dispatched through a different path
+    /// (not yet wired in v0a).
+    pub overlay_skipped: usize,
 }
 
 impl FrameReport {
