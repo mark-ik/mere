@@ -52,11 +52,13 @@ mod external_texture;
 mod host;
 mod recording_renderer;
 mod scene;
+mod solid_rect_renderer;
 
 pub use external_texture::{CompositorError, ExternalTextureCompositor};
 pub use host::{FrameReport, SubstrateHost};
 pub use recording_renderer::{PaintRecord, RecordingRenderer};
 pub use scene::{SubstrateNode, SubstrateScene};
+pub use solid_rect_renderer::SolidRectRenderer;
 
 // Re-export the registry so callers don't need a separate dep on it to
 // name the trait types they implement.
