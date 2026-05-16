@@ -5384,6 +5384,7 @@ dependencies = [
  "kurbo",
  "mere-renderer-registry",
  "vello",
+ "wgpu",
 ]
 
 [[package]]
