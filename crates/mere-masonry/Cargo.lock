@@ -1105,6 +1105,7 @@ dependencies = [
  "masonry_imaging",
  "masonry_testing",
  "mere-renderer-registry",
+ "mere-spatial-prototype",
  "pollster",
  "ui-events",
  "vello",
@@ -1126,6 +1127,16 @@ name = "mere-renderer-registry-types"
 version = "0.0.1"
 dependencies = [
  "kurbo",
+]
+
+[[package]]
+name = "mere-spatial-prototype"
+version = "0.0.1"
+dependencies = [
+ "kurbo",
+ "mere-renderer-registry",
+ "vello",
+ "wgpu 29.0.3",
 ]
 
 [[package]]

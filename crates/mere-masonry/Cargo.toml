@@ -47,3 +47,6 @@ pollster = "0.4"
 # `ModularWidget` — a builder-style stub widget that satisfies the
 # `Widget` trait without us writing one from scratch.
 masonry_testing = { path = "../../../xilem/masonry_testing" }
+# Cross-crate integration test exercises SubstrateHost +
+# ExternalTextureCompositor + MasonryEmbeddedRenderer end-to-end.
+mere-spatial-prototype = { path = "../mere-spatial-prototype" }
