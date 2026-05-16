@@ -86,9 +86,10 @@ Worth naming so the substrate is judged against existing tradition, not invented
 - **Scene graphs** (USD, OpenXR scene, every game engine). Hierarchical placement + LOD + addressable identity. Closest match for §2.1 + §2.4 + §2.5. Has no document model and no concept of typed semantic relations between scene nodes.
 - **Morphic** (Self → Squeak → Newspeak). Composable spatial **morphs** that unify input / render / state in one object. Closest match for §2.2. Does not separate placement from content; everything is paint.
 - **HyperCard / NoteCards / Project Xanadu**. Cards as first-class addressable units with transclusion as a primitive. Closest match for §2.5. Pre-spatial; layout was page-shaped not scene-shaped.
+- **Outliner-graph hybrids (Tana, Logseq, Roam)**. The modern descendants of HyperCard's identity-and-transclusion intuition: every block has a stable id; block-refs render the block in place; the page graph is a first-class view alongside the outline. "Knowledge graph + projections (outline view / graph view / queries)" is structurally Mere's "session = graph, panes = projections" framing, one generation earlier. Closest match for §2.3 (relations as first-class — block refs, supertags, properties) + §2.5 (every block addressable). Tana's supertags + queries are the closest existing thing to typed `SceneEdge::kind` in a shipping product. Lacks §2.1 (layout is outline / page / grid, not free transform), §2.2 (no embedded engines — markdown only), §2.4 (no per-block form-factor / LOD). The substrate's identity + relations layer can borrow their vocabulary directly; the spatial + embed + LOD layers are where Mere goes further.
 - **Whiteboard tools (tldraw, Figma, Miro)**. Scene graph + arbitrary embeds + drag/resize. Practical proof §2.1 + §2.2 ship in production today. Flat in identity (no stable per-surface handles outside the canvas), no first-class relations, no LOD-by-form-factor.
 
-What Mere's IR is, in one line: **spatial hypertext + ZUI + scene graph + embeddable web/document/canvas surfaces + typed relations between them**. That combination has no off-the-shelf name, which is part of why it keeps feeling like a missing layer when described from any one tradition's vocabulary.
+What Mere's IR is, in one line: **outliner-graph hybrid's identity-and-relations layer + spatial hypertext's layout-as-meaning + ZUI's per-node LOD + scene graph's transform stack + embeddable web/document/canvas surfaces**. That combination has no off-the-shelf name, which is part of why it keeps feeling like a missing layer when described from any one tradition's vocabulary.
 
 ## 4. Renderers as plug-ins per node type
 
@@ -178,7 +179,7 @@ mere-host = window manager + GPU surface + spatial scene graph runtime + input r
 
 Everything above shrinks; everything below stays as it is. Critically:
 
-- **mere-domain stays portable.** Already gpui-free per `project_mere_domain_layer`. Already half the IR — `workbench` / `orrery` / `gloss` / `apparatus` / `system` / `graphshell` / `murm` / `moot` are the canonical *node content kinds* the substrate would dispatch on.
+- **mere-domain stays portable.** Already gpui-free per `project_mere_domain_layer`. *Vocabulary-half* the IR — `workbench` / `orrery` / `gloss` / `apparatus` / `system` / `graphshell` / `murm` / `moot` are the canonical *node content kinds* the substrate would dispatch on. **Structurally, today's output is `UxTree`** (`frame::project_frame_with`, `workbench::project_workbench`, `orrery::project_graph`, `gloss::project_outline`, `apparatus::project_skeleton` all emit a flat `Vec<(NodeId, accesskit::Node)>` whose `Node::children: Vec<NodeId>` builds a strict tree). The substrate needs either a new output mode per crate that emits `(NodeContentKind, StableHandle, Content)` triples directly, or a thin wrapper mapping `UxTree → substrate nodes` for projection only. Either way the crate boundaries are at the right seams; only the output shape changes. The wrapper is the cheaper migration; the new-output-mode is the cleaner one. See §10.7.
 - **Two-stack GPU coexistence resolves into one stack.** vello via netrender is the single backend; serval / scrying / wry compose into it (netrender Scene for serval-painted content; OS-composed surfaces for system-WebView content). gpui's blade pipeline drops out.
 - **Web-native chrome, without "chrome = web pages."** The substrate is graph-shaped (per §1 above); web pages are *one node content kind*, painted by serval. The toolkit is the spatial graph IR; serval is a tenant. This dissolves the question Mark balked at — the chrome doesn't have to model itself as HTML to be web-native.
 - **Multi-window synced panels become substrate-native.** Per `project_multi_window_synced_panels`, drag-tab-out spawns a window that re-attaches the same handle. With identity (§2.5) as a substrate property, this is one ECS query per window, not custom plumbing.
@@ -295,6 +296,17 @@ Substrate state is a graph; mere-kernel's graph is also a graph. Same substrate 
 
 Per `project_graphshell_donor_not_authority`, the external graphshell repo is reference material — useful prior thinking on edges, relation families, history import. The substrate IR proposed here is a layer the donor repo never reached, but its edge / relation modelling is informative. Future migration plan should pass over the donor repo for borrowable substrate-shaped fragments before original-writing them.
 
+### 10.7 mere-domain output shape — wrapper vs. new output mode
+
+Per the §6 amendment, today's mere-domain crates emit `UxTree` (flat `Vec<(NodeId, accesskit::Node)>` building a strict accesskit tree). The substrate wants `(NodeContentKind, StableHandle, Content)` triples. Two paths:
+
+- **Wrapper (cheaper).** A `mere-substrate-bridge` crate that maps each crate's existing `UxTree` output into substrate nodes by walking the tree and recovering structure from the path-keyed NodeIds. Mere-domain crates don't change.
+- **New output mode (cleaner).** Each crate grows a second projection function that emits triples directly (`project_workbench_substrate`, etc.). The substrate consumes these natively; `UxTree` becomes an a11y-only emission downstream of substrate state.
+
+The wrapper is the migration-cheap path but pretends mere-domain is graph-shaped when it isn't. The new-output-mode is the substrate-honest path but touches every mere-domain crate. Decision deferred to the modular adoption plan (§12) — it's likely a sequence: wrapper first to unblock substrate development, new-output-mode per crate as their reactive runtime hookup lands.
+
+**Boundary constraint:** AccessKit forces tree shape at the OS edge regardless. Even with substrate-native graph state, the a11y emission has to flatten to a tree before AccessKit's `TreeUpdate` accepts it. "Graph internally, tree at OS boundary" is the same pattern engines already use (each engine paints freely; the OS composes); the substrate inherits the same discipline.
+
 ## 11. Crucial decisions made by this brief
 
 Decisions are deliberately minimal — this is a framing probe.
@@ -305,16 +317,20 @@ Decisions are deliberately minimal — this is a framing probe.
 4. **Five first-class properties (§2) are the substrate test.** Any future IR proposal — whether a spatial substrate, a serval-as-toolkit revival, a return to iced, or anything else — is judged against whether it can express all five uniformly.
 5. **Substrate adoption requires §8's three preconditions.** Renderer maturity + OS-plumbing reuse strategy + substrate-as-host parity demo. Until met, gpui via PlatformSurface remains canonical.
 
-## 12. Follow-ups (deferred; not committed to dates)
+## 12. Follow-ups
 
-These are the *natural* next briefs / plans if the substrate framing holds up under review. Filed when picked up.
+Four of these are filed (same day as this brief — all useful even under the current gpui host); the rest are *natural* next briefs / plans if the substrate framing holds up under review, filed when picked up.
 
-- **Renderer registry contract brief.** The `NodeRenderer` trait, dispatch model, and how serval / scrying / wry / platen / vello-direct / parley each implement it. Independent of substrate-as-host; useful even under the gpui host because it normalises how renderers are described.
-- **OS-plumbing reuse audit.** Per §8.2. Survey of gpui's IME / a11y / focus / drag-drop / window-decoration / clipboard / color / HiDPI subsystems with extractability assessment for each.
-- **Substrate prototype plan** (`mere-host/scene-graph`). If §8.1 + §8.2 clear, the parity-demo plan from §8.3.
+- **Browser taxonomy translation brief** ✅ filed — [`2026-05-15_browser_taxonomy_translation_brief.md`](2026-05-15_browser_taxonomy_translation_brief.md). Maps the spatial chrome / renderer-registry framing onto conventional browser subsystem language (Firefox-like parent/content/rendering/extension/process taxonomy), and spells out the impact on embeddable-browser, extension/mod, PWA/browser-hosted, p2p, and smolweb goals.
+- **Renderer registry contract brief** ✅ filed — [`2026-05-15_renderer_registry_contract_brief.md`](2026-05-15_renderer_registry_contract_brief.md). The `NodeRenderer` trait, three composition modes (in-scene paint / embedded-frame / overlay), per-renderer mapping table, relationship to inker's existing traits.
+- **OS-plumbing reuse audit** ✅ filed — [`2026-05-15_os_plumbing_reuse_audit_brief.md`](2026-05-15_os_plumbing_reuse_audit_brief.md). Per-subsystem extraction posture across 14 subsystems; **IME on macOS is the single substrate-as-host blocker; most others are ecosystem-covered** — a more reassuring finding than §8.2 anticipated.
+- **Spatial chrome modular adoption plan** ✅ filed — [`../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md). Sequences taxonomy cleanup, renderer-registry v0 under the current host, NetRender/Vello composition proof, native texture interop consolidation, PWA/browser-host envelope, session/p2p sync-state split, OS-plumbing proof gates, and substrate-as-host parity demo.
+- **Substrate prototype plan** (`mere-host/scene-graph`). Folded into the modular adoption plan's Phase 8; split out only if/when the preceding proof gates clear.
 - **Chrome IR persistence brief.** Per §10.4 — relationship between substrate state and mere-kernel graph state, serialization sharing.
 - **Substrate naming brief.** Per §10.5.
 - **Relation-shape comparison with the donor graphshell repo.** Per §10.6 — what edge / relation modelling fragments are borrowable into the substrate IR.
+- **IME acceptance-criteria brief.** Per the OS-plumbing audit §8.2 — define what "polished IME" means in Mere's context so the IME work isn't open-ended.
+- **Honest-broker review.** Per the OS-plumbing audit §8.5 — companion to the substrate prototype plan; explicitly articulate whether Mere-on-winit + ecosystem + substrate is materially better than gpui-as-host + spatial-substrate-as-overlay.
 
 ## 13. What this brief does and does not decide
 
@@ -331,4 +347,4 @@ These are the *natural* next briefs / plans if the substrate framing holds up un
 - Decide the reactive-runtime own-vs-borrow question (§10.2).
 - Decide the substrate adoption scope (§10.3).
 
-If the framing is wrong, this brief is the right place to argue against it. If the framing is right, the renderer-registry contract brief and the OS-plumbing reuse audit are the natural next two artefacts — both useful even under the current gpui host.
+If the framing is wrong, this brief is the right place to argue against it. If the framing is right, the taxonomy brief, renderer-registry contract, OS-plumbing audit, and modular adoption plan are the natural child artefacts — all useful even under the current gpui host.

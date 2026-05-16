@@ -1,0 +1,504 @@
+# Spatial Chrome + Renderer Registry Modular Adoption Plan
+
+**Date**: 2026-05-15
+**Status**: Implementation strategy (sequencing plan; does not commit substrate-as-host adoption)
+**Scope**: Turns the spatial chrome IR, renderer registry contract, browser taxonomy translation, OS-plumbing audit, and existing multiplexer/session work into a staged plan. Goal: land the useful host-agnostic pieces first, defer substrate-as-host until proof gates clear, and keep Serval/NetRender/wgpu-* sibling crates aligned with Mere's renderer model.
+
+**Primary inputs**:
+
+- [`../research/2026-05-15_spatial_chrome_ir_brief.md`](../research/2026-05-15_spatial_chrome_ir_brief.md)
+- [`../research/2026-05-15_browser_taxonomy_translation_brief.md`](../research/2026-05-15_browser_taxonomy_translation_brief.md)
+- [`../research/2026-05-15_renderer_registry_contract_brief.md`](../research/2026-05-15_renderer_registry_contract_brief.md)
+- [`../research/2026-05-15_os_plumbing_reuse_audit_brief.md`](../research/2026-05-15_os_plumbing_reuse_audit_brief.md)
+- [`2026-05-11_graph_session_manifest_plan.md`](2026-05-11_graph_session_manifest_plan.md)
+- [`2026-05-14_session_service_runner_plan.md`](2026-05-14_session_service_runner_plan.md)
+- [`2026-05-14_engine_profile_boundary_plan.md`](2026-05-14_engine_profile_boundary_plan.md)
+- [`2026-05-11_relation_taxonomy_and_edge_mutation_plan.md`](2026-05-11_relation_taxonomy_and_edge_mutation_plan.md)
+
+---
+
+## Thesis
+
+> **Ship the renderer registry and taxonomy cleanup before any host pivot. Treat the spatial chrome IR as the desired shape of Mere's presentation/session layer, not as a mandate to replace gpui immediately. The adoption path is registry first, composition proof second, OS-plumbing proof third, substrate-host decision last.**
+
+This plan deliberately separates five threads that are easy to conflate:
+
+1. Browser taxonomy/documentation cleanup.
+2. Renderer registry adoption under the current host.
+3. NetRender/Vello composition proof.
+4. Browser/PWA and p2p envelope constraints.
+5. Substrate-as-host adoption decision.
+
+## 0. Current state
+
+Already present or in flight:
+
+- `inker` has document engines plus `SurfaceEngine` / `SurfaceProducer` shape for long-lived frame streams.
+- `scrying-tile-engine` already adapts scrying into an embedded-frame-style tile producer.
+- `EngineProfileBinding` has a pure path resolver and profile-binding plan.
+- `GraphSessionManifest`, `ViewIntent`, session/service runner, action bus, capability gates, and diagnostics have planned seams.
+- Relation taxonomy and cartography are already separated from tile rendering.
+- NetRender already has scene/text/external-texture/hit-test work that can support a substrate proof.
+- `wgpu-scry` and `wgpu-weld` both have native-frame/web-surface production ideas that should converge on one interop contract.
+
+Still missing:
+
+- No canonical `NodeRenderer` registry.
+- Host dispatch still risks bespoke per-renderer branches.
+- No Workbench-sized NetRender/Vello substrate proof.
+- No accepted OS-plumbing extraction/validation plan beyond the audit posture.
+- No explicit PWA/browser-host degraded envelope.
+- No shared native texture interop crate across scrying/weld/Serval/NetRender.
+
+## Phase 1 - Taxonomy and doc reconciliation
+
+**Goal:** Make the architecture legible in browser terms before code spreads.
+
+**Work:**
+
+1. Promote the browser taxonomy translation brief as the canonical mapping from browser subsystem vocabulary to Mere vocabulary.
+2. Update the spatial chrome IR brief so it links to taxonomy, renderer registry, OS-plumbing audit, and this plan as separate children.
+3. Keep old Graphshell terms translated into current Mere terms:
+   - Graphshell local workbench -> Mere local workbench/app.
+   - Verso/peer session layer -> Murm/murmuring.
+   - Verse/community-scale layer -> Moothold/mooting.
+4. Update `design_docs/DOC_README.md` with the new doc set and intended read order.
+
+**Done when:**
+
+- The design-doc index lists all four 2026-05-15 artifacts.
+- No one document has to answer taxonomy, registry, OS plumbing, and implementation sequencing at once.
+
+**Risks:**
+
+- Over-indexing docs without changing code. This phase is intentionally small and should stop once the references are coherent.
+
+## Phase 2 - Renderer registry v0 under current host
+
+**Goal:** Land the useful abstraction without waiting for substrate-as-host.
+
+**Work:**
+
+1. Choose home:
+   - preferred: `crates/mere-host-runtime/src/renderer_registry.rs` initially, because consumers are host/runtime-owned;
+   - extract later to `mere-renderer-registry` only if sibling consumers appear.
+2. Define:
+   - `RendererId`,
+   - `NodeContentKind`,
+   - `CompositionMode`,
+   - `RendererCapabilities`,
+   - `NodeRenderer`,
+   - `InScenePaintRenderer`,
+   - `EmbeddedFrameRenderer`,
+   - `OverlayRenderer`,
+   - `RendererSelector`.
+3. Add adapters:
+   - document-tile adapter: `Engine` -> `EngineDocument` -> `platen` -> NetRender/Vello scene,
+   - scrying adapter: `SurfaceEngine` / `SurfaceProducer` -> `EmbeddedFrameRenderer`,
+   - cartography adapter: graph projection -> in-scene paint,
+   - edge adapter: relation/edge labels -> in-scene paint,
+   - placeholder overlay adapter for Wry/CEF.
+4. Thread diagnostics:
+   - `renderer.registered`,
+   - `renderer.unregistered`,
+   - `engine.route_chosen`,
+   - `engine.route_degraded`,
+   - `renderer.hot_swapped`,
+   - `surface.attach_failed`.
+5. Thread capability gates:
+   - per-node route override -> `engine.route_override`,
+   - profile escalation -> `engine.profile.escalate`.
+
+**Done when:**
+
+- Host tile dispatch resolves through the registry for at least document tiles and scrying tiles.
+- Existing behavior is unchanged for users.
+- The old bespoke dispatch path is either removed or clearly marked legacy.
+- Unit tests cover selector resolution order and capability-gate denial behavior.
+
+**Risks:**
+
+- Pulling too much GPU detail into portable registry types. Keep GPU handles behind host-side adapters.
+- Making `inker` own final composition. It should not; it owns engine output and profile/routing identity.
+
+## Phase 3 - NetRender/Vello composition proof
+
+**Goal:** Prove the spatial chrome substrate can compose real Mere-like surfaces without replacing the host.
+
+**Work:**
+
+Build a small proof harness, not a product host:
+
+1. Root scene with pan/zoom camera.
+2. One cartography/graph node.
+3. One document tile rendered through document engine -> platen -> NetRender.
+4. One embedded-frame placeholder texture using the same external-texture path expected by scrying/Serval.
+5. One relation edge with label and hit-test.
+6. Basic hit-test returning node/edge/content identity.
+7. Thumbnail/capture path for switcher preview.
+8. UxTree/AccessKit projection for the same scene.
+
+**Suggested home:**
+
+```text
+crates/mere-host-runtime/src/spatial_proof/   (if host-runtime-owned)
+or
+crates/mere-spatial-prototype/                (if crate isolation is useful)
+```
+
+Do not name this final substrate yet. It is a proof.
+
+**Done when:**
+
+- The proof renders a mixed scene without gpui-specific layout concepts.
+- Embedded-frame and in-scene paint surfaces share a coordinate/hit-test model.
+- The proof can be driven by deterministic test data.
+- Windows local validation exists; Linux X11 validation is attempted if practical.
+
+**Risks:**
+
+- Accidentally building a parallel app host. Keep the harness narrow.
+- Treating visual scene state as graph truth. It is presentation/session state.
+
+## Phase 4 - Native texture interop consolidation
+
+**Goal:** Stop sibling crates from drifting into incompatible native-frame contracts.
+
+**Work:**
+
+Create or designate one low-level interop crate with types equivalent to:
+
+```text
+NativeFrame
+ImportedTexture
+TextureImporter
+HostWgpuContext
+ExternalTexturePlacement
+FrameSync / fence metadata
+```
+
+Candidate home:
+
+```text
+repos/wgpu-native-texture-interop/        (if kept independent)
+repos/wgpu-scry/crates/wgpu-native-texture-interop/
+repos/mere/crates/mere-native-texture/    (only if Mere-specific, not preferred)
+```
+
+Rules:
+
+1. `wgpu-scry` depends on it for WebView/WebView2/WK/WebKitGTK captured frames.
+2. `wgpu-weld` depends on it for CEF accelerated OSR frames.
+3. Serval depends on it only at the host-output boundary, not inside core document/layout logic.
+4. NetRender consumes imported textures through a stable external-texture API.
+5. Mere's renderer registry sees only embedded-frame capability metadata and host texture handles, not platform-specific COM/ObjC/DMABuf details.
+
+**Done when:**
+
+- scrying and welding can describe native frames with the same enum/trait vocabulary.
+- NetRender can sample imported textures through one path.
+- Platform-specific sync/fence requirements are explicit in type names or metadata.
+
+**Risks:**
+
+- Making the crate too high-level. It should not know about Mere nodes, sessions, profiles, or panes.
+- Ignoring macOS/Wayland validation gaps.
+
+## Phase 5 - Browser/PWA envelope plan
+
+**Goal:** Define what Mere-in-a-browser can honestly support.
+
+**Work:**
+
+1. Add a browser-host envelope brief or section with supported/degraded/unavailable capabilities.
+2. Split native and web dependencies:
+   - native: desktop wgpu backends, native file/profile dirs, native texture import, OS WebView capture.
+   - web: WebGPU canvas, OPFS/IndexedDB persistence, browser-safe networking, WebRTC/relay p2p.
+3. Require async WebGPU boot for browser targets.
+4. Add a small NetRender smoke for browser canvas when the Pelt/NetRender web lane is active.
+5. Define p2p transport constraints:
+   - raw iroh native,
+   - browser-safe relay/WebRTC path optional/future,
+   - no claim of full p2p parity in PWA until proven.
+
+**Done when:**
+
+- PWA/browser-host documentation stops implying full native parity.
+- Direct Lane/source/graph views are the first-class browser envelope.
+- Serval/native WebView/native texture features are explicitly native-only.
+
+**Risks:**
+
+- Marketing language outrunning capability.
+- Letting browser constraints leak backwards into native architecture.
+
+## Phase 6 - Session/p2p sync boundary
+
+**Goal:** Decide which spatial/session state can replicate and which stays local.
+
+**Work:**
+
+Classify state:
+
+| State kind | Examples | Sync posture |
+| --- | --- | --- |
+| Semantic graph truth | accepted nodes, typed relations, EntryRecord/content identity | Moothold/Murm durable sync |
+| Durable session truth | manifest, panes, frame IDs, selected view intents, branch state | syncable by explicit session policy |
+| Engine profile binding | persona/session/graph profile path, renderer compatibility metadata | sync metadata only; not profile bytes |
+| Presentation state | camera, transient LOD, hover, active drag, latest frame texture | local by default |
+| Live collaboration state | cursor, viewport follow, shared selection | future live-session protocol |
+
+**Done when:**
+
+- The spatial IR persistence question is answered in terms of these buckets.
+- Graph/session manifests do not silently absorb ephemeral renderer state.
+- P2P docs can refer to this table instead of inventing their own split.
+
+**Risks:**
+
+- Over-replicating presentation state and creating noisy/conflicting session restores.
+- Under-replicating session intent and losing the point of collaborative graph work.
+
+## Phase 7 - OS-plumbing proof gate
+
+**Goal:** Decide whether substrate-as-host is worth reopening.
+
+**Work:**
+
+1. Write IME acceptance criteria.
+2. Do source-grade gpui IME audit for macOS and Windows.
+3. Decide whether `mere-os-plumbing` should land incrementally for cheap subsystems:
+   - clipboard,
+   - dialogs,
+   - theme,
+   - gestures,
+   - intra-app drag.
+4. Establish non-local validation strategy:
+   - macOS,
+   - Linux Wayland,
+   - IME/candidate windows,
+   - drag/drop,
+   - accessibility smoke.
+
+**Done when:**
+
+- IME is no longer a vague "hard thing"; it has acceptance criteria and platform strategy.
+- The non-local validation gap is owned.
+- There is a credible answer to "why not stay on gpui?"
+
+**Risks:**
+
+- Underestimating IME polish.
+- Treating AccessKit/winit coverage as proof that all OS integration is solved.
+
+## Phase 8 - Substrate-as-host parity demo
+
+**Goal:** Only after phases 2-7, build the Workbench-sized parity demo.
+
+**Work:**
+
+1. Parallel host path:
+
+```text
+mere-host/gpui                 (canonical)
+mere-host/scene-graph-proof    (experimental)
+```
+
+2. Must demonstrate:
+   - window open/close/resize,
+   - pan/zoom spatial scene,
+   - document tile,
+   - graph view,
+   - embedded web texture,
+   - relation edge,
+   - focus traversal,
+   - clipboard text,
+   - IME floor,
+   - AccessKit tree,
+   - diagnostics,
+   - session restore.
+
+3. Compare against gpui:
+   - user-visible quality,
+   - code ownership,
+   - runtime performance,
+   - OS coverage,
+   - maintenance burden.
+
+**Done when:**
+
+- The demo is usable enough to make an adoption decision.
+- The honest-broker comparison is written down.
+- Either gpui remains canonical with the substrate as a pane/runtime layer, or the host pivot gets a real migration plan.
+
+**Risks:**
+
+- Building an impressive demo that still misses IME/a11y/session restore.
+- Letting the prototype become the mainline host before it earns it.
+
+## Serval changes required
+
+Serval should become a renderer tenant, not a host.
+
+Required direction:
+
+1. Implement or adapt to `EmbeddedFrameRenderer` semantics for full-web pages.
+2. Keep the profile ladder:
+   - static/simple HTML path where appropriate,
+   - interactive/scripting/fullweb path for real web pages,
+   - explicit failure/degrade signals for routing.
+3. Expose:
+   - frame production,
+   - input delivery,
+   - navigation events,
+   - capture/snapshot,
+   - profile binding scope,
+   - accessibility boundary.
+4. Keep WebGL-over-wgpu output compatible with the shared native texture/external texture path.
+5. Do not internalise scrying/Wry as compatibility paths. Those are peer renderers selected by Mere.
+
+Pitfall: using Serval as a toolkit or replacing Mere's host/session model with Serval internals. Serval is the web content engine, not the workbench authority.
+
+## NetRender changes required
+
+NetRender should become the shared scene/composition substrate for in-scene content and external textures.
+
+Required direction:
+
+1. Stabilise a `SceneFragment`/layer-style API that Mere renderers can contribute to.
+2. Keep external texture composition first-class.
+3. Make hit-test/capture/replay deterministic enough for substrate proof tests.
+4. Keep Parley text integration as a helper path, not a separate renderer authority.
+5. Support async device/surface boot for browser/web targets.
+6. Keep wasm/web build concerns separate from native desktop backend concerns.
+
+Pitfall: making NetRender the app architecture. NetRender is rendering/composition infrastructure; Mere still owns session, graph truth, renderer selection, and actions.
+
+## wgpu-scry changes required
+
+`wgpu-scry` should be the system WebView/WebView2 capture/import renderer primitive.
+
+Required direction:
+
+1. Align `WebSurfaceFrame` / producer output with the shared native texture interop crate.
+2. Keep `WebSurfaceProducer` policy-free: no Mere session semantics inside scrying.
+3. Expose capability metadata:
+   - native texture,
+   - CPU fallback,
+   - overlay-only fallback,
+   - input/IME support,
+   - snapshot support,
+   - platform backend.
+4. Keep Windows-first proof strong while documenting macOS/Wayland gaps.
+
+Pitfall: turning scrying into "the web engine." It is an embedded-frame system-WebView renderer, one peer among several.
+
+## wgpu-weld changes required
+
+`wgpu-weld` should be optional CEF accelerated OSR support, not the default web path.
+
+Required direction:
+
+1. Align `NativeFrame` / importer contracts with the shared interop crate.
+2. Register conceptually as `cef.web` or `chromium.web` if adopted.
+3. Preserve CEF subprocess/security/profile costs in capability metadata.
+4. Treat it as high-compat fallback or specific renderer choice, not as the core browser architecture.
+
+Pitfall: CEF can solve compatibility fast while importing Chromium's weight. Keep the cost visible.
+
+## Dependency shape
+
+Target direction:
+
+```text
+mere-kernel
+  -> relation taxonomy / cartography model / Eidetic IDs
+
+inker / nematic
+  -> engine routing, protocol-faithful document production
+
+platen / netrender adapters
+  -> document layout and scene production
+
+renderer registry adapters
+  -> content-kind dispatch and composition-mode selection
+
+mere-host-runtime
+  -> sessions, panes, action bus, workers, diagnostics, renderer lifecycle
+
+host backends
+  -> gpui canonical today
+  -> scene-graph/substrate proof later
+
+optional renderer providers
+  -> Serval
+  -> wgpu-scry
+  -> wgpu-weld / CEF
+  -> Wry overlay
+```
+
+Forbidden direction:
+
+```text
+mere-kernel -> host/backend/rendering crates
+cartography -> gpui
+inker -> gpui or final compositor
+Serval -> Mere host/session authority
+wgpu-scry -> Mere policy/session authority
+wgpu-weld -> Mere policy/session authority
+```
+
+## Sidequests
+
+Useful but not on the critical path:
+
+1. WebExtension compatibility envelope.
+2. DevTools/page inspector story for Serval and system WebView renderers.
+3. `about:`-style diagnostics pages or Mere-native equivalent.
+4. Download manager and permission UI aggregation.
+5. Cross-renderer visual effects.
+6. Overlay thumbnail capture.
+7. Native notifications.
+8. Substrate naming.
+9. Source-grade gpui audits for non-IME subsystems if substrate proof gets serious.
+
+## Pitfalls
+
+1. Replacing gpui before renderer registry and OS proof gates land.
+2. Letting the spatial IR become semantic graph truth.
+3. Pretending overlay renderers can participate in deep hit-test, capture, clipping, and relation anchoring like in-scene renderers.
+4. Treating static HTML as a universal fallback for full web content.
+5. Chasing WebExtension parity before Mere's native mod/capability surface exists.
+6. Claiming PWA parity before WebGPU, persistence, transport, and native-feature degradation are explicit.
+7. Duplicating native-frame/importer contracts across scrying, weld, Serval, and NetRender.
+8. Letting native `pollster`/desktop wgpu backend assumptions leak into browser/wasm targets.
+9. Overfitting to Windows validation and forgetting macOS/Wayland are the substrate-host risk multipliers.
+
+## Near-term execution order
+
+1. Finish doc reconciliation (this plan, taxonomy brief, index updates).
+2. Turn renderer registry contract into an adoption issue/plan with exact crate home.
+3. Land registry v0 for document tiles + scrying under current host.
+4. Start shared native texture interop consolidation across `wgpu-scry` and `wgpu-weld`.
+5. Build NetRender mixed-scene proof.
+6. Define browser/PWA envelope constraints.
+7. Define session/p2p sync-state buckets.
+8. Only then reopen substrate-as-host.
+
+## Non-goals
+
+- No immediate gpui removal.
+- No immediate WebExtension implementation.
+- No claim that PWA/browser-hosted Mere equals native Mere.
+- No requirement that Serval, scrying, Wry, and CEF all ship before the registry is useful.
+- No process-sandbox/multiprocess commitment for v1.
+
+## Decisions
+
+1. **Renderer registry adoption is the first implementation move.**
+2. **Substrate-as-host remains gated by renderer maturity, OS-plumbing proof, and parity demo.**
+3. **NetRender proof is a composition proof, not a host migration.**
+4. **Serval is a renderer tenant, not the workbench authority.**
+5. **wgpu-scry and wgpu-weld must converge on a shared native texture interop contract before both are treated as first-class Mere renderer providers.**
+6. **PWA/browser-hosted Mere is explicitly degraded until proven otherwise.**
+7. **P2P sync state must be bucketed before spatial persistence lands.**
