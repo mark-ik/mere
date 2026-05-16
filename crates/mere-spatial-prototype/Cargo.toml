@@ -17,6 +17,10 @@ mere-renderer-registry = { path = "../mere-renderer-registry" }
 # version travels with the registry's vello.
 kurbo.workspace = true
 vello.workspace = true
+# Direct dep so the `ExternalTextureCompositor` public surface can name
+# `wgpu::Texture`. Vello pulls wgpu transitively but `unused_crate_dependencies`
+# requires direct declaration for crates we name in our own API.
+wgpu.workspace = true
 
 [lints]
 workspace = true

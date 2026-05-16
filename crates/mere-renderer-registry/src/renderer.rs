@@ -80,9 +80,15 @@ pub trait InScenePaintRenderer: NodeRenderer {
 
 /// Renderers that produce wgpu textures on their own clock; the host
 /// composites them as external textures.
+///
+/// `next_frame` returns `Option<wgpu::Texture>` (not `TextureView`) because
+/// vello's `Renderer::register_texture` takes a `wgpu::Texture` and creates
+/// its own view internally. Hosts using a separate-pass compositor (e.g.
+/// netrender's external-texture pipeline) call `.create_view(...)` on the
+/// returned Texture. `wgpu::Texture` is a cheap Clone handle.
 pub trait EmbeddedFrameRenderer: NodeRenderer {
     fn ensure_producer(&mut self, node: &SceneNodeRef) -> ProducerHandle;
-    fn next_frame(&mut self, handle: ProducerHandle) -> Option<wgpu::TextureView>;
+    fn next_frame(&mut self, handle: ProducerHandle) -> Option<wgpu::Texture>;
     fn deliver_input(&mut self, handle: ProducerHandle, event: &InputEvent) -> InputDisposition;
     fn release(&mut self, handle: ProducerHandle);
 }

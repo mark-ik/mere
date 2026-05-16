@@ -48,10 +48,12 @@
 #![warn(unused_crate_dependencies)]
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
+mod external_texture;
 mod host;
 mod recording_renderer;
 mod scene;
 
+pub use external_texture::{CompositorError, ExternalTextureCompositor};
 pub use host::{FrameReport, SubstrateHost};
 pub use recording_renderer::{PaintRecord, RecordingRenderer};
 pub use scene::{SubstrateNode, SubstrateScene};
