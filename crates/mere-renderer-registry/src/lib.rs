@@ -30,7 +30,9 @@ mod registry;
 mod renderer;
 
 pub use paint::{PaintCtx, PaintError, PaintResult};
-pub use registry::{DefaultSelector, RegistryError, RendererRegistry, RendererSelector};
+pub use registry::{
+    DefaultSelector, DispatchError, RegistryError, RendererRegistry, RendererSelector,
+};
 pub use renderer::{
     EmbeddedFrameRenderer, InScenePaintRenderer, NodeRenderer, OverlayRenderer,
 };

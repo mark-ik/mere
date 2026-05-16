@@ -18,8 +18,11 @@
 
 use std::collections::HashMap;
 
-use mere_renderer_registry_types::{NodeContentKind, RendererId, SceneNodeRef};
+use mere_renderer_registry_types::{
+    InputDisposition, InputEvent, NodeContentKind, RendererId, SceneNodeRef,
+};
 
+use crate::paint::{PaintCtx, PaintResult};
 use crate::renderer::NodeRenderer;
 
 /// Substrate-owned registry of renderers.
@@ -110,7 +113,82 @@ impl RendererRegistry {
     pub fn iter_ids(&self) -> impl Iterator<Item = &RendererId> {
         self.renderers.keys()
     }
+
+    /// Dispatch an in-scene paint for `node` through whichever renderer
+    /// the selector chooses.
+    ///
+    /// Returns:
+    /// - `Ok(None)` if no renderer handles `node.content_kind` — host
+    ///   paints a placeholder.
+    /// - `Ok(Some(Err(PaintError::NotReady)))` if the resolved renderer
+    ///   declined to paint this frame.
+    /// - `Ok(Some(Ok(())))` on success.
+    /// - `Err(DispatchError::WrongCompositionMode)` if the resolved
+    ///   renderer's `composition_mode()` is not `InScenePaint` — caller
+    ///   asked an embedded-frame or overlay renderer to in-scene-paint.
+    pub fn paint_node(
+        &mut self,
+        node: &SceneNodeRef,
+        ctx: &mut PaintCtx<'_>,
+    ) -> Result<Option<PaintResult>, DispatchError> {
+        let Some(id) = self.select(node) else {
+            return Ok(None);
+        };
+        let renderer = self
+            .get_mut(&id)
+            .expect("selector returned id not in registry");
+        let painter = renderer
+            .as_in_scene_paint()
+            .ok_or(DispatchError::WrongCompositionMode { id })?;
+        Ok(Some(painter.paint(node, ctx)))
+    }
+
+    /// Dispatch an in-scene input event for `node`.
+    ///
+    /// Mirrors [`Self::paint_node`]: `Ok(None)` when no renderer claims
+    /// the content kind, `Err(WrongCompositionMode)` when the renderer
+    /// doesn't implement `InScenePaintRenderer`.
+    pub fn deliver_in_scene_input(
+        &mut self,
+        node: &SceneNodeRef,
+        event: &InputEvent,
+    ) -> Result<Option<InputDisposition>, DispatchError> {
+        let Some(id) = self.select(node) else {
+            return Ok(None);
+        };
+        let renderer = self
+            .get_mut(&id)
+            .expect("selector returned id not in registry");
+        let painter = renderer
+            .as_in_scene_paint()
+            .ok_or(DispatchError::WrongCompositionMode { id })?;
+        Ok(Some(painter.input(node, event)))
+    }
 }
+
+/// Why a registry dispatch failed structurally (before reaching the renderer).
+#[derive(Debug)]
+pub enum DispatchError {
+    /// The resolved renderer's composition mode doesn't match the
+    /// dispatch the host attempted (e.g. host called `paint_node` on a
+    /// renderer whose `composition_mode()` is `EmbeddedFrame`). Either
+    /// the selector picked the wrong renderer or the host dispatched
+    /// against the wrong mode for this node.
+    WrongCompositionMode { id: RendererId },
+}
+
+impl std::fmt::Display for DispatchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::WrongCompositionMode { id } => write!(
+                f,
+                "renderer {id} resolved for node but does not implement the expected composition-mode trait"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for DispatchError {}
 
 /// Errors from registry mutation.
 #[derive(Debug)]
