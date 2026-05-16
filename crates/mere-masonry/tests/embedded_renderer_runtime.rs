@@ -27,7 +27,7 @@ use mere_renderer_registry::{
     EmbeddedFrameRenderer, LodLevel, NodeContentKind, NodeIdentity, Placement, SceneNodeRef,
 };
 
-fn boot_wgpu() -> Option<(wgpu::Device, wgpu::Queue)> {
+fn boot_wgpu() -> Option<(wgpu::Adapter, wgpu::Device, wgpu::Queue)> {
     pollster::block_on(async {
         let instance = wgpu::Instance::default();
         let adapter = instance
@@ -38,7 +38,7 @@ fn boot_wgpu() -> Option<(wgpu::Device, wgpu::Queue)> {
             .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .ok()?;
-        Some((device, queue))
+        Some((adapter, device, queue))
     })
 }
 
@@ -54,7 +54,7 @@ fn build_factory() -> RootWidgetFactory {
 
 #[test]
 fn full_chain_produces_texture_with_requested_dimensions() {
-    let Some((device, queue)) = boot_wgpu() else {
+    let Some((adapter, device, queue)) = boot_wgpu() else {
         // No GPU adapter available — likely headless CI without
         // accelerated graphics. Skip rather than fail.
         eprintln!("skipping: no wgpu adapter available");
@@ -66,6 +66,7 @@ fn full_chain_produces_texture_with_requested_dimensions() {
     let mut renderer = MasonryEmbeddedRenderer::new(
         "test.mere-masonry.panel",
         NodeContentKind::Panel,
+        adapter,
         device,
         queue,
         default_props,
@@ -109,7 +110,7 @@ fn full_chain_produces_texture_with_requested_dimensions() {
 
 #[test]
 fn multiple_producers_track_independently() {
-    let Some((device, queue)) = boot_wgpu() else {
+    let Some((adapter, device, queue)) = boot_wgpu() else {
         eprintln!("skipping: no wgpu adapter available");
         return;
     };
@@ -119,6 +120,7 @@ fn multiple_producers_track_independently() {
     let mut renderer = MasonryEmbeddedRenderer::new(
         "test.mere-masonry.panel",
         NodeContentKind::Panel,
+        adapter,
         device,
         queue,
         default_props,

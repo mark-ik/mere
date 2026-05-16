@@ -2,65 +2,47 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! `MasonryEmbeddedRenderer` — `EmbeddedFrameRenderer` impl that renders
-//! each Masonry tile to an offscreen wgpu texture for the substrate host
-//! to composite via [`mere_spatial_prototype::ExternalTextureCompositor`].
+//! each Masonry tile directly into a wgpu texture, returned to the
+//! substrate host for compositing via
+//! [`mere_spatial_prototype::ExternalTextureCompositor`].
 //!
-//! ## Why CPU readback (and why not GPU)
+//! ## Pipeline
 //!
-//! The texture-fill path goes through `masonry_imaging`'s
-//! `imaging_vello_cpu` backend — a CPU rasterizer (vello_cpu, distinct
-//! from vello) that produces an RGBA8 `imaging::RgbaImage` in regular
-//! memory. mere-masonry then uploads that buffer to a wgpu 29 texture
-//! via `queue.write_texture`.
+//! 1. `ensure_producer` allocates a wgpu 29 `Texture` (Rgba8Unorm,
+//!    RENDER_ATTACHMENT + TEXTURE_BINDING) sized to the node, plus a
+//!    matching `TextureView`. Constructs a `MasonryTile` for the panel's
+//!    widget tree.
+//! 2. `next_frame` drives `MasonryTile::render` to refresh the
+//!    `VisualLayerPlan`, extracts base + overlay scenes into
+//!    `masonry_imaging::PreparedFrame`, then calls
+//!    `masonry_imaging::texture_render::Renderer::render_to_texture` —
+//!    which uses xilem's `imaging_vello::VelloRenderer` (vello 0.9
+//!    internally) to paint masonry's content into the producer's wgpu
+//!    texture on the GPU. No CPU round-trip.
+//! 3. The host registers the returned `wgpu::Texture` with its own
+//!    `vello::Renderer::register_texture` and composites via
+//!    `Scene::draw_image` at the node's placement transform.
 //!
-//! The CPU path was picked over the GPU path (`imaging_vello`'s
-//! `texture_render::Renderer`) because of the wgpu version skew: xilem's
-//! `imaging_wgpu` pins wgpu 28, mere's workspace pins wgpu 29. Those are
-//! different crates from Rust's point of view; their `Texture` and
-//! `Device` types don't interoperate. CPU readback sidesteps the skew
-//! entirely — the bridge between the two wgpu universes is a `Vec<u8>`.
+//! ## Why this works now (and didn't initially)
 //!
-//! Performance: CPU rasterization is materially slower than GPU for
-//! large surfaces. Panel-shaped tiles (text + simple shapes, a few
-//! hundred pixels on a side) rasterize fast enough on modern CPUs that
-//! this is fine for the prototype. When xilem upstream bumps to vello 0.9
-//! + wgpu 29, this renderer can switch to the GPU path with
-//! `texture_render` and the version skew dissolves; the substrate-host
-//! API doesn't change.
+//! Earlier in development, xilem's workspace pinned wgpu 28 + vello 0.8
+//! while mere's workspace pins wgpu 29 + vello 0.9. Those versions are
+//! different crates from Rust's point of view; a `wgpu::Texture` from
+//! one can't cross to the other. The interim implementation used
+//! `imaging_vello_cpu` (CPU rasterizer; vello_cpu doesn't touch wgpu)
+//! + `queue.write_texture` to bridge the gap.
 //!
-//! ## v0a scope
-//!
-//! Wired end-to-end:
-//!
-//! - GPU-resource ownership (wgpu 29 Device + Queue).
-//! - CPU renderer ownership; recreated when the active producer's size
-//!   changes (mask cache and internal context reset accordingly).
-//! - `ensure_producer`: allocate wgpu 29 texture sized to node + construct
-//!   `MasonryTile` with the host-supplied widget tree.
-//! - `next_frame`: drive masonry's redraw pass → `VisualLayerPlan` →
-//!   `PreparedFrame` → paint_into CPU renderer → `RgbaImage` →
-//!   `queue.write_texture` → return wgpu::Texture.
-//! - `deliver_input`: full input translation via [`crate::input`].
-//! - `release`: clean teardown.
-//!
-//! Not wired yet:
-//!
-//! - **Resize**: the producer's texture is sized at `ensure_producer` time
-//!   and not re-allocated if the node's `size` changes mid-session. Hosts
-//!   currently must release+re-ensure when a panel resizes. A v0b
-//!   `resize(handle, size)` method on the trait would let hosts keep the
-//!   widget tree alive across resizes.
-//! - **Damage tracking / partial updates**: every frame re-renders the
-//!   whole tile from scratch. Fine for panels that update infrequently;
-//!   needs revisiting for high-FPS panels.
+//! With the imaging fork at `repos/imaging` (branch
+//! `mere-wgpu-29-vello-0-9`) and xilem's pins bumped to match mere's,
+//! both stacks live in the same wgpu 29 + vello 0.9 universe. The CPU
+//! detour is no longer needed; the GPU path is the obvious choice.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use masonry_core::app::VisualLayerKind;
 use masonry_core::core::{DefaultProperties, NewWidget, Widget};
-use masonry_core::imaging::{self, render::RenderSource};
-use masonry_imaging::image_render::Renderer as CpuImageRenderer;
+use masonry_imaging::texture_render::{Renderer as TextureRenderer, RenderTarget};
 use masonry_imaging::{Layer, PreparedFrame};
 use mere_renderer_registry::{
     CompositionMode, EmbeddedFrameRenderer, InputDisposition, InputEvent, NodeContentKind,
@@ -83,15 +65,14 @@ pub struct MasonryEmbeddedRenderer {
     handles_kind: NodeContentKind,
 
     // Host-supplied GPU resources. Clone-cheap (wgpu handle types).
+    adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
 
-    // CPU renderer + the size it's configured for. Replaced when a
-    // render at a different size is requested. VelloCpuRenderer::new is
-    // cheap (no GPU init); the trade-off vs. resizing is the mask cache
-    // resets, which is what `resize` does internally anyway.
-    cpu_renderer: CpuImageRenderer,
-    cpu_renderer_size: (u16, u16),
+    // Shared GPU renderer. `texture_render::Renderer::new` is a tiny
+    // stateless wrapper; it caches the underlying VelloRenderer keyed
+    // by device on first render and reuses it after.
+    texture_renderer: TextureRenderer,
 
     // Shared widget construction context.
     default_properties: Arc<DefaultProperties>,
@@ -104,37 +85,38 @@ pub struct MasonryEmbeddedRenderer {
 struct ProducerState {
     tile: MasonryTile,
     texture: wgpu::Texture,
-    /// Physical size of the texture — used by the upload step.
+    view: wgpu::TextureView,
+    /// Physical size of the texture.
     size_px: (u32, u32),
 }
 
 impl MasonryEmbeddedRenderer {
     /// Construct the renderer.
     ///
-    /// `id` is the renderer-registry identifier (e.g. `"mere-masonry.panel"`).
-    /// `handles_kind` is the `NodeContentKind` this renderer claims —
-    /// typically `NodeContentKind::Panel` for mere-domain panel content.
+    /// `id` is the renderer-registry identifier (e.g.
+    /// `"mere-masonry.panel"`). `handles_kind` is the `NodeContentKind`
+    /// this renderer claims — typically `NodeContentKind::Panel` for
+    /// mere-domain panel content.
     ///
-    /// `device` + `queue` are the host's wgpu 29 handles; the renderer
-    /// clones them per allocation (wgpu's Clone is an Arc clone — cheap).
+    /// `adapter` + `device` + `queue` are the host's wgpu 29 handles;
+    /// the renderer clones them per allocation (wgpu's Clone is an Arc
+    /// clone — cheap).
     pub fn new(
         id: &'static str,
         handles_kind: NodeContentKind,
+        adapter: wgpu::Adapter,
         device: wgpu::Device,
         queue: wgpu::Queue,
         default_properties: Arc<DefaultProperties>,
         root_widget_factory: RootWidgetFactory,
     ) -> Self {
-        // Construct at 1×1; first render at a real producer size will
-        // replace this with one at the right dimensions.
-        let cpu_renderer = CpuImageRenderer::new(1, 1);
         Self {
             id: RendererId::from_static(id),
             handles_kind,
+            adapter,
             device,
             queue,
-            cpu_renderer,
-            cpu_renderer_size: (1, 1),
+            texture_renderer: TextureRenderer::new(),
             default_properties,
             root_widget_factory,
             producers: HashMap::new(),
@@ -151,8 +133,12 @@ impl MasonryEmbeddedRenderer {
         self.producers.len()
     }
 
-    fn allocate_texture(&self, width: u32, height: u32) -> wgpu::Texture {
-        self.device.create_texture(&wgpu::TextureDescriptor {
+    fn allocate_texture_and_view(
+        &self,
+        width: u32,
+        height: u32,
+    ) -> (wgpu::Texture, wgpu::TextureView) {
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("mere-masonry embedded-frame target"),
             size: wgpu::Extent3d {
                 width: width.max(1),
@@ -164,54 +150,47 @@ impl MasonryEmbeddedRenderer {
             dimension: wgpu::TextureDimension::D2,
             // Rgba8Unorm matches vello's register_texture expectation
             // (peniko::ImageFormat::Rgba8) and is what
-            // `imaging_vello_cpu`'s RgbaImage produces (unpremultiplied
-            // RGBA8 in row-major order).
+            // `imaging_vello`'s GPU renderer writes.
             format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            // STORAGE_BINDING: vello's compute pipeline writes here.
+            // TEXTURE_BINDING: host's vello samples this when compositing
+            // via `register_texture` + `Scene::draw_image`.
+            // RENDER_ATTACHMENT: required by some wgpu backends as a
+            // companion to STORAGE_BINDING for color-format textures.
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
-        })
+        });
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        (texture, view)
     }
 
-    /// Make sure `self.cpu_renderer` is sized for the given dimensions.
-    /// Replaces the renderer if not (cheap; no GPU work).
-    fn ensure_cpu_renderer_size(&mut self, width: u16, height: u16) {
-        if self.cpu_renderer_size != (width, height) {
-            self.cpu_renderer = CpuImageRenderer::new(width, height);
-            self.cpu_renderer_size = (width, height);
-        }
-    }
-
-    /// Drive masonry's render pass, rasterize to CPU memory, upload to
-    /// the producer's wgpu texture. Returns `None` if any step fails or
-    /// the producer is missing.
+    /// Drive masonry's render pass, paint into the producer's wgpu
+    /// texture via xilem's `texture_render::Renderer`. Returns `None`
+    /// if any step fails or the producer is missing.
     fn fill_texture(&mut self, handle: ProducerHandle) -> Option<()> {
-        // Split borrow: get the producer's data we need out, then call
-        // self.ensure_cpu_renderer_size / self.queue.write_texture
-        // separately.
         let (width_px, height_px) = self.producers.get(&handle)?.size_px;
         if width_px == 0 || height_px == 0 {
             return None;
         }
-        let width_u16 = u16::try_from(width_px).ok()?;
-        let height_u16 = u16::try_from(height_px).ok()?;
 
         // 1. Drive masonry to refresh its VisualLayerPlan. The `ignore`
-        //    scene is a vello 0.9 Scene that MasonryTile::render writes
+        //    scene is a vello 0.9 Scene that `MasonryTile::render` writes
         //    to per its signature; the scene-merge TODO inside that call
-        //    means the scene stays empty — fine, we don't use it here.
+        //    means it stays empty. EmbeddedFrame mode (this renderer)
+        //    uses the texture path instead.
         {
             let state = self.producers.get_mut(&handle)?;
             let mut ignore = vello::Scene::new();
             state.tile.render(&mut ignore, kurbo::Affine::IDENTITY);
         }
 
-        // 2. Resize CPU renderer if needed (does nothing if size matches).
-        self.ensure_cpu_renderer_size(width_u16, height_u16);
-
-        // 3. Build the PreparedFrame and rasterize. The lifetime dance:
-        //    base_scene + overlays borrow from state.tile.pending_layers(),
-        //    which borrows from self.producers; cpu_renderer is a
-        //    different field of self so split-borrow allows both.
+        // 2. Build the PreparedFrame from the layer plan. The lifetime
+        //    dance: base_scene + overlays borrow from
+        //    `state.tile.pending_layers()`, which borrows from
+        //    `self.producers`. `texture_renderer` + adapter/device/queue
+        //    are different fields of self so split-borrow allows both.
         let state = self.producers.get_mut(&handle)?;
         let plan = state.tile.pending_layers()?;
         let root = plan.root_layer()?;
@@ -230,7 +209,7 @@ impl MasonryEmbeddedRenderer {
             })
             .collect();
 
-        let mut prepared = PreparedFrame::new(
+        let prepared = PreparedFrame::new(
             width_px,
             height_px,
             1.0,
@@ -239,30 +218,15 @@ impl MasonryEmbeddedRenderer {
             &overlays,
         );
 
-        let mut image = imaging::RgbaImage::new(width_px, height_px);
-        prepared.paint_into(&mut self.cpu_renderer);
-        self.cpu_renderer.finish_into(&mut image).ok()?;
-
-        // 4. Upload to wgpu 29 texture.
-        self.queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &state.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &image.data,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(width_px * 4),
-                rows_per_image: Some(height_px),
-            },
-            wgpu::Extent3d {
-                width: width_px,
-                height: height_px,
-                depth_or_array_layers: 1,
-            },
-        );
+        // 3. GPU-render masonry's content into the producer's texture.
+        let target = RenderTarget {
+            adapter: &self.adapter,
+            device: &self.device,
+            queue: &self.queue,
+            texture: &state.texture,
+            view: &state.view,
+        };
+        self.texture_renderer.render_to_texture(target, prepared).ok()?;
         Some(())
     }
 }
@@ -301,7 +265,7 @@ impl EmbeddedFrameRenderer for MasonryEmbeddedRenderer {
     fn ensure_producer(&mut self, node: &SceneNodeRef) -> ProducerHandle {
         let width = (node.size.width.round() as i64).clamp(1, u32::MAX as i64) as u32;
         let height = (node.size.height.round() as i64).clamp(1, u32::MAX as i64) as u32;
-        let texture = self.allocate_texture(width, height);
+        let (texture, view) = self.allocate_texture_and_view(width, height);
 
         let root = (self.root_widget_factory)();
         let tile = MasonryTile::new(
@@ -317,6 +281,7 @@ impl EmbeddedFrameRenderer for MasonryEmbeddedRenderer {
             ProducerState {
                 tile,
                 texture,
+                view,
                 size_px: (width, height),
             },
         );

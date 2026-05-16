@@ -32,14 +32,13 @@ accesskit = "0.24"
 ui-events = "0.3"
 dpi = "0.1.2"
 
-# `imaging_vello_cpu` backend (CPU rasterizer; uses `vello_cpu` crate
-# which is separate from `vello` and has no wgpu dep). Picked over
-# `imaging_vello` to sidestep the wgpu 28 ↔ 29 version skew between
-# xilem and mere — see crate-level "Two-vello + wgpu version skew"
-# docs in `lib.rs`. masonry produces an RGBA8 buffer on CPU; mere-masonry
-# uploads it to a wgpu 29 texture via `queue.write_texture`. The wgpu
-# version skew is irrelevant because the bridge is plain bytes.
-masonry_imaging = { path = "../../../xilem/masonry_imaging", default-features = false, features = ["imaging_vello_cpu"] }
+# `imaging_vello` GPU backend. As of the imaging fork at
+# `../../../imaging` (branch `mere-wgpu-29-vello-0-9`) and the xilem
+# workspace pin bump to wgpu 29 + vello 0.9 + parley 0.9, the GPU path
+# aligns with mere's workspace versions — no skew. masonry renders
+# directly into a wgpu 29 `Texture` via `texture_render::Renderer`;
+# the host registers that texture with vello 0.9 via `register_texture`.
+masonry_imaging = { path = "../../../xilem/masonry_imaging", default-features = false, features = ["imaging_vello"] }
 
 [dev-dependencies]
 # Headless wgpu boot for the integration test.

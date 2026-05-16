@@ -30,7 +30,7 @@ use mere_renderer_registry::{NodeContentKind, Placement, RendererRegistry};
 use mere_spatial_prototype::{ExternalTextureCompositor, SubstrateHost, SubstrateNode, SubstrateScene};
 use vello::{AaSupport, RendererOptions};
 
-fn boot_wgpu() -> Option<(wgpu::Device, wgpu::Queue)> {
+fn boot_wgpu() -> Option<(wgpu::Adapter, wgpu::Device, wgpu::Queue)> {
     pollster::block_on(async {
         let instance = wgpu::Instance::default();
         let adapter = instance
@@ -41,7 +41,7 @@ fn boot_wgpu() -> Option<(wgpu::Device, wgpu::Queue)> {
             .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .ok()?;
-        Some((device, queue))
+        Some((adapter, device, queue))
     })
 }
 
@@ -54,7 +54,7 @@ fn build_factory() -> RootWidgetFactory {
 
 #[test]
 fn substrate_host_dispatches_embedded_frame_through_full_chain() {
-    let Some((device, queue)) = boot_wgpu() else {
+    let Some((adapter, device, queue)) = boot_wgpu() else {
         eprintln!("skipping: no wgpu adapter available");
         return;
     };
@@ -64,6 +64,7 @@ fn substrate_host_dispatches_embedded_frame_through_full_chain() {
     let masonry = MasonryEmbeddedRenderer::new(
         "test.mere-masonry.panel",
         NodeContentKind::Panel,
+        adapter.clone(),
         device.clone(),
         queue.clone(),
         Arc::new(DefaultProperties::new()),
@@ -140,7 +141,7 @@ fn substrate_host_dispatches_embedded_frame_through_full_chain() {
 
 #[test]
 fn mixed_scene_dispatches_inscene_and_embedded_correctly() {
-    let Some((device, queue)) = boot_wgpu() else {
+    let Some((adapter, device, queue)) = boot_wgpu() else {
         eprintln!("skipping: no wgpu adapter available");
         return;
     };
@@ -150,6 +151,7 @@ fn mixed_scene_dispatches_inscene_and_embedded_correctly() {
     let masonry = MasonryEmbeddedRenderer::new(
         "test.mere-masonry.panel",
         NodeContentKind::Panel,
+        adapter.clone(),
         device.clone(),
         queue.clone(),
         Arc::new(DefaultProperties::new()),
