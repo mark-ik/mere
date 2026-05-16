@@ -26,6 +26,6 @@ netrender = ["dep:netrender"]
 
 [dependencies]
 inker = { path = "../../inker" }
-parley = "0.9"
-serde = { version = "1.0", features = ["derive"] }
+parley.workspace = true
+serde.workspace = true
 netrender = { path = "../../../../netrender/netrender", optional = true }

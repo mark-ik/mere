@@ -20,7 +20,7 @@ verso-tile = { path = "../verso-tile" }
 # already pulled in by graphshell main's default deps; no new
 # transitive surface for downstream crates.
 graph-canvas = { path = "../graph/graph-canvas" }
-accesskit = { version = "0.24.0", features = ["serde"] }
+accesskit = { workspace = true, features = ["serde"] }
 # 2026-04-25 mere-host-contract extraction Slice 2 (graph_runtime
 # layout cache projection): `OwnedTreeRow`, `TabEntry`, and
 # `SplitBoundary` come from `graph-tree`. Already a dep of

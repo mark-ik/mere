@@ -14,9 +14,9 @@ categories = ["accessibility", "gui"]
 path = "src/lib.rs"
 
 [dependencies]
-accesskit = "0.24"
+accesskit.workspace = true
 platen = { path = "../../platen" }
-tracing = "0.1"
+tracing.workspace = true
 uxtree = { path = "../../uxtree" }
 
 [dev-dependencies]

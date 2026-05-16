@@ -14,6 +14,6 @@ categories = ["accessibility"]
 path = "src/lib.rs"
 
 [dependencies]
-accesskit = "0.24"
+accesskit.workspace = true
 inker = { path = "../inker" }
-tracing = "0.1"
+tracing.workspace = true

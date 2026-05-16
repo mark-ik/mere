@@ -14,10 +14,10 @@ categories = ["accessibility", "gui"]
 path = "src/lib.rs"
 
 [dependencies]
-accesskit = "0.24"
-serde = { version = "1.0", features = ["derive"] }
-tracing = "0.1"
-uuid = { version = "1", features = ["serde", "v4"] }
+accesskit.workspace = true
+serde.workspace = true
+tracing.workspace = true
+uuid.workspace = true
 uxtree = { path = "../../uxtree" }
 
 [dev-dependencies]

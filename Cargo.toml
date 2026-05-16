@@ -47,6 +47,38 @@ edition = "2024"
 license = "MPL-2.0"
 repository = "https://github.com/mark-ik/mere"
 
+# Centralized load-bearing pins. Every crate that uses one of these declares
+# it directly with `<dep>.workspace = true` rather than via transitive
+# resolution through another crate's re-export. Per
+# `~/.claude/.../memory/feedback_workspace_pins_drive_probes.md`: workspace
+# pins canonically, probes adapt; pick once with the user, don't churn.
+[workspace.dependencies]
+# Linebender visual stack — one row, one wgpu, vello upstream-current.
+vello = "0.9"
+wgpu = "29"
+kurbo = "0.13"
+peniko = "0.6"
+parley = "0.9"
+skrifa = "0.42"
+color = "0.3"
+
+# Input + accessibility + window plumbing.
+accesskit = "0.24"
+accesskit_windows = "0.32"
+accesskit_unix = "0.21"
+accesskit_macos = "0.26"
+ui-events = "0.3"
+dpi = "0.1.2"
+raw-window-handle = "0.6"
+winit = "0.30.13"
+
+# Cross-cutting utilities that benefit from one-version alignment.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["serde", "v4"] }
+
 [workspace.lints.rust]
 unsafe_code = "warn"
 

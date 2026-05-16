@@ -14,6 +14,6 @@ categories = ["accessibility", "gui", "development-tools::debugging"]
 path = "src/lib.rs"
 
 [dependencies]
-accesskit = "0.24"
-tracing = "0.1"
+accesskit.workspace = true
+tracing.workspace = true
 uxtree = { path = "../../uxtree" }

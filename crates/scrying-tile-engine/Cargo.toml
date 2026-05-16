@@ -13,7 +13,5 @@ path = "src/lib.rs"
 [dependencies]
 inker = { path = "../inker" }
 scrying = { path = "../../../wgpu-scry/scrying" }
-# `PhysicalSize` for scrying's `resize` signature — scrying uses `dpi` and
-# doesn't re-export the type, so we depend on the same version.
-dpi = "0.1.2"
-tracing = "0.1"
+dpi.workspace = true
+tracing.workspace = true
