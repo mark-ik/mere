@@ -180,6 +180,17 @@ impl MasonryTile {
     /// (a) is architecturally cleaner; (b) is faster to write and gets us to
     /// pixels on screen sooner. Decision lives outside this `todo!()` —
     /// pick when the substrate's wgpu device handle is real.
+    ///
+    /// **⚠ Trap before naive-implementing path (a)**: this crate's dependency
+    /// tree contains **two distinct vello versions** — `vello 0.9` (direct
+    /// dep, what `target_scene` here is) and `vello 0.8.x` (transitive via
+    /// `masonry_imaging::imaging_vello`, what masonry's `PaintSink` expects).
+    /// They are different crates from Rust's point of view; their `Scene`
+    /// types are not interchangeable. See the crate-level docs (`lib.rs`
+    /// "Two-vello version skew" section) before writing path (a) — the
+    /// preferred resolution is to wait for xilem's vello 0.9 bump, which
+    /// dissolves the skew. Path (b) sidesteps it because the wgpu texture
+    /// handle is the version-neutral bridge.
     pub fn render(&mut self, target_scene: &mut vello::Scene, tile_transform: Affine) {
         let (visual_layers, tree_update) = self.render_root.redraw();
         if let Some(update) = tree_update {

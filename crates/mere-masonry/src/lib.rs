@@ -35,6 +35,49 @@
 //!
 //! Callers who want raw masonry widgets get the same `MasonryTile` API;
 //! the xilem layer is not bolted into this crate.
+//!
+//! ## Two-vello version skew (read before implementing scene-merge)
+//!
+//! This crate's dependency tree contains **two distinct `vello` versions**
+//! that are *not* interoperable at the type level:
+//!
+//! - `vello = "0.9"` (direct dep, workspace-pinned) — the substrate-side
+//!   scene the host paints into. Same version as `mere-renderer-registry`.
+//! - `vello 0.8.x` (transitive via `masonry_imaging::imaging_vello`) — xilem
+//!   hasn't bumped yet. This is what `masonry_imaging::vello::Renderer`
+//!   produces; what `imaging_vello`'s `PaintSink` expects.
+//!
+//! For Rust's type system these are **different crates entirely**: a
+//! `vello::Scene` from one cannot be passed to a `PaintSink` from the other.
+//! A naive scene-merge implementation hits this with confusing errors —
+//! "expected `vello::Scene`, found `vello::Scene`" — because the type names
+//! match but the crate identities don't.
+//!
+//! **Three resolution paths**, in order of preference:
+//!
+//! 1. **Wait for xilem's 0.9 bump.** When upstream xilem catches up to vello
+//!    0.9, this entire skew dissolves; one version, one Scene type, scene-merge
+//!    becomes the trivial `target.append(&masonry_scene, transform)` Option A
+//!    from the contract brief. Watch [xilem repo](https://github.com/linebender/xilem)
+//!    for the bump.
+//! 2. **Texture round-trip** (Option B in [`tile::MasonryTile::render`]'s
+//!    doc comment). Render masonry's layers into a wgpu texture via
+//!    `masonry_imaging::vello::Renderer` (xilem-side vello 0.8), then
+//!    composite that texture into the host scene as a textured quad via
+//!    vello 0.9. The two vellos never touch the same Scene type — the wgpu
+//!    texture handle is the version-neutral bridge. Mechanical to write,
+//!    pays per-frame texture round-trip cost.
+//! 3. **Explicit 0.8 → 0.9 scene adapter** (Option A with a version
+//!    converter). Walk the 0.8 `imaging::record::Scene` ops and re-emit them
+//!    against the 0.9 `vello::Scene` API. Correct shape, but reinvents the
+//!    interop that path 1 gets for free. Only worth it if path 1 stalls and
+//!    path 2's texture round-trip becomes measurable in profiling.
+//!
+//! The current `MasonryTile::render` deliberately doesn't paint into the
+//! target scene — it captures the `VisualLayerPlan` for inspection and
+//! drains the AccessKit tree update, which are the next-most-important
+//! consumers. The blank target scene is a load-bearing TODO; resolving it
+//! requires picking one of the three paths above.
 
 #![warn(unused_crate_dependencies)]
 #![warn(clippy::print_stdout, clippy::print_stderr)]
