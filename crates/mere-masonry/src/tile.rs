@@ -181,20 +181,13 @@ impl MasonryTile {
     /// pixels on screen sooner. Decision lives outside this `todo!()` —
     /// pick when the substrate's wgpu device handle is real.
     ///
-    /// **⚠ Trap before naive-implementing either path**: this crate's
-    /// dependency tree contains **two distinct copies of both vello and
-    /// wgpu** — vello 0.9 + wgpu 29 (this crate's direct deps, what
-    /// `target_scene` is) and vello 0.8 + wgpu 28 (transitive via
-    /// `masonry_imaging::imaging_vello`). Both paths cross that boundary:
-    /// path (a) fails on `vello::Scene` type mismatch, path (b) fails on
-    /// `wgpu::Texture` type mismatch (the wgpu texture handle is *not*
-    /// version-neutral between wgpu 28 and 29).
-    ///
-    /// See the crate-level "Two-vello + wgpu version skew" docs in
-    /// `lib.rs` for the resolution paths. The preferred fix is the patch
-    /// bump in xilem's local clone (bump `wgpu` to 29 + `vello` to 0.9
-    /// together), which dissolves *both* skews and makes either path here
-    /// trivial.
+    /// **Note on version alignment**: this crate's deps used to contain
+    /// two distinct copies of both vello and wgpu (xilem at 0.8 / 28,
+    /// mere at 0.9 / 29), making path (a) fail on `vello::Scene` type
+    /// mismatch and path (b) fail on `wgpu::Texture` type mismatch. The
+    /// imaging fork at `repos/imaging` + xilem's local pin bumps now have
+    /// both sides on vello 0.9 + wgpu 29. Either path here will type-check
+    /// today; the choice is just architectural (in-scene vs offscreen).
     pub fn render(&mut self, target_scene: &mut vello::Scene, tile_transform: Affine) {
         let (visual_layers, tree_update) = self.render_root.redraw();
         if let Some(update) = tree_update {
