@@ -5366,7 +5366,7 @@ version = "0.0.1"
 dependencies = [
  "kurbo",
  "mere-renderer-registry-types",
- "vello 0.9.0",
+ "vello",
  "wgpu",
 ]
 
@@ -5375,6 +5375,15 @@ name = "mere-renderer-registry-types"
 version = "0.0.1"
 dependencies = [
  "kurbo",
+]
+
+[[package]]
+name = "mere-spatial-prototype"
+version = "0.0.1"
+dependencies = [
+ "kurbo",
+ "mere-renderer-registry",
+ "vello",
 ]
 
 [[package]]
@@ -5866,7 +5875,7 @@ dependencies = [
  "log",
  "netrender_device",
  "skrifa",
- "vello 0.8.0",
+ "vello",
  "wgpu",
 ]
 
@@ -9741,24 +9750,6 @@ checksum = "8f54a172d0620933a27a4360d3db3e2ae0dd6cceae9730751a036bbf182c4b23"
 
 [[package]]
 name = "vello"
-version = "0.8.0"
-source = "git+https://github.com/linebender/vello?branch=main#1b24e77ba4e01d12f5db86a9b1b5f2cf828a6a33"
-dependencies = [
- "bytemuck",
- "futures-intrusive",
- "log",
- "peniko",
- "png",
- "skrifa",
- "static_assertions",
- "thiserror 2.0.18",
- "vello_encoding 0.8.0",
- "vello_shaders 0.8.0",
- "wgpu",
-]
-
-[[package]]
-name = "vello"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "261359dbef879f8110ef7e1c442246c838d33d3d91cb05e0ea9288d432760c9f"
@@ -9771,21 +9762,9 @@ dependencies = [
  "skrifa",
  "static_assertions",
  "thiserror 2.0.18",
- "vello_encoding 0.9.0",
- "vello_shaders 0.9.0",
+ "vello_encoding",
+ "vello_shaders",
  "wgpu",
-]
-
-[[package]]
-name = "vello_encoding"
-version = "0.8.0"
-source = "git+https://github.com/linebender/vello?branch=main#1b24e77ba4e01d12f5db86a9b1b5f2cf828a6a33"
-dependencies = [
- "bytemuck",
- "guillotiere",
- "peniko",
- "skrifa",
- "smallvec",
 ]
 
 [[package]]
@@ -9803,18 +9782,6 @@ dependencies = [
 
 [[package]]
 name = "vello_shaders"
-version = "0.8.0"
-source = "git+https://github.com/linebender/vello?branch=main#1b24e77ba4e01d12f5db86a9b1b5f2cf828a6a33"
-dependencies = [
- "bytemuck",
- "log",
- "naga",
- "thiserror 2.0.18",
- "vello_encoding 0.8.0",
-]
-
-[[package]]
-name = "vello_shaders"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9dd38937516fa4b47423d9255bb5e4a65e839ec9d57c38c4af6189ce56bf46b7"
@@ -9823,7 +9790,7 @@ dependencies = [
  "log",
  "naga",
  "thiserror 2.0.18",
- "vello_encoding 0.9.0",
+ "vello_encoding",
 ]
 
 [[package]]

@@ -40,6 +40,7 @@ members = [
     "crates/cartography",
     "crates/mere-renderer-registry",
     "crates/mere-renderer-registry-types",
+    "crates/mere-spatial-prototype",
 ]
 exclude = ["crates/probes", "crates/mere-host", "crates/mere-masonry"]
 

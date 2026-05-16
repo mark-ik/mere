@@ -1,0 +1,22 @@
+[package]
+name = "mere-spatial-prototype"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+rust-version = "1.92.0"
+description = "Phase-3 proof harness for the spatial chrome IR substrate (per `design_docs/mere_docs/implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`). Demonstrates renderer-registry dispatch over a minimal substrate scene graph; first real adopter of `mere-renderer-registry`. Not a product host."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+mere-renderer-registry = { path = "../mere-renderer-registry" }
+
+# Substrate-side scene + transform types. Workspace-pinned so the
+# version travels with the registry's vello.
+kurbo.workspace = true
+vello.workspace = true
+
+[lints]
+workspace = true
