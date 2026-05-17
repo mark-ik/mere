@@ -60,18 +60,67 @@ impl HiddenRelationRecord {
     }
 }
 
-/// Persistable per-pane view state. v0 carries `hidden_relations`
-/// only; future fields (`form_factor`, `scale`, `focus`, `filter`,
-/// `strategy`, `overlays`) land as their producers wire up. Per the
-/// plan §2, bundling unwired fields now would be the half-finished
-/// shape the user's memory warns against.
+/// 2D affine snapshot for serialisation. Stores the six kurbo
+/// `Affine` coefficients verbatim — round-trips identity, pan,
+/// zoom, and rotation.
+///
+/// Wire-shape kept compact (a single `[f64; 6]`) so the JSON
+/// representation reads clearly and diffs cleanly:
+///
+/// ```text
+/// "camera": { "coefficients": [1.0, 0.0, 0.0, 1.0, 100.0, 50.0] }
+/// ```
+///
+/// (That value is a pure pan of (100, 50) with identity scale +
+/// no rotation.)
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct CameraSnapshot {
+    /// kurbo `Affine::as_coeffs()` order: `[a, b, c, d, e, f]` for
+    /// the affine `[[a, c, e], [b, d, f]]`.
+    pub coefficients: [f64; 6],
+}
+
+impl CameraSnapshot {
+    /// Identity transform — no pan, no zoom, no rotation.
+    pub const IDENTITY: Self = Self {
+        coefficients: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+    };
+
+    /// True when this snapshot equals identity. The save path can
+    /// skip persisting an identity camera (no user gesture worth
+    /// recording).
+    pub fn is_identity(&self) -> bool {
+        *self == Self::IDENTITY
+    }
+}
+
+impl Default for CameraSnapshot {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
+}
+
+/// Persistable per-pane view state. v0 carried `hidden_relations`
+/// only; `camera` joined per the spatial-chrome IR brief §6's
+/// pan/zoom-as-substrate-camera framing. Future fields
+/// (`form_factor`, `focus`, `filter`, `strategy`, `overlays`) land
+/// as their producers wire up. Per the plan §2, bundling unwired
+/// fields now would be the half-finished shape the user's memory
+/// warns against.
 ///
 /// `BTreeSet` over `HashSet` for deterministic JSON output —
 /// dev-tier inspection wants stable diffs.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct ViewIntent {
     #[serde(default)]
     pub hidden_relations: BTreeSet<HiddenRelationRecord>,
+    /// Substrate camera snapshot (pan + zoom). `None` when the pane
+    /// has no saved camera (fresh pane → host falls back to
+    /// `CameraSnapshot::IDENTITY`). Save path uses `None` for
+    /// identity cameras too, since persisting an unmoved camera is
+    /// wasted I/O.
+    #[serde(default)]
+    pub camera: Option<CameraSnapshot>,
 }
 
 impl ViewIntent {
@@ -83,7 +132,7 @@ impl ViewIntent {
     /// The save path can skip the file for the empty case; the load
     /// path returns `Ok(None)` and the host falls back to default.
     pub fn is_empty(&self) -> bool {
-        self.hidden_relations.is_empty()
+        self.hidden_relations.is_empty() && self.camera.is_none()
     }
 }
 

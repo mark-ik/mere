@@ -73,4 +73,6 @@ pub use switcher_thumbnail::{
     build_switcher_thumbnail,
 };
 pub use tiles::{HistoryEntry, NavigateMode, TileManager, TileState};
-pub use view_intent_store::{HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};
+pub use view_intent_store::{
+    CameraSnapshot, HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent,
+};

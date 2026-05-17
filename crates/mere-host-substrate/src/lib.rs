@@ -36,8 +36,8 @@
 
 use std::collections::HashMap;
 
-use kurbo::Size;
-use mere_host_runtime::TileManager;
+use kurbo::{Affine, Size};
+use mere_host_runtime::{CameraSnapshot, TileManager, ViewIntent};
 use mere_kernel::graph::NodeKey;
 use mere_renderer_registry::{NodeContentKind, NodeIdentity, Placement};
 use mere_spatial_prototype::{
@@ -151,6 +151,47 @@ impl MereHostApp {
     /// Equals the count of open tiles after the last sync.
     pub fn tracked_tile_count(&self) -> usize {
         self.tile_identity_map.len()
+    }
+
+    /// Snapshot the substrate's current camera as a `ViewIntent`
+    /// fragment. Hidden-relation state stays default (substrate
+    /// doesn't manage that yet). Useful for save flows: the host
+    /// merges this snapshot with its existing
+    /// `hidden_relations` before persisting.
+    ///
+    /// Identity cameras serialise as `None` to keep
+    /// `ViewIntent::is_empty` true and let the save path skip the
+    /// file.
+    pub fn current_view_intent(&self) -> ViewIntent {
+        ViewIntent {
+            hidden_relations: Default::default(),
+            camera: camera_snapshot_for_save(self.substrate.camera()),
+        }
+    }
+
+    /// Apply a loaded `ViewIntent` to the substrate's camera. `None`
+    /// or identity camera leaves the host's camera unchanged
+    /// (typical for a fresh pane). Hidden-relations are not yet
+    /// substrate-side state; this method ignores that field.
+    pub fn apply_view_intent(&mut self, intent: &ViewIntent) {
+        if let Some(snapshot) = intent.camera {
+            self.substrate
+                .set_camera(Affine::new(snapshot.coefficients));
+        }
+    }
+}
+
+/// `Some(snapshot)` for non-identity cameras; `None` for identity.
+/// Skipping identity persists less I/O and keeps view-intent files
+/// out of the way for panes the user hasn't moved.
+fn camera_snapshot_for_save(camera: Affine) -> Option<CameraSnapshot> {
+    let snapshot = CameraSnapshot {
+        coefficients: camera.as_coeffs(),
+    };
+    if snapshot.is_identity() {
+        None
+    } else {
+        Some(snapshot)
     }
 }
 
@@ -283,6 +324,56 @@ mod tests {
         let third = app.scene.iter().nth(2).unwrap();
         assert_eq!(third.placement.transform.translation().y, 200.0);
         assert_eq!(third.size, Size::new(100.0, 80.0));
+    }
+
+    #[test]
+    fn current_view_intent_identity_camera_is_empty() {
+        let app = MereHostApp::new();
+        let intent = app.current_view_intent();
+        assert!(intent.is_empty());
+        assert!(intent.camera.is_none());
+    }
+
+    #[test]
+    fn current_view_intent_pan_zoom_camera_is_not_empty() {
+        let mut app = MereHostApp::new();
+        app.substrate
+            .set_camera(kurbo::Affine::translate((100.0, 50.0)));
+        let intent = app.current_view_intent();
+        assert!(!intent.is_empty());
+        let snapshot = intent.camera.unwrap();
+        // Translation is at coefficients[4], [5].
+        assert_eq!(snapshot.coefficients[4], 100.0);
+        assert_eq!(snapshot.coefficients[5], 50.0);
+    }
+
+    #[test]
+    fn apply_view_intent_restores_camera_from_snapshot() {
+        let mut app = MereHostApp::new();
+        // Build a saved intent that has a 2× zoom + (200, 100) pan.
+        let camera = kurbo::Affine::translate((200.0, 100.0)) * kurbo::Affine::scale(2.0);
+        let intent = ViewIntent {
+            hidden_relations: Default::default(),
+            camera: Some(mere_host_runtime::CameraSnapshot {
+                coefficients: camera.as_coeffs(),
+            }),
+        };
+        app.apply_view_intent(&intent);
+        assert_eq!(app.substrate.camera(), camera);
+    }
+
+    #[test]
+    fn apply_then_snapshot_round_trips_through_view_intent() {
+        let mut app = MereHostApp::new();
+        let camera = kurbo::Affine::translate((40.0, 60.0)) * kurbo::Affine::scale(1.5);
+        app.substrate.set_camera(camera);
+
+        let saved = app.current_view_intent();
+        // Reset the app's camera, then re-apply.
+        app.substrate.reset_camera();
+        assert_eq!(app.substrate.camera(), kurbo::Affine::IDENTITY);
+        app.apply_view_intent(&saved);
+        assert_eq!(app.substrate.camera(), camera);
     }
 
     #[test]
