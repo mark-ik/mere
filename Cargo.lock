@@ -8282,6 +8282,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "scrying-embedded-renderer"
+version = "0.0.1"
+dependencies = [
+ "kurbo",
+ "mere-renderer-registry",
+ "pollster",
+ "scrying",
+ "wgpu",
+]
+
+[[package]]
 name = "scrying-tile-engine"
 version = "0.0.1"
 dependencies = [

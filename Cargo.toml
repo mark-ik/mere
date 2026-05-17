@@ -41,6 +41,7 @@ members = [
     "crates/mere-renderer-registry",
     "crates/mere-renderer-registry-types",
     "crates/mere-spatial-prototype",
+    "crates/scrying-embedded-renderer",
 ]
 exclude = ["crates/probes", "crates/mere-host", "crates/mere-masonry"]
 
