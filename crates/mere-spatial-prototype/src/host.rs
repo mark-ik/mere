@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 
+use kurbo::{Affine, Point};
 use mere_renderer_registry::{
     CompositionMode, DispatchError, InputDisposition, InputEvent, NodeIdentity, PaintCtx,
     PaintError, ProducerHandle, RendererId, RendererRegistry,
@@ -235,11 +236,18 @@ impl SubstrateHost {
 
     /// Deliver an input event to a specific node by identity.
     ///
-    /// The hit-test layer that resolves host coordinates to a node
-    /// identity isn't part of this prototype — callers pass the
-    /// identity directly. Returns `None` if the node isn't in `scene`
-    /// or no renderer claims its content kind; returns
-    /// `Some(InputDisposition::*)` otherwise.
+    /// Resolves the node's renderer, dispatches based on
+    /// `composition_mode()`. For `InScenePaint` renderers this calls
+    /// the registry's in-scene input helper; for `EmbeddedFrame` the
+    /// host's cached `ProducerHandle` is needed (returns
+    /// `Ok(Some(Passthrough))` if no producer has been ensured yet —
+    /// hosts typically render before delivering input). Overlay-mode
+    /// nodes pass through (not yet wired).
+    ///
+    /// The event's coordinates are assumed to already be in tile-local
+    /// space; use [`Self::deliver_input_at`] when the caller has
+    /// host-space coordinates and wants hit-test + translation in one
+    /// step.
     pub fn deliver_input(
         &mut self,
         scene: &SubstrateScene,
@@ -249,8 +257,96 @@ impl SubstrateHost {
         let Some(node) = scene.get(target) else {
             return Ok(None);
         };
-        self.registry.deliver_in_scene_input(&node.as_ref(), event)
+        let node_ref = node.as_ref();
+        let Some(id) = self.registry.select(&node_ref) else {
+            return Ok(None);
+        };
+        let mode = self
+            .registry
+            .get(&id)
+            .expect("selector returned id not in registry")
+            .composition_mode();
+        match mode {
+            CompositionMode::InScenePaint => {
+                self.registry.deliver_in_scene_input(&node_ref, event)
+            }
+            CompositionMode::EmbeddedFrame => {
+                let Some(&(ref stored_id, handle)) = self.producers.get(&target) else {
+                    return Ok(Some(InputDisposition::Passthrough));
+                };
+                if stored_id != &id {
+                    return Ok(Some(InputDisposition::Passthrough));
+                }
+                let renderer = self
+                    .registry
+                    .get_mut(&id)
+                    .expect("selector returned id not in registry");
+                let Some(producer) = renderer.as_embedded_frame() else {
+                    return Err(DispatchError::WrongCompositionMode { id });
+                };
+                Ok(Some(producer.deliver_input(handle, event)))
+            }
+            CompositionMode::Overlay => Ok(Some(InputDisposition::Passthrough)),
+        }
     }
+
+    /// Spatial input router: hit-test `host_pos` against `scene`,
+    /// translate the position to the hit node's tile-local coordinates,
+    /// and dispatch via [`Self::deliver_input`].
+    ///
+    /// `host_pos` is the source of truth for the dispatched event's
+    /// position — any `position` field on `event` is overwritten. The
+    /// caller passes `event` to carry the non-positional payload (kind,
+    /// modifiers, etc.); fields like `InputEvent::Pointer { position:
+    /// Point::ZERO, ... }` are typical.
+    ///
+    /// Returns:
+    /// - `Ok(None)` if no node was hit at `host_pos`, or if a hit node
+    ///   has no registered renderer.
+    /// - `Ok(Some(disposition))` on successful dispatch.
+    /// - `Err(DispatchError)` for renderer composition-mode bugs.
+    pub fn deliver_input_at(
+        &mut self,
+        scene: &SubstrateScene,
+        host_pos: Point,
+        event: &InputEvent,
+    ) -> Result<Option<InputDisposition>, DispatchError> {
+        let Some(target) = scene.hit_test(host_pos) else {
+            return Ok(None);
+        };
+        let Some(node) = scene.get(target) else {
+            return Ok(None);
+        };
+        let local_event = rewrite_pointer_position(event, host_pos, node.placement.transform);
+        self.deliver_input(scene, target, &local_event)
+    }
+}
+
+/// For `InputEvent::Pointer`, replace the position with
+/// `node_transform.inverse() * host_pos`. Non-pointer events pass
+/// through unchanged. Degenerate transforms leave `host_pos`
+/// unchanged in the dispatched event.
+fn rewrite_pointer_position(
+    event: &InputEvent,
+    host_pos: Point,
+    node_transform: Affine,
+) -> InputEvent {
+    if let InputEvent::Pointer {
+        kind, modifiers, ..
+    } = event
+    {
+        let local = if node_transform.determinant() == 0.0 {
+            host_pos
+        } else {
+            node_transform.inverse() * host_pos
+        };
+        return InputEvent::Pointer {
+            position: local,
+            kind: *kind,
+            modifiers: *modifiers,
+        };
+    }
+    event.clone()
 }
 
 /// Summary of one frame's dispatch — what painted, what didn't, and why.
@@ -417,5 +513,113 @@ mod tests {
         let report = host.paint_scene(&scene, &mut target, 1.0);
         assert_eq!(report.painted, 0);
         assert_eq!(report.wrong_mode, vec![id]);
+    }
+
+    #[test]
+    fn deliver_input_at_routes_via_hit_test() {
+        use mere_renderer_registry::{ModifiersState, PointerButton, PointerEventKind};
+
+        let renderer = RecordingRenderer::for_kind("recording", NodeContentKind::DocumentTile);
+        let log = renderer.shared_input_log();
+        let mut registry = RendererRegistry::with_default_selector();
+        registry.register(Box::new(renderer)).unwrap();
+        let mut host = SubstrateHost::new(registry);
+
+        let mut scene = SubstrateScene::new();
+        let id = scene.insert(SubstrateNode::new(
+            NodeContentKind::DocumentTile,
+            Placement::translate(100.0, 200.0),
+            Size::new(80.0, 40.0),
+        ));
+
+        let event = InputEvent::Pointer {
+            position: kurbo::Point::new(0.0, 0.0), // overwritten by deliver_input_at
+            kind: PointerEventKind::Down(PointerButton::Primary),
+            modifiers: ModifiersState::default(),
+        };
+        // Click at (120, 220) — inside the rect at tile-local (20, 20).
+        let disposition = host
+            .deliver_input_at(&scene, kurbo::Point::new(120.0, 220.0), &event)
+            .expect("dispatch ok");
+        assert_eq!(disposition, Some(InputDisposition::Consumed));
+
+        // Recording renderer captured the dispatched event with the
+        // translated position.
+        let records = log.borrow();
+        assert_eq!(records.len(), 1);
+        let (recorded_id, recorded_event) = &records[0];
+        assert_eq!(*recorded_id, id);
+        match recorded_event {
+            InputEvent::Pointer { position, .. } => {
+                assert_eq!(position.x, 20.0, "x translated to tile-local");
+                assert_eq!(position.y, 20.0, "y translated to tile-local");
+            }
+            _ => panic!("expected Pointer event"),
+        }
+    }
+
+    #[test]
+    fn deliver_input_at_returns_none_when_no_hit() {
+        use mere_renderer_registry::{ModifiersState, PointerButton, PointerEventKind};
+
+        let (mut host, _) = build_host_with_recording(NodeContentKind::DocumentTile);
+        let mut scene = SubstrateScene::new();
+        scene.insert(SubstrateNode::new(
+            NodeContentKind::DocumentTile,
+            Placement::translate(100.0, 200.0),
+            Size::new(80.0, 40.0),
+        ));
+
+        let event = InputEvent::Pointer {
+            position: kurbo::Point::new(0.0, 0.0),
+            kind: PointerEventKind::Down(PointerButton::Primary),
+            modifiers: ModifiersState::default(),
+        };
+        // Click far from the rect.
+        let disposition = host
+            .deliver_input_at(&scene, kurbo::Point::new(5.0, 5.0), &event)
+            .expect("dispatch ok");
+        assert_eq!(disposition, None);
+    }
+
+    #[test]
+    fn deliver_input_at_picks_topmost_on_overlap() {
+        use mere_renderer_registry::{ModifiersState, PointerButton, PointerEventKind};
+
+        // Two renderers, two content kinds. The CustomCanvas background
+        // and the Panel both cover (50, 50). hit-test should route to
+        // the Panel (topmost).
+        let bg_renderer = RecordingRenderer::for_kind("bg", NodeContentKind::CustomCanvas);
+        let panel_renderer = RecordingRenderer::for_kind("panel", NodeContentKind::Panel);
+        let bg_log = bg_renderer.shared_input_log();
+        let panel_log = panel_renderer.shared_input_log();
+        let mut registry = RendererRegistry::with_default_selector();
+        registry.register(Box::new(bg_renderer)).unwrap();
+        registry.register(Box::new(panel_renderer)).unwrap();
+        let mut host = SubstrateHost::new(registry);
+
+        let mut scene = SubstrateScene::new();
+        scene.insert(SubstrateNode::new(
+            NodeContentKind::CustomCanvas,
+            Placement::IDENTITY,
+            Size::new(200.0, 200.0),
+        ));
+        let panel_id = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::translate(40.0, 40.0),
+            Size::new(100.0, 100.0),
+        ));
+
+        let event = InputEvent::Pointer {
+            position: kurbo::Point::new(0.0, 0.0),
+            kind: PointerEventKind::Down(PointerButton::Primary),
+            modifiers: ModifiersState::default(),
+        };
+        host.deliver_input_at(&scene, kurbo::Point::new(60.0, 60.0), &event)
+            .expect("dispatch ok");
+
+        assert_eq!(bg_log.borrow().len(), 0, "background not hit");
+        assert_eq!(panel_log.borrow().len(), 1, "panel hit");
+        assert_eq!(panel_log.borrow()[0].0, panel_id);
     }
 }
