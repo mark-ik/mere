@@ -280,6 +280,7 @@ mod tests {
             lod: LodLevel::FullPane,
             size: Size::new(640.0, 480.0),
             content_kind: NodeContentKind::WebPage,
+            renderer_pin: None,
         }
     }
 

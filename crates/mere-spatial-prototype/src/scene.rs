@@ -14,21 +14,30 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use kurbo::{Point, Rect, Size};
 use mere_renderer_registry::{
-    LodLevel, NodeContentKind, NodeIdentity, Placement, SceneNodeRef,
+    LodLevel, NodeContentKind, NodeIdentity, Placement, RendererId, SceneNodeRef,
 };
 
 /// A single placed node in the substrate's spatial scene graph.
-#[derive(Copy, Clone, Debug)]
+///
+/// Not `Copy` because [`renderer_pin`](Self::renderer_pin) carries a
+/// `RendererId`. `Clone` is cheap when no pin or static-string pin.
+#[derive(Clone, Debug)]
 pub struct SubstrateNode {
     pub identity: NodeIdentity,
     pub placement: Placement,
     pub size: Size,
     pub lod: LodLevel,
     pub content_kind: NodeContentKind,
+    /// Per-node renderer pin. When set, the registry's selector
+    /// honors this id over the default first-candidate pick if the
+    /// pinned renderer is registered and handles `content_kind`. See
+    /// `mere_renderer_registry::DefaultSelector` for the v0 chain.
+    pub renderer_pin: Option<RendererId>,
 }
 
 impl SubstrateNode {
-    /// Construct a node with a freshly-minted identity and `FullPane` LOD.
+    /// Construct a node with a freshly-minted identity, `FullPane`
+    /// LOD, and no renderer pin.
     pub fn new(content_kind: NodeContentKind, placement: Placement, size: Size) -> Self {
         Self {
             identity: NodeIdentity::next(),
@@ -36,7 +45,14 @@ impl SubstrateNode {
             size,
             lod: LodLevel::FullPane,
             content_kind,
+            renderer_pin: None,
         }
+    }
+
+    /// Builder: attach a renderer pin to this node.
+    pub fn with_renderer_pin(mut self, pin: RendererId) -> Self {
+        self.renderer_pin = Some(pin);
+        self
     }
 
     /// Borrowed view of this node for registry dispatch.
@@ -47,6 +63,7 @@ impl SubstrateNode {
             lod: self.lod,
             size: self.size,
             content_kind: self.content_kind,
+            renderer_pin: self.renderer_pin.clone(),
         }
     }
 }
@@ -563,6 +580,7 @@ mod tests {
             size: kurbo::Size::new(80.0, 40.0),
             lod: LodLevel::FullPane,
             content_kind: NodeContentKind::Panel,
+            renderer_pin: None,
         });
         // (100, 70) → tile-local (25, 10) under inverse → inside.
         assert_eq!(scene.hit_test_node(Point::new(100.0, 70.0)), Some(id));

@@ -731,6 +731,71 @@ mod tests {
     }
 
     #[test]
+    fn renderer_pin_overrides_default_selector() {
+        // Register two renderers for the same NodeContentKind; the
+        // default selector would pick the first-registered one. A
+        // pinned node should route to the second.
+        let first = RecordingRenderer::for_kind("first", NodeContentKind::DocumentTile);
+        let second = RecordingRenderer::for_kind("second", NodeContentKind::DocumentTile);
+        let first_log = first.shared_paint_log();
+        let second_log = second.shared_paint_log();
+        let mut registry = RendererRegistry::with_default_selector();
+        registry.register(Box::new(first)).unwrap();
+        registry.register(Box::new(second)).unwrap();
+        let mut host = SubstrateHost::new(registry);
+
+        let mut scene = SubstrateScene::new();
+        // Unpinned node: should go to "first".
+        scene.insert(SubstrateNode::new(
+            NodeContentKind::DocumentTile,
+            Placement::translate(10.0, 10.0),
+            Size::new(50.0, 50.0),
+        ));
+        // Pinned to "second".
+        scene.insert(
+            SubstrateNode::new(
+                NodeContentKind::DocumentTile,
+                Placement::translate(100.0, 10.0),
+                Size::new(50.0, 50.0),
+            )
+            .with_renderer_pin(RendererId::from_static("second")),
+        );
+
+        let mut target = vello::Scene::new();
+        let report = host.paint_scene(&scene, &mut target, 1.0);
+        assert_eq!(report.painted, 2);
+
+        assert_eq!(first_log.borrow().len(), 1, "first received the unpinned node");
+        assert_eq!(second_log.borrow().len(), 1, "second received the pinned node");
+    }
+
+    #[test]
+    fn renderer_pin_falls_through_when_pin_not_registered() {
+        let renderer = RecordingRenderer::for_kind("only", NodeContentKind::DocumentTile);
+        let log = renderer.shared_paint_log();
+        let mut registry = RendererRegistry::with_default_selector();
+        registry.register(Box::new(renderer)).unwrap();
+        let mut host = SubstrateHost::new(registry);
+
+        let mut scene = SubstrateScene::new();
+        scene.insert(
+            SubstrateNode::new(
+                NodeContentKind::DocumentTile,
+                Placement::IDENTITY,
+                Size::new(50.0, 50.0),
+            )
+            .with_renderer_pin(RendererId::from_static("ghost")),
+        );
+
+        let mut target = vello::Scene::new();
+        let report = host.paint_scene(&scene, &mut target, 1.0);
+        // Pin doesn't match any registered renderer → falls through to
+        // first-candidate ("only").
+        assert_eq!(report.painted, 1);
+        assert_eq!(log.borrow().len(), 1);
+    }
+
+    #[test]
     fn camera_defaults_to_identity() {
         let host = SubstrateHost::with_default_registry();
         assert_eq!(host.camera(), Affine::IDENTITY);

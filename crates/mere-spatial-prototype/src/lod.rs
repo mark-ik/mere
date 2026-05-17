@@ -159,6 +159,7 @@ mod tests {
             lod: stored_lod,
             size,
             content_kind: NodeContentKind::Panel,
+            renderer_pin: None,
         }
     }
 

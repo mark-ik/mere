@@ -79,6 +79,7 @@ fn full_chain_produces_texture_with_requested_dimensions() {
         lod: LodLevel::FullPane,
         size: Size::new(64.0, 32.0),
         content_kind: NodeContentKind::Panel,
+        renderer_pin: None,
     };
 
     let handle = renderer.ensure_producer(&node);
@@ -133,6 +134,7 @@ fn multiple_producers_track_independently() {
         lod: LodLevel::FullPane,
         size: Size::new(48.0, 24.0),
         content_kind: NodeContentKind::Panel,
+        renderer_pin: None,
     };
     let node_b = SceneNodeRef {
         identity: NodeIdentity::next(),
@@ -140,6 +142,7 @@ fn multiple_producers_track_independently() {
         lod: LodLevel::FullPane,
         size: Size::new(80.0, 40.0),
         content_kind: NodeContentKind::Panel,
+        renderer_pin: None,
     };
 
     let handle_a = renderer.ensure_producer(&node_a);

@@ -8,6 +8,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use kurbo::{Affine, Size};
 
+use crate::identity::RendererId;
+
 /// Stable per-node identity in the spatial scene graph.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct NodeIdentity(NonZeroU64);
@@ -110,11 +112,25 @@ impl NodeContentKindSet {
 }
 
 /// Borrowed view of a substrate scene node, passed to renderers each frame.
-#[derive(Copy, Clone, Debug)]
+///
+/// Not `Copy` because [`renderer_pin`](Self::renderer_pin) carries a
+/// `RendererId` (a `Cow<'static, str>` under the hood). `Clone` is
+/// cheap when the pin is `None` or built from a static string;
+/// degrades to a `String` clone if built from a dynamic name.
+#[derive(Clone, Debug)]
 pub struct SceneNodeRef {
     pub identity: NodeIdentity,
     pub placement: Placement,
     pub lod: LodLevel,
     pub size: Size,
     pub content_kind: NodeContentKind,
+    /// Optional per-node renderer pin. When set, the registry's
+    /// selector chain (step 1 of [renderer-registry contract brief
+    /// §5]'s five-step chain) honors the pin if a renderer with that
+    /// id is registered and handles the node's content kind; the
+    /// chain falls through to subsequent steps when the pin doesn't
+    /// match a registered renderer.
+    ///
+    /// [renderer-registry contract brief §5]: ../../../../design_docs/mere_docs/research/2026-05-15_renderer_registry_contract_brief.md
+    pub renderer_pin: Option<RendererId>,
 }

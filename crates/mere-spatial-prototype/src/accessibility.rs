@@ -247,6 +247,7 @@ mod tests {
             size: Size::new(80.0, 40.0),
             lod: mere_renderer_registry::LodLevel::FullPane,
             content_kind: NodeContentKind::Panel,
+            renderer_pin: None,
         });
         let update = project_scene(&scene);
         let node = update

@@ -221,11 +221,83 @@ pub trait RendererSelector {
     fn select(&self, node: &SceneNodeRef, candidates: &[RendererId]) -> Option<RendererId>;
 }
 
-/// First-candidate selector. v0 stub.
+/// v0 selector implementing step 1 (per-node pin) and step 5
+/// (last-resort: first candidate) of the [contract brief §5]
+/// five-step chain. Steps 2–4 (profile-binding constraint, host
+/// capability filter, named default policy) wait on the host-side
+/// surfaces those steps consult.
+///
+/// Behavior:
+/// - If `node.renderer_pin == Some(id)` and `id` is in `candidates`,
+///   return `Some(id)`. The pin only applies when it survives
+///   content-kind filtering — pinning to a renderer that doesn't
+///   handle the kind falls through (a misconfiguration the host can
+///   later flag via a diagnostic).
+/// - Otherwise return the first candidate.
+///
+/// [contract brief §5]: ../../../../design_docs/mere_docs/research/2026-05-15_renderer_registry_contract_brief.md
 pub struct DefaultSelector;
 
 impl RendererSelector for DefaultSelector {
-    fn select(&self, _node: &SceneNodeRef, candidates: &[RendererId]) -> Option<RendererId> {
+    fn select(&self, node: &SceneNodeRef, candidates: &[RendererId]) -> Option<RendererId> {
+        if let Some(pin) = &node.renderer_pin
+            && candidates.iter().any(|c| c == pin)
+        {
+            return Some(pin.clone());
+        }
         candidates.first().cloned()
+    }
+}
+
+#[cfg(test)]
+mod default_selector_tests {
+    use kurbo::Size;
+    use mere_renderer_registry_types::{
+        LodLevel, NodeContentKind, NodeIdentity, Placement, RendererId, SceneNodeRef,
+    };
+
+    use super::*;
+
+    fn node_with_pin(pin: Option<RendererId>) -> SceneNodeRef {
+        SceneNodeRef {
+            identity: NodeIdentity::next(),
+            placement: Placement::IDENTITY,
+            lod: LodLevel::FullPane,
+            size: Size::new(100.0, 100.0),
+            content_kind: NodeContentKind::Panel,
+            renderer_pin: pin,
+        }
+    }
+
+    #[test]
+    fn no_pin_picks_first_candidate() {
+        let candidates = vec![RendererId::from_static("a"), RendererId::from_static("b")];
+        let node = node_with_pin(None);
+        let picked = DefaultSelector.select(&node, &candidates);
+        assert_eq!(picked, Some(RendererId::from_static("a")));
+    }
+
+    #[test]
+    fn matching_pin_overrides_first_candidate() {
+        let candidates = vec![RendererId::from_static("a"), RendererId::from_static("b")];
+        let node = node_with_pin(Some(RendererId::from_static("b")));
+        let picked = DefaultSelector.select(&node, &candidates);
+        assert_eq!(picked, Some(RendererId::from_static("b")));
+    }
+
+    #[test]
+    fn unmatched_pin_falls_through_to_first_candidate() {
+        let candidates = vec![RendererId::from_static("a"), RendererId::from_static("b")];
+        let node = node_with_pin(Some(RendererId::from_static("nonexistent")));
+        let picked = DefaultSelector.select(&node, &candidates);
+        // Falls through to first candidate (step 5 of the chain).
+        assert_eq!(picked, Some(RendererId::from_static("a")));
+    }
+
+    #[test]
+    fn empty_candidates_returns_none_even_with_pin() {
+        let node = node_with_pin(Some(RendererId::from_static("ghost")));
+        let picked = DefaultSelector.select(&node, &[]);
+        assert_eq!(picked, None);
     }
 }
