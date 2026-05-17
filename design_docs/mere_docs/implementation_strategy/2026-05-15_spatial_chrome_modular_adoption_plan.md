@@ -42,8 +42,10 @@ status doc per `DOC_POLICY.md`.
 - `RendererRegistry::paint_node` / `deliver_in_scene_input` dispatch helpers added — close the "registry resolves but doesn't call" gap from the v0 contract.
 - `as_in_scene_paint` / `as_embedded_frame` / `as_overlay` downcast accessors on `NodeRenderer` give the registry a dyn-trait dispatch seam.
 - `DispatchError::WrongCompositionMode` surfaces renderer-impl bugs.
+- **Selector chain (contract brief §5)**: steps 1 (per-node `renderer_pin` on `SceneNodeRef`) and 4 (`set_default_policy(kind, id)` per-content-kind) live on `RendererRegistry::select`; step 5 (first-candidate tie-break) is the `DefaultSelector` strategy. Steps 2–3 (profile-binding constraint, host capability filter) wait on host-side surfaces.
+- **Diagnostic events (contract brief §8)**: `DiagnosticEvent::{RendererRegistered, RendererUnregistered, RouteDegraded}` emitted through a `DiagnosticSink` trait. `NoopSink` is the default; `RecordingSink` lets tests inspect emissions. Registered/unregistered fire at lifecycle points; `RouteDegraded { NoCandidates | WrongCompositionMode }` fires from the registry's dispatch helpers when the chain or downcast fails. Per-frame `route_chosen`, `hot_swapped`, and `surface_attach_failed` events remain unwired — they need host-side dedupe / consumer integration.
 
-Diagnostics emission (`renderer.registered` / `renderer.unregistered` / `engine.route_chosen` / `engine.route_degraded` / `renderer.hot_swapped` / `surface.attach_failed`) and capability-gate threading remain unwired — both flow through the host action bus once a real host is the integration point.
+Capability-gate threading (per-node `engine.route_override`, profile escalation) and the 4-layer policy chain remain unwired — both flow through the host action bus once a real host is the integration point.
 
 ### Phase 3 (composition proof) — **mostly shipped**
 
