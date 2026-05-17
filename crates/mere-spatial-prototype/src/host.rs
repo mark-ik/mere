@@ -18,6 +18,7 @@ use mere_renderer_registry::{
 use vello::peniko::{Brush, Color};
 
 use crate::external_texture::{CompositorError, ExternalTextureCompositor};
+use crate::lod::{LodThresholds, compute_lod_for_node};
 use crate::scene::SubstrateScene;
 
 /// Substrate host: registry + per-frame dispatch + camera transform.
@@ -32,6 +33,10 @@ pub struct SubstrateHost {
     /// composes it onto each node's placement so renderers paint in
     /// host pixels.
     camera: Affine,
+    /// Pixel thresholds for LOD promotion. Substrate computes each
+    /// node's effective LOD per frame from `camera * placement` and
+    /// rewrites `SceneNodeRef.lod` before passing to the renderer.
+    lod_thresholds: LodThresholds,
 }
 
 impl SubstrateHost {
@@ -40,7 +45,19 @@ impl SubstrateHost {
             registry,
             producers: HashMap::new(),
             camera: Affine::IDENTITY,
+            lod_thresholds: LodThresholds::DEFAULT,
         }
+    }
+
+    /// Current LOD-promotion thresholds. Substrate computes effective
+    /// LOD before dispatch via these.
+    pub fn lod_thresholds(&self) -> &LodThresholds {
+        &self.lod_thresholds
+    }
+
+    /// Replace the LOD-promotion thresholds.
+    pub fn set_lod_thresholds(&mut self, thresholds: LodThresholds) {
+        self.lod_thresholds = thresholds;
     }
 
     pub fn with_default_registry() -> Self {
@@ -101,8 +118,10 @@ impl SubstrateHost {
     ) -> FrameReport {
         let mut report = FrameReport::default();
         let camera = self.camera;
+        let thresholds = self.lod_thresholds;
         for node in scene.iter() {
-            let node_ref = node.as_ref();
+            let mut node_ref = node.as_ref();
+            node_ref.lod = compute_lod_for_node(&node_ref, camera, &thresholds);
             let mut ctx = PaintCtx {
                 scene: target,
                 node_transform: camera * node.placement.transform,
@@ -146,9 +165,12 @@ impl SubstrateHost {
     ) -> FrameReport {
         let mut report = FrameReport::default();
         let camera = self.camera;
+        let thresholds = self.lod_thresholds;
         for node in scene.iter() {
+            let mut node_ref = node.as_ref();
+            node_ref.lod = compute_lod_for_node(&node_ref, camera, &thresholds);
             self.dispatch_node(
-                node.as_ref(),
+                node_ref,
                 target,
                 compositor,
                 vello_renderer,

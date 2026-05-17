@@ -51,6 +51,7 @@
 mod accessibility;
 mod external_texture;
 mod host;
+mod lod;
 mod recording_renderer;
 mod scene;
 mod solid_rect_renderer;
@@ -59,6 +60,7 @@ mod thumbnail;
 pub use accessibility::{ROOT_NODE_ID, project_scene};
 pub use external_texture::{CompositorError, ExternalTextureCompositor};
 pub use host::{FrameReport, SubstrateHost};
+pub use lod::{LodThresholds, compute_lod_for_node};
 pub use recording_renderer::{PaintRecord, RecordingRenderer};
 pub use scene::{
     DEFAULT_EDGE_HIT_TOLERANCE, EdgeIdentity, EdgeKind, RelationEdge, SceneHit, SubstrateNode,

@@ -60,14 +60,15 @@ Per-work-item:
 
 | Item | Status |
 | --- | --- |
-| Root scene with pan/zoom camera | Pending (small — a single `Affine` on `SubstrateScene` + a transform applied before per-node placement). |
+| Root scene with pan/zoom camera | ✅ `SubstrateHost::camera()` / `set_camera()` / `pan(dx, dy)` / `zoom_at(pivot, factor)` / `scene_pos_from_host()` (`crates/mere-spatial-prototype/src/host.rs`). Camera composes onto each node's placement during dispatch; `deliver_input_at` pulls host_pos through `camera.inverse()` before hit-testing. |
 | One cartography/graph node | Pending — needs cartography concept work (separate crate; not yet started). |
 | One document tile rendered through engine → platen → NetRender | Pending — needs `inker::Engine` integration; tracked separately from the spatial prototype's renderer-registry surface. |
 | One embedded-frame placeholder texture | ✅ `MasonryEmbeddedRenderer` (real masonry render via `imaging_vello`'s GPU path) + `ScryingEmbeddedRenderer` skeleton (next_frame wired against `WgpuTextureImporter`). |
 | One relation edge with label and hit-test | ✅ for *geometry* (line stroke, `hit_test_edge` with `DEFAULT_EDGE_HIT_TOLERANCE`); label *rendering* pending parley wiring (`label: Option<String>` stored on `RelationEdge` for now). |
 | Basic hit-test returning node/edge/content identity | ✅ `SceneHit::{Node, Edge}` returned from unified `SubstrateScene::hit_test`. |
-| Thumbnail/capture path for switcher preview | Pending — render at lower resolution to a texture; same readback path the PNG test uses. |
+| Thumbnail/capture path for switcher preview | ✅ `SubstrateScene::content_bounds()` + `fit_camera(bounds, target_size, ThumbnailFit)` (`crates/mere-spatial-prototype/src/thumbnail.rs`). Integration test `tests/render_to_thumbnail_png.rs` produces `target/spatial_prototype_thumbnail.png` at 128×128 from a 512×384 scene. |
 | UxTree/AccessKit projection | ✅ for substrate-level nodes (`accessibility::project_scene` emits `TreeUpdate` with role-mapped nodes + AABB bounds). Renderer-contributed sub-trees (e.g. `MasonryTile::take_accesskit_update`) not yet merged — `EmbeddedFrameRenderer` trait needs to surface its pending tree updates first. |
+| LOD-promotion system (IR brief §5) | ✅ `compute_lod_for_node(node, camera, thresholds)` + `LodThresholds` (`crates/mere-spatial-prototype/src/lod.rs`). Substrate rewrites `SceneNodeRef.lod` per frame in `paint_scene` / `render_scene` from apparent host-pixel size of `camera * placement`; stored LOD acts as a floor (never demotes below the producer's declared minimum). |
 
 ### Phase 4 (native texture interop consolidation) — **skeleton**
 
