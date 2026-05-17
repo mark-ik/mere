@@ -19,7 +19,7 @@ use vello::peniko::{Brush, Color};
 
 use crate::external_texture::{CompositorError, ExternalTextureCompositor};
 use crate::lod::{LodThresholds, compute_lod_for_node};
-use crate::scene::SubstrateScene;
+use crate::scene::{EdgeKind, EdgeStyle, SubstrateScene};
 
 /// Substrate host: registry + per-frame dispatch + camera transform.
 pub struct SubstrateHost {
@@ -37,6 +37,11 @@ pub struct SubstrateHost {
     /// node's effective LOD per frame from `camera * placement` and
     /// rewrites `SceneNodeRef.lod` before passing to the renderer.
     lod_thresholds: LodThresholds,
+    /// Per-EdgeKind stroke style overrides. Edges with no entry use
+    /// `EdgeStyle::default_for_kind(kind)`. Hosts call
+    /// [`Self::set_edge_style`] to install custom palettes — typical
+    /// users are cartography, which owns the relation taxonomy.
+    edge_styles: HashMap<EdgeKind, EdgeStyle>,
 }
 
 impl SubstrateHost {
@@ -46,7 +51,30 @@ impl SubstrateHost {
             producers: HashMap::new(),
             camera: Affine::IDENTITY,
             lod_thresholds: LodThresholds::DEFAULT,
+            edge_styles: HashMap::new(),
         }
+    }
+
+    /// Install or replace the stroke style for a specific
+    /// `EdgeKind`. If unset, the substrate paints with
+    /// [`EdgeStyle::default_for_kind`].
+    pub fn set_edge_style(&mut self, kind: EdgeKind, style: EdgeStyle) {
+        self.edge_styles.insert(kind, style);
+    }
+
+    /// Lookup the effective style for `kind` — host-installed
+    /// override if set, otherwise the v0a default.
+    pub fn edge_style(&self, kind: EdgeKind) -> EdgeStyle {
+        self.edge_styles
+            .get(&kind)
+            .copied()
+            .unwrap_or_else(|| EdgeStyle::default_for_kind(kind))
+    }
+
+    /// Drop the override for `kind`; subsequent paints use the v0a
+    /// default. Returns the previous override if any.
+    pub fn clear_edge_style(&mut self, kind: EdgeKind) -> Option<EdgeStyle> {
+        self.edge_styles.remove(&kind)
     }
 
     /// Current LOD-promotion thresholds. Substrate computes effective
@@ -139,7 +167,7 @@ impl SubstrateHost {
                 }
             }
         }
-        report.edges_painted = paint_edges(scene, target, scale_factor, camera);
+        report.edges_painted = paint_edges(scene, target, scale_factor, camera, |k| self.edge_style(k));
         report
     }
 
@@ -179,7 +207,8 @@ impl SubstrateHost {
                 &mut report,
             );
         }
-        report.edges_painted = paint_edges(scene, target, scale_factor, camera);
+        report.edges_painted =
+            paint_edges(scene, target, scale_factor, camera, |k| self.edge_style(k));
         report
     }
 
@@ -510,14 +539,13 @@ fn paint_edges(
     target: &mut vello::Scene,
     scale_factor: f64,
     camera: Affine,
+    style_for: impl Fn(EdgeKind) -> EdgeStyle,
 ) -> usize {
-    // v0a styling: subtle stroke that reads clearly over both light
-    // and dark backgrounds; width scaled to host DPR. Edge geometry
-    // is in scene coords; `camera` placed via the stroke transform
-    // moves edges with their endpoint nodes under pan/zoom.
-    let edge_color = Color::from_rgba8(200, 200, 210, 200);
-    let stroke = Stroke::new(2.0 * scale_factor.max(1.0));
-    let brush = Brush::Solid(edge_color);
+    // Edge geometry is in scene coords; `camera` placed via the
+    // stroke transform moves edges with their endpoint nodes under
+    // pan/zoom. Stroke width scales with host DPR; per-kind styling
+    // resolves through the host's `edge_style` palette (defaults from
+    // `EdgeStyle::default_for_kind`).
     let mut drawn = 0;
     for edge in scene.iter_edges() {
         let (Some(a), Some(b)) = (
@@ -526,6 +554,9 @@ fn paint_edges(
         ) else {
             continue;
         };
+        let style = style_for(edge.kind);
+        let stroke = Stroke::new(style.width_px * scale_factor.max(1.0));
+        let brush = Brush::Solid(style.color);
         let line = Line::new(a, b);
         target.stroke(&stroke, camera, &brush, None, &line);
         drawn += 1;
@@ -940,6 +971,40 @@ mod tests {
         // first-candidate ("only").
         assert_eq!(report.painted, 1);
         assert_eq!(log.borrow().len(), 1);
+    }
+
+    #[test]
+    fn edge_style_returns_default_when_no_override() {
+        let host = SubstrateHost::with_default_registry();
+        assert_eq!(host.edge_style(EdgeKind::Plain), EdgeStyle::PLAIN);
+        assert_eq!(host.edge_style(EdgeKind::Reference), EdgeStyle::REFERENCE);
+    }
+
+    #[test]
+    fn set_edge_style_overrides_default() {
+        use vello::peniko::Color;
+
+        let mut host = SubstrateHost::with_default_registry();
+        let custom = EdgeStyle {
+            color: Color::from_rgba8(255, 0, 0, 255),
+            width_px: 4.0,
+        };
+        host.set_edge_style(EdgeKind::Plain, custom);
+        assert_eq!(host.edge_style(EdgeKind::Plain), custom);
+        // Other kinds still default.
+        assert_eq!(host.edge_style(EdgeKind::Reference), EdgeStyle::REFERENCE);
+    }
+
+    #[test]
+    fn clear_edge_style_returns_previous() {
+        let mut host = SubstrateHost::with_default_registry();
+        let prev = host.clear_edge_style(EdgeKind::Plain);
+        assert_eq!(prev, None);
+        host.set_edge_style(EdgeKind::Plain, EdgeStyle::REFERENCE);
+        let prev = host.clear_edge_style(EdgeKind::Plain);
+        assert_eq!(prev, Some(EdgeStyle::REFERENCE));
+        // After clear, defaults restored.
+        assert_eq!(host.edge_style(EdgeKind::Plain), EdgeStyle::PLAIN);
     }
 
     #[test]

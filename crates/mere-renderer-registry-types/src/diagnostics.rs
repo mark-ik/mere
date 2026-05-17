@@ -50,6 +50,17 @@ pub enum DiagnosticEvent {
     /// `renderer.unregistered` — a renderer was removed from the
     /// registry. Fires only when the id was actually registered.
     RendererUnregistered { id: RendererId },
+    /// `renderer.hot_swapped` — a registered renderer was replaced
+    /// in-place by a new implementation at the same id. Carries the
+    /// new renderer's handled content kinds (may differ from the
+    /// pre-swap impl's kinds). Producer handles owned by the
+    /// substrate-host are stale after this event; hosts typically
+    /// re-call `SubstrateHost::ensure_embedded_producers` on the
+    /// next frame to refresh.
+    RendererHotSwapped {
+        id: RendererId,
+        kinds: Vec<NodeContentKind>,
+    },
     /// `engine.route_degraded` — substrate dispatch attempted to
     /// route `node` but the path didn't resolve cleanly. Fires once
     /// per affected dispatch call.

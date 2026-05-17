@@ -19,7 +19,8 @@
 use std::collections::HashMap;
 
 use mere_renderer_registry_types::{
-    DiagnosticEvent, DiagnosticSink, InputDisposition, InputEvent, NodeContentKind, NoopSink,
+    CapabilityAction, DiagnosticEvent, DiagnosticSink, InputDisposition, InputEvent,
+    NodeContentKind, NoopSink, PermissionDecision, PermissionGate, PermitEverythingGate,
     RendererId, RouteDegradedReason, SceneNodeRef,
 };
 
@@ -53,11 +54,16 @@ pub struct RendererRegistry {
     /// per-node pin matches. The mapping is the host's "if I don't
     /// say otherwise, render WebPage with scrying.web" knob.
     default_policies: HashMap<NodeContentKind, RendererId>,
+    /// Capability gate consulted at policy choice points. Defaults
+    /// to `PermitEverythingGate`; hosts install real policy via
+    /// [`Self::set_gate`].
+    gate: Box<dyn PermissionGate>,
 }
 
 impl RendererRegistry {
-    /// Construct an empty registry with a custom selector and the
-    /// default no-op diagnostic sink.
+    /// Construct an empty registry with a custom selector, the
+    /// default no-op diagnostic sink, and the permit-everything
+    /// capability gate.
     pub fn new(selector: Box<dyn RendererSelector>) -> Self {
         Self {
             renderers: HashMap::new(),
@@ -65,7 +71,22 @@ impl RendererRegistry {
             selector,
             sink: Box::new(NoopSink),
             default_policies: HashMap::new(),
+            gate: Box::new(PermitEverythingGate),
         }
+    }
+
+    /// Install a capability gate. The registry consults the gate at
+    /// policy choice points (currently: per-node pin honoring). Host
+    /// implements the 4-layer policy chain (action → session →
+    /// persona → app fallback) inside its gate impl.
+    pub fn set_gate(&mut self, gate: Box<dyn PermissionGate>) {
+        self.gate = gate;
+    }
+
+    /// Builder-form `set_gate` — usable in chained construction.
+    pub fn with_gate(mut self, gate: Box<dyn PermissionGate>) -> Self {
+        self.gate = gate;
+        self
     }
 
     /// Set the default-policy renderer for a content kind (selector
@@ -151,6 +172,52 @@ impl RendererRegistry {
         Some(removed)
     }
 
+    /// Replace a registered renderer at the same `RendererId` with a
+    /// new implementation. The new renderer may declare different
+    /// content kinds — `by_kind` indexing is re-derived from the new
+    /// `handles()` set.
+    ///
+    /// Soft-swap semantics: the substrate-host's per-node
+    /// `ProducerHandle` cache references the OLD renderer's producer
+    /// state, which is dropped along with the returned old renderer.
+    /// Hosts should call `SubstrateHost::ensure_embedded_producers`
+    /// on the next frame to re-create producers for nodes routed
+    /// through the swapped id.
+    ///
+    /// Returns the displaced old renderer + emits
+    /// [`DiagnosticEvent::RendererHotSwapped`]. Returns
+    /// [`HotSwapError::NotRegistered`] if no renderer was registered
+    /// at the new renderer's id — caller should use
+    /// [`Self::register`] for new ids.
+    pub fn hot_swap(
+        &mut self,
+        new_renderer: Box<dyn NodeRenderer>,
+    ) -> Result<Box<dyn NodeRenderer>, HotSwapError> {
+        let id = new_renderer.renderer_id();
+        if !self.renderers.contains_key(&id) {
+            return Err(HotSwapError::NotRegistered(id));
+        }
+        let new_kinds: Vec<NodeContentKind> = new_renderer.handles().iter().copied().collect();
+        // Remove old's by_kind entries.
+        for ids in self.by_kind.values_mut() {
+            ids.retain(|i| i != &id);
+        }
+        self.by_kind.retain(|_, ids| !ids.is_empty());
+        // Add new's by_kind entries.
+        for kind in &new_kinds {
+            self.by_kind.entry(*kind).or_default().push(id.clone());
+        }
+        let old = self
+            .renderers
+            .insert(id.clone(), new_renderer)
+            .expect("contains_key just succeeded");
+        self.sink.record(DiagnosticEvent::RendererHotSwapped {
+            id,
+            kinds: new_kinds,
+        });
+        Ok(old)
+    }
+
     /// Resolve which renderer should handle this node, applying the
     /// selector chain:
     ///
@@ -169,11 +236,18 @@ impl RendererRegistry {
     /// content kind — host paints a placeholder.
     pub fn select(&self, node: &SceneNodeRef) -> Option<RendererId> {
         let candidates = self.by_kind.get(&node.content_kind)?;
-        // Step 1: per-node pin.
+        // Step 1: per-node pin — checked against the capability gate.
         if let Some(pin) = &node.renderer_pin
             && candidates.iter().any(|c| c == pin)
         {
-            return Some(pin.clone());
+            let action = CapabilityAction::RouteOverride {
+                node: node.identity,
+                target_renderer: pin,
+            };
+            if self.gate.check(&action) == PermissionDecision::Allow {
+                return Some(pin.clone());
+            }
+            // Gate denied — chain falls through to step 4.
         }
         // Step 4: named default policy.
         if let Some(policy) = self.default_policies.get(&node.content_kind)
@@ -310,6 +384,27 @@ impl std::fmt::Display for RegistryError {
 }
 
 impl std::error::Error for RegistryError {}
+
+/// Errors from [`RendererRegistry::hot_swap`].
+#[derive(Debug)]
+pub enum HotSwapError {
+    /// No renderer is registered at the new renderer's id — caller
+    /// should use [`RendererRegistry::register`] for first-time
+    /// installs. Hot-swap is replacement-only.
+    NotRegistered(RendererId),
+}
+
+impl std::fmt::Display for HotSwapError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotRegistered(id) => {
+                write!(f, "hot_swap: no renderer registered at id {id}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for HotSwapError {}
 
 /// Resolves which renderer to use when multiple renderers handle the same
 /// content kind.
@@ -557,5 +652,127 @@ mod selector_chain_tests {
         // Now the WebPage kind has a candidate, but `ghost` is still
         // a fake pin — falls through.
         assert_eq!(reg.select(&node), Some(RendererId::from_static("overlay")));
+    }
+
+    #[test]
+    fn hot_swap_replaces_renderer_at_same_id() {
+        let mut reg = RendererRegistry::with_default_selector();
+        reg.register(Box::new(StubRenderer::new("foo", NodeContentKind::Panel)))
+            .unwrap();
+        let old = reg
+            .hot_swap(Box::new(StubRenderer::new("foo", NodeContentKind::Panel)))
+            .expect("hot_swap ok");
+        assert_eq!(old.renderer_id(), RendererId::from_static("foo"));
+        // Still resolves to "foo" for Panel.
+        let node = node_with_pin(NodeContentKind::Panel, None);
+        assert_eq!(reg.select(&node), Some(RendererId::from_static("foo")));
+    }
+
+    #[test]
+    fn hot_swap_with_different_kinds_reindexes_by_kind() {
+        let mut reg = RendererRegistry::with_default_selector();
+        reg.register(Box::new(StubRenderer::new("foo", NodeContentKind::Panel)))
+            .unwrap();
+        // Before swap: Panel resolves to foo, WebPage resolves to none.
+        let panel_node = node_with_pin(NodeContentKind::Panel, None);
+        let webpage_node = node_with_pin(NodeContentKind::WebPage, None);
+        assert_eq!(reg.select(&panel_node), Some(RendererId::from_static("foo")));
+        assert_eq!(reg.select(&webpage_node), None);
+
+        // Swap foo to claim WebPage instead.
+        let _ = reg
+            .hot_swap(Box::new(StubRenderer::new("foo", NodeContentKind::WebPage)))
+            .expect("hot_swap ok");
+
+        // After swap: Panel resolves to none, WebPage resolves to foo.
+        assert_eq!(reg.select(&panel_node), None);
+        assert_eq!(reg.select(&webpage_node), Some(RendererId::from_static("foo")));
+    }
+
+    #[test]
+    fn hot_swap_not_registered_errors() {
+        let mut reg = RendererRegistry::with_default_selector();
+        let result = reg.hot_swap(Box::new(StubRenderer::new(
+            "ghost",
+            NodeContentKind::Panel,
+        )));
+        assert!(matches!(result, Err(HotSwapError::NotRegistered(_))));
+    }
+
+    #[test]
+    fn deny_gate_makes_pin_fall_through_to_default_policy() {
+        use mere_renderer_registry_types::DenyEverythingGate;
+
+        let mut reg = RendererRegistry::with_default_selector()
+            .with_gate(Box::new(DenyEverythingGate));
+        reg.register(Box::new(StubRenderer::new("a", NodeContentKind::Panel)))
+            .unwrap();
+        reg.register(Box::new(StubRenderer::new("b", NodeContentKind::Panel)))
+            .unwrap();
+        reg.register(Box::new(StubRenderer::new("c", NodeContentKind::Panel)))
+            .unwrap();
+        reg.set_default_policy(NodeContentKind::Panel, RendererId::from_static("b"));
+
+        // Pin to "c", but gate denies — chain falls through to step 4
+        // (default policy = "b").
+        let node = node_with_pin(NodeContentKind::Panel, Some(RendererId::from_static("c")));
+        assert_eq!(reg.select(&node), Some(RendererId::from_static("b")));
+    }
+
+    #[test]
+    fn deny_gate_no_policy_falls_through_to_first_candidate() {
+        use mere_renderer_registry_types::DenyEverythingGate;
+
+        let mut reg = RendererRegistry::with_default_selector()
+            .with_gate(Box::new(DenyEverythingGate));
+        reg.register(Box::new(StubRenderer::new("a", NodeContentKind::Panel)))
+            .unwrap();
+        reg.register(Box::new(StubRenderer::new("b", NodeContentKind::Panel)))
+            .unwrap();
+
+        // Pin to "b", denied, no policy → first candidate "a".
+        let node = node_with_pin(NodeContentKind::Panel, Some(RendererId::from_static("b")));
+        assert_eq!(reg.select(&node), Some(RendererId::from_static("a")));
+    }
+
+    #[test]
+    fn custom_gate_can_target_specific_renderers() {
+        use mere_renderer_registry_types::{CapabilityAction, PermissionDecision, PermissionGate};
+
+        // Gate that denies overrides to specifically "forbidden",
+        // allows anything else.
+        struct SelectiveGate;
+        impl PermissionGate for SelectiveGate {
+            fn check(&self, action: &CapabilityAction<'_>) -> PermissionDecision {
+                match action {
+                    CapabilityAction::RouteOverride { target_renderer, .. }
+                        if target_renderer.as_str() == "forbidden" =>
+                    {
+                        PermissionDecision::Deny
+                    }
+                    _ => PermissionDecision::Allow,
+                }
+            }
+        }
+
+        let mut reg =
+            RendererRegistry::with_default_selector().with_gate(Box::new(SelectiveGate));
+        reg.register(Box::new(StubRenderer::new("ok", NodeContentKind::Panel)))
+            .unwrap();
+        reg.register(Box::new(StubRenderer::new("forbidden", NodeContentKind::Panel)))
+            .unwrap();
+
+        // Pin to "ok": gate allows.
+        let ok_node =
+            node_with_pin(NodeContentKind::Panel, Some(RendererId::from_static("ok")));
+        assert_eq!(reg.select(&ok_node), Some(RendererId::from_static("ok")));
+
+        // Pin to "forbidden": gate denies, falls through to first
+        // candidate ("ok" — was registered first).
+        let forbidden_node = node_with_pin(
+            NodeContentKind::Panel,
+            Some(RendererId::from_static("forbidden")),
+        );
+        assert_eq!(reg.select(&forbidden_node), Some(RendererId::from_static("ok")));
     }
 }

@@ -31,7 +31,8 @@ mod renderer;
 
 pub use paint::{PaintCtx, PaintError, PaintResult};
 pub use registry::{
-    DefaultSelector, DispatchError, RegistryError, RendererRegistry, RendererSelector,
+    DefaultSelector, DispatchError, HotSwapError, RegistryError, RendererRegistry,
+    RendererSelector,
 };
 pub use renderer::{
     EmbeddedFrameRenderer, InScenePaintRenderer, NodeRenderer, OverlayRenderer,
@@ -40,11 +41,12 @@ pub use renderer::{
 // Re-export the data-types surface so callers don't need to add a separate
 // dep on `mere-renderer-registry-types` just to name the types.
 pub use mere_renderer_registry_types::{
-    CompositionMode, DiagnosticEvent, DiagnosticSink, ImeEvent, InputDisposition, InputEvent,
-    KeyCode, KeyEventKind, LodLevel, ModifiersState, NamedKey, NodeContentKind, NodeContentKindSet,
-    NodeIdentity, NoopSink, OverlayHandle, Placement, PointerButton, PointerEventKind,
-    ProducerHandle, ProfileBindingExpectation, RecordingSink, RendererCapabilities, RendererId,
-    RouteDegradedReason, SceneNodeRef, ScreenRect,
+    CapabilityAction, CompositionMode, DenyEverythingGate, DiagnosticEvent, DiagnosticSink,
+    ImeEvent, InputDisposition, InputEvent, KeyCode, KeyEventKind, LodLevel, ModifiersState,
+    NamedKey, NodeContentKind, NodeContentKindSet, NodeIdentity, NoopSink, OverlayHandle,
+    PermissionDecision, PermissionGate, PermitEverythingGate, Placement, PointerButton,
+    PointerEventKind, ProducerHandle, ProfileBindingExpectation, RecordingSink,
+    RendererCapabilities, RendererId, RouteDegradedReason, SceneNodeRef, ScreenRect,
 };
 
 // Re-export shared dependencies for version alignment.

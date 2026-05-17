@@ -26,6 +26,7 @@ mod diagnostics;
 mod handles;
 mod identity;
 mod input;
+mod permissions;
 mod scene;
 
 pub use composition::CompositionMode;
@@ -35,6 +36,10 @@ pub use diagnostics::{
 pub use handles::{OverlayHandle, ProducerHandle};
 pub use identity::{
     ProfileBindingExpectation, RendererCapabilities, RendererId, ScreenRect,
+};
+pub use permissions::{
+    CapabilityAction, DenyEverythingGate, PermissionDecision, PermissionGate,
+    PermitEverythingGate,
 };
 pub use input::{
     ImeEvent, InputDisposition, InputEvent, KeyCode, KeyEventKind, ModifiersState, NamedKey,

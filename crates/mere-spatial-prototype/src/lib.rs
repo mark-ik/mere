@@ -65,8 +65,8 @@ pub use host::{FrameReport, SubstrateHost};
 pub use lod::{LodThresholds, compute_lod_for_node};
 pub use recording_renderer::{PaintRecord, RecordingRenderer};
 pub use scene::{
-    DEFAULT_EDGE_HIT_TOLERANCE, EdgeIdentity, EdgeKind, RelationEdge, SceneHit, SubstrateNode,
-    SubstrateScene,
+    DEFAULT_EDGE_HIT_TOLERANCE, EdgeIdentity, EdgeKind, EdgeStyle, RelationEdge, SceneHit,
+    SubstrateNode, SubstrateScene,
 };
 pub use solid_rect_renderer::SolidRectRenderer;
 pub use thumbnail::{ThumbnailFit, fit_camera};

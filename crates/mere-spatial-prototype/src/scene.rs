@@ -16,6 +16,52 @@ use kurbo::{Point, Rect, Size};
 use mere_renderer_registry::{
     LodLevel, NodeContentKind, NodeIdentity, Placement, RendererId, SceneNodeRef,
 };
+use vello::peniko::Color;
+
+/// Stroke style for substrate-painted relation edges. Picked per
+/// `EdgeKind` via `SubstrateHost::edge_style`.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct EdgeStyle {
+    pub color: Color,
+    pub width_px: f64,
+}
+
+impl EdgeStyle {
+    /// v0a default palette for `EdgeKind::Plain` — neutral gray.
+    pub const PLAIN: Self = Self {
+        color: Color::from_rgba8(200, 200, 210, 200),
+        width_px: 2.0,
+    };
+
+    /// v0a default for `EdgeKind::Reference` — cool blue.
+    pub const REFERENCE: Self = Self {
+        color: Color::from_rgba8(110, 160, 230, 220),
+        width_px: 2.0,
+    };
+
+    /// v0a default for `EdgeKind::Containment` — green, thicker.
+    pub const CONTAINMENT: Self = Self {
+        color: Color::from_rgba8(120, 200, 130, 220),
+        width_px: 2.5,
+    };
+
+    /// v0a default for `EdgeKind::Annotation` — warm amber, thinner.
+    pub const ANNOTATION: Self = Self {
+        color: Color::from_rgba8(230, 180, 110, 200),
+        width_px: 1.5,
+    };
+
+    /// The v0a default style for a given kind. Hosts override by
+    /// calling `SubstrateHost::set_edge_style(kind, style)`.
+    pub fn default_for_kind(kind: EdgeKind) -> Self {
+        match kind {
+            EdgeKind::Plain => Self::PLAIN,
+            EdgeKind::Reference => Self::REFERENCE,
+            EdgeKind::Containment => Self::CONTAINMENT,
+            EdgeKind::Annotation => Self::ANNOTATION,
+        }
+    }
+}
 
 /// A single placed node in the substrate's spatial scene graph.
 ///
@@ -85,13 +131,25 @@ impl EdgeIdentity {
     }
 }
 
-/// Relation kind tag. v0a is a minimal placeholder; the renderer-registry
-/// brief's full relation taxonomy (semantic / spatial / temporal / etc.)
-/// lands when there's a real consumer needing per-kind styling.
+/// Relation kind tag. v0a names a small starter set — cartography
+/// will own the full taxonomy (semantic / spatial / temporal /
+/// causal / etc.) once that crate exists. The substrate paints each
+/// kind with the host-configured `EdgeStyle`; default styles are
+/// chosen for visual distinctness, not semantic correctness.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[non_exhaustive]
 pub enum EdgeKind {
-    /// Generic uncategorized relation. v0a default.
+    /// Generic uncategorized relation.
     Plain,
+    /// "Points to" — link-like, directional reference. Default
+    /// rendering: cool blue.
+    Reference,
+    /// "Contains" — hierarchical / parent-child. Default rendering:
+    /// thicker green.
+    Containment,
+    /// "Annotates" — auxiliary note attached to its source. Default
+    /// rendering: warm amber, thinner.
+    Annotation,
 }
 
 /// A directed relation between two scene nodes.
@@ -543,6 +601,28 @@ mod tests {
             scene.hit_test(Point::new(50.0, 50.0)),
             Some(SceneHit::Node(id))
         );
+    }
+
+    #[test]
+    fn edge_style_defaults_per_kind() {
+        assert_eq!(EdgeStyle::default_for_kind(EdgeKind::Plain), EdgeStyle::PLAIN);
+        assert_eq!(
+            EdgeStyle::default_for_kind(EdgeKind::Reference),
+            EdgeStyle::REFERENCE
+        );
+        assert_eq!(
+            EdgeStyle::default_for_kind(EdgeKind::Containment),
+            EdgeStyle::CONTAINMENT
+        );
+        assert_eq!(
+            EdgeStyle::default_for_kind(EdgeKind::Annotation),
+            EdgeStyle::ANNOTATION
+        );
+        // Each kind has a distinct default.
+        assert_ne!(EdgeStyle::PLAIN, EdgeStyle::REFERENCE);
+        assert_ne!(EdgeStyle::PLAIN, EdgeStyle::CONTAINMENT);
+        assert_ne!(EdgeStyle::PLAIN, EdgeStyle::ANNOTATION);
+        assert_ne!(EdgeStyle::REFERENCE, EdgeStyle::CONTAINMENT);
     }
 
     #[test]
