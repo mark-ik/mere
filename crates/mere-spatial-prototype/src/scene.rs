@@ -12,7 +12,7 @@
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use kurbo::{Point, Size};
+use kurbo::{Point, Rect, Size};
 use mere_renderer_registry::{
     LodLevel, NodeContentKind, NodeIdentity, Placement, SceneNodeRef,
 };
@@ -244,6 +244,57 @@ impl SubstrateScene {
         }
         self.hit_test_node(point).map(SceneHit::Node)
     }
+
+    /// Axis-aligned bounding rectangle of all node bounds (in scene
+    /// coordinates), or `None` if the scene has no nodes.
+    ///
+    /// Each node contributes the AABB of its placement-transformed
+    /// tile rect; the result is the union. Edges are not included —
+    /// their geometry is always contained within the endpoint nodes'
+    /// bounds (lines between endpoint centers). Useful for fitting
+    /// the scene to a thumbnail target via [`crate::fit_camera`].
+    pub fn content_bounds(&self) -> Option<Rect> {
+        let mut iter = self.nodes.iter();
+        let first = iter.next()?;
+        let mut bounds = node_bounds(first);
+        for node in iter {
+            let b = node_bounds(node);
+            bounds = bounds.union(b);
+        }
+        Some(bounds)
+    }
+}
+
+/// Axis-aligned bounding rect of a single node's transformed tile.
+fn node_bounds(node: &SubstrateNode) -> Rect {
+    let t = node.placement.transform;
+    let w = node.size.width;
+    let h = node.size.height;
+    let corners = [
+        t * Point::new(0.0, 0.0),
+        t * Point::new(w, 0.0),
+        t * Point::new(0.0, h),
+        t * Point::new(w, h),
+    ];
+    let mut x0 = corners[0].x;
+    let mut x1 = corners[0].x;
+    let mut y0 = corners[0].y;
+    let mut y1 = corners[0].y;
+    for c in corners.iter().skip(1) {
+        if c.x < x0 {
+            x0 = c.x;
+        }
+        if c.x > x1 {
+            x1 = c.x;
+        }
+        if c.y < y0 {
+            y0 = c.y;
+        }
+        if c.y > y1 {
+            y1 = c.y;
+        }
+    }
+    Rect::new(x0, y0, x1, y1)
 }
 
 /// Default pixel tolerance for edge hit-tests. Roughly 2× the typical

@@ -20,13 +20,18 @@ use vello::peniko::{Brush, Color};
 use crate::external_texture::{CompositorError, ExternalTextureCompositor};
 use crate::scene::SubstrateScene;
 
-/// Substrate host: registry + per-frame dispatch.
+/// Substrate host: registry + per-frame dispatch + camera transform.
 pub struct SubstrateHost {
     registry: RendererRegistry,
     /// Cached producer handles for embedded-frame renderers. Keyed by
     /// node identity; value pairs the renderer id (so we can detect
     /// renderer swap-out) with the producer handle the renderer minted.
     producers: HashMap<NodeIdentity, (RendererId, ProducerHandle)>,
+    /// Scene-space → host-space transform. Default is identity (1:1
+    /// pixel mapping). Pan / zoom mutate this; per-frame dispatch
+    /// composes it onto each node's placement so renderers paint in
+    /// host pixels.
+    camera: Affine,
 }
 
 impl SubstrateHost {
@@ -34,11 +39,46 @@ impl SubstrateHost {
         Self {
             registry,
             producers: HashMap::new(),
+            camera: Affine::IDENTITY,
         }
     }
 
     pub fn with_default_registry() -> Self {
         Self::new(RendererRegistry::with_default_selector())
+    }
+
+    /// The current scene-space → host-space camera transform.
+    pub fn camera(&self) -> Affine {
+        self.camera
+    }
+
+    /// Replace the camera transform outright.
+    pub fn set_camera(&mut self, camera: Affine) {
+        self.camera = camera;
+    }
+
+    /// Reset to the identity camera (no zoom, no pan).
+    pub fn reset_camera(&mut self) {
+        self.camera = Affine::IDENTITY;
+    }
+
+    /// Translate the camera by `(dx, dy)` in host pixels. Composes
+    /// onto the existing camera (multiple pans accumulate).
+    pub fn pan(&mut self, dx: f64, dy: f64) {
+        self.camera = Affine::translate((dx, dy)) * self.camera;
+    }
+
+    /// Apply a uniform zoom of `factor` around `pivot` (in host
+    /// coordinates). `factor > 1.0` zooms in; `factor < 1.0` zooms
+    /// out. Composes onto the existing camera.
+    ///
+    /// Geometric identity: `T(pivot) * S(factor) * T(-pivot) * camera`,
+    /// which keeps the scene point currently under `pivot` stationary
+    /// while everything else expands away from it.
+    pub fn zoom_at(&mut self, pivot: Point, factor: f64) {
+        let p = Affine::translate((pivot.x, pivot.y));
+        let p_inv = Affine::translate((-pivot.x, -pivot.y));
+        self.camera = p * Affine::scale(factor) * p_inv * self.camera;
     }
 
     pub fn registry(&self) -> &RendererRegistry {
@@ -60,11 +100,12 @@ impl SubstrateHost {
         scale_factor: f64,
     ) -> FrameReport {
         let mut report = FrameReport::default();
+        let camera = self.camera;
         for node in scene.iter() {
             let node_ref = node.as_ref();
             let mut ctx = PaintCtx {
                 scene: target,
-                node_transform: node.placement.transform,
+                node_transform: camera * node.placement.transform,
                 scale_factor,
             };
             match self.registry.paint_node(&node_ref, &mut ctx) {
@@ -79,7 +120,7 @@ impl SubstrateHost {
                 }
             }
         }
-        report.edges_painted = paint_edges(scene, target, scale_factor);
+        report.edges_painted = paint_edges(scene, target, scale_factor, camera);
         report
     }
 
@@ -104,10 +145,19 @@ impl SubstrateHost {
         scale_factor: f64,
     ) -> FrameReport {
         let mut report = FrameReport::default();
+        let camera = self.camera;
         for node in scene.iter() {
-            self.dispatch_node(node.as_ref(), target, compositor, vello_renderer, scale_factor, &mut report);
+            self.dispatch_node(
+                node.as_ref(),
+                target,
+                compositor,
+                vello_renderer,
+                scale_factor,
+                camera,
+                &mut report,
+            );
         }
-        report.edges_painted = paint_edges(scene, target, scale_factor);
+        report.edges_painted = paint_edges(scene, target, scale_factor, camera);
         report
     }
 
@@ -118,6 +168,7 @@ impl SubstrateHost {
         compositor: &mut ExternalTextureCompositor,
         vello_renderer: &mut vello::Renderer,
         scale_factor: f64,
+        camera: Affine,
         report: &mut FrameReport,
     ) {
         let Some(id) = self.registry.select(&node_ref) else {
@@ -132,11 +183,12 @@ impl SubstrateHost {
             .get(&id)
             .expect("selector returned id not in registry")
             .composition_mode();
+        let effective_transform = camera * node_ref.placement.transform;
         match mode {
             CompositionMode::InScenePaint => {
                 let mut ctx = PaintCtx {
                     scene: target,
-                    node_transform: node_ref.placement.transform,
+                    node_transform: effective_transform,
                     scale_factor,
                 };
                 match self.registry.paint_node(&node_ref, &mut ctx) {
@@ -158,6 +210,7 @@ impl SubstrateHost {
                     target,
                     compositor,
                     vello_renderer,
+                    effective_transform,
                     report,
                 );
             }
@@ -174,6 +227,7 @@ impl SubstrateHost {
         target: &mut vello::Scene,
         compositor: &mut ExternalTextureCompositor,
         vello_renderer: &mut vello::Renderer,
+        effective_transform: Affine,
         report: &mut FrameReport,
     ) {
         let renderer = self
@@ -204,7 +258,7 @@ impl SubstrateHost {
         match compositor.compose(
             target,
             node_ref.identity,
-            node_ref.placement.transform,
+            effective_transform,
             node_ref.size,
         ) {
             Ok(()) => report.painted += 1,
@@ -316,21 +370,43 @@ impl SubstrateHost {
     ) -> Result<Option<InputDisposition>, DispatchError> {
         // Pointer routing targets nodes specifically — edges don't have
         // registry-resolved renderers to deliver_input through. Hosts
-        // wanting edge-click semantics call `scene.hit_test` (unified)
-        // and handle the `SceneHit::Edge` branch themselves.
-        let Some(target) = scene.hit_test_node(host_pos) else {
+        // wanting edge-click semantics call `host.scene_pos_from_host`
+        // and `scene.hit_test` themselves.
+        //
+        // Pull the click back through the camera into scene space, then
+        // hit-test. The pointer event's final position lands in
+        // tile-local coordinates via the (camera * placement) composite.
+        let scene_pos = self.scene_pos_from_host(host_pos);
+        let Some(target) = scene.hit_test_node(scene_pos) else {
             return Ok(None);
         };
         let Some(node) = scene.get(target) else {
             return Ok(None);
         };
-        let local_event = rewrite_pointer_position(event, host_pos, node.placement.transform);
+        let effective_transform = self.camera * node.placement.transform;
+        let local_event = rewrite_pointer_position(event, host_pos, effective_transform);
         self.deliver_input(scene, target, &local_event)
+    }
+
+    /// Map a host-space point back to scene-space via the camera's
+    /// inverse. Returns `host_pos` unchanged if the camera is
+    /// degenerate (zero determinant — typically a pinned-to-singularity
+    /// zoom-out edge case). Useful for callers that want to do their
+    /// own hit-test against scene-space geometry.
+    pub fn scene_pos_from_host(&self, host_pos: Point) -> Point {
+        if self.camera.determinant() == 0.0 {
+            return host_pos;
+        }
+        self.camera.inverse() * host_pos
     }
 }
 
 /// Paint substrate-owned relation edges into `target`. Edges paint
 /// over nodes; this runs after the per-node dispatch loop.
+///
+/// `camera` is applied to the line geometry via the stroke transform
+/// (so edges follow nodes under pan/zoom) and to the stroke width
+/// (so the line maintains apparent thickness as the camera zooms).
 ///
 /// v0a strokes a straight line between endpoint centers; label
 /// rendering and per-`EdgeKind` styling are deferred to a follow-up
@@ -340,9 +416,16 @@ impl SubstrateHost {
 ///
 /// Returns the count of edges actually drawn (skipped-endpoint edges
 /// don't count).
-fn paint_edges(scene: &SubstrateScene, target: &mut vello::Scene, scale_factor: f64) -> usize {
+fn paint_edges(
+    scene: &SubstrateScene,
+    target: &mut vello::Scene,
+    scale_factor: f64,
+    camera: Affine,
+) -> usize {
     // v0a styling: subtle stroke that reads clearly over both light
-    // and dark backgrounds; width scaled to the host's DPR.
+    // and dark backgrounds; width scaled to host DPR. Edge geometry
+    // is in scene coords; `camera` placed via the stroke transform
+    // moves edges with their endpoint nodes under pan/zoom.
     let edge_color = Color::from_rgba8(200, 200, 210, 200);
     let stroke = Stroke::new(2.0 * scale_factor.max(1.0));
     let brush = Brush::Solid(edge_color);
@@ -355,7 +438,7 @@ fn paint_edges(scene: &SubstrateScene, target: &mut vello::Scene, scale_factor: 
             continue;
         };
         let line = Line::new(a, b);
-        target.stroke(&stroke, Affine::IDENTITY, &brush, None, &line);
+        target.stroke(&stroke, camera, &brush, None, &line);
         drawn += 1;
     }
     drawn
@@ -623,6 +706,98 @@ mod tests {
             .deliver_input_at(&scene, kurbo::Point::new(5.0, 5.0), &event)
             .expect("dispatch ok");
         assert_eq!(disposition, None);
+    }
+
+    #[test]
+    fn camera_defaults_to_identity() {
+        let host = SubstrateHost::with_default_registry();
+        assert_eq!(host.camera(), Affine::IDENTITY);
+    }
+
+    #[test]
+    fn set_and_reset_camera() {
+        let mut host = SubstrateHost::with_default_registry();
+        host.set_camera(Affine::translate((100.0, 50.0)));
+        assert_eq!(host.camera(), Affine::translate((100.0, 50.0)));
+        host.reset_camera();
+        assert_eq!(host.camera(), Affine::IDENTITY);
+    }
+
+    #[test]
+    fn pan_translates_camera() {
+        let mut host = SubstrateHost::with_default_registry();
+        host.pan(10.0, 20.0);
+        host.pan(5.0, 5.0);
+        // Pans compose; total is (15, 25).
+        let mapped = host.camera() * kurbo::Point::new(0.0, 0.0);
+        assert_eq!(mapped, kurbo::Point::new(15.0, 25.0));
+    }
+
+    #[test]
+    fn zoom_at_keeps_pivot_stationary() {
+        let mut host = SubstrateHost::with_default_registry();
+        let pivot = kurbo::Point::new(200.0, 150.0);
+        host.zoom_at(pivot, 2.0);
+        // The pivot point should map to itself.
+        let mapped = host.camera() * pivot;
+        assert!((mapped.x - pivot.x).abs() < 1e-9);
+        assert!((mapped.y - pivot.y).abs() < 1e-9);
+        // A scene point 50 units left of the pivot expands to 100 units left.
+        let scene_pt = kurbo::Point::new(150.0, 150.0);
+        let mapped_pt = host.camera() * scene_pt;
+        assert!((mapped_pt.x - 100.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn scene_pos_from_host_inverts_camera() {
+        let mut host = SubstrateHost::with_default_registry();
+        host.set_camera(Affine::translate((100.0, 50.0)) * Affine::scale(2.0));
+        // Host (200, 100) → through camera⁻¹ → scene (50, 25).
+        let scene_pt = host.scene_pos_from_host(kurbo::Point::new(200.0, 100.0));
+        assert!((scene_pt.x - 50.0).abs() < 1e-9);
+        assert!((scene_pt.y - 25.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn deliver_input_at_respects_camera() {
+        use mere_renderer_registry::{ModifiersState, PointerButton, PointerEventKind};
+
+        let renderer = RecordingRenderer::for_kind("rec", NodeContentKind::DocumentTile);
+        let log = renderer.shared_input_log();
+        let mut registry = RendererRegistry::with_default_selector();
+        registry.register(Box::new(renderer)).unwrap();
+        let mut host = SubstrateHost::new(registry);
+        // Pan the camera so scene-space (0, 0) sits at host-space (200, 100).
+        host.set_camera(Affine::translate((200.0, 100.0)));
+
+        let mut scene = SubstrateScene::new();
+        let id = scene.insert(SubstrateNode::new(
+            NodeContentKind::DocumentTile,
+            Placement::IDENTITY, // node at scene origin
+            Size::new(80.0, 40.0),
+        ));
+
+        let event = InputEvent::Pointer {
+            position: kurbo::Point::ZERO,
+            kind: PointerEventKind::Down(PointerButton::Primary),
+            modifiers: ModifiersState::default(),
+        };
+        // Click at host-space (220, 110), which maps to scene-space
+        // (20, 10) — inside the panned node at tile-local (20, 10).
+        let disposition = host
+            .deliver_input_at(&scene, kurbo::Point::new(220.0, 110.0), &event)
+            .expect("dispatch ok");
+        assert_eq!(disposition, Some(InputDisposition::Consumed));
+        let records = log.borrow();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].0, id);
+        match &records[0].1 {
+            InputEvent::Pointer { position, .. } => {
+                assert!((position.x - 20.0).abs() < 1e-9, "x tile-local");
+                assert!((position.y - 10.0).abs() < 1e-9, "y tile-local");
+            }
+            _ => panic!("expected pointer"),
+        }
     }
 
     #[test]

@@ -54,6 +54,7 @@ mod host;
 mod recording_renderer;
 mod scene;
 mod solid_rect_renderer;
+mod thumbnail;
 
 pub use accessibility::{ROOT_NODE_ID, project_scene};
 pub use external_texture::{CompositorError, ExternalTextureCompositor};
@@ -64,6 +65,7 @@ pub use scene::{
     SubstrateScene,
 };
 pub use solid_rect_renderer::SolidRectRenderer;
+pub use thumbnail::{ThumbnailFit, fit_camera};
 
 // Re-export the registry so callers don't need a separate dep on it to
 // name the trait types they implement.
