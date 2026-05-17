@@ -35,8 +35,11 @@
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
 use std::collections::HashMap;
+use std::io;
+use std::path::Path;
 
 use kurbo::{Affine, Size};
+use mere_host_runtime::view_intent_store::{load_view_intent, save_view_intent};
 use mere_host_runtime::{CameraSnapshot, TileManager, ViewIntent};
 use mere_kernel::graph::NodeKey;
 use mere_renderer_registry::{NodeContentKind, NodeIdentity, Placement};
@@ -192,6 +195,47 @@ fn camera_snapshot_for_save(camera: Affine) -> Option<CameraSnapshot> {
         None
     } else {
         Some(snapshot)
+    }
+}
+
+impl MereHostApp {
+    /// Persist the substrate's current camera (and any future
+    /// substrate-side view state) to disk at
+    /// `<session_dir>/views/<frame_id_str>/<pane_id>.json`.
+    ///
+    /// Returns `Ok(false)` when the snapshot would be empty (identity
+    /// camera + no hidden relations) — the save path skips writing
+    /// to keep the on-disk tree clean. Returns `Ok(true)` when a
+    /// file was written.
+    pub fn save_substrate_view_intent(
+        &self,
+        session_dir: &Path,
+        frame_id_str: &str,
+        pane_id: u64,
+    ) -> io::Result<bool> {
+        let intent = self.current_view_intent();
+        if intent.is_empty() {
+            return Ok(false);
+        }
+        save_view_intent(session_dir, frame_id_str, pane_id, &intent)?;
+        Ok(true)
+    }
+
+    /// Load a per-pane view-intent file from disk and apply it to
+    /// the substrate. Missing file → `Ok(false)` (fresh pane, host
+    /// keeps its defaults); applied → `Ok(true)`. Malformed JSON
+    /// surfaces as `Err`.
+    pub fn load_substrate_view_intent(
+        &mut self,
+        session_dir: &Path,
+        frame_id_str: &str,
+        pane_id: u64,
+    ) -> io::Result<bool> {
+        let Some(intent) = load_view_intent(session_dir, frame_id_str, pane_id)? else {
+            return Ok(false);
+        };
+        self.apply_view_intent(&intent);
+        Ok(true)
     }
 }
 
@@ -360,6 +404,71 @@ mod tests {
         };
         app.apply_view_intent(&intent);
         assert_eq!(app.substrate.camera(), camera);
+    }
+
+    #[test]
+    fn save_then_load_round_trips_camera_through_disk() {
+        // Per-test temp directory under cargo's target dir — avoids
+        // depending on `tempfile` and survives parallel test runs by
+        // namespacing on a fresh UUID per test invocation.
+        let test_root = std::env::temp_dir()
+            .join("mere-host-substrate-tests")
+            .join(uuid::Uuid::new_v4().to_string());
+        let session_dir = test_root.join("session-1");
+        let frame_id_str = "frame-a";
+        let pane_id: u64 = 42;
+
+        let mut app = MereHostApp::new();
+        let camera = kurbo::Affine::translate((123.0, -45.5)) * kurbo::Affine::scale(0.75);
+        app.substrate.set_camera(camera);
+
+        // Save → file should be written.
+        let saved = app
+            .save_substrate_view_intent(&session_dir, frame_id_str, pane_id)
+            .expect("save ok");
+        assert!(saved, "non-identity camera should write a file");
+
+        // Build a fresh app, load → camera restored.
+        let mut app2 = MereHostApp::new();
+        assert_eq!(app2.substrate.camera(), kurbo::Affine::IDENTITY);
+        let loaded = app2
+            .load_substrate_view_intent(&session_dir, frame_id_str, pane_id)
+            .expect("load ok");
+        assert!(loaded);
+        assert_eq!(app2.substrate.camera(), camera);
+
+        // Cleanup.
+        let _ = std::fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn save_identity_camera_skips_file() {
+        let test_root = std::env::temp_dir()
+            .join("mere-host-substrate-tests")
+            .join(uuid::Uuid::new_v4().to_string());
+        let session_dir = test_root.join("session-2");
+        let app = MereHostApp::new();
+        let saved = app
+            .save_substrate_view_intent(&session_dir, "frame-a", 1)
+            .expect("save ok");
+        assert!(!saved, "identity camera should not write");
+        // Cleanup (no file was created, but the dir might exist if
+        // mere-host-runtime created intermediates — defensive cleanup).
+        let _ = std::fs::remove_dir_all(&test_root);
+    }
+
+    #[test]
+    fn load_missing_view_intent_is_a_clean_miss() {
+        let test_root = std::env::temp_dir()
+            .join("mere-host-substrate-tests")
+            .join(uuid::Uuid::new_v4().to_string());
+        let session_dir = test_root.join("nonexistent-session");
+        let mut app = MereHostApp::new();
+        let loaded = app
+            .load_substrate_view_intent(&session_dir, "frame-z", 99)
+            .expect("missing file is not an error");
+        assert!(!loaded);
+        assert_eq!(app.substrate.camera(), kurbo::Affine::IDENTITY);
     }
 
     #[test]

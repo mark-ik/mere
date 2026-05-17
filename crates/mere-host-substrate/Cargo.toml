@@ -24,6 +24,9 @@ kurbo.workspace = true
 # `EngineDocument` + `DocumentProvenance` / `DocumentTrustState`.
 inker = { path = "../inker" }
 petgraph = "0.8"
+# Per-test temp-directory namespacing for the view-intent disk
+# round-trip tests.
+uuid = { workspace = true }
 
 [lints]
 workspace = true
