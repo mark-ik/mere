@@ -5309,6 +5309,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mere-host-substrate"
+version = "0.0.1"
+dependencies = [
+ "inker",
+ "kurbo",
+ "mere-host-runtime",
+ "mere-kernel",
+ "mere-renderer-registry",
+ "mere-spatial-prototype",
+ "petgraph",
+]
+
+[[package]]
 name = "mere-identity"
 version = "0.0.1"
 dependencies = [
@@ -5364,6 +5377,7 @@ dependencies = [
 name = "mere-renderer-registry"
 version = "0.0.1"
 dependencies = [
+ "accesskit",
  "kurbo",
  "mere-renderer-registry-types",
  "vello",
@@ -5381,6 +5395,7 @@ dependencies = [
 name = "mere-spatial-prototype"
 version = "0.0.1"
 dependencies = [
+ "accesskit",
  "kurbo",
  "mere-renderer-registry",
  "png",

@@ -1,0 +1,29 @@
+[package]
+name = "mere-host-substrate"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+rust-version = "1.92.0"
+description = "Substrate-as-host integration crate: bridges `mere-spatial-prototype` (substrate scene + dispatch + camera) to `mere-host-runtime` (session manifest + tile manager + action bus). The first concrete `mere-host/<kind>` host that consumes both the substrate IR and the durable session state."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+mere-spatial-prototype = { path = "../mere-spatial-prototype" }
+mere-renderer-registry = { path = "../mere-renderer-registry" }
+mere-host-runtime = { path = "../mere-host-runtime" }
+mere-kernel = { path = "../mere-kernel" }
+
+kurbo.workspace = true
+
+[dev-dependencies]
+# Tile-projection tests construct fake `EngineDocument`s to drive
+# `TileManager::open_or_focus`. `inker` is the canonical home of
+# `EngineDocument` + `DocumentProvenance` / `DocumentTrustState`.
+inker = { path = "../inker" }
+petgraph = "0.8"
+
+[lints]
+workspace = true
