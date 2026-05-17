@@ -249,14 +249,15 @@ impl ApplicationHandler for App {
                     };
                     let dispatch = state.host.deliver_input_at(&state.scene, cursor, &event);
                     match (dispatch, state.scene.hit_test(cursor)) {
-                        (Ok(Some(d)), Some(id)) => eprintln!(
-                            "click @ ({:.1}, {:.1}) → node {} ({:?})",
-                            cursor.x,
-                            cursor.y,
-                            id.as_u64(),
-                            d
+                        (Ok(Some(d)), Some(hit)) => eprintln!(
+                            "click @ ({:.1}, {:.1}) → {:?} ({:?})",
+                            cursor.x, cursor.y, hit, d
                         ),
-                        (Ok(None), _) => {
+                        (Ok(None), Some(hit)) => eprintln!(
+                            "click @ ({:.1}, {:.1}) → {:?} (no dispatch)",
+                            cursor.x, cursor.y, hit
+                        ),
+                        (Ok(None), None) => {
                             eprintln!("click @ ({:.1}, {:.1}) → no hit", cursor.x, cursor.y)
                         }
                         (Err(e), _) => eprintln!("click dispatch error: {e}"),

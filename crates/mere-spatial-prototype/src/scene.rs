@@ -1,12 +1,16 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! `SubstrateScene` — flat list of placed scene nodes.
+//! `SubstrateScene` — flat list of placed scene nodes + relation edges.
 //!
-//! v0a holds nodes in insertion order; no edges, no spatial index. The IR
+//! v0a holds nodes and edges in insertion order; no spatial index. The IR
 //! brief's full property set (placement / embeds / typed relations / LOD /
-//! identity) is named here for the bits it covers; the rest is Phase-4+
-//! work tracked in the adoption plan.
+//! identity) is reflected for the bits this layer covers; sub-region
+//! refinement / LOD promotion / persistence keys are renderer + cartography
+//! concerns above this layer.
+
+use std::num::NonZeroU64;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use kurbo::{Point, Size};
 use mere_renderer_registry::{
@@ -47,10 +51,90 @@ impl SubstrateNode {
     }
 }
 
-/// Flat substrate scene. Nodes paint in insertion order (back-to-front).
+/// Stable per-edge identity. Disjoint from `NodeIdentity` namespace so
+/// scene-level hit-test can distinguish at the type level.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct EdgeIdentity(NonZeroU64);
+
+impl EdgeIdentity {
+    pub fn next() -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        Self(NonZeroU64::new(n).expect("edge identity counter never zero"))
+    }
+
+    pub fn as_u64(self) -> u64 {
+        self.0.get()
+    }
+}
+
+/// Relation kind tag. v0a is a minimal placeholder; the renderer-registry
+/// brief's full relation taxonomy (semantic / spatial / temporal / etc.)
+/// lands when there's a real consumer needing per-kind styling.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum EdgeKind {
+    /// Generic uncategorized relation. v0a default.
+    Plain,
+}
+
+/// A directed relation between two scene nodes.
+///
+/// v0a edges are pure data: identity + endpoints + kind + optional label.
+/// Rendering is substrate-emitted (a straight line between endpoint
+/// centers); hit-test uses line-segment proximity. The IR brief §10.1
+/// leaves "edges as content vs paint" open — this is the paint
+/// interpretation; a content interpretation (edges as
+/// `NodeContentKind::EdgeRendering` nodes with their own renderer)
+/// remains compatible with this data model since edges aren't
+/// registered through the renderer registry.
+#[derive(Clone, Debug)]
+pub struct RelationEdge {
+    pub identity: EdgeIdentity,
+    pub from: NodeIdentity,
+    pub to: NodeIdentity,
+    pub kind: EdgeKind,
+    /// Optional human-readable label. Rendering of the label string is
+    /// deferred — v0a's substrate-side edge painter only draws the line
+    /// geometry. When parley wiring lands in a downstream consumer,
+    /// labels can be positioned at the edge midpoint.
+    pub label: Option<String>,
+}
+
+impl RelationEdge {
+    pub fn new(from: NodeIdentity, to: NodeIdentity) -> Self {
+        Self {
+            identity: EdgeIdentity::next(),
+            from,
+            to,
+            kind: EdgeKind::Plain,
+            label: None,
+        }
+    }
+
+    pub fn with_kind(mut self, kind: EdgeKind) -> Self {
+        self.kind = kind;
+        self
+    }
+
+    pub fn with_label(mut self, label: impl Into<String>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+}
+
+/// The thing a hit-test resolved to.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SceneHit {
+    Node(NodeIdentity),
+    Edge(EdgeIdentity),
+}
+
+/// Flat substrate scene. Nodes paint in insertion order (back-to-front);
+/// edges paint on top of nodes in their own insertion order.
 #[derive(Default)]
 pub struct SubstrateScene {
     nodes: Vec<SubstrateNode>,
+    edges: Vec<RelationEdge>,
 }
 
 impl SubstrateScene {
@@ -83,24 +167,45 @@ impl SubstrateScene {
         self.nodes.is_empty()
     }
 
-    /// Return the identity of the topmost node containing `point`, or
-    /// `None` if no node does.
-    ///
-    /// Walks nodes in reverse-paint order (front-to-back) and returns
-    /// the first hit — the renderer-registry contract's spatial-input
-    /// router behavior. `point` is in the scene's coordinate space
-    /// (same as the placement transforms in the scene), typically
-    /// host-window logical pixels.
+    /// Insert a relation edge; returns its identity.
+    pub fn insert_edge(&mut self, edge: RelationEdge) -> EdgeIdentity {
+        let id = edge.identity;
+        self.edges.push(edge);
+        id
+    }
+
+    /// Look up an edge by identity.
+    pub fn get_edge(&self, identity: EdgeIdentity) -> Option<&RelationEdge> {
+        self.edges.iter().find(|e| e.identity == identity)
+    }
+
+    /// Iterate edges in paint order (insertion order).
+    pub fn iter_edges(&self) -> impl Iterator<Item = &RelationEdge> {
+        self.edges.iter()
+    }
+
+    pub fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
+
+    /// Compute the scene-space endpoint center for an edge endpoint.
+    /// Returns `None` if the node isn't in the scene.
+    pub(crate) fn endpoint_center(&self, node_id: NodeIdentity) -> Option<Point> {
+        let node = self.get(node_id)?;
+        let local_center = Point::new(node.size.width / 2.0, node.size.height / 2.0);
+        Some(node.placement.transform * local_center)
+    }
+
+    /// Topmost node containing `point`, or `None`. Renderer-registry
+    /// spatial-input router behavior: walks nodes in reverse-paint
+    /// order (front-to-back) and returns the first hit.
     ///
     /// Coarse hit-test only: a node is hit if `point`, mapped back into
     /// the node's local coordinates via the inverse of its placement
-    /// transform, lies within `[0, size.width] × [0, size.height]`. The
-    /// renderer-registry brief leaves sub-region refinement
-    /// (`RendererCapabilities::hit_testable_subregions`) to the
-    /// resolved renderer's own input handling — this method returns
-    /// `Some(identity)` and the host hands the event to that renderer
-    /// to refine if needed.
-    pub fn hit_test(&self, point: Point) -> Option<NodeIdentity> {
+    /// transform, lies within `[0, size.width] × [0, size.height]`.
+    /// Sub-region refinement (`RendererCapabilities::hit_testable_subregions`)
+    /// happens inside the resolved renderer.
+    pub fn hit_test_node(&self, point: Point) -> Option<NodeIdentity> {
         for node in self.nodes.iter().rev() {
             if node_contains_point(node, point) {
                 return Some(node.identity);
@@ -108,6 +213,62 @@ impl SubstrateScene {
         }
         None
     }
+
+    /// Topmost edge whose line geometry passes within `tolerance` of
+    /// `point` (scene-space pixels), or `None`. Walks edges in
+    /// reverse-paint order; ignores edges whose endpoints aren't in the
+    /// scene.
+    pub fn hit_test_edge(&self, point: Point, tolerance: f64) -> Option<EdgeIdentity> {
+        for edge in self.edges.iter().rev() {
+            let (Some(a), Some(b)) =
+                (self.endpoint_center(edge.from), self.endpoint_center(edge.to))
+            else {
+                continue;
+            };
+            if distance_to_segment(point, a, b) <= tolerance {
+                return Some(edge.identity);
+            }
+        }
+        None
+    }
+
+    /// Unified hit-test: returns whatever was hit at `point` —
+    /// `Edge(_)` if the point is within `edge_tolerance` of an edge's
+    /// line geometry; otherwise `Node(_)` if the point is within a
+    /// node; otherwise `None`. Edges win over nodes because they paint
+    /// on top; consumers wanting node-first dispatch should call
+    /// [`Self::hit_test_node`] and [`Self::hit_test_edge`] separately.
+    pub fn hit_test(&self, point: Point) -> Option<SceneHit> {
+        if let Some(edge) = self.hit_test_edge(point, DEFAULT_EDGE_HIT_TOLERANCE) {
+            return Some(SceneHit::Edge(edge));
+        }
+        self.hit_test_node(point).map(SceneHit::Node)
+    }
+}
+
+/// Default pixel tolerance for edge hit-tests. Roughly 2× the typical
+/// stroke width to give comfortable target acquisition on touch and
+/// mouse alike.
+pub const DEFAULT_EDGE_HIT_TOLERANCE: f64 = 6.0;
+
+/// Distance from `p` to segment `[a, b]`.
+fn distance_to_segment(p: Point, a: Point, b: Point) -> f64 {
+    let ab_x = b.x - a.x;
+    let ab_y = b.y - a.y;
+    let len_sq = ab_x * ab_x + ab_y * ab_y;
+    if len_sq <= f64::EPSILON {
+        // Degenerate segment: distance to the single point.
+        let dx = p.x - a.x;
+        let dy = p.y - a.y;
+        return (dx * dx + dy * dy).sqrt();
+    }
+    let t = ((p.x - a.x) * ab_x + (p.y - a.y) * ab_y) / len_sq;
+    let t_clamped = t.clamp(0.0, 1.0);
+    let proj_x = a.x + t_clamped * ab_x;
+    let proj_y = a.y + t_clamped * ab_y;
+    let dx = p.x - proj_x;
+    let dy = p.y - proj_y;
+    (dx * dx + dy * dy).sqrt()
 }
 
 /// Test whether `point` (in scene coords) falls inside `node`'s
@@ -173,7 +334,7 @@ mod tests {
     #[test]
     fn hit_test_empty_scene_returns_none() {
         let scene = SubstrateScene::new();
-        assert_eq!(scene.hit_test(Point::new(10.0, 10.0)), None);
+        assert_eq!(scene.hit_test_node(Point::new(10.0, 10.0)), None);
     }
 
     #[test]
@@ -185,9 +346,9 @@ mod tests {
             Size::new(100.0, 80.0),
         ));
         // Inside the rect (45, 70) is at (5, 10) tile-local.
-        assert_eq!(scene.hit_test(Point::new(45.0, 70.0)), Some(id));
+        assert_eq!(scene.hit_test_node(Point::new(45.0, 70.0)), Some(id));
         // Corner (139.99, 139.99) is inside.
-        assert_eq!(scene.hit_test(Point::new(139.99, 139.99)), Some(id));
+        assert_eq!(scene.hit_test_node(Point::new(139.99, 139.99)), Some(id));
     }
 
     #[test]
@@ -199,13 +360,13 @@ mod tests {
             Size::new(100.0, 80.0),
         ));
         // Left of rect.
-        assert_eq!(scene.hit_test(Point::new(20.0, 70.0)), None);
+        assert_eq!(scene.hit_test_node(Point::new(20.0, 70.0)), None);
         // Above rect.
-        assert_eq!(scene.hit_test(Point::new(50.0, 30.0)), None);
+        assert_eq!(scene.hit_test_node(Point::new(50.0, 30.0)), None);
         // Below rect.
-        assert_eq!(scene.hit_test(Point::new(50.0, 200.0)), None);
+        assert_eq!(scene.hit_test_node(Point::new(50.0, 200.0)), None);
         // Right of rect.
-        assert_eq!(scene.hit_test(Point::new(200.0, 70.0)), None);
+        assert_eq!(scene.hit_test_node(Point::new(200.0, 70.0)), None);
     }
 
     #[test]
@@ -222,7 +383,120 @@ mod tests {
             Size::new(100.0, 100.0),
         ));
         // (100, 100) is inside both — should return the topmost (last inserted).
-        assert_eq!(scene.hit_test(Point::new(100.0, 100.0)), Some(over));
+        assert_eq!(scene.hit_test_node(Point::new(100.0, 100.0)), Some(over));
+    }
+
+    #[test]
+    fn insert_edge_returns_unique_identity() {
+        let mut scene = SubstrateScene::new();
+        let a = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::IDENTITY,
+            Size::new(20.0, 20.0),
+        ));
+        let b = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::translate(100.0, 0.0),
+            Size::new(20.0, 20.0),
+        ));
+        let e1 = scene.insert_edge(RelationEdge::new(a, b));
+        let e2 = scene.insert_edge(RelationEdge::new(b, a));
+        assert_ne!(e1, e2);
+        assert_eq!(scene.edge_count(), 2);
+    }
+
+    #[test]
+    fn hit_test_edge_finds_line_between_nodes() {
+        let mut scene = SubstrateScene::new();
+        let a = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::translate(0.0, 0.0),
+            Size::new(20.0, 20.0),
+        ));
+        let b = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::translate(100.0, 0.0),
+            Size::new(20.0, 20.0),
+        ));
+        // Endpoint centers: (10, 10) and (110, 10). Line lies along y=10.
+        let e = scene.insert_edge(RelationEdge::new(a, b));
+        // Point on the line, well between nodes.
+        assert_eq!(scene.hit_test_edge(Point::new(60.0, 10.0), 1.0), Some(e));
+        // Point just off the line (within tolerance).
+        assert_eq!(scene.hit_test_edge(Point::new(60.0, 14.0), 5.0), Some(e));
+        // Point far from the line.
+        assert_eq!(scene.hit_test_edge(Point::new(60.0, 50.0), 5.0), None);
+    }
+
+    #[test]
+    fn hit_test_edge_skips_when_endpoint_missing() {
+        let mut scene = SubstrateScene::new();
+        let a = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::IDENTITY,
+            Size::new(20.0, 20.0),
+        ));
+        // Endpoint `b` is never inserted into the scene.
+        let phantom = NodeIdentity::next();
+        scene.insert_edge(RelationEdge::new(a, phantom));
+        assert_eq!(scene.hit_test_edge(Point::new(50.0, 10.0), 100.0), None);
+    }
+
+    #[test]
+    fn unified_hit_test_prefers_edge_over_node_when_within_tolerance() {
+        let mut scene = SubstrateScene::new();
+        let a = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::translate(0.0, 0.0),
+            Size::new(200.0, 200.0),
+        ));
+        let b = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::translate(300.0, 0.0),
+            Size::new(200.0, 200.0),
+        ));
+        let e = scene.insert_edge(RelationEdge::new(a, b));
+        // (250, 100) is on the line between endpoint centers
+        // ((100, 100) → (400, 100)) and also inside neither node's
+        // bounds. Should hit the edge.
+        let hit = scene.hit_test(Point::new(250.0, 100.0));
+        assert_eq!(hit, Some(SceneHit::Edge(e)));
+    }
+
+    #[test]
+    fn unified_hit_test_falls_back_to_node_when_no_edge() {
+        let mut scene = SubstrateScene::new();
+        let id = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::translate(40.0, 40.0),
+            Size::new(100.0, 100.0),
+        ));
+        assert_eq!(
+            scene.hit_test(Point::new(50.0, 50.0)),
+            Some(SceneHit::Node(id))
+        );
+    }
+
+    #[test]
+    fn relation_edge_builder_methods() {
+        let mut scene = SubstrateScene::new();
+        let a = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::IDENTITY,
+            Size::new(10.0, 10.0),
+        ));
+        let b = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::translate(50.0, 0.0),
+            Size::new(10.0, 10.0),
+        ));
+        let edge = RelationEdge::new(a, b)
+            .with_kind(EdgeKind::Plain)
+            .with_label("connects");
+        let id = scene.insert_edge(edge);
+        let stored = scene.get_edge(id).unwrap();
+        assert_eq!(stored.kind, EdgeKind::Plain);
+        assert_eq!(stored.label.as_deref(), Some("connects"));
     }
 
     #[test]
@@ -240,8 +514,8 @@ mod tests {
             content_kind: NodeContentKind::Panel,
         });
         // (100, 70) → tile-local (25, 10) under inverse → inside.
-        assert_eq!(scene.hit_test(Point::new(100.0, 70.0)), Some(id));
+        assert_eq!(scene.hit_test_node(Point::new(100.0, 70.0)), Some(id));
         // (250, 70) → tile-local (100, 10) → outside (width = 80).
-        assert_eq!(scene.hit_test(Point::new(250.0, 70.0)), None);
+        assert_eq!(scene.hit_test_node(Point::new(250.0, 70.0)), None);
     }
 }

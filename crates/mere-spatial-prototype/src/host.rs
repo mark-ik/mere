@@ -10,11 +10,12 @@
 
 use std::collections::HashMap;
 
-use kurbo::{Affine, Point};
+use kurbo::{Affine, Line, Point, Stroke};
 use mere_renderer_registry::{
     CompositionMode, DispatchError, InputDisposition, InputEvent, NodeIdentity, PaintCtx,
     PaintError, ProducerHandle, RendererId, RendererRegistry,
 };
+use vello::peniko::{Brush, Color};
 
 use crate::external_texture::{CompositorError, ExternalTextureCompositor};
 use crate::scene::SubstrateScene;
@@ -78,6 +79,7 @@ impl SubstrateHost {
                 }
             }
         }
+        report.edges_painted = paint_edges(scene, target, scale_factor);
         report
     }
 
@@ -105,6 +107,7 @@ impl SubstrateHost {
         for node in scene.iter() {
             self.dispatch_node(node.as_ref(), target, compositor, vello_renderer, scale_factor, &mut report);
         }
+        report.edges_painted = paint_edges(scene, target, scale_factor);
         report
     }
 
@@ -311,7 +314,11 @@ impl SubstrateHost {
         host_pos: Point,
         event: &InputEvent,
     ) -> Result<Option<InputDisposition>, DispatchError> {
-        let Some(target) = scene.hit_test(host_pos) else {
+        // Pointer routing targets nodes specifically — edges don't have
+        // registry-resolved renderers to deliver_input through. Hosts
+        // wanting edge-click semantics call `scene.hit_test` (unified)
+        // and handle the `SceneHit::Edge` branch themselves.
+        let Some(target) = scene.hit_test_node(host_pos) else {
             return Ok(None);
         };
         let Some(node) = scene.get(target) else {
@@ -320,6 +327,38 @@ impl SubstrateHost {
         let local_event = rewrite_pointer_position(event, host_pos, node.placement.transform);
         self.deliver_input(scene, target, &local_event)
     }
+}
+
+/// Paint substrate-owned relation edges into `target`. Edges paint
+/// over nodes; this runs after the per-node dispatch loop.
+///
+/// v0a strokes a straight line between endpoint centers; label
+/// rendering and per-`EdgeKind` styling are deferred to a follow-up
+/// (needs parley wiring for text + a real consumer to drive the
+/// per-kind color palette). Endpoints not in the scene cause the edge
+/// to be silently skipped.
+///
+/// Returns the count of edges actually drawn (skipped-endpoint edges
+/// don't count).
+fn paint_edges(scene: &SubstrateScene, target: &mut vello::Scene, scale_factor: f64) -> usize {
+    // v0a styling: subtle stroke that reads clearly over both light
+    // and dark backgrounds; width scaled to the host's DPR.
+    let edge_color = Color::from_rgba8(200, 200, 210, 200);
+    let stroke = Stroke::new(2.0 * scale_factor.max(1.0));
+    let brush = Brush::Solid(edge_color);
+    let mut drawn = 0;
+    for edge in scene.iter_edges() {
+        let (Some(a), Some(b)) = (
+            scene.endpoint_center(edge.from),
+            scene.endpoint_center(edge.to),
+        ) else {
+            continue;
+        };
+        let line = Line::new(a, b);
+        target.stroke(&stroke, Affine::IDENTITY, &brush, None, &line);
+        drawn += 1;
+    }
+    drawn
 }
 
 /// For `InputEvent::Pointer`, replace the position with
@@ -378,6 +417,10 @@ pub struct FrameReport {
     /// out-of-band OS surfaces dispatched through a different path
     /// (not yet wired in v0a).
     pub overlay_skipped: usize,
+    /// Edges drawn by the substrate's paint pass. Edges paint over
+    /// nodes; this count is informational (no per-edge failure modes
+    /// today — edges with missing endpoints silently skip).
+    pub edges_painted: usize,
 }
 
 impl FrameReport {

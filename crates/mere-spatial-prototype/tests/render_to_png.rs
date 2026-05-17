@@ -30,7 +30,9 @@ use std::sync::mpsc;
 
 use kurbo::Size;
 use mere_renderer_registry::{NodeContentKind, Placement, RendererRegistry};
-use mere_spatial_prototype::{SolidRectRenderer, SubstrateHost, SubstrateNode, SubstrateScene};
+use mere_spatial_prototype::{
+    RelationEdge, SolidRectRenderer, SubstrateHost, SubstrateNode, SubstrateScene,
+};
 use vello::peniko::Color;
 use vello::{AaConfig, AaSupport, RenderParams, RendererOptions};
 
@@ -90,17 +92,20 @@ fn build_scene() -> SubstrateScene {
         Size::new(WIDTH as f64, HEIGHT as f64),
     ));
     // Red panel at (40, 40) sized 100×60.
-    scene.insert(SubstrateNode::new(
+    let panel_id = scene.insert(SubstrateNode::new(
         NodeContentKind::Panel,
         Placement::translate(40.0, 40.0),
         Size::new(100.0, 60.0),
     ));
     // Green doctile at (140, 130) sized 90×90.
-    scene.insert(SubstrateNode::new(
+    let doctile_id = scene.insert(SubstrateNode::new(
         NodeContentKind::DocumentTile,
         Placement::translate(140.0, 130.0),
         Size::new(90.0, 90.0),
     ));
+    // Edge connecting the panel and doctile — exercises the
+    // substrate-side edge paint pass (drawn over the node fill).
+    scene.insert_edge(RelationEdge::new(panel_id, doctile_id).with_label("relates"));
     scene
 }
 
@@ -217,6 +222,7 @@ fn substrate_renders_solid_rect_scene_to_png() {
     let mut target_scene = vello::Scene::new();
     let report = host.paint_scene(&scene, &mut target_scene, 1.0);
     assert_eq!(report.painted, 3, "all three nodes painted");
+    assert_eq!(report.edges_painted, 1, "the panel→doctile edge painted");
     assert!(report.is_clean(), "frame report clean: {:?}", report);
 
     // 2. Vello rasterizes the scene into a wgpu texture.
@@ -271,8 +277,9 @@ fn substrate_renders_solid_rect_scene_to_png() {
 
     // Backdrop pixel — well outside any panel.
     assert_close(pixel_at(&rgba, 10, 10), [20, 30, 60, 255], 8, "backdrop");
-    // Inside red panel (panel at 40..140, 40..100; sample at center).
-    assert_close(pixel_at(&rgba, 90, 70), [220, 80, 80, 255], 8, "red panel center");
-    // Inside green doctile (140..230, 130..220; sample at center).
-    assert_close(pixel_at(&rgba, 185, 175), [80, 200, 100, 255], 8, "green doctile center");
+    // Inside red panel — sample near a corner, well off the diagonal edge
+    // that goes from the panel's center (90, 70) to the doctile's center.
+    assert_close(pixel_at(&rgba, 50, 50), [220, 80, 80, 255], 8, "red panel corner");
+    // Inside green doctile — same corner-sample pattern.
+    assert_close(pixel_at(&rgba, 220, 210), [80, 200, 100, 255], 8, "green doctile corner");
 }
