@@ -48,12 +48,14 @@
 #![warn(unused_crate_dependencies)]
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
+mod accessibility;
 mod external_texture;
 mod host;
 mod recording_renderer;
 mod scene;
 mod solid_rect_renderer;
 
+pub use accessibility::{ROOT_NODE_ID, project_scene};
 pub use external_texture::{CompositorError, ExternalTextureCompositor};
 pub use host::{FrameReport, SubstrateHost};
 pub use recording_renderer::{PaintRecord, RecordingRenderer};

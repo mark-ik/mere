@@ -21,6 +21,9 @@ vello.workspace = true
 # `wgpu::Texture`. Vello pulls wgpu transitively but `unused_crate_dependencies`
 # requires direct declaration for crates we name in our own API.
 wgpu.workspace = true
+# AccessKit projection: substrate scene → accesskit::TreeUpdate per
+# IR brief §5's `accessibility-tree-emit` system.
+accesskit.workspace = true
 
 [lints]
 workspace = true
