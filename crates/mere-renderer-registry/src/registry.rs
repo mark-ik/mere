@@ -19,7 +19,8 @@
 use std::collections::HashMap;
 
 use mere_renderer_registry_types::{
-    InputDisposition, InputEvent, NodeContentKind, RendererId, SceneNodeRef,
+    DiagnosticEvent, DiagnosticSink, InputDisposition, InputEvent, NodeContentKind, NoopSink,
+    RendererId, RouteDegradedReason, SceneNodeRef,
 };
 
 use crate::paint::{PaintCtx, PaintResult};
@@ -43,27 +44,57 @@ pub struct RendererRegistry {
     renderers: HashMap<RendererId, Box<dyn NodeRenderer>>,
     by_kind: HashMap<NodeContentKind, Vec<RendererId>>,
     selector: Box<dyn RendererSelector>,
+    /// Diagnostic sink. Defaults to a NoopSink; hosts wanting
+    /// telemetry / action-bus emission install a real sink via
+    /// [`Self::set_sink`] or [`Self::with_sink`].
+    sink: Box<dyn DiagnosticSink>,
 }
 
 impl RendererRegistry {
-    /// Construct an empty registry with a custom selector.
+    /// Construct an empty registry with a custom selector and the
+    /// default no-op diagnostic sink.
     pub fn new(selector: Box<dyn RendererSelector>) -> Self {
         Self {
             renderers: HashMap::new(),
             by_kind: HashMap::new(),
             selector,
+            sink: Box::new(NoopSink),
         }
     }
 
-    /// Construct an empty registry with the default first-candidate selector.
+    /// Construct an empty registry with the default first-candidate
+    /// selector and the default no-op sink.
     pub fn with_default_selector() -> Self {
         Self::new(Box::new(DefaultSelector))
     }
 
-    /// Register a renderer.
+    /// Construct with a custom diagnostic sink. Selector defaults to
+    /// `DefaultSelector`; pass `new(selector).with_sink(sink)` for
+    /// both.
+    pub fn with_sink(mut self, sink: Box<dyn DiagnosticSink>) -> Self {
+        self.sink = sink;
+        self
+    }
+
+    /// Replace the diagnostic sink. Pass `Box::new(NoopSink)` to
+    /// silence emissions.
+    pub fn set_sink(&mut self, sink: Box<dyn DiagnosticSink>) {
+        self.sink = sink;
+    }
+
+    /// Emit a diagnostic event through the configured sink. Public
+    /// because the substrate host's dispatch path (outside this
+    /// crate) also emits events using the same sink for consistency.
+    pub fn emit(&self, event: DiagnosticEvent) {
+        self.sink.record(event);
+    }
+
+    /// Register a renderer. Emits
+    /// [`DiagnosticEvent::RendererRegistered`] on success.
     ///
     /// Returns [`RegistryError::DuplicateId`] if a renderer with the same
-    /// `RendererId` is already registered.
+    /// `RendererId` is already registered (no diagnostic emitted in
+    /// that case — caller handles the error).
     pub fn register(
         &mut self,
         renderer: Box<dyn NodeRenderer>,
@@ -72,20 +103,26 @@ impl RendererRegistry {
         if self.renderers.contains_key(&id) {
             return Err(RegistryError::DuplicateId(id));
         }
-        for kind in renderer.handles().iter() {
+        let kinds_set = renderer.handles();
+        let kinds: Vec<NodeContentKind> = kinds_set.iter().copied().collect();
+        for kind in &kinds {
             self.by_kind.entry(*kind).or_default().push(id.clone());
         }
-        self.renderers.insert(id, renderer);
+        self.renderers.insert(id.clone(), renderer);
+        self.sink.record(DiagnosticEvent::RendererRegistered { id, kinds });
         Ok(())
     }
 
-    /// Unregister a renderer; returns the boxed renderer if it was registered.
+    /// Unregister a renderer; returns the boxed renderer if it was
+    /// registered. Emits [`DiagnosticEvent::RendererUnregistered`]
+    /// when the id was actually present (silent for unknown ids).
     pub fn unregister(&mut self, id: &RendererId) -> Option<Box<dyn NodeRenderer>> {
         let removed = self.renderers.remove(id)?;
         for ids in self.by_kind.values_mut() {
             ids.retain(|i| i != id);
         }
         self.by_kind.retain(|_, ids| !ids.is_empty());
+        self.sink.record(DiagnosticEvent::RendererUnregistered { id: id.clone() });
         Some(removed)
     }
 
@@ -132,14 +169,23 @@ impl RendererRegistry {
         ctx: &mut PaintCtx<'_>,
     ) -> Result<Option<PaintResult>, DispatchError> {
         let Some(id) = self.select(node) else {
+            self.sink.record(DiagnosticEvent::RouteDegraded {
+                node: node.identity,
+                reason: RouteDegradedReason::NoCandidates,
+            });
             return Ok(None);
         };
         let renderer = self
+            .renderers
             .get_mut(&id)
             .expect("selector returned id not in registry");
-        let painter = renderer
-            .as_in_scene_paint()
-            .ok_or(DispatchError::WrongCompositionMode { id })?;
+        let Some(painter) = renderer.as_in_scene_paint() else {
+            self.sink.record(DiagnosticEvent::RouteDegraded {
+                node: node.identity,
+                reason: RouteDegradedReason::WrongCompositionMode { renderer: id.clone() },
+            });
+            return Err(DispatchError::WrongCompositionMode { id });
+        };
         Ok(Some(painter.paint(node, ctx)))
     }
 
@@ -154,14 +200,23 @@ impl RendererRegistry {
         event: &InputEvent,
     ) -> Result<Option<InputDisposition>, DispatchError> {
         let Some(id) = self.select(node) else {
+            self.sink.record(DiagnosticEvent::RouteDegraded {
+                node: node.identity,
+                reason: RouteDegradedReason::NoCandidates,
+            });
             return Ok(None);
         };
         let renderer = self
+            .renderers
             .get_mut(&id)
             .expect("selector returned id not in registry");
-        let painter = renderer
-            .as_in_scene_paint()
-            .ok_or(DispatchError::WrongCompositionMode { id })?;
+        let Some(painter) = renderer.as_in_scene_paint() else {
+            self.sink.record(DiagnosticEvent::RouteDegraded {
+                node: node.identity,
+                reason: RouteDegradedReason::WrongCompositionMode { renderer: id.clone() },
+            });
+            return Err(DispatchError::WrongCompositionMode { id });
+        };
         Ok(Some(painter.input(node, event)))
     }
 }

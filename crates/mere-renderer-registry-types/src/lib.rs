@@ -22,12 +22,16 @@
 #![warn(clippy::print_stdout, clippy::print_stderr)]
 
 mod composition;
+mod diagnostics;
 mod handles;
 mod identity;
 mod input;
 mod scene;
 
 pub use composition::CompositionMode;
+pub use diagnostics::{
+    DiagnosticEvent, DiagnosticSink, NoopSink, RecordingSink, RouteDegradedReason,
+};
 pub use handles::{OverlayHandle, ProducerHandle};
 pub use identity::{
     ProfileBindingExpectation, RendererCapabilities, RendererId, ScreenRect,

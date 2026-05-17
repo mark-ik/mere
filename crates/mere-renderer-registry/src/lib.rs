@@ -40,10 +40,11 @@ pub use renderer::{
 // Re-export the data-types surface so callers don't need to add a separate
 // dep on `mere-renderer-registry-types` just to name the types.
 pub use mere_renderer_registry_types::{
-    CompositionMode, ImeEvent, InputDisposition, InputEvent, KeyCode, KeyEventKind, LodLevel,
-    ModifiersState, NamedKey, NodeContentKind, NodeContentKindSet, NodeIdentity, OverlayHandle,
-    Placement, PointerButton, PointerEventKind, ProducerHandle, ProfileBindingExpectation,
-    RendererCapabilities, RendererId, SceneNodeRef, ScreenRect,
+    CompositionMode, DiagnosticEvent, DiagnosticSink, ImeEvent, InputDisposition, InputEvent,
+    KeyCode, KeyEventKind, LodLevel, ModifiersState, NamedKey, NodeContentKind, NodeContentKindSet,
+    NodeIdentity, NoopSink, OverlayHandle, Placement, PointerButton, PointerEventKind,
+    ProducerHandle, ProfileBindingExpectation, RecordingSink, RendererCapabilities, RendererId,
+    RouteDegradedReason, SceneNodeRef, ScreenRect,
 };
 
 // Re-export shared dependencies for version alignment.

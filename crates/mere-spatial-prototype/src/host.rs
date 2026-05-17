@@ -731,6 +731,86 @@ mod tests {
     }
 
     #[test]
+    fn diagnostics_fire_for_register_unregister_and_misroute() {
+        use mere_renderer_registry::{DiagnosticEvent, RecordingSink, RouteDegradedReason};
+        use std::sync::Arc;
+
+        let sink = Arc::new(RecordingSink::new());
+
+        // Sink stored once on the registry. We borrow through `sink_view`
+        // for assertions; the registry holds its own Box<dyn DiagnosticSink>
+        // pointing at the same RecordingSink via shared ownership.
+        struct SharedSink(Arc<RecordingSink>);
+        impl mere_renderer_registry::DiagnosticSink for SharedSink {
+            fn record(&self, event: DiagnosticEvent) {
+                self.0.record(event);
+            }
+        }
+
+        let mut registry =
+            RendererRegistry::with_default_selector().with_sink(Box::new(SharedSink(sink.clone())));
+        let renderer_id = RendererId::from_static("test");
+        registry
+            .register(Box::new(RecordingRenderer::for_kind(
+                "test",
+                NodeContentKind::DocumentTile,
+            )))
+            .unwrap();
+
+        // First event: RendererRegistered with the right kinds.
+        let events = sink.events();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            DiagnosticEvent::RendererRegistered { id, kinds } => {
+                assert_eq!(*id, renderer_id);
+                assert!(kinds.contains(&NodeContentKind::DocumentTile));
+            }
+            other => panic!("expected RendererRegistered, got {:?}", other),
+        }
+
+        // Now exercise a misroute: register a node with a content kind
+        // no renderer handles.
+        let mut host = SubstrateHost::new(registry);
+        let mut scene = SubstrateScene::new();
+        let unrouted = scene.insert(SubstrateNode::new(
+            NodeContentKind::WebPage, // no renderer for this kind
+            Placement::IDENTITY,
+            Size::new(50.0, 50.0),
+        ));
+        let mut target = vello::Scene::new();
+        let report = host.paint_scene(&scene, &mut target, 1.0);
+        assert_eq!(report.missing_renderer, 1);
+
+        // Second event: RouteDegraded { NoCandidates } for the unrouted node.
+        let events = sink.events();
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                DiagnosticEvent::RouteDegraded {
+                    node,
+                    reason: RouteDegradedReason::NoCandidates,
+                } if *node == unrouted
+            )),
+            "expected RouteDegraded NoCandidates for {:?}; got {:?}",
+            unrouted,
+            events
+        );
+
+        // Unregister + verify the corresponding event.
+        host.registry_mut().unregister(&renderer_id);
+        let events = sink.events();
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                DiagnosticEvent::RendererUnregistered { id } if *id == renderer_id
+            )),
+            "expected RendererUnregistered for {:?}; got {:?}",
+            renderer_id,
+            events
+        );
+    }
+
+    #[test]
     fn renderer_pin_overrides_default_selector() {
         // Register two renderers for the same NodeContentKind; the
         // default selector would pick the first-registered one. A
