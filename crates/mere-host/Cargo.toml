@@ -9,7 +9,7 @@ accesskit = "0.24"
 gpui = { path = "../../../glass-gpui/crates/gpui" }
 gpui_platform = { path = "../../../glass-gpui/crates/gpui_platform", features = ["font-kit"] }
 graph-canvas = { path = "../graph/graph-canvas" }
-graph-tree = { path = "../graph/graph-tree" }
+forme = { path = "../graph/forme" }
 inker = { path = "../inker" }
 mere-apparatus = { path = "../mere-domain/apparatus" }
 mere-frame = { path = "../mere-domain/frame" }
@@ -52,7 +52,7 @@ gpui_platform = { workspace = true }
 accesskit = { workspace = true }
 euclid = "0.22"
 graph-canvas = { workspace = true }
-graph-tree = { workspace = true }
+forme = { workspace = true }
 inker = { workspace = true }
 mere-apparatus = { workspace = true }
 mere-frame = { workspace = true }

@@ -4,7 +4,7 @@
 
 //! Property tests: tree invariants hold after any sequence of NavActions.
 
-use graph_tree::*;
+use forme::*;
 use proptest::prelude::*;
 
 /// Member IDs are small integers so collisions (duplicate attaches, etc.) exercise
@@ -89,7 +89,7 @@ fn arb_nav_action() -> impl Strategy<Value = NavAction<u64>> {
         ].prop_map(NavAction::CycleFocusRegion),
         // Layout override (weight: 1)
         1 => (1..=MAX_MEMBER_ID, proptest::option::of(0.0f32..=1.0))
-            .prop_map(|(m, ratio)| NavAction::SetLayoutOverride(m, graph_tree::LayoutOverride {
+            .prop_map(|(m, ratio)| NavAction::SetLayoutOverride(m, forme::LayoutOverride {
                 min_width: None,
                 min_height: None,
                 flex_grow: None,

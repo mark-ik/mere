@@ -13,8 +13,9 @@
 //! ## Status
 //!
 //! Pre-1.0. The first migrated surface is the portable graph authority:
-//! owner-scoped graph memory and framework-agnostic graph-tree layout. Host
-//! adapters, GUI integration, and render bridge code move later.
+//! owner-scoped node lineage and the framework-agnostic forme (per-graph-view
+//! workbench arrangement authority). Host adapters, GUI integration, and
+//! render bridge code move later.
 
 #![doc(html_root_url = "https://docs.rs/graphshell/0.0.1")]
 
@@ -29,12 +30,16 @@ pub use mere_kernel as core;
 /// tree.
 pub use mere_host_contract as runtime;
 
-/// Owner-scoped graph memory model migrated from the previous Graphshell tree.
-pub use graph_memory as memory;
+/// Owner-scoped navigation-lineage model migrated from the previous Graphshell
+/// tree. Originally `graph_memory`; renamed because eidetic owns the "memory"
+/// layer and this crate is really navigation lineage.
+pub use node_lineage as lineage;
 
-/// Framework-agnostic graphlet-native tile tree migrated from the previous
-/// Graphshell tree.
-pub use graph_tree as tree;
+/// Per-graph-view workbench arrangement authority — projects graph members +
+/// edges into the workbench's tile arrangement (which may or may not be
+/// tree-shaped). Originally `graph_tree`; renamed because "tree" undersold
+/// the role.
+pub use forme;
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

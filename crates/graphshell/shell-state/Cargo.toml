@@ -16,7 +16,7 @@ path = "src/lib.rs"
 mere-kernel = { path = "../../mere-kernel" }
 mere-graphshell = { path = "../../mere-domain/graphshell" }
 mere-ux-events = { path = "../../mere-ux-events" }
-graph-tree = { path = "../../graph/graph-tree" }
+forme = { path = "../../graph/forme" }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

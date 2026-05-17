@@ -197,7 +197,7 @@ impl HostRoot {
 
     /// Tear out the active tile as a **branch** — Phase 3
     /// implementation. Creates a new graphlet inside the donor's
-    /// graph-tree (via the workbench's `GraphTree<NodeKey>` from
+    /// forme (via the workbench's `GraphTree<NodeKey>` from
     /// node-per-tile v1), opens a new window pointed at the same
     /// donor session+graph but with the new graphlet as the leaf's
     /// initial focus. Donor unchanged.
@@ -243,25 +243,25 @@ impl HostRoot {
                 let parent_spec = workbench
                     .tree
                     .graphlet_of(&node)
-                    .map(|g| graph_tree::GraphletSpec {
-                        kind: g.kind.clone().unwrap_or(graph_tree::GraphletKind::Session),
+                    .map(|g| forme::GraphletSpec {
+                        kind: g.kind.clone().unwrap_or(forme::GraphletKind::Session),
                         anchors: g.anchors.iter().map(|n| format!("{n:?}")).collect(),
                         primary_anchor: g.primary_anchor.as_ref().map(|n| format!("{n:?}")),
                         selectors: Vec::new(),
                     });
                 let binding = match parent_spec {
-                    Some(spec) => graph_tree::GraphletBinding::Forked {
+                    Some(spec) => forme::GraphletBinding::Forked {
                         parent_spec: spec,
                         reason: "tearout-branch".to_string(),
                     },
-                    None => graph_tree::GraphletBinding::UnlinkedSession,
+                    None => forme::GraphletBinding::UnlinkedSession,
                 };
-                let graphlet = graph_tree::GraphletRef {
+                let graphlet = forme::GraphletRef {
                     id: next_id,
                     anchors: vec![node],
                     primary_anchor: Some(node),
                     binding,
-                    kind: Some(graph_tree::GraphletKind::Session),
+                    kind: Some(forme::GraphletKind::Session),
                 };
                 workbench.tree.add_graphlet(graphlet);
                 next_id

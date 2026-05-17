@@ -11,7 +11,7 @@
 //! panel-summon methods.
 
 use gpui::Context;
-use graph_tree::{NavAction, Provenance};
+use forme::{NavAction, Provenance};
 use mere_frame::{
     GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitChoice,
 };
@@ -132,7 +132,7 @@ impl HostRoot {
                     tracing::debug!(?node, address = %address, "tile.opened");
 
                     // v1 — lineage facet. Record this new anchor in
-                    // the workbench's graph-tree, with provenance
+                    // the workbench's forme, with provenance
                     // reflecting how the user got here.
                     let provenance = match anchor {
                         Some(source) if source != node => Provenance::Traversal {

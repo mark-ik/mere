@@ -1,10 +1,10 @@
 [package]
-name = "graph-tree"
+name = "forme"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
 publish = false
-description = "Framework-agnostic graphlet-native tile tree for Graphshell"
+description = "Per-graph-view workbench arrangement authority for Mere — projects graph members + edges into a workbench arrangement (tree-shaped or otherwise)"
 
 [features]
 default = []

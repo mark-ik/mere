@@ -24,8 +24,11 @@ desktop, browser-extension, browser-tab/PWA, and mobile envelopes.
     definitions.
   - `graphshell::runtime` ← `mere-host-contract` — runtime + host-port
     surface, frame projections, finalize-action plumbing.
-  - `graphshell::memory` ← `graph-memory` — owner-scoped graph memory model.
-  - `graphshell::tree` ← `graph-tree` — graphlet-native tile tree.
+  - `graphshell::lineage` ← `node-lineage` — owner-scoped navigation-lineage
+    model (formerly `graph-memory`; eidetic owns the "memory" layer).
+  - `graphshell::forme` ← `forme` — per-graph-view workbench arrangement
+    authority (formerly `graph-tree`; arrangements may or may not be
+    tree-shaped).
 
 ## How it relates to other workspace crates
 

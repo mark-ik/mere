@@ -230,7 +230,7 @@ pub fn apply_fork<N: MemberId>(tree: &mut GraphTree<N>, graphlet_id: GraphletId,
 /// Input for containment lens derivation: origin/domain groupings
 /// supplied by the host from ContainmentRelation edges.
 ///
-/// The graph-tree crate doesn't know about edge types, so the host
+/// The forme crate doesn't know about edge types, so the host
 /// extracts containment relationships and passes them as group lists.
 #[derive(Clone, Debug)]
 pub struct ContainmentGroup<N: MemberId> {

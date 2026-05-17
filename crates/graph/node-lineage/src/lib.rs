@@ -2,19 +2,32 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! `graph-memory` — owner-scoped graph memory model.
+//! `node-lineage` — owner-scoped navigation-lineage model.
 //!
-//! This crate adapts the shared-owner history-tree idea into a graph-oriented
-//! memory model for Graphshell:
+//! Adapts the shared-owner history-tree idea (Atlas Engineer's `history-tree`,
+//! BSD-3-Clause; see README) into a graph-oriented lineage model for Mere:
 //!
 //! - `Entry` is the deduplicated resource/content identity layer.
-//! - `Visit` is a concrete, persisted occurrence in navigation history.
+//! - `Visit` is a concrete, persisted occurrence in navigation lineage.
 //! - `Owner` is a cursor-bearing actor such as a pane, tab, graph view, or
 //!   session.
 //! - `EdgeView` is a derived graph projection over visit parentage.
 //!
 //! The crate deliberately keeps one structural authority: visits own the tree.
 //! Edges are projected from visits instead of being stored separately.
+//!
+//! The lineage concept layers at two granularities:
+//!
+//! - **url → url** (within-tile, branchable internal lineage): navigating in a
+//!   tile extends a visit thread; navigating back and then forward to a
+//!   different link spawns a branch in the same tile's visit tree.
+//! - **node → node** / **tile → tile** (external lineage on the graph itself):
+//!   when a within-tile branch is promoted into its own anchor — assuming an
+//!   identity external to the original node or tile — it surfaces as a
+//!   directed edge in the canonical graph.
+//!
+//! Both granularities use the same Entry/Visit/Owner machinery; "promotion to
+//! anchor" is the affirmative gesture that crosses the boundary.
 
 use serde::{Deserialize, Serialize};
 use slotmap::{SlotMap, new_key_type};

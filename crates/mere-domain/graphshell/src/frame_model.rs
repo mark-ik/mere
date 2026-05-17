@@ -25,7 +25,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use graph_tree::{OwnedTreeRow, SplitBoundary, TabEntry};
+use forme::{OwnedTreeRow, SplitBoundary, TabEntry};
 
 use crate::toolbar::ToolbarDraft;
 use mere_kernel::content::ContentLoadState;

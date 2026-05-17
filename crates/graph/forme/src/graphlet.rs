@@ -89,7 +89,7 @@ pub enum GraphletKind {
 ///
 /// See `graphlet_projection_binding_spec.md §3.1` for the canonical shape.
 /// The `graph_view_id` and `graph_id` fields are carried as opaque strings
-/// because the graph-tree crate has no dependency on Graphshell's ID types.
+/// because the forme crate has no dependency on Graphshell's ID types.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProjectionSource {
     /// Graph-level default projection.

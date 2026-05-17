@@ -14,7 +14,7 @@ categories = ["gui"]
 path = "src/lib.rs"
 
 [dependencies]
-graph-tree = { path = "../../graph/graph-tree" }
+forme = { path = "../../graph/forme" }
 mere-kernel = { path = "../../mere-kernel" }
 serde = { version = "1.0", features = ["derive"] }
 

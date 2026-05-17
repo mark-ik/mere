@@ -15,7 +15,7 @@ use euclid::default::{Point2D, Vector2D};
 // `MemoryEntryPrivacy` / `OwnerScopedMemory` / `GraphMemorySnapshot` /
 // `MemoryTransitionKind` were used by the node-history types that
 // moved to `history.rs` (2026-05-11 decomposition pass); `Graph` itself
-// doesn't reach into graph-memory directly.
+// doesn't reach into node-lineage directly.
 use petgraph::algo::{astar, dijkstra, has_path_connecting, kosaraju_scc};
 #[cfg(test)]
 use petgraph::stable_graph::NodeIndex;
@@ -28,7 +28,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-pub use graph_memory::TransitionKind as NodeHistoryTransitionKind;
+pub use node_lineage::TransitionKind as NodeHistoryTransitionKind;
 
 use crate::address::{Address, AddressKind, address_from_url, cached_host_from_url, detect_mime};
 use crate::persistence::{

@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use graph_tree::{GraphTree, LayoutMode, ProjectionLens};
+use forme::{GraphTree, LayoutMode, ProjectionLens};
 use inker::routing::{EngineRouteDecision, EngineRouteRequest};
 use mere_kernel::graph::{Graph, GraphViewId, NodeKey};
 use mere_kernel::persistence::GraphSnapshot;

@@ -9,7 +9,7 @@
 //! subset: intents either mutate reducer-owned state directly or enqueue typed
 //! effects for composition glue to consume.
 
-use graph_tree::ProjectionLens;
+use forme::ProjectionLens;
 use inker::routing::EngineRouteRequest;
 use mere_kernel::graph::{GraphViewId, NodeKey};
 

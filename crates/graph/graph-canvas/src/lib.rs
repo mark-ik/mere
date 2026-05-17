@@ -11,7 +11,10 @@
 //!
 //! Sibling crates:
 //! - `mere-kernel` — portable graph data model (graph truth)
-//! - `graph-tree` — framework-agnostic workbench/navigator tree and layout
+//! - `forme` — per-graph-view workbench arrangement authority (formerly
+//!   `graph-tree`)
+//! - `node-lineage` — owner-scoped navigation-lineage model (formerly
+//!   `graph-memory`)
 
 pub mod backend;
 pub mod camera;

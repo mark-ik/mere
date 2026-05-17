@@ -9,7 +9,7 @@
 //! updates the GraphTree projection, and emits surface commands for host
 //! adapters to consume later.
 
-use graph_tree::{NavAction, Provenance};
+use forme::{NavAction, Provenance};
 use mere_kernel::graph::{GraphViewId, NodeKey};
 use mere_kernel::pane::PaneId;
 use platen::workbench::{

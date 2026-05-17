@@ -2,10 +2,27 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! `graph-tree` — framework-agnostic graphlet-native tile tree.
+//! `forme` — per-graph-view workbench arrangement authority.
 //!
-//! One `GraphTree<N>` per graph view. Contains all members — active, warm,
-//! and cold — organized by graph topology with multiple projection lenses.
+//! Named for the printing-press *forme*: the locked-up assembly of typeset
+//! pieces ready to print. A forme is whatever shape the typesetter locks up
+//! — not forced into a tree. This crate plays the same role for a graph view's
+//! workbench arrangement: it projects graph members + edges into the
+//! arrangement, which may be tree-shaped, lattice-shaped, or arbitrarily
+//! connected depending on the graphlet topology.
+//!
+//! Boundary in the printing-press stack:
+//!
+//! - **graph truth** (mere-kernel `Graph`) → **forme** (workbench arrangement
+//!   authority) → **platen** (graph-aware print/composition stage that turns
+//!   the forme into surface/pane output) → **verso-tile** (receptor of
+//!   surface/tile lifecycle, communicating rearrangement up the stack from
+//!   tile → forme → graph truth).
+//!
+//! One `GraphTree<N>` per graph view (the type name still says "tree" — that
+//! is the *default output shape*, not the input contract; the input is any
+//! graphlet topology). Contains all members — active, warm, and cold —
+//! organized by graph topology with multiple projection lenses.
 //!
 //! No egui. No iced. No winit. No wgpu. Pure data + pure functions.
 

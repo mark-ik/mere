@@ -22,7 +22,7 @@ use euclid::default::Vector2D;
 use gpui::{Bounds, Pixels};
 use graph_canvas::camera::CanvasCamera;
 use graph_canvas::engine::{InteractionConfig, InteractionEngine};
-use graph_tree::{GraphTree, LayoutMode, ProjectionLens};
+use forme::{GraphTree, LayoutMode, ProjectionLens};
 use mere_frame::PaneContent;
 use mere_kernel::graph::{NodeKey, RelationKind};
 use uuid::Uuid;
@@ -69,7 +69,7 @@ impl Default for OrreryPaneState {
 
 pub(crate) struct WorkbenchPaneState {
     pub tiles: TileManager,
-    /// Per-workbench **lineage facet** — graph-tree view of which
+    /// Per-workbench **lineage facet** — forme view of which
     /// anchor nodes are in this workbench plus how the user got
     /// from one to another (`Provenance::Traversal`). New-tile
     /// creation populates this in `host_navigation::navigate_to`'s

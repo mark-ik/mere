@@ -23,9 +23,8 @@ graph-canvas = { path = "../graph/graph-canvas" }
 accesskit = { workspace = true, features = ["serde"] }
 # 2026-04-25 mere-host-contract extraction Slice 2 (graph_runtime
 # layout cache projection): `OwnedTreeRow`, `TabEntry`, and
-# `SplitBoundary` come from `graph-tree`. Already a dep of
-# graphshell main and mere-kernel's frame_model.
-graph-tree = { path = "../graph/graph-tree" }
+# `SplitBoundary` come from `forme` (formerly `graph-tree`).
+forme = { path = "../graph/forme" }
 # 2026-05-04 Slice 51 (Phase 2): system/signal_bus consolidation
 # from shell/desktop/runtime/registries/signal_routing.rs. The
 # signal bus emits diagnostics on the lagged-receiver channel

@@ -17,8 +17,8 @@ path = "src/lib.rs"
 async-trait = "0.1"
 eidetic = { path = "../eidetic" }
 graph-canvas = { path = "../graph/graph-canvas" }
-graph-memory = { path = "../graph/graph-memory" }
-graph-tree = { path = "../graph/graph-tree" }
+node-lineage = { path = "../graph/node-lineage" }
+forme = { path = "../graph/forme" }
 mere-kernel = { path = "../mere-kernel" }
 mere-host-contract = { path = "../mere-host-contract" }
 inker = { path = "../inker" }

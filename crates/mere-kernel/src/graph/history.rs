@@ -5,7 +5,7 @@
 //! Per-node navigation history.
 //!
 //! Carries each node's webview navigation history projection over the
-//! shared `graph_memory::GraphMemory` substrate. The history is
+//! shared `node_lineage::GraphMemory` substrate. The history is
 //! addressable per-owner (one node has one `Primary` owner today);
 //! projections expose a linear-history view, a branching-history view,
 //! and a coarse semantic summary used by intelligence layers.
@@ -17,7 +17,7 @@
 //! `node.rs`; node history was already documented as the next natural
 //! split target in `node.rs`'s module header.
 
-use graph_memory::{
+use node_lineage::{
     EntryPrivacy as MemoryEntryPrivacy, GraphMemory as OwnerScopedMemory, GraphMemorySnapshot,
     TransitionKind as MemoryTransitionKind,
 };

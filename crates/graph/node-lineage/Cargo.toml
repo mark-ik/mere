@@ -1,10 +1,11 @@
 [package]
-name = "graph-memory"
+name = "node-lineage"
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
 publish = false
-description = "Owner-scoped graph memory model for Graphshell"
+description = "Owner-scoped navigation-lineage model for Mere — visit-level branching with shared deduplicated entries"
+readme = "README.md"
 
 [dependencies]
 rkyv = { version = "0.8", features = ["std"] }

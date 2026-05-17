@@ -3168,6 +3168,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "forme"
+version = "0.1.0"
+dependencies = [
+ "petgraph",
+ "proptest",
+ "serde",
+ "serde_json",
+ "taffy",
+]
+
+[[package]]
 name = "fraction"
 version = "0.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3657,37 +3668,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "graph-memory"
-version = "0.1.0"
-dependencies = [
- "rkyv",
- "serde",
- "slotmap",
-]
-
-[[package]]
-name = "graph-tree"
-version = "0.1.0"
-dependencies = [
- "petgraph",
- "proptest",
- "serde",
- "serde_json",
- "taffy",
-]
-
-[[package]]
 name = "graphshell"
 version = "0.0.1"
 dependencies = [
  "async-trait",
  "eidetic",
+ "forme",
  "graph-canvas",
- "graph-memory",
- "graph-tree",
  "inker",
  "mere-host-contract",
  "mere-kernel",
+ "node-lineage",
  "platen",
  "pollster",
  "serde",
@@ -3700,7 +3691,7 @@ dependencies = [
 name = "graphshell-shell-state"
 version = "0.0.1"
 dependencies = [
- "graph-tree",
+ "forme",
  "mere-graphshell",
  "mere-kernel",
  "mere-ux-events",
@@ -5274,7 +5265,7 @@ dependencies = [
 name = "mere-graphshell"
 version = "0.0.1"
 dependencies = [
- "graph-tree",
+ "forme",
  "mere-kernel",
  "serde",
  "serde_json",
@@ -5285,8 +5276,8 @@ name = "mere-host-contract"
 version = "0.0.1"
 dependencies = [
  "accesskit",
+ "forme",
  "graph-canvas",
- "graph-tree",
  "graphshell-shell-state",
  "log",
  "mere-kernel",
@@ -5319,6 +5310,7 @@ dependencies = [
  "mere-renderer-registry",
  "mere-spatial-prototype",
  "petgraph",
+ "uuid",
 ]
 
 [[package]]
@@ -5346,11 +5338,11 @@ dependencies = [
  "accesskit",
  "crossbeam-channel",
  "euclid",
+ "forme",
  "futures-util",
- "graph-memory",
- "graph-tree",
  "infer",
  "mime_guess",
+ "node-lineage",
  "petgraph",
  "rkyv",
  "serde",
@@ -5955,6 +5947,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "418abd1b6d34fbf6cae440dc874771b0525a604428704c76e48b29a5e67b8003"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "node-lineage"
+version = "0.1.0"
+dependencies = [
+ "rkyv",
+ "serde",
+ "slotmap",
 ]
 
 [[package]]

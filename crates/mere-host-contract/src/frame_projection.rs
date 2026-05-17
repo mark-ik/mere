@@ -4,14 +4,14 @@
 
 //! Pure AppState -> FrameViewModel shaping helpers.
 //!
-//! This is deliberately not Graph Cartography projection vocabulary. These
-//! helpers shape already-selected shell/runtime state into host-facing frame
-//! view-models; they do not derive graph-memory aggregates.
+//! This is deliberately not cartography projection vocabulary. These helpers
+//! shape already-selected shell/runtime state into host-facing frame
+//! view-models; they do not derive node-lineage aggregates.
 
 use std::collections::HashMap;
 use std::time::Duration;
 
-use graph_tree::{OwnedTreeRow, SplitBoundary, TabEntry};
+use forme::{OwnedTreeRow, SplitBoundary, TabEntry};
 use graphshell_shell_state::frame_model::{
     AccessibilityViewModel, CommandPaletteScopeView, CommandPaletteViewModel, DegradedReceiptSpec,
     DialogsViewModel, FocusRingSettingsView, FocusRingSpec, FocusViewModel, GraphSearchViewModel,

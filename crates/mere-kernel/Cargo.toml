@@ -12,8 +12,8 @@ description = "Portable identity, authority, and mutation kernel for the Mere br
 test-utils = []
 
 [dependencies]
-graph-memory = { path = "../graph/graph-memory" }
-graph-tree = { path = "../graph/graph-tree" }
+node-lineage = { path = "../graph/node-lineage" }
+forme = { path = "../graph/forme" }
 crossbeam-channel = "0.5"
 futures-util = "0.3"
 serde = { version = "1.0", features = ["derive"] }

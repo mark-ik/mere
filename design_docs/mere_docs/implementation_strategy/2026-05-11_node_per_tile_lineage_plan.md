@@ -4,6 +4,8 @@
 **Status**: Implementation plan — pre-build
 **Scope**: Reshape Mere's node-creation semantics from **node-per-navigation** (current behaviour) to **node-per-tile**, and introduce the **lineage facet** as the second per-node aspect (the spatial/semantic facet stays in `mere-kernel::graph::Graph`). Operationalises the model committed in the [tear-out operations brief](../research/2026-05-11_tearout_operations_brief.md) §6.1. Prerequisite for Phase 3's **branch** operation, which depends on lineage edges being live and on within-tile navigation *not* polluting the canonical graph with one-shot URL nodes.
 
+**Naming note (2026-05-17)**: This plan was written when the workbench arrangement authority crate was called `graph-tree`. It has since been renamed to `forme` (per the [lineage / forme rename plan](2026-05-17_lineage_forme_rename_plan.md)). The body below still says "graph-tree" in many places — read those as "forme" until a follow-up edits the prose. Public type names like `GraphTree<N>`, `Provenance::Traversal`, `MemberEntry` stay valid (only the crate name changed). Also note: the *layered lineage* framing the rename plan describes — url→url within-tile branching plus tile→tile / node→node external edges on promotion — clarifies what this plan calls "the lineage facet."
+
 **Related**:
 
 - [`../research/2026-05-11_tearout_operations_brief.md`](../research/2026-05-11_tearout_operations_brief.md) — §6.1 (node-per-tile commitment), §4.1 leaf semantics ("within-tile traversal becomes lineage edges in graph-tree, not new mere-kernel nodes").
