@@ -49,3 +49,5 @@ masonry_testing = { path = "../../../xilem/masonry_testing" }
 # Cross-crate integration test exercises SubstrateHost +
 # ExternalTextureCompositor + MasonryEmbeddedRenderer end-to-end.
 mere-spatial-prototype = { path = "../mere-spatial-prototype" }
+# Windowed demo binary (examples/windowed_demo.rs).
+winit = "0.30.13"
