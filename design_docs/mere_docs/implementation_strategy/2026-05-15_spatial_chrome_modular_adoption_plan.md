@@ -1,7 +1,7 @@
 # Spatial Chrome + Renderer Registry Modular Adoption Plan
 
-**Date**: 2026-05-15
-**Status**: Implementation strategy (sequencing plan; does not commit substrate-as-host adoption)
+**Date**: 2026-05-15 (initial); 2026-05-17 implementation status added
+**Status**: Implementation strategy (sequencing plan; does not commit substrate-as-host adoption). Phases 2–3 largely shipped; phase 4 has structural skeleton.
 **Scope**: Turns the spatial chrome IR, renderer registry contract, browser taxonomy translation, OS-plumbing audit, and existing multiplexer/session work into a staged plan. Goal: land the useful host-agnostic pieces first, defer substrate-as-host until proof gates clear, and keep Serval/NetRender/wgpu-* sibling crates aligned with Mere's renderer model.
 
 **Primary inputs**:
@@ -28,6 +28,64 @@ This plan deliberately separates five threads that are easy to conflate:
 3. NetRender/Vello composition proof.
 4. Browser/PWA and p2p envelope constraints.
 5. Substrate-as-host adoption decision.
+
+## Implementation status (2026-05-17)
+
+Snapshot of what's landed in code vs. the plan as filed two days prior.
+Update this section in place when a phase advances; do not spawn a
+status doc per `DOC_POLICY.md`.
+
+### Phase 2 (renderer registry under current host) — **shipped**
+
+- `mere-renderer-registry` + `mere-renderer-registry-types` extracted as workspace crates (not held in `mere-host-runtime` as the plan suggested — the wasm-clean split into a types crate justified the separate home; types crate carries the wasm-safe surface, full registry carries the vello/wgpu-bound traits).
+- `NodeRenderer` / `InScenePaintRenderer` / `EmbeddedFrameRenderer` / `OverlayRenderer` / `RendererSelector` / `RendererId` / `NodeContentKind` / `CompositionMode` / `RendererCapabilities` all defined and re-exported through the full crate.
+- `RendererRegistry::paint_node` / `deliver_in_scene_input` dispatch helpers added — close the "registry resolves but doesn't call" gap from the v0 contract.
+- `as_in_scene_paint` / `as_embedded_frame` / `as_overlay` downcast accessors on `NodeRenderer` give the registry a dyn-trait dispatch seam.
+- `DispatchError::WrongCompositionMode` surfaces renderer-impl bugs.
+
+Diagnostics emission (`renderer.registered` / `renderer.unregistered` / `engine.route_chosen` / `engine.route_degraded` / `renderer.hot_swapped` / `surface.attach_failed`) and capability-gate threading remain unwired — both flow through the host action bus once a real host is the integration point.
+
+### Phase 3 (composition proof) — **mostly shipped**
+
+Crate isolation chosen (`crates/mere-spatial-prototype/`, the plan's second suggested home).
+
+Done-condition checklist:
+
+- ✅ "Mixed scene without gpui-specific layout concepts" — substrate dispatches both InScene (`SolidRectRenderer`, `RecordingRenderer`) and EmbeddedFrame (`MasonryEmbeddedRenderer`, `ScryingEmbeddedRenderer` skeleton) nodes through a single `SubstrateHost::render_scene` path; gpui is nowhere in the dep tree.
+- ✅ "Embedded-frame and in-scene paint surfaces share a coordinate/hit-test model" — both go through `SceneNodeRef` (placement + size) and the unified `SubstrateScene::hit_test`.
+- ✅ "Driven by deterministic test data" — 36 unit + 2 GPU-integration tests in `mere-spatial-prototype`, 14 tests in `mere-masonry` (incl. 2 cross-crate `substrate_integration.rs`), 3 in `scrying-embedded-renderer`.
+- ✅ "Windows local validation exists" — render-to-PNG integration test (`tests/render_to_png.rs`) produces a viewable PNG at `target/spatial_prototype_render.png` showing nodes + edge; windowed demo binary at `mere-masonry/examples/windowed_demo.rs` opens a real winit window with live `deliver_input_at` mouse-click routing.
+
+Per-work-item:
+
+| Item | Status |
+| --- | --- |
+| Root scene with pan/zoom camera | Pending (small — a single `Affine` on `SubstrateScene` + a transform applied before per-node placement). |
+| One cartography/graph node | Pending — needs cartography concept work (separate crate; not yet started). |
+| One document tile rendered through engine → platen → NetRender | Pending — needs `inker::Engine` integration; tracked separately from the spatial prototype's renderer-registry surface. |
+| One embedded-frame placeholder texture | ✅ `MasonryEmbeddedRenderer` (real masonry render via `imaging_vello`'s GPU path) + `ScryingEmbeddedRenderer` skeleton (next_frame wired against `WgpuTextureImporter`). |
+| One relation edge with label and hit-test | ✅ for *geometry* (line stroke, `hit_test_edge` with `DEFAULT_EDGE_HIT_TOLERANCE`); label *rendering* pending parley wiring (`label: Option<String>` stored on `RelationEdge` for now). |
+| Basic hit-test returning node/edge/content identity | ✅ `SceneHit::{Node, Edge}` returned from unified `SubstrateScene::hit_test`. |
+| Thumbnail/capture path for switcher preview | Pending — render at lower resolution to a texture; same readback path the PNG test uses. |
+| UxTree/AccessKit projection | ✅ for substrate-level nodes (`accessibility::project_scene` emits `TreeUpdate` with role-mapped nodes + AABB bounds). Renderer-contributed sub-trees (e.g. `MasonryTile::take_accesskit_update`) not yet merged — `EmbeddedFrameRenderer` trait needs to surface its pending tree updates first. |
+
+### Phase 4 (native texture interop consolidation) — **skeleton**
+
+- `scrying-embedded-renderer` wires `scrying::WebSurfaceProducer` + `WgpuTextureImporter` into the registry's `EmbeddedFrameRenderer`. `next_frame` matches `WebSurfaceFrame::Native(_)` → imports to `wgpu::Texture`; non-native variants and errors fall back to last cached texture (frozen-frame semantics).
+- The plan's call to "create or designate one low-level interop crate" — *designate* `scrying::native_frame` as that crate, since it already has `NativeFrame` / `ImportedTexture` / `TextureImporter` / `HostWgpuContext` / sync mechanisms and is the most production-tested. Renaming + extraction is a follow-up; the contract is already shaped.
+- xilem / forest-rs/imaging local fork (`repos/imaging` branch `mere-wgpu-29-vello-0-9`) added `wgpu-29` + `vello-0-9` feature aliases — dissolves the prior wgpu 28 ↔ 29 skew that would have blocked the GPU path. Tracked back to upstream via the `mere-wgpu-29-vello-0-9` branch on both xilem and imaging local clones.
+
+Capability gates (per-node route override / profile escalation) and diagnostics emission still unwired; they live on the host action bus once a real host is the integration point.
+
+### Phases 5–8 — **untouched**
+
+PWA/browser envelope, session/p2p sync boundary, OS-plumbing proof gate, substrate-as-host parity demo. The strong-host-model decision the rest of these phases depend on is the next big architectural milestone; no implementation work warranted until that lands.
+
+### Cross-cutting status
+
+- Version alignment: post-fork, xilem + mere both on wgpu 29 + vello 0.9 + parley 0.9. mere-masonry runs against `imaging_vello`'s GPU path (not the earlier CPU readback fallback). xilem fork branch tracks upstream; clean PR candidate.
+- 54 tests across the four prototype crates, all green.
+- The "no running prototype demonstrating substrate-as-host shape; risk of paper architecture" pitfall from the spatial chrome IR brief's preconditions is decisively dead — there's both a render-to-PNG integration test producing a viewable artifact and a windowed demo binary.
 
 ## 0. Current state
 
