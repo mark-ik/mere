@@ -39,10 +39,11 @@
 //! - Focus tracking: the projection's `focus` field is set to the root
 //!   for now; substrate-level focus management is its own piece.
 
-use accesskit::{Node, NodeId, Rect, Role, Tree, TreeId, TreeUpdate};
+use accesskit::{Node, NodeId, Rect, Role, Tree, TreeId, TreeUpdate, Uuid};
 use kurbo::Point;
-use mere_renderer_registry::NodeContentKind;
+use mere_renderer_registry::{NodeContentKind, NodeIdentity};
 
+use crate::host::SubstrateHost;
 use crate::scene::{SubstrateNode, SubstrateScene};
 
 /// `NodeId` reserved for the root container. Substrate node identities
@@ -101,6 +102,69 @@ fn build_node(node: &SubstrateNode) -> Node {
     let mut n = Node::new(role_for(node.content_kind));
     n.set_bounds(bounds_for(node));
     n
+}
+
+/// Collect the substrate's scene-level AccessKit tree *plus* one
+/// per-producer subtree update for every `EmbeddedFrameRenderer` that
+/// has pending AccessKit content (returns `Some` from
+/// `take_accesskit_subtree`).
+///
+/// Returned vec is `[root_tree, subtree_1, subtree_2, ...]`. The host
+/// hands each `TreeUpdate` to its AccessKit adapter in order; the OS
+/// stitches them via `Node::tree_id` graft references on the root's
+/// per-node entries.
+///
+/// The subtree's `tree_id` is rewritten from whatever the renderer
+/// produced (typically `TreeId::ROOT`, because the renderer thinks
+/// it's the only tree in the world) to the substrate's minted
+/// per-producer id, computed deterministically from the node's
+/// `NodeIdentity`. The host doesn't need to track tree-id mappings
+/// across frames — same node identity always produces the same
+/// tree id.
+pub fn collect_accesskit_updates(
+    host: &mut SubstrateHost,
+    scene: &SubstrateScene,
+) -> Vec<TreeUpdate> {
+    let mut root = project_scene(scene);
+    let mut subtrees = Vec::new();
+
+    // Walk scene nodes; query each EmbeddedFrame producer for an
+    // AccessKit subtree. If it returns Some, mint a TreeId,
+    // annotate the root's node entry with `tree_id`, push the
+    // subtree.
+    let identities: Vec<NodeIdentity> = scene.iter().map(|n| n.identity).collect();
+    for identity in identities {
+        let Some(mut subtree) = host.take_subtree_for_node(identity) else {
+            continue;
+        };
+        let tree_id = subtree_tree_id_for(identity);
+        subtree.tree_id = tree_id;
+        if let Some((_, root_node)) = root
+            .nodes
+            .iter_mut()
+            .find(|(id, _)| *id == NodeId(identity.as_u64()))
+        {
+            root_node.set_tree_id(tree_id);
+        }
+        subtrees.push(subtree);
+    }
+
+    let mut all = Vec::with_capacity(1 + subtrees.len());
+    all.push(root);
+    all.extend(subtrees);
+    all
+}
+
+/// Deterministic `TreeId` for a producer's subtree, derived from the
+/// substrate node's identity. Same NodeIdentity → same TreeId,
+/// frame after frame, with no host-side state to maintain.
+///
+/// The high 64 bits use a constant tag (`0x4D45_5245_5354_4553` —
+/// ASCII-ish "MERESTES") so the result never collides with
+/// `TreeId::ROOT` (the nil UUID).
+pub fn subtree_tree_id_for(identity: NodeIdentity) -> TreeId {
+    const NAMESPACE_HI: u64 = 0x4D45_5245_5354_4553;
+    TreeId(Uuid::from_u64_pair(NAMESPACE_HI, identity.as_u64()))
 }
 
 /// Axis-aligned bounding box (in scene-space pixels) of `node`'s
@@ -232,6 +296,154 @@ mod tests {
         assert_eq!(bounds.y0, 60.0);
         assert_eq!(bounds.x1, 160.0);
         assert_eq!(bounds.y1, 140.0);
+    }
+
+    #[test]
+    fn subtree_tree_id_is_deterministic_and_non_root() {
+        let id_a = NodeIdentity::next();
+        let id_b = NodeIdentity::next();
+        assert_eq!(subtree_tree_id_for(id_a), subtree_tree_id_for(id_a));
+        assert_ne!(subtree_tree_id_for(id_a), subtree_tree_id_for(id_b));
+        assert_ne!(subtree_tree_id_for(id_a), TreeId::ROOT);
+    }
+
+    #[test]
+    fn collect_returns_only_root_when_no_embedded_producers() {
+        let mut host = crate::host::SubstrateHost::with_default_registry();
+        let mut scene = SubstrateScene::new();
+        scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::IDENTITY,
+            Size::new(100.0, 100.0),
+        ));
+        let updates = collect_accesskit_updates(&mut host, &scene);
+        assert_eq!(updates.len(), 1, "only root tree when no producers");
+        assert_eq!(updates[0].tree_id, TreeId::ROOT);
+    }
+
+    #[test]
+    fn collect_grafts_subtree_with_minted_tree_id() {
+        use mere_renderer_registry::{
+            CompositionMode, EmbeddedFrameRenderer, InputDisposition, InputEvent,
+            NodeContentKindSet, NodeRenderer, ProducerHandle, ProfileBindingExpectation,
+            RendererCapabilities, RendererId, RendererRegistry, SceneNodeRef,
+        };
+
+        struct SubtreeStub {
+            id: RendererId,
+            // Pretend the subtree has a single accessibility node.
+            subtree_node_id: NodeId,
+        }
+
+        impl NodeRenderer for SubtreeStub {
+            fn renderer_id(&self) -> RendererId {
+                self.id.clone()
+            }
+            fn handles(&self) -> NodeContentKindSet {
+                NodeContentKindSet::from_one(NodeContentKind::Panel)
+            }
+            fn composition_mode(&self) -> CompositionMode {
+                CompositionMode::EmbeddedFrame
+            }
+            fn capabilities(&self) -> RendererCapabilities {
+                RendererCapabilities {
+                    accepts_input: false,
+                    handles_ime: false,
+                    handles_a11y: true,
+                    scrollable: false,
+                    hit_testable_subregions: false,
+                    profile_binding: ProfileBindingExpectation::None,
+                    supports_capture: false,
+                }
+            }
+            fn as_embedded_frame(&mut self) -> Option<&mut dyn EmbeddedFrameRenderer> {
+                Some(self)
+            }
+        }
+
+        impl EmbeddedFrameRenderer for SubtreeStub {
+            fn ensure_producer(&mut self, _node: &SceneNodeRef) -> ProducerHandle {
+                ProducerHandle::next()
+            }
+            fn next_frame(&mut self, _handle: ProducerHandle) -> Option<wgpu::Texture> {
+                None
+            }
+            fn deliver_input(
+                &mut self,
+                _h: ProducerHandle,
+                _e: &InputEvent,
+            ) -> InputDisposition {
+                InputDisposition::Passthrough
+            }
+            fn release(&mut self, _h: ProducerHandle) {}
+
+            fn take_accesskit_subtree(
+                &mut self,
+                _h: ProducerHandle,
+            ) -> Option<TreeUpdate> {
+                let mut node = Node::new(Role::Pane);
+                node.set_bounds(Rect {
+                    x0: 0.0,
+                    y0: 0.0,
+                    x1: 100.0,
+                    y1: 100.0,
+                });
+                Some(TreeUpdate {
+                    nodes: vec![(self.subtree_node_id, node)],
+                    tree: Some(Tree::new(self.subtree_node_id)),
+                    tree_id: TreeId::ROOT, // host rewrites
+                    focus: self.subtree_node_id,
+                })
+            }
+        }
+
+        let mut registry = RendererRegistry::with_default_selector();
+        registry
+            .register(Box::new(SubtreeStub {
+                id: RendererId::from_static("subtree-stub"),
+                subtree_node_id: NodeId(99),
+            }))
+            .unwrap();
+        let mut host = crate::host::SubstrateHost::new(registry);
+
+        let mut scene = SubstrateScene::new();
+        let panel_id = scene.insert(SubstrateNode::new(
+            NodeContentKind::Panel,
+            Placement::translate(40.0, 60.0),
+            Size::new(120.0, 80.0),
+        ));
+
+        // Pre-warm the producer so collect_accesskit_updates can query it.
+        let created = host.ensure_embedded_producers(&scene);
+        assert_eq!(created, 1);
+
+        let updates = collect_accesskit_updates(&mut host, &scene);
+        assert_eq!(updates.len(), 2, "root + one subtree");
+
+        // Root tree: substrate node should be a graft node with the
+        // minted tree_id.
+        let expected_tree_id = subtree_tree_id_for(panel_id);
+        let root = &updates[0];
+        assert_eq!(root.tree_id, TreeId::ROOT);
+        let (_, root_panel_node) = root
+            .nodes
+            .iter()
+            .find(|(id, _)| *id == NodeId(panel_id.as_u64()))
+            .expect("substrate panel node present");
+        assert_eq!(
+            root_panel_node.tree_id(),
+            Some(expected_tree_id),
+            "root's panel node is a graft node referencing the subtree"
+        );
+
+        // Subtree update: tree_id rewritten by collect_accesskit_updates.
+        let subtree = &updates[1];
+        assert_eq!(
+            subtree.tree_id, expected_tree_id,
+            "subtree's tree_id rewritten from ROOT to the minted id"
+        );
+        assert_eq!(subtree.nodes.len(), 1);
+        assert_eq!(subtree.nodes[0].0, NodeId(99));
     }
 
     #[test]

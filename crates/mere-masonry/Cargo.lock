@@ -1345,6 +1345,7 @@ dependencies = [
 name = "mere-renderer-registry"
 version = "0.0.1"
 dependencies = [
+ "accesskit",
  "kurbo",
  "mere-renderer-registry-types",
  "vello",

@@ -312,4 +312,19 @@ impl EmbeddedFrameRenderer for MasonryEmbeddedRenderer {
     fn release(&mut self, handle: ProducerHandle) {
         self.producers.remove(&handle);
     }
+
+    fn take_accesskit_subtree(
+        &mut self,
+        handle: ProducerHandle,
+    ) -> Option<accesskit::TreeUpdate> {
+        // MasonryTile produces a TreeUpdate whenever the widget tree
+        // produces one (typically the first render and on widget-tree
+        // mutations). The substrate's `collect_accesskit_updates`
+        // rewrites the `tree_id` field to the substrate's minted
+        // per-producer subtree id before forwarding to the host's
+        // AccessKit adapter — masonry's update arrives here with
+        // `tree_id == TreeId::ROOT`.
+        let state = self.producers.get_mut(&handle)?;
+        state.tile.take_accesskit_update()
+    }
 }

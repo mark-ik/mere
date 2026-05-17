@@ -13,6 +13,10 @@ mere-renderer-registry-types = { path = "../mere-renderer-registry-types" }
 kurbo.workspace = true
 vello.workspace = true
 wgpu.workspace = true
+# `EmbeddedFrameRenderer::take_accesskit_subtree` returns
+# `accesskit::TreeUpdate` so the substrate's `collect_accesskit_updates`
+# can graft renderer-contributed sub-trees onto its scene-level tree.
+accesskit.workspace = true
 
 [lints]
 workspace = true

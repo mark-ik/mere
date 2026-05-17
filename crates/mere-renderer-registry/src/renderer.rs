@@ -91,6 +91,28 @@ pub trait EmbeddedFrameRenderer: NodeRenderer {
     fn next_frame(&mut self, handle: ProducerHandle) -> Option<wgpu::Texture>;
     fn deliver_input(&mut self, handle: ProducerHandle, event: &InputEvent) -> InputDisposition;
     fn release(&mut self, handle: ProducerHandle);
+
+    /// Drain the renderer's pending AccessKit `TreeUpdate` for
+    /// `handle`, if any. The substrate's
+    /// `SubstrateHost::collect_accesskit_updates` grafts the returned
+    /// sub-tree onto the scene-level tree via AccessKit's `TreeId`
+    /// mechanism.
+    ///
+    /// The renderer may return a `TreeUpdate` whose `tree_id` is
+    /// `TreeId::ROOT` (the renderer thinks it's the root of its own
+    /// tree). The substrate rewrites `tree_id` to its minted
+    /// per-producer subtree id before forwarding to the host's
+    /// AccessKit adapter.
+    ///
+    /// Default impl returns `None` — renderers that don't produce
+    /// AccessKit content (e.g. `SolidRectRenderer`) take this default.
+    fn take_accesskit_subtree(
+        &mut self,
+        handle: ProducerHandle,
+    ) -> Option<accesskit::TreeUpdate> {
+        let _ = handle;
+        None
+    }
 }
 
 /// Renderers that render into out-of-band OS surfaces.

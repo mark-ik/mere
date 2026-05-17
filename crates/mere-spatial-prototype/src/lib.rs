@@ -57,7 +57,9 @@ mod scene;
 mod solid_rect_renderer;
 mod thumbnail;
 
-pub use accessibility::{ROOT_NODE_ID, project_scene};
+pub use accessibility::{
+    ROOT_NODE_ID, collect_accesskit_updates, project_scene, subtree_tree_id_for,
+};
 pub use external_texture::{CompositorError, ExternalTextureCompositor};
 pub use host::{FrameReport, SubstrateHost};
 pub use lod::{LodThresholds, compute_lod_for_node};
