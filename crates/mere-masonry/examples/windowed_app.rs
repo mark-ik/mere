@@ -40,7 +40,10 @@ use mere_frame::{
     FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis,
 };
 use mere_host_runtime::{ActionKind, BusAction, BusDispatchOutcome};
-use mere_host_substrate::{MereHostApp, OrreryRenderer, SubstrateInputEvent};
+use mere_host_substrate::{
+    MereHostApp, OrreryRenderer, SplitterDrag, SplitterRenderer, SubstrateInputEvent,
+    compute_container_size,
+};
 use masonry_core::core::{DefaultProperties, NewWidget};
 use masonry_testing::ModularWidget;
 use mere_masonry::{MasonryEmbeddedRenderer, RootWidgetFactory};
@@ -144,6 +147,9 @@ struct RuntimeState {
     /// substrate scene every frame via
     /// `MereHostApp::sync_scene_from_frame_layout`.
     frame_layout: FrameLayout,
+    /// Active splitter drag — set on `SplitterClicked`, consumed
+    /// by `CursorMoved` while held, cleared on mouse-up.
+    dragging_splitter: Option<SplitterDrag>,
     target_texture: Option<wgpu::Texture>,
     target_view: Option<wgpu::TextureView>,
     cursor: Option<kurbo::Point>,
@@ -245,6 +251,10 @@ impl ApplicationHandler for App {
                 "[click] pane {:?} @ host ({:.1}, {:.1}) / scene ({:.1}, {:.1})",
                 pane_id, host_pos.x, host_pos.y, scene_pos.x, scene_pos.y
             ),
+            SubstrateInputEvent::SplitterClicked { path, host_pos, .. } => eprintln!(
+                "[click] splitter at path={:?} @ host ({:.1}, {:.1})",
+                path, host_pos.x, host_pos.y
+            ),
             SubstrateInputEvent::TileClicked {
                 node_key,
                 host_pos,
@@ -303,6 +313,15 @@ impl ApplicationHandler for App {
             .registry_mut()
             .register(Box::new(OrreryRenderer::default()))
             .expect("register orrery");
+        // Splitter renderer for `NodeContentKind::Splitter` —
+        // paints the 4px draggable chrome strip between sibling
+        // panes. Click resolution lands on the substrate node
+        // and is reported as `SubstrateInputEvent::SplitterClicked`.
+        host_app
+            .substrate
+            .registry_mut()
+            .register(Box::new(SplitterRenderer::default()))
+            .expect("register splitter");
 
         // Seed tile-manager state. Not rendered by the frametree
         // projection (workbench panes default to Panel + masonry
@@ -381,6 +400,7 @@ impl ApplicationHandler for App {
             renderer,
             host_app,
             frame_layout,
+            dragging_splitter: None,
             target_texture: None,
             target_view: None,
             cursor: None,
@@ -439,7 +459,39 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::CursorMoved { position, .. } => {
-                state.cursor = Some(kurbo::Point::new(position.x, position.y));
+                let cursor = kurbo::Point::new(position.x, position.y);
+                state.cursor = Some(cursor);
+                // If a splitter drag is active, update the ratio of
+                // the targeted Split from the cursor delta, then
+                // re-project the frametree. compute_container_size
+                // resolves the parent split's pixel-space dimensions
+                // for delta→ratio scaling at any nesting depth.
+                if let Some(drag) = state.dragging_splitter.clone() {
+                    let viewport = viewport_size(
+                        state.surface_config.width,
+                        state.surface_config.height,
+                    );
+                    let container =
+                        compute_container_size(&state.frame_layout, &drag.path, viewport);
+                    let delta = match drag.axis {
+                        SplitAxis::Horizontal => {
+                            (cursor.x - drag.start_cursor.x) as f32
+                                / container.width.max(1.0) as f32
+                        }
+                        SplitAxis::Vertical => {
+                            (cursor.y - drag.start_cursor.y) as f32
+                                / container.height.max(1.0) as f32
+                        }
+                    };
+                    let new_ratio = (drag.start_ratio + delta).clamp(0.05, 0.95);
+                    if state.frame_layout.set_split_ratio(&drag.path, new_ratio) {
+                        state.host_app.sync_scene_from_frame_layout(
+                            &state.frame_layout,
+                            viewport,
+                        );
+                        state.window.request_redraw();
+                    }
+                }
             }
 
             WindowEvent::CursorLeft { .. } => {
@@ -450,24 +502,57 @@ impl ApplicationHandler for App {
                 state: btn_state,
                 button: MouseButton::Left,
                 ..
+            } if btn_state == ElementState::Released => {
+                if state.dragging_splitter.take().is_some() {
+                    eprintln!("[splitter] drag released");
+                }
+            }
+
+            WindowEvent::MouseInput {
+                state: btn_state,
+                button: MouseButton::Left,
+                ..
             } if btn_state == ElementState::Pressed => {
                 if let Some(cursor) = state.cursor {
                     let resolved = state.host_app.handle_pointer_press(cursor);
-                    // Demo dispatch: a `PaneClicked` resolves to a
-                    // `ToggleWorkbench` action targeted at the clicked
-                    // pane — closest match in the v0 `ActionKind` vocab
-                    // for "do something user-visible on click." A
-                    // proper `FocusPane` action lands when the new host
-                    // grows pane focus semantics.
-                    if let SubstrateInputEvent::PaneClicked { pane_id, .. } = resolved {
-                        let action =
-                            BusAction::pane(pane_id, ActionKind::ToggleWorkbench);
-                        match state.host_app.action_bus.dispatch(&action) {
-                            BusDispatchOutcome::Allowed => {}
-                            outcome => {
-                                eprintln!("[bus] dispatch outcome: {:?}", outcome);
+                    match resolved {
+                        // Splitter drag: snapshot the current (axis,
+                        // ratio) from the FrameLayout so cursor moves
+                        // can compute deltas against the start state.
+                        SubstrateInputEvent::SplitterClicked { path, .. } => {
+                            if let Some((axis, start_ratio)) =
+                                state.frame_layout.split_at(&path)
+                            {
+                                state.dragging_splitter = Some(SplitterDrag {
+                                    path: path.clone(),
+                                    axis,
+                                    start_cursor: cursor,
+                                    start_ratio,
+                                });
+                                eprintln!(
+                                    "[splitter] drag started axis={:?} ratio={:.2}",
+                                    axis, start_ratio
+                                );
                             }
                         }
+                        // Demo dispatch: a `PaneClicked` resolves to
+                        // a `ToggleWorkbench` action targeted at the
+                        // clicked pane — closest match in the v0
+                        // `ActionKind` vocab for "do something user-
+                        // visible on click." A proper `FocusPane`
+                        // action lands when the new host grows pane
+                        // focus semantics.
+                        SubstrateInputEvent::PaneClicked { pane_id, .. } => {
+                            let action =
+                                BusAction::pane(pane_id, ActionKind::ToggleWorkbench);
+                            match state.host_app.action_bus.dispatch(&action) {
+                                BusDispatchOutcome::Allowed => {}
+                                outcome => {
+                                    eprintln!("[bus] dispatch outcome: {:?}", outcome);
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }

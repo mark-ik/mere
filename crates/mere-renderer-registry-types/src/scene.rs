@@ -72,6 +72,11 @@ pub enum NodeContentKind {
     CustomCanvas,
     Composite,
     EdgeRendering,
+    /// Chrome region between two sibling panes in a frametree — a
+    /// narrow draggable strip. Painted by a substrate-side splitter
+    /// renderer; drag state is host-owned (snapshot at mouse-down,
+    /// updated on move, cleared on release).
+    Splitter,
 }
 
 /// Set of [`NodeContentKind`]s a renderer handles.

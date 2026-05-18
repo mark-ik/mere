@@ -52,6 +52,26 @@ pub struct LeafBounds {
     pub size: Size,
 }
 
+/// Pixel-space bounds for one splitter in a `FrameLayout`, produced
+/// by [`walk_splitters`]. A splitter is the narrow chrome region
+/// between a Split's two children — vertical strip for a horizontal
+/// split (children laid left/right), horizontal strip for a vertical
+/// split (children laid top/bottom). The strip sits *between* the
+/// children with zero overlap on either; thickness comes from
+/// [`SPLITTER_THICKNESS`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct SplitterBounds {
+    pub path: SplitPath,
+    pub axis: SplitAxis,
+    pub placement: Placement,
+    pub size: Size,
+}
+
+/// Visual + hit-test thickness for the splitter chrome between
+/// sibling panes. Matches the legacy gpui host's value so the
+/// xilem-side path lands with the same affordance density.
+pub const SPLITTER_THICKNESS: f64 = 4.0;
+
 /// Walk the layout tree from the viewport down to each leaf,
 /// multiplying dimensions by each split's ratio along the way.
 /// Returns the pixel-space size of the container at `path` (so
@@ -116,6 +136,19 @@ pub fn walk_leaves(layout: &FrameLayout, viewport_size: Size) -> Vec<LeafBounds>
     out
 }
 
+/// Walk every Split in `layout`, accumulating per-split splitter
+/// bounds. The splitter sits centered on the boundary between
+/// the Split's two children — a vertical strip of [`SPLITTER_THICKNESS`]
+/// width for horizontal splits, a horizontal strip for vertical
+/// splits. Returns one [`SplitterBounds`] per Split in depth-first
+/// order. Visually overlays the pane edges; pane backgrounds paint
+/// behind, splitter chrome paints on top.
+pub fn walk_splitters(layout: &FrameLayout, viewport_size: Size) -> Vec<SplitterBounds> {
+    let mut out = Vec::new();
+    walk_splitters_inner(&layout.root, Point::ZERO, viewport_size, &mut Vec::new(), &mut out);
+    out
+}
+
 fn walk_leaves_inner(node: &PaneNode, origin: Point, size: Size, out: &mut Vec<LeafBounds>) {
     match node {
         PaneNode::Leaf {
@@ -154,6 +187,69 @@ fn walk_leaves_inner(node: &PaneNode, origin: Point, size: Size, out: &mut Vec<L
                 walk_leaves_inner(second, second_origin, second_size, out);
             }
         },
+    }
+}
+
+fn walk_splitters_inner(
+    node: &PaneNode,
+    origin: Point,
+    size: Size,
+    path: &mut Vec<SplitChoice>,
+    out: &mut Vec<SplitterBounds>,
+) {
+    let PaneNode::Split {
+        axis,
+        ratio,
+        first,
+        second,
+    } = node
+    else {
+        return;
+    };
+    // Emit the splitter for THIS Split, centered on the boundary.
+    let half = SPLITTER_THICKNESS / 2.0;
+    match axis {
+        SplitAxis::Horizontal => {
+            let first_w = size.width * *ratio as f64;
+            let splitter_origin = Point::new(origin.x + first_w - half, origin.y);
+            let splitter_size = Size::new(SPLITTER_THICKNESS, size.height);
+            out.push(SplitterBounds {
+                path: path.clone(),
+                axis: *axis,
+                placement: Placement::translate(splitter_origin.x, splitter_origin.y),
+                size: splitter_size,
+            });
+            // Recurse into children with their split-shares.
+            let first_size = Size::new(first_w, size.height);
+            let second_size = Size::new(size.width - first_w, size.height);
+            path.push(SplitChoice::First);
+            walk_splitters_inner(first, origin, first_size, path, out);
+            path.pop();
+            let second_origin = Point::new(origin.x + first_w, origin.y);
+            path.push(SplitChoice::Second);
+            walk_splitters_inner(second, second_origin, second_size, path, out);
+            path.pop();
+        }
+        SplitAxis::Vertical => {
+            let first_h = size.height * *ratio as f64;
+            let splitter_origin = Point::new(origin.x, origin.y + first_h - half);
+            let splitter_size = Size::new(size.width, SPLITTER_THICKNESS);
+            out.push(SplitterBounds {
+                path: path.clone(),
+                axis: *axis,
+                placement: Placement::translate(splitter_origin.x, splitter_origin.y),
+                size: splitter_size,
+            });
+            let first_size = Size::new(size.width, first_h);
+            let second_size = Size::new(size.width, size.height - first_h);
+            path.push(SplitChoice::First);
+            walk_splitters_inner(first, origin, first_size, path, out);
+            path.pop();
+            let second_origin = Point::new(origin.x, origin.y + first_h);
+            path.push(SplitChoice::Second);
+            walk_splitters_inner(second, second_origin, second_size, path, out);
+            path.pop();
+        }
     }
 }
 
@@ -203,8 +299,15 @@ impl MereHostApp {
         F: Fn(&PaneContent) -> NodeContentKind,
     {
         let leaves = walk_leaves(layout, viewport_size);
+        let splitters = walk_splitters(layout, viewport_size);
         let mut new_scene = SubstrateScene::new();
-        let mut new_map = HashMap::with_capacity(leaves.len());
+        let mut new_pane_map = HashMap::with_capacity(leaves.len());
+        let mut new_splitter_map = HashMap::with_capacity(splitters.len());
+        // Insert leaves first so the splitter chrome paints over
+        // their edges. Hit-test runs in reverse insertion order;
+        // splitters added last hit first, which is what we want
+        // (the 4px boundary should grab clicks even when the user's
+        // cursor is also inside the abutting pane bounds).
         for leaf in &leaves {
             let identity = self
                 .pane_identity_map
@@ -219,10 +322,27 @@ impl MereHostApp {
                 content_kind: kind_for_content(&leaf.content),
                 renderer_pin: None,
             });
-            new_map.insert(leaf.pane_id, identity);
+            new_pane_map.insert(leaf.pane_id, identity);
+        }
+        for splitter in &splitters {
+            let identity = self
+                .splitter_identity_map
+                .get(&splitter.path)
+                .copied()
+                .unwrap_or_else(NodeIdentity::next);
+            new_scene.insert(SubstrateNode {
+                identity,
+                placement: splitter.placement,
+                size: splitter.size,
+                lod: mere_renderer_registry::LodLevel::FullPane,
+                content_kind: NodeContentKind::Splitter,
+                renderer_pin: None,
+            });
+            new_splitter_map.insert(splitter.path.clone(), identity);
         }
         self.scene = new_scene;
-        self.pane_identity_map = new_map;
+        self.pane_identity_map = new_pane_map;
+        self.splitter_identity_map = new_splitter_map;
     }
 
     /// Substrate identity assigned to `pane_id`, if the pane is
@@ -232,6 +352,15 @@ impl MereHostApp {
     /// space.
     pub fn identity_for_pane(&self, pane_id: PaneId) -> Option<NodeIdentity> {
         self.pane_identity_map.get(&pane_id).copied()
+    }
+
+    /// Substrate identity assigned to the splitter at `path` in the
+    /// last-synced layout, if any.
+    pub fn splitter_identity_for(
+        &self,
+        path: &mere_frame::SplitPath,
+    ) -> Option<NodeIdentity> {
+        self.splitter_identity_map.get(path).copied()
     }
 
     /// Open-order index of the leaf with `pane_id` within the
@@ -373,7 +502,8 @@ mod tests {
         let mut app = MereHostApp::new();
         app.sync_scene_from_frame_layout(&layout, Size::new(1000.0, 800.0));
 
-        assert_eq!(app.scene.len(), 3);
+        // 3 leaves + 2 splitters = 5 substrate nodes total.
+        assert_eq!(app.scene.len(), 5);
         assert!(app.identity_for_pane(PaneId(1)).is_some());
         assert!(app.identity_for_pane(PaneId(2)).is_some());
         assert!(app.identity_for_pane(PaneId(3)).is_some());
@@ -436,5 +566,62 @@ mod tests {
         };
         assert_eq!(drag.path.len(), 1);
         assert_eq!(drag.start_cursor, Point::new(100.0, 50.0));
+    }
+
+    #[test]
+    fn walk_splitters_emits_one_entry_per_split() {
+        let layout = fixture_three_pane();
+        let splitters = walk_splitters(&layout, Size::new(1000.0, 800.0));
+        // Two Splits in the fixture: the root Horizontal and the
+        // nested Vertical in the second child.
+        assert_eq!(splitters.len(), 2);
+    }
+
+    #[test]
+    fn walk_splitters_root_horizontal_is_vertical_strip_at_boundary() {
+        let layout = fixture_three_pane();
+        let splitters = walk_splitters(&layout, Size::new(1000.0, 800.0));
+        // First emitted is the root split (depth-first).
+        let s = &splitters[0];
+        assert_eq!(s.path, Vec::<SplitChoice>::new());
+        assert_eq!(s.axis, SplitAxis::Horizontal);
+        // Centered on x = 600 with thickness 4 → origin x = 598.
+        let t = s.placement.transform.translation();
+        assert!((t.x - 598.0).abs() < 1e-3);
+        assert!(t.y.abs() < 1e-3);
+        assert!((s.size.width - SPLITTER_THICKNESS).abs() < 1e-3);
+        assert!((s.size.height - 800.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn walk_splitters_nested_vertical_is_horizontal_strip() {
+        let layout = fixture_three_pane();
+        let splitters = walk_splitters(&layout, Size::new(1000.0, 800.0));
+        // Second emitted is the nested vertical split in the right column.
+        let s = &splitters[1];
+        assert_eq!(s.path, vec![SplitChoice::Second]);
+        assert_eq!(s.axis, SplitAxis::Vertical);
+        // Right column origin x = 600, width = 400. Vertical 0.3 split
+        // → first child height 240; splitter centered at y = 240,
+        // origin y = 238, height = 4, width = column width (400).
+        let t = s.placement.transform.translation();
+        assert!((t.x - 600.0).abs() < 1e-3);
+        assert!((t.y - 238.0).abs() < 1e-3);
+        assert!((s.size.width - 400.0).abs() < 1e-3);
+        assert!((s.size.height - SPLITTER_THICKNESS).abs() < 1e-3);
+    }
+
+    #[test]
+    fn sync_scene_from_frame_layout_includes_splitter_nodes() {
+        let layout = fixture_three_pane();
+        let mut app = MereHostApp::new();
+        app.sync_scene_from_frame_layout(&layout, Size::new(1000.0, 800.0));
+        // 3 panes + 2 splitters = 5 substrate nodes.
+        assert_eq!(app.scene.len(), 5);
+        // All splitter paths are queryable through the identity map.
+        let root_path: Vec<SplitChoice> = Vec::new();
+        let nested_path = vec![SplitChoice::Second];
+        assert!(app.splitter_identity_for(&root_path).is_some());
+        assert!(app.splitter_identity_for(&nested_path).is_some());
     }
 }

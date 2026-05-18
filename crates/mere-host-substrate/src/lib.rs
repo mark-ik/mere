@@ -55,12 +55,15 @@ use mere_spatial_prototype::{
 pub mod drop_zone;
 pub mod frame_layout;
 pub mod orrery_renderer;
+pub mod splitter_renderer;
 
 pub use drop_zone::infer_drop_side;
 pub use frame_layout::{
-    LeafBounds, SplitterDrag, compute_container_size, default_content_kind_for, walk_leaves,
+    LeafBounds, SPLITTER_THICKNESS, SplitterBounds, SplitterDrag, compute_container_size,
+    default_content_kind_for, walk_leaves, walk_splitters,
 };
 pub use orrery_renderer::OrreryRenderer;
+pub use splitter_renderer::SplitterRenderer;
 
 /// Per-tile dimensions used by `sync_scene_from_tiles`. Placeholder
 /// until cartography supplies real layout.
@@ -81,6 +84,16 @@ pub enum SubstrateInputEvent {
     /// typically translates to focus/activate actions on the pane.
     PaneClicked {
         pane_id: PaneId,
+        host_pos: Point,
+        scene_pos: Point,
+    },
+    /// Pointer hit landed on a splitter chrome node. Carries the
+    /// `SplitPath` the host needs to snapshot a
+    /// [`crate::SplitterDrag`] and start tracking cursor moves
+    /// against `FrameLayout::set_split_ratio`. The host looks up
+    /// the axis + current ratio via `FrameLayout::split_at(&path)`.
+    SplitterClicked {
+        path: mere_frame::SplitPath,
         host_pos: Point,
         scene_pos: Point,
     },
@@ -151,6 +164,14 @@ pub struct MereHostApp {
     /// and reparent ops that don't change leaf membership.
     pub(crate) pane_identity_map: HashMap<PaneId, NodeIdentity>,
 
+    /// Identity map for splitter chrome — keyed by the
+    /// [`SplitPath`] of the `PaneNode::Split` the splitter sits at.
+    /// Populated alongside `pane_identity_map` by
+    /// `sync_scene_from_frame_layout`. Drag handlers look up the
+    /// split path from a `SplitterClicked` event's identity, then
+    /// dispatch ratio updates against `FrameLayout::set_split_ratio`.
+    pub(crate) splitter_identity_map: HashMap<mere_frame::SplitPath, NodeIdentity>,
+
     /// Host-installed input callback. `handle_pointer_press` calls
     /// this when set; otherwise events are dropped silently (a
     /// reasonable default for tests and probes that don't care about
@@ -190,6 +211,7 @@ impl MereHostApp {
             tiles: TileManager::new(),
             tile_identity_map: HashMap::new(),
             pane_identity_map: HashMap::new(),
+            splitter_identity_map: HashMap::new(),
             input_callback: None,
             manifests: ManifestStore::new(),
             active_session: None,
@@ -376,6 +398,18 @@ impl MereHostApp {
             .find_map(|(k, v)| if *v == identity { Some(*k) } else { None })
     }
 
+    /// Find the frame `SplitPath` for a substrate `NodeIdentity` —
+    /// resolves splitter chrome clicks back to the Split node they
+    /// sit at.
+    pub fn split_path_for_identity(
+        &self,
+        identity: NodeIdentity,
+    ) -> Option<mere_frame::SplitPath> {
+        self.splitter_identity_map
+            .iter()
+            .find_map(|(k, v)| if *v == identity { Some(k.clone()) } else { None })
+    }
+
     /// Install a closure that receives every `SubstrateInputEvent`
     /// the substrate resolves. Replaces any previously-installed
     /// callback. Pass `None`-ish by clearing via
@@ -406,10 +440,18 @@ impl MereHostApp {
         let scene_pos = self.substrate.scene_pos_from_host(host_pos);
         let event = match self.scene.hit_test(scene_pos) {
             Some(SceneHit::Node(identity)) => {
-                // Try the pane map first — frametree projection is the
-                // new-host path; the tile map is the legacy / probe
-                // path. If both have entries, pane wins.
-                if let Some(pane_id) = self.pane_id_for_identity(identity) {
+                // Splitter chrome wins over pane content — clicks on
+                // the 4px boundary should grab the splitter even when
+                // the cursor's also inside the abutting pane bounds.
+                // Then pane (frametree mode), then tile (legacy /
+                // probe mode), then unknown.
+                if let Some(path) = self.split_path_for_identity(identity) {
+                    SubstrateInputEvent::SplitterClicked {
+                        path,
+                        host_pos,
+                        scene_pos,
+                    }
+                } else if let Some(pane_id) = self.pane_id_for_identity(identity) {
                     SubstrateInputEvent::PaneClicked {
                         pane_id,
                         host_pos,

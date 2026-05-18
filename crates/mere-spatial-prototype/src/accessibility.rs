@@ -92,7 +92,8 @@ fn role_for(kind: NodeContentKind) -> Role {
         NodeContentKind::GraphView
         | NodeContentKind::Knot
         | NodeContentKind::Composite
-        | NodeContentKind::EdgeRendering => Role::Group,
+        | NodeContentKind::EdgeRendering
+        | NodeContentKind::Splitter => Role::Group,
     }
 }
 

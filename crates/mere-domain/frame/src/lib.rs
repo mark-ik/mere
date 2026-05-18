@@ -201,7 +201,7 @@ pub enum PaneNode {
 }
 
 /// One step into a [`PaneNode::Split`] when walking the layout tree.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SplitChoice {
     First,
     Second,
