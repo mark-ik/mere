@@ -39,7 +39,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use kurbo::{Affine, Point, Size};
-use mere_frame::{GraphId, SessionId};
+use mere_frame::{GraphId, PaneId, SessionId};
 use mere_host_runtime::view_intent_store::{load_view_intent, save_view_intent};
 use mere_host_runtime::{
     ActionBus, CameraSnapshot, GraphSessionManifest, LoadReport, ManifestStore, TileManager,
@@ -53,8 +53,12 @@ use mere_spatial_prototype::{
 };
 
 pub mod drop_zone;
+pub mod frame_layout;
 
 pub use drop_zone::infer_drop_side;
+pub use frame_layout::{
+    LeafBounds, SplitterDrag, compute_container_size, default_content_kind_for, walk_leaves,
+};
 
 /// Per-tile dimensions used by `sync_scene_from_tiles`. Placeholder
 /// until cartography supplies real layout.
@@ -127,6 +131,13 @@ pub struct MereHostApp {
     /// stable.
     tile_identity_map: HashMap<NodeKey, NodeIdentity>,
 
+    /// Sibling of [`tile_identity_map`] for the pane-level identity
+    /// space. Populated by `sync_scene_from_frame_layout`; each leaf
+    /// pane's `PaneId` maps to a stable `NodeIdentity` so producer
+    /// handles + accessibility tree ids survive ratio adjustments
+    /// and reparent ops that don't change leaf membership.
+    pub(crate) pane_identity_map: HashMap<PaneId, NodeIdentity>,
+
     /// Host-installed input callback. `handle_pointer_press` calls
     /// this when set; otherwise events are dropped silently (a
     /// reasonable default for tests and probes that don't care about
@@ -165,6 +176,7 @@ impl MereHostApp {
             compositor: ExternalTextureCompositor::new(),
             tiles: TileManager::new(),
             tile_identity_map: HashMap::new(),
+            pane_identity_map: HashMap::new(),
             input_callback: None,
             manifests: ManifestStore::new(),
             active_session: None,
