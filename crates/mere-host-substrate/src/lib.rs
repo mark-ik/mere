@@ -36,11 +36,12 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use kurbo::{Affine, Point, Size};
+use mere_frame::SessionId;
 use mere_host_runtime::view_intent_store::{load_view_intent, save_view_intent};
-use mere_host_runtime::{CameraSnapshot, TileManager, ViewIntent};
+use mere_host_runtime::{CameraSnapshot, LoadReport, ManifestStore, TileManager, ViewIntent};
 use mere_kernel::graph::NodeKey;
 use mere_renderer_registry::{DiagnosticEvent, DiagnosticSink, NodeContentKind, NodeIdentity, Placement};
 use mere_spatial_prototype::{
@@ -124,6 +125,16 @@ pub struct MereHostApp {
     /// reasonable default for tests and probes that don't care about
     /// click routing).
     input_callback: Option<InputCallback>,
+
+    /// In-memory + on-disk store for `GraphSessionManifest`s.
+    /// Bound to a sessions-root directory via `bind_session_root`;
+    /// stays empty (no root, no manifests) until then.
+    pub manifests: ManifestStore,
+
+    /// Currently-active session id, if one has been chosen via
+    /// `activate_session`. Drives `active_session_dir` and the
+    /// `*_active_view_intent` save/load helpers.
+    active_session: Option<SessionId>,
 }
 
 impl Default for MereHostApp {
@@ -141,7 +152,87 @@ impl MereHostApp {
             tiles: TileManager::new(),
             tile_identity_map: HashMap::new(),
             input_callback: None,
+            manifests: ManifestStore::new(),
+            active_session: None,
         }
+    }
+
+    /// Bind the manifest store to a sessions-root directory and
+    /// load every `manifest.json` found beneath it. Returns the
+    /// runtime's `LoadReport` listing successful + malformed
+    /// sessions for diagnostic emission.
+    ///
+    /// Missing root → `Ok(empty report)` (fresh install — host
+    /// seeds a default session if it wants one). I/O errors on the
+    /// root traversal surface as `Err`.
+    pub fn bind_session_root(&mut self, root: impl Into<PathBuf>) -> io::Result<LoadReport> {
+        self.manifests.load_from_disk(root)
+    }
+
+    /// Currently-active session id (set via `activate_session`).
+    pub fn active_session_id(&self) -> Option<SessionId> {
+        self.active_session
+    }
+
+    /// Mark a session as active. Returns `true` if the id exists in
+    /// the manifest store; otherwise leaves the active session
+    /// unchanged and returns `false`.
+    pub fn activate_session(&mut self, id: SessionId) -> bool {
+        if self.manifests.get(id).is_some() {
+            self.active_session = Some(id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Drop the active-session selection. Subsequent
+    /// `active_session_dir` / `*_active_view_intent` calls return
+    /// `None` / write nothing.
+    pub fn deactivate_session(&mut self) {
+        self.active_session = None;
+    }
+
+    /// On-disk directory for the active session, if both an active
+    /// session and a bound manifest root are set. Path layout
+    /// matches `ManifestStore::flush_dirty`: `<root>/<session_uuid>/`.
+    pub fn active_session_dir(&self) -> Option<PathBuf> {
+        let id = self.active_session?;
+        let root = self.manifests.root()?;
+        Some(root.join(id.as_uuid().to_string()))
+    }
+
+    /// Persist the substrate camera as a view-intent under the
+    /// active session's directory. Returns `Ok(None)` when no
+    /// active session / manifest root is set; otherwise returns
+    /// `Ok(Some(written))` where `written` is the
+    /// `save_substrate_view_intent` outcome (`false` = identity
+    /// camera skipped).
+    pub fn save_active_view_intent(
+        &self,
+        frame_id_str: &str,
+        pane_id: u64,
+    ) -> io::Result<Option<bool>> {
+        let Some(dir) = self.active_session_dir() else {
+            return Ok(None);
+        };
+        let written = self.save_substrate_view_intent(&dir, frame_id_str, pane_id)?;
+        Ok(Some(written))
+    }
+
+    /// Load a view-intent sidecar from the active session's
+    /// directory and apply it. Returns `Ok(None)` for no-active-
+    /// session / no-bound-root; `Ok(Some(loaded))` otherwise.
+    pub fn load_active_view_intent(
+        &mut self,
+        frame_id_str: &str,
+        pane_id: u64,
+    ) -> io::Result<Option<bool>> {
+        let Some(dir) = self.active_session_dir() else {
+            return Ok(None);
+        };
+        let loaded = self.load_substrate_view_intent(&dir, frame_id_str, pane_id)?;
+        Ok(Some(loaded))
     }
 
     /// Project the tile manager's open-tile list into a new
@@ -643,6 +734,144 @@ mod tests {
         assert_eq!(app.substrate.camera(), kurbo::Affine::IDENTITY);
         app.apply_view_intent(&saved);
         assert_eq!(app.substrate.camera(), camera);
+    }
+
+    /// Per-test scratch directory under the OS temp dir, namespaced
+    /// by a fresh UUID. Tests clean up on success; failures leave
+    /// the dir for inspection.
+    fn temp_session_root() -> PathBuf {
+        std::env::temp_dir()
+            .join("mere-host-substrate-tests")
+            .join(uuid::Uuid::new_v4().to_string())
+    }
+
+    fn fresh_session_id() -> SessionId {
+        SessionId::from_uuid(uuid::Uuid::new_v4())
+    }
+
+    fn fresh_graph_id() -> mere_frame::GraphId {
+        mere_frame::GraphId::from_uuid(uuid::Uuid::new_v4())
+    }
+
+    fn seed_manifest_dir(root: &Path, manifest: &mere_host_runtime::GraphSessionManifest) {
+        let session_dir = root.join(manifest.session_id.as_uuid().to_string());
+        std::fs::create_dir_all(&session_dir).expect("create session dir");
+        let json = serde_json::to_string_pretty(manifest).expect("serialise");
+        std::fs::write(session_dir.join("manifest.json"), json).expect("write manifest");
+    }
+
+    #[test]
+    fn bind_session_root_loads_existing_manifests() {
+        let root = temp_session_root();
+        let manifest =
+            mere_host_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
+        let session_id = manifest.session_id;
+        seed_manifest_dir(&root, &manifest);
+
+        let mut app = MereHostApp::new();
+        let report = app.bind_session_root(&root).expect("bind ok");
+        assert_eq!(report.loaded.len(), 1);
+        assert_eq!(report.loaded[0], session_id);
+        assert_eq!(report.failed.len(), 0);
+        assert!(app.manifests.get(session_id).is_some());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn bind_session_root_missing_root_returns_empty_report() {
+        let root = temp_session_root().join("nonexistent");
+        let mut app = MereHostApp::new();
+        let report = app.bind_session_root(&root).expect("missing root is OK");
+        assert!(report.loaded.is_empty());
+        assert!(report.failed.is_empty());
+    }
+
+    #[test]
+    fn activate_session_only_succeeds_for_known_ids() {
+        let root = temp_session_root();
+        let manifest =
+            mere_host_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
+        let session_id = manifest.session_id;
+        seed_manifest_dir(&root, &manifest);
+
+        let mut app = MereHostApp::new();
+        app.bind_session_root(&root).expect("bind ok");
+
+        assert!(app.active_session_id().is_none());
+        assert!(!app.activate_session(fresh_session_id()), "unknown id");
+        assert!(app.active_session_id().is_none());
+
+        assert!(app.activate_session(session_id));
+        assert_eq!(app.active_session_id(), Some(session_id));
+
+        app.deactivate_session();
+        assert!(app.active_session_id().is_none());
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn active_session_dir_matches_manifest_path_layout() {
+        let root = temp_session_root();
+        let manifest =
+            mere_host_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
+        let session_id = manifest.session_id;
+        seed_manifest_dir(&root, &manifest);
+
+        let mut app = MereHostApp::new();
+        app.bind_session_root(&root).expect("bind ok");
+        assert!(app.active_session_dir().is_none(), "no active session yet");
+        app.activate_session(session_id);
+        let dir = app.active_session_dir().expect("active dir");
+        assert_eq!(dir, root.join(session_id.as_uuid().to_string()));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn save_active_view_intent_writes_under_session_dir() {
+        let root = temp_session_root();
+        let manifest =
+            mere_host_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
+        let session_id = manifest.session_id;
+        seed_manifest_dir(&root, &manifest);
+
+        let mut app = MereHostApp::new();
+        app.bind_session_root(&root).expect("bind ok");
+        app.activate_session(session_id);
+        app.substrate
+            .set_camera(kurbo::Affine::translate((10.0, 20.0)));
+
+        let written = app
+            .save_active_view_intent("frame-a", 1)
+            .expect("save ok");
+        assert_eq!(written, Some(true));
+
+        // Re-bind into a fresh app and confirm the file is reachable
+        // via load_active_view_intent.
+        let mut app2 = MereHostApp::new();
+        app2.bind_session_root(&root).expect("rebind ok");
+        app2.activate_session(session_id);
+        let loaded = app2
+            .load_active_view_intent("frame-a", 1)
+            .expect("load ok");
+        assert_eq!(loaded, Some(true));
+        assert_eq!(
+            app2.substrate.camera(),
+            kurbo::Affine::translate((10.0, 20.0))
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn save_active_view_intent_without_active_session_is_none() {
+        let app = MereHostApp::new();
+        let result = app
+            .save_active_view_intent("frame-a", 1)
+            .expect("save ok");
+        assert!(result.is_none(), "no active session → Ok(None)");
     }
 
     #[test]
