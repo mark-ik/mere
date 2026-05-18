@@ -16,6 +16,34 @@ use std::hash::Hash;
 use crate::projection::ProjectionMode;
 use crate::scripting::{SceneObjectHitShape, SceneObjectId};
 
+/// A derived frame-affinity region — passed in via
+/// `graph_layout::LayoutExtras::frame_regions` and also consumed by
+/// graph-canvas's scene derivation as host-provided input.
+///
+/// Defined in graph-canvas (rather than graph-layout) because
+/// `graph-canvas → graph-layout` is the dep direction; the
+/// frame-region type is host-shaped data both crates need to read.
+/// `graph-layout::extras` re-exports it for backward compatibility.
+///
+/// Hosts derive these from their own relation graph (for Graphshell:
+/// `ArrangementRelation(FrameMember)` edges) and pass them each frame.
+/// The centroid is computed by the layout step from current member
+/// positions — callers do not need to supply it.
+#[derive(Debug, Clone)]
+pub struct FrameRegion<N>
+where
+    N: Clone + Eq + Hash,
+{
+    /// The frame anchor node. Informational — force calculations use the
+    /// member centroid, not the anchor's position.
+    pub anchor: N,
+    /// Member nodes pulled toward the centroid.
+    pub members: Vec<N>,
+    /// Per-region strength multiplier. Multiplied with
+    /// `FrameAffinityConfig::global_strength` at apply time.
+    pub strength: f32,
+}
+
 /// Runtime mode for the graph canvas.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum SceneMode {

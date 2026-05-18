@@ -2,43 +2,44 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! [`LayoutStrategy`] adapter for [`graph_canvas::layout::LSystem`].
+//! [`LayoutStrategy`] adapter for [`graph_canvas::layout::Penrose`].
 //!
-//! Analytic: nodes are placed along the path of an L-system fractal
-//! expansion. Built-in grammars include Hilbert (cache-coherent
-//! space-filling — adjacent indices stay spatially close, good for
-//! very large graphs), Koch, and Dragon. Pick by aesthetic + locality
-//! goals.
+//! Analytic: nodes placed at vertices of a Penrose aperiodic tiling
+//! (P2 kite-dart or P3 rhombus). The tiling is non-periodic — it
+//! never exactly repeats — but locally structured. Useful for
+//! "more than grid, less than organic" UIs where users need spatial
+//! memory of where things are: each region looks distinctive at the
+//! local scale despite never repeating globally.
 
-use graph_canvas::layout::{LSystem, LSystemConfig};
+use crate::{Penrose, PenroseConfig};
 
 use super::shared::{projection_from_positions, run_static_layout_one_shot};
-use crate::projection::Projection;
-use crate::request::ProjectionRequest;
-use crate::strategy::LayoutStrategy;
+use cartography::projection::Projection;
+use cartography::request::ProjectionRequest;
+use cartography::strategy::LayoutStrategy;
 
-/// Cartography-side adapter for [`graph_canvas::layout::LSystem`].
+/// Cartography-side adapter for [`graph_canvas::layout::Penrose`].
 #[derive(Debug, Default, Clone)]
-pub struct LSystemAdapter {
-    pub config: LSystemConfig,
+pub struct PenroseAdapter {
+    pub config: PenroseConfig,
 }
 
-impl LSystemAdapter {
-    pub const PROJECTION_ID: &'static str = "lsystem.default";
+impl PenroseAdapter {
+    pub const PROJECTION_ID: &'static str = "penrose.default";
 
-    pub fn new(config: LSystemConfig) -> Self {
+    pub fn new(config: PenroseConfig) -> Self {
         Self { config }
     }
 }
 
-impl LayoutStrategy for LSystemAdapter {
+impl LayoutStrategy for PenroseAdapter {
     fn projection_id(&self) -> &'static str {
         Self::PROJECTION_ID
     }
 
     fn project(&self, request: &ProjectionRequest<'_>) -> Projection {
-        let mut lsystem = LSystem::new(self.config.clone());
-        let positions = run_static_layout_one_shot(request, &mut lsystem);
+        let mut penrose = Penrose::new(self.config.clone());
+        let positions = run_static_layout_one_shot(request, &mut penrose);
         projection_from_positions(Self::PROJECTION_ID, request, positions)
     }
 }
@@ -46,9 +47,12 @@ impl LayoutStrategy for LSystemAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request::ViewIntent;
-    use crate::signals::IntelligenceSignals;
-    use graph_canvas::layout::{IterationDepth, LSystemGrammar};
+    use cartography::request::ViewIntent;
+    use cartography::signals::IntelligenceSignals;
+    use euclid::default::Point2D;
+    use crate::{
+        NodeAssignmentStrategy, PenroseVariant, SubdivisionCount, UnusedVertexPolicy,
+    };
     use mere_kernel::geometry::PortablePoint;
     use mere_kernel::graph::{Graph, NodeKey};
     use uuid::Uuid;
@@ -69,27 +73,25 @@ mod tests {
 
     #[test]
     fn adapter_projection_id_is_stable() {
-        let adapter = LSystemAdapter::default();
-        assert_eq!(adapter.projection_id(), "lsystem.default");
+        let adapter = PenroseAdapter::default();
+        assert_eq!(adapter.projection_id(), "penrose.default");
     }
 
     #[test]
     fn project_places_every_node_with_distinct_positions() {
-        let (graph, keys) = small_graph(8);
+        let (graph, keys) = small_graph(10);
         let signals = IntelligenceSignals::default();
         let request = ProjectionRequest {
             graph: &graph,
             signals: &signals,
             intent: ViewIntent::default(),
         };
-        let adapter = LSystemAdapter::default();
+        let adapter = PenroseAdapter::default();
         let projection = adapter.project(&request);
-
         assert_eq!(projection.nodes.len(), keys.len());
         assert!(projection.metadata.settled);
 
-        // Hilbert-curve placement: 8 nodes ought to produce 8 distinct
-        // points along the curve.
+        // Penrose vertices are aperiodic — no two share a position.
         let mut sorted: Vec<_> = projection
             .nodes
             .iter()
@@ -102,14 +104,14 @@ mod tests {
 
     #[test]
     fn project_is_deterministic_for_same_graph() {
-        let (graph, _) = small_graph(6);
+        let (graph, _) = small_graph(7);
         let signals = IntelligenceSignals::default();
         let request = ProjectionRequest {
             graph: &graph,
             signals: &signals,
             intent: ViewIntent::default(),
         };
-        let adapter = LSystemAdapter::default();
+        let adapter = PenroseAdapter::default();
         let p1 = adapter.project(&request);
         let p2 = adapter.project(&request);
         let map1: std::collections::HashMap<NodeKey, _> =
@@ -120,16 +122,17 @@ mod tests {
     }
 
     #[test]
-    fn explicit_depth_propagates_through_config() {
-        let adapter = LSystemAdapter::new(LSystemConfig {
-            grammar: LSystemGrammar::Hilbert,
-            iteration_depth: IterationDepth::Explicit(3),
-            ..LSystemConfig::default()
+    fn custom_center_propagates() {
+        let adapter = PenroseAdapter::new(PenroseConfig {
+            variant: PenroseVariant::default(),
+            subdivision_count: SubdivisionCount::Explicit(3),
+            assignment: NodeAssignmentStrategy::default(),
+            unused_vertices: UnusedVertexPolicy::default(),
+            center: Point2D::new(500.0, 500.0),
+            tile_scale: 300.0,
         });
-        assert!(matches!(
-            adapter.config.iteration_depth,
-            IterationDepth::Explicit(3)
-        ));
+        assert_eq!(adapter.config.center.x, 500.0);
+        assert_eq!(adapter.config.tile_scale, 300.0);
     }
 
     #[test]
@@ -141,7 +144,7 @@ mod tests {
             signals: &signals,
             intent: ViewIntent::default(),
         };
-        let adapter = LSystemAdapter::default();
+        let adapter = PenroseAdapter::default();
         let projection = adapter.project(&request);
         assert!(projection.nodes.is_empty());
         assert!(projection.metadata.settled);
@@ -157,7 +160,7 @@ mod tests {
             signals: &signals,
             intent: ViewIntent::default(),
         };
-        let adapter = LSystemAdapter::default();
+        let adapter = PenroseAdapter::default();
         for _ in 0..5 {
             adapter.project(&request);
         }

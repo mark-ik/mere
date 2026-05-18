@@ -1182,8 +1182,6 @@ dependencies = [
 name = "cartography"
 version = "0.0.1"
 dependencies = [
- "euclid",
- "graph-canvas",
  "mere-kernel",
  "serde",
  "uuid",
@@ -3665,6 +3663,20 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
+]
+
+[[package]]
+name = "graph-layout"
+version = "0.0.1"
+dependencies = [
+ "cartography",
+ "euclid",
+ "graph-canvas",
+ "mere-kernel",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -6923,6 +6935,7 @@ dependencies = [
  "cartography",
  "document-canvas",
  "graph-canvas",
+ "graph-layout",
  "inker",
  "mere-kernel",
  "serde",

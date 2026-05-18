@@ -11,6 +11,10 @@
 //!
 //! Sibling crates:
 //! - `mere-kernel` — portable graph data model (graph truth)
+//! - `graph-layout` — graph layout algorithms (`Layout<N>` trait,
+//!   force-directed / Barnes-Hut / Phyllotaxis / Penrose / etc. + the
+//!   cartography adapters). Extracted from `graph-canvas::layout` on
+//!   2026-05-18 per the cartography layer brief §9 step 4.
 //! - `forme` — per-graph-view workbench arrangement authority (formerly
 //!   `graph-tree`)
 //! - `node-lineage` — owner-scoped navigation-lineage model (formerly
@@ -24,12 +28,10 @@ pub mod fields;
 pub mod hit_test;
 pub mod input;
 pub mod interaction;
-pub mod layout;
 pub mod lod;
 pub mod navigation;
 pub mod node_style;
 pub mod packet;
-pub mod physics_config;
 pub mod projection;
 pub mod scene;
 pub mod scene_composition;

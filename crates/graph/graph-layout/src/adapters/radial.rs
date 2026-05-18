@@ -22,16 +22,16 @@
 use std::collections::HashMap;
 
 use euclid::default::Point2D;
-use graph_canvas::layout::{
+use crate::{
     Layout, Radial, RadialAngularPolicy, RadialConfig, RadialUnreachablePolicy, StaticLayoutState,
 };
 use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
 use mere_kernel::graph::NodeKey;
 
 use super::shared::{bounds_of, build_positioned_edges};
-use crate::projection::{PositionedNode, Projection, ProjectionMetadata};
-use crate::request::ProjectionRequest;
-use crate::strategy::LayoutStrategy;
+use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
+use cartography::request::ProjectionRequest;
+use cartography::strategy::LayoutStrategy;
 
 /// Cartography-side adapter for [`graph_canvas::layout::Radial`].
 ///
@@ -134,7 +134,7 @@ impl LayoutStrategy for RadialAdapter {
             step_count: 0,
         };
         let viewport = graph_canvas::camera::CanvasViewport::default();
-        let extras = graph_canvas::layout::LayoutExtras::<NodeKey>::default();
+        let extras = crate::LayoutExtras::<NodeKey>::default();
         let deltas = radial.step(&scene, &mut state, 0.0, &viewport, &extras);
 
         // `deltas[id] = target - origin = target`. Build the
@@ -175,8 +175,8 @@ impl LayoutStrategy for RadialAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request::ViewIntent;
-    use crate::signals::IntelligenceSignals;
+    use cartography::request::ViewIntent;
+    use cartography::signals::IntelligenceSignals;
     use mere_kernel::geometry::PortablePoint;
     use mere_kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
     use uuid::Uuid;

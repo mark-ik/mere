@@ -10,12 +10,12 @@
 //! Snaking / Spiral). Use for structured note-taking views, list
 //! mode, or tile-style overviews.
 
-use graph_canvas::layout::{Grid, GridConfig};
+use crate::{Grid, GridConfig};
 
 use super::shared::{projection_from_positions, run_static_layout_one_shot};
-use crate::projection::Projection;
-use crate::request::ProjectionRequest;
-use crate::strategy::LayoutStrategy;
+use cartography::projection::Projection;
+use cartography::request::ProjectionRequest;
+use cartography::strategy::LayoutStrategy;
 
 /// Cartography-side adapter for [`graph_canvas::layout::Grid`].
 #[derive(Debug, Default, Clone, Copy)]
@@ -46,10 +46,10 @@ impl LayoutStrategy for GridAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request::ViewIntent;
-    use crate::signals::IntelligenceSignals;
+    use cartography::request::ViewIntent;
+    use cartography::signals::IntelligenceSignals;
     use euclid::default::Point2D;
-    use graph_canvas::layout::{GridColumns, GridTraversal};
+    use crate::{GridColumns, GridTraversal};
     use mere_kernel::geometry::PortablePoint;
     use mere_kernel::graph::{Graph, NodeKey};
     use uuid::Uuid;

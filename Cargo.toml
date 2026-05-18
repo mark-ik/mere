@@ -5,6 +5,7 @@ members = [
     "crates/mere/mere-identity",
     "crates/mere/mere-transport",
     "crates/graph/graph-canvas",
+    "crates/graph/graph-layout",
     "crates/graph/node-lineage",
     "crates/graph/forme",
     "crates/document/document-canvas",

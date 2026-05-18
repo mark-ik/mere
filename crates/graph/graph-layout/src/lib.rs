@@ -2,18 +2,33 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Graph layout algorithms that operate on `CanvasSceneInput` snapshots and
-//! return per-node position deltas for the host to apply.
+//! # graph-layout
 //!
-//! The `Layout` trait is delta-returning (not mutating): each `step()` reads
-//! the current scene, advances internal state by `dt`, and returns a map of
-//! node id to displacement. The host is responsible for writing those deltas
-//! back to its own position store (petgraph in graphshell proper; other
-//! carriers for future hosts).
+//! Graph layout algorithms that operate on `CanvasSceneInput` snapshots
+//! and return per-node position deltas for the host to apply.
 //!
-//! This shape is framework-agnostic, allocation-visible, and WASM-clean —
-//! no `std::time`, no egui, no petgraph. Composes with the existing
-//! `scene_physics` delta-based helpers in the same crate.
+//! Extracted from `graph_canvas::layout` per the [cartography layer
+//! brief](../../../../design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
+//! §9 step 4 — the sibling-crate move. `graph-canvas` is now the
+//! renderer; this crate is the layout subsystem. `graph-canvas` still
+//! defines the `CanvasViewport` / `CanvasSceneInput` primitive shapes
+//! the layout impls operate on; this crate depends on `graph-canvas`
+//! one-way for those primitives.
+//!
+//! The `Layout<N>` trait is delta-returning (not mutating): each
+//! `step()` reads the current scene, advances internal state by `dt`,
+//! and returns a map of node id to displacement. The host writes
+//! those deltas back to its own position store (petgraph in
+//! graphshell proper; other carriers for future hosts).
+//!
+//! This shape is framework-agnostic, allocation-visible, and
+//! WASM-clean — no `std::time`, no egui, no petgraph.
+//!
+//! Cartography adapters wrapping each `Layout<N>` impl with the
+//! `LayoutStrategy` / `StreamingLayoutStrategy` contracts live in
+//! [`adapters`]. They retired cartography's prior `graph-canvas-
+//! adapters` feature gate; consumers depend on `graph-layout`
+//! directly to opt in.
 
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -21,8 +36,8 @@ use std::hash::Hash;
 use euclid::default::Vector2D;
 use serde::{Deserialize, Serialize};
 
-use crate::camera::CanvasViewport;
-use crate::scene::CanvasSceneInput;
+use graph_canvas::camera::CanvasViewport;
+use graph_canvas::scene::CanvasSceneInput;
 
 pub mod barnes_hut;
 pub mod curves;
@@ -66,6 +81,13 @@ pub mod registry;
 pub use registry::{
     BuiltinProvider, DynLayout, ErasedState, LayoutCapability, LayoutCategory, LayoutId,
     LayoutProvenance, LayoutProvider, LayoutRegistry, RegisterError, register_builtins,
+};
+
+pub mod adapters;
+
+pub mod physics_config;
+pub use physics_config::{
+    GraphPhysicsTuning, apply_graph_physics_tuning, default_graph_physics_state,
 };
 
 /// A host-provided axis coordinate for layouts that project onto one or

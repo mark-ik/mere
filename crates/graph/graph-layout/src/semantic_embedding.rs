@@ -28,8 +28,8 @@ use serde::{Deserialize, Serialize};
 
 use super::curves::Falloff;
 use super::{Layout, LayoutExtras};
-use crate::camera::CanvasViewport;
-use crate::scene::CanvasSceneInput;
+use graph_canvas::camera::CanvasViewport;
+use graph_canvas::scene::CanvasSceneInput;
 
 // ── SemanticEmbedding (precomputed) ──────────────────────────────────────────
 
@@ -406,8 +406,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projection::ProjectionMode;
-    use crate::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use graph_canvas::projection::ProjectionMode;
+    use graph_canvas::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
     use euclid::default::{Rect, Size2D};
 
     fn viewport() -> CanvasViewport {

@@ -35,13 +35,13 @@
 use std::collections::HashMap;
 
 use euclid::default::Point2D;
-use graph_canvas::layout::{EmbeddingFallback, SemanticEmbeddingConfig};
+use crate::{EmbeddingFallback, SemanticEmbeddingConfig};
 use mere_kernel::graph::NodeKey;
 
 use super::shared::projection_from_positions;
-use crate::projection::Projection;
-use crate::request::ProjectionRequest;
-use crate::strategy::LayoutStrategy;
+use cartography::projection::Projection;
+use cartography::request::ProjectionRequest;
+use cartography::strategy::LayoutStrategy;
 
 /// Cartography-side adapter for
 /// [`graph_canvas::layout::SemanticEmbedding`].
@@ -122,8 +122,8 @@ fn fallback_ring_position(key: NodeKey, config: &SemanticEmbeddingConfig) -> Poi
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request::ViewIntent;
-    use crate::signals::{IntelligenceSignals, NodeEmbeddings};
+    use cartography::request::ViewIntent;
+    use cartography::signals::{IntelligenceSignals, NodeEmbeddings};
     use mere_kernel::geometry::PortablePoint;
     use mere_kernel::graph::Graph;
     use uuid::Uuid;

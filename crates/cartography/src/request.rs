@@ -55,7 +55,7 @@ pub struct ViewIntent {
 /// Host-provided axis coordinate for axial strategies that project onto
 /// one or two explicit axes (Timeline, Kanban, future axial variants).
 ///
-/// Mirrors [`graph_canvas::layout::AxisValue`] so the cartography
+/// Mirrors [`graph_layout::AxisValue`] so the cartography
 /// contract stays decoupled from graph-canvas's internals; the
 /// adapter for each axial strategy maps between them.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

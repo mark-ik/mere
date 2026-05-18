@@ -2,27 +2,16 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Adapters that bridge cartography's strategy contracts to existing
-//! per-renderer layout implementations.
+//! Placeholder for in-cartography adapter implementations.
 //!
-//! Each adapter sits behind its own feature gate so cartography
-//! consumers that just want the contract types don't pull in renderer
-//! crates they don't need.
+//! As of 2026-05-18, the `graph_canvas` adapter family (which wrapped
+//! the `graph-canvas::layout` impls as `LayoutStrategy` /
+//! `StreamingLayoutStrategy`) moved out to the new `graph-layout`
+//! sibling crate, per the cartography layer brief §9 step 4 sibling-
+//! crate move. The `graph-canvas-adapters` feature gate retired with
+//! the move; consumers depend on `graph-layout` directly to pull in
+//! strategy implementations.
 //!
-//! ## Why adapters live in cartography (not in the renderer crates)
-//!
-//! The `mere-kernel` crate has a legacy dependency on `graph-canvas`
-//! (for `graph_canvas::packet::Stroke` in `OverlayStrokePass`). That
-//! makes `graph-canvas → cartography → mere-kernel → graph-canvas` a
-//! dependency cycle. Until the kernel's `graph-canvas` dep is broken
-//! (a separate refactor), the adapter has to live somewhere that
-//! depends on both cartography and graph-canvas but isn't depended on
-//! by either — cartography itself, behind a feature flag, is the
-//! smallest place that fits.
-//!
-//! Long-term, when `graph-layout` is extracted as a sibling crate
-//! (per the cartography brief's revised §9 step 4), it'll absorb
-//! these adapters.
-
-#[cfg(feature = "graph-canvas-adapters")]
-pub mod graph_canvas;
+//! This module stays as a stub home for any future adapter family
+//! that's narrow enough not to warrant its own crate (e.g.,
+//! document-layout adapters that wrap document-canvas's layout).

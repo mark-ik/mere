@@ -23,13 +23,13 @@ use std::collections::HashMap;
 
 use euclid::default::{Point2D, Rect, Size2D};
 use graph_canvas::camera::CanvasViewport;
-use graph_canvas::layout::LayoutExtras;
+use crate::LayoutExtras;
 use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
 use mere_kernel::graph::{NodeKey, RelationKind};
 
-use crate::projection::{PositionedEdge, Projection};
-use crate::request::ProjectionRequest;
-use crate::strategy::StreamingLayoutStrategy;
+use cartography::projection::{PositionedEdge, Projection};
+use cartography::request::ProjectionRequest;
+use cartography::strategy::StreamingLayoutStrategy;
 
 /// Build a [`CanvasSceneInput`] from the request's graph and the
 /// caller's working positions. Positions come from the supplied
@@ -145,16 +145,16 @@ pub fn build_layout_extras(request: &ProjectionRequest<'_>) -> LayoutExtras<Node
 }
 
 /// Convert cartography's [`crate::AxisValue`] to graph-canvas's
-/// [`graph_canvas::layout::AxisValue`]. Structurally identical;
+/// [`crate::AxisValue`]. Structurally identical;
 /// cartography keeps its own enum so the contract stays decoupled
 /// from graph-canvas's internals.
 fn axis_value_to_graph_canvas(
-    value: &crate::request::AxisValue,
-) -> graph_canvas::layout::AxisValue {
+    value: &cartography::request::AxisValue,
+) -> crate::AxisValue {
     match value {
-        crate::request::AxisValue::Numeric(n) => graph_canvas::layout::AxisValue::Numeric(*n),
-        crate::request::AxisValue::Categorical(tag) => {
-            graph_canvas::layout::AxisValue::Categorical(tag.clone())
+        cartography::request::AxisValue::Numeric(n) => crate::AxisValue::Numeric(*n),
+        cartography::request::AxisValue::Categorical(tag) => {
+            crate::AxisValue::Categorical(tag.clone())
         }
     }
 }
@@ -250,7 +250,7 @@ pub fn run_static_layout_one_shot<L>(
     layout: &mut L,
 ) -> HashMap<NodeKey, Point2D<f32>>
 where
-    L: graph_canvas::layout::Layout<NodeKey, State = graph_canvas::layout::StaticLayoutState>,
+    L: crate::Layout<NodeKey, State = crate::StaticLayoutState>,
 {
     let nodes: Vec<CanvasNode<NodeKey>> = request
         .graph
@@ -281,7 +281,7 @@ where
         scene_mode: graph_canvas::scene::SceneMode::default(),
         projection: graph_canvas::projection::ProjectionMode::default(),
     };
-    let mut state = graph_canvas::layout::StaticLayoutState {
+    let mut state = crate::StaticLayoutState {
         damping: 1.0,
         step_count: 0,
     };
@@ -316,9 +316,9 @@ pub fn projection_from_positions(
     request: &ProjectionRequest<'_>,
     positions: HashMap<NodeKey, Point2D<f32>>,
 ) -> Projection {
-    let nodes: Vec<crate::projection::PositionedNode> = positions
+    let nodes: Vec<cartography::projection::PositionedNode> = positions
         .iter()
-        .map(|(key, pos)| crate::projection::PositionedNode {
+        .map(|(key, pos)| cartography::projection::PositionedNode {
             node: *key,
             position: *pos,
             radius: 0.0,
@@ -331,7 +331,7 @@ pub fn projection_from_positions(
         overlays: Vec::new(),
         minimap: None,
         content_bounds: bounds_of(&positions),
-        metadata: crate::projection::ProjectionMetadata {
+        metadata: cartography::projection::ProjectionMetadata {
             strategy_id: Some(strategy_id.to_string()),
             settled: true,
         },

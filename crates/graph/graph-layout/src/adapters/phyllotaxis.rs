@@ -24,15 +24,15 @@
 use std::collections::HashMap;
 
 use euclid::default::Point2D;
-use graph_canvas::layout::{
+use crate::{
     Phyllotaxis, PhyllotaxisConfig, PhyllotaxisRadiusCurve, SpiralOrientation,
 };
 use mere_kernel::graph::NodeKey;
 
 use super::shared::{bounds_of, build_positioned_edges};
-use crate::projection::{PositionedNode, Projection, ProjectionMetadata};
-use crate::request::ProjectionRequest;
-use crate::strategy::LayoutStrategy;
+use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
+use cartography::request::ProjectionRequest;
+use cartography::strategy::LayoutStrategy;
 
 /// Cartography-side adapter for [`graph_canvas::layout::Phyllotaxis`].
 ///
@@ -138,9 +138,9 @@ fn radius_from_ordinal(curve: PhyllotaxisRadiusCurve, scale: f32, ordinal: usize
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request::ViewIntent;
-    use crate::signals::IntelligenceSignals;
-    use graph_canvas::layout::angles;
+    use cartography::request::ViewIntent;
+    use cartography::signals::IntelligenceSignals;
+    use crate::angles;
     use mere_kernel::geometry::PortablePoint;
     use mere_kernel::graph::Graph;
     use uuid::Uuid;

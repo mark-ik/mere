@@ -13,21 +13,14 @@ categories = ["graphics", "rendering"]
 [lib]
 path = "src/lib.rs"
 
+# The `graph-canvas-adapters` feature retired 2026-05-18 when its
+# adapters moved to the new `graph-layout` sibling crate. Cartography
+# stays contract-only; consumers needing strategy impls depend on
+# `graph-layout` directly.
 [features]
 default = []
-# Cartography-side `LayoutStrategy` / `StreamingLayoutStrategy`
-# adapters that wrap `graph-canvas`'s existing `Layout<N>` impls
-# (ForceDirected today; more as the bridge proves out). Off by default
-# because contract consumers may want cartography without pulling in
-# the whole graph-canvas crate; the adapters live here (rather than in
-# graph-canvas) to keep the dependency edge one-way and avoid the
-# `mere-kernel → graph-canvas → ??? → mere-kernel` cycle the kernel's
-# legacy graph-canvas dependency would otherwise create.
-graph-canvas-adapters = ["dep:graph-canvas", "dep:euclid"]
 
 [dependencies]
-euclid = { version = "0.22", features = ["serde"], optional = true }
-graph-canvas = { path = "../graph/graph-canvas", optional = true }
 mere-kernel = { path = "../mere-kernel" }
 serde = { version = "1.0", features = ["derive"] }
 

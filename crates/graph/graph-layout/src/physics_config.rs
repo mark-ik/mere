@@ -20,7 +20,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::layout::ForceDirectedState;
+use crate::ForceDirectedState;
 
 /// Top-level physics tuning — repulsion / attraction / gravity /
 /// damping coefficients. The defaults match the historical

@@ -34,8 +34,8 @@ use serde::{Deserialize, Serialize};
 
 use super::curves::{DegreeWeighting, ProximityFalloff, SimilarityCurve};
 use super::{Layout, LayoutExtras};
-use crate::camera::CanvasViewport;
-use crate::scene::CanvasSceneInput;
+use graph_canvas::camera::CanvasViewport;
+use graph_canvas::scene::CanvasSceneInput;
 
 /// Shared persistent state for stateless extras passes.
 ///
@@ -605,24 +605,11 @@ where
 
 /// A derived frame-affinity region passed in via [`LayoutExtras::frame_regions`].
 ///
-/// Hosts derive these from their own relation graph (for Graphshell:
-/// `ArrangementRelation(FrameMember)` edges) and pass them each frame. The
-/// centroid is computed by the layout step from current member positions —
-/// callers do not need to supply it.
-#[derive(Debug, Clone)]
-pub struct FrameRegion<N>
-where
-    N: Clone + Eq + Hash,
-{
-    /// The frame anchor node. Informational — force calculations use the
-    /// member centroid, not the anchor's position.
-    pub anchor: N,
-    /// Member nodes pulled toward the centroid.
-    pub members: Vec<N>,
-    /// Per-region strength multiplier. Multiplied with
-    /// [`FrameAffinityConfig::global_strength`] at apply time.
-    pub strength: f32,
-}
+/// **Definition lives in `graph_canvas::scene`** (since 2026-05-18 sibling-
+/// crate move) because `graph_canvas::derive` also consumes this type as
+/// host-provided scene-derivation input. Re-exported here for back-compat;
+/// future code should import from `graph_canvas` directly.
+pub use graph_canvas::scene::FrameRegion;
 
 /// Tuning for the frame-affinity extras pass.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -721,8 +708,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projection::ProjectionMode;
-    use crate::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use graph_canvas::projection::ProjectionMode;
+    use graph_canvas::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
     use euclid::default::{Rect, Size2D};
 
     fn viewport() -> CanvasViewport {

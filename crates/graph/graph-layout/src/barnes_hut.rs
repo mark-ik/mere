@@ -24,8 +24,8 @@ use serde::{Deserialize, Serialize};
 
 use super::force_directed::ForceDirectedState;
 use super::{Layout, LayoutExtras};
-use crate::camera::CanvasViewport;
-use crate::scene::CanvasSceneInput;
+use graph_canvas::camera::CanvasViewport;
+use graph_canvas::scene::CanvasSceneInput;
 
 /// Barnes-Hut-specific tuning. Separate from [`ForceDirectedState`] since
 /// these knobs are algorithmic to the tree traversal, not to the shared
@@ -427,8 +427,8 @@ impl Quadtree {
 mod tests {
     use super::super::force_directed::ForceDirected;
     use super::*;
-    use crate::projection::ProjectionMode;
-    use crate::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use graph_canvas::projection::ProjectionMode;
+    use graph_canvas::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
     use euclid::default::{Rect, Size2D};
 
     fn viewport(w: f32, h: f32) -> CanvasViewport {

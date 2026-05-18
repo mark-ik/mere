@@ -21,7 +21,7 @@ use euclid::default::{Point2D, Rect, Size2D};
 use std::hash::Hash;
 
 use crate::camera::{CanvasCamera, CanvasViewport};
-use crate::layout::extras::FrameRegion;
+use crate::scene::FrameRegion;
 use crate::lod::{LodLevel, LodPolicy};
 use crate::packet::{Color, HitProxy, ProjectedScene, SceneDrawItem, Stroke};
 use crate::projection::{ProjectionConfig, ProjectionMode, project_position};

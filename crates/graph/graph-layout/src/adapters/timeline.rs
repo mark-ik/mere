@@ -11,12 +11,12 @@
 //!
 //! Analytic: same input → same output in one call.
 
-use graph_canvas::layout::{Timeline, TimelineConfig};
+use crate::{Timeline, TimelineConfig};
 
 use super::shared::{projection_from_positions, run_static_layout_one_shot};
-use crate::projection::Projection;
-use crate::request::ProjectionRequest;
-use crate::strategy::LayoutStrategy;
+use cartography::projection::Projection;
+use cartography::request::ProjectionRequest;
+use cartography::strategy::LayoutStrategy;
 
 #[derive(Debug, Default, Clone)]
 pub struct TimelineAdapter {
@@ -46,8 +46,8 @@ impl LayoutStrategy for TimelineAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request::{AxisValue, ViewIntent};
-    use crate::signals::IntelligenceSignals;
+    use cartography::request::{AxisValue, ViewIntent};
+    use cartography::signals::IntelligenceSignals;
     use mere_kernel::geometry::PortablePoint;
     use mere_kernel::graph::{Graph, NodeKey};
     use std::collections::HashMap;

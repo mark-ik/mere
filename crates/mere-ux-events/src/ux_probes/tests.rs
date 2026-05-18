@@ -10,7 +10,7 @@ use std::sync::Arc;
 use mere_kernel::actions::ActionId;
 
 use super::*;
-use crate::ux_observability::{DismissReason, UxEvent, UxObservers};
+use crate::ux_observability::{DismissReason, SurfaceId, UxEvent, UxObservers};
 
 #[test]
 fn mutual_exclusion_passes_when_dismissals_precede_opens() {

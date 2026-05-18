@@ -19,16 +19,16 @@
 use std::collections::HashMap;
 
 use euclid::default::{Point2D, Vector2D};
-use graph_canvas::layout::{BarnesHut, BarnesHutConfig, ForceDirectedState, Layout};
+use crate::{BarnesHut, BarnesHutConfig, ForceDirectedState, Layout};
 use mere_kernel::graph::NodeKey;
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
     bounds_of, build_layout_extras, build_positioned_edges, build_scene_input, build_viewport,
 };
-use crate::projection::{PositionedNode, Projection, ProjectionMetadata};
-use crate::request::ProjectionRequest;
-use crate::strategy::StreamingLayoutStrategy;
+use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
+use cartography::request::ProjectionRequest;
+use cartography::strategy::StreamingLayoutStrategy;
 
 /// Cartography-side adapter for [`graph_canvas::layout::BarnesHut`].
 #[derive(Debug, Default, Clone, Copy)]
@@ -140,8 +140,8 @@ impl StreamingLayoutStrategy for BarnesHutAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request::ViewIntent;
-    use crate::signals::IntelligenceSignals;
+    use cartography::request::ViewIntent;
+    use cartography::signals::IntelligenceSignals;
     use mere_kernel::geometry::PortablePoint;
     use mere_kernel::graph::Graph;
     use uuid::Uuid;

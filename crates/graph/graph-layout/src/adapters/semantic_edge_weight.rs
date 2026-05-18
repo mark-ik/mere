@@ -25,7 +25,7 @@
 use std::collections::HashMap;
 
 use euclid::default::{Point2D, Vector2D};
-use graph_canvas::layout::{
+use crate::{
     Layout, SemanticEdgeWeight, SemanticEdgeWeightConfig, SemanticEdgeWeightState,
 };
 use mere_kernel::graph::NodeKey;
@@ -34,9 +34,9 @@ use serde::{Deserialize, Serialize};
 use super::shared::{
     bounds_of, build_layout_extras, build_positioned_edges, build_scene_input, build_viewport,
 };
-use crate::projection::{PositionedNode, Projection, ProjectionMetadata};
-use crate::request::ProjectionRequest;
-use crate::strategy::StreamingLayoutStrategy;
+use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
+use cartography::request::ProjectionRequest;
+use cartography::strategy::StreamingLayoutStrategy;
 
 /// Cartography-side adapter for
 /// [`graph_canvas::layout::SemanticEdgeWeight`].
@@ -142,8 +142,8 @@ impl StreamingLayoutStrategy for SemanticEdgeWeightAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::request::ViewIntent;
-    use crate::signals::{AffinityScores, IntelligenceSignals};
+    use cartography::request::ViewIntent;
+    use cartography::signals::{AffinityScores, IntelligenceSignals};
     use mere_kernel::geometry::PortablePoint;
     use mere_kernel::graph::Graph;
     use uuid::Uuid;

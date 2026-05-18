@@ -14,8 +14,9 @@ categories = ["gui"]
 path = "src/lib.rs"
 
 [dependencies]
-cartography = { path = "../cartography", features = ["graph-canvas-adapters"] }
+cartography = { path = "../cartography" }
 graph-canvas = { path = "../graph/graph-canvas" }
+graph-layout = { path = "../graph/graph-layout" }
 document-canvas = { path = "../document/document-canvas" }
 inker = { path = "../inker" }
 mere-kernel = { path = "../mere-kernel" }

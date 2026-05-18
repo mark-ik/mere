@@ -30,8 +30,8 @@ use euclid::default::{Point2D, Vector2D};
 use serde::{Deserialize, Serialize};
 
 use super::{Layout, LayoutExtras, StaticLayoutState};
-use crate::camera::CanvasViewport;
-use crate::scene::CanvasSceneInput;
+use graph_canvas::camera::CanvasViewport;
+use graph_canvas::scene::CanvasSceneInput;
 
 const PHI: f32 = 1.618_034;
 const INV_PHI: f32 = 0.618_034;
@@ -425,8 +425,8 @@ const _: f32 = PHI;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::projection::ProjectionMode;
-    use crate::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use graph_canvas::projection::ProjectionMode;
+    use graph_canvas::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
     use euclid::default::{Rect, Size2D};
 
     fn viewport() -> CanvasViewport {

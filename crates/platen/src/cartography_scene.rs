@@ -142,7 +142,7 @@ pub fn step_with<S: StreamingLayoutStrategy>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cartography::adapters::graph_canvas::{
+    use graph_layout::adapters::{
         ForceDirectedAdapter, ForceDirectedAdapterState, PhyllotaxisAdapter,
     };
     use mere_kernel::geometry::PortablePoint;
