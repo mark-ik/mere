@@ -36,12 +36,12 @@ pub fn project_graph(graph: &Graph) -> UxTree {
 
         let mut acc_node = Node::new(Role::Link);
         let label = if node.title.is_empty() {
-            node.address.as_url_str().to_string()
+            node.primary_address().as_url_str().to_string()
         } else {
             node.title.clone()
         };
         acc_node.set_label(label);
-        acc_node.set_value(node.address.as_url_str().to_string());
+        acc_node.set_value(node.primary_address().as_url_str().to_string());
 
         nodes.push((acc_id, acc_node));
         child_ids.push(acc_id);

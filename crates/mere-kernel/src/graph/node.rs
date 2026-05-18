@@ -21,7 +21,7 @@ use super::{
     NodeHistoryBranchProjection, NodeHistoryProjection, NodeHistorySemanticSummary,
     NodeNavigationMemory,
 };
-use crate::address::{Address, address_from_url, cached_host_from_url};
+use crate::address::{Address, AddressClaim, address_from_url, cached_host_from_url};
 use crate::types::{
     FrameLayoutHint, NodeClassification, NodeImportProvenance, NodeTagPresentationState,
 };
@@ -130,10 +130,16 @@ pub struct Node {
     /// lets verso's routing policy still apply.
     pub compat_mode: bool,
 
-    /// Typed address — carries both the URL scheme classification and the raw
-    /// URL string (or clip id for clip routes). Use `address.address_kind()` to
-    /// get the scheme classification and `address.as_url_str()` to get the URL.
-    pub address: Address,
+    /// Address claims attached to this node — Primary + zero-or-more Aliases.
+    ///
+    /// Per the [node identity + duplicates brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-18_node_identity_and_duplicates_brief.md):
+    /// identity is `id: Uuid` (above); addresses are properties of the node.
+    /// Exactly one claim must have role `AddressRole::Primary`; the rest are
+    /// `Alias` (mirrors, cross-protocol pairs, user-declared aliases).
+    ///
+    /// Use [`Node::primary_address`] for the canonical retrieval target;
+    /// iterate `addresses` for aliases.
+    pub addresses: Vec<AddressClaim>,
 
     /// Durable split arrangement annotations for frame-anchor nodes.
     pub frame_layout_hints: Vec<FrameLayoutHint>,
@@ -170,9 +176,22 @@ impl Node {
         self.committed_position
     }
 
-    /// Returns the node's raw URL string.
+    /// Returns the node's canonical retrieval address (the Primary claim).
+    ///
+    /// Panics if the per-node invariant (exactly one Primary claim) is
+    /// violated — which the constructors guarantee.
+    pub fn primary_address(&self) -> &Address {
+        self.addresses
+            .iter()
+            .find(|c| c.is_primary())
+            .map(|c| &c.address)
+            .expect("Node invariant violated: no Primary AddressClaim")
+    }
+
+    /// Returns the canonical retrieval URL string. Convenience over
+    /// [`Node::primary_address`].
     pub fn url(&self) -> &str {
-        self.address.as_url_str()
+        self.primary_address().as_url_str()
     }
 
     pub fn history_projection(&self) -> NodeHistoryProjection {
@@ -231,7 +250,7 @@ impl Node {
             mime_hint: None,
             viewer_override: None,
             compat_mode: false,
-            address: address_from_url(url),
+            addresses: vec![AddressClaim::primary(address_from_url(url))],
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
             lifecycle: NodeLifecycle::Cold,

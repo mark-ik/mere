@@ -23,7 +23,7 @@ fn node_created_with_http_url_has_http_address_kind() {
     let mut graph = Graph::new();
     let key = graph.add_node("https://example.com".to_string(), Point2D::new(0.0, 0.0));
     let node = graph.get_node(key).unwrap();
-    assert_eq!(node.address.address_kind(), AddressKind::Http);
+    assert_eq!(node.primary_address().address_kind(), AddressKind::Http);
 }
 
 #[test]
@@ -34,7 +34,7 @@ fn node_created_with_file_url_has_file_address_kind() {
         Point2D::new(0.0, 0.0),
     );
     let node = graph.get_node(key).unwrap();
-    assert_eq!(node.address.address_kind(), AddressKind::File);
+    assert_eq!(node.primary_address().address_kind(), AddressKind::File);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn node_created_with_file_pdf_url_gets_pdf_mime_hint() {
     );
     let node = graph.get_node(key).unwrap();
     assert_eq!(node.mime_hint.as_deref(), Some("application/pdf"));
-    assert_eq!(node.address.address_kind(), AddressKind::File);
+    assert_eq!(node.primary_address().address_kind(), AddressKind::File);
 }
 
 #[test]
@@ -69,11 +69,14 @@ fn node_address_field_is_consistent_with_url_and_address_kind_at_creation() {
     let key = graph.add_node("https://example.com".to_string(), Point2D::new(0.0, 0.0));
     let node = graph.get_node(key).unwrap();
     assert_eq!(
-        node.address,
-        Address::Http("https://example.com".to_string())
+        node.primary_address(),
+        &Address::Http("https://example.com".to_string())
     );
-    assert_eq!(node.address.address_kind(), AddressKind::Http);
-    assert_eq!(node.address.as_url_str(), node.url());
+    assert_eq!(node.primary_address().address_kind(), AddressKind::Http);
+    assert_eq!(node.primary_address().as_url_str(), node.url());
+    // Invariant: exactly one Primary claim per node at creation.
+    assert_eq!(node.addresses.len(), 1);
+    assert!(node.addresses[0].is_primary());
 }
 
 #[test]
@@ -83,11 +86,11 @@ fn node_address_field_stays_in_sync_after_url_update() {
     graph.update_node_url(key, "file:///home/user/doc.txt".to_string());
     let node = graph.get_node(key).unwrap();
     assert_eq!(
-        node.address,
-        Address::File("file:///home/user/doc.txt".to_string())
+        node.primary_address(),
+        &Address::File("file:///home/user/doc.txt".to_string())
     );
-    assert_eq!(node.address.address_kind(), AddressKind::File);
-    assert_eq!(node.address.as_url_str(), node.url());
+    assert_eq!(node.primary_address().address_kind(), AddressKind::File);
+    assert_eq!(node.primary_address().as_url_str(), node.url());
 }
 
 #[test]
@@ -102,7 +105,7 @@ fn snapshot_roundtrip_preserves_mime_hint_and_address_kind() {
         Some("application/pdf")
     );
     assert_eq!(
-        graph.get_node(key).unwrap().address.address_kind(),
+        graph.get_node(key).unwrap().primary_address().address_kind(),
         AddressKind::File
     );
 
@@ -112,7 +115,7 @@ fn snapshot_roundtrip_preserves_mime_hint_and_address_kind() {
         .get_node_by_url("file:///home/user/report.pdf")
         .unwrap();
     assert_eq!(rnode.mime_hint.as_deref(), Some("application/pdf"));
-    assert_eq!(rnode.address.address_kind(), AddressKind::File);
+    assert_eq!(rnode.primary_address().address_kind(), AddressKind::File);
 }
 
 #[test]

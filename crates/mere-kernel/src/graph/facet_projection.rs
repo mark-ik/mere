@@ -39,7 +39,7 @@ pub fn facet_projection_for_node(graph: &Graph, key: NodeKey) -> Option<FacetPro
         facet_keys::ADDRESS_KIND.to_string(),
         FacetValue::Scalar(FacetScalar::Text(format!(
             "{:?}",
-            node.address.address_kind()
+            node.primary_address().address_kind()
         ))),
     );
 

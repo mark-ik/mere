@@ -12,7 +12,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 /// Address type hint for renderer selection.
 ///
 /// Always derived from the URL scheme — never stored independently.
-/// Obtain via `node.address.address_kind()`.
+/// Obtain via `node.primary_address().address_kind()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Archive, Serialize, Deserialize)]
 pub enum AddressKind {
     /// Served over HTTP/HTTPS — default; Servo renders.
@@ -84,6 +84,57 @@ impl Address {
             Address::Directory(_) => AddressKind::Directory,
             Address::Custom(_) => AddressKind::Unknown,
         }
+    }
+}
+
+/// Role of an address claim on a node.
+///
+/// Per the [node identity + duplicates brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-18_node_identity_and_duplicates_brief.md):
+/// a node carries a `Vec<AddressClaim>`; one of them must be `Primary`
+/// (the canonical retrieval target), the rest are `Alias`es (equivalent
+/// addresses — mirrors, cross-protocol pairs, user-declared aliases).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(derive(Debug, PartialEq))]
+pub enum AddressRole {
+    /// Canonical retrieval target. Exactly one Primary per node.
+    Primary,
+    /// Equivalent address pointing at the same content (mirror,
+    /// cross-protocol pair, declared alias).
+    Alias,
+}
+
+/// An address claim attached to a graph node.
+///
+/// Multiple claims per node enable user-declared aliases (mirrors,
+/// cross-protocol equivalents) without conflating identity with address.
+/// Identity is `Node.id: Uuid`; addresses are properties.
+#[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(derive(Debug, PartialEq))]
+pub struct AddressClaim {
+    pub address: Address,
+    pub role: AddressRole,
+}
+
+impl AddressClaim {
+    /// Construct a Primary claim.
+    pub fn primary(address: Address) -> Self {
+        Self {
+            address,
+            role: AddressRole::Primary,
+        }
+    }
+
+    /// Construct an Alias claim.
+    pub fn alias(address: Address) -> Self {
+        Self {
+            address,
+            role: AddressRole::Alias,
+        }
+    }
+
+    /// True if this claim has `Primary` role.
+    pub fn is_primary(&self) -> bool {
+        matches!(self.role, AddressRole::Primary)
     }
 }
 

@@ -259,6 +259,7 @@ impl Graph {
     /// Add a node with a pre-existing UUID.
     pub fn add_node_with_id(&mut self, id: Uuid, url: String, position: Point2D<f32>) -> NodeKey {
         let now = std::time::SystemTime::now();
+        let primary_address = address_from_url(&url);
         let key = self.inner.add_node(Node {
             id,
             title: url.clone(),
@@ -284,7 +285,7 @@ impl Graph {
             mime_hint: detect_mime(&url, None),
             viewer_override: None,
             compat_mode: false,
-            address: address_from_url(&url),
+            addresses: vec![crate::address::AddressClaim::primary(primary_address)],
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
             lifecycle: NodeLifecycle::Cold,
@@ -299,7 +300,12 @@ impl Graph {
     pub fn remove_node(&mut self, key: NodeKey) -> bool {
         if let Some(node) = self.inner.remove_node(key) {
             self.id_to_node.remove(&node.id);
-            self.remove_url_mapping(node.address.as_url_str(), key);
+            // Deregister every URL claim this node carried — Primary plus
+            // any aliases. (Aliases are not yet wired into add paths but the
+            // index handles them when they land.)
+            for claim in &node.addresses {
+                self.remove_url_mapping(claim.address.as_url_str(), key);
+            }
             let removed_id = node.id.to_string();
             for record in &mut self.import_records {
                 record
@@ -314,13 +320,24 @@ impl Graph {
         }
     }
 
-    /// Update a node's URL, maintaining the url_to_node index.
+    /// Update a node's Primary URL, maintaining the url_to_nodes index.
     /// Returns the old URL, or None if the node doesn't exist.
+    ///
+    /// Operates on the Primary claim only; aliases (when supported) stay
+    /// attached. To mutate aliases, use dedicated alias methods (future).
     pub fn update_node_url(&mut self, key: NodeKey, new_url: String) -> Option<String> {
         let node = self.inner.node_weight_mut(key)?;
-        let old_url = node.address.as_url_str().to_string();
+        let old_url = node.primary_address().as_url_str().to_string();
         node.cached_host = cached_host_from_url(&new_url);
-        node.address = address_from_url(&new_url);
+        // Replace the Primary claim's address; aliases (if any) are
+        // preserved.
+        let new_primary_address = address_from_url(&new_url);
+        for claim in node.addresses.iter_mut() {
+            if claim.is_primary() {
+                claim.address = new_primary_address.clone();
+                break;
+            }
+        }
         self.remove_url_mapping(&old_url, key);
         self.url_to_nodes.entry(new_url).or_default().push(key);
         Some(old_url)
@@ -328,7 +345,7 @@ impl Graph {
 
     pub fn recompute_cached_hosts(&mut self) {
         for node in self.inner.node_weights_mut() {
-            node.cached_host = cached_host_from_url(node.address.as_url_str());
+            node.cached_host = cached_host_from_url(node.primary_address().as_url_str());
         }
     }
 

@@ -52,7 +52,7 @@ impl Graph {
                 node.cached_host = pnode
                     .cached_host
                     .clone()
-                    .or_else(|| cached_host_from_url(node.address.as_url_str()));
+                    .or_else(|| cached_host_from_url(node.primary_address().as_url_str()));
                 node.tags = pnode.tags.iter().cloned().collect();
                 node.tag_presentation = pnode.tag_presentation.clone();
                 node.import_provenance = pnode.import_provenance.clone();
@@ -78,15 +78,21 @@ impl Graph {
             if let Some(current_url) = restore_url_from_session
                 && !current_url.is_empty()
             {
-                let preserve_route_identity = graph
-                    .inner
-                    .node_weight(key)
-                    .is_some_and(|node| node.address.address_kind() == AddressKind::GraphshellClip);
+                let preserve_route_identity = graph.inner.node_weight(key).is_some_and(|node| {
+                    node.primary_address().address_kind() == AddressKind::GraphshellClip
+                });
                 if !preserve_route_identity {
-                    // Recompute MIME hint and address from the restored URL.
+                    // Recompute MIME hint and Primary address from the
+                    // restored URL. update_node_url then reindexes the
+                    // url_to_nodes map.
                     if let Some(node) = graph.inner.node_weight_mut(key) {
                         node.mime_hint = detect_mime(&current_url, None);
-                        node.address = address_from_url(&current_url);
+                        for claim in node.addresses.iter_mut() {
+                            if claim.is_primary() {
+                                claim.address = address_from_url(&current_url);
+                                break;
+                            }
+                        }
                     }
                     let _ = graph.update_node_url(key, current_url);
                 }

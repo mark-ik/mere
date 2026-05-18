@@ -51,7 +51,7 @@ impl Graph {
                     scroll_y: node.session_scroll.map(|(_, y)| y),
                     form_draft: node.session_form_draft.clone(),
                 }),
-                address: match &node.address {
+                address: match node.primary_address() {
                     Address::Http(s) => PersistedAddress::Http(s.clone()),
                     Address::File(s) => PersistedAddress::File(s.clone()),
                     Address::Data(s) => PersistedAddress::Data(s.clone()),
@@ -60,7 +60,7 @@ impl Graph {
                     Address::Custom(s) => PersistedAddress::Custom(s.clone()),
                 },
                 // Written for backward compat: pre-Stage C.2 readers use this field.
-                url: node.address.as_url_str().to_string(),
+                url: node.primary_address().as_url_str().to_string(),
                 classifications: node.classifications.clone(),
                 mime_hint: node.mime_hint.clone(),
                 frame_layout_hints: node.frame_layout_hints.clone(),

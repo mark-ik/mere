@@ -40,10 +40,29 @@ impl Graph {
         self.inner.node_weight_mut(key)
     }
 
-    /// Get a node and its key by URL
-    pub fn get_node_by_url(&self, url: &str) -> Option<(NodeKey, &Node)> {
+    /// Find a node whose AddressClaims include the given address (any
+    /// `AddressRole`). Returns an arbitrary matching node when multiple
+    /// nodes share the address — the caller is expected to handle
+    /// duplicates explicitly when relevant.
+    ///
+    /// Canonical address lookup per the [node identity + duplicates
+    /// brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-18_node_identity_and_duplicates_brief.md);
+    /// supersedes the URL-string-keyed `get_node_by_url` (which is
+    /// retained as a transitional shim — see below).
+    pub fn find_node_by_address(&self, address: &crate::address::Address) -> Option<(NodeKey, &Node)> {
+        let url = address.as_url_str();
         let key = self.url_to_nodes.get(url)?.last().copied()?;
         Some((key, self.inner.node_weight(key)?))
+    }
+
+    /// Transitional shim — delegates to [`Graph::find_node_by_address`]
+    /// after building an `Address` from the URL string. Kept while
+    /// Phase 2 of the node-identity rollout updates host call sites; it
+    /// will be removed when the host helpers (`find_node_by_address` /
+    /// `create_node_for_address` in `host_helpers`) land.
+    pub fn get_node_by_url(&self, url: &str) -> Option<(NodeKey, &Node)> {
+        let address = crate::address::address_from_url(url);
+        self.find_node_by_address(&address)
     }
 
     /// Get all node keys currently mapped to a URL.
