@@ -4,12 +4,12 @@ use std::future::Future;
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::{Alpn, NodeId, TransportError};
+use crate::{Alpn, PeerID, TransportError};
 
 /// A peer-to-peer transport for the Mere browser.
 ///
 /// `Transport` provides authenticated, encrypted bidirectional streams between
-/// peers identified by [`NodeId`]. The reference implementation will be
+/// peers identified by [`PeerID`]. The reference implementation will be
 /// iroh-backed (Phase 2C work); an in-memory backend for tests is Phase 2B
 /// work.
 ///
@@ -23,7 +23,7 @@ use crate::{Alpn, NodeId, TransportError};
 /// ```ignore
 /// async fn open_cable_stream<T: Transport>(
 ///     transport: &T,
-///     peer: NodeId,
+///     peer: PeerID,
 /// ) -> Result<T::Stream, TransportError> {
 ///     transport
 ///         .connect(peer, Alpn::new("mere/cable/v1"))
@@ -52,7 +52,7 @@ pub trait Transport: Send + Sync {
 
     /// The local node identifier (derived from the master public key in
     /// [`mere_identity`]).
-    fn local_node_id(&self) -> NodeId;
+    fn local_peer_id(&self) -> PeerID;
 
     /// Open a stream to a peer for a specific protocol (ALPN).
     ///
@@ -60,7 +60,7 @@ pub trait Transport: Send + Sync {
     /// stream is bidirectional and ready for I/O.
     fn connect(
         &self,
-        peer: NodeId,
+        peer: PeerID,
         alpn: Alpn,
     ) -> impl Future<Output = Result<Self::Stream, TransportError>> + Send;
 

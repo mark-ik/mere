@@ -21,14 +21,14 @@
 //! ## Quick start
 //!
 //! ```ignore
-//! use mere_transport::{Alpn, NodeId, Transport};
+//! use mere_transport::{Alpn, PeerID, Transport};
 //! use mere_transport::memory::MemoryTransport;
 //! use mere_identity::{IdentityProvider, InMemoryProvider};
 //!
-//! let alice_id = NodeId::from_public_key(
+//! let alice_id = PeerID::from_public_key(
 //!     InMemoryProvider::from_seed([1; 32]).master_public_key(),
 //! );
-//! let bob_id = NodeId::from_public_key(
+//! let bob_id = PeerID::from_public_key(
 //!     InMemoryProvider::from_seed([2; 32]).master_public_key(),
 //! );
 //!
@@ -48,7 +48,7 @@ use std::sync::{Arc, Mutex};
 use tokio::io::{DuplexStream, duplex};
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 
-use crate::{Alpn, NodeId, Transport, TransportError};
+use crate::{Alpn, PeerID, Transport, TransportError};
 
 /// Default duplex buffer size (64 KiB).
 const DUPLEX_BUF: usize = 64 * 1024;
@@ -90,8 +90,8 @@ fn get_or_create_channel(map: &ChannelMap, alpn: &Alpn) -> PerAlpnChannel {
 ///
 /// Construct with [`MemoryTransport::pair`].
 pub struct MemoryTransport {
-    node_id: NodeId,
-    peer_node: NodeId,
+    peer_id: PeerID,
+    peer_node: PeerID,
     /// Streams *arriving at this transport* (used by `accept`).
     incoming: ChannelMap,
     /// Streams *being sent to the peer* (used by `connect`). The `Arc` is
@@ -103,19 +103,19 @@ impl MemoryTransport {
     /// Create two paired transports that can connect to each other.
     ///
     /// `node_a` and `node_b` should differ — connecting from `a` to `a`'s
-    /// own `node_id` is rejected with [`TransportError::ConnectionRefused`].
-    pub fn pair(node_a: NodeId, node_b: NodeId) -> (MemoryTransport, MemoryTransport) {
+    /// own `peer_id` is rejected with [`TransportError::ConnectionRefused`].
+    pub fn pair(node_a: PeerID, node_b: PeerID) -> (MemoryTransport, MemoryTransport) {
         let a_incoming: ChannelMap = Arc::new(Mutex::new(HashMap::new()));
         let b_incoming: ChannelMap = Arc::new(Mutex::new(HashMap::new()));
 
         let a = MemoryTransport {
-            node_id: node_a,
+            peer_id: node_a,
             peer_node: node_b,
             incoming: Arc::clone(&a_incoming),
             peer_incoming: Arc::clone(&b_incoming),
         };
         let b = MemoryTransport {
-            node_id: node_b,
+            peer_id: node_b,
             peer_node: node_a,
             incoming: b_incoming,
             peer_incoming: a_incoming,
@@ -127,11 +127,11 @@ impl MemoryTransport {
 impl Transport for MemoryTransport {
     type Stream = DuplexStream;
 
-    fn local_node_id(&self) -> NodeId {
-        self.node_id
+    fn local_peer_id(&self) -> PeerID {
+        self.peer_id
     }
 
-    async fn connect(&self, peer: NodeId, alpn: Alpn) -> Result<DuplexStream, TransportError> {
+    async fn connect(&self, peer: PeerID, alpn: Alpn) -> Result<DuplexStream, TransportError> {
         if peer != self.peer_node {
             return Err(TransportError::ConnectionRefused);
         }
@@ -157,18 +157,18 @@ mod tests {
     use mere_identity::{IdentityProvider, InMemoryProvider};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    fn alice_bob_ids() -> (NodeId, NodeId) {
-        let a = NodeId::from_public_key(InMemoryProvider::from_seed([1; 32]).master_public_key());
-        let b = NodeId::from_public_key(InMemoryProvider::from_seed([2; 32]).master_public_key());
+    fn alice_bob_ids() -> (PeerID, PeerID) {
+        let a = PeerID::from_public_key(InMemoryProvider::from_seed([1; 32]).master_public_key());
+        let b = PeerID::from_public_key(InMemoryProvider::from_seed([2; 32]).master_public_key());
         (a, b)
     }
 
     #[tokio::test]
-    async fn pair_local_node_ids_match_construction() {
+    async fn pair_local_peer_ids_match_construction() {
         let (alice_id, bob_id) = alice_bob_ids();
         let (alice, bob) = MemoryTransport::pair(alice_id, bob_id);
-        assert_eq!(alice.local_node_id(), alice_id);
-        assert_eq!(bob.local_node_id(), bob_id);
+        assert_eq!(alice.local_peer_id(), alice_id);
+        assert_eq!(bob.local_peer_id(), bob_id);
     }
 
     #[tokio::test]
@@ -218,7 +218,7 @@ mod tests {
     async fn connect_to_wrong_peer_is_refused() {
         let (alice_id, bob_id) = alice_bob_ids();
         let charlie_id =
-            NodeId::from_public_key(InMemoryProvider::from_seed([3; 32]).master_public_key());
+            PeerID::from_public_key(InMemoryProvider::from_seed([3; 32]).master_public_key());
         let (alice, _bob) = MemoryTransport::pair(alice_id, bob_id);
 
         let result = alice.connect(charlie_id, Alpn::new("mere/test/v1")).await;

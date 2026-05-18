@@ -50,7 +50,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 
 use crate::blobs::BlobStore;
-use crate::{Alpn, NodeId, Transport, TransportError};
+use crate::{Alpn, PeerID, Transport, TransportError};
 
 /// A bidirectional iroh QUIC stream presented as a single
 /// `AsyncRead + AsyncWrite` value.
@@ -157,7 +157,7 @@ impl<'a> IrohTransportBuilder<'a> {
     }
 
     /// Serve the iroh-blobs protocol against the given store. Peers can
-    /// then `fetch_from` this transport's NodeId.
+    /// then `fetch_from` this transport's PeerID.
     pub fn blobs(mut self, store: &'a BlobStore) -> Self {
         self.blobs = Some(store);
         self
@@ -183,7 +183,7 @@ impl<'a> IrohTransportBuilder<'a> {
 /// [`IrohTransport::builder`].
 pub struct IrohTransport {
     endpoint: Endpoint,
-    node_id: NodeId,
+    peer_id: PeerID,
     alpn_queues: AlpnMap,
     address_book: MemoryLookup,
     /// The Router owns the accept loop and the registered protocol
@@ -271,9 +271,9 @@ impl IrohTransport {
             .map_err(|e| TransportError::Backend(format!("endpoint bind: {e}")))?;
 
         let endpoint_id = endpoint.id();
-        let node_id_bytes: [u8; 32] = *endpoint_id.as_bytes();
-        let node_id = NodeId::from_bytes(&node_id_bytes)
-            .map_err(|e| TransportError::Backend(format!("derive NodeId: {e:?}")))?;
+        let peer_id_bytes: [u8; 32] = *endpoint_id.as_bytes();
+        let peer_id = PeerID::from_bytes(&peer_id_bytes)
+            .map_err(|e| TransportError::Backend(format!("derive PeerID: {e:?}")))?;
 
         // Build the per-ALPN queue map and register a handler per ALPN.
         let alpn_queues: AlpnMap = Arc::new(StdMutex::new(HashMap::new()));
@@ -311,7 +311,7 @@ impl IrohTransport {
 
         Ok(Self {
             endpoint,
-            node_id,
+            peer_id,
             alpn_queues,
             address_book,
             router: Some(router),
@@ -354,7 +354,7 @@ impl IrohTransport {
     ///
     /// Adds the addr to iroh's `MemoryLookup` so subsequent connect calls
     /// (ours, plus iroh-blobs / iroh-gossip / any other protocol that
-    /// uses the endpoint's address book) can resolve the peer by NodeId
+    /// uses the endpoint's address book) can resolve the peer by PeerID
     /// alone.
     #[tracing::instrument(level = "debug", skip(self, addr))]
     pub fn add_peer(&self, addr: EndpointAddr) -> Result<(), TransportError> {
@@ -375,7 +375,7 @@ impl IrohTransport {
     )]
     pub async fn connect_raw(
         &self,
-        peer: NodeId,
+        peer: PeerID,
         alpn: &[u8],
     ) -> Result<Connection, TransportError> {
         let endpoint_id = iroh::EndpointId::from_bytes(&peer.to_bytes())
@@ -408,11 +408,11 @@ impl Drop for IrohTransport {
 impl Transport for IrohTransport {
     type Stream = IrohStream;
 
-    fn local_node_id(&self) -> NodeId {
-        self.node_id
+    fn local_peer_id(&self) -> PeerID {
+        self.peer_id
     }
 
-    async fn connect(&self, peer: NodeId, alpn: Alpn) -> Result<Self::Stream, TransportError> {
+    async fn connect(&self, peer: PeerID, alpn: Alpn) -> Result<Self::Stream, TransportError> {
         let connection = self.connect_raw(peer, alpn.as_bytes()).await?;
 
         let (send, recv) = connection
@@ -447,11 +447,11 @@ mod tests {
     use mere_identity::{IdentityProvider, InMemoryProvider};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    fn make_transport_inputs(seed: u8) -> (Ed25519Keypair, NodeId) {
+    fn make_transport_inputs(seed: u8) -> (Ed25519Keypair, PeerID) {
         let provider = InMemoryProvider::from_seed([seed; 32]);
         let kp = provider.master_keypair().clone();
-        let node_id = NodeId::from_public_key(provider.master_public_key());
-        (kp, node_id)
+        let peer_id = PeerID::from_public_key(provider.master_public_key());
+        (kp, peer_id)
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -471,8 +471,8 @@ mod tests {
         alice.add_peer(bob.endpoint_addr()).expect("alice.add_peer");
         bob.add_peer(alice.endpoint_addr()).expect("bob.add_peer");
 
-        assert_eq!(alice.local_node_id(), alice_id);
-        assert_eq!(bob.local_node_id(), bob_id);
+        assert_eq!(alice.local_peer_id(), alice_id);
+        assert_eq!(bob.local_peer_id(), bob_id);
 
         let payload = b"hello over iroh".to_vec();
         let reply = b"hi back".to_vec();
@@ -522,7 +522,7 @@ mod tests {
     /// broadcasts a message; bob receives it.
     ///
     /// Validates: gossip's ProtocolHandler integration with our Router,
-    /// MemoryLookup's role in connect-by-NodeId from inside iroh-gossip's
+    /// MemoryLookup's role in connect-by-PeerID from inside iroh-gossip's
     /// internal connect path, and the gossip API surface exposed via
     /// [`IrohTransport::gossip`].
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -551,8 +551,8 @@ mod tests {
         let topic = TopicId::from_bytes([0xaa; 32]);
 
         // Bob's EndpointId for alice's bootstrap list, and vice versa.
-        let alice_eid = iroh::EndpointId::from_bytes(&alice.local_node_id().to_bytes()).unwrap();
-        let bob_eid = iroh::EndpointId::from_bytes(&bob.local_node_id().to_bytes()).unwrap();
+        let alice_eid = iroh::EndpointId::from_bytes(&alice.local_peer_id().to_bytes()).unwrap();
+        let bob_eid = iroh::EndpointId::from_bytes(&bob.local_peer_id().to_bytes()).unwrap();
 
         // Bob subscribes (with alice as bootstrap) in a task and waits
         // for the first message.

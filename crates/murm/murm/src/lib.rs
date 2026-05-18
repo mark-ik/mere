@@ -50,7 +50,7 @@ pub use crate::error::MurmError;
 // Re-export key types from the layers we sit on, so consumers don't all
 // need direct dependencies on the lower crates.
 pub use mere_identity::{Ed25519PublicKey, IdentityProvider};
-pub use mere_transport::{Alpn, NodeId, Transport};
+pub use mere_transport::{Alpn, PeerID, Transport};
 pub use murmuring::{BilateralProtocol, ChannelName, InfoEntry, Post, PostId, PostKind};
 
 // Re-export Cable's primary entry points so murm consumers don't need a
@@ -80,7 +80,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 ///
 /// `IdentityProvider` is object-safe (sync methods only at this stage), so
 /// using `Arc<dyn ...>` here is fine and gives flexibility — the same
-/// identity backend can be shared with `mere-transport` (for `NodeId`
+/// identity backend can be shared with `mere-transport` (for `PeerID`
 /// derivation) and other consumers without a generic parameter explosion.
 ///
 /// ## Status
@@ -105,10 +105,10 @@ impl<T: Transport> Murm<T> {
         }
     }
 
-    /// The local node's `NodeId`, derived from the identity provider's
+    /// The local node's `PeerID`, derived from the identity provider's
     /// master public key.
-    pub fn local_node_id(&self) -> NodeId {
-        NodeId::from_public_key(self.identity.master_public_key())
+    pub fn local_peer_id(&self) -> PeerID {
+        PeerID::from_public_key(self.identity.master_public_key())
     }
 
     /// Access the underlying identity provider.
@@ -175,7 +175,7 @@ impl<T: Transport> Murm<T> {
     /// `push_cabal_to_peer` whenever they want to share state.
     pub async fn push_cabal_to_peer(
         &self,
-        peer: NodeId,
+        peer: PeerID,
         cabal_id: &CabalId,
     ) -> Result<usize, MurmError> {
         let alpn = Alpn::new("mere/cable/v1");
@@ -327,29 +327,29 @@ mod tests {
     use tokio::io::DuplexStream;
 
     /// A no-op transport for foundation tests. Connect/accept always
-    /// refuse; only `local_node_id` returns a meaningful value. Phase 2B
+    /// refuse; only `local_peer_id` returns a meaningful value. Phase 2B
     /// will replace this with an in-process loopback transport for full
     /// protocol-roundtrip tests.
     struct StubTransport {
-        node_id: NodeId,
+        peer_id: PeerID,
     }
 
     impl StubTransport {
-        fn new(node_id: NodeId) -> Self {
-            Self { node_id }
+        fn new(peer_id: PeerID) -> Self {
+            Self { peer_id }
         }
     }
 
     impl Transport for StubTransport {
         type Stream = DuplexStream;
 
-        fn local_node_id(&self) -> NodeId {
-            self.node_id
+        fn local_peer_id(&self) -> PeerID {
+            self.peer_id
         }
 
         async fn connect(
             &self,
-            _peer: NodeId,
+            _peer: PeerID,
             _alpn: Alpn,
         ) -> Result<Self::Stream, mere_transport::TransportError> {
             Err(mere_transport::TransportError::ConnectionRefused)
@@ -365,8 +365,8 @@ mod tests {
 
     fn make_murm() -> Murm<StubTransport> {
         let identity: Arc<dyn IdentityProvider> = Arc::new(InMemoryProvider::from_seed([42; 32]));
-        let node_id = NodeId::from_public_key(identity.master_public_key());
-        let transport = StubTransport::new(node_id);
+        let peer_id = PeerID::from_public_key(identity.master_public_key());
+        let transport = StubTransport::new(peer_id);
         Murm::new(identity, transport)
     }
 
@@ -376,20 +376,20 @@ mod tests {
     }
 
     #[test]
-    fn local_node_id_matches_master_public_key() {
+    fn local_peer_id_matches_master_public_key() {
         let murm = make_murm();
-        let expected = NodeId::from_public_key(murm.identity().master_public_key());
-        assert_eq!(murm.local_node_id(), expected);
+        let expected = PeerID::from_public_key(murm.identity().master_public_key());
+        assert_eq!(murm.local_peer_id(), expected);
     }
 
     #[test]
-    fn local_node_id_matches_transport_node_id_when_consistent() {
+    fn local_peer_id_matches_transport_peer_id_when_consistent() {
         let murm = make_murm();
         // The stub transport in this test is constructed with the same
-        // node_id as the identity, so they match. (This invariant is
+        // peer_id as the identity, so they match. (This invariant is
         // enforced by transport-layer setup in production; here we just
         // verify the wiring is correct.)
-        assert_eq!(murm.local_node_id(), murm.transport().local_node_id());
+        assert_eq!(murm.local_peer_id(), murm.transport().local_peer_id());
     }
 
     #[test]
@@ -448,8 +448,8 @@ mod tests {
         let bob_provider: Arc<dyn IdentityProvider> =
             Arc::new(mere_identity::InMemoryProvider::from_seed([200; 32]));
 
-        let alice_node = NodeId::from_public_key(alice_provider.master_public_key());
-        let bob_node = NodeId::from_public_key(bob_provider.master_public_key());
+        let alice_node = PeerID::from_public_key(alice_provider.master_public_key());
+        let bob_node = PeerID::from_public_key(bob_provider.master_public_key());
 
         let (alice_t, bob_t) = MemoryTransport::pair(alice_node, bob_node);
 
@@ -495,12 +495,12 @@ mod tests {
         // transport-level sync code).
         let alice_provider: Arc<dyn IdentityProvider> =
             Arc::new(mere_identity::InMemoryProvider::from_seed([10; 32]));
-        let alice_id = NodeId::from_public_key(alice_provider.master_public_key());
+        let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
         let alice = Murm::new(alice_provider, StubTransport::new(alice_id));
 
         let bob_provider: Arc<dyn IdentityProvider> =
             Arc::new(mere_identity::InMemoryProvider::from_seed([20; 32]));
-        let bob_id = NodeId::from_public_key(bob_provider.master_public_key());
+        let bob_id = PeerID::from_public_key(bob_provider.master_public_key());
         let bob = Murm::new(bob_provider, StubTransport::new(bob_id));
 
         let cabal_key = CabalKey::new([0xab; 32]);
@@ -600,8 +600,8 @@ mod tests {
         let bob_provider: Arc<dyn IdentityProvider> =
             Arc::new(mere_identity::InMemoryProvider::from_seed([22; 32]));
 
-        let alice_id = NodeId::from_public_key(alice_provider.master_public_key());
-        let bob_id = NodeId::from_public_key(bob_provider.master_public_key());
+        let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
+        let bob_id = PeerID::from_public_key(bob_provider.master_public_key());
 
         let (alice_t, bob_t) = MemoryTransport::pair(alice_id, bob_id);
 
@@ -704,7 +704,7 @@ mod tests {
             .await
             .expect("bob bind");
 
-        // Cross-register so connect-by-NodeId works without DNS.
+        // Cross-register so connect-by-PeerID works without DNS.
         alice_transport
             .add_peer(bob_transport.endpoint_addr())
             .expect("alice.add_peer");
@@ -712,7 +712,7 @@ mod tests {
             .add_peer(alice_transport.endpoint_addr())
             .expect("bob.add_peer");
 
-        let bob_node = bob_transport.local_node_id();
+        let bob_node = bob_transport.local_peer_id();
 
         let alice_provider_arc: Arc<dyn IdentityProvider> = Arc::new(alice_provider);
         let bob_provider_arc: Arc<dyn IdentityProvider> = Arc::new(bob_provider);
@@ -770,8 +770,8 @@ mod tests {
         let bob_provider: Arc<dyn IdentityProvider> =
             Arc::new(mere_identity::InMemoryProvider::from_seed([44; 32]));
 
-        let alice_id = NodeId::from_public_key(alice_provider.master_public_key());
-        let bob_id = NodeId::from_public_key(bob_provider.master_public_key());
+        let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
+        let bob_id = PeerID::from_public_key(bob_provider.master_public_key());
 
         let (alice_t, bob_t) = MemoryTransport::pair(alice_id, bob_id);
 

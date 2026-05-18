@@ -25,13 +25,13 @@
 //!
 //! `"<node-id-hex>/<blob-hash-hex>"` — 64 hex chars, slash, 64 hex chars.
 //! Picked for simplicity over iroh-blobs' opaque base32 `BlobTicket`
-//! format; both encode the same `(NodeId, Hash)` pair.
+//! format; both encode the same `(PeerID, Hash)` pair.
 
 #![doc(html_root_url = "https://docs.rs/eidetic-iroh-fetcher/0.0.1")]
 
 use async_trait::async_trait;
 use eidetic::{BlobFetcher, BlobSource, Error, Result};
-use mere_transport::{BlobHash, BlobStore, IrohTransport, NodeId};
+use mere_transport::{BlobHash, BlobStore, IrohTransport, PeerID};
 use std::sync::Arc;
 
 /// Iroh-only [`BlobFetcher`].
@@ -52,11 +52,11 @@ impl IrohFetcher {
     }
 
     async fn fetch_iroh(&self, ticket: &str) -> Result<Vec<u8>> {
-        let (node_id, blob_hash) = parse_ticket(ticket)?;
+        let (peer_id, blob_hash) = parse_ticket(ticket)?;
 
         // Fetch persists into the local blob store.
         self.blobs
-            .fetch_from(&self.transport, node_id, blob_hash)
+            .fetch_from(&self.transport, peer_id, blob_hash)
             .await
             .map_err(|e| Error::new(format!("iroh fetch {ticket}: {e:?}")))?;
 
@@ -81,7 +81,7 @@ impl BlobFetcher for IrohFetcher {
 }
 
 /// Parse a `"<node-id-hex>/<blob-hash-hex>"` ticket into its parts.
-fn parse_ticket(ticket: &str) -> Result<(NodeId, BlobHash)> {
+fn parse_ticket(ticket: &str) -> Result<(PeerID, BlobHash)> {
     let (node_part, hash_part) = ticket
         .split_once('/')
         .ok_or_else(|| Error::new(format!("iroh ticket missing '/': {ticket}")))?;
@@ -102,10 +102,10 @@ fn parse_ticket(ticket: &str) -> Result<(NodeId, BlobHash)> {
     let hash_bytes =
         decode_hex_32(hash_part).map_err(|e| Error::new(format!("blob-hash hex: {e}")))?;
 
-    let node_id = NodeId::from_bytes(&node_bytes)
+    let peer_id = PeerID::from_bytes(&node_bytes)
         .map_err(|e| Error::new(format!("invalid node-id: {e:?}")))?;
     let blob_hash = BlobHash::from_bytes(hash_bytes);
-    Ok((node_id, blob_hash))
+    Ok((peer_id, blob_hash))
 }
 
 fn decode_hex_32(hex: &str) -> std::result::Result<[u8; 32], String> {
@@ -118,11 +118,11 @@ fn decode_hex_32(hex: &str) -> std::result::Result<[u8; 32], String> {
 }
 
 /// Build a `"<node-id-hex>/<blob-hash-hex>"` ticket string from a
-/// [`NodeId`] and [`BlobHash`]. Convenience for producers that want to
+/// [`PeerID`] and [`BlobHash`]. Convenience for producers that want to
 /// declare iroh sources in a manifest.
-pub fn build_ticket(node_id: NodeId, blob_hash: BlobHash) -> String {
+pub fn build_ticket(peer_id: PeerID, blob_hash: BlobHash) -> String {
     let mut out = String::with_capacity(129);
-    for byte in node_id.to_bytes() {
+    for byte in peer_id.to_bytes() {
         out.push_str(&format!("{byte:02x}"));
     }
     out.push('/');
@@ -145,15 +145,15 @@ mod tests {
         // Use a real node-id seed so from_bytes succeeds (32 random bytes
         // aren't always a valid ed25519 public key).
         let provider = InMemoryProvider::from_seed(node_bytes);
-        let node_id = NodeId::from_public_key(provider.master_public_key());
+        let peer_id = PeerID::from_public_key(provider.master_public_key());
         let blob_hash = BlobHash::from_bytes(hash_bytes);
 
-        let ticket = build_ticket(node_id, blob_hash);
+        let ticket = build_ticket(peer_id, blob_hash);
         assert_eq!(ticket.len(), 129); // 64 + 1 + 64
         assert!(ticket.contains('/'));
 
         let (parsed_node, parsed_hash) = parse_ticket(&ticket).unwrap();
-        assert_eq!(parsed_node, node_id);
+        assert_eq!(parsed_node, peer_id);
         assert_eq!(parsed_hash, blob_hash);
     }
 
@@ -209,14 +209,14 @@ mod tests {
             .add_peer(alice_transport.endpoint_addr())
             .unwrap();
 
-        let alice_node_id = NodeId::from_public_key(alice_provider.master_public_key());
+        let alice_peer_id = PeerID::from_public_key(alice_provider.master_public_key());
 
         // Alice puts a blob.
         let payload = Bytes::from_static(b"this blob lives on alice's machine");
         let blob_hash = alice_blobs.put_bytes(payload.clone()).await.unwrap();
 
         // Bob's IrohFetcher pulls it.
-        let ticket = build_ticket(alice_node_id, blob_hash);
+        let ticket = build_ticket(alice_peer_id, blob_hash);
         let mut fetcher = IrohFetcher::new(bob_blobs.clone(), bob_transport.clone());
         let result = fetcher
             .fetch(&BlobSource::Iroh { ticket })

@@ -160,7 +160,7 @@ impl BlobStore {
     pub async fn fetch_from(
         &self,
         transport: &crate::IrohTransport,
-        peer: crate::NodeId,
+        peer: crate::PeerID,
         hash: BlobHash,
     ) -> Result<(), BlobError> {
         let conn = transport
@@ -288,7 +288,7 @@ mod tests {
             .add_peer(alice_transport.endpoint_addr())
             .unwrap();
 
-        let alice_node_id = crate::NodeId::from_public_key(alice_provider.master_public_key());
+        let alice_peer_id = crate::PeerID::from_public_key(alice_provider.master_public_key());
 
         // Alice puts.
         let payload = Bytes::from_static(b"this blob lives on alice's machine");
@@ -299,7 +299,7 @@ mod tests {
 
         // Bob fetches from alice.
         bob_blobs
-            .fetch_from(&bob_transport, alice_node_id, hash)
+            .fetch_from(&bob_transport, alice_peer_id, hash)
             .await
             .expect("fetch");
 

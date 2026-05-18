@@ -10,7 +10,7 @@ consumes generically.
 ## Design
 
 - **Identity comes from [`mere-identity`](https://crates.io/crates/mere-identity).**
-  A peer's `NodeId` is derived from its master Ed25519 public key. Transport
+  A peer's `PeerID` is derived from its master Ed25519 public key. Transport
   never holds the master secret; it consumes the public key for addressing.
 - **Streams are byte-oriented.** `Transport::Stream: AsyncRead + AsyncWrite`.
   Higher protocols layer their own framing on top — `murmuring` carries a
@@ -26,8 +26,8 @@ consumes generically.
 ## What's in the crate
 
 - **`transport`** — the public contract.
-  - `Transport` trait — `dial(NodeId, Alpn) -> Stream`, `accept() -> Stream`,
-    NodeId / capability surface. Generic associated types for the stream
+  - `Transport` trait — `dial(PeerID, Alpn) -> Stream`, `accept() -> Stream`,
+    PeerID / capability surface. Generic associated types for the stream
     type.
 - **`iroh_transport`** — the real implementation.
   - `IrohTransport` — backed by `iroh` (Phase 2C v0). Real QUIC, real
@@ -36,7 +36,7 @@ consumes generically.
 - **`memory`** — the in-memory test fixture.
   - `MemoryTransport` — paired channels, no network. Used for unit tests of
     higher-level protocols without booting iroh.
-- **`node_id`** — `NodeId` derived from `Ed25519PublicKey`.
+- **`peer_id`** — `PeerID` derived from `Ed25519PublicKey`. Named `PeerID` rather than `NodeId` to disambiguate from `mere-kernel`'s graph-node identity (graph-object identity and peer identity are distinct concepts that previously shared the name).
 - **`alpn`** — `Alpn` newtype with hash-friendly equality, for the ALPN
   registry pattern.
 - **`blobs`** — content-addressed blob storage.
@@ -67,11 +67,11 @@ the substrate.
                   │                                    │
                   ▼                                    ▼
             mere-identity                       iroh + iroh-blobs
-            (NodeId from                        (QUIC, content addressing,
+            (PeerID from                        (QUIC, content addressing,
              master pubkey)                      gossip topics)
 ```
 
-- [`mere-identity`](https://crates.io/crates/mere-identity) — `NodeId::from_public_key(master_pubkey)`
+- [`mere-identity`](https://crates.io/crates/mere-identity) — `PeerID::from_public_key(master_pubkey)`
   derives the transport's peer identity from the identity trust root. No
   separate transport key is generated.
 - [`murm`](https://crates.io/crates/murm) — opens a stream per cabal

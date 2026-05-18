@@ -6,15 +6,19 @@ use mere_identity::{Ed25519PublicKey, IdentityError};
 ///
 /// Derived from the peer's master Ed25519 public key (the same key managed
 /// by [`mere_identity`]). For iroh-backed transports, this maps directly to
-/// iroh's `NodeId`.
+/// iroh's `NodeId` (their term for the same underlying public key).
+///
+/// Named `PeerID` rather than `NodeId` to disambiguate from
+/// `mere-kernel::Graph` node identity — graph-object identity and peer
+/// identity are distinct concepts that previously shared the name.
 ///
 /// Carries equality and hashing semantics of the underlying public key, so
-/// `NodeId` works as a `HashMap` / `HashSet` key.
+/// `PeerID` works as a `HashMap` / `HashSet` key.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub struct NodeId(Ed25519PublicKey);
+pub struct PeerID(Ed25519PublicKey);
 
-impl NodeId {
-    /// Construct a `NodeId` from a master Ed25519 public key.
+impl PeerID {
+    /// Construct a `PeerID` from a master Ed25519 public key.
     pub fn from_public_key(pk: Ed25519PublicKey) -> Self {
         Self(pk)
     }
@@ -38,7 +42,7 @@ impl NodeId {
     }
 }
 
-impl From<Ed25519PublicKey> for NodeId {
+impl From<Ed25519PublicKey> for PeerID {
     fn from(pk: Ed25519PublicKey) -> Self {
         Self(pk)
     }
