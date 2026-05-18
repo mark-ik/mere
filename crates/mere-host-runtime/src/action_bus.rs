@@ -358,6 +358,96 @@ pub fn check_permission(action: &BusAction, gate: &dyn PermissionGate) -> Permis
     gate.check(action)
 }
 
+/// Listener function the bus calls for every allowed action.
+/// `&BusAction` is borrowed; listeners that need to keep the action
+/// clone it inside themselves. `Send + Sync` so a bus may be shared
+/// across threads even though v0 dispatch is single-threaded.
+pub type ActionListener = Box<dyn Fn(&BusAction) + Send + Sync + 'static>;
+
+/// Action bus — owns the permission gate + listener list, performs
+/// dispatch.
+///
+/// v0 single-threaded; the trait bounds (`Send + Sync` on listeners,
+/// `&self` dispatch) leave space for a threaded host without
+/// breaking the API. The bus is **policy + fan-out only** — it
+/// neither resolves targets to live state nor executes
+/// `ActionKind`s; that's the host adapter's responsibility (per the
+/// module's documented split: runtime vocabulary + bus, host
+/// dispatcher).
+///
+/// Listener ordering: listeners are called in the order they were
+/// registered, sequentially, with `&BusAction` (not `&mut`).
+/// Listeners run only when the gate returned `Allow` — denied
+/// actions short-circuit before any listener sees them.
+pub struct ActionBus {
+    gate: Box<dyn PermissionGate>,
+    listeners: Vec<ActionListener>,
+}
+
+impl ActionBus {
+    /// Construct a bus with the supplied gate and no listeners.
+    pub fn new(gate: Box<dyn PermissionGate>) -> Self {
+        Self {
+            gate,
+            listeners: Vec::new(),
+        }
+    }
+
+    /// Convenience: bus with [`PermitEverythingGate`] installed.
+    /// v0 default; hosts wanting real policy call
+    /// [`Self::set_gate`].
+    pub fn with_permit_everything() -> Self {
+        Self::new(Box::new(PermitEverythingGate))
+    }
+
+    /// Replace the permission gate. Subsequent dispatches use the
+    /// new gate; in-flight calls are unaffected (`&self` dispatch).
+    pub fn set_gate(&mut self, gate: Box<dyn PermissionGate>) {
+        self.gate = gate;
+    }
+
+    /// Register a listener. Listeners receive every allowed
+    /// `BusAction` in registration order.
+    pub fn add_listener<F>(&mut self, listener: F)
+    where
+        F: Fn(&BusAction) + Send + Sync + 'static,
+    {
+        self.listeners.push(Box::new(listener));
+    }
+
+    /// Number of registered listeners. Test hook + diagnostics.
+    pub fn listener_count(&self) -> usize {
+        self.listeners.len()
+    }
+
+    /// Dispatch `action`:
+    /// 1. Check permission against the installed gate.
+    /// 2. If `Allow`: call each listener in registration order,
+    ///    return `Allowed`.
+    /// 3. If `Deny(reason)`: return `Denied(reason)`, skip listeners.
+    ///
+    /// Returns `BusDispatchOutcome`. Hosts that want
+    /// `TargetMissing` semantics layer that resolution on top of
+    /// this dispatch — the bus itself doesn't know what's live.
+    pub fn dispatch(&self, action: &BusAction) -> BusDispatchOutcome {
+        match self.gate.check(action) {
+            PermissionDecision::Allow => {
+                for listener in &self.listeners {
+                    listener(action);
+                }
+                BusDispatchOutcome::Allowed
+            }
+            PermissionDecision::Deny(reason) => BusDispatchOutcome::Denied(reason),
+        }
+    }
+}
+
+impl Default for ActionBus {
+    fn default() -> Self {
+        Self::with_permit_everything()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -408,6 +498,77 @@ mod tests {
                 PermissionDecision::Deny(_)
             ));
         }
+    }
+
+    #[test]
+    fn action_bus_dispatch_with_permit_calls_listeners() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let mut bus = ActionBus::with_permit_everything();
+        let counter = Arc::new(AtomicUsize::new(0));
+        let captured = counter.clone();
+        bus.add_listener(move |_action| {
+            captured.fetch_add(1, Ordering::SeqCst);
+        });
+        assert_eq!(bus.listener_count(), 1);
+
+        let action = BusAction::app(ActionKind::Quit);
+        let outcome = bus.dispatch(&action);
+        assert_eq!(outcome, BusDispatchOutcome::Allowed);
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn action_bus_dispatch_with_refuse_short_circuits() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let mut bus = ActionBus::new(Box::new(RefuseEverythingGate));
+        let counter = Arc::new(AtomicUsize::new(0));
+        let captured = counter.clone();
+        bus.add_listener(move |_action| {
+            captured.fetch_add(1, Ordering::SeqCst);
+        });
+        let action = BusAction::app(ActionKind::Quit);
+        let outcome = bus.dispatch(&action);
+        match outcome {
+            BusDispatchOutcome::Denied(_) => {}
+            other => panic!("expected Denied, got {:?}", other),
+        }
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            0,
+            "listener should not fire on deny"
+        );
+    }
+
+    #[test]
+    fn action_bus_listeners_run_in_registration_order() {
+        use std::sync::{Arc, Mutex};
+
+        let mut bus = ActionBus::with_permit_everything();
+        let log: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+        let l1 = log.clone();
+        let l2 = log.clone();
+        bus.add_listener(move |_| l1.lock().unwrap().push("first"));
+        bus.add_listener(move |_| l2.lock().unwrap().push("second"));
+
+        let action = BusAction::app(ActionKind::OpenNewWindow);
+        bus.dispatch(&action);
+        assert_eq!(*log.lock().unwrap(), vec!["first", "second"]);
+    }
+
+    #[test]
+    fn action_bus_set_gate_changes_policy_for_subsequent_dispatch() {
+        let mut bus = ActionBus::with_permit_everything();
+        let action = BusAction::app(ActionKind::Quit);
+        assert_eq!(bus.dispatch(&action), BusDispatchOutcome::Allowed);
+        bus.set_gate(Box::new(RefuseEverythingGate));
+        assert!(matches!(
+            bus.dispatch(&action),
+            BusDispatchOutcome::Denied(_)
+        ));
     }
 
     #[test]

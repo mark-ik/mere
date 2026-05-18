@@ -5305,11 +5305,13 @@ version = "0.0.1"
 dependencies = [
  "inker",
  "kurbo",
+ "mere-frame",
  "mere-host-runtime",
  "mere-kernel",
  "mere-renderer-registry",
  "mere-spatial-prototype",
  "petgraph",
+ "serde_json",
  "uuid",
 ]
 

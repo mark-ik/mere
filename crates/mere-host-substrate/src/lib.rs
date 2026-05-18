@@ -41,7 +41,9 @@ use std::path::{Path, PathBuf};
 use kurbo::{Affine, Point, Size};
 use mere_frame::SessionId;
 use mere_host_runtime::view_intent_store::{load_view_intent, save_view_intent};
-use mere_host_runtime::{CameraSnapshot, LoadReport, ManifestStore, TileManager, ViewIntent};
+use mere_host_runtime::{
+    ActionBus, CameraSnapshot, LoadReport, ManifestStore, TileManager, ViewIntent,
+};
 use mere_kernel::graph::NodeKey;
 use mere_renderer_registry::{DiagnosticEvent, DiagnosticSink, NodeContentKind, NodeIdentity, Placement};
 use mere_spatial_prototype::{
@@ -135,6 +137,13 @@ pub struct MereHostApp {
     /// `activate_session`. Drives `active_session_dir` and the
     /// `*_active_view_intent` save/load helpers.
     active_session: Option<SessionId>,
+
+    /// Action bus — permission-checked dispatch with listener
+    /// fan-out. Defaults to `PermitEverythingGate` with no
+    /// listeners; hosts install policy via
+    /// `action_bus.set_gate(...)` and handlers via
+    /// `action_bus.add_listener(...)`.
+    pub action_bus: ActionBus,
 }
 
 impl Default for MereHostApp {
@@ -154,6 +163,7 @@ impl MereHostApp {
             input_callback: None,
             manifests: ManifestStore::new(),
             active_session: None,
+            action_bus: ActionBus::with_permit_everything(),
         }
     }
 
@@ -327,13 +337,14 @@ impl MereHostApp {
 
     /// Hit-test `host_pos` against the current scene + camera, emit
     /// the resolved `SubstrateInputEvent` through the installed
-    /// callback (if any).
+    /// callback (if any), and return it.
     ///
     /// This is the substrate-side seam between OS pointer events
     /// and the host's action-bus translation layer: the substrate
-    /// resolves what was hit; the host's callback wraps it in a
-    /// `BusAction` with pane/session/graph context.
-    pub fn handle_pointer_press(&self, host_pos: Point) {
+    /// resolves what was hit; the host translates the returned
+    /// event into a `BusAction` with pane/session/graph context and
+    /// dispatches it via [`Self::action_bus`].
+    pub fn handle_pointer_press(&self, host_pos: Point) -> SubstrateInputEvent {
         let scene_pos = self.substrate.scene_pos_from_host(host_pos);
         let event = match self.scene.hit_test(scene_pos) {
             Some(SceneHit::Node(identity)) => match self.node_key_for_identity(identity) {
@@ -356,8 +367,16 @@ impl MereHostApp {
             None => SubstrateInputEvent::BackgroundClicked { host_pos, scene_pos },
         };
         if let Some(cb) = &self.input_callback {
-            cb(event);
+            cb(event.clone());
         }
+        event
+    }
+
+    /// Open-order index of the tile with `node_key`, or `None` if
+    /// the key isn't currently open. Helpful when constructing
+    /// `ActionKind::FocusTile { index }` from a substrate hit.
+    pub fn tile_index_for(&self, node_key: NodeKey) -> Option<usize> {
+        self.tiles.open_tiles().iter().position(|k| *k == node_key)
     }
 
     /// Install a closure as the substrate registry's diagnostic

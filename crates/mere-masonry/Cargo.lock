@@ -1578,6 +1578,8 @@ dependencies = [
  "masonry_core",
  "masonry_imaging",
  "masonry_testing",
+ "mere-frame",
+ "mere-host-runtime",
  "mere-host-substrate",
  "mere-renderer-registry",
  "mere-spatial-prototype",

@@ -24,6 +24,11 @@
 //! - Input callback streams `TileClicked { node_key, .. }` /
 //!   `BackgroundClicked` / etc. to stderr — clicks resolve back to
 //!   the runtime's `NodeKey` automatically.
+//! - On `TileClicked`, the demo also wraps the event in a
+//!   `BusAction::pane(PaneId(0), FocusTile { index })` and runs it
+//!   through `MereHostApp::action_bus`. A registered listener logs
+//!   each dispatched action so the click → bus → listener round-trip
+//!   is visible on stderr.
 //!
 //! The windowing + wgpu + present pipeline is the same as
 //! `windowed_demo.rs`; this file focuses on the host shape.
@@ -31,6 +36,8 @@
 use std::sync::Arc;
 
 use inker::{DocumentProvenance, DocumentTrustState, EngineDocument};
+use mere_frame::PaneId;
+use mere_host_runtime::{ActionKind, BusAction, BusDispatchOutcome};
 use mere_host_substrate::{MereHostApp, SubstrateInputEvent};
 use masonry_core::core::{DefaultProperties, NewWidget};
 use masonry_testing::ModularWidget;
@@ -193,6 +200,14 @@ impl ApplicationHandler for App {
             }
         });
 
+        // Install a bus listener — every `BusAction` that the gate
+        // allows fans out through here. Demo uses the default
+        // `PermitEverythingGate`; a real host would swap in a policy
+        // gate via `host_app.action_bus.set_gate(...)`.
+        host_app.action_bus.add_listener(|action| {
+            eprintln!("[bus] dispatched {:?} → {:?}", action.target, action.kind);
+        });
+
         // Register the masonry renderer for Panel content.
         let masonry_renderer = MasonryEmbeddedRenderer::new(
             "demo.masonry.panel",
@@ -290,7 +305,25 @@ impl ApplicationHandler for App {
                 ..
             } if btn_state == ElementState::Pressed => {
                 if let Some(cursor) = state.cursor {
-                    state.host_app.handle_pointer_press(cursor);
+                    let resolved = state.host_app.handle_pointer_press(cursor);
+                    // Translate tile-hit events into a bus action. The
+                    // demo uses a stub `PaneId(0)` because it doesn't
+                    // own a frame layout yet — a real host would look
+                    // up the active workbench pane id.
+                    if let SubstrateInputEvent::TileClicked { node_key, .. } = resolved {
+                        if let Some(index) = state.host_app.tile_index_for(node_key) {
+                            let action = BusAction::pane(
+                                PaneId(0),
+                                ActionKind::FocusTile { index },
+                            );
+                            match state.host_app.action_bus.dispatch(&action) {
+                                BusDispatchOutcome::Allowed => {}
+                                outcome => {
+                                    eprintln!("[bus] dispatch outcome: {:?}", outcome);
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

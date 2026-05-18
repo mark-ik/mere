@@ -49,9 +49,9 @@ pub mod tiles;
 pub mod view_intent_store;
 
 pub use action_bus::{
-    ActionKind, ActionTarget, BusAction, BusDispatchOutcome, DenyReason, PermissionDecision,
-    PermissionGate, PermitEverythingGate, RefuseEverythingGate, SurfaceId, TearOutMode,
-    check_permission,
+    ActionBus, ActionKind, ActionListener, ActionTarget, BusAction, BusDispatchOutcome,
+    DenyReason, PermissionDecision, PermissionGate, PermitEverythingGate, RefuseEverythingGate,
+    SurfaceId, TearOutMode, check_permission,
 };
 pub use manifest::{
     EngineProfileBinding, EngramId, GraphSessionManifest, MANIFEST_SCHEMA_VERSION, PersonaId,

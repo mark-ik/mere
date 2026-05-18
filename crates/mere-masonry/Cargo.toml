@@ -55,5 +55,10 @@ winit = "0.30.13"
 # `MereHostApp` to drive the substrate through real tile/manifest/
 # session state.
 mere-host-substrate = { path = "../mere-host-substrate" }
+# Action-bus vocabulary + `PaneId` constructor used by the demo
+# to translate substrate input events into `BusAction`s and run
+# them through `MereHostApp::action_bus`.
+mere-host-runtime = { path = "../mere-host-runtime" }
+mere-frame = { path = "../mere-domain/frame" }
 inker = { path = "../inker" }
 petgraph = "0.8"
