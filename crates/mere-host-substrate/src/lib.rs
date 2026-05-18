@@ -38,13 +38,14 @@ use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 
-use kurbo::{Affine, Size};
+use kurbo::{Affine, Point, Size};
 use mere_host_runtime::view_intent_store::{load_view_intent, save_view_intent};
 use mere_host_runtime::{CameraSnapshot, TileManager, ViewIntent};
 use mere_kernel::graph::NodeKey;
-use mere_renderer_registry::{NodeContentKind, NodeIdentity, Placement};
+use mere_renderer_registry::{DiagnosticEvent, DiagnosticSink, NodeContentKind, NodeIdentity, Placement};
 use mere_spatial_prototype::{
-    ExternalTextureCompositor, SubstrateHost, SubstrateNode, SubstrateScene,
+    EdgeIdentity, ExternalTextureCompositor, SceneHit, SubstrateHost, SubstrateNode,
+    SubstrateScene,
 };
 
 /// Per-tile dimensions used by `sync_scene_from_tiles`. Placeholder
@@ -53,6 +54,49 @@ pub const DEFAULT_TILE_WIDTH: f64 = 320.0;
 pub const DEFAULT_TILE_HEIGHT: f64 = 240.0;
 pub const DEFAULT_TILE_GAP: f64 = 32.0;
 pub const DEFAULT_TILES_PER_ROW: usize = 3;
+
+/// Substrate-resolved input events the host translates into bus
+/// actions. Substrate produces these from hit-tests + camera
+/// inverses; the host wraps them in `BusAction`s with its own
+/// pane/session/graph context.
+#[derive(Clone, Debug)]
+pub enum SubstrateInputEvent {
+    /// Pointer hit landed on a tile-shaped substrate node, resolved
+    /// back to its runtime `NodeKey`. Host typically translates to
+    /// `BusAction { target: Pane(active), kind: FocusTile { index } }`
+    /// or similar.
+    TileClicked {
+        node_key: NodeKey,
+        host_pos: Point,
+        scene_pos: Point,
+    },
+    /// Pointer hit a relation edge. Host typically opens an edge
+    /// inspector / context menu rather than dispatching a bus action.
+    EdgeClicked {
+        edge: EdgeIdentity,
+        host_pos: Point,
+        scene_pos: Point,
+    },
+    /// Pointer hit a substrate node but the host has no `NodeKey`
+    /// mapping for it (drift between scene and tile_identity_map —
+    /// shouldn't happen if `sync_scene_from_tiles` is the only scene
+    /// source). Reported as a degraded variant for diagnostic
+    /// visibility rather than silently dropped.
+    UnknownTileHit {
+        identity: NodeIdentity,
+        host_pos: Point,
+        scene_pos: Point,
+    },
+    /// Pointer landed on substrate background (no node, no edge).
+    /// Host typically clears tile focus / dismisses menus.
+    BackgroundClicked { host_pos: Point, scene_pos: Point },
+}
+
+/// Boxed input-event callback. Owned by `MereHostApp`; replaced via
+/// `set_input_callback`. `Fn` (not `FnMut`) keeps the callback
+/// safely callable from `&self` paths; hosts needing mutable state
+/// use interior mutability.
+type InputCallback = Box<dyn Fn(SubstrateInputEvent) + Send + Sync + 'static>;
 
 /// Substrate-as-host integration: owns both the substrate machinery
 /// and the runtime's durable state.
@@ -74,6 +118,12 @@ pub struct MereHostApp {
     /// closes, so producer handles + accessibility tree ids remain
     /// stable.
     tile_identity_map: HashMap<NodeKey, NodeIdentity>,
+
+    /// Host-installed input callback. `handle_pointer_press` calls
+    /// this when set; otherwise events are dropped silently (a
+    /// reasonable default for tests and probes that don't care about
+    /// click routing).
+    input_callback: Option<InputCallback>,
 }
 
 impl Default for MereHostApp {
@@ -90,6 +140,7 @@ impl MereHostApp {
             compositor: ExternalTextureCompositor::new(),
             tiles: TileManager::new(),
             tile_identity_map: HashMap::new(),
+            input_callback: None,
         }
     }
 
@@ -156,6 +207,94 @@ impl MereHostApp {
         self.tile_identity_map.len()
     }
 
+    /// Find the runtime `NodeKey` for a substrate `NodeIdentity`.
+    /// Returns `None` if the identity isn't in the tile-identity map
+    /// (the substrate scene has a node that didn't come from
+    /// `sync_scene_from_tiles`, or a tile was closed mid-frame).
+    pub fn node_key_for_identity(&self, identity: NodeIdentity) -> Option<NodeKey> {
+        self.tile_identity_map
+            .iter()
+            .find_map(|(k, v)| if *v == identity { Some(*k) } else { None })
+    }
+
+    /// Install a closure that receives every `SubstrateInputEvent`
+    /// the substrate resolves. Replaces any previously-installed
+    /// callback. Pass `None`-ish by clearing via
+    /// `clear_input_callback`.
+    pub fn set_input_callback<F>(&mut self, callback: F)
+    where
+        F: Fn(SubstrateInputEvent) + Send + Sync + 'static,
+    {
+        self.input_callback = Some(Box::new(callback));
+    }
+
+    /// Drop the input callback. Subsequent `handle_pointer_press`
+    /// calls drop events silently.
+    pub fn clear_input_callback(&mut self) {
+        self.input_callback = None;
+    }
+
+    /// Hit-test `host_pos` against the current scene + camera, emit
+    /// the resolved `SubstrateInputEvent` through the installed
+    /// callback (if any).
+    ///
+    /// This is the substrate-side seam between OS pointer events
+    /// and the host's action-bus translation layer: the substrate
+    /// resolves what was hit; the host's callback wraps it in a
+    /// `BusAction` with pane/session/graph context.
+    pub fn handle_pointer_press(&self, host_pos: Point) {
+        let scene_pos = self.substrate.scene_pos_from_host(host_pos);
+        let event = match self.scene.hit_test(scene_pos) {
+            Some(SceneHit::Node(identity)) => match self.node_key_for_identity(identity) {
+                Some(node_key) => SubstrateInputEvent::TileClicked {
+                    node_key,
+                    host_pos,
+                    scene_pos,
+                },
+                None => SubstrateInputEvent::UnknownTileHit {
+                    identity,
+                    host_pos,
+                    scene_pos,
+                },
+            },
+            Some(SceneHit::Edge(edge)) => SubstrateInputEvent::EdgeClicked {
+                edge,
+                host_pos,
+                scene_pos,
+            },
+            None => SubstrateInputEvent::BackgroundClicked { host_pos, scene_pos },
+        };
+        if let Some(cb) = &self.input_callback {
+            cb(event);
+        }
+    }
+
+    /// Install a closure as the substrate registry's diagnostic
+    /// sink. The closure receives every `DiagnosticEvent` the
+    /// registry emits (renderer registration / unregistration /
+    /// hot-swap, route-degraded misroutes) and routes them to the
+    /// host's log / telemetry / action bus.
+    ///
+    /// Replaces any sink previously installed. Pass a no-op closure
+    /// to silence the registry's diagnostic emissions:
+    ///
+    /// ```ignore
+    /// app.set_diagnostic_callback(|_| {});
+    /// ```
+    ///
+    /// The closure is wrapped in `CallbackSink`; bring your own
+    /// `Box<dyn DiagnosticSink>` via
+    /// `app.substrate.registry_mut().set_sink(...)` for richer sink
+    /// state (event buffering, async dispatch, etc.).
+    pub fn set_diagnostic_callback<F>(&mut self, callback: F)
+    where
+        F: Fn(DiagnosticEvent) + Send + Sync + 'static,
+    {
+        self.substrate
+            .registry_mut()
+            .set_sink(Box::new(CallbackSink::new(callback)));
+    }
+
     /// Snapshot the substrate's current camera as a `ViewIntent`
     /// fragment. Hidden-relation state stays default (substrate
     /// doesn't manage that yet). Useful for save flows: the host
@@ -181,6 +320,27 @@ impl MereHostApp {
             self.substrate
                 .set_camera(Affine::new(snapshot.coefficients));
         }
+    }
+}
+
+/// `DiagnosticSink` impl that delegates to a host-supplied closure.
+/// The closure runs synchronously inside the registry's emit path —
+/// hosts wanting async / batched / deduped delivery should buffer
+/// inside their closure (or implement `DiagnosticSink` directly with
+/// richer state).
+pub struct CallbackSink<F: Fn(DiagnosticEvent) + Send + Sync + 'static> {
+    callback: F,
+}
+
+impl<F: Fn(DiagnosticEvent) + Send + Sync + 'static> CallbackSink<F> {
+    pub fn new(callback: F) -> Self {
+        Self { callback }
+    }
+}
+
+impl<F: Fn(DiagnosticEvent) + Send + Sync + 'static> DiagnosticSink for CallbackSink<F> {
+    fn record(&self, event: DiagnosticEvent) {
+        (self.callback)(event);
     }
 }
 
@@ -483,6 +643,186 @@ mod tests {
         assert_eq!(app.substrate.camera(), kurbo::Affine::IDENTITY);
         app.apply_view_intent(&saved);
         assert_eq!(app.substrate.camera(), camera);
+    }
+
+    #[test]
+    fn pointer_press_routes_tile_click_to_node_key() {
+        use std::sync::{Arc, Mutex};
+
+        let captured: Arc<Mutex<Vec<SubstrateInputEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let buf = captured.clone();
+
+        let mut app = MereHostApp::new();
+        let keys = open_tiles_for(
+            &mut app.tiles,
+            &["https://a.example", "https://b.example", "https://c.example"],
+        );
+        app.sync_scene_from_tiles();
+        app.set_input_callback(move |event| {
+            buf.lock().expect("lock").push(event);
+        });
+
+        // First tile sits at grid (col=0, row=0), origin
+        // (DEFAULT_TILE_GAP, DEFAULT_TILE_GAP). Click inside its rect.
+        let click = Point::new(DEFAULT_TILE_GAP + 50.0, DEFAULT_TILE_GAP + 50.0);
+        app.handle_pointer_press(click);
+
+        let events = captured.lock().unwrap().clone();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            SubstrateInputEvent::TileClicked {
+                node_key,
+                host_pos,
+                scene_pos,
+            } => {
+                assert_eq!(*node_key, keys[0]);
+                assert_eq!(*host_pos, click);
+                // Identity camera → scene_pos equals host_pos.
+                assert_eq!(*scene_pos, click);
+            }
+            other => panic!("expected TileClicked, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn pointer_press_on_background_emits_background_event() {
+        use std::sync::{Arc, Mutex};
+
+        let captured: Arc<Mutex<Vec<SubstrateInputEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let buf = captured.clone();
+
+        let mut app = MereHostApp::new();
+        let _ = open_tiles_for(&mut app.tiles, &["https://a.example"]);
+        app.sync_scene_from_tiles();
+        app.set_input_callback(move |event| {
+            buf.lock().expect("lock").push(event);
+        });
+
+        // Click well outside any tile rect.
+        app.handle_pointer_press(Point::new(2000.0, 2000.0));
+        let events = captured.lock().unwrap().clone();
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            events[0],
+            SubstrateInputEvent::BackgroundClicked { .. }
+        ));
+    }
+
+    #[test]
+    fn pointer_press_under_panned_camera_uses_inverse() {
+        use std::sync::{Arc, Mutex};
+
+        let captured: Arc<Mutex<Vec<SubstrateInputEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let buf = captured.clone();
+
+        let mut app = MereHostApp::new();
+        let keys = open_tiles_for(&mut app.tiles, &["https://a.example"]);
+        app.sync_scene_from_tiles();
+        // Pan camera by (500, 300); first tile's host-space position
+        // shifts from (32, 32) to (532, 332).
+        app.substrate.set_camera(kurbo::Affine::translate((500.0, 300.0)));
+        app.set_input_callback(move |event| {
+            buf.lock().expect("lock").push(event);
+        });
+
+        // Click inside the panned tile's host-space rect.
+        app.handle_pointer_press(Point::new(532.0 + 50.0, 332.0 + 50.0));
+        let events = captured.lock().unwrap().clone();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            SubstrateInputEvent::TileClicked {
+                node_key,
+                scene_pos,
+                ..
+            } => {
+                assert_eq!(*node_key, keys[0]);
+                // scene_pos is the camera-inverse of host_pos:
+                // host (582, 382) - pan (500, 300) = scene (82, 82).
+                assert!((scene_pos.x - 82.0).abs() < 1e-9);
+                assert!((scene_pos.y - 82.0).abs() < 1e-9);
+            }
+            other => panic!("expected TileClicked, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn pointer_press_without_callback_is_a_silent_drop() {
+        let mut app = MereHostApp::new();
+        let _ = open_tiles_for(&mut app.tiles, &["https://a.example"]);
+        app.sync_scene_from_tiles();
+        // No callback set — should not panic.
+        app.handle_pointer_press(Point::new(50.0, 50.0));
+    }
+
+    #[test]
+    fn node_key_for_identity_returns_none_for_unknown() {
+        let app = MereHostApp::new();
+        assert!(app.node_key_for_identity(NodeIdentity::next()).is_none());
+    }
+
+    #[test]
+    fn diagnostic_callback_receives_registry_events() {
+        use std::sync::Arc;
+        use std::sync::Mutex;
+
+        use mere_renderer_registry::{
+            CompositionMode, NodeContentKindSet, NodeRenderer, RendererCapabilities, RendererId,
+        };
+        use mere_spatial_prototype::RecordingRenderer;
+
+        let captured: Arc<Mutex<Vec<DiagnosticEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let mut app = MereHostApp::new();
+        let sink_buf = captured.clone();
+        app.set_diagnostic_callback(move |event| {
+            sink_buf.lock().expect("sink lock").push(event);
+        });
+
+        // Register a renderer — should produce one RendererRegistered.
+        let renderer = RecordingRenderer::for_kind("test.cb", NodeContentKind::DocumentTile);
+        let id = renderer.id();
+        app.substrate
+            .registry_mut()
+            .register(Box::new(renderer))
+            .expect("register");
+
+        let events = captured.lock().unwrap().clone();
+        assert_eq!(events.len(), 1, "exactly one event captured");
+        match &events[0] {
+            DiagnosticEvent::RendererRegistered { id: e_id, kinds } => {
+                assert_eq!(*e_id, id);
+                assert!(kinds.contains(&NodeContentKind::DocumentTile));
+            }
+            other => panic!("expected RendererRegistered, got {:?}", other),
+        }
+
+        // Unregister — second event.
+        app.substrate.registry_mut().unregister(&id);
+        let events = captured.lock().unwrap().clone();
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            events[1],
+            DiagnosticEvent::RendererUnregistered { .. }
+        ));
+
+        // Silence the callback by installing a no-op. Subsequent
+        // registration emits nothing visible to the prior buffer.
+        let buf_len_before = captured.lock().unwrap().len();
+        app.set_diagnostic_callback(|_| {});
+        // Suppress unused warnings for the trait items we only used
+        // above; this keeps the test file consistent if linters trim.
+        let _: fn(CompositionMode) = |_| {};
+        let _: NodeContentKindSet = NodeContentKindSet::new();
+        let _: fn(&dyn NodeRenderer) = |_| {};
+        let _: fn(RendererCapabilities) = |_| {};
+        let _: fn(RendererId) = |_| {};
+        app.substrate
+            .registry_mut()
+            .register(Box::new(RecordingRenderer::for_kind(
+                "test.silenced",
+                NodeContentKind::Panel,
+            )))
+            .expect("register again");
+        assert_eq!(captured.lock().unwrap().len(), buf_len_before);
     }
 
     #[test]
