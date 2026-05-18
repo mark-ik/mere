@@ -134,7 +134,26 @@ pub struct Projection {
     pub overlays: Vec<Overlay>,    // ClusterHalo, ActivityHeat, BridgeEmphasis, ImportanceScale, EdgeWeight
     pub minimap: Option<MinimapDescriptor>,
     pub content_bounds: PortableRect,
+    pub binding_mode: ProjectionBindingMode,  // see below
     pub metadata: ProjectionMetadata,
+}
+
+/// Whether a projection re-renders when its source graph mutates, or is
+/// captured at one moment and frozen.
+///
+/// Per [graphshell harvest brief](2026-05-17_graphshell_harvest_brief.md) Tier 1 / T1-5: making
+/// this explicit catches subtle bugs. Today every projection is implicitly
+/// "live-bound" — that's wrong for switcher thumbnails (captured snapshots
+/// that should not re-render when the captured graph mutates), wrong for
+/// printed/exported maps (frozen at export time), and right for the active
+/// orrery's projection (must re-render).
+pub enum ProjectionBindingMode {
+    /// Re-render when the source graph mutates. Default for active views.
+    Linked,
+    /// Captured at projection time; ignores subsequent graph mutations.
+    /// Default for thumbnails, exports, switcher previews, and any
+    /// projection that lives outside an active view's render loop.
+    Unlinked,
 }
 
 pub struct IntelligenceSignals {

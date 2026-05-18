@@ -145,7 +145,7 @@ mod tests {
         SurfaceCommandStatus, SurfaceHostId, SurfaceLifecycleState, SurfacePlacementPlan,
         SurfaceSlotPlacement, TaskRequest, ThemeModePreference, TileSlot, WorkspaceId,
         WorkspacePreferences, WorkspaceServiceError,
-        persistence::{GraphTreeDocument, WorkspaceLayoutDocument, WorkspaceLayoutName},
+        persistence::{FormeDocument, WorkspaceLayoutDocument, WorkspaceLayoutName},
     };
 
     #[derive(Default)]
@@ -177,17 +177,17 @@ mod tests {
             Ok(GraphViewId::from_uuid(Uuid::from_u128(1)))
         }
 
-        fn load_graph_tree(
+        fn load_forme(
             &mut self,
             _view_id: &GraphViewId,
-        ) -> WorkspaceServiceResult<Option<GraphTreeDocument>> {
+        ) -> WorkspaceServiceResult<Option<FormeDocument>> {
             Ok(None)
         }
 
-        fn save_graph_tree(
+        fn save_forme(
             &mut self,
             _view_id: &GraphViewId,
-            _document: &GraphTreeDocument,
+            _document: &FormeDocument,
         ) -> WorkspaceServiceResult<()> {
             Ok(())
         }

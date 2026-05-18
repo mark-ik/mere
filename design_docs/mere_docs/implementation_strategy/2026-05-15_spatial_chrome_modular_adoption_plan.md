@@ -111,6 +111,12 @@ Still missing:
 - No explicit PWA/browser-host degraded envelope.
 - No shared native texture interop crate across scrying/weld/Serval/NetRender.
 
+## Cross-cutting prerequisite — single-write-path invariant on mere-kernel
+
+Per [graphshell harvest brief](../research/2026-05-17_graphshell_harvest_brief.md) Tier 1 / T1-1: all durable graph mutations flow through one reducer entry on `mere-kernel`'s `Graph` (e.g. an `apply_intents()` boundary); direct mutations raise diagnostics. Enforced compile-time via `pub(crate)` on the graph mutators, runtime via an `INV-1`-style invariant check. The [typed action bus](2026-05-11_typed_action_bus_plan.md) is the natural carrier for the "sole intent path" guarantee — bus actions become the only legal mutation source.
+
+This sits above the spatial-chrome lane but blocks none of it: phases 2–4 can proceed without the invariant landing, because the host doesn't reach into mere-kernel internals — it dispatches through the action bus already. The invariant is what makes that *enforced* rather than *conventional*. Track as a mere-kernel-side todo; revisit when bus-action coverage approaches 100% of the mutation surface (which it largely does today after the relation-taxonomy + edge-mutation work).
+
 ## Phase 1 - Taxonomy and doc reconciliation
 
 **Goal:** Make the architecture legible in browser terms before code spreads.
@@ -166,6 +172,8 @@ Still missing:
    - `engine.route_degraded`,
    - `renderer.hot_swapped`,
    - `surface.attach_failed`.
+
+   **Naming convention for long-running operations** (per [graphshell harvest brief](../research/2026-05-17_graphshell_harvest_brief.md) Tier 1 / T1-3): any operation that can hang, fail asynchronously, or have non-trivial latency emits a paired `<op>.started` / `<op>.succeeded` / `<op>.failed` triple with a timeout contract. Watchdog analyzers consume the stream to surface hangs vs. silent failures. The point events listed above stay point events; future async expansions (e.g. `renderer.boot_started` / `renderer.boot_succeeded` / `renderer.boot_failed` for renderers that boot asynchronously like Serval or scrying WebView2; `engine.warmup_*` for engines with cold-start) follow the triple convention. `ChannelRegistry` carries channel descriptors (schema, severity, retention) as declarative config separate from the live analyzers — schema is configuration, analyzers are pluggable.
 5. Thread capability gates:
    - per-node route override -> `engine.route_override`,
    - profile escalation -> `engine.profile.escalate`.
@@ -215,6 +223,7 @@ Do not name this final substrate yet. It is a proof.
 - Embedded-frame and in-scene paint surfaces share a coordinate/hit-test model.
 - The proof can be driven by deterministic test data.
 - Windows local validation exists; Linux X11 validation is attempted if practical.
+- **Composition-pass ordering invariant on `SubstrateScene`** (per [graphshell harvest brief](../research/2026-05-17_graphshell_harvest_brief.md) Tier 1 / T1-2): the substrate's paint path enforces a strict three-tier layering — *chrome* (host UI surrounding the canvas) paints first, *content* (NodeRenderer dispatches per node, including both in-scene paint and embedded-frame composite) paints second, *overlay* (focus rings, lasso, drag preview, tooltips, edge labels above their endpoints) paints last. The contract is a type-level invariant on `SubstrateScene::paint_scene` (or equivalent), not a convention. Under a free-zoom camera, overlay Z is camera-relative; chrome Z is window-relative — without the strict ordering, overlays Z-fight with content as the camera moves. Currently `mere-spatial-prototype/SubstrateHost::render_scene` is flat (no enforced ordering); this done-condition closes the gap.
 
 **Risks:**
 
@@ -271,8 +280,15 @@ Rules:
 
 **Work:**
 
-1. Add a browser-host envelope brief or section with supported/degraded/unavailable capabilities.
-2. Split native and web dependencies:
+1. Define `EnvelopeCapabilityProfile` as the single host capability/degradation contract (per [graphshell harvest brief](../research/2026-05-17_graphshell_harvest_brief.md) Tier 1 / T1-4). One product model across hosts; each envelope declares per-capability state: `Full`, `Degraded(reason)`, `Unavailable(reason)`. Initial envelopes:
+   - `Envelope::DesktopNative` (full)
+   - `Envelope::BrowserWasm` (degraded — see capability matrix below)
+   - `Envelope::Headless` (degraded for visual capabilities, full for data/sync)
+   - `Envelope::Mobile` (future; constrained for native-WebView differences and resource limits)
+
+   Renderer selectors consult the profile via `RendererCapabilities::supported_in(envelope)`. Composes with the existing per-action [capability gate catalogue](../research/2026-05-14_capability_gate_catalogue_brief.md): **envelope is the *outer* layer** (what is even physically available on this host) — **gate is the *inner* layer** (which gated actions an actor may perform within what's available). Order: envelope filters first; if a capability is `Unavailable`, the gate is moot.
+
+2. Bucket capabilities into the profile by category — supported / degraded / unavailable — for each envelope:
    - native: desktop wgpu backends, native file/profile dirs, native texture import, OS WebView capture.
    - web: WebGPU canvas, OPFS/IndexedDB persistence, browser-safe networking, WebRTC/relay p2p.
 3. Require async WebGPU boot for browser targets.
@@ -287,6 +303,7 @@ Rules:
 - PWA/browser-host documentation stops implying full native parity.
 - Direct Lane/source/graph views are the first-class browser envelope.
 - Serval/native WebView/native texture features are explicitly native-only.
+- `EnvelopeCapabilityProfile` exists as a typed contract (somewhere in `mere-host-runtime` or a small `mere-envelope` crate) and is consulted by `RendererSelector`, replacing any ad-hoc per-feature "is this host supported" checks.
 
 **Risks:**
 

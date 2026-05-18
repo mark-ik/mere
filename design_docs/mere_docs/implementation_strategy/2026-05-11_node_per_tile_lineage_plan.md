@@ -4,17 +4,17 @@
 **Status**: Implementation plan — pre-build
 **Scope**: Reshape Mere's node-creation semantics from **node-per-navigation** (current behaviour) to **node-per-tile**, and introduce the **lineage facet** as the second per-node aspect (the spatial/semantic facet stays in `mere-kernel::graph::Graph`). Operationalises the model committed in the [tear-out operations brief](../research/2026-05-11_tearout_operations_brief.md) §6.1. Prerequisite for Phase 3's **branch** operation, which depends on lineage edges being live and on within-tile navigation *not* polluting the canonical graph with one-shot URL nodes.
 
-**Naming note (2026-05-17)**: This plan was written when the workbench arrangement authority crate was called `graph-tree`. It has since been renamed to `forme` (per the [lineage / forme rename plan](2026-05-17_lineage_forme_rename_plan.md)). The body below still says "graph-tree" in many places — read those as "forme" until a follow-up edits the prose. Public type names like `GraphTree<N>`, `Provenance::Traversal`, `MemberEntry` stay valid (only the crate name changed). Also note: the *layered lineage* framing the rename plan describes — url→url within-tile branching plus tile→tile / node→node external edges on promotion — clarifies what this plan calls "the lineage facet."
+**Naming note (2026-05-17)**: This plan was written when the workbench arrangement authority crate was called `forme`. It has since been renamed to `forme` (per the [lineage / forme rename plan](2026-05-17_lineage_forme_rename_plan.md)). The body below still says "forme" in many places — read those as "forme" until a follow-up edits the prose. Public type names like `GraphTree<N>`, `Provenance::Traversal`, `MemberEntry` stay valid (only the crate name changed). Also note: the *layered lineage* framing the rename plan describes — url→url within-tile branching plus tile→tile / node→node external edges on promotion — clarifies what this plan calls "the lineage facet."
 
 **Related**:
 
-- [`../research/2026-05-11_tearout_operations_brief.md`](../research/2026-05-11_tearout_operations_brief.md) — §6.1 (node-per-tile commitment), §4.1 leaf semantics ("within-tile traversal becomes lineage edges in graph-tree, not new mere-kernel nodes").
-- [`../research/2026-05-11_memory_tiers_brief.md`](../research/2026-05-11_memory_tiers_brief.md) — within-tile history is short-term memory; lineage edges between anchor nodes (Provenance::Traversal in graph-tree) are part of graph state and become long-term on consolidation.
+- [`../research/2026-05-11_tearout_operations_brief.md`](../research/2026-05-11_tearout_operations_brief.md) — §6.1 (node-per-tile commitment), §4.1 leaf semantics ("within-tile traversal becomes lineage edges in forme, not new mere-kernel nodes").
+- [`../research/2026-05-11_memory_tiers_brief.md`](../research/2026-05-11_memory_tiers_brief.md) — within-tile history is short-term memory; lineage edges between anchor nodes (Provenance::Traversal in forme) are part of graph state and become long-term on consolidation.
 - [`../research/2026-05-11_browser_multiplexer_framing.md`](../research/2026-05-11_browser_multiplexer_framing.md) — §11.4 places this plan as step 4, immediately before Phase 3.
 - Current node creation: [`crates/mere-host/src/host_helpers.rs`](../../../crates/mere-host/src/host_helpers.rs) — `ensure_node_for_address_near`.
 - Current navigation: [`crates/mere-host/src/host_navigation.rs`](../../../crates/mere-host/src/host_navigation.rs) — `navigate_to`.
 - Tile state: [`crates/mere-host/src/tiles.rs`](../../../crates/mere-host/src/tiles.rs) — `TileManager`.
-- Graph-tree primitives: [`crates/graph/graph-tree/src/`](../../../crates/graph/graph-tree/src/) — `GraphTree<N>`, `MemberEntry`, `Provenance::Traversal`.
+- Graph-tree primitives: [`crates/graph/forme/src/`](../../../crates/graph/forme/src/) — `GraphTree<N>`, `MemberEntry`, `Provenance::Traversal`.
 
 ---
 
@@ -22,7 +22,7 @@
 
 **Goal:** a node in `mere-kernel::graph::Graph` represents *a thing the user explicitly opened as a tile*, not "every URL that crossed the omnibar." Within-tile navigation accumulates as ephemeral history in short-term memory; **crossing into a new tile** is the act that mints a new anchor node and (when lineage is live) a lineage edge from the source anchor.
 
-**Done when (v0 — semantics shift, no graph-tree wiring yet):**
+**Done when (v0 — semantics shift, no forme wiring yet):**
 
 - `TileManager` tracks **per-tile navigation history** (URL + timestamp) for each open tile.
 - `navigate_to` distinguishes **within-tile navigation** (extends history; updates omnibar; loads document; *does not* create a node) from **new-tile creation** (mints a node; opens a new tile; sets new tile as active).
@@ -36,7 +36,7 @@
 **Done when (v1 — lineage facet wired):**
 
 - `mere-kernel::graph::Graph` owns a paired `GraphTree<NodeKey>` (or `mere-host` instantiates one per workbench pane; see §6 for the decision).
-- New-tile creation calls into the graph + graph-tree pair: adds the node to the petgraph; adds the member to graph-tree with `Provenance::Traversal { source: source_anchor, edge_kind: Some("user-spawned-tile") }`.
+- New-tile creation calls into the graph + forme pair: adds the node to the petgraph; adds the member to forme with `Provenance::Traversal { source: source_anchor, edge_kind: Some("user-spawned-tile") }`.
 - The first tile of a session (no source anchor) gets `Provenance::Anchor`.
 - Manually-added nodes (palette: "add node," future drag-into-orrery) get `Provenance::Manual`.
 - Diagnostics: `lineage.edge_added { from, to, edge_kind }` fires alongside `tile.opened`.
@@ -44,10 +44,10 @@
 **Explicitly NOT in scope:**
 
 - Within-tile back/forward **UI** beyond the F5 reload reshape. Browser-style back/forward buttons against per-tile history land in a follow-up.
-- Lineage visualization (showing the graph-tree's traversal edges in the orrery). Cartography work.
+- Lineage visualization (showing the forme's traversal edges in the orrery). Cartography work.
 - "Promote this within-tile visit to its own anchor" gesture. Future; not blocking.
 - Cross-graph lineage (a lineage edge that points at an anchor in a different session). Phase 3+; not blocking for branch.
-- `graph-tree`'s other concerns (lifecycle Warm/Cold, lens, layout, graphlet membership beyond §6.4). Each gets attention when consumers materialise.
+- `forme`'s other concerns (lifecycle Warm/Cold, lens, layout, graphlet membership beyond §6.4). Each gets attention when consumers materialise.
 
 ## 2. The three-layer model
 
@@ -65,7 +65,7 @@
                             │ shares NodeKeys
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  graph-tree::GraphTree<NodeKey>                             │
+│  forme::GraphTree<NodeKey>                             │
 │  (lineage / topology facet)                                 │
 │                                                             │
 │  Members:    one per node in the graph; carries Provenance  │
@@ -90,11 +90,11 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-The key invariant: **a navigation event affects exactly one layer at a time.** Within-tile navigation → history only. New-tile creation → kernel graph + graph-tree (when live). Manual node add → kernel graph + graph-tree. Nothing implicitly creates anchors as a side effect of typing in the omnibar.
+The key invariant: **a navigation event affects exactly one layer at a time.** Within-tile navigation → history only. New-tile creation → kernel graph + forme (when live). Manual node add → kernel graph + forme. Nothing implicitly creates anchors as a side effect of typing in the omnibar.
 
 ## 3. v0 — semantics shift
 
-The v0 milestone changes behaviour without introducing graph-tree as a dependency. It's the smallest change that unblocks Phase 3.
+The v0 milestone changes behaviour without introducing forme as a dependency. It's the smallest change that unblocks Phase 3.
 
 ### 3.1 `TileManager` extension
 
@@ -212,7 +212,7 @@ Diagnostics for the removal: `host.history_removed` fires once at startup so the
 
 ## 5. v1 — lineage facet wired
 
-After v0 lands, lineage edges become explicit in `graph-tree`. v1 is the substrate piece Phase 3's **branch** operation needs.
+After v0 lands, lineage edges become explicit in `forme`. v1 is the substrate piece Phase 3's **branch** operation needs.
 
 ### 5.1 Where does `GraphTree<NodeKey>` live?
 
@@ -220,28 +220,28 @@ Two reasonable answers:
 
 **Option A — kernel-side ownership.** `mere-kernel::graph::Graph` grows a paired `GraphTree<NodeKey>` field. Every node addition to the petgraph mirrors into the tree with appropriate provenance. The kernel exposes one unified API. Host code talks to `Graph`; the tree is a private implementation detail of the kernel.
 
-**Option B — host-side ownership per workbench pane.** Each `PaneState::Workbench` carries its own `GraphTree<NodeKey>` over the shared `Entity<Graph>`. Multiple workbenches over the same graph can have different graph-tree views (different lenses, different graphlet memberships, different active members).
+**Option B — host-side ownership per workbench pane.** Each `PaneState::Workbench` carries its own `GraphTree<NodeKey>` over the shared `Entity<Graph>`. Multiple workbenches over the same graph can have different forme views (different lenses, different graphlet memberships, different active members).
 
 Picked: **Option B** (host-side per workbench).
 
 Reasoning:
 
-- `graph-tree`'s docstring says "One `GraphTree<N>` per **graph view**." A workbench is a view; the graph is the truth. Multiple views over one truth is the natural fit.
-- `graph-tree` carries session state (active member, expanded set, scroll anchor, lens) that is per-view, not per-graph. Putting it on the graph would conflate viewpoint with truth.
-- Branch creates a `GraphletRef` in *the workbench's graph-tree*, not in the underlying graph — multiple branches off the same graph (one per workbench window viewing it) coexist cleanly because each workbench's graph-tree is independent.
+- `forme`'s docstring says "One `GraphTree<N>` per **graph view**." A workbench is a view; the graph is the truth. Multiple views over one truth is the natural fit.
+- `forme` carries session state (active member, expanded set, scroll anchor, lens) that is per-view, not per-graph. Putting it on the graph would conflate viewpoint with truth.
+- Branch creates a `GraphletRef` in *the workbench's forme*, not in the underlying graph — multiple branches off the same graph (one per workbench window viewing it) coexist cleanly because each workbench's forme is independent.
 - Per the multiplexer framing: the graph is the session's truth; the workbench is an attach client. Trees-per-attachment fits that hierarchy.
 
-What's shared across all graph-trees over the same graph: **the set of NodeKeys**. When the graph mutates (node added in window A), every window's graph-tree gets notified and adds the member to its own tree if appropriate.
+What's shared across all formes over the same graph: **the set of NodeKeys**. When the graph mutates (node added in window A), every window's forme gets notified and adds the member to its own tree if appropriate.
 
-### 5.2 `graph-tree` dependency
+### 5.2 `forme` dependency
 
 Add to `crates/mere-host/Cargo.toml`:
 
 ```toml
-graph-tree = { path = "../graph/graph-tree" }
+forme = { path = "../graph/forme" }
 ```
 
-`mere-kernel` already depends on graph-tree, so this isn't introducing a new cross-workspace edge — it's making mere-host a direct consumer of an already-used crate.
+`mere-kernel` already depends on forme, so this isn't introducing a new cross-workspace edge — it's making mere-host a direct consumer of an already-used crate.
 
 ### 5.3 `PaneState::Workbench` extension
 
@@ -254,12 +254,12 @@ pub struct WorkbenchPaneState {
 
 The tree is constructed empty when the workbench pane is created (lens defaults to `ProjectionLens::default()`, layout to `LayoutMode::default()`). As tiles open, members are added.
 
-### 5.4 New-tile creation wires through to graph-tree
+### 5.4 New-tile creation wires through to forme
 
 The `NewTile` path of `navigate_to` is extended:
 
 1. Mint new anchor node (existing `ensure_node_for_address_near`).
-2. **Add to graph-tree:** `tree.apply_nav(NavAction::Attach { member: new_node, provenance: Provenance::Traversal { source: source_anchor, edge_kind: Some("user-spawned-tile") } })`.
+2. **Add to forme:** `tree.apply_nav(NavAction::Attach { member: new_node, provenance: Provenance::Traversal { source: source_anchor, edge_kind: Some("user-spawned-tile") } })`.
    - If `source_anchor` is `None` (first tile of the session), use `Provenance::Anchor`.
 3. Open the tile (existing).
 
@@ -267,7 +267,7 @@ The tree's `apply_nav` returns a `NavResult` whose intents the host doesn't need
 
 ### 5.5 Tile close / node removal
 
-Closing a tile in v0 keeps the underlying node alive (we discussed this in Phase 2 Part 1 — closing the tile drops the visual binding, the node stays for the orrery). v1 keeps that: the graph-tree member's lifecycle transitions from `Active` → `Warm` (or `Cold` if the user explicitly removes the node from the graph), but the member entry remains. Provenance stays intact for lineage queries.
+Closing a tile in v0 keeps the underlying node alive (we discussed this in Phase 2 Part 1 — closing the tile drops the visual binding, the node stays for the orrery). v1 keeps that: the forme member's lifecycle transitions from `Active` → `Warm` (or `Cold` if the user explicitly removes the node from the graph), but the member entry remains. Provenance stays intact for lineage queries.
 
 ### 5.6 Diagnostics
 
@@ -299,7 +299,7 @@ App start with no active tile (empty workbench): omnibar submit creates the firs
 
 ### 6.4 Graphlet membership
 
-v0: no graphlet membership changes. The default graph-tree has no graphlets (empty `Vec<GraphletRef<N>>`).
+v0: no graphlet membership changes. The default forme has no graphlets (empty `Vec<GraphletRef<N>>`).
 
 v1: still no graphlet creation for ordinary tile opens. Graphlets get created only when the user does a **branch** tear-out (Phase 3) or explicit "group these tiles" gesture.
 
@@ -307,10 +307,10 @@ This keeps v0/v1 small and lets Phase 3's branch operation be a clean delta on t
 
 ### 6.5 What happens when the graph is mutated from a different window?
 
-Mere is multi-window over one graph (see framing brief). If window A creates a tile (adds anchor X to graph), window B's graph-tree should observe the addition. v1 handling:
+Mere is multi-window over one graph (see framing brief). If window A creates a tile (adds anchor X to graph), window B's forme should observe the addition. v1 handling:
 
 - The `cx.observe(&graph, ...)` subscription in the host already notifies on graph mutations.
-- On notify, each window's per-workbench graph-tree reconciles: if a new node exists in the graph but not in the tree, add it as a member with `Provenance::Derived { connection: None, derivation: "cross-window-reconcile".into() }`.
+- On notify, each window's per-workbench forme reconciles: if a new node exists in the graph but not in the tree, add it as a member with `Provenance::Derived { connection: None, derivation: "cross-window-reconcile".into() }`.
 - This is a coarse default; future work could pass the originating provenance across windows via a graph-side event channel.
 
 ## 7. File-size impact
@@ -320,7 +320,7 @@ Per Mere's 600-LOC ceiling:
 - `tiles.rs` grows from 116 to ~250 LOC (history list, per-tile cache, back/forward primitives). Fits.
 - `host_helpers.rs` shrinks slightly — `ensure_node_for_address_near` becomes more focused (only the new-tile path).
 - `host_navigation.rs` grows by ~50 LOC for the `NavigateMode` branch. Currently at 535; staying under 600 will require extraction. **Action:** before this plan's v0, extract `host_navigation`'s tile/workbench methods (`focus_tile_in`, `close_tile_in`, `rebuild_app_tree`) into a new module `tile_ops.rs`. ~120 LOC. Brings `host_navigation` to ~400 LOC before this plan's additions.
-- v1 adds ~150 LOC to `panes.rs` and `pane_state.rs` for graph-tree wiring; both stay under 600.
+- v1 adds ~150 LOC to `panes.rs` and `pane_state.rs` for forme wiring; both stay under 600.
 
 ## 8. Sequencing
 
@@ -336,11 +336,11 @@ Suggested commit-shaped milestones, each leaves the codebase green:
 6. **Back/forward = within-tile.** Remove host-level `history` + `history_cursor`. Reload reloads the active history entry. Diagnostic `host.history_removed` fires once at startup.
 7. **Diagnostics events** for `tile.opened`, `tile.navigated_within`, `node.created { reason }`.
 
-After (7), v0 is done. Phase 3's **branch** operation could be implemented on top of v0 alone — it would just have to skip the graph-tree integration. v1 makes the graph-tree integration explicit so branch's `GraphletBinding::Forked` machinery has a real graph-tree to insert into.
+After (7), v0 is done. Phase 3's **branch** operation could be implemented on top of v0 alone — it would just have to skip the forme integration. v1 makes the forme integration explicit so branch's `GraphletBinding::Forked` machinery has a real forme to insert into.
 
 ### v1 milestones
 
-8. **Add `graph-tree` dependency to `mere-host`.**
+8. **Add `forme` dependency to `mere-host`.**
 9. **`WorkbenchPaneState` carries `GraphTree<NodeKey>`.** Constructed empty.
 10. **New-tile path wires `NavAction::Attach`** to the workbench's tree. Provenance::Traversal for non-first tiles; Provenance::Anchor for the first.
 11. **Tile-close lifecycle reconcile.** Active → Warm or Cold.
@@ -369,7 +369,7 @@ Per project preference (configurability over opinionated defaults):
 ## 11. What this plan unblocks
 
 - **Phase 3 branch operation** — `GraphletBinding::Forked` inserts into a live `GraphTree` (v1).
-- **Cartography lineage overlays** — visualising graph-tree's Provenance::Traversal edges as a temporal-edge overlay in the orrery (future).
+- **Cartography lineage overlays** — visualising forme's Provenance::Traversal edges as a temporal-edge overlay in the orrery (future).
 - **Per-tile back/forward UI** — small browser-style back/forward buttons in the tile strip (small follow-up).
-- **Time-axis diff via eidetic** — consolidating a graph-tree state into an engram captures both the spatial graph and the lineage facet; diffs between engrams can show "what new lineage edges appeared between t1 and t2" (memory-tiers brief consolidation work).
-- **"Promote this visit to anchor" gesture** — user has been within-tile-browsing through several URLs; clicks a button on the active history entry to mint it as a real anchor node. Becomes a Manual provenance entry in graph-tree.
+- **Time-axis diff via eidetic** — consolidating a forme state into an engram captures both the spatial graph and the lineage facet; diffs between engrams can show "what new lineage edges appeared between t1 and t2" (memory-tiers brief consolidation work).
+- **"Promote this visit to anchor" gesture** — user has been within-tile-browsing through several URLs; clicks a button on the active history entry to mint it as a real anchor node. Becomes a Manual provenance entry in forme.

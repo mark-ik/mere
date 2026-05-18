@@ -2,13 +2,18 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Origin-aware memory policy for large trees.
+//! Origin-aware resource-pressure policy for large formes.
 //!
-//! The tree has no capacity limit (thousands of members are normal), but
+//! The forme has no capacity limit (thousands of members are normal), but
 //! runtime resources (WebViews, GL contexts, DOM state) are finite. This
-//! module provides a policy layer that queries the tree by origin/domain
+//! module provides a policy layer that queries the forme by origin/domain
 //! grouping and produces lifecycle demotion actions to keep resource
 //! consumption bounded.
+//!
+//! Named `pressure` rather than `memory_policy` because the "memory" layer
+//! in Mere is owned by [`eidetic`](https://crates.io/crates/eidetic) — this
+//! module is about resource pressure (active+warm budget vs. demotion
+//! recommendations), not memory.
 //!
 //! Key principles:
 //!
@@ -34,12 +39,12 @@ use crate::tree::GraphTree;
 /// ("local", "unresolved"). The host controls the taxonomy.
 pub type Origin = String;
 
-/// Memory pressure policy configuration.
+/// Resource pressure policy configuration.
 ///
 /// All limits are soft — exceeding them produces demotion recommendations,
 /// not errors. The host chooses which to apply.
 #[derive(Clone, Debug)]
-pub struct MemoryPolicy {
+pub struct PressurePolicy {
     /// Maximum number of Active + Warm members across all origins.
     /// When exceeded, the policy recommends Cold-demoting the least
     /// recently relevant members from the least recently touched origins.
@@ -54,7 +59,7 @@ pub struct MemoryPolicy {
     pub exempt_origins: Vec<Origin>,
 }
 
-impl Default for MemoryPolicy {
+impl Default for PressurePolicy {
     fn default() -> Self {
         Self {
             global_warm_budget: 100,
@@ -140,7 +145,7 @@ pub fn group_by_origin<N: MemberId>(
 /// available for a member, it gets the lowest priority (demoted first).
 pub fn evaluate<N: MemberId>(
     tree: &GraphTree<N>,
-    policy: &MemoryPolicy,
+    policy: &PressurePolicy,
     origin_of: &dyn Fn(&N) -> Origin,
     last_touched: &dyn Fn(&N) -> u64,
 ) -> PolicyEvaluation<N> {
@@ -306,7 +311,7 @@ mod tests {
             (4, Lifecycle::Warm),
             (5, Lifecycle::Warm),
         ]);
-        let policy = MemoryPolicy {
+        let policy = PressurePolicy {
             global_warm_budget: 100,
             per_origin_warm_budget: 3,
             exempt_origins: vec![],
@@ -344,7 +349,7 @@ mod tests {
             (4, Lifecycle::Warm),
             (5, Lifecycle::Warm),
         ]);
-        let policy = MemoryPolicy {
+        let policy = PressurePolicy {
             global_warm_budget: 100,
             per_origin_warm_budget: 2,
             exempt_origins: vec!["example.com".to_string()],
@@ -366,7 +371,7 @@ mod tests {
             (7, Lifecycle::Warm),
             (8, Lifecycle::Warm),
         ]);
-        let policy = MemoryPolicy {
+        let policy = PressurePolicy {
             global_warm_budget: 4,
             per_origin_warm_budget: 10,
             exempt_origins: vec![],
@@ -398,7 +403,7 @@ mod tests {
             (2, Lifecycle::Active),
             (3, Lifecycle::Active),
         ]);
-        let policy = MemoryPolicy {
+        let policy = PressurePolicy {
             global_warm_budget: 100,
             per_origin_warm_budget: 2,
             exempt_origins: vec![],

@@ -3,8 +3,8 @@
 **Date**: 2026-05-11
 **Status**: Design brief — supersedes the earlier "sticky-note fork-model decision brief" (same date), which framed this as three competing options. The resolution is that those weren't options to pick between — they were three coexisting operations the user picks at gesture time.
 
-**Naming note (2026-05-17)**: This brief was written when the workbench arrangement authority crate was called `graph-tree`. It has since been renamed to `forme` (per the [lineage / forme rename plan](../implementation_strategy/2026-05-17_lineage_forme_rename_plan.md)). The body below still says "graph-tree" — read those as "forme" until a follow-up edits the prose. Function/type identifiers like `GraphletRef`, `GraphletBinding::Forked`, `GraphTree<NodeKey>` stay valid (only the crate name changed).
-**Scope**: Defines the three tear-out operations Mere supports (**leaf**, **branch**, **fork**), their identity semantics in terms of `SessionId` / `GraphId` / `GraphletId`, the gesture model that selects between them (modifier-keyed drags + a toast for ambiguous gestures), and the substrate primitives they rest on (graph-tree graphlets, eidetic engrams, short-term memory). Resolves §11.3 of the [browser multiplexer framing brief](2026-05-11_browser_multiplexer_framing.md).
+**Naming note (2026-05-17)**: This brief was written when the workbench arrangement authority crate was called `forme`. It has since been renamed to `forme` (per the [lineage / forme rename plan](../implementation_strategy/2026-05-17_lineage_forme_rename_plan.md)). The body below still says "forme" — read those as "forme" until a follow-up edits the prose. Function/type identifiers like `GraphletRef`, `GraphletBinding::Forked`, `GraphTree<NodeKey>` stay valid (only the crate name changed).
+**Scope**: Defines the three tear-out operations Mere supports (**leaf**, **branch**, **fork**), their identity semantics in terms of `SessionId` / `GraphId` / `GraphletId`, the gesture model that selects between them (modifier-keyed drags + a toast for ambiguous gestures), and the substrate primitives they rest on (forme graphlets, eidetic engrams, short-term memory). Resolves §11.3 of the [browser multiplexer framing brief](2026-05-11_browser_multiplexer_framing.md).
 
 **Related**:
 
@@ -12,7 +12,7 @@
 - [`2026-05-11_memory_tiers_brief.md`](2026-05-11_memory_tiers_brief.md) — short-term vs. long-term memory partitioning. Diff/branch state lives in short-term by default; consolidation into engrams is an affirmative gesture. This brief depends on the memory-tiers framing for its diff substrate.
 - [`../implementation_strategy/2026-05-11_graph_session_manifest_plan.md`](../implementation_strategy/2026-05-11_graph_session_manifest_plan.md) — `parent_session` reference fields used by **fork**.
 - Phase 2 Part 1 tear-out: [`crates/mere-host/src/tearout.rs`](../../../crates/mere-host/src/tearout.rs). The current sticky-note implementation is the **leaf** operation in this brief's vocabulary, made explicit.
-- Graphlet primitives: [`crates/graph/graph-tree/src/graphlet.rs`](../../../crates/graph/graph-tree/src/graphlet.rs) — `GraphletId`, `GraphletRef`, `GraphletBinding::{UnlinkedSession, Linked, Forked}`. Already first-class; **branch** uses these.
+- Graphlet primitives: [`crates/graph/forme/src/graphlet.rs`](../../../crates/graph/forme/src/graphlet.rs) — `GraphletId`, `GraphletRef`, `GraphletBinding::{UnlinkedSession, Linked, Forked}`. Already first-class; **branch** uses these.
 - Eidetic engrams: [`crates/eidetic/src/engram.rs`](../../../crates/eidetic/src/engram.rs) — content-addressed immutable snapshots; the long-term substrate for consolidated branches and forks.
 
 ---
@@ -24,7 +24,7 @@ A tear-out gesture pulls a tile out of its donor window. The user has three legi
 | Operation  | What it does                                                                                | Identity change                                  | Survives donor deletion? |
 | ---------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------ |
 | **Leaf**   | UI-only. New window holds a tile facet of the donor's existing node in the donor's graph.   | None.                                            | No (node is in donor).   |
-| **Branch** | New **graphlet** in the donor's graph. Same nodes, new lineage / grouping in graph-tree.    | New `GraphletId` (donor `SessionId` + `GraphId`).| No (lives in donor).     |
+| **Branch** | New **graphlet** in the donor's graph. Same nodes, new lineage / grouping in forme.    | New `GraphletId` (donor `SessionId` + `GraphId`).| No (lives in donor).     |
 | **Fork**   | New **graph** entirely. Snapshots the reachable subgraph into a freshly-minted session.     | New `SessionId` + new `GraphId`.                 | Yes — independent.       |
 
 The earlier brief asked "do we eager-promote, lazy-promote, or do view-with-diff?" Wrong question. The real question is **which of these three the user wants right now**, and the answer differs per gesture. The brief picks how the user selects between them and what each one means.
@@ -103,7 +103,7 @@ Live behaviour:
 
 - The tile is one facet of the node. The node hasn't moved; the tile has.
 - Edits to the node propagate to every window/pane that's rendering it — same as today, because both windows hold handles to the same `Entity<Graph>` via the registry.
-- Within-tile navigation in the leaf window adds **lineage edges** (graph-tree's per-node lineage facet), not new mere-kernel nodes (see §6.1 on node-per-tile).
+- Within-tile navigation in the leaf window adds **lineage edges** (forme's per-node lineage facet), not new mere-kernel nodes (see §6.1 on node-per-tile).
 - Closing the leaf window does not delete the node. The node stays in the donor's graph.
 
 This is exactly what the v0 sticky-note tear-out implementation does today — re-described in the trichotomy's vocabulary.
@@ -113,7 +113,7 @@ This is exactly what the v0 sticky-note tear-out implementation does today — r
 What happens on Shift+drag:
 
 - New window opens (workbench-only, like leaf).
-- A new `GraphletRef` is created **in the donor's graph-tree**:
+- A new `GraphletRef` is created **in the donor's forme**:
   ```rust
   GraphletRef {
       id: <next graphlet_id>,
@@ -129,7 +129,7 @@ What happens on Shift+drag:
 - The new window's leaf carries the donor's `GraphId` plus the new `GraphletId`.
 - The user's subsequent in-window actions (navigation, node selection, tile additions) populate the branch graphlet's lineage. The branch and donor diverge in their lineage facet while sharing mere-kernel nodes.
 
-Vocabulary note: graph-tree's existing `GraphletBinding::Forked` variant means what we're calling "branch" at the multiplexer level. This brief uses the user-facing word **branch**; the graph-tree-internal word stays `Forked` for now. If renaming the variant becomes useful (e.g., `Branched`) we can do it in graph-tree without affecting this brief.
+Vocabulary note: forme's existing `GraphletBinding::Forked` variant means what we're calling "branch" at the multiplexer level. This brief uses the user-facing word **branch**; the forme-internal word stays `Forked` for now. If renaming the variant becomes useful (e.g., `Branched`) we can do it in forme without affecting this brief.
 
 Live behaviour:
 
@@ -159,11 +159,11 @@ Live behaviour:
 
 The three operations rest on three existing or already-planned primitives:
 
-### 5.1 Graphlet (`graph-tree`)
+### 5.1 Graphlet (`forme`)
 
 Already first-class. `GraphletRef` carries anchors + binding + kind. Branch is exactly "mint a new graphlet of kind `Session` with binding `Forked { parent_spec: donor_spec, ... }`."
 
-The brief does **not** propose changes to graph-tree's API. Branch is a use case for what's already there.
+The brief does **not** propose changes to forme's API. Branch is a use case for what's already there.
 
 ### 5.2 Engram (eidetic)
 
@@ -187,9 +187,9 @@ Today, [`host_helpers::ensure_node_for_address_near`](../../../crates/mere-host/
 
 Implementation impact (out of scope for this brief; needs its own plan):
 
-- `navigate_to` (in [`host_navigation.rs`](../../../crates/mere-host/src/host_navigation.rs)) reshapes: navigation within an existing tile updates lineage in graph-tree without calling `ensure_node_for_address_near`.
+- `navigate_to` (in [`host_navigation.rs`](../../../crates/mere-host/src/host_navigation.rs)) reshapes: navigation within an existing tile updates lineage in forme without calling `ensure_node_for_address_near`.
 - Opening a new tile (omnibar submit when no active tile, or explicit "open in new tile" gesture) is what creates a new mere-kernel node.
-- Lineage edges in graph-tree become the primary record of within-tile traversal history.
+- Lineage edges in forme become the primary record of within-tile traversal history.
 
 This is a meaningful change to existing host behaviour. Filed as a follow-up plan: "node-per-tile + lineage facet implementation" (todo).
 
@@ -207,7 +207,7 @@ Concrete deliverables:
 1. **Toast UI** on no-modifier tear-out drag. Three buttons + auto-dismiss. Routes through the action bus (per the [typed action bus plan](../implementation_strategy/2026-05-11_typed_action_bus_plan.md)).
 2. **Leaf operation** — already implemented as today's `TearOutTileAsStickyNote`. Renamed action: `TearOutTileAsLeaf`. Behaviour unchanged. (Or keep the old action name as an alias if external configs reference it.)
 3. **Branch operation** — new action `TearOutTileAsBranch`:
-   - Creates `GraphletRef` in donor's graph-tree with `GraphletBinding::Forked`.
+   - Creates `GraphletRef` in donor's forme with `GraphletBinding::Forked`.
    - Opens new window with workbench-only layout; leaf carries donor `GraphId` + new `GraphletId`.
    - Emits `session.branched { session_id, parent_graphlet, child_graphlet }`.
 4. **Fork operation** — new action `TearOutTileAsFork`:
@@ -229,7 +229,7 @@ Default to **connected component** (graph-theoretic). Configurable later (whole 
 
 For **fork**: `parent_session` is **weak** — informational only; the parent is allowed to be killed without breaking the child. Reference surfaces in the session switcher as lineage breadcrumbs.
 
-For **branch**: parent is the donor graphlet via `GraphletBinding::Forked { parent_spec, ... }` — this is graph-tree's existing mechanism; nothing new to decide.
+For **branch**: parent is the donor graphlet via `GraphletBinding::Forked { parent_spec, ... }` — this is forme's existing mechanism; nothing new to decide.
 
 ### 8.3 Cascade behaviour on donor delete
 
@@ -252,7 +252,7 @@ Open. Tile-pane-top is the obvious anchor. Could also appear in a corner of the 
 - Three coexisting operations: leaf, branch, fork. Picked at gesture time.
 - Gesture model: drag = leaf; Shift+drag = branch; Ctrl+Shift+drag = fork; toast on ambiguous drag.
 - Stability principle: identity changes only on affirmative user action.
-- Branch = new graphlet in donor's graph-tree. Fork = new session + graph. Leaf = no new identity.
+- Branch = new graphlet in donor's forme. Fork = new session + graph. Leaf = no new identity.
 - Branch/fork state defaults to short-term memory; consolidation to engrams is its own gesture.
 - `parent_session` reference is weak.
 
@@ -261,7 +261,7 @@ Open. Tile-pane-top is the obvious anchor. Could also appear in a corner of the 
 - Future "diff" UX surfacing differences between a branch and its donor in a dedicated apparatus pane or gloss overlay.
 - Future automatic consolidation policies (e.g., "consolidate branches inactive for >7 days").
 - Future cross-fork merge gestures (merge a fork back into its `parent_session`).
-- The `GraphletBinding::Branched` rename in graph-tree if it becomes useful.
+- The `GraphletBinding::Branched` rename in forme if it becomes useful.
 
 **Defers to follow-up plans:**
 

@@ -59,6 +59,7 @@ Future fields (per framing brief §5.3) land as separate slices, each gated on a
 - `form_factor: FormFactor` — once cartography drives the orrery render.
 - `scale, focus, overlays` — once the cartography request pipeline replaces direct `mere-host-orrery::render`.
 - `filter, strategy` — once user-facing strategy picker + filter UI ship.
+- `binding_mode: ProjectionBindingMode` — once cartography ships the [linked/unlinked split](../research/2026-05-10_cartography_layer_brief.md#4-contract-surface) (per [graphshell harvest brief](../research/2026-05-17_graphshell_harvest_brief.md) Tier 1 / T1-5). The default for a live pane's view intent is `Linked` (re-render on graph mutation); for captured / snapshot view intents (switcher thumbnails, exports), it's `Unlinked`. Today every pane is implicitly linked — making the field explicit catches subtle bugs in scenarios like a switcher thumbnail re-rendering after the captured graph mutates.
 
 Bundling them now risks the "half-finished implementation" the user's memory warns against. Each field arrives when its producer does.
 

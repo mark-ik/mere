@@ -50,34 +50,34 @@ pub enum ParityDivergence<N: MemberId> {
     /// Member exists in GraphTree but not in external tree.
     MissingFromExternal(N),
     /// Member exists in external tree but not in GraphTree.
-    MissingFromGraphTree(N),
+    MissingFromForme(N),
     /// Parent/child relationship differs.
     TopologyMismatch {
         member: N,
-        graph_tree_parent: Option<N>,
+        forme_parent: Option<N>,
         external_parent: Option<N>,
     },
     /// Active member disagrees.
     ActiveMismatch {
-        graph_tree: Option<N>,
+        forme: Option<N>,
         external: Option<N>,
     },
     /// Visible set differs (member visible in one but not the other).
     VisibilityMismatch {
         member: N,
-        in_graph_tree: bool,
+        in_forme: bool,
         in_external: bool,
     },
     /// Expansion state differs (expanded in one but not the other).
     ExpansionMismatch {
         member: N,
-        in_graph_tree: bool,
+        in_forme: bool,
         in_external: bool,
     },
     /// Visible member ordering differs.
     VisibleOrderMismatch {
         /// GraphTree's rendering order for visible members.
-        graph_tree_order: Vec<N>,
+        forme_order: Vec<N>,
         /// External tree's rendering order for visible members.
         external_order: Vec<N>,
     },
@@ -90,7 +90,7 @@ pub struct ParityReport<N: MemberId> {
     pub divergences: Vec<ParityDivergence<N>>,
 
     /// Summary counts for quick triage.
-    pub graph_tree_only: usize,
+    pub forme_only: usize,
     pub external_only: usize,
     pub topology_mismatches: usize,
     pub visibility_mismatches: usize,
@@ -107,7 +107,7 @@ impl<N: MemberId> ParityReport<N> {
 
     /// True when membership sets match (ignoring topology).
     pub fn membership_matches(&self) -> bool {
-        self.graph_tree_only == 0 && self.external_only == 0
+        self.forme_only == 0 && self.external_only == 0
     }
 
     /// True when membership AND topology both match.
@@ -138,7 +138,7 @@ pub fn compare<N: MemberId>(
     external: &ExternalTreeSnapshot<N>,
 ) -> ParityReport<N> {
     let mut divergences = Vec::new();
-    let mut graph_tree_only = 0usize;
+    let mut forme_only = 0usize;
     let mut external_only = 0usize;
     let mut topology_mismatches = 0usize;
     let mut visibility_mismatches = 0usize;
@@ -155,14 +155,14 @@ pub fn compare<N: MemberId>(
             let is_cold = entry.is_some_and(|e| e.lifecycle == Lifecycle::Cold);
             if !is_cold {
                 divergences.push(ParityDivergence::MissingFromExternal(id.clone()));
-                graph_tree_only += 1;
+                forme_only += 1;
             }
         }
     }
 
     for id in &external.members {
         if !gt_members.contains(id) {
-            divergences.push(ParityDivergence::MissingFromGraphTree(id.clone()));
+            divergences.push(ParityDivergence::MissingFromForme(id.clone()));
             external_only += 1;
         }
     }
@@ -185,7 +185,7 @@ pub fn compare<N: MemberId>(
             if gt_parent != ext_parent {
                 divergences.push(ParityDivergence::TopologyMismatch {
                     member: (*id).clone(),
-                    graph_tree_parent: gt_parent,
+                    forme_parent: gt_parent,
                     external_parent: ext_parent,
                 });
                 topology_mismatches += 1;
@@ -198,7 +198,7 @@ pub fn compare<N: MemberId>(
     let active_matches = external.active.is_none() || tree.active().cloned() == external.active;
     if !active_matches {
         divergences.push(ParityDivergence::ActiveMismatch {
-            graph_tree: tree.active().cloned(),
+            forme: tree.active().cloned(),
             external: external.active.clone(),
         });
     }
@@ -214,7 +214,7 @@ pub fn compare<N: MemberId>(
     for id in gt_visible.difference(&external.visible) {
         divergences.push(ParityDivergence::VisibilityMismatch {
             member: id.clone(),
-            in_graph_tree: true,
+            in_forme: true,
             in_external: false,
         });
         visibility_mismatches += 1;
@@ -224,7 +224,7 @@ pub fn compare<N: MemberId>(
         if gt_members.contains(id) {
             divergences.push(ParityDivergence::VisibilityMismatch {
                 member: id.clone(),
-                in_graph_tree: false,
+                in_forme: false,
                 in_external: true,
             });
             visibility_mismatches += 1;
@@ -240,7 +240,7 @@ pub fn compare<N: MemberId>(
             if external.members.contains(id) {
                 divergences.push(ParityDivergence::ExpansionMismatch {
                     member: id.clone(),
-                    in_graph_tree: true,
+                    in_forme: true,
                     in_external: false,
                 });
                 expansion_mismatches += 1;
@@ -250,7 +250,7 @@ pub fn compare<N: MemberId>(
             if gt_members.contains(id) {
                 divergences.push(ParityDivergence::ExpansionMismatch {
                     member: id.clone(),
-                    in_graph_tree: false,
+                    in_forme: false,
                     in_external: true,
                 });
                 expansion_mismatches += 1;
@@ -271,7 +271,7 @@ pub fn compare<N: MemberId>(
         let matches = gt_order == external.visible_order;
         if !matches {
             divergences.push(ParityDivergence::VisibleOrderMismatch {
-                graph_tree_order: gt_order,
+                forme_order: gt_order,
                 external_order: external.visible_order.clone(),
             });
         }
@@ -280,7 +280,7 @@ pub fn compare<N: MemberId>(
 
     ParityReport {
         divergences,
-        graph_tree_only,
+        forme_only,
         external_only,
         topology_mismatches,
         visibility_mismatches,
@@ -359,7 +359,7 @@ mod tests {
 
         let report = compare(&tree, &snapshot);
         assert!(!report.membership_matches());
-        assert_eq!(report.graph_tree_only, 1);
+        assert_eq!(report.forme_only, 1);
     }
 
     #[test]
@@ -371,7 +371,7 @@ mod tests {
 
         let report = compare(&tree, &snapshot);
         // 3 is Cold, so not flagged as MissingFromExternal
-        assert_eq!(report.graph_tree_only, 0);
+        assert_eq!(report.forme_only, 0);
     }
 
     #[test]

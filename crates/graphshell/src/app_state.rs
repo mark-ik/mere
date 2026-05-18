@@ -379,15 +379,15 @@ pub trait WorkspaceRepository {
         workspace_id: &WorkspaceId,
     ) -> WorkspaceServiceResult<GraphViewId>;
 
-    fn load_graph_tree(
+    fn load_forme(
         &mut self,
         view_id: &GraphViewId,
-    ) -> WorkspaceServiceResult<Option<persistence::GraphTreeDocument>>;
+    ) -> WorkspaceServiceResult<Option<persistence::FormeDocument>>;
 
-    fn save_graph_tree(
+    fn save_forme(
         &mut self,
         view_id: &GraphViewId,
-        document: &persistence::GraphTreeDocument,
+        document: &persistence::FormeDocument,
     ) -> WorkspaceServiceResult<()>;
 
     fn load_workspace_layout(

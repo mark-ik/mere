@@ -30,7 +30,7 @@ mod graphlet;
 mod layout;
 mod lens;
 mod member;
-pub mod memory_policy;
+pub mod pressure;
 mod nav;
 pub mod parity;
 mod query;

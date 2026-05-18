@@ -76,12 +76,12 @@ impl WorkspaceLayoutName {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GraphTreeDocument {
+pub struct FormeDocument {
     pub format: PersistenceDocumentFormat,
     pub body: String,
 }
 
-impl GraphTreeDocument {
+impl FormeDocument {
     pub fn json(body: impl Into<String>) -> Self {
         Self {
             format: PersistenceDocumentFormat::Json,
@@ -217,23 +217,23 @@ pub fn ensure_workbench_view_id(
     Ok(view_id)
 }
 
-pub fn load_workbench_graph_tree(
+pub fn load_workbench_forme(
     repository: &mut dyn WorkspaceRepository,
     workspace_id: &WorkspaceId,
     workspace: &mut GraphWorkspace,
-) -> WorkspaceServiceResult<Option<GraphTreeDocument>> {
+) -> WorkspaceServiceResult<Option<FormeDocument>> {
     let view_id = ensure_workbench_view_id(repository, workspace_id, workspace)?;
-    repository.load_graph_tree(&view_id)
+    repository.load_forme(&view_id)
 }
 
-pub fn save_workbench_graph_tree(
+pub fn save_workbench_forme(
     repository: &mut dyn WorkspaceRepository,
     workspace_id: &WorkspaceId,
     workspace: &mut GraphWorkspace,
-    document: &GraphTreeDocument,
+    document: &FormeDocument,
 ) -> WorkspaceServiceResult<GraphViewId> {
     let view_id = ensure_workbench_view_id(repository, workspace_id, workspace)?;
-    repository.save_graph_tree(&view_id, document)?;
+    repository.save_forme(&view_id, document)?;
     Ok(view_id)
 }
 
@@ -375,7 +375,7 @@ mod tests {
         snapshot: Option<GraphWorkspaceSnapshot>,
         saved_snapshot: Option<GraphWorkspaceSnapshot>,
         workbench_view_id: Option<GraphViewId>,
-        graph_trees: HashMap<GraphViewId, GraphTreeDocument>,
+        formes: HashMap<GraphViewId, FormeDocument>,
         layouts: HashMap<WorkspaceLayoutName, WorkspaceLayoutDocument>,
     }
 
@@ -407,19 +407,19 @@ mod tests {
             Ok(view_id)
         }
 
-        fn load_graph_tree(
+        fn load_forme(
             &mut self,
             view_id: &GraphViewId,
-        ) -> WorkspaceServiceResult<Option<GraphTreeDocument>> {
-            Ok(self.graph_trees.get(view_id).cloned())
+        ) -> WorkspaceServiceResult<Option<FormeDocument>> {
+            Ok(self.formes.get(view_id).cloned())
         }
 
-        fn save_graph_tree(
+        fn save_forme(
             &mut self,
             view_id: &GraphViewId,
-            document: &GraphTreeDocument,
+            document: &FormeDocument,
         ) -> WorkspaceServiceResult<()> {
-            self.graph_trees.insert(*view_id, document.clone());
+            self.formes.insert(*view_id, document.clone());
             Ok(())
         }
 
@@ -921,16 +921,16 @@ mod tests {
     }
 
     #[test]
-    fn workbench_graph_tree_round_trips_through_repository_contract() {
+    fn workbench_forme_round_trips_through_repository_contract() {
         let view_id = GraphViewId::from_uuid(Uuid::from_u128(66));
         let mut repository = FakeWorkspaceRepository {
             workbench_view_id: Some(view_id),
             ..FakeWorkspaceRepository::default()
         };
         let mut workspace = GraphWorkspace::new();
-        let tree = GraphTreeDocument::json("{\"tree\":\"tabs\"}");
+        let tree = FormeDocument::json("{\"tree\":\"tabs\"}");
 
-        let saved_view = save_workbench_graph_tree(
+        let saved_view = save_workbench_forme(
             &mut repository,
             &WorkspaceId::new("main"),
             &mut workspace,
@@ -938,7 +938,7 @@ mod tests {
         )
         .unwrap();
         let loaded =
-            load_workbench_graph_tree(&mut repository, &WorkspaceId::new("main"), &mut workspace)
+            load_workbench_forme(&mut repository, &WorkspaceId::new("main"), &mut workspace)
                 .unwrap();
 
         assert_eq!(saved_view, view_id);

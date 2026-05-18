@@ -72,11 +72,28 @@
 - Cascade-deleted in graphshell repo: `crates/graph-memory`, `crates/graph-cartography`, `crates/graphshell-core`, `crates/graphshell-runtime`. Graphshell `Cargo.toml` workspace members pruned + commented-out explanation added.
 - Design docs: DOC_README printing-press metaphor rewritten in two threads (per-node content production + per-graph-view workbench arrangement); rename plan added to index; tearout brief + node-per-tile lineage plan got top-of-doc naming notes pointing at this plan.
 
-**Deferred (separate-pass follow-ups)**:
+**2026-05-17 (same day) — second pass — landed:**
 
-- Internal field-name rename in `forme/src/parity.rs` (`graph_tree_parent`, `graph_tree_only`, `in_graph_tree`, etc.) — diagnostic-report field names comparing "forme view" against "external view"; should become `forme_*` for clarity. Mechanical but touches tests.
-- Downstream API rename in `graphshell/src/app_state/persistence.rs` (`load_workbench_graph_tree` / `save_workbench_graph_tree` functions, `load_graph_tree` / `save_graph_tree` trait methods, `GraphTreeDocument` type, `graph_trees` HashMap field) — these are persistence-layer naming downstream of the old crate name; legitimate to rename to `forme_arrangement` / `FormeDocument` etc. in a separate pass.
-- Module rename inside `forme` (`tree.rs` → e.g. `arrangement.rs`; `memory_policy.rs` → `lifecycle.rs`) — module-name cleanup that fits the new framing; defer until module-by-module work touches each.
-- Prose updates in `tearout brief` and `node-per-tile lineage plan` bodies — top-of-doc notes point at the rename, but inline references to "graph-tree" inside the body prose remain. Cosmetic; fold into next edits of those docs.
+- `forme/src/parity.rs` internal field-name rename: `graph_tree_parent` → `forme_parent`, `graph_tree_only` → `forme_only`, `graph_tree_order` → `forme_order`, `in_graph_tree` → `in_forme`, `MissingFromGraphTree` enum variant → `MissingFromForme`, `ActiveMismatch.graph_tree` field → `ActiveMismatch.forme`. Local `gt_*` vars kept as-is (scoped, harmless).
+- `graphshell/src/app_state/persistence.rs` + `services.rs` + `app_state.rs` downstream API rename: `load_workbench_graph_tree` → `load_workbench_forme`, `save_workbench_graph_tree` → `save_workbench_forme`, `WorkspaceRepository::load_graph_tree` → `load_forme`, `WorkspaceRepository::save_graph_tree` → `save_forme`, `GraphTreeDocument` type → `FormeDocument`, `graph_trees` HashMap field → `formes`, test `workbench_graph_tree_round_trips_*` → `workbench_forme_round_trips_*`.
+- Module rename inside `forme`: `memory_policy.rs` → `pressure.rs`; type `MemoryPolicy` → `PressurePolicy`; module doc rewritten to explain naming (eidetic owns "memory"; this module is resource-pressure policy, not memory policy). `tree.rs` left as-is because the central type stays `GraphTree<N>` for now; renaming the type is a bigger surface change deferred to its own pass.
+- Prose updates in `tearout brief` and `node-per-tile lineage plan` bodies: replace_all `graph-tree` → `forme` inside the body (top-of-doc naming notes kept as historical context).
+- Targeted `cargo check -p forme -p graphshell` after second pass — green.
+
+**Spatial-chrome plan amendments (also 2026-05-17) — Tier 1 of harvest brief absorbed**:
+
+- Phase 2: named the `<op>.started` / `<op>.succeeded` / `<op>.failed` triple convention for long-running operations with timeout contracts; `ChannelRegistry` descriptors as declarative config separate from live analyzers (T1-3).
+- Phase 3: added composition-pass ordering invariant on `SubstrateScene` to done-conditions — chrome → content → overlay layering, type-level invariant under a free-zoom camera (T1-2).
+- Phase 5: introduced `EnvelopeCapabilityProfile` as the single host capability/degradation contract, with envelope filtering as the outer layer and the existing per-action capability-gate catalogue as the inner layer (T1-4).
+- New "Cross-cutting prerequisite" section between §0 and Phase 1: single-write-path invariant on mere-kernel's `Graph` (`pub(crate)` mutators + `INV-1`-style runtime check + typed action bus as sole intent carrier) — sits above the spatial-chrome lane, blocks none of it, but converts conventional invariance to enforced (T1-1).
+
+**ProjectionBindingMode (T1-5) absorbed across two adjacent briefs:**
+
+- [`cartography brief §4`](../research/2026-05-10_cartography_layer_brief.md): added `binding_mode: ProjectionBindingMode` field on `Projection`, with `Linked` / `Unlinked` variants and explanation of which scenarios pick which default.
+- [`view intent sidecar plan §2`](2026-05-14_view_intent_sidecar_plan.md): added `binding_mode` to the future-fields list, gated on cartography shipping the linked/unlinked split. Default for a live pane = `Linked`; default for switcher thumbnails / exports = `Unlinked`.
+
+**Still deferred (separate-pass follow-ups)**:
+
+- Type rename `GraphTree<N>` → `Forme<N>` (or similar) inside `forme/src/tree.rs` + all consumers — larger surface change; touches every site that names the type. Defer until naming around forme has fully bedded down (the user may want to revisit type-level naming once `arrangement` / `lattice` etc. patterns emerge in usage).
 - Other design docs that mention `graph-tree` / `graph-memory` in passing (`local_intelligence_integration_research`, `browser_multiplexer_framing`, `memory_tiers_brief`, `relation_taxonomy_and_edge_mutation_plan`, the historical `graph_canvas_field_algebra_plan` in `graphshell_docs/`) — left as-is; readers cross-reference DOC_README's working-principles entry for current names.
-- Graphshell repo will be archived as a unit in a separate pass; this rename pass deleted exactly the four crates that are donor-superseded duplicates.
+- Graphshell repo will be archived as a unit in a separate pass; this rename pass deleted exactly the four crates that were donor-superseded duplicates.
