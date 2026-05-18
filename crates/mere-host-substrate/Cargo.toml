@@ -16,11 +16,13 @@ mere-renderer-registry = { path = "../mere-renderer-registry" }
 mere-host-runtime = { path = "../mere-host-runtime" }
 mere-kernel = { path = "../mere-kernel" }
 mere-frame = { path = "../mere-domain/frame" }
+# Substrate is renderer-agnostic and host-agnostic. Renderers
+# (OrreryRenderer, SplitterRenderer) and the orchestration around
+# them (cartography projection, GraphRegistry) live in `mere-host`
+# alongside the winit / wgpu / vello setup — substrate stays
+# narrowly focused on the substrate ↔ runtime bridge.
 
 kurbo.workspace = true
-# `OrreryRenderer` paints into a `vello::Scene` via the registry's
-# `InScenePaintRenderer` contract.
-vello.workspace = true
 # `create_session` mints fresh `SessionId` / `GraphId` UUIDs.
 uuid = { workspace = true }
 

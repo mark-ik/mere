@@ -1,103 +1,65 @@
-[workspace]
-resolver = "2"
-members = ["workbench", "orrery", "gloss", "apparatus", "graphshell"]
-
-# Shared deps across mere-host's sub-crates so versions stay aligned and
-# every renderer points at the same gpui checkout.
-[workspace.dependencies]
-accesskit = "0.24"
-gpui = { path = "../../../glass-gpui/crates/gpui" }
-gpui_platform = { path = "../../../glass-gpui/crates/gpui_platform", features = ["font-kit"] }
-graph-canvas = { path = "../graph/graph-canvas" }
-forme = { path = "../graph/forme" }
-inker = { path = "../inker" }
-mere-apparatus = { path = "../mere-domain/apparatus" }
-mere-frame = { path = "../mere-domain/frame" }
-mere-gloss = { path = "../mere-domain/gloss" }
-mere-graphshell = { path = "../mere-domain/graphshell" }
-mere-host-runtime = { path = "../mere-host-runtime" }
-mere-kernel = { path = "../mere-kernel" }
-mere-orrery = { path = "../mere-domain/orrery" }
-mere-workbench = { path = "../mere-domain/workbench" }
-nematic = { path = "../nematic" }
-platen = { path = "../platen" }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uxtree = { path = "../uxtree" }
-uuid = "1"
-
 [package]
 name = "mere-host"
 version = "0.0.1"
-edition = "2024"
+authors = ["@mark-ik"]
 license = "MPL-2.0"
-description = "gpui host orchestrator for the Mere browser — Application bootstrap, window lifecycle, frame traversal, dispatch to per-domain renderer crates."
+edition = "2024"
 publish = false
+rust-version = "1.92.0"
+description = "Mere xilem host — winit application binding the substrate scene, frametree projection, renderer chain (orrery / panel / splitter), and cartography projection into a runnable window. Replaces the prior gpui mere-host (2026-05-18 redirect)."
 
-[lib]
-path = "src/lib.rs"
+# Excluded from the parent mere workspace because it transitively
+# depends on mere-masonry, which path-deps the local xilem clone
+# (outside the workspace tree). When xilem stabilises (post-1.0),
+# join the workspace; until then this crate stands alone like
+# mere-masonry.
 
 [[bin]]
 name = "mere-host"
 path = "src/main.rs"
 
 [dependencies]
-gpui = { workspace = true }
-gpui_platform = { workspace = true }
+# Substrate ↔ runtime bridge — owns MereHostApp, sync_scene_from_frame_layout,
+# pane/splitter/tile identity tracking, action bus, manifest store.
+mere-host-substrate = { path = "../mere-host-substrate" }
+# Durable state vocabulary + ActionKind/BusAction. MereHostApp re-exports
+# what's needed for dispatch; we pull the runtime crate directly for
+# the action-bus enum types the click handlers construct.
+mere-host-runtime = { path = "../mere-host-runtime" }
+# Frame layout types (FrameLayout, PaneContent, etc.) for the seed
+# layout the host builds at startup.
+mere-frame = { path = "../mere-domain/frame" }
+# Substrate scene primitives (NodeContentKind, RendererRegistry traits,
+# NodeIdentity) used by the orrery / splitter renderers.
+mere-renderer-registry = { path = "../mere-renderer-registry" }
+# Kernel graph + geometry — the host seeds a Graph at startup and
+# stores it in its GraphRegistry for cartography projection.
+mere-kernel = { path = "../mere-kernel" }
+# Cartography contracts — ProjectionRequest / ViewIntent / Projection.
+cartography = { path = "../cartography" }
+# Strategy implementations (GridAdapter for the v0 orrery; force-
+# directed / etc. as the renderer chain grows).
+graph-layout = { path = "../graph/graph-layout" }
+# EngineDocument shape for seeding workbench tiles.
+inker = { path = "../inker" }
 
-# Mere portable layer (data + a11y projection). The orchestrator
-# composes the application uxtree by calling project_* on each
-# domain crate; the actual gpui rendering for each lives in the
-# matching mere-host-* renderer below.
-accesskit = { workspace = true }
-euclid = "0.22"
-graph-canvas = { workspace = true }
-forme = { workspace = true }
-inker = { workspace = true }
-mere-apparatus = { workspace = true }
-mere-frame = { workspace = true }
-mere-gloss = { workspace = true }
-mere-graphshell = { workspace = true }
-mere-host-runtime = { workspace = true }
-mere-kernel = { workspace = true }
-mere-orrery = { workspace = true }
-mere-workbench = { workspace = true }
-nematic = { workspace = true }
-platen = { workspace = true }
-uxtree = { workspace = true }
-uuid = { workspace = true }
+# Masonry renderer for `NodeContentKind::Panel` panes (workbench /
+# gloss / apparatus). Pulls in the upstream xilem stack via mere-
+# masonry's path-deps.
+mere-masonry = { path = "../mere-masonry" }
+masonry_core = { path = "../../../xilem/masonry_core" }
+masonry_testing = { path = "../../../xilem/masonry_testing" }
 
-# Per-domain renderers — each owns one domain's gpui rendering.
-mere-host-apparatus = { path = "apparatus" }
-mere-host-gloss = { path = "gloss" }
-mere-host-graphshell = { path = "graphshell" }
-mere-host-orrery = { path = "orrery" }
-mere-host-workbench = { path = "workbench" }
+# Windowing + GPU + paint stack.
+winit = "0.30.13"
+wgpu = "29"
+vello = "0.9"
+kurbo = "0.13"
+pollster = "0.4"
+# petgraph::NodeIndex constructor for tile-seeding.
+petgraph = "0.8"
 
-# Tracing capture lives in mere-host-apparatus; the orchestrator wires
-# the subscriber + passes the buffer through.
-tracing = { workspace = true }
-
-# Frame layout persistence (~/.local/share/mere/mere-host/ on Linux,
-# %LOCALAPPDATA%\mere\mere-host\ on Windows, similar on macOS).
-dirs = "5"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-anyhow = "1"
-# raw_window_handle is re-exported by gpui (Glass-HQ fork's `Window`
-# impls `HasWindowHandle`); we depend on it directly so we can match
-# on platform variants when constructing the accesskit OS adapter.
-raw-window-handle = "0.6"
-
-# Per-platform a11y adapters. The portable layer (uxtree) already
-# produces `accesskit::TreeUpdate`; these crates ship it to the OS
-# (UIA on Windows, AT-SPI on Linux, NSAccessibility on macOS) so
-# screen readers + automation tools can consume Mere's tree.
-[target.'cfg(windows)'.dependencies]
-accesskit_windows = "0.32"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-accesskit_unix = "0.21"
-
-[target.'cfg(target_os = "macos")'.dependencies]
-accesskit_macos = "0.26"
+[dev-dependencies]
+# Substrate primitives used by the moved renderer-module unit tests
+# (orrery_renderer / splitter_renderer / graph_registry).
+mere-spatial-prototype = { path = "../mere-spatial-prototype" }

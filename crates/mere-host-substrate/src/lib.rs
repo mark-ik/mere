@@ -54,16 +54,12 @@ use mere_spatial_prototype::{
 
 pub mod drop_zone;
 pub mod frame_layout;
-pub mod orrery_renderer;
-pub mod splitter_renderer;
 
 pub use drop_zone::infer_drop_side;
 pub use frame_layout::{
     LeafBounds, SPLITTER_THICKNESS, SplitterBounds, SplitterDrag, compute_container_size,
     default_content_kind_for, walk_leaves, walk_splitters,
 };
-pub use orrery_renderer::OrreryRenderer;
-pub use splitter_renderer::SplitterRenderer;
 
 /// Per-tile dimensions used by `sync_scene_from_tiles`. Placeholder
 /// until cartography supplies real layout.
