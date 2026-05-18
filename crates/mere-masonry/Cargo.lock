@@ -1544,6 +1544,7 @@ dependencies = [
  "mere-kernel",
  "mere-renderer-registry",
  "mere-spatial-prototype",
+ "uuid",
 ]
 
 [[package]]

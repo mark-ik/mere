@@ -18,6 +18,8 @@ mere-kernel = { path = "../mere-kernel" }
 mere-frame = { path = "../mere-domain/frame" }
 
 kurbo.workspace = true
+# `create_session` mints fresh `SessionId` / `GraphId` UUIDs.
+uuid = { workspace = true }
 
 [dev-dependencies]
 # Tile-projection tests construct fake `EngineDocument`s to drive

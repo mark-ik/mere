@@ -54,6 +54,13 @@ use winit::window::{Window, WindowId};
 const INITIAL_WIDTH: u32 = 960;
 const INITIAL_HEIGHT: u32 = 720;
 
+/// Frame id the demo persists view-intent state under. Real hosts
+/// derive this from their FrameLayout; the demo uses one fixed
+/// frame because there's no pane management.
+const DEMO_FRAME_ID: &str = "demo-frame";
+/// Pane id within `DEMO_FRAME_ID`. Demo has a single root pane.
+const DEMO_PANE_ID: u64 = 1;
+
 fn fake_document(url: &str) -> EngineDocument {
     EngineDocument {
         address: url.to_string(),
@@ -240,6 +247,38 @@ impl ApplicationHandler for App {
         }
         host_app.sync_scene_from_tiles();
 
+        // Bind session root + activate (or create) a session, then
+        // try to restore the saved camera. Demo persists state under
+        // a directory next to the binary so successive runs see the
+        // same sessions; a real host would use a config-local dir.
+        let session_root = std::path::PathBuf::from("./mere-demo-sessions");
+        let report = host_app
+            .bind_session_root(&session_root)
+            .expect("bind session root");
+        let session_id = match report.loaded.first().copied() {
+            Some(id) => {
+                host_app.activate_session(id);
+                eprintln!(
+                    "[session] resumed {:?} ({} sessions on disk)",
+                    id,
+                    report.loaded.len()
+                );
+                id
+            }
+            None => {
+                let id = host_app.create_session();
+                eprintln!("[session] created new session {:?}", id);
+                id
+            }
+        };
+        if let Ok(Some(true)) = host_app.load_active_view_intent(DEMO_FRAME_ID, DEMO_PANE_ID) {
+            eprintln!(
+                "[session] restored view intent for {:?}/{}",
+                DEMO_FRAME_ID, DEMO_PANE_ID
+            );
+        }
+        let _ = session_id; // For potential future logging.
+
         eprintln!(
             "host-app demo up — {}×{} pixels, {} tiles open, surface format {:?}",
             size.width,
@@ -248,6 +287,7 @@ impl ApplicationHandler for App {
             surface_format
         );
         eprintln!("click anywhere to see substrate event resolution");
+        eprintln!("close window to save view intent + flush manifest");
 
         self.state = Some(RuntimeState {
             window: window.clone(),
@@ -275,7 +315,26 @@ impl ApplicationHandler for App {
         };
 
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                // Save view intent + flush manifest before exit so
+                // the next launch resumes the same camera.
+                match state
+                    .host_app
+                    .save_active_view_intent(DEMO_FRAME_ID, DEMO_PANE_ID)
+                {
+                    Ok(Some(true)) => eprintln!("[session] saved view intent on close"),
+                    Ok(Some(false)) => {
+                        eprintln!("[session] view intent skipped (identity camera)")
+                    }
+                    Ok(None) => eprintln!("[session] no active session — skipping save"),
+                    Err(err) => eprintln!("[session] view-intent save failed: {err}"),
+                }
+                match state.host_app.manifests.flush_dirty() {
+                    Ok(n) => eprintln!("[session] flushed {n} dirty manifest(s)"),
+                    Err(err) => eprintln!("[session] manifest flush failed: {err}"),
+                }
+                event_loop.exit();
+            }
 
             WindowEvent::Resized(size) => {
                 if size.width > 0 && size.height > 0 {
