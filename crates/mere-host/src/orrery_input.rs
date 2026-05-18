@@ -776,10 +776,12 @@ fn retractable_selector(
 /// §4.1: single-click stays "open or focus in active workbench"
 /// (current SelectNode handler); double-click commits to a fresh
 /// tile entry under `NavigateMode::NewTile`. The node already
-/// exists in the graph, so `ensure_node_for_address_near` is a
-/// find-or-create that returns the existing node — no duplicate
-/// minting. The lineage facet records a Traversal edge from the
-/// previously-active anchor.
+/// exists in the graph, so `find_or_create_node_for_address`
+/// returns the existing node — no duplicate minting under default
+/// navigation. Explicit duplication goes through the
+/// `OpenAddressAsNewNode` gesture (Phase 3) which calls
+/// `create_node_for_address` unconditionally. The lineage facet
+/// records a Traversal edge from the previously-active anchor.
 fn open_node_as_new_tile(
     this: &mut HostRoot,
     graph_id: GraphId,

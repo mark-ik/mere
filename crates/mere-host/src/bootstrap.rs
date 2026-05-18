@@ -28,7 +28,7 @@ use crate::demo::{
     render_demo_graph_state, render_demo_toolbar,
 };
 use crate::graph_registry::GraphRegistry;
-use crate::host_helpers::ensure_node_for_address;
+use crate::host_helpers::find_or_create_node_for_address;
 use crate::layout_config::load_chrome_layout;
 use crate::loader;
 use crate::persistence::load_frame_layout;
@@ -146,7 +146,7 @@ fn restore_or_seed(
             cx,
             |g, _| {
                 *g = render_demo_graph_state();
-                ensure_node_for_address(g, "mere://intro");
+                find_or_create_node_for_address(g, "mere://intro", None);
             },
         );
         tracing::info!(?sid, ?gid, "session.created (default seed)");
@@ -177,7 +177,7 @@ fn restore_or_seed(
             })
             .unwrap_or_else(|| {
                 let mut g = Graph::new();
-                ensure_node_for_address(&mut g, "mere://intro");
+                find_or_create_node_for_address(&mut g, "mere://intro", None);
                 g
             });
         let entity = cx.new(|_| graph);
@@ -232,7 +232,9 @@ pub(crate) fn open_host_window(
             tracing::warn!(error = %e, "failed to load intro; falling back to demo doc");
             render_demo_document()
         });
-    let intro_node = graph.update(cx, |g, _| ensure_node_for_address(g, intro_address));
+    let intro_node = graph.update(cx, |g, _| {
+        find_or_create_node_for_address(g, intro_address, None).0
+    });
     let mut tiles = TileManager::new();
     tiles.open_or_focus(intro_node, intro_address.to_string(), intro_doc);
 

@@ -19,7 +19,7 @@ use mere_host_runtime::NavigateMode;
 use crate::persistence::save_frame_layout;
 
 use crate::graph_registry::GraphRegistry;
-use crate::host_helpers::{ensure_node_for_address, ensure_node_for_address_near, error_document};
+use crate::host_helpers::{error_document, find_or_create_node_for_address};
 use crate::layout_config::save_chrome_layout;
 use crate::loader;
 use crate::HostRoot;
@@ -107,7 +107,7 @@ impl HostRoot {
                 // active so the graph reflects the navigation path.
                 let anchor = self.active_tiles().and_then(|t| t.active_node());
                 let (node, created) = graph_entity.update(cx, |g, gcx| {
-                    let result = ensure_node_for_address_near(g, &address, anchor);
+                    let result = find_or_create_node_for_address(g, &address, anchor);
                     gcx.notify();
                     result
                 });
@@ -315,7 +315,7 @@ impl HostRoot {
             Some(&manifests),
             cx,
             |g, _| {
-                ensure_node_for_address(g, "mere://intro");
+                find_or_create_node_for_address(g, "mere://intro", None);
             },
         );
         tracing::info!(?graph_id, "opening host window with fresh graph");
@@ -358,7 +358,7 @@ impl HostRoot {
             Some(&manifests),
             cx,
             |g, _| {
-                ensure_node_for_address(g, "mere://intro");
+                find_or_create_node_for_address(g, "mere://intro", None);
             },
         );
         tracing::info!(?graph_id, "summoning orrery for fresh graph in current window");

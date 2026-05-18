@@ -55,11 +55,13 @@ impl Graph {
         Some((key, self.inner.node_weight(key)?))
     }
 
-    /// Transitional shim — delegates to [`Graph::find_node_by_address`]
-    /// after building an `Address` from the URL string. Kept while
-    /// Phase 2 of the node-identity rollout updates host call sites; it
-    /// will be removed when the host helpers (`find_node_by_address` /
-    /// `create_node_for_address` in `host_helpers`) land.
+    /// Convenience wrapper over [`Graph::find_node_by_address`] for
+    /// callers that have a URL string rather than a typed [`Address`].
+    /// Builds the [`Address`] internally and delegates.
+    ///
+    /// Use this for tests and quick lookups; prefer
+    /// [`Graph::find_node_by_address`] in code paths that already have a
+    /// typed [`Address`] in hand.
     pub fn get_node_by_url(&self, url: &str) -> Option<(NodeKey, &Node)> {
         let address = crate::address::address_from_url(url);
         self.find_node_by_address(&address)

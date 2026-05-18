@@ -31,7 +31,7 @@ use mere_frame::{
 use mere_host_runtime::TileManager;
 
 use crate::graph_registry::GraphRegistry;
-use crate::host_helpers::ensure_node_for_address;
+use crate::host_helpers::find_or_create_node_for_address;
 use crate::HostRoot;
 
 /// Re-export so call sites (and ide-completable references) stay
@@ -118,7 +118,7 @@ impl HostRoot {
         let (_new_session_id, new_graph_id, new_graph) =
             GraphRegistry::create_graph(&registry, Some(&manifests), cx);
         let new_node = new_graph.update(cx, |g, gcx| {
-            let key = ensure_node_for_address(g, &url);
+            let (key, _was_created) = find_or_create_node_for_address(g, &url, None);
             gcx.notify();
             key
         });

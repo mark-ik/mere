@@ -20,24 +20,44 @@ pub(crate) const NODE_RADIUS_WORLD: f32 = 18.0;
 pub(crate) const NODE_PLACEMENT_PADDING: f32 = 4.0;
 pub(crate) const NODE_MIN_SPACING: f32 = NODE_RADIUS_WORLD * 2.0 + NODE_PLACEMENT_PADDING;
 
-/// Find an existing node by URL, or create one placed near `anchor`
-/// (when supplied). New nodes are scattered into a free spot so
-/// they don't overlap existing ones, and — when `anchor` is set —
-/// connected to the anchor with a hyperlink edge so the graph
-/// reflects the navigation path.
+/// Pure lookup: find an existing graph node whose address claims include
+/// the given URL. No side effects. Returns the bare `NodeKey`; use
+/// [`Graph::find_node_by_address`] or [`Graph::get_node_by_url`] when the
+/// full `(NodeKey, &Node)` pair is needed.
 ///
-/// Returns `(node, was_created)` so the caller can decide whether to
-/// run any "first-touch" logic (e.g. record the visit in history,
-/// emit a creation telemetry event).
-pub(crate) fn ensure_node_for_address_near(
+/// Per the [node identity + duplicates brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-18_node_identity_and_duplicates_brief.md):
+/// the address is a *property* of the node, not its identity. Multiple
+/// nodes may match. This helper returns *some* match (current impl: the
+/// most-recently-added). Callers that need to enumerate siblings use
+/// [`Graph::get_nodes_by_url`] instead.
+pub(crate) fn find_node_by_address(graph: &Graph, address: &str) -> Option<NodeKey> {
+    graph.get_node_by_url(address).map(|(key, _)| key)
+}
+
+/// Always create a fresh graph node carrying the given address as its
+/// `Primary` claim. The kernel assigns a new `Uuid`; an existing node
+/// pointing at the same address (if any) is **not** consulted.
+///
+/// Positioning:
+/// - When `position` is `Some`, use it directly.
+/// - When `position` is `None`, scatter into a free spot near `anchor`
+///   (or near the origin when `anchor` is `None`) so the new node
+///   doesn't overlap existing ones.
+///
+/// When `anchor` is supplied, a hyperlink edge from `anchor` → new
+/// node is asserted so the graph reflects the navigation path.
+///
+/// Phase 2 of the node-identity rollout: replaces the old
+/// `ensure_node_for_address_near` for the cases that wanted "always
+/// create new" semantics. Sites that wanted "find or create" compose
+/// [`find_node_by_address`] with this helper at the call site.
+pub(crate) fn create_node_for_address(
     graph: &mut Graph,
     address: &str,
+    position: Option<Point2D<f32>>,
     anchor: Option<NodeKey>,
-) -> (NodeKey, bool) {
-    if let Some((key, _)) = graph.get_node_by_url(address) {
-        return (key, false);
-    }
-    let position = next_free_position(graph, anchor);
+) -> NodeKey {
+    let position = position.unwrap_or_else(|| next_free_position(graph, anchor));
     let key = create_node(graph, address, position);
     if let Some(anchor_key) = anchor
         && anchor_key != key
@@ -52,13 +72,30 @@ pub(crate) fn ensure_node_for_address_near(
             },
         );
     }
-    (key, true)
+    key
 }
 
-/// Compatibility shim — same behaviour as `ensure_node_for_address_near`
-/// without an anchor, returning only the `NodeKey`.
-pub(crate) fn ensure_node_for_address(graph: &mut Graph, address: &str) -> NodeKey {
-    ensure_node_for_address_near(graph, address, None).0
+/// "Find or create" — looks up by address; falls back to creating a
+/// fresh node positioned near `anchor` (with a hyperlink edge when
+/// the anchor is set).
+///
+/// Convenience over composing [`find_node_by_address`] +
+/// [`create_node_for_address`] at the call site for the common
+/// default-navigation case. Sites that explicitly want one behaviour
+/// or the other should call the underlying helpers directly.
+///
+/// Returns `(key, was_created)` for callers that need to run
+/// "first-touch" logic on creation.
+pub(crate) fn find_or_create_node_for_address(
+    graph: &mut Graph,
+    address: &str,
+    anchor: Option<NodeKey>,
+) -> (NodeKey, bool) {
+    if let Some(key) = find_node_by_address(graph, address) {
+        return (key, false);
+    }
+    let key = create_node_for_address(graph, address, None, anchor);
+    (key, true)
 }
 
 fn create_node(graph: &mut Graph, address: &str, position: Point2D<f32>) -> NodeKey {
