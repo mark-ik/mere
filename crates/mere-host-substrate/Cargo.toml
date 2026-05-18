@@ -18,6 +18,9 @@ mere-kernel = { path = "../mere-kernel" }
 mere-frame = { path = "../mere-domain/frame" }
 
 kurbo.workspace = true
+# `OrreryRenderer` paints into a `vello::Scene` via the registry's
+# `InScenePaintRenderer` contract.
+vello.workspace = true
 # `create_session` mints fresh `SessionId` / `GraphId` UUIDs.
 uuid = { workspace = true }
 

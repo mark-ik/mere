@@ -54,11 +54,13 @@ use mere_spatial_prototype::{
 
 pub mod drop_zone;
 pub mod frame_layout;
+pub mod orrery_renderer;
 
 pub use drop_zone::infer_drop_side;
 pub use frame_layout::{
     LeafBounds, SplitterDrag, compute_container_size, default_content_kind_for, walk_leaves,
 };
+pub use orrery_renderer::OrreryRenderer;
 
 /// Per-tile dimensions used by `sync_scene_from_tiles`. Placeholder
 /// until cartography supplies real layout.
@@ -73,8 +75,19 @@ pub const DEFAULT_TILES_PER_ROW: usize = 3;
 /// pane/session/graph context.
 #[derive(Clone, Debug)]
 pub enum SubstrateInputEvent {
+    /// Pointer hit landed on a pane-shaped substrate node, resolved
+    /// back to its `PaneId`. Emitted when the scene was projected
+    /// via `sync_scene_from_frame_layout` (frametree mode). Host
+    /// typically translates to focus/activate actions on the pane.
+    PaneClicked {
+        pane_id: PaneId,
+        host_pos: Point,
+        scene_pos: Point,
+    },
     /// Pointer hit landed on a tile-shaped substrate node, resolved
-    /// back to its runtime `NodeKey`. Host typically translates to
+    /// back to its runtime `NodeKey`. Emitted when the scene was
+    /// projected via `sync_scene_from_tiles` (tile-grid mode). Host
+    /// typically translates to
     /// `BusAction { target: Pane(active), kind: FocusTile { index } }`
     /// or similar.
     TileClicked {
@@ -89,11 +102,11 @@ pub enum SubstrateInputEvent {
         host_pos: Point,
         scene_pos: Point,
     },
-    /// Pointer hit a substrate node but the host has no `NodeKey`
-    /// mapping for it (drift between scene and tile_identity_map —
-    /// shouldn't happen if `sync_scene_from_tiles` is the only scene
-    /// source). Reported as a degraded variant for diagnostic
-    /// visibility rather than silently dropped.
+    /// Pointer hit a substrate node but the host has no `PaneId` /
+    /// `NodeKey` mapping for it (drift between scene and the
+    /// identity maps — shouldn't happen if a sync_scene_from_* call
+    /// is the only scene source). Reported as a degraded variant
+    /// for diagnostic visibility rather than silently dropped.
     UnknownTileHit {
         identity: NodeIdentity,
         host_pos: Point,
@@ -353,6 +366,16 @@ impl MereHostApp {
             .find_map(|(k, v)| if *v == identity { Some(*k) } else { None })
     }
 
+    /// Find the frame `PaneId` for a substrate `NodeIdentity`.
+    /// Returns `None` if the identity isn't in the pane-identity map
+    /// (the substrate scene wasn't projected from a `FrameLayout`,
+    /// or the pane left the tree on the last sync).
+    pub fn pane_id_for_identity(&self, identity: NodeIdentity) -> Option<PaneId> {
+        self.pane_identity_map
+            .iter()
+            .find_map(|(k, v)| if *v == identity { Some(*k) } else { None })
+    }
+
     /// Install a closure that receives every `SubstrateInputEvent`
     /// the substrate resolves. Replaces any previously-installed
     /// callback. Pass `None`-ish by clearing via
@@ -382,18 +405,30 @@ impl MereHostApp {
     pub fn handle_pointer_press(&self, host_pos: Point) -> SubstrateInputEvent {
         let scene_pos = self.substrate.scene_pos_from_host(host_pos);
         let event = match self.scene.hit_test(scene_pos) {
-            Some(SceneHit::Node(identity)) => match self.node_key_for_identity(identity) {
-                Some(node_key) => SubstrateInputEvent::TileClicked {
-                    node_key,
-                    host_pos,
-                    scene_pos,
-                },
-                None => SubstrateInputEvent::UnknownTileHit {
-                    identity,
-                    host_pos,
-                    scene_pos,
-                },
-            },
+            Some(SceneHit::Node(identity)) => {
+                // Try the pane map first — frametree projection is the
+                // new-host path; the tile map is the legacy / probe
+                // path. If both have entries, pane wins.
+                if let Some(pane_id) = self.pane_id_for_identity(identity) {
+                    SubstrateInputEvent::PaneClicked {
+                        pane_id,
+                        host_pos,
+                        scene_pos,
+                    }
+                } else if let Some(node_key) = self.node_key_for_identity(identity) {
+                    SubstrateInputEvent::TileClicked {
+                        node_key,
+                        host_pos,
+                        scene_pos,
+                    }
+                } else {
+                    SubstrateInputEvent::UnknownTileHit {
+                        identity,
+                        host_pos,
+                        scene_pos,
+                    }
+                }
+            }
             Some(SceneHit::Edge(edge)) => SubstrateInputEvent::EdgeClicked {
                 edge,
                 host_pos,

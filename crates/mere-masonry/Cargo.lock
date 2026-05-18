@@ -1545,6 +1545,7 @@ dependencies = [
  "mere-renderer-registry",
  "mere-spatial-prototype",
  "uuid",
+ "vello",
 ]
 
 [[package]]

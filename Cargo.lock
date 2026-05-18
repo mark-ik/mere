@@ -5313,6 +5313,7 @@ dependencies = [
  "petgraph",
  "serde_json",
  "uuid",
+ "vello",
 ]
 
 [[package]]

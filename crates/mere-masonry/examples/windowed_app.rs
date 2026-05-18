@@ -36,9 +36,11 @@
 use std::sync::Arc;
 
 use inker::{DocumentProvenance, DocumentTrustState, EngineDocument};
-use mere_frame::PaneId;
+use mere_frame::{
+    FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis,
+};
 use mere_host_runtime::{ActionKind, BusAction, BusDispatchOutcome};
-use mere_host_substrate::{MereHostApp, SubstrateInputEvent};
+use mere_host_substrate::{MereHostApp, OrreryRenderer, SubstrateInputEvent};
 use masonry_core::core::{DefaultProperties, NewWidget};
 use masonry_testing::ModularWidget;
 use mere_masonry::{MasonryEmbeddedRenderer, RootWidgetFactory};
@@ -81,6 +83,50 @@ fn build_masonry_factory() -> RootWidgetFactory {
     })
 }
 
+/// Seed frametree for the demo: a horizontal split with the
+/// workbench on the left (60%), and a vertical split on the right
+/// holding an orrery (top 60%) and an apparatus (bottom 40%).
+///
+///   ┌──────────┬─────────┐
+///   │          │ orrery  │
+///   │ workbench├─────────┤
+///   │          │apparatus│
+///   └──────────┴─────────┘
+fn build_demo_layout() -> FrameLayout {
+    let graph_id = GraphId::new();
+    FrameLayout {
+        id: FrameId::new("demo-frame"),
+        label: "Demo".to_string(),
+        root: PaneNode::Split {
+            axis: SplitAxis::Horizontal,
+            ratio: 0.6,
+            first: Box::new(PaneNode::Leaf {
+                pane_id: PaneId(1),
+                content: PaneContent::Workbench,
+                graph_id,
+            }),
+            second: Box::new(PaneNode::Split {
+                axis: SplitAxis::Vertical,
+                ratio: 0.6,
+                first: Box::new(PaneNode::Leaf {
+                    pane_id: PaneId(2),
+                    content: PaneContent::Orrery,
+                    graph_id,
+                }),
+                second: Box::new(PaneNode::Leaf {
+                    pane_id: PaneId(3),
+                    content: PaneContent::Apparatus,
+                    graph_id,
+                }),
+            }),
+        },
+    }
+}
+
+fn viewport_size(width: u32, height: u32) -> kurbo::Size {
+    kurbo::Size::new(width.max(1) as f64, height.max(1) as f64)
+}
+
 #[derive(Default)]
 struct App {
     state: Option<RuntimeState>,
@@ -94,6 +140,10 @@ struct RuntimeState {
     surface_config: wgpu::SurfaceConfiguration,
     renderer: vello::Renderer,
     host_app: MereHostApp,
+    /// Current frametree — owned by the demo, projected into the
+    /// substrate scene every frame via
+    /// `MereHostApp::sync_scene_from_frame_layout`.
+    frame_layout: FrameLayout,
     target_texture: Option<wgpu::Texture>,
     target_view: Option<wgpu::TextureView>,
     cursor: Option<kurbo::Point>,
@@ -187,6 +237,14 @@ impl ApplicationHandler for App {
 
         // Install input callback — streams click resolutions to stderr.
         host_app.set_input_callback(|event| match event {
+            SubstrateInputEvent::PaneClicked {
+                pane_id,
+                host_pos,
+                scene_pos,
+            } => eprintln!(
+                "[click] pane {:?} @ host ({:.1}, {:.1}) / scene ({:.1}, {:.1})",
+                pane_id, host_pos.x, host_pos.y, scene_pos.x, scene_pos.y
+            ),
             SubstrateInputEvent::TileClicked {
                 node_key,
                 host_pos,
@@ -203,7 +261,7 @@ impl ApplicationHandler for App {
                 host_pos.x, host_pos.y
             ),
             SubstrateInputEvent::UnknownTileHit { identity, .. } => {
-                eprintln!("[click] unknown tile id {:?}", identity.as_u64())
+                eprintln!("[click] unknown identity {:?}", identity.as_u64())
             }
         });
 
@@ -215,7 +273,12 @@ impl ApplicationHandler for App {
             eprintln!("[bus] dispatched {:?} → {:?}", action.target, action.kind);
         });
 
-        // Register the masonry renderer for Panel content.
+        // Register renderer chain — one per `NodeContentKind` the
+        // demo frametree projects into. Workbench / Gloss /
+        // Apparatus / Custom default to `Panel` content kind
+        // (via `default_content_kind_for`), so the masonry renderer
+        // covers them with an empty masonry widget until each gets
+        // its own specialised renderer.
         let masonry_renderer = MasonryEmbeddedRenderer::new(
             "demo.masonry.panel",
             NodeContentKind::Panel,
@@ -230,8 +293,21 @@ impl ApplicationHandler for App {
             .registry_mut()
             .register(Box::new(masonry_renderer))
             .expect("register masonry");
+        // Orrery renderer for `NodeContentKind::GraphView` — v0
+        // paints a static triangle of demo "nodes" so the graph-
+        // view pane is visibly distinct from neighbouring Panel
+        // panes. Real graph plumbing follows when the orrery
+        // renderer takes a host-installed snapshot.
+        host_app
+            .substrate
+            .registry_mut()
+            .register(Box::new(OrreryRenderer::default()))
+            .expect("register orrery");
 
-        // Seed a handful of tiles so the scene has content.
+        // Seed tile-manager state. Not rendered by the frametree
+        // projection (workbench panes default to Panel + masonry
+        // empty-widget for now), but populated so a future
+        // workbench renderer can consume it without re-seeding.
         for (i, url) in [
             "https://a.example",
             "https://b.example",
@@ -245,7 +321,14 @@ impl ApplicationHandler for App {
                 .tiles
                 .open_or_focus(NodeIndex::new(i), url.to_string(), fake_document(url));
         }
-        host_app.sync_scene_from_tiles();
+
+        // Build the demo frametree + project it into the substrate
+        // scene. Subsequent resize handler calls re-project against
+        // the new viewport so the pane bounds rescale with the
+        // window.
+        let frame_layout = build_demo_layout();
+        host_app
+            .sync_scene_from_frame_layout(&frame_layout, viewport_size(size.width, size.height));
 
         // Bind session root + activate (or create) a session, then
         // try to restore the saved camera. Demo persists state under
@@ -280,10 +363,10 @@ impl ApplicationHandler for App {
         let _ = session_id; // For potential future logging.
 
         eprintln!(
-            "host-app demo up — {}×{} pixels, {} tiles open, surface format {:?}",
+            "host-app demo up — {}×{} pixels, frametree projected ({} panes), surface format {:?}",
             size.width,
             size.height,
-            host_app.tracked_tile_count(),
+            host_app.scene.len(),
             surface_format
         );
         eprintln!("click anywhere to see substrate event resolution");
@@ -297,6 +380,7 @@ impl ApplicationHandler for App {
             surface_config,
             renderer,
             host_app,
+            frame_layout,
             target_texture: None,
             target_view: None,
             cursor: None,
@@ -343,9 +427,13 @@ impl ApplicationHandler for App {
                     state.surface.configure(&state.device, &state.surface_config);
                     state.target_texture = None;
                     state.target_view = None;
-                    // Re-sync scene; future cartography would consult
-                    // the new viewport size at layout time.
-                    state.host_app.sync_scene_from_tiles();
+                    // Re-project the frametree against the new viewport
+                    // so each pane's substrate bounds rescale with the
+                    // window.
+                    state.host_app.sync_scene_from_frame_layout(
+                        &state.frame_layout,
+                        viewport_size(size.width, size.height),
+                    );
                     state.window.request_redraw();
                 }
             }
@@ -365,21 +453,19 @@ impl ApplicationHandler for App {
             } if btn_state == ElementState::Pressed => {
                 if let Some(cursor) = state.cursor {
                     let resolved = state.host_app.handle_pointer_press(cursor);
-                    // Translate tile-hit events into a bus action. The
-                    // demo uses a stub `PaneId(0)` because it doesn't
-                    // own a frame layout yet — a real host would look
-                    // up the active workbench pane id.
-                    if let SubstrateInputEvent::TileClicked { node_key, .. } = resolved {
-                        if let Some(index) = state.host_app.tile_index_for(node_key) {
-                            let action = BusAction::pane(
-                                PaneId(0),
-                                ActionKind::FocusTile { index },
-                            );
-                            match state.host_app.action_bus.dispatch(&action) {
-                                BusDispatchOutcome::Allowed => {}
-                                outcome => {
-                                    eprintln!("[bus] dispatch outcome: {:?}", outcome);
-                                }
+                    // Demo dispatch: a `PaneClicked` resolves to a
+                    // `ToggleWorkbench` action targeted at the clicked
+                    // pane — closest match in the v0 `ActionKind` vocab
+                    // for "do something user-visible on click." A
+                    // proper `FocusPane` action lands when the new host
+                    // grows pane focus semantics.
+                    if let SubstrateInputEvent::PaneClicked { pane_id, .. } = resolved {
+                        let action =
+                            BusAction::pane(pane_id, ActionKind::ToggleWorkbench);
+                        match state.host_app.action_bus.dispatch(&action) {
+                            BusDispatchOutcome::Allowed => {}
+                            outcome => {
+                                eprintln!("[bus] dispatch outcome: {:?}", outcome);
                             }
                         }
                     }
