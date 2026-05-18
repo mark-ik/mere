@@ -52,6 +52,10 @@ use mere_spatial_prototype::{
     SubstrateScene,
 };
 
+pub mod drop_zone;
+
+pub use drop_zone::infer_drop_side;
+
 /// Per-tile dimensions used by `sync_scene_from_tiles`. Placeholder
 /// until cartography supplies real layout.
 pub const DEFAULT_TILE_WIDTH: f64 = 320.0;
