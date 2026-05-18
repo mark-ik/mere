@@ -51,3 +51,9 @@ masonry_testing = { path = "../../../xilem/masonry_testing" }
 mere-spatial-prototype = { path = "../mere-spatial-prototype" }
 # Windowed demo binary (examples/windowed_demo.rs).
 winit = "0.30.13"
+# Full-stack windowed demo (examples/windowed_app.rs) — uses
+# `MereHostApp` to drive the substrate through real tile/manifest/
+# session state.
+mere-host-substrate = { path = "../mere-host-substrate" }
+inker = { path = "../inker" }
+petgraph = "0.8"
