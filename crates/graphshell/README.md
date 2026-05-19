@@ -1,85 +1,47 @@
 # graphshell
 
-`graphshell` is the portable shell layer for the
-[mere](https://crates.io/crates/mere) browser. It owns the workbench, the
-tile tree, the Navigator, and the contracts to whichever GUI framework hosts
-the app on a given platform, so the same shell semantics ship across native
-desktop, browser-extension, browser-tab/PWA, and mobile envelopes.
+`graphshell/` is a **supercrate directory** — a semantic grouping of the
+graph and shell crates that together form the chrome layer of the
+[mere](https://crates.io/crates/mere) browser. Each sub-crate is a real
+workspace member that can be built and tested in isolation; the top-level
+directory itself is not a crate.
 
-## What's in the crate
-
-- **`app_state`** — reducer-owned `GraphWorkspace`, typed pending effects,
-  and the service-trait surface that hosts implement. Sub-modules:
-  `intent_system`, `graph_runtime`, `workspace_routing`, `composition`,
-  `app_ux`, `persistence`, `services`.
-
-- **Service traits**: `WorkspaceRepository`, `SettingsStore`,
-  `GraphMutationJournal`, `EngineRouter`, `SurfaceHost`, `DiagnosticsSink`,
-  `Clock`, `TaskRuntime`. Concrete stores, engine routers, and host adapters
-  implement these traits; reducers stay pure.
-
-- **Re-exports of the workspace-internal shell-substrate crates** (consumed
-  inside the mere workspace; not separately published):
-  - `graphshell::core` ← `mere-kernel` — portable vocabulary + port-trait
-    definitions.
-  - `graphshell::runtime` ← `host-contract` — runtime + host-port
-    surface, frame projections, finalize-action plumbing.
-  - `graphshell::lineage` ← `node-lineage` — owner-scoped navigation-lineage
-    model (formerly `graph-memory`; eidetic owns the "memory" layer).
-  - `graphshell::forme` ← `forme` — per-graph-view workbench arrangement
-    authority (formerly `graph-tree`; arrangements may or may not be
-    tree-shaped).
-
-## How it relates to other workspace crates
-
-graphshell sits between [`mere`](https://crates.io/crates/mere) above and the
-press-stack peers below; host adapters plug in from the side.
+## Layout
 
 ```text
-                            mere
-                              │ composes
-                              ▼
-       host adapters  ──→  graphshell  ──→  mere-kernel / -runtime
-       (iced, gpui, …)         │            (workspace-internal substrate)
-                ┌──────────────┼──────────────┐
-                ▼              ▼              ▼
-              inker          platen        verso-core
-                                                │
-                                                ▼
-                                            eidetic
-                                       (via app_state effects)
+crates/graphshell/
+├── graph/            # The graph half (data + spatial substrate)
+│   ├── aether/             — top-level paint/layout primitives
+│   ├── cartography/        — ProjectionRequest / ViewIntent / Projection
+│   ├── graph-canvas/       — canvas scene IR (CanvasSceneInput, FrameRegion)
+│   ├── graph-kernel/       — kernel crate (graph + geometry + identity)
+│   ├── graph-layout/       — LayoutStrategy adapters (grid, force-directed, …)
+│   ├── node-lineage/       — owner-scoped navigation lineage
+│   ├── orrery/             — tiered-graph framework primitives
+│   └── spatial-substrate/  — substrate scene + dispatch + camera
+│
+└── shell/            # The shell half (chrome + runtime + registries)
+    ├── domain/
+    │   ├── chrome/         — toolbar / omnibar / palette / authorities view-models
+    │   └── frame/          — FrameLayout + PaneContent + frame projections
+    ├── host-ports/         — host-port trait vocabulary
+    ├── session-runtime/    — session graph store, manifest store, view-intent store
+    ├── state/              — shell-state crate (re-exports chrome modules + ux probes)
+    ├── system/
+    │   ├── control-plane/  — control-plane action bus
+    │   └── registry/
+    │       ├── register-diagnostics/
+    │       ├── register-renderer/         — renderer-registry trait + dispatch
+    │       └── register-renderer-types/   — wasm32-clean data-only types
+    └── ux-events/          — UX event vocabulary
 ```
 
-- [`mere`](https://crates.io/crates/mere) — composes graphshell into the
-  product entrypoint.
-- [`inker`](https://crates.io/crates/inker) — `app_state` emits
-  `EngineRouteRequest` effects; inker returns `EngineRouteDecision` /
-  `SurfaceContract`.
-- [`platen`](https://crates.io/crates/platen) — `app_state` consumes platen's
-  `WorkbenchProjection` and `ArrangementSnapshot` selectors over reducer-owned
-  state.
-- [`verso-core`](https://crates.io/crates/verso-core) — `app_state` emits
-  `SurfaceCommand` effects and tracks `SurfaceLifecycleState`.
-- [`eidetic`](https://crates.io/crates/eidetic) — `app_state` emits
-  `eidetic::Request` effects routed through the `eidetic::Store` service trait.
-- **Host adapters** (iced, gpui, html/css, makepad, egui) — implement
-  graphshell's service traits; they consume graphshell rather than appearing
-  as deps.
+The supercrate split is also a semantic split: the **graph half** owns
+data and spatial structure (kernel, projection, canvas IR, substrate);
+the **shell half** owns chrome view-models, runtime contracts, and the
+registries the host plugs renderers into.
 
 ## Status
 
-Pre-1.0. The reducer + service-trait surface is in place and tested
-in-workspace; concrete host adapters land once the portable contracts
-stabilize.
-
-## Fun Fact
-
-This crate's name was the prior name of this browser project for months!
-I couldn't come up with a good name for the browser, so I adopted
-servoshell's naming semantics, since I'd forked it from servoshell
-in the first place. Now it is appropriately the name of the shell component
-in the browser, and the browser itself has a much better name.
-
-## License
-
-MPL-2.0.
+Pre-1.0. The reorganization into the current topology landed in May 2026
+(commit `32e7207` and the B1–B7 supercrate naming passes that followed).

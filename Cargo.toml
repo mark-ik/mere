@@ -4,7 +4,6 @@ members = [
     "crates/mere/host",
     "crates/mere/host-substrate",
     "crates/persona/identity",
-    "crates/graphshell",
     "crates/graphshell/graph/aether",
     "crates/graphshell/graph/cartography",
     "crates/graphshell/graph/graph-canvas",
@@ -78,7 +77,6 @@ kernel = { path = "crates/graphshell/graph/graph-kernel" }
 orrery = { path = "crates/graphshell/graph/orrery" }
 spatial-substrate = { path = "crates/graphshell/graph/spatial-substrate" }
 
-graphshell = { path = "crates/graphshell" }
 control-plane = { path = "crates/graphshell/shell/system/control-plane" }
 shell-state = { path = "crates/graphshell/shell/state" }
 frame = { path = "crates/graphshell/shell/domain/frame" }

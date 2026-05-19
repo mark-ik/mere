@@ -3975,26 +3975,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "graphshell"
-version = "0.0.1"
-dependencies = [
- "async-trait",
- "eidetic",
- "forme",
- "graph-canvas",
- "host-ports",
- "inker",
- "kernel",
- "node-lineage",
- "platen",
- "pollster",
- "serde",
- "serde_json",
- "uuid",
- "verso-core",
-]
-
-[[package]]
 name = "grid"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

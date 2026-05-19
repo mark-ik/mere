@@ -1,4 +1,4 @@
-# mere-graphshell
+# chrome
 
 Graphshell domain module for the [mere](https://crates.io/crates/mere)
 browser — the user-facing UX surface of the application's chrome.
@@ -8,31 +8,23 @@ navigation arrows, the address/omnibar, layout switcher buttons. In
 mere terms: anything that's *the application's outer interface*
 between the user and the system.
 
-This crate is **narrower than the legacy `crates/graphshell/`** crate,
-which bundled session state, runtime traits, host adapters, and the
-shell itself. mere-graphshell is the new home for the **UX-concept
-slice** — view-models for toolbar, omnibar, command palette, focus
-authorities, etc. — extracted incrementally from
-`graphshell-shell-state` as the migration progresses.
+The crate is the home for the **UX-concept slice** — view-models for
+toolbar, omnibar, command palette, focus authorities, etc. The
+`shell-state` crate re-exports each module from its original path so
+existing call sites (`shell_state::toolbar`) keep resolving while
+consumers gradually switch to direct `chrome::toolbar` imports.
 
-## Migration progress
+## Modules
 
-| Slice | Source | Status |
-| --- | --- | --- |
-| toolbar (location bar, drafts, viewer status) | `graphshell-shell-state::toolbar` | ✅ landed (first slice, 2026-05-09) |
-| omnibar | `graphshell-shell-state::omnibar` | pending |
-| command palette | `graphshell-shell-state::command_palette` | pending |
-| focus authorities | `graphshell-shell-state::authorities` | pending |
-| graph search | `graphshell-shell-state::frame_model::GraphSearchViewModel` | pending |
-
-`graphshell-shell-state` re-exports each migrated module from its
-original path so existing call sites (`graphshell_shell_state::toolbar`)
-keep resolving while consumers gradually switch to direct
-`mere_graphshell::toolbar` imports.
+- `authorities` — focus authority view-models.
+- `command_palette` — command palette state.
+- `frame_model` — frame view-model + host-input types.
+- `host_intent` — host→runtime intent shape.
+- `omnibar` — address bar / omnibar.
+- `routing` — return-target routing for tool surfaces.
+- `toolbar` — root toolbar view-model.
 
 ## Status
 
-Pre-1.0. Toolbar lane shipped as the first slice; other lanes follow
-as they're extracted. Eventual home for `project_graphshell(state) ->
-UxTree` once the UX surface is wired through (root toolbar
-projection).
+Pre-1.0. Eventual home for `project_chrome(state) -> UxTree` once
+the UX surface is wired through (root toolbar projection).
