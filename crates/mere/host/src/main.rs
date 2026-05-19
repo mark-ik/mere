@@ -19,8 +19,14 @@
 //!   leaf in a [`frame::FrameLayout`] carries a `graph_id`
 //!   resolved here at projection time.
 //! - [`orrery_renderer`] — substrate `InScenePaintRenderer` for
-//!   `NodeContentKind::GraphView` panes; reads a host-installed
-//!   `Projection` per-identity from a shared snapshot map.
+//!   `NodeContentKind::GraphView` panes (Path A); reads a host-
+//!   installed `Projection` per-identity from a shared snapshot map.
+//! - [`graph_node_renderer`] — substrate `InScenePaintRenderer` for
+//!   `NodeContentKind::GraphNode` (Path B); paints one circle per
+//!   exploded graph node.
+//! - [`graph_node_explode`] — turns a projection into per-node
+//!   `GraphNode` substrate entities + relation edges, with stable
+//!   identity across resyncs.
 //! - [`splitter_renderer`] — substrate renderer for the 4px
 //!   draggable chrome between sibling panes.
 //! - [`render`] — per-frame paint path (substrate dispatch → vello
@@ -40,6 +46,8 @@
 //!   eventually plug in through this surface.
 
 mod cartography_projection;
+mod graph_node_explode;
+mod graph_node_renderer;
 mod graph_registry;
 mod orrery_renderer;
 mod render;

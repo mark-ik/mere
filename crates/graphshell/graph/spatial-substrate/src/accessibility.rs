@@ -87,6 +87,7 @@ fn role_for(kind: NodeContentKind) -> Role {
         NodeContentKind::Panel => Role::Pane,
         NodeContentKind::CustomCanvas => Role::Canvas,
         NodeContentKind::GraphView
+        | NodeContentKind::GraphNode
         | NodeContentKind::Knot
         | NodeContentKind::Composite
         | NodeContentKind::EdgeRendering

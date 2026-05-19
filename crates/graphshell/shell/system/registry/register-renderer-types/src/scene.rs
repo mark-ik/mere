@@ -68,6 +68,13 @@ pub enum LodLevel {
 pub enum NodeContentKind {
     WebPage,
     GraphView,
+    /// A single graph node as a first-class spatial entity (Path B of
+    /// the cartography projection). Whereas `GraphView` is one pane
+    /// that paints an entire projection internally (Path A), a
+    /// `GraphNode` is one substrate node per graph node — the host
+    /// explodes a projection into these so each node gets its own
+    /// hit-test target, placement, and (future) drag handling.
+    GraphNode,
     Panel,
     Knot,
     DocumentTile,

@@ -34,6 +34,11 @@ cartography.workspace = true
 # Strategy implementations (GridAdapter for the v0 orrery; force-
 # directed / etc. as the renderer chain grows).
 graph-layout.workspace = true
+# Substrate scene primitives (SubstrateScene, SubstrateNode,
+# RelationEdge) — the Path-B explosion appends per-node entities to
+# the scene directly, so the substrate types are needed in non-test
+# code, not just the renderer unit tests.
+spatial-substrate.workspace = true
 # EngineDocument shape for seeding workbench tiles.
 inker.workspace = true
 
@@ -53,7 +58,3 @@ pollster = "0.4"
 # petgraph::NodeIndex constructor for tile-seeding.
 petgraph = "0.8"
 
-[dev-dependencies]
-# Substrate primitives used by the moved renderer-module unit tests
-# (orrery_renderer / splitter_renderer / graph_registry).
-spatial-substrate.workspace = true

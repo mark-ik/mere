@@ -17,6 +17,7 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
 use crate::cartography_projection::{pane_identity_closure, project_orreries};
+use crate::graph_node_explode::{GraphNodeIdentities, explode_projection_into_scene};
 use crate::graph_registry::GraphRegistry;
 use crate::orrery_renderer::OrrerySnapshots;
 use crate::render::render_frame;
@@ -51,6 +52,10 @@ pub struct RuntimeState {
     /// registered strategy here; `with_defaults` ships the analytic
     /// adapters every v0a preset routes to.
     pub strategies: StrategyRegistry,
+    /// Stable `(PaneId, NodeKey) → NodeIdentity` map for Path-B
+    /// (exploded) graph nodes. Survives scene rebuilds so a node keeps
+    /// its substrate identity as its projected position changes.
+    pub graph_node_identities: GraphNodeIdentities,
     /// Host-shared orrery projection map cloned from the registered
     /// `OrreryRenderer` at construction.
     pub orrery_snapshots: OrrerySnapshots,
@@ -70,7 +75,7 @@ impl RuntimeState {
     fn resync(&mut self, viewport: kurbo::Size) {
         self.host_app
             .sync_scene_from_frame_layout(&self.frame_layout, viewport);
-        let _report = project_orreries(
+        let outcome = project_orreries(
             &self.frame_layout,
             viewport,
             pane_identity_closure(&self.host_app),
@@ -78,6 +83,19 @@ impl RuntimeState {
             &self.strategies,
             &self.orrery_snapshots,
         );
+        // Path B: append per-node substrate entities for each exploded
+        // pane. `sync_scene_from_frame_layout` rebuilt the scene above
+        // (panes + splitters), so this re-explodes onto the fresh
+        // scene every resync; the identity map keeps node ids stable.
+        for pane in &outcome.exploded {
+            explode_projection_into_scene(
+                &mut self.host_app.scene,
+                &mut self.graph_node_identities,
+                pane.pane_id,
+                pane.pane_origin,
+                &pane.projection,
+            );
+        }
     }
 }
 

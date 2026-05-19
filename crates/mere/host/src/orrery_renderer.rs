@@ -4,18 +4,20 @@
 //! `OrreryRenderer` — InScenePaint renderer for `NodeContentKind::GraphView`
 //! panes (the orrery, t1 root view, and any future graph-shaped surface).
 //!
-//! v0 ships **Path A** (per the cartography-projection options): the
-//! renderer holds an `Arc<RwLock<HashMap<NodeIdentity, Projection>>>`
-//! snapshot map that the host updates per frametree-sync. When a
-//! `GraphView` substrate node is dispatched, the renderer looks up
-//! its identity, paints the projection's nodes + edges. Falls back
-//! to a static demo triangle when no snapshot is present (useful for
-//! the bare windowed_app demo before the host has wired cartography).
+//! This is the **Path A** half of the cartography-projection options:
+//! the renderer holds an `Arc<RwLock<HashMap<NodeIdentity, Projection>>>`
+//! snapshot map the host updates per frametree-sync. When a
+//! `GraphView` substrate node is dispatched, the renderer looks up its
+//! identity and paints the projection's nodes + edges inside the pane.
+//! When no snapshot covers the pane it paints background only — that's
+//! the steady state for **Path B** (exploded) panes, whose per-node
+//! `GraphNode` substrate entities (see [`crate::graph_node_renderer`])
+//! paint on top of this background instead.
 //!
-//! Path B (one substrate node per graph node — first-class spatial
-//! entities) is a separate slice for streaming strategies (force-
-//! directed and friends, where per-node hit-test + drag are the
-//! real interactions).
+//! Painted (Path A) suits analytic, settle-once layouts; exploded
+//! (Path B) suits streaming layouts and any view where per-node
+//! hit-test / drag is the point. [`crate::view_preset::ProjectionPath`]
+//! decides per pane.
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -138,10 +140,12 @@ impl InScenePaintRenderer for OrreryRenderer {
             .snapshots
             .read()
             .expect("orrery snapshots lock poisoned");
+        // Path A: a painted snapshot covers this pane — draw the whole
+        // projection inside it. Path B (exploded) panes have no
+        // snapshot; the per-node `GraphNode` substrate entities paint
+        // on top of this background instead, so we draw bg only.
         if let Some(projection) = snapshots.get(&node.identity) {
             paint_projection(projection, node, ctx);
-        } else {
-            paint_demo_triangle(w, h, ctx);
         }
         Ok(())
     }
@@ -185,42 +189,6 @@ fn paint_projection(projection: &Projection, _node: &SceneNodeRef, ctx: &mut Pai
         };
         let center = kurbo::Point::new(positioned.position.x as f64, positioned.position.y as f64);
         let circle = Circle::new(center, radius);
-        ctx.scene.fill(
-            Fill::NonZero,
-            ctx.node_transform,
-            &node_brush,
-            None,
-            &circle,
-        );
-    }
-}
-
-/// Static demo content — three nodes arranged in a triangle inside
-/// the pane, connected by edges. Painted when no host-installed
-/// snapshot covers the orrery's substrate identity. Same shape as
-/// the pre-cartography v0 visual; conveys "graph view" at a glance.
-fn paint_demo_triangle(w: f64, h: f64, ctx: &mut PaintCtx<'_>) {
-    let margin = (w.min(h) * 0.18).clamp(8.0, 80.0);
-    let radius = (w.min(h) * 0.04).clamp(4.0, 24.0);
-    let nodes = [
-        kurbo::Point::new(w * 0.5, margin),
-        kurbo::Point::new(margin, h - margin),
-        kurbo::Point::new(w - margin, h - margin),
-    ];
-    let stroke = Stroke::new(2.0);
-    let edge_brush = Brush::Solid(ORRERY_EDGE_STROKE);
-    for (i, a) in nodes.iter().enumerate() {
-        for b in &nodes[i + 1..] {
-            let mut path = BezPath::new();
-            path.move_to(*a);
-            path.line_to(*b);
-            ctx.scene
-                .stroke(&stroke, ctx.node_transform, &edge_brush, None, &path);
-        }
-    }
-    let node_brush = Brush::Solid(ORRERY_NODE_FILL);
-    for p in &nodes {
-        let circle = Circle::new(*p, radius);
         ctx.scene.fill(
             Fill::NonZero,
             ctx.node_transform,

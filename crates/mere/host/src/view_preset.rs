@@ -25,6 +25,22 @@
 use cartography::{FormFactor, ProjectionDimension, TargetSize, ViewIntent};
 use frame::PaneContent;
 
+/// How a pane's projection reaches the screen.
+///
+/// - `Painted` (Path A): one `GraphView` substrate node per pane; the
+///   orrery renderer paints the entire projection inside it. Cheap;
+///   no per-node hit-test. Right for analytic, settle-once layouts.
+/// - `Exploded` (Path B): one `GraphNode` substrate node per graph
+///   node, positioned in window space. Each node is a first-class
+///   spatial entity the substrate hit-tests and (later) drags. Right
+///   for streaming layouts and any view where per-node interaction is
+///   the point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ProjectionPath {
+    Painted,
+    Exploded,
+}
+
 /// Named view-intent preset. Each variant is a *role* a pane plays;
 /// the preset picks the [`cartography::FormFactor`] and target-size
 /// shape that role implies.
@@ -78,6 +94,19 @@ impl ViewPreset {
         match self {
             ViewPreset::Orrery => "phyllotaxis.default",
             ViewPreset::Drift | ViewPreset::Minimap => "grid.default",
+        }
+    }
+
+    /// Which projection path this preset uses. Orrery explodes into
+    /// per-node substrate entities (Path B) so the t1 root view's
+    /// nodes are individually selectable / draggable; Drift and
+    /// Minimap stay painted (Path A) — a minimap thumbnail never wants
+    /// N hit-test targets, and Drift's per-node interaction lands when
+    /// a streaming strategy backs it.
+    pub fn projection_path(self) -> ProjectionPath {
+        match self {
+            ViewPreset::Orrery => ProjectionPath::Exploded,
+            ViewPreset::Drift | ViewPreset::Minimap => ProjectionPath::Painted,
         }
     }
 }
@@ -160,6 +189,16 @@ mod tests {
             let id = preset.default_strategy_id();
             assert!(!id.is_empty(), "preset {preset:?} returned empty id");
         }
+    }
+
+    #[test]
+    fn orrery_explodes_others_paint() {
+        assert_eq!(ViewPreset::Orrery.projection_path(), ProjectionPath::Exploded);
+        assert_eq!(ViewPreset::Drift.projection_path(), ProjectionPath::Painted);
+        assert_eq!(
+            ViewPreset::Minimap.projection_path(),
+            ProjectionPath::Painted
+        );
     }
 
     #[test]

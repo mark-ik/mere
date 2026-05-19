@@ -21,6 +21,8 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
 
 use crate::cartography_projection::{pane_identity_closure, project_orreries};
+use crate::graph_node_explode::{GraphNodeIdentities, explode_projection_into_scene};
+use crate::graph_node_renderer::GraphNodeRenderer;
 use crate::graph_registry::GraphRegistry;
 use crate::orrery_renderer::OrreryRenderer;
 use crate::runtime::RuntimeState;
@@ -136,11 +138,14 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
     }
 
     // Project the frametree into the substrate scene, then run the
-    // cartography projection for each orrery pane.
+    // cartography projection for each orrery pane. Painted panes write
+    // a snapshot; exploded panes are returned for insertion as per-node
+    // substrate entities below.
     let viewport = viewport_size(size.width, size.height);
     host_app.sync_scene_from_frame_layout(&frame_layout, viewport);
     let strategies = StrategyRegistry::with_defaults();
-    let report = project_orreries(
+    let mut graph_node_identities = GraphNodeIdentities::new();
+    let outcome = project_orreries(
         &frame_layout,
         viewport,
         pane_identity_closure(&host_app),
@@ -148,9 +153,22 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         &strategies,
         &orrery_snapshots,
     );
+    let mut exploded_nodes = 0;
+    for pane in &outcome.exploded {
+        let report = explode_projection_into_scene(
+            &mut host_app.scene,
+            &mut graph_node_identities,
+            pane.pane_id,
+            pane.pane_origin,
+            &pane.projection,
+        );
+        exploded_nodes += report.nodes;
+    }
     eprintln!(
-        "[cartography] projected {} orrery pane(s), {} registered strategies",
-        report.projected,
+        "[cartography] {} painted, {} exploded pane(s) → {} graph nodes, {} strategies",
+        outcome.report.painted,
+        outcome.report.exploded,
+        exploded_nodes,
         strategies.len(),
     );
 
@@ -200,6 +218,7 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         frame_layout,
         graph_registry,
         strategies,
+        graph_node_identities,
         orrery_snapshots,
         dragging_splitter: None,
         target_texture: None,
@@ -277,6 +296,12 @@ fn register_renderers(
         .registry_mut()
         .register(Box::new(orrery))
         .expect("register orrery renderer");
+
+    host_app
+        .substrate
+        .registry_mut()
+        .register(Box::new(GraphNodeRenderer::default()))
+        .expect("register graph-node renderer");
 
     host_app
         .substrate
