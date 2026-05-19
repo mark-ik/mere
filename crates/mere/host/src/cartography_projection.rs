@@ -10,13 +10,14 @@
 //! cartography integration lives in this crate as the place where
 //! "the modular pieces become a running host."
 
-use cartography::{IntelligenceSignals, LayoutStrategy, ProjectionRequest};
+use cartography::{IntelligenceSignals, ProjectionRequest};
 use frame::{FrameLayout, PaneContent, PaneId};
 use host_substrate::{HostApp, walk_leaves};
 use register_renderer::NodeIdentity;
 
 use crate::graph_registry::GraphRegistry;
 use crate::orrery_renderer::OrrerySnapshots;
+use crate::strategy_registry::StrategyRegistry;
 use crate::view_preset::default_preset_for;
 
 /// Per-call report from [`project_orreries`] — counts of what got
@@ -31,18 +32,22 @@ pub struct ProjectionReport {
     /// wasn't synced to the substrate scene, or the pane isn't
     /// currently mapped).
     pub missing_identity: usize,
+    /// Orrery leaves whose preset routes to a strategy id the registry
+    /// doesn't know about. Skipped without writing a snapshot.
+    pub missing_strategy: usize,
     /// Non-orrery leaves walked through without action.
     pub skipped_non_orrery: usize,
 }
 
-/// Project every `PaneContent::Orrery` leaf in `layout` through
-/// `strategy`, writing each pane's projection into `orrery_snapshots`
-/// keyed by its substrate `NodeIdentity`.
+/// Project every `PaneContent::Orrery` leaf in `layout` through the
+/// strategy its preset resolves to in `strategies`, writing each
+/// pane's projection into `orrery_snapshots` keyed by its substrate
+/// `NodeIdentity`.
 ///
 /// Per-pane viewport sizing comes from `walk_leaves`'s split-computed
-/// bounds; the cartography `ViewIntent.target_size` is set to
-/// `Pixels { pane_width, pane_height }` so positions land in pane-
-/// local coordinates the orrery renderer paints directly.
+/// bounds; the cartography `ViewIntent` shape is picked by the leaf's
+/// [`ViewPreset`](crate::view_preset::ViewPreset) (form factor +
+/// target-size policy).
 ///
 /// `pane_identity_for` resolves a `PaneId` to its substrate identity —
 /// typically `|id| host_app.identity_for_pane(id)`. Decoupled as a
@@ -55,7 +60,7 @@ pub fn project_orreries<F>(
     viewport_size: kurbo::Size,
     pane_identity_for: F,
     graph_registry: &GraphRegistry,
-    strategy: &dyn LayoutStrategy,
+    strategies: &StrategyRegistry,
     orrery_snapshots: &OrrerySnapshots,
 ) -> ProjectionReport
 where
@@ -81,6 +86,10 @@ where
             continue;
         };
         let preset = default_preset_for(&leaf.content);
+        let Some(strategy) = strategies.resolve(preset.default_strategy_id()) else {
+            report.missing_strategy += 1;
+            continue;
+        };
         let intent = preset.intent_for(leaf.size);
         let request = ProjectionRequest {
             graph,
@@ -126,24 +135,34 @@ mod tests {
     use super::*;
     use crate::graph_registry::GraphRegistry;
     use crate::orrery_renderer::OrreryRenderer;
+    use crate::view_preset::ViewPreset;
 
-    /// Stub strategy that returns an empty projection with a known
-    /// strategy id so tests can assert which strategy ran without
-    /// asserting on positions.
-    struct StubStrategy;
+    /// Stub strategy that returns an empty projection under the given
+    /// `projection_id`. Lets each test register a stub at whatever id
+    /// the preset under test routes to.
+    struct StubStrategy(&'static str);
     impl LayoutStrategy for StubStrategy {
         fn projection_id(&self) -> &'static str {
-            "stub.test"
+            self.0
         }
         fn project(&self, _request: &ProjectionRequest<'_>) -> Projection {
             Projection {
                 metadata: ProjectionMetadata {
-                    strategy_id: Some("stub.test".to_string()),
+                    strategy_id: Some(self.0.to_string()),
                     settled: true,
                 },
                 ..Projection::empty()
             }
         }
+    }
+
+    /// Build a [`StrategyRegistry`] containing a stub under the id the
+    /// Orrery preset routes to. Default test fixture for the bulk of
+    /// the projection-pass tests below.
+    fn stub_registry_for_orrery() -> StrategyRegistry {
+        let mut registry = StrategyRegistry::empty();
+        registry.register(Box::new(StubStrategy(ViewPreset::Orrery.default_strategy_id())));
+        registry
     }
 
     fn workbench_plus_orrery_layout() -> (FrameLayout, GraphId, PaneId) {
@@ -174,13 +193,14 @@ mod tests {
     fn skips_non_orrery_panes() {
         let (layout, _, _) = workbench_plus_orrery_layout();
         let graphs = GraphRegistry::new();
+        let strategies = stub_registry_for_orrery();
         let snapshots = OrreryRenderer::default().snapshots();
         let report = project_orreries(
             &layout,
             Size::new(800.0, 600.0),
             |_| None,
             &graphs,
-            &StubStrategy,
+            &strategies,
             &snapshots,
         );
         assert_eq!(report.skipped_non_orrery, 1);
@@ -191,6 +211,7 @@ mod tests {
     fn reports_missing_graph_when_registry_lacks_id() {
         let (layout, _graph_id, orrery_pane) = workbench_plus_orrery_layout();
         let graphs = GraphRegistry::new();
+        let strategies = stub_registry_for_orrery();
         let identity = NodeIdentity::next();
         let mut pane_to_identity = HashMap::new();
         pane_to_identity.insert(orrery_pane, identity);
@@ -200,7 +221,7 @@ mod tests {
             Size::new(800.0, 600.0),
             |p| pane_to_identity.get(&p).copied(),
             &graphs,
-            &StubStrategy,
+            &strategies,
             &snapshots,
         );
         assert_eq!(report.missing_graph, 1);
@@ -208,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn projects_orrery_when_graph_and_identity_resolve() {
+    fn reports_missing_strategy_when_registry_lacks_preset_id() {
         let (layout, graph_id, orrery_pane) = workbench_plus_orrery_layout();
         let mut graphs = GraphRegistry::new();
         graphs.insert(graph_id, Graph::new());
@@ -222,7 +243,31 @@ mod tests {
             Size::new(800.0, 600.0),
             |p| pane_to_identity.get(&p).copied(),
             &graphs,
-            &StubStrategy,
+            &StrategyRegistry::empty(),
+            &snapshots,
+        );
+
+        assert_eq!(report.missing_strategy, 1);
+        assert_eq!(report.projected, 0);
+    }
+
+    #[test]
+    fn projects_orrery_when_graph_identity_and_strategy_resolve() {
+        let (layout, graph_id, orrery_pane) = workbench_plus_orrery_layout();
+        let mut graphs = GraphRegistry::new();
+        graphs.insert(graph_id, Graph::new());
+        let strategies = stub_registry_for_orrery();
+        let identity = NodeIdentity::next();
+        let mut pane_to_identity = HashMap::new();
+        pane_to_identity.insert(orrery_pane, identity);
+        let snapshots = OrreryRenderer::default().snapshots();
+
+        let report = project_orreries(
+            &layout,
+            Size::new(800.0, 600.0),
+            |p| pane_to_identity.get(&p).copied(),
+            &graphs,
+            &strategies,
             &snapshots,
         );
 
@@ -231,7 +276,7 @@ mod tests {
         assert!(map.contains_key(&identity));
         assert_eq!(
             map.get(&identity).unwrap().metadata.strategy_id.as_deref(),
-            Some("stub.test")
+            Some(ViewPreset::Orrery.default_strategy_id())
         );
     }
 

@@ -34,6 +34,10 @@
 //!   Minimap); maps a pane's role to a [`cartography::ViewIntent`]
 //!   shape so the projection pass picks the right form factor per
 //!   pane.
+//! - [`strategy_registry`] — `projection_id` → boxed
+//!   [`cartography::LayoutStrategy`]; each preset resolves to a
+//!   registered strategy here. Third-party / WASM strategies
+//!   eventually plug in through this surface.
 
 mod cartography_projection;
 mod graph_registry;
@@ -43,6 +47,7 @@ mod runtime;
 mod seed;
 mod setup;
 mod splitter_renderer;
+mod strategy_registry;
 mod view_preset;
 
 use winit::event_loop::{ControlFlow, EventLoop};

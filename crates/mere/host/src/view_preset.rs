@@ -64,13 +64,20 @@ impl ViewPreset {
         }
     }
 
-    /// Default cartography strategy id for this preset. v0a returns
-    /// the same grid adapter for every preset (Path A — bulk Projection
-    /// snapshot, no per-node substrate nodes). Per-preset strategy
-    /// selection grows here when the streaming-strategy slice lands.
+    /// Default cartography strategy id for this preset. Returns the
+    /// [`cartography::LayoutStrategy::projection_id`] string the host's
+    /// [`StrategyRegistry`](crate::strategy_registry::StrategyRegistry)
+    /// resolves to a boxed strategy.
+    ///
+    /// v0a routes through analytic adapters only (no streaming):
+    /// Orrery → phyllotaxis (sunflower packing reads as a map of the
+    /// user's flora); Drift and Minimap → grid (cheap, deterministic;
+    /// streaming strategies replace these when Path B / per-node
+    /// substrate nodes land).
     pub fn default_strategy_id(self) -> &'static str {
         match self {
-            ViewPreset::Orrery | ViewPreset::Drift | ViewPreset::Minimap => "graph_layout:grid",
+            ViewPreset::Orrery => "phyllotaxis.default",
+            ViewPreset::Drift | ViewPreset::Minimap => "grid.default",
         }
     }
 }

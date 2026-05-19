@@ -9,8 +9,6 @@
 
 use std::sync::Arc;
 
-use cartography::LayoutStrategy;
-use graph_layout::adapters::GridAdapter;
 use masonry_core::core::DefaultProperties;
 use frame::GraphId;
 use session_runtime::ActionKind;
@@ -28,6 +26,7 @@ use crate::orrery_renderer::OrreryRenderer;
 use crate::runtime::RuntimeState;
 use crate::seed;
 use crate::splitter_renderer::SplitterRenderer;
+use crate::strategy_registry::StrategyRegistry;
 
 pub const INITIAL_WIDTH: u32 = 960;
 pub const INITIAL_HEIGHT: u32 = 720;
@@ -140,19 +139,19 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
     // cartography projection for each orrery pane.
     let viewport = viewport_size(size.width, size.height);
     host_app.sync_scene_from_frame_layout(&frame_layout, viewport);
-    let strategy: GridAdapter = GridAdapter::default();
+    let strategies = StrategyRegistry::with_defaults();
     let report = project_orreries(
         &frame_layout,
         viewport,
         pane_identity_closure(&host_app),
         &graph_registry,
-        &strategy as &dyn LayoutStrategy,
+        &strategies,
         &orrery_snapshots,
     );
     eprintln!(
-        "[cartography] projected {} orrery pane(s) via {}",
+        "[cartography] projected {} orrery pane(s), {} registered strategies",
         report.projected,
-        strategy.projection_id()
+        strategies.len(),
     );
 
     // Session bind / create / restore (camera) — mirrors the prior
@@ -200,6 +199,7 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         host_app,
         frame_layout,
         graph_registry,
+        strategies,
         orrery_snapshots,
         dragging_splitter: None,
         target_texture: None,

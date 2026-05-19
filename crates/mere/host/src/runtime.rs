@@ -8,8 +8,6 @@
 
 use std::sync::Arc;
 
-use cartography::LayoutStrategy;
-use graph_layout::adapters::GridAdapter;
 use frame::{FrameLayout, SplitAxis};
 use session_runtime::{ActionKind, BusAction, BusDispatchOutcome};
 use host_substrate::{HostApp, SplitterDrag, SubstrateInputEvent, compute_container_size};
@@ -23,6 +21,7 @@ use crate::graph_registry::GraphRegistry;
 use crate::orrery_renderer::OrrerySnapshots;
 use crate::render::render_frame;
 use crate::setup::{HOST_FRAME_ID, HOST_PANE_ID, build_runtime_state, viewport_size};
+use crate::strategy_registry::StrategyRegistry;
 
 /// The winit application handle — wraps an `Option<RuntimeState>`
 /// (None until `resumed` mints the window).
@@ -47,6 +46,11 @@ pub struct RuntimeState {
     /// App-scope graph registry; each pane in `frame_layout` carries
     /// a `graph_id` resolved through this map at projection time.
     pub graph_registry: GraphRegistry,
+    /// App-scope strategy registry — cartography `LayoutStrategy`s
+    /// keyed by `projection_id`. Each [`ViewPreset`] resolves to a
+    /// registered strategy here; `with_defaults` ships the analytic
+    /// adapters every v0a preset routes to.
+    pub strategies: StrategyRegistry,
     /// Host-shared orrery projection map cloned from the registered
     /// `OrreryRenderer` at construction.
     pub orrery_snapshots: OrrerySnapshots,
@@ -66,13 +70,12 @@ impl RuntimeState {
     fn resync(&mut self, viewport: kurbo::Size) {
         self.host_app
             .sync_scene_from_frame_layout(&self.frame_layout, viewport);
-        let strategy = GridAdapter::default();
         let _report = project_orreries(
             &self.frame_layout,
             viewport,
             pane_identity_closure(&self.host_app),
             &self.graph_registry,
-            &strategy as &dyn LayoutStrategy,
+            &self.strategies,
             &self.orrery_snapshots,
         );
     }
