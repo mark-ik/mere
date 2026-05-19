@@ -13,7 +13,7 @@
 //! drag visual, etc.) is host-specific.
 //!
 //! This module ships only the payload. Execution lives in
-//! `mere-host::tearout`.
+//! `host::tearout`.
 
 use frame::PaneId;
 

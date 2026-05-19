@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! App-scope graph registry — kurbo/host-neutral port of the legacy
-//! gpui-side `mere_host::graph_registry`.
+//! gpui-side `host::graph_registry`.
 //!
 //! Every live `kernel::graph::Graph` in the application sits in
 //! this map, keyed by `frame::GraphId`. Panes in a `FrameLayout`

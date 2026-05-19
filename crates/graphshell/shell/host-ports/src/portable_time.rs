@@ -5,7 +5,7 @@
 //! Process-monotonic clock adapter producing
 //! [`kernel::time::PortableInstant`] values.
 //!
-//! 2026-04-25 mere-host-contract extraction: relocated from
+//! 2026-04-25 host-contract extraction: relocated from
 //! `shell/desktop/ui/portable_time.rs`. Both host adapters (egui,
 //! iced) on desktop want the same monotonic-clock anchoring, so the
 //! shim moved into the runtime crate where it can be shared without

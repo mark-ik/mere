@@ -44,7 +44,7 @@ on 2026-05-10 because:
 2. They're broadly useful, not graphshell-specific — every host emits
    the same taxonomy.
 3. They bridge to `register-diagnostics` (registry events) and feed
-   `mere-host-apparatus` (host-side inspector). Sitting under a single
+   `host-apparatus` (host-side inspector). Sitting under a single
    shell-state crate understated the scope.
 
 `graphshell-shell-state` re-exports each module for backward compat;

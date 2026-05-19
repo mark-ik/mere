@@ -7,7 +7,7 @@
 //! Data-only types (`InputEvent`, `NodeContentKind`, `RendererId`,
 //! `RendererCapabilities`, etc.) live in
 //! [`mere-renderer-registry-types`](https://docs.rs/mere-renderer-registry-types)
-//! so wasm32-clean consumers (notably `mere-host-runtime`) can consume them
+//! so wasm32-clean consumers (notably `host-runtime`) can consume them
 //! without pulling vello/wgpu transitively. This crate re-exports the types
 //! crate's full surface, so consumers of the full registry can
 //! `use register_renderer::*` and get everything.

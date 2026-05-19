@@ -1,11 +1,11 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! `mere-host` — the Mere browser host (xilem stack: winit + wgpu +
+//! `host` — the Mere browser host (xilem stack: winit + wgpu +
 //! vello, with masonry panel rendering through the substrate's
 //! renderer registry).
 //!
-//! Replaces the prior gpui mere-host (deleted 2026-05-18 on the
+//! Replaces the prior gpui host (deleted 2026-05-18 on the
 //! "xilem is the host" pivot). Modular by design: each module here
 //! is a sibling concern composed at the top level, not absorbed
 //! into a god-struct.

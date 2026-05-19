@@ -14,7 +14,7 @@ use graph_layout::adapters::GridAdapter;
 use masonry_core::core::DefaultProperties;
 use frame::GraphId;
 use session_runtime::ActionKind;
-use mere_host_substrate::MereHostApp;
+use host_substrate::MereHostApp;
 use mere_masonry::MasonryEmbeddedRenderer;
 use register_renderer::NodeContentKind;
 use petgraph::graph::NodeIndex;
@@ -183,7 +183,7 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
     let _ = session_id;
 
     eprintln!(
-        "mere-host up — {}×{} pixels, {} substrate nodes, surface format {:?}",
+        "host up — {}×{} pixels, {} substrate nodes, surface format {:?}",
         size.width,
         size.height,
         host_app.scene.len(),
@@ -213,7 +213,7 @@ fn install_callbacks(host_app: &mut MereHostApp) {
         eprintln!("[diag] {event:?}");
     });
     host_app.set_input_callback(|event| {
-        use mere_host_substrate::SubstrateInputEvent::*;
+        use host_substrate::SubstrateInputEvent::*;
         match event {
             PaneClicked {
                 pane_id, host_pos, ..
@@ -256,7 +256,7 @@ fn register_renderers(
     queue: &wgpu::Queue,
 ) -> crate::orrery_renderer::OrrerySnapshots {
     let masonry = MasonryEmbeddedRenderer::new(
-        "mere-host.masonry.panel",
+        "host.masonry.panel",
         NodeContentKind::Panel,
         adapter.clone(),
         device.clone(),

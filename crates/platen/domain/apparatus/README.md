@@ -31,7 +31,7 @@ Real content lands as each lane is wired:
 - **register-diagnostics channels** — bridged in via
   `register_diagnostics::install_global_sender`
 - **uxtree** — a snapshot of the running application uxtree
-  (the inspector overlay you already have in `mere-host`)
+  (the inspector overlay you already have in `host`)
 - **accesskit** — node walk of the current accesskit tree
 
 ## Status

@@ -5,7 +5,7 @@
 //! [`FrameLayout`] tree to compute per-leaf bounds, splitter-drag
 //! state, and projection of the tree into a substrate scene.
 //!
-//! Lifted from the legacy gpui host (`mere-host::panes`) and
+//! Lifted from the legacy gpui host (`host::panes`) and
 //! retyped against `kurbo` so the new xilem-side host can consume
 //! the same geometry. The structural shape — nested split tree
 //! with horizontal/vertical axes, ratio clamping, leaf identity
@@ -27,7 +27,7 @@ use crate::MereHostApp;
 /// snapshots let pixel deltas map to ratio deltas at any nesting
 /// depth, using [`compute_container_size`] for scaling.
 ///
-/// kurbo-typed sibling of the legacy `mere_host::panes::SplitterDrag`.
+/// kurbo-typed sibling of the legacy `host::panes::SplitterDrag`.
 /// Lives alongside the layout walkers because the drag handler needs
 /// the same `(path, axis, start_ratio)` snapshot to compute the new
 /// ratio from a cursor delta.

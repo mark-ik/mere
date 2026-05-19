@@ -6,7 +6,7 @@ First-cut sketch of a Mere-substrate driver for the Masonry widget engine.
 > [`design_docs/mere_docs/research/2026-05-15_xilem_embedding_spike.md`](../../design_docs/mere_docs/research/2026-05-15_xilem_embedding_spike.md)
 > as the next concrete artefact in §7.2. **Does not compile yet** — depends on
 > the (not-yet-built) renderer-registry crate and on substrate-side types
-> `mere-host-runtime` hasn't exposed. The shape is concrete; the wiring is
+> `host-runtime` hasn't exposed. The shape is concrete; the wiring is
 > `TODO`. Read this against the spike report for the architectural rationale.
 
 ## What this crate is
@@ -61,7 +61,7 @@ substrate vello scene at tile.placement.transform
     │
     │  via netrender → vello → wgpu surface
     ▼
-mere-host (current: gpui via PlatformSurface; future: substrate-as-host)
+host (current: gpui via PlatformSurface; future: substrate-as-host)
 ```
 
 The boundary between this crate and the substrate is one trait
@@ -94,7 +94,7 @@ impl on `MasonryTile`.
 
 **Not wired (separate concern)**:
 
-- The substrate-side OS-event source + translator (which produces `mere_renderer_registry::InputEvent` from raw OS events) lives in `mere-host-runtime` and isn't built yet. `mere-masonry` is the consumer side; the producer is independent work.
+- The substrate-side OS-event source + translator (which produces `mere_renderer_registry::InputEvent` from raw OS events) lives in `host-runtime` and isn't built yet. `mere-masonry` is the consumer side; the producer is independent work.
 - The `xilem_masonry` adapter integration showing how callers compose a reactive `View<T, A>` on top. Sketched in a doctest comment in `lib.rs`, not actual code — that's the host's wiring concern, not this crate's.
 
 ## Reading order

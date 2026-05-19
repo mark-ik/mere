@@ -20,7 +20,7 @@ pub mod rendering_context_producer;
 pub mod system;
 pub mod webview_backpressure;
 
-// 2026-04-25 mere-host-contract extraction Slice 3: portable_now()
+// 2026-04-25 host-contract extraction Slice 3: portable_now()
 // re-exported at the crate root for ergonomic imports.
 pub use portable_time::portable_now;
 

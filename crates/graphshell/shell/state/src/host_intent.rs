@@ -9,7 +9,7 @@
 //! Re-exports for backward compat. New code should import from
 //! `chrome::host_intent`.
 //!
-//! Future move: this type ultimately belongs in `mere-host-contract`
+//! Future move: this type ultimately belongs in `host-contract`
 //! (the host-runtime boundary contract). Living in `mere-graphshell`
 //! is a transitional home until the host-contract crate absorbs it.
 

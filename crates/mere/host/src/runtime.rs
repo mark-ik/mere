@@ -12,7 +12,7 @@ use cartography::LayoutStrategy;
 use graph_layout::adapters::GridAdapter;
 use frame::{FrameLayout, SplitAxis};
 use session_runtime::{ActionKind, BusAction, BusDispatchOutcome};
-use mere_host_substrate::{MereHostApp, SplitterDrag, SubstrateInputEvent, compute_container_size};
+use host_substrate::{MereHostApp, SplitterDrag, SubstrateInputEvent, compute_container_size};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::ActiveEventLoop;

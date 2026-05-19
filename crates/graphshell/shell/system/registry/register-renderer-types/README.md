@@ -2,7 +2,7 @@
 
 The wasm-friendly data-types half of the renderer registry contract. Split
 from [`mere-renderer-registry`](../mere-renderer-registry/) so
-wasm32-clean consumers (notably [`mere-host-runtime`](../mere-host-runtime/))
+wasm32-clean consumers (notably [`host-runtime`](../host-runtime/))
 can consume the input event vocabulary, scene contract, and renderer-identity
 types without pulling vello / wgpu transitively.
 
@@ -11,7 +11,7 @@ types without pulling vello / wgpu transitively.
 - **`InputEvent`** + supporting (`PointerEventKind` / `PointerButton` /
   `ModifiersState` / `KeyEventKind` / `KeyCode` / `NamedKey` / `ImeEvent`) —
   the renderer-facing input vocabulary the substrate produces and renderers
-  consume. Substrate-side OS-event-source lives in `mere-host-runtime` and
+  consume. Substrate-side OS-event-source lives in `host-runtime` and
   produces these.
 - **`SceneNodeRef`** + `NodeContentKind` / `NodeContentKindSet` /
   `NodeIdentity` / `Placement` / `LodLevel` — the scene contract renderers

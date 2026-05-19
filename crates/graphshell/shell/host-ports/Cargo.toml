@@ -12,7 +12,7 @@ description = "Portable runtime boundary traits for Mere hosts. Renamed from gra
 kernel.workspace = true
 shell-state.workspace = true
 verso-core.workspace = true
-# 2026-04-25 servo-into-verso S3a: mere-host-contract now owns the
+# 2026-04-25 servo-into-verso S3a: host-contract now owns the
 # host-port trait surface (HostInputPort, HostPaintPort,
 # HostSurfacePort, HostTexturePort, HostAccessibilityPort), so it
 # needs `graph-canvas::packet` types (Stroke, Color) and `accesskit`
@@ -21,7 +21,7 @@ verso-core.workspace = true
 # transitive surface for downstream crates.
 graph-canvas.workspace = true
 accesskit = { workspace = true, features = ["serde"] }
-# 2026-04-25 mere-host-contract extraction Slice 2 (graph_runtime
+# 2026-04-25 host-contract extraction Slice 2 (graph_runtime
 # layout cache projection): `OwnedTreeRow`, `TabEntry`, and
 # `SplitBoundary` come from `forme` (formerly `graph-tree`).
 forme.workspace = true

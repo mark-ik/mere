@@ -4244,6 +4244,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "host"
+version = "0.0.1"
+dependencies = [
+ "cartography",
+ "frame",
+ "graph-layout",
+ "host-substrate",
+ "inker",
+ "kernel",
+ "kurbo",
+ "masonry_core",
+ "masonry_testing",
+ "mere-masonry",
+ "petgraph",
+ "pollster",
+ "register-renderer",
+ "session-runtime",
+ "spatial-substrate",
+ "vello",
+ "wgpu",
+ "winit",
+]
+
+[[package]]
 name = "host-ports"
 version = "0.0.1"
 dependencies = [
@@ -4256,6 +4280,22 @@ dependencies = [
  "shell-state",
  "tokio",
  "verso-core",
+]
+
+[[package]]
+name = "host-substrate"
+version = "0.0.1"
+dependencies = [
+ "frame",
+ "inker",
+ "kernel",
+ "kurbo",
+ "petgraph",
+ "register-renderer",
+ "serde_json",
+ "session-runtime",
+ "spatial-substrate",
+ "uuid",
 ]
 
 [[package]]
@@ -5682,46 +5722,6 @@ checksum = "714098028fe011992e1c3962653c96b2d578c4b4bce9036e15ff220319b1e0e3"
 dependencies = [
  "libc",
  "stable_deref_trait",
-]
-
-[[package]]
-name = "mere-host"
-version = "0.0.1"
-dependencies = [
- "cartography",
- "frame",
- "graph-layout",
- "inker",
- "kernel",
- "kurbo",
- "masonry_core",
- "masonry_testing",
- "mere-host-substrate",
- "mere-masonry",
- "petgraph",
- "pollster",
- "register-renderer",
- "session-runtime",
- "spatial-substrate",
- "vello",
- "wgpu",
- "winit",
-]
-
-[[package]]
-name = "mere-host-substrate"
-version = "0.0.1"
-dependencies = [
- "frame",
- "inker",
- "kernel",
- "kurbo",
- "petgraph",
- "register-renderer",
- "serde_json",
- "session-runtime",
- "spatial-substrate",
- "uuid",
 ]
 
 [[package]]

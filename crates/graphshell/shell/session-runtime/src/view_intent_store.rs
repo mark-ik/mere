@@ -23,7 +23,7 @@
 //! v0a (this module) is the I/O primitive: type definitions plus
 //! `save_view_intent` / `load_view_intent` / `view_intent_exists`.
 //! v0b host wiring (load on pane bootstrap, save on `HideRelation`
-//! toggle) lands in `mere-host` as a follow-up; see the plan's §4 for
+//! toggle) lands in `host` as a follow-up; see the plan's §4 for
 //! the open questions around session-id resolution at pane scope.
 
 use std::collections::BTreeSet;

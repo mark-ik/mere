@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Quadrant inference for drop targets — port of the gpui-host
-//! `mere_host::drop_zone` against `kurbo` types so the spatial-chrome
+//! `host::drop_zone` against `kurbo` types so the spatial-chrome
 //! / xilem-side path can reuse the geometry without dragging in
 //! gpui. Lifted shape; no behavior change.
 //!

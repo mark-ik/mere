@@ -23,7 +23,7 @@ pub fn ensure_target_texture(state: &mut RuntimeState) {
     let width = state.surface_config.width;
     let height = state.surface_config.height;
     let texture = state.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("mere-host intermediate"),
+        label: Some("host intermediate"),
         size: wgpu::Extent3d {
             width,
             height,
@@ -100,7 +100,7 @@ pub fn render_frame(state: &mut RuntimeState) {
     let mut encoder = state
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("mere-host blit"),
+            label: Some("host blit"),
         });
     encoder.copy_texture_to_texture(
         wgpu::TexelCopyTextureInfo {

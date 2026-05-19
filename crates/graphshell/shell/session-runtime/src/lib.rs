@@ -26,20 +26,20 @@
 //!
 //! Adjacent crates:
 //!
-//! - [`mere-host-contract`](../host_ports/index.html) —
+//! - [`host-contract`](../host_ports/index.html) —
 //!   the **vocabulary** half: port traits hosts satisfy
 //!   (HostPaintPort, HostInputPort, HostSurfacePort, HostAccessibility
 //!   Port, …) + frame-projection inputs.
 //! - `graphshell-control-plane` owns the action-bus vocabulary.
 //! - `tile-state` owns workbench tile state and surface-producer state.
-//! - `mere-host` and future host adapters consume these portable surfaces
+//! - `host` and future host adapters consume these portable surfaces
 //!   without owning their schemas.
 //!
 //! See:
 //! - `design_docs/mere_docs/research/2026-05-11_browser_multiplexer_framing.md`
 //! - `design_docs/mere_docs/implementation_strategy/2026-05-11_graph_session_manifest_plan.md`
 
-#![doc(html_root_url = "https://docs.rs/mere-host-runtime/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/host-runtime/0.0.1")]
 
 pub mod engine_profile_store;
 pub mod manifest;

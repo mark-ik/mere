@@ -5,9 +5,9 @@ adopter of [`mere-renderer-registry`](../mere-renderer-registry/).
 
 See [`design_docs/mere_docs/implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../../design_docs/mere_docs/implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md)
 § Phase 3 for the framing. This crate is the "if crate isolation is
-useful" branch of the suggested home — sibling to `mere-host` rather
-than nested inside `mere-host-runtime`, because the registry pulls vello
-+ wgpu and `mere-host-runtime` is wasm32-clean.
+useful" branch of the suggested home — sibling to `host` rather
+than nested inside `host-runtime`, because the registry pulls vello
++ wgpu and `host-runtime` is wasm32-clean.
 
 ## Scope (v0a, 2026-05-16)
 

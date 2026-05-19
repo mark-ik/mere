@@ -123,8 +123,8 @@ mooting = { path = "crates/moot/mooting" }
 
 identity = { path = "crates/persona/identity" }
 
-mere-host = { path = "crates/mere/host" }
-mere-host-substrate = { path = "crates/mere/host-substrate" }
+host = { path = "crates/mere/host" }
+host-substrate = { path = "crates/mere/host-substrate" }
 
 # ─── External pins ───────────────────────────────────────────────────────────
 # Linebender visual stack — one row, one wgpu, vello upstream-current.

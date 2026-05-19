@@ -22,7 +22,7 @@
 //! persistence — switch storage substrates without touching the
 //! `Graph` API.
 //!
-//! **Not wired into `mere-host` yet** — bootstrap continues to seed
+//! **Not wired into `host` yet** — bootstrap continues to seed
 //! in-memory graphs as before. The wiring slice connects this to
 //! `ManifestStore` lifecycle + bootstrap's startup path. This module
 //! ships the I/O primitives + tests so the wiring slice is small.

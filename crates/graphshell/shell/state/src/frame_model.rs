@@ -9,7 +9,7 @@
 //! `chrome::frame_model`.
 //!
 //! Per-type future destinations (TODO):
-//! - `FrameHostInput` belongs in `mere-host-contract` (host→runtime
+//! - `FrameHostInput` belongs in `host-contract` (host→runtime
 //!   input).
 //! - `SettingsViewModel` + `FocusRingSettingsView` +
 //!   `ThumbnailSettings*` belong in a future `mere-system` crate

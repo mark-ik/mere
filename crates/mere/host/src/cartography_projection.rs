@@ -6,13 +6,13 @@
 //! [`cartography::LayoutStrategy`] + the orrery renderer's snapshot
 //! map without making `MereHostApp` aware of any of it.
 //!
-//! `mere-host-substrate` stays narrow (substrate ↔ runtime bridge);
+//! `host-substrate` stays narrow (substrate ↔ runtime bridge);
 //! cartography integration lives in this crate as the place where
 //! "the modular pieces become a running host."
 
 use cartography::{IntelligenceSignals, LayoutStrategy, ProjectionRequest, ViewIntent};
 use frame::{FrameLayout, PaneContent, PaneId};
-use mere_host_substrate::{MereHostApp, walk_leaves};
+use host_substrate::{MereHostApp, walk_leaves};
 use register_renderer::NodeIdentity;
 
 use crate::graph_registry::GraphRegistry;

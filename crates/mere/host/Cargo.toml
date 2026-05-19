@@ -1,21 +1,21 @@
 [package]
-name = "mere-host"
+name = "host"
 version = "0.0.1"
 authors = ["@mark-ik"]
 license = "MPL-2.0"
 edition = "2024"
 publish = false
 rust-version = "1.92.0"
-description = "Mere xilem host — winit application binding the substrate scene, frametree projection, renderer chain (orrery / panel / splitter), and cartography projection into a runnable window. Replaces the prior gpui mere-host (2026-05-18 redirect)."
+description = "Mere xilem host — winit application binding the substrate scene, frametree projection, renderer chain (orrery / panel / splitter), and cartography projection into a runnable window. Replaces the prior gpui host (2026-05-18 redirect)."
 
 [[bin]]
-name = "mere-host"
+name = "host"
 path = "src/main.rs"
 
 [dependencies]
 # Substrate ↔ runtime bridge — owns MereHostApp, sync_scene_from_frame_layout,
 # pane/splitter/tile identity tracking, action bus, manifest store.
-mere-host-substrate.workspace = true
+host-substrate.workspace = true
 # Durable state vocabulary + ActionKind/BusAction. MereHostApp re-exports
 # what's needed for dispatch; we pull the runtime crate directly for
 # the action-bus enum types the click handlers construct.

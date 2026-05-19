@@ -14,7 +14,7 @@
 //! - `crate::graph::NodeKey` → `kernel::graph::NodeKey`
 //! - `crate::shell::desktop::runtime::diagnostics::*` → `register_diagnostics::*`
 //! - `super::CHANNEL_REGISTER_SIGNAL_ROUTING_LAGGED` → `register_diagnostics::channels::*`
-//! - `pub` → `pub` (items are now the public API of `mere-host-contract::system::signal_bus`)
+//! - `pub` → `pub` (items are now the public API of `host-contract::system::signal_bus`)
 //!
 //! Split across submodules to keep each file under the workspace's
 //! 600-LOC ceiling: this module owns the vocabulary (signal kinds,

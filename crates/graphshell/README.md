@@ -22,7 +22,7 @@ desktop, browser-extension, browser-tab/PWA, and mobile envelopes.
   inside the mere workspace; not separately published):
   - `graphshell::core` ← `mere-kernel` — portable vocabulary + port-trait
     definitions.
-  - `graphshell::runtime` ← `mere-host-contract` — runtime + host-port
+  - `graphshell::runtime` ← `host-contract` — runtime + host-port
     surface, frame projections, finalize-action plumbing.
   - `graphshell::lineage` ← `node-lineage` — owner-scoped navigation-lineage
     model (formerly `graph-memory`; eidetic owns the "memory" layer).

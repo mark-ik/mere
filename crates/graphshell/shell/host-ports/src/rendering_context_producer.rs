@@ -11,7 +11,7 @@
 //! That is a wgpu-first operation set; nothing here requires a GL context.
 //!
 //! `RenderingContextProducer` exposes that surface using only primitive types
-//! so it can ship from `mere-host-contract` without dragging Servo-only
+//! so it can ship from `host-contract` without dragging Servo-only
 //! dependencies (`embedder_traits::RefreshDriver`, `webrender_api::units`) or
 //! GL-ecosystem dependencies (`surfman`, `gleam`, `glow`) into the runtime
 //! crate.

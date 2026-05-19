@@ -1,7 +1,7 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! Test module for `mere-host-substrate`. Split out of `lib.rs` to
+//! Test module for `host-substrate`. Split out of `lib.rs` to
 //! keep the production half under the workspace's 600-LOC ceiling
 //! (per `feedback_mere_file_size_ceiling`).
 
@@ -165,7 +165,7 @@ fn save_then_load_round_trips_camera_through_disk() {
     // depending on `tempfile` and survives parallel test runs by
     // namespacing on a fresh UUID per test invocation.
     let test_root = std::env::temp_dir()
-        .join("mere-host-substrate-tests")
+        .join("host-substrate-tests")
         .join(uuid::Uuid::new_v4().to_string());
     let session_dir = test_root.join("session-1");
     let frame_id_str = "frame-a";
@@ -197,7 +197,7 @@ fn save_then_load_round_trips_camera_through_disk() {
 #[test]
 fn save_identity_camera_skips_file() {
     let test_root = std::env::temp_dir()
-        .join("mere-host-substrate-tests")
+        .join("host-substrate-tests")
         .join(uuid::Uuid::new_v4().to_string());
     let session_dir = test_root.join("session-2");
     let app = MereHostApp::new();
@@ -206,14 +206,14 @@ fn save_identity_camera_skips_file() {
         .expect("save ok");
     assert!(!saved, "identity camera should not write");
     // Cleanup (no file was created, but the dir might exist if
-    // mere-host-runtime created intermediates — defensive cleanup).
+    // host-runtime created intermediates — defensive cleanup).
     let _ = std::fs::remove_dir_all(&test_root);
 }
 
 #[test]
 fn load_missing_view_intent_is_a_clean_miss() {
     let test_root = std::env::temp_dir()
-        .join("mere-host-substrate-tests")
+        .join("host-substrate-tests")
         .join(uuid::Uuid::new_v4().to_string());
     let session_dir = test_root.join("nonexistent-session");
     let mut app = MereHostApp::new();
@@ -243,7 +243,7 @@ fn apply_then_snapshot_round_trips_through_view_intent() {
 /// the dir for inspection.
 fn temp_session_root() -> PathBuf {
     std::env::temp_dir()
-        .join("mere-host-substrate-tests")
+        .join("host-substrate-tests")
         .join(uuid::Uuid::new_v4().to_string())
 }
 

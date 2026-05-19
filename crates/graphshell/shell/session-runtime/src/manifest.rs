@@ -98,7 +98,7 @@ pub struct SessionPolicy {
 pub struct SessionPolicyOverride {}
 
 /// The durable session record. One file on disk per session
-/// (`<data_dir>/mere/mere-host/sessions/<session_id>/manifest.json`).
+/// (`<data_dir>/mere/host/sessions/<session_id>/manifest.json`).
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GraphSessionManifest {
     /// Schema version. Bumped on incompatible changes.

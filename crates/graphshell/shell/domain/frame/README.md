@@ -23,7 +23,7 @@ This crate owns:
   coexist while migration is in progress; eventually `platen::FrameState`
   is replaced by `mere_frame::FrameLayout` or `platen` consumes
   `FrameLayout` directly.
-- The host (`mere-host`) renders the layout: walks the tree, emits gpui
+- The host (`host`) renders the layout: walks the tree, emits gpui
   split panes, and stitches each leaf pane's mere-domain subtree
   (workbench / orrery / etc.) into the application uxtree.
 - Pane content is identified by [`PaneContent`] tags rather than typed

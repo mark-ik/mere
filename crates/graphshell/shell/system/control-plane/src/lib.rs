@@ -11,7 +11,7 @@
 //! gesture, and future external IPC routes through one
 //! dispatch path. This module owns the **data shape** + the
 //! **permission gate trait** — both portable. The host adapter
-//! (currently `mere-host`) owns the execute side, which translates
+//! (currently `host`) owns the execute side, which translates
 //! a `BusAction` into the host's native action or command surface.
 //!
 //! ## Architecture
@@ -41,7 +41,7 @@
 //! - `BusDispatchOutcome` (Allowed / Denied / TargetMissing)
 //! - `check_permission` — pure function
 //!
-//! Host-specific (mere-host or future siblings):
+//! Host-specific (host or future siblings):
 //! - `BusDispatcher` impl (the `execute` side)
 //! - Diagnostics emission (currently routes through the apparatus
 //!   event buffer; runtime stays unaware of that mechanism)

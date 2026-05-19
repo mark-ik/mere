@@ -23,10 +23,10 @@ chain (stub for v0), and §3.3 registry shape.
   brief §5's full chain (per-node pin → profile binding → host capability
   filter → default policy → last-resort) is the v1 selector and lands when
   per-node pins, profile binding, and host capabilities are real types in
-  `mere-host-runtime`.
+  `host-runtime`.
 - **Input vocabulary** — [`InputEvent`](src/input.rs) is the renderer-facing
   input contract: `Pointer` / `Key` / `Text` / `Ime` / `Focus`. Substrate-side
-  producer (OS event → `InputEvent`) lives in `mere-host-runtime::input`
+  producer (OS event → `InputEvent`) lives in `host-runtime::input`
   (placeholder there pending the actual OS event source).
 - **Scene contract** — [`SceneNodeRef`](src/scene.rs) (borrowed view of a
   substrate node passed to renderers each frame), `NodeContentKind` (dispatch

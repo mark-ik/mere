@@ -566,7 +566,7 @@ pub struct PersistedEdge {
 ///
 /// Carries both `rkyv` derives (for compact binary persistence —
 /// the original intent) and `serde` derives (added 2026-05-11 so
-/// `mere-host-runtime::session_graph_store` can persist sessions
+/// `host-runtime::session_graph_store` can persist sessions
 /// as hand-inspectable JSON). All sub-types (`PersistedNode`,
 /// `PersistedEdge`, `ImportRecord`) already carry both.
 #[derive(Archive, Serialize, Deserialize, Clone, Debug, serde::Serialize, serde::Deserialize)]

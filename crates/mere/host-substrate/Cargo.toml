@@ -1,5 +1,5 @@
 [package]
-name = "mere-host-substrate"
+name = "host-substrate"
 version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"
@@ -18,7 +18,7 @@ kernel.workspace = true
 frame.workspace = true
 # Substrate is renderer-agnostic and host-agnostic. Renderers
 # (OrreryRenderer, SplitterRenderer) and the orchestration around
-# them (cartography projection, GraphRegistry) live in `mere-host`
+# them (cartography projection, GraphRegistry) live in `host`
 # alongside the winit / wgpu / vello setup — substrate stays
 # narrowly focused on the substrate ↔ runtime bridge.
 

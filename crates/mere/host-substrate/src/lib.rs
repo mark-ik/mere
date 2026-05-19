@@ -1,7 +1,7 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! `mere-host-substrate` — first concrete substrate-as-host integration.
+//! `host-substrate` — first concrete substrate-as-host integration.
 //!
 //! Bridges:
 //!

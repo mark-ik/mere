@@ -5,7 +5,7 @@
 //! registry contract.
 //!
 //! Split from [`mere-renderer-registry`](https://docs.rs/mere-renderer-registry)
-//! so wasm32-clean consumers (notably `mere-host-runtime`) can consume the
+//! so wasm32-clean consumers (notably `host-runtime`) can consume the
 //! input vocabulary + scene contract + renderer-identity types without
 //! pulling vello / wgpu deps.
 //!
