@@ -8976,7 +8976,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "scrying-tile-engine"
+name = "scrying-engine"
 version = "0.0.1"
 dependencies = [
  "dpi",

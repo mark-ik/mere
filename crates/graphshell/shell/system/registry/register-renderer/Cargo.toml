@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"
 publish = false
-description = "Trait + dispatch contract for renderers (mere-masonry, scrying-tile-engine, future serval/wry adapters) co-resident in Mere's spatial chrome IR substrate. Vello/wgpu-bound half of the contract; data-only types live in mere-renderer-registry-types so wasm32-clean consumers (mere-host-runtime) can use them without pulling vello/wgpu."
+description = "Trait + dispatch contract for renderers (mere-masonry, scrying-engine, future serval/wry adapters) co-resident in Mere's spatial chrome IR substrate. Vello/wgpu-bound half of the contract; data-only types live in register-renderer-types so wasm32-clean consumers (session-runtime) can use them without pulling vello/wgpu."
 rust-version = "1.92.0"
 
 [dependencies]

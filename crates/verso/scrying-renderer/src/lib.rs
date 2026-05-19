@@ -231,7 +231,7 @@ mod tests {
     /// Minimal producer stub — returns OverlayOnly + Unsupported. Used
     /// to drive the lifecycle methods of `ScryingEmbeddedRenderer`
     /// without standing up real WebView2/WKWebView/WebKitGTK platform
-    /// state. Mirrors scrying-tile-engine's OverlayStub.
+    /// state. Mirrors scrying-engine's OverlayStub.
     struct OverlayStub;
 
     impl WebSurfaceProducer for OverlayStub {

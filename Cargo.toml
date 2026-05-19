@@ -93,7 +93,7 @@ register-diagnostics = { path = "crates/graphshell/shell/system/registry/registe
 inker = { path = "crates/inker" }
 document-canvas = { path = "crates/inker/document-canvas" }
 nematic = { path = "crates/inker/engines/nematic" }
-scrying-tile-engine = { path = "crates/inker/engines/scrying-engine" }
+scrying-engine = { path = "crates/inker/engines/scrying-engine" }
 
 forme = { path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }

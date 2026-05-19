@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! # scrying-tile-engine
+//! # scrying-engine
 //!
 //! `inker::SurfaceEngine` implementation backed by the
 //! [`scrying`](https://crates.io/crates/scrying) system-WebView producer
@@ -21,7 +21,7 @@
 //! See `design_docs/mere_docs/implementation_strategy/2026-05-11_scrying_web_tile_plan.md`
 //! for the full integration plan.
 
-#![doc(html_root_url = "https://docs.rs/scrying-tile-engine/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/scrying-engine/0.0.1")]
 
 pub mod engine;
 pub mod producer;

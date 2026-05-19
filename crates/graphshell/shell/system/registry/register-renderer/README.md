@@ -1,7 +1,7 @@
 # mere-renderer-registry
 
 v0 minimal of the renderer registry — the trait + dispatch contract that lets
-renderer crates (`mere-masonry`, `scrying-tile-engine`, future `serval-web` /
+renderer crates (`mere-masonry`, `scrying-engine`, future `serval-web` /
 `wry-web` / `cartography-graph` / `vello-canvas` / `chrome-edge` adapters)
 coexist as co-resident tenants of Mere's spatial chrome IR substrate.
 
