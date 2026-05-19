@@ -17,4 +17,4 @@ path = "src/lib.rs"
 kernel.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
-verso-tile.workspace = true
+verso-core.workspace = true

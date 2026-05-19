@@ -119,7 +119,7 @@ for the full design.
 
 nematic is the engine that [`inker`](https://crates.io/crates/inker)
 dispatches to for smolweb URI schemes; rendered output is presented through
-[`verso-tile`](https://crates.io/crates/verso-tile)'s surface contracts.
+[`verso-core`](https://crates.io/crates/verso-core)'s surface contracts.
 
 ```text
    inker.routing
@@ -129,14 +129,14 @@ dispatches to for smolweb URI schemes; rendered output is presented through
    nematic
       │ rendered content
       ▼
-   verso-tile (CompositedTexture surface)
+   verso-core (CompositedTexture surface)
 ```
 
 - [`inker`](https://crates.io/crates/inker) — references nematic by engine
   ID. The default policy routes `gemini`, `gopher`, `finger`, `spartan` →
   `nematic.smolweb`, and `file` → `nematic.file`.
-- [`verso-tile`](https://crates.io/crates/verso-tile) — nematic's output is
-  presented as a `CompositedTexture` surface; verso-tile owns the surface
+- [`verso-core`](https://crates.io/crates/verso-core) — nematic's output is
+  presented as a `CompositedTexture` surface; verso-core owns the surface
   lifecycle.
 - [`mere`](https://crates.io/crates/mere) — composes nematic into the
   product.

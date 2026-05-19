@@ -3,14 +3,14 @@
 //! Tile-rendering-surface management for the
 //! [`mere`](https://crates.io/crates/mere) browser. *Verso* is the brand-level
 //! name (Latin *verso*: the back side of a printed leaf, the page that catches
-//! the impression); `verso-tile` is the crate that owns rendering-surface
+//! the impression); `verso-core` is the crate that owns rendering-surface
 //! identity and command schedules. Mutable tile lifecycle state that depends on
-//! `inker` lives in the sibling `verso-tile-state` crate.
+//! `inker` lives in the sibling `tile-state` crate.
 //!
 //! In the printing-press metaphor that organizes Mere's architecture:
 //! engines produce ink, the inker pairs each ink to its content, the
 //! [`platen`](https://crates.io/crates/platen) presses the inked content,
-//! and `verso-tile` is the surface that receives the impression.
+//! and `verso-core` is the surface that receives the impression.
 //!
 //! ## Status
 //!
@@ -18,7 +18,7 @@
 //! implementation is in progress within the
 //! [Mere workspace](https://crates.io/crates/mere).
 
-#![doc(html_root_url = "https://docs.rs/verso-tile/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/verso-core/0.0.1")]
 
 /// Apply algorithm for `SurfaceCommandSchedule`.
 pub mod apply;

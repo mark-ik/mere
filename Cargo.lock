@@ -210,6 +210,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a38750a2a9617d9f1a1428b408fb909f7256a2766c59b0b07993170959731bb"
 
 [[package]]
+name = "apparatus"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "tracing",
+ "uxtree",
+]
+
+[[package]]
 name = "approx"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3859,6 +3868,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gloss"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "inker",
+ "tracing",
+ "uxtree",
+]
+
+[[package]]
 name = "glow"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3957,7 +3976,7 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
- "verso-tile",
+ "verso-core",
 ]
 
 [[package]]
@@ -4221,7 +4240,7 @@ dependencies = [
  "register-diagnostics",
  "shell-state",
  "tokio",
- "verso-tile",
+ "verso-core",
 ]
 
 [[package]]
@@ -4661,7 +4680,7 @@ dependencies = [
  "kernel",
  "serde",
  "tracing",
- "verso-tile",
+ "verso-core",
 ]
 
 [[package]]
@@ -5647,25 +5666,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mere-apparatus"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "tracing",
- "uxtree",
-]
-
-[[package]]
-name = "mere-gloss"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "inker",
- "tracing",
- "uxtree",
-]
-
-[[package]]
 name = "mere-host"
 version = "0.0.1"
 dependencies = [
@@ -5752,19 +5752,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
-]
-
-[[package]]
-name = "mere-workbench"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "kernel",
- "platen",
- "tracing",
- "uuid",
- "uxtree",
- "verso-tile",
 ]
 
 [[package]]
@@ -7519,7 +7506,7 @@ dependencies = [
  "serde",
  "tracing",
  "uuid",
- "verso-tile",
+ "verso-core",
 ]
 
 [[package]]
@@ -8965,17 +8952,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scrying-embedded-renderer"
-version = "0.0.1"
-dependencies = [
- "kurbo",
- "pollster",
- "register-renderer",
- "scrying",
- "wgpu",
-]
-
-[[package]]
 name = "scrying-engine"
 version = "0.0.1"
 dependencies = [
@@ -8983,6 +8959,17 @@ dependencies = [
  "inker",
  "scrying",
  "tracing",
+]
+
+[[package]]
+name = "scrying-renderer"
+version = "0.0.1"
+dependencies = [
+ "kurbo",
+ "pollster",
+ "register-renderer",
+ "scrying",
+ "wgpu",
 ]
 
 [[package]]
@@ -9140,8 +9127,8 @@ dependencies = [
  "mere-identity",
  "serde",
  "serde_json",
+ "tile-state",
  "uuid",
- "verso-tile-state",
 ]
 
 [[package]]
@@ -9841,6 +9828,14 @@ dependencies = [
  "quick-error 2.0.1",
  "weezl",
  "zune-jpeg",
+]
+
+[[package]]
+name = "tile-state"
+version = "0.0.1"
+dependencies = [
+ "inker",
+ "kernel",
 ]
 
 [[package]]
@@ -10778,19 +10773,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "verso-tile"
+name = "verso-core"
 version = "0.0.1"
 dependencies = [
  "kernel",
  "serde",
-]
-
-[[package]]
-name = "verso-tile-state"
-version = "0.0.1"
-dependencies = [
- "inker",
- "kernel",
 ]
 
 [[package]]
@@ -11801,6 +11788,19 @@ dependencies = [
  "thiserror 2.0.18",
  "windows",
  "windows-core",
+]
+
+[[package]]
+name = "workbench"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "kernel",
+ "platen",
+ "tracing",
+ "uuid",
+ "uxtree",
+ "verso-core",
 ]
 
 [[package]]

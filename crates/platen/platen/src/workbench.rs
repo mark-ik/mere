@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use kernel::graph::{GraphViewId, NodeKey};
 use kernel::pane::PaneId;
 use serde::{Deserialize, Serialize};
-pub use verso_tile::surface::TileSlot;
-use verso_tile::surface::{SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement};
+pub use verso_core::surface::TileSlot;
+use verso_core::surface::{SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FrameId(pub String);

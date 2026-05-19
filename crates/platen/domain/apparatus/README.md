@@ -1,4 +1,4 @@
-# mere-apparatus
+# apparatus
 
 Apparatus domain module for the [mere](https://crates.io/crates/mere)
 browser — the peripheral system-inspector strip.

@@ -8,7 +8,7 @@
 //! In the printing-press metaphor that organizes Mere's architecture, the
 //! Inker pairs each engine to its content and applies the engine's "ink" to
 //! the [`platen`](https://crates.io/crates/platen) for the
-//! [`verso-tile`](https://crates.io/crates/verso-tile) layer to receive.
+//! [`verso-core`](https://crates.io/crates/verso-core) layer to receive.
 //! Routing URI schemes to engines, lifecycle management, and engine-output
 //! piping all live here.
 //!

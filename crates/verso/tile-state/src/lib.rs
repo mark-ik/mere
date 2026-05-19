@@ -5,7 +5,7 @@
 //! navigation history, cached document tiles, and long-lived
 //! surface-producer-backed tiles.
 
-#![doc(html_root_url = "https://docs.rs/verso-tile-state/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/tile-state/0.0.1")]
 
 /// Long-lived surface-producer tile state.
 pub mod surface_tile;

@@ -14,7 +14,7 @@
 //! - `SettingsViewModel` + `FocusRingSettingsView` +
 //!   `ThumbnailSettings*` belong in a future `mere-system` crate
 //!   (settings module).
-//! - `AccessibilityViewModel` may move to `mere-apparatus` as a11y
+//! - `AccessibilityViewModel` may move to `apparatus` as a11y
 //!   inspection grows.
 //!
 //! For now everything stays under `mere-graphshell::frame_model` for

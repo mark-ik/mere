@@ -2,14 +2,14 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! # mere-gloss
+//! # gloss
 //!
 //! Gloss domain layer — peripheral content-commentary strip. v0
 //! projects an `EngineDocument` outline (heading list).
 //!
 //! See README for scope.
 
-#![doc(html_root_url = "https://docs.rs/mere-gloss/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/gloss/0.0.1")]
 
 use accesskit::{Node, Role};
 use inker::{DocumentBlock, EngineDocument, inline_text};

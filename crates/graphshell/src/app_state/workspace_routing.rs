@@ -15,7 +15,7 @@ use kernel::pane::PaneId;
 use platen::workbench::{
     assign_view_and_frame_pane, remove_view_and_frame_pane, set_view_and_frame_surface_host,
 };
-use verso_tile::surface::SurfaceCommand;
+use verso_core::surface::SurfaceCommand;
 
 use super::{FrameId, GraphWorkspace, PaneBinding, SurfaceHostId, WorkspaceEffect};
 

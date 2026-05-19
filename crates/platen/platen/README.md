@@ -5,7 +5,7 @@
 workspace state into renderable layout: the canvas scene that the workspace
 graph view draws against, the frame/workbench arrangement, and the
 surface-placement plan that
-[`verso-tile`](https://crates.io/crates/verso-tile) receives.
+[`verso-core`](https://crates.io/crates/verso-core) receives.
 
 In the printing-press metaphor: the platen is the press itself: the layer
 that knows graph semantics (where a node goes, how panes bind to nodes, how
@@ -34,7 +34,7 @@ the workbench is arranged) and presses that knowledge into renderable form.
     `WorkbenchProjection`.
   - **Arrangement bridge** (plain data): `ArrangementSnapshot`,
     `ArrangementContainer`, `ArrangementMember`. `TileSlot` is re-exported
-    from verso-tile for convenience.
+    from verso-core for convenience.
   - **Mutators**: `upsert_pane_binding`, `remove_pane_binding`,
     `assign_frame_pane`, `clear_frame_pane`, `set_frame_root_view`,
     `set_binding_surface_host`, `assign_view_and_frame_pane`,
@@ -62,7 +62,7 @@ surface placements) that downstream layers consume.
        │             │
        ▼             ▼
  CanvasSceneInput    WorkbenchProjection / ArrangementSnapshot
- (drawn by the       SurfacePlacementPlan ───► verso-tile
+ (drawn by the       SurfacePlacementPlan ───► verso-core
   canvas layer)
 ```
 
@@ -71,9 +71,9 @@ surface placements) that downstream layers consume.
   reducer-owned `GraphWorkspace` state; reducer mutators
   (`upsert_pane_binding`, `assign_view_and_frame_pane`, …) operate on that
   state.
-- [`verso-tile`](https://crates.io/crates/verso-tile) — platen produces
+- [`verso-core`](https://crates.io/crates/verso-core) — platen produces
   `SurfacePlacementPlan`s composed of `SurfaceSlotPlacement`s with
-  `verso_tile::surface::TileSlot`s; verso-tile owns the surface lifecycle
+  `verso_core::surface::TileSlot`s; verso-core owns the surface lifecycle
   that consumes them.
 - **`graph-canvas`** (workspace-internal) —
   `canvas_scene::build_canvas_scene_input()` returns

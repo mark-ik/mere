@@ -10,7 +10,7 @@
 //!
 //! This is deliberately not the owner of graph-aware layout policy. If this
 //! code starts deciding tile placement, split topology, engine surfaces, or
-//! render scheduling, that behavior belongs in `platen`, `verso-tile`, `inker`,
+//! render scheduling, that behavior belongs in `platen`, `verso-core`, `inker`,
 //! or host glue instead.
 
 use graph_canvas::scene::CanvasSceneInput;
@@ -309,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn active_surface_placements_use_verso_tile_slots() {
+    fn active_surface_placements_use_verso_core_slots() {
         let pane = PaneBinding {
             pane_id: PaneId::from_uuid(Uuid::from_u128(46)),
             node: NodeKey::new(9),

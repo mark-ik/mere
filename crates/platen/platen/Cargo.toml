@@ -23,4 +23,4 @@ kernel.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
 uuid = { version = "1", features = ["serde"] }
-verso-tile.workspace = true
+verso-core.workspace = true

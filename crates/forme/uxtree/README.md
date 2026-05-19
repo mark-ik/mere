@@ -6,7 +6,7 @@ Portable accessibility / automation tree for the
 ## What it does
 
 Projects mere structural elements (`inker::EngineDocument` blocks,
-eventually `platen` workbench frames + `verso-tile` panes) into a tree of
+eventually `platen` workbench frames + `verso-core` panes) into a tree of
 [AccessKit](https://accesskit.dev) `Node`s with **stable, deterministic
 IDs**. The same projection feeds:
 

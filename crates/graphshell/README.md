@@ -43,7 +43,7 @@ press-stack peers below; host adapters plug in from the side.
        (iced, gpui, …)         │            (workspace-internal substrate)
                 ┌──────────────┼──────────────┐
                 ▼              ▼              ▼
-              inker          platen        verso-tile
+              inker          platen        verso-core
                                                 │
                                                 ▼
                                             eidetic
@@ -58,7 +58,7 @@ press-stack peers below; host adapters plug in from the side.
 - [`platen`](https://crates.io/crates/platen) — `app_state` consumes platen's
   `WorkbenchProjection` and `ArrangementSnapshot` selectors over reducer-owned
   state.
-- [`verso-tile`](https://crates.io/crates/verso-tile) — `app_state` emits
+- [`verso-core`](https://crates.io/crates/verso-core) — `app_state` emits
   `SurfaceCommand` effects and tracks `SurfaceLifecycleState`.
 - [`eidetic`](https://crates.io/crates/eidetic) — `app_state` emits
   `eidetic::Request` effects routed through the `eidetic::Store` service trait.

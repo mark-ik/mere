@@ -99,13 +99,13 @@ forme = { path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }
 
 platen = { path = "crates/platen/platen" }
-mere-apparatus = { path = "crates/platen/domain/apparatus" }
-mere-gloss = { path = "crates/platen/domain/gloss" }
-mere-workbench = { path = "crates/platen/domain/workbench" }
+apparatus = { path = "crates/platen/domain/apparatus" }
+gloss = { path = "crates/platen/domain/gloss" }
+workbench = { path = "crates/platen/domain/workbench" }
 
-verso-tile = { path = "crates/verso/verso-core" }
-verso-tile-state = { path = "crates/verso/tile-state" }
-scrying-embedded-renderer = { path = "crates/verso/scrying-renderer" }
+verso-core = { path = "crates/verso/verso-core" }
+tile-state = { path = "crates/verso/tile-state" }
+scrying-renderer = { path = "crates/verso/scrying-renderer" }
 
 eidetic = { path = "crates/eidetic/eidetic-core" }
 eidetic-fjall = { path = "crates/eidetic/eidetic-fjall" }

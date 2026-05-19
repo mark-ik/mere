@@ -21,7 +21,7 @@ pub use platen::workbench::{
     ProjectedPane, WorkbenchProjection,
 };
 use serde::{Deserialize, Serialize};
-pub use verso_tile::surface::{
+pub use verso_core::surface::{
     SurfaceCommand, SurfaceCommandBacklog, SurfaceCommandOutcome, SurfaceCommandSchedule,
     SurfaceCommandSink, SurfaceCommandStatus, SurfaceHostId, SurfaceLifecycleState,
     SurfacePlacementPlan, SurfaceRequest, SurfaceSlotPlacement, TileSlot,

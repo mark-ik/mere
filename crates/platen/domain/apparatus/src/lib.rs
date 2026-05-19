@@ -2,13 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! # mere-apparatus
+//! # apparatus
 //!
 //! Apparatus domain layer — peripheral system-inspector strip. v0
 //! emits a placeholder skeleton subtree; each section grows real
 //! content as the corresponding host bridge lands.
 
-#![doc(html_root_url = "https://docs.rs/mere-apparatus/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/apparatus/0.0.1")]
 
 use accesskit::{Node, Role};
 use uxtree::{UxTree, node_id_for_path};

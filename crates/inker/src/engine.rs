@@ -6,7 +6,7 @@
 //!
 //! Routing decides which engine handles an address. This module defines what
 //! an engine *is*: a thing that takes raw content (already fetched) and
-//! produces a portable [`crate::EngineDocument`] that platen / verso-tile
+//! produces a portable [`crate::EngineDocument`] that platen / verso-core
 //! can consume. Concrete engines live outside this crate (`nematic` for
 //! smolweb / markdown / file lanes; `serval` for full web; etc).
 //!

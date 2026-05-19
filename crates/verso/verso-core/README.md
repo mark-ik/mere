@@ -1,13 +1,13 @@
-# verso-tile
+# verso-core
 
-`verso-tile` owns the rendering-surface layer for the
+`verso-core` owns the rendering-surface layer for the
 [mere](https://crates.io/crates/mere) browser: surface identity, tile-slot
 placement, and the lifecycle that moves surfaces between *Present*, *Retire*,
 and *Focus* states. Hosts implement small traits to apply commands;
-verso-tile owns the schedule shape and the apply algorithm.
+verso-core owns the schedule shape and the apply algorithm.
 
 In the printing-press metaphor: *verso* is the back of the printed leaf, the
-page that catches the impression. `verso-tile` is the surface that receives
+page that catches the impression. `verso-core` is the surface that receives
 engine output (routed by [`inker`](https://crates.io/crates/inker), composed
 by [`platen`](https://crates.io/crates/platen)) and places it into tile
 slots.
@@ -37,7 +37,7 @@ slots.
 
 ## How it relates to other workspace crates
 
-verso-tile sits below the press-stack peers (inker, platen) and above
+verso-core sits below the press-stack peers (inker, platen) and above
 concrete host adapters; it's the layer that turns "this surface should
 exist" decisions into actual viewer allocations.
 
@@ -60,11 +60,11 @@ exist" decisions into actual viewer allocations.
 ```
 
 - [`inker`](https://crates.io/crates/inker) — `SurfaceContract.target` is
-  verso-tile's `SurfaceTargetId` (re-exported through `inker::routing` for
+  verso-core's `SurfaceTargetId` (re-exported through `inker::routing` for
   convenience).
 - [`platen`](https://crates.io/crates/platen) — produces
   `SurfacePlacementPlan`s composed of `SurfaceSlotPlacement` + `TileSlot`;
-  verso-tile's `SurfaceLifecycleState::schedule_placements()` consumes them.
+  verso-core's `SurfaceLifecycleState::schedule_placements()` consumes them.
 - [`graphshell`](https://crates.io/crates/graphshell) — emits
   `SurfaceCommand` effects via `WorkspaceEffect::RequestSurface`; the
   `SurfaceHost` trait in graphshell is a specialization of
@@ -82,7 +82,7 @@ through `SurfaceCommandSink` and `ViewerSurfaceHost`.
 
 ## Fun Fact
 
-The name "verso-tile" was chosen because of the archived experimental browser
+The name "verso-core" was chosen because of the archived experimental browser
 project for servo, `verso` (the associated company was `versotile`). It was cool!
 Led to a lot of learnings that benefitted this project. This is merely an homage,
 but I am happy to change the name if needed.

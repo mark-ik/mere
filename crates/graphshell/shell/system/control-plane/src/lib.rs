@@ -85,12 +85,12 @@ pub enum ActionTarget {
     /// Scoped to a graph node. Reserved for node-level actions
     /// (rename, pin, follow).
     Node(GraphId, NodeKey),
-    /// Scoped to a verso-tile surface. Reserved.
+    /// Scoped to a verso-core surface. Reserved.
     Surface(SurfaceId),
 }
 
-/// Placeholder for a verso-tile surface identifier. v0: opaque u64
-/// stand-in. When verso-tile exposes a stable id type, swap.
+/// Placeholder for a verso-core surface identifier. v0: opaque u64
+/// stand-in. When verso-core exposes a stable id type, swap.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SurfaceId(pub u64);
 

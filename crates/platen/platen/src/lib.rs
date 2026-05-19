@@ -3,7 +3,7 @@
 //! Workbench composition surface for the
 //! [`mere`](https://crates.io/crates/mere) browser — arranges canvas
 //! "swatches" into frames and panes, presenting the composed arrangement
-//! for [`verso-tile`](https://crates.io/crates/verso-tile) to render.
+//! for [`verso-core`](https://crates.io/crates/verso-core) to render.
 //!
 //! In the printing-press metaphor: the platen is the press that pushes the
 //! inked forme onto the verso to produce the impression. Here it is the
@@ -35,10 +35,10 @@
 //! - **Within-canvas layout** — a canvas crate's job (graph-canvas knows
 //!   where each node goes; document-canvas will know where each paragraph
 //!   goes). Platen sees canvases as opaque renderable units.
-//! - **Rendering** — that's verso-tile's surface lifecycle plus the host's
+//! - **Rendering** — that's verso-core's surface lifecycle plus the host's
 //!   netrender / gpui integration.
 //! - **A11y projection** — that's mere-domain (`mere-orrery`,
-//!   `mere-frame`, `mere-gloss`, `mere-apparatus`) → uxtree.
+//!   `mere-frame`, `gloss`, `apparatus`) → uxtree.
 //!
 //! ## Status
 //!

@@ -1,7 +1,7 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! `scrying-embedded-renderer` — `EmbeddedFrameRenderer` for the
+//! `scrying-renderer` — `EmbeddedFrameRenderer` for the
 //! renderer-registry contract, backed by `scrying`'s system-WebView
 //! producers (WebView2 on Windows, WKWebView on macOS, WPE/WebKitGTK
 //! on Linux).

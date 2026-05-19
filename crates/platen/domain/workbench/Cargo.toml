@@ -1,11 +1,11 @@
 [package]
-name = "mere-workbench"
+name = "workbench"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Workbench domain layer for the Mere browser — projects platen's WorkbenchProjection into uxtree nodes (a11y / automation tree)."
-documentation = "https://docs.rs/mere-workbench"
+documentation = "https://docs.rs/workbench"
 readme = "README.md"
 keywords = ["workbench", "mere", "domain", "accessibility", "uxtree"]
 categories = ["accessibility", "gui"]
@@ -22,4 +22,4 @@ uxtree.workspace = true
 [dev-dependencies]
 kernel.workspace = true
 uuid = "1"
-verso-tile.workspace = true
+verso-core.workspace = true

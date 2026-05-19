@@ -1,4 +1,4 @@
-# mere-gloss
+# gloss
 
 Gloss domain module for the [mere](https://crates.io/crates/mere) browser —
 the peripheral content-commentary strip.

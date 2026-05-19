@@ -8,7 +8,7 @@
 //! [`mere`](https://crates.io/crates/mere) browser.
 //!
 //! Projects mere's portable structural elements ([`inker::EngineDocument`]
-//! today; `platen` workbenches and `verso-tile` panes once those land) into
+//! today; `platen` workbenches and `verso-core` panes once those land) into
 //! a tree of [AccessKit](https://accesskit.dev) `Node`s with stable,
 //! deterministic [`NodeId`]s. The same projection feeds screen-reader
 //! a11y, automation tooling, and inspector overlays.

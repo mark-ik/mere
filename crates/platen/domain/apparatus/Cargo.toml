@@ -1,11 +1,11 @@
 [package]
-name = "mere-apparatus"
+name = "apparatus"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Apparatus domain layer for the Mere browser — peripheral system-inspector strip; v0 projects a placeholder skeleton."
-documentation = "https://docs.rs/mere-apparatus"
+documentation = "https://docs.rs/apparatus"
 readme = "README.md"
 keywords = ["apparatus", "inspector", "diagnostics", "mere", "uxtree"]
 categories = ["accessibility", "gui", "development-tools::debugging"]

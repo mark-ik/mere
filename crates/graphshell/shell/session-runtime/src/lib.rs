@@ -31,7 +31,7 @@
 //!   (HostPaintPort, HostInputPort, HostSurfacePort, HostAccessibility
 //!   Port, …) + frame-projection inputs.
 //! - `graphshell-control-plane` owns the action-bus vocabulary.
-//! - `verso-tile-state` owns workbench tile state and surface-producer state.
+//! - `tile-state` owns workbench tile state and surface-producer state.
 //! - `mere-host` and future host adapters consume these portable surfaces
 //!   without owning their schemas.
 //!
@@ -73,7 +73,7 @@ pub use switcher_thumbnail::{
     build_switcher_thumbnail,
 };
 pub use tearout::{PaneDragPayload, TileDragPayload};
-pub use verso_tile_state::{
+pub use tile_state::{
     HistoryEntry, NavigateMode, SurfaceTileState, SurfaceTileStep, TileManager, TileState,
 };
 pub use view_intent_store::{CameraSnapshot, HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};

@@ -5,7 +5,7 @@
 engine should handle this content,*" taking into account the URI scheme,
 the content type, which engines are actually available on the host, and any
 user preference. The output is a host-neutral surface contract that
-[`verso-tile`](https://crates.io/crates/verso-tile) renders against.
+[`verso-core`](https://crates.io/crates/verso-core) renders against.
 
 Inker is the right home for arbitrating among engines when several are valid
 for the same input. For full-web pages, both the Servo/wgpu fork (Serval) and
@@ -116,7 +116,7 @@ ready to ink the platen.
 
 inker sits between [`graphshell`](https://crates.io/crates/graphshell) (which
 issues route requests) and the engines themselves;
-[`verso-tile`](https://crates.io/crates/verso-tile) owns the surface identity
+[`verso-core`](https://crates.io/crates/verso-core) owns the surface identity
 inker hands back.
 
 ```text
@@ -130,15 +130,15 @@ inker hands back.
        engine_id selects: serval | scrying | nematic | wry | internal
                                                        │
                                                        ▼
-                                                  verso-tile
+                                                  verso-core
                                               (SurfaceTargetId)
 ```
 
 - [`graphshell`](https://crates.io/crates/graphshell) — emits
   `EngineRouteRequest` effects via its `EngineRouter` service trait; consumes
   the returned `EngineRouteDecision`.
-- [`verso-tile`](https://crates.io/crates/verso-tile) — `SurfaceContract.target`
-  is `verso_tile::SurfaceTargetId`, re-exported through `inker::routing` for
+- [`verso-core`](https://crates.io/crates/verso-core) — `SurfaceContract.target`
+  is `verso_core::SurfaceTargetId`, re-exported through `inker::routing` for
   convenience.
 - [`nematic`](https://crates.io/crates/nematic) — implements 12 concrete
   `Engine`s: `markdown`, `gemtext`, `gopher`, `feed`, `text`, `file`,

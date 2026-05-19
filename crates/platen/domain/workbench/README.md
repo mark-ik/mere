@@ -1,4 +1,4 @@
-# mere-workbench
+# workbench
 
 Workbench domain module for the [mere](https://crates.io/crates/mere) browser.
 
@@ -7,7 +7,7 @@ view, and pane bindings) into a subtree of
 [AccessKit](https://accesskit.dev) nodes for consumption by `uxtree`.
 This is the layer where mere's *user-facing* concept of a workbench gets
 its accessibility / automation identity — distinct from platen, which
-owns the data shape, and verso-tile, which owns the surface lifecycle.
+owns the data shape, and verso-core, which owns the surface lifecycle.
 
 ## What it produces
 

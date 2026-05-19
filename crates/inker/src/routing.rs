@@ -6,7 +6,7 @@
 
 use kernel::graph::{GraphViewId, NodeKey};
 use serde::{Deserialize, Serialize};
-pub use verso_tile::SurfaceTargetId;
+pub use verso_core::SurfaceTargetId;
 
 pub const ENGINE_SERVAL_WEB: &str = "serval.web";
 /// Mere-managed system-WebView tile driven by the in-house `scrying`

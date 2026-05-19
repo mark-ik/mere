@@ -1,5 +1,5 @@
 [package]
-name = "verso-tile-state"
+name = "tile-state"
 version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"

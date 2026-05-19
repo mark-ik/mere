@@ -2,17 +2,17 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! # mere-workbench
+//! # workbench
 //!
 //! Workbench domain layer — projects [`platen::WorkbenchProjection`]
 //! into a subtree of AccessKit nodes for `uxtree`.
 //!
 //! See the crate README for the role / id scheme. The host pairs this
 //! subtree with a sibling `mere-orrery` subtree for graph content,
-//! `mere-gloss` for peripheral strips, etc., merging them under a single
+//! `gloss` for peripheral strips, etc., merging them under a single
 //! application-root node.
 
-#![doc(html_root_url = "https://docs.rs/mere-workbench/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/workbench/0.0.1")]
 
 use accesskit::{Node, Role};
 use platen::{ProjectedPane, WorkbenchProjection};
@@ -103,10 +103,10 @@ mod tests {
     use super::*;
     use platen::{FrameId, PaneBinding, ProjectedPane, WorkbenchProjection};
     // Fixtures need lower-level types: PaneId / NodeKey are mere-kernel
-    // types that flow through platen; SurfaceHostId is from verso-tile.
+    // types that flow through platen; SurfaceHostId is from verso-core.
     use kernel::graph::NodeKey;
     use kernel::pane::PaneId;
-    use verso_tile::surface::SurfaceHostId;
+    use verso_core::surface::SurfaceHostId;
 
     fn fixture_pane(seed: u128, primary: bool) -> ProjectedPane {
         // Deterministic UUIDs so test ids are stable across runs without
