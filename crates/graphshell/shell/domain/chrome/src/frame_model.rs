@@ -28,13 +28,13 @@ use std::time::Duration;
 use forme::{OwnedTreeRow, SplitBoundary, TabEntry};
 
 use crate::toolbar::ToolbarDraft;
-use mere_kernel::content::ContentLoadState;
-use mere_kernel::geometry::{PortablePoint, PortableRect, PortableSize};
-use mere_kernel::graph::NodeKey;
-use mere_kernel::host_event::{HostEvent, ModifiersState};
-use mere_kernel::overlay::OverlayStrokePass;
-use mere_kernel::pane::{PaneId, TileRenderMode};
-use mere_kernel::time::PortableInstant;
+use kernel::content::ContentLoadState;
+use kernel::geometry::{PortablePoint, PortableRect, PortableSize};
+use kernel::graph::NodeKey;
+use kernel::host_event::{HostEvent, ModifiersState};
+use kernel::overlay::OverlayStrokePass;
+use kernel::pane::{PaneId, TileRenderMode};
+use kernel::time::PortableInstant;
 
 // ---------------------------------------------------------------------------
 // FrameViewModel — aggregate per-frame host-painting snapshot

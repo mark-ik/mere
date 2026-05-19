@@ -48,4 +48,4 @@ pollster = "0.4"
 masonry_testing = { path = "../../../../xilem/masonry_testing" }
 # Cross-crate integration test exercises SubstrateHost +
 # ExternalTextureCompositor + MasonryEmbeddedRenderer end-to-end.
-mere-spatial-prototype = { path = "../../graphshell/graph/spatial-substrate" }
+spatial-substrate = { path = "../../graphshell/graph/spatial-substrate" }

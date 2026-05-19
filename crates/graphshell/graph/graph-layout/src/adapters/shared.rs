@@ -25,7 +25,7 @@ use crate::LayoutExtras;
 use euclid::default::{Point2D, Rect, Size2D};
 use graph_canvas::camera::CanvasViewport;
 use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
-use mere_kernel::graph::{NodeKey, RelationKind};
+use kernel::graph::{NodeKey, RelationKind};
 
 use cartography::projection::{PositionedEdge, Projection};
 use cartography::request::ProjectionRequest;

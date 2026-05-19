@@ -20,7 +20,7 @@ graph-canvas.workspace = true
 # Cartography contracts — adapters implement `LayoutStrategy` /
 # `StreamingLayoutStrategy` against the Layout<N> impls in this crate.
 cartography.workspace = true
-mere-kernel.workspace = true
+kernel.workspace = true
 
 euclid = { version = "0.22", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }

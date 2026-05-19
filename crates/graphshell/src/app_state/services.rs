@@ -135,7 +135,7 @@ mod tests {
     use inker::routing::{
         EngineRouteRequest, SurfaceContract, SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId,
     };
-    use mere_kernel::{graph::GraphViewId, pane::PaneId};
+    use kernel::{graph::GraphViewId, pane::PaneId};
     use uuid::Uuid;
 
     use super::*;
@@ -447,14 +447,14 @@ mod tests {
             host.clone(),
             Some(view),
             first_pane,
-            mere_kernel::graph::NodeKey::new(80),
+            kernel::graph::NodeKey::new(80),
             TileSlot::primary(),
         ));
         plan.push(SurfaceSlotPlacement::new(
             host,
             Some(view),
             second_pane,
-            mere_kernel::graph::NodeKey::new(81),
+            kernel::graph::NodeKey::new(81),
             TileSlot::secondary(1),
         ));
         let mut lifecycle = SurfaceLifecycleState::default();

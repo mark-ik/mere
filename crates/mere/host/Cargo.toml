@@ -28,7 +28,7 @@ mere-frame.workspace = true
 mere-renderer-registry.workspace = true
 # Kernel graph + geometry — the host seeds a Graph at startup and
 # stores it in its GraphRegistry for cartography projection.
-mere-kernel.workspace = true
+kernel.workspace = true
 # Cartography contracts — ProjectionRequest / ViewIntent / Projection.
 cartography.workspace = true
 # Strategy implementations (GridAdapter for the v0 orrery; force-
@@ -56,4 +56,4 @@ petgraph = "0.8"
 [dev-dependencies]
 # Substrate primitives used by the moved renderer-module unit tests
 # (orrery_renderer / splitter_renderer / graph_registry).
-mere-spatial-prototype.workspace = true
+spatial-substrate.workspace = true

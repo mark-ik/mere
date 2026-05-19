@@ -11,7 +11,7 @@
 
 use forme::ProjectionLens;
 use inker::routing::EngineRouteRequest;
-use mere_kernel::graph::{GraphViewId, NodeKey};
+use kernel::graph::{GraphViewId, NodeKey};
 
 use super::{
     ChromeState, DiagnosticRecord, FrameId, FrameState, GraphWorkspace, SurfaceCommand,
@@ -220,7 +220,7 @@ pub fn reduce_workspace_intent(
 
 #[cfg(test)]
 mod tests {
-    use mere_kernel::graph::GraphViewId;
+    use kernel::graph::GraphViewId;
 
     use super::*;
     use crate::app_state::{NavigatorSidebarPreference, ThemeModePreference};

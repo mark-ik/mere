@@ -5,7 +5,7 @@
 //!
 //! Bridges:
 //!
-//! - `mere_spatial_prototype` — substrate IR (scene + renderer
+//! - `spatial_substrate` — substrate IR (scene + renderer
 //!   registry + camera + hit-test + AccessKit projection + diagnostics).
 //! - `mere_host_runtime` — session manifests, view intents, and
 //!   compatibility re-exports for the control-plane action bus and
@@ -46,11 +46,11 @@ use mere_host_runtime::{
     ActionBus, CameraSnapshot, GraphSessionManifest, LoadReport, ManifestStore, TileManager,
     ViewIntent,
 };
-use mere_kernel::graph::NodeKey;
+use kernel::graph::NodeKey;
 use mere_renderer_registry::{
     DiagnosticEvent, DiagnosticSink, NodeContentKind, NodeIdentity, Placement,
 };
-use mere_spatial_prototype::{
+use spatial_substrate::{
     EdgeIdentity, ExternalTextureCompositor, SceneHit, SubstrateHost, SubstrateNode, SubstrateScene,
 };
 

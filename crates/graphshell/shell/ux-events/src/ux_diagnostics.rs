@@ -269,8 +269,8 @@ impl DiagnosticsChannelSink for RecordingChannelSink {
 mod tests {
     use super::*;
     use crate::ux_observability::UxObservers;
-    use mere_kernel::actions::ActionId;
-    use mere_kernel::graph::NodeKey;
+    use kernel::actions::ActionId;
+    use kernel::graph::NodeKey;
     use std::sync::Arc;
 
     #[test]

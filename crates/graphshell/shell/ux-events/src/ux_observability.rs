@@ -53,10 +53,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
-pub use mere_kernel::accessibility::SurfaceId;
+pub use kernel::accessibility::SurfaceId;
 
-use mere_kernel::actions::ActionId;
-use mere_kernel::graph::NodeKey;
+use kernel::actions::ActionId;
+use kernel::graph::NodeKey;
 
 /// Why a surface dismissed. Lets observers distinguish "user
 /// confirmed" from "user cancelled" from "system superseded" without

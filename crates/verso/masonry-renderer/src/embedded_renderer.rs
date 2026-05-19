@@ -4,7 +4,7 @@
 //! `MasonryEmbeddedRenderer` — `EmbeddedFrameRenderer` impl that renders
 //! each Masonry tile directly into a wgpu texture, returned to the
 //! substrate host for compositing via
-//! [`mere_spatial_prototype::ExternalTextureCompositor`].
+//! [`spatial_substrate::ExternalTextureCompositor`].
 //!
 //! ## Pipeline
 //!

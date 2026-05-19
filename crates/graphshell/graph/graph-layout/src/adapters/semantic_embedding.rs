@@ -36,7 +36,7 @@ use std::collections::HashMap;
 
 use crate::{EmbeddingFallback, SemanticEmbeddingConfig};
 use euclid::default::Point2D;
-use mere_kernel::graph::NodeKey;
+use kernel::graph::NodeKey;
 
 use super::shared::projection_from_positions;
 use cartography::projection::Projection;
@@ -124,8 +124,8 @@ mod tests {
     use super::*;
     use cartography::request::ViewIntent;
     use cartography::signals::{IntelligenceSignals, NodeEmbeddings};
-    use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::Graph;
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::Graph;
     use uuid::Uuid;
 
     fn small_graph() -> (Graph, [NodeKey; 3]) {

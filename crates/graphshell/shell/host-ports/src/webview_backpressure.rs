@@ -13,8 +13,8 @@
 //! [`PortableInstant`] for time values, keeping this module free of
 //! host-specific clocks and Servo types.
 
-use mere_kernel::graph::NodeKey;
-use mere_kernel::time::PortableInstant;
+use kernel::graph::NodeKey;
+use kernel::time::PortableInstant;
 
 use crate::ports::ViewerSurfaceId;
 

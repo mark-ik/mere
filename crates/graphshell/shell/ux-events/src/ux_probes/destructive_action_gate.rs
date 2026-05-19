@@ -7,7 +7,7 @@
 
 use std::sync::Mutex;
 
-use mere_kernel::actions::ActionId;
+use kernel::actions::ActionId;
 
 use crate::ux_observability::{DismissReason, SurfaceId, UxEvent};
 

@@ -11,7 +11,7 @@
 //! file is now a `pub use` shim; the canonical body lives here.
 //!
 //! Cross-crate retargets vs. the original shell-side file:
-//! - `crate::graph::NodeKey` → `mere_kernel::graph::NodeKey`
+//! - `crate::graph::NodeKey` → `kernel::graph::NodeKey`
 //! - `crate::shell::desktop::runtime::diagnostics::*` → `register_diagnostics::*`
 //! - `super::CHANNEL_REGISTER_SIGNAL_ROUTING_LAGGED` → `register_diagnostics::channels::*`
 //! - `pub` → `pub` (items are now the public API of `mere-host-contract::system::signal_bus`)
@@ -24,7 +24,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use mere_kernel::graph::NodeKey;
+use kernel::graph::NodeKey;
 
 mod routing;
 

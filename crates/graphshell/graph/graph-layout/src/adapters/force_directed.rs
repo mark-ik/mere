@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use crate::{ForceDirected, ForceDirectedState, Layout};
 use euclid::default::{Point2D, Vector2D};
-use mere_kernel::graph::NodeKey;
+use kernel::graph::NodeKey;
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
@@ -136,8 +136,8 @@ mod tests {
     use super::*;
     use cartography::request::ViewIntent;
     use cartography::signals::{AffinityScores, Cluster, ClusterSet, IntelligenceSignals};
-    use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::Graph;
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::Graph;
     use uuid::Uuid;
 
     fn triangle_graph() -> (Graph, [NodeKey; 3]) {

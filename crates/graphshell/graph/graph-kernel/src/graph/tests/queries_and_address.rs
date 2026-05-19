@@ -61,7 +61,7 @@ fn node_created_with_http_url_has_no_mime_hint_by_default() {
     assert!(node.mime_hint.is_none());
 }
 
-// Address type and function tests have moved to `mere_kernel::address::tests`.
+// Address type and function tests have moved to `kernel::address::tests`.
 
 #[test]
 fn node_address_field_is_consistent_with_url_and_address_kind_at_creation() {

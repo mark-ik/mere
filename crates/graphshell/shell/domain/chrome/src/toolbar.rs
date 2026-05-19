@@ -22,7 +22,7 @@
 //! `ToolbarState` / `ToolbarEditable` / `ToolbarDraft` call sites
 //! resolve unchanged.
 
-use mere_kernel::content::ContentLoadState;
+use kernel::content::ContentLoadState;
 
 /// The editable subset of a toolbar input surface: the fields the
 /// user manipulates as they type and submit. Shared between the

@@ -4,7 +4,7 @@
 
 //! Host-neutral engine routing vocabulary and default policy.
 
-use mere_kernel::graph::{GraphViewId, NodeKey};
+use kernel::graph::{GraphViewId, NodeKey};
 use serde::{Deserialize, Serialize};
 pub use verso_tile::SurfaceTargetId;
 

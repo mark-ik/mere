@@ -14,7 +14,7 @@ categories = ["web-programming"]
 path = "src/lib.rs"
 
 [dependencies]
-mere-kernel.workspace = true
+kernel.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
 verso-tile.workspace = true

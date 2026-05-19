@@ -25,8 +25,8 @@
 use std::sync::Mutex;
 
 use mere_graphshell::routing::ToolSurfaceReturnTarget;
-use mere_kernel::graph::NodeKey;
-use mere_kernel::pane::PaneId;
+use kernel::graph::NodeKey;
+use kernel::pane::PaneId;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CommandBarSemanticMetadata {

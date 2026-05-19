@@ -50,8 +50,8 @@ mod tests {
     use cartography::request::ViewIntent;
     use cartography::signals::IntelligenceSignals;
     use euclid::default::Point2D;
-    use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::{Graph, NodeKey};
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::{Graph, NodeKey};
     use uuid::Uuid;
 
     fn nine_node_graph() -> (Graph, Vec<NodeKey>) {

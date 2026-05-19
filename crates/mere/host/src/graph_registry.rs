@@ -4,7 +4,7 @@
 //! App-scope graph registry — kurbo/host-neutral port of the legacy
 //! gpui-side `mere_host::graph_registry`.
 //!
-//! Every live `mere_kernel::graph::Graph` in the application sits in
+//! Every live `kernel::graph::Graph` in the application sits in
 //! this map, keyed by `mere_frame::GraphId`. Panes in a `FrameLayout`
 //! carry a `graph_id` on each leaf; the substrate path looks each
 //! `graph_id` up here when projecting per-pane content (orrery,
@@ -24,7 +24,7 @@
 use std::collections::HashMap;
 
 use mere_frame::GraphId;
-use mere_kernel::graph::Graph;
+use kernel::graph::Graph;
 
 /// Holds every live graph the app is currently presenting, keyed
 /// by `GraphId`.
@@ -124,7 +124,7 @@ mod tests {
         let g = reg.get_mut(id).unwrap();
         g.add_node(
             "test://node".to_string(),
-            mere_kernel::geometry::PortablePoint::new(0.0, 0.0),
+            kernel::geometry::PortablePoint::new(0.0, 0.0),
         );
         assert_eq!(reg.get(id).unwrap().node_count(), 1);
     }

@@ -235,7 +235,7 @@ fn paint_demo_triangle(w: f64, h: f64, ctx: &mut PaintCtx<'_>) {
 mod tests {
     use kurbo::Size;
     use mere_renderer_registry::{Placement, RendererRegistry};
-    use mere_spatial_prototype::{SubstrateHost, SubstrateNode, SubstrateScene};
+    use spatial_substrate::{SubstrateHost, SubstrateNode, SubstrateScene};
 
     use super::*;
 

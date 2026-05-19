@@ -15,8 +15,8 @@
 //! `family_tag` to `platen::family_color` so switcher rows and the
 //! live orrery share one palette story.
 
-use mere_kernel::geometry::PortablePoint;
-use mere_kernel::graph::Graph;
+use kernel::geometry::PortablePoint;
+use kernel::graph::Graph;
 
 /// Caller config for [`build_switcher_thumbnail`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -209,7 +209,7 @@ fn bounds<K>(positions: &std::collections::HashMap<K, PortablePoint>) -> (f32, f
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mere_kernel::graph::{EdgeAssertion, EdgeFamily, RelationKind, SemanticSubKind};
+    use kernel::graph::{EdgeAssertion, EdgeFamily, RelationKind, SemanticSubKind};
 
     fn hyperlink() -> EdgeAssertion {
         EdgeAssertion::Semantic {
@@ -307,7 +307,7 @@ mod tests {
                 a,
                 b,
                 EdgeAssertion::Provenance {
-                    sub_kind: mere_kernel::graph::ProvenanceSubKind::ClippedFrom,
+                    sub_kind: kernel::graph::ProvenanceSubKind::ClippedFrom,
                 },
             )
             .unwrap();
@@ -380,16 +380,16 @@ mod tests {
             EdgeFamily::Semantic => RelationKind::Semantic(SemanticSubKind::Hyperlink),
             EdgeFamily::Traversal => RelationKind::Traversal,
             EdgeFamily::Containment => {
-                RelationKind::Containment(mere_kernel::graph::ContainmentSubKind::UrlPath)
+                RelationKind::Containment(kernel::graph::ContainmentSubKind::UrlPath)
             }
             EdgeFamily::Arrangement => {
-                RelationKind::Arrangement(mere_kernel::graph::ArrangementSubKind::FrameMember)
+                RelationKind::Arrangement(kernel::graph::ArrangementSubKind::FrameMember)
             }
             EdgeFamily::Imported => {
-                RelationKind::Imported(mere_kernel::graph::ImportedSubKind::BookmarkFolder)
+                RelationKind::Imported(kernel::graph::ImportedSubKind::BookmarkFolder)
             }
             EdgeFamily::Provenance => {
-                RelationKind::Provenance(mere_kernel::graph::ProvenanceSubKind::ClippedFrom)
+                RelationKind::Provenance(kernel::graph::ProvenanceSubKind::ClippedFrom)
             }
         };
         ((representative.tag() >> 24) & 0xff) as u8

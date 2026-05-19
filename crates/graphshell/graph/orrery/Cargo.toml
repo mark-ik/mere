@@ -1,5 +1,5 @@
 [package]
-name = "mere-orrery"
+name = "orrery"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 accesskit.workspace = true
-mere-kernel.workspace = true
+kernel.workspace = true
 tracing.workspace = true
 uxtree.workspace = true
 

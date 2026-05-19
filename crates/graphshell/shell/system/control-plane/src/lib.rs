@@ -56,7 +56,7 @@
 
 use mere_frame::{FrameId, GraphId, InsertSide, PaneId, SessionId};
 use mere_identity::PersonaId;
-use mere_kernel::graph::{
+use kernel::graph::{
     EdgeAssertion, NavigationTrigger, NodeKey, RelationKind, RelationSelector,
 };
 

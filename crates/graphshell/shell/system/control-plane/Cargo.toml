@@ -9,7 +9,7 @@ description = "Portable shell control-plane bus for Mere: target-scoped BusActio
 
 [dependencies]
 mere-frame.workspace = true
-mere-kernel.workspace = true
+kernel.workspace = true
 mere-identity.workspace = true
 
 [dev-dependencies]

@@ -23,9 +23,9 @@
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
-use mere_kernel::async_request::AsyncRequestState;
-use mere_kernel::graph::NodeKey;
-use mere_kernel::time::PortableInstant;
+use kernel::async_request::AsyncRequestState;
+use kernel::graph::NodeKey;
+use kernel::time::PortableInstant;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OmnibarSessionKind {

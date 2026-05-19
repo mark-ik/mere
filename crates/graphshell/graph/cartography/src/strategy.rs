@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn noop_strategy_returns_strategy_id_in_metadata() {
-        let graph = mere_kernel::graph::Graph::new();
+        let graph = kernel::graph::Graph::new();
         let signals = IntelligenceSignals::default();
         let intent = ViewIntent::default();
         let request = ProjectionRequest {
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn streaming_strategy_advances_state_and_converges_after_target_frames() {
-        let graph = mere_kernel::graph::Graph::new();
+        let graph = kernel::graph::Graph::new();
         let signals = IntelligenceSignals::default();
         let request = ProjectionRequest {
             graph: &graph,
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn streaming_strategy_project_initial_builds_default_state_and_steps_once() {
-        let graph = mere_kernel::graph::Graph::new();
+        let graph = kernel::graph::Graph::new();
         let signals = IntelligenceSignals::default();
         let request = ProjectionRequest {
             graph: &graph,

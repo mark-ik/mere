@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use mere_kernel::actions::ActionId;
+use kernel::actions::ActionId;
 
 use super::*;
 use crate::ux_observability::{DismissReason, SurfaceId, UxEvent, UxObservers};
@@ -208,7 +208,7 @@ fn productive_selection_finder_with_open_node_passes() {
     let mut observers = UxObservers::new();
     observers.register(probe_as_observer(Arc::clone(&probe) as Arc<dyn UxProbe>));
 
-    let dummy = mere_kernel::graph::NodeKey::new(0);
+    let dummy = kernel::graph::NodeKey::new(0);
     observers.emit(UxEvent::SurfaceDismissed {
         surface: SurfaceId::NodeFinder,
         reason: DismissReason::Confirmed,

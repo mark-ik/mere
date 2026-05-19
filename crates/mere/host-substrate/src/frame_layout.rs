@@ -18,7 +18,7 @@ use mere_frame::{
     FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice, SplitPath,
 };
 use mere_renderer_registry::{NodeContentKind, NodeIdentity, Placement};
-use mere_spatial_prototype::{SubstrateNode, SubstrateScene};
+use spatial_substrate::{SubstrateNode, SubstrateScene};
 
 use crate::MereHostApp;
 

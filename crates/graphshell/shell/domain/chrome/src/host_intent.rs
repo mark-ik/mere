@@ -30,9 +30,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use mere_kernel::actions::ActionId;
-use mere_kernel::geometry::PortablePoint;
-use mere_kernel::graph::NodeKey;
+use kernel::actions::ActionId;
+use kernel::geometry::PortablePoint;
+use kernel::graph::NodeKey;
 
 /// Portable intent a host can push into `FrameHostInput.host_intents`
 /// for the runtime to translate and apply during its tick.

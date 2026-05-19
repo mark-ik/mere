@@ -16,7 +16,7 @@
 //! use mere_renderer_registry::{
 //!     NodeContentKind, NodeRenderer, RendererRegistry,
 //! };
-//! use mere_spatial_prototype::{
+//! use spatial_substrate::{
 //!     RecordingRenderer, SubstrateHost, SubstrateNode, SubstrateScene,
 //! };
 //! use mere_renderer_registry::Placement;

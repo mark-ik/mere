@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use graph_canvas::packet::Color;
 use graph_canvas::projection::{ProjectionMode, ViewDimension};
 use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, SceneMode, ViewId};
-use mere_kernel::graph::{EdgeFamily, Graph, GraphViewId, NodeKey, RelationKind};
+use kernel::graph::{EdgeFamily, Graph, GraphViewId, NodeKey, RelationKind};
 
 /// View-local relation-hide key. One stored edge between a node pair
 /// can carry several typed relations; the key names the specific
@@ -130,8 +130,8 @@ pub fn graph_view_id_to_canvas(id: GraphViewId) -> ViewId {
 
 #[cfg(test)]
 mod tests {
-    use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::{EdgeAssertion, SemanticSubKind};
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::{EdgeAssertion, SemanticSubKind};
     use uuid::Uuid;
 
     use super::*;

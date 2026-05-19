@@ -29,7 +29,7 @@ use crate::pane::TileRenderMode;
 /// One overlay stroke pass the host painter renders over a pane.
 ///
 /// Fields use portable types throughout (`PortableRect`,
-/// `mere_kernel::paint::Stroke`) so the descriptor flows across the
+/// `kernel::paint::Stroke`) so the descriptor flows across the
 /// host boundary without egui leakage. Egui painters convert at the
 /// draw-call boundary via `egui_rect_from_portable` /
 /// `egui_stroke_from_portable` in `compositor_adapter`; iced painters

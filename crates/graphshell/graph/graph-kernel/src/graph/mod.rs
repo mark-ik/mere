@@ -61,20 +61,20 @@ pub mod node_props;
 // Identity types and rkyv archive helpers extracted to `identity.rs`
 // per the 2026-04-30 renderer plan §6.4 decomposition target. Public
 // types are re-exported at this module path so external callers
-// (`mere_kernel::graph::NodeKey`, etc.) continue to resolve;
+// (`kernel::graph::NodeKey`, etc.) continue to resolve;
 // the rkyv `with = ...` archive helpers are crate-internal and used
 // only by struct field annotations in this file.
 pub(crate) use identity::UuidAsBytes;
 pub use identity::{EdgeKey, GraphDirection, GraphIndex, GraphViewId, NodeKey};
 
 // Node + NodeLifecycle extracted to `node.rs` per the same
-// decomposition target. Re-exported so `mere_kernel::graph::Node`
+// decomposition target. Re-exported so `kernel::graph::Node`
 // continues to resolve.
 pub use node::{Node, NodeLifecycle};
 
 // Node navigation history extracted to `history.rs` (2026-05-11
 // kernel-mod decomposition pass). Re-exported so external callers
-// (`mere_kernel::graph::NodeNavigationMemory`, etc.) keep resolving.
+// (`kernel::graph::NodeNavigationMemory`, etc.) keep resolving.
 pub use history::{
     NodeHistoryBranchAlternative, NodeHistoryBranchProjection, NodeHistoryBranchVisit,
     NodeHistoryOwner, NodeHistoryProjection, NodeHistorySemanticSummary, NodeNavigationMemory,
@@ -173,7 +173,7 @@ pub(crate) fn current_unix_timestamp_secs() -> u64 {
 
 // Node, NodeLifecycle, and impl Node moved to `node.rs` per the
 // 2026-04-30 renderer plan §6.4 decomposition target. Re-exported
-// here so external paths (`mere_kernel::graph::Node`, etc.)
+// here so external paths (`kernel::graph::Node`, etc.)
 // resolve unchanged.
 
 /// Canonical read-side relation view. One row per (from, to,

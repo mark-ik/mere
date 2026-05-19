@@ -19,12 +19,12 @@ use graphshell_shell_state::frame_model::{
     ThumbnailSettingsView, ToastSpec, ToolbarViewModel,
 };
 use graphshell_shell_state::toolbar::ToolbarDraft;
-use mere_kernel::content::ContentLoadState;
-use mere_kernel::geometry::PortableRect;
-use mere_kernel::graph::NodeKey;
-use mere_kernel::overlay::OverlayStrokePass;
-use mere_kernel::pane::{PaneId, TileRenderMode};
-use mere_kernel::time::PortableInstant;
+use kernel::content::ContentLoadState;
+use kernel::geometry::PortableRect;
+use kernel::graph::NodeKey;
+use kernel::overlay::OverlayStrokePass;
+use kernel::pane::{PaneId, TileRenderMode};
+use kernel::time::PortableInstant;
 
 /// Portable inputs needed to shape the focus section of `FrameViewModel`.
 pub struct FocusProjectionInput<'a> {

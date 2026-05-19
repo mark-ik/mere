@@ -21,7 +21,7 @@
 //! `CommandPaletteSession` / `SearchPaletteScope` call sites resolve
 //! unchanged.
 
-use mere_kernel::actions::ActionCategory;
+use kernel::actions::ActionCategory;
 
 /// Scope filter for command-palette search results.
 ///

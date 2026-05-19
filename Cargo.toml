@@ -74,9 +74,9 @@ cartography = { path = "crates/graphshell/graph/cartography" }
 graph-canvas = { path = "crates/graphshell/graph/graph-canvas" }
 graph-layout = { path = "crates/graphshell/graph/graph-layout" }
 node-lineage = { path = "crates/graphshell/graph/node-lineage" }
-mere-kernel = { path = "crates/graphshell/graph/graph-kernel" }
-mere-orrery = { path = "crates/graphshell/graph/orrery" }
-mere-spatial-prototype = { path = "crates/graphshell/graph/spatial-substrate" }
+kernel = { path = "crates/graphshell/graph/graph-kernel" }
+orrery = { path = "crates/graphshell/graph/orrery" }
+spatial-substrate = { path = "crates/graphshell/graph/spatial-substrate" }
 
 graphshell = { path = "crates/graphshell" }
 graphshell-control-plane = { path = "crates/graphshell/shell/system/control-plane" }

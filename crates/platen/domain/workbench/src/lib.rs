@@ -104,8 +104,8 @@ mod tests {
     use platen::{FrameId, PaneBinding, ProjectedPane, WorkbenchProjection};
     // Fixtures need lower-level types: PaneId / NodeKey are mere-kernel
     // types that flow through platen; SurfaceHostId is from verso-tile.
-    use mere_kernel::graph::NodeKey;
-    use mere_kernel::pane::PaneId;
+    use kernel::graph::NodeKey;
+    use kernel::pane::PaneId;
     use verso_tile::surface::SurfaceHostId;
 
     fn fixture_pane(seed: u128, primary: bool) -> ProjectedPane {

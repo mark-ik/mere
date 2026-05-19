@@ -21,7 +21,7 @@ pub mod app_state;
 
 /// Portable identity, authority, and mutation kernel migrated from the
 /// previous Graphshell tree.
-pub use mere_kernel as core;
+pub use kernel as core;
 
 /// Portable host-port vocabulary migrated from the previous Graphshell tree.
 pub use mere_host_contract as runtime;

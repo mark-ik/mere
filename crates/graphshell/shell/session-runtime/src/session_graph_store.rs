@@ -31,8 +31,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use mere_kernel::graph::Graph;
-use mere_kernel::persistence::GraphSnapshot;
+use kernel::graph::Graph;
+use kernel::persistence::GraphSnapshot;
 
 /// Filename for the per-session graph snapshot inside the session
 /// directory. Sibling to `manifest.json`.
@@ -110,8 +110,8 @@ mod tests {
         let _ = g.assert_relation(
             a,
             b,
-            mere_kernel::graph::EdgeAssertion::Semantic {
-                sub_kind: mere_kernel::graph::SemanticSubKind::Hyperlink,
+            kernel::graph::EdgeAssertion::Semantic {
+                sub_kind: kernel::graph::SemanticSubKind::Hyperlink,
                 label: None,
                 decay_progress: None,
             },

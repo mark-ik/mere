@@ -14,7 +14,7 @@
 //! or host glue instead.
 
 use graph_canvas::scene::CanvasSceneInput;
-use mere_kernel::graph::{GraphViewId, NodeKey};
+use kernel::graph::{GraphViewId, NodeKey};
 pub use platen::canvas_scene::{CanvasSceneOptions, graph_view_id_to_canvas};
 
 use super::{
@@ -91,8 +91,8 @@ mod tests {
 
     use graph_canvas::projection::{ProjectionMode, TwoPointFiveProjection, ViewDimension};
     use graph_canvas::scene::SceneMode;
-    use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::{EdgeAssertion, SemanticSubKind};
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::{EdgeAssertion, SemanticSubKind};
 
     fn hyperlink() -> EdgeAssertion {
         EdgeAssertion::Semantic {
@@ -101,7 +101,7 @@ mod tests {
             decay_progress: None,
         }
     }
-    use mere_kernel::pane::PaneId;
+    use kernel::pane::PaneId;
     use uuid::Uuid;
 
     use super::*;

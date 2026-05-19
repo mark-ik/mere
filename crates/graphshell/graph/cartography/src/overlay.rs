@@ -9,7 +9,7 @@
 //! owners can grow the vocabulary additively without breaking
 //! downstream consumers.
 
-use mere_kernel::graph::{EdgeKey, NodeKey};
+use kernel::graph::{EdgeKey, NodeKey};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

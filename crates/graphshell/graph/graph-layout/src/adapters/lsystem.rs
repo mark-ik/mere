@@ -49,8 +49,8 @@ mod tests {
     use crate::{IterationDepth, LSystemGrammar};
     use cartography::request::ViewIntent;
     use cartography::signals::IntelligenceSignals;
-    use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::{Graph, NodeKey};
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::{Graph, NodeKey};
     use uuid::Uuid;
 
     fn small_graph(n: usize) -> (Graph, Vec<NodeKey>) {

@@ -20,7 +20,7 @@ use std::collections::HashMap;
 
 use crate::{BarnesHut, BarnesHutConfig, ForceDirectedState, Layout};
 use euclid::default::{Point2D, Vector2D};
-use mere_kernel::graph::NodeKey;
+use kernel::graph::NodeKey;
 use serde::{Deserialize, Serialize};
 
 use super::shared::{
@@ -142,8 +142,8 @@ mod tests {
     use super::*;
     use cartography::request::ViewIntent;
     use cartography::signals::IntelligenceSignals;
-    use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::Graph;
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::Graph;
     use uuid::Uuid;
 
     fn small_graph() -> (Graph, [NodeKey; 4]) {

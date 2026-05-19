@@ -5,8 +5,8 @@
 //! exercised end-to-end.
 //!
 //! Wires together:
-//! - `mere_spatial_prototype::SubstrateHost` (per-frame dispatch)
-//! - `mere_spatial_prototype::ExternalTextureCompositor` (vello
+//! - `spatial_substrate::SubstrateHost` (per-frame dispatch)
+//! - `spatial_substrate::ExternalTextureCompositor` (vello
 //!   register_texture cache + Scene::draw_image)
 //! - `mere_renderer_registry::RendererRegistry` (renderer lookup)
 //! - `mere_masonry::MasonryEmbeddedRenderer` (EmbeddedFrameRenderer)
@@ -27,7 +27,7 @@ use masonry_core::core::{DefaultProperties, NewWidget};
 use masonry_testing::ModularWidget;
 use mere_masonry::{MasonryEmbeddedRenderer, RootWidgetFactory};
 use mere_renderer_registry::{NodeContentKind, Placement, RendererRegistry};
-use mere_spatial_prototype::{
+use spatial_substrate::{
     ExternalTextureCompositor, SubstrateHost, SubstrateNode, SubstrateScene,
 };
 use vello::{AaSupport, RendererOptions};
@@ -171,7 +171,7 @@ fn mixed_scene_dispatches_inscene_and_embedded_correctly() {
         Arc::new(DefaultProperties::new()),
         build_factory(),
     );
-    let recording = mere_spatial_prototype::RecordingRenderer::for_kind(
+    let recording = spatial_substrate::RecordingRenderer::for_kind(
         "test.recording",
         NodeContentKind::DocumentTile,
     );

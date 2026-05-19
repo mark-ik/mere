@@ -25,7 +25,7 @@ use std::collections::HashMap;
 
 use crate::{Phyllotaxis, PhyllotaxisConfig, PhyllotaxisRadiusCurve, SpiralOrientation};
 use euclid::default::Point2D;
-use mere_kernel::graph::NodeKey;
+use kernel::graph::NodeKey;
 
 use super::shared::{bounds_of, build_positioned_edges};
 use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
@@ -138,8 +138,8 @@ mod tests {
     use crate::angles;
     use cartography::request::ViewIntent;
     use cartography::signals::IntelligenceSignals;
-    use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::Graph;
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::Graph;
     use uuid::Uuid;
 
     fn small_graph() -> (Graph, Vec<NodeKey>) {

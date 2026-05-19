@@ -37,10 +37,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use graphshell_shell_state::frame_model::{ToastSeverity, ToastSpec};
-use mere_kernel::geometry::{PortablePoint, PortableRect};
-use mere_kernel::graph::NodeKey;
-use mere_kernel::host_event::{HostEvent, ModifiersState};
-use mere_kernel::overlay::GlyphOverlay;
+use kernel::geometry::{PortablePoint, PortableRect};
+use kernel::graph::NodeKey;
+use kernel::host_event::{HostEvent, ModifiersState};
+use kernel::overlay::GlyphOverlay;
 
 // ---------------------------------------------------------------------------
 // Identity vocabulary

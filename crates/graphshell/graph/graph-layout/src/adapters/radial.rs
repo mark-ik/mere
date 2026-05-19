@@ -26,7 +26,7 @@ use crate::{
 };
 use euclid::default::Point2D;
 use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
-use mere_kernel::graph::NodeKey;
+use kernel::graph::NodeKey;
 
 use super::shared::{bounds_of, build_positioned_edges};
 use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
@@ -177,8 +177,8 @@ mod tests {
     use super::*;
     use cartography::request::ViewIntent;
     use cartography::signals::IntelligenceSignals;
-    use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
     use uuid::Uuid;
 
     fn star_graph() -> (Graph, [NodeKey; 5]) {

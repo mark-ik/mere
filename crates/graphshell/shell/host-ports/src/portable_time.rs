@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! Process-monotonic clock adapter producing
-//! [`mere_kernel::time::PortableInstant`] values.
+//! [`kernel::time::PortableInstant`] values.
 //!
 //! 2026-04-25 mere-host-contract extraction: relocated from
 //! `shell/desktop/ui/portable_time.rs`. Both host adapters (egui,
@@ -28,7 +28,7 @@
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use mere_kernel::time::PortableInstant;
+use kernel::time::PortableInstant;
 
 static APP_START: OnceLock<Instant> = OnceLock::new();
 

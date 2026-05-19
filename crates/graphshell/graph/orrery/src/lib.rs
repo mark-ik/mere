@@ -4,7 +4,7 @@
 
 //! # mere-orrery
 //!
-//! Orrery domain layer — projects [`mere_kernel::graph::Graph`] into a
+//! Orrery domain layer — projects [`kernel::graph::Graph`] into a
 //! subtree of AccessKit nodes for `uxtree`. Each graph node becomes a
 //! `Role::Link` accessibility / automation entry; edges are deferred.
 //!
@@ -13,7 +13,7 @@
 #![doc(html_root_url = "https://docs.rs/mere-orrery/0.0.1")]
 
 use accesskit::{Node, Role};
-use mere_kernel::graph::Graph;
+use kernel::graph::Graph;
 use uxtree::{UxTree, node_id_for_path};
 
 /// Crate version.
@@ -67,7 +67,7 @@ pub fn project_graph(graph: &Graph) -> UxTree {
 mod tests {
     use super::*;
     use euclid::default::Point2D;
-    use mere_kernel::graph::Graph;
+    use kernel::graph::Graph;
 
     fn fixture_graph() -> Graph {
         let mut g = Graph::new();

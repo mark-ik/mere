@@ -9,7 +9,7 @@
 //!
 //! ## Place in the architecture
 //!
-//! [`mere_kernel::graph::Graph`] is the source of truth for node
+//! [`kernel::graph::Graph`] is the source of truth for node
 //! identity, topology, and the *committed* position used for
 //! persistence. Aether holds the rapier world that drives the
 //! *projected* position — bodies bound to nodes, forces from
@@ -45,7 +45,7 @@
 use std::collections::HashMap;
 
 use euclid::default::Point2D;
-use mere_kernel::graph::{Graph, NodeKey};
+use kernel::graph::{Graph, NodeKey};
 use rapier2d::prelude::*;
 
 /// Physical radius used for every node body's collider.

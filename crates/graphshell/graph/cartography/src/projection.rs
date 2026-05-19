@@ -4,8 +4,8 @@
 
 //! Projection: the output handed to canvas swatches.
 
-use mere_kernel::geometry::{PortablePoint, PortableRect};
-use mere_kernel::graph::{EdgeKey, NodeKey};
+use kernel::geometry::{PortablePoint, PortableRect};
+use kernel::graph::{EdgeKey, NodeKey};
 use serde::{Deserialize, Serialize};
 
 use crate::minimap::MinimapDescriptor;

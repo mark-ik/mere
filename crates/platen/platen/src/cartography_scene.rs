@@ -35,7 +35,7 @@ use cartography::{
     FormFactor, IntelligenceSignals, LayoutStrategy, ProjectionDimension, ProjectionRequest,
     StreamingLayoutStrategy, TargetSize, ViewIntent,
 };
-use mere_kernel::graph::{Graph, NodeKey};
+use kernel::graph::{Graph, NodeKey};
 
 /// Inputs the host supplies for a cartography projection.
 ///
@@ -145,7 +145,7 @@ mod tests {
     use graph_layout::adapters::{
         ForceDirectedAdapter, ForceDirectedAdapterState, PhyllotaxisAdapter,
     };
-    use mere_kernel::geometry::PortablePoint;
+    use kernel::geometry::PortablePoint;
     use uuid::Uuid;
 
     fn triangle_graph() -> (Graph, [NodeKey; 3]) {

@@ -6,8 +6,8 @@
 
 use std::collections::HashMap;
 
-use mere_kernel::geometry::PortableSize;
-use mere_kernel::graph::NodeKey;
+use kernel::geometry::PortableSize;
+use kernel::graph::NodeKey;
 use serde::{Deserialize, Serialize};
 
 use crate::signals::IntelligenceSignals;
@@ -25,7 +25,7 @@ use crate::signals::IntelligenceSignals;
 /// should log the `intent` and signal-presence flags separately.
 #[derive(Clone)]
 pub struct ProjectionRequest<'a> {
-    pub graph: &'a mere_kernel::graph::Graph,
+    pub graph: &'a kernel::graph::Graph,
     pub signals: &'a IntelligenceSignals,
     pub intent: ViewIntent,
 }

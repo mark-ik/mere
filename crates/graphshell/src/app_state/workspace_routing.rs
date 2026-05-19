@@ -10,8 +10,8 @@
 //! adapters to consume later.
 
 use forme::{NavAction, Provenance};
-use mere_kernel::graph::{GraphViewId, NodeKey};
-use mere_kernel::pane::PaneId;
+use kernel::graph::{GraphViewId, NodeKey};
+use kernel::pane::PaneId;
 use platen::workbench::{
     assign_view_and_frame_pane, remove_view_and_frame_pane, set_view_and_frame_surface_host,
 };
@@ -235,7 +235,7 @@ fn set_pane_surface_host(
 
 #[cfg(test)]
 mod tests {
-    use mere_kernel::geometry::PortablePoint;
+    use kernel::geometry::PortablePoint;
     use uuid::Uuid;
 
     use super::*;

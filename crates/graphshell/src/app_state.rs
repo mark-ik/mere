@@ -14,8 +14,8 @@ use std::collections::HashMap;
 
 use forme::{GraphTree, LayoutMode, ProjectionLens};
 use inker::routing::{EngineRouteDecision, EngineRouteRequest};
-use mere_kernel::graph::{Graph, GraphViewId, NodeKey};
-use mere_kernel::persistence::GraphSnapshot;
+use kernel::graph::{Graph, GraphViewId, NodeKey};
+use kernel::persistence::GraphSnapshot;
 pub use platen::workbench::{
     ArrangementContainer, ArrangementMember, ArrangementSnapshot, FrameId, FrameState, PaneBinding,
     ProjectedPane, WorkbenchProjection,

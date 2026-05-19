@@ -48,8 +48,8 @@ mod tests {
     use super::*;
     use cartography::request::{AxisValue, ViewIntent};
     use cartography::signals::IntelligenceSignals;
-    use mere_kernel::geometry::PortablePoint;
-    use mere_kernel::graph::{Graph, NodeKey};
+    use kernel::geometry::PortablePoint;
+    use kernel::graph::{Graph, NodeKey};
     use std::collections::HashMap;
     use uuid::Uuid;
 

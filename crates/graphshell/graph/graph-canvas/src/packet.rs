@@ -19,7 +19,7 @@ use crate::scripting::SceneObjectId;
 // graph-layout extraction (see the cartography brief's revised §9
 // step 4). Re-exported here to keep graph-canvas's public API stable
 // for downstream consumers.
-pub use mere_kernel::paint::{Color, Stroke};
+pub use kernel::paint::{Color, Stroke};
 
 /// A single drawable primitive in screen space.
 ///

@@ -10,7 +10,7 @@ description = "Portable graphshell session runtime state: session manifests, ses
 
 [dependencies]
 mere-frame.workspace = true
-mere-kernel.workspace = true
+kernel.workspace = true
 mere-identity.workspace = true
 graphshell-control-plane.workspace = true
 verso-tile-state.workspace = true

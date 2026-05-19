@@ -39,7 +39,7 @@
 //!
 //! Inputs:
 //!
-//! - [`mere_kernel::graph::Graph`] — read-only reference.
+//! - [`kernel::graph::Graph`] — read-only reference.
 //! - [`IntelligenceSignals`] — clusters, affinity, hot regions, bridge
 //!   nodes, importance hints. Produced by `intelligence-embeddings`
 //!   and consumed through this narrow contract type, not a direct

@@ -21,7 +21,7 @@ path = "src/lib.rs"
 default = []
 
 [dependencies]
-mere-kernel.workspace = true
+kernel.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

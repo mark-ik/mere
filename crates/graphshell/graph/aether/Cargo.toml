@@ -15,7 +15,7 @@ path = "src/lib.rs"
 # resolve through this simulation, so the dep lands as a foundational
 # layer alongside vello and petgraph rather than a feature bolt-on.
 rapier2d = "0.22"
-mere-kernel.workspace = true
+kernel.workspace = true
 euclid = "0.22"
 tracing = "0.1"
 

@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::time::SystemTime;
 
 use inker::{EngineDocument, SurfaceProducer};
-use mere_kernel::graph::NodeKey;
+use kernel::graph::NodeKey;
 
 use crate::surface_tile::SurfaceTileState;
 

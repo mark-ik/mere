@@ -14,7 +14,7 @@
 //! the canvas where the minimap goes and which overlays to keep at
 //! thumbnail scale.
 
-use mere_kernel::geometry::PortableRect;
+use kernel::geometry::PortableRect;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

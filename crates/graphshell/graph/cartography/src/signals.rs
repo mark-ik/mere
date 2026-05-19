@@ -9,7 +9,7 @@
 //! hand it to cartography; the signal-producer crate's internal shapes
 //! never leak through this type.
 
-use mere_kernel::graph::NodeKey;
+use kernel::graph::NodeKey;
 use serde::{Deserialize, Serialize};
 
 /// Signals from intelligence layers that strategies can consume.

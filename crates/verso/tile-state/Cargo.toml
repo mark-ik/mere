@@ -8,7 +8,7 @@ rust-version = "1.92.0"
 description = "Workbench tile lifecycle state for Verso: within-tile history, document-tile cache state, and long-lived surface-producer tile state."
 
 [dependencies]
-mere-kernel.workspace = true
+kernel.workspace = true
 inker.workspace = true
 
 [lints]

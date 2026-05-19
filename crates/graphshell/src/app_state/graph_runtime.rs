@@ -8,8 +8,8 @@
 //! applies durable node-level graph changes through `mere-kernel::graph`
 //! APIs and emits mutation-journal effects for services to persist later.
 
-use mere_kernel::geometry::PortablePoint;
-use mere_kernel::graph::NodeKey;
+use kernel::geometry::PortablePoint;
+use kernel::graph::NodeKey;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -181,7 +181,7 @@ pub fn reduce_graph_runtime_intent(
 
 #[cfg(test)]
 mod tests {
-    use mere_kernel::geometry::PortablePoint;
+    use kernel::geometry::PortablePoint;
 
     use super::*;
     use crate::app_state::{MutationPayload, WorkspaceEffect};

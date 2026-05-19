@@ -121,7 +121,7 @@ mod tests {
     use cartography::{LayoutStrategy, Projection, ProjectionMetadata, ProjectionRequest};
     use kurbo::Size;
     use mere_frame::{FrameId, GraphId, PaneId, PaneNode, SplitAxis};
-    use mere_kernel::graph::Graph;
+    use kernel::graph::Graph;
     use mere_renderer_registry::NodeIdentity;
 
     use super::*;

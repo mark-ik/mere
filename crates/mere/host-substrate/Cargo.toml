@@ -11,10 +11,10 @@ description = "Substrate-as-host integration crate: bridges `mere-spatial-protot
 path = "src/lib.rs"
 
 [dependencies]
-mere-spatial-prototype.workspace = true
+spatial-substrate.workspace = true
 mere-renderer-registry.workspace = true
 mere-host-runtime.workspace = true
-mere-kernel.workspace = true
+kernel.workspace = true
 mere-frame.workspace = true
 # Substrate is renderer-agnostic and host-agnostic. Renderers
 # (OrreryRenderer, SplitterRenderer) and the orchestration around

@@ -6,8 +6,8 @@
 
 use std::collections::HashMap;
 
-use mere_kernel::graph::{GraphViewId, NodeKey};
-use mere_kernel::pane::PaneId;
+use kernel::graph::{GraphViewId, NodeKey};
+use kernel::pane::PaneId;
 use serde::{Deserialize, Serialize};
 pub use verso_tile::surface::TileSlot;
 use verso_tile::surface::{SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement};

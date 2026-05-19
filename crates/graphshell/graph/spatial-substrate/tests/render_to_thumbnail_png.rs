@@ -24,7 +24,7 @@ use std::sync::mpsc;
 
 use kurbo::Size;
 use mere_renderer_registry::{NodeContentKind, Placement, RendererRegistry};
-use mere_spatial_prototype::{
+use spatial_substrate::{
     RelationEdge, SolidRectRenderer, SubstrateHost, SubstrateNode, SubstrateScene, ThumbnailFit,
     fit_camera,
 };

@@ -10,7 +10,7 @@
 
 use crate::ports::{RuntimeClipboardPort, RuntimeToastPort};
 use graphshell_shell_state::frame_model::ToastSeverity;
-use mere_kernel::graph::NodeKey;
+use kernel::graph::NodeKey;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClipboardCopyKind {

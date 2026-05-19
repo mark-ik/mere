@@ -13,7 +13,7 @@ test-utils = []
 path = "src/lib.rs"
 
 [dependencies]
-mere-kernel.workspace = true
+kernel.workspace = true
 mere-graphshell.workspace = true
 mere-ux-events.workspace = true
 forme.workspace = true

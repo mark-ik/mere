@@ -15,7 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 forme.workspace = true
-mere-kernel.workspace = true
+kernel.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

@@ -527,7 +527,7 @@ fn diagnostic_callback_receives_registry_events() {
     use mere_renderer_registry::{
         CompositionMode, NodeContentKindSet, NodeRenderer, RendererCapabilities, RendererId,
     };
-    use mere_spatial_prototype::RecordingRenderer;
+    use spatial_substrate::RecordingRenderer;
 
     let captured: Arc<Mutex<Vec<DiagnosticEvent>>> = Arc::new(Mutex::new(Vec::new()));
     let mut app = MereHostApp::new();

@@ -127,7 +127,7 @@ impl InScenePaintRenderer for SplitterRenderer {
 mod tests {
     use kurbo::Size;
     use mere_renderer_registry::{Placement, RendererRegistry};
-    use mere_spatial_prototype::{SubstrateHost, SubstrateNode, SubstrateScene};
+    use spatial_substrate::{SubstrateHost, SubstrateNode, SubstrateScene};
 
     use super::*;
 

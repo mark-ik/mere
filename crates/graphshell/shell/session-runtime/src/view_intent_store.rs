@@ -39,7 +39,7 @@ use uuid::Uuid;
 pub const VIEW_INTENT_DIR: &str = "views";
 
 /// One entry in [`ViewIntent::hidden_relations`]. Keyed by stable
-/// node UUIDs and the [`mere_kernel::graph::RelationKind::tag`]
+/// node UUIDs and the [`kernel::graph::RelationKind::tag`]
 /// ordinal so a Hyperlink line and a Cites line on the same node
 /// pair persist independently.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -358,7 +358,7 @@ mod tests {
         let from = Uuid::from_u128(1);
         let to = Uuid::from_u128(2);
         let cites_tag =
-            mere_kernel::graph::RelationKind::Semantic(mere_kernel::graph::SemanticSubKind::Cites)
+            kernel::graph::RelationKind::Semantic(kernel::graph::SemanticSubKind::Cites)
                 .tag();
         original
             .hidden_relations
@@ -367,9 +367,9 @@ mod tests {
         let restored = load_view_intent(&dir, &frame, 1).unwrap().unwrap();
         let record = restored.hidden_relations.iter().next().unwrap();
         assert_eq!(
-            mere_kernel::graph::RelationKind::from_tag(record.relation_tag),
-            Some(mere_kernel::graph::RelationKind::Semantic(
-                mere_kernel::graph::SemanticSubKind::Cites,
+            kernel::graph::RelationKind::from_tag(record.relation_tag),
+            Some(kernel::graph::RelationKind::Semantic(
+                kernel::graph::SemanticSubKind::Cites,
             )),
         );
         fs::remove_dir_all(&dir).ok();

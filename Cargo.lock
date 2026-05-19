@@ -94,7 +94,7 @@ name = "aether"
 version = "0.0.1"
 dependencies = [
  "euclid",
- "mere-kernel",
+ "kernel",
  "rapier2d",
  "tracing",
  "uuid",
@@ -1313,7 +1313,7 @@ dependencies = [
 name = "cartography"
 version = "0.0.1"
 dependencies = [
- "mere-kernel",
+ "kernel",
  "serde",
  "uuid",
 ]
@@ -3887,7 +3887,7 @@ version = "0.0.1"
 dependencies = [
  "burn",
  "euclid",
- "mere-kernel",
+ "kernel",
  "rhai",
  "serde",
  "serde_json",
@@ -3901,7 +3901,7 @@ dependencies = [
  "cartography",
  "euclid",
  "graph-canvas",
- "mere-kernel",
+ "kernel",
  "serde",
  "serde_json",
  "tracing",
@@ -3917,8 +3917,8 @@ dependencies = [
  "forme",
  "graph-canvas",
  "inker",
+ "kernel",
  "mere-host-contract",
- "mere-kernel",
  "node-lineage",
  "platen",
  "pollster",
@@ -3932,9 +3932,9 @@ dependencies = [
 name = "graphshell-control-plane"
 version = "0.0.1"
 dependencies = [
+ "kernel",
  "mere-frame",
  "mere-identity",
- "mere-kernel",
  "uuid",
 ]
 
@@ -3943,8 +3943,8 @@ name = "graphshell-shell-state"
 version = "0.0.1"
 dependencies = [
  "forme",
+ "kernel",
  "mere-graphshell",
- "mere-kernel",
  "mere-ux-events",
  "serde",
  "serde_json",
@@ -4633,7 +4633,7 @@ checksum = "a257582fdcde896fd96463bf2d40eefea0580021c0712a0e2b028b60b47a837a"
 name = "inker"
 version = "0.0.1"
 dependencies = [
- "mere-kernel",
+ "kernel",
  "serde",
  "tracing",
  "verso-tile",
@@ -5187,6 +5187,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "kernel"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "crossbeam-channel",
+ "euclid",
+ "forme",
+ "futures-util",
+ "infer",
+ "mime_guess",
+ "node-lineage",
+ "petgraph",
+ "rkyv",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "time",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "keyboard-types"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5635,7 +5657,7 @@ name = "mere-graphshell"
 version = "0.0.1"
 dependencies = [
  "forme",
- "mere-kernel",
+ "kernel",
  "serde",
  "serde_json",
 ]
@@ -5647,18 +5669,18 @@ dependencies = [
  "cartography",
  "graph-layout",
  "inker",
+ "kernel",
  "kurbo",
  "masonry_core",
  "masonry_testing",
  "mere-frame",
  "mere-host-runtime",
  "mere-host-substrate",
- "mere-kernel",
  "mere-masonry",
  "mere-renderer-registry",
- "mere-spatial-prototype",
  "petgraph",
  "pollster",
+ "spatial-substrate",
  "vello",
  "wgpu",
  "winit",
@@ -5672,8 +5694,8 @@ dependencies = [
  "forme",
  "graph-canvas",
  "graphshell-shell-state",
+ "kernel",
  "log",
- "mere-kernel",
  "register-diagnostics",
  "tokio",
  "verso-tile",
@@ -5685,9 +5707,9 @@ version = "0.0.1"
 dependencies = [
  "euclid",
  "graphshell-control-plane",
+ "kernel",
  "mere-frame",
  "mere-identity",
- "mere-kernel",
  "serde",
  "serde_json",
  "uuid",
@@ -5699,14 +5721,14 @@ name = "mere-host-substrate"
 version = "0.0.1"
 dependencies = [
  "inker",
+ "kernel",
  "kurbo",
  "mere-frame",
  "mere-host-runtime",
- "mere-kernel",
  "mere-renderer-registry",
- "mere-spatial-prototype",
  "petgraph",
  "serde_json",
+ "spatial-substrate",
  "uuid",
 ]
 
@@ -5730,28 +5752,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mere-kernel"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "crossbeam-channel",
- "euclid",
- "forme",
- "futures-util",
- "infer",
- "mime_guess",
- "node-lineage",
- "petgraph",
- "rkyv",
- "serde",
- "serde_json",
- "tempfile",
- "time",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "mere-masonry"
 version = "0.0.1"
 dependencies = [
@@ -5764,18 +5764,6 @@ dependencies = [
  "ui-events",
  "vello",
  "wgpu",
-]
-
-[[package]]
-name = "mere-orrery"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "euclid",
- "mere-kernel",
- "tracing",
- "uuid",
- "uxtree",
 ]
 
 [[package]]
@@ -5797,19 +5785,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mere-spatial-prototype"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "kurbo",
- "mere-renderer-registry",
- "png",
- "pollster",
- "vello",
- "wgpu",
-]
-
-[[package]]
 name = "mere-transport"
 version = "0.0.1"
 dependencies = [
@@ -5828,8 +5803,8 @@ dependencies = [
 name = "mere-ux-events"
 version = "0.0.1"
 dependencies = [
+ "kernel",
  "mere-graphshell",
- "mere-kernel",
  "serde",
 ]
 
@@ -5838,7 +5813,7 @@ name = "mere-workbench"
 version = "0.0.1"
 dependencies = [
  "accesskit",
- "mere-kernel",
+ "kernel",
  "platen",
  "tracing",
  "uuid",
@@ -7247,6 +7222,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "orrery"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "euclid",
+ "kernel",
+ "tracing",
+ "uuid",
+ "uxtree",
+]
+
+[[package]]
 name = "owned_ttf_parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7582,7 +7569,7 @@ dependencies = [
  "graph-canvas",
  "graph-layout",
  "inker",
- "mere-kernel",
+ "kernel",
  "serde",
  "tracing",
  "uuid",
@@ -9451,6 +9438,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "spatial-substrate"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "kurbo",
+ "mere-renderer-registry",
+ "png",
+ "pollster",
+ "vello",
+ "wgpu",
+]
+
+[[package]]
 name = "spez"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10781,7 +10781,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 name = "verso-tile"
 version = "0.0.1"
 dependencies = [
- "mere-kernel",
+ "kernel",
  "serde",
 ]
 
@@ -10790,7 +10790,7 @@ name = "verso-tile-state"
 version = "0.0.1"
 dependencies = [
  "inker",
- "mere-kernel",
+ "kernel",
 ]
 
 [[package]]
