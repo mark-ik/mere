@@ -21,7 +21,9 @@
 use std::collections::HashMap;
 
 use cartography::LayoutStrategy;
-use graph_layout::adapters::{GridAdapter, PhyllotaxisAdapter};
+use graph_layout::adapters::{
+    GridAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter, RadialAdapter,
+};
 
 /// Resolves a `projection_id` to a registered [`LayoutStrategy`].
 /// Defaults include the analytic adapters every v0a preset routes to
@@ -40,13 +42,32 @@ impl StrategyRegistry {
         }
     }
 
-    /// Pre-populated with the analytic adapters every v0a preset
-    /// routes to. Streaming strategies (force-directed and friends)
-    /// join when Path B (per-node substrate nodes) lands.
+    /// Pre-populated with the analytic adapters that produce
+    /// meaningful output from a bare graph + viewport — no host-
+    /// supplied axis values, embeddings, or focus required (Radial
+    /// degrades to an empty projection until a focus-setting preset
+    /// drives it):
+    ///
+    /// - `grid.default` — row-major snap grid
+    /// - `phyllotaxis.default` — sunflower / golden-angle packing
+    /// - `penrose.default` — aperiodic P2/P3 tiling
+    /// - `lsystem.default` — space-filling fractal path
+    /// - `radial.default` — BFS rings around `ViewIntent::focus`
+    ///
+    /// Axial (Kanban / Timeline) and embedding (SemanticEmbedding)
+    /// adapters are intentionally left out until the host supplies
+    /// their inputs (axis values / precomputed embeddings) — they'd
+    /// otherwise be dead routes. Streaming strategies (force-directed,
+    /// Barnes-Hut, semantic-edge-weight) implement
+    /// `StreamingLayoutStrategy`, not `LayoutStrategy`, so they join
+    /// through a separate per-frame stepping path, not this registry.
     pub fn with_defaults() -> Self {
         let mut registry = Self::empty();
         registry.register(Box::new(GridAdapter::default()));
         registry.register(Box::new(PhyllotaxisAdapter::default()));
+        registry.register(Box::new(PenroseAdapter::default()));
+        registry.register(Box::new(LSystemAdapter::default()));
+        registry.register(Box::new(RadialAdapter::default()));
         registry
     }
 
@@ -96,6 +117,21 @@ mod tests {
                 "preset {preset:?} routes to unregistered id {id}"
             );
         }
+    }
+
+    #[test]
+    fn defaults_register_the_analytic_adapter_set() {
+        let registry = StrategyRegistry::with_defaults();
+        for id in [
+            "grid.default",
+            "phyllotaxis.default",
+            "penrose.default",
+            "lsystem.default",
+            "radial.default",
+        ] {
+            assert!(registry.resolve(id).is_some(), "missing adapter {id}");
+        }
+        assert_eq!(registry.len(), 5);
     }
 
     #[test]
