@@ -1,22 +1,22 @@
-# mere-identity
+# identity
 
-`mere-identity` is the identity foundation for the
+`identity` is the identity foundation for the
 [mere](https://crates.io/crates/mere) browser. It owns the user's master
 Ed25519 keypair, the per-protocol derivation algorithm, and the storage
 abstractions for keeping the master secret at rest. Every other
-identity-bearing crate in the workspace (`mere-transport`, `murm`, eventually
+identity-bearing crate in the workspace (`transport`, `murm`, eventually
 `moothold` and `eidetic`) builds on this trust root.
 
 When a user runs mere, they have one identity. But that identity has to play multiple roles:
 
-- a network identity (their iroh `NodeId` in mere-transport)
+- a network identity (their iroh `NodeId` in transport)
 - a per-conversation identity (Ed25519 keys for each cabal in murm)
 - a per-community identity across the tier framework (future moothold for t1–t3, demesne for t4)
 - at-rest encryption keys (future eidetic)
 
 You don't want to use one keypair for all of those: if one has a vulnerability, you don't want it to leak your master identity. You also don't want to store N separate keys forever; that's an attack surface and a backup nightmare.
 
-mere-identity solves this by storing one master secret and deriving every other key from it on demand. Lose the master, lose everything; protect the master, protect everything.
+identity solves this by storing one master secret and deriving every other key from it on demand. Lose the master, lose everything; protect the master, protect everything.
 
 ## Design rules
 
@@ -47,7 +47,7 @@ mere-identity solves this by storing one master secret and deriving every other 
 ## Quick start
 
 ```rust
-use mere_identity::{IdentityProvider, InMemoryProvider};
+use identity::{IdentityProvider, InMemoryProvider};
 
 let provider = InMemoryProvider::random();
 let _master_pubkey = provider.master_public_key();
@@ -64,24 +64,24 @@ assert!(cabal_keypair.public_key().verify(msg, &sig));
 
 ## How it relates to other workspace crates
 
-mere-identity is a leaf crate: it depends on no other mere workspace crate,
+identity is a leaf crate: it depends on no other mere workspace crate,
 only third-party crypto. Consumers reach for it as the identity trust root.
 
 ```text
-    murm   mere-transport   moothold (planned)   eidetic (planned)
+    murm   transport   moothold (planned)   eidetic (planned)
       ▲          ▲                 ▲                   ▲
       │          │                 │                   │
       └──────────┴─────────────────┴───────────────────┘
                        │ master_public_key()
                        │ derive_keypair(salt)
                        ▼
-                  mere-identity
+                  identity
                        │
                        ▼  IdentityStorage impl
               OS keychain | passphrase-encrypted | in-memory
 ```
 
-- [`mere-transport`](https://crates.io/crates/mere-transport) — derives the
+- [`transport`](https://crates.io/crates/transport) — derives the
   iroh `NodeId` from the master public key, so the user's network identity
   is keyed to their identity root. The transport never sees the master
   secret; it consumes the public key for addressing.

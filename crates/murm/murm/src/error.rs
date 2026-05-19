@@ -7,11 +7,11 @@ use thiserror::Error;
 pub enum MurmError {
     /// An identity-layer error.
     #[error("identity error: {0}")]
-    Identity(#[from] mere_identity::IdentityError),
+    Identity(#[from] identity::IdentityError),
 
     /// A transport-layer error.
     #[error("transport error: {0}")]
-    Transport(#[from] mere_transport::TransportError),
+    Transport(#[from] transport::TransportError),
 
     /// A protocol-core error from `murmuring`.
     #[error("protocol error: {0}")]

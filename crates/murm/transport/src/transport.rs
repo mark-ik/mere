@@ -51,7 +51,7 @@ pub trait Transport: Send + Sync {
     type Stream: AsyncRead + AsyncWrite + Send + Unpin + 'static;
 
     /// The local node identifier (derived from the master public key in
-    /// [`mere_identity`]).
+    /// [`identity`]).
     fn local_peer_id(&self) -> PeerID;
 
     /// Open a stream to a peer for a specific protocol (ALPN).

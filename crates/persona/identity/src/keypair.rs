@@ -37,7 +37,7 @@ impl Ed25519Keypair {
     ///
     /// Exposes the secret seed for cryptographic-handshake use that needs
     /// to construct another library's secret-key type (e.g.,
-    /// [`mere-transport`](https://crates.io/crates/mere-transport) building
+    /// [`transport`](https://crates.io/crates/transport) building
     /// an iroh `SecretKey` whose ed25519-dalek major version may differ
     /// from this crate's). **Treat the returned array as sensitive**:
     /// avoid logging, persisting, or passing it to untrusted code.

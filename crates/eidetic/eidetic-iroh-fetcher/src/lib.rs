@@ -6,7 +6,7 @@
 //!
 //! Implements `eidetic::BlobFetcher` for `BlobSource::Iroh { ticket }` by
 //! parsing the ticket as `"<node-id-hex>/<blob-hash-hex>"`, fetching the
-//! blob from the named peer through [`mere_transport`]'s `BlobStore` /
+//! blob from the named peer through [`transport`]'s `BlobStore` /
 //! `IrohTransport`, and returning the bytes.
 //!
 //! Returns `Ok(None)` for any other source kind so
@@ -31,7 +31,7 @@
 
 use async_trait::async_trait;
 use eidetic::{BlobFetcher, BlobSource, Error, Result};
-use mere_transport::{BlobHash, BlobStore, IrohTransport, PeerID};
+use transport::{BlobHash, BlobStore, IrohTransport, PeerID};
 use std::sync::Arc;
 
 /// Iroh-only [`BlobFetcher`].
@@ -136,7 +136,7 @@ pub fn build_ticket(peer_id: PeerID, blob_hash: BlobHash) -> String {
 mod tests {
     use super::*;
     use bytes::Bytes;
-    use mere_identity::{IdentityProvider, InMemoryProvider};
+    use identity::{IdentityProvider, InMemoryProvider};
 
     #[test]
     fn build_then_parse_ticket_round_trips() {
@@ -179,7 +179,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn fetch_returns_bytes_from_remote_peer() {
-        // Two iroh nodes wired up via mere-transport. Alice has a blob;
+        // Two iroh nodes wired up via transport. Alice has a blob;
         // the IrohFetcher (running on Bob's stack) pulls it through the
         // BlobFetcher trait surface.
         let alice_provider = InMemoryProvider::from_seed([10; 32]);

@@ -11,7 +11,7 @@ description = "Portable graphshell session runtime state: session manifests, ses
 [dependencies]
 frame.workspace = true
 kernel.workspace = true
-mere-identity.workspace = true
+identity.workspace = true
 control-plane.workspace = true
 tile-state.workspace = true
 

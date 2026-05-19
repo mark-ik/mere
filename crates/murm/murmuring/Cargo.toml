@@ -15,7 +15,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # Path + version: path for local workspace builds; version for `cargo publish`.
-mere-identity.workspace = true
+identity.workspace = true
 # `blake2` is the standard digest-trait crate; we use it for `hash_cabal_id`
 # (plain BLAKE2b-256). `blake2b_simd` is added because the standard `blake2`
 # crate doesn't expose unkeyed-with-salt-personal construction directly,

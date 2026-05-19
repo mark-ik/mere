@@ -3,7 +3,7 @@
 
 //! Host startup seeding — frametree layout, masonry factory, demo
 //! graph + documents for the v0 orrery. Replace each seed with real
-//! state as session-persistence + intelligence-embeddings + real
+//! state as session-persistence + embed + real
 //! engines wire in.
 
 use std::sync::Arc;

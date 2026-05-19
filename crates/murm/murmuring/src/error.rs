@@ -19,7 +19,7 @@ pub enum MurmuringError {
 
     /// An identity-layer error (key derivation, signing, etc.).
     #[error("identity error: {0}")]
-    Identity(#[from] mere_identity::IdentityError),
+    Identity(#[from] identity::IdentityError),
 
     /// A backend error (storage, transport-adapter, etc.).
     #[error("backend error: {0}")]

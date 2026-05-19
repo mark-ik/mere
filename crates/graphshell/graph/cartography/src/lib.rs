@@ -13,7 +13,7 @@
 //! [`StreamingLayoutStrategy`] traits, the [`Projection`] /
 //! [`Overlay`] / [`MinimapDescriptor`] vocabulary, and the
 //! [`IntelligenceSignals`] narrow shape that firewalls cartography
-//! from `intelligence-embeddings`' internals. The strategies
+//! from `embed`' internals. The strategies
 //! themselves live in sibling crates (graph-layout, document-layout,
 //! …).
 //!
@@ -41,7 +41,7 @@
 //!
 //! - [`kernel::graph::Graph`] — read-only reference.
 //! - [`IntelligenceSignals`] — clusters, affinity, hot regions, bridge
-//!   nodes, importance hints. Produced by `intelligence-embeddings`
+//!   nodes, importance hints. Produced by `embed`
 //!   and consumed through this narrow contract type, not a direct
 //!   dependency on the crate's internals.
 //! - [`ViewIntent`] — what the user is trying to see right now: scale,

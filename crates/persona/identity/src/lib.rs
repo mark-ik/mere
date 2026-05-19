@@ -10,7 +10,7 @@
 //! ## Quick start
 //!
 //! ```
-//! use mere_identity::{IdentityProvider, InMemoryProvider};
+//! use identity::{IdentityProvider, InMemoryProvider};
 //!
 //! let provider = InMemoryProvider::random();
 //! let _master_pubkey = provider.master_public_key();
@@ -40,7 +40,7 @@
 //!
 //! - [`murm`](https://crates.io/crates/murm) — derives per-cabal Ed25519
 //!   keypairs for bilateral chat
-//! - [`mere-transport`](https://crates.io/crates/mere-transport) — derives
+//! - [`transport`](https://crates.io/crates/transport) — derives
 //!   the iroh `NodeId` from the master public key
 //! - Future: [`moothold`](https://crates.io/crates/moothold), [`eidetic`](https://crates.io/crates/eidetic)
 //!
@@ -49,7 +49,7 @@
 //! Pre-1.0. The [`IdentityProvider`] trait surface is intended to stabilize
 //! before 0.1.0.
 
-#![doc(html_root_url = "https://docs.rs/mere-identity/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/identity/0.0.1")]
 #![warn(missing_docs)]
 
 mod error;

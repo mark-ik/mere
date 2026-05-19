@@ -112,16 +112,16 @@ eidetic-fjall = { path = "crates/eidetic/eidetic-fjall" }
 eidetic-https-fetcher = { path = "crates/eidetic/eidetic-https-fetcher" }
 eidetic-iroh-fetcher = { path = "crates/eidetic/eidetic-iroh-fetcher" }
 
-intelligence-embeddings = { path = "crates/intel/embed" }
+embed = { path = "crates/intel/embed" }
 
 murm = { path = "crates/murm/murm" }
 murmuring = { path = "crates/murm/murmuring" }
-mere-transport = { path = "crates/murm/transport" }
+transport = { path = "crates/murm/transport" }
 
 moothold = { path = "crates/moot/moothold" }
 mooting = { path = "crates/moot/mooting" }
 
-mere-identity = { path = "crates/persona/identity" }
+identity = { path = "crates/persona/identity" }
 
 mere-host = { path = "crates/mere/host" }
 mere-host-substrate = { path = "crates/mere/host-substrate" }

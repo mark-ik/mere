@@ -1,4 +1,4 @@
-//! Error types for `mere-transport`.
+//! Error types for `transport`.
 
 use thiserror::Error;
 

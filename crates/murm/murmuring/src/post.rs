@@ -6,7 +6,7 @@
 //! `cable::wire::{encode_post, decode_post}` can round-trip without lossy
 //! conversion.
 
-use mere_identity::{Ed25519PublicKey, Ed25519Signature};
+use identity::{Ed25519PublicKey, Ed25519Signature};
 
 use crate::MurmuringError;
 

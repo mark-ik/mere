@@ -210,7 +210,7 @@ mod tests {
     use crate::cable::hash::hash_post_bytes;
     use crate::cable::sign::sign_post;
     use crate::{ChannelName, PostKind};
-    use mere_identity::{IdentityProvider, InMemoryProvider};
+    use identity::{IdentityProvider, InMemoryProvider};
     use tempfile::tempdir;
 
     fn make_text(channel: &str, text: &str, timestamp_ms: u64) -> (PostId, Post) {

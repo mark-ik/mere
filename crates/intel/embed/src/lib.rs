@@ -14,8 +14,8 @@
 //! ```no_run
 //! # #[cfg(feature = "bert")]
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use intelligence_embeddings::bert::BertEmbeddingProvider;
-//! use intelligence_embeddings::SemanticSearch;
+//! use embed::bert::BertEmbeddingProvider;
+//! use embed::SemanticSearch;
 //!
 //! type B = burn::backend::NdArray<f32>;
 //!

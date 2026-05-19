@@ -185,7 +185,7 @@ impl Default for PrivacyClass {
 }
 
 /// Where an artifact came from. The shape stays loose for Phase 2 — concrete
-/// origin enrichment lands when `mere-identity` and the Distillery aspect
+/// origin enrichment lands when `identity` and the Distillery aspect
 /// surface.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProvenanceOrigin {
@@ -248,7 +248,7 @@ impl Default for TrustLevel {
 }
 
 /// Reference to a signature — opaque string for Phase 2; concrete shape
-/// (likely DID / VC envelope per the engram_spec) lands with `mere-identity`.
+/// (likely DID / VC envelope per the engram_spec) lands with `identity`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct SignatureRef(pub String);

@@ -55,7 +55,7 @@
 //! migration targets.
 
 use frame::{FrameId, GraphId, InsertSide, PaneId, SessionId};
-use mere_identity::PersonaId;
+use identity::PersonaId;
 use kernel::graph::{
     EdgeAssertion, NavigationTrigger, NodeKey, RelationKind, RelationSelector,
 };

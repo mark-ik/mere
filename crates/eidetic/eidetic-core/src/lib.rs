@@ -30,7 +30,7 @@
 //!
 //! Eidetic is distinct from:
 //!
-//! - [`mere-transport`](https://crates.io/crates/mere-transport) (peer
+//! - [`transport`](https://crates.io/crates/transport) (peer
 //!   transport state — networked, not local-private),
 //! - [`moothold`](https://crates.io/crates/moothold) (community/federation
 //!   flora — shared, not private),

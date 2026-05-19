@@ -7,7 +7,7 @@
 //!
 //! ## Design
 //!
-//! - **Identity** comes from [`mere_identity`]: a peer's [`PeerID`] is
+//! - **Identity** comes from [`identity`]: a peer's [`PeerID`] is
 //!   derived from its master Ed25519 public key. Transport never holds the
 //!   master secret; it consumes the public key for addressing.
 //! - **Streams are byte-oriented**: the [`Transport::Stream`] associated
@@ -35,7 +35,7 @@
 //!   sync (planned)
 //! - Future: [`eidetic`](https://crates.io/crates/eidetic) sync, co-op session orchestration
 
-#![doc(html_root_url = "https://docs.rs/mere-transport/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/transport/0.0.1")]
 #![warn(missing_docs)]
 
 mod alpn;
@@ -54,8 +54,8 @@ pub use crate::peer_id::PeerID;
 pub use crate::transport::Transport;
 
 // Re-export commonly-used identity types so consumers don't need a direct
-// dependency on `mere-identity` for the basic identity-into-transport flow.
-pub use mere_identity::{Ed25519PublicKey, IdentityProvider};
+// dependency on `identity` for the basic identity-into-transport flow.
+pub use identity::{Ed25519PublicKey, IdentityProvider};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -66,7 +66,7 @@ pub const STAGE: &str = "pre-alpha";
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mere_identity::InMemoryProvider;
+    use identity::InMemoryProvider;
 
     #[test]
     fn alpn_from_str_round_trips() {

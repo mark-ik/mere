@@ -3,7 +3,7 @@
 //! [`CableEngine`] is the concrete implementation of the Cable bilateral
 //! chat protocol. It owns:
 //!
-//! - The user's [`mere_identity::IdentityProvider`] (for per-cabal keypair
+//! - The user's [`identity::IdentityProvider`] (for per-cabal keypair
 //!   derivation)
 //! - A map of open cabals, keyed by their derived `cabal_id`
 //! - Each cabal's per-cabal Ed25519 keypair (for signing posts as this user)
@@ -21,15 +21,15 @@
 //!
 //! ## Transport / sync
 //!
-//! Phase 2B does **not** yet integrate with [`mere_transport::Transport`].
+//! Phase 2B does **not** yet integrate with [`transport::Transport`].
 //! `post_text` composes, signs, and stores locally; sync between peers
 //! requires the Cable channel-time-range request protocol on top of
-//! `mere-transport` streams, which is a future chunk.
+//! `transport` streams, which is a future chunk.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use mere_identity::{Ed25519Keypair, Ed25519PublicKey, IdentityProvider};
+use identity::{Ed25519Keypair, Ed25519PublicKey, IdentityProvider};
 
 use crate::cable::hash::{hash_cabal_id, hash_post_bytes};
 use crate::cable::sign::sign_post;
@@ -298,7 +298,7 @@ impl BilateralProtocol for CableEngine {
 mod tests {
     use super::*;
     use crate::cable::sign::verify_post;
-    use mere_identity::InMemoryProvider;
+    use identity::InMemoryProvider;
 
     fn engine_with_seed(seed: [u8; 32]) -> CableEngine {
         let provider: Arc<dyn IdentityProvider> = Arc::new(InMemoryProvider::from_seed(seed));

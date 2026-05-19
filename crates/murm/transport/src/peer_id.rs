@@ -1,11 +1,11 @@
 //! Peer-identifier type for transport operations.
 
-use mere_identity::{Ed25519PublicKey, IdentityError};
+use identity::{Ed25519PublicKey, IdentityError};
 
 /// A peer's identifier on the transport network.
 ///
 /// Derived from the peer's master Ed25519 public key (the same key managed
-/// by [`mere_identity`]). For iroh-backed transports, this maps directly to
+/// by [`identity`]). For iroh-backed transports, this maps directly to
 /// iroh's `NodeId` (their term for the same underlying public key).
 ///
 /// Named `PeerID` rather than `NodeId` to disambiguate from

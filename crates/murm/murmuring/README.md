@@ -39,7 +39,7 @@ the user-facing term in `murm` and `mere`.
 
 ## How it relates to other workspace crates
 
-murmuring sits above [`mere-identity`](https://crates.io/crates/mere-identity)
+murmuring sits above [`identity`](https://crates.io/crates/identity)
 (for per-cabal keypair derivation) and below
 [`murm`](https://crates.io/crates/murm) (which wraps it with cabal lifecycle
 and transport orchestration). It does not depend on transport directly:
@@ -60,11 +60,11 @@ the calling layer moves them.
         over concrete              hash, store, persistent_store
         protocols)                          │
                                             ▼
-                                      mere-identity
+                                      identity
                               (derive_keypair for per-cabal Ed25519)
 ```
 
-- [`mere-identity`](https://crates.io/crates/mere-identity) —
+- [`identity`](https://crates.io/crates/identity) —
   `CableEngine::new(Arc<dyn IdentityProvider>)` consumes the identity trust
   root for per-cabal keypair derivation. The master secret never leaves the
   provider.
@@ -73,7 +73,7 @@ the calling layer moves them.
   holds the engine; murmuring provides the protocol logic.
 - **Transport is *not* a dep.** murmuring doesn't know about iroh / streams
   / ALPNs. murm bridges wire bytes through
-  [`mere-transport`](https://crates.io/crates/mere-transport).
+  [`transport`](https://crates.io/crates/transport).
 
 ## Why this lives in its own crate
 
@@ -104,7 +104,7 @@ Forward direction is tracked in the
   survives; the wire format does not.
 - **BLAKE3 unification.** Post hashing (`hash_post`) and any internal hash
   uses migrate from BLAKE2b-256 to BLAKE3, in lockstep with the
-  mere-identity derivation swap.
+  identity derivation swap.
 - **Causal-DAG management** (links resolution, head tracking) and
   **channel time-range request sync** continue to land. These are
   protocol-level features, not wire-format, and survive the wire migration

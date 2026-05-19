@@ -26,7 +26,7 @@ pub trait IdentityProvider: Send + Sync {
     /// The master public key.
     ///
     /// In Mere, the iroh `NodeId` is derived from this (per
-    /// [`mere-transport`](https://crates.io/crates/mere-transport)).
+    /// [`transport`](https://crates.io/crates/transport)).
     fn master_public_key(&self) -> Ed25519PublicKey;
 
     /// Derive a per-protocol keypair from a salt.

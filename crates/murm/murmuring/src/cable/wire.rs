@@ -34,7 +34,7 @@
 
 use std::io::{Cursor, Read};
 
-use mere_identity::{Ed25519PublicKey, Ed25519Signature};
+use identity::{Ed25519PublicKey, Ed25519Signature};
 
 use crate::cable::varint::{read_varint, write_varint};
 use crate::{ChannelName, InfoEntry, MurmuringError, Post, PostId, PostKind};
@@ -261,7 +261,7 @@ fn read_lp_str<R: Read>(cursor: &mut R) -> Result<String, MurmuringError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mere_identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
+    use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 
     /// Construct a signature value for testing — content of the signature
     /// is irrelevant for wire round-trip tests; we just need *some* valid

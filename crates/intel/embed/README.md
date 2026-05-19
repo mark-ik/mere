@@ -1,4 +1,4 @@
-# intelligence-embeddings
+# embed
 
 Embedding-provider trait, deterministic test provider, and pure-Rust flat
 vector index for Mere's statistical-intelligence tier. Target topology:
@@ -32,7 +32,7 @@ End-to-end integration test in `tests/bert_full_pipeline.rs` runs against `MERE_
 
 ```bash
 export MERE_MINILM_DIR=/path/to/all-MiniLM-L6-v2
-cargo test -p intelligence-embeddings --features bert --test bert_full_pipeline -- --ignored
+cargo test -p embed --features bert --test bert_full_pipeline -- --ignored
 ```
 
 ## Field-algebra integration

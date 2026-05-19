@@ -5,8 +5,8 @@
 signed conversations between known peers: a *murmur* between them.
 
 `murm` orchestrates three layers: identity from
-[`mere-identity`](https://crates.io/crates/mere-identity), transport from
-[`mere-transport`](https://crates.io/crates/mere-transport), and the wire
+[`identity`](https://crates.io/crates/identity), transport from
+[`transport`](https://crates.io/crates/transport), and the wire
 protocol from [`murmuring`](https://crates.io/crates/murmuring). It exposes
 a small high-level API (`open_cabal`, snapshot push / accept) for callers;
 the moving parts stay behind it.
@@ -28,8 +28,8 @@ the moving parts stay behind it.
     through.
 - **`MurmError`** — unified error type.
 - **Re-exports for ergonomic use**:
-  - `Ed25519PublicKey`, `IdentityProvider` from mere-identity.
-  - `Alpn`, `NodeId`, `Transport` from mere-transport.
+  - `Ed25519PublicKey`, `IdentityProvider` from identity.
+  - `Alpn`, `NodeId`, `Transport` from transport.
   - `BilateralProtocol`, `ChannelName`, `InfoEntry`, `Post`, `PostId`,
     `PostKind` from murmuring.
   - Post primitives: `encode_post`, `decode_post`, `hash_post`, `sign_post`,
@@ -51,18 +51,18 @@ the user-facing Comms UI in graphshell.
                           │
    ┌──────────────────────┼──────────────────────────┐
    ▼                      ▼                          ▼
-mere-identity      mere-transport                murmuring
+identity      transport                murmuring
 (derive_keypair    (streams +              (wire protocol;
  per cabal)         ALPN multiplex)         today: Cable;
                                             direction: Mere
                                             event DAG)
 ```
 
-- [`mere-identity`](https://crates.io/crates/mere-identity) —
+- [`identity`](https://crates.io/crates/identity) —
   `derive_keypair(cabal_key)` produces the per-cabal Ed25519 keypair. The
   master secret never leaves the identity provider; murm only sees the
   derived keypair.
-- [`mere-transport`](https://crates.io/crates/mere-transport) — murm is
+- [`transport`](https://crates.io/crates/transport) — murm is
   `Murm<T: Transport>`; the same code runs against `MemoryTransport` in
   tests and `IrohTransport` in production. Cabal traffic claims its own
   ALPN (`mere/cable/v1` today; will change as the wire layer migrates per
@@ -92,7 +92,7 @@ Forward direction is tracked in the
   ALPN-multiplexed transport) survive; the wire moves from Cable's binary
   records to CBOR-encoded MereEvents over iroh streams.
 - **BLAKE3 unification.** Cabal-id derivation and post hashing migrate
-  from BLAKE2b-256 to BLAKE3, in lockstep with the mere-identity swap.
+  from BLAKE2b-256 to BLAKE3, in lockstep with the identity swap.
 - **Live broadcast.** Today's snapshot-push is one-shot; a live
   "send-as-you-post" channel is a future chunk.
 - **Additional `BilateralProtocol` impls** (MLS, Tox, …) can land in

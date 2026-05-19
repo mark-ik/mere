@@ -155,7 +155,7 @@ mod fixture_tests {
     ///
     /// ```bash
     /// export MERE_MINILM_DIR=/path/to/all-MiniLM-L6-v2
-    /// cargo test -p intelligence-embeddings --features bert -- --ignored bert::validation
+    /// cargo test -p embed --features bert -- --ignored bert::validation
     /// ```
     #[test]
     #[ignore = "requires MERE_MINILM_DIR pointing at a real all-MiniLM-L6-v2 directory"]

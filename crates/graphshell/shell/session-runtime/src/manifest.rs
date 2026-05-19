@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 
 use frame::{GraphId, SessionId};
-pub use mere_identity::PersonaId;
+pub use identity::PersonaId;
 use serde::{Deserialize, Serialize};
 
 /// Current manifest schema version. Bump on incompatible changes
@@ -69,7 +69,7 @@ pub enum WorkerKind {
     /// surfaces preview content for tiles. v0b adds the implementation.
     FetcherPool,
     /// Embedding producer (BERT-class model) — runs on demand to
-    /// populate the intelligence-embeddings store.
+    /// populate the embed store.
     Embedder,
     /// Indexer that walks document content into the `SearchIndex`
     /// engram referenced by the framing brief §3.

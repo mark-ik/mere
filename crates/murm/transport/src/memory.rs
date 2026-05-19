@@ -21,9 +21,9 @@
 //! ## Quick start
 //!
 //! ```ignore
-//! use mere_transport::{Alpn, PeerID, Transport};
-//! use mere_transport::memory::MemoryTransport;
-//! use mere_identity::{IdentityProvider, InMemoryProvider};
+//! use transport::{Alpn, PeerID, Transport};
+//! use transport::memory::MemoryTransport;
+//! use identity::{IdentityProvider, InMemoryProvider};
 //!
 //! let alice_id = PeerID::from_public_key(
 //!     InMemoryProvider::from_seed([1; 32]).master_public_key(),
@@ -154,7 +154,7 @@ impl Transport for MemoryTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mere_identity::{IdentityProvider, InMemoryProvider};
+    use identity::{IdentityProvider, InMemoryProvider};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn alice_bob_ids() -> (PeerID, PeerID) {

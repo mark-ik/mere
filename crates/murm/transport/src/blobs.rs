@@ -3,7 +3,7 @@
 //! Phase 2C v0 per
 //! [`mere/design_docs/mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md`](../../../../../../design_docs/mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md)
 //! §2.1 — `iroh-blobs` is a sibling iroh primitive that lives in
-//! `mere-transport`. Consumers (murm Cable attachments, moothold engram
+//! `transport`. Consumers (murm Cable attachments, moothold engram
 //! payloads, eidetic large artifacts) put bytes and get a stable BLAKE3
 //! [`BlobHash`]; future network transfer (one peer fetches a hash from
 //! another) lands with the first concrete consumer.
@@ -27,7 +27,7 @@ use thiserror::Error;
 ///
 /// Wraps `iroh_blobs::Hash`. We expose this as our own newtype rather
 /// than re-exporting iroh's type so that consumers depend on the
-/// `mere-transport` API surface, not on a specific iroh-blobs version
+/// `transport` API surface, not on a specific iroh-blobs version
 /// directly.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct BlobHash(Hash);
@@ -262,7 +262,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn fetch_from_remote_peer_round_trips_blob() {
         use crate::IrohTransport;
-        use mere_identity::{IdentityProvider, InMemoryProvider};
+        use identity::{IdentityProvider, InMemoryProvider};
 
         let alice_provider = InMemoryProvider::from_seed([10; 32]);
         let bob_provider = InMemoryProvider::from_seed([20; 32]);

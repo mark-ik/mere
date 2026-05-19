@@ -14,9 +14,9 @@
 //! - **Cabal lifecycle** — opening, joining, leaving cabals; cabal-id
 //!   addressing; the `Cabal` handle returned to consumers
 //! - **Bilateral identity orchestration** — uses
-//!   [`mere_identity::IdentityProvider`] for per-cabal keypair derivation
+//!   [`identity::IdentityProvider`] for per-cabal keypair derivation
 //!   (Cable spec §2.2 pattern)
-//! - **Transport orchestration** — uses [`mere_transport::Transport`] for
+//! - **Transport orchestration** — uses [`transport::Transport`] for
 //!   stream-level peer connections; Murm is generic over the transport
 //!   implementation
 //! - **Per-protocol routing** — dispatches conversation operations to
@@ -26,8 +26,8 @@
 //!
 //! ## What Murm does NOT own
 //!
-//! - Master keypair / OS keychain → [`mere_identity`]
-//! - iroh / QUIC / ALPN → [`mere_transport`]
+//! - Master keypair / OS keychain → [`identity`]
+//! - iroh / QUIC / ALPN → [`transport`]
 //! - Cable wire protocol, MLS, etc. → [`murmuring`] protocol modules
 //! - User-facing chat panel UI → graphshell-side Comms applet (separate)
 //! - Many-to-many federation → `moothold`
@@ -49,8 +49,8 @@ pub use crate::error::MurmError;
 
 // Re-export key types from the layers we sit on, so consumers don't all
 // need direct dependencies on the lower crates.
-pub use mere_identity::{Ed25519PublicKey, IdentityProvider};
-pub use mere_transport::{Alpn, PeerID, Transport};
+pub use identity::{Ed25519PublicKey, IdentityProvider};
+pub use transport::{Alpn, PeerID, Transport};
 pub use murmuring::{BilateralProtocol, ChannelName, InfoEntry, Post, PostId, PostKind};
 
 // Re-export Cable's primary entry points so murm consumers don't need a
@@ -80,7 +80,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 ///
 /// `IdentityProvider` is object-safe (sync methods only at this stage), so
 /// using `Arc<dyn ...>` here is fine and gives flexibility — the same
-/// identity backend can be shared with `mere-transport` (for `PeerID`
+/// identity backend can be shared with `transport` (for `PeerID`
 /// derivation) and other consumers without a generic parameter explosion.
 ///
 /// ## Status
@@ -155,7 +155,7 @@ impl<T: Transport> Murm<T> {
     pub fn derive_cabal_keypair(
         &self,
         cabal_key: &CabalKey,
-    ) -> Result<mere_identity::Ed25519Keypair, MurmError> {
+    ) -> Result<identity::Ed25519Keypair, MurmError> {
         Ok(self.identity.derive_keypair(cabal_key.as_bytes())?)
     }
 
@@ -322,7 +322,7 @@ pub const STAGE: &str = "pre-alpha";
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mere_identity::InMemoryProvider;
+    use identity::InMemoryProvider;
     use std::sync::Arc;
     use tokio::io::DuplexStream;
 
@@ -351,15 +351,15 @@ mod tests {
             &self,
             _peer: PeerID,
             _alpn: Alpn,
-        ) -> Result<Self::Stream, mere_transport::TransportError> {
-            Err(mere_transport::TransportError::ConnectionRefused)
+        ) -> Result<Self::Stream, transport::TransportError> {
+            Err(transport::TransportError::ConnectionRefused)
         }
 
         async fn accept(
             &self,
             _alpn: Alpn,
-        ) -> Result<Self::Stream, mere_transport::TransportError> {
-            Err(mere_transport::TransportError::ConnectionRefused)
+        ) -> Result<Self::Stream, transport::TransportError> {
+            Err(transport::TransportError::ConnectionRefused)
         }
     }
 
@@ -441,12 +441,12 @@ mod tests {
     /// Bob's history matches Alice's.
     #[tokio::test]
     async fn cable_snapshot_sync_via_transport() {
-        use mere_transport::memory::MemoryTransport;
+        use transport::memory::MemoryTransport;
 
         let alice_provider: Arc<dyn IdentityProvider> =
-            Arc::new(mere_identity::InMemoryProvider::from_seed([100; 32]));
+            Arc::new(identity::InMemoryProvider::from_seed([100; 32]));
         let bob_provider: Arc<dyn IdentityProvider> =
-            Arc::new(mere_identity::InMemoryProvider::from_seed([200; 32]));
+            Arc::new(identity::InMemoryProvider::from_seed([200; 32]));
 
         let alice_node = PeerID::from_public_key(alice_provider.master_public_key());
         let bob_node = PeerID::from_public_key(bob_provider.master_public_key());
@@ -494,12 +494,12 @@ mod tests {
         // (simulating transport delivery without yet wiring the actual
         // transport-level sync code).
         let alice_provider: Arc<dyn IdentityProvider> =
-            Arc::new(mere_identity::InMemoryProvider::from_seed([10; 32]));
+            Arc::new(identity::InMemoryProvider::from_seed([10; 32]));
         let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
         let alice = Murm::new(alice_provider, StubTransport::new(alice_id));
 
         let bob_provider: Arc<dyn IdentityProvider> =
-            Arc::new(mere_identity::InMemoryProvider::from_seed([20; 32]));
+            Arc::new(identity::InMemoryProvider::from_seed([20; 32]));
         let bob_id = PeerID::from_public_key(bob_provider.master_public_key());
         let bob = Murm::new(bob_provider, StubTransport::new(bob_id));
 
@@ -553,7 +553,7 @@ mod tests {
     // End-to-end integration: Cable post roundtrip between two peers
     // ─────────────────────────────────────────────────────────────────
 
-    use mere_transport::memory::MemoryTransport;
+    use transport::memory::MemoryTransport;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     /// Read a LEB128 varint from an async reader.
@@ -596,9 +596,9 @@ mod tests {
     async fn cable_text_post_roundtrips_between_peers() {
         // Setup
         let alice_provider: Arc<dyn IdentityProvider> =
-            Arc::new(mere_identity::InMemoryProvider::from_seed([11; 32]));
+            Arc::new(identity::InMemoryProvider::from_seed([11; 32]));
         let bob_provider: Arc<dyn IdentityProvider> =
-            Arc::new(mere_identity::InMemoryProvider::from_seed([22; 32]));
+            Arc::new(identity::InMemoryProvider::from_seed([22; 32]));
 
         let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
         let bob_id = PeerID::from_public_key(bob_provider.master_public_key());
@@ -687,10 +687,10 @@ mod tests {
     /// real endpoints, cross-registering EndpointAddrs).
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn cable_snapshot_sync_via_iroh_transport() {
-        use mere_transport::IrohTransport;
+        use transport::IrohTransport;
 
-        let alice_provider = mere_identity::InMemoryProvider::from_seed([101; 32]);
-        let bob_provider = mere_identity::InMemoryProvider::from_seed([202; 32]);
+        let alice_provider = identity::InMemoryProvider::from_seed([101; 32]);
+        let bob_provider = identity::InMemoryProvider::from_seed([202; 32]);
 
         let alice_kp = alice_provider.master_keypair().clone();
         let bob_kp = bob_provider.master_keypair().clone();
@@ -766,9 +766,9 @@ mod tests {
     #[tokio::test]
     async fn tampered_post_in_transit_fails_verification() {
         let alice_provider: Arc<dyn IdentityProvider> =
-            Arc::new(mere_identity::InMemoryProvider::from_seed([33; 32]));
+            Arc::new(identity::InMemoryProvider::from_seed([33; 32]));
         let bob_provider: Arc<dyn IdentityProvider> =
-            Arc::new(mere_identity::InMemoryProvider::from_seed([44; 32]));
+            Arc::new(identity::InMemoryProvider::from_seed([44; 32]));
 
         let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
         let bob_id = PeerID::from_public_key(bob_provider.master_public_key());

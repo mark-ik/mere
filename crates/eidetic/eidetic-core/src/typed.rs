@@ -43,7 +43,7 @@ use crate::{Error, Result, Store};
 /// schema.org-shaped payloads, etc.).
 ///
 /// [`schema_ref`]: TypedPayload::schema_ref
-/// [`VectorIndex`]: https://crates.io/crates/intelligence-embeddings
+/// [`VectorIndex`]: https://crates.io/crates/embed
 pub trait TypedPayload: Serialize + DeserializeOwned + Sized {
     /// Content-addressed reference to the schema this type conforms to.
     /// In practice this is typically a `const fn`-computed `SchemaRef` or a

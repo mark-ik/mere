@@ -479,7 +479,7 @@ pub fn build_clip_knot(
 /// Round-trip: the knot engine's frontmatter parser will surface this
 /// list as a `block_sources` MetadataRow on re-render — full
 /// per-block-provenance restoration through the engine is gated on a
-/// concrete consumer (intelligence-embeddings cross-source matching,
+/// concrete consumer (embed cross-source matching,
 /// citation overlays). The producer side documents the shape so
 /// downstream consumers can read it directly.
 pub fn build_clip_knot_with_block_provenance(

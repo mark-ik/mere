@@ -12,7 +12,7 @@
 //! payload kind. [`verify_post`] checks that an existing `Post`'s signature
 //! is valid against its `author` field.
 
-use mere_identity::Ed25519Keypair;
+use identity::Ed25519Keypair;
 
 use crate::cable::wire::encode_signed_region;
 use crate::{Post, PostId, PostKind};
@@ -51,7 +51,7 @@ mod tests {
     use super::*;
     use crate::cable::wire::{decode_post, encode_post};
     use crate::{ChannelName, InfoEntry, PostKind};
-    use mere_identity::{IdentityProvider, InMemoryProvider};
+    use identity::{IdentityProvider, InMemoryProvider};
 
     fn keypair() -> Ed25519Keypair {
         InMemoryProvider::from_seed([99; 32])

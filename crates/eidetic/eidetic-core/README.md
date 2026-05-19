@@ -75,7 +75,7 @@ reach for it; it doesn't reach for them.
   impl.
 - [`mere`](https://crates.io/crates/mere) — composes eidetic into the
   product alongside a concrete `Store` backend.
-- [`intelligence-embeddings`](https://crates.io/crates/intelligence-embeddings)
+- [`embed`](https://crates.io/crates/embed)
   — owns embedding providers, vector index, semantic search, and field bridges;
   persists model/index artifacts through eidetic rather than embedding those
   responsibilities here.
@@ -87,7 +87,7 @@ reach for it; it doesn't reach for them.
 
 eidetic occupies a different scope from these adjacent crates:
 
-- [`mere-transport`](https://crates.io/crates/mere-transport) carries an
+- [`transport`](https://crates.io/crates/transport) carries an
   `iroh-blobs` content-addressed blob store — networked / shared between
   peers, not owner-private.
 - [`moothold`](https://crates.io/crates/moothold) owns community flora

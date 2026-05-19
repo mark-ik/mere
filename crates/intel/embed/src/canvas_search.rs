@@ -14,7 +14,7 @@
 //! couplings.
 //!
 //! This module does **not** know about graphshell or any UI toolkit —
-//! it composes existing intelligence-embeddings + graph-canvas
+//! it composes existing embed + graph-canvas
 //! primitives. Graphshell-side palette wiring (action registration,
 //! input event routing) is its own slice.
 

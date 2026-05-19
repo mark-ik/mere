@@ -1,11 +1,11 @@
 [package]
-name = "mere-identity"
+name = "identity"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Identity management for the Mere browser — master Ed25519 keypair, OS-keychain integration, per-protocol identity derivation."
-documentation = "https://docs.rs/mere-identity"
+documentation = "https://docs.rs/identity"
 readme = "README.md"
 keywords = ["identity", "ed25519", "keychain", "browser", "p2p"]
 categories = ["cryptography", "authentication"]

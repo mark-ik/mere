@@ -28,12 +28,12 @@
 //!
 //! ## Identity
 //!
-//! Constructed from an [`mere_identity::Ed25519Keypair`]; the iroh
+//! Constructed from an [`identity::Ed25519Keypair`]; the iroh
 //! `SecretKey` is built from the raw 32-byte seed via [`Ed25519Keypair::to_seed`].
-//! This crosses the ed25519-dalek major-version boundary (mere-identity uses
+//! This crosses the ed25519-dalek major-version boundary (identity uses
 //! `2.x`; iroh 0.98 uses `3.0-pre`) without forcing either side to upgrade.
 //!
-//! [`Ed25519Keypair::to_seed`]: mere_identity::Ed25519Keypair::to_seed
+//! [`Ed25519Keypair::to_seed`]: identity::Ed25519Keypair::to_seed
 
 use std::pin::Pin;
 use std::sync::{Arc, Mutex as StdMutex};
@@ -45,7 +45,7 @@ use iroh::address_lookup::memory::MemoryLookup;
 use iroh::endpoint::{Builder, Connection};
 use iroh::protocol::{AcceptError, ProtocolHandler, Router, RouterBuilder};
 use iroh::{Endpoint, EndpointAddr, SecretKey};
-use mere_identity::Ed25519Keypair;
+use identity::Ed25519Keypair;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::{Mutex as TokioMutex, mpsc};
 
@@ -444,7 +444,7 @@ impl Transport for IrohTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mere_identity::{IdentityProvider, InMemoryProvider};
+    use identity::{IdentityProvider, InMemoryProvider};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn make_transport_inputs(seed: u8) -> (Ed25519Keypair, PeerID) {

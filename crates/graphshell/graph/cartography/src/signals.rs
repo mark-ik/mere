@@ -4,7 +4,7 @@
 
 //! Narrow contract for signals from intelligence layers.
 //!
-//! Cartography does not depend on `intelligence-embeddings`. Producers
+//! Cartography does not depend on `embed`. Producers
 //! of these signals construct an [`IntelligenceSignals`] value and
 //! hand it to cartography; the signal-producer crate's internal shapes
 //! never leak through this type.
@@ -68,7 +68,7 @@ impl AffinityScores {
     }
 }
 
-/// Nodes that bridge communities. Detected by intelligence-embeddings
+/// Nodes that bridge communities. Detected by embed
 /// or by graph-structural betweenness.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct BridgeNodes {

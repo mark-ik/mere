@@ -1,8 +1,8 @@
-//! Error types for `mere-identity`.
+//! Error types for `identity`.
 
 use thiserror::Error;
 
-/// Errors raised by `mere-identity` operations.
+/// Errors raised by `identity` operations.
 #[derive(Debug, Error)]
 pub enum IdentityError {
     /// The provided byte sequence does not encode a valid Ed25519 public key.

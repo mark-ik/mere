@@ -14,7 +14,7 @@
 //!
 //! Per Cable spec §2.2, the user's per-cabal Ed25519 keypair is derived
 //! from `BLAKE2b(master_secret || cabal_key)` — that derivation lives in
-//! [`mere_identity::IdentityProvider::derive_keypair`].
+//! [`identity::IdentityProvider::derive_keypair`].
 
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -113,7 +113,7 @@ impl CabalHandle {
 
     /// The author public key this user posts under in this cabal —
     /// derived from `(master_secret, cabal_key)` per Cable spec §2.2.
-    pub fn author_public_key(&self) -> Result<mere_identity::Ed25519PublicKey, MurmError> {
+    pub fn author_public_key(&self) -> Result<identity::Ed25519PublicKey, MurmError> {
         Ok(self.engine.cabal_author_pubkey(self.cabal_id.as_bytes())?)
     }
 

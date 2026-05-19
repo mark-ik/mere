@@ -34,7 +34,7 @@ use crate::VectorIndex;
 ///
 /// Mere-native schema declaring the persisted vector-index shape. Stable
 /// across instances; its BLAKE3 hash is [`VECTOR_INDEX_SCHEMA_REF`].
-const VECTOR_INDEX_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"intelligence-embeddings.VectorIndex/v1","body":{"version":1,"description":"Persisted vector index over embeddings: dimensions, metric, and key->vector entries.","required":["dimensions","metric","entries"],"fields":{"dimensions":{"type":"u64"},"metric":{"type":"string"},"entries":{"type":"object"}}}}"#;
+const VECTOR_INDEX_SCHEMA_PAYLOAD: &[u8] = br#"{"format":"mere-native","schema_id":"embed.VectorIndex/v1","body":{"version":1,"description":"Persisted vector index over embeddings: dimensions, metric, and key->vector entries.","required":["dimensions","metric","entries"],"fields":{"dimensions":{"type":"u64"},"metric":{"type":"string"},"entries":{"type":"object"}}}}"#;
 
 /// Schema reference for `VectorIndex` engrams.
 ///
@@ -141,7 +141,7 @@ mod tests {
         ProvenanceRecord {
             origin: ProvenanceOrigin::Generated,
             upstream: Vec::new(),
-            tooling: Some("intelligence-embeddings-test".to_string()),
+            tooling: Some("embed-test".to_string()),
             generated_at: Timestamp(0),
         }
     }

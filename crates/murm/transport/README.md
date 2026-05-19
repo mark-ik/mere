@@ -1,6 +1,6 @@
-# mere-transport
+# transport
 
-`mere-transport` is the peer transport layer for the
+`transport` is the peer transport layer for the
 [mere](https://crates.io/crates/mere) browser. It wraps
 [iroh](https://www.iroh.computer) for authenticated, encrypted QUIC streams
 between known peers, exposes content-addressed blob storage (BLAKE3 via
@@ -9,7 +9,7 @@ consumes generically.
 
 ## Design
 
-- **Identity comes from [`mere-identity`](https://crates.io/crates/mere-identity).**
+- **Identity comes from [`identity`](https://crates.io/crates/identity).**
   A peer's `PeerID` is derived from its master Ed25519 public key. Transport
   never holds the master secret; it consumes the public key for addressing.
 - **Streams are byte-oriented.** `Transport::Stream: AsyncRead + AsyncWrite`.
@@ -44,12 +44,12 @@ consumes generically.
     `iroh-blobs::store::mem::MemStore` today; persistent backends land
     behind the same trait.
 - **`error`** — `TransportError` (unified error type).
-- **Re-exports**: `Ed25519PublicKey`, `IdentityProvider` from `mere-identity`
+- **Re-exports**: `Ed25519PublicKey`, `IdentityProvider` from `identity`
   so consumers don't need a direct identity dep for basic flows.
 
 ## How it relates to other workspace crates
 
-mere-transport sits between [`mere-identity`](https://crates.io/crates/mere-identity)
+transport sits between [`identity`](https://crates.io/crates/identity)
 (for addressing) and the higher-level protocols above; iroh sits below as
 the substrate.
 
@@ -62,16 +62,16 @@ the substrate.
                                  │ ALPN-multiplexed streams,
                                  │ BlobStore for content addressing
                                  ▼
-                          mere-transport
+                          transport
                   ┌─────────────────┴──────────────────┐
                   │                                    │
                   ▼                                    ▼
-            mere-identity                       iroh + iroh-blobs
+            identity                       iroh + iroh-blobs
             (PeerID from                        (QUIC, content addressing,
              master pubkey)                      gossip topics)
 ```
 
-- [`mere-identity`](https://crates.io/crates/mere-identity) — `PeerID::from_public_key(master_pubkey)`
+- [`identity`](https://crates.io/crates/identity) — `PeerID::from_public_key(master_pubkey)`
   derives the transport's peer identity from the identity trust root. No
   separate transport key is generated.
 - [`murm`](https://crates.io/crates/murm) — opens a stream per cabal
@@ -84,13 +84,13 @@ the substrate.
   blobs through `BlobStore`; consumed via `iroh-blobs` for cross-device sync
   in multi-device deployments.
 - **Bridges** (`mere-bridge-matrix`, `mere-bridge-nostr`, …, planned) — sit
-  above mere-transport when their foreign protocol can ride iroh; otherwise
+  above transport when their foreign protocol can ride iroh; otherwise
   they bring their own transport.
 
 ## Privacy transport (planned)
 
 Per the [event-DAG substrate brief](../../../design_docs/mere_docs/implementation_strategy/2026-05-07_event_dag_substrate_brief.md),
-mere-transport will gain an optional [Veilid](https://veilid.com/) backend
+transport will gain an optional [Veilid](https://veilid.com/) backend
 behind a `veilid` feature flag, for moots that declare a
 privacy-required transport policy. iroh stays the default; Veilid is opt-in
 for communities where membership-graph leakage is unacceptable.
@@ -104,7 +104,7 @@ land. Veilid backend is planned but not yet wired.
 
 Forward direction is tracked in the
 [event-DAG substrate brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_event_dag_substrate_brief.md):
-mere-transport stays the iroh wrapper; the substrate-level decisions
+transport stays the iroh wrapper; the substrate-level decisions
 (Mere-native event DAG over iroh streams, BLAKE3 unification, Veilid as a
 per-moot privacy policy, bridges-only for foreign protocols) drive what
 lands here.

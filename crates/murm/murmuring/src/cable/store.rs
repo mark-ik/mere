@@ -113,7 +113,7 @@ mod tests {
     use crate::cable::sign::sign_post;
     use crate::cable::wire::encode_post;
     use crate::{ChannelName, PostKind};
-    use mere_identity::{IdentityProvider, InMemoryProvider};
+    use identity::{IdentityProvider, InMemoryProvider};
 
     fn make_text(channel: &str, text: &str, timestamp_ms: u64) -> (PostId, Post) {
         let kp = InMemoryProvider::from_seed([7; 32])

@@ -6,7 +6,7 @@ truth + intelligence signals on the input side, and canvas swatches on
 the output side, and owns the *contracts* — the strategy trait, the
 projection / overlay / minimap vocabulary, and the narrow
 `IntelligenceSignals` shape that firewalls cartography from
-`intelligence-embeddings`' internals.
+`embed`' internals.
 
 The graph stays canonical. Cartography is *representation*, not
 truth — it never mutates the graph; it produces alternative views of
@@ -59,7 +59,7 @@ Contracts only:
 
 - **No strategy implementations** — force-directed, radial,
   cluster-collapsed, phyllotaxis, etc. live in `graph-layout`.
-- **No intelligence-embeddings dependency** — `IntelligenceSignals` is
+- **No embed dependency** — `IntelligenceSignals` is
   a narrow contract type. Producers fill in fields they have; cartography
   consumers read what's there.
 - **No rendering** — `graph-canvas` (and the future `document-canvas`
@@ -81,7 +81,7 @@ dimensions never invalidates a strategy's output.
                   mere-kernel::graph::Graph
                             │ &Graph
                             │
-intelligence-embeddings ────►│ IntelligenceSignals
+embed ────►│ IntelligenceSignals
                             │
                             ▼
                      ┌──────────────┐

@@ -11,7 +11,7 @@
 //! mechanics; semantic-quality tests arrive with the BERT provider in a
 //! follow-up slice.
 
-use intelligence_embeddings::{EmbeddingProvider, HashedEmbeddingProvider, VectorIndex};
+use embed::{EmbeddingProvider, HashedEmbeddingProvider, VectorIndex};
 
 #[test]
 fn semantic_search_pipeline_roundtrip() {

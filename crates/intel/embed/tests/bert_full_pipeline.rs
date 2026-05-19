@@ -13,7 +13,7 @@
 //!
 //! ```bash
 //! export MERE_MINILM_DIR=/path/to/all-MiniLM-L6-v2
-//! cargo test -p intelligence-embeddings --features bert --test bert_full_pipeline -- --ignored
+//! cargo test -p embed --features bert --test bert_full_pipeline -- --ignored
 //! ```
 //!
 //! These tests verify the **mechanical pipeline** works (load → embed →
@@ -34,8 +34,8 @@ use eidetic::{
 use graph_canvas::fields::eval::eval_scalar;
 use graph_canvas::fields::projection::FieldProjection;
 use graph_canvas::fields::registry::FieldRegistry;
-use intelligence_embeddings::bert::BertEmbeddingProvider;
-use intelligence_embeddings::{
+use embed::bert::BertEmbeddingProvider;
+use embed::{
     EmbeddingProvider, SemanticSearch, SimilarityMetric, VectorIndex,
     register_query_similarity_field,
 };
@@ -67,7 +67,7 @@ fn test_provenance() -> ProvenanceRecord {
             source: "hf:sentence-transformers/all-MiniLM-L6-v2".to_string(),
         },
         upstream: Vec::new(),
-        tooling: Some("intelligence-embeddings::bert_full_pipeline".to_string()),
+        tooling: Some("embed::bert_full_pipeline".to_string()),
         generated_at: Timestamp(0),
     }
 }
@@ -264,7 +264,7 @@ fn field_bridge_with_real_bert_separates_similar_from_dissimilar() {
     );
 }
 
-/// **Phase 5 done condition** — closes the eidetic↔intelligence-embeddings
+/// **Phase 5 done condition** — closes the eidetic↔embed
 /// boundary with real MiniLM bytes.
 ///
 /// Reads `config.json` / `tokenizer.json` / `model.safetensors` from
