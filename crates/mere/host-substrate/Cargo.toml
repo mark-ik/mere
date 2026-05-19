@@ -1,0 +1,44 @@
+[package]
+name = "mere-host-substrate"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+rust-version = "1.92.0"
+description = "Substrate-as-host integration crate: bridges `mere-spatial-prototype` (substrate scene + dispatch + camera) to graphshell session runtime, control-plane actions, and verso tile state."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+mere-spatial-prototype.workspace = true
+mere-renderer-registry.workspace = true
+mere-host-runtime.workspace = true
+mere-kernel.workspace = true
+mere-frame.workspace = true
+# Substrate is renderer-agnostic and host-agnostic. Renderers
+# (OrreryRenderer, SplitterRenderer) and the orchestration around
+# them (cartography projection, GraphRegistry) live in `mere-host`
+# alongside the winit / wgpu / vello setup — substrate stays
+# narrowly focused on the substrate ↔ runtime bridge.
+
+kurbo.workspace = true
+# `create_session` mints fresh `SessionId` / `GraphId` UUIDs.
+uuid = { workspace = true }
+
+[dev-dependencies]
+# Tile-projection tests construct fake `EngineDocument`s to drive
+# `TileManager::open_or_focus`. `inker` is the canonical home of
+# `EngineDocument` + `DocumentProvenance` / `DocumentTrustState`.
+inker.workspace = true
+petgraph = "0.8"
+# Per-test temp-directory namespacing for the view-intent disk
+# round-trip tests.
+uuid = { workspace = true }
+# Seeding manifest fixtures via direct JSON write — the test
+# bypasses ManifestStore's atomic-flush path so it can exercise
+# load_from_disk in isolation.
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

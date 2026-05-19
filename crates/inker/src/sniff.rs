@@ -183,7 +183,10 @@ fn has_markdown_marker(trimmed: &[u8]) -> bool {
             return true;
         }
         // Setext heading underline on line 2+: ===… or ---…
-        if i > 0 && (l.starts_with("===") || l.starts_with("---")) && l.chars().all(|c| c == l.chars().next().unwrap()) {
+        if i > 0
+            && (l.starts_with("===") || l.starts_with("---"))
+            && l.chars().all(|c| c == l.chars().next().unwrap())
+        {
             return true;
         }
     }
@@ -239,7 +242,10 @@ mod tests {
 
     #[test]
     fn html_root_without_doctype_is_detected() {
-        assert_eq!(sniff_content_type(b"<html><body/></html>"), Some("text/html"));
+        assert_eq!(
+            sniff_content_type(b"<html><body/></html>"),
+            Some("text/html")
+        );
     }
 
     #[test]

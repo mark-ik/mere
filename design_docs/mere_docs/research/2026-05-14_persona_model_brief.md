@@ -8,7 +8,8 @@
 
 - [`2026-05-11_browser_multiplexer_framing.md`](2026-05-11_browser_multiplexer_framing.md) §11.2 — the gap this brief fills.
 - [`../implementation_strategy/2026-05-14_engine_profile_boundary_plan.md`](../implementation_strategy/2026-05-14_engine_profile_boundary_plan.md) — relies on `PersonaId` to root UDF paths under `<data_root>/personas/<persona_id>/`.
-- [`crates/mere-host-runtime/src/manifest.rs`](../../../crates/mere-host-runtime/src/manifest.rs) — `PersonaId(pub Uuid)` and `GraphSessionManifest.persona_id` are already present. v0 always uses `PersonaId::default_persona()`; this brief governs what the not-default world looks like.
+- [`crates/persona/identity/src/lib.rs`](../../../crates/persona/identity/src/lib.rs) — `PersonaId(pub Uuid)` now lives at the persona boundary.
+- [`crates/graphshell/shell/session-runtime/src/manifest.rs`](../../../crates/graphshell/shell/session-runtime/src/manifest.rs) — `GraphSessionManifest.persona_id` references that `PersonaId`. v0 always uses `PersonaId::default_persona()`; this brief governs what the not-default world looks like.
 
 ---
 
@@ -40,7 +41,7 @@ Multi-user-per-machine is **out of scope** for Mere v0 — defer to the OS user 
 ├── persona.json              ← PersonaManifest (NEW; v1)
 ├── engine-profiles/          ← per-engine UDFs (engine_profile_boundary_plan §2)
 │   └── <engine_id>/
-├── vault/                    ← identity material (Phase 4-ish; tracked by event-DAG brief)
+├── vault/                    ← persona identity material (absorbs mere-identity)
 └── settings/                 ← persona-scoped overrides (capability gates, palette, theme tweaks)
 ```
 
@@ -62,6 +63,54 @@ struct PersonaManifest {
 ```
 
 `durable = false` is the lever for scratch personas: their engine UDF lives under `personas/` but the session manifests carry a flag that consolidates-on-idle clean up the persona's children, and a lifecycle hook archives or deletes the persona on app exit.
+
+### 3.1 Persistence ownership pattern
+
+Persistence follows ownership, not convenience. Every persisted shape has an
+owning domain and a storage substrate:
+
+| Persisted shape | Owner | Storage substrate / path |
+|---|---|---|
+| Persona manifest, vault metadata, persona settings | `persona` | `<data_root>/personas/<persona_id>/` |
+| Engine profile bytes / UDFs | Engine profile boundary, under persona policy | `<data_root>/personas/<persona_id>/engine-profiles/<engine_id>/` by default; session/graph override only by explicit policy |
+| Session manifest and session policy | `graphshell/shell` session runtime | `<data_root>/sessions/<session_id>/manifest.json` |
+| Graph truth | `graphshell/graph/graph-kernel` | Session graph store; eidetic may be the byte substrate, but the graph schema belongs to the graph kernel |
+| View intent / pane-local state | `graphshell/shell` + workbench owner for the pane kind | `<session_dir>/views/<frame_id>/<pane_id>.json` |
+| Tile lifecycle state | `workbench/verso` | Session/workbench store keyed by tile identity |
+| Long-lived artifacts, engrams, model blobs, vector indexes, import payloads | `eidetic` substrate plus the producing domain | content-addressed eidetic manifests / typed payloads |
+| Disposable caches and thumbnails | Producing subsystem | Cache directory; recomputable, never authoritative |
+
+The rule is: **schemas live with the domain that interprets them; eidetic
+stores durable artifacts and typed payloads; hosts provide I/O and lifecycle
+but do not invent persistence schemas.** If a new persisted file appears
+without an owning domain and a declared scope (`persona`, `session`, `graph`,
+`view`, `pane`, `tile`, or `engine-profile`), it is architectural drift.
+
+Each store exposes a typed repository API (`PersonaStore`, `ManifestStore`,
+`ViewIntentStore`, `SessionGraphStore`, etc.) with atomic write semantics.
+Direct ad-hoc JSON writes from host code are out of bounds.
+
+### 3.2 Persona identity crate direction
+
+The current `mere-identity` crate resolves into the persona layer. Identity
+material is not generic app state and not protocol-specific enough to live in
+`murm` or `eidetic-iroh-fetcher`; it is the persona's vault surface. Protocol
+crates ask the active persona for derived keys / public identity material, and
+the host supplies OS-keychain integration behind the persona vault API.
+
+Target topology:
+
+```text
+crates/
+  persona/
+    identity/           # current PersonaId + key derivation / signing / vault surface
+    persona-core/       # optional future split: PersonaManifest + PersonaStore
+```
+
+The current efficient shape keeps `PersonaId` in `persona/identity` so the
+session runtime and control-plane bus can share the type without adding another
+stub crate. If persona manifests/settings grow enough to warrant it, split
+`persona-core` later; do not add it as an empty namespace placeholder.
 
 ## 4. Persona switch as a session-boundary moment
 

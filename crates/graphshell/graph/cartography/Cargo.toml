@@ -1,0 +1,28 @@
+[package]
+name = "cartography"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Non-destructive projection layer for Mere — contracts between graph truth + intelligence signals on the input side and canvas swatches on the output side. Owns LayoutStrategy trait, Projection/Overlay/MinimapDescriptor types, and the narrow IntelligenceSignals shape that firewalls cartography from intelligence-embeddings internals."
+documentation = "https://docs.rs/cartography"
+readme = "README.md"
+keywords = ["cartography", "graph", "layout", "projection", "browser"]
+categories = ["graphics", "rendering"]
+
+[lib]
+path = "src/lib.rs"
+
+# The `graph-canvas-adapters` feature retired 2026-05-18 when its
+# adapters moved to the new `graph-layout` sibling crate. Cartography
+# stays contract-only; consumers needing strategy impls depend on
+# `graph-layout` directly.
+[features]
+default = []
+
+[dependencies]
+mere-kernel.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+uuid = { version = "1.10", features = ["v4"] }

@@ -41,16 +41,16 @@ pub use document::{
     DocumentTrustState, EngineDocument, InlineSpan, ResolvedProvenance, inline_text,
 };
 pub use engine::{Engine, EngineError, EngineInput, EngineRegistry};
+pub use routing::{
+    EngineRouteDecision, EngineRoutePolicy, EngineRouteRequest, EngineRouteRule, SurfaceContract,
+    SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId,
+};
+pub use sniff::sniff_content_type;
 pub use surface_engine::{
     CursorShape, EngineProfileBinding, FocusReason, KeyboardEvent, KeyboardModifiers, MouseButton,
     MouseEvent, MouseEventKind, NativeTextureHandle, NavigationEvent, PhysicalPosition,
     PointerEvent, SurfaceEngine, SurfaceEngineRegistry, SurfaceError, SurfaceFrame,
     SurfaceProducer, SurfaceSettings, SurfaceSpawnRequest, SurfaceSyncHandle, WebMessage,
-};
-pub use sniff::sniff_content_type;
-pub use routing::{
-    EngineRouteDecision, EngineRoutePolicy, EngineRouteRequest, EngineRouteRule, SurfaceContract,
-    SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId,
 };
 
 /// Crate version.

@@ -43,7 +43,7 @@ The refactor this implies:
 
 | Conventional browser subsystem | Firefox-like shape | Mere translation | Current posture |
 | --- | --- | --- | --- |
-| Browser parent / chrome | Parent process owns browser UI, privileged chrome, process management, helper orchestration | `mere-host-runtime`, action bus, capability gates, session manifest, window/runtime host | Partially planned; gpui host canonical today |
+| Browser parent / chrome | Parent process owns browser UI, privileged chrome, process management, helper orchestration | `graphshell/shell/session-runtime`, `graphshell/shell/system/control-plane`, capability gates, session manifest, window/runtime host | Partially planned; gpui host canonical today |
 | Tabs / windows / browser frontend | Tabs and browser chrome around web documents | `GraphSessionManifest`, panes, `ViewIntent`, spatial scene nodes, multi-window projections | Session manifest and view-intent seams exist; spatial IR is research |
 | Content process | Web content loaded in content processes, with origin/process isolation | Renderer tenants: `serval.web`, `scrying.web`, `wry.web`, Nematic document engines, panels | Renderer taxonomy clarified; registry not adopted |
 | Layout/document engine | DOM/CSS/layout builds display lists/scenes | Serval for full web; Nematic/Platen/NetRender for protocol-faithful documents; Cartography for graph views | Multiple lanes exist; unified dispatch pending |
@@ -213,7 +213,7 @@ mere-kernel / eidetic / relation taxonomy
     -> cartography / nematic / inker
     -> platen / uxtree
     -> renderer-registry adapters
-    -> mere-host-runtime
+    -> graphshell shell session/control-plane crates
     -> host backends (gpui today; substrate prototype later)
 ```
 
@@ -239,7 +239,7 @@ Rules:
 
 ## 7. Open questions
 
-1. Should the renderer registry live in `mere-host-runtime`, `inker`, or a small new crate? Lean: host/runtime boundary, not `mere-kernel`.
+1. Should the renderer registry stay under `graphshell/shell/system/registry` or split into a tiny host-facing crate with portable IDs/types? Lean: shell/system boundary, not `mere-kernel`.
 2. What is the first acceptable WebExtension compatibility story: none, read-only adapter, or a privileged compatibility renderer?
 3. How much of `GraphSessionManifest` should be syncable by default versus local-only?
 4. Does CEF/wgpu-weld become a first-class `chromium.web` renderer or remain an experiment until scrying/Serval gaps force it?

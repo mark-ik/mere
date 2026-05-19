@@ -1,0 +1,35 @@
+[package]
+name = "mere-host-contract"
+version = "0.0.1"
+authors = ["@mark-ik"]
+license = "MPL-2.0"
+edition = "2024"
+publish = false
+rust-version = "1.92.0"
+description = "Portable runtime boundary traits for Mere hosts. Renamed from graphshell-runtime."
+
+[dependencies]
+mere-kernel.workspace = true
+graphshell-shell-state.workspace = true
+verso-tile.workspace = true
+# 2026-04-25 servo-into-verso S3a: mere-host-contract now owns the
+# host-port trait surface (HostInputPort, HostPaintPort,
+# HostSurfacePort, HostTexturePort, HostAccessibilityPort), so it
+# needs `graph-canvas::packet` types (Stroke, Color) and `accesskit`
+# (TreeUpdate, NodeId) at the trait signature level. These are
+# already pulled in by graphshell main's default deps; no new
+# transitive surface for downstream crates.
+graph-canvas.workspace = true
+accesskit = { workspace = true, features = ["serde"] }
+# 2026-04-25 mere-host-contract extraction Slice 2 (graph_runtime
+# layout cache projection): `OwnedTreeRow`, `TabEntry`, and
+# `SplitBoundary` come from `forme` (formerly `graph-tree`).
+forme.workspace = true
+# 2026-05-04 Slice 51 (Phase 2): system/signal_bus consolidation
+# from shell/desktop/runtime/registries/signal_routing.rs. The
+# signal bus emits diagnostics on the lagged-receiver channel
+# (`register_diagnostics::channels::CHANNEL_REGISTER_SIGNAL_ROUTING_LAGGED`)
+# and uses tokio broadcast for async fan-out.
+register-diagnostics.workspace = true
+tokio = { version = "1", features = ["sync", "rt", "macros"] }
+log = "0.4.29"

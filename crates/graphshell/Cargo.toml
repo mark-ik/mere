@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Portable shell layer for the Mere browser — host GUI integration and Navigator surface."
+description = "Portable graph + shell chrome facade for the Mere browser — graph authority, shell state, host ports, and Navigator-facing contracts."
 documentation = "https://docs.rs/graphshell"
 readme = "README.md"
 keywords = ["shell", "gui", "navigator", "tiling", "browser"]
@@ -15,18 +15,18 @@ path = "src/lib.rs"
 
 [dependencies]
 async-trait = "0.1"
-eidetic = { path = "../eidetic" }
-graph-canvas = { path = "../graph/graph-canvas" }
-node-lineage = { path = "../graph/node-lineage" }
-forme = { path = "../graph/forme" }
-mere-kernel = { path = "../mere-kernel" }
-mere-host-contract = { path = "../mere-host-contract" }
-inker = { path = "../inker" }
-platen = { path = "../platen" }
+eidetic.workspace = true
+graph-canvas.workspace = true
+node-lineage.workspace = true
+forme.workspace = true
+mere-kernel.workspace = true
+mere-host-contract.workspace = true
+inker.workspace = true
+platen.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "1", features = ["serde"] }
-verso-tile = { path = "../verso-tile" }
+verso-tile.workspace = true
 
 [dev-dependencies]
 pollster = "0.4"

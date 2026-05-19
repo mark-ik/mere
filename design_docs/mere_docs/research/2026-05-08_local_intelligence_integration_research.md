@@ -17,7 +17,7 @@
 **Mere-side context**:
 
 - `repos/mere/design_docs/graphshell_docs/implementation_strategy/2026-05-07_graph_canvas_field_algebra_plan.md` — Burn 0.21 already wired into `graph-canvas`; field algebra exists with `Sample(FieldId)` indirection that accepts vector outputs.
-- `repos/mere/crates/eidetic/` — private local memory crate (`Request`/`Response`/`Store`/`dispatch`); the natural home for embeddings + vector index.
+- `repos/mere/crates/eidetic/eidetic-core/` — private local memory crate and typed-artifact substrate; embeddings and vector indexes persist through it but are not owned by it.
 - `repos/mere/design_docs/mere_docs/implementation_strategy/2026-05-07_event_dag_substrate_brief.md` — engram/event-DAG substrate; relevant when distillery output crosses peer boundaries via murm/moothold.
 
 ---
@@ -78,7 +78,7 @@ The graphshell research's sequencing rule still applies: **structural and semant
 
 ### 4.1 Already in the workspace
 
-- `burn = "0.21"` (optional, behind `field-burn` feature) at `repos/mere/crates/graph/graph-canvas/Cargo.toml`
+- `burn = "0.21"` (optional, behind `field-burn` feature) at `repos/mere/crates/graphshell/graph/graph-canvas/Cargo.toml`
 - `field-burn-wgpu` feature flag for downstream consumers wanting wgpu acceleration
 - Lowering walks the field algebra AST and emits Burn tensor programs — full forward eval for Const, CoordX/Y, Time, Add, Mul, Scale, Negate, Gaussian, Linear, Disk (4 falloffs), Dot, Sample, plus closed-form gradients
 - 23 backend tests passing on the ndarray backend; lowering is generic over `B: Backend`
@@ -332,7 +332,7 @@ The strongest near-term move is **embeddings + vector index + field-coupling** a
 
 The intelligence-embeddings crate has shipped through Tier-2 (statistical retrieval) end-to-end. Status by section:
 
-- **§5 first-cut integration** — DONE. Crate at `crates/intelligence-embeddings/`. Trait + flat vector index + hashed test provider + Bridge-A field-algebra integration + eidetic persistence + `SemanticSearch` facade. ~108 active tests.
+- **§5 first-cut integration** — DONE. Crate at `crates/intel/embed/` (formerly `crates/intelligence-embeddings/`). Trait + flat vector index + hashed test provider + Bridge-A field-algebra integration + eidetic persistence + `SemanticSearch` facade. ~108 active tests.
 - **§5 BERT-via-Burn** — DONE mechanically. Full layer stack (`BertEmbeddings`/`BertSelfAttention`/`BertSelfOutput`/`BertAttention`/`BertIntermediate`/`BertOutput`/`BertLayer`/`BertEncoder`/`BertModel`) implemented in Burn 0.21 with `from_loaded` constructors. `BertEmbeddingProvider::<B>::load(model_dir, device)` is the one-shot entry point. PyTorch `[out, in]` → Burn `[in, out]` Linear-weight transpose handled at the safetensors-extraction boundary. HF `LayerNorm.weight/bias` → Burn `gamma/beta` mapped at the construct boundary.
 - **§5 BERT validation** — TIERED, AWAITING EMPIRICAL RUN. Tier-1 (cheap fixture comparison) runnable as soon as fixtures populate; helper at `scripts/capture_minilm_fixtures.py`. Tier-2 (continuous candle-or-ort comparison) gated behind `bert-validation` feature, structurally ready. First empirical run reveals whether numerical adjustments are needed at three known sites: Linear transpose direction, GELU variant, attention scale factor.
 - **§6 Distillery** — UNCHANGED. Genuinely deferred until Tier-3+ work begins.
@@ -345,3 +345,18 @@ The remaining BERT work is environmental — a developer with `MERE_MINILM_DIR` 
 - Burn remains the Tier-2 embedding / tensor path, but the document no longer treats it as the Tier-3+ LLM or LoRA runtime by default.
 - `eidetic` has moved beyond the early blob-only description: manifest, typed-payload, schema-engram, engram, bundle, and model-storage layers are present in code. Future updates should treat eidetic as the persistence substrate for typed intelligence artifacts, while keeping model/provider logic in sibling intelligence crates.
 - Hash-agility is now called out as a current code/design mismatch: the design wants multihash discipline, while the implementation still uses raw BLAKE3 hashes.
+
+### 2026-05-18 topology adjustment
+
+- Target crate family: `crates/intel/embed/`. The current
+  `intelligence-embeddings` crate becomes the `embed` crate in the `intel`
+  family, not an `eidetic` submodule and not a graphshell crate.
+- `intel/embed` owns embedding providers, vector indexes, semantic search,
+  and typed intelligence-signal production. It may persist indexes and model
+  artifacts through eidetic, but eidetic remains the storage substrate rather
+  than the model/signal owner.
+- The current graph-canvas bridge (`canvas_search` / `field_bridge`) is a
+  transitional integration surface. Long-term, graph-canvas-specific field
+  adapters belong beside `graphshell/graph/graph-canvas` or as an explicit
+  adapter crate; `intel/embed` should retain a graph-agnostic provider/index
+  core.

@@ -15,9 +15,9 @@ path = "src/lib.rs"
 
 [dependencies]
 # Path + version: path for local workspace builds; version for `cargo publish`.
-mere-identity = { path = "../../mere/mere-identity", version = "0.0.1" }
-mere-transport = { path = "../../mere/mere-transport", version = "0.0.1" }
-murmuring = { path = "../murmuring", version = "0.0.1" }
+mere-identity.workspace = true
+mere-transport.workspace = true
+murmuring.workspace = true
 tokio = { version = "1", features = ["io-util"] }
 thiserror = "1"
 

@@ -1,0 +1,26 @@
+[package]
+name = "platen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Graph-aware composition surface for the Mere browser — node layout, the press to verso's page."
+documentation = "https://docs.rs/platen"
+readme = "README.md"
+keywords = ["layout", "composition", "graph", "workbench", "browser"]
+categories = ["gui"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+cartography.workspace = true
+graph-canvas.workspace = true
+graph-layout.workspace = true
+document-canvas.workspace = true
+inker.workspace = true
+mere-kernel.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+tracing = "0.1"
+uuid = { version = "1", features = ["serde"] }
+verso-tile.workspace = true

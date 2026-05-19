@@ -1,51 +1,56 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/mere/mere",
-    "crates/mere/mere-identity",
-    "crates/mere/mere-transport",
-    "crates/graph/graph-canvas",
-    "crates/graph/graph-layout",
-    "crates/graph/node-lineage",
-    "crates/graph/forme",
-    "crates/document/document-canvas",
-    "crates/registry/register-diagnostics",
+    "crates/mere/host",
+    "crates/mere/host-substrate",
+    "crates/persona/identity",
     "crates/graphshell",
-    "crates/mere-kernel",
-    "crates/mere-host-contract",
-    "crates/mere-host-runtime",
-    "crates/graphshell/shell-state",
-    "crates/verso-tile",
+    "crates/graphshell/graph/aether",
+    "crates/graphshell/graph/cartography",
+    "crates/graphshell/graph/graph-canvas",
+    "crates/graphshell/graph/graph-kernel",
+    "crates/graphshell/graph/graph-layout",
+    "crates/graphshell/graph/node-lineage",
+    "crates/graphshell/graph/orrery",
+    "crates/graphshell/graph/spatial-substrate",
+    "crates/graphshell/shell/domain/chrome",
+    "crates/graphshell/shell/domain/frame",
+    "crates/graphshell/shell/host-ports",
+    "crates/graphshell/shell/session-runtime",
+    "crates/graphshell/shell/state",
+    "crates/graphshell/shell/system/control-plane",
+    "crates/graphshell/shell/system/registry/register-diagnostics",
+    "crates/graphshell/shell/system/registry/register-renderer",
+    "crates/graphshell/shell/system/registry/register-renderer-types",
+    "crates/graphshell/shell/ux-events",
     "crates/inker",
-    "crates/scrying-tile-engine",
-    "crates/platen",
-    "crates/nematic",
-    "crates/eidetic",
-    "crates/eidetic-fjall",
-    "crates/eidetic-https-fetcher",
-    "crates/eidetic-iroh-fetcher",
-    "crates/intelligence-embeddings",
-    "crates/uxtree",
-    "crates/mere-domain/workbench",
-    "crates/mere-domain/orrery",
-    "crates/mere-domain/frame",
-    "crates/mere-domain/gloss",
-    "crates/mere-domain/apparatus",
-    "crates/mere-domain/graphshell",
-    "crates/mere-ux-events",
+    "crates/inker/document-canvas",
+    "crates/inker/engines/nematic",
+    "crates/inker/engines/scrying-engine",
+    "crates/forme/forme",
+    "crates/forme/uxtree",
+    "crates/platen/domain/apparatus",
+    "crates/platen/domain/gloss",
+    "crates/platen/domain/workbench",
+    "crates/platen/platen",
+    "crates/verso/scrying-renderer",
+    "crates/verso/tile-state",
+    "crates/verso/verso-core",
+    "crates/eidetic/eidetic-core",
+    "crates/eidetic/eidetic-fjall",
+    "crates/eidetic/eidetic-https-fetcher",
+    "crates/eidetic/eidetic-iroh-fetcher",
+    "crates/intel/embed",
     "crates/murm/murm",
     "crates/murm/murmuring",
+    "crates/murm/transport",
     "crates/moot/moothold",
     "crates/moot/mooting",
-    "crates/aether",
-    "crates/cartography",
-    "crates/mere-renderer-registry",
-    "crates/mere-renderer-registry-types",
-    "crates/mere-spatial-prototype",
-    "crates/mere-host-substrate",
-    "crates/scrying-embedded-renderer",
 ]
-exclude = ["crates/probes", "crates/mere-host", "crates/mere-masonry"]
+exclude = [
+    "crates/probes",
+    "crates/verso/masonry-renderer",
+]
 
 [workspace.package]
 version = "0.0.1"
@@ -59,6 +64,69 @@ repository = "https://github.com/mark-ik/mere"
 # `~/.claude/.../memory/feedback_workspace_pins_drive_probes.md`: workspace
 # pins canonically, probes adapt; pick once with the user, don't churn.
 [workspace.dependencies]
+# ─── Workspace-internal path deps ────────────────────────────────────────────
+# Every workspace member listed here; consumers do `dep.workspace = true`
+# so only the root Cargo.toml knows where each crate lives. Package names
+# below are the *current* names — rename passes (drop mere-* prefix etc.)
+# update both this list and consumer references in one shot.
+aether = { path = "crates/graphshell/graph/aether" }
+cartography = { path = "crates/graphshell/graph/cartography" }
+graph-canvas = { path = "crates/graphshell/graph/graph-canvas" }
+graph-layout = { path = "crates/graphshell/graph/graph-layout" }
+node-lineage = { path = "crates/graphshell/graph/node-lineage" }
+mere-kernel = { path = "crates/graphshell/graph/graph-kernel" }
+mere-orrery = { path = "crates/graphshell/graph/orrery" }
+mere-spatial-prototype = { path = "crates/graphshell/graph/spatial-substrate" }
+
+graphshell = { path = "crates/graphshell" }
+graphshell-control-plane = { path = "crates/graphshell/shell/system/control-plane" }
+graphshell-shell-state = { path = "crates/graphshell/shell/state" }
+mere-frame = { path = "crates/graphshell/shell/domain/frame" }
+mere-graphshell = { path = "crates/graphshell/shell/domain/chrome" }
+mere-host-contract = { path = "crates/graphshell/shell/host-ports" }
+mere-host-runtime = { path = "crates/graphshell/shell/session-runtime" }
+mere-renderer-registry = { path = "crates/graphshell/shell/system/registry/register-renderer" }
+mere-renderer-registry-types = { path = "crates/graphshell/shell/system/registry/register-renderer-types" }
+mere-ux-events = { path = "crates/graphshell/shell/ux-events" }
+register-diagnostics = { path = "crates/graphshell/shell/system/registry/register-diagnostics" }
+
+inker = { path = "crates/inker" }
+document-canvas = { path = "crates/inker/document-canvas" }
+nematic = { path = "crates/inker/engines/nematic" }
+scrying-tile-engine = { path = "crates/inker/engines/scrying-engine" }
+
+forme = { path = "crates/forme/forme" }
+uxtree = { path = "crates/forme/uxtree" }
+
+platen = { path = "crates/platen/platen" }
+mere-apparatus = { path = "crates/platen/domain/apparatus" }
+mere-gloss = { path = "crates/platen/domain/gloss" }
+mere-workbench = { path = "crates/platen/domain/workbench" }
+
+verso-tile = { path = "crates/verso/verso-core" }
+verso-tile-state = { path = "crates/verso/tile-state" }
+scrying-embedded-renderer = { path = "crates/verso/scrying-renderer" }
+
+eidetic = { path = "crates/eidetic/eidetic-core" }
+eidetic-fjall = { path = "crates/eidetic/eidetic-fjall" }
+eidetic-https-fetcher = { path = "crates/eidetic/eidetic-https-fetcher" }
+eidetic-iroh-fetcher = { path = "crates/eidetic/eidetic-iroh-fetcher" }
+
+intelligence-embeddings = { path = "crates/intel/embed" }
+
+murm = { path = "crates/murm/murm" }
+murmuring = { path = "crates/murm/murmuring" }
+mere-transport = { path = "crates/murm/transport" }
+
+moothold = { path = "crates/moot/moothold" }
+mooting = { path = "crates/moot/mooting" }
+
+mere-identity = { path = "crates/persona/identity" }
+
+mere-host = { path = "crates/mere/host" }
+mere-host-substrate = { path = "crates/mere/host-substrate" }
+
+# ─── External pins ───────────────────────────────────────────────────────────
 # Linebender visual stack — one row, one wgpu, vello upstream-current.
 vello = "0.9"
 wgpu = "29"

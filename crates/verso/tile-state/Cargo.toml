@@ -1,0 +1,15 @@
+[package]
+name = "verso-tile-state"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+rust-version = "1.92.0"
+description = "Workbench tile lifecycle state for Verso: within-tile history, document-tile cache state, and long-lived surface-producer tile state."
+
+[dependencies]
+mere-kernel.workspace = true
+inker.workspace = true
+
+[lints]
+workspace = true

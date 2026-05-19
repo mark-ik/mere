@@ -1,0 +1,35 @@
+[package]
+name = "mere-spatial-prototype"
+version = "0.0.1"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+rust-version = "1.92.0"
+description = "Phase-3 proof harness for the spatial chrome IR substrate (per `design_docs/mere_docs/implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`). Demonstrates renderer-registry dispatch over a minimal substrate scene graph; first real adopter of `mere-renderer-registry`. Not a product host."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+mere-renderer-registry.workspace = true
+
+# Substrate-side scene + transform types. Workspace-pinned so the
+# version travels with the registry's vello.
+kurbo.workspace = true
+vello.workspace = true
+# Direct dep so the `ExternalTextureCompositor` public surface can name
+# `wgpu::Texture`. Vello pulls wgpu transitively but `unused_crate_dependencies`
+# requires direct declaration for crates we name in our own API.
+wgpu.workspace = true
+# AccessKit projection: substrate scene → accesskit::TreeUpdate per
+# IR brief §5's `accessibility-tree-emit` system.
+accesskit.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+# Headless wgpu boot for the render-to-PNG integration test.
+pollster = "0.4"
+# Encode the read-back framebuffer as a PNG for visual inspection.
+png = "0.18"

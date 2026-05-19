@@ -38,7 +38,7 @@ pub fn load(...) -> Result<EngineDocument, EngineError> {
     registry.dispatch(&decision, &input)   // → EngineDocument
 }
 
-// mere-host-runtime/src/tiles.rs
+// workbench/verso/tile-state/src/tiles.rs
 pub struct TileState {
     pub history: Vec<HistoryEntry>,
     pub history_cursor: usize,
@@ -142,30 +142,39 @@ inker (new module: surface_engine)
   - SurfaceSpawnRequest / SurfaceFrame / surface event vocabulary
   - SurfaceEngineRegistry (parallel to EngineRegistry)
 
-mere-host-runtime (new module: surface_tile)
+workbench/verso/tile-state (new crate: verso-tile-state)
   - SurfaceTileState (analog of TileState but holds a producer +
     last-acquired frame, not a document cache)
   - lifecycle helpers: spawn / navigate / step (per-frame poll) /
     teardown
 
-mere-host (existing crates)
+graphshell/shell/session-runtime
+  - session manifest, engine profile paths, view-intent sidecars, and
+    worker declarations
+  - re-exports tile state for compatibility but does not own it
+
+mere-host (product binary)
   - host_navigation, panes, etc.: new dispatch branch on whether
     the chosen engine is in the document or surface registry
   - rendering: new gpui-side path that imports the producer's wgpu
     texture into a gpui-renderable surface
 
-scrying-tile-engine (new crate, optional)
+scrying-engine (workbench/verso crate)
   - implements `inker::SurfaceEngine` for the scrying-driven path
   - depends on scrying + inker
   - host pulls this in to register the engine
 
-Alternatively the impl can live directly in mere-host-runtime;
-splitting into a separate crate is cleaner if a host other than
-mere-host ever wants the same scrying integration.
+graphshell/shell/system/control-plane
+  - owns the typed action bus and gates; surface navigation commands
+    route through it rather than through tile state directly
 ```
 
-Recommended: implement directly in `mere-host-runtime` first; spin
-out to `scrying-tile-engine` if a second consumer materializes.
+2026-05-19 topology correction: do **not** put the scrying surface
+implementation or tile state back into session runtime. The runtime
+owns manifests and session sidecars. Tile lifecycle belongs under
+`workbench/verso/tile-state`; the scrying surface engine implementation
+belongs under `workbench/verso/scrying-engine` once it becomes more than
+a registration shim.
 
 ## 4. The `SurfaceProducer` trait shape
 
@@ -259,11 +268,11 @@ scrying impl plumbs it to the right producer config.
   producer.
 - ~200 LOC, no new deps. Pure inker work.
 
-### Slice 2 — `scrying-tile-engine` impl (in `mere-host-runtime`)
+### Slice 2 — `scrying-engine` impl in `workbench/verso`
 
 - Add `scrying = { path = "../../scrying/scrying" }` to
-  `mere-host-runtime/Cargo.toml`.
-- New module `mere-host-runtime::scrying_tile_engine` implementing
+  the verso scrying engine crate.
+- New module/crate implementing
   `inker::SurfaceEngine` and `SurfaceProducer`.
 - Windows path first (it's the most mature per the audit doc).
   macOS path follows; Linux stays skeletal until scrying's Linux
@@ -274,11 +283,11 @@ scrying impl plumbs it to the right producer config.
 - Tests: lifecycle smoke — spawn against a known URL, acquire a
   frame, teardown. Maps to scrying's `--scripted` /
   `--browser-test` already-validated paths.
-- ~300 LOC, drops the scrying dep into `mere-host-runtime`.
+- ~300 LOC, drops the scrying dep into the verso scrying engine crate.
 
-### Slice 3 — Surface tile state + lifecycle in `mere-host-runtime`
+### Slice 3 — Surface tile state + lifecycle in `workbench/verso/tile-state`
 
-- New module `mere-host-runtime::surface_tile` with `SurfaceTileState`
+- `verso-tile-state::surface_tile` with `SurfaceTileState`
   analog of `TileState`. Holds a `Box<dyn SurfaceProducer>` plus the
   last-acquired `SurfaceFrame`, plus the within-tile navigation
   history (still relevant for back/forward — the producer has its
@@ -407,8 +416,8 @@ trait; the parallel-trait choice is more code but lower-risk.
    traits in inker. Low-risk; doesn't depend on anything else;
    establishes the contract Mark can sanity-check before deeper
    work.
-2. **Slice 2** — scrying-tile-engine impl. Pulls scrying dep into
-   mere-host-runtime; concrete Windows-first impl.
+2. **Slice 2** — scrying engine impl. Pulls scrying dep into
+   `workbench/verso/scrying-engine`; concrete Windows-first impl.
 3. **Slices 3–6** together as a working tile. Each individually is
    ~100–200 LOC but they have to land together for any tile to
    render.

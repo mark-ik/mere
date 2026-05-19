@@ -1,0 +1,24 @@
+[package]
+name = "mere-frame"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Frame domain layer for the Mere browser — savable layout of resizable panes (workbench / orrery / gloss / apparatus / system) projected into uxtree."
+documentation = "https://docs.rs/mere-frame"
+readme = "README.md"
+keywords = ["frame", "pane", "layout", "mere", "uxtree"]
+categories = ["accessibility", "gui"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+accesskit.workspace = true
+serde.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+uxtree.workspace = true
+
+[dev-dependencies]
+serde_json = "1"

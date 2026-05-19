@@ -1,0 +1,24 @@
+[package]
+name = "mere-orrery"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Orrery domain layer for the Mere browser — projects mere-kernel's Graph into uxtree nodes (a11y / automation tree)."
+documentation = "https://docs.rs/mere-orrery"
+readme = "README.md"
+keywords = ["graph", "mere", "domain", "accessibility", "uxtree"]
+categories = ["accessibility", "gui"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+accesskit.workspace = true
+mere-kernel.workspace = true
+tracing.workspace = true
+uxtree.workspace = true
+
+[dev-dependencies]
+euclid = "0.22"
+uuid = "1"

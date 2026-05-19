@@ -249,7 +249,10 @@ pub trait SurfaceEngine: Send + Sync {
     fn engine_id(&self) -> &str;
 
     /// Spawn a new producer for the given request.
-    fn spawn(&self, request: &SurfaceSpawnRequest) -> Result<Box<dyn SurfaceProducer>, SurfaceError>;
+    fn spawn(
+        &self,
+        request: &SurfaceSpawnRequest,
+    ) -> Result<Box<dyn SurfaceProducer>, SurfaceError>;
 }
 
 /// Long-lived surface producer. Owns a WebView control until dropped.
@@ -360,25 +363,63 @@ mod tests {
     struct StubProducer;
 
     impl SurfaceProducer for StubProducer {
-        fn resize(&mut self, _: u32, _: u32) -> Result<(), SurfaceError> { Ok(()) }
-        fn set_offset(&mut self, _: i32, _: i32) -> Result<(), SurfaceError> { Ok(()) }
-        fn acquire_frame(&mut self) -> Result<Option<SurfaceFrame>, SurfaceError> { Ok(None) }
-        fn navigate_to_url(&mut self, _: &str) -> Result<(), SurfaceError> { Ok(()) }
-        fn navigate_to_string(&mut self, _: &str) -> Result<(), SurfaceError> { Ok(()) }
-        fn reload(&mut self) -> Result<(), SurfaceError> { Ok(()) }
-        fn stop(&mut self) -> Result<(), SurfaceError> { Ok(()) }
-        fn go_back(&mut self) -> Result<(), SurfaceError> { Ok(()) }
-        fn go_forward(&mut self) -> Result<(), SurfaceError> { Ok(()) }
-        fn can_go_back(&self) -> bool { false }
-        fn can_go_forward(&self) -> bool { false }
-        fn send_mouse_input(&mut self, _: MouseEvent) -> Result<(), SurfaceError> { Ok(()) }
-        fn send_pointer_input(&mut self, _: PointerEvent) -> Result<(), SurfaceError> { Ok(()) }
-        fn send_keyboard_input(&mut self, _: KeyboardEvent) -> Result<(), SurfaceError> { Ok(()) }
-        fn move_focus(&mut self, _: FocusReason) -> Result<(), SurfaceError> { Ok(()) }
-        fn poll_navigation_event(&mut self) -> Option<NavigationEvent> { None }
-        fn poll_cursor_shape(&mut self) -> Option<CursorShape> { None }
-        fn poll_web_message(&mut self) -> Option<WebMessage> { None }
-        fn apply_settings(&mut self, _: &SurfaceSettings) -> Result<(), SurfaceError> { Ok(()) }
+        fn resize(&mut self, _: u32, _: u32) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn set_offset(&mut self, _: i32, _: i32) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn acquire_frame(&mut self) -> Result<Option<SurfaceFrame>, SurfaceError> {
+            Ok(None)
+        }
+        fn navigate_to_url(&mut self, _: &str) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn navigate_to_string(&mut self, _: &str) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn reload(&mut self) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn stop(&mut self) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn go_back(&mut self) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn go_forward(&mut self) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn can_go_back(&self) -> bool {
+            false
+        }
+        fn can_go_forward(&self) -> bool {
+            false
+        }
+        fn send_mouse_input(&mut self, _: MouseEvent) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn send_pointer_input(&mut self, _: PointerEvent) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn send_keyboard_input(&mut self, _: KeyboardEvent) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn move_focus(&mut self, _: FocusReason) -> Result<(), SurfaceError> {
+            Ok(())
+        }
+        fn poll_navigation_event(&mut self) -> Option<NavigationEvent> {
+            None
+        }
+        fn poll_cursor_shape(&mut self) -> Option<CursorShape> {
+            None
+        }
+        fn poll_web_message(&mut self) -> Option<WebMessage> {
+            None
+        }
+        fn apply_settings(&mut self, _: &SurfaceSettings) -> Result<(), SurfaceError> {
+            Ok(())
+        }
         fn capture_snapshot_png(&mut self) -> Result<Vec<u8>, SurfaceError> {
             Err(SurfaceError::Unsupported("stub".into()))
         }
@@ -387,7 +428,9 @@ mod tests {
     struct StubSurfaceEngine;
 
     impl SurfaceEngine for StubSurfaceEngine {
-        fn engine_id(&self) -> &str { "test.surface" }
+        fn engine_id(&self) -> &str {
+            "test.surface"
+        }
         fn spawn(&self, _: &SurfaceSpawnRequest) -> Result<Box<dyn SurfaceProducer>, SurfaceError> {
             Ok(Box::new(StubProducer))
         }
@@ -428,7 +471,10 @@ mod tests {
         let mut reg = SurfaceEngineRegistry::new();
         reg.register(Box::new(StubSurfaceEngine));
         // `Box<dyn SurfaceProducer>` doesn't implement Debug, so avoid .expect()
-        assert!(reg.spawn(&decision("test.surface"), &stub_request()).is_ok());
+        assert!(
+            reg.spawn(&decision("test.surface"), &stub_request())
+                .is_ok()
+        );
     }
 
     #[test]

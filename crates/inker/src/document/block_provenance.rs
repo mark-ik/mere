@@ -173,7 +173,10 @@ mod tests {
     fn override_wins_for_recorded_block_only() {
         let mut map = BlockProvenanceMap::new();
         let other = other_provenance();
-        map.insert(2, BlockProvenance::from_document(other.clone()).with_anchor("L42-L58"));
+        map.insert(
+            2,
+            BlockProvenance::from_document(other.clone()).with_anchor("L42-L58"),
+        );
 
         let doc = doc_provenance();
 
@@ -207,7 +210,10 @@ mod tests {
     fn with_anchor_attaches_anchor() {
         let bp = BlockProvenance::from_document(other_provenance()).with_anchor("guid:abc");
         assert_eq!(bp.anchor.as_deref(), Some("guid:abc"));
-        assert_eq!(bp.provenance.canonical_uri.as_deref(), Some("gemini://other/"));
+        assert_eq!(
+            bp.provenance.canonical_uri.as_deref(),
+            Some("gemini://other/")
+        );
     }
 
     #[test]

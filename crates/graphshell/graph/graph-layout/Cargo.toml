@@ -1,0 +1,32 @@
+[package]
+name = "graph-layout"
+version = "0.0.1"
+authors = ["@mark-ik"]
+license = "MPL-2.0"
+edition = "2024"
+publish = false
+rust-version = "1.92.0"
+description = "Graph layout algorithms — Layout<N> trait, analytic and streaming impls, and cartography LayoutStrategy adapters. Sibling crate to graph-canvas, extracted from `graph-canvas::layout` per the cartography layer brief §9 step 4."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Layout impls operate against graph-canvas's `CanvasViewport` /
+# `CanvasSceneInput` types. The renderer still depends on this crate
+# via re-exports; the layout subsystem here depends on graph-canvas
+# only for those primitive scene/camera shapes.
+graph-canvas.workspace = true
+# Cartography contracts — adapters implement `LayoutStrategy` /
+# `StreamingLayoutStrategy` against the Layout<N> impls in this crate.
+cartography.workspace = true
+mere-kernel.workspace = true
+
+euclid = { version = "0.22", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+
+[dev-dependencies]
+serde_json = "1.0"
+uuid = { workspace = true }

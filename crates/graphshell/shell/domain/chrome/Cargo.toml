@@ -1,0 +1,22 @@
+[package]
+name = "mere-graphshell"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Graphshell domain layer for the Mere browser — root toolbar, app menu, address/omnibar, window chrome view-models. Narrower than the legacy graphshell crate; absorbs slices of graphshell-shell-state as they migrate."
+documentation = "https://docs.rs/mere-graphshell"
+readme = "README.md"
+keywords = ["graphshell", "toolbar", "omnibar", "mere", "domain"]
+categories = ["gui"]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+forme.workspace = true
+mere-kernel.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"

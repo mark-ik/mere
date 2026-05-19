@@ -1,0 +1,23 @@
+[package]
+name = "graphshell-shell-state"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Portable shell session state for the Mere browser — focus authorities, command palette, omnibar, toolbar, frame view-models, and UX state types."
+
+[features]
+test-utils = []
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+mere-kernel.workspace = true
+mere-graphshell.workspace = true
+mere-ux-events.workspace = true
+forme.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"
