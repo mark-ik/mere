@@ -53,28 +53,23 @@ The point is, we want to support the **fullest** web, and that includes the smol
 
 ## Crates
 
-| Crate | Role |
+The workspace is organized by semantic ownership rather than by a `mere-*`
+namespace prefix:
+
+| Family | Role |
 |-------|------|
-| [`mere`](crates/mere/mere) | The browser product crate — entrypoint and surface composition |
-| [`mere-identity`](crates/mere/mere-identity) | Identity management — master Ed25519 keypair, keychain integration, per-protocol derivation |
-| [`mere-transport`](crates/mere/mere-transport) | Peer transport layer — iroh-based authenticated streams between known peers |
-| [`graphshell`](crates/graphshell) | Portable shell layer — host GUI integration (iced / gpui / html-css / other) and Navigator surface |
-| [`graphshell-core`](crates/graphshell/core) | Portable Graphshell identity, authority, graph, pane, and shell-state contracts |
-| [`graphshell-runtime`](crates/graphshell/runtime) | Portable runtime adapters, frame projections, host ports, and surface schedule application |
-| [`graphshell-host`](crates/graphshell/host) | Host-side adapters and toolkit ordering for fresh Graphshell surface hosts |
-| [`graphshell-host-iced`](crates/graphshell/host-iced) | Fresh iced host boundary — queues surface lifecycle requests without old GraphBrowserApp mutation assumptions |
-| [`verso-tile`](crates/verso-tile) | Rendering-surface management — receives engine output and places it into GraphTree tiles (Verso brand) |
-| [`inker`](crates/inker) | Engine controller — selects and orchestrates content engines |
-| [`platen`](crates/platen) | Composition surface — graph-aware layout, the press to verso's page |
-| [`nematic`](crates/nematic) | Smolweb engine — Gemini, Gopher, static HTML, Markdown, RSS/Atom |
-| [`murm`](crates/murm/murm) | Bilateral peer-to-peer comms supercrate |
-| [`murmuring`](crates/murm/murmuring) | Protocol core for bilateral chat-protocol selection — inner layer of `murm` |
-| [`moothold`](crates/moot/moothold) | Community / federation supercrate (will switch to `moot` if that name frees up) |
-| [`mooting`](crates/moot/mooting) | Protocol core for community social-primitives selection — inner layer of `moothold` |
+| [`mere`](crates/mere) | Product binary and host substrate glue |
+| [`persona`](crates/persona) | Persona identity, vaults, key lifecycle, and per-persona policy roots |
+| [`graphshell`](crates/graphshell) | Graph + shell chrome: graph kernel/canvas/layout/cartography plus host shell state, ports, session runtime, control plane, registries, and chrome-domain contracts |
+| [`workbench`](crates/workbench) | Content workbench: `inker`, document canvas, nematic engines, `forme`, `platen`, and `verso` surface/tile lifecycle crates |
+| [`eidetic`](crates/eidetic) | Durable artifact and typed-payload substrate |
+| [`intel`](crates/intel) | Local intelligence providers and indexes; `embed` owns embedding/search machinery over eidetic artifacts |
+| [`murm`](crates/murm) | Bilateral peer-to-peer comms and transport |
+| [`moot`](crates/moot) | Community / federation social primitives |
 
 ## Workbench: printing-press metaphor
 
-Engines (Wry, Serval, Nematic) produce content. The **inker** pairs each engine to its content. The **platen** composes the layout. The **verso** receives the impression. The user sees the printed result in the surface that `mere` composes atop `graphshell`. **Mnem** keeps the impressions over time. **Murm** carries one-to-one comms; **moothold** carries community/federation.
+Engines (Wry, Serval, Nematic) produce content. The **inker** pairs each engine to its content. The **forme** locks graph members into a view arrangement. The **platen** composes the layout. The **verso** receives the impression. The user sees the printed result in the surface that `mere` composes atop `graphshell`. **Eidetic** keeps durable artifacts over time. **Murm** carries one-to-one comms; **moot** carries community/federation.
 
 ## Status
 
