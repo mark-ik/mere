@@ -7,6 +7,6 @@
 //!
 //! **Migrated to `mere-graphshell::routing` (2026-05-09).** This module
 //! re-exports the canonical types from the new location for backward
-//! compat. New code should import from `mere_graphshell::routing`.
+//! compat. New code should import from `chrome::routing`.
 
-pub use mere_graphshell::routing::*;
+pub use chrome::routing::*;

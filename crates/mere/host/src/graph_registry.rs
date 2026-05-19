@@ -5,7 +5,7 @@
 //! gpui-side `mere_host::graph_registry`.
 //!
 //! Every live `kernel::graph::Graph` in the application sits in
-//! this map, keyed by `mere_frame::GraphId`. Panes in a `FrameLayout`
+//! this map, keyed by `frame::GraphId`. Panes in a `FrameLayout`
 //! carry a `graph_id` on each leaf; the substrate path looks each
 //! `graph_id` up here when projecting per-pane content (orrery,
 //! workbench tile strip, gloss).
@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 
-use mere_frame::GraphId;
+use frame::GraphId;
 use kernel::graph::Graph;
 
 /// Holds every live graph the app is currently presenting, keyed

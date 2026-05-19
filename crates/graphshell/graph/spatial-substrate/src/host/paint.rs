@@ -9,7 +9,7 @@
 //! [`FrameReport`](super::FrameReport) stay in the parent.
 
 use kurbo::{Affine, Line, Stroke};
-use mere_renderer_registry::{
+use register_renderer::{
     CompositionMode, DispatchError, PaintCtx, PaintError, ProducerHandle, RendererId,
 };
 use vello::peniko::Brush;
@@ -102,7 +102,7 @@ impl SubstrateHost {
 
     fn dispatch_node(
         &mut self,
-        node_ref: mere_renderer_registry::SceneNodeRef,
+        node_ref: register_renderer::SceneNodeRef,
         target: &mut vello::Scene,
         compositor: &mut ExternalTextureCompositor,
         vello_renderer: &mut vello::Renderer,
@@ -161,7 +161,7 @@ impl SubstrateHost {
 
     fn dispatch_embedded(
         &mut self,
-        node_ref: &mere_renderer_registry::SceneNodeRef,
+        node_ref: &register_renderer::SceneNodeRef,
         id: RendererId,
         target: &mut vello::Scene,
         compositor: &mut ExternalTextureCompositor,

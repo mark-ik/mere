@@ -12,7 +12,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use kurbo::Affine;
-use mere_renderer_registry::{
+use register_renderer::{
     CompositionMode, InScenePaintRenderer, InputDisposition, InputEvent, NodeContentKind,
     NodeContentKindSet, NodeIdentity, NodeRenderer, PaintCtx, PaintResult, RendererCapabilities,
     RendererId, SceneNodeRef,
@@ -116,7 +116,7 @@ impl InScenePaintRenderer for RecordingRenderer {
 #[cfg(test)]
 mod tests {
     use kurbo::Size;
-    use mere_renderer_registry::{Placement, RendererRegistry};
+    use register_renderer::{Placement, RendererRegistry};
 
     use super::*;
     use crate::host::SubstrateHost;
@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn input_dispatch_records_event() {
-        use mere_renderer_registry::{ModifiersState, PointerButton, PointerEventKind};
+        use register_renderer::{ModifiersState, PointerButton, PointerEventKind};
 
         let renderer = RecordingRenderer::for_kind("recording", NodeContentKind::DocumentTile);
         let log = renderer.shared_input_log();

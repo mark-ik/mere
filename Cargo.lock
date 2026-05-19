@@ -1422,6 +1422,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "chrome"
+version = "0.0.1"
+dependencies = [
+ "forme",
+ "kernel",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "chrono"
 version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1647,6 +1657,16 @@ name = "constcat"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "136d3e02915a2cea4d74caa8681e2d44b1c3254bdbf17d11d41d587ff858832c"
+
+[[package]]
+name = "control-plane"
+version = "0.0.1"
+dependencies = [
+ "frame",
+ "kernel",
+ "mere-identity",
+ "uuid",
+]
 
 [[package]]
 name = "convert_case"
@@ -3400,6 +3420,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "frame"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uuid",
+ "uxtree",
+]
+
+[[package]]
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3916,9 +3948,9 @@ dependencies = [
  "eidetic",
  "forme",
  "graph-canvas",
+ "host-ports",
  "inker",
  "kernel",
- "mere-host-contract",
  "node-lineage",
  "platen",
  "pollster",
@@ -3926,28 +3958,6 @@ dependencies = [
  "serde_json",
  "uuid",
  "verso-tile",
-]
-
-[[package]]
-name = "graphshell-control-plane"
-version = "0.0.1"
-dependencies = [
- "kernel",
- "mere-frame",
- "mere-identity",
- "uuid",
-]
-
-[[package]]
-name = "graphshell-shell-state"
-version = "0.0.1"
-dependencies = [
- "forme",
- "kernel",
- "mere-graphshell",
- "mere-ux-events",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -4197,6 +4207,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
 dependencies = [
  "digest 0.10.7",
+]
+
+[[package]]
+name = "host-ports"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "forme",
+ "graph-canvas",
+ "kernel",
+ "log",
+ "register-diagnostics",
+ "shell-state",
+ "tokio",
+ "verso-tile",
 ]
 
 [[package]]
@@ -5631,18 +5656,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mere-frame"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "serde",
- "serde_json",
- "tracing",
- "uuid",
- "uxtree",
-]
-
-[[package]]
 name = "mere-gloss"
 version = "0.0.1"
 dependencies = [
@@ -5653,33 +5666,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "mere-graphshell"
-version = "0.0.1"
-dependencies = [
- "forme",
- "kernel",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "mere-host"
 version = "0.0.1"
 dependencies = [
  "cartography",
+ "frame",
  "graph-layout",
  "inker",
  "kernel",
  "kurbo",
  "masonry_core",
  "masonry_testing",
- "mere-frame",
- "mere-host-runtime",
  "mere-host-substrate",
  "mere-masonry",
- "mere-renderer-registry",
  "petgraph",
  "pollster",
+ "register-renderer",
+ "session-runtime",
  "spatial-substrate",
  "vello",
  "wgpu",
@@ -5687,47 +5690,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "mere-host-contract"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "forme",
- "graph-canvas",
- "graphshell-shell-state",
- "kernel",
- "log",
- "register-diagnostics",
- "tokio",
- "verso-tile",
-]
-
-[[package]]
-name = "mere-host-runtime"
-version = "0.0.1"
-dependencies = [
- "euclid",
- "graphshell-control-plane",
- "kernel",
- "mere-frame",
- "mere-identity",
- "serde",
- "serde_json",
- "uuid",
- "verso-tile-state",
-]
-
-[[package]]
 name = "mere-host-substrate"
 version = "0.0.1"
 dependencies = [
+ "frame",
  "inker",
  "kernel",
  "kurbo",
- "mere-frame",
- "mere-host-runtime",
- "mere-renderer-registry",
  "petgraph",
+ "register-renderer",
  "serde_json",
+ "session-runtime",
  "spatial-substrate",
  "uuid",
 ]
@@ -5760,28 +5733,10 @@ dependencies = [
  "kurbo",
  "masonry_core",
  "masonry_imaging",
- "mere-renderer-registry",
+ "register-renderer",
  "ui-events",
  "vello",
  "wgpu",
-]
-
-[[package]]
-name = "mere-renderer-registry"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "kurbo",
- "mere-renderer-registry-types",
- "vello",
- "wgpu",
-]
-
-[[package]]
-name = "mere-renderer-registry-types"
-version = "0.0.1"
-dependencies = [
- "kurbo",
 ]
 
 [[package]]
@@ -5797,15 +5752,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
-]
-
-[[package]]
-name = "mere-ux-events"
-version = "0.0.1"
-dependencies = [
- "kernel",
- "mere-graphshell",
- "serde",
 ]
 
 [[package]]
@@ -8498,6 +8444,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "register-renderer"
+version = "0.0.1"
+dependencies = [
+ "accesskit",
+ "kurbo",
+ "register-renderer-types",
+ "vello",
+ "wgpu",
+]
+
+[[package]]
+name = "register-renderer-types"
+version = "0.0.1"
+dependencies = [
+ "kurbo",
+]
+
+[[package]]
 name = "rend"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9005,8 +8969,8 @@ name = "scrying-embedded-renderer"
 version = "0.0.1"
 dependencies = [
  "kurbo",
- "mere-renderer-registry",
  "pollster",
+ "register-renderer",
  "scrying",
  "wgpu",
 ]
@@ -9166,6 +9130,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "session-runtime"
+version = "0.0.1"
+dependencies = [
+ "control-plane",
+ "euclid",
+ "frame",
+ "kernel",
+ "mere-identity",
+ "serde",
+ "serde_json",
+ "uuid",
+ "verso-tile-state",
+]
+
+[[package]]
 name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9211,6 +9190,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
+]
+
+[[package]]
+name = "shell-state"
+version = "0.0.1"
+dependencies = [
+ "chrome",
+ "forme",
+ "kernel",
+ "serde",
+ "serde_json",
+ "ux-events",
 ]
 
 [[package]]
@@ -9443,9 +9434,9 @@ version = "0.0.1"
 dependencies = [
  "accesskit",
  "kurbo",
- "mere-renderer-registry",
  "png",
  "pollster",
+ "register-renderer",
  "vello",
  "wgpu",
 ]
@@ -10576,6 +10567,15 @@ dependencies = [
  "js-sys",
  "serde_core",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "ux-events"
+version = "0.0.1"
+dependencies = [
+ "chrome",
+ "kernel",
+ "serde",
 ]
 
 [[package]]

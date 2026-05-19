@@ -6,7 +6,7 @@
 //!
 //! **Migrated to `mere-graphshell::frame_model` (2026-05-10).**
 //! Re-exports for backward compat. New code should import from
-//! `mere_graphshell::frame_model`.
+//! `chrome::frame_model`.
 //!
 //! Per-type future destinations (TODO):
 //! - `FrameHostInput` belongs in `mere-host-contract` (host→runtime
@@ -21,4 +21,4 @@
 //! coherence with the other chrome view-models (toolbar, omnibar,
 //! command_palette).
 
-pub use mere_graphshell::frame_model::*;
+pub use chrome::frame_model::*;

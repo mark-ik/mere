@@ -7,6 +7,6 @@
 //! **Migrated to `mere-graphshell::command_palette` (2026-05-09).**
 //! This module re-exports the canonical types from the new location
 //! for backward compat. New code should import from
-//! `mere_graphshell::command_palette`.
+//! `chrome::command_palette`.
 
-pub use mere_graphshell::command_palette::*;
+pub use chrome::command_palette::*;

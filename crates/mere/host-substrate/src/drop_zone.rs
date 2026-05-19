@@ -34,7 +34,7 @@
 //! gestures, matching the legacy gpui host.
 
 use kurbo::{Point, Rect};
-use mere_frame::InsertSide;
+use frame::InsertSide;
 
 /// Pick which side of a target a drop lands on, given the cursor
 /// position and the target's bounds. See the module docs for the

@@ -1,5 +1,5 @@
 [package]
-name = "graphshell-control-plane"
+name = "control-plane"
 version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"
@@ -8,7 +8,7 @@ rust-version = "1.92.0"
 description = "Portable shell control-plane bus for Mere: target-scoped BusAction types, permission gates, and action dispatch outcomes."
 
 [dependencies]
-mere-frame.workspace = true
+frame.workspace = true
 kernel.workspace = true
 mere-identity.workspace = true
 

@@ -6,8 +6,8 @@
 //!
 //! **Migrated to `mere-graphshell::toolbar` (2026-05-09).** This module
 //! re-exports the canonical types from the new location so existing
-//! `graphshell_shell_state::toolbar::ToolbarState` / `ToolbarEditable`
+//! `shell_state::toolbar::ToolbarState` / `ToolbarEditable`
 //! / `ToolbarDraft` call sites resolve unchanged. New code should
-//! import from `mere_graphshell::toolbar` directly.
+//! import from `chrome::toolbar` directly.
 
-pub use mere_graphshell::toolbar::*;
+pub use chrome::toolbar::*;

@@ -6,6 +6,6 @@
 //!
 //! **Migrated to `mere-graphshell::omnibar` (2026-05-09).** This module
 //! re-exports the canonical types from the new location for backward
-//! compat. New code should import from `mere_graphshell::omnibar`.
+//! compat. New code should import from `chrome::omnibar`.
 
-pub use mere_graphshell::omnibar::*;
+pub use chrome::omnibar::*;

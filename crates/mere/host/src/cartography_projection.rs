@@ -11,9 +11,9 @@
 //! "the modular pieces become a running host."
 
 use cartography::{IntelligenceSignals, LayoutStrategy, ProjectionRequest, ViewIntent};
-use mere_frame::{FrameLayout, PaneContent, PaneId};
+use frame::{FrameLayout, PaneContent, PaneId};
 use mere_host_substrate::{MereHostApp, walk_leaves};
-use mere_renderer_registry::NodeIdentity;
+use register_renderer::NodeIdentity;
 
 use crate::graph_registry::GraphRegistry;
 use crate::orrery_renderer::OrrerySnapshots;
@@ -120,9 +120,9 @@ mod tests {
 
     use cartography::{LayoutStrategy, Projection, ProjectionMetadata, ProjectionRequest};
     use kurbo::Size;
-    use mere_frame::{FrameId, GraphId, PaneId, PaneNode, SplitAxis};
+    use frame::{FrameId, GraphId, PaneId, PaneNode, SplitAxis};
     use kernel::graph::Graph;
-    use mere_renderer_registry::NodeIdentity;
+    use register_renderer::NodeIdentity;
 
     use super::*;
     use crate::graph_registry::GraphRegistry;

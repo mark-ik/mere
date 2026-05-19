@@ -11,7 +11,7 @@ description = "EmbeddedFrameRenderer impl for `mere-renderer-registry` backed by
 path = "src/lib.rs"
 
 [dependencies]
-mere-renderer-registry.workspace = true
+register-renderer.workspace = true
 scrying = { path = "../../../../wgpu-scry/scrying" }
 
 wgpu.workspace = true

@@ -18,7 +18,7 @@
 //! cursor moves through `FrameLayout::set_split_ratio`, and clears
 //! the snapshot on mouse-up.
 
-use mere_renderer_registry::{
+use register_renderer::{
     CompositionMode, InScenePaintRenderer, InputDisposition, InputEvent, NodeContentKind,
     NodeContentKindSet, NodeRenderer, PaintCtx, PaintResult, ProfileBindingExpectation,
     RendererCapabilities, RendererId, SceneNodeRef,
@@ -126,7 +126,7 @@ impl InScenePaintRenderer for SplitterRenderer {
 #[cfg(test)]
 mod tests {
     use kurbo::Size;
-    use mere_renderer_registry::{Placement, RendererRegistry};
+    use register_renderer::{Placement, RendererRegistry};
     use spatial_substrate::{SubstrateHost, SubstrateNode, SubstrateScene};
 
     use super::*;

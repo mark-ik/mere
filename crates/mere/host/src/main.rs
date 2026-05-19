@@ -16,7 +16,7 @@
 //!   [`cartography::LayoutStrategy`] against each orrery pane and
 //!   writes results into the orrery renderer's snapshot map.
 //! - [`graph_registry`] — app-scope `GraphId → Graph` map. Each
-//!   leaf in a [`mere_frame::FrameLayout`] carries a `graph_id`
+//!   leaf in a [`frame::FrameLayout`] carries a `graph_id`
 //!   resolved here at projection time.
 //! - [`orrery_renderer`] — substrate `InScenePaintRenderer` for
 //!   `NodeContentKind::GraphView` panes; reads a host-installed

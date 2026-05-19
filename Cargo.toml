@@ -79,15 +79,15 @@ orrery = { path = "crates/graphshell/graph/orrery" }
 spatial-substrate = { path = "crates/graphshell/graph/spatial-substrate" }
 
 graphshell = { path = "crates/graphshell" }
-graphshell-control-plane = { path = "crates/graphshell/shell/system/control-plane" }
-graphshell-shell-state = { path = "crates/graphshell/shell/state" }
-mere-frame = { path = "crates/graphshell/shell/domain/frame" }
-mere-graphshell = { path = "crates/graphshell/shell/domain/chrome" }
-mere-host-contract = { path = "crates/graphshell/shell/host-ports" }
-mere-host-runtime = { path = "crates/graphshell/shell/session-runtime" }
-mere-renderer-registry = { path = "crates/graphshell/shell/system/registry/register-renderer" }
-mere-renderer-registry-types = { path = "crates/graphshell/shell/system/registry/register-renderer-types" }
-mere-ux-events = { path = "crates/graphshell/shell/ux-events" }
+control-plane = { path = "crates/graphshell/shell/system/control-plane" }
+shell-state = { path = "crates/graphshell/shell/state" }
+frame = { path = "crates/graphshell/shell/domain/frame" }
+chrome = { path = "crates/graphshell/shell/domain/chrome" }
+host-ports = { path = "crates/graphshell/shell/host-ports" }
+session-runtime = { path = "crates/graphshell/shell/session-runtime" }
+register-renderer = { path = "crates/graphshell/shell/system/registry/register-renderer" }
+register-renderer-types = { path = "crates/graphshell/shell/system/registry/register-renderer-types" }
+ux-events = { path = "crates/graphshell/shell/ux-events" }
 register-diagnostics = { path = "crates/graphshell/shell/system/registry/register-diagnostics" }
 
 inker = { path = "crates/inker" }

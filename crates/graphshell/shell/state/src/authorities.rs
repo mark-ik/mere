@@ -7,6 +7,6 @@
 //! **Migrated to `mere-graphshell::authorities` (2026-05-09).** This
 //! module re-exports the canonical types from the new location for
 //! backward compat. New code should import from
-//! `mere_graphshell::authorities`.
+//! `chrome::authorities`.
 
-pub use mere_graphshell::authorities::*;
+pub use chrome::authorities::*;

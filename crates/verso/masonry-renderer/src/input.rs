@@ -1,7 +1,7 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! Translation from [`mere_renderer_registry::InputEvent`] to masonry's
+//! Translation from [`register_renderer::InputEvent`] to masonry's
 //! [`TextEvent`] / [`PointerEvent`] vocabulary.
 //!
 //! masonry consumes [`ui-events`](https://crates.io/crates/ui-events). This
@@ -46,7 +46,7 @@
 
 use kurbo::Vec2;
 use masonry_core::core::{Ime, PointerEvent, TextEvent};
-use mere_renderer_registry::{
+use register_renderer::{
     ImeEvent, InputEvent, KeyCode, KeyEventKind, ModifiersState, NamedKey, PointerButton as RPB,
     PointerEventKind,
 };
@@ -243,7 +243,7 @@ fn translate_named_key(named: NamedKey) -> (Key, Code) {
         NamedKey::F10 => (Key::Named(UiNamedKey::F10), Code::F10),
         NamedKey::F11 => (Key::Named(UiNamedKey::F11), Code::F11),
         NamedKey::F12 => (Key::Named(UiNamedKey::F12), Code::F12),
-        // `mere_renderer_registry::NamedKey` is `#[non_exhaustive]`; future
+        // `register_renderer::NamedKey` is `#[non_exhaustive]`; future
         // variants fall through to `Unidentified`.
         _ => (Key::Named(UiNamedKey::Unidentified), Code::Unidentified),
     }

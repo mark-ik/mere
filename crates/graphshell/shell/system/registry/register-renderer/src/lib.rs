@@ -10,7 +10,7 @@
 //! so wasm32-clean consumers (notably `mere-host-runtime`) can consume them
 //! without pulling vello/wgpu transitively. This crate re-exports the types
 //! crate's full surface, so consumers of the full registry can
-//! `use mere_renderer_registry::*` and get everything.
+//! `use register_renderer::*` and get everything.
 //!
 //! ## Public surface
 //!
@@ -37,7 +37,7 @@ pub use renderer::{EmbeddedFrameRenderer, InScenePaintRenderer, NodeRenderer, Ov
 
 // Re-export the data-types surface so callers don't need to add a separate
 // dep on `mere-renderer-registry-types` just to name the types.
-pub use mere_renderer_registry_types::{
+pub use register_renderer_types::{
     CapabilityAction, CompositionMode, DenyEverythingGate, DiagnosticEvent, DiagnosticSink,
     ImeEvent, InputDisposition, InputEvent, KeyCode, KeyEventKind, LodLevel, ModifiersState,
     NamedKey, NodeContentKind, NodeContentKindSet, NodeIdentity, NoopSink, OverlayHandle,

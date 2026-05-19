@@ -14,9 +14,9 @@
 //! ## Re-export shape
 //!
 //! `mere-renderer-registry` re-exports everything from this crate, so
-//! consumers of the full registry can `use mere_renderer_registry::*` and
+//! consumers of the full registry can `use register_renderer::*` and
 //! get the data types too. Direct consumers of *just* this crate use
-//! `use mere_renderer_registry_types::*`.
+//! `use register_renderer_types::*`.
 
 #![warn(unused_crate_dependencies)]
 #![warn(clippy::print_stdout, clippy::print_stderr)]

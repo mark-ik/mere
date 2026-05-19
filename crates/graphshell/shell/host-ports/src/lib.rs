@@ -54,7 +54,7 @@ pub use frame_projection::{
     project_omnibar_view_model, project_settings_view_model, project_toolbar_view_model,
     project_transient_frame_outputs,
 };
-pub use graphshell_shell_state::frame_model::{
+pub use shell_state::frame_model::{
     AccessibilityViewModel, CommandPaletteScopeView, CommandPaletteViewModel, DialogsViewModel,
     FocusRingCurve, FocusRingSettingsView, FocusRingSpec, FocusViewModel, FrameHostInput,
     FrameViewModel, GraphSearchViewModel, OmnibarProviderStatusView, OmnibarSessionKindView,

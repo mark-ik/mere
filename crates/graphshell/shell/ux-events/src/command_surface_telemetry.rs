@@ -24,7 +24,7 @@
 
 use std::sync::Mutex;
 
-use mere_graphshell::routing::ToolSurfaceReturnTarget;
+use chrome::routing::ToolSurfaceReturnTarget;
 use kernel::graph::NodeKey;
 use kernel::pane::PaneId;
 

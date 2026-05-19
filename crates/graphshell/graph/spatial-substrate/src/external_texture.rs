@@ -40,7 +40,7 @@
 use std::collections::HashMap;
 
 use kurbo::{Affine, Size};
-use mere_renderer_registry::NodeIdentity;
+use register_renderer::NodeIdentity;
 use vello::peniko;
 
 /// Caches the `peniko::ImageData` handles vello returns from

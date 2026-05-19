@@ -6,6 +6,6 @@
 //!
 //! **Migrated to `mere-ux-events::ux_probes` (2026-05-10).**
 //! Re-exports for backward compat. New code should import from
-//! `mere_ux_events::ux_probes`.
+//! `ux_events::ux_probes`.
 
-pub use mere_ux_events::ux_probes::*;
+pub use ux_events::ux_probes::*;

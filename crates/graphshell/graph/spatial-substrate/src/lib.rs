@@ -13,13 +13,13 @@
 //!
 //! ```
 //! use kurbo::Size;
-//! use mere_renderer_registry::{
+//! use register_renderer::{
 //!     NodeContentKind, NodeRenderer, RendererRegistry,
 //! };
 //! use spatial_substrate::{
 //!     RecordingRenderer, SubstrateHost, SubstrateNode, SubstrateScene,
 //! };
-//! use mere_renderer_registry::Placement;
+//! use register_renderer::Placement;
 //!
 //! // Register a renderer that handles DocumentTile nodes.
 //! let mut registry = RendererRegistry::with_default_selector();
@@ -73,4 +73,4 @@ pub use thumbnail::{ThumbnailFit, fit_camera};
 
 // Re-export the registry so callers don't need a separate dep on it to
 // name the trait types they implement.
-pub use mere_renderer_registry;
+pub use register_renderer;

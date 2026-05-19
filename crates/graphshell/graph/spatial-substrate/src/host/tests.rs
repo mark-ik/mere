@@ -5,7 +5,7 @@
 //! the parent module under the workspace's 600-LOC ceiling.
 
 use kurbo::{Affine, Size};
-use mere_renderer_registry::{
+use register_renderer::{
     CompositionMode, InputDisposition, InputEvent, NodeContentKind, NodeContentKindSet,
     NodeRenderer, Placement, RendererCapabilities, RendererId, RendererRegistry,
 };
@@ -131,7 +131,7 @@ fn dispatch_reports_wrong_composition_mode() {
 
 #[test]
 fn deliver_input_at_routes_via_hit_test() {
-    use mere_renderer_registry::{ModifiersState, PointerButton, PointerEventKind};
+    use register_renderer::{ModifiersState, PointerButton, PointerEventKind};
 
     let renderer = RecordingRenderer::for_kind("recording", NodeContentKind::DocumentTile);
     let log = renderer.shared_input_log();
@@ -174,7 +174,7 @@ fn deliver_input_at_routes_via_hit_test() {
 
 #[test]
 fn deliver_input_at_returns_none_when_no_hit() {
-    use mere_renderer_registry::{ModifiersState, PointerButton, PointerEventKind};
+    use register_renderer::{ModifiersState, PointerButton, PointerEventKind};
 
     let (mut host, _) = build_host_with_recording(NodeContentKind::DocumentTile);
     let mut scene = SubstrateScene::new();
@@ -198,7 +198,7 @@ fn deliver_input_at_returns_none_when_no_hit() {
 
 #[test]
 fn diagnostics_fire_for_register_unregister_and_misroute() {
-    use mere_renderer_registry::{DiagnosticEvent, RecordingSink, RouteDegradedReason};
+    use register_renderer::{DiagnosticEvent, RecordingSink, RouteDegradedReason};
     use std::sync::Arc;
 
     let sink = Arc::new(RecordingSink::new());
@@ -207,7 +207,7 @@ fn diagnostics_fire_for_register_unregister_and_misroute() {
     // for assertions; the registry holds its own Box<dyn DiagnosticSink>
     // pointing at the same RecordingSink via shared ownership.
     struct SharedSink(Arc<RecordingSink>);
-    impl mere_renderer_registry::DiagnosticSink for SharedSink {
+    impl register_renderer::DiagnosticSink for SharedSink {
         fn record(&self, event: DiagnosticEvent) {
             self.0.record(event);
         }
@@ -435,7 +435,7 @@ fn scene_pos_from_host_inverts_camera() {
 
 #[test]
 fn deliver_input_at_respects_camera() {
-    use mere_renderer_registry::{ModifiersState, PointerButton, PointerEventKind};
+    use register_renderer::{ModifiersState, PointerButton, PointerEventKind};
 
     let renderer = RecordingRenderer::for_kind("rec", NodeContentKind::DocumentTile);
     let log = renderer.shared_input_log();
@@ -477,7 +477,7 @@ fn deliver_input_at_respects_camera() {
 
 #[test]
 fn deliver_input_at_picks_topmost_on_overlap() {
-    use mere_renderer_registry::{ModifiersState, PointerButton, PointerEventKind};
+    use register_renderer::{ModifiersState, PointerButton, PointerEventKind};
 
     // Two renderers, two content kinds. The CustomCanvas background
     // and the Panel both cover (50, 50). hit-test should route to

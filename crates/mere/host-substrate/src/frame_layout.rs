@@ -14,10 +14,10 @@
 use std::collections::HashMap;
 
 use kurbo::{Point, Size};
-use mere_frame::{
+use frame::{
     FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice, SplitPath,
 };
-use mere_renderer_registry::{NodeContentKind, NodeIdentity, Placement};
+use register_renderer::{NodeContentKind, NodeIdentity, Placement};
 use spatial_substrate::{SubstrateNode, SubstrateScene};
 
 use crate::MereHostApp;
@@ -324,7 +324,7 @@ impl MereHostApp {
                 identity,
                 placement: leaf.placement,
                 size: leaf.size,
-                lod: mere_renderer_registry::LodLevel::FullPane,
+                lod: register_renderer::LodLevel::FullPane,
                 content_kind: kind_for_content(&leaf.content),
                 renderer_pin: None,
             });
@@ -340,7 +340,7 @@ impl MereHostApp {
                 identity,
                 placement: splitter.placement,
                 size: splitter.size,
-                lod: mere_renderer_registry::LodLevel::FullPane,
+                lod: register_renderer::LodLevel::FullPane,
                 content_kind: NodeContentKind::Splitter,
                 renderer_pin: None,
             });
@@ -362,7 +362,7 @@ impl MereHostApp {
 
     /// Substrate identity assigned to the splitter at `path` in the
     /// last-synced layout, if any.
-    pub fn splitter_identity_for(&self, path: &mere_frame::SplitPath) -> Option<NodeIdentity> {
+    pub fn splitter_identity_for(&self, path: &frame::SplitPath) -> Option<NodeIdentity> {
         self.splitter_identity_map.get(path).copied()
     }
 
@@ -382,7 +382,7 @@ impl MereHostApp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mere_frame::{FrameId, PaneContent, PaneId, PaneNode, SplitAxis};
+    use frame::{FrameId, PaneContent, PaneId, PaneNode, SplitAxis};
 
     fn graph_id(seed: u128) -> GraphId {
         GraphId::from_uuid(uuid::Uuid::from_u128(seed))
@@ -494,7 +494,7 @@ mod tests {
             NodeContentKind::Panel
         );
         assert_eq!(
-            default_content_kind_for(&PaneContent::Tile(mere_frame::LeafNodeRef(7))),
+            default_content_kind_for(&PaneContent::Tile(frame::LeafNodeRef(7))),
             NodeContentKind::DocumentTile
         );
     }

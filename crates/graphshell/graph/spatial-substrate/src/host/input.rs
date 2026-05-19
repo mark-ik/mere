@@ -9,7 +9,7 @@
 //! along with the pointer-position rewriter helper.
 
 use kurbo::{Affine, Point};
-use mere_renderer_registry::{
+use register_renderer::{
     CompositionMode, DispatchError, InputDisposition, InputEvent, NodeIdentity,
 };
 

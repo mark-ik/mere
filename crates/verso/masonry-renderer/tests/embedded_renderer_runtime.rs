@@ -23,7 +23,7 @@ use kurbo::Size;
 use masonry_core::core::{DefaultProperties, NewWidget};
 use masonry_testing::ModularWidget;
 use mere_masonry::{MasonryEmbeddedRenderer, RootWidgetFactory};
-use mere_renderer_registry::{
+use register_renderer::{
     EmbeddedFrameRenderer, LodLevel, NodeContentKind, NodeIdentity, Placement, SceneNodeRef,
 };
 

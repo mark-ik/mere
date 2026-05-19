@@ -1,5 +1,5 @@
 [package]
-name = "mere-renderer-registry-types"
+name = "register-renderer-types"
 version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"

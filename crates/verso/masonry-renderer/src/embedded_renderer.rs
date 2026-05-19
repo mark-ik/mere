@@ -44,7 +44,7 @@ use masonry_core::app::VisualLayerKind;
 use masonry_core::core::{DefaultProperties, NewWidget, Widget};
 use masonry_imaging::texture_render::{RenderTarget, Renderer as TextureRenderer};
 use masonry_imaging::{Layer, PreparedFrame};
-use mere_renderer_registry::{
+use register_renderer::{
     CompositionMode, EmbeddedFrameRenderer, InputDisposition, InputEvent, NodeContentKind,
     NodeContentKindSet, NodeRenderer, ProducerHandle, ProfileBindingExpectation,
     RendererCapabilities, RendererId, SceneNodeRef,

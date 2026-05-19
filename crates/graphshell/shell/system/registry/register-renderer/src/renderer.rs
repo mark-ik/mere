@@ -5,7 +5,7 @@
 //!
 //! Renderers run on the host's UI thread; not `Send + Sync`.
 
-use mere_renderer_registry_types::{
+use register_renderer_types::{
     CompositionMode, InputDisposition, InputEvent, NodeContentKindSet, OverlayHandle,
     ProducerHandle, RendererCapabilities, RendererId, SceneNodeRef, ScreenRect,
 };

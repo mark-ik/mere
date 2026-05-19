@@ -54,7 +54,7 @@
 //! bus is the explicit next slice; this module's API is what that
 //! migration targets.
 
-use mere_frame::{FrameId, GraphId, InsertSide, PaneId, SessionId};
+use frame::{FrameId, GraphId, InsertSide, PaneId, SessionId};
 use mere_identity::PersonaId;
 use kernel::graph::{
     EdgeAssertion, NavigationTrigger, NodeKey, RelationKind, RelationSelector,
@@ -188,7 +188,7 @@ pub enum ActionKind {
     /// `PaneContent::Tile(LeafNodeRef)` leaf summons to the right
     /// of the target pane.
     PinTileToFrame {
-        node: mere_frame::LeafNodeRef,
+        node: frame::LeafNodeRef,
         graph_id: GraphId,
     },
 

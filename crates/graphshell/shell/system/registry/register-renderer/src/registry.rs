@@ -18,7 +18,7 @@
 
 use std::collections::HashMap;
 
-use mere_renderer_registry_types::{
+use register_renderer_types::{
     CapabilityAction, DiagnosticEvent, DiagnosticSink, InputDisposition, InputEvent,
     NodeContentKind, NoopSink, PermissionDecision, PermissionGate, PermitEverythingGate,
     RendererId, RouteDegradedReason, SceneNodeRef,
@@ -444,7 +444,7 @@ impl RendererSelector for DefaultSelector {
 #[cfg(test)]
 mod selector_chain_tests {
     use kurbo::Size;
-    use mere_renderer_registry_types::{
+    use register_renderer_types::{
         LodLevel, NodeContentKind, NodeIdentity, Placement, RendererId, SceneNodeRef,
     };
 
@@ -452,7 +452,7 @@ mod selector_chain_tests {
     use crate::NodeRenderer;
     use crate::paint::{PaintCtx, PaintResult};
     use crate::renderer::{InScenePaintRenderer, OverlayRenderer};
-    use mere_renderer_registry_types::{
+    use register_renderer_types::{
         CompositionMode, InputDisposition, InputEvent, NodeContentKindSet,
         ProfileBindingExpectation, RendererCapabilities,
     };
@@ -537,24 +537,24 @@ mod selector_chain_tests {
         fn ensure_overlay(
             &mut self,
             _node: &SceneNodeRef,
-        ) -> mere_renderer_registry_types::OverlayHandle {
-            mere_renderer_registry_types::OverlayHandle::next()
+        ) -> register_renderer_types::OverlayHandle {
+            register_renderer_types::OverlayHandle::next()
         }
         fn position(
             &mut self,
-            _h: mere_renderer_registry_types::OverlayHandle,
-            _r: mere_renderer_registry_types::ScreenRect,
+            _h: register_renderer_types::OverlayHandle,
+            _r: register_renderer_types::ScreenRect,
             _z: i32,
         ) {
         }
         fn deliver_input(
             &mut self,
-            _h: mere_renderer_registry_types::OverlayHandle,
+            _h: register_renderer_types::OverlayHandle,
             _e: &InputEvent,
         ) -> InputDisposition {
             InputDisposition::Passthrough
         }
-        fn release(&mut self, _h: mere_renderer_registry_types::OverlayHandle) {}
+        fn release(&mut self, _h: register_renderer_types::OverlayHandle) {}
     }
 
     fn node_with_pin(kind: NodeContentKind, pin: Option<RendererId>) -> SceneNodeRef {
@@ -707,7 +707,7 @@ mod selector_chain_tests {
 
     #[test]
     fn deny_gate_makes_pin_fall_through_to_default_policy() {
-        use mere_renderer_registry_types::DenyEverythingGate;
+        use register_renderer_types::DenyEverythingGate;
 
         let mut reg =
             RendererRegistry::with_default_selector().with_gate(Box::new(DenyEverythingGate));
@@ -727,7 +727,7 @@ mod selector_chain_tests {
 
     #[test]
     fn deny_gate_no_policy_falls_through_to_first_candidate() {
-        use mere_renderer_registry_types::DenyEverythingGate;
+        use register_renderer_types::DenyEverythingGate;
 
         let mut reg =
             RendererRegistry::with_default_selector().with_gate(Box::new(DenyEverythingGate));
@@ -743,7 +743,7 @@ mod selector_chain_tests {
 
     #[test]
     fn custom_gate_can_target_specific_renderers() {
-        use mere_renderer_registry_types::{CapabilityAction, PermissionDecision, PermissionGate};
+        use register_renderer_types::{CapabilityAction, PermissionDecision, PermissionGate};
 
         // Gate that denies overrides to specifically "forbidden",
         // allows anything else.

@@ -8,7 +8,7 @@
 //! - `spatial_substrate::SubstrateHost` (per-frame dispatch)
 //! - `spatial_substrate::ExternalTextureCompositor` (vello
 //!   register_texture cache + Scene::draw_image)
-//! - `mere_renderer_registry::RendererRegistry` (renderer lookup)
+//! - `register_renderer::RendererRegistry` (renderer lookup)
 //! - `mere_masonry::MasonryEmbeddedRenderer` (EmbeddedFrameRenderer)
 //! - `vello::Renderer` (host-side scene renderer)
 //! - Real wgpu 29 device
@@ -26,7 +26,7 @@ use kurbo::Size;
 use masonry_core::core::{DefaultProperties, NewWidget};
 use masonry_testing::ModularWidget;
 use mere_masonry::{MasonryEmbeddedRenderer, RootWidgetFactory};
-use mere_renderer_registry::{NodeContentKind, Placement, RendererRegistry};
+use register_renderer::{NodeContentKind, Placement, RendererRegistry};
 use spatial_substrate::{
     ExternalTextureCompositor, SubstrateHost, SubstrateNode, SubstrateScene,
 };

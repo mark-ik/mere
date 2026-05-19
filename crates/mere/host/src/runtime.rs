@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use cartography::LayoutStrategy;
 use graph_layout::adapters::GridAdapter;
-use mere_frame::{FrameLayout, SplitAxis};
-use mere_host_runtime::{ActionKind, BusAction, BusDispatchOutcome};
+use frame::{FrameLayout, SplitAxis};
+use session_runtime::{ActionKind, BusAction, BusDispatchOutcome};
 use mere_host_substrate::{MereHostApp, SplitterDrag, SubstrateInputEvent, compute_container_size};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};

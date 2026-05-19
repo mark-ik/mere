@@ -41,7 +41,7 @@
 
 use accesskit::{Node, NodeId, Rect, Role, Tree, TreeId, TreeUpdate, Uuid};
 use kurbo::Point;
-use mere_renderer_registry::{NodeContentKind, NodeIdentity};
+use register_renderer::{NodeContentKind, NodeIdentity};
 
 use crate::host::SubstrateHost;
 use crate::scene::{SubstrateNode, SubstrateScene};
@@ -201,7 +201,7 @@ fn bounds_for(node: &SubstrateNode) -> Rect {
 #[cfg(test)]
 mod tests {
     use kurbo::Size;
-    use mere_renderer_registry::{NodeContentKind, NodeIdentity, Placement};
+    use register_renderer::{NodeContentKind, NodeIdentity, Placement};
 
     use super::*;
     use crate::scene::{SubstrateNode, SubstrateScene};
@@ -321,7 +321,7 @@ mod tests {
 
     #[test]
     fn collect_grafts_subtree_with_minted_tree_id() {
-        use mere_renderer_registry::{
+        use register_renderer::{
             CompositionMode, EmbeddedFrameRenderer, InputDisposition, InputEvent,
             NodeContentKindSet, NodeRenderer, ProducerHandle, ProfileBindingExpectation,
             RendererCapabilities, RendererId, RendererRegistry, SceneNodeRef,
@@ -448,7 +448,7 @@ mod tests {
                 kurbo::Affine::translate((50.0, 50.0)) * kurbo::Affine::scale(2.0),
             ),
             size: Size::new(80.0, 40.0),
-            lod: mere_renderer_registry::LodLevel::FullPane,
+            lod: register_renderer::LodLevel::FullPane,
             content_kind: NodeContentKind::Panel,
             renderer_pin: None,
         });

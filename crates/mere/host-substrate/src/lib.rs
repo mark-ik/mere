@@ -7,7 +7,7 @@
 //!
 //! - `spatial_substrate` — substrate IR (scene + renderer
 //!   registry + camera + hit-test + AccessKit projection + diagnostics).
-//! - `mere_host_runtime` — session manifests, view intents, and
+//! - `session_runtime` — session manifests, view intents, and
 //!   compatibility re-exports for the control-plane action bus and
 //!   verso tile state.
 //!
@@ -40,14 +40,14 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use kurbo::{Affine, Point, Size};
-use mere_frame::{GraphId, PaneId, SessionId};
-use mere_host_runtime::view_intent_store::{load_view_intent, save_view_intent};
-use mere_host_runtime::{
+use frame::{GraphId, PaneId, SessionId};
+use session_runtime::view_intent_store::{load_view_intent, save_view_intent};
+use session_runtime::{
     ActionBus, CameraSnapshot, GraphSessionManifest, LoadReport, ManifestStore, TileManager,
     ViewIntent,
 };
 use kernel::graph::NodeKey;
-use mere_renderer_registry::{
+use register_renderer::{
     DiagnosticEvent, DiagnosticSink, NodeContentKind, NodeIdentity, Placement,
 };
 use spatial_substrate::{
@@ -91,7 +91,7 @@ pub enum SubstrateInputEvent {
     /// against `FrameLayout::set_split_ratio`. The host looks up
     /// the axis + current ratio via `FrameLayout::split_at(&path)`.
     SplitterClicked {
-        path: mere_frame::SplitPath,
+        path: frame::SplitPath,
         host_pos: Point,
         scene_pos: Point,
     },
@@ -168,7 +168,7 @@ pub struct MereHostApp {
     /// `sync_scene_from_frame_layout`. Drag handlers look up the
     /// split path from a `SplitterClicked` event's identity, then
     /// dispatch ratio updates against `FrameLayout::set_split_ratio`.
-    pub(crate) splitter_identity_map: HashMap<mere_frame::SplitPath, NodeIdentity>,
+    pub(crate) splitter_identity_map: HashMap<frame::SplitPath, NodeIdentity>,
 
     /// Host-installed input callback. `handle_pointer_press` calls
     /// this when set; otherwise events are dropped silently (a
@@ -351,7 +351,7 @@ impl MereHostApp {
                 identity,
                 placement,
                 size,
-                lod: mere_renderer_registry::LodLevel::FullPane,
+                lod: register_renderer::LodLevel::FullPane,
                 content_kind: NodeContentKind::Panel,
                 renderer_pin: None,
             });
@@ -399,7 +399,7 @@ impl MereHostApp {
     /// Find the frame `SplitPath` for a substrate `NodeIdentity` —
     /// resolves splitter chrome clicks back to the Split node they
     /// sit at.
-    pub fn split_path_for_identity(&self, identity: NodeIdentity) -> Option<mere_frame::SplitPath> {
+    pub fn split_path_for_identity(&self, identity: NodeIdentity) -> Option<frame::SplitPath> {
         self.splitter_identity_map.iter().find_map(|(k, v)| {
             if *v == identity {
                 Some(k.clone())

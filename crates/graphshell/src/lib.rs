@@ -24,7 +24,7 @@ pub mod app_state;
 pub use kernel as core;
 
 /// Portable host-port vocabulary migrated from the previous Graphshell tree.
-pub use mere_host_contract as runtime;
+pub use host_ports as runtime;
 
 /// Owner-scoped navigation-lineage model migrated from the previous Graphshell
 /// tree. Originally `graph_memory`; renamed because eidetic owns the "memory"

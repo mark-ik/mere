@@ -6,6 +6,6 @@
 //!
 //! **Migrated to `mere-ux-events::command_surface_telemetry`
 //! (2026-05-10).** Re-exports for backward compat. New code should
-//! import from `mere_ux_events::command_surface_telemetry`.
+//! import from `ux_events::command_surface_telemetry`.
 
-pub use mere_ux_events::command_surface_telemetry::*;
+pub use ux_events::command_surface_telemetry::*;

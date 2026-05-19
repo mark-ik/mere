@@ -9,7 +9,7 @@
 //! metadata, but the payloads themselves are host-neutral and cheap to share.
 
 use crate::ports::{RuntimeClipboardPort, RuntimeToastPort};
-use graphshell_shell_state::frame_model::ToastSeverity;
+use shell_state::frame_model::ToastSeverity;
 use kernel::graph::NodeKey;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -219,7 +219,7 @@ pub fn clipboard_copy_missing_node_failure_text() -> String {
 mod tests {
     use std::collections::VecDeque;
 
-    use graphshell_shell_state::frame_model::ToastSpec;
+    use shell_state::frame_model::ToastSpec;
 
     use super::*;
 

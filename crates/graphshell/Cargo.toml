@@ -20,7 +20,7 @@ graph-canvas.workspace = true
 node-lineage.workspace = true
 forme.workspace = true
 kernel.workspace = true
-mere-host-contract.workspace = true
+host-ports.workspace = true
 inker.workspace = true
 platen.workspace = true
 serde = { version = "1.0", features = ["derive"] }

@@ -1,5 +1,5 @@
 [package]
-name = "mere-graphshell"
+name = "chrome"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

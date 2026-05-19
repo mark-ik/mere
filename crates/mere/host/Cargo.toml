@@ -19,13 +19,13 @@ mere-host-substrate.workspace = true
 # Durable state vocabulary + ActionKind/BusAction. MereHostApp re-exports
 # what's needed for dispatch; we pull the runtime crate directly for
 # the action-bus enum types the click handlers construct.
-mere-host-runtime.workspace = true
+session-runtime.workspace = true
 # Frame layout types (FrameLayout, PaneContent, etc.) for the seed
 # layout the host builds at startup.
-mere-frame.workspace = true
+frame.workspace = true
 # Substrate scene primitives (NodeContentKind, RendererRegistry traits,
 # NodeIdentity) used by the orrery / splitter renderers.
-mere-renderer-registry.workspace = true
+register-renderer.workspace = true
 # Kernel graph + geometry — the host seeds a Graph at startup and
 # stores it in its GraphRegistry for cartography projection.
 kernel.workspace = true

@@ -15,7 +15,7 @@
 //! This module ships only the payload. Execution lives in
 //! `mere-host::tearout`.
 
-use mere_frame::PaneId;
+use frame::PaneId;
 
 /// Payload carried by a tile-strip drag gesture. Identifies the
 /// donor pane + the tile index so the drop handler can fire a

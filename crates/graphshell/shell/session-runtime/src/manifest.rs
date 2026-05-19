@@ -19,7 +19,7 @@
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use mere_frame::{GraphId, SessionId};
+use frame::{GraphId, SessionId};
 pub use mere_identity::PersonaId;
 use serde::{Deserialize, Serialize};
 

@@ -4,7 +4,7 @@
 //! `NodeRenderer` + `InScenePaintRenderer` impl for [`MasonryTile`].
 //!
 //! This is the seam that registers `mere-masonry` against the
-//! [`mere_renderer_registry`] dispatch model. The substrate selects this
+//! [`register_renderer`] dispatch model. The substrate selects this
 //! renderer for any node whose `content_kind == NodeContentKind::Panel`,
 //! resolves to a per-tile [`MasonryTile`] (typically held inside a wrapper
 //! that owns the `(NodeIdentity → MasonryTile)` map), and dispatches paint /
@@ -25,7 +25,7 @@
 //! and implements `InScenePaintRenderer` once for all of them — that's a
 //! v1 ergonomic, not a v0 requirement.
 
-use mere_renderer_registry::{
+use register_renderer::{
     CompositionMode, InScenePaintRenderer, InputDisposition, InputEvent, NodeContentKind,
     NodeContentKindSet, NodeRenderer, PaintCtx, PaintResult, RendererCapabilities, RendererId,
     SceneNodeRef,

@@ -36,7 +36,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use graphshell_shell_state::frame_model::{ToastSeverity, ToastSpec};
+use shell_state::frame_model::{ToastSeverity, ToastSpec};
 use kernel::geometry::{PortablePoint, PortableRect};
 use kernel::graph::NodeKey;
 use kernel::host_event::{HostEvent, ModifiersState};

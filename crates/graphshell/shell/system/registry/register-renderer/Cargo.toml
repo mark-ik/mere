@@ -1,5 +1,5 @@
 [package]
-name = "mere-renderer-registry"
+name = "register-renderer"
 version = "0.0.1"
 edition = "2024"
 license = "MPL-2.0"
@@ -8,7 +8,7 @@ description = "Trait + dispatch contract for renderers (mere-masonry, scrying-ti
 rust-version = "1.92.0"
 
 [dependencies]
-mere-renderer-registry-types.workspace = true
+register-renderer-types.workspace = true
 # All load-bearing pins live in mere/Cargo.toml's [workspace.dependencies].
 kurbo.workspace = true
 vello.workspace = true

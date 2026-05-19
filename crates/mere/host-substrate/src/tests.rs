@@ -151,7 +151,7 @@ fn apply_view_intent_restores_camera_from_snapshot() {
     let camera = kurbo::Affine::translate((200.0, 100.0)) * kurbo::Affine::scale(2.0);
     let intent = ViewIntent {
         hidden_relations: Default::default(),
-        camera: Some(mere_host_runtime::CameraSnapshot {
+        camera: Some(session_runtime::CameraSnapshot {
             coefficients: camera.as_coeffs(),
         }),
     };
@@ -251,11 +251,11 @@ fn fresh_session_id() -> SessionId {
     SessionId::from_uuid(uuid::Uuid::new_v4())
 }
 
-fn fresh_graph_id() -> mere_frame::GraphId {
-    mere_frame::GraphId::from_uuid(uuid::Uuid::new_v4())
+fn fresh_graph_id() -> frame::GraphId {
+    frame::GraphId::from_uuid(uuid::Uuid::new_v4())
 }
 
-fn seed_manifest_dir(root: &Path, manifest: &mere_host_runtime::GraphSessionManifest) {
+fn seed_manifest_dir(root: &Path, manifest: &session_runtime::GraphSessionManifest) {
     let session_dir = root.join(manifest.session_id.as_uuid().to_string());
     std::fs::create_dir_all(&session_dir).expect("create session dir");
     let json = serde_json::to_string_pretty(manifest).expect("serialise");
@@ -266,7 +266,7 @@ fn seed_manifest_dir(root: &Path, manifest: &mere_host_runtime::GraphSessionMani
 fn bind_session_root_loads_existing_manifests() {
     let root = temp_session_root();
     let manifest =
-        mere_host_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
+        session_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
     let session_id = manifest.session_id;
     seed_manifest_dir(&root, &manifest);
 
@@ -322,7 +322,7 @@ fn create_session_then_flush_writes_manifest_to_disk() {
 fn activate_session_only_succeeds_for_known_ids() {
     let root = temp_session_root();
     let manifest =
-        mere_host_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
+        session_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
     let session_id = manifest.session_id;
     seed_manifest_dir(&root, &manifest);
 
@@ -346,7 +346,7 @@ fn activate_session_only_succeeds_for_known_ids() {
 fn active_session_dir_matches_manifest_path_layout() {
     let root = temp_session_root();
     let manifest =
-        mere_host_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
+        session_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
     let session_id = manifest.session_id;
     seed_manifest_dir(&root, &manifest);
 
@@ -364,7 +364,7 @@ fn active_session_dir_matches_manifest_path_layout() {
 fn save_active_view_intent_writes_under_session_dir() {
     let root = temp_session_root();
     let manifest =
-        mere_host_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
+        session_runtime::GraphSessionManifest::new(fresh_session_id(), fresh_graph_id());
     let session_id = manifest.session_id;
     seed_manifest_dir(&root, &manifest);
 
@@ -524,7 +524,7 @@ fn diagnostic_callback_receives_registry_events() {
     use std::sync::Arc;
     use std::sync::Mutex;
 
-    use mere_renderer_registry::{
+    use register_renderer::{
         CompositionMode, NodeContentKindSet, NodeRenderer, RendererCapabilities, RendererId,
     };
     use spatial_substrate::RecordingRenderer;

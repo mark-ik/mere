@@ -11,7 +11,7 @@ description = "Phase-3 proof harness for the spatial chrome IR substrate (per `d
 path = "src/lib.rs"
 
 [dependencies]
-mere-renderer-registry.workspace = true
+register-renderer.workspace = true
 
 # Substrate-side scene + transform types. Workspace-pinned so the
 # version travels with the registry's vello.

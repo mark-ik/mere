@@ -13,7 +13,7 @@ use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use kurbo::{Point, Rect, Size};
-use mere_renderer_registry::{
+use register_renderer::{
     LodLevel, NodeContentKind, NodeIdentity, Placement, RendererId, SceneNodeRef,
 };
 use vello::peniko::Color;
@@ -77,7 +77,7 @@ pub struct SubstrateNode {
     /// Per-node renderer pin. When set, the registry's selector
     /// honors this id over the default first-candidate pick if the
     /// pinned renderer is registered and handles `content_kind`. See
-    /// `mere_renderer_registry::DefaultSelector` for the v0 chain.
+    /// `register_renderer::DefaultSelector` for the v0 chain.
     pub renderer_pin: Option<RendererId>,
 }
 

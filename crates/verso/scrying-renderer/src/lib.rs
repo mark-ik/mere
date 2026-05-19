@@ -32,7 +32,7 @@
 //!
 //! `WebSurfaceProducer` accepts scrying-shaped `MouseEvent` /
 //! `PointerEvent` / `KeyboardEvent` types (distinct from
-//! `mere_renderer_registry::InputEvent`). A faithful translation is
+//! `register_renderer::InputEvent`). A faithful translation is
 //! ~150 LOC of mechanical mapping similar to
 //! `mere-masonry/src/input.rs` — out of scope for v0a. The
 //! [`EmbeddedFrameRenderer::deliver_input`] impl currently returns
@@ -46,7 +46,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use mere_renderer_registry::{
+use register_renderer::{
     CompositionMode, EmbeddedFrameRenderer, InputDisposition, InputEvent, NodeContentKind,
     NodeContentKindSet, NodeRenderer, ProducerHandle, ProfileBindingExpectation,
     RendererCapabilities, RendererId, SceneNodeRef,
@@ -215,7 +215,7 @@ mod tests {
     use std::sync::Arc;
 
     use kurbo::Size;
-    use mere_renderer_registry::{
+    use register_renderer::{
         LodLevel, NodeContentKind, NodeIdentity, Placement, SceneNodeRef,
     };
     use scrying::native_frame::{

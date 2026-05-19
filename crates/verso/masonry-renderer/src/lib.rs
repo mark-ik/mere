@@ -95,7 +95,7 @@ pub use tile::{MasonryTile, TileSize};
 pub use accesskit;
 pub use kurbo;
 pub use masonry_core;
-pub use mere_renderer_registry;
+pub use register_renderer;
 pub use ui_events;
 pub use vello;
 

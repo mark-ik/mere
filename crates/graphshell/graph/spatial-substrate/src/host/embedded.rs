@@ -7,7 +7,7 @@
 //! workspace's 600-LOC ceiling. Producer caches + AccessKit subtree
 //! grafting + node release all run through here.
 
-use mere_renderer_registry::{CompositionMode, NodeIdentity};
+use register_renderer::{CompositionMode, NodeIdentity};
 
 use crate::external_texture::ExternalTextureCompositor;
 use crate::scene::SubstrateScene;

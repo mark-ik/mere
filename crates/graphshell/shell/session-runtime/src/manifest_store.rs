@@ -47,7 +47,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use mere_frame::SessionId;
+use frame::SessionId;
 
 use crate::manifest::GraphSessionManifest;
 
@@ -325,7 +325,7 @@ impl ManifestStore {
 mod tests {
     use super::*;
     use crate::manifest::{EngineProfileBinding, EngramId, GraphSessionManifest};
-    use mere_frame::{GraphId, SessionId};
+    use frame::{GraphId, SessionId};
     use uuid::Uuid;
 
     fn fixture_session(idx: u128) -> (SessionId, GraphId) {

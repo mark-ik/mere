@@ -1,5 +1,5 @@
 [package]
-name = "graphshell-shell-state"
+name = "shell-state"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -14,8 +14,8 @@ path = "src/lib.rs"
 
 [dependencies]
 kernel.workspace = true
-mere-graphshell.workspace = true
-mere-ux-events.workspace = true
+chrome.workspace = true
+ux-events.workspace = true
 forme.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 

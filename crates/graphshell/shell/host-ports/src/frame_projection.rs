@@ -12,13 +12,13 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use forme::{OwnedTreeRow, SplitBoundary, TabEntry};
-use graphshell_shell_state::frame_model::{
+use shell_state::frame_model::{
     AccessibilityViewModel, CommandPaletteScopeView, CommandPaletteViewModel, DegradedReceiptSpec,
     DialogsViewModel, FocusRingSettingsView, FocusRingSpec, FocusViewModel, GraphSearchViewModel,
     OmnibarProviderStatusView, OmnibarSessionKindView, OmnibarViewModel, SettingsViewModel,
     ThumbnailSettingsView, ToastSpec, ToolbarViewModel,
 };
-use graphshell_shell_state::toolbar::ToolbarDraft;
+use shell_state::toolbar::ToolbarDraft;
 use kernel::content::ContentLoadState;
 use kernel::geometry::PortableRect;
 use kernel::graph::NodeKey;
@@ -344,7 +344,7 @@ pub fn project_transient_frame_outputs(
 
 #[cfg(test)]
 mod tests {
-    use graphshell_shell_state::frame_model::FocusRingCurve;
+    use shell_state::frame_model::FocusRingCurve;
 
     use super::*;
 
@@ -542,7 +542,7 @@ mod tests {
 
     #[test]
     fn settings_projection_preserves_focus_and_thumbnail_settings() {
-        use graphshell_shell_state::frame_model::{
+        use shell_state::frame_model::{
             ThumbnailAspectView, ThumbnailFilterView, ThumbnailFormatView,
         };
 

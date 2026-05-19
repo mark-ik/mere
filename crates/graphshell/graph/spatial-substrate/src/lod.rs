@@ -34,7 +34,7 @@
 //! axis (a panel sheared narrow correctly demotes).
 
 use kurbo::Affine;
-use mere_renderer_registry::{LodLevel, SceneNodeRef};
+use register_renderer::{LodLevel, SceneNodeRef};
 
 /// Tunable pixel thresholds for LOD promotion. Each value is the
 /// minimum host-pixel size at which the corresponding LOD becomes the
@@ -148,7 +148,7 @@ fn lod_rank(lod: LodLevel) -> u8 {
 #[cfg(test)]
 mod tests {
     use kurbo::Size;
-    use mere_renderer_registry::{NodeContentKind, NodeIdentity, Placement};
+    use register_renderer::{NodeContentKind, NodeIdentity, Placement};
 
     use super::*;
 

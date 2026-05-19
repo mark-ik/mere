@@ -26,7 +26,7 @@
 //!
 //! Adjacent crates:
 //!
-//! - [`mere-host-contract`](../mere_host_contract/index.html) —
+//! - [`mere-host-contract`](../host_ports/index.html) —
 //!   the **vocabulary** half: port traits hosts satisfy
 //!   (HostPaintPort, HostInputPort, HostSurfacePort, HostAccessibility
 //!   Port, …) + frame-projection inputs.
@@ -54,7 +54,7 @@ pub use engine_profile_store::{
     ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
     engine_profile_path, engine_profile_path_for_session,
 };
-pub use graphshell_control_plane::{
+pub use control_plane::{
     ActionBus, ActionKind, ActionListener, ActionTarget, BusAction, BusDispatchOutcome, DenyReason,
     PermissionDecision, PermissionGate, PermitEverythingGate, RefuseEverythingGate, SurfaceId,
     TearOutMode, check_permission,

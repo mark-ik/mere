@@ -22,7 +22,7 @@
 use std::collections::HashMap;
 
 use kurbo::{Affine, Point};
-use mere_renderer_registry::{NodeIdentity, ProducerHandle, RendererId, RendererRegistry};
+use register_renderer::{NodeIdentity, ProducerHandle, RendererId, RendererRegistry};
 
 use crate::lod::LodThresholds;
 use crate::scene::{EdgeKind, EdgeStyle};

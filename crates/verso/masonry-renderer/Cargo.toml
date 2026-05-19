@@ -14,7 +14,7 @@ rust-version = "1.92.0"
 # the workspace.
 
 [dependencies]
-mere-renderer-registry = { path = "../../graphshell/shell/system/registry/register-renderer" }
+register-renderer = { path = "../../graphshell/shell/system/registry/register-renderer" }
 
 # Upstream Linebender stack — driven by this crate, not modified.
 # Path deps to the local xilem clone for development convenience; switch to

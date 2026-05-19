@@ -22,7 +22,7 @@ use std::sync::{Arc, RwLock};
 
 use cartography::Projection;
 use kurbo::{BezPath, Circle, Stroke};
-use mere_renderer_registry::{
+use register_renderer::{
     CompositionMode, InScenePaintRenderer, InputDisposition, InputEvent, NodeContentKind,
     NodeContentKindSet, NodeIdentity, NodeRenderer, PaintCtx, PaintResult,
     ProfileBindingExpectation, RendererCapabilities, RendererId, SceneNodeRef,
@@ -234,7 +234,7 @@ fn paint_demo_triangle(w: f64, h: f64, ctx: &mut PaintCtx<'_>) {
 #[cfg(test)]
 mod tests {
     use kurbo::Size;
-    use mere_renderer_registry::{Placement, RendererRegistry};
+    use register_renderer::{Placement, RendererRegistry};
     use spatial_substrate::{SubstrateHost, SubstrateNode, SubstrateScene};
 
     use super::*;

@@ -6,6 +6,6 @@
 //!
 //! **Migrated to `mere-ux-events::ux_observability` (2026-05-10).**
 //! Re-exports for backward compat. New code should import from
-//! `mere_ux_events::ux_observability`.
+//! `ux_events::ux_observability`.
 
-pub use mere_ux_events::ux_observability::*;
+pub use ux_events::ux_observability::*;

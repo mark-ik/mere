@@ -11,7 +11,7 @@ use std::sync::Arc;
 use inker::{DocumentProvenance, DocumentTrustState, EngineDocument};
 use masonry_core::core::NewWidget;
 use masonry_testing::ModularWidget;
-use mere_frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis};
+use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis};
 use kernel::geometry::PortablePoint;
 use kernel::graph::Graph;
 use mere_masonry::RootWidgetFactory;

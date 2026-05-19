@@ -1,5 +1,5 @@
 [package]
-name = "mere-host-runtime"
+name = "session-runtime"
 version = "0.0.1"
 authors = ["@mark-ik"]
 license = "MPL-2.0"
@@ -9,10 +9,10 @@ rust-version = "1.92.0"
 description = "Portable graphshell session runtime state: session manifests, session graph/view sidecars, worker declarations, and compatibility re-exports for adjacent control-plane and verso state."
 
 [dependencies]
-mere-frame.workspace = true
+frame.workspace = true
 kernel.workspace = true
 mere-identity.workspace = true
-graphshell-control-plane.workspace = true
+control-plane.workspace = true
 verso-tile-state.workspace = true
 
 serde = { version = "1", features = ["derive"] }
