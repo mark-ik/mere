@@ -588,7 +588,7 @@ pub struct GraphSnapshot {
 /// audit events in the WAL provides the full history; diffing adjacent entries
 /// to recover the "from" value is a query-time operation.
 ///
-/// Promoted to mere-kernel in Slice 63 so it can travel with the rest
+/// Promoted to kernel in Slice 63 so it can travel with the rest
 /// of the persistence type taxonomy and be referenced by the (eventually
 /// portable) `GraphMutation` / `GraphIntent` enums without needing the
 /// shell-side `services/persistence` module in scope.

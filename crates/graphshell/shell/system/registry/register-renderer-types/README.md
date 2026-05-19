@@ -1,7 +1,7 @@
-# mere-renderer-registry-types
+# register-renderer-types
 
 The wasm-friendly data-types half of the renderer registry contract. Split
-from [`mere-renderer-registry`](../mere-renderer-registry/) so
+from [`register-renderer`](../register-renderer/) so
 wasm32-clean consumers (notably [`host-runtime`](../host-runtime/))
 can consume the input event vocabulary, scene contract, and renderer-identity
 types without pulling vello / wgpu transitively.
@@ -28,7 +28,7 @@ types without pulling vello / wgpu transitively.
 The trait surface (`NodeRenderer`, `InScenePaintRenderer`,
 `EmbeddedFrameRenderer`, `OverlayRenderer`), the registry (`RendererRegistry`,
 `RendererSelector`, `DefaultSelector`), and the paint context (`PaintCtx`)
-all live in [`mere-renderer-registry`](../mere-renderer-registry/) — they
+all live in [`register-renderer`](../register-renderer/) — they
 require vello / wgpu and so are not wasm-clean.
 
 ## Dep posture

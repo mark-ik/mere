@@ -5,7 +5,7 @@ edition = "2024"
 license = "MPL-2.0"
 publish = false
 rust-version = "1.92.0"
-description = "Phase-3 proof harness for the spatial chrome IR substrate (per `design_docs/mere_docs/implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`). Demonstrates renderer-registry dispatch over a minimal substrate scene graph; first real adopter of `mere-renderer-registry`. Not a product host."
+description = "Phase-3 proof harness for the spatial chrome IR substrate (per `design_docs/mere_docs/implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`). Demonstrates renderer-registry dispatch over a minimal substrate scene graph; first real adopter of `register-renderer`. Not a product host."
 
 [lib]
 path = "src/lib.rs"

@@ -23,7 +23,7 @@
 //!
 //! Graph-data persistence (the `graph/` directory under each
 //! session) is the **next slice** — it depends on the eidetic graph
-//! persistence boundary being clean for `mere-kernel::graph::Graph`.
+//! persistence boundary being clean for `kernel::graph::Graph`.
 //! Until then, manifests persist independently; graph entities
 //! reset on app restart.
 //!

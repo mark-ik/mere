@@ -15,7 +15,7 @@ use crate::paint::{PaintCtx, PaintResult};
 /// Common surface every renderer implements.
 ///
 /// All return types are wasm-friendly data; the `NodeRenderer` trait itself
-/// could in principle live in `mere-renderer-registry-types`. It lives here
+/// could in principle live in `register-renderer-types`. It lives here
 /// instead because its sub-traits (below) reference vello / wgpu types and
 /// it's cleaner to keep all four traits in one crate.
 ///

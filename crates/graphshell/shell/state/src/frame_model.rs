@@ -4,7 +4,7 @@
 
 //! Frame view-model + host-input types.
 //!
-//! **Migrated to `mere-graphshell::frame_model` (2026-05-10).**
+//! **Migrated to `chrome::frame_model` (2026-05-10).**
 //! Re-exports for backward compat. New code should import from
 //! `chrome::frame_model`.
 //!
@@ -17,7 +17,7 @@
 //! - `AccessibilityViewModel` may move to `apparatus` as a11y
 //!   inspection grows.
 //!
-//! For now everything stays under `mere-graphshell::frame_model` for
+//! For now everything stays under `chrome::frame_model` for
 //! coherence with the other chrome view-models (toolbar, omnibar,
 //! command_palette).
 

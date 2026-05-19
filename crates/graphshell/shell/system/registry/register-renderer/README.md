@@ -1,4 +1,4 @@
-# mere-renderer-registry
+# register-renderer
 
 v0 minimal of the renderer registry — the trait + dispatch contract that lets
 renderer crates (`mere-masonry`, `scrying-engine`, future `serval-web` /

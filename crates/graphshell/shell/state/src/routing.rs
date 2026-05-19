@@ -5,7 +5,7 @@
 //! Return-target classification used by focus-restore and command-
 //! surface routing.
 //!
-//! **Migrated to `mere-graphshell::routing` (2026-05-09).** This module
+//! **Migrated to `chrome::routing` (2026-05-09).** This module
 //! re-exports the canonical types from the new location for backward
 //! compat. New code should import from `chrome::routing`.
 

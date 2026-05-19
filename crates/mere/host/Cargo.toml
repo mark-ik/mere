@@ -13,10 +13,10 @@ name = "host"
 path = "src/main.rs"
 
 [dependencies]
-# Substrate ↔ runtime bridge — owns MereHostApp, sync_scene_from_frame_layout,
+# Substrate ↔ runtime bridge — owns HostApp, sync_scene_from_frame_layout,
 # pane/splitter/tile identity tracking, action bus, manifest store.
 host-substrate.workspace = true
-# Durable state vocabulary + ActionKind/BusAction. MereHostApp re-exports
+# Durable state vocabulary + ActionKind/BusAction. HostApp re-exports
 # what's needed for dispatch; we pull the runtime crate directly for
 # the action-bus enum types the click handlers construct.
 session-runtime.workspace = true

@@ -4,7 +4,7 @@
 
 //! UX observability layer.
 //!
-//! **Migrated to `mere-ux-events::ux_observability` (2026-05-10).**
+//! **Migrated to `ux-events::ux_observability` (2026-05-10).**
 //! Re-exports for backward compat. New code should import from
 //! `ux_events::ux_observability`.
 

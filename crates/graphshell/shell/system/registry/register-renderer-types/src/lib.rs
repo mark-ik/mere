@@ -1,10 +1,10 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! mere-renderer-registry-types — wasm-friendly data types for the renderer
+//! register-renderer-types — wasm-friendly data types for the renderer
 //! registry contract.
 //!
-//! Split from [`mere-renderer-registry`](https://docs.rs/mere-renderer-registry)
+//! Split from [`register-renderer`](https://docs.rs/register-renderer)
 //! so wasm32-clean consumers (notably `host-runtime`) can consume the
 //! input vocabulary + scene contract + renderer-identity types without
 //! pulling vello / wgpu deps.
@@ -13,7 +13,7 @@
 //!
 //! ## Re-export shape
 //!
-//! `mere-renderer-registry` re-exports everything from this crate, so
+//! `register-renderer` re-exports everything from this crate, so
 //! consumers of the full registry can `use register_renderer::*` and
 //! get the data types too. Direct consumers of *just* this crate use
 //! `use register_renderer_types::*`.

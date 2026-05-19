@@ -4,7 +4,7 @@
 //! Cartography orchestration for the xilem host — composes
 //! [`crate::graph_registry::GraphRegistry`] +
 //! [`cartography::LayoutStrategy`] + the orrery renderer's snapshot
-//! map without making `MereHostApp` aware of any of it.
+//! map without making `HostApp` aware of any of it.
 //!
 //! `host-substrate` stays narrow (substrate ↔ runtime bridge);
 //! cartography integration lives in this crate as the place where
@@ -12,7 +12,7 @@
 
 use cartography::{IntelligenceSignals, LayoutStrategy, ProjectionRequest, ViewIntent};
 use frame::{FrameLayout, PaneContent, PaneId};
-use host_substrate::{MereHostApp, walk_leaves};
+use host_substrate::{HostApp, walk_leaves};
 use register_renderer::NodeIdentity;
 
 use crate::graph_registry::GraphRegistry;
@@ -45,7 +45,7 @@ pub struct ProjectionReport {
 ///
 /// `pane_identity_for` resolves a `PaneId` to its substrate identity —
 /// typically `|id| host_app.identity_for_pane(id)`. Decoupled as a
-/// closure so callers aren't forced to thread a specific MereHostApp
+/// closure so callers aren't forced to thread a specific HostApp
 /// reference. Stale entries (orreries no longer in the layout) are
 /// not swept here — call [`clear_orrery_snapshots`] before a fresh
 /// pass when the frametree's orrery membership may have changed.
@@ -107,9 +107,9 @@ pub fn clear_orrery_snapshots(orrery_snapshots: &OrrerySnapshots) {
 
 /// Convenience: pull `host_app.identity_for_pane` into a closure
 /// suitable for [`project_orreries`]. Cuts the call-site boilerplate
-/// when the caller has a `&MereHostApp` handy.
+/// when the caller has a `&HostApp` handy.
 pub fn pane_identity_closure(
-    host_app: &MereHostApp,
+    host_app: &HostApp,
 ) -> impl Fn(PaneId) -> Option<NodeIdentity> + '_ {
     move |id| host_app.identity_for_pane(id)
 }

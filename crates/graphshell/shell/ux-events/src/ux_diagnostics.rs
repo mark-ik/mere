@@ -24,7 +24,7 @@
 //!   built-in [`RecordingChannelSink`] to assert mapping; the
 //!   built-in [`NoopChannelSink`] is the default for environments
 //!   that don't yet have a registry wired.
-//! - **Avoid coupling `mere-kernel` to any host's internal
+//! - **Avoid coupling `kernel` to any host's internal
 //!   registry types.** Hosts implement the trait against their
 //!   registry; nothing in core has to know that registry's shape.
 

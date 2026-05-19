@@ -5,7 +5,7 @@ edition = "2024"
 license = "MPL-2.0"
 publish = false
 rust-version = "1.92.0"
-description = "Substrate-as-host integration crate: bridges `mere-spatial-prototype` (substrate scene + dispatch + camera) to graphshell session runtime, control-plane actions, and verso tile state."
+description = "Substrate-as-host integration crate: bridges `spatial-substrate` (substrate scene + dispatch + camera) to graphshell session runtime, control-plane actions, and verso tile state."
 
 [lib]
 path = "src/lib.rs"

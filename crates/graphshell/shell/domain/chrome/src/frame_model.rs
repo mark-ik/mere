@@ -615,7 +615,7 @@ mod tests {
 /// `chrome_ui.focus_ring_settings` directly. The canonical settings
 /// types live in `app/settings_persistence.rs` (graphshell crate);
 /// this module mirrors the read-side shape with POD types so the
-/// mere-kernel kernel stays independent of the app crate.
+/// kernel kernel stays independent of the app crate.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SettingsViewModel {
     /// Focus-ring animation behavior (enabled toggle, fade duration,

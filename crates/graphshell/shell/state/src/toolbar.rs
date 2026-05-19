@@ -4,7 +4,7 @@
 
 //! Toolbar session state.
 //!
-//! **Migrated to `mere-graphshell::toolbar` (2026-05-09).** This module
+//! **Migrated to `chrome::toolbar` (2026-05-09).** This module
 //! re-exports the canonical types from the new location so existing
 //! `shell_state::toolbar::ToolbarState` / `ToolbarEditable`
 //! / `ToolbarDraft` call sites resolve unchanged. New code should

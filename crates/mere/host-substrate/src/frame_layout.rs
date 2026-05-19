@@ -20,7 +20,7 @@ use frame::{
 use register_renderer::{NodeContentKind, NodeIdentity, Placement};
 use spatial_substrate::{SubstrateNode, SubstrateScene};
 
-use crate::MereHostApp;
+use crate::HostApp;
 
 /// State for an in-progress splitter drag. The path identifies which
 /// split in the layout tree the user grabbed; the cursor + ratio
@@ -263,7 +263,7 @@ fn walk_splitters_inner(
 /// [`NodeContentKind`] the substrate's renderer registry uses to
 /// route the pane's body to a registered renderer. Hosts wanting
 /// finer-grained routing pass their own closure to
-/// [`MereHostApp::sync_scene_from_frame_layout_with`].
+/// [`HostApp::sync_scene_from_frame_layout_with`].
 pub fn default_content_kind_for(content: &PaneContent) -> NodeContentKind {
     match content {
         PaneContent::Orrery => NodeContentKind::GraphView,
@@ -276,7 +276,7 @@ pub fn default_content_kind_for(content: &PaneContent) -> NodeContentKind {
     }
 }
 
-impl MereHostApp {
+impl HostApp {
     /// Project a [`FrameLayout`] into a `SubstrateScene` — one
     /// substrate node per leaf, placed at split-computed bounds
     /// within `viewport_size`. Content kinds come from
@@ -502,7 +502,7 @@ mod tests {
     #[test]
     fn sync_scene_from_frame_layout_produces_one_node_per_leaf() {
         let layout = fixture_three_pane();
-        let mut app = MereHostApp::new();
+        let mut app = HostApp::new();
         app.sync_scene_from_frame_layout(&layout, Size::new(1000.0, 800.0));
 
         // 3 leaves + 2 splitters = 5 substrate nodes total.
@@ -515,7 +515,7 @@ mod tests {
     #[test]
     fn sync_scene_from_frame_layout_preserves_pane_identity_across_calls() {
         let layout = fixture_three_pane();
-        let mut app = MereHostApp::new();
+        let mut app = HostApp::new();
         app.sync_scene_from_frame_layout(&layout, Size::new(1000.0, 800.0));
         let id_a_first = app.identity_for_pane(PaneId(1)).unwrap();
         let id_b_first = app.identity_for_pane(PaneId(2)).unwrap();
@@ -530,7 +530,7 @@ mod tests {
     #[test]
     fn sync_scene_from_frame_layout_uses_default_content_kinds_for_each_leaf() {
         let layout = fixture_three_pane();
-        let mut app = MereHostApp::new();
+        let mut app = HostApp::new();
         app.sync_scene_from_frame_layout(&layout, Size::new(1000.0, 800.0));
 
         // Workbench (Panel), Orrery (GraphView), Apparatus (Panel).
@@ -542,7 +542,7 @@ mod tests {
     #[test]
     fn sync_scene_from_frame_layout_with_routes_via_custom_mapping() {
         let layout = fixture_three_pane();
-        let mut app = MereHostApp::new();
+        let mut app = HostApp::new();
         app.sync_scene_from_frame_layout_with(&layout, Size::new(1000.0, 800.0), |content| {
             match content {
                 PaneContent::Workbench => NodeContentKind::CustomCanvas,
@@ -617,7 +617,7 @@ mod tests {
     #[test]
     fn sync_scene_from_frame_layout_includes_splitter_nodes() {
         let layout = fixture_three_pane();
-        let mut app = MereHostApp::new();
+        let mut app = HostApp::new();
         app.sync_scene_from_frame_layout(&layout, Size::new(1000.0, 800.0));
         // 3 panes + 2 splitters = 5 substrate nodes.
         assert_eq!(app.scene.len(), 5);

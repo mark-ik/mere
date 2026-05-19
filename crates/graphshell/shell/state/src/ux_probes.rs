@@ -4,7 +4,7 @@
 
 //! UX probes — assertion-shaped consumers of the UxEvent stream.
 //!
-//! **Migrated to `mere-ux-events::ux_probes` (2026-05-10).**
+//! **Migrated to `ux-events::ux_probes` (2026-05-10).**
 //! Re-exports for backward compat. New code should import from
 //! `ux_events::ux_probes`.
 

@@ -10,7 +10,7 @@
 //! every portable consumer (knowledge registry, lens registry,
 //! presentation, edge styles) reach into the shell-side runtime tree
 //! to import a primitive — backwards layering. Slice 52 promotes the
-//! portable form to `mere-kernel::color::Color32`. The egui-host
+//! portable form to `kernel::color::Color32`. The egui-host
 //! re-export at theme.rs continues to alias to `egui::Color32` (the
 //! egui-host build is frozen per the iced jump-ship plan §S1, so its
 //! integration with `egui::Color32` is unchanged).

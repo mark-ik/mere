@@ -102,7 +102,7 @@ fn build_pane_node(pane: &ProjectedPane) -> Node {
 mod tests {
     use super::*;
     use platen::{FrameId, PaneBinding, ProjectedPane, WorkbenchProjection};
-    // Fixtures need lower-level types: PaneId / NodeKey are mere-kernel
+    // Fixtures need lower-level types: PaneId / NodeKey are kernel
     // types that flow through platen; SurfaceHostId is from verso-core.
     use kernel::graph::NodeKey;
     use kernel::pane::PaneId;

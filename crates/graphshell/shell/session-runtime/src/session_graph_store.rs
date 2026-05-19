@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! Per-session graph-data persistence — `Graph` ↔ on-disk JSON
-//! via `mere-kernel`'s existing `GraphSnapshot` round-trip.
+//! via `kernel`'s existing `GraphSnapshot` round-trip.
 //!
 //! Companion to [`crate::manifest_store::ManifestStore`]: the
 //! manifest persists *session identity*; this module persists the

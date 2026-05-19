@@ -11,14 +11,14 @@
 //!   compatibility re-exports for the control-plane action bus and
 //!   verso tile state.
 //!
-//! The bridge is the data-model projection: a `MereHostApp` owns
+//! The bridge is the data-model projection: a `HostApp` owns
 //! both halves and provides `sync_scene_from_tiles` to translate the
 //! workbench per-tile state into substrate scene nodes that get
 //! dispatched through the registry on the next frame.
 //!
 //! ## v0a scope
 //!
-//! - `MereHostApp` struct bundling `SubstrateHost`, `SubstrateScene`,
+//! - `HostApp` struct bundling `SubstrateHost`, `SubstrateScene`,
 //!   `ExternalTextureCompositor`, `TileManager`. Action bus +
 //!   manifest store integration is a follow-up; the data-model
 //!   bridge is the first piece because every other integration
@@ -128,7 +128,7 @@ pub enum SubstrateInputEvent {
     BackgroundClicked { host_pos: Point, scene_pos: Point },
 }
 
-/// Boxed input-event callback. Owned by `MereHostApp`; replaced via
+/// Boxed input-event callback. Owned by `HostApp`; replaced via
 /// `set_input_callback`. `Fn` (not `FnMut`) keeps the callback
 /// safely callable from `&self` paths; hosts needing mutable state
 /// use interior mutability.
@@ -136,7 +136,7 @@ type InputCallback = Box<dyn Fn(SubstrateInputEvent) + Send + Sync + 'static>;
 
 /// Substrate-as-host integration: owns both the substrate machinery
 /// and the runtime's durable state.
-pub struct MereHostApp {
+pub struct HostApp {
     /// Substrate scene + registry dispatcher + camera.
     pub substrate: SubstrateHost,
     /// Current scene state, rebuilt by `sync_scene_from_tiles` from
@@ -194,13 +194,13 @@ pub struct MereHostApp {
     pub action_bus: ActionBus,
 }
 
-impl Default for MereHostApp {
+impl Default for HostApp {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl MereHostApp {
+impl HostApp {
     pub fn new() -> Self {
         Self {
             substrate: SubstrateHost::with_default_registry(),
@@ -582,7 +582,7 @@ fn camera_snapshot_for_save(camera: Affine) -> Option<CameraSnapshot> {
     }
 }
 
-impl MereHostApp {
+impl HostApp {
     /// Persist the substrate's current camera (and any future
     /// substrate-side view state) to disk at
     /// `<session_dir>/views/<frame_id_str>/<pane_id>.json`.

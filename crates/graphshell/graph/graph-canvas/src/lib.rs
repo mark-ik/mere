@@ -10,7 +10,7 @@
 //! or mutating application state.
 //!
 //! Sibling crates:
-//! - `mere-kernel` — portable graph data model (graph truth)
+//! - `kernel` — portable graph data model (graph truth)
 //! - `graph-layout` — graph layout algorithms (`Layout<N>` trait,
 //!   force-directed / Barnes-Hut / Phyllotaxis / Penrose / etc. + the
 //!   cartography adapters). Extracted from `graph-canvas::layout` on

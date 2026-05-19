@@ -12,7 +12,7 @@
 //!
 //! Per the node-per-tile + lineage facet design committed in the
 //! [tear-out operations brief](../../../../../design_docs/mere_docs/research/2026-05-11_tearout_operations_brief.md)
-//! §6.1: opening a new tile mints a node in `mere-kernel::graph`;
+//! §6.1: opening a new tile mints a node in `kernel::graph`;
 //! navigating within that tile extends its history without minting
 //! new nodes. Within-tile back/forward operates on this history;
 //! cross-tile navigation is the tile-strip switcher.

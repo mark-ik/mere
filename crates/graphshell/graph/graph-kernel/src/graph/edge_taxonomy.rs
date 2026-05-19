@@ -372,7 +372,7 @@ impl RelationKind {
     }
 
     /// Encode this relation as an opaque `u32` tag for transport
-    /// through layers that can't depend on `mere-kernel` (e.g.
+    /// through layers that can't depend on `kernel` (e.g.
     /// `graph-canvas::CanvasEdge::tag` / `HitProxy::Edge::tag`).
     /// The top byte is the family ordinal (0..5); the bottom three
     /// bytes are the sub-kind ordinal within the family.

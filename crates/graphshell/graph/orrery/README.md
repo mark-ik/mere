@@ -2,7 +2,7 @@
 
 Orrery domain module for the [mere](https://crates.io/crates/mere) browser.
 
-Projects [`mere_kernel::graph::Graph`] (the user's graph of nodes + edges)
+Projects [`kernel::graph::Graph`] (the user's graph of nodes + edges)
 into a subtree of [AccessKit](https://accesskit.dev) nodes for `uxtree`.
 Each graph node becomes an addressable accessibility / automation node
 identified by its UUID, regardless of whether it's currently in the

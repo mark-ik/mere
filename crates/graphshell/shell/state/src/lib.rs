@@ -16,7 +16,7 @@
 //!
 //! The vocabulary primitives (`geometry`, `time`, `pane`, `content`, etc.)
 //! and the host-port trait definitions live in
-//! [`mere-kernel`](https://crates.io/crates/mere-kernel); this crate
+//! [`kernel`](https://crates.io/crates/kernel); this crate
 //! depends on those.
 
 pub mod authorities;

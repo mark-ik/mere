@@ -4,7 +4,7 @@
 
 //! Omnibar session state.
 //!
-//! **Migrated to `mere-graphshell::omnibar` (2026-05-09).** This module
+//! **Migrated to `chrome::omnibar` (2026-05-09).** This module
 //! re-exports the canonical types from the new location for backward
 //! compat. New code should import from `chrome::omnibar`.
 

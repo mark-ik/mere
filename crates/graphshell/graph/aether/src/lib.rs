@@ -17,7 +17,7 @@
 //! translations back to the graph each step.
 //!
 //! Vello renders whatever the graph currently says. Petgraph (inside
-//! mere-kernel) owns topology. Aether owns physical state. The three
+//! kernel) owns topology. Aether owns physical state. The three
 //! sit at the same architectural tier — substrate layers consumed by
 //! everything above.
 //!

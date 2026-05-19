@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! `mere-kernel`: Portable identity, authority, and mutation kernel.
+//! `kernel`: Portable identity, authority, and mutation kernel.
 //!
 //! This crate must compile to `wasm32-unknown-unknown` with zero errors.
 //! It contains no egui, wgpu, Servo, or platform I/O dependencies.

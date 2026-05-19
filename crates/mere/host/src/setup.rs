@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Host bootstrap: builds the window, wgpu device, vello renderer,
-//! `MereHostApp`, registers the renderer chain, seeds a graph + frame
+//! `HostApp`, registers the renderer chain, seeds a graph + frame
 //! layout, projects the first frame, and binds the session store.
 //! Returns a fully-initialised [`RuntimeState`] for the event loop to
 //! consume.
@@ -14,7 +14,7 @@ use graph_layout::adapters::GridAdapter;
 use masonry_core::core::DefaultProperties;
 use frame::GraphId;
 use session_runtime::ActionKind;
-use host_substrate::MereHostApp;
+use host_substrate::HostApp;
 use mere_masonry::MasonryEmbeddedRenderer;
 use register_renderer::NodeContentKind;
 use petgraph::graph::NodeIndex;
@@ -110,7 +110,7 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
     .expect("vello renderer init");
 
     // -- Host state -------------------------------------------------
-    let mut host_app = MereHostApp::new();
+    let mut host_app = HostApp::new();
     install_callbacks(&mut host_app);
     let orrery_snapshots = register_renderers(&mut host_app, &adapter, &device, &queue);
 
@@ -208,7 +208,7 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
     }
 }
 
-fn install_callbacks(host_app: &mut MereHostApp) {
+fn install_callbacks(host_app: &mut HostApp) {
     host_app.set_diagnostic_callback(|event| {
         eprintln!("[diag] {event:?}");
     });
@@ -250,7 +250,7 @@ fn install_callbacks(host_app: &mut MereHostApp) {
 /// host-side write path alive after the registry takes ownership
 /// of the boxed renderer.
 fn register_renderers(
-    host_app: &mut MereHostApp,
+    host_app: &mut HostApp,
     adapter: &wgpu::Adapter,
     device: &wgpu::Device,
     queue: &wgpu::Queue,

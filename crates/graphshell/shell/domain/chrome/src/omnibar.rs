@@ -12,7 +12,7 @@
 //! session state is driven from a host-side `ProviderSuggestionDriver`.
 //! Slice 5b (this module, 2026-04-22) replaces the remaining
 //! `std::time::Instant` with [`PortableInstant`](crate::time::PortableInstant)
-//! so the whole omnibar session can move to mere-kernel.
+//! so the whole omnibar session can move to kernel.
 //!
 //! The concrete receiver + generation tag still live in a shell-side
 //! `ProviderSuggestionDriver`; this module defines only the portable

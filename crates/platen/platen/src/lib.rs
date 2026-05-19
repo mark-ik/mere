@@ -38,7 +38,7 @@
 //! - **Rendering** — that's verso-core's surface lifecycle plus the host's
 //!   netrender / gpui integration.
 //! - **A11y projection** — that's mere-domain (`mere-orrery`,
-//!   `mere-frame`, `gloss`, `apparatus`) → uxtree.
+//!   `frame`, `gloss`, `apparatus`) → uxtree.
 //!
 //! ## Status
 //!

@@ -1,12 +1,12 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! mere-renderer-registry — vello/wgpu-bound trait + dispatch surface for
+//! register-renderer — vello/wgpu-bound trait + dispatch surface for
 //! Mere's renderer registry contract.
 //!
 //! Data-only types (`InputEvent`, `NodeContentKind`, `RendererId`,
 //! `RendererCapabilities`, etc.) live in
-//! [`mere-renderer-registry-types`](https://docs.rs/mere-renderer-registry-types)
+//! [`register-renderer-types`](https://docs.rs/register-renderer-types)
 //! so wasm32-clean consumers (notably `host-runtime`) can consume them
 //! without pulling vello/wgpu transitively. This crate re-exports the types
 //! crate's full surface, so consumers of the full registry can
@@ -20,7 +20,7 @@
 //! - [`RendererRegistry`] — substrate-owned dispatcher.
 //! - [`PaintCtx`] / [`PaintResult`] — paint contract for in-scene-paint
 //!   renderers.
-//! - All data types from `mere-renderer-registry-types` re-exported.
+//! - All data types from `register-renderer-types` re-exported.
 
 #![warn(unused_crate_dependencies)]
 #![warn(clippy::print_stdout, clippy::print_stderr)]
@@ -36,7 +36,7 @@ pub use registry::{
 pub use renderer::{EmbeddedFrameRenderer, InScenePaintRenderer, NodeRenderer, OverlayRenderer};
 
 // Re-export the data-types surface so callers don't need to add a separate
-// dep on `mere-renderer-registry-types` just to name the types.
+// dep on `register-renderer-types` just to name the types.
 pub use register_renderer_types::{
     CapabilityAction, CompositionMode, DenyEverythingGate, DiagnosticEvent, DiagnosticSink,
     ImeEvent, InputDisposition, InputEvent, KeyCode, KeyEventKind, LodLevel, ModifiersState,

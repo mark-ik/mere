@@ -4,7 +4,7 @@
 
 //! Portable leaf types used by the graph model and persistence schema.
 //!
-//! These types are shared between `mere-kernel` modules and must be
+//! These types are shared between `kernel` modules and must be
 //! WASM-clean: no platform I/O, no UI framework dependencies.
 
 use std::collections::HashMap;

@@ -425,7 +425,7 @@ impl Graph {
     }
 
     /// Internal setter for `Node::history`. Tightened to `pub(crate)` so the
-    /// only reachable write surface from outside `mere-kernel` is
+    /// only reachable write surface from outside `kernel` is
     /// `GraphDelta::UpdateNodeHistory`, dispatched via the
     /// `app::history::GraphBrowserApp::apply_node_history_change` helper.
     pub(crate) fn set_node_history_state(

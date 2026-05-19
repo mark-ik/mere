@@ -7,15 +7,15 @@
 //! These types are the kernel's framework-agnostic color + stroke
 //! vocabulary. Host painters convert to backend-specific types
 //! (egui `Color32`, iced `Color`, vello / wgpu colors) at the draw-
-//! call boundary; portable descriptors flow through `mere-kernel`'s
+//! call boundary; portable descriptors flow through `kernel`'s
 //! overlay surface (`OverlayStrokePass`), through `host-contract`
 //! ports, and through `graph-canvas`'s `packet::SceneDrawItem` /
 //! `node_style` / `derive` surfaces — all without coupling the kernel
 //! to a renderer crate.
 //!
-//! **Why these live in mere-kernel, not graph-canvas**: previously
-//! they lived in `graph_canvas::packet`, with mere-kernel importing
-//! them — that made `mere-kernel → graph-canvas` an upward dependency
+//! **Why these live in kernel, not graph-canvas**: previously
+//! they lived in `graph_canvas::packet`, with kernel importing
+//! them — that made `kernel → graph-canvas` an upward dependency
 //! that blocked the
 //! [cartography layer](../../../../design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
 //! brief's revised §9 step 4 (the `graph-layout` extraction).

@@ -36,7 +36,7 @@ consumes generically.
 - **`memory`** — the in-memory test fixture.
   - `MemoryTransport` — paired channels, no network. Used for unit tests of
     higher-level protocols without booting iroh.
-- **`peer_id`** — `PeerID` derived from `Ed25519PublicKey`. Named `PeerID` rather than `NodeId` to disambiguate from `mere-kernel`'s graph-node identity (graph-object identity and peer identity are distinct concepts that previously shared the name).
+- **`peer_id`** — `PeerID` derived from `Ed25519PublicKey`. Named `PeerID` rather than `NodeId` to disambiguate from `kernel`'s graph-node identity (graph-object identity and peer identity are distinct concepts that previously shared the name).
 - **`alpn`** — `Alpn` newtype with hash-friendly equality, for the ALPN
   registry pattern.
 - **`blobs`** — content-addressed blob storage.

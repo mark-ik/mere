@@ -1,4 +1,4 @@
-# mere-ux-events
+# ux-events
 
 Portable chrome-event taxonomy for the [mere](https://crates.io/crates/mere)
 browser. The **third pillar** between:
@@ -35,7 +35,7 @@ shared contract lets:
 
 ## History
 
-These modules previously lived in `graphshell-shell-state` (a kitchen-
+These modules previously lived in `shell-state` (a kitchen-
 sink portable session-state crate). They were extracted to this crate
 on 2026-05-10 because:
 
@@ -47,8 +47,8 @@ on 2026-05-10 because:
    `host-apparatus` (host-side inspector). Sitting under a single
    shell-state crate understated the scope.
 
-`graphshell-shell-state` re-exports each module for backward compat;
-new code imports from `mere_ux_events::*` directly.
+`shell-state` re-exports each module for backward compat;
+new code imports from `ux_events::*` directly.
 
 ## Status
 

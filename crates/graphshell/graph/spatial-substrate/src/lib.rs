@@ -1,7 +1,7 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! mere-spatial-prototype — Phase-3 proof harness for the spatial chrome
+//! spatial-substrate — Phase-3 proof harness for the spatial chrome
 //! IR substrate.
 //!
 //! See [README](../README.md) for scope and framing. The TL;DR is: this

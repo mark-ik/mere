@@ -154,7 +154,7 @@ impl ToolPaneState {
 /// (full / reduced / chromeless) and tile-tree mobility (whether
 /// the pane participates in normal split moves).
 ///
-/// Promoted to mere-kernel in Slice 64 from
+/// Promoted to kernel in Slice 64 from
 /// `shell/desktop/workbench/pane_model.rs` so the intent vocabulary
 /// (`AppCommand`) can reference it without dragging the workbench
 /// module into portable code.
@@ -173,7 +173,7 @@ pub enum PanePresentationMode {
 }
 
 /// Placement context for promoting a floating pane into the tile tree.
-/// Promoted to mere-kernel in Slice 64.
+/// Promoted to kernel in Slice 64.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FloatingPaneTargetTileContext {
     TabGroup,
@@ -181,7 +181,7 @@ pub enum FloatingPaneTargetTileContext {
     BareGraph,
 }
 
-/// Direction for pane split operations. Promoted to mere-kernel
+/// Direction for pane split operations. Promoted to kernel
 /// in Slice 64. (Note: `crates/graph-tree::member::SplitDirection`
 /// and `crates/registrar/register-layout::workbench_surface::SplitDirection`
 /// are separate types in their respective domains; this is the

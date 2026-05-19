@@ -12,7 +12,7 @@ use cartography::LayoutStrategy;
 use graph_layout::adapters::GridAdapter;
 use frame::{FrameLayout, SplitAxis};
 use session_runtime::{ActionKind, BusAction, BusDispatchOutcome};
-use host_substrate::{MereHostApp, SplitterDrag, SubstrateInputEvent, compute_container_size};
+use host_substrate::{HostApp, SplitterDrag, SubstrateInputEvent, compute_container_size};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
@@ -40,9 +40,9 @@ pub struct RuntimeState {
     pub surface: wgpu::Surface<'static>,
     pub surface_config: wgpu::SurfaceConfiguration,
     pub renderer: vello::Renderer,
-    pub host_app: MereHostApp,
+    pub host_app: HostApp,
     /// Current frametree — owned by the host, projected into the
-    /// substrate scene through `MereHostApp::sync_scene_from_frame_layout`.
+    /// substrate scene through `HostApp::sync_scene_from_frame_layout`.
     pub frame_layout: FrameLayout,
     /// App-scope graph registry; each pane in `frame_layout` carries
     /// a `graph_id` resolved through this map at projection time.

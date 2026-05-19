@@ -69,8 +69,8 @@ exist" decisions into actual viewer allocations.
   `SurfaceCommand` effects via `WorkspaceEffect::RequestSurface`; the
   `SurfaceHost` trait in graphshell is a specialization of
   `SurfaceCommandSink`.
-- **`mere-kernel`** (workspace-internal) — the apply algorithm uses
-  `mere_kernel::viewer_host::ViewerSurfaceHost` as its host-port trait
+- **`kernel`** (workspace-internal) — the apply algorithm uses
+  `kernel::viewer_host::ViewerSurfaceHost` as its host-port trait
   bound; concrete host adapters implement this.
 
 ## Status

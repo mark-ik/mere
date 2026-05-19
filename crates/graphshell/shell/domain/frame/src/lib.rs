@@ -2,20 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! # mere-frame
+//! # frame
 //!
 //! Frame domain layer — defines the savable layout of resizable panes
 //! and projects it into a uxtree subtree.
 //!
 //! See the crate README for the conceptual scope and the relationship
-//! to legacy `platen::FrameState` / `graphshell-shell-state`.
+//! to legacy `platen::FrameState` / `shell-state`.
 //!
 //! Split across submodules to keep each file under the workspace's
 //! 600-LOC ceiling: [`layout`] holds the [`FrameLayout`] operations
 //! ([`FrameLayout::summon_leaf`], `reparent_leaf`, `close_leaf`, …);
 //! [`projection`] holds [`project_frame`] + [`project_frame_with`].
 
-#![doc(html_root_url = "https://docs.rs/mere-frame/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/frame/0.0.1")]
 
 use serde::{Deserialize, Serialize};
 
@@ -126,7 +126,7 @@ pub enum SplitAxis {
 
 /// Identity of a single node within a graph. Mirrors petgraph's
 /// `NodeIndex` but kept as an opaque wrapped `u32` here so
-/// `mere-frame` doesn't depend on `mere-kernel` / petgraph. The
+/// `frame` doesn't depend on `kernel` / petgraph. The
 /// host resolves these against the leaf's `graph_id` to get the
 /// real node entity. v0: `usize` index as a `u32` — matches
 /// petgraph's `NodeIndex::index()`.

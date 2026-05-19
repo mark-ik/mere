@@ -16,7 +16,7 @@ the same territory at the user's current scale and intent.
 
 Inputs:
 
-- **Graph truth** — `mere_kernel::graph::Graph` (immutable reference).
+- **Graph truth** — `kernel::graph::Graph` (immutable reference).
 - **Intelligence signals** — clusters, affinity, hot regions, bridge
   nodes, importance hints. Consumed through `IntelligenceSignals`, not
   a direct dependency on the producer crate.
@@ -65,7 +65,7 @@ Contracts only:
 - **No rendering** — `graph-canvas` (and the future `document-canvas`
   minimap consumer) renders `Projection`s.
 - **No host-platform coupling** — `wasm32-unknown-unknown` clean.
-  Geometry types come from `mere-kernel` (which uses `euclid`).
+  Geometry types come from `kernel` (which uses `euclid`).
 
 ## Position parity contract
 
@@ -78,7 +78,7 @@ dimensions never invalidates a strategy's output.
 ## How it relates to other workspace crates
 
 ```text
-                  mere-kernel::graph::Graph
+                  kernel::graph::Graph
                             │ &Graph
                             │
 embed ────►│ IntelligenceSignals

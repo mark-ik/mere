@@ -13,7 +13,7 @@
 //!
 //! Boundary in the printing-press stack:
 //!
-//! - **graph truth** (mere-kernel `Graph`) → **forme** (workbench arrangement
+//! - **graph truth** (kernel `Graph`) → **forme** (workbench arrangement
 //!   authority) → **platen** (graph-aware print/composition stage that turns
 //!   the forme into surface/pane output) → **verso-core** (receptor of
 //!   surface/tile lifecycle, communicating rearrangement up the stack from

@@ -12,7 +12,7 @@
 //! runtime translates them to internal reducer actions during its
 //! `tick` pass.
 //!
-//! `HostIntent` lives in `mere-kernel` so `FrameHostInput` (also
+//! `HostIntent` lives in `kernel` so `FrameHostInput` (also
 //! core) can carry a `Vec<HostIntent>`. This is deliberately a
 //! **parallel portable enum** — not a move of the shell crate's
 //! `GraphIntent` into core. Hosts only need a small surface of intent

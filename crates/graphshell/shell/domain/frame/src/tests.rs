@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Tests for `mere-frame`. Split out of `lib.rs` to keep the parent
+//! Tests for `frame`. Split out of `lib.rs` to keep the parent
 //! module under the workspace's 600-LOC ceiling.
 
 use accesskit::{Node, Role};

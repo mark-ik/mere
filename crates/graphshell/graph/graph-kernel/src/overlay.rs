@@ -17,7 +17,7 @@
 //! egui-specific painter, and the glyph-overlay types were in
 //! `registries/atomic/lens/registry.rs`. Consolidating them here
 //! removes the last data-shape barrier between `FrameViewModel` and
-//! mere-kernel.
+//! kernel.
 
 use serde::{Deserialize, Serialize};
 

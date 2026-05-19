@@ -1,7 +1,7 @@
-# mere-spatial-prototype
+# spatial-substrate
 
 Phase-3 proof harness for the spatial chrome IR substrate. First real
-adopter of [`mere-renderer-registry`](../mere-renderer-registry/).
+adopter of [`register-renderer`](../register-renderer/).
 
 See [`design_docs/mere_docs/implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../../design_docs/mere_docs/implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md)
 § Phase 3 for the framing. This crate is the "if crate isolation is

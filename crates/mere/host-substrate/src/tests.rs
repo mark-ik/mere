@@ -39,7 +39,7 @@ fn open_tiles_for(tiles: &mut TileManager, urls: &[&str]) -> Vec<NodeKey> {
 
 #[test]
 fn new_app_has_empty_scene_and_tile_map() {
-    let app = MereHostApp::new();
+    let app = HostApp::new();
     assert!(app.scene.is_empty());
     assert_eq!(app.tracked_tile_count(), 0);
     assert_eq!(app.tiles.open_tiles().len(), 0);
@@ -47,14 +47,14 @@ fn new_app_has_empty_scene_and_tile_map() {
 
 #[test]
 fn sync_with_no_tiles_keeps_scene_empty() {
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     app.sync_scene_from_tiles();
     assert!(app.scene.is_empty());
 }
 
 #[test]
 fn sync_projects_each_tile_to_a_substrate_node() {
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let keys = open_tiles_for(
         &mut app.tiles,
         &[
@@ -74,7 +74,7 @@ fn sync_projects_each_tile_to_a_substrate_node() {
 
 #[test]
 fn sync_preserves_identity_across_calls() {
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let keys = open_tiles_for(&mut app.tiles, &["https://a.example", "https://b.example"]);
     app.sync_scene_from_tiles();
     let id_a_first = app.identity_for_tile(keys[0]).unwrap();
@@ -87,7 +87,7 @@ fn sync_preserves_identity_across_calls() {
 
 #[test]
 fn closing_a_tile_drops_its_identity_on_next_sync() {
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let keys = open_tiles_for(&mut app.tiles, &["https://a.example", "https://b.example"]);
     app.sync_scene_from_tiles();
     assert_eq!(app.tracked_tile_count(), 2);
@@ -102,7 +102,7 @@ fn closing_a_tile_drops_its_identity_on_next_sync() {
 
 #[test]
 fn custom_layout_function_runs_per_tile() {
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let _ = open_tiles_for(
         &mut app.tiles,
         &[
@@ -125,7 +125,7 @@ fn custom_layout_function_runs_per_tile() {
 
 #[test]
 fn current_view_intent_identity_camera_is_empty() {
-    let app = MereHostApp::new();
+    let app = HostApp::new();
     let intent = app.current_view_intent();
     assert!(intent.is_empty());
     assert!(intent.camera.is_none());
@@ -133,7 +133,7 @@ fn current_view_intent_identity_camera_is_empty() {
 
 #[test]
 fn current_view_intent_pan_zoom_camera_is_not_empty() {
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     app.substrate
         .set_camera(kurbo::Affine::translate((100.0, 50.0)));
     let intent = app.current_view_intent();
@@ -146,7 +146,7 @@ fn current_view_intent_pan_zoom_camera_is_not_empty() {
 
 #[test]
 fn apply_view_intent_restores_camera_from_snapshot() {
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     // Build a saved intent that has a 2× zoom + (200, 100) pan.
     let camera = kurbo::Affine::translate((200.0, 100.0)) * kurbo::Affine::scale(2.0);
     let intent = ViewIntent {
@@ -171,7 +171,7 @@ fn save_then_load_round_trips_camera_through_disk() {
     let frame_id_str = "frame-a";
     let pane_id: u64 = 42;
 
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let camera = kurbo::Affine::translate((123.0, -45.5)) * kurbo::Affine::scale(0.75);
     app.substrate.set_camera(camera);
 
@@ -182,7 +182,7 @@ fn save_then_load_round_trips_camera_through_disk() {
     assert!(saved, "non-identity camera should write a file");
 
     // Build a fresh app, load → camera restored.
-    let mut app2 = MereHostApp::new();
+    let mut app2 = HostApp::new();
     assert_eq!(app2.substrate.camera(), kurbo::Affine::IDENTITY);
     let loaded = app2
         .load_substrate_view_intent(&session_dir, frame_id_str, pane_id)
@@ -200,7 +200,7 @@ fn save_identity_camera_skips_file() {
         .join("host-substrate-tests")
         .join(uuid::Uuid::new_v4().to_string());
     let session_dir = test_root.join("session-2");
-    let app = MereHostApp::new();
+    let app = HostApp::new();
     let saved = app
         .save_substrate_view_intent(&session_dir, "frame-a", 1)
         .expect("save ok");
@@ -216,7 +216,7 @@ fn load_missing_view_intent_is_a_clean_miss() {
         .join("host-substrate-tests")
         .join(uuid::Uuid::new_v4().to_string());
     let session_dir = test_root.join("nonexistent-session");
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let loaded = app
         .load_substrate_view_intent(&session_dir, "frame-z", 99)
         .expect("missing file is not an error");
@@ -226,7 +226,7 @@ fn load_missing_view_intent_is_a_clean_miss() {
 
 #[test]
 fn apply_then_snapshot_round_trips_through_view_intent() {
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let camera = kurbo::Affine::translate((40.0, 60.0)) * kurbo::Affine::scale(1.5);
     app.substrate.set_camera(camera);
 
@@ -270,7 +270,7 @@ fn bind_session_root_loads_existing_manifests() {
     let session_id = manifest.session_id;
     seed_manifest_dir(&root, &manifest);
 
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let report = app.bind_session_root(&root).expect("bind ok");
     assert_eq!(report.loaded.len(), 1);
     assert_eq!(report.loaded[0], session_id);
@@ -283,7 +283,7 @@ fn bind_session_root_loads_existing_manifests() {
 #[test]
 fn bind_session_root_missing_root_returns_empty_report() {
     let root = temp_session_root().join("nonexistent");
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let report = app.bind_session_root(&root).expect("missing root is OK");
     assert!(report.loaded.is_empty());
     assert!(report.failed.is_empty());
@@ -291,7 +291,7 @@ fn bind_session_root_missing_root_returns_empty_report() {
 
 #[test]
 fn create_session_inserts_manifest_and_activates_it() {
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let id = app.create_session();
     assert_eq!(app.manifests.len(), 1);
     assert!(app.manifests.get(id).is_some());
@@ -302,7 +302,7 @@ fn create_session_inserts_manifest_and_activates_it() {
 #[test]
 fn create_session_then_flush_writes_manifest_to_disk() {
     let root = temp_session_root();
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     app.manifests.set_root(&root);
     let id = app.create_session();
     assert_eq!(app.manifests.flush_dirty().expect("flush"), 1);
@@ -312,7 +312,7 @@ fn create_session_then_flush_writes_manifest_to_disk() {
             .is_file()
     );
 
-    let mut app2 = MereHostApp::new();
+    let mut app2 = HostApp::new();
     let report = app2.bind_session_root(&root).expect("rebind");
     assert_eq!(report.loaded, vec![id]);
     let _ = std::fs::remove_dir_all(&root);
@@ -326,7 +326,7 @@ fn activate_session_only_succeeds_for_known_ids() {
     let session_id = manifest.session_id;
     seed_manifest_dir(&root, &manifest);
 
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     app.bind_session_root(&root).expect("bind ok");
 
     assert!(app.active_session_id().is_none());
@@ -350,7 +350,7 @@ fn active_session_dir_matches_manifest_path_layout() {
     let session_id = manifest.session_id;
     seed_manifest_dir(&root, &manifest);
 
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     app.bind_session_root(&root).expect("bind ok");
     assert!(app.active_session_dir().is_none(), "no active session yet");
     app.activate_session(session_id);
@@ -368,7 +368,7 @@ fn save_active_view_intent_writes_under_session_dir() {
     let session_id = manifest.session_id;
     seed_manifest_dir(&root, &manifest);
 
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     app.bind_session_root(&root).expect("bind ok");
     app.activate_session(session_id);
     app.substrate
@@ -379,7 +379,7 @@ fn save_active_view_intent_writes_under_session_dir() {
 
     // Re-bind into a fresh app and confirm the file is reachable
     // via load_active_view_intent.
-    let mut app2 = MereHostApp::new();
+    let mut app2 = HostApp::new();
     app2.bind_session_root(&root).expect("rebind ok");
     app2.activate_session(session_id);
     let loaded = app2.load_active_view_intent("frame-a", 1).expect("load ok");
@@ -394,7 +394,7 @@ fn save_active_view_intent_writes_under_session_dir() {
 
 #[test]
 fn save_active_view_intent_without_active_session_is_none() {
-    let app = MereHostApp::new();
+    let app = HostApp::new();
     let result = app.save_active_view_intent("frame-a", 1).expect("save ok");
     assert!(result.is_none(), "no active session → Ok(None)");
 }
@@ -406,7 +406,7 @@ fn pointer_press_routes_tile_click_to_node_key() {
     let captured: Arc<Mutex<Vec<SubstrateInputEvent>>> = Arc::new(Mutex::new(Vec::new()));
     let buf = captured.clone();
 
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let keys = open_tiles_for(
         &mut app.tiles,
         &[
@@ -449,7 +449,7 @@ fn pointer_press_on_background_emits_background_event() {
     let captured: Arc<Mutex<Vec<SubstrateInputEvent>>> = Arc::new(Mutex::new(Vec::new()));
     let buf = captured.clone();
 
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let _ = open_tiles_for(&mut app.tiles, &["https://a.example"]);
     app.sync_scene_from_tiles();
     app.set_input_callback(move |event| {
@@ -473,7 +473,7 @@ fn pointer_press_under_panned_camera_uses_inverse() {
     let captured: Arc<Mutex<Vec<SubstrateInputEvent>>> = Arc::new(Mutex::new(Vec::new()));
     let buf = captured.clone();
 
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let keys = open_tiles_for(&mut app.tiles, &["https://a.example"]);
     app.sync_scene_from_tiles();
     // Pan camera by (500, 300); first tile's host-space position
@@ -506,7 +506,7 @@ fn pointer_press_under_panned_camera_uses_inverse() {
 
 #[test]
 fn pointer_press_without_callback_is_a_silent_drop() {
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let _ = open_tiles_for(&mut app.tiles, &["https://a.example"]);
     app.sync_scene_from_tiles();
     // No callback set — should not panic.
@@ -515,7 +515,7 @@ fn pointer_press_without_callback_is_a_silent_drop() {
 
 #[test]
 fn node_key_for_identity_returns_none_for_unknown() {
-    let app = MereHostApp::new();
+    let app = HostApp::new();
     assert!(app.node_key_for_identity(NodeIdentity::next()).is_none());
 }
 
@@ -530,7 +530,7 @@ fn diagnostic_callback_receives_registry_events() {
     use spatial_substrate::RecordingRenderer;
 
     let captured: Arc<Mutex<Vec<DiagnosticEvent>>> = Arc::new(Mutex::new(Vec::new()));
-    let mut app = MereHostApp::new();
+    let mut app = HostApp::new();
     let sink_buf = captured.clone();
     app.set_diagnostic_callback(move |event| {
         sink_buf.lock().expect("sink lock").push(event);

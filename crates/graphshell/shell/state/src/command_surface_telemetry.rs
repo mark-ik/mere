@@ -4,7 +4,7 @@
 
 //! Command-surface telemetry sink.
 //!
-//! **Migrated to `mere-ux-events::command_surface_telemetry`
+//! **Migrated to `ux-events::command_surface_telemetry`
 //! (2026-05-10).** Re-exports for backward compat. New code should
 //! import from `ux_events::command_surface_telemetry`.
 

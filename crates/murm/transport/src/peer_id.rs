@@ -9,7 +9,7 @@ use identity::{Ed25519PublicKey, IdentityError};
 /// iroh's `NodeId` (their term for the same underlying public key).
 ///
 /// Named `PeerID` rather than `NodeId` to disambiguate from
-/// `mere-kernel::Graph` node identity — graph-object identity and peer
+/// `kernel::Graph` node identity — graph-object identity and peer
 /// identity are distinct concepts that previously shared the name.
 ///
 /// Carries equality and hashing semantics of the underlying public key, so

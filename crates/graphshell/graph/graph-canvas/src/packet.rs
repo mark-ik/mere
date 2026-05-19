@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::scripting::SceneObjectId;
 
-// `Color` and `Stroke` moved into mere-kernel's `paint` module
+// `Color` and `Stroke` moved into kernel's `paint` module
 // (2026-05-11) so the kernel no longer depends on graph-canvas — the
 // reversed dependency direction unlocks the cartography layer's
 // graph-layout extraction (see the cartography brief's revised §9
