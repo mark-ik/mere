@@ -30,6 +30,10 @@
 //! - [`seed`] — initial frametree / graph / masonry factory.
 //! - [`setup`] — boots the window + wgpu + vello stack and assembles
 //!   the initial `RuntimeState`.
+//! - [`view_preset`] — named view-intent presets (Orrery / Drift /
+//!   Minimap); maps a pane's role to a [`cartography::ViewIntent`]
+//!   shape so the projection pass picks the right form factor per
+//!   pane.
 
 mod cartography_projection;
 mod graph_registry;
@@ -39,6 +43,7 @@ mod runtime;
 mod seed;
 mod setup;
 mod splitter_renderer;
+mod view_preset;
 
 use winit::event_loop::{ControlFlow, EventLoop};
 

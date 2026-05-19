@@ -10,13 +10,14 @@
 //! cartography integration lives in this crate as the place where
 //! "the modular pieces become a running host."
 
-use cartography::{IntelligenceSignals, LayoutStrategy, ProjectionRequest, ViewIntent};
+use cartography::{IntelligenceSignals, LayoutStrategy, ProjectionRequest};
 use frame::{FrameLayout, PaneContent, PaneId};
 use host_substrate::{HostApp, walk_leaves};
 use register_renderer::NodeIdentity;
 
 use crate::graph_registry::GraphRegistry;
 use crate::orrery_renderer::OrrerySnapshots;
+use crate::view_preset::default_preset_for;
 
 /// Per-call report from [`project_orreries`] — counts of what got
 /// projected vs. skipped, for diagnostics and tests.
@@ -79,10 +80,8 @@ where
             report.missing_graph += 1;
             continue;
         };
-        let intent = ViewIntent::canvas_pixels(
-            leaf.size.width.max(1.0) as u32,
-            leaf.size.height.max(1.0) as u32,
-        );
+        let preset = default_preset_for(&leaf.content);
+        let intent = preset.intent_for(leaf.size);
         let request = ProjectionRequest {
             graph,
             signals: &signals,
