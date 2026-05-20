@@ -42,6 +42,10 @@ pub struct NodeDrag {
     /// The pane's window-space origin, snapshotted at grab time (the
     /// layout is static during a node drag).
     pub pane_origin: kurbo::Point,
+    /// The pane's size, snapshotted at grab time. The dragged node's
+    /// pane-local position is clamped to `[0, w] × [0, h]` so it can't
+    /// wander out of its origin orrery pane into neighbouring panes.
+    pub pane_size: kurbo::Size,
 }
 
 /// The winit application handle — wraps an `Option<RuntimeState>`
@@ -173,9 +177,19 @@ impl ApplicationHandler for App {
             } if btn_state == ElementState::Pressed => handle_mouse_press(state),
             WindowEvent::RedrawRequested => {
                 render_frame(state);
-                state.window.request_redraw();
             }
             _ => {}
+        }
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        // Drive the continuous render loop (ControlFlow::Poll): request
+        // a redraw each cycle so the live diagnostics panel and any
+        // animation keep advancing. Requesting from here (rather than
+        // inside the RedrawRequested handler) is the canonical winit
+        // animation pattern and avoids redraw-request coalescing.
+        if let Some(state) = self.state.as_ref() {
+            state.window.request_redraw();
         }
     }
 }
@@ -222,10 +236,14 @@ fn handle_cursor_moved(state: &mut RuntimeState, position: winit::dpi::PhysicalP
     if let Some(drag) = state.dragging_node.clone() {
         let node_center = cursor - drag.grab_offset;
         let local = node_center - drag.pane_origin;
+        // Clamp to the origin pane's bounds — nodes stay inside their
+        // orrery pane rather than wandering across the window.
+        let clamped_x = local.x.clamp(0.0, drag.pane_size.width);
+        let clamped_y = local.y.clamp(0.0, drag.pane_size.height);
         state.node_overrides.set(
             drag.pane_id,
             drag.node_key,
-            PortablePoint::new(local.x as f32, local.y as f32),
+            PortablePoint::new(clamped_x as f32, clamped_y as f32),
         );
         let viewport = viewport_size(state.surface_config.width, state.surface_config.height);
         state.resync(viewport);
@@ -347,19 +365,20 @@ fn start_node_drag(
     let center = kurbo::Point::new(t.x + node.size.width / 2.0, t.y + node.size.height / 2.0);
 
     let viewport = viewport_size(state.surface_config.width, state.surface_config.height);
-    let Some(pane_origin) = walk_leaves(&state.frame_layout, viewport)
+    let Some(leaf) = walk_leaves(&state.frame_layout, viewport)
         .into_iter()
         .find(|leaf| leaf.pane_id == pane_id)
-        .map(|leaf| leaf.placement.transform.translation().to_point())
     else {
         return;
     };
+    let pane_origin = leaf.placement.transform.translation().to_point();
 
     state.dragging_node = Some(NodeDrag {
         pane_id,
         node_key,
         grab_offset: cursor - center,
         pane_origin,
+        pane_size: leaf.size,
     });
     eprintln!("[graph-node] drag started pane={pane_id:?} node={node_key:?}");
 }

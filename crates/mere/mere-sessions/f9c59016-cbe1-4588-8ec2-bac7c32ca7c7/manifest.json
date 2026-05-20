@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "session_id": "f9c59016-cbe1-4588-8ec2-bac7c32ca7c7",
+  "root_graph_id": "1ed21e73-0db8-44bc-92e0-28a2d15d33dc",
+  "sub_graph_refs": [],
+  "display_name": null,
+  "persona_id": "00000000-0000-0000-0000-000000000001",
+  "created_at": {
+    "secs_since_epoch": 1779303632,
+    "nanos_since_epoch": 920591100
+  },
+  "updated_at": {
+    "secs_since_epoch": 1779303632,
+    "nanos_since_epoch": 920591100
+  },
+  "parent_session": null,
+  "consolidated_engrams": [],
+  "last_consolidated_at": null,
+  "active_workers": [],
+  "engine_profile": "PersonaScoped",
+  "policy": {
+    "overrides": []
+  },
+  "storage_path": null
+}

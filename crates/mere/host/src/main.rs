@@ -66,7 +66,12 @@ use winit::event_loop::{ControlFlow, EventLoop};
 
 fn main() {
     let event_loop = EventLoop::new().expect("event loop");
-    event_loop.set_control_flow(ControlFlow::Wait);
+    // Continuous render loop: the reactive diagnostics panel shows live
+    // per-frame metrics, so we drive a redraw every cycle via
+    // `App::about_to_wait`. A production browser would gate redraws on
+    // dirty/animation state instead of pegging a core; this is the v0
+    // "make the live panel actually live" choice.
+    event_loop.set_control_flow(ControlFlow::Poll);
     let mut app = runtime::App::default();
     event_loop.run_app(&mut app).expect("run_app");
 }
