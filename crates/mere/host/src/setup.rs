@@ -229,27 +229,29 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
     );
 
     RuntimeState {
-        window,
-        device,
-        queue,
-        surface,
-        surface_config,
-        renderer,
+        gpu: crate::runtime::WindowGpu {
+            window,
+            device,
+            queue,
+            surface,
+            surface_config,
+            renderer,
+            target_texture: None,
+            target_view: None,
+        },
         host_app,
         frame_layout,
-        graph_registry,
-        strategies,
-        graph_node_identities,
-        orrery_snapshots,
-        graph_node_selection,
-        node_overrides,
-        dragging_node: None,
+        cartography: crate::runtime::CartographyState {
+            graph_registry,
+            strategies,
+            identities: graph_node_identities,
+            overrides: node_overrides,
+            orrery_snapshots,
+            selection: graph_node_selection,
+        },
+        interaction: crate::runtime::InteractionState::default(),
         diagnostics,
         frame_count: 0,
-        dragging_splitter: None,
-        target_texture: None,
-        target_view: None,
-        cursor: None,
     }
 }
 

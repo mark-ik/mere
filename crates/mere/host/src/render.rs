@@ -17,12 +17,12 @@ use crate::runtime::RuntimeState;
 /// binding actually validates — set during `setup` based on what
 /// the adapter offers.
 pub fn ensure_target_texture(state: &mut RuntimeState) {
-    if state.target_texture.is_some() {
+    if state.gpu.target_texture.is_some() {
         return;
     }
-    let width = state.surface_config.width;
-    let height = state.surface_config.height;
-    let texture = state.device.create_texture(&wgpu::TextureDescriptor {
+    let width = state.gpu.surface_config.width;
+    let height = state.gpu.surface_config.height;
+    let texture = state.gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("host intermediate"),
         size: wgpu::Extent3d {
             width,
@@ -32,15 +32,15 @@ pub fn ensure_target_texture(state: &mut RuntimeState) {
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: state.surface_config.format,
+        format: state.gpu.surface_config.format,
         usage: wgpu::TextureUsages::STORAGE_BINDING
             | wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    state.target_view = Some(view);
-    state.target_texture = Some(texture);
+    state.gpu.target_view = Some(view);
+    state.gpu.target_texture = Some(texture);
 }
 
 /// Render one frame: substrate scene → vello scene → intermediate
@@ -57,17 +57,18 @@ pub fn render_frame(state: &mut RuntimeState) {
     if let Ok(mut snap) = state.diagnostics.lock() {
         snap.frame_count = state.frame_count;
         snap.scene_nodes = state.host_app.scene.len();
-        snap.cursor = state.cursor.map(|p| (p.x, p.y));
+        snap.cursor = state.interaction.cursor.map(|p| (p.x, p.y));
     }
 
     use wgpu::CurrentSurfaceTexture;
-    let surface_texture = match state.surface.get_current_texture() {
+    let surface_texture = match state.gpu.surface.get_current_texture() {
         CurrentSurfaceTexture::Success(t) | CurrentSurfaceTexture::Suboptimal(t) => t,
         CurrentSurfaceTexture::Outdated | CurrentSurfaceTexture::Lost => {
             state
+                .gpu
                 .surface
-                .configure(&state.device, &state.surface_config);
-            state.target_texture = None;
+                .configure(&state.gpu.device, &state.gpu.surface_config);
+            state.gpu.target_texture = None;
             return;
         }
         CurrentSurfaceTexture::Timeout
@@ -82,18 +83,19 @@ pub fn render_frame(state: &mut RuntimeState) {
         &state.host_app.scene,
         &mut vello_scene,
         &mut state.host_app.compositor,
-        &mut state.renderer,
-        state.window.scale_factor(),
+        &mut state.gpu.renderer,
+        state.gpu.window.scale_factor(),
     );
 
-    let target_view = state.target_view.as_ref().expect("ensured");
-    let width = state.surface_config.width;
-    let height = state.surface_config.height;
+    let target_view = state.gpu.target_view.as_ref().expect("ensured");
+    let width = state.gpu.surface_config.width;
+    let height = state.gpu.surface_config.height;
     state
+        .gpu
         .renderer
         .render_to_texture(
-            &state.device,
-            &state.queue,
+            &state.gpu.device,
+            &state.gpu.queue,
             &vello_scene,
             target_view,
             &RenderParams {
@@ -106,8 +108,9 @@ pub fn render_frame(state: &mut RuntimeState) {
         .expect("vello render");
 
     // Blit → present.
-    let target_texture = state.target_texture.as_ref().expect("ensured");
+    let target_texture = state.gpu.target_texture.as_ref().expect("ensured");
     let mut encoder = state
+        .gpu
         .device
         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("host blit"),
@@ -131,7 +134,7 @@ pub fn render_frame(state: &mut RuntimeState) {
             depth_or_array_layers: 1,
         },
     );
-    state.queue.submit(Some(encoder.finish()));
-    state.window.pre_present_notify();
+    state.gpu.queue.submit(Some(encoder.finish()));
+    state.gpu.window.pre_present_notify();
     surface_texture.present();
 }
