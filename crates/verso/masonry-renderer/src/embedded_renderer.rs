@@ -188,9 +188,17 @@ impl MasonryEmbeddedRenderer {
             // via `register_texture` + `Scene::draw_image`.
             // RENDER_ATTACHMENT: required by some wgpu backends as a
             // companion to STORAGE_BINDING for color-format textures.
+            // COPY_SRC + COPY_DST: masonry_imaging's
+            // `texture_render::Renderer` composites layers through a
+            // copy inside its `render_to_texture` command encoder; wgpu
+            // validates COPY_SRC is present (observed on Vulkan). Both
+            // copy flags are included so the layer-composite path
+            // type-checks regardless of copy direction.
             usage: wgpu::TextureUsages::STORAGE_BINDING
                 | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::RENDER_ATTACHMENT,
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
