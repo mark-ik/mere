@@ -125,7 +125,7 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
 
     let mut host_app = HostApp::new();
     install_callbacks(&mut host_app);
-    let orrery_snapshots = register_renderers(
+    let (orrery_snapshots, graph_node_selection) = register_renderers(
         &mut host_app,
         &adapter,
         &device,
@@ -133,6 +133,7 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         diagnostics.clone(),
         runtime.clone(),
     );
+    let node_overrides = crate::graph_node_explode::NodeOverrides::new();
 
     // Seed: a graph in the registry + a frame layout bound to it.
     let mut graph_registry = GraphRegistry::new();
@@ -177,6 +178,7 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         let report = explode_projection_into_scene(
             &mut host_app.scene,
             &mut graph_node_identities,
+            &node_overrides,
             pane.pane_id,
             pane.pane_origin,
             &pane.projection,
@@ -239,6 +241,9 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         strategies,
         graph_node_identities,
         orrery_snapshots,
+        graph_node_selection,
+        node_overrides,
+        dragging_node: None,
         diagnostics,
         frame_count: 0,
         dragging_splitter: None,
@@ -301,7 +306,10 @@ fn register_renderers(
     queue: &wgpu::Queue,
     diagnostics: crate::diagnostics_panel::DiagnosticsHandle,
     runtime: Arc<tokio::runtime::Runtime>,
-) -> crate::orrery_renderer::OrrerySnapshots {
+) -> (
+    crate::orrery_renderer::OrrerySnapshots,
+    crate::graph_node_renderer::GraphNodeSelection,
+) {
     let default_props = Arc::new(DefaultProperties::new());
     let panel_factory: mere_masonry::PanelFactory = Arc::new(move |size, scale| {
         crate::diagnostics_panel::build_diagnostics_panel(
@@ -334,10 +342,12 @@ fn register_renderers(
         .register(Box::new(orrery))
         .expect("register orrery renderer");
 
+    let graph_node = GraphNodeRenderer::default();
+    let selection = graph_node.selection();
     host_app
         .substrate
         .registry_mut()
-        .register(Box::new(GraphNodeRenderer::default()))
+        .register(Box::new(graph_node))
         .expect("register graph-node renderer");
 
     host_app
@@ -346,5 +356,5 @@ fn register_renderers(
         .register(Box::new(SplitterRenderer::default()))
         .expect("register splitter renderer");
 
-    snapshots
+    (snapshots, selection)
 }

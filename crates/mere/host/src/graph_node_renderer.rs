@@ -16,11 +16,14 @@
 //! semantic coloring lands, a shared per-identity style map (mirroring
 //! [`crate::orrery_renderer::OrrerySnapshots`]) plugs in here.
 
-use kurbo::Circle;
+use std::collections::HashSet;
+use std::sync::{Arc, RwLock};
+
+use kurbo::{Circle, Stroke};
 use register_renderer::{
     CompositionMode, InScenePaintRenderer, InputDisposition, InputEvent, NodeContentKind,
-    NodeContentKindSet, NodeRenderer, PaintCtx, PaintResult, ProfileBindingExpectation,
-    RendererCapabilities, RendererId, SceneNodeRef,
+    NodeContentKindSet, NodeIdentity, NodeRenderer, PaintCtx, PaintResult,
+    ProfileBindingExpectation, RendererCapabilities, RendererId, SceneNodeRef,
 };
 use vello::peniko::{Brush, Color, Fill};
 
@@ -28,17 +31,39 @@ use vello::peniko::{Brush, Color, Fill};
 /// node fill so Path A and Path B read identically at a glance.
 pub const GRAPH_NODE_FILL: Color = Color::from_rgba8(0x4a, 0x90, 0xff, 0xff);
 
+/// Stroke color for a selected node's highlight ring. Warm amber so it
+/// reads clearly against the cool node fill.
+pub const GRAPH_NODE_SELECTED_STROKE: Color = Color::from_rgba8(0xff, 0xc8, 0x5a, 0xff);
+
+/// Host-shared set of selected graph-node substrate identities. The
+/// host writes it on click; the renderer reads it under a shared lock
+/// during `paint()` to draw a highlight ring on selected nodes.
+///
+/// Cloned at construction (Arc) so the host writes while the renderer
+/// reads — same pattern as [`crate::orrery_renderer::OrrerySnapshots`].
+pub type GraphNodeSelection = Arc<RwLock<HashSet<NodeIdentity>>>;
+
 /// `InScenePaintRenderer` for `NodeContentKind::GraphNode`. Paints a
-/// filled circle inscribed in the node's bounds.
+/// filled circle inscribed in the node's bounds; selected nodes get a
+/// highlight ring.
 pub struct GraphNodeRenderer {
     id: RendererId,
+    selection: GraphNodeSelection,
 }
 
 impl GraphNodeRenderer {
     pub fn new(id: &'static str) -> Self {
         Self {
             id: RendererId::from_static(id),
+            selection: Arc::new(RwLock::new(HashSet::new())),
         }
+    }
+
+    /// Clone of the renderer's selection set. The host holds this to
+    /// mark nodes selected without going through the `NodeRenderer`
+    /// trait; the renderer keeps its own clone for reads in `paint`.
+    pub fn selection(&self) -> GraphNodeSelection {
+        Arc::clone(&self.selection)
     }
 }
 
@@ -95,6 +120,22 @@ impl InScenePaintRenderer for GraphNodeRenderer {
             None,
             &circle,
         );
+        let selected = self
+            .selection
+            .read()
+            .map(|set| set.contains(&node.identity))
+            .unwrap_or(false);
+        if selected {
+            // Highlight ring just outside the node fill.
+            let ring = Circle::new(center, radius + 3.0);
+            ctx.scene.stroke(
+                &Stroke::new(2.5),
+                ctx.node_transform,
+                &Brush::Solid(GRAPH_NODE_SELECTED_STROKE),
+                None,
+                &ring,
+            );
+        }
         Ok(())
     }
 

@@ -8,21 +8,41 @@
 
 use std::sync::Arc;
 
-use frame::{FrameLayout, SplitAxis};
+use frame::{FrameLayout, PaneId, SplitAxis};
+use kernel::geometry::PortablePoint;
+use kernel::graph::NodeKey;
 use session_runtime::{ActionKind, BusAction, BusDispatchOutcome};
-use host_substrate::{HostApp, SplitterDrag, SubstrateInputEvent, compute_container_size};
+use host_substrate::{HostApp, SplitterDrag, SubstrateInputEvent, compute_container_size, walk_leaves};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
 use crate::cartography_projection::{pane_identity_closure, project_orreries};
-use crate::graph_node_explode::{GraphNodeIdentities, explode_projection_into_scene};
+use crate::graph_node_explode::{
+    GraphNodeIdentities, NodeOverrides, explode_projection_into_scene,
+};
+use crate::graph_node_renderer::GraphNodeSelection;
 use crate::graph_registry::GraphRegistry;
 use crate::orrery_renderer::OrrerySnapshots;
 use crate::render::render_frame;
 use crate::setup::{HOST_FRAME_ID, HOST_PANE_ID, build_runtime_state, viewport_size};
 use crate::strategy_registry::StrategyRegistry;
+
+/// In-progress drag of a single exploded graph node. Captured on
+/// mouse-down over a `GraphNode`; consumed by `CursorMoved` while held
+/// to update the node's position override; cleared on mouse-up.
+#[derive(Clone, Debug)]
+pub struct NodeDrag {
+    pub pane_id: PaneId,
+    pub node_key: NodeKey,
+    /// Window-space offset from the node's center to the grab point,
+    /// so the node tracks the cursor without snapping its center to it.
+    pub grab_offset: kurbo::Vec2,
+    /// The pane's window-space origin, snapshotted at grab time (the
+    /// layout is static during a node drag).
+    pub pane_origin: kurbo::Point,
+}
 
 /// The winit application handle — wraps an `Option<RuntimeState>`
 /// (None until `resumed` mints the window).
@@ -59,6 +79,16 @@ pub struct RuntimeState {
     /// Host-shared orrery projection map cloned from the registered
     /// `OrreryRenderer` at construction.
     pub orrery_snapshots: OrrerySnapshots,
+    /// Host-shared selection set cloned from the registered
+    /// `GraphNodeRenderer`; the host writes it on click, the renderer
+    /// reads it to highlight selected nodes.
+    pub graph_node_selection: GraphNodeSelection,
+    /// Per-node manual position overrides (pane-local). Set during a
+    /// node drag; consulted by the Path-B explosion so a dragged node
+    /// stays where it was dropped across reprojection.
+    pub node_overrides: NodeOverrides,
+    /// In-progress graph-node drag, if the user grabbed a node.
+    pub dragging_node: Option<NodeDrag>,
     /// Shared diagnostics snapshot the reactive panel reads. The host
     /// overwrites it each frame in `render_frame`.
     pub diagnostics: crate::diagnostics_panel::DiagnosticsHandle,
@@ -91,11 +121,14 @@ impl RuntimeState {
         // Path B: append per-node substrate entities for each exploded
         // pane. `sync_scene_from_frame_layout` rebuilt the scene above
         // (panes + splitters), so this re-explodes onto the fresh
-        // scene every resync; the identity map keeps node ids stable.
+        // scene every resync; the identity map keeps node ids stable
+        // and `node_overrides` keeps dragged nodes where they were
+        // dropped.
         for pane in &outcome.exploded {
             explode_projection_into_scene(
                 &mut self.host_app.scene,
                 &mut self.graph_node_identities,
+                &self.node_overrides,
                 pane.pane_id,
                 pane.pane_origin,
                 &pane.projection,
@@ -182,6 +215,24 @@ fn handle_resize(state: &mut RuntimeState, size: winit::dpi::PhysicalSize<u32>) 
 fn handle_cursor_moved(state: &mut RuntimeState, position: winit::dpi::PhysicalPosition<f64>) {
     let cursor = kurbo::Point::new(position.x, position.y);
     state.cursor = Some(cursor);
+
+    // Graph-node drag wins over splitter drag (a node grab is the more
+    // specific gesture). Move the node's pane-local override so it
+    // tracks the cursor, then re-explode through resync.
+    if let Some(drag) = state.dragging_node.clone() {
+        let node_center = cursor - drag.grab_offset;
+        let local = node_center - drag.pane_origin;
+        state.node_overrides.set(
+            drag.pane_id,
+            drag.node_key,
+            PortablePoint::new(local.x as f32, local.y as f32),
+        );
+        let viewport = viewport_size(state.surface_config.width, state.surface_config.height);
+        state.resync(viewport);
+        state.window.request_redraw();
+        return;
+    }
+
     let Some(drag) = state.dragging_splitter.clone() else {
         return;
     };
@@ -205,6 +256,12 @@ fn handle_cursor_moved(state: &mut RuntimeState, position: winit::dpi::PhysicalP
 fn handle_mouse_release(state: &mut RuntimeState) {
     if state.dragging_splitter.take().is_some() {
         eprintln!("[splitter] drag released");
+    }
+    if let Some(drag) = state.dragging_node.take() {
+        eprintln!(
+            "[graph-node] drag released pane={:?} node={:?}",
+            drag.pane_id, drag.node_key
+        );
     }
 }
 
@@ -239,6 +296,70 @@ fn handle_mouse_press(state: &mut RuntimeState) {
                 outcome => eprintln!("[bus] dispatch outcome: {:?}", outcome),
             }
         }
+        SubstrateInputEvent::UnknownTileHit { identity, .. } => {
+            // host-substrate doesn't know about graph nodes (a mere/host
+            // concept) — they fall through to UnknownTileHit. If the hit
+            // identity is one of our exploded nodes, select + start a drag.
+            if let Some((pane_id, node_key)) =
+                state.graph_node_identities.node_for_identity(identity)
+            {
+                select_only(state, identity);
+                start_node_drag(state, pane_id, node_key, identity, cursor);
+            }
+        }
+        SubstrateInputEvent::BackgroundClicked { .. } => {
+            clear_node_selection(state);
+        }
         _ => {}
     }
+}
+
+/// Replace the graph-node selection with a single identity.
+fn select_only(state: &RuntimeState, identity: register_renderer::NodeIdentity) {
+    if let Ok(mut sel) = state.graph_node_selection.write() {
+        sel.clear();
+        sel.insert(identity);
+    }
+}
+
+/// Clear the graph-node selection (e.g. on background click).
+fn clear_node_selection(state: &RuntimeState) {
+    if let Ok(mut sel) = state.graph_node_selection.write() {
+        sel.clear();
+    }
+}
+
+/// Begin dragging the exploded graph node `identity`. Snapshots the
+/// grab offset (cursor → node center) and the pane's window-space
+/// origin so `handle_cursor_moved` can map cursor motion to a pane-
+/// local position override.
+fn start_node_drag(
+    state: &mut RuntimeState,
+    pane_id: PaneId,
+    node_key: NodeKey,
+    identity: register_renderer::NodeIdentity,
+    cursor: kurbo::Point,
+) {
+    let Some(node) = state.host_app.scene.get(identity) else {
+        return;
+    };
+    let t = node.placement.transform.translation();
+    let center = kurbo::Point::new(t.x + node.size.width / 2.0, t.y + node.size.height / 2.0);
+
+    let viewport = viewport_size(state.surface_config.width, state.surface_config.height);
+    let Some(pane_origin) = walk_leaves(&state.frame_layout, viewport)
+        .into_iter()
+        .find(|leaf| leaf.pane_id == pane_id)
+        .map(|leaf| leaf.placement.transform.translation().to_point())
+    else {
+        return;
+    };
+
+    state.dragging_node = Some(NodeDrag {
+        pane_id,
+        node_key,
+        grab_offset: cursor - center,
+        pane_origin,
+    });
+    eprintln!("[graph-node] drag started pane={pane_id:?} node={node_key:?}");
 }

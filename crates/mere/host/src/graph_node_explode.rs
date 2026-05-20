@@ -24,6 +24,7 @@ use std::collections::HashMap;
 
 use cartography::Projection;
 use frame::PaneId;
+use kernel::geometry::PortablePoint;
 use kernel::graph::NodeKey;
 use register_renderer::{LodLevel, NodeContentKind, NodeIdentity, Placement};
 use spatial_substrate::{RelationEdge, SubstrateNode, SubstrateScene};
@@ -32,6 +33,41 @@ use spatial_substrate::{RelationEdge, SubstrateNode, SubstrateScene};
 /// strategy emitted `radius == 0.0`. Matches the orrery renderer's
 /// fallback so Path A and Path B size nodes identically.
 const DEFAULT_NODE_RADIUS: f64 = 8.0;
+
+/// Per-node manual position overrides, in **pane-local** coordinates
+/// (the same space cartography projection positions live in). When a
+/// `(PaneId, NodeKey)` has an override, the explosion places that node
+/// at the override instead of its projected position — this is what
+/// makes a dragged node stay put across reprojection.
+#[derive(Debug, Default)]
+pub struct NodeOverrides {
+    map: HashMap<(PaneId, NodeKey), PortablePoint>,
+}
+
+impl NodeOverrides {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set (or replace) the pane-local position override for a node.
+    pub fn set(&mut self, pane: PaneId, node: NodeKey, position: PortablePoint) {
+        self.map.insert((pane, node), position);
+    }
+
+    /// Pane-local override for `(pane, node)`, if one is set.
+    pub fn get(&self, pane: PaneId, node: NodeKey) -> Option<PortablePoint> {
+        self.map.get(&(pane, node)).copied()
+    }
+
+    /// Number of overridden nodes.
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+}
 
 /// Persistent `(PaneId, NodeKey) -> NodeIdentity` map. Lives on the
 /// host's runtime state, not in the substrate scene (which is rebuilt
@@ -61,6 +97,16 @@ impl GraphNodeIdentities {
     /// node identity from the node pass).
     fn lookup(&self, pane: PaneId, node: NodeKey) -> Option<NodeIdentity> {
         self.map.get(&(pane, node)).copied()
+    }
+
+    /// Reverse lookup: which `(PaneId, NodeKey)` owns this substrate
+    /// identity. Used by the host's pointer hit-resolution to turn a
+    /// clicked `GraphNode` identity back into a graph node it can
+    /// select / drag. O(n) scan — fine at orrery node counts.
+    pub fn node_for_identity(&self, identity: NodeIdentity) -> Option<(PaneId, NodeKey)> {
+        self.map
+            .iter()
+            .find_map(|(&key, &id)| (id == identity).then_some(key))
     }
 
     /// Number of tracked `(pane, node)` identities.
@@ -102,6 +148,7 @@ pub struct ExplodeReport {
 pub fn explode_projection_into_scene(
     scene: &mut SubstrateScene,
     identities: &mut GraphNodeIdentities,
+    overrides: &NodeOverrides,
     pane_id: PaneId,
     pane_origin: kurbo::Point,
     projection: &Projection,
@@ -114,8 +161,13 @@ pub fn explode_projection_into_scene(
         } else {
             DEFAULT_NODE_RADIUS
         };
-        let center_x = pane_origin.x + positioned.position.x as f64;
-        let center_y = pane_origin.y + positioned.position.y as f64;
+        // A manual override (from a drag) wins over the projected
+        // position so a dragged node stays where it was dropped.
+        let local = overrides
+            .get(pane_id, positioned.node)
+            .unwrap_or(positioned.position);
+        let center_x = pane_origin.x + local.x as f64;
+        let center_y = pane_origin.y + local.y as f64;
         let identity = identities.identity_for(pane_id, positioned.node);
         scene.insert(SubstrateNode {
             identity,
@@ -198,6 +250,7 @@ mod tests {
         let report = explode_projection_into_scene(
             &mut scene,
             &mut identities,
+            &NodeOverrides::new(),
             PaneId(2),
             kurbo::Point::new(100.0, 50.0),
             &projection,
@@ -215,6 +268,7 @@ mod tests {
         explode_projection_into_scene(
             &mut scene,
             &mut identities,
+            &NodeOverrides::new(),
             PaneId(2),
             kurbo::Point::new(100.0, 50.0),
             &projection,
@@ -237,6 +291,7 @@ mod tests {
         let report = explode_projection_into_scene(
             &mut scene,
             &mut identities,
+            &NodeOverrides::new(),
             PaneId(2),
             kurbo::Point::ZERO,
             &projection,
@@ -257,6 +312,7 @@ mod tests {
         explode_projection_into_scene(
             &mut scene_a,
             &mut identities,
+            &NodeOverrides::new(),
             PaneId(2),
             kurbo::Point::ZERO,
             &projection,
@@ -268,6 +324,7 @@ mod tests {
         explode_projection_into_scene(
             &mut scene_b,
             &mut identities,
+            &NodeOverrides::new(),
             PaneId(2),
             kurbo::Point::ZERO,
             &projection,
@@ -287,6 +344,7 @@ mod tests {
         explode_projection_into_scene(
             &mut scene,
             &mut identities,
+            &NodeOverrides::new(),
             PaneId(2),
             kurbo::Point::ZERO,
             &projection,
@@ -294,11 +352,69 @@ mod tests {
         explode_projection_into_scene(
             &mut scene,
             &mut identities,
+            &NodeOverrides::new(),
             PaneId(3),
             kurbo::Point::ZERO,
             &projection,
         );
         // Two panes × two nodes = four distinct identities.
         assert_eq!(identities.len(), 4);
+    }
+
+    #[test]
+    fn override_wins_over_projected_position() {
+        let (projection, keys) = projection_with(2, false);
+        let mut scene = SubstrateScene::new();
+        let mut identities = GraphNodeIdentities::new();
+        let mut overrides = NodeOverrides::new();
+        // Pin node 0 to a pane-local position distinct from its
+        // projected (0, 0).
+        overrides.set(PaneId(2), keys[0], PortablePoint::new(50.0, 60.0));
+
+        explode_projection_into_scene(
+            &mut scene,
+            &mut identities,
+            &overrides,
+            PaneId(2),
+            kurbo::Point::new(100.0, 50.0),
+            &projection,
+        );
+
+        // Node 0: window center = pane_origin (100,50) + override
+        // (50,60) = (150,110); radius 6 → top-left (144,104).
+        let placements: Vec<_> = scene
+            .iter()
+            .map(|n| n.placement.transform.translation())
+            .collect();
+        assert!(
+            placements
+                .iter()
+                .any(|t| (t.x - 144.0).abs() < 1e-6 && (t.y - 104.0).abs() < 1e-6),
+            "overridden node should land at the override, got {placements:?}"
+        );
+    }
+
+    #[test]
+    fn node_for_identity_round_trips() {
+        let (projection, keys) = projection_with(3, false);
+        let mut scene = SubstrateScene::new();
+        let mut identities = GraphNodeIdentities::new();
+        explode_projection_into_scene(
+            &mut scene,
+            &mut identities,
+            &NodeOverrides::new(),
+            PaneId(2),
+            kurbo::Point::ZERO,
+            &projection,
+        );
+        // Every exploded substrate identity reverse-resolves to the
+        // right (pane, node) it was minted for.
+        for node in scene.iter() {
+            let (pane, key) = identities
+                .node_for_identity(node.identity)
+                .expect("identity must reverse-resolve");
+            assert_eq!(pane, PaneId(2));
+            assert!(keys.contains(&key));
+        }
     }
 }
