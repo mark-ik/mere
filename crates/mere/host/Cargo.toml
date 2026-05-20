@@ -47,7 +47,6 @@ inker.workspace = true
 # masonry's path-deps.
 mere-masonry = { path = "../../verso/masonry-renderer" }
 masonry_core = { path = "../../../../xilem/masonry_core" }
-masonry_testing = { path = "../../../../xilem/masonry_testing" }
 
 # Windowing + GPU + paint stack.
 winit = "0.30.13"
@@ -57,4 +56,8 @@ kurbo = "0.13"
 pollster = "0.4"
 # petgraph::NodeIndex constructor for tile-seeding.
 petgraph = "0.8"
+# xilem's ViewCtx requires a tokio runtime; the host owns one and
+# shares it into each reactive panel (multi-threaded flavor per the
+# panel-work decision).
+tokio = { version = "1", features = ["rt-multi-thread"] }
 

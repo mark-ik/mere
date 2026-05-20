@@ -1,31 +1,14 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! Host startup seeding — frametree layout, masonry factory, demo
-//! graph + documents for the v0 orrery. Replace each seed with real
-//! state as session-persistence + embed + real
-//! engines wire in.
-
-use std::sync::Arc;
+//! Host startup seeding — frametree layout, demo graph + documents
+//! for the v0 orrery. Replace each seed with real state as
+//! session-persistence + embed + real engines wire in.
 
 use inker::{DocumentProvenance, DocumentTrustState, EngineDocument};
-use masonry_core::core::NewWidget;
-use masonry_testing::ModularWidget;
 use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis};
 use kernel::geometry::PortablePoint;
 use kernel::graph::Graph;
-use mere_masonry::RootWidgetFactory;
-
-/// Build the masonry root-widget factory the panel renderer hands
-/// to each panel-shaped substrate node. v0 hands out an empty
-/// `ModularWidget` stub — when the workbench / gloss / apparatus
-/// renderers materialise, each registers its own root factory.
-pub fn build_masonry_factory() -> RootWidgetFactory {
-    Arc::new(|| {
-        let widget: ModularWidget<()> = ModularWidget::new(());
-        NewWidget::new(widget).erased()
-    })
-}
 
 /// Synthetic [`EngineDocument`] for tile seeding. The v0 host
 /// doesn't have real engines wired; documents stand in as

@@ -50,6 +50,16 @@ pub fn ensure_target_texture(state: &mut RuntimeState) {
 pub fn render_frame(state: &mut RuntimeState) {
     ensure_target_texture(state);
 
+    // Publish live metrics for the reactive diagnostics panel before
+    // the substrate paints — the panel's `tick` reads this snapshot
+    // and rebuilds its widget tree during `next_frame`.
+    state.frame_count += 1;
+    if let Ok(mut snap) = state.diagnostics.lock() {
+        snap.frame_count = state.frame_count;
+        snap.scene_nodes = state.host_app.scene.len();
+        snap.cursor = state.cursor.map(|p| (p.x, p.y));
+    }
+
     use wgpu::CurrentSurfaceTexture;
     let surface_texture = match state.surface.get_current_texture() {
         CurrentSurfaceTexture::Success(t) | CurrentSurfaceTexture::Suboptimal(t) => t,

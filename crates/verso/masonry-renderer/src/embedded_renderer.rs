@@ -52,12 +52,19 @@ use register_renderer::{
 use vello::peniko::Color;
 
 use crate::input::{translate_to_masonry_pointer, translate_to_masonry_text};
+use crate::panel_tile::PanelTile;
 use crate::tile::{MasonryTile, TileSize};
 
 /// Factory the renderer invokes to construct each tile's root widget.
 /// Cheap to clone (Arc); typically a `move ||` closure that builds a
 /// fresh widget tree per producer.
 pub type RootWidgetFactory = Arc<dyn Fn() -> NewWidget<dyn Widget> + Send + Sync>;
+
+/// Factory the renderer invokes to construct each producer's panel.
+/// Receives the producer's physical size + scale factor and returns a
+/// boxed [`PanelTile`] — a plain [`MasonryTile`] or a reactive
+/// [`crate::XilemPanel`]. Cheap to clone (Arc).
+pub type PanelFactory = Arc<dyn Fn(TileSize, f64) -> Box<dyn PanelTile> + Send + Sync>;
 
 /// One masonry-rendered embedded-frame producer per node.
 pub struct MasonryEmbeddedRenderer {
@@ -74,16 +81,15 @@ pub struct MasonryEmbeddedRenderer {
     // by device on first render and reuses it after.
     texture_renderer: TextureRenderer,
 
-    // Shared widget construction context.
-    default_properties: Arc<DefaultProperties>,
-    root_widget_factory: RootWidgetFactory,
+    // Builds each producer's panel (plain or reactive).
+    panel_factory: PanelFactory,
 
     // Per-producer state.
     producers: HashMap<ProducerHandle, ProducerState>,
 }
 
 struct ProducerState {
-    tile: MasonryTile,
+    tile: Box<dyn PanelTile>,
     texture: wgpu::Texture,
     view: wgpu::TextureView,
     /// Physical size of the texture.
@@ -101,14 +107,16 @@ impl MasonryEmbeddedRenderer {
     /// `adapter` + `device` + `queue` are the host's wgpu 29 handles;
     /// the renderer clones them per allocation (wgpu's Clone is an Arc
     /// clone — cheap).
+    /// Construct from a [`PanelFactory`] — the general path. The
+    /// factory builds each producer's panel (plain [`MasonryTile`] or
+    /// reactive [`crate::XilemPanel`]) given its size + scale.
     pub fn new(
         id: &'static str,
         handles_kind: NodeContentKind,
         adapter: wgpu::Adapter,
         device: wgpu::Device,
         queue: wgpu::Queue,
-        default_properties: Arc<DefaultProperties>,
-        root_widget_factory: RootWidgetFactory,
+        panel_factory: PanelFactory,
     ) -> Self {
         Self {
             id: RendererId::from_static(id),
@@ -117,10 +125,33 @@ impl MasonryEmbeddedRenderer {
             device,
             queue,
             texture_renderer: TextureRenderer::new(),
-            default_properties,
-            root_widget_factory,
+            panel_factory,
             producers: HashMap::new(),
         }
+    }
+
+    /// Convenience constructor for plain (non-reactive) masonry tiles:
+    /// wraps a [`RootWidgetFactory`] (build a `NewWidget` per producer)
+    /// into a [`PanelFactory`] that produces [`MasonryTile`]s.
+    pub fn with_widget_factory(
+        id: &'static str,
+        handles_kind: NodeContentKind,
+        adapter: wgpu::Adapter,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        default_properties: Arc<DefaultProperties>,
+        root_widget_factory: RootWidgetFactory,
+    ) -> Self {
+        let panel_factory: PanelFactory = Arc::new(move |size, scale| {
+            let widget = (root_widget_factory)();
+            Box::new(MasonryTile::new(
+                default_properties.clone(),
+                widget,
+                size,
+                scale,
+            )) as Box<dyn PanelTile>
+        });
+        Self::new(id, handles_kind, adapter, device, queue, panel_factory)
     }
 
     /// True if the renderer has a live producer for `handle`. Test hook.
@@ -175,15 +206,15 @@ impl MasonryEmbeddedRenderer {
             return None;
         }
 
-        // 1. Drive masonry to refresh its VisualLayerPlan. The `ignore`
-        //    scene is a vello 0.9 Scene that `MasonryTile::render` writes
-        //    to per its signature; the scene-merge TODO inside that call
-        //    means it stays empty. EmbeddedFrame mode (this renderer)
-        //    uses the texture path instead.
+        // 1. Reactive update (if any) + drive masonry to refresh its
+        //    VisualLayerPlan. `tick` re-runs a reactive panel's logic
+        //    against current state and rebuilds; plain tiles no-op.
+        //    `render_layers` runs masonry's pass chain and stashes the
+        //    layer plan the texture path below extracts.
         {
             let state = self.producers.get_mut(&handle)?;
-            let mut ignore = vello::Scene::new();
-            state.tile.render(&mut ignore, kurbo::Affine::IDENTITY);
+            state.tile.tick();
+            state.tile.render_layers();
         }
 
         // 2. Build the PreparedFrame from the layer plan. The lifetime
@@ -269,13 +300,7 @@ impl EmbeddedFrameRenderer for MasonryEmbeddedRenderer {
         let height = (node.size.height.round() as i64).clamp(1, u32::MAX as i64) as u32;
         let (texture, view) = self.allocate_texture_and_view(width, height);
 
-        let root = (self.root_widget_factory)();
-        let tile = MasonryTile::new(
-            self.default_properties.clone(),
-            root,
-            TileSize(dpi::PhysicalSize::new(width, height)),
-            1.0,
-        );
+        let tile = (self.panel_factory)(TileSize(dpi::PhysicalSize::new(width, height)), 1.0);
 
         let handle = ProducerHandle::next();
         self.producers.insert(

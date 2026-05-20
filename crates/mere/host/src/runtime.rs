@@ -59,6 +59,11 @@ pub struct RuntimeState {
     /// Host-shared orrery projection map cloned from the registered
     /// `OrreryRenderer` at construction.
     pub orrery_snapshots: OrrerySnapshots,
+    /// Shared diagnostics snapshot the reactive panel reads. The host
+    /// overwrites it each frame in `render_frame`.
+    pub diagnostics: crate::diagnostics_panel::DiagnosticsHandle,
+    /// Frames rendered since startup — published into `diagnostics`.
+    pub frame_count: u64,
     /// Active splitter drag — set on `SplitterClicked`, consumed by
     /// `CursorMoved` while held, cleared on mouse-up.
     pub dragging_splitter: Option<SplitterDrag>,

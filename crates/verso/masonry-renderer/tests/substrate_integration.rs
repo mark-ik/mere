@@ -63,7 +63,7 @@ fn substrate_host_dispatches_embedded_frame_through_full_chain() {
 
     // 1. Construct the renderer registry + register a MasonryEmbeddedRenderer
     //    that handles NodeContentKind::Panel nodes.
-    let masonry = MasonryEmbeddedRenderer::new(
+    let masonry = MasonryEmbeddedRenderer::with_widget_factory(
         "test.mere-masonry.panel",
         NodeContentKind::Panel,
         adapter.clone(),
@@ -162,7 +162,7 @@ fn mixed_scene_dispatches_inscene_and_embedded_correctly() {
 
     // Register one EmbeddedFrame renderer for Panel + one InScenePaint
     // renderer (the recording stub) for DocumentTile.
-    let masonry = MasonryEmbeddedRenderer::new(
+    let masonry = MasonryEmbeddedRenderer::with_widget_factory(
         "test.mere-masonry.panel",
         NodeContentKind::Panel,
         adapter.clone(),

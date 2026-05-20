@@ -191,16 +191,33 @@ impl MasonryTile {
     /// both sides on vello 0.9 + wgpu 29. Either path here will type-check
     /// today; the choice is just architectural (in-scene vs offscreen).
     pub fn render(&mut self, target_scene: &mut vello::Scene, tile_transform: Affine) {
-        let (visual_layers, tree_update) = self.render_root.redraw();
-        if let Some(update) = tree_update {
-            self.pending_tree_update = Some(update);
-        }
-        self.pending_layers = Some(visual_layers);
+        self.redraw_layers();
         // TODO(scene-merge): see doc comment above. Until decided, the
         // host won't see masonry pixels in the substrate scene; the layers
         // and tree update ARE captured for tests / accessibility tree
         // routing, which is the next-most-important consumer.
         let _ = (target_scene, tile_transform);
+    }
+
+    /// Drive masonry's render pass and stash the visual-layer plan +
+    /// AccessKit tree update, without the (currently unused) vello
+    /// scene-merge step. The EmbeddedFrame path consumes the stashed
+    /// layers through [`pending_layers`](Self::pending_layers); the
+    /// in-scene `render` above wraps this.
+    pub fn redraw_layers(&mut self) {
+        let (visual_layers, tree_update) = self.render_root.redraw();
+        if let Some(update) = tree_update {
+            self.pending_tree_update = Some(update);
+        }
+        self.pending_layers = Some(visual_layers);
+    }
+
+    /// Borrow the tile's `RenderRoot` for in-place mutation. This is
+    /// the seam the reactive layer ([`crate::XilemPanel`]) drives
+    /// `View::rebuild` through — `RenderRoot` is the masonry-side
+    /// mutation point xilem's `MasonryRoot::rebuild` expects.
+    pub fn edit_render_root<R>(&mut self, f: impl FnOnce(&mut RenderRoot) -> R) -> R {
+        f(&mut self.render_root)
     }
 
     /// Drain pending signals collected since the last call.

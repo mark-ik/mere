@@ -80,13 +80,22 @@
 
 mod embedded_renderer;
 mod input;
+mod panel_tile;
 mod renderer;
 mod signal;
 mod tile;
+mod xilem_panel;
 
-pub use embedded_renderer::{MasonryEmbeddedRenderer, RootWidgetFactory};
+pub use embedded_renderer::{MasonryEmbeddedRenderer, PanelFactory, RootWidgetFactory};
+pub use panel_tile::PanelTile;
 pub use signal::TileSignal;
 pub use tile::{MasonryTile, TileSize};
+pub use xilem_panel::{PanelLogic, XilemPanel};
+
+// Re-export the xilem masonry binding so host-side panel logic can
+// name views (label / flex_col / etc.), `AnyWidgetView`, and the
+// `WidgetView::boxed` helper without a separate dep.
+pub use xilem_masonry;
 
 // Re-export the surfaces callers need so they don't have to add the matching
 // dep version themselves. Every load-bearing crate is a direct dep of this

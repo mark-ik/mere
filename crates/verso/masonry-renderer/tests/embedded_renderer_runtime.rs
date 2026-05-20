@@ -63,7 +63,7 @@ fn full_chain_produces_texture_with_requested_dimensions() {
 
     let default_props = Arc::new(DefaultProperties::new());
     let factory = build_factory();
-    let mut renderer = MasonryEmbeddedRenderer::new(
+    let mut renderer = MasonryEmbeddedRenderer::with_widget_factory(
         "test.mere-masonry.panel",
         NodeContentKind::Panel,
         adapter,
@@ -118,7 +118,7 @@ fn multiple_producers_track_independently() {
 
     let default_props = Arc::new(DefaultProperties::new());
     let factory = build_factory();
-    let mut renderer = MasonryEmbeddedRenderer::new(
+    let mut renderer = MasonryEmbeddedRenderer::with_widget_factory(
         "test.mere-masonry.panel",
         NodeContentKind::Panel,
         adapter,

@@ -27,6 +27,9 @@
 //! - [`graph_node_explode`] — turns a projection into per-node
 //!   `GraphNode` substrate entities + relation edges, with stable
 //!   identity across resyncs.
+//! - [`diagnostics_panel`] — the first reactive xilem-driven panel:
+//!   a `View<DiagnosticsState, (), ViewCtx>` showing live host metrics,
+//!   rebuilt each frame from a shared snapshot the host publishes.
 //! - [`splitter_renderer`] — substrate renderer for the 4px
 //!   draggable chrome between sibling panes.
 //! - [`render`] — per-frame paint path (substrate dispatch → vello
@@ -46,6 +49,7 @@
 //!   eventually plug in through this surface.
 
 mod cartography_projection;
+mod diagnostics_panel;
 mod graph_node_explode;
 mod graph_node_renderer;
 mod graph_registry;

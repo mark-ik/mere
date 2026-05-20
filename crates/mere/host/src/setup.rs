@@ -111,9 +111,28 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
     .expect("vello renderer init");
 
     // -- Host state -------------------------------------------------
+    // Shared tokio runtime for xilem panels (ViewCtx requires one) and
+    // the diagnostics snapshot the reactive panel reads each frame.
+    let runtime = Arc::new(
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("build tokio runtime"),
+    );
+    let diagnostics: crate::diagnostics_panel::DiagnosticsHandle = Arc::new(std::sync::Mutex::new(
+        crate::diagnostics_panel::DiagnosticsSnapshot::default(),
+    ));
+
     let mut host_app = HostApp::new();
     install_callbacks(&mut host_app);
-    let orrery_snapshots = register_renderers(&mut host_app, &adapter, &device, &queue);
+    let orrery_snapshots = register_renderers(
+        &mut host_app,
+        &adapter,
+        &device,
+        &queue,
+        diagnostics.clone(),
+        runtime.clone(),
+    );
 
     // Seed: a graph in the registry + a frame layout bound to it.
     let mut graph_registry = GraphRegistry::new();
@@ -220,6 +239,8 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         strategies,
         graph_node_identities,
         orrery_snapshots,
+        diagnostics,
+        frame_count: 0,
         dragging_splitter: None,
         target_texture: None,
         target_view: None,
@@ -263,25 +284,41 @@ fn install_callbacks(host_app: &mut HostApp) {
     let _ = ActionKind::ToggleWorkbench;
 }
 
-/// Register the three v0 renderers (panel via masonry, orrery,
-/// splitter) and return the orrery renderer's snapshot handle.
-/// Cloning the `OrrerySnapshots` Arc before `register` keeps the
-/// host-side write path alive after the registry takes ownership
-/// of the boxed renderer.
+/// Register the v0 renderers (reactive panel via masonry+xilem,
+/// orrery, graph-node, splitter) and return the orrery renderer's
+/// snapshot handle. Cloning the `OrrerySnapshots` Arc before `register`
+/// keeps the host-side write path alive after the registry takes
+/// ownership of the boxed renderer.
+///
+/// `diagnostics` + `runtime` feed the reactive panel factory: every
+/// `Panel` node renders a xilem-driven diagnostics view reading the
+/// shared snapshot. (v0 routes all panels to diagnostics; per-node
+/// routing — workbench vs apparatus vs gloss — is a follow-up.)
 fn register_renderers(
     host_app: &mut HostApp,
     adapter: &wgpu::Adapter,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    diagnostics: crate::diagnostics_panel::DiagnosticsHandle,
+    runtime: Arc<tokio::runtime::Runtime>,
 ) -> crate::orrery_renderer::OrrerySnapshots {
+    let default_props = Arc::new(DefaultProperties::new());
+    let panel_factory: mere_masonry::PanelFactory = Arc::new(move |size, scale| {
+        crate::diagnostics_panel::build_diagnostics_panel(
+            diagnostics.clone(),
+            runtime.clone(),
+            default_props.clone(),
+            size,
+            scale,
+        )
+    });
     let masonry = MasonryEmbeddedRenderer::new(
         "host.masonry.panel",
         NodeContentKind::Panel,
         adapter.clone(),
         device.clone(),
         queue.clone(),
-        Arc::new(DefaultProperties::new()),
-        seed::build_masonry_factory(),
+        panel_factory,
     );
     host_app
         .substrate

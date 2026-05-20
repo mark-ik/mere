@@ -40,6 +40,14 @@ dpi = "0.1.2"
 # the host registers that texture with vello 0.9 via `register_texture`.
 masonry_imaging = { path = "../../../../xilem/masonry_imaging", default-features = false, features = ["imaging_vello"] }
 
+# Xilem reactive layer — drives a `View<State, (), ViewCtx>` against a
+# masonry `RenderRoot` for declarative panels (XilemPanel). xilem_core
+# is re-exported through xilem_masonry as `xilem_masonry::core`.
+xilem_masonry = { path = "../../../../xilem/xilem_masonry" }
+# ViewCtx::new requires a tokio runtime (xilem's async-message proxy +
+# task views need it). Multi-threaded flavor per the host's choice.
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
 [dev-dependencies]
 # Headless wgpu boot for the integration tests.
 pollster = "0.4"
