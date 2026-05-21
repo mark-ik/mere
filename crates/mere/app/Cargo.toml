@@ -1,0 +1,26 @@
+[package]
+name = "mere-app"
+version = "0.0.1"
+authors = ["@mark-ik"]
+license = "MPL-2.0"
+edition = "2024"
+publish = false
+rust-version = "1.92.0"
+description = "Mere — idiomatic Xilem app. Chrome is a Xilem view tree over one AppState; the graph canvas is a custom Masonry widget. Replaces the substrate-as-host mere-host (2026-05-21 re-scaffold)."
+
+[[bin]]
+name = "mere"
+path = "src/main.rs"
+
+[dependencies]
+# The Xilem app driver (window + event loop + reactive view tree).
+# Path-dep to the local xilem clone, like mere-masonry/mere-host; switch
+# to crates.io once xilem stabilises.
+xilem = { path = "../../../../xilem/xilem" }
+
+# Portable core — the framework-free truth the views render.
+kernel.workspace = true
+frame.workspace = true
+
+[lints]
+workspace = true
