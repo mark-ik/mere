@@ -61,10 +61,12 @@ use crate::tile::{MasonryTile, TileSize};
 pub type RootWidgetFactory = Arc<dyn Fn() -> NewWidget<dyn Widget> + Send + Sync>;
 
 /// Factory the renderer invokes to construct each producer's panel.
-/// Receives the producer's physical size + scale factor and returns a
-/// boxed [`PanelTile`] — a plain [`MasonryTile`] or a reactive
-/// [`crate::XilemPanel`]. Cheap to clone (Arc).
-pub type PanelFactory = Arc<dyn Fn(TileSize, f64) -> Box<dyn PanelTile> + Send + Sync>;
+/// Receives the node being produced (so the host can route content by
+/// pane role / identity), plus its physical size + scale factor, and
+/// returns a boxed [`PanelTile`] — a plain [`MasonryTile`] or a
+/// reactive [`crate::XilemPanel`]. Cheap to clone (Arc).
+pub type PanelFactory =
+    Arc<dyn Fn(&SceneNodeRef, TileSize, f64) -> Box<dyn PanelTile> + Send + Sync>;
 
 /// One masonry-rendered embedded-frame producer per node.
 pub struct MasonryEmbeddedRenderer {
@@ -142,7 +144,7 @@ impl MasonryEmbeddedRenderer {
         default_properties: Arc<DefaultProperties>,
         root_widget_factory: RootWidgetFactory,
     ) -> Self {
-        let panel_factory: PanelFactory = Arc::new(move |size, scale| {
+        let panel_factory: PanelFactory = Arc::new(move |_node, size, scale| {
             let widget = (root_widget_factory)();
             Box::new(MasonryTile::new(
                 default_properties.clone(),
@@ -308,7 +310,7 @@ impl EmbeddedFrameRenderer for MasonryEmbeddedRenderer {
         let height = (node.size.height.round() as i64).clamp(1, u32::MAX as i64) as u32;
         let (texture, view) = self.allocate_texture_and_view(width, height);
 
-        let tile = (self.panel_factory)(TileSize(dpi::PhysicalSize::new(width, height)), 1.0);
+        let tile = (self.panel_factory)(node, TileSize(dpi::PhysicalSize::new(width, height)), 1.0);
 
         let handle = ProducerHandle::next();
         self.producers.insert(

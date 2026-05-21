@@ -30,6 +30,9 @@
 //! - [`diagnostics_panel`] — the first reactive xilem-driven panel:
 //!   a `View<DiagnosticsState, (), ViewCtx>` showing live host metrics,
 //!   rebuilt each frame from a shared snapshot the host publishes.
+//! - [`panels`] — per-pane content routing: maps each `Panel` pane's
+//!   identity to a [`panels::PaneRole`] and builds the matching panel
+//!   (Apparatus → diagnostics; Workbench / Gloss / System → placeholders).
 //! - [`splitter_renderer`] — substrate renderer for the 4px
 //!   draggable chrome between sibling panes.
 //! - [`render`] — per-frame paint path (substrate dispatch → vello
@@ -54,6 +57,7 @@ mod graph_node_explode;
 mod graph_node_renderer;
 mod graph_registry;
 mod orrery_renderer;
+mod panels;
 mod render;
 mod runtime;
 mod seed;

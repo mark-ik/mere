@@ -122,6 +122,10 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         crate::diagnostics_panel::DiagnosticsSnapshot::default(),
     ));
 
+    let pane_roles: crate::panels::PaneRoles = Arc::new(std::sync::RwLock::new(
+        std::collections::HashMap::new(),
+    ));
+
     let mut host_app = HostApp::new();
     install_callbacks(&mut host_app);
     let (orrery_snapshots, graph_node_selection) = register_renderers(
@@ -131,6 +135,7 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         &queue,
         diagnostics.clone(),
         runtime.clone(),
+        pane_roles.clone(),
     );
     let node_overrides = crate::graph_node_explode::NodeOverrides::new();
 
@@ -212,6 +217,9 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
     // substrate entities below.
     let viewport = viewport_size(size.width, size.height);
     host_app.sync_scene_from_frame_layout(&frame_layout, viewport);
+    // Refresh the identity→role map so the panel factory routes each
+    // pane to its role-appropriate content on first dispatch.
+    crate::panels::update_pane_roles(&host_app, &frame_layout, viewport, &pane_roles);
     let strategies = StrategyRegistry::with_defaults();
     let mut graph_node_identities = GraphNodeIdentities::new();
     let outcome = project_orreries(
@@ -279,6 +287,7 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         },
         interaction: crate::runtime::InteractionState::default(),
         diagnostics,
+        pane_roles,
         frame_count: 0,
     }
 }
@@ -336,16 +345,22 @@ fn register_renderers(
     queue: &wgpu::Queue,
     diagnostics: crate::diagnostics_panel::DiagnosticsHandle,
     runtime: Arc<tokio::runtime::Runtime>,
+    pane_roles: crate::panels::PaneRoles,
 ) -> (
     crate::orrery_renderer::OrrerySnapshots,
     crate::graph_node_renderer::GraphNodeSelection,
 ) {
     let default_props = Arc::new(DefaultProperties::new());
-    let panel_factory: mere_masonry::PanelFactory = Arc::new(move |size, scale| {
-        crate::diagnostics_panel::build_diagnostics_panel(
-            diagnostics.clone(),
-            runtime.clone(),
-            default_props.clone(),
+    // Route each Panel pane to its role-appropriate content. The
+    // factory reads the host-maintained identity→role map at
+    // producer-construction time (the map is refreshed each sync).
+    let panel_factory: mere_masonry::PanelFactory = Arc::new(move |node, size, scale| {
+        crate::panels::build_panel(
+            node,
+            &pane_roles,
+            &diagnostics,
+            &runtime,
+            &default_props,
             size,
             scale,
         )

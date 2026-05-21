@@ -123,6 +123,9 @@ pub struct RuntimeState {
     /// Shared diagnostics snapshot the reactive panel reads. The host
     /// overwrites it each frame in `render_frame`.
     pub diagnostics: crate::diagnostics_panel::DiagnosticsHandle,
+    /// Shared `NodeIdentity → PaneRole` map the panel factory routes on.
+    /// Refreshed each sync so a pane's panel matches its content kind.
+    pub pane_roles: crate::panels::PaneRoles,
     /// Frames rendered since startup — published into `diagnostics`.
     pub frame_count: u64,
 }
@@ -135,6 +138,14 @@ impl RuntimeState {
     fn resync(&mut self, viewport: kurbo::Size) {
         self.host_app
             .sync_scene_from_frame_layout(&self.frame_layout, viewport);
+        // Keep the panel factory's identity→role map current — pane
+        // identities are reassigned by the sync above.
+        crate::panels::update_pane_roles(
+            &self.host_app,
+            &self.frame_layout,
+            viewport,
+            &self.pane_roles,
+        );
         let outcome = project_orreries(
             &self.frame_layout,
             viewport,
