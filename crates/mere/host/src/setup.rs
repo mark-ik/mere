@@ -15,7 +15,6 @@ use session_runtime::ActionKind;
 use host_substrate::HostApp;
 use mere_masonry::MasonryEmbeddedRenderer;
 use register_renderer::NodeContentKind;
-use petgraph::graph::NodeIndex;
 use vello::{AaSupport, RendererOptions};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::Window;
@@ -135,27 +134,77 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
     );
     let node_overrides = crate::graph_node_explode::NodeOverrides::new();
 
-    // Seed: a graph in the registry + a frame layout bound to it.
-    let mut graph_registry = GraphRegistry::new();
-    let graph_id = GraphId::new();
-    graph_registry.insert(graph_id, seed::build_seed_graph());
-    let frame_layout = seed::build_seed_layout(graph_id);
-
-    // Tile-manager state stays seeded for when the workbench
-    // renderer wakes up; not consumed by the v0 projection.
-    for (i, url) in [
-        "https://a.example",
-        "https://b.example",
-        "https://c.example",
-        "https://d.example",
-    ]
-    .iter()
-    .enumerate()
-    {
-        host_app
-            .tiles
-            .open_or_focus(NodeIndex::new(i), url.to_string(), seed::fake_document(url));
+    // ── Session lifecycle: bind the store, resolve resumed vs fresh ──
+    // Session-first: the session decides the workspace content, not the
+    // other way round. This is the seed → restore boundary — a resumed
+    // session restores its persisted graph; a fresh one seeds the
+    // default workspace and persists it.
+    let session_root = std::path::PathBuf::from("./mere-sessions");
+    let load_report = host_app
+        .bind_session_root(&session_root)
+        .expect("bind session root");
+    let session_id = match load_report.loaded.first().copied() {
+        Some(id) => {
+            host_app.activate_session(id);
+            eprintln!(
+                "[session] resumed {:?} ({} session(s) on disk)",
+                id,
+                load_report.loaded.len()
+            );
+            id
+        }
+        None => {
+            let id = host_app.create_session();
+            eprintln!("[session] created {:?}", id);
+            id
+        }
+    };
+    // Persist the manifest immediately (not just on clean close) so the
+    // session resumes next run even after a crash, and so its directory
+    // exists for the graph save below. Flush writes only dirty
+    // manifests — a resumed session is already on disk and untouched.
+    match host_app.manifests.flush_dirty() {
+        Ok(n) if n > 0 => eprintln!("[session] persisted {n} manifest(s)"),
+        Ok(_) => {}
+        Err(e) => eprintln!("[session] manifest flush failed: {e}"),
     }
+    let session_dir = host_app
+        .active_session_dir()
+        .expect("active session has a dir");
+    // Belt-and-suspenders: flush_dirty created the dir for a fresh
+    // session; ensure it exists regardless before save_graph.
+    std::fs::create_dir_all(&session_dir).ok();
+
+    // ── Workspace content: restore the session's graph, or seed it ──
+    // The graph_id comes from the session manifest so the host registry
+    // key, the frame layout's panes, and the on-disk session all agree.
+    let graph_id = host_app
+        .manifests
+        .get(session_id)
+        .map(|m| m.root_graph_id)
+        .unwrap_or_else(GraphId::new);
+    let graph = match session_runtime::session_graph_store::load_graph(&session_dir) {
+        Ok(Some(g)) => {
+            eprintln!("[session] restored graph ({} node(s))", g.nodes().count());
+            g
+        }
+        Ok(None) | Err(_) => {
+            let g = seed::default_workspace_graph();
+            match session_runtime::session_graph_store::save_graph(&session_dir, &g) {
+                Ok(()) => eprintln!("[session] seeded default workspace graph"),
+                Err(e) => eprintln!("[session] seed graph save failed: {e}"),
+            }
+            g
+        }
+    };
+    let mut graph_registry = GraphRegistry::new();
+    graph_registry.insert(graph_id, graph);
+
+    // Frame layout + placeholder tiles seed each boot — layout/tile
+    // persistence is Phase D of the host roadmap. Both reference the
+    // session's `graph_id`.
+    let frame_layout = seed::default_workspace_layout(graph_id);
+    seed::open_placeholder_tiles(&mut host_app);
 
     // Project the frametree into the substrate scene, then run the
     // cartography projection for each orrery pane. Painted panes write
@@ -193,32 +242,11 @@ pub fn build_runtime_state(event_loop: &ActiveEventLoop) -> RuntimeState {
         strategies.len(),
     );
 
-    // Session bind / create / restore (camera) — mirrors the prior
-    // session lifecycle, narrowed to the canonical host path.
-    let session_root = std::path::PathBuf::from("./mere-sessions");
-    let load_report = host_app
-        .bind_session_root(&session_root)
-        .expect("bind session root");
-    let session_id = match load_report.loaded.first().copied() {
-        Some(id) => {
-            host_app.activate_session(id);
-            eprintln!(
-                "[session] resumed {:?} ({} sessions on disk)",
-                id,
-                load_report.loaded.len()
-            );
-            id
-        }
-        None => {
-            let id = host_app.create_session();
-            eprintln!("[session] created {:?}", id);
-            id
-        }
-    };
+    // Restore the persisted camera (view intent) for the active
+    // session, now that the scene is projected.
     if let Ok(Some(true)) = host_app.load_active_view_intent(HOST_FRAME_ID, HOST_PANE_ID) {
         eprintln!("[session] restored view intent");
     }
-    let _ = session_id;
 
     eprintln!(
         "host up — {}×{} pixels, {} substrate nodes, surface format {:?}",
