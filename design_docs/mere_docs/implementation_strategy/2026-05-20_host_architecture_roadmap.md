@@ -71,11 +71,11 @@ It is still a **single-window, hardcoded-seed** host with one content kind that 
 
 Roughly ordered; each phase has a done-condition, not a date.
 
-### Phase A — Harden the spine *(in progress)*
-- **Tame `RuntimeState`** into cohesive sub-structs so the host stays an orchestrator, not a god-struct. *(this pass)*
-- **Gate the redraw loop** — render on change, not every frame. *(this pass)*
-- Make the seed → session-restore boundary explicit (don't accrete demo logic into the boot path).
-- Done when: adding a renderer/panel touches only `setup.rs` registration, and an idle host doesn't peg a core.
+### Phase A — Harden the spine ✅ *(2026-05-20)*
+- **Tame `RuntimeState`** into cohesive sub-structs (`WindowGpu` / `CartographyState` / `InteractionState`) so the host stays an orchestrator, not a god-struct. ✅
+- **Gate the redraw loop** — `ControlFlow::Wait` + render-on-input; idle host issues no frames. ✅
+- **Seed → session-restore boundary** explicit: session-first, restore-or-seed. The graph now persists to / restores from the session's `graph.json` (`session_graph_store`); the seed is reframed as the default-workspace content a fresh session opens with. Frame-layout + tile persistence remain Phase D. ✅
+- Done: adding a renderer/panel touches only `setup.rs` registration; an idle host doesn't peg a core; a session round-trips its graph across restart.
 
 ### Phase B — Real chrome + input
 - Per-pane content routing (workbench / apparatus / gloss / orrery), not diagnostics-everywhere — via `renderer_pin` or a content-kind-per-pane mapping.
