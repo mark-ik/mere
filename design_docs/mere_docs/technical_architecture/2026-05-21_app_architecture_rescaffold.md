@@ -9,6 +9,13 @@ and the host portions of [`2026-05-20_host_architecture_roadmap.md`](2026-05-20_
 Their *spatial* insights survive — relocated into the graph-canvas widget (§3).
 **Evidence**: Woodshed (sibling Strophos app on the same Xilem+Masonry+Vello
 stack) proves the idiomatic shape; `xilem_web` confirms the web story.
+**Correction (2026-05-21)**: this doc's §5 "collapses … forme / platen" was
+wrong. They have sharp, rent-paying roles — forme = graph-capable *arrangement
+authority*, platen = *projection compiler* — see
+[`2026-05-21_mere_composition_spine.md`](2026-05-21_mere_composition_spine.md),
+the canonical product spine. What collapses is the substrate-as-host scaffolding,
+the action bus, and the printing-press-as-executable-pipeline — not forme/platen
+as a model→projection layer feeding Xilem.
 
 ---
 
