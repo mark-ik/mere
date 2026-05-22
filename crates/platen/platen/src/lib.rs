@@ -73,6 +73,12 @@ pub mod document_scene;
 /// given pane.
 pub mod workbench;
 
+/// Tree projection — compiles a forme [`forme::Arrangement`] into a
+/// [`tree_projection::WorkbenchPlan`] (splits of tab-stacks), platen's core
+/// role under the composition spine. Sibling projections (cartography,
+/// lattice) are added when a surface needs one.
+pub mod tree_projection;
+
 pub use canvas_scene::{
     CanvasSceneOptions, HiddenRelationKey, build_canvas_scene_input, graph_view_id_to_canvas,
 };
@@ -80,6 +86,7 @@ pub use cartography_scene::{
     CartographySceneOptions, build_projection_request, project_with, step_with,
 };
 pub use document_scene::build_document_scene;
+pub use tree_projection::{PlanSlot, ProjectionKind, TilePlan, WorkbenchPlan, project_tree};
 pub use workbench::{
     ArrangementContainer, ArrangementMember, ArrangementSnapshot, FrameId, FrameState, PaneBinding,
     ProjectedPane, TileSlot, WorkbenchProjection, assign_frame_pane, assign_view_and_frame_pane,
