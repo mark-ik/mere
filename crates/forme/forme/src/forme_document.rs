@@ -10,10 +10,10 @@
 //! the implicit identity arrangement the orrery uses.
 //!
 //! Ownership: `forme` owns these *types* + the [`crate::Arrangement`] schema +
-//! pure mutation. `session-runtime` owns the on-disk `FormeStore` and lifecycle
-//! (create / fork / delete / stamp), mirroring `session_graph_store` /
-//! `manifest_store`. Geometry is **not** here — it is a sibling store keyed
-//! `(FormeRef, ProjectionKind)`.
+//! pure mutation + the on-disk store ([`crate::store`], behind the `store`
+//! feature so portable consumers stay `std::fs`-free). The *host* supplies
+//! persistence policy — which session directory, and when to save. Geometry is
+//! **not** here — it is a sibling store keyed `(FormeRef, ProjectionKind)`.
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;

@@ -18,8 +18,11 @@
 
 mod engine_tile;
 
+use std::path::{Path, PathBuf};
+
 use engine_tile::RenderedTile;
-use forme::{Arrangement, ArrangementNodeKind};
+use forme::store::{load_all_formes, save_forme};
+use forme::{ArrangementNodeKind, FormeDocument};
 use kernel::geometry::PortablePoint;
 use kernel::graph::Graph;
 use platen::{PlanSlot, TilePlan, project_tree};
@@ -63,12 +66,17 @@ struct AppState {
     /// Graph truth — the orrery projects this. Foundational `kernel`
     /// crate, framework-free.
     graph: Graph,
-    /// The Workbench pane's forme arrangement (curated tiles). Rendered
-    /// via `platen::project_tree` → a tree-projected `WorkbenchPlan`.
-    workbench: Arrangement,
+    /// The Workbench pane's forme — a durable, persisted [`FormeDocument`].
+    /// Its `arrangement` is rendered via `platen::project_tree`; the document
+    /// is loaded at startup and re-saved on every edit, so the workbench
+    /// survives a restart.
+    workbench: FormeDocument,
     /// The live engine-backed tile: a document routed through `inker` and
     /// rendered by a `nematic` engine at startup. The v1 "one live tile."
     welcome: RenderedTile,
+    /// Where session state lives on disk (the forme store writes under
+    /// `<session_dir>/formes/`).
+    session_dir: PathBuf,
     /// Human label for the current frame/workspace (placeholder for the
     /// real `FrameLayout` once the canvas + multi-pane interaction land).
     frame_label: String,
@@ -81,35 +89,22 @@ impl AppState {
             graph.add_node(format!("seed://node/{i}"), PortablePoint::new(0.0, 0.0));
         }
 
-        // Seed a small workbench arrangement: one solo tile + two stacked
-        // (tabs) — proving the projection produces a split slot + a tab slot.
-        let mut workbench = Arrangement::new();
-        let root = workbench.root();
-        let solo = workbench.insert(
-            ArrangementNodeKind::TileIntent { member: None },
-            Some("a.example".into()),
-        );
-        workbench.attach(solo, root);
-        let t2 = workbench.insert(
-            ArrangementNodeKind::TileIntent { member: None },
-            Some("b.example".into()),
-        );
-        workbench.attach(t2, root);
-        let t3 = workbench.insert(
-            ArrangementNodeKind::TileIntent { member: None },
-            Some("c.example".into()),
-        );
-        workbench.attach(t3, root);
-        workbench.stack(t2, t3);
+        // Restore the workbench forme from disk, or seed + persist a fresh one
+        // on first run. (The in-memory graph is re-seeded each run — graph
+        // persistence is a separate slice; forme persistence stands alone.)
+        let session_dir = session_dir();
+        let workbench = load_or_seed_workbench(&session_dir);
 
         // Route + render the welcome document at startup through the engine
         // seam (inker policy → nematic markdown engine).
-        let welcome = engine_tile::render_address("mere://welcome", WELCOME_MD, Some("text/markdown"));
+        let welcome =
+            engine_tile::render_address("mere://welcome", WELCOME_MD, Some("text/markdown"));
 
         Self {
             graph,
             workbench,
             welcome,
+            session_dir,
             frame_label: "Mere".to_string(),
         }
     }
@@ -117,6 +112,77 @@ impl AppState {
     fn node_count(&self) -> usize {
         self.graph.nodes().count()
     }
+
+    /// Persist the workbench forme after an edit. Failures are surfaced to
+    /// stderr, not fatal — a transient write error shouldn't crash the app.
+    fn persist_workbench(&mut self) {
+        if let Err(e) = save_forme(&self.session_dir, &mut self.workbench, now_ms()) {
+            eprintln!("mere: failed to persist workbench forme: {e}");
+        }
+    }
+}
+
+/// Where this host persists session state: a local `mere-sessions/default`
+/// directory (gitignored), relative to the run cwd — matches the prior host
+/// convention. A per-user data dir is a later refinement.
+fn session_dir() -> PathBuf {
+    PathBuf::from("mere-sessions").join("default")
+}
+
+/// Unix-epoch milliseconds for the forme store's timestamp stamping.
+fn now_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Load the workbench forme (the first stored forme) or seed + persist a fresh
+/// one. A load error falls back to an unsaved in-memory seed rather than
+/// crashing.
+fn load_or_seed_workbench(session_dir: &Path) -> FormeDocument {
+    match load_all_formes(session_dir) {
+        Ok(mut formes) if !formes.is_empty() => formes.remove(0),
+        Ok(_) => {
+            let mut doc = seed_workbench();
+            if let Err(e) = save_forme(session_dir, &mut doc, now_ms()) {
+                eprintln!("mere: failed to write seed workbench forme: {e}");
+            }
+            doc
+        }
+        Err(e) => {
+            eprintln!("mere: failed to load formes ({e}); using a fresh in-memory workbench");
+            seed_workbench()
+        }
+    }
+}
+
+/// A fresh workbench forme: one solo tile + two stacked (tabs) — exercises the
+/// projection's split and tab-stack paths. The `graph_id` is freshly minted
+/// (the in-memory graph isn't persisted yet; forme persistence is independent
+/// for v1, and `TileIntent`s are unbound).
+fn seed_workbench() -> FormeDocument {
+    let mut doc = FormeDocument::new(uuid::Uuid::new_v4(), Some("Workbench".into()));
+    let arr = &mut doc.arrangement;
+    let root = arr.root();
+    let solo = arr.insert(
+        ArrangementNodeKind::TileIntent { member: None },
+        Some("a.example".into()),
+    );
+    arr.attach(solo, root);
+    let t2 = arr.insert(
+        ArrangementNodeKind::TileIntent { member: None },
+        Some("b.example".into()),
+    );
+    arr.attach(t2, root);
+    let t3 = arr.insert(
+        ArrangementNodeKind::TileIntent { member: None },
+        Some("c.example".into()),
+    );
+    arr.attach(t3, root);
+    arr.stack(t2, t3);
+    doc
 }
 
 /// The whole app view: a frametree of splits. Left = workbench; right
@@ -135,23 +201,26 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
 /// proving the forme → platen → view loop end-to-end. Tile *content*
 /// (real engines) is a later slice; tiles show their label for now.
 fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
-    let plan = project_tree(&state.workbench);
+    let plan = project_tree(&state.workbench.arrangement);
     let slots: Vec<Box<AnyWidgetView<AppState>>> = plan.slots.iter().map(slot_view).collect();
     flex_col((
         label("Workbench").text_size(18.0),
         prose(format!(
-            "forme → tree projection: {} slot(s), {} tile(s)",
+            "forme \"{}\" → tree projection: {} slot(s), {} tile(s) · persisted",
+            state.workbench.label.as_deref().unwrap_or("workbench"),
             plan.slots.len(),
             plan.tile_count()
         )),
         button(label("+ tile"), |state: &mut AppState| {
-            let root = state.workbench.root();
-            let n = state.workbench.len();
-            let id = state.workbench.insert(
+            let arr = &mut state.workbench.arrangement;
+            let root = arr.root();
+            let n = arr.len();
+            let id = arr.insert(
                 ArrangementNodeKind::TileIntent { member: None },
                 Some(format!("tile {n}")),
             );
-            state.workbench.attach(id, root);
+            arr.attach(id, root);
+            state.persist_workbench();
         }),
         flex_row(slots),
         live_tile(state),
@@ -220,10 +289,13 @@ fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
 /// Apparatus pane — diagnostics / inspector. Static placeholder reading
 /// app state.
 fn apparatus_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
+    let forme_id = state.workbench.id.as_uuid().to_string();
     flex_col((
         label("Apparatus").text_size(18.0),
         prose(format!("frame: {}", state.frame_label)),
         prose(format!("graph nodes: {}", state.node_count())),
+        prose(format!("session: {}", state.session_dir.display())),
+        prose(format!("workbench forme: {}", &forme_id[..8])),
     ))
 }
 
@@ -231,4 +303,44 @@ fn main() {
     Xilem::new_simple(AppState::new(), app_logic, WindowOptions::new("Mere"))
         .run_in(EventLoop::with_user_event())
         .expect("run mere");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The FormeStore wiring's done-line: a first load with nothing on disk
+    /// seeds + persists; an edit re-saves; the next load restores the *same*
+    /// forme with the edit intact (the workbench survives a restart).
+    #[test]
+    fn workbench_seeds_then_restores_with_edits() {
+        let dir = std::env::temp_dir().join(format!("mere-app-wb-{}", uuid::Uuid::new_v4()));
+
+        // First load: empty store → seed + persist.
+        let seeded = load_or_seed_workbench(&dir);
+        let id = seeded.id;
+        let tiles = project_tree(&seeded.arrangement).tile_count();
+        assert!(tiles >= 3, "seed should have at least the 3 demo tiles");
+
+        // Edit (simulating the "+ tile" button) and persist.
+        let mut doc = seeded;
+        let root = doc.arrangement.root();
+        let added = doc.arrangement.insert(
+            ArrangementNodeKind::TileIntent { member: None },
+            Some("added".into()),
+        );
+        doc.arrangement.attach(added, root);
+        save_forme(&dir, &mut doc, now_ms()).expect("persist edit");
+
+        // Next load: same forme id, edit preserved.
+        let restored = load_or_seed_workbench(&dir);
+        assert_eq!(restored.id, id, "should restore the same forme, not reseed");
+        assert_eq!(
+            project_tree(&restored.arrangement).tile_count(),
+            tiles + 1,
+            "the added tile should survive the reload"
+        );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

@@ -9,6 +9,11 @@ description = "Per-graph-view workbench arrangement authority for Mere — proje
 [features]
 default = []
 petgraph = ["dep:petgraph"]
+# Native on-disk persistence of `FormeDocument`s (the `store` module).
+# Off by default so forme stays portable-by-default (wasm consumers don't
+# pull `std::fs` paths); the native host enables it. `serde_json` is already
+# a base dep, so this gates only the module.
+store = []
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

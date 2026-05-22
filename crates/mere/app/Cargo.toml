@@ -22,14 +22,18 @@ xilem = { path = "../../../../xilem/xilem" }
 kernel.workspace = true
 frame.workspace = true
 # Arrangement authority + its tree projection — the Workbench pane renders
-# `platen::project_tree(&forme::Arrangement)`.
-forme.workspace = true
+# `platen::project_tree(&forme::Arrangement)`. The `store` feature adds native
+# on-disk persistence so the workbench forme survives a restart.
+forme = { workspace = true, features = ["store"] }
 platen.workspace = true
 # Engine choice + a smolweb document engine — the live workbench tile routes
 # an address through `inker`'s policy and renders the matched `nematic`
 # engine's `EngineDocument` (the v1 "one live engine-backed tile").
 inker.workspace = true
 nematic.workspace = true
+
+# Mint the seed workbench forme's graph_id (forme's `GraphId` is a bare UUID).
+uuid = { version = "1", features = ["v4"] }
 
 [lints]
 workspace = true

@@ -264,10 +264,21 @@ The forks are settled (three review passes). The build follows these.
 | Store | Lives in | Keyed by | Holds |
 |---|---|---|---|
 | `FormeDocument` types | `forme` | `FormeId` | id, graph_id, label, arrangement (semantic, geometry-free) |
-| `FormeStore` (disk I/O, lifecycle) | `session-runtime` | `FormeId` | per-session formes beside `graph.json`; create/fork/delete |
+| `FormeStore` (disk I/O, lifecycle) | `forme` (`store` feature) | `FormeId` | per-session formes under `<session_dir>/formes/`; create/load/delete |
 | projection geometry | `session-runtime` (store) / `platen` (types) | `(FormeRef, ProjectionKind)` | semantic geometry (ratios, world positions) |
 | pane view-intent | `session-runtime` | `frame_id + pane_id` | camera, focus, selection, local relation-hide |
 
 `forme` owns `FormeId` / `FormeRef` / `FormeDocument` / arrangement schema +
-pure mutation; `session-runtime` owns the disk I/O + lifecycle (mirroring
-`session_graph_store` / `manifest_store` / `view_intent_store`).
+pure mutation **and** the native on-disk store (`forme::store`, gated by the
+`store` feature so portable consumers stay `std::fs`-free). The *host* supplies
+persistence policy — which session directory, and *when* to save (the clean
+`mere-app` host enables `forme/store`, picks `<cwd>/mere-sessions/default`, and
+re-saves the workbench forme on every edit).
+
+> **Moved 2026-05-22.** The store originally landed in `session-runtime`
+> (mirroring `session_graph_store`). It was relocated into `forme` so the clean
+> `mere-app` host can persist formes without depending on `session-runtime` —
+> which drags in the substrate control-plane crates (`identity`,
+> `control-plane`, `tile-state`) the re-scaffold is retiring. Projection
+> geometry + pane view-intent stores stay in `session-runtime` for now; they
+> migrate when their substrate consumers are cut.

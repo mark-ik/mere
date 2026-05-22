@@ -1,24 +1,25 @@
 // Copyright 2026 the Mere authors
 // SPDX-License-Identifier: MPL-2.0
 
-//! `FormeStore` — per-session persistence of curated [`FormeDocument`]s.
+//! Native on-disk persistence of curated [`FormeDocument`]s (the `store`
+//! feature).
 //!
 //! A session carries *many* formes (curated workbenches, compare benches, …) —
-//! unlike the single `graph.json` — so they live in a `formes/` directory, one
-//! file per [`FormeId`]. The orrery's `Identity` arrangement is implicit and
-//! is **not** stored here (only its projection geometry persists, elsewhere).
+//! unlike a single `graph.json` — so they live in a `formes/` directory, one
+//! file per [`FormeId`]. The orrery's `Identity` arrangement is implicit and is
+//! **not** stored here (only its projection geometry persists, elsewhere).
 //!
-//! Ownership boundary (composition spine §15): `forme` owns the
-//! [`FormeDocument`] types + arrangement schema + pure mutation; this module
-//! owns disk I/O + lifecycle (create / load / delete) + timestamp stamping,
-//! mirroring [`crate::session_graph_store`]. The clock is injected (`now_ms`)
-//! so the store stays testable and portable.
+//! Ownership (composition spine §15): `forme` owns the [`FormeDocument`] types,
+//! the arrangement schema, pure mutation, **and** this native store (gated by
+//! the `store` feature so portable consumers stay `std::fs`-free). The *host*
+//! supplies policy — which session directory, and *when* to save. The clock is
+//! injected (`now_ms`) so the store stays testable.
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use forme::{FormeDocument, FormeId};
+use crate::{FormeDocument, FormeId};
 
 /// Subdirectory under a session dir holding one JSON file per forme.
 pub const FORMES_DIR: &str = "formes";

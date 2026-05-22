@@ -1,5 +1,17 @@
 # Mere Host — Architecture & Roadmap
 
+> **Superseded for host *shape* (2026-05-21).** This roadmap describes the
+> substrate-as-host (`crates/mere/host/` + `host-substrate`). The host was
+> re-scaffolded into an idiomatic Xilem app (`crates/mere/app/`, binary `mere`)
+> with **no** action bus, renderer registry, or substrate — chrome is a Xilem
+> view tree over one `AppState`; the graph canvas is a custom Masonry widget.
+> Current authority: [`../technical_architecture/2026-05-21_app_architecture_rescaffold.md`](../technical_architecture/2026-05-21_app_architecture_rescaffold.md)
+> and [`../technical_architecture/2026-05-21_mere_composition_spine.md`](../technical_architecture/2026-05-21_mere_composition_spine.md).
+> The *concern ownership* (§1 table) and *pitfalls* (§6) below remain useful;
+> the module map (§2) and phase wording (§4) are substrate-era. Phase C's goal
+> ("a real smolweb document renders in a workbench tile") is met in `mere-app`
+> via the engine tile (`inker` route → `nematic` render → masonry views).
+
 **Date**: 2026-05-20
 **Status**: Steering doc for `crates/mere/host/`. Living — update as phases land.
 **Companion to**: [`../technical_architecture/2026-05-19_workspace_topology_status.md`](../technical_architecture/2026-05-19_workspace_topology_status.md) (workspace shape), [`../research/2026-05-15_spatial_chrome_ir_brief.md`](../research/2026-05-15_spatial_chrome_ir_brief.md) (substrate framing), [`../research/2026-05-15_renderer_registry_contract_brief.md`](../research/2026-05-15_renderer_registry_contract_brief.md) (renderer tenancy), [`2026-05-15_spatial_chrome_modular_adoption_plan.md`](2026-05-15_spatial_chrome_modular_adoption_plan.md) (adoption sequence).

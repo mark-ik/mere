@@ -37,6 +37,12 @@
 pub mod arrangement;
 pub mod forme_document;
 
+/// Native on-disk persistence of [`FormeDocument`]s. Gated by the `store`
+/// feature so portable consumers stay `std::fs`-free; the native host enables
+/// it.
+#[cfg(feature = "store")]
+pub mod store;
+
 pub use arrangement::{
     Arrangement, ArrangementEdge, ArrangementEdgeKind, ArrangementNode, ArrangementNodeId,
     ArrangementNodeKind, GraphMemberId,
