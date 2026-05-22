@@ -17,6 +17,7 @@
 //! "+ node" / "+ tile" buttons prove the reactive loop end-to-end (mutate
 //! `AppState` → view rebuilds → canvas/projection re-render).
 
+mod camera;
 mod engine_tile;
 mod graph_canvas;
 
@@ -25,12 +26,22 @@ use std::path::{Path, PathBuf};
 use engine_tile::RenderedTile;
 use forme::store::{load_all_formes, save_forme};
 use forme::{ArrangementNodeKind, FormeDocument};
+use graph_canvas::{NodeMoved, graph_canvas, scene_from_graph};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NavigationTrigger, Traversal};
 use platen::{PlanSlot, TilePlan, project_tree};
 use xilem::masonry::kurbo::Axis;
-use xilem::view::{FlexExt as _, button, canvas, flex_col, flex_row, label, prose, split};
+use xilem::view::{FlexExt as _, button, flex_col, flex_row, label, prose, split};
 use xilem::{AnyWidgetView, EventLoop, WidgetView, WindowOptions, Xilem};
+
+/// Lay seed nodes (and new ones) on a world-space ring so the orrery shows a
+/// spread graph. The kernel seeds all nodes at the origin; the orrery reads
+/// projected positions, so we assign them here.
+fn ring_world(i: usize, n: usize) -> PortablePoint {
+    let theta = std::f64::consts::TAU * (i as f64) / (n.max(1) as f64) - std::f64::consts::FRAC_PI_2;
+    let radius = 140.0;
+    PortablePoint::new((radius * theta.cos()) as f32, (radius * theta.sin()) as f32)
+}
 
 /// Seeded markdown for the live engine tile. Routed through `inker` and
 /// rendered by the `nematic` markdown engine at startup — proof the engine
@@ -94,6 +105,10 @@ impl AppState {
         // loose dots. Traversal edges = "navigated A → B".
         for &(a, b) in &[(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (0, 3), (0, 5)] {
             graph.push_traversal(keys[a], keys[b], Traversal::now(NavigationTrigger::LinkClick));
+        }
+        // Spread them on a world-space ring (the orrery reads projected pos).
+        for (i, &k) in keys.iter().enumerate() {
+            graph.set_node_projected_position(k, ring_world(i, keys.len()));
         }
 
         // Restore the workbench forme from disk, or seed + persist a fresh one
@@ -277,10 +292,11 @@ fn tile_label(t: &TilePlan) -> String {
     })
 }
 
-/// Orrery pane — the spatial graph view. A custom Masonry `canvas`
-/// paints the kernel graph (see [`graph_canvas`]); the "+ node" button
-/// mutates graph truth and the canvas re-renders. Real cartography
-/// layout, camera, and hit-testing are later slices.
+/// Orrery pane — the spatial graph view, a bespoke Masonry widget (see
+/// [`graph_canvas`]). Drag a node to move it (written back to graph
+/// truth), drag empty space to pan, wheel to zoom. The "+ node" button
+/// mutates graph truth and the view re-renders. Real cartography layout
+/// (force-directed / radial) and LOD are later slices.
 fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
     let relations = state.graph.relations().count();
     flex_col((
@@ -288,14 +304,23 @@ fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
         prose(format!("graph: {} nodes · {relations} relations", state.node_count())),
         button(label("+ node"), |state: &mut AppState| {
             let n = state.node_count();
-            state
+            let key = state
                 .graph
                 .add_node(format!("seed://node/{n}"), PortablePoint::new(0.0, 0.0));
+            // Place it on the ring (offset outward a touch so it doesn't land
+            // on an existing node) rather than stacking at the origin.
+            state.graph.set_node_projected_position(key, ring_world(n, 8));
         }),
-        // The spatial graph view: a custom Masonry canvas painting graph truth
-        // (ring layout, relations as lines, parley labels). Fills the pane.
-        canvas(|state: &mut AppState, ctx, scene, size| {
-            graph_canvas::paint_graph(scene, ctx, size, &state.graph);
+        // The spatial graph view: a bespoke Masonry widget. Drag a node to move
+        // it (writes back to graph truth), drag empty space to pan, wheel to
+        // zoom toward the cursor.
+        graph_canvas(scene_from_graph(&state.graph), |state: &mut AppState, moved: NodeMoved| {
+            if let Some(key) = state.graph.get_node_key_by_id(moved.id) {
+                state.graph.set_node_projected_position(
+                    key,
+                    PortablePoint::new(moved.world.x as f32, moved.world.y as f32),
+                );
+            }
         })
         .flex(1.0),
     ))
