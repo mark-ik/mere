@@ -42,6 +42,7 @@
 #![doc(html_root_url = "https://docs.rs/host-runtime/0.0.1")]
 
 pub mod engine_profile_store;
+pub mod forme_store;
 pub mod manifest;
 pub mod manifest_store;
 pub mod session_graph_store;
@@ -58,6 +59,9 @@ pub use control_plane::{
     ActionBus, ActionKind, ActionListener, ActionTarget, BusAction, BusDispatchOutcome, DenyReason,
     PermissionDecision, PermissionGate, PermitEverythingGate, RefuseEverythingGate, SurfaceId,
     TearOutMode, check_permission,
+};
+pub use forme_store::{
+    FORMES_DIR, delete_forme, formes_dir, load_all_formes, load_forme, save_forme,
 };
 pub use manifest::{
     EngineProfileBinding, EngramId, GraphSessionManifest, MANIFEST_SCHEMA_VERSION, PersonaId,
