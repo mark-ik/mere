@@ -21,6 +21,10 @@ xilem = { path = "../../../../xilem/xilem" }
 # Portable core — the framework-free truth the views render.
 kernel.workspace = true
 frame.workspace = true
+# Arrangement authority + its tree projection — the Workbench pane renders
+# `platen::project_tree(&forme::Arrangement)`.
+forme.workspace = true
+platen.workspace = true
 
 [lints]
 workspace = true

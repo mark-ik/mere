@@ -3766,6 +3766,7 @@ dependencies = [
  "serde",
  "serde_json",
  "taffy",
+ "uuid",
 ]
 
 [[package]]
@@ -6046,8 +6047,10 @@ dependencies = [
 name = "mere-app"
 version = "0.0.1"
 dependencies = [
+ "forme",
  "frame",
  "kernel",
+ "platen",
  "xilem",
 ]
 
@@ -7868,11 +7871,13 @@ version = "0.0.1"
 dependencies = [
  "cartography",
  "document-canvas",
+ "forme",
  "graph-canvas",
  "graph-layout",
  "inker",
  "kernel",
  "serde",
+ "serde_json",
  "tracing",
  "uuid",
  "verso-core",
@@ -9531,6 +9536,7 @@ version = "0.0.1"
 dependencies = [
  "control-plane",
  "euclid",
+ "forme",
  "frame",
  "identity",
  "kernel",

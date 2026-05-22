@@ -16,11 +16,13 @@
 //! button proves the reactive loop end-to-end (mutate `AppState.graph`
 //! → view rebuilds → node count updates).
 
+use forme::{Arrangement, ArrangementNodeKind};
 use kernel::geometry::PortablePoint;
 use kernel::graph::Graph;
+use platen::{PlanSlot, TilePlan, project_tree};
 use xilem::masonry::kurbo::Axis;
-use xilem::view::{button, flex_col, label, prose, split};
-use xilem::{EventLoop, WidgetView, WindowOptions, Xilem};
+use xilem::view::{button, flex_col, flex_row, label, prose, split};
+use xilem::{AnyWidgetView, EventLoop, WidgetView, WindowOptions, Xilem};
 
 /// The single application state the Xilem driver owns. Widgets mutate
 /// it in place through their callbacks; the view tree rebuilds on diff.
@@ -31,6 +33,9 @@ struct AppState {
     /// Graph truth — the orrery projects this. Foundational `kernel`
     /// crate, framework-free.
     graph: Graph,
+    /// The Workbench pane's forme arrangement (curated tiles). Rendered
+    /// via `platen::project_tree` → a tree-projected `WorkbenchPlan`.
+    workbench: Arrangement,
     /// Human label for the current frame/workspace (placeholder for the
     /// real `FrameLayout` once the canvas + multi-pane interaction land).
     frame_label: String,
@@ -42,8 +47,31 @@ impl AppState {
         for i in 0..6 {
             graph.add_node(format!("seed://node/{i}"), PortablePoint::new(0.0, 0.0));
         }
+
+        // Seed a small workbench arrangement: one solo tile + two stacked
+        // (tabs) — proving the projection produces a split slot + a tab slot.
+        let mut workbench = Arrangement::new();
+        let root = workbench.root();
+        let solo = workbench.insert(
+            ArrangementNodeKind::TileIntent { member: None },
+            Some("a.example".into()),
+        );
+        workbench.attach(solo, root);
+        let t2 = workbench.insert(
+            ArrangementNodeKind::TileIntent { member: None },
+            Some("b.example".into()),
+        );
+        workbench.attach(t2, root);
+        let t3 = workbench.insert(
+            ArrangementNodeKind::TileIntent { member: None },
+            Some("c.example".into()),
+        );
+        workbench.attach(t3, root);
+        workbench.stack(t2, t3);
+
         Self {
             graph,
+            workbench,
             frame_label: "Mere".to_string(),
         }
     }
@@ -63,13 +91,56 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     )
 }
 
-/// Workbench pane — will host the tile strip + engine content; static
-/// placeholder for now.
-fn workbench_pane(_state: &AppState) -> impl WidgetView<AppState> + use<> {
+/// Workbench pane — renders the forme arrangement through platen's tree
+/// projection: slots laid side-by-side, tab-stacks shown grouped. The
+/// "+ tile" button mutates the arrangement and the projection re-renders,
+/// proving the forme → platen → view loop end-to-end. Tile *content*
+/// (real engines) is a later slice; tiles show their label for now.
+fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
+    let plan = project_tree(&state.workbench);
+    let slots: Vec<Box<AnyWidgetView<AppState>>> = plan.slots.iter().map(slot_view).collect();
     flex_col((
         label("Workbench").text_size(18.0),
-        prose("tile strip — engine content (nematic / serval / scrying) lands in a later phase"),
+        prose(format!(
+            "forme → tree projection: {} slot(s), {} tile(s)",
+            plan.slots.len(),
+            plan.tile_count()
+        )),
+        button(label("+ tile"), |state: &mut AppState| {
+            let root = state.workbench.root();
+            let n = state.workbench.len();
+            let id = state.workbench.insert(
+                ArrangementNodeKind::TileIntent { member: None },
+                Some(format!("tile {n}")),
+            );
+            state.workbench.attach(id, root);
+        }),
+        flex_row(slots),
     ))
+}
+
+/// Render one workbench slot: a single tile, or a tab-stack.
+fn slot_view(slot: &PlanSlot) -> Box<AnyWidgetView<AppState>> {
+    match slot {
+        PlanSlot::Tile(t) => {
+            flex_col((label("▭ tile").text_size(13.0), prose(tile_label(t)))).boxed()
+        }
+        PlanSlot::Tabs(tabs) => {
+            let rows: Vec<_> = tabs
+                .iter()
+                .map(|t| prose(format!("• {}", tile_label(t))))
+                .collect();
+            flex_col((label(format!("▭ tabs ({})", tabs.len())).text_size(13.0), rows)).boxed()
+        }
+    }
+}
+
+/// Display name for a tile: its label, else its bound member, else unbound.
+fn tile_label(t: &TilePlan) -> String {
+    t.label.clone().unwrap_or_else(|| match t.member {
+        Some(m) => format!("member {}", &m.to_string()[..8]),
+        None => "(unbound)".to_string(),
+    })
 }
 
 /// Orrery pane — placeholder for the custom `GraphCanvas` Masonry
