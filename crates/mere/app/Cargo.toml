@@ -25,6 +25,11 @@ frame.workspace = true
 # `platen::project_tree(&forme::Arrangement)`.
 forme.workspace = true
 platen.workspace = true
+# Engine choice + a smolweb document engine — the live workbench tile routes
+# an address through `inker`'s policy and renders the matched `nematic`
+# engine's `EngineDocument` (the v1 "one live engine-backed tile").
+inker.workspace = true
+nematic.workspace = true
 
 [lints]
 workspace = true

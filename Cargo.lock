@@ -6049,7 +6049,9 @@ version = "0.0.1"
 dependencies = [
  "forme",
  "frame",
+ "inker",
  "kernel",
+ "nematic",
  "platen",
  "xilem",
 ]

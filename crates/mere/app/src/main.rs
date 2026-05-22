@@ -16,6 +16,9 @@
 //! button proves the reactive loop end-to-end (mutate `AppState.graph`
 //! → view rebuilds → node count updates).
 
+mod engine_tile;
+
+use engine_tile::RenderedTile;
 use forme::{Arrangement, ArrangementNodeKind};
 use kernel::geometry::PortablePoint;
 use kernel::graph::Graph;
@@ -23,6 +26,33 @@ use platen::{PlanSlot, TilePlan, project_tree};
 use xilem::masonry::kurbo::Axis;
 use xilem::view::{button, flex_col, flex_row, label, prose, split};
 use xilem::{AnyWidgetView, EventLoop, WidgetView, WindowOptions, Xilem};
+
+/// Seeded markdown for the live engine tile. Routed through `inker` and
+/// rendered by the `nematic` markdown engine at startup — proof the engine
+/// seam produces real content, not a placeholder. Edit here to change the
+/// welcome page.
+const WELCOME_MD: &str = "\
+# Welcome to Mere
+
+A **spatial browser** on the *composition spine*: graph truth → forme →
+platen → verso → inker.
+
+This tile is **live**. Its content was routed through `inker`'s engine
+policy and parsed by the `nematic` markdown engine — nothing below the rule
+is placeholder text.
+
+## What you're looking at
+
+- The **workbench** projects a forme arrangement into tiles
+- The **orrery** is the spatial graph view (canvas widget pending)
+- This document proves the engine-routing seam end to end
+
+---
+
+    route(address, content_type) -> Engine -> EngineDocument
+
+Edit `WELCOME_MD` in `main.rs` to change this page.
+";
 
 /// The single application state the Xilem driver owns. Widgets mutate
 /// it in place through their callbacks; the view tree rebuilds on diff.
@@ -36,6 +66,9 @@ struct AppState {
     /// The Workbench pane's forme arrangement (curated tiles). Rendered
     /// via `platen::project_tree` → a tree-projected `WorkbenchPlan`.
     workbench: Arrangement,
+    /// The live engine-backed tile: a document routed through `inker` and
+    /// rendered by a `nematic` engine at startup. The v1 "one live tile."
+    welcome: RenderedTile,
     /// Human label for the current frame/workspace (placeholder for the
     /// real `FrameLayout` once the canvas + multi-pane interaction land).
     frame_label: String,
@@ -69,9 +102,14 @@ impl AppState {
         workbench.attach(t3, root);
         workbench.stack(t2, t3);
 
+        // Route + render the welcome document at startup through the engine
+        // seam (inker policy → nematic markdown engine).
+        let welcome = engine_tile::render_address("mere://welcome", WELCOME_MD, Some("text/markdown"));
+
         Self {
             graph,
             workbench,
+            welcome,
             frame_label: "Mere".to_string(),
         }
     }
@@ -116,7 +154,27 @@ fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
             state.workbench.attach(id, root);
         }),
         flex_row(slots),
+        live_tile(state),
     ))
+}
+
+/// The live engine-backed tile: a header naming the engine that handled the
+/// address, then the rendered document. This realizes the v1 "one live
+/// engine-backed tile" — the projected slots above are still placeholders
+/// (label-only), but *this* tile is real engine output.
+fn live_tile(state: &AppState) -> impl WidgetView<AppState> + use<> {
+    let tile = &state.welcome;
+    let mut children: Vec<Box<AnyWidgetView<AppState>>> = vec![
+        label("▣ live tile").text_size(13.0).boxed(),
+        prose(format!(
+            "engine: {} · {}",
+            tile.engine_id,
+            tile.document.title.as_deref().unwrap_or("(untitled)"),
+        ))
+        .boxed(),
+    ];
+    children.extend(engine_tile::document_views(&tile.document));
+    flex_col(children)
 }
 
 /// Render one workbench slot: a single tile, or a tab-stack.

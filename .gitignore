@@ -45,3 +45,7 @@ models/
 # Host session store — runtime artifact written by `cargo run -p host`
 # (./mere-sessions relative to the run cwd). Never commit session state.
 mere-sessions/
+
+# Local tooling cache (semantic index / scratch db). Multi-MB binary cache,
+# not source — never commit.
+.sem/
