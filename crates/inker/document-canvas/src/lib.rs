@@ -34,17 +34,21 @@
 
 pub mod font;
 pub mod layout;
+pub mod paint_list;
 pub mod style;
 pub mod text;
 pub mod types;
 
-/// Netrender backend — turns a [`types::DocumentRenderPacket`] into a
-/// `netrender::Scene`. Behind the `netrender` cargo feature; pulls in
-/// wgpu transitively, so wasm-light consumers skip it.
+/// Netrender backend — lowers an [`paint_list::InkerPaintList`] to a
+/// `netrender::Scene` via the shared `paint_list_render` translator.
+/// Behind the `netrender` cargo feature; pulls in wgpu transitively, so
+/// wasm-light consumers skip it. The portable producer
+/// ([`paint_list::paint_list_from_packet`]) is always available.
 #[cfg(feature = "netrender")]
 pub mod netrender_backend;
 
-pub use font::{FontRequest, FontResolver, NoFontResolver};
+pub use font::{FontFaceData, FontRequest, FontResolver, NoFontResolver};
+pub use paint_list::{paint_list_from_packet, InkerPaintList};
 pub use layout::layout_document;
 pub use style::{ColorVocabulary, InlineStyle, StyleConfig};
 pub use types::{

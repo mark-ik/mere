@@ -14,15 +14,27 @@
 //!
 //! - [`crate::text::LayoutEnvironment::with_resolver`] — the resolver
 //!   registers its fonts with parley's `FontContext` so layout sees them.
-//! - [`crate::netrender_backend::scene_from_packet`] (when the
-//!   `netrender` feature is on) — the resolver maps each glyph run's
-//!   `(family, weight, style)` to a `netrender::FontId` so real glyph
-//!   runs get emitted instead of placeholder rects.
+//! - [`crate::paint_list::paint_list_from_packet`] — the resolver maps
+//!   each glyph run's `(family, weight, style)` to the **font face bytes**
+//!   ([`FontFaceData`]) so the produced `PaintList` can carry them in its
+//!   `fonts()` side-table. The `paint_list_render` translator registers
+//!   those bytes into the renderer's font palette and resolves each run's
+//!   `FontInstanceKey` to a concrete font. Runs whose face the resolver
+//!   can't supply fall back to a placeholder rect.
+//!
+//! ## Bytes, not pre-registered ids
+//!
+//! Earlier the resolver returned an opaque `netrender::FontId` (assuming
+//! the host had pre-registered the face out-of-band — an in-process-only
+//! model). The PaintList contract instead carries face bytes with the
+//! paint output so the list is self-contained for IPC / capture-replay;
+//! the renderer owns registration and dedups by blob identity across
+//! resends. Hence [`FontResolver::resolve_font_data`].
 //!
 //! ## Re-resolve at render time
 //!
-//! v1 *re-resolves* the (family, weight, style) tuple at render time
-//! rather than baking a `FontId` into [`crate::types::GlyphRun`]. This
+//! v1 *re-resolves* the (family, weight, style) tuple at packet-emit time
+//! rather than baking font identity into [`crate::types::GlyphRun`]. This
 //! keeps the packet shape pure (no rendering metadata in the layout
 //! result) and lets the same packet feed multiple backends. The cost: if
 //! parley fell back to a different concrete font than the resolver
@@ -41,8 +53,20 @@ pub struct FontRequest<'a> {
     pub style: TextStyle,
 }
 
+/// Font face bytes for a resolved request, destined for a `PaintList`'s
+/// font side-table ([`paint_list_api::FontResource`]). The renderer
+/// interns these into its font palette; producers ship them once per
+/// unique face and reference by `FontInstanceKey`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FontFaceData {
+    /// TTF / OTF / TTC font bytes.
+    pub data: Vec<u8>,
+    /// Index within a font collection (TTC); `0` for single-font files.
+    pub index: u32,
+}
+
 /// Trait the host implements to provide fonts for both layout (parley)
-/// and rendering (netrender / future backends).
+/// and rendering (the PaintList side-table → renderer palette).
 pub trait FontResolver: Send + Sync {
     /// Register all fonts this resolver provides with parley's font
     /// context. Called once when the [`crate::text::LayoutEnvironment`]
@@ -53,13 +77,15 @@ pub trait FontResolver: Send + Sync {
     /// out without boilerplate.
     fn register_with_parley(&self, _font_cx: &mut parley::FontContext) {}
 
-    /// Map a font request to an opaque `netrender::FontId`. Returns
-    /// `None` if the resolver doesn't have a font for this request — the
-    /// renderer falls back to a placeholder rect in that case.
+    /// Map a font request to its face bytes ([`FontFaceData`]) for the
+    /// produced `PaintList`'s font side-table. Returns `None` if the
+    /// resolver doesn't have a face for this request — the producer
+    /// falls back to a placeholder rect for that run.
     ///
-    /// The same `FontRequest` must always map to the same ID for a given
-    /// resolver instance. Renderers may cache by ID.
-    fn resolve_font_id(&self, request: FontRequest<'_>) -> Option<u32>;
+    /// The same `FontRequest` must map to the same face for a given
+    /// resolver instance (producers dedup by request and ship each face
+    /// once).
+    fn resolve_font_data(&self, request: FontRequest<'_>) -> Option<FontFaceData>;
 }
 
 /// A no-op resolver. Registers nothing with parley (parley falls back to
@@ -69,7 +95,7 @@ pub trait FontResolver: Send + Sync {
 pub struct NoFontResolver;
 
 impl FontResolver for NoFontResolver {
-    fn resolve_font_id(&self, _request: FontRequest<'_>) -> Option<u32> {
+    fn resolve_font_data(&self, _request: FontRequest<'_>) -> Option<FontFaceData> {
         None
     }
 }

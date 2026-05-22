@@ -3068,6 +3068,8 @@ version = "0.0.1"
 dependencies = [
  "inker",
  "netrender",
+ "paint_list_api",
+ "paint_list_render",
  "parley",
  "serde",
 ]
@@ -7503,6 +7505,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36820e9051aca1014ddc75770aab4d68bc1e9e632f0f5627c4086bc216fb583b"
 dependencies = [
  "ttf-parser",
+]
+
+[[package]]
+name = "paint_list_api"
+version = "0.0.1"
+dependencies = [
+ "euclid",
+ "serde",
+]
+
+[[package]]
+name = "paint_list_render"
+version = "0.0.1"
+dependencies = [
+ "log",
+ "netrender",
+ "paint_list_api",
 ]
 
 [[package]]
