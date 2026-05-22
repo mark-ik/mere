@@ -10,13 +10,15 @@
 //! no action bus — Xilem's `View<State>` + state mutation is the whole
 //! app-coordination layer (Woodshed's proven shape).
 //!
-//! Stage 1 (this file): the chrome shape is touchable — a frametree of
-//! `split` views with stock-widget panes, one of which (orrery) is a
-//! placeholder until the `GraphCanvas` widget lands. The "+ node"
-//! button proves the reactive loop end-to-end (mutate `AppState.graph`
-//! → view rebuilds → node count updates).
+//! The chrome shape is a frametree of `split` views: a Workbench pane
+//! (forme → tree projection + a live engine-backed tile), an Orrery pane
+//! (the spatial graph view — a custom Masonry `canvas` painting graph
+//! truth, see [`graph_canvas`]), and an Apparatus pane (diagnostics). The
+//! "+ node" / "+ tile" buttons prove the reactive loop end-to-end (mutate
+//! `AppState` → view rebuilds → canvas/projection re-render).
 
 mod engine_tile;
+mod graph_canvas;
 
 use std::path::{Path, PathBuf};
 
@@ -24,10 +26,10 @@ use engine_tile::RenderedTile;
 use forme::store::{load_all_formes, save_forme};
 use forme::{ArrangementNodeKind, FormeDocument};
 use kernel::geometry::PortablePoint;
-use kernel::graph::Graph;
+use kernel::graph::{Graph, NavigationTrigger, Traversal};
 use platen::{PlanSlot, TilePlan, project_tree};
 use xilem::masonry::kurbo::Axis;
-use xilem::view::{button, flex_col, flex_row, label, prose, split};
+use xilem::view::{FlexExt as _, button, canvas, flex_col, flex_row, label, prose, split};
 use xilem::{AnyWidgetView, EventLoop, WidgetView, WindowOptions, Xilem};
 
 /// Seeded markdown for the live engine tile. Routed through `inker` and
@@ -85,8 +87,13 @@ struct AppState {
 impl AppState {
     fn new() -> Self {
         let mut graph = Graph::new();
-        for i in 0..6 {
-            graph.add_node(format!("seed://node/{i}"), PortablePoint::new(0.0, 0.0));
+        let keys: Vec<_> = (0..6)
+            .map(|i| graph.add_node(format!("seed://node/{i}"), PortablePoint::new(0.0, 0.0)))
+            .collect();
+        // A few seed relations so the orrery shows a connected graph, not
+        // loose dots. Traversal edges = "navigated A → B".
+        for &(a, b) in &[(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (0, 3), (0, 5)] {
+            graph.push_traversal(keys[a], keys[b], Traversal::now(NavigationTrigger::LinkClick));
         }
 
         // Restore the workbench forme from disk, or seed + persist a fresh one
@@ -270,19 +277,27 @@ fn tile_label(t: &TilePlan) -> String {
     })
 }
 
-/// Orrery pane — placeholder for the custom `GraphCanvas` Masonry
-/// widget (the spatial graph view). The "+ node" button proves the
-/// reactive loop until the canvas widget paints the graph.
+/// Orrery pane — the spatial graph view. A custom Masonry `canvas`
+/// paints the kernel graph (see [`graph_canvas`]); the "+ node" button
+/// mutates graph truth and the canvas re-renders. Real cartography
+/// layout, camera, and hit-testing are later slices.
 fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
+    let relations = state.graph.relations().count();
     flex_col((
         label("Orrery").text_size(18.0),
-        prose(format!("graph: {} nodes (GraphCanvas widget pending)", state.node_count())),
+        prose(format!("graph: {} nodes · {relations} relations", state.node_count())),
         button(label("+ node"), |state: &mut AppState| {
             let n = state.node_count();
             state
                 .graph
                 .add_node(format!("seed://node/{n}"), PortablePoint::new(0.0, 0.0));
         }),
+        // The spatial graph view: a custom Masonry canvas painting graph truth
+        // (ring layout, relations as lines, parley labels). Fills the pane.
+        canvas(|state: &mut AppState, ctx, scene, size| {
+            graph_canvas::paint_graph(scene, ctx, size, &state.graph);
+        })
+        .flex(1.0),
     ))
 }
 

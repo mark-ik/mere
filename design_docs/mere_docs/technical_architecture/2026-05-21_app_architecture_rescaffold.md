@@ -170,15 +170,26 @@ masonry-native a web target). Native first; web is a later, separate view layer.
 Per the prototype doctrine (rewrite over migrate for zero-user code), the host
 is **rewritten** as an idiomatic Xilem app, not incrementally migrated:
 
-1. **Skeleton** — `Xilem::new_simple` + `AppState` + `app_logic` with the
-   frametree as `split` views and stock-widget placeholder panes. Touchable
-   idiomatic-Xilem chrome.
-2. **GraphCanvas widget** — the custom Masonry widget; port the orrery/graph-node
-   painting + selection/drag into it; wire cartography.
+1. **Skeleton** ✅ — `Xilem::new_simple` + `AppState` + `app_logic` with the
+   frametree as `split` views and stock-widget panes. Touchable idiomatic-Xilem
+   chrome.
+2. **GraphCanvas** — *paint-only first cut shipped (2026-05-22).* The orrery is a
+   custom Masonry `canvas` (`crates/mere/app/src/graph_canvas.rs`) painting graph
+   truth — ring layout, relations as lines, parley labels — via Xilem's **stock
+   `canvas` view** (a paint closure over the scene), **not yet** a bespoke
+   `Widget`. Still pending: real cartography layout (`graph-layout`/`cartography`
+   IR), camera pan/zoom, LOD, and **input — hit-testing / select / drag** (these
+   need a bespoke `Widget`, which the stock canvas view doesn't expose). Promote
+   to a custom `Widget` when interaction lands.
 3. **Panels** — apparatus/gloss/workbench as plain Xilem views over `AppState`
-   (retire the per-panel `XilemPanel`/`Arc<Mutex>` plumbing).
-4. **Engine tiles** — first real engine (`scrying.web`) as a tile widget.
+   (retire the per-panel `XilemPanel`/`Arc<Mutex>` plumbing). *Workbench pane
+   shipped (forme → tree projection + persisted `FormeStore`).*
+4. **Engine tiles** — first real engine as a tile. *Shipped (2026-05-22) via
+   `nematic` (document lane), not `scrying.web`: the workbench's live tile routes
+   an address through `inker` → renders an `EngineDocument` as masonry views
+   (`engine_tile.rs`). `scrying.web` (live WebView surface) is a later slice.*
 5. **Retire** the substrate-as-host crates from the host path once parity lands.
+   *(In progress: `FormeStore` relocated off `session-runtime` into `forme`.)*
 
 ## 8. The one rule (unchanged, sharpened)
 
