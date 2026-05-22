@@ -2,30 +2,48 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! `forme` — per-graph-view workbench arrangement authority.
+//! `forme` — workbench arrangement authority.
 //!
 //! Named for the printing-press *forme*: the locked-up assembly of typeset
 //! pieces ready to print. A forme is whatever shape the typesetter locks up
-//! — not forced into a tree. This crate plays the same role for a graph view's
-//! workbench arrangement: it projects graph members + edges into the
-//! arrangement, which may be tree-shaped, lattice-shaped, or arbitrarily
-//! connected depending on the graphlet topology.
+//! — not forced into a tree. forme owns *what a workbench is*; a tree is one
+//! projection of it (platen's job), per the composition spine
+//! (`design_docs/mere_docs/technical_architecture/2026-05-21_mere_composition_spine.md`).
 //!
-//! Boundary in the printing-press stack:
+//! Boundary: **graph truth** (kernel `Graph`) → **forme** (arrangement
+//! authority) → **platen** (projects an arrangement into a presentation plan)
+//! → **verso** (realizes tiles/surfaces).
 //!
-//! - **graph truth** (kernel `Graph`) → **forme** (workbench arrangement
-//!   authority) → **platen** (graph-aware print/composition stage that turns
-//!   the forme into surface/pane output) → **verso-core** (receptor of
-//!   surface/tile lifecycle, communicating rearrangement up the stack from
-//!   tile → forme → graph truth).
+//! ## v1 canonical core (this is the live path)
 //!
-//! One `GraphTree<N>` per graph view (the type name still says "tree" — that
-//! is the *default output shape*, not the input contract; the input is any
-//! graphlet topology). Contains all members — active, warm, and cold —
-//! organized by graph topology with multiple projection lenses.
+//! - [`arrangement`] — `Arrangement`: a small, graph-capable, **geometry-free**
+//!   arrangement (members / tiles / groups + stacked / split / compare /
+//!   focus-path / mirror relations).
+//! - [`forme_document`] — `FormeId` / `FormeRef` / `FormeDocument`: a forme as a
+//!   durable, session-scoped, graph-bound object.
+//!
+//! ## Parked (graphshell-era machinery — git-revivable)
+//!
+//! The modules below are the rich graph-derived-navigation lane (graphlet
+//! topology, lenses, reconciliation, pressure, the tree-first `GraphTree` /
+//! `TreeTopology`). They are **not** the v1 arrangement core and will be
+//! removed from the active crate in a follow-up (kept only as the future
+//! `CollapsedGraphlet` / derived-arrangement hook). Do not build new product
+//! paths on them.
 //!
 //! No egui. No iced. No winit. No wgpu. Pure data + pure functions.
 
+// ── v1 canonical core ────────────────────────────────────────────────────────
+pub mod arrangement;
+pub mod forme_document;
+
+pub use arrangement::{
+    Arrangement, ArrangementEdge, ArrangementEdgeKind, ArrangementNode, ArrangementNodeId,
+    ArrangementNodeKind, GraphMemberId,
+};
+pub use forme_document::{FormeDocument, FormeId, FormeRef};
+
+// ── Parked graphshell-era machinery (git-revivable; pending removal) ─────────
 mod graphlet;
 mod layout;
 mod lens;

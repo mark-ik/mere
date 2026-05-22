@@ -143,10 +143,19 @@ stays parked.
   projections: **Tree** (the tiled workbench) and **Cartography** (the orrery).
   Others (lattice, corridor, spatial, storyboard) are added when a surface needs
   one — not built up front.
-- **view-intent sidecar** (already in `session-runtime`) carries per-projection
-  *view-state*: camera, node positions, collapse/focus. Arrangement-relations +
-  view-intent together realize a concrete bench. (This is why a graph projection
-  isn't pure relations: spatial/lattice projections persist positions.)
+- **Three persistence scopes** (resolved 2026-05-22 — corrects an earlier
+  conflation that put positions in the pane sidecar):
+  - **forme** owns *semantic arrangement* (group / stack / split / compare /
+    pin relations) — geometry-free.
+  - **projection geometry** owns *semantic geometry* keyed `(FormeRef,
+    ProjectionKind)` — split *ratios*/order (tree), canonical *world* positions
+    (cartography). **Not** pixel rectangles, so panes of different sizes render
+    responsively from one saved geometry. Shared across panes projecting the
+    same forme the same way; two independent layouts are *forked formes*, not
+    one bench in two views.
+  - **pane view-intent** (`frame_id + pane_id`, already in `session-runtime`)
+    owns *pane-local* state only: camera/pan-zoom, focus, selection, local
+    relation-hide.
 - **Host (Xilem)** renders the plan as a view tree: FrameTree → `split` views;
   a tree-projected workbench → nested split/tab views over tile widgets; the
   orrery → the `GraphCanvas` Masonry widget (the cartography projection); Verso
@@ -204,41 +213,61 @@ It is *clever in the middle* the moment a layer exists for a metaphor or a
 capability taxonomy rather than for an arrangement, a projection, a surface, or
 an engine choice a user can see.
 
-## 14. Open questions (to hammer out)
+## 14. Resolutions (2026-05-22)
 
-These are the design forks the spine deliberately leaves open. None blocks the
-shape; each shapes the v1 build.
+The forks are settled (three review passes). The build follows these.
 
-1. **Arrangement vs. graph truth.** Is a forme a *curated view* over graph truth
-   (members enter/leave as the graph changes — i.e. reconciliation) or an
-   *independent arrangement* that merely references members? Does the orrery
-   (every member, positioned) and a curated workbench (a hand-picked subset)
-   really share one authority, or is the orrery the degenerate "identity
-   arrangement"? (This is exactly what the parked graphlet-reconciliation
-   machinery is about.)
+1. **Arrangement vs. graph truth** — a forme is an **independent curated
+   arrangement** that references graph truth; it does **not** auto-reconcile.
+   Binding modes: `Curated` (explicit, hand-placed) · `Identity` (read-through
+   "all members," for the orrery — *not* a copied roster) · `LinkedDerived`
+   (graphlet/reconciliation-backed; later). Promote arrangement facts into
+   durable graph Arrangement-relations only on an explicit pin/save.
 
-2. **Pane ↔ forme.** Does each FrameTree pane wrap a `(forme, projection)` pair,
-   so a pane *kind* is essentially "which projection"? Is there **one forme per
-   graph-view** shared by multiple panes (each a different projection), or **one
-   forme per pane**? (Ties to "window = graph-shaped session; panes carry
-   `graph_id`.")
+2. **Pane ↔ forme** — a forme is an **arrangement instance bound to a graph**,
+   *not* the singleton for a graph-view. A graph carries many formes (identity
+   orrery, curated workbenches, compare benches, later derived). A graph-bearing
+   pane binds **`graph_id + FormeRef + projection_kind + view_state_ref`**, where
+   `FormeRef = Stored(FormeId) | Identity(GraphId)`. Same authority *type*,
+   different *instances + projections* — that is the precise orrery↔workbench
+   unification.
 
-3. **Tile ownership boundary.** Draw the line between forme (`TileIntent`: where
-   a tile sits, what it represents), Verso (the live surface + lifecycle),
-   Inker (engine choice), and today's `TileManager` (does it survive as Verso's
-   realization layer, fold in, or become forme's per-tile cache?).
+3. **Tile ownership** — `forme` owns `TileIntent` (id, inclusion, relations,
+   route hint); `inker` owns engine selection; `verso` owns live realization,
+   surface lifecycle, cached tile state, within-tile history; **`TileManager`
+   survives as Verso runtime keyed by a forme-assigned tile / surface id — no
+   longer `NodeKey`** (NodeKey breaks on mirrors / multiple intents per member).
 
-4. **Position: arrangement-truth or projection view-state?** For a spatial bench
-   a pinned tile's position *is* arrangement; for a tree it's derived. Does
-   forme hold positions for projections that need them, or does each projection
-   own a view-intent sidecar (camera/positions/collapse)?
+4. **Position** — see §9's three scopes: geometry-free forme; semantic geometry
+   (not pixels) in projection state keyed `(FormeRef, ProjectionKind)`, shared
+   across panes; pane view-intent is pane-local only.
 
-5. **v1 product target.** Which bench first — a tree-projected workbench with one
-   engine-backed tile (unlocks the engine/protocol work fastest), the orrery
-   (cartography projection), or both? What is "done" for the first spine slice?
+5. **v1 target** — **tree-projected workbench with one live engine-backed tile
+   first**; orrery second. Done = forme arrangement → platen tree projection →
+   Workbench pane renders the plan → Verso realizes a tile → Inker routes one
+   real engine.
 
-6. **Crate topology + graphlet fate.** Under the spine, which authorities are
-   crates vs. modules? Re-home `kernel`/`cartography` out from under the
-   `graphshell` supercrate (the kernel-under-chrome inversion)? And the parked
-   graphlet/reconciliation/pressure/lens machinery — delete-and-revive-from-git,
-   or keep as a separate graph-derived navigation lane?
+6. **Crate topology + graphlet fate** — `kernel` · `frame` · `forme` · `platen`
+   · `verso` · `inker` · `cartography`/`graph-layout` · `session-runtime` are the
+   real authorities (crates). Re-home `kernel` + `cartography` out from under the
+   `graphshell` supercrate (kernel-under-chrome is upside down); `graph-layout`
+   moves with cartography. `graph-canvas` survives **narrowed** to a portable
+   scene/packet/geometry/hit IR + pure derivation, consumed by the Xilem
+   `GraphCanvas` widget (the widget owns interaction + paint; interaction
+   reducers stay in the widget until a second consumer pulls them out). Retire
+   substrate-as-host crates from the product path. Graphlet / reconciliation /
+   pressure / lens machinery leaves the active forme path (git-revivable; keep
+   only a minimal `CollapsedGraphlet` hook for the future derived lane).
+
+## 15. Persistence ownership (concrete)
+
+| Store | Lives in | Keyed by | Holds |
+|---|---|---|---|
+| `FormeDocument` types | `forme` | `FormeId` | id, graph_id, label, arrangement (semantic, geometry-free) |
+| `FormeStore` (disk I/O, lifecycle) | `session-runtime` | `FormeId` | per-session formes beside `graph.json`; create/fork/delete |
+| projection geometry | `session-runtime` (store) / `platen` (types) | `(FormeRef, ProjectionKind)` | semantic geometry (ratios, world positions) |
+| pane view-intent | `session-runtime` | `frame_id + pane_id` | camera, focus, selection, local relation-hide |
+
+`forme` owns `FormeId` / `FormeRef` / `FormeDocument` / arrangement schema +
+pure mutation; `session-runtime` owns the disk I/O + lifecycle (mirroring
+`session_graph_store` / `manifest_store` / `view_intent_store`).
