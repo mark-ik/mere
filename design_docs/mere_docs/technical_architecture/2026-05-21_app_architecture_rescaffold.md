@@ -192,6 +192,12 @@ is **rewritten** as an idiomatic Xilem app, not incrementally migrated:
    (`engine_tile.rs`). `scrying.web` (live WebView surface) is a later slice.*
 5. **Retire** the substrate-as-host crates from the host path once parity lands.
    *(In progress: `FormeStore` relocated off `session-runtime` into `forme`.)*
+   What to revive from the retired stack, per deferred slice (external-texture
+   compositing → scrying.web tile, LOD, cartography-layout wiring, FrameLayout,
+   multi-graph registry, permission gates), is mapped in the
+   [retired host-stack salvage map](../research/2026-05-22_retired_host_stack_salvage_map.md);
+   the broader `crates/graphshell/` decomposition is in the
+   [graphshell supercrate salvage map](../research/2026-05-22_graphshell_supercrate_salvage_map.md).
 
 ## 8. The one rule (unchanged, sharpened)
 
