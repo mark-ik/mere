@@ -14,6 +14,11 @@ there; revisit only if a federation tier demands it).
 
 ### The core decision: closed families, open predicate
 
+> This plan is the **first instance** of the
+> [statements-over-schema stance](../technical_architecture/2026-05-22_statements_over_schema_stance.md).
+> See that doc for the general principle (open statement substrate + curated
+> behavioral lens) and the guardrail against over-applying it.
+
 Today the kernel relation taxonomy (`graph-kernel/src/graph/edge_taxonomy.rs`)
 is **fully closed**:
 
