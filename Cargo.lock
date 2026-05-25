@@ -4556,61 +4556,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "host"
-version = "0.0.1"
-dependencies = [
- "cartography",
- "frame",
- "graph-layout",
- "host-substrate",
- "inker",
- "kernel",
- "kurbo",
- "masonry_core",
- "mere-masonry",
- "petgraph",
- "pollster",
- "register-renderer",
- "session-runtime",
- "spatial-substrate",
- "tokio",
- "vello",
- "wgpu",
- "winit",
-]
-
-[[package]]
-name = "host-ports"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "forme",
- "graph-canvas",
- "kernel",
- "log",
- "register-diagnostics",
- "shell-state",
- "tokio",
- "verso-core",
-]
-
-[[package]]
-name = "host-substrate"
-version = "0.0.1"
-dependencies = [
- "frame",
- "inker",
- "kernel",
- "kurbo",
- "petgraph",
- "register-renderer",
- "serde_json",
- "session-runtime",
- "spatial-substrate",
- "uuid",
-]
-
-[[package]]
 name = "http"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6057,23 +6002,6 @@ dependencies = [
  "platen",
  "uuid",
  "xilem",
-]
-
-[[package]]
-name = "mere-masonry"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "dpi",
- "kurbo",
- "masonry_core",
- "masonry_imaging",
- "register-renderer",
- "tokio",
- "ui-events",
- "vello",
- "wgpu",
- "xilem_masonry",
 ]
 
 [[package]]
@@ -8812,24 +8740,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "register-renderer"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "kurbo",
- "register-renderer-types",
- "vello",
- "wgpu",
-]
-
-[[package]]
-name = "register-renderer-types"
-version = "0.0.1"
-dependencies = [
- "kurbo",
-]
-
-[[package]]
 name = "rend"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9387,17 +9297,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "scrying-renderer"
-version = "0.0.1"
-dependencies = [
- "kurbo",
- "pollster",
- "register-renderer",
- "scrying",
- "wgpu",
-]
-
-[[package]]
 name = "sctk-adwaita"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9887,19 +9786,6 @@ dependencies = [
  "num-traits",
  "robust",
  "smallvec",
-]
-
-[[package]]
-name = "spatial-substrate"
-version = "0.0.1"
-dependencies = [
- "accesskit",
- "kurbo",
- "png",
- "pollster",
- "register-renderer",
- "vello",
- "wgpu",
 ]
 
 [[package]]

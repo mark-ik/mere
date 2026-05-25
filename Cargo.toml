@@ -2,8 +2,6 @@
 resolver = "2"
 members = [
     "crates/mere/app",
-    "crates/mere/host",
-    "crates/mere/host-substrate",
     "crates/persona/identity",
     "crates/graphshell/graph/aether",
     "crates/graphshell/graph/cartography",
@@ -12,16 +10,12 @@ members = [
     "crates/graphshell/graph/graph-layout",
     "crates/graphshell/graph/node-lineage",
     "crates/graphshell/graph/orrery",
-    "crates/graphshell/graph/spatial-substrate",
     "crates/graphshell/shell/domain/chrome",
     "crates/graphshell/shell/domain/frame",
-    "crates/graphshell/shell/host-ports",
     "crates/graphshell/shell/session-runtime",
     "crates/graphshell/shell/state",
     "crates/graphshell/shell/system/control-plane",
     "crates/graphshell/shell/system/registry/register-diagnostics",
-    "crates/graphshell/shell/system/registry/register-renderer",
-    "crates/graphshell/shell/system/registry/register-renderer-types",
     "crates/graphshell/shell/ux-events",
     "crates/inker",
     "crates/inker/document-canvas",
@@ -33,7 +27,6 @@ members = [
     "crates/platen/domain/gloss",
     "crates/platen/domain/workbench",
     "crates/platen/platen",
-    "crates/verso/scrying-renderer",
     "crates/verso/tile-state",
     "crates/verso/verso-core",
     "crates/eidetic/eidetic-core",
@@ -49,7 +42,6 @@ members = [
 ]
 exclude = [
     "crates/probes",
-    "crates/verso/masonry-renderer",
 ]
 
 [workspace.package]
@@ -76,16 +68,12 @@ graph-layout = { path = "crates/graphshell/graph/graph-layout" }
 node-lineage = { path = "crates/graphshell/graph/node-lineage" }
 kernel = { path = "crates/graphshell/graph/graph-kernel" }
 orrery = { path = "crates/graphshell/graph/orrery" }
-spatial-substrate = { path = "crates/graphshell/graph/spatial-substrate" }
 
 control-plane = { path = "crates/graphshell/shell/system/control-plane" }
 shell-state = { path = "crates/graphshell/shell/state" }
 frame = { path = "crates/graphshell/shell/domain/frame" }
 chrome = { path = "crates/graphshell/shell/domain/chrome" }
-host-ports = { path = "crates/graphshell/shell/host-ports" }
 session-runtime = { path = "crates/graphshell/shell/session-runtime" }
-register-renderer = { path = "crates/graphshell/shell/system/registry/register-renderer" }
-register-renderer-types = { path = "crates/graphshell/shell/system/registry/register-renderer-types" }
 ux-events = { path = "crates/graphshell/shell/ux-events" }
 register-diagnostics = { path = "crates/graphshell/shell/system/registry/register-diagnostics" }
 
@@ -104,7 +92,6 @@ workbench = { path = "crates/platen/domain/workbench" }
 
 verso-core = { path = "crates/verso/verso-core" }
 tile-state = { path = "crates/verso/tile-state" }
-scrying-renderer = { path = "crates/verso/scrying-renderer" }
 
 eidetic = { path = "crates/eidetic/eidetic-core" }
 eidetic-fjall = { path = "crates/eidetic/eidetic-fjall" }
@@ -121,9 +108,6 @@ moothold = { path = "crates/moot/moothold" }
 mooting = { path = "crates/moot/mooting" }
 
 identity = { path = "crates/persona/identity" }
-
-host = { path = "crates/mere/host" }
-host-substrate = { path = "crates/mere/host-substrate" }
 
 # ─── External pins ───────────────────────────────────────────────────────────
 # Linebender visual stack — one row, one wgpu, vello upstream-current.
