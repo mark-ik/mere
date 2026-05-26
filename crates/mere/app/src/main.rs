@@ -10,12 +10,13 @@
 //! no action bus — Xilem's `View<State>` + state mutation is the whole
 //! app-coordination layer (Woodshed's proven shape).
 //!
-//! The chrome shape is a frametree of `split` views: a Workbench pane
-//! (forme → tree projection + a live engine-backed tile), an Orrery pane
-//! (the spatial graph view — a custom Masonry `canvas` painting graph
-//! truth, see [`graph_canvas`]), and an Apparatus pane (diagnostics). The
-//! "+ node" / "+ tile" buttons prove the reactive loop end-to-end (mutate
-//! `AppState` → view rebuilds → canvas/projection re-render).
+//! The chrome shape: a toolbar (back / forward / omnibar) over a frametree of
+//! draggable `split` views — a Workbench pane (forme → tree projection of tiles
+//! that render their bound graph member's content), an Orrery pane (the spatial
+//! graph view; a custom Masonry widget, see [`graph_canvas`]), and an Apparatus
+//! pane (diagnostics). The graph + workbench forme persist across restarts.
+//! Navigating the omnibar or clicking an orrery node routes through
+//! [`navigation`] → `inker` and renders in the focus tile.
 
 mod camera;
 mod engine_tile;
@@ -45,6 +46,52 @@ fn ring_world(i: usize, n: usize) -> PortablePoint {
     PortablePoint::new((radius * theta.cos()) as f32, (radius * theta.sin()) as f32)
 }
 
+/// Back/forward navigation history: a list of addresses + a cursor. Pure (no
+/// rendering or I/O) so it's unit-testable on its own.
+struct History {
+    entries: Vec<String>,
+    pos: usize,
+}
+
+impl History {
+    fn new(initial: String) -> Self {
+        Self {
+            entries: vec![initial],
+            pos: 0,
+        }
+    }
+
+    /// Navigate to `address`: drop any forward entries, then push (unless it
+    /// equals the current tip).
+    fn push(&mut self, address: &str) {
+        self.entries.truncate(self.pos + 1);
+        if self.entries.last().map(String::as_str) != Some(address) {
+            self.entries.push(address.to_string());
+            self.pos = self.entries.len() - 1;
+        }
+    }
+
+    /// Step back, returning the now-current address (or `None` at the start).
+    fn back(&mut self) -> Option<&str> {
+        if self.pos > 0 {
+            self.pos -= 1;
+            Some(&self.entries[self.pos])
+        } else {
+            None
+        }
+    }
+
+    /// Step forward, returning the now-current address (or `None` at the end).
+    fn forward(&mut self) -> Option<&str> {
+        if self.pos + 1 < self.entries.len() {
+            self.pos += 1;
+            Some(&self.entries[self.pos])
+        } else {
+            None
+        }
+    }
+}
+
 /// The single application state the Xilem driver owns. Widgets mutate
 /// it in place through their callbacks; the view tree rebuilds on diff.
 /// Per-pane UI sub-state gets its own struct here as panes grow
@@ -61,6 +108,8 @@ struct AppState {
     workbench: FormeDocument,
     /// The address currently in the omnibar (edited as the user types).
     omnibar: String,
+    /// Back/forward navigation history.
+    history: History,
     /// The currently-navigated document: resolved by [`navigation`] and
     /// rendered through `inker`. Replaced on every navigation.
     current: RenderedTile,
@@ -104,6 +153,7 @@ impl AppState {
         Self {
             graph,
             workbench,
+            history: History::new(omnibar.clone()),
             omnibar,
             current,
             selected_node: None,
@@ -117,11 +167,27 @@ impl AppState {
         self.graph.nodes().count()
     }
 
-    /// Navigate to `address`: resolve + render it into the current tile, and
-    /// sync the omnibar text to the address.
+    /// Navigate to `address`: push history, resolve + render it, sync omnibar.
     fn navigate(&mut self, address: &str) {
+        self.history.push(address);
         self.current = navigation::open(address);
         self.omnibar = address.to_string();
+    }
+
+    /// Go back in history and render that entry (no-op at the start).
+    fn back(&mut self) {
+        if let Some(address) = self.history.back().map(str::to_string) {
+            self.current = navigation::open(&address);
+            self.omnibar = address;
+        }
+    }
+
+    /// Go forward in history and render that entry (no-op at the end).
+    fn forward(&mut self) {
+        if let Some(address) = self.history.forward().map(str::to_string) {
+            self.current = navigation::open(&address);
+            self.omnibar = address;
+        }
     }
 
     /// Persist the workbench forme after an edit. Failures are surfaced to
@@ -283,7 +349,7 @@ fn render_workbench_tiles(
 /// frametree — splits are split views, panes are view functions.
 fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     flex_col((
-        omnibar_bar(state),
+        toolbar(state),
         split(
             workbench_pane(state),
             split(orrery_pane(state), apparatus_pane(state)).split_axis(Axis::Vertical),
@@ -292,10 +358,12 @@ fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
     ))
 }
 
-/// The omnibar: type an address and press Enter (or click Go) to navigate.
-/// Routes through [`navigation`] → `inker` and updates the live tile.
-fn omnibar_bar(state: &AppState) -> impl WidgetView<AppState> + use<> {
+/// The toolbar: back / forward, the omnibar (type an address + Enter), and Go.
+/// Navigation routes through [`navigation`] → `inker` and updates the live tile.
+fn toolbar(state: &AppState) -> impl WidgetView<AppState> + use<> {
     flex_row((
+        button(label("◀"), |state: &mut AppState| state.back()),
+        button(label("▶"), |state: &mut AppState| state.forward()),
         text_input(state.omnibar.clone(), |state: &mut AppState, text| {
             state.omnibar = text;
         })
@@ -527,6 +595,23 @@ mod tests {
         );
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn history_back_forward_and_branch() {
+        let mut h = History::new("mere://welcome".into());
+        h.push("mere://a");
+        h.push("mere://b");
+        assert_eq!(h.back(), Some("mere://a"));
+        assert_eq!(h.back(), Some("mere://welcome"));
+        assert_eq!(h.back(), None); // at the start
+        assert_eq!(h.forward(), Some("mere://a"));
+        // Navigating from the middle drops the forward entry (b).
+        h.push("mere://z");
+        assert_eq!(h.forward(), None); // z is the tip
+        // Re-pushing the current tip is a no-op (no duplicate entry).
+        h.push("mere://z");
+        assert_eq!(h.back(), Some("mere://a"));
     }
 
     /// Slice 4 done-line: a first load seeds + persists the graph; the next load
