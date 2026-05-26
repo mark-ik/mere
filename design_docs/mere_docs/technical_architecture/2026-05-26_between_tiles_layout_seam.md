@@ -122,11 +122,38 @@ the tiles are interactive, not just painted in place. The tiling region's size
 round-trips through `AppState.content_size` via a `resize_observer` (one-frame
 lag on resize, then stable; the loop is safe because the stretched `zstack`'s
 measured size is independent of where tiles are placed inside it). Flex no longer
-lays the slots out, so the double-layout caveat holds. **Runtime GUI
-verification pending** (the headless toolchain can't check visual layout): watch
-for first-frame placement at the default `content_size`, and that pointer events
-land through the affine. Route 2 (custom child-hosting widget) remains the
-robust, clip-correct graduation, especially once verso lands.
+lays the slots out, so the double-layout caveat holds.
+
+**Route 2 folded into verso adoption (decided 2026-05-26).** A custom
+child-hosting tiling widget — one whose `layout()` runs `layout_plan` at the real
+size (no `resize_observer` round-trip, no one-frame lag) and clips each tile — is
+exactly what `verso-core` is chartered to own (tile/surface realization, the
+fit-map's "clearest gap"). Building it standalone in `mere-app` now would be a
+third place doing verso's job. So route 2 is **not** a standalone app widget; it
+is the **first concrete verso slice**. Route 1 holds the live path until then.
+
+### Testing the seam (it is automatable)
+
+The placement is verifiable headless, not just by eye. masonry ships a
+`TestHarness` (`masonry_testing`): `create_with_size((w, h), root)` runs layout
+without a window, simulated input (`mouse_click_on(id)`, `process_pointer_event`,
+`mouse_move(point)`), and widget-tree inspection — `get_widget(id)` →
+`WidgetRef` exposes each widget's computed `window_origin()` / `border_box()` /
+`bounding_box()`. So the verso tiling widget gets a real headless test:
+
+1. **Placement** — build the widget with a known plan + window size; assert each
+   tile widget's `window_origin()` + `border_box_size()` equals its `layout_plan`
+   rect. This validates the widget's novel `layout()` end to end.
+2. **Hit routing** — `mouse_click_on` / a pointer at a tile rect's centre routes
+   to the right child (a `Recorder`-wrapped tile confirms receipt). Validates that
+   placement and hit-testing agree.
+
+What still needs human eyes (or blessed, platform-brittle render snapshots via
+`harness.render() -> RgbaImage`): subjective visual quality. The *correctness* of
+placement and routing does not. (For route 1, the novel logic is platen — already
+unit-tested — over a thin composition of stock Xilem views whose layout +
+hit-testing masonry tests in its own suite, so the harness test earns its keep at
+the verso layer, where the layout code is ours.)
 
 ## Status
 
