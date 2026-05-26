@@ -170,9 +170,16 @@ masonry-native a web target). Native first; web is a later, separate view layer.
 Per the prototype doctrine (rewrite over migrate for zero-user code), the host
 is **rewritten** as an idiomatic Xilem app, not incrementally migrated:
 
-1. **Skeleton** ✅ — `Xilem::new_simple` + `AppState` + `app_logic` with the
-   frametree as `split` views and stock-widget panes. Touchable idiomatic-Xilem
-   chrome.
+1. **Skeleton** ✅ — `Xilem::new_simple` + `AppState` + `app_logic`. **Chrome
+   model refined 2026-05-25:** the window opens on a *single content pane that is
+   the Orrery* (the graph is home), not a fixed frametree of splits. The pane
+   switches *content kind* (`MainView::{Orrery | Document | Workbench |
+   Apparatus}`) — navigating shows the Document, the toolbar switches the rest.
+   Splitting into side-by-side leaves is a deliberate user gesture (the real
+   multi-leaf `FrameLayout`), deferred to its own slice. So "frametree of splits"
+   elsewhere in this doc is the *eventual* shape; the default is one pane, splits
+   on demand. (The view tree split into `main.rs` + `panes.rs` to stay under the
+   600-LOC ceiling.)
 2. **GraphCanvas** — *bespoke interactive widget shipped (2026-05-22).* The
    orrery is now a custom Masonry `Widget` (`crates/mere/app/src/graph_canvas.rs`
    + pure geometry in `camera.rs`): paints graph truth (discs, relations as
@@ -181,8 +188,9 @@ is **rewritten** as an idiomatic Xilem app, not incrementally migrated:
    truth via a `NodeMoved` action), **drag empty space to pan**, **wheel to zoom
    toward the cursor**. Camera state is widget-internal; only graph mutations
    leave. Still pending: real cartography layout (`graph-layout`/`cartography`
-   IR — positions are a seeded ring for now), LOD, edge styling by relation
-   kind, and node selection / context actions.
+   IR — positions are a seeded ring for now), LOD, and edge styling by relation
+   kind. Node **selection + click-to-open shipped** (gold highlight; click opens
+   the node's address, drag moves + persists); context-menu actions pending.
 3. **Panels** — apparatus/gloss/workbench as plain Xilem views over `AppState`
    (retire the per-panel `XilemPanel`/`Arc<Mutex>` plumbing). *Workbench pane
    shipped (forme → tree projection + persisted `FormeStore`).*
