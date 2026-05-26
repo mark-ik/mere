@@ -49,6 +49,18 @@ fn fetch(address: &str) -> (String, Option<String>) {
         return (WELCOME_MD.to_string(), Some("text/markdown".to_string()));
     }
 
+    if let Some(name) = address.strip_prefix("mere://") {
+        // Any other mere:// address gets a generated page, so orrery nodes
+        // (seeded with mere:// urls) open to real rendered content.
+        return (
+            format!(
+                "# {name}\n\nA seeded Mere page at `{address}`.\n\nOpened from the orrery. \
+                 Navigation routed through `inker`; rendered by the `nematic` markdown engine."
+            ),
+            Some("text/markdown".to_string()),
+        );
+    }
+
     if let Some(raw) = address.strip_prefix("file://") {
         let path = normalize_file_path(raw);
         return match std::fs::read_to_string(&path) {
@@ -105,6 +117,13 @@ mod tests {
     #[test]
     fn welcome_routes_to_markdown_engine() {
         let tile = open("mere://welcome");
+        assert_eq!(tile.engine_id, "nematic.markdown");
+        assert!(!tile.document.blocks.is_empty());
+    }
+
+    #[test]
+    fn mere_path_renders_a_generated_markdown_page() {
+        let tile = open("mere://node/3");
         assert_eq!(tile.engine_id, "nematic.markdown");
         assert!(!tile.document.blocks.is_empty());
     }

@@ -43,6 +43,7 @@ use crate::camera::{Camera, GraphScene, SceneNode, hit_test};
 
 const NODE_FILL: Color = Color::from_rgb8(70, 110, 200);
 const NODE_RING: Color = Color::from_rgb8(220, 228, 245);
+const SELECTED_RING: Color = Color::from_rgb8(255, 200, 90);
 const EDGE_COLOR: Color = Color::from_rgb8(120, 130, 150);
 const LABEL_COLOR: Color = Color::from_rgb8(228, 233, 242);
 const LABEL_SIZE: f32 = 11.0;
@@ -55,21 +56,32 @@ fn screen_node_radius(zoom: f64) -> f64 {
     (BASE_NODE_RADIUS * zoom).clamp(7.0, 40.0)
 }
 
-/// Action emitted when the user drags a node: its stable id and new world
-/// position. The view routes this to app state (write the kernel graph).
+/// Pointer movement (screen px) below which a node press counts as a click,
+/// not a drag.
+const CLICK_SLOP: f64 = 4.0;
+
+/// What the orrery emits to app state; the view routes each variant.
 #[derive(Clone, Copy, Debug)]
-pub struct NodeMoved {
-    pub id: Uuid,
-    pub world: Point,
+pub enum GraphAction {
+    /// A node was dragged to a new world position (write the kernel graph).
+    NodeMoved { id: Uuid, world: Point },
+    /// A node was clicked (press + release without dragging) — open it.
+    NodeActivated { id: Uuid },
 }
 
 /// An in-progress pointer gesture. `Drag` is `Copy` so `on_pointer_event` can
 /// match it by value and freely mutate the rest of the widget.
 #[derive(Clone, Copy, Debug)]
 enum Drag {
-    /// Moving a node: `grab` is the (world-space) offset from the cursor to the
-    /// node center at grab time, so the node doesn't jump under the cursor.
-    Node { index: usize, grab: Vec2 },
+    /// Pressing/moving a node. `grab` is the world-space cursor→center offset;
+    /// `down` is the press position and `moved` flips once it becomes a drag
+    /// (rather than a click).
+    Node {
+        index: usize,
+        grab: Vec2,
+        down: Point,
+        moved: bool,
+    },
     /// Panning the empty canvas; `last` is the previous cursor screen position.
     Pan { last: Point },
 }
@@ -118,6 +130,8 @@ pub struct GraphCanvasWidget {
     camera: Camera,
     size: Size,
     drag: Option<Drag>,
+    /// The selected node (highlighted). Pushed from app state each rebuild.
+    selected: Option<Uuid>,
 }
 
 impl GraphCanvasWidget {
@@ -127,6 +141,7 @@ impl GraphCanvasWidget {
             camera: Camera::default(),
             size: Size::ZERO,
             drag: None,
+            selected: None,
         }
     }
 
@@ -135,10 +150,18 @@ impl GraphCanvasWidget {
         this.widget.scene = scene;
         this.ctx.request_render();
     }
+
+    /// Set the highlighted node (from app state's selection).
+    fn set_selected(this: &mut WidgetMut<'_, Self>, selected: Option<Uuid>) {
+        if this.widget.selected != selected {
+            this.widget.selected = selected;
+            this.ctx.request_render();
+        }
+    }
 }
 
 impl Widget for GraphCanvasWidget {
-    type Action = NodeMoved;
+    type Action = GraphAction;
 
     fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
 
@@ -163,6 +186,8 @@ impl Widget for GraphCanvasWidget {
                         Some(Drag::Node {
                             index: i,
                             grab: self.scene.nodes[i].world - cursor_world,
+                            down: local,
+                            moved: false,
                         })
                     }
                     None => Some(Drag::Pan { last: local }),
@@ -172,13 +197,15 @@ impl Widget for GraphCanvasWidget {
             PointerEvent::Move(PointerUpdate { current, .. }) if ctx.is_active() => {
                 let local = ctx.local_position(current.position);
                 match self.drag {
-                    Some(Drag::Node { index, grab }) => {
+                    Some(Drag::Node { index, grab, down, moved }) => {
                         let world = self.camera.screen_to_world(local, self.size) + grab;
                         if let Some(node) = self.scene.nodes.get_mut(index) {
                             node.world = world;
                             let id = node.id;
-                            ctx.submit_action::<NodeMoved>(NodeMoved { id, world });
+                            ctx.submit_action::<GraphAction>(GraphAction::NodeMoved { id, world });
                         }
+                        let moved = moved || local.distance(down) > CLICK_SLOP;
+                        self.drag = Some(Drag::Node { index, grab, down, moved });
                         ctx.request_render();
                     }
                     Some(Drag::Pan { last }) => {
@@ -190,6 +217,16 @@ impl Widget for GraphCanvasWidget {
                 }
             }
             PointerEvent::Up(_) => {
+                // A node press that never became a drag is a click → activate it.
+                if let Some(Drag::Node { index, moved, .. }) = self.drag {
+                    if !moved {
+                        if let Some(node) = self.scene.nodes.get(index) {
+                            ctx.submit_action::<GraphAction>(GraphAction::NodeActivated {
+                                id: node.id,
+                            });
+                        }
+                    }
+                }
                 if self.drag.take().is_some() {
                     ctx.request_render();
                 }
@@ -244,13 +281,18 @@ impl Widget for GraphCanvasWidget {
             }
         }
 
-        // Node discs.
+        // Node discs (the selected node gets a brighter, thicker ring).
         let ring_stroke = Stroke::new(2.0);
+        let selected_stroke = Stroke::new(3.5);
         for node in &self.scene.nodes {
             let p = self.camera.world_to_screen(node.world, size);
             let disc = Circle::new(p, r);
             painter.fill(disc, NODE_FILL).draw();
-            painter.stroke(disc, &ring_stroke, NODE_RING).draw();
+            if self.selected == Some(node.id) {
+                painter.stroke(disc, &selected_stroke, SELECTED_RING).draw();
+            } else {
+                painter.stroke(disc, &ring_stroke, NODE_RING).draw();
+            }
         }
 
         // Labels above the discs.
@@ -298,14 +340,19 @@ fn draw_label(painter: &mut Painter<'_>, ctx: &mut PaintCtx<'_>, text: &str, cen
 
 /// A reactive orrery view over a [`GraphScene`]. `on_node_moved` writes a
 /// dragged node's new world position back to app state (the kernel graph).
-pub fn graph_canvas<State, Action, F>(scene: GraphScene, on_node_moved: F) -> GraphCanvas<State, F>
+pub fn graph_canvas<State, Action, F>(
+    scene: GraphScene,
+    selected: Option<Uuid>,
+    on_action: F,
+) -> GraphCanvas<State, F>
 where
     State: 'static,
-    F: Fn(&mut State, NodeMoved) -> Action + Send + Sync + 'static,
+    F: Fn(&mut State, GraphAction) -> Action + Send + Sync + 'static,
 {
     GraphCanvas {
         scene,
-        on_node_moved,
+        selected,
+        on_action,
         phantom: PhantomData,
     }
 }
@@ -314,7 +361,8 @@ where
 #[must_use = "View values do nothing unless provided to Xilem."]
 pub struct GraphCanvas<State, F> {
     scene: GraphScene,
-    on_node_moved: F,
+    selected: Option<Uuid>,
+    on_action: F,
     phantom: PhantomData<fn() -> State>,
 }
 
@@ -323,7 +371,7 @@ impl<State, F> ViewMarker for GraphCanvas<State, F> {}
 impl<State, Action, F> View<State, Action, ViewCtx> for GraphCanvas<State, F>
 where
     State: 'static,
-    F: Fn(&mut State, NodeMoved) -> Action + Send + Sync + 'static,
+    F: Fn(&mut State, GraphAction) -> Action + Send + Sync + 'static,
 {
     type Element = Pod<GraphCanvasWidget>;
     type ViewState = ();
@@ -344,6 +392,7 @@ where
         _app_state: &mut State,
     ) {
         GraphCanvasWidget::set_scene(&mut element, self.scene.clone());
+        GraphCanvasWidget::set_selected(&mut element, self.selected);
     }
 
     fn teardown(&self, (): &mut Self::ViewState, _: &mut ViewCtx, _: Mut<'_, Self::Element>) {}
@@ -355,8 +404,8 @@ where
         _element: Mut<'_, Self::Element>,
         app_state: &mut State,
     ) -> MessageResult<Action> {
-        match message.take_message::<NodeMoved>() {
-            Some(moved) => MessageResult::Action((self.on_node_moved)(app_state, *moved)),
+        match message.take_message::<GraphAction>() {
+            Some(action) => MessageResult::Action((self.on_action)(app_state, *action)),
             None => MessageResult::Stale,
         }
     }

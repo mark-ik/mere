@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 use engine_tile::RenderedTile;
 use forme::store::{load_all_formes, save_forme};
 use forme::{ArrangementNodeKind, FormeDocument};
-use graph_canvas::{NodeMoved, graph_canvas, scene_from_graph};
+use graph_canvas::{GraphAction, graph_canvas, scene_from_graph};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NavigationTrigger, Traversal};
 use platen::{PlanSlot, TilePlan, project_tree};
@@ -63,6 +63,8 @@ struct AppState {
     /// The currently-navigated document: resolved by [`navigation`] and
     /// rendered through `inker`. Replaced on every navigation.
     current: RenderedTile,
+    /// The orrery's selected node (highlighted; clicking it opened `current`).
+    selected_node: Option<uuid::Uuid>,
     /// Where session state lives on disk (the forme store writes under
     /// `<session_dir>/formes/`).
     session_dir: PathBuf,
@@ -75,7 +77,7 @@ impl AppState {
     fn new() -> Self {
         let mut graph = Graph::new();
         let keys: Vec<_> = (0..6)
-            .map(|i| graph.add_node(format!("seed://node/{i}"), PortablePoint::new(0.0, 0.0)))
+            .map(|i| graph.add_node(format!("mere://node/{i}"), PortablePoint::new(0.0, 0.0)))
             .collect();
         // A few seed relations so the orrery shows a connected graph, not
         // loose dots. Traversal edges = "navigated A → B".
@@ -102,6 +104,7 @@ impl AppState {
             workbench,
             omnibar,
             current,
+            selected_node: None,
             session_dir,
             frame_label: "Mere".to_string(),
         }
@@ -310,7 +313,7 @@ fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
             let n = state.node_count();
             let key = state
                 .graph
-                .add_node(format!("seed://node/{n}"), PortablePoint::new(0.0, 0.0));
+                .add_node(format!("mere://node/{n}"), PortablePoint::new(0.0, 0.0));
             // Place it on the ring (offset outward a touch so it doesn't land
             // on an existing node) rather than stacking at the origin.
             state.graph.set_node_projected_position(key, ring_world(n, 8));
@@ -318,14 +321,30 @@ fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
         // The spatial graph view: a bespoke Masonry widget. Drag a node to move
         // it (writes back to graph truth), drag empty space to pan, wheel to
         // zoom toward the cursor.
-        graph_canvas(scene_from_graph(&state.graph), |state: &mut AppState, moved: NodeMoved| {
-            if let Some(key) = state.graph.get_node_key_by_id(moved.id) {
-                state.graph.set_node_projected_position(
-                    key,
-                    PortablePoint::new(moved.world.x as f32, moved.world.y as f32),
-                );
-            }
-        })
+        graph_canvas(
+            scene_from_graph(&state.graph),
+            state.selected_node,
+            |state: &mut AppState, action: GraphAction| match action {
+                GraphAction::NodeMoved { id, world } => {
+                    if let Some(key) = state.graph.get_node_key_by_id(id) {
+                        state.graph.set_node_projected_position(
+                            key,
+                            PortablePoint::new(world.x as f32, world.y as f32),
+                        );
+                    }
+                }
+                GraphAction::NodeActivated { id } => {
+                    state.selected_node = Some(id);
+                    let url = state
+                        .graph
+                        .get_node_by_id(id)
+                        .map(|(_, node)| node.url().to_string());
+                    if let Some(url) = url {
+                        state.navigate(&url);
+                    }
+                }
+            },
+        )
         .flex(1.0),
     ))
 }
