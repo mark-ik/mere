@@ -6116,6 +6116,15 @@ name = "mooting"
 version = "0.0.1"
 
 [[package]]
+name = "morphorm"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "810a18a0afed4cf6e711e3bd61d1611cadf81d5281a89af945d943868a6a8060"
+dependencies = [
+ "smallvec",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7816,6 +7825,7 @@ dependencies = [
  "graph-layout",
  "inker",
  "kernel",
+ "morphorm",
  "serde",
  "serde_json",
  "tracing",

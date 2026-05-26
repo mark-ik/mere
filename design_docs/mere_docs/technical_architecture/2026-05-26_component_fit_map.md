@@ -70,7 +70,7 @@ State legend: **live** (on the running path) · **partial** (used in part) ·
 |---|---|---|---|---|
 | `forme` | 6,455 | arrangement authority + `store` | **live** | canonical; most of the crate (graphlet/lens/pressure) is parked, v1 uses `arrangement` + `forme_document` |
 | `uxtree` | 537 | a11y / automation tree | latent | projection target for the domain crates; a11y not yet wired in the host |
-| `platen` | 1,515 | projection compiler; `project_tree` + canvas/cartography/document scene wrappers | **partial** | `project_tree` is live; `canvas_scene`/`cartography_scene`/`document_scene` (the graph-canvas/cartography/document-canvas wrappers) are **not** used by the host |
+| `platen` | 1,515 | projection compiler; `project_tree` + `layout` (morphorm between-tiles geometry) + canvas/cartography/document scene wrappers | **partial** | `project_tree` is live; `layout` (the [between-tiles seam](2026-05-26_between_tiles_layout_seam.md)) is **built + tested, host adoption pending**; `canvas_scene`/`cartography_scene`/`document_scene` are **not** used by the host |
 | `verso-core` | 1,031 | tile/surface realization | latent | **the gap** — the host renders engine docs directly into masonry, bypassing verso. Decide where verso fits or whether masonry-direct is the answer |
 | `tile-state` | 985 | tile lifecycle (within-tile history, cache) | latent | verso-adjacent; not wired |
 

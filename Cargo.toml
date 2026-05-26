@@ -117,6 +117,10 @@ parley = "0.9"
 skrifa = "0.42"
 color = "0.3"
 
+# Layout engine — platen's between-tiles arrangement authority (Masonry owns
+# within-tile content). Standalone, GUI-free; platen implements its Node/Cache.
+morphorm = "0.8"
+
 # Input + accessibility + window plumbing.
 accesskit = "0.24"
 accesskit_windows = "0.32"

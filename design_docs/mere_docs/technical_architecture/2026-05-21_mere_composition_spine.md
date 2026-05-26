@@ -157,9 +157,12 @@ stays parked.
     owns *pane-local* state only: camera/pan-zoom, focus, selection, local
     relation-hide.
 - **Host (Xilem)** renders the plan as a view tree: FrameTree → `split` views;
-  a tree-projected workbench → nested split/tab views over tile widgets; the
-  orrery → the `GraphCanvas` Masonry widget (the cartography projection); Verso
-  surfaces → each tile's content compositor (in-scene paint or embedded texture).
+  a tree-projected workbench → tile content placed at platen-computed rects (the
+  between-tiles geometry is platen's, via morphorm — see the
+  [between-tiles layout seam](2026-05-26_between_tiles_layout_seam.md); Masonry
+  owns only within-tile content); the orrery → the `GraphCanvas` Masonry widget
+  (the cartography projection); Verso surfaces → each tile's content compositor
+  (in-scene paint or embedded texture).
 
 So forme/platen produce the *plan*; Xilem *renders* it. "Chrome = idiomatic
 Xilem" (the re-scaffold doc) still holds — forme/platen are the model→plan layer

@@ -20,6 +20,7 @@ graph-layout.workspace = true
 document-canvas.workspace = true
 inker.workspace = true
 kernel.workspace = true
+morphorm.workspace = true
 # Platen projects a forme arrangement into a presentation plan (the
 # tree projection — its core role under the composition spine).
 forme.workspace = true
