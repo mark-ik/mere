@@ -11,8 +11,8 @@ name = "probe-markdown-v0"
 path = "src/main.rs"
 
 [dependencies]
-gpui = { path = "../../../../glass-gpui/crates/gpui" }
-gpui_platform = { path = "../../../../glass-gpui/crates/gpui_platform", features = ["font-kit"] }
+gpui = { path = "../../../../../crates/glass-gpui/crates/gpui" }
+gpui_platform = { path = "../../../../../crates/glass-gpui/crates/gpui_platform", features = ["font-kit"] }
 inker = { path = "../../workbench/inker" }
 nematic = { path = "../../workbench/inker/engines/nematic" }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
