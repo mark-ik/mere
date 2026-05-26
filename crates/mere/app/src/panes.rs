@@ -17,7 +17,7 @@ use xilem::view::{
 use xilem::{AnyWidgetView, WidgetView};
 
 use crate::engine_tile::{self, RenderedTile};
-use crate::graph_canvas::{GraphAction, graph_canvas, scene_from_graph};
+use crate::graph_canvas::{GraphAction, graph_canvas};
 use crate::{AppState, MainView, ring_world};
 
 /// The whole app view: a toolbar over a single main pane. The app opens on the
@@ -204,20 +204,22 @@ fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
                 .add_node(format!("mere://node/{n}"), PortablePoint::new(0.0, 0.0));
             // Place it on the ring (committed position, so it persists).
             state.graph.set_node_position(key, ring_world(n, 8));
+            state.rebuild_scene();
             state.persist_graph();
         }),
         graph_canvas(
-            scene_from_graph(&state.graph),
+            state.scene.clone(),
             state.selected_node,
             |state: &mut AppState, action: GraphAction| match action {
                 GraphAction::NodeMoved { id, world } => {
                     if let Some(key) = state.graph.get_node_key_by_id(id) {
-                        // Per-move: update committed position in memory only
-                        // (persist happens on NodeDropped, not every tick).
+                        // Per-move: update committed position + cached scene in
+                        // memory (persist happens on NodeDropped, not per tick).
                         state.graph.set_node_position(
                             key,
                             PortablePoint::new(world.x as f32, world.y as f32),
                         );
+                        state.rebuild_scene();
                     }
                 }
                 GraphAction::NodeDropped => state.persist_graph(),

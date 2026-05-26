@@ -30,6 +30,8 @@ use std::path::{Path, PathBuf};
 use engine_tile::RenderedTile;
 use forme::store::{load_all_formes, save_forme};
 use forme::{ArrangementNodeKind, FormeDocument};
+use camera::GraphScene;
+use graph_canvas::scene_from_graph;
 use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NavigationTrigger, Traversal};
 #[cfg(test)]
@@ -130,6 +132,9 @@ struct AppState {
     /// Rendered content for workbench tiles bound to a graph member, keyed by
     /// member id. Built once at startup (tile content is static for v1).
     tile_docs: HashMap<uuid::Uuid, RenderedTile>,
+    /// Cached orrery scene (graph projected to world positions + edges).
+    /// Rebuilt only on graph mutation, not per frame (memoized derivation).
+    scene: GraphScene,
     /// Where session state lives on disk (the forme store writes under
     /// `<session_dir>/formes/`).
     session_dir: PathBuf,
@@ -162,6 +167,8 @@ impl AppState {
         let omnibar = "mere://welcome".to_string();
         let current = navigation::open(&omnibar);
 
+        let scene = scene_from_graph(&graph);
+
         Self {
             graph,
             workbench,
@@ -171,6 +178,7 @@ impl AppState {
             selected_node: None,
             main_view: MainView::Orrery,
             tile_docs,
+            scene,
             session_dir,
             frame_label: "Mere".to_string(),
         }
@@ -178,6 +186,13 @@ impl AppState {
 
     fn node_count(&self) -> usize {
         self.graph.nodes().count()
+    }
+
+    /// Recompute the cached orrery scene from graph truth. Call after any graph
+    /// mutation; the orrery view reads the cache rather than walking the graph
+    /// every frame.
+    fn rebuild_scene(&mut self) {
+        self.scene = scene_from_graph(&self.graph);
     }
 
     /// Navigate to `address`: push history, resolve + render it, sync omnibar,
