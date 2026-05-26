@@ -102,15 +102,36 @@ pub struct PositionedGlyph {
     pub advance: f32,
 }
 
+/// Identifies the concrete font face a [`GlyphRun`] was *shaped against*,
+/// as parley actually chose it (after any fallback). Index into the
+/// out-of-band [`crate::FontTable`] sidecar that rides alongside the
+/// packet — the bytes live there, not on the (serializable) packet.
+///
+/// This is the face the glyph **ids** index into. Shipping any other
+/// face (e.g. one re-resolved from `font_family`/`weight`/`style`, which
+/// are the *requested* attributes, not necessarily the chosen face) makes
+/// the renderer index the wrong outlines on fallback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub struct FontFaceId(pub u32);
+
 /// A run of glyphs that share a font + style.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GlyphRun {
     /// Origin of the run, relative to the packet's content origin.
     pub origin: Point,
     pub font_size: f32,
+    /// The face the glyph ids in `glyphs` were shaped against (parley's
+    /// actual choice). Resolves to bytes via the [`crate::FontTable`]
+    /// sidecar.
+    pub font_face: FontFaceId,
+    /// Requested family label, kept for a11y / debug. May differ from the
+    /// face actually shaped against (`font_face`) on fallback — do **not**
+    /// use it to resolve render bytes.
     pub font_family: String,
-    /// CSS-style weight: 100..900.
+    /// CSS-style weight: 100..900. Requested, not necessarily the chosen
+    /// face's own weight. For a11y / debug.
     pub font_weight: u16,
+    /// Requested style. For a11y / debug (see `font_weight`).
     pub font_style: TextStyle,
     pub glyphs: Vec<PositionedGlyph>,
     /// Y of the baseline relative to `origin.y`.

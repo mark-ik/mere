@@ -11,6 +11,7 @@
 
 use inker::{DocumentBlock, EngineDocument, InlineSpan};
 
+use crate::font_table::{FontInterner, FontTable};
 use crate::style::StyleConfig;
 use crate::text::{
     Flattened, LaidOutText, LayoutEnvironment, TextBaseStyle, flatten_inline, layout_text_block,
@@ -20,13 +21,28 @@ use crate::types::{
     Viewport,
 };
 
+/// A laid-out document: the serializable [`DocumentRenderPacket`] plus the
+/// out-of-band [`FontTable`] sidecar carrying the `parley::FontData` each
+/// `GlyphRun` was shaped against. The packet alone is the portable,
+/// serializable shape; `fonts` holds `Arc`-cheap face handles whose owned
+/// bytes materialize only at the `paint_list_api` boundary (the
+/// `PaintList`'s font side-table). See [`crate::font_table`].
+#[derive(Clone, Debug)]
+pub struct LaidOutDocument {
+    pub packet: DocumentRenderPacket,
+    pub fonts: FontTable,
+}
+
 /// Layout entry point. Consumes an `EngineDocument` and a viewport,
-/// produces a portable [`DocumentRenderPacket`] downstream renderers paint.
+/// produces a [`LaidOutDocument`]: a portable [`DocumentRenderPacket`]
+/// downstream renderers paint, plus the font sidecar that resolves each
+/// run's [`FontFaceId`](crate::FontFaceId) to the real face bytes parley
+/// shaped against.
 pub fn layout_document(
     document: &EngineDocument,
     viewport: Viewport,
     style: &StyleConfig,
-) -> DocumentRenderPacket {
+) -> LaidOutDocument {
     let mut env = LayoutEnvironment::new();
     let mut layouter = DocumentLayouter::new(viewport, style, &mut env);
 
@@ -45,6 +61,9 @@ struct DocumentLayouter<'a> {
     blocks: Vec<RenderedBlock>,
     interactions: Vec<InteractionRegion>,
     max_x: f32,
+    /// Interns parley's chosen face per run; sealed into the
+    /// [`LaidOutDocument`]'s [`FontTable`] sidecar at `finish`.
+    fonts: FontInterner,
 }
 
 impl<'a> DocumentLayouter<'a> {
@@ -57,6 +76,7 @@ impl<'a> DocumentLayouter<'a> {
             blocks: Vec::new(),
             interactions: Vec::new(),
             max_x: 0.0,
+            fonts: FontInterner::new(),
         }
     }
 
@@ -236,7 +256,7 @@ impl<'a> DocumentLayouter<'a> {
             glyph_runs,
             total_size,
             mut interactions,
-        } = layout_text_block(self.env, flattened, &base, available, origin);
+        } = layout_text_block(self.env, flattened, &base, available, origin, &mut self.fonts);
 
         self.interactions.append(&mut interactions);
 
@@ -534,13 +554,16 @@ impl<'a> DocumentLayouter<'a> {
         )
     }
 
-    fn finish(self) -> DocumentRenderPacket {
+    fn finish(self) -> LaidOutDocument {
         let total_height = self.cursor_y + self.style.vertical_padding;
-        DocumentRenderPacket {
-            viewport: self.viewport,
-            content_bounds: Rect::from_xywh(0.0, 0.0, self.viewport.width, total_height),
-            blocks: self.blocks,
-            interactions: self.interactions,
+        LaidOutDocument {
+            packet: DocumentRenderPacket {
+                viewport: self.viewport,
+                content_bounds: Rect::from_xywh(0.0, 0.0, self.viewport.width, total_height),
+                blocks: self.blocks,
+                interactions: self.interactions,
+            },
+            fonts: self.fonts.into_table(),
         }
     }
 }
@@ -572,7 +595,7 @@ mod tests {
 
     #[test]
     fn empty_document_lays_out_to_empty_block_list() {
-        let packet = layout_document(&doc(vec![]), viewport(), &StyleConfig::default());
+        let packet = layout_document(&doc(vec![]), viewport(), &StyleConfig::default()).packet;
         assert!(packet.blocks.is_empty());
         assert!(packet.interactions.is_empty());
         assert_eq!(packet.viewport.width, 640.0);
@@ -586,7 +609,8 @@ mod tests {
             }]),
             viewport(),
             &StyleConfig::default(),
-        );
+        )
+        .packet;
         assert_eq!(packet.blocks.len(), 1);
         let block = &packet.blocks[0];
         assert_eq!(block.source_block_index, 0);
@@ -611,7 +635,8 @@ mod tests {
             ]),
             viewport(),
             &style,
-        );
+        )
+        .packet;
         assert_eq!(packet.blocks.len(), 2);
         let heading = &packet.blocks[0];
         let paragraph = &packet.blocks[1];
@@ -639,7 +664,8 @@ mod tests {
             }]),
             viewport(),
             &StyleConfig::default(),
-        );
+        )
+        .packet;
         assert_eq!(packet.interactions.len(), 1);
         let region = &packet.interactions[0];
         match &region.kind {
@@ -665,7 +691,8 @@ mod tests {
             }]),
             viewport(),
             &StyleConfig::default(),
-        );
+        )
+        .packet;
         let RenderedBlockKind::Group { children } = &packet.blocks[0].kind else {
             panic!("expected Group kind");
         };
@@ -683,7 +710,8 @@ mod tests {
             }]),
             viewport(),
             &style,
-        );
+        )
+        .packet;
         let RenderedBlockKind::Group { children } = &packet.blocks[0].kind else {
             panic!("expected Group kind");
         };
@@ -702,7 +730,8 @@ mod tests {
             &doc(vec![DocumentBlock::Rule]),
             viewport(),
             &StyleConfig::default(),
-        );
+        )
+        .packet;
         assert!(matches!(packet.blocks[0].kind, RenderedBlockKind::Rule));
     }
 
@@ -715,7 +744,8 @@ mod tests {
             }]),
             viewport(),
             &StyleConfig::default(),
-        );
+        )
+        .packet;
         let RenderedBlockKind::Image { url, alt } = &packet.blocks[0].kind else {
             panic!("expected Image kind");
         };
@@ -735,7 +765,8 @@ mod tests {
             }]),
             viewport(),
             &StyleConfig::default(),
-        );
+        )
+        .packet;
         let RenderedBlockKind::Group { children } = &packet.blocks[0].kind else {
             panic!("expected Group kind");
         };
@@ -757,7 +788,8 @@ mod tests {
             }]),
             viewport(),
             &StyleConfig::default(),
-        );
+        )
+        .packet;
         assert_eq!(packet.blocks.len(), 1);
         let RenderedBlockKind::Text { glyph_runs } = &packet.blocks[0].kind else {
             panic!("expected Text kind");
@@ -774,7 +806,8 @@ mod tests {
             }]),
             viewport(),
             &style,
-        );
+        )
+        .packet;
         let several = layout_document(
             &doc(vec![
                 DocumentBlock::Paragraph {
@@ -789,7 +822,66 @@ mod tests {
             ]),
             viewport(),
             &style,
-        );
+        )
+        .packet;
         assert!(several.content_bounds.size.height > single.content_bounds.size.height);
+    }
+
+    #[test]
+    fn document_dedups_shared_face() {
+        // Two body paragraphs shape against the same family/weight, so
+        // parley returns the same face for both runs → one entry in the
+        // sidecar, and both runs carry the same FontFaceId.
+        let laid = layout_document(
+            &doc(vec![
+                DocumentBlock::Paragraph {
+                    spans: vec![InlineSpan::Text("first".into())],
+                },
+                DocumentBlock::Paragraph {
+                    spans: vec![InlineSpan::Text("second".into())],
+                },
+            ]),
+            viewport(),
+            &StyleConfig::default(),
+        );
+        assert_eq!(laid.fonts.len(), 1, "shared body face should intern once");
+        let faces: Vec<_> = laid
+            .packet
+            .blocks
+            .iter()
+            .filter_map(|b| match &b.kind {
+                RenderedBlockKind::Text { glyph_runs } => glyph_runs.first(),
+                _ => None,
+            })
+            .map(|r| r.font_face)
+            .collect();
+        assert!(faces.len() >= 2, "expected a run per paragraph");
+        assert!(faces.iter().all(|f| *f == faces[0]), "runs share one face id");
+    }
+
+    #[test]
+    fn text_populates_font_sidecar() {
+        // Mirrors serval's `emit_with_layouts_populates_font_table`: real
+        // text yields a non-empty sidecar, every run's face resolves in
+        // it, and the resolved face carries real bytes.
+        let laid = layout_document(
+            &doc(vec![DocumentBlock::Paragraph {
+                spans: vec![InlineSpan::Text("hello".into())],
+            }]),
+            viewport(),
+            &StyleConfig::default(),
+        );
+        assert!(!laid.fonts.is_empty(), "text should populate the font sidecar");
+        for block in &laid.packet.blocks {
+            if let RenderedBlockKind::Text { glyph_runs } = &block.kind {
+                for run in glyph_runs {
+                    let face = laid
+                        .fonts
+                        .get(run.font_face)
+                        .expect("run face resolves in sidecar");
+                    assert!(!face.data.data().is_empty(), "face carries real bytes");
+                }
+            }
+        }
     }
 }

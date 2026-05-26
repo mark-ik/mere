@@ -21,6 +21,7 @@ use parley::{
     PositionedLayoutItem, StyleProperty,
 };
 
+use crate::font_table::FontInterner;
 use crate::style::InlineStyle;
 use crate::types::{
     GlyphRun, InteractionKind, InteractionRegion, Point, PositionedGlyph, Rect, Size, TextStyle,
@@ -144,9 +145,11 @@ impl LayoutEnvironment {
 
     /// Build a `LayoutEnvironment` with a font resolver pre-registered
     /// against parley's font context. Layout-time text shaping then sees
-    /// whatever fonts the resolver provides; render-time backends look
-    /// up the same resolver via `resolve_font_id` to emit real glyph
-    /// runs (not just placeholder rects).
+    /// whatever fonts the resolver provides. The render side no longer
+    /// consults the resolver: glyph runs carry parley's actually-shaped
+    /// face (a [`FontFaceId`](crate::FontFaceId) into the font sidecar),
+    /// so the bytes downstream renders come from the same face parley
+    /// shaped against.
     pub fn with_resolver<R: crate::font::FontResolver>(resolver: &R) -> Self {
         let mut env = Self::default();
         resolver.register_with_parley(&mut env.font_cx);
@@ -163,6 +166,7 @@ pub fn layout_text_block(
     base: &TextBaseStyle,
     available_width: f32,
     origin: Point,
+    fonts: &mut FontInterner,
 ) -> LaidOutText {
     let display_scale = 1.0_f32;
     let quantize = true;
@@ -250,6 +254,12 @@ pub fn layout_text_block(
 
             let run_origin = Point::new(origin.x + advance_x, origin.y + line_top_y);
 
+            // Source the face from parley's actual choice (after any
+            // fallback), not from the requested attrs — the glyph ids
+            // above index into *this* face. `font_attrs` below is the
+            // *requested* family/weight/style, kept only for a11y/debug.
+            let font_face = fonts.intern(run.font());
+
             let attrs = run.font_attrs();
             let weight_value = attrs.weight.value() as u16;
             let font_style = if matches!(attrs.style, parley::FontStyle::Italic) {
@@ -261,6 +271,7 @@ pub fn layout_text_block(
             glyph_runs.push(GlyphRun {
                 origin: run_origin,
                 font_size,
+                font_face,
                 font_family: family_label_from_brush(parley_run.style().brush, base),
                 font_weight: weight_value,
                 font_style,

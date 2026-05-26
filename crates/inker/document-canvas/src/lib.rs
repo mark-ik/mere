@@ -33,6 +33,7 @@
 #![doc(html_root_url = "https://docs.rs/document-canvas/0.0.1")]
 
 pub mod font;
+pub mod font_table;
 pub mod layout;
 pub mod paint_list;
 pub mod style;
@@ -47,13 +48,14 @@ pub mod types;
 #[cfg(feature = "netrender")]
 pub mod netrender_backend;
 
-pub use font::{FontFaceData, FontRequest, FontResolver, NoFontResolver};
+pub use font::{FontResolver, NoFontResolver};
+pub use font_table::FontTable;
 pub use paint_list::{paint_list_from_packet, InkerPaintList};
-pub use layout::layout_document;
+pub use layout::{layout_document, LaidOutDocument};
 pub use style::{ColorVocabulary, InlineStyle, StyleConfig};
 pub use types::{
-    DocumentRenderPacket, GlyphRun, InteractionKind, InteractionRegion, Point, PositionedGlyph,
-    Rect, RenderedBlock, RenderedBlockKind, Size, TextStyle, Viewport,
+    DocumentRenderPacket, FontFaceId, GlyphRun, InteractionKind, InteractionRegion, Point,
+    PositionedGlyph, Rect, RenderedBlock, RenderedBlockKind, Size, TextStyle, Viewport,
 };
 
 /// Crate version.

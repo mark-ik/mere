@@ -67,7 +67,9 @@ it); scoped below.
 
 ## v2 scope: thread parley's actual font identity
 
-**Status: scoped, not started.** Fixes the caveat above.
+**Status: implemented 2026-05-23** (option (a) — sidecar; packet stays
+serializable). Fixes the caveat above. See Progress for the receipt and
+the one deviation from the phasing below.
 
 ### Why the bug is real
 
@@ -95,18 +97,35 @@ needed:
 - `Run::normalized_coords() -> &[i16]` — variable-font axis coords the
   run was shaped at.
 
+### Reference implementation — serval already does Tier 1
+
+This is not an open design question. Serval, the more mature sibling
+producer, already does exactly what Tier 1 proposes:
+[`serval-layout::paint_emit`](../../../../serval/components/serval-layout/paint_emit.rs)
+keys its `FontCollector` on `font.data.id()` (blob id) and interns
+`parley_run.font()` — parley's *actual* shaped face, not a re-resolved
+label — shipping `font.data.data().to_vec()` + `font.index`. **Inker is
+the only one of the four producers doing label re-resolution.** That
+collapses Tier 1 from a design exercise to a mirror-task: copy serval's
+`FontCollector` shape and its `emit_with_layouts_populates_font_table`
+test pattern. Lead the graduated plan with this.
+
 ### Fidelity tiers
 
 | Tier | Carries | Fixes | Cost |
 | --- | --- | --- | --- |
 | **0** (current/P4) | label re-resolve | — | — |
 | **1** (v2 target) | parley's real `FontData` (blob + index) per run | wrong-face-on-fallback (the actual bug) | `text.rs` + `GlyphRun` + `paint_list.rs`; **no netrender change** |
-| **2** (further) | + `synthesis` (embolden/skew) + normalized var-coords | synthetic bold/italic + variable fonts matching exactly | also extends netrender's glyph API (`Glyph{id,x,y}` + `push_glyph_run` model neither today) — reaches into the renderer |
+| **2a** (var fonts) | + normalized var-coords per run | variable fonts matching exactly | `paint_list_api` (`TextRunItem`/`TextOptions`) + producers + translator. **No netrender change** — `SceneGlyphRun.font_axis_values` + `push_glyph_run_variable` already model it (Roadmap C4, shipped); the translator just drops it (calls `push_glyph_run_full`) |
+| **2b** (synthesis) | + `synthesis` (embolden/skew) | synthetic bold/italic exactly | genuine renderer gap — unmodeled at all three layers. Faux-bold needs vello outline work; faux-italic could ride a skew transform. Own netrender-side plan |
 
 Recommend **Tier 1** as the v2 deliverable — it eliminates the
-correctness bug with bounded, mere-side changes. Tier 2 is a renderer
-capability and gets its own netrender-side plan (lands in
-`paint_list_render` + `netrender`).
+correctness bug with bounded, mere-side changes. Of Tier 2, **2a
+(var-coords) is upstream-only** — `paint_list_api` + producers +
+translator, with no netrender change since the renderer already models
+axis values — and could ride close behind Tier 1. **2b (synthesis) is the
+genuine renderer capability** and gets its own netrender-side plan (lands
+in `paint_list_render` + `netrender`, possibly vello).
 
 ### Design tension — where the bytes live
 
@@ -114,18 +133,47 @@ capability and gets its own netrender-side plan (lands in
 `DocumentRenderPacket`; `FontData` (an Arc-backed `Blob`) isn't trivially
 those. Options:
 
-- **(a) `GlyphRun` gains `font_face: FontFaceId` (u32); a companion font
-  table holds the `FontData`, out-of-band from the serialized packet.**
-  Recommended — the **`PaintList`, not the packet, is the IPC-self-contained
-  form** (it already carries `FontResource` bytes). So the packet/`LaidOutText`
-  carries Arc-cheap font handles in-process; owned bytes materialize only
-  at the `paint_list_api` boundary.
+- **(a) `GlyphRun` gains `font_face: FontFaceId` (u32); the `FontData`
+  table rides as a sidecar return value — *not* on the serialized
+  packet.** Recommended — the **`PaintList`, not the packet, is the
+  IPC-self-contained form** (it already carries `FontResource` bytes).
+  Concretely: `layout_document` returns `LaidOutDocument { packet, fonts }`
+  (or `paint_list_from_packet` takes the font table as a second arg); the
+  `Arc`-cheap `FontData` handles stay in-process and owned bytes
+  materialize only at the `paint_list_api` boundary. Do **not** hang the
+  table on the packet behind `#[serde(skip)]` — that makes the packet
+  silently lossy on round-trip (deserializes to placeholder-only text) and
+  breaks its `PartialEq`.
 - (b) Packet carries owned `Vec<u8>` per face (serializable packet,
   heavy). Only if document packets themselves must serialize/cache.
 - (c) Keep the resolver but key it on `Blob::id()` (actual identity) not
   the label. Lighter, but keeps an indirection parley makes unnecessary.
 
 Lean (a).
+
+### Architectural note — does the serializable intermediate earn its keep?
+
+Serval has none of this tension because
+[`serval-layout::paint_emit`](../../../../serval/components/serval-layout/paint_emit.rs)
+emits `PaintCmd`s straight from the live parley `Layout` at walk time — it
+never drops to a serializable intermediate, so glyph IDs and face bytes
+can't diverge by construction. Inker's tension is *entirely* a product of
+the `DocumentRenderPacket` / `GlyphRun` layer sitting between layout and
+paint-list production.
+
+That layer is currently **single-consumer**: the only renderers of the
+packet are `paint_list_from_packet` and platen's passthrough (which feeds
+the same netrender path). The "feeds multiple backends (gpui-native,
+AccessKit)" rationale is aspirational — nothing pulls on the packet's
+`Serialize` derive yet. Two honest paths:
+
+- **Keep the intermediate, add the sidecar** (option (a)) — smaller,
+  reversible, ships Tier 1 now. Recommended near-term.
+- **Collapse toward serval's shape** — keep the parley `Layout` alive and
+  emit the `PaintList` directly, retiring the serializable packet. Makes
+  the bug *and* the tension vanish together; the right move if the
+  packet's `Serialize` derive stays unpulled. Decide this consciously
+  rather than treating the serializable packet as a fixed constraint.
 
 ### Consequence for P4's `resolve_font_data`
 
@@ -135,17 +183,27 @@ only `register_with_parley` (layout-time). P4's `resolve_font_data` was
 the interim stopgap; v2 removes it (or repurposes it for hosts injecting
 faces parley can't discover).
 
+**The bigger payoff.** Tier 1 isn't just a rare-fallback fix. Today
+`NoFontResolver` makes *every* run a placeholder rect — no real text until
+a host wires fonts. Once `run.font()` supplies the bytes, parley's
+bundled/system defaults ride in the side-table, so **documents render real
+text with zero host font wiring** and the placeholder-rect path retires
+for the common case. Caveat: this means copying system-font bytes into
+every `PaintList` — exactly when the large-blob question (below) bites.
+Resolve the two together.
+
 ### Phasing (Tier 1)
 
-1. `text.rs` — capture `run.font()` (`FontData`) per `GlyphRun`; build a
-   `Blob::id()`-keyed font table on `LaidOutText`; record a `FontFaceId`
-   on each run.
-2. `types.rs` — `GlyphRun` gains `font_face: FontFaceId`; keep
-   `font_family`/`weight`/`style` for a11y/debug. Font table rides
-   out-of-band per option (a).
+1. `text.rs` — capture `run.font()` (`FontData`, an `Arc`-cheap clone) per
+   `GlyphRun`; record a `FontFaceId` on each run; merge per-block faces
+   into a doc-level `Blob::id()`-keyed table.
+2. `types.rs` / `layout.rs` — `GlyphRun` gains `font_face: FontFaceId`;
+   keep `font_family`/`weight`/`style` for a11y/debug. `layout_document`
+   returns the font table as a sidecar (`LaidOutDocument { packet, fonts }`)
+   per option (a) — the packet stays honestly serializable.
 3. `paint_list.rs` — drop resolver re-resolution; map `FontFaceId →
-   FontInstanceKey`; populate `InkerPaintList.fonts` from the font table
-   (dedup by blob id).
+   FontInstanceKey`; populate `InkerPaintList.fonts` from the sidecar table
+   (dedup by blob id). Mirror serval's `FontCollector`.
 4. `font.rs` — remove `resolve_font_data`'s render role; keep
    `register_with_parley`.
 5. Tests — a fallback case (resolver advertises family A; parley falls
@@ -154,15 +212,50 @@ faces parley can't discover).
 ### Open questions
 
 - **Large system-font blobs** (e.g. CJK TTC) in the `PaintList`
-  side-table — acceptable under the IPC-containment contract, or warrant
-  a lazy/streamed font channel? netrender already dedups by blob id across
-  resends, which softens repeated sends.
-- **Tier 2 sequencing** — netrender glyph-API extension (synthesis +
-  var-coords) is a renderer capability; own plan, netrender-side.
-- **Cross-check serval-layout** — does serval's `paint_emit` have the same
-  latent label-re-resolution issue, or does it already carry real shaped
-  bytes? If serval does it right, mirror its approach; if not, this scope
-  applies there too. Worth a look when the work starts.
+  side-table — acceptable under the IPC-containment contract, or warrant a
+  lazy/streamed/content-addressed font channel? The "netrender already
+  dedups by blob id across resends" softener is **not true on this path as
+  wired**:
+  [`paint_list_render::register_fonts`](../../../../netrender/paint_list_render/src/lib.rs)
+  does `peniko::Blob::new(Arc::new(fr.data.clone()))` — minting a fresh
+  blob id from cloned bytes every translate call, which netrender's own
+  `FontBlob` doc flags as defeating vello's atlas dedup. The
+  [`FontRegistry`](../../../../netrender/netrender/src/registry.rs) built
+  for exactly this is never threaded into the translator.
+  - **Consumer-reality check (2026-05-23, corrected 2026-05-24).** The
+    render path is *not* absent — serval's C4 landed 2026-05-09:
+    [`Paint::render`](../../../../serval/components/paint/netrender_painter.rs)
+    drives `renderer.render_with_compositor(&state.scene, …)` on a
+    persistent `netrender::Renderer` (one per painter id, built in
+    `register_rendering_context`). It renders the *stored* `Scene`, whose
+    `FontBlob`s were minted once at `SendPaintList`/translate time; so
+    re-rendering the same scene reuses them (vello dedups by `Blob::id()`),
+    and the fresh-Blob waste is **per re-translate** (a new `SendPaintList`
+    — content change / resize / relayout), not per frame. (An earlier
+    revision of this note wrongly called the render loop unbuilt, anchoring
+    on the stale `GenerateFrame` "C4 territory" comment in the message-loop
+    arm, which is a different thing from `Paint::render`.)
+  - **Where the lever belongs.** A persistent `FontRegistry` + `FontBlob`
+    cache on the painter (it already holds persistent `Renderer`s per
+    painter id), threaded into the `SendPaintList` translate step (today
+    the stateless `translate_envelope_with_external_textures`), keyed on a
+    stable `FontResource.blob_id` (new wire field). Prerequisite still
+    missing: that stable id — `FontResource` carries none, and inker
+    recreates its `FontContext` per `layout_document`, so even producer
+    `Blob::id()`s aren't stable across calls. Low priority: waste is
+    per-content-change (not per frame) and current faces are small system
+    fonts. The lazy/streamed font channel (wire cost) rides the same id.
+- **Tier 2a sequencing (var-coords)** — upstream PaintList work, not a
+  netrender extension. Add run-level axis payload to `TextRunItem` /
+  `TextOptions`, thread it from parley through producers, and have the
+  translator build `SceneGlyphRun` / call `push_glyph_run_variable`.
+- **Tier 2b sequencing (synthesis)** — renderer-capability work. Add a
+  run-level synthesis payload to the PaintList API, then plan the
+  netrender/vello implementation separately (especially faux-bold).
+- **Cross-check serval-layout** — *resolved:* serval already threads
+  `run.font()` and keys on `Blob::id()` (see "Reference implementation —
+  serval already does Tier 1" above). Mirror it; this scope does not apply
+  to serval.
 
 ## Progress
 
@@ -173,9 +266,47 @@ faces parley can't discover).
   - `cargo build -p document-canvas` (no `netrender` feature) green —
     the producer path stays wgpu-free / wasm-light.
   - `paint_list_api` `engine_id_sentinels_are_stable` green with `INKER`.
+- 2026-05-23: v2 scope sharpened against the codebase (parley 0.9,
+  netrender, `paint_list_api`, serval-layout). Revisions: serval already
+  implements Tier 1 (mirror-task, not a design exercise); option (a) is a
+  sidecar return, not a `#[serde(skip)]` packet field; Tier 2 split into 2a
+  (var-coords, upstream-only — netrender already models it) and 2b
+  (synthesis, the only genuine renderer gap); corrected the "netrender
+  already dedups" softener (the translator re-blobs every frame, defeating
+  vello's atlas dedup); noted Tier 1 also makes text render with no host
+  font wiring.
+- 2026-05-23: **Tier 1 implemented** (option (a) — sidecar; packet stays
+  serializable). New `font_table` module: `FontInterner` dedups parley
+  faces by `Blob::id()` during layout, sealed into a `FontTable` sidecar.
+  `layout_document` now returns `LaidOutDocument { packet, fonts }`; each
+  `GlyphRun` carries a `FontFaceId` interned from `run.font()` (parley's
+  actually-shaped face), with `font_family`/`weight`/`style` kept for
+  a11y/debug only. `paint_list_from_packet` / `scene_from_packet` drop the
+  resolver, take `&FontTable`, and ship each face's bytes from the sidecar.
+  `font.rs` slimmed to the layout-time `register_with_parley` seam
+  (`resolve_font_data` / `FontFaceData` / `FontRequest` removed). platen's
+  `build_document_scene` returns `LaidOutDocument`.
+  - **Deviation from phasing step 5.** The "resolver advertises A, parley
+    falls back to B" test is obviated: removing the render-side resolver
+    structurally deletes the second font-identity source, so there is no
+    "A" to advertise. Replaced by deterministic invariants —
+    `each_run_ships_the_face_it_was_shaped_against` (per-run: shipped bytes
+    == `sidecar[font_face]` bytes), `shipped_faces_come_from_the_sidecar`
+    (set membership), and `document_dedups_shared_face`.
+  - **Payoff realized.** Bytes now come from parley, so `NoFontResolver`
+    renders real text — the placeholder-rect path is dead for the common
+    case (kept only as a defensive branch if a face is absent from the
+    sidecar).
+  - Tests (Windows): `cargo test -p document-canvas` → **21 passed**;
+    `--features netrender` → **25 passed**; `cargo test -p platen` →
+    **31 passed**. 0 failed.
+  - Implemented **in place** rather than graduating to a fresh dated plan:
+    the change is one self-contained pass fully covered by the scope above
+    (DOC_POLICY §1 — control doc growth).
 
 This completes the extraction's payoff: serval and inker are now two
 producers of the same `paint_list_api` vocabulary, both lowering through
-the one shared `paint_list_render` translator. The v2 font-identity
-follow-up is scoped above (Tier 1: thread parley's real `FontData`); this
-doc graduates to a fresh dated plan when that work begins.
+the one shared `paint_list_render` translator. Tier 1 (thread parley's
+real `FontData`) landed 2026-05-23 — see Progress. **Tier 2a** (var-coords,
+upstream-only) and **Tier 2b** (synthesis, renderer-side) remain scoped
+above for their own plans.
