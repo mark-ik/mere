@@ -385,4 +385,20 @@ Two oracles, used together:
   refreshed stored entry; `no-store` honored; `Vary` responses conservatively not
   cached). This sharpens OQ #4: durable storage is Mere/eidetic's job, *policy* is
   netfetcher's — so a host cache impl can't get RFC 9111 wrong. **22 tests green.**
-  **Deferred (next):** increment 3 (CORS + tainting + CSP + HSTS + mixed-content).
+- **2026-05-26** — **increment 3 landed** (cross-origin security model), in four
+  committed slices. **(1)** Request gains an initiator `origin`; response tainting
+  (`Basic`/`Cors`/`Opaque`) + simple-request CORS gating (blocked → network error).
+  **(2)** HSTS (`HstsStore` seam; known-secure http→https upgrade on initial +
+  redirect targets; `Strict-Transport-Security` recorded over https) + mixed-content
+  **auto-upgrade** (http target in an https-origin context → https). **(3)**
+  **SameSite enforcement** — `CookieStore::cookies_for` grew a `SameSiteContext`;
+  Strict/Lax/None gated; same-site computed by registrable-domain approximation (no
+  PSL yet). **(4)** **CORS preflight** (OPTIONS round-trip with
+  `Access-Control-Request-*`, `Allow-Origin/Methods/Headers` checks, grant cached per
+  `Access-Control-Max-Age` via a `PreflightCache` seam) + `Cors` response-header
+  filtering (safelist + `Expose-Headers`). Two wrinkles were taken to Mark mid-slice
+  and decided: mixed-content **auto-upgrade now / active-passive split later**;
+  SameSite **registrable-domain approximation now / PSL later**. **47 tests green**
+  (offline via mockito). **Deferred:** active/passive mixed-content split,
+  public-suffix-accurate same-site, then increment 4 (HTTP/3) and increment 5
+  (optional WebSocket).
