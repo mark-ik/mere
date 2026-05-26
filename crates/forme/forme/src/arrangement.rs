@@ -223,6 +223,18 @@ impl Arrangement {
         self.nodes.get(&id)
     }
 
+    /// Bind (or unbind) a `TileIntent` node to a graph member. Returns whether
+    /// `id` was a tile-intent node.
+    pub fn set_tile_member(&mut self, id: ArrangementNodeId, member: Option<GraphMemberId>) -> bool {
+        match self.nodes.get_mut(&id).map(|n| &mut n.kind) {
+            Some(ArrangementNodeKind::TileIntent { member: slot }) => {
+                *slot = member;
+                true
+            }
+            _ => false,
+        }
+    }
+
     /// Iterate all nodes (deterministic order).
     pub fn nodes(&self) -> impl Iterator<Item = &ArrangementNode> {
         self.nodes.values()
@@ -369,5 +381,20 @@ mod tests {
         let json = serde_json::to_string(&a).unwrap();
         let back: Arrangement = serde_json::from_str(&json).unwrap();
         assert_eq!(a, back);
+    }
+
+    #[test]
+    fn set_tile_member_rebinds_only_tile_intents() {
+        let mut a = Arrangement::new();
+        let tile = a.add_tile_intent(None);
+        let group = a.add_group(Some("g".into()));
+
+        assert!(a.set_tile_member(tile, Some(Uuid::from_u128(9))));
+        assert!(matches!(
+            a.node(tile).map(|n| &n.kind),
+            Some(ArrangementNodeKind::TileIntent { member: Some(_) })
+        ));
+        // Not a tile-intent → no-op, returns false.
+        assert!(!a.set_tile_member(group, Some(Uuid::from_u128(1))));
     }
 }

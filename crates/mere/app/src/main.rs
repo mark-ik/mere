@@ -22,6 +22,7 @@ mod engine_tile;
 mod graph_canvas;
 mod navigation;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use engine_tile::RenderedTile;
@@ -65,6 +66,9 @@ struct AppState {
     current: RenderedTile,
     /// The orrery's selected node (highlighted; clicking it opened `current`).
     selected_node: Option<uuid::Uuid>,
+    /// Rendered content for workbench tiles bound to a graph member, keyed by
+    /// member id. Built once at startup (tile content is static for v1).
+    tile_docs: HashMap<uuid::Uuid, RenderedTile>,
     /// Where session state lives on disk (the forme store writes under
     /// `<session_dir>/formes/`).
     session_dir: PathBuf,
@@ -93,7 +97,15 @@ impl AppState {
         // on first run. (The in-memory graph is re-seeded each run — graph
         // persistence is a separate slice; forme persistence stands alone.)
         let session_dir = session_dir();
-        let workbench = load_or_seed_workbench(&session_dir);
+        let mut workbench = load_or_seed_workbench(&session_dir);
+        // Bind unbound workbench tiles to graph members (by order) so they
+        // render real content, then persist. Durable cross-restart binding
+        // arrives with graph persistence; until then we re-bind each run.
+        bind_unbound_tiles(&mut workbench, &graph);
+        if let Err(e) = save_forme(&session_dir, &mut workbench, now_ms()) {
+            eprintln!("mere: failed to persist bound workbench: {e}");
+        }
+        let tile_docs = render_workbench_tiles(&workbench, &graph);
 
         // Navigate to the welcome page at startup through the engine seam.
         let omnibar = "mere://welcome".to_string();
@@ -105,6 +117,7 @@ impl AppState {
             omnibar,
             current,
             selected_node: None,
+            tile_docs,
             session_dir,
             frame_label: "Mere".to_string(),
         }
@@ -193,6 +206,44 @@ fn seed_workbench() -> FormeDocument {
     doc
 }
 
+/// Bind unbound root workbench tiles to graph members, in order, so each tile
+/// shows real content. Already-bound tiles are left alone. v1 re-binds to the
+/// current graph each run (graph identity isn't persistent yet — slice 4).
+fn bind_unbound_tiles(workbench: &mut FormeDocument, graph: &Graph) {
+    let root = workbench.arrangement.root();
+    let tile_ids: Vec<_> = workbench.arrangement.members_of(root).collect();
+    let member_ids: Vec<uuid::Uuid> = graph.nodes().map(|(_, n)| n.id).collect();
+    let mut next = 0;
+    for tid in tile_ids {
+        let unbound = matches!(
+            workbench.arrangement.node(tid).map(|n| &n.kind),
+            Some(ArrangementNodeKind::TileIntent { member: None })
+        );
+        if unbound {
+            if let Some(&member) = member_ids.get(next) {
+                workbench.arrangement.set_tile_member(tid, Some(member));
+                next += 1;
+            }
+        }
+    }
+}
+
+/// Render content for each bound workbench tile, keyed by member id, by
+/// resolving member → graph node → address → engine document.
+fn render_workbench_tiles(
+    workbench: &FormeDocument,
+    graph: &Graph,
+) -> HashMap<uuid::Uuid, RenderedTile> {
+    let mut docs = HashMap::new();
+    for member in workbench.arrangement.referenced_members() {
+        if let Some((_, node)) = graph.get_node_by_id(member) {
+            let url = node.url().to_string();
+            docs.insert(member, navigation::open(&url));
+        }
+    }
+    docs
+}
+
 /// The whole app view: a frametree of splits. Left = workbench; right
 /// column = orrery (top) over apparatus (bottom). This *is* the
 /// frametree — splits are split views, panes are view functions.
@@ -226,11 +277,16 @@ fn omnibar_bar(state: &AppState) -> impl WidgetView<AppState> + use<> {
 /// Workbench pane — renders the forme arrangement through platen's tree
 /// projection: slots laid side-by-side, tab-stacks shown grouped. The
 /// "+ tile" button mutates the arrangement and the projection re-renders,
-/// proving the forme → platen → view loop end-to-end. Tile *content*
-/// (real engines) is a later slice; tiles show their label for now.
+/// proving the forme → platen → view loop end-to-end. Tiles bound to a graph
+/// member render that member's engine content (compact); unbound tiles show a
+/// label placeholder.
 fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
     let plan = project_tree(&state.workbench.arrangement);
-    let slots: Vec<Box<AnyWidgetView<AppState>>> = plan.slots.iter().map(slot_view).collect();
+    let slots: Vec<Box<AnyWidgetView<AppState>>> = plan
+        .slots
+        .iter()
+        .map(|s| slot_view(s, &state.tile_docs))
+        .collect();
     flex_col((
         label("Workbench").text_size(18.0),
         prose(format!(
@@ -255,10 +311,8 @@ fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
     ))
 }
 
-/// The live engine-backed tile: a header naming the engine that handled the
-/// address, then the rendered document. This realizes the v1 "one live
-/// engine-backed tile" — the projected slots above are still placeholders
-/// (label-only), but *this* tile is real engine output.
+/// The focus tile: the omnibar/orrery-navigated document (`state.current`),
+/// shown below the workbench's bound tiles. Header names the engine + address.
 fn live_tile(state: &AppState) -> impl WidgetView<AppState> + use<> {
     let tile = &state.current;
     let mut children: Vec<Box<AnyWidgetView<AppState>>> = vec![
@@ -275,19 +329,50 @@ fn live_tile(state: &AppState) -> impl WidgetView<AppState> + use<> {
     flex_col(children)
 }
 
-/// Render one workbench slot: a single tile, or a tab-stack.
-fn slot_view(slot: &PlanSlot) -> Box<AnyWidgetView<AppState>> {
+/// Render one workbench slot: a single tile, or a tab-stack (active tab's
+/// content + a strip of the rest).
+fn slot_view(
+    slot: &PlanSlot,
+    docs: &HashMap<uuid::Uuid, RenderedTile>,
+) -> Box<AnyWidgetView<AppState>> {
     match slot {
-        PlanSlot::Tile(t) => {
-            flex_col((label("▭ tile").text_size(13.0), prose(tile_label(t)))).boxed()
-        }
+        PlanSlot::Tile(t) => tile_view(t, docs),
         PlanSlot::Tabs(tabs) => {
-            let rows: Vec<_> = tabs
-                .iter()
-                .map(|t| prose(format!("• {}", tile_label(t))))
-                .collect();
-            flex_col((label(format!("▭ tabs ({})", tabs.len())).text_size(13.0), rows)).boxed()
+            let mut children: Vec<Box<AnyWidgetView<AppState>>> =
+                vec![label(format!("▭ tabs ({})", tabs.len())).text_size(13.0).boxed()];
+            for t in tabs.iter().skip(1) {
+                children.push(prose(format!("• {}", tile_label(t))).boxed());
+            }
+            if let Some(active) = tabs.first() {
+                children.push(tile_view(active, docs));
+            }
+            flex_col(children).boxed()
         }
+    }
+}
+
+/// A single workbench tile: its bound member's rendered content (compact), or a
+/// label placeholder when unbound / unresolved.
+fn tile_view(t: &TilePlan, docs: &HashMap<uuid::Uuid, RenderedTile>) -> Box<AnyWidgetView<AppState>> {
+    match t.member.and_then(|m| docs.get(&m)) {
+        Some(tile) => {
+            let mut children: Vec<Box<AnyWidgetView<AppState>>> = vec![
+                label(format!(
+                    "▭ {}",
+                    tile.document.title.as_deref().unwrap_or("(untitled)")
+                ))
+                .text_size(13.0)
+                .boxed(),
+                prose(tile.document.address.clone()).boxed(),
+            ];
+            children.extend(
+                engine_tile::document_views(&tile.document)
+                    .into_iter()
+                    .take(3),
+            );
+            flex_col(children).boxed()
+        }
+        None => flex_col((label("▭ tile").text_size(13.0), prose(tile_label(t)))).boxed(),
     }
 }
 
