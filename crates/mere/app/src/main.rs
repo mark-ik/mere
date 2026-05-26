@@ -34,7 +34,9 @@ use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NavigationTrigger, Traversal};
 use platen::{PlanSlot, TilePlan, project_tree};
 use xilem::masonry::kurbo::Axis;
-use xilem::view::{FlexExt as _, button, flex_col, flex_row, label, prose, split, text_input};
+use xilem::view::{
+    FlexExt as _, button, flex_col, flex_row, label, portal, prose, split, text_input,
+};
 use xilem::{AnyWidgetView, EventLoop, WidgetView, WindowOptions, Xilem};
 
 /// Lay seed nodes (and new ones) on a world-space ring so the orrery shows a
@@ -389,7 +391,7 @@ fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
         .iter()
         .map(|s| slot_view(s, &state.tile_docs))
         .collect();
-    flex_col((
+    portal(flex_col((
         label("Workbench").text_size(18.0),
         prose(format!(
             "forme \"{}\" → tree projection: {} slot(s), {} tile(s) · persisted",
@@ -410,7 +412,8 @@ fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
         }),
         flex_row(slots),
         live_tile(state),
-    ))
+    )))
+    .constrain_horizontal(true)
 }
 
 /// The focus tile: the omnibar/orrery-navigated document (`state.current`),
@@ -522,7 +525,7 @@ fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
                         );
                     }
                 }
-                GraphAction::NodeDropped { .. } => state.persist_graph(),
+                GraphAction::NodeDropped => state.persist_graph(),
                 GraphAction::NodeActivated { id } => {
                     state.selected_node = Some(id);
                     let url = state
@@ -543,13 +546,14 @@ fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
 /// app state.
 fn apparatus_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
     let forme_id = state.workbench.id.as_uuid().to_string();
-    flex_col((
+    portal(flex_col((
         label("Apparatus").text_size(18.0),
         prose(format!("frame: {}", state.frame_label)),
         prose(format!("graph nodes: {}", state.node_count())),
         prose(format!("session: {}", state.session_dir.display())),
         prose(format!("workbench forme: {}", &forme_id[..8])),
-    ))
+    )))
+    .constrain_horizontal(true)
 }
 
 fn main() {

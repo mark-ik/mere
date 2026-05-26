@@ -66,7 +66,7 @@ pub enum GraphAction {
     /// A node is being dragged (per-move) — update its position in memory.
     NodeMoved { id: Uuid, world: Point },
     /// A drag finished (pointer up after movement) — a good point to persist.
-    NodeDropped { id: Uuid },
+    NodeDropped,
     /// A node was clicked (press + release without dragging) — open it.
     NodeActivated { id: Uuid },
 }
@@ -223,11 +223,10 @@ impl Widget for GraphCanvasWidget {
                 // moved is a drop (persist the new position).
                 if let Some(Drag::Node { index, moved, .. }) = self.drag {
                     if let Some(node) = self.scene.nodes.get(index) {
-                        let id = node.id;
                         let action = if moved {
-                            GraphAction::NodeDropped { id }
+                            GraphAction::NodeDropped
                         } else {
-                            GraphAction::NodeActivated { id }
+                            GraphAction::NodeActivated { id: node.id }
                         };
                         ctx.submit_action::<GraphAction>(action);
                     }
