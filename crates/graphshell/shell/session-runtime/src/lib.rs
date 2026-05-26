@@ -44,7 +44,6 @@
 pub mod engine_profile_store;
 pub mod manifest;
 pub mod manifest_store;
-pub mod session_graph_store;
 pub mod session_service_runner;
 pub mod switcher_thumbnail;
 pub mod tearout;

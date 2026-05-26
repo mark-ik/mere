@@ -16,10 +16,10 @@ path = "src/main.rs"
 # The Xilem app driver (window + event loop + reactive view tree).
 # Path-dep to the local xilem clone, like mere-masonry/mere-host; switch
 # to crates.io once xilem stabilises.
-xilem = { path = "../../../../xilem/xilem" }
+xilem = { path = "../../../../../crates/xilem/xilem" }
 
 # Portable core — the framework-free truth the views render.
-kernel.workspace = true
+kernel = { workspace = true, features = ["store"] }
 frame.workspace = true
 # Arrangement authority + its tree projection — the Workbench pane renders
 # `platen::project_tree(&forme::Arrangement)`. The `store` feature adds native

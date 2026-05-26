@@ -29,6 +29,10 @@ pub mod overlay;
 pub mod paint;
 pub mod pane;
 pub mod persistence;
+/// Native on-disk graph persistence. Gated by the `store` feature so the kernel
+/// stays portable-by-default; the native host enables it.
+#[cfg(feature = "store")]
+pub mod store;
 pub mod signal_router;
 pub mod time;
 pub mod types;

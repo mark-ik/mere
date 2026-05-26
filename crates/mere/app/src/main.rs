@@ -79,24 +79,14 @@ struct AppState {
 
 impl AppState {
     fn new() -> Self {
-        let mut graph = Graph::new();
-        let keys: Vec<_> = (0..6)
-            .map(|i| graph.add_node(format!("mere://node/{i}"), PortablePoint::new(0.0, 0.0)))
-            .collect();
-        // A few seed relations so the orrery shows a connected graph, not
-        // loose dots. Traversal edges = "navigated A → B".
-        for &(a, b) in &[(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (0, 3), (0, 5)] {
-            graph.push_traversal(keys[a], keys[b], Traversal::now(NavigationTrigger::LinkClick));
-        }
-        // Spread them on a world-space ring (the orrery reads projected pos).
-        for (i, &k) in keys.iter().enumerate() {
-            graph.set_node_projected_position(k, ring_world(i, keys.len()));
-        }
-
-        // Restore the workbench forme from disk, or seed + persist a fresh one
-        // on first run. (The in-memory graph is re-seeded each run — graph
-        // persistence is a separate slice; forme persistence stands alone.)
         let session_dir = session_dir();
+        let _ = std::fs::create_dir_all(&session_dir);
+
+        // Restore the graph from disk, or seed + persist a fresh one. Node ids
+        // survive the round-trip, so workbench member bindings stay valid.
+        let graph = load_or_seed_graph(&session_dir);
+
+        // Restore the workbench forme from disk, or seed + persist a fresh one.
         let mut workbench = load_or_seed_workbench(&session_dir);
         // Bind unbound workbench tiles to graph members (by order) so they
         // render real content, then persist. Durable cross-restart binding
@@ -141,6 +131,14 @@ impl AppState {
             eprintln!("mere: failed to persist workbench forme: {e}");
         }
     }
+
+    /// Persist the graph after a structural/position change (node added or
+    /// dropped). Not called per drag-move tick — only on discrete edits.
+    fn persist_graph(&mut self) {
+        if let Err(e) = kernel::store::save_graph(&self.session_dir, &self.graph) {
+            eprintln!("mere: failed to persist graph: {e}");
+        }
+    }
 }
 
 /// Where this host persists session state: a local `mere-sessions/default`
@@ -157,6 +155,42 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// Restore the graph from `<session_dir>/graph.json`, or seed + persist a fresh
+/// one. A load error falls back to an unsaved in-memory seed.
+fn load_or_seed_graph(session_dir: &Path) -> Graph {
+    match kernel::store::load_graph(session_dir) {
+        Ok(Some(graph)) => graph,
+        Ok(None) => {
+            let graph = seed_graph();
+            if let Err(e) = kernel::store::save_graph(session_dir, &graph) {
+                eprintln!("mere: failed to write seed graph: {e}");
+            }
+            graph
+        }
+        Err(e) => {
+            eprintln!("mere: failed to load graph ({e}); seeding fresh in-memory");
+            seed_graph()
+        }
+    }
+}
+
+/// A fresh seed graph: 6 `mere://node/N` nodes on a world-space ring, with a
+/// few traversal relations so the orrery shows a connected graph. Positions are
+/// committed (durable) so they survive a restart.
+fn seed_graph() -> Graph {
+    let mut graph = Graph::new();
+    let keys: Vec<_> = (0..6)
+        .map(|i| graph.add_node(format!("mere://node/{i}"), PortablePoint::new(0.0, 0.0)))
+        .collect();
+    for &(a, b) in &[(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (0, 3), (0, 5)] {
+        graph.push_traversal(keys[a], keys[b], Traversal::now(NavigationTrigger::LinkClick));
+    }
+    for (i, &k) in keys.iter().enumerate() {
+        graph.set_node_position(k, ring_world(i, keys.len()));
+    }
+    graph
 }
 
 /// Load the workbench forme (the first stored forme) or seed + persist a fresh
@@ -399,9 +433,9 @@ fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
             let key = state
                 .graph
                 .add_node(format!("mere://node/{n}"), PortablePoint::new(0.0, 0.0));
-            // Place it on the ring (offset outward a touch so it doesn't land
-            // on an existing node) rather than stacking at the origin.
-            state.graph.set_node_projected_position(key, ring_world(n, 8));
+            // Place it on the ring (committed position, so it persists).
+            state.graph.set_node_position(key, ring_world(n, 8));
+            state.persist_graph();
         }),
         // The spatial graph view: a bespoke Masonry widget. Drag a node to move
         // it (writes back to graph truth), drag empty space to pan, wheel to
@@ -412,12 +446,15 @@ fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
             |state: &mut AppState, action: GraphAction| match action {
                 GraphAction::NodeMoved { id, world } => {
                     if let Some(key) = state.graph.get_node_key_by_id(id) {
-                        state.graph.set_node_projected_position(
+                        // Per-move: update committed position in memory only
+                        // (persist happens on NodeDropped, not every tick).
+                        state.graph.set_node_position(
                             key,
                             PortablePoint::new(world.x as f32, world.y as f32),
                         );
                     }
                 }
+                GraphAction::NodeDropped { .. } => state.persist_graph(),
                 GraphAction::NodeActivated { id } => {
                     state.selected_node = Some(id);
                     let url = state
@@ -488,6 +525,25 @@ mod tests {
             tiles + 1,
             "the added tile should survive the reload"
         );
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Slice 4 done-line: a first load seeds + persists the graph; the next load
+    /// restores it with the same node ids (so workbench bindings stay valid).
+    #[test]
+    fn graph_seeds_then_restores_with_stable_ids() {
+        let dir = std::env::temp_dir().join(format!("mere-app-graph-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let seeded = load_or_seed_graph(&dir);
+        let ids: std::collections::HashSet<_> = seeded.nodes().map(|(_, n)| n.id).collect();
+        assert!(!ids.is_empty(), "seed graph should have nodes");
+
+        let restored = load_or_seed_graph(&dir);
+        let restored_ids: std::collections::HashSet<_> =
+            restored.nodes().map(|(_, n)| n.id).collect();
+        assert_eq!(ids, restored_ids, "node ids must survive a restart");
 
         std::fs::remove_dir_all(&dir).ok();
     }

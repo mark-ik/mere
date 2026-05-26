@@ -63,8 +63,10 @@ const CLICK_SLOP: f64 = 4.0;
 /// What the orrery emits to app state; the view routes each variant.
 #[derive(Clone, Copy, Debug)]
 pub enum GraphAction {
-    /// A node was dragged to a new world position (write the kernel graph).
+    /// A node is being dragged (per-move) — update its position in memory.
     NodeMoved { id: Uuid, world: Point },
+    /// A drag finished (pointer up after movement) — a good point to persist.
+    NodeDropped { id: Uuid },
     /// A node was clicked (press + release without dragging) — open it.
     NodeActivated { id: Uuid },
 }
@@ -93,7 +95,7 @@ pub fn scene_from_graph(graph: &Graph) -> GraphScene {
     let mut nodes = Vec::new();
     let mut index_of = HashMap::new();
     for (key, node) in graph.nodes() {
-        let w = graph.node_projected_position(key).unwrap_or_default();
+        let w = graph.node_committed_position(key).unwrap_or_default();
         index_of.insert(key, nodes.len());
         nodes.push(SceneNode {
             id: node.id,
@@ -217,14 +219,17 @@ impl Widget for GraphCanvasWidget {
                 }
             }
             PointerEvent::Up(_) => {
-                // A node press that never became a drag is a click → activate it.
+                // A node press that never moved is a click (activate); one that
+                // moved is a drop (persist the new position).
                 if let Some(Drag::Node { index, moved, .. }) = self.drag {
-                    if !moved {
-                        if let Some(node) = self.scene.nodes.get(index) {
-                            ctx.submit_action::<GraphAction>(GraphAction::NodeActivated {
-                                id: node.id,
-                            });
-                        }
+                    if let Some(node) = self.scene.nodes.get(index) {
+                        let id = node.id;
+                        let action = if moved {
+                            GraphAction::NodeDropped { id }
+                        } else {
+                            GraphAction::NodeActivated { id }
+                        };
+                        ctx.submit_action::<GraphAction>(action);
                     }
                 }
                 if self.drag.take().is_some() {
@@ -422,8 +427,8 @@ mod tests {
         let mut g = Graph::new();
         let a = g.add_node("seed://a".into(), PortablePoint::new(0.0, 0.0));
         let b = g.add_node("seed://b".into(), PortablePoint::new(0.0, 0.0));
-        g.set_node_projected_position(a, PortablePoint::new(10.0, 20.0));
-        g.set_node_projected_position(b, PortablePoint::new(-5.0, 7.0));
+        g.set_node_position(a, PortablePoint::new(10.0, 20.0));
+        g.set_node_position(b, PortablePoint::new(-5.0, 7.0));
         // Two traversals between the same pair → one undirected edge.
         g.push_traversal(a, b, Traversal::now(NavigationTrigger::LinkClick));
         g.push_traversal(b, a, Traversal::now(NavigationTrigger::LinkClick));

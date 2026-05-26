@@ -10,6 +10,10 @@ description = "Portable identity, authority, and mutation kernel for the Mere br
 
 [features]
 test-utils = []
+# Native on-disk graph persistence (the `store` module: Graph <-> graph.json
+# via GraphSnapshot). Off by default so the kernel stays portable-by-default;
+# the native host enables it. serde_json is already a base dep.
+store = []
 
 [dependencies]
 node-lineage.workspace = true
