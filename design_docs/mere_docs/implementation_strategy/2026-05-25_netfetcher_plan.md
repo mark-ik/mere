@@ -402,3 +402,23 @@ Two oracles, used together:
   (offline via mockito). **Deferred:** active/passive mixed-content split,
   public-suffix-accurate same-site, then increment 4 (HTTP/3) and increment 5
   (optional WebSocket).
+- **2026-05-26** — **increment 4 landed** (HTTP/3), in three committed steps.
+  **4a:** an `h3_client` transport over quinn 0.11 + h3 0.0.8 (QUIC connect → drive
+  the connection concurrently with the request via `tokio::select!` → collect),
+  verified by a real offline round-trip against an in-process quinn h3 server
+  (rcgen self-signed cert, ALPN h3, no-verify test client) — native-only, wasm-
+  excluded. **4b-1:** Alt-Svc discovery — `AltSvcStore` seam + `Alt-Svc` parsing
+  (h3 alternative / `ma` / `clear`), recorded off responses; production webpki QUIC
+  config. **4b-2 (Mark chose the clean path over a minimal-with-gaps branch):** a
+  **transport-abstraction refactor** — both h1/h2 and h3 now yield a common
+  `RawResponse { status, headers, body-stream }`, and the shared back half
+  (cookie/HSTS/Alt-Svc recording, redirects, tainting, `Cors` filtering, cache,
+  content-encoding decode) runs over either; `send_request` prefers h3 when an
+  https origin advertised it (bodyless requests) and falls back to h1/h2. So h3 has
+  **full back-half parity** (redirects, cache, revalidation), not a gappy side
+  path. **51 tests green** — the existing suite passing through the new abstraction
+  confirms h1/h2 parity. Honest gap: the combined Alt-Svc→live-h3-success path
+  isn't offline-unit-tested (production webpki config won't trust a self-signed
+  test server; mockito is http-only) — covered by the 4a transport test +
+  routing-decision/recording tests. **Deferred:** h3 for requests with bodies,
+  active/passive mixed-content split, PSL same-site, then increment 5 (WebSocket).
