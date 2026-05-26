@@ -11,28 +11,31 @@ use std::collections::HashMap;
 use forme::ArrangementNodeKind;
 use kernel::geometry::PortablePoint;
 use platen::{PlanSlot, TilePlan, project_tree};
-use xilem::masonry::kurbo::Axis;
 use xilem::view::{
-    CrossAxisAlignment, FlexExt as _, button, flex_col, flex_row, label, portal, prose, split,
-    text_input,
+    CrossAxisAlignment, FlexExt as _, button, flex_col, flex_row, label, portal, prose, text_input,
 };
 use xilem::{AnyWidgetView, WidgetView};
 
 use crate::engine_tile::{self, RenderedTile};
 use crate::graph_canvas::{GraphAction, graph_canvas, scene_from_graph};
-use crate::{AppState, ring_world};
+use crate::{AppState, MainView, ring_world};
 
-/// The whole app view: a toolbar over a frametree of splits. Left = workbench;
-/// right column = orrery (top) over apparatus (bottom).
+/// The whole app view: a toolbar over a single main pane. The app opens on the
+/// orrery (the graph is home); navigating shows a document; the toolbar switches
+/// the pane to the workbench / apparatus. Side-by-side splitting is a separate
+/// user gesture (a later slice), not the default layout.
 pub fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
-    flex_col((
-        toolbar(state),
-        split(
-            workbench_pane(state),
-            split(orrery_pane(state), apparatus_pane(state)).split_axis(Axis::Vertical),
-        )
-        .flex(1.0),
-    ))
+    flex_col((toolbar(state), content_pane(state).flex(1.0)))
+}
+
+/// The single main pane, dispatched on the current [`MainView`].
+fn content_pane(state: &AppState) -> Box<AnyWidgetView<AppState>> {
+    match state.main_view {
+        MainView::Orrery => orrery_pane(state).boxed(),
+        MainView::Document => document_pane(state).boxed(),
+        MainView::Workbench => workbench_pane(state).boxed(),
+        MainView::Apparatus => apparatus_pane(state).boxed(),
+    }
 }
 
 /// The toolbar: back / forward, the omnibar (type an address + Enter), and Go.
@@ -50,6 +53,17 @@ fn toolbar(state: &AppState) -> impl WidgetView<AppState> + use<> {
         button(label("Go"), |state: &mut AppState| {
             let address = state.omnibar.clone();
             state.navigate(&address);
+        }),
+        // View switches: the single pane's content kind (Document appears by
+        // navigating). Side-by-side splitting is a later gesture.
+        button(label("graph"), |state: &mut AppState| {
+            state.main_view = MainView::Orrery;
+        }),
+        button(label("bench"), |state: &mut AppState| {
+            state.main_view = MainView::Workbench;
+        }),
+        button(label("info"), |state: &mut AppState| {
+            state.main_view = MainView::Apparatus;
         }),
     ))
 }
@@ -88,29 +102,29 @@ fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
                 state.persist_workbench();
             }),)),
             flex_row(slots),
-            live_tile(state),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Stretch),
     )
     .constrain_horizontal(true)
 }
 
-/// The focus tile: the omnibar/orrery-navigated document (`state.current`),
-/// shown below the workbench's bound tiles. Header names the engine + address.
-fn live_tile(state: &AppState) -> impl WidgetView<AppState> + use<> {
+/// Document pane — the currently-navigated document (`state.current`), rendered
+/// full-pane. This is what the main pane shows after navigating (omnibar or an
+/// orrery node click).
+fn document_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
     let tile = &state.current;
+    let title = tile
+        .document
+        .title
+        .as_deref()
+        .unwrap_or(tile.document.address.as_str());
     let mut children: Vec<Box<AnyWidgetView<AppState>>> = vec![
-        label("▣ live tile").text_size(13.0).boxed(),
-        prose(format!(
-            "{} · engine: {} · {}",
-            tile.document.address,
-            tile.engine_id,
-            tile.document.title.as_deref().unwrap_or("(untitled)"),
-        ))
-        .boxed(),
+        label(title.to_string()).text_size(18.0).boxed(),
+        prose(format!("{} · engine: {}", tile.document.address, tile.engine_id)).boxed(),
     ];
     children.extend(engine_tile::document_views(&tile.document));
-    flex_col(children).cross_axis_alignment(CrossAxisAlignment::Stretch)
+    portal(flex_col(children).cross_axis_alignment(CrossAxisAlignment::Stretch))
+        .constrain_horizontal(true)
 }
 
 /// Render one workbench slot: a single tile, or a tab-stack (active tab's

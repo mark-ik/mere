@@ -32,6 +32,7 @@ use forme::store::{load_all_formes, save_forme};
 use forme::{ArrangementNodeKind, FormeDocument};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NavigationTrigger, Traversal};
+#[cfg(test)]
 use platen::project_tree;
 use xilem::{EventLoop, WindowOptions, Xilem};
 
@@ -90,6 +91,17 @@ impl History {
     }
 }
 
+/// What the single main pane shows. The app opens on `Orrery` (the graph is
+/// home); navigating switches it to `Document`; the toolbar switches it to
+/// `Workbench` / `Apparatus`. Side-by-side splitting is a separate gesture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MainView {
+    Orrery,
+    Document,
+    Workbench,
+    Apparatus,
+}
+
 /// The single application state the Xilem driver owns. Widgets mutate
 /// it in place through their callbacks; the view tree rebuilds on diff.
 /// Per-pane UI sub-state gets its own struct here as panes grow
@@ -113,6 +125,8 @@ struct AppState {
     current: RenderedTile,
     /// The orrery's selected node (highlighted; clicking it opened `current`).
     selected_node: Option<uuid::Uuid>,
+    /// What the main pane currently shows. Opens on `Orrery`.
+    main_view: MainView,
     /// Rendered content for workbench tiles bound to a graph member, keyed by
     /// member id. Built once at startup (tile content is static for v1).
     tile_docs: HashMap<uuid::Uuid, RenderedTile>,
@@ -155,6 +169,7 @@ impl AppState {
             omnibar,
             current,
             selected_node: None,
+            main_view: MainView::Orrery,
             tile_docs,
             session_dir,
             frame_label: "Mere".to_string(),
@@ -165,11 +180,13 @@ impl AppState {
         self.graph.nodes().count()
     }
 
-    /// Navigate to `address`: push history, resolve + render it, sync omnibar.
+    /// Navigate to `address`: push history, resolve + render it, sync omnibar,
+    /// and switch the main pane to show the document.
     fn navigate(&mut self, address: &str) {
         self.history.push(address);
         self.current = navigation::open(address);
         self.omnibar = address.to_string();
+        self.main_view = MainView::Document;
     }
 
     /// Go back in history and render that entry (no-op at the start).
@@ -177,6 +194,7 @@ impl AppState {
         if let Some(address) = self.history.back().map(str::to_string) {
             self.current = navigation::open(&address);
             self.omnibar = address;
+            self.main_view = MainView::Document;
         }
     }
 
@@ -185,6 +203,7 @@ impl AppState {
         if let Some(address) = self.history.forward().map(str::to_string) {
             self.current = navigation::open(&address);
             self.omnibar = address;
+            self.main_view = MainView::Document;
         }
     }
 
