@@ -236,6 +236,40 @@ mod tests {
     }
 
     #[test]
+    fn tab_stack_after_a_tile_is_offset_to_its_slot() {
+        // A solo tile, then a two-tab stack. The stack is the *second* slot, so
+        // its strip/content must be offset by the slot's x-origin — the path the
+        // single-slot test above never exercises.
+        let mut a = Arrangement::new();
+        a.add_tile_intent(Some(Uuid::from_u128(1)));
+        let t2 = a.add_tile_intent(Some(Uuid::from_u128(2)));
+        let t3 = a.add_tile_intent(Some(Uuid::from_u128(3)));
+        a.stack(t2, t3);
+        let plan = project_tree(&a);
+        let cfg = LayoutConfig { gap: 10.0, tab_strip_height: 30.0 };
+        let out = layout_plan(&plan, viewport(810.0, 400.0), &cfg);
+
+        assert_eq!(out.slots.len(), 2);
+        // (810 - 10 gap) / 2 = 400; second slot starts at 410.
+        let slot_x = match &out.slots[1] {
+            LaidOutSlot::Tabs { rect, .. } => rect.origin.x,
+            other => panic!("expected Tabs as slot 1, got {other:?}"),
+        };
+        assert_eq!(slot_x, 410.0);
+        match &out.slots[1] {
+            LaidOutSlot::Tabs { strip, content, rect, .. } => {
+                assert_eq!(rect.size, PortableSize::new(400.0, 400.0));
+                // Strip/content sit at the slot's x, not the viewport origin.
+                assert_eq!(strip.origin, PortablePoint::new(410.0, 0.0));
+                assert_eq!(strip.size, PortableSize::new(400.0, 30.0));
+                assert_eq!(content.origin, PortablePoint::new(410.0, 30.0));
+                assert_eq!(content.size, PortableSize::new(400.0, 370.0));
+            }
+            other => panic!("expected Tabs, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn slots_cover_the_viewport_height() {
         let mut a = Arrangement::new();
         a.add_tile_intent(Some(Uuid::from_u128(1)));
