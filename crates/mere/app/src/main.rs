@@ -20,6 +20,7 @@
 mod camera;
 mod engine_tile;
 mod graph_canvas;
+mod navigation;
 
 use std::path::{Path, PathBuf};
 
@@ -31,7 +32,7 @@ use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NavigationTrigger, Traversal};
 use platen::{PlanSlot, TilePlan, project_tree};
 use xilem::masonry::kurbo::Axis;
-use xilem::view::{FlexExt as _, button, flex_col, flex_row, label, prose, split};
+use xilem::view::{FlexExt as _, button, flex_col, flex_row, label, prose, split, text_input};
 use xilem::{AnyWidgetView, EventLoop, WidgetView, WindowOptions, Xilem};
 
 /// Lay seed nodes (and new ones) on a world-space ring so the orrery shows a
@@ -42,33 +43,6 @@ fn ring_world(i: usize, n: usize) -> PortablePoint {
     let radius = 140.0;
     PortablePoint::new((radius * theta.cos()) as f32, (radius * theta.sin()) as f32)
 }
-
-/// Seeded markdown for the live engine tile. Routed through `inker` and
-/// rendered by the `nematic` markdown engine at startup — proof the engine
-/// seam produces real content, not a placeholder. Edit here to change the
-/// welcome page.
-const WELCOME_MD: &str = "\
-# Welcome to Mere
-
-A **spatial browser** on the *composition spine*: graph truth → forme →
-platen → verso → inker.
-
-This tile is **live**. Its content was routed through `inker`'s engine
-policy and parsed by the `nematic` markdown engine — nothing below the rule
-is placeholder text.
-
-## What you're looking at
-
-- The **workbench** projects a forme arrangement into tiles
-- The **orrery** is the spatial graph view (canvas widget pending)
-- This document proves the engine-routing seam end to end
-
----
-
-    route(address, content_type) -> Engine -> EngineDocument
-
-Edit `WELCOME_MD` in `main.rs` to change this page.
-";
 
 /// The single application state the Xilem driver owns. Widgets mutate
 /// it in place through their callbacks; the view tree rebuilds on diff.
@@ -84,9 +58,11 @@ struct AppState {
     /// is loaded at startup and re-saved on every edit, so the workbench
     /// survives a restart.
     workbench: FormeDocument,
-    /// The live engine-backed tile: a document routed through `inker` and
-    /// rendered by a `nematic` engine at startup. The v1 "one live tile."
-    welcome: RenderedTile,
+    /// The address currently in the omnibar (edited as the user types).
+    omnibar: String,
+    /// The currently-navigated document: resolved by [`navigation`] and
+    /// rendered through `inker`. Replaced on every navigation.
+    current: RenderedTile,
     /// Where session state lives on disk (the forme store writes under
     /// `<session_dir>/formes/`).
     session_dir: PathBuf,
@@ -117,15 +93,15 @@ impl AppState {
         let session_dir = session_dir();
         let workbench = load_or_seed_workbench(&session_dir);
 
-        // Route + render the welcome document at startup through the engine
-        // seam (inker policy → nematic markdown engine).
-        let welcome =
-            engine_tile::render_address("mere://welcome", WELCOME_MD, Some("text/markdown"));
+        // Navigate to the welcome page at startup through the engine seam.
+        let omnibar = "mere://welcome".to_string();
+        let current = navigation::open(&omnibar);
 
         Self {
             graph,
             workbench,
-            welcome,
+            omnibar,
+            current,
             session_dir,
             frame_label: "Mere".to_string(),
         }
@@ -133,6 +109,13 @@ impl AppState {
 
     fn node_count(&self) -> usize {
         self.graph.nodes().count()
+    }
+
+    /// Navigate to `address`: resolve + render it into the current tile, and
+    /// sync the omnibar text to the address.
+    fn navigate(&mut self, address: &str) {
+        self.current = navigation::open(address);
+        self.omnibar = address.to_string();
     }
 
     /// Persist the workbench forme after an edit. Failures are surfaced to
@@ -211,10 +194,30 @@ fn seed_workbench() -> FormeDocument {
 /// column = orrery (top) over apparatus (bottom). This *is* the
 /// frametree — splits are split views, panes are view functions.
 fn app_logic(state: &mut AppState) -> impl WidgetView<AppState> + use<> {
-    split(
-        workbench_pane(state),
-        split(orrery_pane(state), apparatus_pane(state)).split_axis(Axis::Vertical),
-    )
+    flex_col((
+        omnibar_bar(state),
+        split(
+            workbench_pane(state),
+            split(orrery_pane(state), apparatus_pane(state)).split_axis(Axis::Vertical),
+        )
+        .flex(1.0),
+    ))
+}
+
+/// The omnibar: type an address and press Enter (or click Go) to navigate.
+/// Routes through [`navigation`] → `inker` and updates the live tile.
+fn omnibar_bar(state: &AppState) -> impl WidgetView<AppState> + use<> {
+    flex_row((
+        text_input(state.omnibar.clone(), |state: &mut AppState, text| {
+            state.omnibar = text;
+        })
+        .on_enter(|state: &mut AppState, text| state.navigate(&text))
+        .flex(1.0),
+        button(label("Go"), |state: &mut AppState| {
+            let address = state.omnibar.clone();
+            state.navigate(&address);
+        }),
+    ))
 }
 
 /// Workbench pane — renders the forme arrangement through platen's tree
@@ -254,11 +257,12 @@ fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
 /// engine-backed tile" — the projected slots above are still placeholders
 /// (label-only), but *this* tile is real engine output.
 fn live_tile(state: &AppState) -> impl WidgetView<AppState> + use<> {
-    let tile = &state.welcome;
+    let tile = &state.current;
     let mut children: Vec<Box<AnyWidgetView<AppState>>> = vec![
         label("▣ live tile").text_size(13.0).boxed(),
         prose(format!(
-            "engine: {} · {}",
+            "{} · engine: {} · {}",
+            tile.document.address,
             tile.engine_id,
             tile.document.title.as_deref().unwrap_or("(untitled)"),
         ))
