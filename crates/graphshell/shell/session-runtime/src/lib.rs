@@ -54,11 +54,6 @@ pub use engine_profile_store::{
     ENGINE_PROFILES_DIR, EngineProfileScope, GRAPHS_DIR, PERSONAS_DIR, SESSIONS_DIR,
     engine_profile_path, engine_profile_path_for_session,
 };
-pub use control_plane::{
-    ActionBus, ActionKind, ActionListener, ActionTarget, BusAction, BusDispatchOutcome, DenyReason,
-    PermissionDecision, PermissionGate, PermitEverythingGate, RefuseEverythingGate, SurfaceId,
-    TearOutMode, check_permission,
-};
 pub use manifest::{
     EngineProfileBinding, EngramId, GraphSessionManifest, MANIFEST_SCHEMA_VERSION, PersonaId,
     SessionPolicy, SessionPolicyOverride, WorkerKind,

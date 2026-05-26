@@ -6,14 +6,13 @@ license = "MPL-2.0"
 edition = "2024"
 publish = false
 rust-version = "1.92.0"
-description = "Portable graphshell session runtime state: session manifests, session graph/view sidecars, worker declarations, and compatibility re-exports for adjacent control-plane and verso state."
+description = "Portable graphshell session runtime state: session manifests, session graph/view sidecars, and worker declarations."
 
 [dependencies]
 frame.workspace = true
 kernel.workspace = true
 forme.workspace = true
 identity.workspace = true
-control-plane.workspace = true
 tile-state.workspace = true
 
 serde = { version = "1", features = ["derive"] }

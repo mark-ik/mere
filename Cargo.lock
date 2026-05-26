@@ -1927,16 +1927,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "136d3e02915a2cea4d74caa8681e2d44b1c3254bdbf17d11d41d587ff858832c"
 
 [[package]]
-name = "control-plane"
-version = "0.0.1"
-dependencies = [
- "frame",
- "identity",
- "kernel",
- "uuid",
-]
-
-[[package]]
 name = "convert_case"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9455,7 +9445,6 @@ dependencies = [
 name = "session-runtime"
 version = "0.0.1"
 dependencies = [
- "control-plane",
  "euclid",
  "forme",
  "frame",
