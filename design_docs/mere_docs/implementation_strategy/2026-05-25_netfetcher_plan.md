@@ -133,6 +133,17 @@ Key invariants:
   binding → cookie jar + cache partition; capability gates → `connect-src`
   decisions), and routes fetched bytes to whichever renderer tenant asked
   (`serval.web`, nematic engines, etc.).
+- **Native-only — the *whole* crate, not just the h3/WebSocket lanes.** netfetcher
+  is built on `hyper` + `tokio` (sockets, runtime), which don't run on
+  `wasm32`. So netfetcher is a **native** network engine, period; the
+  wasm/PWA target uses the **browser's own `fetch`/`WebSocket`** through a thin
+  adapter (unbuilt, a separate component). This mirrors the scripting split
+  (Nova native; browser JS in the browser): the host platform's native engine on
+  desktop, the browser's built-ins in a PWA. (Implementation note: h3 +
+  WebSocket are additionally `#[cfg]`-excluded from wasm, but that's moot given
+  the core stack is native already.) Corrects the earlier "wasm-friendlier"
+  framing in the open questions below — storage-agnostic seams are still good
+  design, just not for a wasm *netfetcher*.
 - **The JS `fetch()` binding (serval scripting tier) ultimately calls
   netfetcher** — but through the host, not by linking it, preserving the same
   byte-seam discipline.
@@ -334,8 +345,51 @@ Two oracles, used together:
 - **Conformance:** shares a WPT-runner harness with serval's CSS/layout
   conformance effort.
 - **Sibling organs:** `netrender` (paint→GPU, done), `serval` (render engine),
-  proposed `net-media` (WebRTC via `webrtc-rs` + media decode — a *separate*
-  future plan; netfetcher does not do media streaming/DRM).
+  `net-media` ([plan](2026-05-26_net_media_plan.md): WebRTC + media decode — a
+  separate organ; netfetcher does not do media streaming/DRM).
+
+---
+
+## 11. Integration — wiring netfetcher into a consumer (the next step)
+
+The engine is complete (increments 1–5); nothing calls it yet. This is the
+load-bearing next move — it closes the "no consumer" gap and validates the organ
+against real use. The shape:
+
+1. **Mere side — the `FetcherPool` worker.** `SessionServiceRunner`'s
+   `WorkerKind::FetcherPool` instantiates a `FetchContext` with **host-backed
+   seams** (the seams were designed for exactly this):
+   - `CookieStore` → eidetic-/persona-scoped durable jar (per the
+     [engine-profile-boundary plan](2026-05-14_engine_profile_boundary_plan.md)).
+   - `HttpCache` → eidetic-backed durable cache.
+   - `CspChecker` → bridges to Mere's
+     [capability gates](../research/2026-05-14_capability_gate_catalogue_brief.md)
+     (`connect-src` decisions).
+   - `HstsStore` / `AltSvcStore` / `PreflightCache` → durable or per-session.
+
+   The worker takes a request (URL + method + headers + initiator origin), runs
+   `fetch`, and returns the `Response`.
+2. **serval side — byte seams (no serval change).** serval's `ImageLoader`
+   (and stylesheet/script seams) already take *bytes*; the host fetches via
+   netfetcher and hands them back. serval never links netfetcher. Flow: serval
+   reports a needed URL → host fetches → bytes → serval's seam.
+3. **CORS stays host-side.** The host supplies the initiating document's
+   `origin`; netfetcher does the cross-origin gating; serval just gets bytes
+   (success) or nothing (blocked) — it never reasons about CORS.
+4. **Streaming vs collect.** netfetcher's `ResponseBody` is a stream; the
+   image/stylesheet seams want complete bytes (worker collects), while
+   progressive consumers (future) take the stream.
+5. **The wasm split (per §3).** Native host → netfetcher. wasm/PWA → a host
+   adapter over the **browser's** `fetch`. serval's seams are identical across
+   both (they only take bytes), so **serval is unchanged native↔wasm — only the
+   host's fetcher differs.**
+6. **eidetic-https-fetcher convergence (OQ#5), on contact.** Once netfetcher is
+   the host fetch path, eidetic's `BlobFetcher` can either delegate to it (one
+   HTTP stack) or stay a minimal hash-verified blob GET. Decide then.
+
+**Smallest first integration:** one native consumer doing a single GET through
+netfetcher into serval's `ImageLoader` — proves the whole organ end-to-end
+against real use, and surfaces any seam-shape mismatch early.
 
 ---
 
@@ -421,4 +475,15 @@ Two oracles, used together:
   isn't offline-unit-tested (production webpki config won't trust a self-signed
   test server; mockito is http-only) — covered by the 4a transport test +
   routing-decision/recording tests. **Deferred:** h3 for requests with bodies,
-  active/passive mixed-content split, PSL same-site, then increment 5 (WebSocket).
+  active/passive mixed-content split, PSL same-site.
+- **2026-05-26** — **increment 5 landed** (WebSocket), completing the ladder. New
+  native-only `websocket` module over `tokio-tungstenite` 0.29: `connect()` does
+  the RFC 6455 handshake (`ws://` and `wss://` via rustls) and returns a
+  `WebSocket` whose `send`/`recv` use a `WsMessage` enum (text/binary/ping/pong/
+  close) decoupled from tungstenite types. Verified by an in-process `ws://` echo
+  round-trip (text + binary); `wss://` supported via webpki but not offline-tested.
+  **52 tests green.** **Ladder complete (1–5).** Remaining is *not* more protocol
+  surface but **integration** (wire netfetcher into a consumer — Mere's
+  `FetcherPool` + serval's byte-seams; see §11) and the deferred refinements
+  (h3-with-bodies, active/passive mixed-content, PSL same-site). Confirmed
+  native-only as a whole (hyper/tokio) — wasm uses the browser's fetch (§3).
