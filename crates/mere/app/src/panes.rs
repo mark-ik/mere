@@ -9,10 +9,14 @@
 use std::collections::HashMap;
 
 use forme::ArrangementNodeKind;
-use kernel::geometry::PortablePoint;
-use platen::{PlanSlot, TilePlan, project_tree};
+use kernel::geometry::{PortablePoint, PortableRect, PortableSize};
+use platen::{LaidOutSlot, LayoutConfig, TilePlan, layout_plan, project_tree};
+use xilem::masonry::kurbo::Vec2;
+use xilem::masonry::layout::{Length, UnitPoint};
+use xilem::masonry::properties::Dimensions;
 use xilem::view::{
-    CrossAxisAlignment, FlexExt as _, button, flex_col, flex_row, label, portal, prose, text_input,
+    CrossAxisAlignment, FlexExt as _, button, flex_col, flex_row, label, portal, prose,
+    resize_observer, sized_box, text_input, transformed, zstack,
 };
 use xilem::{AnyWidgetView, WidgetView};
 
@@ -75,22 +79,41 @@ fn toolbar(state: &AppState) -> impl WidgetView<AppState> + use<> {
 /// show a label placeholder.
 fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
     let plan = project_tree(&state.workbench.arrangement);
-    let slots: Vec<Box<AnyWidgetView<AppState>>> = plan
-        .slots
-        .iter()
-        .map(|s| slot_view(s, &state.tile_docs))
-        .collect();
-    portal(
-        flex_col((
-            label("Workbench").text_size(18.0),
-            prose(format!(
-                "forme \"{}\" → tree projection: {} slot(s), {} tile(s) · persisted",
+    let viewport = PortableSize::new(
+        state.content_size.width as f32,
+        state.content_size.height as f32,
+    );
+    let laid = layout_plan(&plan, viewport, &LayoutConfig::default());
+
+    // Place each slot at its platen-computed rect. Masonry is not re-deriving
+    // the between-tiles layout here — platen owns it (see the between-tiles
+    // layout seam); each tile is an absolutely-positioned fixed-size box, and
+    // Masonry lays out only the content *within* it.
+    let mut placed: Vec<Box<AnyWidgetView<AppState>>> = Vec::new();
+    for slot in &laid.slots {
+        match slot {
+            LaidOutSlot::Tile { tile, rect } => {
+                placed.push(place(rect, tile_view(tile, &state.tile_docs)));
+            }
+            LaidOutSlot::Tabs { tabs, strip, content, .. } => {
+                placed.push(place(strip, tabs_strip(tabs)));
+                if let Some(active) = tabs.first() {
+                    placed.push(place(content, tile_view(active, &state.tile_docs)));
+                }
+            }
+        }
+    }
+
+    flex_col((
+        // Chrome strip (natural height): header + the "+ tile" affordance.
+        flex_row((
+            label(format!(
+                "Workbench \"{}\" · {} slot(s), {} tile(s) · platen-placed",
                 state.workbench.label.as_deref().unwrap_or("workbench"),
-                plan.slots.len(),
+                laid.slots.len(),
                 plan.tile_count()
             )),
-            // Wrapped in a row so Stretch doesn't widen the button full-width.
-            flex_row((button(label("+ tile"), |state: &mut AppState| {
+            button(label("+ tile"), |state: &mut AppState| {
                 let arr = &mut state.workbench.arrangement;
                 let root = arr.root();
                 let n = arr.len();
@@ -100,12 +123,21 @@ fn workbench_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
                 );
                 arr.attach(id, root);
                 state.persist_workbench();
-            }),)),
-            flex_row(slots),
-        ))
-        .cross_axis_alignment(CrossAxisAlignment::Stretch),
-    )
-    .constrain_horizontal(true)
+            }),
+        )),
+        // Tiling region: the platen-placed tiles, stretched to fill. Its
+        // measured size round-trips into `content_size` for the next layout
+        // pass (one-frame lag on resize, then stable).
+        resize_observer(
+            |state: &mut AppState, size| {
+                state.content_size = size;
+            },
+            zstack(placed)
+                .alignment(UnitPoint::TOP_LEFT)
+                .prop(Dimensions::STRETCH),
+        )
+        .flex(1.0),
+    ))
 }
 
 /// Document pane — the currently-navigated document (`state.current`), rendered
@@ -127,28 +159,31 @@ fn document_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
         .constrain_horizontal(true)
 }
 
-/// Render one workbench slot: a single tile, or a tab-stack (active tab's
-/// content + a strip of the rest).
-fn slot_view(
-    slot: &PlanSlot,
-    docs: &HashMap<uuid::Uuid, RenderedTile>,
-) -> Box<AnyWidgetView<AppState>> {
-    match slot {
-        PlanSlot::Tile(t) => tile_view(t, docs),
-        PlanSlot::Tabs(tabs) => {
-            let mut children: Vec<Box<AnyWidgetView<AppState>>> =
-                vec![label(format!("▭ tabs ({})", tabs.len())).text_size(13.0).boxed()];
-            for t in tabs.iter().skip(1) {
-                children.push(prose(format!("• {}", tile_label(t))).boxed());
-            }
-            if let Some(active) = tabs.first() {
-                children.push(tile_view(active, docs));
-            }
-            flex_col(children)
-                .cross_axis_alignment(CrossAxisAlignment::Stretch)
-                .boxed()
-        }
-    }
+/// Place a view at a platen-computed rect: a fixed-size box translated to the
+/// rect's origin, inside the workbench's top-left-anchored `zstack`. This is
+/// the route-1 absolute-placement seam — the host positions tiles at platen's
+/// geometry rather than letting a flex container re-derive it.
+fn place(rect: &PortableRect, view: Box<AnyWidgetView<AppState>>) -> Box<AnyWidgetView<AppState>> {
+    transformed(
+        sized_box(view)
+            .fixed_width(Length::px(rect.size.width.max(0.0) as f64))
+            .fixed_height(Length::px(rect.size.height.max(0.0) as f64)),
+    )
+    .translate(Vec2::new(rect.origin.x as f64, rect.origin.y as f64))
+    .boxed()
+}
+
+/// The tab strip for a tab-stack slot: the active tab marked, the rest listed.
+fn tabs_strip(tabs: &[TilePlan]) -> Box<AnyWidgetView<AppState>> {
+    let labels: Vec<Box<AnyWidgetView<AppState>>> = tabs
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let mark = if i == 0 { "▣" } else { "▢" };
+            prose(format!("{mark} {}", tile_label(t))).boxed()
+        })
+        .collect();
+    flex_row(labels).boxed()
 }
 
 /// A single workbench tile: its bound member's rendered content (compact), or a

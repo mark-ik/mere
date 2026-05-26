@@ -113,6 +113,21 @@ Recommended sequencing: do the composition spike (route 1) first to close the
 loop and feel the interaction, then graduate to the custom widget (route 2) when
 verso lands or when route 1's affine handling proves fragile.
 
+**Route 1 landed (2026-05-26).** The workbench pane (`mere-app/panes.rs`) now
+consumes `LaidOutPlan`: each slot is placed via `transformed(sized_box(view)
+.fixed_width/height(..)).translate((x, y))` inside a top-left `zstack` stretched
+to fill (`Dimensions::STRETCH`). `transformed` sets a real `WidgetPod` transform
+(border-box coordinate space), so pointer hit-testing follows the placement —
+the tiles are interactive, not just painted in place. The tiling region's size
+round-trips through `AppState.content_size` via a `resize_observer` (one-frame
+lag on resize, then stable; the loop is safe because the stretched `zstack`'s
+measured size is independent of where tiles are placed inside it). Flex no longer
+lays the slots out, so the double-layout caveat holds. **Runtime GUI
+verification pending** (the headless toolchain can't check visual layout): watch
+for first-frame placement at the default `content_size`, and that pointer events
+land through the affine. Route 2 (custom child-hosting widget) remains the
+robust, clip-correct graduation, especially once verso lands.
+
 ## Status
 
 - `platen::layout` — **built + tested** (`layout_plan`, `LaidOutPlan`,

@@ -36,6 +36,7 @@ use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NavigationTrigger, Traversal};
 #[cfg(test)]
 use platen::project_tree;
+use xilem::masonry::kurbo::Size;
 use xilem::{EventLoop, WindowOptions, Xilem};
 
 /// Lay seed nodes (and new ones) on a world-space ring so the orrery shows a
@@ -135,6 +136,11 @@ struct AppState {
     /// Cached orrery scene (graph projected to world positions + edges).
     /// Rebuilt only on graph mutation, not per frame (memoized derivation).
     scene: GraphScene,
+    /// Last measured size of the workbench tiling region, reported back by a
+    /// `resize_observer`. `platen::layout_plan` needs a viewport to lay tiles
+    /// out, but Xilem builds the view before layout runs — so the size round-
+    /// trips through state (one-frame lag on resize, then stable).
+    content_size: Size,
     /// Where session state lives on disk (the forme store writes under
     /// `<session_dir>/formes/`).
     session_dir: PathBuf,
@@ -179,6 +185,7 @@ impl AppState {
             main_view: MainView::Orrery,
             tile_docs,
             scene,
+            content_size: Size::new(960.0, 640.0),
             session_dir,
             frame_label: "Mere".to_string(),
         }
