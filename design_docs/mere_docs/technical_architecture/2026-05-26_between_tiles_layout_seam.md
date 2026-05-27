@@ -138,12 +138,15 @@ The placement is verifiable headless, not just by eye. masonry ships a
 `TestHarness` (`masonry_testing`): `create_with_size((w, h), root)` runs layout
 without a window, simulated input (`mouse_click_on(id)`, `process_pointer_event`,
 `mouse_move(point)`), and widget-tree inspection — `get_widget(id)` →
-`WidgetRef` exposes each widget's computed `window_origin()` / `border_box()` /
-`bounding_box()`. So the verso tiling widget gets a real headless test:
+`WidgetRef` exposes each widget's window placement via `to_window(Point::ZERO)` /
+`window_transform()` + `border_box()` / `bounding_box()` (`window_origin()` was
+removed upstream 2026-05-25 as a transform footgun). So the verso tiling widget
+gets a real headless test:
 
 1. **Placement** — build the widget with a known plan + window size; assert each
-   tile widget's `window_origin()` + `border_box_size()` equals its `layout_plan`
-   rect. This validates the widget's novel `layout()` end to end.
+   tile widget's window rect (`to_window(Point::ZERO)` + `border_box_size()`)
+   equals its `layout_plan` rect. This validates the widget's novel `layout()`
+   end to end.
 2. **Hit routing** — `mouse_click_on` / a pointer at a tile rect's centre routes
    to the right child (a `Recorder`-wrapped tile confirms receipt). Validates that
    placement and hit-testing agree.

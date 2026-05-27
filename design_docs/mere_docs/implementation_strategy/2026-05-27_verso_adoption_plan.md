@@ -93,7 +93,9 @@ second consumer appears):
 - Swaps the workbench pane off route 1.
 
 **Tests (masonry `TestHarness`, headless):** `create_with_size((w,h), widget)`,
-then assert each tile widget's `window_origin()` + `border_box_size()` equals its
+then assert each tile widget's window rect — `to_window(Point::ZERO)` +
+`border_box_size()` (`window_origin()` was removed upstream 2026-05-25 as a
+transform footgun; use `to_window` / `window_transform`) — equals its
 `layout_plan` rect; `mouse_click_on` / a pointer at a tile rect's centre routes
 to the right child (a `Recorder` tile confirms). Placement and hit-routing
 correctness is automated; only subjective visual quality needs eyes.
