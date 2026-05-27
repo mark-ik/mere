@@ -126,6 +126,26 @@ The cluster where verso, the Xilem driver edit, and the scrying brief converge:
   for the orthogonal observable channel).
 - `scrying-engine`'s producer becomes the `SurfaceProducer` behind the tile.
 
+**Gate + stub landed 2026-05-27 (builds green; runtime GPU verification pending).**
+The external-surface *pipe* is wired end to end with a solid-color stub:
+
+- **Xilem `with_external_compositor`** (vendored fork, commit `813179ae`) —
+  `MasonryDriver` forwards `composite_external_layers` to an app closure
+  (mirrors `start_callback`); the closure gets the shared device/queue, target,
+  and the external layers (`widget_id` + bounds).
+- **mere-app `surface_tile.rs`** (commit `76b9889`) — `SurfaceRegistry`
+  (`WidgetId → content`, the decoupler), `SurfaceTileWidget` (reserves an
+  `External` layer + registers its color, paints nothing), `composite_color`
+  (staging texture + `copy_texture_to_texture` into the target), and the `main()`
+  wiring (one registry shared between views and the closure; `MainView::Surface`
+  + a `surf` button show one tile).
+
+Remaining for the real lane: swap the registry value (`[u8;4]` → producer frame
+texture handle) and `composite_color`'s copy source (`scrying-engine`'s
+`SurfaceProducer`). The `SurfaceTile` currently mounts directly in a pane; the
+Phase 1 `WorkbenchTiling` widget will host it once that lands. The DOM-bridge
+observable channel (the brief) is orthogonal and rides the same pixel path.
+
 ## Sequencing decision (for the user)
 
 Two orders, both valid:
