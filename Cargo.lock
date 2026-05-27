@@ -10202,6 +10202,8 @@ version = "0.0.1"
 dependencies = [
  "inker",
  "kernel",
+ "uuid",
+ "verso-core",
 ]
 
 [[package]]
@@ -11234,6 +11236,7 @@ version = "0.0.1"
 dependencies = [
  "kernel",
  "serde",
+ "uuid",
 ]
 
 [[package]]

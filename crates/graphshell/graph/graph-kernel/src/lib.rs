@@ -37,4 +37,3 @@ pub mod signal_router;
 pub mod time;
 pub mod types;
 pub mod verso_address;
-pub mod viewer_host;

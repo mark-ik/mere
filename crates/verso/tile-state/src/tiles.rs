@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::time::SystemTime;
 
 use inker::{EngineDocument, SurfaceProducer};
-use kernel::graph::NodeKey;
+use verso_core::TileId;
 
 use crate::surface_tile::SurfaceTileState;
 
@@ -49,7 +49,7 @@ impl HistoryEntry {
 }
 
 /// Per-tile mutable state. Each open tile has one of these, keyed
-/// in the manager by the anchor `NodeKey`.
+/// in the manager by the forme-assigned `TileId`.
 #[derive(Default)]
 pub struct TileState {
     /// Within-tile navigation history. Index 0 = oldest; pushed when
@@ -184,19 +184,19 @@ impl Default for NavigateMode {
 /// Workbench tile state. Tiles are an ordered list (matches the
 /// strip the user sees); `active` indexes into it.
 ///
-/// Each open tile is identified by its anchor `NodeKey`; per-tile
-/// mutable state ([`TileState`]) lives in `state`, keyed by the
-/// same anchor.
+/// Each open tile is identified by its forme-assigned `TileId`;
+/// per-tile mutable state ([`TileState`]) lives in `state`, keyed by
+/// the same tile.
 #[derive(Default)]
 pub struct TileManager {
-    open: Vec<NodeKey>,
+    open: Vec<TileId>,
     active: Option<usize>,
-    state: HashMap<NodeKey, TileState>,
+    state: HashMap<TileId, TileState>,
     /// Parallel state map for surface-engine tiles (e.g. `scrying.web`).
-    /// A given anchor is always one flavor or the other — the routing
+    /// A given tile is always one flavor or the other — the routing
     /// decision picks which at open time (slice 5 of the scrying plan).
     /// Slice 3 just makes both flavors addressable from the same manager.
-    surface: HashMap<NodeKey, SurfaceTileState>,
+    surface: HashMap<TileId, SurfaceTileState>,
 }
 
 impl TileManager {
@@ -204,8 +204,8 @@ impl TileManager {
         Self::default()
     }
 
-    /// Ordered anchors of the open tiles.
-    pub fn open_tiles(&self) -> &[NodeKey] {
+    /// Ordered tiles of the open tiles.
+    pub fn open_tiles(&self) -> &[TileId] {
         &self.open
     }
 
@@ -214,30 +214,30 @@ impl TileManager {
         self.active
     }
 
-    /// Anchor `NodeKey` of the active tile.
-    pub fn active_node(&self) -> Option<NodeKey> {
+    /// `TileId` of the active tile.
+    pub fn active_node(&self) -> Option<TileId> {
         self.active.and_then(|i| self.open.get(i).copied())
     }
 
     /// Document at the active tile's history cursor.
     pub fn active_document(&self) -> Option<&EngineDocument> {
-        let node = self.active_node()?;
-        self.state.get(&node)?.current_document()
+        let tile = self.active_node()?;
+        self.state.get(&tile)?.current_document()
     }
 
     /// URL the active tile is currently displaying. Use this to
     /// sync the omnibar / toolbar — distinct from the anchor's URL
     /// once within-tile navigation has happened.
     pub fn active_url(&self) -> Option<&str> {
-        let node = self.active_node()?;
-        self.state.get(&node)?.current().map(|e| e.url.as_str())
+        let tile = self.active_node()?;
+        self.state.get(&tile)?.current().map(|e| e.url.as_str())
     }
 
     /// Whether the active tile can navigate back in its own
     /// history.
     pub fn active_can_go_back(&self) -> bool {
         self.active_node()
-            .and_then(|n| self.state.get(&n))
+            .and_then(|t| self.state.get(&t))
             .map(|s| s.can_go_back())
             .unwrap_or(false)
     }
@@ -246,46 +246,46 @@ impl TileManager {
     /// history.
     pub fn active_can_go_forward(&self) -> bool {
         self.active_node()
-            .and_then(|n| self.state.get(&n))
+            .and_then(|t| self.state.get(&t))
             .map(|s| s.can_go_forward())
             .unwrap_or(false)
     }
 
-    /// Document the tile anchored at `node` is currently showing.
+    /// Document the tile keyed by `tile` is currently showing.
     /// Used by tile-strip rendering to label rows by their current
     /// document title.
-    pub fn document_for(&self, node: NodeKey) -> Option<&EngineDocument> {
-        self.state.get(&node)?.current_document()
+    pub fn document_for(&self, tile: TileId) -> Option<&EngineDocument> {
+        self.state.get(&tile)?.current_document()
     }
 
     /// Borrow the active tile's state (history + documents).
     pub fn active_state(&self) -> Option<&TileState> {
-        let node = self.active_node()?;
-        self.state.get(&node)
+        let tile = self.active_node()?;
+        self.state.get(&tile)
     }
 
     /// Mutably borrow the active tile's state.
     pub fn active_state_mut(&mut self) -> Option<&mut TileState> {
-        let node = self.active.and_then(|i| self.open.get(i).copied())?;
-        self.state.get_mut(&node)
+        let tile = self.active.and_then(|i| self.open.get(i).copied())?;
+        self.state.get_mut(&tile)
     }
 
-    /// Open a new tile anchored at `node` for `url`/`document`, or
+    /// Open a new tile keyed by `tile` for `url`/`document`, or
     /// focus the existing tile if one already exists for that
-    /// anchor. Returns `true` when a fresh tile was added; `false`
+    /// tile. Returns `true` when a fresh tile was added; `false`
     /// when an existing one was re-focused (the URL is treated as
     /// a history push if it differs from the current entry, or a
     /// refresh if it matches).
-    pub fn open_or_focus(&mut self, node: NodeKey, url: String, document: EngineDocument) -> bool {
-        if let Some(i) = self.open.iter().position(|n| *n == node) {
+    pub fn open_or_focus(&mut self, tile: TileId, url: String, document: EngineDocument) -> bool {
+        if let Some(i) = self.open.iter().position(|t| *t == tile) {
             self.active = Some(i);
-            if let Some(state) = self.state.get_mut(&node) {
+            if let Some(state) = self.state.get_mut(&tile) {
                 state.push(url, document);
             }
             false
         } else {
-            self.open.push(node);
-            self.state.insert(node, TileState::seeded(url, document));
+            self.open.push(tile);
+            self.state.insert(tile, TileState::seeded(url, document));
             self.active = Some(self.open.len() - 1);
             true
         }
@@ -326,8 +326,8 @@ impl TileManager {
     }
 
     /// Set the active tile to `index` if it is in range. Returns
-    /// the resulting active `NodeKey` if any.
-    pub fn focus_index(&mut self, index: usize) -> Option<NodeKey> {
+    /// the resulting active `TileId` if any.
+    pub fn focus_index(&mut self, index: usize) -> Option<TileId> {
         if index < self.open.len() {
             self.active = Some(index);
         }
@@ -336,8 +336,8 @@ impl TileManager {
 
     // ── Surface-tile API ────────────────────────────────────────────────
 
-    /// Open a new surface tile anchored at `node`, or focus the existing
-    /// one if `node` already has a surface tile. The `producer` is a live
+    /// Open a new surface tile keyed by `tile`, or focus the existing
+    /// one if `tile` already has a surface tile. The `producer` is a live
     /// [`SurfaceProducer`] (already spawned by the engine); `engine_id`
     /// identifies which engine produced it (e.g. `"scrying.web"`).
     ///
@@ -346,25 +346,25 @@ impl TileManager {
     /// dropped — the existing producer is kept).
     pub fn open_or_focus_surface(
         &mut self,
-        node: NodeKey,
+        tile: TileId,
         anchor_url: String,
         producer: Box<dyn SurfaceProducer>,
         engine_id: impl Into<String>,
     ) -> bool {
-        if let Some(i) = self.open.iter().position(|n| *n == node) {
+        if let Some(i) = self.open.iter().position(|t| *t == tile) {
             self.active = Some(i);
             // Existing surface tile keeps its producer; the freshly-passed
             // one drops here. Existing document tile would coexist —
             // routing should not normally call this for a doc-tile
-            // anchor, but if it does, we leave the doc state alone and
-            // start tracking surface state too. Same-anchor flavor flip
+            // tile, but if it does, we leave the doc state alone and
+            // start tracking surface state too. Same-tile flavor flip
             // is policy elsewhere.
             let _ = producer;
             false
         } else {
-            self.open.push(node);
+            self.open.push(tile);
             self.surface.insert(
-                node,
+                tile,
                 SurfaceTileState::spawned(engine_id, producer, anchor_url),
             );
             self.active = Some(self.open.len() - 1);
@@ -372,45 +372,45 @@ impl TileManager {
         }
     }
 
-    /// Borrow the surface state for `node`, if it has one.
-    pub fn surface_state(&self, node: NodeKey) -> Option<&SurfaceTileState> {
-        self.surface.get(&node)
+    /// Borrow the surface state for `tile`, if it has one.
+    pub fn surface_state(&self, tile: TileId) -> Option<&SurfaceTileState> {
+        self.surface.get(&tile)
     }
 
-    /// Mutably borrow the surface state for `node`, if it has one.
-    pub fn surface_state_mut(&mut self, node: NodeKey) -> Option<&mut SurfaceTileState> {
-        self.surface.get_mut(&node)
+    /// Mutably borrow the surface state for `tile`, if it has one.
+    pub fn surface_state_mut(&mut self, tile: TileId) -> Option<&mut SurfaceTileState> {
+        self.surface.get_mut(&tile)
     }
 
     /// Borrow the active tile's surface state, if any.
     pub fn active_surface_state(&self) -> Option<&SurfaceTileState> {
-        let node = self.active_node()?;
-        self.surface.get(&node)
+        let tile = self.active_node()?;
+        self.surface.get(&tile)
     }
 
     /// Mutably borrow the active tile's surface state, if any.
     pub fn active_surface_state_mut(&mut self) -> Option<&mut SurfaceTileState> {
-        let node = self.active.and_then(|i| self.open.get(i).copied())?;
-        self.surface.get_mut(&node)
+        let tile = self.active.and_then(|i| self.open.get(i).copied())?;
+        self.surface.get_mut(&tile)
     }
 
-    /// Whether `node` is anchored by a surface-engine tile. False both for
-    /// document-engine tiles and for unknown anchors.
-    pub fn is_surface_tile(&self, node: NodeKey) -> bool {
-        self.surface.contains_key(&node)
+    /// Whether `tile` is keyed by a surface-engine tile. False both for
+    /// document-engine tiles and for unknown tiles.
+    pub fn is_surface_tile(&self, tile: TileId) -> bool {
+        self.surface.contains_key(&tile)
     }
 
-    /// Iterator over all open surface-tile anchors. Useful for the host's
+    /// Iterator over all open surface-tile keys. Useful for the host's
     /// per-tick `step()` driver, which needs to poll every active producer.
-    pub fn surface_tile_anchors(&self) -> impl Iterator<Item = NodeKey> + '_ {
+    pub fn surface_tile_anchors(&self) -> impl Iterator<Item = TileId> + '_ {
         self.surface.keys().copied()
     }
 
-    /// Close the tile at `index`. The tile's per-anchor state (and
+    /// Close the tile at `index`. The tile's per-tile state (and
     /// its document cache, or surface producer) is dropped — the
     /// underlying graph node stays alive for other tiles / the orrery.
-    /// Returns the new active `NodeKey` if any.
-    pub fn close_index(&mut self, index: usize) -> Option<NodeKey> {
+    /// Returns the new active `TileId` if any.
+    pub fn close_index(&mut self, index: usize) -> Option<TileId> {
         if index >= self.open.len() {
             return self.active_node();
         }
@@ -452,8 +452,8 @@ mod tests {
         }
     }
 
-    fn fixture_node(seed: u32) -> NodeKey {
-        NodeKey::new(seed as usize)
+    fn fixture_node(seed: u32) -> TileId {
+        TileId::from_uuid(uuid::Uuid::from_u128(seed as u128))
     }
 
     #[test]

@@ -4,10 +4,25 @@
 
 //! Portable surface identity contracts.
 
-use kernel::graph::GraphViewId;
-use kernel::graph::NodeKey;
-use kernel::pane::PaneId;
 use serde::{Deserialize, Serialize};
+
+/// Forme-assigned surface/tile identity. The durable per-tile key verso
+/// realizes against; the host maps `forme::ArrangementNodeId` -> `TileId`
+/// (both UUID-backed). Replaces the substrate-era `NodeKey`/`PaneId` keys.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TileId(pub uuid::Uuid);
+
+impl TileId {
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4())
+    }
+    pub fn from_uuid(id: uuid::Uuid) -> Self {
+        Self(id)
+    }
+    pub fn as_uuid(&self) -> uuid::Uuid {
+        self.0
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SurfaceTargetId(pub String);
@@ -38,8 +53,7 @@ impl SurfaceHostId {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SurfaceEffect {
     pub host: SurfaceHostId,
-    pub view: Option<GraphViewId>,
-    pub pane: Option<PaneId>,
+    pub tile: TileId,
     pub request: SurfaceRequest,
 }
 
@@ -52,21 +66,9 @@ pub enum SurfaceRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SurfaceCommand {
-    Present {
-        host: SurfaceHostId,
-        view: Option<GraphViewId>,
-        pane: Option<PaneId>,
-    },
-    Retire {
-        host: SurfaceHostId,
-        view: Option<GraphViewId>,
-        pane: Option<PaneId>,
-    },
-    Focus {
-        host: SurfaceHostId,
-        view: Option<GraphViewId>,
-        pane: Option<PaneId>,
-    },
+    Present { host: SurfaceHostId, tile: TileId },
+    Retire { host: SurfaceHostId, tile: TileId },
+    Focus { host: SurfaceHostId, tile: TileId },
 }
 
 pub trait SurfaceCommandSink {
@@ -88,8 +90,7 @@ pub enum SurfaceCommandStatus {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SurfaceCommandOutcome {
     pub host: SurfaceHostId,
-    pub view: Option<GraphViewId>,
-    pub pane: Option<PaneId>,
+    pub tile: TileId,
     pub request: SurfaceRequest,
     pub status: SurfaceCommandStatus,
 }
@@ -108,9 +109,7 @@ pub struct TileSlot {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SurfaceSlotPlacement {
     pub host: SurfaceHostId,
-    pub view: Option<GraphViewId>,
-    pub pane: PaneId,
-    pub node: NodeKey,
+    pub tile: TileId,
     pub slot: TileSlot,
 }
 
@@ -133,28 +132,16 @@ pub struct SurfaceLifecycleState {
 }
 
 impl SurfaceCommand {
-    pub fn present(host: SurfaceHostId, view: Option<GraphViewId>, pane: Option<PaneId>) -> Self {
-        Self::Present { host, view, pane }
+    pub fn present(host: SurfaceHostId, tile: TileId) -> Self {
+        Self::Present { host, tile }
     }
 
-    pub fn retire(host: SurfaceHostId, view: Option<GraphViewId>, pane: Option<PaneId>) -> Self {
-        Self::Retire { host, view, pane }
+    pub fn retire(host: SurfaceHostId, tile: TileId) -> Self {
+        Self::Retire { host, tile }
     }
 
-    pub fn focus(host: SurfaceHostId, view: Option<GraphViewId>, pane: Option<PaneId>) -> Self {
-        Self::Focus { host, view, pane }
-    }
-
-    pub fn present_pane(host: SurfaceHostId, view: GraphViewId, pane: PaneId) -> Self {
-        Self::present(host, Some(view), Some(pane))
-    }
-
-    pub fn retire_pane(host: SurfaceHostId, view: GraphViewId, pane: PaneId) -> Self {
-        Self::retire(host, Some(view), Some(pane))
-    }
-
-    pub fn focus_pane(host: SurfaceHostId, view: GraphViewId, pane: PaneId) -> Self {
-        Self::focus(host, Some(view), Some(pane))
+    pub fn focus(host: SurfaceHostId, tile: TileId) -> Self {
+        Self::Focus { host, tile }
     }
 
     pub fn host(&self) -> &SurfaceHostId {
@@ -165,18 +152,10 @@ impl SurfaceCommand {
         }
     }
 
-    pub fn view(&self) -> Option<GraphViewId> {
+    pub fn tile(&self) -> TileId {
         match self {
-            Self::Present { view, .. } | Self::Retire { view, .. } | Self::Focus { view, .. } => {
-                *view
-            }
-        }
-    }
-
-    pub fn pane(&self) -> Option<PaneId> {
-        match self {
-            Self::Present { pane, .. } | Self::Retire { pane, .. } | Self::Focus { pane, .. } => {
-                *pane
+            Self::Present { tile, .. } | Self::Retire { tile, .. } | Self::Focus { tile, .. } => {
+                *tile
             }
         }
     }
@@ -192,8 +171,7 @@ impl SurfaceCommand {
     pub fn to_effect(&self) -> SurfaceEffect {
         SurfaceEffect {
             host: self.host().clone(),
-            view: self.view(),
-            pane: self.pane(),
+            tile: self.tile(),
             request: self.request(),
         }
     }
@@ -201,8 +179,7 @@ impl SurfaceCommand {
     pub fn outcome(&self, status: SurfaceCommandStatus) -> SurfaceCommandOutcome {
         SurfaceCommandOutcome {
             host: self.host().clone(),
-            view: self.view(),
-            pane: self.pane(),
+            tile: self.tile(),
             request: self.request(),
             status,
         }
@@ -210,29 +187,26 @@ impl SurfaceCommand {
 }
 
 impl SurfaceEffect {
-    pub fn present(host: SurfaceHostId, view: Option<GraphViewId>, pane: Option<PaneId>) -> Self {
+    pub fn present(host: SurfaceHostId, tile: TileId) -> Self {
         Self {
             host,
-            view,
-            pane,
+            tile,
             request: SurfaceRequest::Present,
         }
     }
 
-    pub fn retire(host: SurfaceHostId, view: Option<GraphViewId>, pane: Option<PaneId>) -> Self {
+    pub fn retire(host: SurfaceHostId, tile: TileId) -> Self {
         Self {
             host,
-            view,
-            pane,
+            tile,
             request: SurfaceRequest::Retire,
         }
     }
 
-    pub fn focus(host: SurfaceHostId, view: Option<GraphViewId>, pane: Option<PaneId>) -> Self {
+    pub fn focus(host: SurfaceHostId, tile: TileId) -> Self {
         Self {
             host,
-            view,
-            pane,
+            tile,
             request: SurfaceRequest::Focus,
         }
     }
@@ -245,8 +219,7 @@ impl SurfaceCommandOutcome {
 
     pub fn matches_command(&self, command: &SurfaceCommand) -> bool {
         self.host == *command.host()
-            && self.view == command.view()
-            && self.pane == command.pane()
+            && self.tile == command.tile()
             && self.request == command.request()
     }
 }
@@ -309,28 +282,16 @@ impl TileSlot {
 }
 
 impl SurfaceSlotPlacement {
-    pub fn new(
-        host: SurfaceHostId,
-        view: Option<GraphViewId>,
-        pane: PaneId,
-        node: NodeKey,
-        slot: TileSlot,
-    ) -> Self {
-        Self {
-            host,
-            view,
-            pane,
-            node,
-            slot,
-        }
+    pub fn new(host: SurfaceHostId, tile: TileId, slot: TileSlot) -> Self {
+        Self { host, tile, slot }
     }
 
     pub fn present_command(&self) -> SurfaceCommand {
-        SurfaceCommand::present(self.host.clone(), self.view, Some(self.pane))
+        SurfaceCommand::present(self.host.clone(), self.tile)
     }
 
     pub fn retire_command(&self) -> SurfaceCommand {
-        SurfaceCommand::retire(self.host.clone(), self.view, Some(self.pane))
+        SurfaceCommand::retire(self.host.clone(), self.tile)
     }
 }
 
@@ -351,22 +312,20 @@ impl SurfacePlacementPlan {
         self.placements.push(placement);
     }
 
-    pub fn placement_for_pane(&self, pane: PaneId) -> Option<&SurfaceSlotPlacement> {
+    pub fn placement_for_tile(&self, tile: TileId) -> Option<&SurfaceSlotPlacement> {
         self.placements
             .iter()
-            .find(|placement| placement.pane == pane)
+            .find(|placement| placement.tile == tile)
     }
 
     pub fn placement_for_command(&self, command: &SurfaceCommand) -> Option<&SurfaceSlotPlacement> {
         self.placements.iter().find(|placement| {
-            placement.host == *command.host()
-                && placement.view == command.view()
-                && Some(placement.pane) == command.pane()
+            placement.host == *command.host() && placement.tile == command.tile()
         })
     }
 
-    pub fn retire_command_for_pane(&self, pane: PaneId) -> Option<SurfaceCommand> {
-        self.placement_for_pane(pane)
+    pub fn retire_command_for_tile(&self, tile: TileId) -> Option<SurfaceCommand> {
+        self.placement_for_tile(tile)
             .map(SurfaceSlotPlacement::retire_command)
     }
 
@@ -375,9 +334,7 @@ impl SurfacePlacementPlan {
         command: &SurfaceCommand,
     ) -> Option<SurfaceSlotPlacement> {
         let index = self.placements.iter().position(|placement| {
-            placement.host == *command.host()
-                && placement.view == command.view()
-                && Some(placement.pane) == command.pane()
+            placement.host == *command.host() && placement.tile == command.tile()
         })?;
         Some(self.placements.remove(index))
     }
@@ -428,8 +385,8 @@ impl SurfaceLifecycleState {
         }
     }
 
-    pub fn schedule_retire_pane(&self, pane: PaneId) -> Option<SurfaceCommandSchedule> {
-        let command = self.placements.retire_command_for_pane(pane)?;
+    pub fn schedule_retire_tile(&self, tile: TileId) -> Option<SurfaceCommandSchedule> {
+        let command = self.placements.retire_command_for_tile(tile)?;
         Some(SurfaceCommandSchedule {
             commands: vec![command],
             placements: 0,
@@ -472,46 +429,44 @@ mod tests {
 
     #[test]
     fn present_constructor_sets_present_request() {
-        let effect = SurfaceEffect::present(SurfaceHostId::new("desktop"), None, None);
+        let effect = SurfaceEffect::present(SurfaceHostId::new("desktop"), TileId::new());
 
         assert_eq!(effect.request, SurfaceRequest::Present);
     }
 
     #[test]
     fn retire_constructor_sets_retire_request() {
-        let effect = SurfaceEffect::retire(SurfaceHostId::new("desktop"), None, None);
+        let effect = SurfaceEffect::retire(SurfaceHostId::new("desktop"), TileId::new());
 
         assert_eq!(effect.request, SurfaceRequest::Retire);
     }
 
     #[test]
     fn focus_constructor_sets_focus_request() {
-        let effect = SurfaceEffect::focus(SurfaceHostId::new("desktop"), None, None);
+        let effect = SurfaceEffect::focus(SurfaceHostId::new("desktop"), TileId::new());
 
         assert_eq!(effect.request, SurfaceRequest::Focus);
     }
 
     #[test]
     fn present_command_sets_present_request() {
-        let command = SurfaceCommand::present(SurfaceHostId::new("desktop"), None, None);
+        let command = SurfaceCommand::present(SurfaceHostId::new("desktop"), TileId::new());
 
         assert_eq!(command.request(), SurfaceRequest::Present);
     }
 
     #[test]
-    fn pane_command_helpers_set_view_and_pane() {
-        let view = GraphViewId::new();
-        let pane = PaneId::new();
-        let command = SurfaceCommand::present_pane(SurfaceHostId::new("desktop"), view, pane);
+    fn command_helpers_set_tile() {
+        let tile = TileId::new();
+        let command = SurfaceCommand::present(SurfaceHostId::new("desktop"), tile);
 
         assert_eq!(command.request(), SurfaceRequest::Present);
-        assert_eq!(command.view(), Some(view));
-        assert_eq!(command.pane(), Some(pane));
+        assert_eq!(command.tile(), tile);
     }
 
     #[test]
     fn command_round_trips_to_effect() {
-        let command = SurfaceCommand::retire(SurfaceHostId::new("desktop"), None, None);
+        let command = SurfaceCommand::retire(SurfaceHostId::new("desktop"), TileId::new());
 
         let effect = command.to_effect();
 
@@ -521,7 +476,7 @@ mod tests {
 
     #[test]
     fn command_builds_host_reportable_outcome() {
-        let command = SurfaceCommand::focus(SurfaceHostId::new("desktop"), None, None);
+        let command = SurfaceCommand::focus(SurfaceHostId::new("desktop"), TileId::new());
 
         let outcome = command.outcome(SurfaceCommandStatus::Applied);
 
@@ -532,7 +487,7 @@ mod tests {
 
     #[test]
     fn outcome_matches_its_source_command() {
-        let command = SurfaceCommand::present(SurfaceHostId::new("desktop"), None, None);
+        let command = SurfaceCommand::present(SurfaceHostId::new("desktop"), TileId::new());
         let outcome = command.outcome(SurfaceCommandStatus::Deferred);
 
         assert!(outcome.is_deferred());
@@ -541,10 +496,11 @@ mod tests {
 
     #[test]
     fn backlog_records_only_matching_deferred_outcomes() {
-        let command = SurfaceCommand::present(SurfaceHostId::new("desktop"), None, None);
+        let tile = TileId::new();
+        let command = SurfaceCommand::present(SurfaceHostId::new("desktop"), tile);
         let applied = command.outcome(SurfaceCommandStatus::Applied);
         let deferred = command.outcome(SurfaceCommandStatus::Deferred);
-        let mismatched = SurfaceCommand::retire(SurfaceHostId::new("desktop"), None, None)
+        let mismatched = SurfaceCommand::retire(SurfaceHostId::new("desktop"), tile)
             .outcome(SurfaceCommandStatus::Deferred);
         let mut backlog = SurfaceCommandBacklog::default();
 
@@ -565,62 +521,48 @@ mod tests {
 
     #[test]
     fn placement_plan_exposes_present_commands_by_slot() {
-        let view = GraphViewId::new();
-        let pane = PaneId::new();
-        let node = NodeKey::new(4);
+        let tile = TileId::new();
         let host = SurfaceHostId::new("desktop");
-        let placement =
-            SurfaceSlotPlacement::new(host.clone(), Some(view), pane, node, TileSlot::primary());
+        let placement = SurfaceSlotPlacement::new(host.clone(), tile, TileSlot::primary());
         let mut plan = SurfacePlacementPlan::default();
 
         plan.push(placement);
 
         assert_eq!(plan.len(), 1);
         assert_eq!(
-            plan.placement_for_pane(pane).unwrap().slot,
+            plan.placement_for_tile(tile).unwrap().slot,
             TileSlot::primary()
         );
         assert_eq!(
-            plan.placement_for_command(&SurfaceCommand::present_pane(host.clone(), view, pane))
+            plan.placement_for_command(&SurfaceCommand::present(host.clone(), tile))
                 .unwrap()
-                .node,
-            node
+                .tile,
+            tile
         );
         assert_eq!(
             plan.present_commands(),
-            vec![SurfaceCommand::present_pane(host, view, pane)]
+            vec![SurfaceCommand::present(host, tile)]
         );
         assert_eq!(
-            plan.retire_command_for_pane(pane),
-            Some(SurfaceCommand::retire_pane(
-                SurfaceHostId::new("desktop"),
-                view,
-                pane
-            ))
+            plan.retire_command_for_tile(tile),
+            Some(SurfaceCommand::retire(SurfaceHostId::new("desktop"), tile))
         );
     }
 
     #[test]
     fn lifecycle_state_schedules_placements_and_retries_deferred_commands() {
-        let view = GraphViewId::new();
-        let first_pane = PaneId::new();
-        let second_pane = PaneId::new();
-        let first_node = NodeKey::new(6);
-        let second_node = NodeKey::new(7);
+        let first_tile = TileId::new();
+        let second_tile = TileId::new();
         let host = SurfaceHostId::new("desktop");
         let mut plan = SurfacePlacementPlan::default();
         plan.push(SurfaceSlotPlacement::new(
             host.clone(),
-            Some(view),
-            first_pane,
-            first_node,
+            first_tile,
             TileSlot::primary(),
         ));
         plan.push(SurfaceSlotPlacement::new(
             host.clone(),
-            Some(view),
-            second_pane,
-            second_node,
+            second_tile,
             TileSlot::secondary(1),
         ));
         let mut lifecycle = SurfaceLifecycleState::default();
@@ -637,8 +579,8 @@ mod tests {
             lifecycle
                 .placement_for_command(&first_command)
                 .unwrap()
-                .node,
-            first_node
+                .tile,
+            first_tile
         );
         assert!(lifecycle.record_outcome(
             &first_command,
@@ -659,32 +601,29 @@ mod tests {
 
     #[test]
     fn lifecycle_state_schedules_retire_and_removes_applied_placement() {
-        let view = GraphViewId::new();
-        let pane = PaneId::new();
+        let tile = TileId::new();
         let host = SurfaceHostId::new("desktop");
         let mut plan = SurfacePlacementPlan::default();
         plan.push(SurfaceSlotPlacement::new(
             host.clone(),
-            Some(view),
-            pane,
-            NodeKey::new(9),
+            tile,
             TileSlot::primary(),
         ));
         let mut lifecycle = SurfaceLifecycleState::default();
         lifecycle.schedule_placements(plan);
 
-        let retire = lifecycle.schedule_retire_pane(pane).unwrap();
+        let retire = lifecycle.schedule_retire_tile(tile).unwrap();
 
         assert_eq!(retire.len(), 1);
         assert_eq!(
             retire.commands(),
-            &[SurfaceCommand::retire_pane(host, view, pane)]
+            &[SurfaceCommand::retire(host, tile)]
         );
         assert!(!lifecycle.record_outcome(
             &retire.commands()[0],
             &retire.commands()[0].outcome(SurfaceCommandStatus::Applied)
         ));
-        assert!(lifecycle.placements().placement_for_pane(pane).is_none());
+        assert!(lifecycle.placements().placement_for_tile(tile).is_none());
     }
 
     #[test]
@@ -708,7 +647,7 @@ mod tests {
         }
 
         let mut sink = RecordingSink::default();
-        let command = SurfaceCommand::focus(SurfaceHostId::new("desktop"), None, None);
+        let command = SurfaceCommand::focus(SurfaceHostId::new("desktop"), TileId::new());
 
         let outcome = sink.apply_surface_command(&command).unwrap();
 

@@ -9,7 +9,7 @@
 //! algorithm walks each command, allocates or retires the corresponding
 //! viewer surface, and records the outcome on the lifecycle state.
 
-use kernel::viewer_host::{ViewerSurfaceError, ViewerSurfaceHost};
+use crate::host::{ViewerSurfaceError, ViewerSurfaceHost};
 
 use crate::surface::{
     SurfaceCommand, SurfaceCommandOutcome, SurfaceCommandSchedule, SurfaceCommandStatus,
@@ -90,10 +90,10 @@ where
     let placement = lifecycle
         .placement_for_command(command)
         .ok_or_else(|| SurfaceScheduleApplyError::MissingPlacement(command.clone()))?;
-    if host.has_surface(registry, placement.node) {
+    if host.has_surface(registry, placement.tile) {
         return Ok(command.outcome(SurfaceCommandStatus::AlreadySatisfied));
     }
-    host.allocate_surface(registry, placement.node)
+    host.allocate_surface(registry, placement.tile)
         .map_err(SurfaceScheduleApplyError::Viewer)?;
     Ok(command.outcome(SurfaceCommandStatus::Applied))
 }
@@ -110,10 +110,10 @@ where
     let placement = lifecycle
         .placement_for_command(command)
         .ok_or_else(|| SurfaceScheduleApplyError::MissingPlacement(command.clone()))?;
-    if !host.has_surface(registry, placement.node) {
+    if !host.has_surface(registry, placement.tile) {
         return Ok(command.outcome(SurfaceCommandStatus::AlreadySatisfied));
     }
-    host.retire_surface(registry, placement.node);
+    host.retire_surface(registry, placement.tile);
     Ok(command.outcome(SurfaceCommandStatus::Applied))
 }
 
@@ -121,14 +121,12 @@ where
 mod tests {
     use std::collections::HashSet;
 
-    use kernel::{graph::GraphViewId, graph::NodeKey, pane::PaneId};
-
     use super::*;
-    use crate::surface::{SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement, TileSlot};
+    use crate::surface::{SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement, TileId, TileSlot};
 
     #[derive(Default)]
     struct MockRegistry {
-        nodes: HashSet<NodeKey>,
+        tiles: HashSet<TileId>,
     }
 
     #[derive(Default)]
@@ -138,32 +136,28 @@ mod tests {
         fn allocate_surface(
             &mut self,
             registry: &mut MockRegistry,
-            node_key: NodeKey,
+            tile: TileId,
         ) -> Result<(), ViewerSurfaceError> {
-            registry.nodes.insert(node_key);
+            registry.tiles.insert(tile);
             Ok(())
         }
 
-        fn retire_surface(&mut self, registry: &mut MockRegistry, node_key: NodeKey) {
-            registry.nodes.remove(&node_key);
+        fn retire_surface(&mut self, registry: &mut MockRegistry, tile: TileId) {
+            registry.tiles.remove(&tile);
         }
 
-        fn has_surface(&self, registry: &MockRegistry, node_key: NodeKey) -> bool {
-            registry.nodes.contains(&node_key)
+        fn has_surface(&self, registry: &MockRegistry, tile: TileId) -> bool {
+            registry.tiles.contains(&tile)
         }
     }
 
     #[test]
-    fn present_schedule_allocates_viewer_surfaces_by_placement_node() {
-        let view = GraphViewId::new();
-        let node = NodeKey::new(3);
-        let pane = PaneId::new();
+    fn present_schedule_allocates_viewer_surfaces_by_placement_tile() {
+        let tile = TileId::new();
         let mut plan = SurfacePlacementPlan::default();
         plan.push(SurfaceSlotPlacement::new(
             SurfaceHostId::new("desktop"),
-            Some(view),
-            pane,
-            node,
+            tile,
             TileSlot::primary(),
         ));
         let mut lifecycle = SurfaceLifecycleState::default();
@@ -176,27 +170,23 @@ mod tests {
                 .unwrap();
 
         assert_eq!(report.allocated, 1);
-        assert!(registry.nodes.contains(&node));
+        assert!(registry.tiles.contains(&tile));
         assert!(lifecycle.backlog().is_empty());
     }
 
     #[test]
     fn present_schedule_reports_already_satisfied_without_reallocating() {
-        let view = GraphViewId::new();
-        let node = NodeKey::new(4);
-        let pane = PaneId::new();
+        let tile = TileId::new();
         let mut plan = SurfacePlacementPlan::default();
         plan.push(SurfaceSlotPlacement::new(
             SurfaceHostId::new("desktop"),
-            Some(view),
-            pane,
-            node,
+            tile,
             TileSlot::primary(),
         ));
         let mut lifecycle = SurfaceLifecycleState::default();
         let schedule = lifecycle.schedule_placements(plan);
         let mut registry = MockRegistry::default();
-        registry.nodes.insert(node);
+        registry.tiles.insert(tile);
         let mut host = MockHost;
 
         let report =
@@ -212,22 +202,18 @@ mod tests {
 
     #[test]
     fn retire_schedule_retires_existing_surface_and_clears_placement() {
-        let view = GraphViewId::new();
-        let node = NodeKey::new(5);
-        let pane = PaneId::new();
+        let tile = TileId::new();
         let mut plan = SurfacePlacementPlan::default();
         plan.push(SurfaceSlotPlacement::new(
             SurfaceHostId::new("desktop"),
-            Some(view),
-            pane,
-            node,
+            tile,
             TileSlot::primary(),
         ));
         let mut lifecycle = SurfaceLifecycleState::default();
         lifecycle.schedule_placements(plan);
-        let schedule = lifecycle.schedule_retire_pane(pane).unwrap();
+        let schedule = lifecycle.schedule_retire_tile(tile).unwrap();
         let mut registry = MockRegistry::default();
-        registry.nodes.insert(node);
+        registry.tiles.insert(tile);
         let mut host = MockHost;
 
         let report =
@@ -235,26 +221,22 @@ mod tests {
                 .unwrap();
 
         assert_eq!(report.retired, 1);
-        assert!(!registry.nodes.contains(&node));
-        assert!(lifecycle.placements().placement_for_pane(pane).is_none());
+        assert!(!registry.tiles.contains(&tile));
+        assert!(lifecycle.placements().placement_for_tile(tile).is_none());
     }
 
     #[test]
     fn retire_schedule_reports_already_satisfied_for_absent_surface() {
-        let view = GraphViewId::new();
-        let node = NodeKey::new(6);
-        let pane = PaneId::new();
+        let tile = TileId::new();
         let mut plan = SurfacePlacementPlan::default();
         plan.push(SurfaceSlotPlacement::new(
             SurfaceHostId::new("desktop"),
-            Some(view),
-            pane,
-            node,
+            tile,
             TileSlot::primary(),
         ));
         let mut lifecycle = SurfaceLifecycleState::default();
         lifecycle.schedule_placements(plan);
-        let schedule = lifecycle.schedule_retire_pane(pane).unwrap();
+        let schedule = lifecycle.schedule_retire_tile(tile).unwrap();
         let mut registry = MockRegistry::default();
         let mut host = MockHost;
 
@@ -267,6 +249,6 @@ mod tests {
             report.outcomes[0].status,
             SurfaceCommandStatus::AlreadySatisfied
         );
-        assert!(lifecycle.placements().placement_for_pane(pane).is_none());
+        assert!(lifecycle.placements().placement_for_tile(tile).is_none());
     }
 }

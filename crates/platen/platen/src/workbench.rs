@@ -10,7 +10,7 @@ use kernel::graph::{GraphViewId, NodeKey};
 use kernel::pane::PaneId;
 use serde::{Deserialize, Serialize};
 pub use verso_core::surface::TileSlot;
-use verso_core::surface::{SurfaceHostId, SurfacePlacementPlan, SurfaceSlotPlacement};
+use verso_core::surface::SurfaceHostId;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FrameId(pub String);
@@ -151,33 +151,6 @@ pub fn snapshot_active_arrangement(
     active_frame: Option<&FrameId>,
 ) -> Option<ArrangementSnapshot> {
     select_active_frame(frames, active_frame).map(snapshot_frame_arrangement)
-}
-
-pub fn project_surface_placements(snapshot: &ArrangementSnapshot) -> SurfacePlacementPlan {
-    let view = match &snapshot.container {
-        ArrangementContainer::Frame { root_view, .. } => *root_view,
-    };
-    let mut plan = SurfacePlacementPlan::default();
-    for member in &snapshot.members {
-        if let Some(host) = member.surface_host.clone() {
-            plan.push(SurfaceSlotPlacement::new(
-                host,
-                view,
-                member.pane_id,
-                member.node,
-                member.slot,
-            ));
-        }
-    }
-    plan
-}
-
-pub fn project_active_surface_placements(
-    frames: &HashMap<FrameId, FrameState>,
-    active_frame: Option<&FrameId>,
-) -> Option<SurfacePlacementPlan> {
-    snapshot_active_arrangement(frames, active_frame)
-        .map(|snapshot| project_surface_placements(&snapshot))
 }
 
 #[tracing::instrument(level = "debug", skip(bindings), fields(pane_id = ?binding.pane_id))]
@@ -425,36 +398,6 @@ mod tests {
         assert_eq!(snapshot.members[1].pane_id, second.pane_id);
         assert_eq!(snapshot.members[1].slot.index, 1);
         assert!(!snapshot.members[1].slot.is_primary);
-    }
-
-    #[test]
-    fn project_active_surface_placements_filters_unhosted_members() {
-        let frame_id = FrameId::new("main");
-        let root_view = GraphViewId::from_uuid(uuid::Uuid::from_u128(22));
-        let first = PaneBinding {
-            pane_id: PaneId::from_uuid(uuid::Uuid::from_u128(23)),
-            node: NodeKey::new(12),
-            surface_host: Some(SurfaceHostId::new("desktop")),
-        };
-        let second = PaneBinding {
-            pane_id: PaneId::from_uuid(uuid::Uuid::from_u128(24)),
-            node: NodeKey::new(13),
-            surface_host: None,
-        };
-        let frame = FrameState {
-            id: frame_id.clone(),
-            label: "Main".to_string(),
-            root_view: Some(root_view),
-            panes: vec![first.clone(), second],
-        };
-        let frames = HashMap::from([(frame_id.clone(), frame)]);
-
-        let plan = project_active_surface_placements(&frames, Some(&frame_id)).unwrap();
-
-        assert_eq!(plan.len(), 1);
-        let placement = plan.placement_for_pane(first.pane_id).unwrap();
-        assert_eq!(placement.view, Some(root_view));
-        assert_eq!(placement.slot, TileSlot::primary());
     }
 
     #[test]

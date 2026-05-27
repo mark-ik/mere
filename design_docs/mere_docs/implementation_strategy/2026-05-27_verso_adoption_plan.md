@@ -50,14 +50,32 @@ replace it (clipping, within-tile navigation, or an external texture).
 
 ## Phases
 
-### Phase 0 — Reshape verso keys to the forme/tile-id model (prerequisite)
+### Phase 0 — Reshape verso keys to the forme/tile-id model (prerequisite) ✅
 
-`verso-core` and `tile-state` move off `NodeKey` / `PaneId` onto a
-forme-assigned surface/tile id (`SurfaceTargetId` already exists in verso-core
-as a `String` newtype; promote it to the key, or introduce a `TileId` newtype
-the forme arrangement mints). Portable, no framework, fully unit-testable; the
-existing verso-core/tile-state test suites port across. **Done:** both crates
-build and test against tile-ids; no `NodeKey` in their public API.
+**Done 2026-05-27.** `verso-core` and `tile-state` moved off `NodeKey` / `PaneId`
+/ `GraphViewId` onto a single forme-assigned `TileId(Uuid)` (new type in
+`verso-core::surface`; the host maps `forme::ArrangementNodeId` → `TileId`). A
+surface is now addressed by `(SurfaceHostId, TileId)` — the `(view, pane, node)`
+triple collapsed to one tile key, since a tile *is* both the location and the
+content. Tests: verso-core 19/19, tile-state 14/14; `mere-app`, `platen`,
+`kernel`, `session-runtime` all build; no substrate key remains in either
+crate's API.
+
+Two things surfaced during execution, beyond the original text:
+
+- **`ViewerSurfaceHost` + `ViewerSurfaceError` moved kernel → verso-core**
+  (`verso-core::host`), keyed on `TileId`. A surface-allocation seam is
+  realization (verso's domain), not graph truth (kernel's) — it was used only by
+  verso's apply, so the move also de-clutters kernel.
+- **`platen::project_surface_placements` / `project_active_surface_placements`
+  retired** (deleted, with their re-exports). They were unused substrate-era
+  functions building placements from `ArrangementSnapshot` members'
+  `NodeKey`/`PaneId` — the sole non-verso consumer forcing the old shape, and
+  superseded by `tree_projection` + `layout`. The rest of `workbench.rs` (the
+  `WorkbenchProjection` / a11y types `platen/domain/workbench` consumes) stays.
+
+Open tidy-up (deferred, needs the dependency-drop go-ahead): `verso-core` no
+longer references `kernel`, so its `kernel` dep is now dead weight.
 
 ### Phase 1 — `WorkbenchTiling` realization widget (route 2 proper)
 

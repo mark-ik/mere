@@ -22,16 +22,19 @@
 
 /// Apply algorithm for `SurfaceCommandSchedule`.
 pub mod apply;
+/// Portable viewer-surface lifecycle seam.
+pub mod host;
 /// Portable rendering-surface identity types.
 pub mod surface;
 
 pub use apply::{
     SurfaceScheduleApplyError, SurfaceScheduleApplyReport, apply_viewer_surface_schedule,
 };
+pub use host::{ViewerSurfaceError, ViewerSurfaceHost};
 pub use surface::{
     SurfaceCommand, SurfaceCommandBacklog, SurfaceCommandOutcome, SurfaceCommandSchedule,
     SurfaceCommandSink, SurfaceCommandStatus, SurfaceEffect, SurfaceHostId, SurfaceLifecycleState,
-    SurfacePlacementPlan, SurfaceRequest, SurfaceSlotPlacement, SurfaceTargetId, TileSlot,
+    SurfacePlacementPlan, SurfaceRequest, SurfaceSlotPlacement, SurfaceTargetId, TileId, TileSlot,
 };
 
 /// Crate version.

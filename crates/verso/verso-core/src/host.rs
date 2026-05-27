@@ -4,7 +4,7 @@
 
 //! Portable viewer-surface lifecycle seam.
 
-use crate::graph::NodeKey;
+use crate::surface::TileId;
 
 /// Host-owned viewer surface lifecycle.
 ///
@@ -14,12 +14,12 @@ pub trait ViewerSurfaceHost<Registry> {
     fn allocate_surface(
         &mut self,
         registry: &mut Registry,
-        node_key: NodeKey,
+        tile: TileId,
     ) -> Result<(), ViewerSurfaceError>;
 
-    fn retire_surface(&mut self, registry: &mut Registry, node_key: NodeKey);
+    fn retire_surface(&mut self, registry: &mut Registry, tile: TileId);
 
-    fn has_surface(&self, registry: &Registry, node_key: NodeKey) -> bool;
+    fn has_surface(&self, registry: &Registry, tile: TileId) -> bool;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,11 +34,11 @@ mod tests {
     use std::collections::HashSet;
 
     use super::{ViewerSurfaceError, ViewerSurfaceHost};
-    use crate::graph::NodeKey;
+    use crate::surface::TileId;
 
     #[derive(Default)]
     struct MockViewerSurfaceRegistry {
-        surfaces: HashSet<NodeKey>,
+        surfaces: HashSet<TileId>,
     }
 
     #[derive(Default)]
@@ -48,18 +48,18 @@ mod tests {
         fn allocate_surface(
             &mut self,
             registry: &mut MockViewerSurfaceRegistry,
-            node_key: NodeKey,
+            tile: TileId,
         ) -> Result<(), ViewerSurfaceError> {
-            registry.surfaces.insert(node_key);
+            registry.surfaces.insert(tile);
             Ok(())
         }
 
-        fn retire_surface(&mut self, registry: &mut MockViewerSurfaceRegistry, node_key: NodeKey) {
-            registry.surfaces.remove(&node_key);
+        fn retire_surface(&mut self, registry: &mut MockViewerSurfaceRegistry, tile: TileId) {
+            registry.surfaces.remove(&tile);
         }
 
-        fn has_surface(&self, registry: &MockViewerSurfaceRegistry, node_key: NodeKey) -> bool {
-            registry.surfaces.contains(&node_key)
+        fn has_surface(&self, registry: &MockViewerSurfaceRegistry, tile: TileId) -> bool {
+            registry.surfaces.contains(&tile)
         }
     }
 
@@ -67,15 +67,15 @@ mod tests {
     fn viewer_surface_host_tracks_allocated_surfaces() {
         let mut host = MockViewerSurfaceHost;
         let mut registry = MockViewerSurfaceRegistry::default();
-        let node_key = NodeKey::new(7);
+        let tile = TileId::new();
 
-        host.allocate_surface(&mut registry, node_key)
+        host.allocate_surface(&mut registry, tile)
             .expect("surface allocation should succeed");
 
-        assert!(host.has_surface(&registry, node_key));
+        assert!(host.has_surface(&registry, tile));
 
-        host.retire_surface(&mut registry, node_key);
+        host.retire_surface(&mut registry, tile);
 
-        assert!(!host.has_surface(&registry, node_key));
+        assert!(!host.has_surface(&registry, tile));
     }
 }

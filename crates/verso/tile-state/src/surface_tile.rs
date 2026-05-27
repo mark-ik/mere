@@ -206,7 +206,7 @@ impl SurfaceTileState {
 }
 
 // Surface-tile lookup methods live on [`crate::TileManager`] itself —
-// see `tiles.rs` for the parallel `surface: HashMap<NodeKey, SurfaceTileState>`
+// see `tiles.rs` for the parallel `surface: HashMap<TileId, SurfaceTileState>`
 // map and the `*_surface*` accessors.
 
 #[cfg(test)]
