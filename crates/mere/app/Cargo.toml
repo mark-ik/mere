@@ -35,5 +35,10 @@ nematic.workspace = true
 # Mint the seed workbench forme's graph_id (forme's `GraphId` is a bare UUID).
 uuid = { version = "1", features = ["v4"] }
 
+# External-surface tiles: the `with_external_compositor` hook composites engine
+# textures into the shared render target. Same wgpu (29) as masonry_winit, so
+# the `ExternalCompositeCtx` device/queue/target types unify.
+wgpu.workspace = true
+
 [lints]
 workspace = true

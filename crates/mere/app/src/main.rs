@@ -23,6 +23,7 @@ mod engine_tile;
 mod graph_canvas;
 mod navigation;
 mod panes;
+mod surface_tile;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -32,6 +33,7 @@ use forme::store::{load_all_formes, save_forme};
 use forme::{ArrangementNodeKind, FormeDocument};
 use camera::GraphScene;
 use graph_canvas::scene_from_graph;
+use surface_tile::SurfaceRegistry;
 use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NavigationTrigger, Traversal};
 #[cfg(test)]
@@ -103,6 +105,9 @@ pub enum MainView {
     Document,
     Workbench,
     Apparatus,
+    /// A single external-surface tile (the verso P3 stub: an engine surface
+    /// composited as an external GPU layer, not Masonry paint).
+    Surface,
 }
 
 /// The single application state the Xilem driver owns. Widgets mutate
@@ -136,6 +141,10 @@ struct AppState {
     /// Cached orrery scene (graph projected to world positions + edges).
     /// Rebuilt only on graph mutation, not per frame (memoized derivation).
     scene: GraphScene,
+    /// External-surface content registry: maps each `SurfaceTileWidget`'s id to
+    /// its content (stub: a solid color), read by the `with_external_compositor`
+    /// hook. Cloned into the compositor closure in `main`.
+    surface_registry: SurfaceRegistry,
     /// Last measured size of the workbench tiling region, reported back by a
     /// `resize_observer`. `platen::layout_plan` needs a viewport to lay tiles
     /// out, but Xilem builds the view before layout runs — so the size round-
@@ -150,7 +159,7 @@ struct AppState {
 }
 
 impl AppState {
-    fn new() -> Self {
+    fn new(surface_registry: SurfaceRegistry) -> Self {
         let session_dir = session_dir();
         let _ = std::fs::create_dir_all(&session_dir);
 
@@ -185,6 +194,7 @@ impl AppState {
             main_view: MainView::Orrery,
             tile_docs,
             scene,
+            surface_registry,
             content_size: Size::new(960.0, 640.0),
             session_dir,
             frame_label: "Mere".to_string(),
@@ -384,7 +394,30 @@ fn render_workbench_tiles(
 }
 
 fn main() {
-    Xilem::new_simple(AppState::new(), panes::app_logic, WindowOptions::new("Mere"))
+    // The external-surface registry is shared between the SurfaceTile widgets
+    // (which register their content) and the compositor hook (which realizes
+    // it). One clone lives in AppState for the views; one in the closure.
+    let surface_registry = SurfaceRegistry::new();
+    let state = AppState::new(surface_registry.clone());
+
+    Xilem::new_simple(state, panes::app_logic, WindowOptions::new("Mere"))
+        // Realize each external layer (a SurfaceTile's reserved rect) by filling
+        // it with the tile's registered content. Stub: a solid color; the real
+        // lane copies a `scrying` producer's frame texture instead.
+        .with_external_compositor(move |ctx| {
+            for layer in ctx.layers {
+                let color = surface_registry
+                    .color(layer.widget_id)
+                    .unwrap_or([40, 44, 60, 255]);
+                surface_tile::composite_color(
+                    ctx.device,
+                    ctx.queue,
+                    ctx.target_texture,
+                    layer.bounds,
+                    color,
+                );
+            }
+        })
         .run_in(EventLoop::with_user_event())
         .expect("run mere");
 }
