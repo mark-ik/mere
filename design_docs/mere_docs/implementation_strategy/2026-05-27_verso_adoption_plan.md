@@ -126,8 +126,9 @@ The cluster where verso, the Xilem driver edit, and the scrying brief converge:
   for the orthogonal observable channel).
 - `scrying-engine`'s producer becomes the `SurfaceProducer` behind the tile.
 
-**Gate + stub landed 2026-05-27 (builds green; runtime GPU verification pending).**
-The external-surface *pipe* is wired end to end with a solid-color stub:
+**Gate + stub landed 2026-05-27 — runtime-verified.** The blue stub tile
+composites below the chrome and persists when idle (confirmed on the Windows
+box). The external-surface *pipe* is wired end to end with a solid-color stub:
 
 - **Xilem `with_external_compositor`** (vendored fork, commit `813179ae`) —
   `MasonryDriver` forwards `composite_external_layers` to an app closure
@@ -139,6 +140,14 @@ The external-surface *pipe* is wired end to end with a solid-color stub:
   (staging texture + `copy_texture_to_texture` into the target), and the `main()`
   wiring (one registry shared between views and the closure; `MainView::Surface`
   + a `surf` button show one tile).
+
+Three runtime fixes the smoke test forced out (all generic, not stub-specific):
+`COPY_DST` on the staging texture (mere `176063b`); and two in masonry
+(`77ddbbc3`) — `push_external_layer` must carry the widget's
+`border_box_to_layer_transform` (else content composites at the window origin,
+not the widget), and `paint_layer_mode` must reset only on actual repaint (else
+an external layer vanishes on every idle/cached frame, flickering visible only
+during active resize).
 
 Remaining for the real lane: swap the registry value (`[u8;4]` → producer frame
 texture handle) and `composite_color`'s copy source (`scrying-engine`'s
