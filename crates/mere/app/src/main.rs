@@ -405,6 +405,9 @@ fn main() {
         // it with the tile's registered content. Stub: a solid color; the real
         // lane copies a `scrying` producer's frame texture instead.
         .with_external_compositor(move |ctx| {
+            // `ctx.window` is the parent window handle the scrying WebView
+            // producer needs (HWND on Windows); step 2 reads it to create the
+            // producer. Verified reachable (step 1).
             for layer in ctx.layers {
                 let color = surface_registry
                     .color(layer.widget_id)
