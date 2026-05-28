@@ -178,7 +178,9 @@ pub fn composite_color(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::COPY_SRC,
+        // Written by `write_texture` (needs COPY_DST) and read by
+        // `copy_texture_to_texture` (needs COPY_SRC).
+        usage: wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
 
