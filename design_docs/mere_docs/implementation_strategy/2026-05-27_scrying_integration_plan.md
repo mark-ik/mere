@@ -144,11 +144,28 @@ streams.
   runtime. Result: the page shows only in the composited tile, our scene
   controls layering. Verify: page renders in the tile rect, no overlay over the
   chrome.
-- **Step 4 — input routing.** Translate pointer/keyboard from the `SurfaceTile`
-  widget (it already takes pointer events) into the producer's `send_mouse_input`
-  / `send_keyboard_input`. Verify: links click, scrolling works.
-- **Step 5 — lifecycle polish.** Resize → `producer.resize`; offset tracking;
-  retire on tile close; multi-tile via the `WorkbenchTiling` widget (verso P1).
+- **Step 3b — composite + suppress. Done 2026-05-27 (`5ca7a58`).** Verified on
+  DX12: example.com renders inside the tile (no overlay over the chrome) via the
+  `BlitPipeline`; offscreen-suppression kept WGC capturing. B complete.
+- **Step 4 — input + live frames. Done 2026-05-27 (`8b116fa`).** The
+  `SurfaceTileWidget` queues pointer events (down/up/move/wheel) into the shared
+  `SurfaceChannel`; the host drains, scales logical→physical, forwards via
+  `send_mouse_input` (+ `move_focus` on press). The producer is **sized to the
+  tile** (compositor records bounds → host `resize`s), so it renders 1:1 (crisp
+  + 1:1 input). Live updates: while a web tile is shown the host
+  `request_redraw`s each tick (the WebView produces frames continuously but the
+  compositor only blits on render + the loop sleeps when idle). Verified:
+  clicking navigates, smooth scrolling.
+- **Step 5 — lifecycle polish (remaining).**
+  - **Frame-arrival-driven redraw** instead of every-tick (a waker from WGC
+    `FrameArrived` → the winit loop), so a static page goes idle-quiet.
+  - **Resize tracking** is janky mid-drag (the producer resize lags the tile
+    bounds, so a stretched frame shows for a frame or two) — smooth it.
+  - **Keyboard input** (`send_keyboard_input`) — only mouse is wired.
+  - **Retire on tile close** + **multi-tile** (key producers by tile, not the
+    single-URL cache) via the `WorkbenchTiling` widget (verso P1).
+  - **`WGPU_BACKEND=dx12`** should be a host default on Windows (the import
+    needs the DX12 backend), not a manual env var.
 
 ## Boundaries
 
