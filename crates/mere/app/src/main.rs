@@ -401,6 +401,17 @@ fn render_workbench_tiles(
 }
 
 fn main() {
+    // A scrying WebView frame is a D3D12 shared texture; importing it into our
+    // wgpu device requires the DX12 backend (the importer opens the handle via
+    // `as_hal::<Dx12>()`). Default to DX12 on Windows — vello renders fine on it
+    // — unless the user explicitly chose a backend.
+    #[cfg(target_os = "windows")]
+    if std::env::var_os("WGPU_BACKEND").is_none() {
+        // SAFETY: set once at startup, before any thread reads the environment
+        // (wgpu reads `WGPU_BACKEND` when the first window creates its device).
+        unsafe { std::env::set_var("WGPU_BACKEND", "dx12") };
+    }
+
     // The external-surface registry is shared between the SurfaceTile widgets
     // (which register their content), the compositor hook (which fills each
     // layer), and the on_tick host (which drives web producers). All clones of

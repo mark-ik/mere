@@ -33,11 +33,12 @@ use std::sync::{Arc, Mutex};
 
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem::masonry::accesskit::{Node as AccessNode, Role};
+use xilem::masonry::core::keyboard::{Key, KeyState, NamedKey};
 use xilem::masonry::core::pointer::PointerButton;
 use xilem::masonry::core::{
-    AccessCtx, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, PaintCtx, PaintLayerMode,
-    PointerButtonEvent, PointerEvent, PointerScrollEvent, PointerUpdate, PropertiesMut,
-    PropertiesRef, RegisterCtx, ScrollDelta, Widget, WidgetId, WidgetMut,
+    AccessCtx, ChildrenIds, EventCtx, KeyboardEvent, LayoutCtx, MeasureCtx, Modifiers, PaintCtx,
+    PaintLayerMode, PointerButtonEvent, PointerEvent, PointerScrollEvent, PointerUpdate,
+    PropertiesMut, PropertiesRef, RegisterCtx, ScrollDelta, TextEvent, Widget, WidgetId, WidgetMut,
 };
 use xilem::masonry::imaging::Painter;
 use xilem::masonry::kurbo::{Axis, Size};
@@ -132,6 +133,59 @@ impl SurfaceTileWidget {
             channel.input.push(TileMouse { kind, x: pos.x as f32, y: pos.y as f32, delta });
         }
     }
+
+    /// Map + queue a keyboard event for the host.
+    fn push_key(&self, ke: &KeyboardEvent) {
+        if !matches!(self.content, SurfaceContent::Web { .. }) {
+            return;
+        }
+        let m = ke.modifiers;
+        let (vk, characters) = match &ke.key {
+            // Printable: forward the text; VK is best-effort (ASCII letters /
+            // digits ARE their VK, e.g. VK_A == b'A' == 0x41).
+            Key::Character(s) => {
+                let vk = s
+                    .chars()
+                    .next()
+                    .map(|c| c.to_ascii_uppercase() as u32)
+                    .filter(|c| *c < 0x80)
+                    .unwrap_or(0);
+                (vk, s.clone())
+            }
+            // Named keys the page cares about (form submit, editing, nav).
+            Key::Named(named) => {
+                let vk = match named {
+                    NamedKey::Enter => 0x0D,
+                    NamedKey::Backspace => 0x08,
+                    NamedKey::Tab => 0x09,
+                    NamedKey::Escape => 0x1B,
+                    NamedKey::Delete => 0x2E,
+                    NamedKey::ArrowLeft => 0x25,
+                    NamedKey::ArrowUp => 0x26,
+                    NamedKey::ArrowRight => 0x27,
+                    NamedKey::ArrowDown => 0x28,
+                    NamedKey::Home => 0x24,
+                    NamedKey::End => 0x23,
+                    NamedKey::PageUp => 0x21,
+                    NamedKey::PageDown => 0x22,
+                    _ => 0,
+                };
+                (vk, String::new())
+            }
+            _ => (0, String::new()),
+        };
+        if let Ok(mut channel) = self.channel.lock() {
+            channel.keys.push(TileKey {
+                down: ke.state == KeyState::Down,
+                vk,
+                characters,
+                shift: m.contains(Modifiers::SHIFT),
+                control: m.contains(Modifiers::CONTROL),
+                alt: m.contains(Modifiers::ALT),
+                meta: m.contains(Modifiers::META),
+            });
+        }
+    }
 }
 
 impl Widget for SurfaceTileWidget {
@@ -154,6 +208,8 @@ impl Widget for SurfaceTileWidget {
                 ..
             }) => {
                 ctx.capture_pointer();
+                // Take keyboard focus so on_text_event reaches this widget.
+                ctx.request_focus();
                 self.push_input(TileMouseKind::LeftDown, ctx.local_position(state.position), 0.0);
             }
             PointerEvent::Move(PointerUpdate { current, .. }) => {
@@ -174,6 +230,22 @@ impl Widget for SurfaceTileWidget {
                 );
             }
             _ => {}
+        }
+    }
+
+    fn accepts_focus(&self) -> bool {
+        // Focusable so it can receive keyboard events when a web tile.
+        matches!(self.content, SurfaceContent::Web { .. })
+    }
+
+    fn on_text_event(
+        &mut self,
+        _ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &TextEvent,
+    ) {
+        if let TextEvent::Keyboard(ke) = event {
+            self.push_key(ke);
         }
     }
 
@@ -507,6 +579,9 @@ pub struct SurfaceShared {
     /// Pointer events captured by the widget (tile-local logical px), drained by
     /// the host and forwarded to the producer.
     pub input: Vec<TileMouse>,
+    /// Keyboard events captured by the focused widget, drained by the host and
+    /// forwarded to the producer.
+    pub keys: Vec<TileKey>,
 }
 
 /// Shared [`SurfaceShared`], `Arc`-cloned to the widget, compositor, and host.
@@ -529,6 +604,19 @@ pub enum TileMouseKind {
     LeftDown,
     LeftUp,
     Wheel,
+}
+
+/// A keyboard event from the focused tile widget. The host maps it to scrying's
+/// `KeyboardInput` (the `vk` is a best-effort Windows virtual-key code).
+#[derive(Clone, Debug)]
+pub struct TileKey {
+    pub down: bool,
+    pub vk: u32,
+    pub characters: String,
+    pub shift: bool,
+    pub control: bool,
+    pub alt: bool,
+    pub meta: bool,
 }
 
 impl WebSurfaceHost {
@@ -658,11 +746,14 @@ impl WebSurfaceHost {
     /// tile's top-left).
     #[cfg(target_os = "windows")]
     fn forward_input(&mut self, scale: f64) {
-        use scrying::{FocusReason, MouseEventKind, MouseInput, MouseVirtualKeys};
-        let events: Vec<TileMouse> = self
+        use scrying::{
+            FocusReason, KeyEventKind, KeyModifierFlags, KeyboardInput, MouseEventKind, MouseInput,
+            MouseVirtualKeys,
+        };
+        let (events, keys) = self
             .channel
             .lock()
-            .map(|mut c| std::mem::take(&mut c.input))
+            .map(|mut c| (std::mem::take(&mut c.input), std::mem::take(&mut c.keys)))
             .unwrap_or_default();
         let Some(producer) = self.producer.as_mut() else {
             return;
@@ -696,6 +787,24 @@ impl WebSurfaceHost {
                 point,
             }) {
                 eprintln!("[web] send_mouse_input failed: {err}");
+            }
+        }
+        for key in keys {
+            if let Err(err) = producer.send_keyboard_input(KeyboardInput {
+                kind: if key.down { KeyEventKind::Down } else { KeyEventKind::Up },
+                virtual_key_code: key.vk,
+                characters_ignoring_modifiers: key.characters.clone(),
+                characters: key.characters,
+                modifiers: KeyModifierFlags {
+                    shift: key.shift,
+                    control: key.control,
+                    alt: key.alt,
+                    meta: key.meta,
+                    caps_lock: false,
+                },
+                is_repeat: false,
+            }) {
+                eprintln!("[web] send_keyboard_input failed: {err}");
             }
         }
     }
