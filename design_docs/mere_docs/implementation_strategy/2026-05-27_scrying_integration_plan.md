@@ -156,16 +156,27 @@ streams.
   `request_redraw`s each tick (the WebView produces frames continuously but the
   compositor only blits on render + the loop sleeps when idle). Verified:
   clicking navigates, smooth scrolling.
-- **Step 5 — lifecycle polish (remaining).**
+- **Step 5 — keyboard + DX12-default. Done 2026-05-27 (`69c04f1`).** Verified
+  (typed into DuckDuckGo, Enter searched):
+  - **Keyboard**: the widget is focusable (`accepts_focus` for web tiles), takes
+    focus on click, and `on_text_event` maps ui-events keys → `TileKey`
+    (printable via `characters` + best-effort VK; named keys → Windows VK),
+    queued on the channel; the host forwards `send_keyboard_input` with modifier
+    flags.
+  - **`WGPU_BACKEND=dx12`** is now a Windows host default (`main()` sets it if
+    unset) — no manual env var; the D3D12-shared-texture import needs DX12.
+- **Step 5 — remaining polish (deferred, all optional; the tile is fully
+  interactive without them).**
   - **Frame-arrival-driven redraw** instead of every-tick (a waker from WGC
-    `FrameArrived` → the winit loop), so a static page goes idle-quiet.
+    `FrameArrived` → the winit loop), so a static *shown* page goes idle-quiet.
   - **Resize tracking** is janky mid-drag (the producer resize lags the tile
     bounds, so a stretched frame shows for a frame or two) — smooth it.
-  - **Keyboard input** (`send_keyboard_input`) — only mouse is wired.
-  - **Retire on tile close** + **multi-tile** (key producers by tile, not the
-    single-URL cache) via the `WorkbenchTiling` widget (verso P1).
-  - **`WGPU_BACKEND=dx12`** should be a host default on Windows (the import
-    needs the DX12 backend), not a manual env var.
+  - **Multi-tile** (key producers by tile id, not the single-URL cache) +
+    retire on real tile close, via the `WorkbenchTiling` widget (verso P1).
+    (Keep-alive across view-switch is intentional: instant re-show vs the ~5 s
+    WebView2 env rebuild.)
+  - **IME + fuller key coverage** (the current map covers printable + common
+    named keys; composition/dead-keys and the long tail are not wired).
 
 ## Boundaries
 
