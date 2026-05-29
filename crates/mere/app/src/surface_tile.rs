@@ -567,6 +567,11 @@ pub struct WebSurfaceHost {
     pending_size: Option<(u32, u32)>,
     #[cfg(target_os = "windows")]
     stable_ticks: u32,
+    /// Set right after a resize: the next pump does one *blocking* acquire
+    /// (which waits for + pumps a fresh new-size frame) so the tile snaps to the
+    /// resized content instead of showing the stale frame for a beat.
+    #[cfg(target_os = "windows")]
+    force_acquire: bool,
     /// Shared state for the web tile (see [`SurfaceChannel`]).
     channel: SurfaceChannel,
 }
@@ -646,6 +651,8 @@ impl WebSurfaceHost {
             pending_size: None,
             #[cfg(target_os = "windows")]
             stable_ticks: 0,
+            #[cfg(target_os = "windows")]
+            force_acquire: false,
             channel,
         }
     }
@@ -763,6 +770,8 @@ impl WebSurfaceHost {
                 Ok(()) => {
                     self.sized_to = Some(target);
                     self.pending_size = None;
+                    // Snap to a fresh new-size frame on the next pump.
+                    self.force_acquire = true;
                 }
                 Err(err) => eprintln!("[web] resize failed: {err}"),
             }
@@ -854,15 +863,30 @@ impl WebSurfaceHost {
             )));
         }
 
+        // Right after a resize, do one *blocking* acquire so the tile snaps to a
+        // fresh new-size frame (the blocking path pumps + waits for it); safe
+        // here because pump runs from on_tick, outside render. Otherwise the
+        // non-blocking path (returns `None` until a frame is ready).
+        let force = std::mem::take(&mut self.force_acquire);
         let Some(producer) = self.producer.as_mut() else {
             return;
         };
-        let frame = match producer.try_acquire_frame() {
-            Ok(Some(frame)) => frame,
-            Ok(None) => return,
-            Err(err) => {
-                eprintln!("[web] acquire failed: {err}");
-                return;
+        let frame = if force {
+            match producer.acquire_full_frame() {
+                Ok(frame) => frame,
+                Err(err) => {
+                    eprintln!("[web] resync acquire failed: {err}");
+                    return;
+                }
+            }
+        } else {
+            match producer.try_acquire_frame() {
+                Ok(Some(frame)) => frame,
+                Ok(None) => return,
+                Err(err) => {
+                    eprintln!("[web] acquire failed: {err}");
+                    return;
+                }
             }
         };
         let WebSurfaceFrame::Native(native) = &frame.frame else {
