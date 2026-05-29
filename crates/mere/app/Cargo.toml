@@ -13,10 +13,12 @@ name = "mere"
 path = "src/main.rs"
 
 [dependencies]
-# The Xilem app driver (window + event loop + reactive view tree).
-# Path-dep to the local xilem clone, like mere-masonry/mere-host; switch
-# to crates.io once xilem stabilises.
-xilem = { path = "../../../../../crates/xilem/xilem" }
+# The Xilem app driver (window + event loop + reactive view tree). Git-dep on
+# our fork's branch (carries the external-surface + on_tick hooks and the
+# wgpu-29/vello-0-9 pins) so a fresh `git clone` of mere builds without a
+# sibling xilem checkout. The fork resolves its imaging dep via git too. For
+# local xilem dev, override via a gitignored `.cargo/config.toml` `paths` entry.
+xilem = { git = "https://github.com/mark-ik/xilem", branch = "mere-wgpu-29-vello-0-9" }
 
 # Portable core — the framework-free truth the views render.
 kernel = { workspace = true, features = ["store"] }
