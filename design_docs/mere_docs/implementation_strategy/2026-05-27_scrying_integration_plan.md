@@ -116,13 +116,34 @@ streams.
     the ones that bite.
   - Verify (either): producer constructs on DX12 with our HWND, a navigation
     event fires (log). Frames come in step 3.
-- **Step 3 — frame pump + zero-copy import + composite.** In the tick hook
-  (option B): `try_acquire_frame()`; on a frame, import the `Dx12SharedTexture`
-  via the cached `WgpuTextureImporter` (re-import only when `resource_is_new`),
-  store the imported `wgpu::Texture` in the shared cell, `request_redraw`. In the
-  compositor (inside render): `copy_texture_to_texture` the cell's texture (BGRA
-  → target) into the layer bounds. Verify: a real web page renders in the surf
-  tile.
+  - **Done 2026-05-27 (B, `on_tick`).** Added `AppDriver::on_tick` + xilem
+    `with_on_tick` (masonry fork `3756054d`). mere-app's host builds a
+    `WebView2CompositionProducer` for the surf tile's URL and `load_url`s it
+    (`7493776`). Two fixes the runtime forced: WebView2's WinComp `Compositor`
+    needs a `DispatcherQueue` on the UI thread first (host creates + holds a
+    `DispatcherQueueController`); single-producer keyed by URL (the surf tile's
+    `WidgetId` churns across rebuilds, which would spawn N WebViews). Full nav
+    lifecycle logs; the page renders **as a native DirectComposition overlay**
+    (see step 3b — the producer attaches its visual to the HWND target).
+- **Step 3a — Dx12 frame import. Done 2026-05-27 (`e358353`).**
+  `try_acquire_frame` (non-blocking after the first) → import the
+  `Dx12SharedTexture` into our wgpu DX12 device via `WgpuTextureImporter`.
+  Verified: `imported frame 1379x926 (Bgra8Unorm) gen 1`. Re-import only on
+  `resource_is_new` (else the reused texture's shared handle is stale →
+  "handle is invalid"); cache the import otherwise.
+- **Step 3b — composite + suppress the overlay (next).** Share the cached
+  imported `wgpu::Texture` to the compositor (a `Arc<Mutex<Option<Texture>>>`
+  cell; `Texture` is `Send`). In the compositor: **blit** it into the tile rect.
+  The frame is `Bgra8Unorm`, the target `Rgba8Unorm` — *not* copy-compatible, so
+  `copy_texture_to_texture` won't do; a sample-based blit (render pass into the
+  target's RENDER_ATTACHMENT, viewport = tile bounds, sampling the imported
+  texture) handles both positioning and channel order (sampling normalizes BGRA
+  → RGBA). **Suppress the native overlay**: WGC captures via `CreateFromVisual`
+  (the visual's *content*, position-independent), so offsetting the producer's
+  visual off-screen hides the overlay while capture keeps working — to verify at
+  runtime. Result: the page shows only in the composited tile, our scene
+  controls layering. Verify: page renders in the tile rect, no overlay over the
+  chrome.
 - **Step 4 — input routing.** Translate pointer/keyboard from the `SurfaceTile`
   widget (it already takes pointer events) into the producer's `send_mouse_input`
   / `send_keyboard_input`. Verify: links click, scrolling works.
