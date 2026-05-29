@@ -33,9 +33,11 @@ use std::sync::{Arc, Mutex};
 
 use xilem::core::{MessageCtx, MessageResult, Mut, View, ViewMarker};
 use xilem::masonry::accesskit::{Node as AccessNode, Role};
+use xilem::masonry::core::pointer::PointerButton;
 use xilem::masonry::core::{
-    AccessCtx, ChildrenIds, LayoutCtx, MeasureCtx, PaintCtx, PaintLayerMode, PropertiesRef,
-    RegisterCtx, Widget, WidgetId, WidgetMut,
+    AccessCtx, ChildrenIds, EventCtx, LayoutCtx, MeasureCtx, PaintCtx, PaintLayerMode,
+    PointerButtonEvent, PointerEvent, PointerScrollEvent, PointerUpdate, PropertiesMut,
+    PropertiesRef, RegisterCtx, ScrollDelta, Widget, WidgetId, WidgetMut,
 };
 use xilem::masonry::imaging::Painter;
 use xilem::masonry::kurbo::{Axis, Size};
@@ -103,12 +105,15 @@ impl SurfaceRegistry {
 pub struct SurfaceTileWidget {
     registry: SurfaceRegistry,
     content: SurfaceContent,
+    /// Pointer events are queued here for the on_tick host to forward to the
+    /// producer (only meaningful for a `Web` tile).
+    channel: SurfaceChannel,
     size: Size,
 }
 
 impl SurfaceTileWidget {
-    fn new(registry: SurfaceRegistry, content: SurfaceContent) -> Self {
-        Self { registry, content, size: Size::ZERO }
+    fn new(registry: SurfaceRegistry, content: SurfaceContent, channel: SurfaceChannel) -> Self {
+        Self { registry, content, channel, size: Size::ZERO }
     }
 
     fn set_content(this: &mut WidgetMut<'_, Self>, content: SurfaceContent) {
@@ -117,12 +122,60 @@ impl SurfaceTileWidget {
             this.ctx.request_render();
         }
     }
+
+    /// Queue a pointer event (tile-local logical coords) for the host.
+    fn push_input(&self, kind: TileMouseKind, pos: xilem::masonry::kurbo::Point, delta: f32) {
+        if !matches!(self.content, SurfaceContent::Web { .. }) {
+            return;
+        }
+        if let Ok(mut channel) = self.channel.lock() {
+            channel.input.push(TileMouse { kind, x: pos.x as f32, y: pos.y as f32, delta });
+        }
+    }
 }
 
 impl Widget for SurfaceTileWidget {
     type Action = ();
 
     fn register_children(&mut self, _ctx: &mut RegisterCtx<'_>) {}
+
+    fn on_pointer_event(
+        &mut self,
+        ctx: &mut EventCtx<'_>,
+        _props: &mut PropertiesMut<'_>,
+        event: &PointerEvent,
+    ) {
+        // Forward pointer activity into the producer's input queue. Coords are
+        // tile-local logical px; the host scales to the WebView's physical px.
+        match event {
+            PointerEvent::Down(PointerButtonEvent {
+                button: Some(PointerButton::Primary) | None,
+                state,
+                ..
+            }) => {
+                ctx.capture_pointer();
+                self.push_input(TileMouseKind::LeftDown, ctx.local_position(state.position), 0.0);
+            }
+            PointerEvent::Move(PointerUpdate { current, .. }) => {
+                self.push_input(TileMouseKind::Move, ctx.local_position(current.position), 0.0);
+            }
+            PointerEvent::Up(PointerButtonEvent { state, .. }) => {
+                self.push_input(TileMouseKind::LeftUp, ctx.local_position(state.position), 0.0);
+            }
+            PointerEvent::Scroll(PointerScrollEvent { state, delta, .. }) => {
+                let dy = match delta {
+                    ScrollDelta::LineDelta(_, y) | ScrollDelta::PageDelta(_, y) => *y as f64,
+                    ScrollDelta::PixelDelta(p) => p.y / 40.0,
+                };
+                self.push_input(
+                    TileMouseKind::Wheel,
+                    ctx.local_position(state.position),
+                    dy as f32,
+                );
+            }
+            _ => {}
+        }
+    }
 
     fn measure(
         &mut self,
@@ -431,19 +484,55 @@ pub struct WebSurfaceHost {
     /// Log the first successful import once, not every frame.
     #[cfg(target_os = "windows")]
     logged_import: bool,
-    /// Shared with the compositor: the latest imported frame texture for the web
-    /// tile. The host (on_tick) writes it on import; the compositor reads + blits
-    /// it into the tile rect. Doubles as the `resource_is_new` cache (`Some` ⇒ a
-    /// valid import is held, so a reused-resource frame is skipped).
-    frame: SurfaceFrameCell,
+    /// Producer's current physical size; re-`resize` only when the tile bounds
+    /// change, so the WebView renders 1:1 in the tile (crisp + 1:1 input coords).
+    #[cfg(target_os = "windows")]
+    sized_to: Option<(u32, u32)>,
+    /// Shared state for the web tile (see [`SurfaceChannel`]).
+    channel: SurfaceChannel,
 }
 
-/// The latest web-tile frame, shared host↔compositor. `wgpu::Texture` is
-/// `Send + Sync`; both ends run on the main thread so the lock is uncontended.
-pub type SurfaceFrameCell = Arc<Mutex<Option<wgpu::Texture>>>;
+/// Web-tile state shared across the three main-thread sites that touch it: the
+/// `SurfaceTileWidget` (writes `input`), the compositor (writes `bounds`, reads
+/// `frame`), and the on_tick host (reads `bounds`/`input`, writes `frame`).
+/// All run on the main thread, so the lock is uncontended.
+#[derive(Default)]
+pub struct SurfaceShared {
+    /// Latest imported frame texture (host writes on import; compositor blits).
+    /// `Some` also serves as the `resource_is_new` cache marker.
+    pub frame: Option<wgpu::Texture>,
+    /// The tile's current rect in physical px (compositor writes from the
+    /// external layer bounds); the host sizes the producer to match.
+    pub bounds: Option<[u32; 4]>,
+    /// Pointer events captured by the widget (tile-local logical px), drained by
+    /// the host and forwarded to the producer.
+    pub input: Vec<TileMouse>,
+}
+
+/// Shared [`SurfaceShared`], `Arc`-cloned to the widget, compositor, and host.
+pub type SurfaceChannel = Arc<Mutex<SurfaceShared>>;
+
+/// A pointer event from the tile widget, in tile-local logical px. The host
+/// scales to physical and maps to scrying's `MouseInput`.
+#[derive(Clone, Copy, Debug)]
+pub struct TileMouse {
+    pub kind: TileMouseKind,
+    pub x: f32,
+    pub y: f32,
+    /// Vertical wheel notches for [`TileMouseKind::Wheel`]; 0 otherwise.
+    pub delta: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TileMouseKind {
+    Move,
+    LeftDown,
+    LeftUp,
+    Wheel,
+}
 
 impl WebSurfaceHost {
-    pub fn new(user_data_dir: std::path::PathBuf, frame: SurfaceFrameCell) -> Self {
+    pub fn new(user_data_dir: std::path::PathBuf, channel: SurfaceChannel) -> Self {
         Self {
             user_data_dir,
             #[cfg(target_os = "windows")]
@@ -456,7 +545,9 @@ impl WebSurfaceHost {
             importer: None,
             #[cfg(target_os = "windows")]
             logged_import: false,
-            frame,
+            #[cfg(target_os = "windows")]
+            sized_to: None,
+            channel,
         }
     }
 
@@ -472,65 +563,140 @@ impl WebSurfaceHost {
         size: (u32, u32),
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        scale: f64,
     ) {
         #[cfg(target_os = "windows")]
         {
-            if self.current_url.as_deref() == Some(url) {
-                if let Some(producer) = self.producer.as_mut() {
-                    while let Some(event) = producer.poll_navigation_event() {
-                        eprintln!("[web] nav: {event:?}");
-                    }
-                }
-                self.pump_frame(device, queue);
-                return;
+            if self.current_url.as_deref() != Some(url) {
+                self.build(hwnd, url, size);
             }
-
-            // WebView2's WinComp `Compositor` requires a DispatcherQueue on
-            // this (UI/event-loop) thread. Create + hold it once before the
-            // first producer build.
-            if self.dispatcher_queue.is_none() {
-                use windows::Win32::System::WinRT::{
-                    CreateDispatcherQueueController, DQTAT_COM_STA, DQTYPE_THREAD_CURRENT,
-                    DispatcherQueueOptions,
-                };
-                self.dispatcher_queue = unsafe {
-                    CreateDispatcherQueueController(DispatcherQueueOptions {
-                        dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32,
-                        threadType: DQTYPE_THREAD_CURRENT,
-                        apartmentType: DQTAT_COM_STA,
-                    })
+            if let Some(producer) = self.producer.as_mut() {
+                while let Some(event) = producer.poll_navigation_event() {
+                    eprintln!("[web] nav: {event:?}");
                 }
-                .ok();
             }
-
-            let config = scrying::PlatformWebSurfaceConfig::new(
-                dpi::PhysicalSize::new(size.0.max(1), size.1.max(1)),
-                self.user_data_dir.clone(),
-            );
-            // SAFETY: `hwnd` is the live top-level window handle from
-            // `TickCtx::windows`, valid for the app's lifetime.
-            match unsafe { scrying::PlatformWebSurfaceProducer::new(hwnd, config) } {
-                Ok(mut producer) => {
-                    eprintln!("[web] producer built ({}x{}) for {url}", size.0, size.1);
-                    if let Err(err) = producer.load_url(url) {
-                        eprintln!("[web] load_url failed: {err}");
-                    }
-                    // Suppress the native composition overlay: move the visual
-                    // off-screen. WGC captures via `CreateFromVisual` (the
-                    // visual's content, position-independent), so the frame
-                    // still arrives — we composite it into the tile ourselves.
-                    if let Err(err) = producer.set_offset(-32000.0, -32000.0) {
-                        eprintln!("[web] set_offset failed: {err}");
-                    }
-                    self.producer = Some(producer);
-                    self.current_url = Some(url.to_string());
-                }
-                Err(err) => eprintln!("[web] producer build failed: {err}"),
-            }
+            self.resize_to_bounds();
+            self.forward_input(scale);
+            self.pump_frame(device, queue);
         }
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = (hwnd, url, size, device, queue);
+            let _ = (hwnd, url, size, device, queue, scale);
+        }
+    }
+
+    /// Build + navigate the producer (once per URL), suppressing its native
+    /// overlay. Sets `sized_to` to the construct size.
+    #[cfg(target_os = "windows")]
+    fn build(&mut self, hwnd: *mut std::ffi::c_void, url: &str, size: (u32, u32)) {
+        // WebView2's WinComp `Compositor` requires a DispatcherQueue on this
+        // (UI/event-loop) thread. Create + hold it once before the first build.
+        if self.dispatcher_queue.is_none() {
+            use windows::Win32::System::WinRT::{
+                CreateDispatcherQueueController, DQTAT_COM_STA, DQTYPE_THREAD_CURRENT,
+                DispatcherQueueOptions,
+            };
+            self.dispatcher_queue = unsafe {
+                CreateDispatcherQueueController(DispatcherQueueOptions {
+                    dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32,
+                    threadType: DQTYPE_THREAD_CURRENT,
+                    apartmentType: DQTAT_COM_STA,
+                })
+            }
+            .ok();
+        }
+
+        let config = scrying::PlatformWebSurfaceConfig::new(
+            dpi::PhysicalSize::new(size.0.max(1), size.1.max(1)),
+            self.user_data_dir.clone(),
+        );
+        // SAFETY: `hwnd` is the live top-level window handle from
+        // `TickCtx::windows`, valid for the app's lifetime.
+        match unsafe { scrying::PlatformWebSurfaceProducer::new(hwnd, config) } {
+            Ok(mut producer) => {
+                eprintln!("[web] producer built ({}x{}) for {url}", size.0, size.1);
+                if let Err(err) = producer.load_url(url) {
+                    eprintln!("[web] load_url failed: {err}");
+                }
+                // Suppress the native composition overlay: move the visual
+                // off-screen. WGC captures via `CreateFromVisual` (the visual's
+                // content, position-independent), so the frame still arrives —
+                // we composite it into the tile ourselves.
+                if let Err(err) = producer.set_offset(-32000.0, -32000.0) {
+                    eprintln!("[web] set_offset failed: {err}");
+                }
+                self.producer = Some(producer);
+                self.current_url = Some(url.to_string());
+                self.sized_to = Some((size.0.max(1), size.1.max(1)));
+            }
+            Err(err) => eprintln!("[web] producer build failed: {err}"),
+        }
+    }
+
+    /// Resize the producer to the tile's physical bounds when they change, so
+    /// the WebView renders 1:1 in the tile (crisp + 1:1 input coordinates).
+    #[cfg(target_os = "windows")]
+    fn resize_to_bounds(&mut self) {
+        let Some([_, _, w, h]) = self.channel.lock().ok().and_then(|c| c.bounds) else {
+            return;
+        };
+        let target = (w.max(1), h.max(1));
+        if self.sized_to == Some(target) {
+            return;
+        }
+        if let Some(producer) = self.producer.as_mut() {
+            match producer.resize(dpi::PhysicalSize::new(target.0, target.1)) {
+                Ok(()) => self.sized_to = Some(target),
+                Err(err) => eprintln!("[web] resize failed: {err}"),
+            }
+        }
+    }
+
+    /// Drain queued widget pointer events and forward them to the producer.
+    /// Tile-local logical coords × `scale` → physical px relative to the
+    /// WebView's top-left (which, since we size the producer to the tile, is the
+    /// tile's top-left).
+    #[cfg(target_os = "windows")]
+    fn forward_input(&mut self, scale: f64) {
+        use scrying::{FocusReason, MouseEventKind, MouseInput, MouseVirtualKeys};
+        let events: Vec<TileMouse> = self
+            .channel
+            .lock()
+            .map(|mut c| std::mem::take(&mut c.input))
+            .unwrap_or_default();
+        let Some(producer) = self.producer.as_mut() else {
+            return;
+        };
+        for ev in events {
+            let point = ((ev.x as f64 * scale) as i32, (ev.y as f64 * scale) as i32);
+            let kind = match ev.kind {
+                TileMouseKind::Move => MouseEventKind::Move,
+                TileMouseKind::LeftDown => MouseEventKind::LeftButtonDown,
+                TileMouseKind::LeftUp => MouseEventKind::LeftButtonUp,
+                TileMouseKind::Wheel => MouseEventKind::Wheel,
+            };
+            // Take keyboard focus when the user presses inside the tile.
+            if ev.kind == TileMouseKind::LeftDown {
+                let _ = producer.move_focus(FocusReason::Programmatic);
+            }
+            let virtual_keys = MouseVirtualKeys {
+                left_button: ev.kind == TileMouseKind::LeftDown,
+                ..Default::default()
+            };
+            // WebView2 wheel delta is in WHEEL_DELTA units (120 per notch).
+            let mouse_data = if ev.kind == TileMouseKind::Wheel {
+                (ev.delta * 120.0) as i32
+            } else {
+                0
+            };
+            if let Err(err) = producer.send_mouse_input(MouseInput {
+                kind,
+                virtual_keys,
+                mouse_data,
+                point,
+            }) {
+                eprintln!("[web] send_mouse_input failed: {err}");
+            }
         }
     }
 
@@ -567,7 +733,11 @@ impl WebSurfaceHost {
         // Re-import only on a fresh allocation. When the producer reused its
         // texture (`resource_is_new == false`) the shared handle is stale —
         // keep the cached import (its backing memory was just overwritten).
-        let have_cached = self.frame.lock().map(|f| f.is_some()).unwrap_or(false);
+        let have_cached = self
+            .channel
+            .lock()
+            .map(|c| c.frame.is_some())
+            .unwrap_or(false);
         if !frame.resource_is_new && have_cached {
             return;
         }
@@ -585,8 +755,8 @@ impl WebSurfaceHost {
                         imported.size.width, imported.size.height, imported.format, imported.generation
                     );
                 }
-                if let Ok(mut cell) = self.frame.lock() {
-                    *cell = Some(imported.texture);
+                if let Ok(mut cell) = self.channel.lock() {
+                    cell.frame = Some(imported.texture);
                 }
             }
             Err(err) => eprintln!("[web] import failed: {err}"),
@@ -600,12 +770,16 @@ impl WebSurfaceHost {
 
 /// A reactive external-surface tile. The widget registers `content` in
 /// `registry` so the compositor hook (and, for `Web`, the on_tick host) can
-/// realize it.
-pub fn surface_tile<State>(registry: SurfaceRegistry, content: SurfaceContent) -> SurfaceTile<State>
+/// realize it, and queues pointer events into `channel` for the host.
+pub fn surface_tile<State>(
+    registry: SurfaceRegistry,
+    content: SurfaceContent,
+    channel: SurfaceChannel,
+) -> SurfaceTile<State>
 where
     State: 'static,
 {
-    SurfaceTile { registry, content, phantom: PhantomData }
+    SurfaceTile { registry, content, channel, phantom: PhantomData }
 }
 
 /// The [`View`] created by [`surface_tile`].
@@ -613,6 +787,7 @@ where
 pub struct SurfaceTile<State> {
     registry: SurfaceRegistry,
     content: SurfaceContent,
+    channel: SurfaceChannel,
     phantom: PhantomData<fn() -> State>,
 }
 
@@ -631,6 +806,7 @@ where
             ctx.create_pod(SurfaceTileWidget::new(
                 self.registry.clone(),
                 self.content.clone(),
+                self.channel.clone(),
             )),
             (),
         )

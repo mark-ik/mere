@@ -295,6 +295,7 @@ fn surface_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
         surface_tile(
             state.surface_registry.clone(),
             SurfaceContent::Web { url: "https://example.com".to_string() },
+            state.surface_channel.clone(),
         )
         .flex(1.0),
     ))

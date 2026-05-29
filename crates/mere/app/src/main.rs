@@ -142,9 +142,12 @@ struct AppState {
     /// Rebuilt only on graph mutation, not per frame (memoized derivation).
     scene: GraphScene,
     /// External-surface content registry: maps each `SurfaceTileWidget`'s id to
-    /// its content (stub: a solid color), read by the `with_external_compositor`
-    /// hook. Cloned into the compositor closure in `main`.
+    /// its content, read by the `with_external_compositor` hook. Cloned into the
+    /// compositor closure in `main`.
     surface_registry: SurfaceRegistry,
+    /// Shared web-tile channel (frame / bounds / input), cloned to the surf
+    /// tile's widget so it can queue pointer events for the on_tick host.
+    surface_channel: surface_tile::SurfaceChannel,
     /// Last measured size of the workbench tiling region, reported back by a
     /// `resize_observer`. `platen::layout_plan` needs a viewport to lay tiles
     /// out, but Xilem builds the view before layout runs — so the size round-
@@ -159,7 +162,10 @@ struct AppState {
 }
 
 impl AppState {
-    fn new(surface_registry: SurfaceRegistry) -> Self {
+    fn new(
+        surface_registry: SurfaceRegistry,
+        surface_channel: surface_tile::SurfaceChannel,
+    ) -> Self {
         let session_dir = session_dir();
         let _ = std::fs::create_dir_all(&session_dir);
 
@@ -195,6 +201,7 @@ impl AppState {
             tile_docs,
             scene,
             surface_registry,
+            surface_channel,
             content_size: Size::new(960.0, 640.0),
             session_dir,
             frame_label: "Mere".to_string(),
@@ -399,19 +406,21 @@ fn main() {
     // layer), and the on_tick host (which drives web producers). All clones of
     // one `Arc`.
     let surface_registry = SurfaceRegistry::new();
-    let state = AppState::new(surface_registry.clone());
+    // Web-tile channel (frame / bounds / input), shared widget ↔ compositor ↔
+    // on_tick host.
+    let surface_channel: surface_tile::SurfaceChannel =
+        std::sync::Arc::new(std::sync::Mutex::new(Default::default()));
+    let state = AppState::new(surface_registry.clone(), surface_channel.clone());
     let webview_data_dir = session_dir().join("webview");
-    // Latest web-tile frame, shared host (on_tick, writes) ↔ compositor (reads).
-    let surface_frame: surface_tile::SurfaceFrameCell =
-        std::sync::Arc::new(std::sync::Mutex::new(None));
 
     Xilem::new_simple(state, panes::app_logic, WindowOptions::new("Mere"))
         // Realize each external layer (a SurfaceTile's reserved rect): a solid
-        // color, or — for a web tile — a placeholder until step 3 copies the
-        // WebView frame here.
+        // color, or — for a web tile — the imported WebView frame (placeholder
+        // until the first frame lands). Also records the tile's bounds so the
+        // on_tick host can size the producer to match.
         .with_external_compositor({
             let registry = surface_registry.clone();
-            let frame_cell = surface_frame.clone();
+            let channel = surface_channel.clone();
             // The blit pipeline is created lazily on the first web frame (needs
             // the device + target format) and cached across frames.
             let mut blit: Option<surface_tile::BlitPipeline> = None;
@@ -428,7 +437,15 @@ fn main() {
                             );
                         }
                         Some(SurfaceContent::Web { .. }) => {
-                            let frame = frame_cell.lock().ok().and_then(|f| f.as_ref().cloned());
+                            // Record the tile bounds (host sizes the producer to
+                            // them) and read the latest imported frame.
+                            let frame = match channel.lock() {
+                                Ok(mut c) => {
+                                    c.bounds = Some(layer.bounds);
+                                    c.frame.clone()
+                                }
+                                Err(_) => None,
+                            };
                             match frame {
                                 Some(texture) => {
                                     let pipeline = blit.get_or_insert_with(|| {
@@ -466,7 +483,8 @@ fn main() {
         // producer for the active web tile (step 2); frames come in step 3.
         .with_on_tick({
             let registry = surface_registry.clone();
-            let mut web_host = surface_tile::WebSurfaceHost::new(webview_data_dir, surface_frame);
+            let mut web_host =
+                surface_tile::WebSurfaceHost::new(webview_data_dir, surface_channel);
             move |ctx| {
                 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
                 // Need the shared device + a window. Device exists once the
@@ -482,13 +500,35 @@ fn main() {
                     Ok(RawWindowHandle::Win32(h)) => h.hwnd.get() as *mut std::ffi::c_void,
                     _ => return,
                 };
+                // The producer is sized to the tile bounds (physical px); the
+                // initial size is the window until the first compositor pass
+                // records the tile rect. `scale` maps widget logical input → px.
                 let inner = window.inner_size();
+                let scale = window.scale_factor();
                 // First web tile drives the (single, v1) producer.
+                let mut web_active = false;
                 for (_id, content) in registry.entries() {
                     if let SurfaceContent::Web { url } = content {
-                        web_host.ensure(hwnd, &url, (inner.width, inner.height), device, queue);
+                        web_host.ensure(
+                            hwnd,
+                            &url,
+                            (inner.width, inner.height),
+                            device,
+                            queue,
+                            scale,
+                        );
+                        web_active = true;
                         break;
                     }
+                }
+                // A live WebView produces frames continuously (scroll, video,
+                // animation); the compositor only blits them when Masonry
+                // renders, and the event loop sleeps when idle. While a web tile
+                // is shown, keep requesting redraws so imported frames reach the
+                // screen without needing an unrelated interaction. (Step 5 can
+                // make this frame-arrival-driven instead of every-tick.)
+                if web_active {
+                    window.request_redraw();
                 }
             }
         })
