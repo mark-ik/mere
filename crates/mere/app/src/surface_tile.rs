@@ -275,6 +275,19 @@ pub struct WebSurfaceHost {
     /// the producer's lifetime.
     #[cfg(target_os = "windows")]
     dispatcher_queue: Option<windows::System::DispatcherQueueController>,
+    /// Imports the producer's `Dx12SharedTexture` frames into our wgpu (DX12)
+    /// device. Created once the device is known.
+    #[cfg(target_os = "windows")]
+    importer: Option<scrying::WgpuTextureImporter>,
+    /// Log the first successful import once, not every frame.
+    #[cfg(target_os = "windows")]
+    logged_import: bool,
+    /// The most-recently imported frame texture. Re-imported only when the
+    /// producer reports `resource_is_new`; otherwise the producer reused its
+    /// underlying allocation and re-opening the (now-stale) shared handle fails
+    /// — we keep this cached texture instead. Step 3b composites it.
+    #[cfg(target_os = "windows")]
+    imported_texture: Option<wgpu::Texture>,
 }
 
 impl WebSurfaceHost {
@@ -287,14 +300,28 @@ impl WebSurfaceHost {
             current_url: None,
             #[cfg(target_os = "windows")]
             dispatcher_queue: None,
+            #[cfg(target_os = "windows")]
+            importer: None,
+            #[cfg(target_os = "windows")]
+            logged_import: false,
+            #[cfg(target_os = "windows")]
+            imported_texture: None,
         }
     }
 
     /// Ensure a producer parented to `hwnd`, navigated to `url`, at `size`
-    /// physical px. Builds on first call (or when `url` changes); otherwise
-    /// drains navigation events. Safe to call every tick. Step 3 adds frame
-    /// acquisition; for now this is construct + navigate (+ event logging).
-    pub fn ensure(&mut self, hwnd: *mut std::ffi::c_void, url: &str, size: (u32, u32)) {
+    /// physical px, and pump one frame: acquire the producer's Dx12 shared
+    /// texture and import it into our wgpu (DX12) device. Builds on first call
+    /// (or when `url` changes). Safe to call every tick (acquire is non-blocking
+    /// after the first frame). Step 3a: import + log; 3b composites it.
+    pub fn ensure(
+        &mut self,
+        hwnd: *mut std::ffi::c_void,
+        url: &str,
+        size: (u32, u32),
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) {
         #[cfg(target_os = "windows")]
         {
             if self.current_url.as_deref() == Some(url) {
@@ -303,6 +330,7 @@ impl WebSurfaceHost {
                         eprintln!("[web] nav: {event:?}");
                     }
                 }
+                self.pump_frame(device, queue);
                 return;
             }
 
@@ -344,7 +372,63 @@ impl WebSurfaceHost {
         }
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = (hwnd, url, size);
+            let _ = (hwnd, url, size, device, queue);
+        }
+    }
+
+    /// Acquire the producer's latest frame (non-blocking after the first) and
+    /// import its `Dx12SharedTexture` into our wgpu device. Step 3a logs the
+    /// first successful import; 3b stores the texture for the compositor.
+    #[cfg(target_os = "windows")]
+    fn pump_frame(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        use scrying::{
+            HostWgpuContext, ImportOptions, TextureImporter, WebSurfaceFrame, WgpuTextureImporter,
+        };
+
+        if self.importer.is_none() {
+            self.importer = Some(WgpuTextureImporter::new(HostWgpuContext::new(
+                device.clone(),
+                queue.clone(),
+            )));
+        }
+
+        let Some(producer) = self.producer.as_mut() else {
+            return;
+        };
+        let frame = match producer.try_acquire_frame() {
+            Ok(Some(frame)) => frame,
+            Ok(None) => return,
+            Err(err) => {
+                eprintln!("[web] acquire failed: {err}");
+                return;
+            }
+        };
+        let WebSurfaceFrame::Native(native) = &frame.frame else {
+            return;
+        };
+        // Re-import only on a fresh allocation. When the producer reused its
+        // texture (`resource_is_new == false`) the shared handle is stale —
+        // keep the cached import (its backing memory was just overwritten).
+        if !frame.resource_is_new && self.imported_texture.is_some() {
+            return;
+        }
+        match self
+            .importer
+            .as_ref()
+            .expect("importer created above")
+            .import_frame(native, &ImportOptions::default())
+        {
+            Ok(imported) => {
+                if !self.logged_import {
+                    self.logged_import = true;
+                    eprintln!(
+                        "[web] imported frame {}x{} ({:?}) gen {}",
+                        imported.size.width, imported.size.height, imported.format, imported.generation
+                    );
+                }
+                self.imported_texture = Some(imported.texture);
+            }
+            Err(err) => eprintln!("[web] import failed: {err}"),
         }
     }
 }

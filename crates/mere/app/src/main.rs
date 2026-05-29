@@ -435,6 +435,12 @@ fn main() {
             let mut web_host = surface_tile::WebSurfaceHost::new(webview_data_dir);
             move |ctx| {
                 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                // Need the shared device + a window. Device exists once the
+                // first frame has created it; the producer's frame import needs
+                // it (our DX12 device — the same one the importer targets).
+                let (Some(device), Some(queue)) = (ctx.device, ctx.queue) else {
+                    return;
+                };
                 let Some(window) = ctx.windows.first() else {
                     return;
                 };
@@ -446,7 +452,7 @@ fn main() {
                 // First web tile drives the (single, v1) producer.
                 for (_id, content) in registry.entries() {
                     if let SurfaceContent::Web { url } = content {
-                        web_host.ensure(hwnd, &url, (inner.width, inner.height));
+                        web_host.ensure(hwnd, &url, (inner.width, inner.height), device, queue);
                         break;
                     }
                 }
