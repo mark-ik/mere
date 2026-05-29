@@ -169,8 +169,18 @@ streams.
   interactive without them).**
   - **Frame-arrival-driven redraw** instead of every-tick (a waker from WGC
     `FrameArrived` → the winit loop), so a static *shown* page goes idle-quiet.
-  - **Resize tracking** is janky mid-drag (the producer resize lags the tile
-    bounds, so a stretched frame shows for a frame or two) — smooth it.
+  - ~~**Resize tracking** is janky mid-drag~~ **Addressed 2026-05-27
+    (`1a0e842` + `e4796c3`).** Two parts: **debounce** the producer resize (only
+    after the tile size is stable a few ticks, so a drag doesn't thrash the
+    capture pipeline — the cached frame blits scaled meanwhile), then a
+    **resync-snap** (one blocking `acquire_full_frame` in on_tick after settle,
+    so the tile grabs a fresh new-size frame rather than holding the
+    stretched-stale one). **Finding:** true *drag-time* smoothness (content
+    tracking the size live) is **producer-capped** — WebView2/WGC restarts
+    capture on every resize, so live-resize inherently flickers; the
+    debounce+settle-snap is the pragmatic point on the debounce↔throttled↔
+    continuous spectrum. Smooth live-resize would need scrying to support
+    resize-without-capture-restart.
   - **Multi-tile** (key producers by tile id, not the single-URL cache) +
     retire on real tile close, via the `WorkbenchTiling` widget (verso P1).
     (Keep-alive across view-switch is intentional: instant re-show vs the ~5 s
