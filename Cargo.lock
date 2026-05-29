@@ -6053,14 +6053,18 @@ dependencies = [
 name = "mere-app"
 version = "0.0.1"
 dependencies = [
+ "dpi",
  "forme",
  "frame",
  "inker",
  "kernel",
  "nematic",
  "platen",
+ "raw-window-handle",
+ "scrying 0.4.0 (git+https://github.com/mark-ik/wgpu-scry?branch=main)",
  "uuid",
  "wgpu",
+ "windows",
  "xilem",
 ]
 
@@ -9488,12 +9492,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "scrying"
+version = "0.4.0"
+source = "git+https://github.com/mark-ik/wgpu-scry?branch=main#7c3c91d5780e15e6b950afe8a90063cad27d6738"
+dependencies = [
+ "ash",
+ "block2 0.6.2",
+ "dispatch2",
+ "dpi",
+ "image",
+ "libc",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-core-media",
+ "objc2-core-video",
+ "objc2-foundation 0.3.2",
+ "objc2-io-surface",
+ "objc2-metal 0.3.2",
+ "objc2-screen-capture-kit",
+ "objc2-web-kit",
+ "palette",
+ "thiserror 2.0.18",
+ "webview2-com",
+ "wgpu",
+ "wgpu-hal",
+ "wgpu-types",
+ "windows",
+ "windows-numerics",
+]
+
+[[package]]
 name = "scrying-engine"
 version = "0.0.1"
 dependencies = [
  "dpi",
  "inker",
- "scrying",
+ "scrying 0.4.0",
  "tracing",
 ]
 

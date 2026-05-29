@@ -33,7 +33,7 @@ use forme::store::{load_all_formes, save_forme};
 use forme::{ArrangementNodeKind, FormeDocument};
 use camera::GraphScene;
 use graph_canvas::scene_from_graph;
-use surface_tile::SurfaceRegistry;
+use surface_tile::{SurfaceContent, SurfaceRegistry};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NavigationTrigger, Traversal};
 #[cfg(test)]
@@ -395,30 +395,61 @@ fn render_workbench_tiles(
 
 fn main() {
     // The external-surface registry is shared between the SurfaceTile widgets
-    // (which register their content) and the compositor hook (which realizes
-    // it). One clone lives in AppState for the views; one in the closure.
+    // (which register their content), the compositor hook (which fills each
+    // layer), and the on_tick host (which drives web producers). All clones of
+    // one `Arc`.
     let surface_registry = SurfaceRegistry::new();
     let state = AppState::new(surface_registry.clone());
+    let webview_data_dir = session_dir().join("webview");
 
     Xilem::new_simple(state, panes::app_logic, WindowOptions::new("Mere"))
-        // Realize each external layer (a SurfaceTile's reserved rect) by filling
-        // it with the tile's registered content. Stub: a solid color; the real
-        // lane copies a `scrying` producer's frame texture instead.
-        .with_external_compositor(move |ctx| {
-            // `ctx.window` is the parent window handle the scrying WebView
-            // producer needs (HWND on Windows); step 2 reads it to create the
-            // producer. Verified reachable (step 1).
-            for layer in ctx.layers {
-                let color = surface_registry
-                    .color(layer.widget_id)
-                    .unwrap_or([40, 44, 60, 255]);
-                surface_tile::composite_color(
-                    ctx.device,
-                    ctx.queue,
-                    ctx.target_texture,
-                    layer.bounds,
-                    color,
-                );
+        // Realize each external layer (a SurfaceTile's reserved rect): a solid
+        // color, or — for a web tile — a placeholder until step 3 copies the
+        // WebView frame here.
+        .with_external_compositor({
+            let registry = surface_registry.clone();
+            move |ctx| {
+                for layer in ctx.layers {
+                    let color = match registry.content(layer.widget_id) {
+                        Some(SurfaceContent::Solid(c)) => c,
+                        // Web tile, frame not yet wired (step 3): dark teal.
+                        Some(SurfaceContent::Web { .. }) => [28, 56, 48, 255],
+                        None => [40, 44, 60, 255],
+                    };
+                    surface_tile::composite_color(
+                        ctx.device,
+                        ctx.queue,
+                        ctx.target_texture,
+                        layer.bounds,
+                        color,
+                    );
+                }
+            }
+        })
+        // The outside-render, main-thread tick where the scrying WebView
+        // producer is safely driven (it pumps the OS message loop, which would
+        // re-enter render() if done in the compositor). Build + navigate a
+        // producer for the active web tile (step 2); frames come in step 3.
+        .with_on_tick({
+            let registry = surface_registry.clone();
+            let mut web_host = surface_tile::WebSurfaceHost::new(webview_data_dir);
+            move |ctx| {
+                use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                let Some(window) = ctx.windows.first() else {
+                    return;
+                };
+                let hwnd = match window.window_handle().map(|h| h.as_raw()) {
+                    Ok(RawWindowHandle::Win32(h)) => h.hwnd.get() as *mut std::ffi::c_void,
+                    _ => return,
+                };
+                let inner = window.inner_size();
+                // First web tile drives the (single, v1) producer.
+                for (_id, content) in registry.entries() {
+                    if let SurfaceContent::Web { url } = content {
+                        web_host.ensure(hwnd, &url, (inner.width, inner.height));
+                        break;
+                    }
+                }
             }
         })
         .run_in(EventLoop::with_user_event())

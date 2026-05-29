@@ -44,31 +44,54 @@ use xilem::{Pod, ViewCtx};
 
 const DEFAULT_LENGTH: Length = Length::const_px(100.0);
 
+/// What a [`SurfaceTileWidget`] wants realized into its external layer.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SurfaceContent {
+    /// Fill the layer with a solid color (the original stub; still used as a
+    /// placeholder for a web tile whose first frame hasn't arrived).
+    Solid([u8; 4]),
+    /// A live system WebView at this URL. The [on_tick host](WebSurfaceHost)
+    /// drives the producer; the compositor copies its frames.
+    Web { url: String },
+}
+
 /// Maps each [`SurfaceTileWidget`]'s `WidgetId` to its current content. The
-/// widget writes its entry; the app's external-compositor hook reads it by the
-/// `widget_id` masonry reports for each external layer. Cheap, low-frequency
-/// (one insert per tile paint), shared by `Arc` clone between the widgets and
-/// the compositor closure.
-///
-/// Stub content is a solid `[r, g, b, a]`; the real lane swaps this for a
-/// producer-backed texture handle.
+/// widget writes its entry; the app's external-compositor hook + the on_tick
+/// host read it by the `widget_id` masonry reports for each external layer.
+/// Cheap, low-frequency (one insert per tile paint), shared by `Arc` clone
+/// between the widgets, the compositor closure, and the tick closure.
 #[derive(Clone, Default)]
-pub struct SurfaceRegistry(Arc<Mutex<HashMap<WidgetId, [u8; 4]>>>);
+pub struct SurfaceRegistry(Arc<Mutex<HashMap<WidgetId, SurfaceContent>>>);
 
 impl SurfaceRegistry {
     pub fn new() -> Self {
         Self::default()
     }
 
-    fn set(&self, id: WidgetId, color: [u8; 4]) {
+    fn set(&self, id: WidgetId, content: SurfaceContent) {
         if let Ok(mut map) = self.0.lock() {
-            map.insert(id, color);
+            map.insert(id, content);
+        }
+    }
+
+    fn remove(&self, id: WidgetId) {
+        if let Ok(mut map) = self.0.lock() {
+            map.remove(&id);
         }
     }
 
     /// The content registered for `id`, if any. Called by the compositor hook.
-    pub fn color(&self, id: WidgetId) -> Option<[u8; 4]> {
-        self.0.lock().ok().and_then(|map| map.get(&id).copied())
+    pub fn content(&self, id: WidgetId) -> Option<SurfaceContent> {
+        self.0.lock().ok().and_then(|map| map.get(&id).cloned())
+    }
+
+    /// All registered `(id, content)` pairs — the tick host scans these to find
+    /// the web tiles it must keep a producer for.
+    pub fn entries(&self) -> Vec<(WidgetId, SurfaceContent)> {
+        self.0
+            .lock()
+            .map(|map| map.iter().map(|(id, c)| (*id, c.clone())).collect())
+            .unwrap_or_default()
     }
 }
 
@@ -79,18 +102,18 @@ impl SurfaceRegistry {
 /// A tile whose content is realized as an external GPU layer, not Masonry paint.
 pub struct SurfaceTileWidget {
     registry: SurfaceRegistry,
-    color: [u8; 4],
+    content: SurfaceContent,
     size: Size,
 }
 
 impl SurfaceTileWidget {
-    fn new(registry: SurfaceRegistry, color: [u8; 4]) -> Self {
-        Self { registry, color, size: Size::ZERO }
+    fn new(registry: SurfaceRegistry, content: SurfaceContent) -> Self {
+        Self { registry, content, size: Size::ZERO }
     }
 
-    fn set_color(this: &mut WidgetMut<'_, Self>, color: [u8; 4]) {
-        if this.widget.color != color {
-            this.widget.color = color;
+    fn set_content(this: &mut WidgetMut<'_, Self>, content: SurfaceContent) {
+        if this.widget.content != content {
+            this.widget.content = content;
             this.ctx.request_render();
         }
     }
@@ -122,10 +145,11 @@ impl Widget for SurfaceTileWidget {
 
     fn paint(&mut self, ctx: &mut PaintCtx<'_>, _props: &PropertiesRef<'_>, _painter: &mut Painter<'_>) {
         // Reserve an external layer for this widget's rect and publish our
-        // content key. Masonry hands the embedder this widget's id + bounds in
-        // `composite_external_layers`; the compositor looks the color up here.
-        // We deliberately paint nothing — the compositor fills the region.
-        self.registry.set(ctx.widget_id(), self.color);
+        // content. Masonry hands the embedder this widget's id + bounds in
+        // `composite_external_layers`; the compositor + tick host look the
+        // content up here. We deliberately paint nothing — the compositor fills
+        // the region (solid color, or the WebView frame).
+        self.registry.set(ctx.widget_id(), self.content.clone());
         ctx.set_paint_layer_mode(PaintLayerMode::External);
     }
 
@@ -226,23 +250,124 @@ pub fn composite_color(
 }
 
 // =============================================================================
+// WebView producer host (driven from on_tick — outside render)
+// =============================================================================
+
+/// Owns the live system-WebView producer(s) and drives them from the on_tick
+/// hook (main thread, outside `render()`), where pumping the OS message loop is
+/// safe. The compositor only ever *copies* an already-prepared frame; it never
+/// touches the producer.
+///
+/// v1 is **single-producer**, keyed by URL (not widget id — the surf tile's
+/// `WidgetId` churns across view rebuilds, which would otherwise spawn a fresh
+/// WebView each frame). Multi-tile + per-tile lifecycle is a later step.
+/// Windows-only for now (WebView2); other platforms no-op until their producer
+/// is wired.
+pub struct WebSurfaceHost {
+    #[allow(dead_code)]
+    user_data_dir: std::path::PathBuf,
+    #[cfg(target_os = "windows")]
+    producer: Option<scrying::PlatformWebSurfaceProducer>,
+    #[cfg(target_os = "windows")]
+    current_url: Option<String>,
+    /// WebView2's composition path requires a `DispatcherQueue` on this thread
+    /// before `Compositor::new`. Created once on first build and held alive for
+    /// the producer's lifetime.
+    #[cfg(target_os = "windows")]
+    dispatcher_queue: Option<windows::System::DispatcherQueueController>,
+}
+
+impl WebSurfaceHost {
+    pub fn new(user_data_dir: std::path::PathBuf) -> Self {
+        Self {
+            user_data_dir,
+            #[cfg(target_os = "windows")]
+            producer: None,
+            #[cfg(target_os = "windows")]
+            current_url: None,
+            #[cfg(target_os = "windows")]
+            dispatcher_queue: None,
+        }
+    }
+
+    /// Ensure a producer parented to `hwnd`, navigated to `url`, at `size`
+    /// physical px. Builds on first call (or when `url` changes); otherwise
+    /// drains navigation events. Safe to call every tick. Step 3 adds frame
+    /// acquisition; for now this is construct + navigate (+ event logging).
+    pub fn ensure(&mut self, hwnd: *mut std::ffi::c_void, url: &str, size: (u32, u32)) {
+        #[cfg(target_os = "windows")]
+        {
+            if self.current_url.as_deref() == Some(url) {
+                if let Some(producer) = self.producer.as_mut() {
+                    while let Some(event) = producer.poll_navigation_event() {
+                        eprintln!("[web] nav: {event:?}");
+                    }
+                }
+                return;
+            }
+
+            // WebView2's WinComp `Compositor` requires a DispatcherQueue on
+            // this (UI/event-loop) thread. Create + hold it once before the
+            // first producer build.
+            if self.dispatcher_queue.is_none() {
+                use windows::Win32::System::WinRT::{
+                    CreateDispatcherQueueController, DQTAT_COM_STA, DQTYPE_THREAD_CURRENT,
+                    DispatcherQueueOptions,
+                };
+                self.dispatcher_queue = unsafe {
+                    CreateDispatcherQueueController(DispatcherQueueOptions {
+                        dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32,
+                        threadType: DQTYPE_THREAD_CURRENT,
+                        apartmentType: DQTAT_COM_STA,
+                    })
+                }
+                .ok();
+            }
+
+            let config = scrying::PlatformWebSurfaceConfig::new(
+                dpi::PhysicalSize::new(size.0.max(1), size.1.max(1)),
+                self.user_data_dir.clone(),
+            );
+            // SAFETY: `hwnd` is the live top-level window handle from
+            // `TickCtx::windows`, valid for the app's lifetime.
+            match unsafe { scrying::PlatformWebSurfaceProducer::new(hwnd, config) } {
+                Ok(producer) => {
+                    eprintln!("[web] producer built ({}x{}) for {url}", size.0, size.1);
+                    if let Err(err) = producer.load_url(url) {
+                        eprintln!("[web] load_url failed: {err}");
+                    }
+                    self.producer = Some(producer);
+                    self.current_url = Some(url.to_string());
+                }
+                Err(err) => eprintln!("[web] producer build failed: {err}"),
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = (hwnd, url, size);
+        }
+    }
+}
+
+// =============================================================================
 // Xilem view
 // =============================================================================
 
-/// A reactive external-surface tile. `color` is the stub content; the widget
-/// registers it in `registry` so the app's compositor hook can realize it.
-pub fn surface_tile<State>(registry: SurfaceRegistry, color: [u8; 4]) -> SurfaceTile<State>
+/// A reactive external-surface tile. The widget registers `content` in
+/// `registry` so the compositor hook (and, for `Web`, the on_tick host) can
+/// realize it.
+pub fn surface_tile<State>(registry: SurfaceRegistry, content: SurfaceContent) -> SurfaceTile<State>
 where
     State: 'static,
 {
-    SurfaceTile { registry, color, phantom: PhantomData }
+    SurfaceTile { registry, content, phantom: PhantomData }
 }
 
 /// The [`View`] created by [`surface_tile`].
 #[must_use = "View values do nothing unless provided to Xilem."]
 pub struct SurfaceTile<State> {
     registry: SurfaceRegistry,
-    color: [u8; 4],
+    content: SurfaceContent,
     phantom: PhantomData<fn() -> State>,
 }
 
@@ -258,7 +383,10 @@ where
 
     fn build(&self, ctx: &mut ViewCtx, _: &mut State) -> (Self::Element, Self::ViewState) {
         (
-            ctx.create_pod(SurfaceTileWidget::new(self.registry.clone(), self.color)),
+            ctx.create_pod(SurfaceTileWidget::new(
+                self.registry.clone(),
+                self.content.clone(),
+            )),
             (),
         )
     }
@@ -271,10 +399,14 @@ where
         mut element: Mut<'_, Self::Element>,
         _app_state: &mut State,
     ) {
-        SurfaceTileWidget::set_color(&mut element, self.color);
+        SurfaceTileWidget::set_content(&mut element, self.content.clone());
     }
 
-    fn teardown(&self, (): &mut Self::ViewState, _: &mut ViewCtx, _: Mut<'_, Self::Element>) {}
+    fn teardown(&self, (): &mut Self::ViewState, _: &mut ViewCtx, element: Mut<'_, Self::Element>) {
+        // Drop our registry entry so the compositor + tick host stop tracking a
+        // tile that's no longer shown. (Producer teardown is step 5.)
+        self.registry.remove(element.ctx.widget_id());
+    }
 
     fn message(
         &self,

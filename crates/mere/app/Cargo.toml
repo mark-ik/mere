@@ -41,6 +41,21 @@ uuid = { version = "1", features = ["v4"] }
 # textures into the shared render target. Same wgpu (29) as masonry_winit, so
 # the `ExternalCompositeCtx` device/queue/target types unify.
 wgpu.workspace = true
+# The system-WebView producer for scrying surface tiles. Git-dep (portable, like
+# the xilem fork); scrying pins the same wgpu 29 / rwh 0.6 / dpi, so its frame
+# textures + the importer unify with our device. Driven from the on_tick hook.
+scrying = { git = "https://github.com/mark-ik/wgpu-scry", branch = "main" }
+# Extract the parent window handle (HWND) from `ctx.window` to parent the
+# WebView, and build the producer's `PhysicalSize` config.
+raw-window-handle.workspace = true
+dpi.workspace = true
+
+# WebView2's composition path needs a `DispatcherQueue` on the UI thread before
+# `Compositor::new`; the host creates + holds the controller (scrying leaves
+# thread init to the embedder). Windows-only.
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.62"
+features = ["System", "Win32_System_WinRT"]
 
 [lints]
 workspace = true

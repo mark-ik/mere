@@ -22,7 +22,7 @@ use xilem::{AnyWidgetView, WidgetView};
 
 use crate::engine_tile::{self, RenderedTile};
 use crate::graph_canvas::{GraphAction, graph_canvas};
-use crate::surface_tile::surface_tile;
+use crate::surface_tile::{SurfaceContent, surface_tile};
 use crate::{AppState, MainView, ring_world};
 
 /// The whole app view: a toolbar over a single main pane. The app opens on the
@@ -281,17 +281,22 @@ fn orrery_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
 
 /// Surface pane — a single external-surface tile (verso P3 stub). The
 /// [`surface_tile`] widget reserves an external GPU layer for its rect; the
-/// app's `with_external_compositor` hook fills it (stub: a solid color). Swap
-/// the registered color for a `scrying` WebView texture to close the loop.
+/// on_tick host builds a `scrying` WebView for the registered URL (outside
+/// render), and the compositor copies its frames into the layer. Step 2 shows a
+/// placeholder while the producer constructs + navigates; step 3 wires frames.
 fn surface_pane(state: &AppState) -> impl WidgetView<AppState> + use<> {
     flex_col((
         label("External Surface").text_size(18.0),
         prose(
-            "A SurfaceTile reserves an external GPU layer; the compositor hook \
-             fills it on the shared device. The blue region below is composited \
-             outside Masonry's paint — proof of the external-surface pipe.",
+            "A SurfaceTile reserves an external GPU layer; a scrying WebView is \
+             built outside render and navigated to the URL below. The region is \
+             composited outside Masonry's paint (placeholder until frames land).",
         ),
-        surface_tile(state.surface_registry.clone(), [60, 90, 160, 255]).flex(1.0),
+        surface_tile(
+            state.surface_registry.clone(),
+            SurfaceContent::Web { url: "https://example.com".to_string() },
+        )
+        .flex(1.0),
     ))
 }
 
