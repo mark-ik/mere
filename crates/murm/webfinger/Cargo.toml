@@ -1,0 +1,20 @@
+[package]
+name = "webfinger"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WebFinger (RFC 7033) resolver for Mere — resolves acct: handles to a JRD document and classifies its links into gemini / gopher / misfin / ActivityPub / profile endpoints for peer discovery."
+
+[features]
+# Expose test-only helpers (resolver fetch overrides) to downstream crates
+# for integration testing.
+test-support = []
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+url = "2.5"
+
+[lib]
+path = "src/lib.rs"

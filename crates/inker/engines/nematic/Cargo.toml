@@ -17,4 +17,6 @@ path = "src/lib.rs"
 inker.workspace = true
 pulldown-cmark = { version = "0.13", default-features = false }
 quick-xml = "0.39"
+serde = { workspace = true }
+serde_json = { workspace = true }
 tracing = "0.1"

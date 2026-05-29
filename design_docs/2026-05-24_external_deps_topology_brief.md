@@ -22,8 +22,12 @@ Two sibling directories under `Code/`:
     to fork — the icu fix was free along the way). See
     [`serval/docs/2026-05-20_serval_script_engine_plan.md`](../../serval/docs/2026-05-20_serval_script_engine_plan.md).
 - **`Code/repos/`** — Mark's own projects: `mere`, `serval`, `netrender`,
-  `netfetcher`, `strophe`, `woodshed`, `graphshell`, `wgpu-graft`, `wgpu-scry`,
-  `wgpu-weld`. (**`netfetcher`** added 2026-05-25 — a scaffold; the portable
+  `netfetcher`, `strophe`, `woodshed`, `wgpu-graft`, `wgpu-scry`,
+  `wgpu-weld`. (**`graphshell`** was here until 2026-05-27, when it was
+  GitHub-archived and the local clone deleted — see the [donor-repo code
+  salvage map](mere_docs/research/2026-05-27_donor_graphshell_repo_salvage_map.md)
+  and [full docs harvest](mere_docs/research/2026-05-27_graphshell_docs_full_harvest.md).)
+  (**`netfetcher`** added 2026-05-25 — a scaffold; the portable
   WHATWG-Fetch network engine. Mere owns it; serval/consumers receive bytes. Plan:
   [`mere_docs/.../2026-05-25_netfetcher_plan.md`](mere_docs/implementation_strategy/2026-05-25_netfetcher_plan.md).)
 
@@ -54,20 +58,22 @@ graphshell's old sibling-repo deps map to current homes:
 
 A repo-wide path sweep flags these as broken; they are **expected**:
 
-- **`graphshell`** is archive-bound — its own root `Cargo.toml` states the repo
-  "is no longer expected to build as-is; the plan is to archive the repo as a
-  unit, not maintain it." Its `graph-memory` / `graph-cartography` /
-  `graphshell-core` / `graphshell-runtime` members were donor-superseded and
-  removed (roles absorbed by mere's `node-lineage`, `cartography`,
-  `mere-kernel`, `mere-host-runtime`). Repointing its deps would not make it
-  build. Leave it; it is reference material, not a live target.
+- **`graphshell`** — **archived 2026-05-27** (read-only at
+  <https://github.com/mark-ik/graphshell>; local clone deleted). It was
+  archive-bound: its root `Cargo.toml` no longer built as-is, and its
+  `graph-memory` / `graph-cartography` / `graphshell-core` / `graphshell-runtime`
+  members had been donor-superseded (roles absorbed by mere's `node-lineage`,
+  `cartography`, `mere-kernel`, `mere-host-runtime`). Its remaining salvage was
+  pulled into mere (engines, `crates/import`, the `register-*` cluster, `murm`
+  misfin/webfinger) and its 633 design docs were harvested before archiving.
+  No longer in `repos/`; the path sweep no longer applies to it.
 - **`serval`** carries servo-stack path-deps (`html5ever`, `mozjs`, `stylo`,
   `rust-content-security-policy`) that are being incorporated **piece by
   piece** into the architecture. The dangling paths are deliberate WIP, not
   reorg breakage.
 
-graphshell remains a donor / grab-bag of prior thinking — cite for ideas, never
-treat as prescriptive; mere-kernel is canonical.
+The archived graphshell remains a donor / grab-bag of prior thinking — cite the
+GitHub archive for ideas, never treat as prescriptive; mere-kernel is canonical.
 
 ## Workspace tooling: sem & weave (Ataraxy Labs)
 

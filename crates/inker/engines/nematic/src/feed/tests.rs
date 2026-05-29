@@ -47,9 +47,141 @@ const ATOM_SAMPLE: &str = r#"<?xml version="1.0" encoding="utf-8"?>
   </entry>
 </feed>"#;
 
+const JSON_FEED_SAMPLE: &str = r#"{
+  "version": "https://jsonfeed.org/version/1.1",
+  "title": "JSON Example",
+  "home_page_url": "https://example.test/",
+  "description": "Example JSON feed description",
+  "language": "en-US",
+  "items": [
+    {
+      "id": "1",
+      "url": "https://example.test/first",
+      "title": "First post",
+      "content_html": "This is <b>the first</b> post.",
+      "date_published": "2026-05-08T00:00:00Z"
+    },
+    {
+      "id": "2",
+      "url": "https://example.test/second",
+      "title": "Second post",
+      "content_text": "Plain second-post body."
+    }
+  ]
+}"#;
+
 #[test]
 fn engine_id_is_stable() {
     assert_eq!(FeedEngine::new().engine_id(), "nematic.feed");
+}
+
+#[test]
+fn json_feed_extracts_title_lang_and_entries() {
+    let doc = render(JSON_FEED_SAMPLE);
+    assert_eq!(doc.title.as_deref(), Some("JSON Example"));
+    assert_eq!(doc.lang.as_deref(), Some("en-US"));
+
+    let urls = doc.outgoing_links();
+    assert_eq!(
+        urls,
+        vec![
+            "https://example.test/",
+            "https://example.test/first",
+            "https://example.test/second",
+        ]
+    );
+
+    let entry_titles: Vec<&str> = doc
+        .blocks
+        .iter()
+        .filter_map(|b| match b {
+            DocumentBlock::FeedEntry { title, .. } => Some(title.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(entry_titles, vec!["First post", "Second post"]);
+}
+
+#[test]
+fn json_feed_emits_header_with_subtitle() {
+    let doc = render(JSON_FEED_SAMPLE);
+    let header = doc
+        .blocks
+        .iter()
+        .find_map(|b| match b {
+            DocumentBlock::FeedHeader {
+                title,
+                subtitle,
+                source_url,
+                ..
+            } => Some((title.as_str(), subtitle.as_deref(), source_url.as_deref())),
+            _ => None,
+        })
+        .expect("expected FeedHeader block");
+    assert_eq!(header.0, "JSON Example");
+    assert_eq!(header.1, Some("Example JSON feed description"));
+    assert_eq!(header.2, Some("https://example.test/"));
+}
+
+#[test]
+fn json_feed_content_html_is_stripped_and_flagged() {
+    let doc = render(JSON_FEED_SAMPLE);
+    let summary = doc
+        .blocks
+        .iter()
+        .find_map(|b| match b {
+            DocumentBlock::FeedEntry { title, summary, .. } if title == "First post" => {
+                summary.as_deref()
+            }
+            _ => None,
+        })
+        .expect("expected first-post summary");
+    assert_eq!(summary, "This is the first post.");
+
+    let degraded = doc.diagnostics.iter().any(|d| {
+        matches!(d, DocumentDiagnostic::DegradedRendering(msg) if msg.contains("HTML"))
+    });
+    assert!(degraded, "expected DegradedRendering diagnostic for stripped HTML");
+}
+
+#[test]
+fn json_feed_content_text_is_kept_verbatim() {
+    let doc = render(JSON_FEED_SAMPLE);
+    let summary = doc
+        .blocks
+        .iter()
+        .find_map(|b| match b {
+            DocumentBlock::FeedEntry { title, summary, .. } if title == "Second post" => {
+                summary.as_deref()
+            }
+            _ => None,
+        })
+        .expect("expected second-post summary");
+    assert_eq!(summary, "Plain second-post body.");
+}
+
+#[test]
+fn json_feed_detected_via_content_type_over_body_sniff() {
+    // Declared JSON content type routes to the JSON path even though the
+    // body sniff alone would also catch the leading `{`.
+    let doc = FeedEngine::new()
+        .render(
+            &EngineInput::new("https://example.test/feed.json", JSON_FEED_SAMPLE)
+                .with_content_type("application/feed+json"),
+        )
+        .expect("render");
+    assert_eq!(doc.title.as_deref(), Some("JSON Example"));
+}
+
+#[test]
+fn malformed_json_feed_yields_invalid_content_error() {
+    let err = FeedEngine::new()
+        .render(
+            &EngineInput::new("feed:bad", "{ \"title\": ")
+                .with_content_type("application/feed+json"),
+        )
+        .expect_err("expected error");
+    assert!(matches!(err, EngineError::InvalidContent(_)));
 }
 
 #[test]

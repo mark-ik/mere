@@ -2,14 +2,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Feed engine — parses RSS 2.0 and Atom 1.0 feeds into a portable
-//! document.
+//! Feed engine — parses RSS 2.0, Atom 1.0, and JSON Feed 1.x into a
+//! portable document.
 //!
-//! Handles both formats with one event-driven walker. The two formats
-//! differ in element names but share the same logical shape: a feed-level
-//! title plus a sequence of entries, each carrying a title, link, and
-//! summary. RSS expresses links as element text; Atom uses `<link href=…>`
-//! attributes.
+//! The two XML formats share one event-driven walker: they differ in
+//! element names but share the same logical shape — a feed-level title
+//! plus a sequence of entries, each carrying a title, link, and summary.
+//! RSS expresses links as element text; Atom uses `<link href=…>`
+//! attributes. JSON Feed is parsed separately (it is a JSON object, not
+//! XML) but lands in the same intermediate [`Parsed`] shape, so all three
+//! flavours share [`build_document_blocks`]. The flavour is chosen by
+//! [`looks_like_json_feed`]: the declared content type first, a body sniff
+//! as fallback.
 //!
 //! The output layout is:
 //!
@@ -30,6 +34,7 @@ use inker::{
 use quick_xml::Reader;
 use quick_xml::escape::unescape;
 use quick_xml::events::Event;
+use serde::Deserialize;
 
 /// Stable engine identifier.
 pub const ENGINE_ID: &str = "nematic.feed";
@@ -55,10 +60,21 @@ impl Engine for FeedEngine {
     }
 
     fn render(&self, input: &EngineInput) -> Result<EngineDocument, EngineError> {
-        let parsed = parse(&input.body)?;
+        let is_json = looks_like_json_feed(input);
+        let parsed = if is_json {
+            parse_json(&input.body)?
+        } else {
+            parse(&input.body)?
+        };
         let title = parsed.feed_title.clone();
         let lang = parsed.feed_lang.clone();
         let (blocks, diagnostics) = build_document_blocks(parsed);
+
+        let default_content_type = if is_json {
+            "application/feed+json"
+        } else {
+            "application/feed+xml"
+        };
 
         Ok(EngineDocument {
             address: input.address.clone(),
@@ -66,7 +82,7 @@ impl Engine for FeedEngine {
             content_type: input
                 .content_type
                 .clone()
-                .unwrap_or_else(|| "application/feed+xml".to_string()),
+                .unwrap_or_else(|| default_content_type.to_string()),
             lang,
             provenance: DocumentProvenance::for_engine(self.engine_id(), &input.address),
             trust: DocumentTrustState::Unknown,
@@ -329,6 +345,103 @@ fn atom_href(element: &quick_xml::events::BytesStart<'_>) -> Option<String> {
 
 fn invalid_xml<E: std::fmt::Display>(err: E) -> EngineError {
     EngineError::InvalidContent(err.to_string())
+}
+
+/// Decide whether `input` is a JSON Feed rather than RSS/Atom XML. Prefers
+/// the declared content type; an XML/RSS/Atom type short-circuits to the
+/// walker. With no usable content type, sniff the body: a JSON Feed
+/// document is an object, so the first non-whitespace byte is `{`.
+fn looks_like_json_feed(input: &EngineInput) -> bool {
+    if let Some(content_type) = &input.content_type {
+        let lowered = content_type.to_ascii_lowercase();
+        if lowered.contains("json") {
+            return true;
+        }
+        if lowered.contains("xml") || lowered.contains("rss") || lowered.contains("atom") {
+            return false;
+        }
+    }
+    input.body.trim_start().starts_with('{')
+}
+
+/// JSON Feed 1.x top-level object. Only the fields nematic projects are
+/// modelled; unknown keys are ignored (forward-compatible with 1.1+).
+#[derive(Deserialize)]
+struct JsonFeed {
+    title: Option<String>,
+    home_page_url: Option<String>,
+    feed_url: Option<String>,
+    description: Option<String>,
+    language: Option<String>,
+    #[serde(default)]
+    items: Vec<JsonFeedItem>,
+}
+
+#[derive(Deserialize)]
+struct JsonFeedItem {
+    id: Option<String>,
+    url: Option<String>,
+    external_url: Option<String>,
+    title: Option<String>,
+    summary: Option<String>,
+    content_text: Option<String>,
+    content_html: Option<String>,
+    date_published: Option<String>,
+    date_modified: Option<String>,
+}
+
+/// Parse a JSON Feed 1.x document into the same [`Parsed`] shape the XML
+/// walker produces, so both flavours share [`build_document_blocks`].
+fn parse_json(body: &str) -> Result<Parsed, EngineError> {
+    let feed: JsonFeed = serde_json::from_str(body)
+        .map_err(|err| EngineError::InvalidContent(format!("JSON Feed parse failed: {err}")))?;
+
+    let mut parsed = Parsed {
+        feed_title: trimmed_some(feed.title),
+        feed_subtitle: trimmed_some(feed.description).map(|text| strip_tags(&text)),
+        feed_link: trimmed_some(feed.home_page_url).or_else(|| trimmed_some(feed.feed_url)),
+        feed_lang: trimmed_some(feed.language),
+        ..Parsed::default()
+    };
+
+    for item in feed.items {
+        let title = trimmed_some(item.title).or_else(|| trimmed_some(item.id));
+        let link = trimmed_some(item.url).or_else(|| trimmed_some(item.external_url));
+        let date = trimmed_some(item.date_published).or_else(|| trimmed_some(item.date_modified));
+
+        // Mirror the XML path's summary handling: prefer an explicit
+        // summary, then plain-text content, then HTML content; strip tags
+        // and count the strip so the doc surfaces a DegradedRendering hint.
+        let summary = trimmed_some(item.summary)
+            .or_else(|| trimmed_some(item.content_text))
+            .or_else(|| trimmed_some(item.content_html))
+            .map(|raw| {
+                if raw.contains('<') {
+                    parsed.html_stripped_count += 1;
+                    strip_tags(&raw)
+                } else {
+                    raw
+                }
+            });
+
+        if title.is_some() || link.is_some() || summary.is_some() {
+            parsed.entries.push(Entry {
+                title,
+                link,
+                date,
+                summary,
+            });
+        }
+    }
+
+    Ok(parsed)
+}
+
+/// Trim a JSON string field, dropping it if empty after trimming.
+fn trimmed_some(value: Option<String>) -> Option<String> {
+    value
+        .map(|text| text.trim().to_string())
+        .filter(|text| !text.is_empty())
 }
 
 /// Naively strip HTML tags from a fragment, preserving text content. Used

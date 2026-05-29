@@ -93,13 +93,14 @@ Every implementation pass is also a design probe. After each implementation pass
 
 ## Inheritance and migration
 
-The inherited [`graphshell/design_docs/`](../../graphshell/design_docs/) remains authoritative for content not yet migrated here. Pull content over incrementally as it becomes relevant to active work in this workspace. Until migrated, the original location is canonical.
+The donor graphshell repo was **GitHub-archived on 2026-05-27** (read-only at <https://github.com/mark-ik/graphshell>; local clone deleted). Its design docs are no longer a local sibling. Before archiving, all 633 donor docs were swept into two curated indexes that are now the entry points for any remaining pull: the [full docs harvest](mere_docs/research/2026-05-27_graphshell_docs_full_harvest.md) (what to pull, where it lives in the donor, which mere domain wants it) and the [concept brief](mere_docs/research/2026-05-17_graphshell_harvest_brief.md). Treat those indexes as canonical; fetch detail from the GitHub archive when a slice needs it.
 
-When migrating a doc:
-1. Place in the appropriate `<area>_docs/<category>/` directory here
+When pulling a donor doc's content into a mere doc:
+
+1. Place it in the appropriate `<area>_docs/<category>/` directory here
 2. Update terminology to current Mere-aligned vocabulary (per `TERMINOLOGY.md` / `2026-05-04_lexicon_brief.md`)
 3. Add the new file to `DOC_README.md` index
-4. Either delete the original (with rationale + confirmation) or leave it with a `> Superseded by [link]` header
+4. Cite the donor source by its GitHub-archive path (the original is read-only; it cannot be edited or deleted)
 
 ## Trademark / brand notes
 

@@ -24,12 +24,14 @@
 //! - [`MarkdownEngine`] — CommonMark via `pulldown-cmark`
 //! - [`GemtextEngine`] — Gemini's `text/gemini` line-oriented format
 //! - [`GopherEngine`] — RFC 1436 gopher menu parser
-//! - [`FeedEngine`] — RSS 2.0 and Atom 1.0 syndication feeds
+//! - [`FeedEngine`] — RSS 2.0, Atom 1.0, and JSON Feed 1.x syndication feeds
 //! - [`TextEngine`] — plain text with paragraph splitting
 //! - [`FileEngine`] — extension-based dispatch for `file://` content
 //! - [`FingerEngine`] — RFC 1288 finger protocol responses
 //! - [`KnotEngine`] — Mere's native note / clip format (frontmatter + markdown)
 //! - [`ScrollEngine`] — Scroll smolweb body (gemtext or markdown)
+//! - [`SpartanEngine`] — Spartan smolweb body (gemtext or markdown)
+//! - [`TitanEngine`] — Titan response body (gemtext; upload is transport-side)
 //! - [`MisfinEngine`] — Misfin gemini-style mail body (gemtext)
 //! - [`NexEngine`] — Nex directory listings + content
 //! - [`GuppyEngine`] — Guppy UDP-smolweb body (gemtext)
@@ -56,7 +58,9 @@ pub mod markdown;
 pub mod misfin;
 pub mod nex;
 pub mod scroll;
+pub mod spartan;
 pub mod text;
+pub mod titan;
 
 pub use feed::{ENGINE_ID as ENGINE_FEED, FeedEngine};
 pub use file::{ENGINE_ID as ENGINE_FILE, FileEngine};
@@ -69,7 +73,9 @@ pub use markdown::{ENGINE_ID as ENGINE_MARKDOWN, MarkdownEngine};
 pub use misfin::{ENGINE_ID as ENGINE_MISFIN, MisfinEngine};
 pub use nex::{ENGINE_ID as ENGINE_NEX, NexEngine};
 pub use scroll::{ENGINE_ID as ENGINE_SCROLL, ScrollEngine};
+pub use spartan::{ENGINE_ID as ENGINE_SPARTAN, SpartanEngine};
 pub use text::{ENGINE_ID as ENGINE_TEXT, TextEngine};
+pub use titan::{ENGINE_ID as ENGINE_TITAN, TitanEngine};
 
 use inker::Engine;
 
@@ -86,6 +92,8 @@ pub fn engines() -> Vec<Box<dyn Engine>> {
         Box::new(FingerEngine::new()),
         Box::new(KnotEngine::new()),
         Box::new(ScrollEngine::new()),
+        Box::new(SpartanEngine::new()),
+        Box::new(TitanEngine::new()),
         Box::new(MisfinEngine::new()),
         Box::new(NexEngine::new()),
         Box::new(GuppyEngine::new()),
@@ -138,7 +146,9 @@ mod tests {
                 ENGINE_MISFIN,
                 ENGINE_NEX,
                 ENGINE_SCROLL,
-                ENGINE_TEXT
+                ENGINE_SPARTAN,
+                ENGINE_TEXT,
+                ENGINE_TITAN
             ]
         );
     }

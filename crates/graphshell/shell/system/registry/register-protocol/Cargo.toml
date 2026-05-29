@@ -1,0 +1,12 @@
+[package]
+name = "register-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+http = "1.4"
+tower = "0.5"
+
+[lib]
+path = "src/lib.rs"

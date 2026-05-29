@@ -1,0 +1,24 @@
+[package]
+name = "register-mod-loader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+register-diagnostics = { path = "../register-diagnostics" }
+register-viewer = { path = "../register-viewer" }
+inventory = "0.3"
+serde = { workspace = true }
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+# Exposes `compute_active_capabilities_with_disabled` (used by host tests
+# that exercise the active-capability set without going through the full
+# ACTIVE_CAPABILITIES OnceLock).
+test-utils = []
+
+[lib]
+path = "src/lib.rs"

@@ -1,0 +1,27 @@
+[package]
+name = "misfin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Misfin (gemini-style mail) client for Mere — self-signed-cert TLS transport, mailbox identity, and message send/receive over the Misfin protocol."
+
+[features]
+# Expose test-only helpers (send_for_tests, in-memory server scopes) to
+# downstream crates for integration testing.
+test-support = []
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+rustls = { version = "0.23", default-features = false, features = ["logging", "std", "tls12", "aws-lc-rs"] }
+rcgen = "0.13"
+sha2 = "0.10"
+url = "2.5"
+dirs = "6"
+log = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lib]
+path = "src/lib.rs"
