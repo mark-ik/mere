@@ -249,6 +249,155 @@ pub fn composite_color(
     queue.submit(std::iter::once(encoder.finish()));
 }
 
+/// Samples a source texture into a sub-rect of the render target. Used to
+/// composite an engine frame into its tile: the frame is `Bgra8Unorm` and the
+/// target `Rgba8Unorm` (not copy-compatible, so `copy_texture_to_texture` can't
+/// be used), but **sampling normalizes channel order**, so a render pass that
+/// samples the frame and draws a viewport-filling triangle handles both the
+/// positioning and the format. `LoadOp::Load` preserves Masonry's content
+/// outside the tile rect.
+pub struct BlitPipeline {
+    pipeline: wgpu::RenderPipeline,
+    layout: wgpu::BindGroupLayout,
+    sampler: wgpu::Sampler,
+}
+
+impl BlitPipeline {
+    pub fn new(device: &wgpu::Device, target_format: wgpu::TextureFormat) -> Self {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("mere-blit-shader"),
+            source: wgpu::ShaderSource::Wgsl(BLIT_WGSL.into()),
+        });
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("mere-blit-bgl"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("mere-blit-pl"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("mere-blit-pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs"),
+                targets: &[Some(target_format.into())],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
+        });
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("mere-blit-sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        Self { pipeline, layout, sampler }
+    }
+
+    /// Draw `src` into `bounds` = `[x, y, w, h]` (physical px) of `target_view`.
+    pub fn blit(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        target_view: &wgpu::TextureView,
+        src: &wgpu::Texture,
+        bounds: [u32; 4],
+    ) {
+        let [x, y, w, h] = bounds;
+        if w == 0 || h == 0 {
+            return;
+        }
+        let src_view = src.create_view(&wgpu::TextureViewDescriptor::default());
+        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("mere-blit-bind"),
+            layout: &self.layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&src_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("mere-blit") });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("mere-blit-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &bind, &[]);
+            pass.set_viewport(x as f32, y as f32, w as f32, h as f32, 0.0, 1.0);
+            pass.set_scissor_rect(x, y, w, h);
+            pass.draw(0..3, 0..1);
+        }
+        queue.submit(std::iter::once(encoder.finish()));
+    }
+}
+
+/// Fullscreen-triangle blit: sample the source into the viewport. Y flipped so
+/// the texture's top-left maps to the viewport's top-left.
+const BLIT_WGSL: &str = r#"
+struct VsOut { @builtin(position) pos: vec4<f32>, @location(0) uv: vec2<f32> };
+@vertex
+fn vs(@builtin(vertex_index) i: u32) -> VsOut {
+    var p = array<vec2<f32>, 3>(vec2(-1.0, -1.0), vec2(3.0, -1.0), vec2(-1.0, 3.0));
+    var out: VsOut;
+    out.pos = vec4(p[i], 0.0, 1.0);
+    out.uv = vec2(p[i].x * 0.5 + 0.5, p[i].y * -0.5 + 0.5);
+    return out;
+}
+@group(0) @binding(0) var tex: texture_2d<f32>;
+@group(0) @binding(1) var samp: sampler;
+@fragment
+fn fs(in: VsOut) -> @location(0) vec4<f32> {
+    return textureSample(tex, samp, in.uv);
+}
+"#;
+
 // =============================================================================
 // WebView producer host (driven from on_tick — outside render)
 // =============================================================================
@@ -282,16 +431,19 @@ pub struct WebSurfaceHost {
     /// Log the first successful import once, not every frame.
     #[cfg(target_os = "windows")]
     logged_import: bool,
-    /// The most-recently imported frame texture. Re-imported only when the
-    /// producer reports `resource_is_new`; otherwise the producer reused its
-    /// underlying allocation and re-opening the (now-stale) shared handle fails
-    /// — we keep this cached texture instead. Step 3b composites it.
-    #[cfg(target_os = "windows")]
-    imported_texture: Option<wgpu::Texture>,
+    /// Shared with the compositor: the latest imported frame texture for the web
+    /// tile. The host (on_tick) writes it on import; the compositor reads + blits
+    /// it into the tile rect. Doubles as the `resource_is_new` cache (`Some` ⇒ a
+    /// valid import is held, so a reused-resource frame is skipped).
+    frame: SurfaceFrameCell,
 }
 
+/// The latest web-tile frame, shared host↔compositor. `wgpu::Texture` is
+/// `Send + Sync`; both ends run on the main thread so the lock is uncontended.
+pub type SurfaceFrameCell = Arc<Mutex<Option<wgpu::Texture>>>;
+
 impl WebSurfaceHost {
-    pub fn new(user_data_dir: std::path::PathBuf) -> Self {
+    pub fn new(user_data_dir: std::path::PathBuf, frame: SurfaceFrameCell) -> Self {
         Self {
             user_data_dir,
             #[cfg(target_os = "windows")]
@@ -304,8 +456,7 @@ impl WebSurfaceHost {
             importer: None,
             #[cfg(target_os = "windows")]
             logged_import: false,
-            #[cfg(target_os = "windows")]
-            imported_texture: None,
+            frame,
         }
     }
 
@@ -359,10 +510,17 @@ impl WebSurfaceHost {
             // SAFETY: `hwnd` is the live top-level window handle from
             // `TickCtx::windows`, valid for the app's lifetime.
             match unsafe { scrying::PlatformWebSurfaceProducer::new(hwnd, config) } {
-                Ok(producer) => {
+                Ok(mut producer) => {
                     eprintln!("[web] producer built ({}x{}) for {url}", size.0, size.1);
                     if let Err(err) = producer.load_url(url) {
                         eprintln!("[web] load_url failed: {err}");
+                    }
+                    // Suppress the native composition overlay: move the visual
+                    // off-screen. WGC captures via `CreateFromVisual` (the
+                    // visual's content, position-independent), so the frame
+                    // still arrives — we composite it into the tile ourselves.
+                    if let Err(err) = producer.set_offset(-32000.0, -32000.0) {
+                        eprintln!("[web] set_offset failed: {err}");
                     }
                     self.producer = Some(producer);
                     self.current_url = Some(url.to_string());
@@ -409,7 +567,8 @@ impl WebSurfaceHost {
         // Re-import only on a fresh allocation. When the producer reused its
         // texture (`resource_is_new == false`) the shared handle is stale —
         // keep the cached import (its backing memory was just overwritten).
-        if !frame.resource_is_new && self.imported_texture.is_some() {
+        let have_cached = self.frame.lock().map(|f| f.is_some()).unwrap_or(false);
+        if !frame.resource_is_new && have_cached {
             return;
         }
         match self
@@ -426,7 +585,9 @@ impl WebSurfaceHost {
                         imported.size.width, imported.size.height, imported.format, imported.generation
                     );
                 }
-                self.imported_texture = Some(imported.texture);
+                if let Ok(mut cell) = self.frame.lock() {
+                    *cell = Some(imported.texture);
+                }
             }
             Err(err) => eprintln!("[web] import failed: {err}"),
         }

@@ -401,6 +401,9 @@ fn main() {
     let surface_registry = SurfaceRegistry::new();
     let state = AppState::new(surface_registry.clone());
     let webview_data_dir = session_dir().join("webview");
+    // Latest web-tile frame, shared host (on_tick, writes) ↔ compositor (reads).
+    let surface_frame: surface_tile::SurfaceFrameCell =
+        std::sync::Arc::new(std::sync::Mutex::new(None));
 
     Xilem::new_simple(state, panes::app_logic, WindowOptions::new("Mere"))
         // Realize each external layer (a SurfaceTile's reserved rect): a solid
@@ -408,21 +411,52 @@ fn main() {
         // WebView frame here.
         .with_external_compositor({
             let registry = surface_registry.clone();
+            let frame_cell = surface_frame.clone();
+            // The blit pipeline is created lazily on the first web frame (needs
+            // the device + target format) and cached across frames.
+            let mut blit: Option<surface_tile::BlitPipeline> = None;
             move |ctx| {
                 for layer in ctx.layers {
-                    let color = match registry.content(layer.widget_id) {
-                        Some(SurfaceContent::Solid(c)) => c,
-                        // Web tile, frame not yet wired (step 3): dark teal.
-                        Some(SurfaceContent::Web { .. }) => [28, 56, 48, 255],
-                        None => [40, 44, 60, 255],
-                    };
-                    surface_tile::composite_color(
-                        ctx.device,
-                        ctx.queue,
-                        ctx.target_texture,
-                        layer.bounds,
-                        color,
-                    );
+                    match registry.content(layer.widget_id) {
+                        Some(SurfaceContent::Solid(color)) => {
+                            surface_tile::composite_color(
+                                ctx.device,
+                                ctx.queue,
+                                ctx.target_texture,
+                                layer.bounds,
+                                color,
+                            );
+                        }
+                        Some(SurfaceContent::Web { .. }) => {
+                            let frame = frame_cell.lock().ok().and_then(|f| f.as_ref().cloned());
+                            match frame {
+                                Some(texture) => {
+                                    let pipeline = blit.get_or_insert_with(|| {
+                                        surface_tile::BlitPipeline::new(
+                                            ctx.device,
+                                            ctx.target_texture.format(),
+                                        )
+                                    });
+                                    pipeline.blit(
+                                        ctx.device,
+                                        ctx.queue,
+                                        ctx.target_view,
+                                        &texture,
+                                        layer.bounds,
+                                    );
+                                }
+                                // No frame imported yet: dark-teal placeholder.
+                                None => surface_tile::composite_color(
+                                    ctx.device,
+                                    ctx.queue,
+                                    ctx.target_texture,
+                                    layer.bounds,
+                                    [28, 56, 48, 255],
+                                ),
+                            }
+                        }
+                        None => {}
+                    }
                 }
             }
         })
@@ -432,7 +466,7 @@ fn main() {
         // producer for the active web tile (step 2); frames come in step 3.
         .with_on_tick({
             let registry = surface_registry.clone();
-            let mut web_host = surface_tile::WebSurfaceHost::new(webview_data_dir);
+            let mut web_host = surface_tile::WebSurfaceHost::new(webview_data_dir, surface_frame);
             move |ctx| {
                 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
                 // Need the shared device + a window. Device exists once the
