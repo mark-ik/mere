@@ -560,6 +560,13 @@ pub struct WebSurfaceHost {
     /// change, so the WebView renders 1:1 in the tile (crisp + 1:1 input coords).
     #[cfg(target_os = "windows")]
     sized_to: Option<(u32, u32)>,
+    /// Debounce state: the size the tile is settling toward + how many ticks
+    /// it's held there. We only `resize` after it stabilizes, so an in-progress
+    /// drag doesn't thrash the WebView's capture pipeline.
+    #[cfg(target_os = "windows")]
+    pending_size: Option<(u32, u32)>,
+    #[cfg(target_os = "windows")]
+    stable_ticks: u32,
     /// Shared state for the web tile (see [`SurfaceChannel`]).
     channel: SurfaceChannel,
 }
@@ -635,6 +642,10 @@ impl WebSurfaceHost {
             logged_import: false,
             #[cfg(target_os = "windows")]
             sized_to: None,
+            #[cfg(target_os = "windows")]
+            pending_size: None,
+            #[cfg(target_os = "windows")]
+            stable_ticks: 0,
             channel,
         }
     }
@@ -721,20 +732,38 @@ impl WebSurfaceHost {
         }
     }
 
-    /// Resize the producer to the tile's physical bounds when they change, so
-    /// the WebView renders 1:1 in the tile (crisp + 1:1 input coordinates).
+    /// Resize the producer to the tile's physical bounds, **debounced**: only
+    /// after the size has been stable for a few ticks. An in-progress window /
+    /// pane drag changes the bounds every frame; resizing the WebView each frame
+    /// restarts its capture pipeline (visible jank), so we hold off until it
+    /// settles — the cached frame is blitted (scaled) meanwhile, then snaps
+    /// crisp. Keeps the WebView 1:1 with the tile (also 1:1 input coords).
     #[cfg(target_os = "windows")]
     fn resize_to_bounds(&mut self) {
+        const RESIZE_SETTLE_TICKS: u32 = 4;
         let Some([_, _, w, h]) = self.channel.lock().ok().and_then(|c| c.bounds) else {
             return;
         };
         let target = (w.max(1), h.max(1));
         if self.sized_to == Some(target) {
+            self.pending_size = None;
+            return;
+        }
+        if self.pending_size == Some(target) {
+            self.stable_ticks += 1;
+        } else {
+            self.pending_size = Some(target);
+            self.stable_ticks = 0;
+        }
+        if self.stable_ticks < RESIZE_SETTLE_TICKS {
             return;
         }
         if let Some(producer) = self.producer.as_mut() {
             match producer.resize(dpi::PhysicalSize::new(target.0, target.1)) {
-                Ok(()) => self.sized_to = Some(target),
+                Ok(()) => {
+                    self.sized_to = Some(target);
+                    self.pending_size = None;
+                }
                 Err(err) => eprintln!("[web] resize failed: {err}"),
             }
         }
