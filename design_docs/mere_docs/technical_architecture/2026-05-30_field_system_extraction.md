@@ -3,8 +3,9 @@
 **Date**: 2026-05-30
 **Status**: Architecture decision + decomposition plan. Establishes **fields as a
 third graph primitive** (beside nodes and edges), extracts the field-algebra
-runtime into its own crate, names the physics-substrate sibling pair, and maps
-where the rest of the 9.6k-LOC `graph-canvas` crate goes as it comes apart.
+runtime into its own crate, names the physics-substrate sibling pair
+(**`aether`** + **`gyre`**), and maps where the rest of the 9.6k-LOC
+`graph-canvas` crate goes as it comes apart.
 **Related**: [composition spine](2026-05-21_mere_composition_spine.md),
 [cartography-aether seam](2026-05-29_cartography_aether_layout_seam.md),
 [serval-as-host eval](2026-05-29_serval_as_host_evaluation.md),
@@ -21,13 +22,14 @@ field),"* and the `scene_region` effects (Attractor / Repulsor / Dampener / Wall
 are bounded-shape fields with fixed responses.
 
 So the field system is not a graph-canvas feature. **It is the general framework
-of which aether's hand-written force fields are special cases.** That inverts the
-earlier sketch ("aether owns fields"): aether is the *integrator*, and the field
-system is the *source* of what it integrates. `NodeExclusion` is a per-node
-repulsive field coupled with a force response; `EdgeSpring` is an edge-length
-field; `Boundary` is a centering field. They are instances.
+of which the physics integrator's hand-written forces are special cases.** The
+integrator owns *motion* (rapier bodies, collision, stepping); the field system
+is the *source* of what it integrates. `NodeExclusion` is a per-node repulsive
+field coupled with a force response; `EdgeSpring` is an edge-length field;
+`Boundary` is a centering field. They are instances.
 
-This is the load-bearing insight. Everything below follows from it.
+The two crates are named in §5: the field system is **`aether`**, the integrator
+**`gyre`**. This is the load-bearing insight; everything below follows from it.
 
 ## 2. Fields are a third graph primitive
 
@@ -65,10 +67,10 @@ trigger (a field whose threshold fires an action). The v1 surface is force +
 visual; the *contract* is open, because a spatial-influence framework over a
 graph is worth more than a physics helper.
 
-## 3. The field-algebra runtime is its own crate
+## 3. The field-algebra runtime is its own crate (`aether`)
 
-The evaluation engine moves out of graph-canvas into a dedicated crate in the
-graph-substrate tier:
+The evaluation engine moves out of graph-canvas into a dedicated substrate-tier
+crate, **`aether`**:
 
 - The field **AST** (scalar / vector field algebra).
 - **Rhai** authoring (script → AST), feature-gated (`field-rhai`).
@@ -87,14 +89,15 @@ untouched.
 
 ## 4. The seams
 
-**To the physics substrate (forces).** The runtime resolves a force coupling into
-the existing `aether::Field` contract: a coupling compiles to a `Field` whose
-`apply` writes the field's force onto the bodies it selects. aether integrates
-(rapier bodies, collision, stepping) and owns nothing about how the force was
-defined. aether's built-in `NodeExclusion` / `EdgeSpring` / `Boundary` stay as a
-fast Rust default-path that everyone gets cheaply; the field runtime is the
-general, scriptable path that produces the same kind of output. They coexist,
-which matches the configurability stance: a cheap default, a deep override.
+**To the physics substrate (forces).** `aether` resolves a force coupling into a
+force that **`gyre`** integrates. `gyre` is the rapier crate (bodies, collision,
+stepping); its per-tick force hook is the trait the built-ins implement today as
+`aether::Field` and which becomes `gyre::Force` after the rename (§5), since
+"field" now names the `aether` crate. A coupling compiles to one of those force
+contributors. `gyre`'s built-in `NodeExclusion` / `EdgeSpring` / `Boundary` stay a
+fast Rust default-path that everyone gets cheaply; `aether` is the general,
+scriptable path that produces the same kind of output. They coexist, which
+matches the configurability stance: a cheap default, a deep override.
 
 **To paint (visual).** A visual coupling resolves to overlays the renderer draws
 through [`platen::scene_paint`](2026-05-29_cartography_aether_layout_seam.md) (the
@@ -103,90 +106,97 @@ are PaintCmds like any other scene content.
 
 **To intelligence (meaning).** This is the seam that pays off. A Burn embedding
 (the [local-intelligence](../research/2026-05-08_local_intelligence_integration_research.md)
-layer) becomes a vector field in this crate; a coupling makes selected nodes
-follow its gradient; aether integrates the result. *Force-directed-by-meaning*
-stops being a bespoke layout strategy and becomes "a semantic field, coupled."
-One Burn substrate serves both the intelligence layer and the field runtime,
-rather than two.
+layer) becomes a vector field in `aether`; a coupling makes selected nodes follow
+its gradient; `gyre` integrates the result. *Force-directed-by-meaning* stops
+being a bespoke layout strategy and becomes "a semantic field, coupled." One Burn
+substrate serves both the intelligence layer and `aether`, rather than two.
 
-## 5. Naming: the substrate sibling pair
+## 5. Naming: `aether` (field) + `gyre` (integrator)
 
-The substrate now has two crates that want to read as siblings: the one that
-*defines* the fields of influence, and the one that *realizes* them as motion.
-aether's own doc already calls it "the medium through which forces propagate,"
-which is exactly the integrator's role, so the question is mostly what to name the
-new field crate (and whether to re-pitch aether against it).
+Decided (Mark, 2026-05-30). The substrate splits into the crate that *defines*
+fields of influence and the crate that *realizes* them as motion, and the names
+are an etymological pair, not an arbitrary one:
 
-The conceptual pair is **potential → motion** (Aristotle's dynamis → energeia: a
-capacity, and its realization). Options, recommendation first:
+- **`aether`** = the field-algebra crate. The luminiferous aether was precisely
+  the *field-bearing medium*: Faraday's lines of force and Maxwell's
+  electromagnetic field were states and stresses *of* the aether. The field is
+  what the aether *does*, so the name belongs on the crate that defines fields,
+  not on the body-mover. (This is the correction to the earlier framing, which
+  had aether as the integrator.)
+- **`gyre`** = the integrator. The wheeling, turning motion of bodies (Yeats's
+  "the widening gyre"); `gyre` realizes the aether's potentials as motion. It also
+  shares a sibilance with **orrery** (the t1 graph view), so the physics that
+  moves the orrery's bodies reads as kin to the orrery itself.
 
-| Field-algebra crate | Integrator crate | Reading |
-|---|---|---|
-| **`dynamis`** | **`aether`** (kept) | the potentials (dynamis) propagate through the medium (aether) into motion. Keeps aether's apt, established name; adds a scholarly sibling. **Recommended.** |
-| `dynamis` | `kinesis` | a matched Greek pair, potential / motion, if aether should be renamed for symmetry. Loses aether's "medium" resonance. |
-| `numen` | `aether` (kept) | more numinous: a `numen` is a presiding influence/emanation over space. Reads less like physics, more like presence. |
-| `flux` | `aether` (kept) | physics-plain: the field/flow (`flux`) through the medium. Clearest, least evocative. |
+Rejected: `dynamis` (swamped), `welkin` / `firmament` (a static expanse, which
+fits a field-arena, not a motion-engine, and once `aether` takes the field role
+they are redundant), `kinesis` (swamped), `numen` / `flux` (weaker than the
+etymological pair).
 
-Recommendation: **`dynamis` + `aether`**. It keeps the name that already means
-the right thing, and "dynamis" (potential, power, the capacity to influence) names
-the field crate for what a field *is* before it acts. The naming is yours; this is
-the proposal.
+**Consequence — a crate rename.** Today's `aether` crate *is* the rapier
+integrator, so it is renamed to `gyre`, freeing `aether` for the new
+field-algebra crate. The integrator's `aether::Field` trait (its per-tick force
+hook) becomes `gyre::Force`. The [cartography-aether seam](2026-05-29_cartography_aether_layout_seam.md)
+doc and the `aether::Simulation` references in it rename to `gyre` during that
+slice (§8 step 0).
 
 ## 6. Where the rest of graph-canvas goes
 
 | graph-canvas module(s) | Destination |
 |---|---|
-| `fields/*`, `scene_region` | **the field system** (§2–§3): definitions → kernel `Field`/`Coupling` primitives; AST + Rhai + Burn → the `dynamis` crate. `scene_region`'s four effects become built-in field shapes. |
-| `scene_physics`, `scene_composition`, `hit_test` | **aether** (physics + the QueryPipeline; already there). |
+| `fields/*`, `scene_region` | **the field system** (§2–§3): definitions → kernel `Field`/`Coupling` primitives; AST + Rhai + Burn → the `aether` crate. `scene_region`'s four effects become built-in field shapes. |
+| `scene_physics`, `scene_composition`, `hit_test` | **`gyre`** (physics + the QueryPipeline; today's `aether` rapier crate, renamed). |
 | `projection` | **cartography** / **graph-layout** (positions, already there). |
 | `derive`, `packet`, `scene`, `backend` | the graph→draw pipeline collapses into **cartography** (positions) → **platen::scene_paint** (PaintList). |
 | `camera`, `navigation` | **understory** view2d steal-the-shape + a small portable canvas-feel config (the `NavigationPolicy` knobs). |
 | `node_style` | **register-theme** (the look layer). |
-| `lod` | cull mechanics → aether; LOD *policy* rides with the renderer (platen). |
+| `lod` | cull mechanics → `gyre`; LOD *policy* rides with the renderer (platen). |
 | `engine`, `interaction`, `input` | the **host**. Under serval-as-host, serval's hit-test + dispatch own interaction; the `CanvasAction` indirection collapses. |
 | `scripting` | reconciles into the Rhai scripting story (the Wasmtime/Extism framing here is superseded by the browser/PWA Rhai+Burn direction). |
 | `math`, `types` | absorbed at use sites (geometry → `kernel::geometry`). |
 
-Net: graph-canvas dissolves. Its physics was already aether's, its projection
-cartography's, its paint platen's; its one irreducible contribution, the field
-algebra, graduates to a first-class primitive plus a substrate crate.
+Net: graph-canvas dissolves. Its physics was already the integrator's, its
+projection cartography's, its paint platen's; its one irreducible contribution,
+the field algebra, graduates to a first-class primitive plus the `aether` crate.
 
 ## 7. Spine placement
 
 Fields join the **truth** row of the spine (kernel: nodes, edges, fields), beside
-node-lineage as another thing the graph carries. The **`dynamis` runtime** and
-**aether** are the physics substrate. The flow:
+node-lineage as another thing the graph carries. The **`aether` runtime** and
+**`gyre`** are the physics substrate. The flow:
 
 ```
 truth (kernel: nodes / edges / fields + couplings)
-  → dynamis (evaluate fields, resolve couplings: Burn on GPU)
-  → aether (integrate forces: rapier bodies, collision, settle)
+  → aether (evaluate fields, resolve couplings: Burn on GPU)
+  → gyre   (integrate forces: rapier bodies, collision, settle)
   → cartography (positions as a Projection)
   → platen::scene_paint (Projection + visual couplings → PaintList)
   → netrender → host
 ```
 
 The spine's substrate tier gains one sentence: *fields are first-class graph
-elements; the `dynamis` runtime evaluates them into forces and visual responses,
-aether integrates the forces, and the result projects and paints like any scene.*
+elements; the `aether` runtime evaluates them into forces and visual responses,
+`gyre` integrates the forces, and the result projects and paints like any scene.*
 
 ## 8. Sequencing
 
 Not all at once. A workable order, each slice host-agnostic and testable:
 
-1. **Extract `dynamis`** from `graph-canvas/fields/*` as a standalone crate
+0. **Rename today's `aether` rapier crate to `gyre`** (and `aether::Field` →
+   `gyre::Force`), updating the cartography-aether seam doc + `Simulation`
+   references. Mechanical, frees the `aether` name.
+1. **Extract the `aether` field-algebra crate** from `graph-canvas/fields/*`
    (AST + eval + Rhai + Burn + registry + coupling), depending only on kernel +
    Rhai/Burn. Pure move; its existing tests come with it.
-2. **The `aether` seam**: a coupling → `aether::Field` adapter, so a force
-   coupling drives the rapier bodies. Re-express one built-in (e.g.
-   `NodeExclusion`) as a coupling to prove equivalence, keep the built-in as the
-   fast path.
+2. **The `gyre` seam**: a coupling → `gyre::Force` adapter, so a force coupling
+   drives the rapier bodies. Re-express one built-in (e.g. `NodeExclusion`) as a
+   coupling to prove equivalence, keep the built-in as the fast path.
 3. **The `Field`/`Coupling` kernel primitive** + lifecycle (the bigger, truth-
-   level slice; its own plan). Until it lands, `dynamis` can read fields from an
+   level slice; its own plan). Until it lands, `aether` can read fields from an
    in-memory registry rather than the graph.
 4. **Dissolve graph-canvas**: relocate the rows in §6 as their consumers need
    them; retire the shell when empty (the fit-map's adopt/retire call, now
    answered: retire, harvesting the field algebra).
 
-Steps 1–2 are the immediate host-agnostic work; step 3 is the load-bearing kernel
+Steps 0–2 are the immediate host-agnostic work; step 3 is the load-bearing kernel
 change that deserves its own plan; step 4 is opportunistic cleanup.
