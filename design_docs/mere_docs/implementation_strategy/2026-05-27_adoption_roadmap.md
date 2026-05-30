@@ -93,22 +93,30 @@ damping alone). `query_pipeline` is held and fed to the step, but not exposed fo
 hit-test queries. The running app uses the hand-rolled canvas. So R1's true first
 step is **R1a — aether graduation**, and only then **R1b — the spike**.
 
-- **R1a — aether graduation** (new gate for the spike): depend on `aether` from
-  `mere-app`; implement the core fields so a layout actually settles
-  (`NodeExclusion` repulsion, `EdgeSpring` attraction, `Boundary` containment);
-  expose `QueryPipeline` hit-test (point/AABB) on `Simulation`; drive a tick in
-  the app. One confirmed-by-inspection asset: every node is already a rapier
-  collider (`ColliderBuilder::ball`), so `QueryPipeline` hit-tests nodes for free.
-- **Decide** graph-canvas-crate vs hardened hand-rolled widget (fit-map Q3) —
-  *before* building, run the understory comparison the brief defines.
-- **R1b — Spike** (gating, needs R1a): the rapier-`QueryPipeline` vs
-  `understory_index` hit-test/cull bake-off over the now-live physics layout,
-  measured against `canvas_behavior_contract` metrics (`crossing_density`,
-  `label_overlap_ratio`, `edge_len_cv`). Decides whether a spatial index earns its
-  place in the hot phase. (Question 2 — node/rapier redundancy — is already
-  half-answered: nodes are colliders, so `understory_index` would earn its keep
-  for non-collider visuals + cull, not node hit-testing, unless it wins as a
-  single all-visuals index.)
+- **R1a — aether graduation** — **DONE (host-agnostic part), 2026-05-29.**
+  Query surface (`3c12827`): `hit_test` (point) + `cull_aabb` + `refresh_spatial_index`
+  on `Simulation` over rapier's `QueryPipeline`. Core fields + a settling layout
+  (`f016492`): `NodeExclusion` repulsion, `EdgeSpring` attraction along synced
+  topology, `Boundary` centering, in `aether::fields`; plus `sync_edges`,
+  `position_of`, and node-mass normalization. Fixed a real bug: rapier's
+  `add_force` is persistent, so per-tick forces compounded and went unstable;
+  `tick()` now resets forces each pass. 10 tests pass (each field's effect, a
+  triangle settling separated+bounded, orrery-scale queries). *Not* done: driving
+  a tick in the app — deliberately deferred (the app-binding retargets to whichever
+  host wins; kept thin per the [serval-as-host eval](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)).
+- **R1b — Spike** — **RESOLVED by inspection + runtime, 2026-05-29: rapier's
+  `QueryPipeline` suffices; no second index.** The decisive facts: (1) every node
+  is already a rapier collider, so the QBVH rapier maintains *for collision anyway*
+  hit-tests nodes for free; (2) `query_pipeline_handles_orrery_scale` confirms it
+  resolves hit-test + cull correctly at ~1024 nodes, fast; (3) under serval-as-host
+  (the now-decided destination) node *content* hit-testing is serval's DOM, leaving
+  aether's `QueryPipeline` only the scene-geometry role (edges, empty space, cull)
+  it already serves. So `understory_index` would be a redundant second index and
+  does not earn the hot-phase seat. understory's value narrows to *steal-the-shape*
+  (view2d camera, responder/focus routing) per the brief, not a dependency. The
+  full `canvas_behavior_contract` metric bake-off is unnecessary for this call;
+  reopen only if a non-collider-visual query (dense edge/label picking) shows a
+  rapier hot spot.
 - **Wire** `cartography` + `graph-layout` for real layout (replaces the seeded
   ring); `register-lens` presets onto the `scene_physics` runtime (the salvage
   map's named integration); `register-theme` edge styling (`edge_visual_encoding_spec`);

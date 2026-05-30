@@ -205,3 +205,48 @@ fn full_layout_settles_separated_and_bounded() {
         );
     }
 }
+
+/// R1b spike, runtime-verified: rapier's `QueryPipeline` (the QBVH it maintains
+/// for collision anyway) resolves hit-test + cull correctly at orrery scale, so
+/// the canvas needs no *second* spatial index for scene-geometry queries. A
+/// ~1k-node grid; the index is the one rapier already keeps current.
+#[test]
+fn query_pipeline_handles_orrery_scale() {
+    let mut sim = Simulation::new();
+    let mut g = Graph::new();
+    // 32x32 grid, 60px apart (clear of the 36px contact range): ~1024 nodes.
+    let n: u128 = 32;
+    let spacing = 60.0_f32;
+    let mut keys = Vec::new();
+    for i in 0..n {
+        for j in 0..n {
+            keys.push(node_at(
+                &mut g,
+                i * n + j + 1,
+                i as f32 * spacing,
+                j as f32 * spacing,
+            ));
+        }
+    }
+    sim.sync_with_graph(&g);
+    sim.refresh_spatial_index();
+    assert_eq!(sim.body_count(), (n * n) as usize);
+
+    // Hit-test pinpoints one node among ~1000 (balls don't overlap at 60px).
+    let target = keys[500];
+    let at = sim.position_of(target).unwrap();
+    assert_eq!(sim.hit_test(at), Some(target));
+    assert!(sim.hit_test(Point2D::new(-500.0, -500.0)).is_none());
+
+    // Cull is selective: a ~200px window near the origin returns a handful of
+    // the grid's corner nodes, not the whole graph.
+    let window = sim.cull_aabb(Box2D::new(
+        Point2D::new(-10.0, -10.0),
+        Point2D::new(190.0, 190.0),
+    ));
+    assert!(
+        (9..64).contains(&window.len()),
+        "cull window not selective at scale: {}",
+        window.len()
+    );
+}
