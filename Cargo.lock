@@ -172,17 +172,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aether"
-version = "0.0.1"
-dependencies = [
- "euclid",
- "kernel",
- "rapier2d",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4362,6 +4351,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gyre"
+version = "0.0.1"
+dependencies = [
+ "euclid",
+ "kernel",
+ "rapier2d",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "h2"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7938,6 +7938,7 @@ dependencies = [
  "inker",
  "kernel",
  "morphorm",
+ "paint_list_api",
  "serde",
  "serde_json",
  "tracing",
