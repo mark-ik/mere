@@ -250,3 +250,46 @@ fn query_pipeline_handles_orrery_scale() {
         window.len()
     );
 }
+
+#[test]
+fn seed_positions_overrides_placement_and_round_trips() {
+    // The cartography bridge: a strategy's projected positions seed the layout
+    // in place of the graph's stored positions.
+    let mut sim = Simulation::new();
+    let graph = graph_with_two_nodes(); // a@(0,0), b@(100,0)
+    sim.sync_with_graph(&graph);
+    let keys: Vec<NodeKey> = graph.nodes().map(|(k, _)| k).collect();
+
+    sim.seed_positions([
+        (keys[0], Point2D::new(300.0, 300.0)),
+        (keys[1], Point2D::new(-300.0, -300.0)),
+    ]);
+    assert_eq!(sim.position_of(keys[0]), Some(Point2D::new(300.0, 300.0)));
+    assert_eq!(sim.position_of(keys[1]), Some(Point2D::new(-300.0, -300.0)));
+
+    // positions() reads the live layout back (the caller would rebuild a
+    // Projection from these).
+    let read: Vec<(NodeKey, Point2D<f32>)> = sim.positions().collect();
+    assert!(read.contains(&(keys[0], Point2D::new(300.0, 300.0))));
+    assert!(read.contains(&(keys[1], Point2D::new(-300.0, -300.0))));
+}
+
+#[test]
+fn seeded_overlap_separates_under_physics() {
+    // A degenerate strategy output (two nodes nearly coincident) is refined by
+    // the physics the pure strategy lacks: collision + repulsion separate them.
+    let mut sim = Simulation::new();
+    let mut g = Graph::new();
+    let a = node_at(&mut g, 1, 0.0, 0.0);
+    let b = node_at(&mut g, 2, 0.0, 0.0);
+    sim.sync_with_graph(&g);
+    sim.seed_positions([(a, Point2D::new(0.0, 0.0)), (b, Point2D::new(1.0, 0.0))]);
+    sim.add_field(NodeExclusion::default());
+    for _ in 0..240 {
+        sim.tick(1.0 / 60.0);
+    }
+    assert!(
+        separation(&sim, a, b) >= 2.0 * NODE_BODY_RADIUS,
+        "physics should separate a seeded overlap"
+    );
+}

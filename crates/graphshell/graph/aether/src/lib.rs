@@ -205,6 +205,47 @@ impl Simulation {
         Some(Point2D::new(t.x, t.y))
     }
 
+    /// Seed (override) the positions of existing node bodies, e.g. from a
+    /// cartography projection's positioned nodes, so a real layout strategy
+    /// (radial, astroid, a converged force-directed pass) becomes the physics
+    /// starting point instead of the graph's stored positions. Resets each
+    /// seeded body's velocity so the settle starts clean, and refreshes the
+    /// query index since this moves bodies outside a tick. Nodes without a body
+    /// are skipped (seed after [`Self::sync_with_graph`]).
+    ///
+    /// Takes plain `(NodeKey, Point2D)` rather than a `cartography::Projection`
+    /// on purpose: aether is a kernel-tier substrate and must not depend on the
+    /// projection layer above it. The caller maps `Projection.nodes` to these
+    /// pairs (see the cartography-aether layout seam doc).
+    pub fn seed_positions(&mut self, positions: impl IntoIterator<Item = (NodeKey, Point2D<f32>)>) {
+        let mut touched = false;
+        for (node, pos) in positions {
+            let Some(&handle) = self.bodies_by_node.get(&node) else {
+                continue;
+            };
+            if let Some(body) = self.bodies.get_mut(handle) {
+                body.set_translation(vector![pos.x, pos.y], true);
+                body.set_linvel(vector![0.0, 0.0], true);
+                touched = true;
+            }
+        }
+        if touched {
+            self.query_pipeline.update(&self.colliders);
+        }
+    }
+
+    /// Iterate the current `(node, position)` of every node body — the live
+    /// layout, e.g. for the caller to build a cartography projection for
+    /// downstream consumers. Reflects the most recent [`Self::tick`]; order is
+    /// unspecified.
+    pub fn positions(&self) -> impl Iterator<Item = (NodeKey, Point2D<f32>)> + '_ {
+        self.bodies_by_node.iter().filter_map(|(&node, &handle)| {
+            self.bodies
+                .get(handle)
+                .map(|b| (node, Point2D::new(b.translation().x, b.translation().y)))
+        })
+    }
+
     /// Refresh the spatial query index so [`Self::hit_test`] and
     /// [`Self::cull_aabb`] reflect the colliders' current positions.
     /// [`Self::tick`] already updates the index each step; call this when
