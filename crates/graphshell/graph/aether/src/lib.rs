@@ -44,7 +44,7 @@
 
 use std::collections::HashMap;
 
-use euclid::default::Point2D;
+use euclid::default::{Box2D, Point2D};
 use kernel::graph::{Graph, NodeKey};
 use rapier2d::prelude::*;
 
@@ -164,6 +164,65 @@ impl Simulation {
     /// external callers (host drag handlers, etc.).
     pub fn body_for(&self, node: NodeKey) -> Option<RigidBodyHandle> {
         self.bodies_by_node.get(&node).copied()
+    }
+
+    /// Refresh the spatial query index so [`Self::hit_test`] and
+    /// [`Self::cull_aabb`] reflect the colliders' current positions.
+    /// [`Self::tick`] already updates the index each step; call this when
+    /// you've moved bodies outside a tick (a drag via [`Self::pin`], or a
+    /// fresh [`Self::sync_with_graph`] on a layout you don't intend to step).
+    pub fn refresh_spatial_index(&mut self) {
+        self.query_pipeline.update(&self.colliders);
+    }
+
+    /// Hit-test a world-space point: the node whose body collider contains it,
+    /// or `None`. Reads the index as of the last [`Self::tick`] /
+    /// [`Self::refresh_spatial_index`]. Node bodies are kept separated, so on
+    /// the rare overlap this returns one of the hits, not a defined "topmost".
+    ///
+    /// Because every node is already a rapier collider, this is the
+    /// `QueryPipeline` doing node picking for free — the orrery's canvas needs
+    /// no separate index for *node* hit-testing (adoption roadmap R1b spike).
+    pub fn hit_test(&self, point: Point2D<f32>) -> Option<NodeKey> {
+        let colliders = &self.colliders;
+        let nodes_by_body = &self.nodes_by_body;
+        let p = Point::new(point.x, point.y);
+        let mut hit = None;
+        self.query_pipeline.intersections_with_point(
+            &self.bodies,
+            colliders,
+            &p,
+            QueryFilter::default(),
+            |handle| {
+                if let Some(node) = collider_to_node(colliders, nodes_by_body, handle) {
+                    hit = Some(node);
+                    return false; // stop at the first hit
+                }
+                true
+            },
+        );
+        hit
+    }
+
+    /// Frustum cull: every node whose body collider's Aabb intersects `region`
+    /// (world space). Reads the index as of the last tick / refresh. Order is
+    /// unspecified.
+    pub fn cull_aabb(&self, region: Box2D<f32>) -> Vec<NodeKey> {
+        let colliders = &self.colliders;
+        let nodes_by_body = &self.nodes_by_body;
+        let aabb = Aabb::new(
+            Point::new(region.min.x, region.min.y),
+            Point::new(region.max.x, region.max.y),
+        );
+        let mut out = Vec::new();
+        self.query_pipeline
+            .colliders_with_aabb_intersecting_aabb(&aabb, |handle| {
+                if let Some(node) = collider_to_node(colliders, nodes_by_body, *handle) {
+                    out.push(node);
+                }
+                true // visit all
+            });
+        out
     }
 
     /// Make the simulation match the graph: spawn a body for every
@@ -330,6 +389,18 @@ impl Simulation {
     }
 }
 
+/// Map a collider back to the node it represents, via its parent rigid body.
+/// A free function (not a method) so the query callbacks can borrow the two
+/// fields they need without capturing the whole `Simulation`.
+fn collider_to_node(
+    colliders: &ColliderSet,
+    nodes_by_body: &HashMap<RigidBodyHandle, NodeKey>,
+    handle: ColliderHandle,
+) -> Option<NodeKey> {
+    let body = colliders.get(handle)?.parent()?;
+    nodes_by_body.get(&body).copied()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -390,5 +461,39 @@ mod tests {
         // position as the graph reports.
         let changed = sim.write_positions_to(&mut graph);
         assert_eq!(changed, 0);
+    }
+
+    #[test]
+    fn hit_test_and_cull_resolve_nodes_by_position() {
+        // a@(0,0), b@(100,0), each an 18px-radius ball collider.
+        let mut sim = Simulation::new();
+        let graph = graph_with_two_nodes();
+        sim.sync_with_graph(&graph);
+        // No tick: refresh the index so queries see the synced positions.
+        sim.refresh_spatial_index();
+
+        let a = sim.hit_test(Point2D::new(0.0, 0.0)).expect("point inside node a");
+        let b = sim
+            .hit_test(Point2D::new(100.0, 0.0))
+            .expect("point inside node b");
+        assert_ne!(a, b, "the two centers resolve to different nodes");
+        assert!(
+            sim.hit_test(Point2D::new(5000.0, 5000.0)).is_none(),
+            "empty space hits nothing"
+        );
+
+        // A small box around the origin catches a (radius 18 reaches ±18) but
+        // not b (its AABB starts at x=82).
+        let near_origin =
+            sim.cull_aabb(Box2D::new(Point2D::new(-10.0, -10.0), Point2D::new(10.0, 10.0)));
+        assert_eq!(near_origin, vec![a]);
+
+        // A wide box catches both.
+        let everything = sim.cull_aabb(Box2D::new(
+            Point2D::new(-1000.0, -1000.0),
+            Point2D::new(1000.0, 1000.0),
+        ));
+        assert_eq!(everything.len(), 2);
+        assert!(everything.contains(&a) && everything.contains(&b));
     }
 }
