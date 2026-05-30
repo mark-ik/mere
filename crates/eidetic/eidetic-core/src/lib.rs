@@ -35,6 +35,25 @@
 //! - [`moothold`](https://crates.io/crates/moothold) (community/federation
 //!   flora — shared, not private),
 //! - host UI state (transient, not durable).
+//!
+//! ## Temporal-integrity contract (R0 invariant)
+//!
+//! Adopted from the donor `graphshell` history/memory subsystem (per the
+//! [adoption roadmap](../../../../design_docs/mere_docs/implementation_strategy/2026-05-27_adoption_roadmap.md)
+//! R0; the same contract binds the navigation side in
+//! [`node-lineage`](https://docs.rs/node-lineage)). Three invariants, already
+//! embodied by [`engram::Engram`] and the [`Store`] trait, named here so they
+//! hold as backends and tiers are added:
+//!
+//! 1. **Temporal-integrity** — an [`engram::Engram`] is immutable and
+//!    content-hashed; edits do not exist. A refresh produces a *new* engram
+//!    with a fresh hash; a stored blob is never mutated in place.
+//! 2. **Replay-isolation** — reading or replaying stored memory does not mutate
+//!    the store. A [`Store`] read leaves history untouched, so re-deriving a
+//!    past state is side-effect-free.
+//! 3. **Shared-projection** — derived views ("recent", caches, indices) are
+//!    projections over the single engram store, never a second authoritative
+//!    store.
 
 #![doc(html_root_url = "https://docs.rs/eidetic/0.0.1")]
 

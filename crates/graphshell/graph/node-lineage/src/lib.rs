@@ -28,6 +28,26 @@
 //!
 //! Both granularities use the same Entry/Visit/Owner machinery; "promotion to
 //! anchor" is the affirmative gesture that crosses the boundary.
+//!
+//! ## Temporal-integrity contract (R0 invariant)
+//!
+//! Adopted from the donor `graphshell` history/lineage subsystem (per the
+//! [adoption roadmap](../../../../../design_docs/mere_docs/implementation_strategy/2026-05-27_adoption_roadmap.md)
+//! R0; the same contract binds the content side in
+//! [`eidetic-core`](https://docs.rs/eidetic)). Three invariants, already
+//! embodied by this crate's types and named here so they hold as the lineage
+//! model grows:
+//!
+//! 1. **Temporal-integrity** — a [`VisitRecord`] is an append-only occurrence;
+//!    the past is never rewritten. Navigating back and then forward to a
+//!    different link *branches* (spawns new visits); it does not edit prior
+//!    visits.
+//! 2. **Replay-isolation** — deriving a projection or replaying lineage *reads*
+//!    visits; it never mutates the visit tree. Re-deriving a past view is a
+//!    pure read over the visit authority.
+//! 3. **Shared-projection** — `EdgeView` (and any "recent" / derived view) is a
+//!    projection over the single visit authority, never a second store. This is
+//!    the crate's standing rule: visits own the tree; edges are projected.
 
 use serde::{Deserialize, Serialize};
 use slotmap::{SlotMap, new_key_type};
