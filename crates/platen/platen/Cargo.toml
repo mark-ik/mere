@@ -21,6 +21,11 @@ document-canvas.workspace = true
 inker.workspace = true
 kernel.workspace = true
 morphorm.workspace = true
+# The engine-agnostic paint vocabulary (PaintCmd). Platen renders a cartography
+# Projection into a PaintList here; netrender (behind the host) consumes it.
+# Direct path dep like inker/document-canvas, so the heavy renderer stays
+# host-side and this dep does not propagate through the contract crates.
+paint_list_api = { path = "../../../../netrender/paint_list_api" }
 # Platen projects a forme arrangement into a presentation plan (the
 # tree projection — its core role under the composition spine).
 forme.workspace = true

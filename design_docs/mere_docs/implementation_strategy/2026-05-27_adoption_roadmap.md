@@ -117,6 +117,17 @@ step is **R1a — aether graduation**, and only then **R1b — the spike**.
   full `canvas_behavior_contract` metric bake-off is unnecessary for this call;
   reopen only if a non-collider-visual query (dense edge/label picking) shows a
   rapier hot spot.
+- **Scene renderer — DONE (host-agnostic), 2026-05-30.** `platen::scene_paint`
+  renders a cartography `Projection` to a `paint_list_api` `PaintList` (the
+  serval-eval's scene underlay: camera `PushTransform`, an edge stroke per edge,
+  a node rect per node), consumed by netrender regardless of host. Scoping
+  finding: `graph-canvas` (9.6k LOC) is a *whole* overlapping scene+physics+
+  projection system whose physics is superseded by aether and projection overlaps
+  cartography, with **no** `paint_list_api` output. The renderer deliberately
+  works off the cartography `Projection` (not graph-canvas's heavy scene IR),
+  placed in platen ("the press") so the `paint_list_api` dep does not propagate
+  through the contract crates. graph-canvas's adopt/retire remains the fit-map's
+  open call; this is the minimal inner-ring start. 3 tests.
 - **Wire** `cartography` + `graph-layout` for real layout (replaces the seeded
   ring); `register-lens` presets onto the `scene_physics` runtime (the salvage
   map's named integration); `register-theme` edge styling (`edge_visual_encoding_spec`);

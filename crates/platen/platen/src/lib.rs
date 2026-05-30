@@ -61,6 +61,11 @@ pub mod canvas_scene;
 /// hard-coded force-directed.
 pub mod cartography_scene;
 
+/// Render a cartography `Projection` into a `paint_list_api` paint list — the
+/// orrery's host-agnostic scene underlay, consumed by netrender regardless of
+/// host. Platen is the press; this is where a projection becomes paint.
+pub mod scene_paint;
+
 /// Document-canvas scene-input derivation. Wraps `document-canvas` for
 /// composition-time use; the sibling of `canvas_scene` for the document
 /// swatch. Hosts call this for any pane that holds a document tile (the
