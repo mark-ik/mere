@@ -293,3 +293,39 @@ fn seeded_overlap_separates_under_physics() {
         "physics should separate a seeded overlap"
     );
 }
+
+#[test]
+fn node_exclusion_scales_to_many_nodes() {
+    // A 10x10 grid (no initial overlap, so the contact solver stays cheap)
+    // spread under cull-based repulsion + centering. Exercises the spatial-index
+    // neighbor path at scale; asserts a finite, bounded layout that spread out.
+    let mut sim = Simulation::new();
+    let mut g = Graph::new();
+    let mut id: u128 = 0;
+    for i in 0..10 {
+        for j in 0..10 {
+            id += 1;
+            node_at(&mut g, id, (i as f32 - 4.5) * 50.0, (j as f32 - 4.5) * 50.0);
+        }
+    }
+    sim.sync_with_graph(&g);
+    sim.add_field(NodeExclusion::default());
+    sim.add_field(Boundary::default());
+    let keys: Vec<NodeKey> = g.nodes().map(|(k, _)| k).collect();
+    assert_eq!(keys.len(), 100);
+
+    for _ in 0..60 {
+        sim.tick(1.0 / 60.0);
+    }
+
+    let mut max_radius = 0.0_f32;
+    for &k in &keys {
+        let p = sim.position_of(k).unwrap();
+        assert!(p.x.is_finite() && p.y.is_finite(), "non-finite position");
+        let r = radius_from_origin(&sim, k);
+        assert!(r < 50_000.0, "node escaped: {r}");
+        max_radius = max_radius.max(r);
+    }
+    // Repulsion pushed the grid outward (it did not collapse to a point).
+    assert!(max_radius > 50.0, "layout failed to spread: {max_radius}");
+}

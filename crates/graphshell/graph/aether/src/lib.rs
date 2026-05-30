@@ -101,6 +101,11 @@ pub struct FieldContext<'a> {
     /// pairs, set via [`Simulation::sync_edges`]; aether stays relation-taxonomy
     /// agnostic, so the caller decides which edge families feed the layout.
     pub edges: &'a [(NodeKey, NodeKey)],
+    /// The spatial index, for fields that find neighbors by region instead of
+    /// scanning all pairs (e.g. [`NodeExclusion`] cull-based repulsion). Current
+    /// as of the last [`Simulation::tick`] step or [`Simulation::sync_with_graph`]
+    /// (a tick's worth of staleness is harmless for soft forces).
+    pub query_index: &'a QueryPipeline,
 }
 
 /// One rapier world + bookkeeping. The host owns one of these per
@@ -314,6 +319,8 @@ impl Simulation {
     /// or once at startup — does nothing when the graph and bimap
     /// are already in sync.
     pub fn sync_with_graph(&mut self, graph: &Graph) {
+        let mut changed = false;
+
         // 1. Add bodies for new nodes.
         let mut seen = std::collections::HashSet::with_capacity(self.bodies_by_node.len());
         for (key, node) in graph.nodes() {
@@ -337,6 +344,7 @@ impl Simulation {
                 .insert_with_parent(collider, handle, &mut self.bodies);
             self.bodies_by_node.insert(key, handle);
             self.nodes_by_body.insert(handle, key);
+            changed = true;
         }
 
         // 2. Remove bodies whose nodes are gone.
@@ -357,7 +365,15 @@ impl Simulation {
                     &mut self.multibody_joints,
                     /* remove_attached_colliders */ true,
                 );
+                changed = true;
             }
+        }
+
+        // Keep the spatial index current with the new collider set, so
+        // cull-based fields (e.g. NodeExclusion) see the bodies on the very
+        // next tick rather than after the first step rebuilds the index.
+        if changed {
+            self.query_pipeline.update(&self.colliders);
         }
     }
 
@@ -388,6 +404,7 @@ impl Simulation {
                 bodies_by_node: &self.bodies_by_node,
                 nodes_by_body: &self.nodes_by_body,
                 edges: &self.edges,
+                query_index: &self.query_pipeline,
             };
             for field in &self.fields {
                 field.apply(&mut ctx, dt);
@@ -477,8 +494,9 @@ impl Simulation {
 
 /// Map a collider back to the node it represents, via its parent rigid body.
 /// A free function (not a method) so the query callbacks can borrow the two
-/// fields they need without capturing the whole `Simulation`.
-fn collider_to_node(
+/// fields they need without capturing the whole `Simulation`. `pub(crate)` so
+/// [`fields`] can reuse it for cull-based neighbor queries.
+pub(crate) fn collider_to_node(
     colliders: &ColliderSet,
     nodes_by_body: &HashMap<RigidBodyHandle, NodeKey>,
     handle: ColliderHandle,
