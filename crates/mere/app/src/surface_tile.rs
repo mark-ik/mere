@@ -168,6 +168,19 @@ impl SurfaceTileWidget {
                     NamedKey::End => 0x23,
                     NamedKey::PageUp => 0x21,
                     NamedKey::PageDown => 0x22,
+                    NamedKey::Insert => 0x2D,
+                    NamedKey::F1 => 0x70,
+                    NamedKey::F2 => 0x71,
+                    NamedKey::F3 => 0x72,
+                    NamedKey::F4 => 0x73,
+                    NamedKey::F5 => 0x74,
+                    NamedKey::F6 => 0x75,
+                    NamedKey::F7 => 0x76,
+                    NamedKey::F8 => 0x77,
+                    NamedKey::F9 => 0x78,
+                    NamedKey::F10 => 0x79,
+                    NamedKey::F11 => 0x7A,
+                    NamedKey::F12 => 0x7B,
                     _ => 0,
                 };
                 (vk, String::new())
@@ -662,6 +675,9 @@ impl WebSurfaceHost {
     /// texture and import it into our wgpu (DX12) device. Builds on first call
     /// (or when `url` changes). Safe to call every tick (acquire is non-blocking
     /// after the first frame). Step 3a: import + log; 3b composites it.
+    /// Drive the producer one tick. Returns `true` if there was activity (input
+    /// forwarded or a new frame arrived) — `on_tick` uses this to keep redrawing
+    /// while the tile is live and let the loop idle when it goes static.
     pub fn ensure(
         &mut self,
         hwnd: *mut std::ffi::c_void,
@@ -670,7 +686,7 @@ impl WebSurfaceHost {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         scale: f64,
-    ) {
+    ) -> bool {
         #[cfg(target_os = "windows")]
         {
             if self.current_url.as_deref() != Some(url) {
@@ -682,12 +698,14 @@ impl WebSurfaceHost {
                 }
             }
             self.resize_to_bounds();
-            self.forward_input(scale);
-            self.pump_frame(device, queue);
+            let forwarded = self.forward_input(scale);
+            let pumped = self.pump_frame(device, queue);
+            forwarded || pumped
         }
         #[cfg(not(target_os = "windows"))]
         {
             let _ = (hwnd, url, size, device, queue, scale);
+            false
         }
     }
 
@@ -783,7 +801,7 @@ impl WebSurfaceHost {
     /// WebView's top-left (which, since we size the producer to the tile, is the
     /// tile's top-left).
     #[cfg(target_os = "windows")]
-    fn forward_input(&mut self, scale: f64) {
+    fn forward_input(&mut self, scale: f64) -> bool {
         use scrying::{
             FocusReason, KeyEventKind, KeyModifierFlags, KeyboardInput, MouseEventKind, MouseInput,
             MouseVirtualKeys,
@@ -793,8 +811,9 @@ impl WebSurfaceHost {
             .lock()
             .map(|mut c| (std::mem::take(&mut c.input), std::mem::take(&mut c.keys)))
             .unwrap_or_default();
+        let had_input = !events.is_empty() || !keys.is_empty();
         let Some(producer) = self.producer.as_mut() else {
-            return;
+            return false;
         };
         for ev in events {
             let point = ((ev.x as f64 * scale) as i32, (ev.y as f64 * scale) as i32);
@@ -845,13 +864,15 @@ impl WebSurfaceHost {
                 eprintln!("[web] send_keyboard_input failed: {err}");
             }
         }
+        had_input
     }
 
     /// Acquire the producer's latest frame (non-blocking after the first) and
-    /// import its `Dx12SharedTexture` into our wgpu device. Step 3a logs the
-    /// first successful import; 3b stores the texture for the compositor.
+    /// import its `Dx12SharedTexture` into our wgpu device. Returns `true` if a
+    /// new frame arrived this tick (content changed → a redraw is wanted), which
+    /// drives the idle-quiet redraw heuristic in `on_tick`.
     #[cfg(target_os = "windows")]
-    fn pump_frame(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    fn pump_frame(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) -> bool {
         use scrying::{
             HostWgpuContext, ImportOptions, TextureImporter, WebSurfaceFrame, WgpuTextureImporter,
         };
@@ -869,39 +890,41 @@ impl WebSurfaceHost {
         // non-blocking path (returns `None` until a frame is ready).
         let force = std::mem::take(&mut self.force_acquire);
         let Some(producer) = self.producer.as_mut() else {
-            return;
+            return false;
         };
         let frame = if force {
             match producer.acquire_full_frame() {
                 Ok(frame) => frame,
                 Err(err) => {
                     eprintln!("[web] resync acquire failed: {err}");
-                    return;
+                    return false;
                 }
             }
         } else {
             match producer.try_acquire_frame() {
                 Ok(Some(frame)) => frame,
-                Ok(None) => return,
+                Ok(None) => return false,
                 Err(err) => {
                     eprintln!("[web] acquire failed: {err}");
-                    return;
+                    return false;
                 }
             }
         };
         let WebSurfaceFrame::Native(native) = &frame.frame else {
-            return;
+            return false;
         };
-        // Re-import only on a fresh allocation. When the producer reused its
-        // texture (`resource_is_new == false`) the shared handle is stale —
-        // keep the cached import (its backing memory was just overwritten).
+        // A new frame arrived → its content changed, so a redraw is wanted even
+        // if we keep the cached import: when the producer reused its texture
+        // (`resource_is_new == false`) the shared handle is stale, so we skip
+        // re-import (its backing memory was overwritten in place) but still
+        // re-blit. Re-import only on a fresh allocation.
         let have_cached = self
             .channel
             .lock()
             .map(|c| c.frame.is_some())
             .unwrap_or(false);
         if !frame.resource_is_new && have_cached {
-            return;
+            return true;
         }
         match self
             .importer
@@ -923,6 +946,7 @@ impl WebSurfaceHost {
             }
             Err(err) => eprintln!("[web] import failed: {err}"),
         }
+        true
     }
 }
 

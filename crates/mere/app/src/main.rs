@@ -496,6 +496,13 @@ fn main() {
             let registry = surface_registry.clone();
             let mut web_host =
                 surface_tile::WebSurfaceHost::new(webview_data_dir, surface_channel);
+            // Idle-quiet redraw: keep requesting redraws while a web tile is
+            // active (input or new frames — so video/scroll/animation stay
+            // smooth), but after a grace window with no activity (a static page)
+            // stop, letting the event loop sleep. Any interaction or new frame
+            // resets it. (~0.5s grace at 60fps.)
+            const REDRAW_GRACE_TICKS: u32 = 30;
+            let mut idle_ticks: u32 = REDRAW_GRACE_TICKS;
             move |ctx| {
                 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
                 // Need the shared device + a window. Device exists once the
@@ -518,9 +525,10 @@ fn main() {
                 let scale = window.scale_factor();
                 // First web tile drives the (single, v1) producer.
                 let mut web_active = false;
+                let mut activity = false;
                 for (_id, content) in registry.entries() {
                     if let SurfaceContent::Web { url } = content {
-                        web_host.ensure(
+                        activity = web_host.ensure(
                             hwnd,
                             &url,
                             (inner.width, inner.height),
@@ -532,14 +540,18 @@ fn main() {
                         break;
                     }
                 }
-                // A live WebView produces frames continuously (scroll, video,
-                // animation); the compositor only blits them when Masonry
-                // renders, and the event loop sleeps when idle. While a web tile
-                // is shown, keep requesting redraws so imported frames reach the
-                // screen without needing an unrelated interaction. (Step 5 can
-                // make this frame-arrival-driven instead of every-tick.)
+                // Keep redrawing while there's activity (new frames or input) so
+                // imported frames reach the screen; once a shown tile goes static
+                // (no frames, no input) for the grace window, stop requesting
+                // redraws and let the loop idle. A new frame or interaction wakes
+                // it and resets the counter.
                 if web_active {
-                    window.request_redraw();
+                    idle_ticks = if activity { 0 } else { idle_ticks.saturating_add(1) };
+                    if idle_ticks < REDRAW_GRACE_TICKS {
+                        window.request_redraw();
+                    }
+                } else {
+                    idle_ticks = REDRAW_GRACE_TICKS;
                 }
             }
         })
