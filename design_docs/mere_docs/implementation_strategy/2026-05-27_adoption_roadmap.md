@@ -84,12 +84,31 @@ rows are tracked here with their triggers; they re-enter as their gate lifts.
 (the fit-map's named overlap: ~24 KB widget vs the 9.6k `graph-canvas` crate).
 This rung converges the most pulled assets, so it's the highest-value next move.
 
+**Prerequisite finding (2026-05-29).** The gating spike below *cannot lead*: it
+measures over "a live physics layout," and that layout does not exist yet.
+`aether` (394 LOC) is an unwired, field-less scaffold: `mere-app` has no `aether`
+dependency, no `Field` is implemented (`NodeExclusion`/`EdgeSpring`/`Boundary` are
+only named in a doc comment), and the world ticks empty (bodies settle under
+damping alone). `query_pipeline` is held and fed to the step, but not exposed for
+hit-test queries. The running app uses the hand-rolled canvas. So R1's true first
+step is **R1a — aether graduation**, and only then **R1b — the spike**.
+
+- **R1a — aether graduation** (new gate for the spike): depend on `aether` from
+  `mere-app`; implement the core fields so a layout actually settles
+  (`NodeExclusion` repulsion, `EdgeSpring` attraction, `Boundary` containment);
+  expose `QueryPipeline` hit-test (point/AABB) on `Simulation`; drive a tick in
+  the app. One confirmed-by-inspection asset: every node is already a rapier
+  collider (`ColliderBuilder::ball`), so `QueryPipeline` hit-tests nodes for free.
 - **Decide** graph-canvas-crate vs hardened hand-rolled widget (fit-map Q3) —
   *before* building, run the understory comparison the brief defines.
-- **Spike** (gating): the rapier-`QueryPipeline` vs `understory_index` hit-test/
-  cull bake-off over a live physics layout, measured against
-  `canvas_behavior_contract` metrics (`crossing_density`, `label_overlap_ratio`,
-  `edge_len_cv`). Decides whether a spatial index earns its place in the hot phase.
+- **R1b — Spike** (gating, needs R1a): the rapier-`QueryPipeline` vs
+  `understory_index` hit-test/cull bake-off over the now-live physics layout,
+  measured against `canvas_behavior_contract` metrics (`crossing_density`,
+  `label_overlap_ratio`, `edge_len_cv`). Decides whether a spatial index earns its
+  place in the hot phase. (Question 2 — node/rapier redundancy — is already
+  half-answered: nodes are colliders, so `understory_index` would earn its keep
+  for non-collider visuals + cull, not node hit-testing, unless it wins as a
+  single all-visuals index.)
 - **Wire** `cartography` + `graph-layout` for real layout (replaces the seeded
   ring); `register-lens` presets onto the `scene_physics` runtime (the salvage
   map's named integration); `register-theme` edge styling (`edge_visual_encoding_spec`);
