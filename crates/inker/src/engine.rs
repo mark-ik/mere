@@ -19,6 +19,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::a11y::A11yCapability;
 use crate::document::EngineDocument;
 use crate::routing::EngineRouteDecision;
 
@@ -79,6 +80,14 @@ pub trait Engine: Send + Sync {
 
     /// Parse raw content into a portable document.
     fn render(&self, input: &EngineInput) -> Result<EngineDocument, EngineError>;
+
+    /// This engine's accessibility capability (see [`crate::a11y`]). Document
+    /// engines default to [`A11yCapability::Full`] — their [`EngineDocument`]
+    /// blocks *are* the semantic tree. Override to declare degradation (an
+    /// engine that drops structure must not claim `Full`).
+    fn a11y_capability(&self) -> A11yCapability {
+        A11yCapability::Full
+    }
 }
 
 /// Engine ID → engine instance dispatch.
@@ -199,5 +208,29 @@ mod tests {
             .dispatch(&decision("test.absent"), &EngineInput::new("a", "b"))
             .expect_err("expected EngineNotFound");
         assert!(matches!(err, EngineError::EngineNotFound(_)));
+    }
+
+    /// Contract: document engines are `Full` a11y by default (their blocks are
+    /// the semantic tree); an engine that degrades must *declare* it.
+    #[test]
+    fn a11y_capability_defaults_full_and_degrades_explicitly() {
+        assert_eq!(EchoEngine.a11y_capability(), A11yCapability::Full);
+
+        struct LossyEngine;
+        impl Engine for LossyEngine {
+            fn engine_id(&self) -> &str {
+                "test.lossy"
+            }
+            fn render(&self, input: &EngineInput) -> Result<EngineDocument, EngineError> {
+                EchoEngine.render(input)
+            }
+            // Declares its degradation rather than silently claiming Full.
+            fn a11y_capability(&self) -> A11yCapability {
+                A11yCapability::Partial
+            }
+        }
+        assert_eq!(LossyEngine.a11y_capability(), A11yCapability::Partial);
+        assert!(LossyEngine.a11y_capability().is_inspectable());
+        assert!(!A11yCapability::Opaque.is_inspectable());
     }
 }

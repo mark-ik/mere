@@ -20,6 +20,10 @@
 
 #![doc(html_root_url = "https://docs.rs/inker/0.0.1")]
 
+/// Accessibility capability contract (R0 invariant — every surface declares
+/// what it can expose to the a11y tree; degradation is declared, never silent).
+pub mod a11y;
+
 /// Host-neutral engine routing contracts.
 pub mod routing;
 
@@ -36,6 +40,7 @@ pub mod surface_engine;
 /// Content-type sniffing for unlabelled byte streams.
 pub mod sniff;
 
+pub use a11y::A11yCapability;
 pub use document::{
     BlockProvenance, BlockProvenanceMap, DocumentBlock, DocumentDiagnostic, DocumentProvenance,
     DocumentTrustState, EngineDocument, InlineSpan, ResolvedProvenance, inline_text,

@@ -17,6 +17,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::a11y::A11yCapability;
 use crate::routing::EngineRouteDecision;
 
 // ── Errors ─────────────────────────────────────────────────────────────────
@@ -253,6 +254,15 @@ pub trait SurfaceEngine: Send + Sync {
         &self,
         request: &SurfaceSpawnRequest,
     ) -> Result<Box<dyn SurfaceProducer>, SurfaceError>;
+
+    /// This surface's accessibility capability (see [`crate::a11y`]).
+    /// Frame-streaming surfaces default to [`A11yCapability::Opaque`] — a raw
+    /// GPU frame / system WebView has no semantics the host can read. A surface
+    /// that *bridges* its content (e.g. scrying's DOM bridge) overrides this to
+    /// declare [`A11yCapability::Partial`], per the non-silent-degradation rule.
+    fn a11y_capability(&self) -> A11yCapability {
+        A11yCapability::Opaque
+    }
 }
 
 /// Long-lived surface producer. Owns a WebView control until dropped.
