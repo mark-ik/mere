@@ -53,22 +53,30 @@ Rungs are grouped by **trigger** (the consumer that pulls them live). R0 has no
 gate; R1–R5 are ordered by my recommended near-term sequence, but R1–R3 are
 substantially **parallelizable** — they touch different crates.
 
-### R0 — Invariant contracts (adopt now, no consumer gate)
+### R0 — Invariant contracts
 
 Policy/contract language that **prevents silent corruption** and constrains
-everything downstream. These are doc + type-level guardrails, not host wiring, so
-they don't wait. Highest leverage per the harvest §1.
+everything downstream. These are doc + type-level guardrails, not host wiring.
+Highest leverage per the harvest §1.
 
-| Adopt | From (harvest) | Into | Why now |
+**Feasibility finding (2026-05-29).** The original framing ("adopt now, no
+consumer gate") held for only two of the five. Verifying each against the actual
+crates showed three carry a real gate: the target crate is not in the workspace,
+the type the contract constrains is not yet promoted, or the thing to constrain
+does not exist yet (so it is net-new design, not a contract to adopt). Two were
+adopted; three are gated with their trigger named below.
+
+| Adopt | From (harvest) | Into | Status |
 |---|---|---|---|
-| Capability-declaration + non-silent-degradation + cross-surface-parity | `SUBSYSTEM_ACCESSIBILITY.md`, `accessibility_baseline_checklist` | `platen` + `inker` | every surface must declare a11y capability in one place — retrofitting later is far costlier |
-| Settings/permissions five-scope + **narrowing rule** (narrower scope only narrows) | `settings_and_permissions_spine_spec.md` | `kernel` + `verso` | permission model must exist before surfaces/mods can be gated |
-| Register-layer composition contract (explicit-bridge, no hidden cross-registry calls, diagnosable routing) | `register_layer_spec.md` | `register-*` cluster | the cluster is pulled but contract-free; pin the rules before wiring (R1/R3) |
-| Temporal-integrity + replay-isolation + shared-projection (Recent = projection, not a 2nd store) | `SUBSYSTEM_HISTORY.md` | `node-lineage` + `eidetic` | history-truth invariants before any history UI |
-| Undoable / SoftUndoable / NotUndoable as **structural** | `command_semantics_matrix.md` | `kernel` mutation bus | undo classification shapes the mutation API; cheaper as a constraint than a retrofit |
+| Capability-declaration + non-silent-degradation + cross-surface-parity | `SUBSYSTEM_ACCESSIBILITY.md` | `inker` (consumer = verso/uxtree a11y bridge, R2) | **Done** (`0f884ae`). `inker::a11y::A11yCapability` {Opaque, Partial, Full}; `Engine` defaults Full, `SurfaceEngine` defaults Opaque. Non-breaking and already correct (nematic Full, scrying Opaque). Adopted into `inker`, not `platen` (platen disclaims a11y projection; the uxtree bridge consumes it). |
+| Temporal-integrity + replay-isolation + shared-projection (Recent = projection, not a 2nd store) | `SUBSYSTEM_HISTORY.md` | `node-lineage` + `eidetic` | **Done** (`9a52852`). Doc-contract naming the three invariants both crates already embody (Engram immutability + content hash; visits own the tree, edges projected). Cross-referenced, donor cited. |
+| Register-layer composition contract (explicit-bridge, no hidden cross-registry calls, diagnosable routing) | `register_layer_spec.md` | `register-*` cluster | **Gated**: the `register-*` crates are not in the workspace (the salvage map lists them as *to-pull*, not pulled). Trigger: adopt when the cluster is pulled (precedes R3 wiring). |
+| Undoable / SoftUndoable / NotUndoable as **structural** | `command_semantics_matrix.md` | `kernel` mutation bus | **Gated**: `GraphMutation` is not yet promoted into kernel (`intents.rs` carries only portable primitives; the full vocab is in the donor's entangled `app/intents.rs`, slices 57b/c/d pending). Trigger: adopt at `GraphMutation` promotion, when it can shape the type. |
+| Settings/permissions five-scope + **narrowing rule** | `settings_and_permissions_spine_spec.md` | `kernel` + `verso` | **Reclassified**: no permission model exists in kernel or verso, so this is net-new design (its own slice), not a contract to pin onto an existing type. Moves out of R0 to a dedicated permissions slice, triggered when surfaces/mods first need gating. |
 
-Done = the contract language lives in each crate's docs/types as invariants
-(not prose aspiration), with the donor doc cited per DOC_POLICY incremental rule.
+Done (for the two adopted) = the contract language lives in the crate's docs/types
+as invariants, donor cited per the DOC_POLICY incremental rule. The three gated
+rows are tracked here with their triggers; they re-enter as their gate lifts.
 
 ### R1 — Orrery graduation (the next big *visible* slice)
 
@@ -147,9 +155,12 @@ because they're near.
 
 ## 4. Recommended near-term order
 
-1. **R0 contracts** — cheap, high-leverage, unblocks safe wiring everywhere. Do first.
+1. **R0 contracts** — two adopted (a11y `0f884ae`, temporal `9a52852`); the
+   other three are gated on their triggers (see the R0 table) and re-enter as
+   those lift, so they no longer block. R0 is effectively cleared for now.
 2. **R1 orrery graduation** — most visible, converges the most pulled assets;
    lead with the understory/rapier spike since it gates the canvas-layer decision.
+   This is the next move.
 3. **R2 verso deepening** — parallelizable with R1 (different crates); the scrying
    tile already proved the seam.
 4. **R3 registry wiring** — when a second engine or mod lane gives it a consumer.
