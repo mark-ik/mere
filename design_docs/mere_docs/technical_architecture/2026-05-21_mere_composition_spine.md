@@ -168,6 +168,19 @@ So forme/platen produce the *plan*; Xilem *renders* it. "Chrome = idiomatic
 Xilem" (the re-scaffold doc) still holds — forme/platen are the model→plan layer
 *above* the view functions, not a replacement for them.
 
+**Host-architecture note (2026-05-29).** The "Host (Xilem)" row above describes
+architecture 1 (Xilem authoring, Masonry within-tile content). Serval-as-host
+(architecture 3) is the evaluated destination: serval renders both between-tiles
+and within-tile through one engine, chrome authored via `xilem_serval` and painted
+through netrender. It changes the *realization substrate* at the bottom of the
+spine (the Masonry scene becomes serval DOM + netrender) while leaving the
+model→plan layers (forme, platen) and "chrome = idiomatic Xilem" (now an
+`xilem_core` backend beside Masonry) intact. platen loses Morphorm to serval's
+taffy; the orrery becomes a custom-paint element with physics-positioned DOM
+children. See the
+[serval-as-host evaluation](2026-05-29_serval_as_host_evaluation.md) for the
+decision, pros/cons, and the worked orrery + platen consequences.
+
 ## 10. Costs we accept (and the guardrails)
 
 Graph-capability costs what a tree gives for free:

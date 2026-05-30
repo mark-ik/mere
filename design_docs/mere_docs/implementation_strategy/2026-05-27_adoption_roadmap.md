@@ -191,6 +191,14 @@ because they're near.
 - **Spine ontology is fixed**: adoption sharpens `kernel → forme → platen → verso
   → inker → host`; nothing here adds a parallel spine (the understory "no second
   presentation tree" call is the canonical example).
+- **Host is under an evaluated flip (2026-05-29)**: serval-as-host (architecture
+  3) is the destination for the bottom of the spine, replacing Masonry as the
+  chrome substrate; the flip is gated and deliberate (see the
+  [serval-as-host evaluation](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)).
+  The operative constraint on every rung below: **do not deepen Masonry-specific
+  investment; keep new host-coupling retargetable.** R1's aether work is
+  host-agnostic and proceeds; its app-wiring stays thin. platen's Morphorm layout
+  (R1/the between-tiles seam) is the piece that retargets to serval's taffy.
 - **Pull eagerly, wire on consumer** (§1): the reconciliation above.
 - **Borrow boundaries, not crates, when youth is a risk** (understory): steal the
   shape unless a probe earns a pin.
