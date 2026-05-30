@@ -48,6 +48,10 @@ use euclid::default::{Box2D, Point2D};
 use kernel::graph::{Graph, NodeKey};
 use rapier2d::prelude::*;
 
+/// Built-in force fields for the force-directed orrery layout.
+pub mod fields;
+pub use fields::{Boundary, EdgeSpring, NodeExclusion};
+
 /// Physical radius used for every node body's collider.
 ///
 /// Mirrors `platen::CanvasSceneOptions::default()`'s
@@ -55,6 +59,12 @@ use rapier2d::prelude::*;
 /// the renderer's drawn radius. When per-node radii become a real
 /// thing, this constant will get replaced by a per-node lookup.
 pub const NODE_BODY_RADIUS: f32 = 18.0;
+
+/// Density for node-body colliders, chosen so each node's mass is ~= 1.0
+/// (mass = density * pi * r^2 ~= 0.001 * pi * 18^2 ~= 1.0). The layout forces in
+/// [`fields`] are then intuitive accelerations rather than being swamped by the
+/// large mass a default density would give an 18px ball.
+pub const NODE_BODY_DENSITY: f32 = 0.001;
 
 /// Linear damping applied to every node body. High enough to make
 /// the simulation settle without continuous input — without forces
@@ -87,6 +97,10 @@ pub struct FieldContext<'a> {
     pub joints: &'a mut ImpulseJointSet,
     pub bodies_by_node: &'a HashMap<NodeKey, RigidBodyHandle>,
     pub nodes_by_body: &'a HashMap<RigidBodyHandle, NodeKey>,
+    /// Topology the layout fields pull along (e.g. [`EdgeSpring`]). Node-key
+    /// pairs, set via [`Simulation::sync_edges`]; aether stays relation-taxonomy
+    /// agnostic, so the caller decides which edge families feed the layout.
+    pub edges: &'a [(NodeKey, NodeKey)],
 }
 
 /// One rapier world + bookkeeping. The host owns one of these per
@@ -106,6 +120,7 @@ pub struct Simulation {
     query_pipeline: QueryPipeline,
     bodies_by_node: HashMap<NodeKey, RigidBodyHandle>,
     nodes_by_body: HashMap<RigidBodyHandle, NodeKey>,
+    edges: Vec<(NodeKey, NodeKey)>,
     fields: Vec<Box<dyn Field>>,
 }
 
@@ -140,6 +155,7 @@ impl Simulation {
             query_pipeline: QueryPipeline::new(),
             bodies_by_node: HashMap::new(),
             nodes_by_body: HashMap::new(),
+            edges: Vec::new(),
             fields: Vec::new(),
         }
     }
@@ -154,6 +170,21 @@ impl Simulation {
         self.fields.len()
     }
 
+    /// Replace the topology the layout fields pull along (see
+    /// [`FieldContext::edges`]). Caller-chosen node-key pairs: aether does not
+    /// read graph edges itself, so the caller filters to the relation families
+    /// that should shape the layout (e.g. semantic edges, not arrangement).
+    /// Idempotent; replaces the whole edge list.
+    pub fn sync_edges(&mut self, edges: impl IntoIterator<Item = (NodeKey, NodeKey)>) {
+        self.edges.clear();
+        self.edges.extend(edges);
+    }
+
+    /// Number of edges currently feeding the layout fields.
+    pub fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
+
     /// Number of currently-tracked bodies. Useful for traces / tests.
     pub fn body_count(&self) -> usize {
         self.bodies_by_node.len()
@@ -164,6 +195,14 @@ impl Simulation {
     /// external callers (host drag handlers, etc.).
     pub fn body_for(&self, node: NodeKey) -> Option<RigidBodyHandle> {
         self.bodies_by_node.get(&node).copied()
+    }
+
+    /// Current projected position of a node's body, if it has one. Reads the
+    /// live rapier translation, so it reflects the most recent [`Self::tick`].
+    pub fn position_of(&self, node: NodeKey) -> Option<Point2D<f32>> {
+        let handle = *self.bodies_by_node.get(&node)?;
+        let t = self.bodies.get(handle)?.translation();
+        Some(Point2D::new(t.x, t.y))
     }
 
     /// Refresh the spatial query index so [`Self::hit_test`] and
@@ -249,6 +288,7 @@ impl Simulation {
                 .build();
             let handle = self.bodies.insert(body);
             let collider = ColliderBuilder::ball(NODE_BODY_RADIUS)
+                .density(NODE_BODY_DENSITY)
                 .restitution(0.0)
                 .friction(0.0)
                 .build();
@@ -292,16 +332,21 @@ impl Simulation {
         }
         self.parameters.dt = dt;
 
-        // Field forces fold into rapier's `add_force` accumulator;
-        // step() applies them, integrates, and clears the
-        // accumulator for the next frame.
+        // rapier's `add_force` is a *persistent* force (it survives across
+        // steps until reset), so clear last tick's field forces before this
+        // tick's fields set fresh ones. Without this, per-tick forces compound
+        // and the layout goes unstable.
         if !self.fields.is_empty() {
+            for (_, body) in self.bodies.iter_mut() {
+                body.reset_forces(false);
+            }
             let mut ctx = FieldContext {
                 bodies: &mut self.bodies,
                 colliders: &self.colliders,
                 joints: &mut self.impulse_joints,
                 bodies_by_node: &self.bodies_by_node,
                 nodes_by_body: &self.nodes_by_body,
+                edges: &self.edges,
             };
             for field in &self.fields {
                 field.apply(&mut ctx, dt);
@@ -402,98 +447,4 @@ fn collider_to_node(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn graph_with_two_nodes() -> Graph {
-        let mut g = Graph::new();
-        g.add_node_with_id(
-            uuid::Uuid::from_u128(1),
-            "mere://a".to_string(),
-            Point2D::new(0.0, 0.0),
-        );
-        g.add_node_with_id(
-            uuid::Uuid::from_u128(2),
-            "mere://b".to_string(),
-            Point2D::new(100.0, 0.0),
-        );
-        g
-    }
-
-    #[test]
-    fn sync_with_graph_creates_bodies_for_new_nodes() {
-        let mut sim = Simulation::new();
-        let graph = graph_with_two_nodes();
-        sim.sync_with_graph(&graph);
-        assert_eq!(sim.body_count(), 2);
-        for (key, _) in graph.nodes() {
-            assert!(sim.body_for(key).is_some());
-        }
-    }
-
-    #[test]
-    fn sync_is_idempotent() {
-        let mut sim = Simulation::new();
-        let graph = graph_with_two_nodes();
-        sim.sync_with_graph(&graph);
-        sim.sync_with_graph(&graph);
-        sim.sync_with_graph(&graph);
-        assert_eq!(sim.body_count(), 2);
-    }
-
-    #[test]
-    fn empty_simulation_settles_to_rest() {
-        let mut sim = Simulation::new();
-        let graph = graph_with_two_nodes();
-        sim.sync_with_graph(&graph);
-        for _ in 0..120 {
-            sim.tick(1.0 / 60.0);
-        }
-        assert!(sim.is_at_rest(0.01));
-    }
-
-    #[test]
-    fn write_positions_to_returns_zero_when_nothing_moves() {
-        let mut sim = Simulation::new();
-        let mut graph = graph_with_two_nodes();
-        sim.sync_with_graph(&graph);
-        // No forces, no time elapsed — bodies are at the same
-        // position as the graph reports.
-        let changed = sim.write_positions_to(&mut graph);
-        assert_eq!(changed, 0);
-    }
-
-    #[test]
-    fn hit_test_and_cull_resolve_nodes_by_position() {
-        // a@(0,0), b@(100,0), each an 18px-radius ball collider.
-        let mut sim = Simulation::new();
-        let graph = graph_with_two_nodes();
-        sim.sync_with_graph(&graph);
-        // No tick: refresh the index so queries see the synced positions.
-        sim.refresh_spatial_index();
-
-        let a = sim.hit_test(Point2D::new(0.0, 0.0)).expect("point inside node a");
-        let b = sim
-            .hit_test(Point2D::new(100.0, 0.0))
-            .expect("point inside node b");
-        assert_ne!(a, b, "the two centers resolve to different nodes");
-        assert!(
-            sim.hit_test(Point2D::new(5000.0, 5000.0)).is_none(),
-            "empty space hits nothing"
-        );
-
-        // A small box around the origin catches a (radius 18 reaches ±18) but
-        // not b (its AABB starts at x=82).
-        let near_origin =
-            sim.cull_aabb(Box2D::new(Point2D::new(-10.0, -10.0), Point2D::new(10.0, 10.0)));
-        assert_eq!(near_origin, vec![a]);
-
-        // A wide box catches both.
-        let everything = sim.cull_aabb(Box2D::new(
-            Point2D::new(-1000.0, -1000.0),
-            Point2D::new(1000.0, 1000.0),
-        ));
-        assert_eq!(everything.len(), 2);
-        assert!(everything.contains(&a) && everything.contains(&b));
-    }
-}
+mod tests;

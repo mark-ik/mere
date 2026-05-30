@@ -1,0 +1,207 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+//! Unit tests for the simulation + built-in fields. Split out of `lib.rs` to
+//! keep both files under the workspace's per-file size ceiling.
+
+use super::*;
+
+fn graph_with_two_nodes() -> Graph {
+    let mut g = Graph::new();
+    g.add_node_with_id(
+        uuid::Uuid::from_u128(1),
+        "mere://a".to_string(),
+        Point2D::new(0.0, 0.0),
+    );
+    g.add_node_with_id(
+        uuid::Uuid::from_u128(2),
+        "mere://b".to_string(),
+        Point2D::new(100.0, 0.0),
+    );
+    g
+}
+
+#[test]
+fn sync_with_graph_creates_bodies_for_new_nodes() {
+    let mut sim = Simulation::new();
+    let graph = graph_with_two_nodes();
+    sim.sync_with_graph(&graph);
+    assert_eq!(sim.body_count(), 2);
+    for (key, _) in graph.nodes() {
+        assert!(sim.body_for(key).is_some());
+    }
+}
+
+#[test]
+fn sync_is_idempotent() {
+    let mut sim = Simulation::new();
+    let graph = graph_with_two_nodes();
+    sim.sync_with_graph(&graph);
+    sim.sync_with_graph(&graph);
+    sim.sync_with_graph(&graph);
+    assert_eq!(sim.body_count(), 2);
+}
+
+#[test]
+fn empty_simulation_settles_to_rest() {
+    let mut sim = Simulation::new();
+    let graph = graph_with_two_nodes();
+    sim.sync_with_graph(&graph);
+    for _ in 0..120 {
+        sim.tick(1.0 / 60.0);
+    }
+    assert!(sim.is_at_rest(0.01));
+}
+
+#[test]
+fn write_positions_to_returns_zero_when_nothing_moves() {
+    let mut sim = Simulation::new();
+    let mut graph = graph_with_two_nodes();
+    sim.sync_with_graph(&graph);
+    // No forces, no time elapsed — bodies are at the same
+    // position as the graph reports.
+    let changed = sim.write_positions_to(&mut graph);
+    assert_eq!(changed, 0);
+}
+
+#[test]
+fn hit_test_and_cull_resolve_nodes_by_position() {
+    // a@(0,0), b@(100,0), each an 18px-radius ball collider.
+    let mut sim = Simulation::new();
+    let graph = graph_with_two_nodes();
+    sim.sync_with_graph(&graph);
+    // No tick: refresh the index so queries see the synced positions.
+    sim.refresh_spatial_index();
+
+    let a = sim.hit_test(Point2D::new(0.0, 0.0)).expect("point inside node a");
+    let b = sim
+        .hit_test(Point2D::new(100.0, 0.0))
+        .expect("point inside node b");
+    assert_ne!(a, b, "the two centers resolve to different nodes");
+    assert!(
+        sim.hit_test(Point2D::new(5000.0, 5000.0)).is_none(),
+        "empty space hits nothing"
+    );
+
+    // A small box around the origin catches a (radius 18 reaches ±18) but
+    // not b (its AABB starts at x=82).
+    let near_origin =
+        sim.cull_aabb(Box2D::new(Point2D::new(-10.0, -10.0), Point2D::new(10.0, 10.0)));
+    assert_eq!(near_origin, vec![a]);
+
+    // A wide box catches both.
+    let everything = sim.cull_aabb(Box2D::new(
+        Point2D::new(-1000.0, -1000.0),
+        Point2D::new(1000.0, 1000.0),
+    ));
+    assert_eq!(everything.len(), 2);
+    assert!(everything.contains(&a) && everything.contains(&b));
+}
+
+fn node_at(g: &mut Graph, id: u128, x: f32, y: f32) -> NodeKey {
+    g.add_node_with_id(
+        uuid::Uuid::from_u128(id),
+        format!("mere://{id}"),
+        Point2D::new(x, y),
+    )
+}
+
+fn separation(sim: &Simulation, a: NodeKey, b: NodeKey) -> f32 {
+    (sim.position_of(a).unwrap() - sim.position_of(b).unwrap()).length()
+}
+
+fn radius_from_origin(sim: &Simulation, a: NodeKey) -> f32 {
+    sim.position_of(a).unwrap().to_vector().length()
+}
+
+#[test]
+fn node_exclusion_pushes_apart() {
+    let mut sim = Simulation::new();
+    let mut g = Graph::new();
+    // 50px apart: clear of the 36px contact range, inside the 600px cutoff,
+    // so only the repulsion field acts.
+    let a = node_at(&mut g, 1, 0.0, 0.0);
+    let b = node_at(&mut g, 2, 50.0, 0.0);
+    sim.sync_with_graph(&g);
+    sim.add_field(NodeExclusion::default());
+    let before = separation(&sim, a, b);
+    for _ in 0..60 {
+        sim.tick(1.0 / 60.0);
+    }
+    assert!(
+        separation(&sim, a, b) > before,
+        "repulsion should increase separation"
+    );
+}
+
+#[test]
+fn edge_spring_pulls_together() {
+    let mut sim = Simulation::new();
+    let mut g = Graph::new();
+    // 400px apart, well past the 140px rest length; no repulsion field.
+    let a = node_at(&mut g, 1, 0.0, 0.0);
+    let b = node_at(&mut g, 2, 400.0, 0.0);
+    sim.sync_with_graph(&g);
+    sim.sync_edges([(a, b)]);
+    assert_eq!(sim.edge_count(), 1);
+    sim.add_field(EdgeSpring::default());
+    let before = separation(&sim, a, b);
+    for _ in 0..60 {
+        sim.tick(1.0 / 60.0);
+    }
+    assert!(
+        separation(&sim, a, b) < before,
+        "a stretched spring should contract"
+    );
+}
+
+#[test]
+fn boundary_centers_toward_origin() {
+    let mut sim = Simulation::new();
+    let mut g = Graph::new();
+    let a = node_at(&mut g, 1, 500.0, 0.0);
+    sim.sync_with_graph(&g);
+    sim.add_field(Boundary::default());
+    let before = radius_from_origin(&sim, a);
+    for _ in 0..60 {
+        sim.tick(1.0 / 60.0);
+    }
+    assert!(
+        radius_from_origin(&sim, a) < before,
+        "centering should pull the node toward the origin"
+    );
+}
+
+#[test]
+fn full_layout_settles_separated_and_bounded() {
+    let mut sim = Simulation::new();
+    let mut g = Graph::new();
+    // A connected triangle from distinct, near-coincident starts.
+    let a = node_at(&mut g, 1, 10.0, 0.0);
+    let b = node_at(&mut g, 2, -5.0, 8.0);
+    let c = node_at(&mut g, 3, -5.0, -8.0);
+    sim.sync_with_graph(&g);
+    sim.sync_edges([(a, b), (b, c), (c, a)]);
+    sim.add_field(NodeExclusion::default());
+    sim.add_field(EdgeSpring::default());
+    sim.add_field(Boundary::default());
+    for _ in 0..4000 {
+        sim.tick(1.0 / 60.0);
+    }
+    assert!(
+        sim.is_at_rest(0.5),
+        "the layout should settle to rest under damping"
+    );
+    for (x, y) in [(a, b), (b, c), (c, a)] {
+        let d = separation(&sim, x, y);
+        assert!(d.is_finite(), "non-finite separation");
+        assert!(d >= 2.0 * NODE_BODY_RADIUS, "nodes overlap: {d}");
+    }
+    for k in [a, b, c] {
+        assert!(
+            radius_from_origin(&sim, k) < 5_000.0,
+            "centering failed; node escaped"
+        );
+    }
+}
