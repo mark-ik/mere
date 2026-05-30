@@ -165,10 +165,16 @@ streams.
     flags.
   - **`WGPU_BACKEND=dx12`** is now a Windows host default (`main()` sets it if
     unset) — no manual env var; the D3D12-shared-texture import needs DX12.
-- **Step 5 — remaining polish (deferred, all optional; the tile is fully
-  interactive without them).**
-  - **Frame-arrival-driven redraw** instead of every-tick (a waker from WGC
-    `FrameArrived` → the winit loop), so a static *shown* page goes idle-quiet.
+- **Step 5 — polish.**
+  - ~~**Frame-arrival-driven redraw**~~ **Addressed 2026-05-27 (`9797bc8`).**
+    Idle-quiet via a mere-side *activity heuristic*, not a cross-crate waker:
+    keep redrawing only while there's activity (a new frame arrived or input was
+    forwarded — so video/scroll/animation stay smooth, since continuous content
+    keeps the loop awake by itself), and after a ~0.5 s grace with no activity on
+    a static page, stop requesting redraws and let the loop sleep. Narrow residual
+    gap (a static page that *spontaneously* animates after idling won't repaint
+    until the next interaction) — a true `FrameArrived → winit` waker would close
+    it but needs scrying + xilem plumbing; not worth it for the gap.
   - ~~**Resize tracking** is janky mid-drag~~ **Addressed 2026-05-27
     (`1a0e842` + `e4796c3`).** Two parts: **debounce** the producer resize (only
     after the tile size is stable a few ticks, so a drag doesn't thrash the
@@ -181,12 +187,19 @@ streams.
     debounce+settle-snap is the pragmatic point on the debounce↔throttled↔
     continuous spectrum. Smooth live-resize would need scrying to support
     resize-without-capture-restart.
-  - **Multi-tile** (key producers by tile id, not the single-URL cache) +
-    retire on real tile close, via the `WorkbenchTiling` widget (verso P1).
-    (Keep-alive across view-switch is intentional: instant re-show vs the ~5 s
-    WebView2 env rebuild.)
-  - **IME + fuller key coverage** (the current map covers printable + common
-    named keys; composition/dead-keys and the long tail are not wired).
+  - ~~Fuller key coverage~~ **Done 2026-05-27 (`9797bc8`)** — F1–F12 + Insert
+    added to the named-key → VK map.
+  - **Multi-tile + retire — deferred to verso/workbench (roadmap R2).** Not a
+    standalone fix: multi-tile needs a *stable* per-tile identity (forme
+    `TileId`), which the fixed `MainView::Surface` tile lacks, and retire-on-close
+    needs a close gesture that doesn't exist yet. The current single-producer
+    keep-alive across view-switch is correct until then (instant re-show vs the
+    ~5 s WebView2 env rebuild). Folds into the `WorkbenchTiling` widget (verso P1).
+  - **IME — deferred to its own careful pass.** Enabling `accepts_text_input`
+    reroutes Latin input from `Keyboard(Character)` onto the IME session's
+    `Ime::Commit`, a platform-nuanced text-path change with double/missed-insert
+    regression risk to the *verified* keyboard. Worth doing for CJK/dead-keys,
+    but with dedicated runtime iteration — not a tail-of-session bolt-on.
 
 ## Boundaries
 
