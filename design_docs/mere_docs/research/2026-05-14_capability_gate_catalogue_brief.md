@@ -1,7 +1,7 @@
 # Capability-gate catalogue brief
 
 **Date**: 2026-05-14
-**Status**: Research brief — enumerates the v0 capability gates and the layered policy model that resolves them
+**Status**: Research brief — enumerates the v0 capability gates and the layered policy model that resolves them. **Resolution superseded 2026-05-30**: the "first-match-wins" chain here is replaced for permissions by the narrowing rule in [`kernel::permissions`](../implementation_strategy/2026-05-27_adoption_roadmap.md) (most-restrictive-wins across a five-scope hierarchy — first-match could let a broader opinion win over a stricter narrower one, the wrong direction for security). The capability *vocabulary* and the three-state decision carry forward; `RequireConsent` is now `Permission::Prompt`.
 **Scope**: Concretise the gate set the framing brief §7 names but doesn't enumerate, define the policy chain (action → session → persona → app), and pin down how denials flow into diagnostics. Sits between the framing brief's principle and the gate enforcement landing in the action bus.
 
 **Related**:

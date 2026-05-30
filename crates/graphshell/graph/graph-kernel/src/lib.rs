@@ -28,6 +28,8 @@ pub mod intents;
 pub mod overlay;
 pub mod paint;
 pub mod pane;
+/// Settings/permissions scope hierarchy + the narrowing rule (R0 invariant).
+pub mod permissions;
 pub mod persistence;
 /// Native on-disk graph persistence. Gated by the `store` feature so the kernel
 /// stays portable-by-default; the native host enables it.
