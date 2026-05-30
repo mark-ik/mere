@@ -2,9 +2,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Built-in force fields for the orrery's force-directed layout.
+//! Built-in force forces for the orrery's force-directed layout.
 //!
-//! Three fields compose into a Fruchterman-Reingold-shaped layout:
+//! Three forces compose into a Fruchterman-Reingold-shaped layout:
 //!
 //! - [`NodeExclusion`] — every node repels every other, spreading them apart
 //!   (the "charge"). This is the long-range push *beyond* the hard ball-collider
@@ -14,8 +14,8 @@
 //! - [`Boundary`] — a weak centering pull toward the origin so disconnected
 //!   pieces stay on screen and the whole layout stays bounded.
 //!
-//! Each field reads body positions and accumulates forces through
-//! `add_force`; [`crate::Simulation::tick`] walks the registered fields before
+//! Each force reads body positions and accumulates forces through
+//! `add_force`; [`crate::Simulation::tick`] walks the registered forces before
 //! stepping, and rapier's per-body damping settles the result to rest.
 //!
 //! All three constants are public so the host can tune feel (per the
@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use kernel::graph::NodeKey;
 use rapier2d::prelude::*;
 
-use crate::{Field, FieldContext, collider_to_node};
+use crate::{Force, ForceContext, collider_to_node};
 
 /// Pairwise repulsion that spreads nodes apart (the force-directed charge).
 ///
@@ -57,8 +57,8 @@ impl Default for NodeExclusion {
     }
 }
 
-impl Field for NodeExclusion {
-    fn apply(&self, ctx: &mut FieldContext<'_>, _dt: f32) {
+impl Force for NodeExclusion {
+    fn apply(&self, ctx: &mut ForceContext<'_>, _dt: f32) {
         // Snapshot every node's (key, handle, position) and an index by key,
         // immutably, before touching forces.
         let mut nodes: Vec<(NodeKey, RigidBodyHandle, Vector<Real>)> =
@@ -112,7 +112,7 @@ impl Field for NodeExclusion {
 }
 
 /// Hooke's-law attraction along edges: connected nodes pull toward a rest
-/// length. Reads [`FieldContext::edges`], so it pulls along whatever topology
+/// length. Reads [`ForceContext::edges`], so it pulls along whatever topology
 /// the caller synced via [`crate::Simulation::sync_edges`].
 #[derive(Clone, Copy, Debug)]
 pub struct EdgeSpring {
@@ -131,8 +131,8 @@ impl Default for EdgeSpring {
     }
 }
 
-impl Field for EdgeSpring {
-    fn apply(&self, ctx: &mut FieldContext<'_>, _dt: f32) {
+impl Force for EdgeSpring {
+    fn apply(&self, ctx: &mut ForceContext<'_>, _dt: f32) {
         for &(a, b) in ctx.edges {
             if a == b {
                 continue; // no self-springs
@@ -180,8 +180,8 @@ impl Default for Boundary {
     }
 }
 
-impl Field for Boundary {
-    fn apply(&self, ctx: &mut FieldContext<'_>, _dt: f32) {
+impl Force for Boundary {
+    fn apply(&self, ctx: &mut ForceContext<'_>, _dt: f32) {
         let handles: Vec<RigidBodyHandle> = ctx.bodies_by_node.values().copied().collect();
         for handle in handles {
             let Some(pos) = ctx.bodies.get(handle).map(|b| *b.translation()) else {

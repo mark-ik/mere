@@ -2,45 +2,42 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! # aether
+//! # gyre
 //!
-//! Rapier-backed body/field simulation for Mere. The medium through
-//! which forces propagate.
+//! Rapier-backed force integration for Mere: the crate that realizes the
+//! graph's bodies as motion. Sibling to the forthcoming `aether` field-algebra
+//! crate — `aether` defines the fields and couplings and resolves them into
+//! forces; `gyre` integrates those forces (rapier bodies, collision, stepping)
+//! into positions. (`gyre` is the wheeling motion of the bodies; kin to the
+//! `orrery` view they compose.)
 //!
 //! ## Place in the architecture
 //!
-//! [`kernel::graph::Graph`] is the source of truth for node
-//! identity, topology, and the *committed* position used for
-//! persistence. Aether holds the rapier world that drives the
-//! *projected* position — bodies bound to nodes, forces from
-//! pluggable [`Field`] implementors, and a tick that mirrors body
+//! [`kernel::graph::Graph`] is the source of truth for node identity, topology,
+//! and the *committed* position used for persistence. Gyre holds the rapier
+//! world that drives the *projected* position — bodies bound to nodes, forces
+//! from pluggable [`Force`] implementors, and a tick that mirrors body
 //! translations back to the graph each step.
 //!
-//! Vello renders whatever the graph currently says. Petgraph (inside
-//! kernel) owns topology. Aether owns physical state. The three
-//! sit at the same architectural tier — substrate layers consumed by
-//! everything above.
+//! Petgraph (inside kernel) owns topology; gyre owns physical state. Both sit at
+//! the substrate tier, consumed by everything above.
 //!
-//! ## Scope
+//! ## Forces
 //!
-//! This scaffold lands the substrate without enabling any forces:
+//! - [`Simulation`] — owns the rapier world, a [`NodeKey`] ↔
+//!   [`RigidBodyHandle`] bimap, the query index (hit-test / cull), and the
+//!   registered forces.
+//! - [`Simulation::sync_with_graph`] / [`Simulation::sync_edges`] — keep bodies
+//!   and edge topology in step with the graph. Idempotent.
+//! - [`Simulation::tick`] — apply each registered [`Force`], then step the world.
+//! - Built-in forces ([`NodeExclusion`], [`EdgeSpring`], [`Boundary`]) are the
+//!   fast Rust default-path; `aether`'s couplings are the general, scriptable
+//!   path that compiles to the same [`Force`] contract.
 //!
-//! - [`Simulation`] — owns the rapier world + a [`NodeKey`] ↔
-//!   [`RigidBodyHandle`] bimap.
-//! - [`Simulation::sync_with_graph`] — add bodies for new nodes,
-//!   remove bodies whose nodes have disappeared. Idempotent.
-//! - [`Simulation::tick`] — step the world, run each registered
-//!   field, then mirror body positions into a caller-provided
-//!   buffer (or directly into a [`Graph`]).
-//! - [`Field`] trait — fields read the body store + apply forces.
-//!   Built-in fields (NodeExclusion, EdgeSpring, Boundary, …) ship
-//!   in follow-up slices.
-//!
-//! Until a `Field` is registered, the world ticks empty — bodies
-//! settle to rest under damping alone, which keeps placement
-//! deterministic exactly as today.
+//! Until a [`Force`] is registered, the world ticks empty — bodies settle to
+//! rest under damping alone.
 
-#![doc(html_root_url = "https://docs.rs/aether/0.0.1")]
+#![doc(html_root_url = "https://docs.rs/gyre/0.0.1")]
 
 use std::collections::HashMap;
 
@@ -48,9 +45,9 @@ use euclid::default::{Box2D, Point2D};
 use kernel::graph::{Graph, NodeKey};
 use rapier2d::prelude::*;
 
-/// Built-in force fields for the force-directed orrery layout.
-pub mod fields;
-pub use fields::{Boundary, EdgeSpring, NodeExclusion};
+/// Built-in force forces for the force-directed orrery layout.
+pub mod forces;
+pub use forces::{Boundary, EdgeSpring, NodeExclusion};
 
 /// Physical radius used for every node body's collider.
 ///
@@ -62,7 +59,7 @@ pub const NODE_BODY_RADIUS: f32 = 18.0;
 
 /// Density for node-body colliders, chosen so each node's mass is ~= 1.0
 /// (mass = density * pi * r^2 ~= 0.001 * pi * 18^2 ~= 1.0). The layout forces in
-/// [`fields`] are then intuitive accelerations rather than being swamped by the
+/// [`forces`] are then intuitive accelerations rather than being swamped by the
 /// large mass a default density would give an 18px ball.
 pub const NODE_BODY_DENSITY: f32 = 0.001;
 
@@ -77,31 +74,31 @@ const DEFAULT_LINEAR_DAMPING: f32 = 4.0;
 /// spurious spin.
 const DEFAULT_ANGULAR_DAMPING: f32 = 4.0;
 
-/// A pluggable force-applier. Fields read the body store and apply
-/// forces / impulses; aether's tick walks every registered field
+/// A pluggable force-applier. Forces read the body store and apply
+/// forces / impulses; gyre's tick walks every registered force
 /// before stepping the world.
 ///
 /// Implementors should be cheap — the tick budget is ~16ms total —
 /// and write through `bodies.get_mut(...).add_force(...)` or
-/// equivalent. Fields are queried in registration order each tick.
-pub trait Field: Send {
-    fn apply(&self, ctx: &mut FieldContext<'_>, dt: f32);
+/// equivalent. Forces are queried in registration order each tick.
+pub trait Force: Send {
+    fn apply(&self, ctx: &mut ForceContext<'_>, dt: f32);
 }
 
-/// Per-tick view a [`Field`] sees: mutable access to the rapier body
-/// store plus the NodeKey ↔ handle bimap so fields can reason about
+/// Per-tick view a [`Force`] sees: mutable access to the rapier body
+/// store plus the NodeKey ↔ handle bimap so forces can reason about
 /// pairs / topology when they need to.
-pub struct FieldContext<'a> {
+pub struct ForceContext<'a> {
     pub bodies: &'a mut RigidBodySet,
     pub colliders: &'a ColliderSet,
     pub joints: &'a mut ImpulseJointSet,
     pub bodies_by_node: &'a HashMap<NodeKey, RigidBodyHandle>,
     pub nodes_by_body: &'a HashMap<RigidBodyHandle, NodeKey>,
-    /// Topology the layout fields pull along (e.g. [`EdgeSpring`]). Node-key
-    /// pairs, set via [`Simulation::sync_edges`]; aether stays relation-taxonomy
+    /// Topology the layout forces pull along (e.g. [`EdgeSpring`]). Node-key
+    /// pairs, set via [`Simulation::sync_edges`]; gyre stays relation-taxonomy
     /// agnostic, so the caller decides which edge families feed the layout.
     pub edges: &'a [(NodeKey, NodeKey)],
-    /// The spatial index, for fields that find neighbors by region instead of
+    /// The spatial index, for forces that find neighbors by region instead of
     /// scanning all pairs (e.g. [`NodeExclusion`] cull-based repulsion). Current
     /// as of the last [`Simulation::tick`] step or [`Simulation::sync_with_graph`]
     /// (a tick's worth of staleness is harmless for soft forces).
@@ -109,7 +106,7 @@ pub struct FieldContext<'a> {
 }
 
 /// One rapier world + bookkeeping. The host owns one of these per
-/// graph; aether stays pure (no global state, no static handles).
+/// graph; gyre stays pure (no global state, no static handles).
 pub struct Simulation {
     pipeline: PhysicsPipeline,
     parameters: IntegrationParameters,
@@ -126,7 +123,7 @@ pub struct Simulation {
     bodies_by_node: HashMap<NodeKey, RigidBodyHandle>,
     nodes_by_body: HashMap<RigidBodyHandle, NodeKey>,
     edges: Vec<(NodeKey, NodeKey)>,
-    fields: Vec<Box<dyn Field>>,
+    forces: Vec<Box<dyn Force>>,
 }
 
 impl Default for Simulation {
@@ -145,9 +142,9 @@ impl Simulation {
         Self {
             pipeline: PhysicsPipeline::new(),
             parameters,
-            // No global gravity — fields supply directional forces
-            // when they want them. A "gravity" field is just another
-            // Field impl.
+            // No global gravity — forces supply directional forces
+            // when they want them. A "gravity" force is just another
+            // Force impl.
             gravity: Vector::zeros(),
             islands: IslandManager::new(),
             broad_phase: DefaultBroadPhase::new(),
@@ -161,22 +158,22 @@ impl Simulation {
             bodies_by_node: HashMap::new(),
             nodes_by_body: HashMap::new(),
             edges: Vec::new(),
-            fields: Vec::new(),
+            forces: Vec::new(),
         }
     }
 
-    /// Register a field. Fields apply in registration order on every
+    /// Register a force. Forces apply in registration order on every
     /// tick.
-    pub fn add_field<F: Field + 'static>(&mut self, field: F) {
-        self.fields.push(Box::new(field));
+    pub fn add_force<F: Force + 'static>(&mut self, force: F) {
+        self.forces.push(Box::new(force));
     }
 
-    pub fn field_count(&self) -> usize {
-        self.fields.len()
+    pub fn force_count(&self) -> usize {
+        self.forces.len()
     }
 
-    /// Replace the topology the layout fields pull along (see
-    /// [`FieldContext::edges`]). Caller-chosen node-key pairs: aether does not
+    /// Replace the topology the layout forces pull along (see
+    /// [`ForceContext::edges`]). Caller-chosen node-key pairs: gyre does not
     /// read graph edges itself, so the caller filters to the relation families
     /// that should shape the layout (e.g. semantic edges, not arrangement).
     /// Idempotent; replaces the whole edge list.
@@ -185,7 +182,7 @@ impl Simulation {
         self.edges.extend(edges);
     }
 
-    /// Number of edges currently feeding the layout fields.
+    /// Number of edges currently feeding the layout forces.
     pub fn edge_count(&self) -> usize {
         self.edges.len()
     }
@@ -195,8 +192,8 @@ impl Simulation {
         self.bodies_by_node.len()
     }
 
-    /// Look up the body handle for a node, if any. Field implementors
-    /// already get the bimap through [`FieldContext`]; this is for
+    /// Look up the body handle for a node, if any. Force implementors
+    /// already get the bimap through [`ForceContext`]; this is for
     /// external callers (host drag handlers, etc.).
     pub fn body_for(&self, node: NodeKey) -> Option<RigidBodyHandle> {
         self.bodies_by_node.get(&node).copied()
@@ -219,9 +216,9 @@ impl Simulation {
     /// are skipped (seed after [`Self::sync_with_graph`]).
     ///
     /// Takes plain `(NodeKey, Point2D)` rather than a `cartography::Projection`
-    /// on purpose: aether is a kernel-tier substrate and must not depend on the
+    /// on purpose: gyre is a kernel-tier substrate and must not depend on the
     /// projection layer above it. The caller maps `Projection.nodes` to these
-    /// pairs (see the cartography-aether layout seam doc).
+    /// pairs (see the cartography-gyre layout seam doc).
     pub fn seed_positions(&mut self, positions: impl IntoIterator<Item = (NodeKey, Point2D<f32>)>) {
         let mut touched = false;
         for (node, pos) in positions {
@@ -370,7 +367,7 @@ impl Simulation {
         }
 
         // Keep the spatial index current with the new collider set, so
-        // cull-based fields (e.g. NodeExclusion) see the bodies on the very
+        // cull-based forces (e.g. NodeExclusion) see the bodies on the very
         // next tick rather than after the first step rebuilds the index.
         if changed {
             self.query_pipeline.update(&self.colliders);
@@ -378,7 +375,7 @@ impl Simulation {
     }
 
     /// Advance the simulation by `dt` seconds. Walks every registered
-    /// [`Field`] first (so forces accumulate), then steps the world.
+    /// [`Force`] first (so forces accumulate), then steps the world.
     /// Position writeback to the graph is a separate call —
     /// [`Simulation::write_positions_to`] — so callers can read
     /// positions for purposes other than committing to the graph
@@ -390,14 +387,14 @@ impl Simulation {
         self.parameters.dt = dt;
 
         // rapier's `add_force` is a *persistent* force (it survives across
-        // steps until reset), so clear last tick's field forces before this
-        // tick's fields set fresh ones. Without this, per-tick forces compound
+        // steps until reset), so clear last tick's force forces before this
+        // tick's forces set fresh ones. Without this, per-tick forces compound
         // and the layout goes unstable.
-        if !self.fields.is_empty() {
+        if !self.forces.is_empty() {
             for (_, body) in self.bodies.iter_mut() {
                 body.reset_forces(false);
             }
-            let mut ctx = FieldContext {
+            let mut ctx = ForceContext {
                 bodies: &mut self.bodies,
                 colliders: &self.colliders,
                 joints: &mut self.impulse_joints,
@@ -406,8 +403,8 @@ impl Simulation {
                 edges: &self.edges,
                 query_index: &self.query_pipeline,
             };
-            for field in &self.fields {
-                field.apply(&mut ctx, dt);
+            for force in &self.forces {
+                force.apply(&mut ctx, dt);
             }
         }
 
@@ -468,7 +465,7 @@ impl Simulation {
 
     /// Pin a node's body to a position via a kinematic-position
     /// override. Use this during a drag: call `pin` while the user
-    /// holds the mouse, then `unpin` on release so other fields can
+    /// holds the mouse, then `unpin` on release so other forces can
     /// react to the final position again.
     pub fn pin(&mut self, node: NodeKey, position: Point2D<f32>) {
         let Some(handle) = self.bodies_by_node.get(&node).copied() else {
@@ -494,8 +491,8 @@ impl Simulation {
 
 /// Map a collider back to the node it represents, via its parent rigid body.
 /// A free function (not a method) so the query callbacks can borrow the two
-/// fields they need without capturing the whole `Simulation`. `pub(crate)` so
-/// [`fields`] can reuse it for cull-based neighbor queries.
+/// forces they need without capturing the whole `Simulation`. `pub(crate)` so
+/// [`forces`] can reuse it for cull-based neighbor queries.
 pub(crate) fn collider_to_node(
     colliders: &ColliderSet,
     nodes_by_body: &HashMap<RigidBodyHandle, NodeKey>,

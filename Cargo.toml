@@ -3,7 +3,7 @@ resolver = "2"
 members = [
     "crates/mere/app",
     "crates/persona/identity",
-    "crates/graphshell/graph/aether",
+    "crates/graphshell/graph/gyre",
     "crates/graphshell/graph/cartography",
     "crates/graphshell/graph/graph-canvas",
     "crates/graphshell/graph/graph-kernel",
@@ -71,7 +71,7 @@ repository = "https://github.com/mark-ik/mere"
 # so only the root Cargo.toml knows where each crate lives. Package names
 # below are the *current* names — rename passes (drop mere-* prefix etc.)
 # update both this list and consumer references in one shot.
-aether = { path = "crates/graphshell/graph/aether" }
+gyre = { path = "crates/graphshell/graph/gyre" }
 cartography = { path = "crates/graphshell/graph/cartography" }
 graph-canvas = { path = "crates/graphshell/graph/graph-canvas" }
 graph-layout = { path = "crates/graphshell/graph/graph-layout" }

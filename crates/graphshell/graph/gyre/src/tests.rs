@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Unit tests for the simulation + built-in fields. Split out of `lib.rs` to
+//! Unit tests for the simulation + built-in forces. Split out of `lib.rs` to
 //! keep both files under the workspace's per-file size ceiling.
 
 use super::*;
@@ -120,11 +120,11 @@ fn node_exclusion_pushes_apart() {
     let mut sim = Simulation::new();
     let mut g = Graph::new();
     // 50px apart: clear of the 36px contact range, inside the 600px cutoff,
-    // so only the repulsion field acts.
+    // so only the repulsion force acts.
     let a = node_at(&mut g, 1, 0.0, 0.0);
     let b = node_at(&mut g, 2, 50.0, 0.0);
     sim.sync_with_graph(&g);
-    sim.add_field(NodeExclusion::default());
+    sim.add_force(NodeExclusion::default());
     let before = separation(&sim, a, b);
     for _ in 0..60 {
         sim.tick(1.0 / 60.0);
@@ -139,13 +139,13 @@ fn node_exclusion_pushes_apart() {
 fn edge_spring_pulls_together() {
     let mut sim = Simulation::new();
     let mut g = Graph::new();
-    // 400px apart, well past the 140px rest length; no repulsion field.
+    // 400px apart, well past the 140px rest length; no repulsion force.
     let a = node_at(&mut g, 1, 0.0, 0.0);
     let b = node_at(&mut g, 2, 400.0, 0.0);
     sim.sync_with_graph(&g);
     sim.sync_edges([(a, b)]);
     assert_eq!(sim.edge_count(), 1);
-    sim.add_field(EdgeSpring::default());
+    sim.add_force(EdgeSpring::default());
     let before = separation(&sim, a, b);
     for _ in 0..60 {
         sim.tick(1.0 / 60.0);
@@ -162,7 +162,7 @@ fn boundary_centers_toward_origin() {
     let mut g = Graph::new();
     let a = node_at(&mut g, 1, 500.0, 0.0);
     sim.sync_with_graph(&g);
-    sim.add_field(Boundary::default());
+    sim.add_force(Boundary::default());
     let before = radius_from_origin(&sim, a);
     for _ in 0..60 {
         sim.tick(1.0 / 60.0);
@@ -183,9 +183,9 @@ fn full_layout_settles_separated_and_bounded() {
     let c = node_at(&mut g, 3, -5.0, -8.0);
     sim.sync_with_graph(&g);
     sim.sync_edges([(a, b), (b, c), (c, a)]);
-    sim.add_field(NodeExclusion::default());
-    sim.add_field(EdgeSpring::default());
-    sim.add_field(Boundary::default());
+    sim.add_force(NodeExclusion::default());
+    sim.add_force(EdgeSpring::default());
+    sim.add_force(Boundary::default());
     for _ in 0..4000 {
         sim.tick(1.0 / 60.0);
     }
@@ -284,7 +284,7 @@ fn seeded_overlap_separates_under_physics() {
     let b = node_at(&mut g, 2, 0.0, 0.0);
     sim.sync_with_graph(&g);
     sim.seed_positions([(a, Point2D::new(0.0, 0.0)), (b, Point2D::new(1.0, 0.0))]);
-    sim.add_field(NodeExclusion::default());
+    sim.add_force(NodeExclusion::default());
     for _ in 0..240 {
         sim.tick(1.0 / 60.0);
     }
@@ -309,8 +309,8 @@ fn node_exclusion_scales_to_many_nodes() {
         }
     }
     sim.sync_with_graph(&g);
-    sim.add_field(NodeExclusion::default());
-    sim.add_field(Boundary::default());
+    sim.add_force(NodeExclusion::default());
+    sim.add_force(Boundary::default());
     let keys: Vec<NodeKey> = g.nodes().map(|(k, _)| k).collect();
     assert_eq!(keys.len(), 100);
 
