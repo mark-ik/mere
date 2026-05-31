@@ -58,6 +58,17 @@ pub mod import_records;
 pub mod node;
 pub mod node_props;
 
+// Field system (2026-05-31, field-system step 3): Field/Coupling kernel-truth
+// primitives + the portable field AST. A parallel keyed store on `Graph` lands
+// in Phase 1 — these are not petgraph node weights or `EdgePayload` sidecars.
+// See `2026-05-31_field_coupling_kernel_primitive_plan.md`.
+pub mod coupling;
+pub mod field;
+pub mod field_ast;
+/// Graph mutators + queries for the field layer (Phase 1): the parallel keyed
+/// store on `Graph` + selector evaluation.
+mod field_ops;
+
 // Identity types and rkyv archive helpers extracted to `identity.rs`
 // per the 2026-04-30 renderer plan §6.4 decomposition target. Public
 // types are re-exported at this module path so external callers
@@ -93,6 +104,12 @@ pub use edge_taxonomy::{
     ProvenanceSubKind, RelationDurability, RelationKind, RelationSelector, SemanticData,
     SemanticSubKind, Traversal, TraversalData,
 };
+
+// Field-system truth types (2026-05-31). Field/Coupling form a parallel field
+// layer beside the node/edge graph; aether reads them and evaluates.
+pub use coupling::{Coupling, CouplingResponse, NodeSelector};
+pub use field::{CouplingId, Field, FieldDefinition, FieldExtent, FieldId, FieldLifecycle};
+pub use field_ast::{Falloff, ScalarField, VectorField};
 
 /// Traversal archive payload emitted when dissolving a node.
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -228,6 +245,13 @@ pub struct Graph {
 
     /// Durable imported relation truth; node provenance is derived from this.
     pub(crate) import_records: Vec<ImportRecord>,
+
+    /// Field-layer truth (field-system step 3, Phase 1): a parallel keyed store
+    /// beside the node/edge petgraph. A coupling targets a *selector* over nodes,
+    /// not a node→node edge, so fields/couplings cannot ride the petgraph; they
+    /// are content truth that `aether` reads and evaluates (derived).
+    pub(crate) fields: HashMap<FieldId, Field>,
+    pub(crate) couplings: HashMap<CouplingId, Coupling>,
 }
 
 impl Graph {
@@ -238,6 +262,8 @@ impl Graph {
             url_to_nodes: HashMap::new(),
             id_to_node: HashMap::new(),
             import_records: Vec::new(),
+            fields: HashMap::new(),
+            couplings: HashMap::new(),
         }
     }
 
