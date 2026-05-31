@@ -24,7 +24,6 @@ pub mod backend;
 pub mod camera;
 pub mod derive;
 pub mod engine;
-pub mod fields;
 pub mod hit_test;
 pub mod input;
 pub mod interaction;

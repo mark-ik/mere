@@ -2,15 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Field algebra for the graph canvas.
+//! # aether — the field algebra
 //!
 //! Defines a small AST for scalar and vector fields over canvas coordinates,
 //! coupling rules describing how nodes and edges respond to those fields, an
 //! evaluator that produces values at requested points, and a per-canvas
 //! [`FieldRegistry`] keyed by [`FieldId`].
 //!
-//! Architectural anchor: see
-//! `repos/mere/design_docs/graphshell_docs/implementation_strategy/2026-05-07_graph_canvas_field_algebra_plan.md`.
+//! In the substrate, `aether` is the *source* of influence: it defines fields
+//! and couplings and resolves them. Force couplings compile to forces the `gyre`
+//! rapier integrator applies to bodies; visual couplings feed paint. `aether`
+//! itself stays kernel-free and portable (serde + optional Rhai/Burn).
+//!
+//! Architectural anchor: the
+//! [field-system extraction brief](../../../../design_docs/mere_docs/technical_architecture/2026-05-30_field_system_extraction.md).
 //!
 //! ## Backends
 //!

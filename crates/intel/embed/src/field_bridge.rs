@@ -19,14 +19,14 @@
 //! tuning parameter (smaller = sharper peaks, larger = smoother field).
 //!
 //! Crucially this composes inside the existing field-algebra AST — no new
-//! AST variant is required. The graph-canvas evaluator handles it.
+//! AST variant is required. The aether evaluator handles it.
 
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use graph_canvas::fields::ast::ScalarField;
-use graph_canvas::fields::projection::FieldProjection;
-use graph_canvas::fields::registry::FieldId;
+use aether::ast::ScalarField;
+use aether::projection::FieldProjection;
+use aether::registry::FieldId;
 
 use crate::VectorIndex;
 use crate::provider::SimilarityMetric;
@@ -110,8 +110,8 @@ mod tests {
     use super::*;
     use crate::HashedEmbeddingProvider;
     use crate::provider::EmbeddingProvider;
-    use graph_canvas::fields::eval::eval_scalar;
-    use graph_canvas::fields::registry::FieldRegistry;
+    use aether::eval::eval_scalar;
+    use aether::registry::FieldRegistry;
 
     fn approx(a: f32, b: f32, eps: f32) -> bool {
         (a - b).abs() < eps

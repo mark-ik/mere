@@ -12,7 +12,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::fields::ast::{ScalarField, VectorField};
+use crate::ast::{ScalarField, VectorField};
 
 /// Opaque identifier for a registered field. Stable within a registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -107,7 +107,7 @@ impl FieldRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fields::ast::Falloff;
+    use crate::ast::Falloff;
 
     #[test]
     fn insert_and_lookup_scalar() {

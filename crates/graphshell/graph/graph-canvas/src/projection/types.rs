@@ -6,7 +6,7 @@
 //!
 //! As of the field-algebra "full-break" reshape, [`ViewDimension`] is the
 //! single per-view geometric state. The legacy `ZSource` and `ThreeDMode`
-//! enums are gone — z-derivation lives in [`crate::fields::FieldProjection`]
+//! enums are gone — z-derivation lives in [`aether::FieldProjection`]
 //! as `z_field: Option<FieldId>`, and what used to be `ThreeDMode` collapses
 //! into the [`crate::projection::TwoPointFiveProjection`] preset family
 //! (Isometric / Cabinet / Cavalier / Tilted / MildPerspective).
@@ -17,7 +17,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::fields::registry::FieldId;
+use aether::FieldId;
 use crate::projection::presets::{TwoDPreset, TwoPointFiveProjection};
 
 /// Per-view dimension state.

@@ -25,7 +25,7 @@
 //!   z stays; couplings unchanged.
 //! - **Any → 2D**: discard z; `(x, y)` preserved.
 
-use crate::fields::registry::FieldId;
+use aether::FieldId;
 use serde::{Deserialize, Serialize};
 
 /// Visual presets for the 2D projection family. Pure styling — `(x, y)`

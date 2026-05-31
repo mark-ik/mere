@@ -13,7 +13,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::fields::registry::FieldId;
+use crate::registry::FieldId;
 
 /// Falloff shape for spatially-bounded scalar kernels (e.g. `Disk`).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

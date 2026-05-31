@@ -34,8 +34,8 @@
 //! [`LowerError::UnknownField`]; samples crossing scalar↔vector return
 //! [`LowerError::SampleTypeMismatch`].
 
-use crate::fields::ast::{Falloff, ScalarField, VectorField};
-use crate::fields::registry::{FieldDef, FieldId, FieldRegistry};
+use crate::ast::{Falloff, ScalarField, VectorField};
+use crate::registry::{FieldDef, FieldId, FieldRegistry};
 
 #[cfg(feature = "field-burn")]
 use burn::tensor::{Tensor, backend::Backend};
@@ -290,8 +290,8 @@ fn expect_const_vec(v: &VectorField, msg: &'static str) -> Result<(f32, f32), Lo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fields::ast::{ScalarField, VectorField};
-    use crate::fields::eval;
+    use crate::ast::{ScalarField, VectorField};
+    use crate::eval;
     use burn::backend::NdArray;
     use burn::tensor::Tensor;
     use burn::tensor::backend::BackendTypes;

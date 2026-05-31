@@ -1,0 +1,27 @@
+[package]
+name = "aether"
+version = "0.0.1"
+authors = ["@mark-ik"]
+license = "MPL-2.0"
+edition = "2024"
+publish = false
+rust-version = "1.92.0"
+description = "Field algebra for Mere's graph canvas — scalar/vector fields over canvas space, node/edge couplings, and evaluation (Rhai authoring, Burn lowering). The field source whose forces `gyre` integrates."
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+# Burn-backed lowering of the field algebra (AST -> a fused tensor program).
+# ndarray backend for portable per-target compute; generic over `B: Backend`.
+burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
+# Rhai composition surface for fields, couplings, and edge-path rules.
+rhai = { version = "1.20", default-features = false, features = ["std"], optional = true }
+
+[features]
+default = []
+field-burn = ["dep:burn"]
+# Adds the wgpu backend so consumers can target GPU evaluation.
+field-burn-wgpu = ["field-burn", "burn/wgpu"]
+field-rhai = ["dep:rhai"]
+
+[dev-dependencies]
+serde_json = "1.0"

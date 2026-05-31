@@ -12,8 +12,8 @@
 //! `field-burn` feature) will lower an entire expression to a fused tensor
 //! program for vectorised evaluation across many points; see `lower_burn`.
 
-use crate::fields::ast::{Falloff, ScalarField, VectorField};
-use crate::fields::registry::{FieldDef, FieldRegistry};
+use crate::ast::{Falloff, ScalarField, VectorField};
+use crate::registry::{FieldDef, FieldRegistry};
 
 /// Evaluate a scalar field at `(x, y, t)`.
 ///
@@ -347,7 +347,7 @@ mod tests {
     #[test]
     fn sample_returns_zero_for_missing() {
         let reg = FieldRegistry::new();
-        let f = ScalarField::Sample(crate::fields::registry::FieldId(99));
+        let f = ScalarField::Sample(crate::registry::FieldId(99));
         assert_eq!(eval_scalar(&f, &reg, 0.0, 0.0, 0.0), 0.0);
     }
 

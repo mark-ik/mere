@@ -12,7 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::fields::registry::FieldId;
+use crate::registry::FieldId;
 
 /// Selects which nodes (or edges) a coupling rule applies to.
 ///

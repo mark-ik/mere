@@ -16,7 +16,9 @@ path = "src/lib.rs"
 async-trait = "0.1"
 burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
 eidetic.workspace = true
-graph-canvas.workspace = true
+# The field algebra (FieldProjection / FieldId / eval) the embedding→field
+# bridge builds onto — extracted from graph-canvas into its own crate.
+aether.workspace = true
 safetensors = { version = "0.4", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

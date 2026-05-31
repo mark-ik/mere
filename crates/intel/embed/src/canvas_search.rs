@@ -14,15 +14,15 @@
 //! couplings.
 //!
 //! This module does **not** know about graphshell or any UI toolkit —
-//! it composes existing embed + graph-canvas
+//! it composes existing embed + aether
 //! primitives. Graphshell-side palette wiring (action registration,
 //! input event routing) is its own slice.
 
 use std::collections::HashMap;
 use std::hash::Hash;
 
-use graph_canvas::fields::projection::FieldProjection;
-use graph_canvas::fields::registry::FieldId;
+use aether::projection::FieldProjection;
+use aether::registry::FieldId;
 
 use crate::VectorIndex;
 use crate::field_bridge::register_query_similarity_field;
@@ -182,8 +182,8 @@ impl<K: Hash + Eq + Clone, P: EmbeddingProvider> CanvasSearchSurface<K, P> {
 mod tests {
     use super::*;
     use crate::HashedEmbeddingProvider;
-    use graph_canvas::fields::eval::eval_scalar;
-    use graph_canvas::fields::registry::{FieldDef, FieldRegistry};
+    use aether::eval::eval_scalar;
+    use aether::registry::{FieldDef, FieldRegistry};
 
     fn provider() -> HashedEmbeddingProvider {
         HashedEmbeddingProvider::new(64).unwrap()

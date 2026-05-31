@@ -13,9 +13,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::fields::ast::{ScalarField, VectorField};
-use crate::fields::coupling::{Coupling, EdgePathRule};
-use crate::fields::registry::{FieldId, FieldRegistry};
+use crate::ast::{ScalarField, VectorField};
+use crate::coupling::{Coupling, EdgePathRule};
+use crate::registry::{FieldId, FieldRegistry};
 
 /// Per-canvas field-driven projection state.
 ///
@@ -65,7 +65,7 @@ pub struct FieldProjectionBuilder;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fields::coupling::{CouplingResponse, EdgePath, NodeSelector};
+    use crate::coupling::{CouplingResponse, EdgePath, NodeSelector};
 
     #[test]
     fn new_projection_is_empty() {

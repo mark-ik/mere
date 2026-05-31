@@ -8,7 +8,7 @@
 //! All projections preserve the canonical `(x, y)` graph layout truth — they
 //! only add depth cues, screen-space offsets, and (for perspective) scale.
 //! Callers are responsible for deriving `z` from the active z-field (see
-//! [`crate::fields::FieldProjection::z_field`]) before calling
+//! [`aether::FieldProjection::z_field`]) before calling
 //! [`project_position`]. `TwoD` ignores `z`.
 
 use euclid::default::Point2D;

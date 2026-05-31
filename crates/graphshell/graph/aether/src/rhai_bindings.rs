@@ -44,10 +44,10 @@
 
 use rhai::{Engine, ImmutableString};
 
-use crate::fields::ast::{ScalarField, VectorField};
-use crate::fields::coupling::{Coupling, CouplingResponse, EdgePath, EdgePathRule, NodeSelector};
-use crate::fields::projection::FieldProjection;
-use crate::fields::registry::FieldId;
+use crate::ast::{ScalarField, VectorField};
+use crate::coupling::{Coupling, CouplingResponse, EdgePath, EdgePathRule, NodeSelector};
+use crate::projection::FieldProjection;
+use crate::registry::FieldId;
 
 /// Reasons a Rhai script could not be evaluated into a `FieldProjection`.
 #[derive(Debug, Clone, PartialEq)]
@@ -259,7 +259,7 @@ fn register_edge_path_methods(engine: &mut Engine) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fields::registry::FieldDef;
+    use crate::registry::FieldDef;
 
     #[test]
     fn empty_script_returns_empty_projection() {

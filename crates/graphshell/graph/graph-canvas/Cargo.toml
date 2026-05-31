@@ -9,26 +9,14 @@ rust-version = "1.92.0"
 description = "Framework-agnostic graph-view canvas: scene derivation, camera, projection, interaction, hit testing, and render-packet derivation for Graphshell"
 
 [dependencies]
-burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }
+# The field algebra (FieldId etc.) extracted to its own crate; graph-canvas
+# now consumes it rather than owning the `fields` module.
+aether.workspace = true
 euclid = { version = "0.22", features = ["serde"] }
 kernel.workspace = true
-rhai = { version = "1.20", default-features = false, features = ["std"], optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
-
-[features]
-default = []
-# Burn-backed lowering of the field algebra. Pulls in `burn` with the
-# ndarray backend for portable per-target compute. The lowering is generic
-# over `B: Backend`; consumers pick which backend type to instantiate.
-field-burn = ["dep:burn"]
-# Adds the wgpu backend so consumers can target GPU evaluation. Pulls in the
-# `wgpu` feature on `burn`. No wgpu-specific code in graph-canvas itself —
-# this just makes `burn::backend::Wgpu` available to downstream crates.
-field-burn-wgpu = ["field-burn", "burn/wgpu"]
-# Rhai composition surface for fields, couplings, and edge-path rules.
-field-rhai = ["dep:rhai"]
 
 [dev-dependencies]
 serde_json = "1.0"
