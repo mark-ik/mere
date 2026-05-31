@@ -205,14 +205,14 @@ This is the right shape for spaces that need cluster-governance as a first-class
 
 ## 9. The `mere-namespace` crate (sketch)
 
-Per the substrate brief §5 (revised): a new crate that integrates willow-rs (with `PayloadDigest25` = BLAKE3) over iroh streams, plus graph-cluster path computation.
+Per the substrate brief §5 (refreshed 2026-05-30): a new crate boundary for graph-cluster path computation and scoped replication over Iroh streams. The current crate choice is deliberately open: evaluate official `willow25`, active `n0-computer/iroh-willow`, and a Mere-native Meadowcap-shaped layer.
 
 **Modules** (target files; each <600 LOC per workspace `feedback_mere_file_size_ceiling`):
 
 - `path.rs` — `MerePath`, conversion from graph-cluster-decomposition to Willow `Path`, cluster-id BLAKE3 canonicalization.
 - `cluster.rs` — Leiden / Louvain implementations (or an existing crate like `petgraph-community` integration), parameter types, deterministic-RNG handling.
 - `space.rs` — `MereSpace` type wrapping Willow's namespace concept; constitution data carrying canonical clustering rule.
-- `wgps_iroh.rs` — adapter from willow-rs WGPS sync to iroh streams (~200 LOC estimated).
+- `wgps_iroh.rs` - possible WGPS-to-Iroh adapter if the Willow25 interop spike justifies it. Estimate after measuring dual-address storage and current upstream sync surfaces.
 - `cap.rs` — passthrough re-exports of `meadowcap` types, scoped to `MerePath`-shaped paths (Option A from substrate-brief §8.8).
 
 **Out of scope for v1:**
@@ -262,7 +262,7 @@ In rough order of leverage:
 (Captured during the 2026-05-10 brief-drafting session.)
 
 - The reframe from "namespace path = admin choice" to "namespace path = graph-cluster decomposition" appears novel. No prior art found in capability-systems literature (UCAN, biscuits, macaroons, meadowcap, OCaps) that does this. Worth pursuing precisely because no one else is.
-- Willow's data model maps cleanly: `NamespaceId / SubspaceId / Path` absorb mere's space + author + cluster-decomposition without modification. willow-rs is BLAKE3-default and PD-generic (per the substrate brief 2026-05-10 reframe), so the integration cost is the WGPS-iroh adapter (~200 LOC) plus the cluster-path computation, not a hash-substitution fork.
+- Willow's data model maps cleanly: `NamespaceId / SubspaceId / Path` absorb Mere's space + author + cluster-decomposition without modification. **Refreshed 2026-05-30:** the older approximately 200 LOC estimate is withdrawn. Current official `willow25` uses a WILLIAM3/Bab payload digest, and `n0-computer/iroh-willow` is active again. The conceptual adapter boundary remains right, but a spike must measure dual-address storage with Iroh blobs, current storage and sync gaps, and whether Mere wants Willow25 interop, a Mere-native Meadowcap-shaped layer, or both. See [Nonstandard browsing profiles and semantic-web donors](../research/2026-05-30_nonstandard_browsing_profiles_brief.md).
 - The hardest design question is §4 (stability under evolution). Strategy (a) — caps bind to leaf nodes; cluster paths are routing hints — is recommended for v1. Stricter semantics are opt-in.
 - The second-hardest question is §3.2 (cluster determinism). Strategy (b) — canonical rule per space — is recommended for v1, with §8 (clusters as events) reserved for spaces that need it.
 - Configurability is non-negotiable per workspace memory; full parameter space tracked here even when v1 ships a narrower slice.

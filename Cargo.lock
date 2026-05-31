@@ -5611,6 +5611,7 @@ dependencies = [
  "rkyv",
  "serde",
  "serde_json",
+ "strum",
  "tempfile",
  "time",
  "url",

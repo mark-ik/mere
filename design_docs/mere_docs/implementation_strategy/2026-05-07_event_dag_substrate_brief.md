@@ -74,11 +74,11 @@ All hash uses across the workspace move to BLAKE3:
 - Engram envelope content addressing: BLAKE3 (matches engram_spec adopted standard, IPFS CIDv1 with BLAKE3).
 - Future tessera receipts, governance signatures: BLAKE3 over the canonical encoding.
 
-**Note on Willow (revised 2026-05-10).** Willow'25 specifies WILLIAM3 as its eventual payload hash — verified as a Bab tree-mode modification of BLAKE3 ([Bab spec](https://worm-blossom.github.io/bab/), [Willow'25 spec](https://willowprotocol.org/specs/willow25/)) with three concrete differences from raw BLAKE3: domain-separated IV constants, zero chunk indices in leaf computation, and length-in-inner-nodes (parameter `t`). Differences #2 and #3 are load-bearing for one specific guarantee: **constant-size slice-verification proofs.** Difference #1 is pure domain separation.
+**Note on Willow (revised 2026-05-10; corrected 2026-05-30).** Willow25 specifies WILLIAM3 as its payload hash - verified as a Bab tree-mode modification of BLAKE3 ([Bab spec](https://worm-blossom.github.io/bab/), [Willow25 spec](https://willowprotocol.org/specs/willow25/)) with three concrete differences from raw BLAKE3: domain-separated IV constants, zero chunk indices in leaf computation, and length-in-inner-nodes (parameter `t`). Differences #2 and #3 are load-bearing for one specific guarantee: **constant-size slice-verification proofs.** Difference #1 is pure domain separation.
 
-However, **the willow-rs reference implementation is BLAKE3-default today**: `willow_25::PayloadDigest25` is a `blake3::Hash` newtype, and the doc comment marks WILLIAM3 as future work. Every willow-rs crate (`data-model`, `meadowcap`, `wgps`, `store_simple_sled`, `sideload`) is fully generic over `PayloadDigest`, with no WILLIAM3-specific assumptions in the trait surfaces. The chunk-vs-byte conversion that WILLIAM3 would eventually require is already abstracted as pluggable function pointers (`chunk_to_byte_fun` in `wgps/src/lib.rs`), defaulting to identity functions for BLAKE3.
+The 2026-05-10 low-cost assumption described the older BLAKE3-default Willow Rust line. Current official [`willow25`](https://docs.rs/willow25/latest/willow25/) uses `bab_rs::TreeRoot` from the WILLIAM3/Bab line. Mere's native event DAG and iroh-blobs addressing can remain BLAKE3-based, but Willow25 interoperability is no longer a free pass-through.
 
-**Implication:** if mere adopts Willow's data model + meadowcap + WGPS sync, BLAKE3 carries through unchanged across the entire willow-rs stack. There is no "WILLIAM3 cost" to calibrate — the cost was illusory under the willow-rs reality. The future WILLIAM3 swap only matters if mere ever needs Bab's constant-size slice-verification proofs, which it does not (iroh-blobs' BAO already provides logarithmic-proof verifiable streaming under BLAKE3, sufficient for all mere use cases).
+**Implication:** if Mere adopts Willow25 interoperability, the integration spike must measure a dual-address boundary between WILLIAM3 payload digests and Iroh BLAKE3 blob addresses. If Mere adopts only a Meadowcap-shaped native scope layer, it can keep BLAKE3 throughout. The choice is now explicit rather than hidden in an outdated crate assumption.
 
 ---
 
@@ -178,13 +178,13 @@ Each candidate evaluated as: "can it carry MereEvents, and at what cost?"
 
 → Best fit for: **engram publishing and cross-moot exchange**, where typed schemas earn their cost. Not for local event DAG storage.
 
-**Willow (revised 2026-05-10/11).** 3D namespace/subspace/path data model, capability-based access (meadowcap), Range-Based Set Reconciliation, optional Confidential Sync handshake. Pros: meadowcap is the most thoughtful design for structural namespace delegation at scale; namespace/subspace/path maps cleanly to moot organization (and even more cleanly to graph-cluster-derived paths — see §14). willow-rs is BLAKE3-default today, fully PD-generic, and integrates over arbitrary byte transports. Cons: 3D data model is more machinery than flat K/V if we don't actually use the path dimension; iroh-willow (the existing iroh-bound integration) is dormant pre-alpha (last meaningful commit 2025-10-27, open correctness bug in capability delegation, [issue #5](https://github.com/n0-computer/iroh-willow/issues/5)) — we'd build our own willow-rs-on-iroh integration in `mere-namespace` rather than depend on it; meadowcap is design-stable but not an expressive moot-policy layer. §8.8 now treats Biscuit as the policy-token candidate and Keyhive as the live group/key-state eval, not as a direct Willow replacement.
+**Willow (revised 2026-05-10/11; refreshed 2026-05-30).** 3D namespace/subspace/path data model, capability-based access (meadowcap), Range-Based Set Reconciliation, optional Confidential Sync handshake. Pros: meadowcap is the most thoughtful design for structural namespace delegation at scale; namespace/subspace/path maps cleanly to moot organization (and even more cleanly to graph-cluster-derived paths - see §14). The current official [`willow25`](https://docs.rs/willow25/latest/willow25/) implementation covers the Willow25 data model and Meadowcap. Cons: the older BLAKE3-default integration assumption is stale. Current `willow25` uses `bab_rs::TreeRoot` from the WILLIAM3/Bab line, while storage and sync remain under development. [`n0-computer/iroh-willow`](https://github.com/n0-computer/iroh-willow) is active again, so the dormant pre-alpha claim is retired. The crate choice and iroh-blobs dual-address boundary need a measured spike. Meadowcap remains design-stable but not an expressive moot-policy layer. §8.8 still treats Biscuit as the policy-token candidate and Keyhive as the live group/key-state eval, not as a direct Willow replacement.
 
-→ Best fit for: **`mere-namespace`** (a new crate). Adopt for the data model + meadowcap + WGPS sync over iroh streams. The substrate-level RBSR efficiency is *not* a reason to adopt — iroh-docs already does RBSR (verified against `n0-computer/iroh-docs` v0.99.0, 2026-05-08). Adopt for the 3D data model, path-keyed range queries, and meadowcap-style capability scoping; or skip if those are not load-bearing. Per §14 (graph-cluster namespaces) they likely are.
+→ Best fit for: **`mere-namespace`** (a new crate). Evaluate for the data model and Meadowcap over Iroh streams. The substrate-level RBSR efficiency is *not* a reason to adopt - iroh-docs already does RBSR (verified against `n0-computer/iroh-docs` v0.99.0, 2026-05-08). Adopt for the 3D data model, path-keyed range queries, and Meadowcap-style capability scoping; or skip if those are not load-bearing. Per §14 (graph-cluster namespaces) they likely are. Select current `willow25`, active `iroh-willow`, a Mere-native Meadowcap-shaped layer, or a combination only after the refresh spike.
 
-**NextGraph / Lofire (revised 2026-05-10).** CRDT-based decentralized data + identity, RDF/SPARQL graph model. Pros: most architecturally aligned with mere's "graph as document" premise; cohesive stack; **as of FOSDEM 2026 has shipped Social Queries SPARQL and a reactive ORM TypeScript SDK with real users — no longer pre-production.** Cons: still betting on one project's roadmap; RDF-first model misaligned with mere's spatial/experiential graph; significant overlap with already-built mere-identity / eidetic.
+**NextGraph / Lofire (revised 2026-05-10; refreshed 2026-05-30).** CRDT-based decentralized data + identity, RDF/SPARQL graph model. NextGraph is actively developed on its [authoritative Gitea workspace](https://git.nextgraph.org/NextGraph/nextgraph-rs); its older GitHub mirror is not a reliable activity signal. Pros: its [`engine/oxigraph`](https://git.nextgraph.org/NextGraph/nextgraph-rs/src/branch/main/engine/oxigraph) RDF-CRDT fork (internally packaged as `ng-oxigraph`), verifier/materialization boundary, decentralized SPARQL work, and ShEx-driven reactive SDK are strong semantic-web donors. Cons: its own signed commit DAG, repositories, overlays, broker distribution, and read capabilities overlap heavily with Mere's event DAG, Eidetic, Iroh transport, and Moot authorization work. Lofire is the historical predecessor, not the primary fork target.
 
-→ Best fit for: **engram-layer semantic interop.** Take design lessons (RDF-as-engram-metadata, DID interop) and consider NextGraph compatibility for cross-stack engram exchange when mere ever ships engrams to RDF-shaped consumers. Do not adopt as substrate.
+→ Best fit for: **derived RDF projection and linked-data tooling.** Evaluate narrow reuse or a patch-series fork of NextGraph's `engine/oxigraph`; study `engine/verifier` as a design donor around accepted Mere contributions and engrams. Do not adopt NextGraph's repository, broker, networking, or identity stack as substrate. See [Nonstandard browsing profiles and semantic-web donors](../research/2026-05-30_nonstandard_browsing_profiles_brief.md).
 
 **Veilid.** Privacy-routed P2P substrate; DHT routing with built-in onion-routing privacy. BLAKE3 + Ed25519 native. Pros: closes the metadata-leakage gap iroh leaves open; live development; opinionated. Cons: less ergonomic than iroh; smaller ecosystem; replaces transport, not sync.
 
@@ -198,7 +198,7 @@ Each candidate evaluated as: "can it carry MereEvents, and at what cost?"
 
 → Best fit for: **specific projections** (collaborative graph annotations, co-edited views) when those features land. Not the substrate.
 
-**Practical decision (revised 2026-05-10):** start with iroh-docs (already RBSR). **Willow adoption is now a live evaluation, not a deferral** — the prior deferral was based on a now-disproven WILLIAM3 cost. See §14 (graph-cluster namespaces) for why Willow's data model is especially attractive under the emerging design direction. p2panda and NextGraph remain deferred until concrete need at the engram boundary. Treat all of these as candidate projections of the event DAG, not as identity-defining commitments.
+**Practical decision (revised 2026-05-10; refreshed 2026-05-30):** start with iroh-docs (already RBSR). **Willow adoption remains a live evaluation, not a deferral**, but the older low-cost integration assumption is no longer valid: current Willow25 uses WILLIAM3/Bab payload digests and active `iroh-willow` deserves evaluation. See §14 (graph-cluster namespaces) for why Willow's data model remains attractive. p2panda remains deferred until concrete need at the engram boundary. NextGraph moves into a narrow linked-data projection spike. Treat all of these as candidate projections of the event DAG, not as identity-defining commitments.
 
 ---
 
@@ -406,7 +406,7 @@ This is essentially "the user is a one-member moot" — same protocol, scoped to
 
 Treating those as one decision hides the real architecture. Meadowcap, Biscuit, UCAN, and Keyhive cover different parts of the stack.
 
-**Option A — meadowcap via willow-rs (structural namespace layer).** If mere adopts Willow's data model (see §5 and §14), willow-rs's `meadowcap` crate provides the structural capability layer natively, fully PD-generic over BLAKE3. Zero design re-derivation; we get path-prefix delegation, logical time-interval bounds, recursive delegation, and signed credentials directly. Lowest implementation cost.
+**Option A - Meadowcap via current Willow25 (structural namespace layer; refreshed 2026-05-30).** If Mere adopts Willow's data model (see §5 and §14), current `willow25` provides the structural capability layer natively. Reuse avoids re-deriving path-prefix delegation, logical time-interval bounds, recursive delegation, and signed credentials. It is not a zero-cost BLAKE3 mapping: Willow25 payload digests use the WILLIAM3/Bab line, and a spike must measure the dual-address boundary with iroh-blobs plus current storage and sync gaps.
 
 Pros: purpose-built for Willow entries; maps cleanly to graph-cluster-derived paths; simple deterministic verification for "does this cap authorize this event area?"; good fit for `mere-namespace`.
 
@@ -537,7 +537,7 @@ At that point: Cable is gone, BLAKE3 is central, the Mere-native event DAG is th
 
 ## 13. Hash agility for future migrations
 
-**Added 2026-05-10.** CIDv1 multihash discipline is the runway for any future hash-function transition (BLAKE4, post-quantum, or otherwise). Every digest field in the system MUST use a multihash-aware type — never raw `[u8; 32]` — so that the hash function identifier travels with the digest. Eidetic's `schema::Hash` already does this; the rule generalizes across the workspace.
+**Added 2026-05-10; corrected 2026-05-30.** CIDv1 multihash discipline is the runway for any future hash-function transition (BLAKE4, post-quantum, or otherwise). Every digest field in the system MUST use a multihash-aware type - never raw `[u8; 32]` - so that the hash function identifier travels with the digest. Eidetic's `schema::Hash` does not yet do this; the rule generalizes across the workspace.
 
 **What hash agility costs at adoption time:** ~3 bytes per digest (multihash function code + length prefix). Native BLAKE3 storage doesn't change.
 
@@ -584,12 +584,12 @@ Schema-at-engram-boundary: the architectural insight that resolves the "rdf vs s
 
 Research dispatch (four parallel agents on iroh-docs sync, iroh-willow status, willow-rs PD-genericity, and broader 2025-26 P2P landscape) inverted §2's premise.
 
-- **WILLIAM3 was not a current cost.** willow-rs is BLAKE3-default (`willow_25::PayloadDigest25 = blake3::Hash` newtype), and every crate (`data-model`, `meadowcap`, `wgps`, `store_simple_sled`, `sideload`) is fully PD-generic. The eventual WILLIAM3 swap is for partial-payload verification — a guarantee mere does not need (iroh-blobs' BAO already provides logarithmic-proof verifiable streaming under BLAKE3).
+- **Superseded 2026-05-30: WILLIAM3 is a current integration question again.** The 2026-05-10 note described the older Willow Rust line. Current official `willow25` uses `bab_rs::TreeRoot` from the WILLIAM3/Bab line. Mere still does not need to replace Iroh blobs, but it must measure the dual-address boundary if Willow25 interoperability is desired.
 - **iroh-docs already does RBSR.** The "no RBSR-style sync efficiency at large scale" concern in the original §5 iroh-docs entry was wrong — it has done RBSR per [Meyer 2022](https://arxiv.org/abs/2212.13567) all along, verified at v0.99.0 (2026-05-08). Willow adoption is therefore not justified by sync efficiency; it must be justified by the data model + meadowcap.
-- **iroh-willow is dormant.** Pre-alpha (0.0.1, never released), last meaningful commit 2025-10-27, open correctness bug in capability delegation ([issue #5](https://github.com/n0-computer/iroh-willow/issues/5)). We'd build our own willow-rs-on-iroh integration in `mere-namespace` rather than depend on it.
+- **Superseded 2026-05-30: iroh-willow is active again.** Evaluate current [`n0-computer/iroh-willow`](https://github.com/n0-computer/iroh-willow) alongside official `willow25` before deciding whether Mere writes its own narrow Iroh adapter.
 - **Capability layer is now a capability stack.** §8.8 now separates structural namespace caps (meadowcap via willow-rs, or meadowcap-shaped Mere-native), moothold policy authorization (Biscuit / `biscuit-rust` candidate for tessera, quotas, roles, heartbeats, bridge-publish rules), and live group/key state (Keyhive for dynamic membership, devices, encrypted sync, pull access). The eval is three proof spikes, not one meadowcap-vs-Keyhive choice.
 - **Loro added** as preferred CRDT projection over Yjs/Automerge — Rust-native with version-DAG-and-frontiers as first-class primitives.
-- **NextGraph reframed** from "research branch" to "engram-layer interop candidate" — has shipped real users and SPARQL APIs as of FOSDEM 2026.
+- **NextGraph reframed again 2026-05-30** from "engram-layer interop candidate" to a narrow derived-RDF donor spike. Its authoritative Gitea workspace is active; evaluate `engine/oxigraph` and the verifier/materialization boundary without adopting its repository protocol wholesale.
 - **Snapchain (Farcaster) abandoned CRDT for BFT in April 2025** — negative signal worth examining before locking eventual-consistency assumptions for moot scale. Mere's moot-scale topology likely doesn't hit Farcaster's wall, but the failure mode deserves understanding.
 - **iroh transport bet validated.** noq (n0's QUIC, March 2026) replacing quinn under iroh ≥0.96; iroh 1.0 RC in progress; Holochain 0.7 adopted iroh for hole-punching — first significant external adopter.
 - **Multihash discipline (new §13)** codifies hash-function tagging across all digest fields. Runway for any future hash transition without flag-day rotation.
@@ -609,7 +609,7 @@ Research dispatch (four parallel agents on iroh-docs sync, iroh-willow status, w
 
 ### 2026-05-10
 
-- §2 rewritten: WILLIAM3 cost framing removed; willow-rs is BLAKE3-default and PD-generic.
+- §2 rewritten: WILLIAM3 cost framing removed; willow-rs was BLAKE3-default and PD-generic. **Superseded 2026-05-30 by the current `willow25` WILLIAM3/Bab implementation.**
 - §5 entries revised: iroh-docs (RBSR confirmed), Willow (full re-evaluation), NextGraph (matured), Loro (added). Practical-decision footer revised.
 - §8.8 initially reframed as a three-option capability-layer decision (meadowcap-via-willow-rs, meadowcap-shaped-native, Keyhive); this intermediate framing is superseded by the 2026-05-11 stack split below.
 - §10 open questions updated: WILLIAM3 disposition resolved; the initial meadowcap-vs-Keyhive question is superseded by the 2026-05-11 capability-stack proof.
@@ -623,3 +623,10 @@ Research dispatch (four parallel agents on iroh-docs sync, iroh-willow status, w
 - §8.8 corrected from a flat meadowcap-vs-Keyhive comparison into a layered capability stack: structural namespace caps, moothold policy authorization, and live group/key state.
 - Biscuit / `biscuit-rust` added as the missing moothold policy-token candidate for tessera-gated hosting, quotas, roles, heartbeat freshness, and event-type/bridge-publish constraints.
 - §10 open question updated to require three proof spikes: meadowcap over graph-cluster paths, Biscuit policy proof for tessera-gated hosting, Keyhive translation proof for Mere event-DAG authors and group membership.
+
+### 2026-05-30
+
+- Willow facts refreshed against current official `willow25` and active `n0-computer/iroh-willow`; the old low-cost BLAKE3 adapter estimate is retired.
+- NextGraph refreshed against its active authoritative Gitea workspace; `engine/oxigraph` and `engine/verifier` move into a narrow linked-data projection spike.
+- §13 corrected: Eidetic `schema::Hash` remains a raw BLAKE3 implementation gap, not an existing multihash-aware type.
+- See [Nonstandard browsing profiles and semantic-web donors](../research/2026-05-30_nonstandard_browsing_profiles_brief.md).

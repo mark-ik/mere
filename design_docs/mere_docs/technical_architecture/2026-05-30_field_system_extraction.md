@@ -184,7 +184,8 @@ Not all at once. A workable order, each slice host-agnostic and testable:
 
 0. **Rename today's `aether` rapier crate to `gyre`** (and `aether::Field` →
    `gyre::Force`), updating the cartography-aether seam doc + `Simulation`
-   references. Mechanical, frees the `aether` name.
+   references. Mechanical, frees the `aether` name. **Done 2026-05-30 (commits
+   `0bb0337`, `1d94746`); the seam doc's references are synced to `gyre`.**
 1. **Extract the `aether` field-algebra crate** from `graph-canvas/fields/*`
    (AST + eval + Rhai + Burn + registry + coupling), depending only on kernel +
    Rhai/Burn. Pure move; its existing tests come with it.

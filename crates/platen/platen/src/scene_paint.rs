@@ -13,9 +13,9 @@
 //! routed edges, external-texture node content) layer on later.
 //!
 //! This is deliberately minimal and does *not* reach into the 9.6k-LOC
-//! `graph-canvas` crate (whose own physics is superseded by `aether` and whose
+//! `graph-canvas` crate (whose own physics is superseded by `gyre` and whose
 //! projection overlaps cartography). It works off the cartography `Projection`
-//! abstraction, so any strategy's output — analytic or an aether layout rebuilt
+//! abstraction, so any strategy's output — analytic or an gyre layout rebuilt
 //! into a projection — paints through one path.
 
 use std::collections::HashMap;

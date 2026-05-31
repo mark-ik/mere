@@ -57,6 +57,7 @@ pub enum EdgeFamily {
     serde::Deserialize,
 )]
 #[rkyv(compare(PartialEq, PartialOrd), derive(PartialEq, Eq, PartialOrd, Ord))]
+#[derive(strum::EnumIter, strum::FromRepr)]
 pub enum SemanticSubKind {
     Hyperlink,
     UserGrouped,
@@ -93,6 +94,7 @@ pub enum SemanticSubKind {
     serde::Deserialize,
 )]
 #[rkyv(compare(PartialEq, PartialOrd), derive(PartialEq, Eq, PartialOrd, Ord))]
+#[derive(strum::EnumIter, strum::FromRepr)]
 pub enum ArrangementSubKind {
     FrameMember,
     TileGroup,
@@ -115,6 +117,7 @@ pub enum ArrangementSubKind {
     serde::Deserialize,
 )]
 #[rkyv(compare(PartialEq, PartialOrd), derive(PartialEq, Eq, PartialOrd, Ord))]
+#[derive(strum::EnumIter, strum::FromRepr)]
 pub enum ContainmentSubKind {
     UrlPath,
     Domain,
@@ -155,6 +158,7 @@ impl ContainmentSubKind {
     serde::Deserialize,
 )]
 #[rkyv(compare(PartialEq, PartialOrd), derive(PartialEq, Eq, PartialOrd, Ord))]
+#[derive(strum::EnumIter, strum::FromRepr)]
 pub enum ImportedSubKind {
     BookmarkFolder,
     HistoryImport,
@@ -181,6 +185,7 @@ pub enum ImportedSubKind {
     serde::Deserialize,
 )]
 #[rkyv(compare(PartialEq, PartialOrd), derive(PartialEq, Eq, PartialOrd, Ord))]
+#[derive(strum::EnumIter, strum::FromRepr)]
 pub enum ProvenanceSubKind {
     ClippedFrom,
     ExcerptedFrom,
@@ -379,12 +384,12 @@ impl RelationKind {
     /// [`Self::from_tag`] is the inverse.
     pub fn tag(self) -> u32 {
         let (family, sub) = match self {
-            RelationKind::Semantic(sk) => (0u32, semantic_sub_ordinal(sk)),
+            RelationKind::Semantic(sk) => (0u32, sk as u32),
             RelationKind::Traversal => (1, 0),
-            RelationKind::Containment(sk) => (2, containment_sub_ordinal(sk)),
-            RelationKind::Arrangement(sk) => (3, arrangement_sub_ordinal(sk)),
-            RelationKind::Imported(sk) => (4, imported_sub_ordinal(sk)),
-            RelationKind::Provenance(sk) => (5, provenance_sub_ordinal(sk)),
+            RelationKind::Containment(sk) => (2, sk as u32),
+            RelationKind::Arrangement(sk) => (3, sk as u32),
+            RelationKind::Imported(sk) => (4, sk as u32),
+            RelationKind::Provenance(sk) => (5, sk as u32),
         };
         (family << 24) | (sub & 0x00ff_ffff)
     }
@@ -396,226 +401,40 @@ impl RelationKind {
         let family = tag >> 24;
         let sub = tag & 0x00ff_ffff;
         match family {
-            0 => semantic_from_ordinal(sub).map(RelationKind::Semantic),
+            0 => SemanticSubKind::from_repr(sub as usize).map(RelationKind::Semantic),
             1 => (sub == 0).then_some(RelationKind::Traversal),
-            2 => containment_from_ordinal(sub).map(RelationKind::Containment),
-            3 => arrangement_from_ordinal(sub).map(RelationKind::Arrangement),
-            4 => imported_from_ordinal(sub).map(RelationKind::Imported),
-            5 => provenance_from_ordinal(sub).map(RelationKind::Provenance),
+            2 => ContainmentSubKind::from_repr(sub as usize).map(RelationKind::Containment),
+            3 => ArrangementSubKind::from_repr(sub as usize).map(RelationKind::Arrangement),
+            4 => ImportedSubKind::from_repr(sub as usize).map(RelationKind::Imported),
+            5 => ProvenanceSubKind::from_repr(sub as usize).map(RelationKind::Provenance),
             _ => None,
         }
     }
 }
 
-fn semantic_sub_ordinal(sk: SemanticSubKind) -> u32 {
-    match sk {
-        SemanticSubKind::Hyperlink => 0,
-        SemanticSubKind::UserGrouped => 1,
-        SemanticSubKind::AgentDerived => 2,
-        SemanticSubKind::Cites => 3,
-        SemanticSubKind::Quotes => 4,
-        SemanticSubKind::Summarizes => 5,
-        SemanticSubKind::Elaborates => 6,
-        SemanticSubKind::ExampleOf => 7,
-        SemanticSubKind::Supports => 8,
-        SemanticSubKind::Contradicts => 9,
-        SemanticSubKind::Questions => 10,
-        SemanticSubKind::SameEntityAs => 11,
-        SemanticSubKind::DuplicateOf => 12,
-        SemanticSubKind::CanonicalMirrorOf => 13,
-        SemanticSubKind::DependsOn => 14,
-        SemanticSubKind::Blocks => 15,
-        SemanticSubKind::NextStep => 16,
-    }
-}
-
-fn semantic_from_ordinal(o: u32) -> Option<SemanticSubKind> {
-    Some(match o {
-        0 => SemanticSubKind::Hyperlink,
-        1 => SemanticSubKind::UserGrouped,
-        2 => SemanticSubKind::AgentDerived,
-        3 => SemanticSubKind::Cites,
-        4 => SemanticSubKind::Quotes,
-        5 => SemanticSubKind::Summarizes,
-        6 => SemanticSubKind::Elaborates,
-        7 => SemanticSubKind::ExampleOf,
-        8 => SemanticSubKind::Supports,
-        9 => SemanticSubKind::Contradicts,
-        10 => SemanticSubKind::Questions,
-        11 => SemanticSubKind::SameEntityAs,
-        12 => SemanticSubKind::DuplicateOf,
-        13 => SemanticSubKind::CanonicalMirrorOf,
-        14 => SemanticSubKind::DependsOn,
-        15 => SemanticSubKind::Blocks,
-        16 => SemanticSubKind::NextStep,
-        _ => return None,
-    })
-}
-
-fn containment_sub_ordinal(sk: ContainmentSubKind) -> u32 {
-    match sk {
-        ContainmentSubKind::UrlPath => 0,
-        ContainmentSubKind::Domain => 1,
-        ContainmentSubKind::FileSystem => 2,
-        ContainmentSubKind::UserFolder => 3,
-        ContainmentSubKind::ClipSource => 4,
-        ContainmentSubKind::NotebookSection => 5,
-        ContainmentSubKind::CollectionMember => 6,
-    }
-}
-
-fn containment_from_ordinal(o: u32) -> Option<ContainmentSubKind> {
-    Some(match o {
-        0 => ContainmentSubKind::UrlPath,
-        1 => ContainmentSubKind::Domain,
-        2 => ContainmentSubKind::FileSystem,
-        3 => ContainmentSubKind::UserFolder,
-        4 => ContainmentSubKind::ClipSource,
-        5 => ContainmentSubKind::NotebookSection,
-        6 => ContainmentSubKind::CollectionMember,
-        _ => return None,
-    })
-}
-
-fn arrangement_sub_ordinal(sk: ArrangementSubKind) -> u32 {
-    match sk {
-        ArrangementSubKind::FrameMember => 0,
-        ArrangementSubKind::TileGroup => 1,
-        ArrangementSubKind::SplitPair => 2,
-    }
-}
-
-fn arrangement_from_ordinal(o: u32) -> Option<ArrangementSubKind> {
-    Some(match o {
-        0 => ArrangementSubKind::FrameMember,
-        1 => ArrangementSubKind::TileGroup,
-        2 => ArrangementSubKind::SplitPair,
-        _ => return None,
-    })
-}
-
-fn imported_sub_ordinal(sk: ImportedSubKind) -> u32 {
-    match sk {
-        ImportedSubKind::BookmarkFolder => 0,
-        ImportedSubKind::HistoryImport => 1,
-        ImportedSubKind::SessionImport => 2,
-        ImportedSubKind::RssMembership => 3,
-        ImportedSubKind::FileSystemImport => 4,
-        ImportedSubKind::ArchiveMembership => 5,
-        ImportedSubKind::SharedCollection => 6,
-    }
-}
-
-fn imported_from_ordinal(o: u32) -> Option<ImportedSubKind> {
-    Some(match o {
-        0 => ImportedSubKind::BookmarkFolder,
-        1 => ImportedSubKind::HistoryImport,
-        2 => ImportedSubKind::SessionImport,
-        3 => ImportedSubKind::RssMembership,
-        4 => ImportedSubKind::FileSystemImport,
-        5 => ImportedSubKind::ArchiveMembership,
-        6 => ImportedSubKind::SharedCollection,
-        _ => return None,
-    })
-}
-
-fn provenance_sub_ordinal(sk: ProvenanceSubKind) -> u32 {
-    match sk {
-        ProvenanceSubKind::ClippedFrom => 0,
-        ProvenanceSubKind::ExcerptedFrom => 1,
-        ProvenanceSubKind::SummarizedFrom => 2,
-        ProvenanceSubKind::TranslatedFrom => 3,
-        ProvenanceSubKind::RewrittenFrom => 4,
-        ProvenanceSubKind::GeneratedFrom => 5,
-        ProvenanceSubKind::ExtractedFrom => 6,
-        ProvenanceSubKind::ImportedFromSource => 7,
-    }
-}
-
-fn provenance_from_ordinal(o: u32) -> Option<ProvenanceSubKind> {
-    Some(match o {
-        0 => ProvenanceSubKind::ClippedFrom,
-        1 => ProvenanceSubKind::ExcerptedFrom,
-        2 => ProvenanceSubKind::SummarizedFrom,
-        3 => ProvenanceSubKind::TranslatedFrom,
-        4 => ProvenanceSubKind::RewrittenFrom,
-        5 => ProvenanceSubKind::GeneratedFrom,
-        6 => ProvenanceSubKind::ExtractedFrom,
-        7 => ProvenanceSubKind::ImportedFromSource,
-        _ => return None,
-    })
-}
+// The u32 transport tag's ordinal mapping (see `RelationKind::tag` /
+// `from_tag`) is derived, not hand-maintained: the forward direction is the
+// field-less-enum cast `sk as u32`, the reverse is `strum::FromRepr`'s
+// `from_repr`, both keyed by declaration order. The hand-written
+// `*_sub_ordinal` / `*_from_ordinal` mirror tables that used to live here are
+// gone, so adding a sub-kind no longer means editing parallel match arms.
 
 #[cfg(test)]
 mod relation_tag_tests {
     use super::*;
+    use strum::IntoEnumIterator;
 
     fn all_kinds() -> Vec<RelationKind> {
+        // Driven by `EnumIter`, so a new sub-kind is covered automatically with
+        // no parallel list to maintain. `Traversal` is the one family with no
+        // sub-kind.
         let mut out = Vec::new();
-        // Semantic — every sub-kind.
-        for sk in [
-            SemanticSubKind::Hyperlink,
-            SemanticSubKind::UserGrouped,
-            SemanticSubKind::AgentDerived,
-            SemanticSubKind::Cites,
-            SemanticSubKind::Quotes,
-            SemanticSubKind::Summarizes,
-            SemanticSubKind::Elaborates,
-            SemanticSubKind::ExampleOf,
-            SemanticSubKind::Supports,
-            SemanticSubKind::Contradicts,
-            SemanticSubKind::Questions,
-            SemanticSubKind::SameEntityAs,
-            SemanticSubKind::DuplicateOf,
-            SemanticSubKind::CanonicalMirrorOf,
-            SemanticSubKind::DependsOn,
-            SemanticSubKind::Blocks,
-            SemanticSubKind::NextStep,
-        ] {
-            out.push(RelationKind::Semantic(sk));
-        }
+        out.extend(SemanticSubKind::iter().map(RelationKind::Semantic));
         out.push(RelationKind::Traversal);
-        for sk in [
-            ContainmentSubKind::UrlPath,
-            ContainmentSubKind::Domain,
-            ContainmentSubKind::FileSystem,
-            ContainmentSubKind::UserFolder,
-            ContainmentSubKind::ClipSource,
-            ContainmentSubKind::NotebookSection,
-            ContainmentSubKind::CollectionMember,
-        ] {
-            out.push(RelationKind::Containment(sk));
-        }
-        for sk in [
-            ArrangementSubKind::FrameMember,
-            ArrangementSubKind::TileGroup,
-            ArrangementSubKind::SplitPair,
-        ] {
-            out.push(RelationKind::Arrangement(sk));
-        }
-        for sk in [
-            ImportedSubKind::BookmarkFolder,
-            ImportedSubKind::HistoryImport,
-            ImportedSubKind::SessionImport,
-            ImportedSubKind::RssMembership,
-            ImportedSubKind::FileSystemImport,
-            ImportedSubKind::ArchiveMembership,
-            ImportedSubKind::SharedCollection,
-        ] {
-            out.push(RelationKind::Imported(sk));
-        }
-        for sk in [
-            ProvenanceSubKind::ClippedFrom,
-            ProvenanceSubKind::ExcerptedFrom,
-            ProvenanceSubKind::SummarizedFrom,
-            ProvenanceSubKind::TranslatedFrom,
-            ProvenanceSubKind::RewrittenFrom,
-            ProvenanceSubKind::GeneratedFrom,
-            ProvenanceSubKind::ExtractedFrom,
-            ProvenanceSubKind::ImportedFromSource,
-        ] {
-            out.push(RelationKind::Provenance(sk));
-        }
+        out.extend(ContainmentSubKind::iter().map(RelationKind::Containment));
+        out.extend(ArrangementSubKind::iter().map(RelationKind::Arrangement));
+        out.extend(ImportedSubKind::iter().map(RelationKind::Imported));
+        out.extend(ProvenanceSubKind::iter().map(RelationKind::Provenance));
         out
     }
 

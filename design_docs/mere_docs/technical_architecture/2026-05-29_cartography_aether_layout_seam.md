@@ -1,9 +1,9 @@
-# The cartography-aether layout seam
+# The cartography-gyre layout seam
 
 **Date**: 2026-05-29
 **Status**: Architecture decision + landed substrate primitives. Resolves how the
 projection layer (cartography + graph-layout) relates to the physics substrate
-(aether), now that aether has a working force-directed layout. Companion to the
+(gyre), now that gyre has a working force-directed layout. Companion to the
 [between-tiles layout seam](2026-05-26_between_tiles_layout_seam.md) (the same
 seam-doc shape, one layer over).
 **Related**: [cartography layer brief](../research/2026-05-10_cartography_layer_brief.md),
@@ -16,9 +16,9 @@ seam-doc shape, one layer over).
 ## The question
 
 R1 says "wire cartography + graph-layout for real layout (replaces the seeded
-ring)." With aether now doing force-directed physics, that raises a sharp
-question: aether *is* a force-directed layout, and so is graph-layout. Are they
-redundant, and is aether a cartography strategy?
+ring)." With gyre now doing force-directed physics, that raises a sharp
+question: gyre *is* a force-directed layout, and so is graph-layout. Are they
+redundant, and is gyre a cartography strategy?
 
 ## The three layers (verified against the crates)
 
@@ -34,19 +34,19 @@ redundant, and is aether a cartography strategy?
   `SemanticEmbedding`) and streaming (`ForceDirected`, `BarnesHut`,
   `SemanticEdgeWeight`). Its streaming state (`ForceDirectedState`) is a pure,
   `Serialize`-able value. graph-layout depends on cartography.
-- **aether** owns the *physics*: a stateful rapier world (bodies, colliders,
+- **gyre** owns the *physics*: a stateful rapier world (bodies, colliders,
   the `QueryPipeline`, drag-pinning), with the `NodeExclusion` / `EdgeSpring` /
   `Boundary` fields.
 
-## Finding 1: aether is not a cartography strategy
+## Finding 1: gyre is not a cartography strategy
 
 `StreamingLayoutStrategy::State` must be `Default + Clone + Serialize +
 Deserialize`, and the strategy must be `&self`-stateless (the host threads the
 state across frames, snapshots it for undo, persists it). A rapier world is none
-of those. So aether **cannot** implement `StreamingLayoutStrategy`, and that is
-not a defect to paper over: aether is a different *kind* of thing. cartography
+of those. So gyre **cannot** implement `StreamingLayoutStrategy`, and that is
+not a defect to paper over: gyre is a different *kind* of thing. cartography
 strategies *compute* a layout (pure function of input + serializable state);
-aether *simulates* one (a stateful actor with collision and interaction).
+gyre *simulates* one (a stateful actor with collision and interaction).
 
 ## Finding 2: the two force-directed implementations are not redundant
 
@@ -57,39 +57,39 @@ There are two force-directed layouts, and they serve different regimes:
   tool for headless / batch / deterministic layout: switcher thumbnails,
   minimaps, snapshot-and-freeze, large graphs, any non-interactive view. It
   produces a `Projection`.
-- **aether** — stateful rapier rigid bodies with *hard collision* (nodes cannot
+- **gyre** — stateful rapier rigid bodies with *hard collision* (nodes cannot
   overlap), kinematic drag-pinning (grab one, the rest react), continuous
   real-time settling, and the `QueryPipeline` for hit-test/cull. The right tool
   for the *live interactive orrery*.
 
-The canvas picks by regime: interactive orrery uses aether; everything headless
+The canvas picks by regime: interactive orrery uses gyre; everything headless
 uses graph-layout. The force *model* (repulsion + spring + centering) is shared
 conceptually; the *integration* differs (pure n-body vs rapier-with-collision).
 
 ## The bridge: the `Projection` type, with a clean dependency direction
 
-aether and cartography meet through the `Projection`, not through the strategy
+gyre and cartography meet through the `Projection`, not through the strategy
 trait:
 
 - **Seed**: a cartography strategy computes a `Projection` (radial, astroid, or a
-  converged force-directed pass); its `PositionedNode` positions seed aether,
+  converged force-directed pass); its `PositionedNode` positions seed gyre,
   which then runs live physics on top. This is what *replaces the seeded ring* —
   the orrery's starting layout becomes a real strategy's output, refined by
   collision and interaction.
-- **Read back**: aether's live `(node, position)` stream can be rebuilt into a
-  `Projection` for downstream consumers, so aether and the analytic strategies
+- **Read back**: gyre's live `(node, position)` stream can be rebuilt into a
+  `Projection` for downstream consumers, so gyre and the analytic strategies
   present the same shape to the canvas.
 
 **Dependency direction is the constraint.** In the spine, cartography is a
-projection layer *above* the kernel-tier substrates (aether's own doc places it
-at the same tier as kernel and petgraph). So aether must **not** depend on
+projection layer *above* the kernel-tier substrates (gyre's own doc places it
+at the same tier as kernel and petgraph). So gyre must **not** depend on
 cartography; a substrate depending on the projection layer above it is a layering
-inversion. The bridge therefore lives at the *caller* (the host), not in aether.
-aether speaks only kernel types.
+inversion. The bridge therefore lives at the *caller* (the host), not in gyre.
+gyre speaks only kernel types.
 
-### Landed (host-agnostic, in aether)
+### Landed (host-agnostic, in gyre)
 
-`aether::Simulation` gained the two primitives the bridge needs, in kernel types
+`gyre::Simulation` gained the two primitives the bridge needs, in kernel types
 only, tested:
 
 - `seed_positions(impl IntoIterator<Item = (NodeKey, Point2D)>)` — override body
@@ -105,12 +105,12 @@ The `Projection` ↔ positions mapping is a few lines the host owns, sketched he
 (illustrative, not compile-ready):
 
 ```rust
-// seed: cartography Projection -> aether
+// seed: cartography Projection -> gyre
 sim.seed_positions(
     projection.nodes.iter().map(|n| (n.node, Point2D::new(n.position.x, n.position.y))),
 );
 
-// read back: aether -> a Projection the canvas consumes
+// read back: gyre -> a Projection the canvas consumes
 let projection = Projection {
     nodes: sim.positions().map(|(node, p)| PositionedNode {
         node, position: PortablePoint::new(p.x, p.y), radius: 0.0,
@@ -128,9 +128,9 @@ where the orrery becomes a serval custom element fed by this same seed/read pair
 
 ## What this settles
 
-- aether is the interactive-physics layout; graph-layout is the pure/headless
+- gyre is the interactive-physics layout; graph-layout is the pure/headless
   layout; cartography is the contract both feed into. No redundancy, no second
   spatial index (the R1b spike already settled that), and no upward dependency.
 - R1's "wire cartography + graph-layout (replaces the seeded ring)" is now a
-  well-defined, small host task (seed aether from a strategy `Projection`), with
+  well-defined, small host task (seed gyre from a strategy `Projection`), with
   the substrate side already in place.

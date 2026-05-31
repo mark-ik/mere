@@ -42,7 +42,7 @@ Everything below is a wiring/adoption slice, not a salvage task. Salvage is done
 | Layer | What it is | Status |
 |---|---|---|
 | **Live path** | What the running `mere-app` actually exercises | `kernel(+store) → forme(+store) → platen::{project_tree,layout} → panes.rs → inker → nematic`; hand-rolled orrery (`camera`/`graph_canvas`); **scrying web tile** (built this session); `kernel::store`/`forme::store` persistence |
-| **Pulled, latent** | In-workspace, green, no live caller | `register-*` cluster (8: viewer/protocol/theme/lens/knowledge/input/layout/mod-loader/diagnostics), `import`, `misfin`, `webfinger`; verso-core/tile-state (keyed on `TileId` now); cartography/graph-layout/aether; document-canvas; the domain a11y crates (orrery/workbench/gloss/apparatus → uxtree) |
+| **Pulled, latent** | In-workspace, green, no live caller | `register-*` cluster (8: viewer/protocol/theme/lens/knowledge/input/layout/mod-loader/diagnostics), `import`, `misfin`, `webfinger`; verso-core/tile-state (keyed on `TileId` now); cartography/graph-layout/gyre; document-canvas; the domain a11y crates (orrery/workbench/gloss/apparatus → uxtree) |
 | **Doc-mapped** | Specs/invariants harvested, not yet code | the harvest's §1–§10 — a11y/temporal/permission invariants, focus/event/UxTree specs, frame-assembly/viewer-presentation, verse governance, etc. |
 
 The roadmap's job: move things up this table in a sensible order.
@@ -86,18 +86,18 @@ This rung converges the most pulled assets, so it's the highest-value next move.
 
 **Prerequisite finding (2026-05-29).** The gating spike below *cannot lead*: it
 measures over "a live physics layout," and that layout does not exist yet.
-`aether` (394 LOC) is an unwired, field-less scaffold: `mere-app` has no `aether`
+`gyre` (394 LOC) is an unwired, field-less scaffold: `mere-app` has no `gyre`
 dependency, no `Field` is implemented (`NodeExclusion`/`EdgeSpring`/`Boundary` are
 only named in a doc comment), and the world ticks empty (bodies settle under
 damping alone). `query_pipeline` is held and fed to the step, but not exposed for
 hit-test queries. The running app uses the hand-rolled canvas. So R1's true first
-step is **R1a — aether graduation**, and only then **R1b — the spike**.
+step is **R1a — gyre graduation**, and only then **R1b — the spike**.
 
-- **R1a — aether graduation** — **DONE (host-agnostic part), 2026-05-29.**
+- **R1a — gyre graduation** — **DONE (host-agnostic part), 2026-05-29.**
   Query surface (`3c12827`): `hit_test` (point) + `cull_aabb` + `refresh_spatial_index`
   on `Simulation` over rapier's `QueryPipeline`. Core fields + a settling layout
   (`f016492`): `NodeExclusion` repulsion, `EdgeSpring` attraction along synced
-  topology, `Boundary` centering, in `aether::fields`; plus `sync_edges`,
+  topology, `Boundary` centering, in `gyre::forces`; plus `sync_edges`,
   `position_of`, and node-mass normalization. Fixed a real bug: rapier's
   `add_force` is persistent, so per-tick forces compounded and went unstable;
   `tick()` now resets forces each pass. 10 tests pass (each field's effect, a
@@ -110,7 +110,7 @@ step is **R1a — aether graduation**, and only then **R1b — the spike**.
   hit-tests nodes for free; (2) `query_pipeline_handles_orrery_scale` confirms it
   resolves hit-test + cull correctly at ~1024 nodes, fast; (3) under serval-as-host
   (the now-decided destination) node *content* hit-testing is serval's DOM, leaving
-  aether's `QueryPipeline` only the scene-geometry role (edges, empty space, cull)
+  gyre's `QueryPipeline` only the scene-geometry role (edges, empty space, cull)
   it already serves. So `understory_index` would be a redundant second index and
   does not earn the hot-phase seat. understory's value narrows to *steal-the-shape*
   (view2d camera, responder/focus routing) per the brief, not a dependency. The
@@ -122,7 +122,7 @@ step is **R1a — aether graduation**, and only then **R1b — the spike**.
   serval-eval's scene underlay: camera `PushTransform`, an edge stroke per edge,
   a node rect per node), consumed by netrender regardless of host. Scoping
   finding: `graph-canvas` (9.6k LOC) is a *whole* overlapping scene+physics+
-  projection system whose physics is superseded by aether and projection overlaps
+  projection system whose physics is superseded by gyre and projection overlaps
   cartography, with **no** `paint_list_api` output. The renderer deliberately
   works off the cartography `Projection` (not graph-canvas's heavy scene IR),
   placed in platen ("the press") so the `paint_list_api` dep does not propagate
@@ -131,7 +131,7 @@ step is **R1a — aether graduation**, and only then **R1b — the spike**.
 - **Wire** `cartography` + `graph-layout` for real layout (replaces the seeded
   ring); `register-lens` presets onto the `scene_physics` runtime (the salvage
   map's named integration); `register-theme` edge styling (`edge_visual_encoding_spec`);
-  `aether` (rapier) for the live/settling phase.
+  `gyre` (rapier) for the live/settling phase.
 - **Borrow** (understory, steal-the-shape): `view2d` camera boundary; the
   box-tree/index seam *if the spike favours it*; `responder`/`focus` routing for
   in-canvas interaction (reconciled with Masonry: Masonry routes the chrome tree,
@@ -215,7 +215,7 @@ because they're near.
   chrome substrate; the flip is gated and deliberate (see the
   [serval-as-host evaluation](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)).
   The operative constraint on every rung below: **do not deepen Masonry-specific
-  investment; keep new host-coupling retargetable.** R1's aether work is
+  investment; keep new host-coupling retargetable.** R1's gyre work is
   host-agnostic and proceeds; its app-wiring stays thin. platen's Morphorm layout
   (R1/the between-tiles seam) is the piece that retargets to serval's taffy.
 - **Pull eagerly, wire on consumer** (§1): the reconciliation above.

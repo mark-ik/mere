@@ -126,16 +126,16 @@ Two seams the rest of Mere depends on are confirmed present:
 ## 5. Relevance to the adoption plan
 
 The portable core of the plan is unaffected, by design. kernel, forme, inker's
-engine contracts, mere-domain, eidetic, node-lineage, and the aether physics are
+engine contracts, mere-domain, eidetic, node-lineage, and the gyre physics are
 host-agnostic. The "pulled not wired" discipline already hedged this: we have not
 deep-wired Masonry specifics. What shifts:
 
 - **platen is the most affected piece** (section 7).
 - **R0 a11y is reinforced** (section 4, pro 3); R0 temporal-integrity is unchanged.
-- **R1 orrery work is validated as host-agnostic.** The aether hit-test/cull
+- **R1 orrery work is validated as host-agnostic.** The gyre hit-test/cull
   surface (`3c12827`) and the future force-field/physics work are host-agnostic;
   only the canvas *host-binding* (Masonry widget vs serval element) is
-  architecture-dependent. So the paused R1 fork resolves: the aether/live-layout
+  architecture-dependent. So the paused R1 fork resolves: the gyre/live-layout
   work is safe to continue, the app-wiring stays thin and retargetable.
 - **scrying re-homes cleanly** onto `netrender::compose_external_texture` (section
   3), which the counter demo already exercises.
@@ -160,9 +160,9 @@ custom-layout element composing three first-class layers:
    DOM, and it renders identically whether driven from a Masonry widget or a serval
    element.
 2. **Physics-positioned DOM children (real documents).** The visible nodes
-   (selected by `aether::Simulation::cull_aabb`) materialize as real serval DOM
+   (selected by `gyre::Simulation::cull_aabb`) materialize as real serval DOM
    subtrees: cascade-styled, hit-tested by serval's `FragmentQuery`, emitted to
-   AccessKit. Their *position* comes from aether, not CSS flow: each is
+   AccessKit. Their *position* comes from gyre, not CSS flow: each is
    `position: absolute` with a per-frame `transform: translate(x, y)` from the sim.
    A node can therefore hold a label, a live document, or a WebView (via
    `ExternalTextureItem`), styled and accessible, while rapier arranges them. In
@@ -176,7 +176,7 @@ custom-layout element composing three first-class layers:
 
 **The two-hit-test worry resolves.** Node-*content* hit-testing is serval's (nodes
 are DOM fragments); scene-*geometry* hit-testing (empty space, edge picking,
-marquee) is aether's `QueryPipeline`. They are complementary, not duplicative,
+marquee) is gyre's `QueryPipeline`. They are complementary, not duplicative,
 with a clean boundary: a pointer landing on a materialized node dispatches through
 serval; otherwise it is a scene-geometry query.
 
@@ -262,7 +262,7 @@ the whole chrome.
 - **Do not deepen Masonry investment.** No elaborate Masonry chrome widgets; keep
   platen's layout emission abstract enough to retarget to DOM; keep the scrying
   seam re-homable to netrender external-texture.
-- **Continue R1's aether work** (host-agnostic), keep the app-wiring thin.
+- **Continue R1's gyre work** (host-agnostic), keep the app-wiring thin.
 - **Hold the separate-roots discipline** from day one: chrome-root and content-root
   are distinct document authorities. This is the invariant that goes wrong quietly.
 - **Run the perf spike** (section 8) before any commitment to render the whole

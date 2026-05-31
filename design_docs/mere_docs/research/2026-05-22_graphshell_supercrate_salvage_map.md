@@ -48,7 +48,7 @@ The host cut leaves these consumer-less (their only dependents were the host sta
 | `shell-state` | 176 | shell session state aggregator (focus, palette, omnibar, toolbar, frame view-models) | with `chrome` |
 | `ux-events` | 1998 | UX event taxonomy + telemetry (`UxEvent` / `UxObserver` / `UxProbe`, diagnostics bridge) | instrumenting the new chrome |
 | `register-diagnostics` | 2934 | keystone diagnostics registry: 253 channel-name constants + `DiagnosticsRegistry` | the new host's instrumentation; was the unblocker for other registry extractions |
-| `aether` | 394 | rapier-backed physics (bodies / forces / fields bound to nodes) | streaming / force-directed layout in the GraphCanvas |
+| `gyre` | 394 | rapier-backed physics (bodies / forces / fields bound to nodes) | streaming / force-directed layout in the GraphCanvas |
 
 `session-runtime` (2569 LOC, session manifests / view-intent / engine-profile / switcher-thumbnail) is also keep-and-rewire, but it sits on the host-stack boundary and is tracked there.
 

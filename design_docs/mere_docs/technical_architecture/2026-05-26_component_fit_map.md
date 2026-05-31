@@ -63,7 +63,7 @@ State legend: **live** (on the running path) · **partial** (used in part) ·
 | `cartography` | 1,016 | projection layer, `LayoutStrategy` contract | latent | **adopt** for the orrery's real layout (replaces the seeded ring) |
 | `graph-layout` | 9,643 | layout algorithms (analytic/streaming) | latent | **adopt** via cartography when the ring goes |
 | `graph-canvas` | 9,608 | framework-agnostic graph canvas IR (scene/camera/hit-test/render-packet) | latent | overlaps `mere-app/graph_canvas.rs`; **decide adopt-vs-retire** — the hand-rolled widget covers v1, this crate has the richer IR |
-| `aether` | 394 | rapier physics (forces/fields on nodes) | latent | sidequest: streaming/force-directed motion |
+| `gyre` | 394 | rapier physics (forces/fields on nodes) | latent | sidequest: streaming/force-directed motion |
 
 ### Arrangement + projection + realization
 | Crate | LOC | Role | State | Note |
@@ -137,7 +137,7 @@ State legend: **live** (on the running path) · **partial** (used in part) ·
    wins on simplicity.
 4. **kernel + cartography relocate** out from under `crates/graphshell/`.
 5. **The orphaned-keep cluster** (chrome, shell-state, ux-events,
-   register-diagnostics, session-runtime, the domain crates, aether) is real
+   register-diagnostics, session-runtime, the domain crates, gyre) is real
    value with no current consumer — track it here so it's revived or retired
    deliberately, not left to rot.
 

@@ -43,6 +43,26 @@ The recurring pattern, stated once: **recognized core gets behavior, open tail g
 
 Mere is not becoming RDF. Mere has an RDF-shaped substrate that it *curates*. The composition spine's small-vocabulary discipline governs the lens; the substrate beneath can be as open as the web is.
 
+## Which truths are RDF's (the world / experience cut)
+
+**Added 2026-05-30.** A refinement of the guardrail above, from asking what "support RDF" actually buys.
+
+RDF describes resources. It never described the reading of them. RDF was built to state what a thing on the web *is* and what it *relates to*, and Mere's nodes are web resources, so that part is dead-center RDF. But Mere also records two things RDF was never about: the user's trail through resources, and the user's arrangement of them. Three graphs, one of which is RDF's home turf:
+
+- **Content graph.** What documents say, cite, contradict, derive from, are about. RDF-native. The `Semantic` family is close to CiTO already (`Cites` → `cito:cites`, `Quotes` → `cito:includesQuotationFrom`, `Contradicts` → `cito:disagreesWith`); `Provenance` and `Imported` are PROV-O (`prov:wasDerivedFrom`); `tags` and classifications are SKOS. A mature standard vocabulary is already waiting for this half.
+- **Browse-trail graph.** `Traversal`: the user went from A to B at time T. There is no standard vocabulary for this, and there should not be. You can mint `mere:traversedFrom`, but nobody else on the web produces or consumes browse-trails, so the interop payoff (the whole reason to reach for RDF) is zero while the impedance cost is real.
+- **Workspace graph.** `Arrangement` (canvas geometry, LOD, physics) and `Containment` as layout nesting. Private, high-frequency, mutable UI state: expressible as triples, worthless as triples.
+
+**The cut this draws.** RDF's value is shared vocabulary for shared facts about the world, and it pays off exactly where the facts are shared. The two-layer model cuts on *recognized-behavior vs stored-tail*. Underneath it sits a second, sharper cut: **shared-world-fact (RDF-native) vs private-experiential-fact (Mere's own).** The two cuts mostly coincide, which is why the model works; the world/experience cut is the one that predicts whether RDF has words for a relation at all.
+
+**What it means for the substrate question.** "Build Mere-specifics on SPARQL, Turtle, JSON-LD" is right for the content graph and wrong for the workspace graph. Three positions:
+
+1. **Conservative (current).** One native kernel; add an open `predicate` IRI; curate. RDF stays a projection in and out. This is the [linked-data ingest/export plan](../implementation_strategy/2026-05-22_linked_data_ingest_export_plan.md).
+2. **Radical.** Internal store becomes a quad store, everything is quads, SPARQL is the internal query, families become vocabulary on top. Rejected as the *substrate*: the workspace half runs at frame rate over mutable state, behavior dispatch wants exhaustive closed enums, a SPARQL engine is heavy in wasm, and "natively RDF" pulls toward the OWL/RDFS reasoning footgun this doc already excludes.
+3. **Split (the live option).** The content subgraph becomes a real SPARQL-queryable RDF store ([Oxigraph](https://crates.io/crates/oxigraph) is the wasm-capable Rust candidate); the browse and workspace graphs stay in the native kernel; the node IRI is the join key. This makes "build on RDF" true for the half where facts are shared, without the kernel becoming RDF.
+
+**Disposition.** Hold position 1 now: the native kernel stays the substrate, and the world/experience cut is a conceptual layer over it. Treat position 3, promoting the content subgraph into an actual SPARQL store, as a future projection that earns its place when federated or semantic query over the content graph is a real requirement. This is the same slot the [event-DAG substrate brief](../implementation_strategy/2026-05-07_event_dag_substrate_brief.md) assigns Oxigraph and NextGraph at the engram boundary.
+
 ## The posture
 
 Two stances follow, both of which a *browser* should hold anyway:
@@ -63,6 +83,7 @@ The anti-scope, stated plainly so the principle is not over-applied:
 - Signing stays out: RDF canonicalization and the verifiable-credential stack (deferred with federation).
 - The curated vocabulary stays. The lens remains opinionated and small.
 - Structure stays. The families exist because behavior needs more than a flat triple gives.
+- The internal substrate stays the native kernel. A quad store plus SPARQL is not adopted as the *store*; the content subgraph may later become a SPARQL *projection* (see the world/experience cut above) without the kernel becoming RDF.
 
 ## How it is applied
 
