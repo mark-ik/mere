@@ -24,9 +24,21 @@ impl Graph {
     /// Retire a field: mark it `Retired` (keeping its definition for history /
     /// federation) rather than dropping it. Returns whether the field existed.
     pub fn retire_field(&mut self, id: FieldId) -> bool {
+        self.set_field_lifecycle(id, FieldLifecycle::Retired)
+    }
+
+    /// Reactivate a retired field, marking it `Active` again. The inverse of
+    /// [`retire_field`](Self::retire_field); together they make the field
+    /// lifecycle fully round-trippable from the kernel (the activate/retire UX
+    /// drives these). Returns whether the field existed.
+    pub fn activate_field(&mut self, id: FieldId) -> bool {
+        self.set_field_lifecycle(id, FieldLifecycle::Active)
+    }
+
+    fn set_field_lifecycle(&mut self, id: FieldId, lifecycle: FieldLifecycle) -> bool {
         match self.fields.get_mut(&id) {
             Some(field) => {
-                field.lifecycle = FieldLifecycle::Retired;
+                field.lifecycle = lifecycle;
                 true
             }
             None => false,
@@ -135,6 +147,11 @@ mod tests {
             FieldDefinition::Scalar(_)
         ));
         assert!(!g.retire_field(fid(99)), "unknown field retires false");
+
+        // reactivating is the inverse and round-trips the lifecycle
+        assert!(g.activate_field(id));
+        assert!(g.field(id).unwrap().is_active());
+        assert!(!g.activate_field(fid(99)), "unknown field activates false");
     }
 
     #[test]
