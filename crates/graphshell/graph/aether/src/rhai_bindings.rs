@@ -28,6 +28,8 @@
 //! - `p.couple_align(kind, id, strength)`
 //! - `p.couple_advect(kind, id, strength)`
 //! - `p.couple_wall(kind, id, strength)`
+//! - `p.couple_open(kind, id, iri, strength)` — an open-tail (non-force) response
+//!   by IRI, e.g. a `visual/*` coupling the paint layer consumes
 //! - `p.edge_path_field_line(edge_kind, field_id, max_steps, step_size)`
 //! - `p.edge_path_straight(edge_kind)`
 //!
@@ -230,6 +232,25 @@ fn register_coupling_methods(engine: &mut Engine) {
                 CouplingResponse::DampenInside {
                     factor: factor as f32,
                 },
+            );
+        },
+    );
+    // Open-tail responses: any non-force family (visual / navigational / …),
+    // addressed by IRI under `COUPLING_VOCAB`. `CouplingResponse::open` canonicalizes
+    // a recognized core IRI back to its typed variant and wraps the rest as `Open`.
+    engine.register_fn(
+        "couple_open",
+        |p: &mut FieldProjection,
+         kind: ImmutableString,
+         field_id: i64,
+         iri: ImmutableString,
+         strength: f64| {
+            append(
+                p,
+                kind,
+                field_id,
+                strength,
+                CouplingResponse::open(iri.to_string()),
             );
         },
     );
@@ -457,5 +478,50 @@ mod tests {
         )
         .unwrap();
         assert_eq!(p.registry.len(), 2);
+    }
+
+    #[test]
+    fn couple_open_authors_an_open_response() {
+        let p = build_from_script(
+            r#"
+            let p = new_projection();
+            let f = p.add_scalar("focus", gaussian(0.0, 0.0, 10.0));
+            p.couple_open("paper", f, "https://mere.computer/ns/coupling#visual/halo", 1.0);
+            p
+        "#,
+        )
+        .unwrap();
+        assert_eq!(p.couplings.len(), 1);
+        assert_eq!(
+            p.couplings[0].response.predicate(),
+            Some("https://mere.computer/ns/coupling#visual/halo"),
+        );
+    }
+
+    #[test]
+    fn authored_open_coupling_commits_to_the_graph() {
+        // The full author → commit → graph path: a script authors a visual
+        // coupling, committing it lands the field + coupling in the kernel Graph
+        // that gyre and platen read from.
+        let p = build_from_script(
+            r#"
+            let p = new_projection();
+            let f = p.add_scalar("focus", gaussian(0.0, 0.0, 10.0));
+            p.couple_open("paper", f, "https://mere.computer/ns/coupling#visual/halo", 1.0);
+            p
+        "#,
+        )
+        .unwrap();
+
+        let mut g = kernel::graph::Graph::new();
+        let (fields, couplings) = p.commit_to_graph(&mut g);
+        assert_eq!((fields, couplings), (1, 1));
+        let c = g.couplings().next().expect("coupling in graph");
+        assert_eq!(
+            c.response.predicate(),
+            Some("https://mere.computer/ns/coupling#visual/halo"),
+        );
+        // and the field it references is present
+        assert!(g.field(c.field).is_some(), "referenced field committed");
     }
 }
