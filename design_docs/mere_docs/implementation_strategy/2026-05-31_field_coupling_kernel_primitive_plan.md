@@ -316,3 +316,14 @@ field→selector relation.
   the activate/retire lifecycle primitive. kernel 232 (236 with `store`), gyre 18.
   Federation and the host-side lifecycle UX remain (both outside kernel truth), so
   the plan is effectively complete.
+
+- **2026-06-01** — **First paint consumer of the open tail landed** (`08fa8ce`,
+  platen). `platen::coupling_paint` recognizes the `visual/*` slice (halo / tint) of
+  the open response vocabulary and resolves it to overlay paint commands, the
+  aether→platen seam mirroring gyre's `CouplingForce` on the force side: same
+  resolve path (`graph.field` + `nodes_matching` + a registry seeded from
+  `graph.fields()`), evaluate the scalar field at each target's projected position,
+  map value × strength to intensity. Validates the open tail end to end on the paint
+  side; the kernel stays force-core-only (platen owns its visual vocabulary, an
+  unrecognized `visual/*` IRI is skipped). platen 43. The rhai `couple_open`
+  authoring surface still waits on a `FieldProjection`→`Graph` commit path.
