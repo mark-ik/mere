@@ -243,13 +243,17 @@ has a done-condition, not a date.
   unrecognized → `assert_semantic_predicate` (the open-predicate kernel path).
   Done condition met for expanded / inline-`@context` documents; 2 tests (parse +
   materialize). Deps `oxjsonld = "0.2"`, `oxrdf = "0.3"`.
-- **Remaining:** (a) a **bundled-context loader** so a *remote* `@context`
-  (`"@context": "https://schema.org/"`) resolves offline — seam is
-  `JsonLdParser::with_load_document_callback(|url, _| …)`, a sync closure that
-  serves bundled context JSON and errors on anything else (oxjsonld already
-  errors when a remote context is referenced with no callback). (b) **inker
-  routing** for `application/ld+json` as a graph-contribution input (distinct
-  from `EngineDocument` / render).
+- **Loader mechanism landed 2026-06-01.** `ContextCache` (a URL → context-bytes
+  map) + `from_jsonld_with_contexts(bytes, cache)` wire oxjsonld's
+  `for_slice(..).with_load_document_callback(..)`: a registered remote `@context`
+  is served from the cache and anything else is refused (no network). Tested both
+  ways (resolve + refuse). **Still open there:** the context *assets* — embed the
+  real schema.org / Dublin Core / ActivityStreams context JSON (a bundle-size /
+  which-vocabularies call) versus a minimal curated context. The cache takes
+  either; populating it is the decision.
+- **Remaining:** **inker routing** for `application/ld+json` as a
+  graph-contribution input (distinct from `EngineDocument` / render) — host
+  integration.
 
 ### Phase 3 — Round-trip + coverage
 - Ingest → export → compare, modulo the by-design drops (uncurated literals).
@@ -312,3 +316,7 @@ has a done-condition, not a date.
   `assert_semantic_predicate`). linked-data **4** (2 export + 2 ingest). API was
   read from the oxjsonld/oxrdf source (not guessed). Remaining: bundled-context
   loader + inker `application/ld+json` routing (see Phase 2).
+- **2026-06-01 (loader)** — bundled-context **mechanism** landed: `ContextCache`
+  plus `from_jsonld_with_contexts` over oxjsonld's `with_load_document_callback`
+  (serve registered contexts, refuse the rest, no network). linked-data **6**.
+  Open: embed real context assets (schema.org/DC/AS vs minimal) + inker routing.

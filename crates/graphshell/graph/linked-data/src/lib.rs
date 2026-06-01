@@ -32,7 +32,10 @@ use std::collections::BTreeMap;
 /// JSON-LD ingest (Phase 2): `application/ld+json` → a graph contribution.
 pub mod ingest;
 
-pub use ingest::{EdgeContribution, GraphContribution, IngestError, NodeContribution, from_jsonld};
+pub use ingest::{
+    ContextCache, EdgeContribution, GraphContribution, IngestError, NodeContribution, from_jsonld,
+    from_jsonld_with_contexts,
+};
 #[cfg(not(target_arch = "wasm32"))]
 pub use ingest::{ApplyOutcome, apply_contribution};
 

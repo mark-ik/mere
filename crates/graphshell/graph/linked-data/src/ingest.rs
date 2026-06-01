@@ -26,8 +26,8 @@
 //! and full literal fidelity.
 
 use crate::{SCHEMA_KEYWORDS, SCHEMA_NAME};
-use oxjsonld::JsonLdParser;
-use oxrdf::{NamedOrBlankNode, Term};
+use oxjsonld::{JsonLdParser, JsonLdRemoteDocument};
+use oxrdf::{NamedOrBlankNode, Quad, Term};
 use std::collections::BTreeMap;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -135,10 +135,43 @@ fn route_resource(
 /// graph, no kernel mutation. Expects inline-`@context` or expanded JSON-LD; a
 /// remote `@context` is not fetched (a bundled-context loader is a later step).
 pub fn from_jsonld(bytes: &[u8]) -> Result<GraphContribution, IngestError> {
+    collect_contribution(JsonLdParser::new().for_slice(bytes))
+}
+
+/// Like [`from_jsonld`], but a remote `@context` is resolved from `contexts`
+/// instead of the network. A context URL absent from the cache is an error, so
+/// ingest never makes a request. The cache is the seam for bundling schema.org /
+/// Dublin Core / ActivityStreams; populating it (the asset-weight decision) is a
+/// separate step.
+pub fn from_jsonld_with_contexts(
+    bytes: &[u8],
+    contexts: ContextCache,
+) -> Result<GraphContribution, IngestError> {
+    let quads = JsonLdParser::new()
+        .for_slice(bytes)
+        .with_load_document_callback(move |url, _options| {
+            contexts
+                .get(url)
+                .map(|document| JsonLdRemoteDocument {
+                    document: document.to_vec(),
+                    document_url: url.to_string(),
+                })
+                .ok_or_else(|| -> Box<dyn std::error::Error + Send + Sync> {
+                    format!("refused remote @context (not in the bundled cache): {url}").into()
+                })
+        });
+    collect_contribution(quads)
+}
+
+/// Group a stream of RDF quads into a [`GraphContribution`] — shared by the
+/// network-free and bundled-context parsers.
+fn collect_contribution<E: std::fmt::Display>(
+    quads: impl Iterator<Item = Result<Quad, E>>,
+) -> Result<GraphContribution, IngestError> {
     let mut nodes: BTreeMap<String, NodeContribution> = BTreeMap::new();
     let mut edges: Vec<EdgeContribution> = Vec::new();
 
-    for quad in JsonLdParser::new().for_slice(bytes) {
+    for quad in quads {
         let quad = quad.map_err(|err| IngestError::Parse(err.to_string()))?;
         let subject = subject_iri(&quad.subject);
         let predicate = quad.predicate.as_str();
@@ -184,6 +217,31 @@ pub fn from_jsonld(bytes: &[u8]) -> Result<GraphContribution, IngestError> {
         .collect();
 
     Ok(GraphContribution { nodes, edges })
+}
+
+/// A bundled JSON-LD `@context` cache for offline ingest: a map of context URL to
+/// its document bytes. [`from_jsonld_with_contexts`] serves these and refuses any
+/// URL not present, so a document's remote `@context` never hits the network.
+#[derive(Clone, Default)]
+pub struct ContextCache {
+    documents: std::collections::HashMap<String, Vec<u8>>,
+}
+
+impl ContextCache {
+    /// An empty cache: every remote `@context` is refused.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Bundle a context document under its URL (builder style).
+    pub fn with(mut self, url: impl Into<String>, document: impl Into<Vec<u8>>) -> Self {
+        self.documents.insert(url.into(), document.into());
+        self
+    }
+
+    fn get(&self, url: &str) -> Option<&[u8]> {
+        self.documents.get(url).map(Vec::as_slice)
+    }
 }
 
 /// What [`apply_contribution`] did.
@@ -357,5 +415,50 @@ mod tests {
             citation.semantic_data().and_then(|d| d.predicate.as_deref()),
             Some("https://schema.org/citation")
         );
+    }
+
+    const REMOTE_DOC: &[u8] = br#"{
+      "@context": "https://ctx.test/v1",
+      "@id": "https://a.test/",
+      "name": "Article A",
+      "cites": {"@id": "https://b.test/"}
+    }"#;
+
+    const BUNDLED_CONTEXT: &[u8] = br#"{
+      "@context": {
+        "name": "https://schema.org/name",
+        "cites": "https://mere.computer/ns/rel#cites"
+      }
+    }"#;
+
+    #[test]
+    fn bundled_context_expands_a_remote_context() {
+        let cache = ContextCache::new().with("https://ctx.test/v1", BUNDLED_CONTEXT);
+        let contribution = from_jsonld_with_contexts(REMOTE_DOC, cache).expect("context resolved");
+
+        // `name` expands to schema:name (a title); `cites` to the Mere predicate
+        // (an edge) — both via the bundled context, no network.
+        let a = contribution
+            .nodes
+            .iter()
+            .find(|n| n.id == "https://a.test/")
+            .expect("node a");
+        assert_eq!(a.title.as_deref(), Some("Article A"));
+        assert!(contribution.edges.contains(&EdgeContribution {
+            subject: "https://a.test/".into(),
+            predicate: "https://mere.computer/ns/rel#cites".into(),
+            object: "https://b.test/".into(),
+        }));
+    }
+
+    #[test]
+    fn unbundled_remote_context_is_refused() {
+        // Empty cache → the remote @context cannot be resolved → ingest errors.
+        assert!(matches!(
+            from_jsonld_with_contexts(REMOTE_DOC, ContextCache::new()),
+            Err(IngestError::Parse(_))
+        ));
+        // The network-free parser refuses a remote @context outright.
+        assert!(matches!(from_jsonld(REMOTE_DOC), Err(IngestError::Parse(_))));
     }
 }
