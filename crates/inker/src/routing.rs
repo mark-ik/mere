@@ -38,6 +38,7 @@ pub const ENGINE_NEMATIC_GEMTEXT: &str = "nematic.gemtext";
 pub const ENGINE_NEMATIC_GOPHER: &str = "nematic.gopher";
 pub const ENGINE_NEMATIC_GUPPY: &str = "nematic.guppy";
 pub const ENGINE_NEMATIC_KNOT: &str = "nematic.knot";
+pub const ENGINE_NEMATIC_KNOT_DJOT: &str = "nematic.knot-djot";
 pub const ENGINE_NEMATIC_MARKDOWN: &str = "nematic.markdown";
 pub const ENGINE_NEMATIC_MISFIN: &str = "nematic.misfin";
 pub const ENGINE_NEMATIC_NEX: &str = "nematic.nex";
@@ -296,7 +297,10 @@ impl Default for EngineRoutePolicy {
                 ),
                 EngineRouteRule::content_type(
                     ["text/x-knot", "application/x-knot"],
-                    ENGINE_NEMATIC_KNOT,
+                    // djot is the default knot grammar (knot design doc §10.5
+                    // Phase 5); the CommonMark `nematic.knot` engine stays
+                    // available by explicit pin for import/compat.
+                    ENGINE_NEMATIC_KNOT_DJOT,
                     SurfaceContractMode::CompositedTexture,
                 ),
             ],

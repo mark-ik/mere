@@ -234,6 +234,7 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
                 sub_kinds: vec![PersistedSemanticSubKind::Hyperlink],
                 label: None,
                 agent_decay_progress: None,
+                predicate: None,
             }),
             traversal: None,
             containment: None,

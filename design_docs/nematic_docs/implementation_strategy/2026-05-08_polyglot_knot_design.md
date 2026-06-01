@@ -195,3 +195,153 @@ File-size budget: knot.rs is at 429 LOC today; +200 LOC pushes near the 600 ceil
 ## 9. Summary
 
 Polyglot knot bodies make the format the **richest reasonable surface for graph-native notes** without breaking the protocol-faithfulness rule the protocol engines hold. Markdown remains the connective prose; fenced protocol blocks preserve clipped content in its original spec-shaped form; semantic-only blocks (feed entries, metadata rows, badges) get a small declarative fence syntax. Round-trip is symmetric: `to_knot()` is the dual of fence expansion, so a clip + save + re-open cycle reproduces the source's intent and (in v2) its bytes.
+
+---
+
+## 10. Djot substrate direction (added 2026-05-31)
+
+A later design pass (prompted by "what about djot?") concludes that **djot is the
+stronger long-term substrate** for the knot body, and that several of §2's custom
+fence hacks become native djot constructs. CommonMark stays available as an
+import/compat mode; djot becomes the authoring grammar.
+
+### 10.1 Why djot
+
+Three of knot's hardest requirements are djot's native strengths:
+
+1. **Round-trip fidelity.** §4's `to_knot()` and the v2 byte-faithful goal are
+   exactly what djot ([djot.net](https://djot.net), John MacFarlane) was designed
+   for; CommonMark is notoriously hard to round-trip. The grammar is regular and
+   unambiguous, with a clean event model.
+2. **Typed blocks without a hack.** §2.2's semantic fences (`feed-entry`,
+   `feed-header`, `metadata-row`, `badge`) abuse *code* blocks as typed data.
+   Djot's generic **divs** (`:::class`) and **attributes** (`{#id .class key="v"}`)
+   are the right primitive for "a block that means something."
+3. **Attributes as statements.** Djot inline/block attributes are a human-writable
+   syntax for the open-predicate `(subject, predicate, object)` model of the
+   [statements-over-schema stance](../../mere_docs/technical_architecture/2026-05-22_statements_over_schema_stance.md).
+   `[[Topic]]{rel=schema:cites}` is a `Semantic` edge with a predicate;
+   `# H {typeof=schema:Article}` is a node classification. CommonMark cannot say
+   this without another fence.
+
+The cost is the ergonomic knot leans on: "it is just markdown, paste anything."
+Djot is markdown-*like*, not CommonMark-compatible. Mitigation: keep a CommonMark
+import/compat mode (the existing engine) for pasted markdown; author new knots in
+djot.
+
+### 10.2 Construct mapping
+
+| §2 today (CommonMark) | Djot |
+| --- | --- |
+| `feed-entry` / `feed-header` (key:value fence) | `:::feed-entry {title=… url=… date=…}` div; content = summary |
+| `metadata-row` (key:value fence) | native **definition list** (`: Term` then an indented definition) |
+| `badge` (line fence) | `[text]{.tag}` spans, or a `:::badge` div |
+| `gemtext` / `gopher` / `nex` (protocol source) | unchanged — a code fence is the honest primitive for verbatim foreign source and round-trips byte-faithfully |
+| `[[wikilink]]` → node | `[[wikilink]]{rel=…}` — wikilink stays a knot extension; the optional `rel` carries the predicate |
+| `#hashtag` → Badge | `[tag]{.tag}` span, or keep `#tag` extraction as a convenience |
+
+The migration *shrinks* knot's custom surface: `metadata-row` disappears into
+definition lists, the semantic fences become attribute-carrying divs (now
+schema-able), and the only irreducible custom pieces are the protocol code-fences
+(honest), the `[[ ]]` wikilink, and YAML frontmatter.
+
+### 10.3 Sketch
+
+```text
+# Proposed (djot + jotdown)
+# My research {typeof=schema:Note}
+A note about [[Topic A]]{rel=schema:about}.
+
+` ` `gemtext
+=> gemini://capsule.test/ a capsule
+` ` `
+
+{title="Article I clipped" url="https://blog.test/post" date="2026-05-08"}
+::: feed-entry
+A summary, as the div's content.
+:::
+
+: Trust
+
+  tofu
+
+[research]{.tag} [clip]{.tag}
+```
+
+### 10.4 What the field tells us (Markdoc / MyST / Obsidian / Logseq)
+
+- **MyST** directives (` ```{note} ` with `:key: val` options) are structurally
+  what §2's fences already are — knot is MyST-shaped without naming it. Djot
+  divs + attributes express the same idea more cleanly.
+- **Markdoc** (Stripe) contributes the missing piece: a declarative **schema** for
+  the recognized blocks (node/tag/attribute types + validation). Knot's fence
+  vocabulary is hardcoded; a small schema makes it data (recognized-core-plus-open-
+  tail, per the stance).
+- **Obsidian** validates the model the [two-natured kernel brief](../../mere_docs/research/2026-05-30_two_natured_kernel_brief.md)
+  draws: the file is truth, the graph is derived. A knot is the authoritative file;
+  kernel nodes/edges are the projection.
+- **Logseq** shows the backend: notes over a **datalog statement store**, with
+  `key:: value` block properties that *are* statements. That is the kernel's
+  content-core direction; knot is the authoring surface, the kernel is the store.
+  Djot `{key=val}` and Logseq `key:: value` are the same move.
+
+Through-line: **knot is the human authoring front-end for the kernel's
+content-truth, and djot is the only substrate here where the authoring syntax can
+express the same statements the kernel stores.**
+
+### 10.5 Phased migration (additive; the shipped CommonMark knot stays working)
+
+1. **PoC (additive):** add `jotdown` (the Rust djot pull-parser); a new
+   `knot/djot.rs` parses a djot body into `DocumentBlock`s for the key constructs
+   (div-with-class → semantic block; definition list → `MetadataRow`; protocol
+   code-fence → existing expansion; inline `rel`/`typeof` attribute → a predicate
+   carried on the block/link). Behind a flag / experimental engine id; existing
+   knot untouched. Tests. **Landed 2026-05-31** (`knot/djot.rs`; `jotdown =
+   "0.10"`): definition list → `MetadataRow`, `::: feed-entry` / `::: badge` divs
+   → semantic blocks (typed attributes read via `Attributes::get_value`), with
+   headings / paragraphs / code mapped structurally; then wired as a reachable `DjotKnotEngine` (engine id
+   `nematic.knot-djot`, re-exported; shares `apply_frontmatter` with `KnotEngine`;
+   kept out of the default `engines()` registry since it shares the `text/x-knot`
+   content-type). 44/44 knot + djot tests green. Deferred: inline `rel`/`typeof` predicates (need an
+   `InlineSpan` predicate slot, tied to the linked-data plan) and reusing the
+   existing protocol-fence expansion. Note: jotdown emits a standalone
+   `{…}` attribute line as `Event::Attributes` applying to the next block, so the
+   verified div form is an attribute line *preceding* `::: feed-entry`.
+2. **Round-trip:** `to_djot_knot()` as the dual; byte-faithful source-segment
+   preservation for protocol fences (§4 option (b)). **Dual landed 2026-05-31** as
+   `blocks_to_djot` (the inverse of `parse_djot_knot_body`): semantic blocks emit
+   as native djot (`MetadataRow` → definition list; `FeedEntry` / `FeedHeader` /
+   `Badge` → an attributed div); a parse → emit → parse round-trip test is green on
+   the recognized subset. Byte-faithful protocol-fence preservation stays future.
+3. **Schema:** a small declarative registry for recognized div-classes + attribute
+   types (the Markdoc lesson); validate, store unknown divs/attributes generically
+   (the open tail). **Landed 2026-05-31** as `KNOT_DIV_SCHEMA` + `validate_div`:
+   the recognized classes (`feed-entry` / `feed-header` / `badge`) and their
+   required attributes are declared data; `parse_djot_knot_body_validated` returns
+   blocks + diagnostics (unknown class → `UnsupportedConstruct` + a generic
+   `Quote`; recognized div missing a required attribute → `ParseWarning`),
+   surfaced in the engine's `doc.diagnostics`; 3 tests. Unknown-*attribute*
+   preservation (the rest of the open tail) needs jotdown attribute iteration and
+   stays future.
+4. **Statements wiring:** map `rel`/`typeof` to kernel `Semantic` edges with
+   predicate IRIs + node classifications — depends on the
+   [linked-data plan](../../mere_docs/implementation_strategy/2026-05-22_linked_data_ingest_export_plan.md)
+   Phase 0 (open the Semantic predicate). **Phase 0 landed 2026-05-31** (kernel
+   `SemanticData.predicate` + `predicate_iri` vocabulary + `set_semantic_predicate`),
+   so this is unblocked. Remaining, measured: a `predicate` slot on
+   `InlineSpan::Link` (constructed/matched across ~14 files — every engine) so a
+   djot link carries its `rel`, plus a knot→graph ingest that turns those into
+   `Semantic` edges via `set_semantic_predicate`. The wide `InlineSpan` change and
+   the absent ingest path make this its own focused pass.
+5. **Default flip:** once parity + ergonomics hold, djot becomes the knot grammar;
+   CommonMark stays as an import/compat mode rather than the author grammar.
+   **Landed 2026-05-31.** `DjotKnotEngine` gained CommonMark parity by reusing the
+   engine-agnostic `expand_fenced_blocks` + `rewrite_inline_extensions` passes
+   (protocol fences + wikilinks/hashtags — so CommonMark-style fenced knots still
+   work under djot); registered in `engines()`; the `text/x-knot` content-type
+   default flipped to `nematic.knot-djot` (`inker/routing.rs`), with `nematic.knot`
+   available by pin for compat. nematic **154** + inker **67** green.
+
+Open question: keep a permanent CommonMark compat-parse mode for pasted markdown,
+or convert-on-paste markdown → djot? Likely the former (cheap; preserves "paste
+anything" for import while djot is the native author format).

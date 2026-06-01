@@ -176,9 +176,11 @@ name = "aether"
 version = "0.0.1"
 dependencies = [
  "burn",
+ "kernel",
  "rhai",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -4363,6 +4365,7 @@ dependencies = [
 name = "gyre"
 version = "0.0.1"
 dependencies = [
+ "aether",
  "euclid",
  "kernel",
  "rapier2d",
@@ -5565,6 +5568,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "jotdown"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "206bf4773a58f2a051a24fb77cb6c5eeaa84403c0dc5d072ec460ed1648db594"
+
+[[package]]
 name = "js-sys"
 version = "0.3.97"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6463,6 +6472,7 @@ name = "nematic"
 version = "0.0.1"
 dependencies = [
  "inker",
+ "jotdown",
  "pulldown-cmark",
  "quick-xml",
  "serde",

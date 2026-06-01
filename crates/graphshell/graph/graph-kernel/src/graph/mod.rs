@@ -103,7 +103,7 @@ pub use edge_taxonomy::{
     ArrangementData, ArrangementSubKind, ContainmentData, ContainmentSubKind, EdgeAssertion,
     EdgeFamily, EdgeMetrics, ImportedData, ImportedSubKind, NavigationTrigger, ProvenanceData,
     ProvenanceSubKind, RelationDurability, RelationKind, RelationSelector, SemanticData,
-    SemanticSubKind, Traversal, TraversalData,
+    SemanticSubKind, Traversal, TraversalData, predicate_iri, sub_kind_from_iri, REL_VOCAB,
 };
 
 // Field-system truth types (2026-05-31). Field/Coupling form a parallel field

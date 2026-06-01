@@ -140,6 +140,8 @@ Per-protocol mods in `mooting/` register their own ALPNs as needed (`mere/mootin
 
 iroh-blobs / iroh-gossip / iroh-docs integrations land **after** Cable's iroh transport (Cable migration plan Phase 2C). They are independent of each other and can ship in any order; first concrete consumer drives priority.
 
+**iroh-docs caution (2026-05-31).** iroh 1.0 (rc.1, 2026-05-27) stabilizes the connection layer plus noq, not the higher protocols; iroh-blobs / iroh-docs / iroh-gossip are separate community crates, and iroh-docs is a meta-protocol layered on the other two. Treat iroh-docs as a swappable projection (it already does RBSR, so adoption is not a sync-efficiency question), with p2panda-sync and willow-rs as fallbacks if its maintenance lags. See the [murm/p2p landscape brief](../research/2026-05-31_murm_p2p_landscape_brief.md).
+
 ---
 
 ## 3. Identity Vault (mere-identity Phase 2C)
@@ -541,6 +543,8 @@ This is a real change from MURM_AS_BILATERAL §1's claim that "co-op stays in mu
 What changes immediately on the strength of this re-derivation:
 
 - **Misfin moves out of Murm.** Misfin is mail-shaped (store-and-forward, asynchronous, recipient may be offline for days). It does not fit the "ad-hoc peer interaction" model. Misfin lives in **moothold + nematic**: nematic hosts the smolweb-shaped Misfin server endpoint; moothold owns the mailbox-as-durable-membership UX.
+
+  > **Relaxed 2026-06-01 (Mark).** This "move Misfin out" call is reversed for the client/exchange side. Misfin and other smolweb *exchange* protocols stay in murm once developed to Misfin's level and jibing with murm. The operative murm axis is *bilateral exchange with a known endpoint* (sync or store-and-forward), not strictly "ad-hoc real-time peer," so `misfin` stays under `crates/murm/`. nematic still hosts any server-side smolweb endpoint; murm owns the client/exchange side. See the [MURM_AS_BILATERAL status note](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md) and the [murm/p2p landscape brief](../research/2026-05-31_murm_p2p_landscape_brief.md) contradiction (C).
 - **Matrix is fully Moothold.** Including DMs. The mod does not split DMs into one layer and rooms into another.
 - **Nostr is fully Moothold.** Including NIP-17 DMs. Same reasoning.
 - **iroh-gossip is not a "Murm/Moothold concern."** It's transport that lives in `mere-transport`. §2.1 already corrected to say so.
@@ -844,3 +848,9 @@ Code-side and plan-side execution against the §6 phase tracks user requested in
 - **(b) iroh-gossip integration** — `IrohTransport` grows a builder pattern (`IrohTransport::builder(master).gossip().bind()`) and an `iroh_gossip::Gossip` handler registered with the same Router. `IrohTransport::gossip() -> Option<&Gossip>` exposes the iroh-gossip API directly (no wrapper layer in v0). New test `paired_iroh_transports_exchange_gossip_message` runs alice + bob as gossip peers on the same loopback endpoints (which also serve blobs and Cable), broadcasts and receives a topic message. **24 mere-transport tests** (+1).
 - **(c) PassphraseEncryptedStorage backend** — `mere-identity::passphrase_storage::PassphraseEncryptedStorage` ships as a production-grade `IdentityStorage` backend. Argon2id-derived KEK, ChaCha20-Poly1305 authenticated encryption per profile, single-file JSON storage with atomic-rename writes. `serde::{Serialize, Deserialize}` derives added to `CredentialLineage` and `UnlockTier` to support the wire format. Wrong-passphrase rejection at `open()` time (decrypts an existing profile to verify). 6 new tests including a "ciphertext doesn't contain plaintext secrets" check. **19 mere-identity tests** (+6).
 - **(d) IRC mod plan branch** — [`design_docs/moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md`](../../moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md) drafted. Crate scaffold (`mere-mod-irc`), vault slot shape (`Direct`, `kind="irc"`, `lineage=ExternallyIssued`, `unlock_tier=ShortTtl 15min` default), Pattern A (orrery-pinned) lifecycle, Pattern B (moot-relayed, puppet mode only per protocol architecture plan §5.1.1) flows, ALPN reuse (`mere/moothold/primitive-node/v1` — no new ALPN), IRCv3 capabilities scoped (sasl + server-time + away-notify + multi-prefix + extended-join + message-tags), three-phase delivery (3.0 mod scaffold + Pattern A → 3.1 Pattern B puppet relay → 3.2 comms applet UI), 5 still-open questions deferred to per-protocol research. DOC_README index updated.
+
+### 2026-05-31 — landscape refresh + iroh-docs caution
+
+- External p2p landscape grounded against current sources in the [murm/p2p landscape brief](../research/2026-05-31_murm_p2p_landscape_brief.md). §2 iroh layering validated: iroh 1.0.0-rc.1 (2026-05-27), noq stabilizing, and two external stacks (Holochain, p2panda) converged on iroh.
+- **iroh-docs caution (added to §2.4).** iroh 1.0 stabilizes the connection layer plus noq, not the higher protocols; iroh-docs is a community meta-protocol over blobs+gossip. The "iroh-docs first concrete consumer = moot roster" track (§6 Phase 3) should treat iroh-docs as a swappable projection, with p2panda-sync and willow-rs as fallbacks.
+- The §3 vault skeleton plus passphrase backend are built (`persona/identity`); the §5 moot/bridge/primitive-node layer remains a 61-LOC stub. No §5 code started. p2panda's modular rewrite is now a substrate adopt-candidate for the event-DAG core (the substrate brief's deferral predates it).

@@ -69,6 +69,10 @@ pub use gemtext::{ENGINE_ID as ENGINE_GEMTEXT, GemtextEngine};
 pub use gopher::{ENGINE_ID as ENGINE_GOPHER, GopherEngine};
 pub use guppy::{ENGINE_ID as ENGINE_GUPPY, GuppyEngine};
 pub use knot::{ENGINE_ID as ENGINE_KNOT, KnotEngine};
+// Experimental djot-bodied knot engine (design doc §10). Not in `engines()` —
+// it shares the `text/x-knot` content-type with `KnotEngine`, so route to it
+// explicitly by engine id.
+pub use knot::djot::{DjotKnotEngine, ENGINE_ID as ENGINE_KNOT_DJOT};
 pub use markdown::{ENGINE_ID as ENGINE_MARKDOWN, MarkdownEngine};
 pub use misfin::{ENGINE_ID as ENGINE_MISFIN, MisfinEngine};
 pub use nex::{ENGINE_ID as ENGINE_NEX, NexEngine};
@@ -91,6 +95,7 @@ pub fn engines() -> Vec<Box<dyn Engine>> {
         Box::new(FileEngine::new()),
         Box::new(FingerEngine::new()),
         Box::new(KnotEngine::new()),
+        Box::new(DjotKnotEngine::new()),
         Box::new(ScrollEngine::new()),
         Box::new(SpartanEngine::new()),
         Box::new(TitanEngine::new()),
@@ -142,6 +147,7 @@ mod tests {
                 ENGINE_GOPHER,
                 ENGINE_GUPPY,
                 ENGINE_KNOT,
+                ENGINE_KNOT_DJOT,
                 ENGINE_MARKDOWN,
                 ENGINE_MISFIN,
                 ENGINE_NEX,

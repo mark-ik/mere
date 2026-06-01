@@ -134,6 +134,16 @@ has a done-condition, not a date.
 - **Done:** old `graph.json` loads unchanged (`predicate = None`); a recognized
   sub-kind round-trips kind ↔ IRI ↔ kind; a raw IRI survives a save/load;
   existing kernel + consumer tests stay green.
+- **Landed 2026-05-31.** `SemanticData.predicate: Option<String>` (raw IRI string,
+  **not yet interned** — interning stays open question 2); `predicate_iri` /
+  `sub_kind_from_iri` canonical-vocabulary helpers (`REL_VOCAB`; recognized
+  sub-kind ↔ IRI both ways, tested for all 17 sub-kinds); `EdgePayload::set_semantic_predicate`;
+  `PersistedSemanticEdgeData.predicate` (`#[serde(default)]`) with
+  `snapshot/{to,from}.rs` round-trip (restored via `find_edge_key` /
+  `get_edge_mut`, so no `EdgeAssertion` sweep). Old graphs load with `None`;
+  kernel suite **228/228** green. **Deferred:** raw predicate-*only* edges (empty
+  `sub_kinds`) are not yet recreated on load — that pairs with JSON-LD ingest
+  (Phase 2).
 
 ### Phase 1 — Export (graph → JSON-LD)
 - New `linked-data` crate. `to_jsonld(subgraph) -> JSON-LD`: nodes → objects

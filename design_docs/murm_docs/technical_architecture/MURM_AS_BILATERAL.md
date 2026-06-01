@@ -19,6 +19,11 @@
 
 ---
 
+> **Status update (2026-05-31).** This doc predates two later shifts and now reads partly stale. Read it with these corrections, tracked in the [murm/p2p landscape brief](../../mere_docs/research/2026-05-31_murm_p2p_landscape_brief.md):
+> - **Built reality.** `transport` (iroh QUIC + blobs + gossip), `murmuring`/`murm` (Cable bilateral sync), and a `persona/identity` vault skeleton plus passphrase backend are built and tested. The moot/federation tier is a 61-LOC stub.
+> - **The substrate pivot ([event-DAG brief](../../mere_docs/implementation_strategy/2026-05-07_event_dag_substrate_brief.md)) intends to replace the Cable *wire* with a BLAKE3 MereEvent DAG** while keeping bilateral semantics in murm. The code is still Cable (BLAKE2b). "Cable stays in murm" (the soul is bilateral) and "drop the Cable wire" are reconcilable once read as layer-ownership vs wire-format, but the code has executed neither the rename nor the BLAKE3 move.
+> - **The §1 boundary axis was re-derived, then partly relaxed.** Protocol-plan §5.0 replaced "1:1 vs many-to-many" with "ad-hoc peer vs durable group" and proposed moving Misfin out of murm. **Resolved 2026-06-01 (Mark):** Misfin and other smolweb *exchange* protocols stay in murm once they reach Misfin's implementation level and jibe with murm. The operative murm axis is therefore *bilateral exchange with a known endpoint* (sync or store-and-forward, which includes mail), not strictly "ad-hoc real-time peer." Pure fetch/render protocols stay nematic engines; murm owns the client/exchange side. So `misfin` under `crates/murm/` is correct, not a contradiction.
+
 ## 1. What Murm Is
 
 Murm is the **bilateral peer-to-peer comms supercrate** in the Mere workspace. It owns:

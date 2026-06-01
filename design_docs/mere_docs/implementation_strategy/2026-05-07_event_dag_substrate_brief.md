@@ -630,3 +630,11 @@ Research dispatch (four parallel agents on iroh-docs sync, iroh-willow status, w
 - NextGraph refreshed against its active authoritative Gitea workspace; `engine/oxigraph` and `engine/verifier` move into a narrow linked-data projection spike.
 - §13 corrected: Eidetic `schema::Hash` remains a raw BLAKE3 implementation gap, not an existing multihash-aware type.
 - See [Nonstandard browsing profiles and semantic-web donors](../research/2026-05-30_nonstandard_browsing_profiles_brief.md).
+
+### 2026-05-31
+
+- External landscape grounded against current sources and the live code in the [murm/p2p landscape brief](../research/2026-05-31_murm_p2p_landscape_brief.md). Refreshes bearing on this brief:
+  - **iroh 1.0 is landing** (1.0.0-rc.1, 2026-05-27); noq is the stabilizing QUIC layer. The §2 transport bet is validated. Holochain (from tx5/WebRTC) and p2panda (full rewrite) both converged on iroh, and p2panda's stack mirrors Mere's exact ingredient list (iroh + BLAKE3 + Ed25519 + CBOR + UCAN + PlumTree/HyParView).
+  - **iroh-docs is not on the iroh 1.0 stability train.** 1.0 commits to the connection layer plus noq; blobs/docs/gossip are separate community crates and iroh-docs is a meta-protocol over the other two. The §5 sync-as-projection stance is the right hedge and should be held firmly; plan to own or replace the sync layer if its maintenance lags.
+  - **p2panda's modular rewrite (p2panda-core + p2panda-net, iroh-based) reopens adopt-vs-build for the §4 event grammar.** This was not true when §5 deferred p2panda. Run the spike before writing the MereEvent DAG core.
+  - **The §9 code moves remain unstarted.** Derivation is still BLAKE2b (`persona/identity/keypair.rs`), murm still ships the Cable wire, and `MereEvent`/`mere-namespace` exist only in README prose. The §13 multihash gap on `eidetic::schema::Hash` is still open and is the one free structural task.

@@ -234,6 +234,18 @@ impl EdgePayload {
         self.semantic.as_ref()
     }
 
+    /// Set (or clear) the open predicate IRI on the semantic sidecar, creating
+    /// the sidecar if needed. The predicate is independent of `sub_kinds`: a
+    /// recognized edge carries both; a raw web predicate may carry only this.
+    pub fn set_semantic_predicate(&mut self, predicate: Option<String>) {
+        if predicate.is_none() && self.semantic.is_none() {
+            return;
+        }
+        self.semantic
+            .get_or_insert_with(SemanticData::default)
+            .predicate = predicate;
+    }
+
     pub fn traversal_data(&self) -> Option<&TraversalData> {
         self.traversal.as_ref()
     }

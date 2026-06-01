@@ -16,6 +16,9 @@ path = "src/lib.rs"
 [dependencies]
 inker.workspace = true
 pulldown-cmark = { version = "0.13", default-features = false }
+# Djot pull-parser for the knot djot-substrate proof-of-concept (knot/djot.rs;
+# design doc §10). Additive alongside pulldown-cmark during the migration.
+jotdown = "0.10"
 quick-xml = "0.39"
 serde = { workspace = true }
 serde_json = { workspace = true }

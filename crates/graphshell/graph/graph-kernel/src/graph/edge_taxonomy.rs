@@ -424,6 +424,15 @@ mod relation_tag_tests {
     use super::*;
     use strum::IntoEnumIterator;
 
+    #[test]
+    fn predicate_iri_round_trips_for_every_semantic_sub_kind() {
+        for sk in SemanticSubKind::iter() {
+            let iri = predicate_iri(sk);
+            assert_eq!(sub_kind_from_iri(iri), Some(sk), "iri {iri} for {sk:?}");
+        }
+        assert!(sub_kind_from_iri("https://example.com/unknown").is_none());
+    }
+
     fn all_kinds() -> Vec<RelationKind> {
         // Driven by `EnumIter`, so a new sub-kind is covered automatically with
         // no parallel list to maintain. `Traversal` is the one family with no
@@ -527,6 +536,50 @@ impl Default for EdgeMetrics {
 pub struct SemanticData {
     pub sub_kinds: BTreeSet<SemanticSubKind>,
     pub label: Option<String>,
+    /// Open predicate IRI (the statements-over-schema substrate, linked-data
+    /// plan Phase 0). `None` when the edge's meaning is fully carried by
+    /// `sub_kinds`; a canonical IRI ([`predicate_iri`]) for a recognized
+    /// predicate, or a raw IRI for an unrecognized one. `sub_kinds` stays
+    /// authoritative for behaviour; `predicate` carries identity + round-trip.
+    pub predicate: Option<String>,
+}
+
+/// Base IRI for Mere's canonical relation vocabulary. Recognized
+/// [`SemanticSubKind`]s map to `{REL_VOCAB}{slug}` (the "small Mere vocabulary
+/// of canonical IRIs"); the JSON-LD export layer maps these onto standard
+/// vocabularies (CiTO, schema.org, …) through its `@context`. Provisional base.
+pub const REL_VOCAB: &str = "https://mere.computer/ns/rel#";
+
+/// The canonical relation IRI for a recognized semantic sub-kind. Inverse of
+/// [`sub_kind_from_iri`].
+pub fn predicate_iri(sub_kind: SemanticSubKind) -> &'static str {
+    match sub_kind {
+        SemanticSubKind::Hyperlink => "https://mere.computer/ns/rel#hyperlink",
+        SemanticSubKind::UserGrouped => "https://mere.computer/ns/rel#user-grouped",
+        SemanticSubKind::AgentDerived => "https://mere.computer/ns/rel#agent-derived",
+        SemanticSubKind::Cites => "https://mere.computer/ns/rel#cites",
+        SemanticSubKind::Quotes => "https://mere.computer/ns/rel#quotes",
+        SemanticSubKind::Summarizes => "https://mere.computer/ns/rel#summarizes",
+        SemanticSubKind::Elaborates => "https://mere.computer/ns/rel#elaborates",
+        SemanticSubKind::ExampleOf => "https://mere.computer/ns/rel#example-of",
+        SemanticSubKind::Supports => "https://mere.computer/ns/rel#supports",
+        SemanticSubKind::Contradicts => "https://mere.computer/ns/rel#contradicts",
+        SemanticSubKind::Questions => "https://mere.computer/ns/rel#questions",
+        SemanticSubKind::SameEntityAs => "https://mere.computer/ns/rel#same-entity-as",
+        SemanticSubKind::DuplicateOf => "https://mere.computer/ns/rel#duplicate-of",
+        SemanticSubKind::CanonicalMirrorOf => "https://mere.computer/ns/rel#canonical-mirror-of",
+        SemanticSubKind::DependsOn => "https://mere.computer/ns/rel#depends-on",
+        SemanticSubKind::Blocks => "https://mere.computer/ns/rel#blocks",
+        SemanticSubKind::NextStep => "https://mere.computer/ns/rel#next-step",
+    }
+}
+
+/// The recognized semantic sub-kind for a canonical relation IRI, if any.
+/// Inverse of [`predicate_iri`]; `None` for an unrecognized (raw) IRI, which is
+/// stored as an open predicate without a sub-kind.
+pub fn sub_kind_from_iri(iri: &str) -> Option<SemanticSubKind> {
+    use strum::IntoEnumIterator;
+    SemanticSubKind::iter().find(|&sub_kind| predicate_iri(sub_kind) == iri)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Archive, Serialize, Deserialize, Default)]

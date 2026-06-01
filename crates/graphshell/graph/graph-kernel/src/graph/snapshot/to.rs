@@ -159,8 +159,15 @@ impl Graph {
                         agent_decay_progress: payload
                             .has_relation(RelationSelector::Semantic(SemanticSubKind::AgentDerived))
                             .then_some(0.0),
+                        predicate: payload
+                            .semantic_data()
+                            .and_then(|data| data.predicate.clone()),
                     })
-                    .filter(|data| !data.sub_kinds.is_empty() || data.label.is_some()),
+                    .filter(|data| {
+                        !data.sub_kinds.is_empty()
+                            || data.label.is_some()
+                            || data.predicate.is_some()
+                    }),
                     traversal: payload
                         .traversal_data()
                         .map(|data| PersistedTraversalEdgeData {

@@ -188,13 +188,18 @@ Not all at once. A workable order, each slice host-agnostic and testable:
    `0bb0337`, `1d94746`); the seam doc's references are synced to `gyre`.**
 1. **Extract the `aether` field-algebra crate** from `graph-canvas/fields/*`
    (AST + eval + Rhai + Burn + registry + coupling), depending only on kernel +
-   Rhai/Burn. Pure move; its existing tests come with it.
+   Rhai/Burn. Pure move; its existing tests come with it. **Done 2026-05-31
+   (commit `9ea5858`)** — the landed crate is standalone (serde + optional
+   burn/rhai, *no* kernel dep yet); the kernel dependency arrives with step 3,
+   when Field/Coupling become kernel truth.
 2. **The `gyre` seam**: a coupling → `gyre::Force` adapter, so a force coupling
    drives the rapier bodies. Re-express one built-in (e.g. `NodeExclusion`) as a
    coupling to prove equivalence, keep the built-in as the fast path.
 3. **The `Field`/`Coupling` kernel primitive** + lifecycle (the bigger, truth-
-   level slice; its own plan). Until it lands, `aether` can read fields from an
-   in-memory registry rather than the graph.
+   level slice; its own plan: the
+   [field/coupling kernel-primitive plan](../implementation_strategy/2026-05-31_field_coupling_kernel_primitive_plan.md)).
+   Until it lands, `aether` reads fields from an in-memory registry rather than
+   the graph.
 4. **Dissolve graph-canvas**: relocate the rows in §6 as their consumers need
    them; retire the shell when empty (the fit-map's adopt/retire call, now
    answered: retire, harvesting the field algebra).

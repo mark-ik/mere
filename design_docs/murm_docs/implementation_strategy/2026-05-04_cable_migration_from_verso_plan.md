@@ -133,7 +133,9 @@ The migration is complete when:
 
 ## Findings
 
-(None yet — populate as research/implementation surfaces relevant findings.)
+### 2026-05-31 — built, but the wire is now contested
+
+Cable's Phase 2B/2C work actually landed: `murmuring`/`murm` sign, encode, and snapshot-sync posts (BLAKE2b) over both the memory transport and real iroh QUIC, with passing tamper-detection and loopback tests. The later [event-DAG substrate brief](../../mere_docs/implementation_strategy/2026-05-07_event_dag_substrate_brief.md) intends to replace the Cable *wire* with a BLAKE3 MereEvent DAG while keeping bilateral semantics in murm. That replacement is not executed: the code is still BLAKE2b Cable. Reconciliation, plus the current external p2p landscape, is tracked in the [murm/p2p landscape brief](../../mere_docs/research/2026-05-31_murm_p2p_landscape_brief.md). The wire question intersects the persistent-cabal store schema (Phase 5) and the Cable-seeder idea; resolve the wire before the store schema hardens.
 
 ## Progress
 

@@ -147,6 +147,16 @@ impl Graph {
                         };
                         let _ = graph.assert_relation(from, to, assertion);
                     }
+                    // Restore the open predicate IRI onto the (now-created) edge.
+                    // A raw predicate-only edge (no sub-kinds) is not yet
+                    // recreated here — that pairs with JSON-LD ingest (Phase 2).
+                    if semantic.predicate.is_some() {
+                        if let Some(key) = graph.find_edge_key(from, to) {
+                            if let Some(payload) = graph.get_edge_mut(key) {
+                                payload.set_semantic_predicate(semantic.predicate.clone());
+                            }
+                        }
+                    }
                 }
                 if let Some(arrangement) = &pedge.arrangement {
                     for sub_kind in &arrangement.sub_kinds {

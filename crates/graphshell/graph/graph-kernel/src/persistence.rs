@@ -338,6 +338,10 @@ pub struct PersistedSemanticEdgeData {
     pub label: Option<String>,
     #[serde(default)]
     pub agent_decay_progress: Option<f32>,
+    /// Open predicate IRI (statements-over-schema). `#[serde(default)]` so old
+    /// graphs load with `None`.
+    #[serde(default)]
+    pub predicate: Option<String>,
 }
 
 #[derive(

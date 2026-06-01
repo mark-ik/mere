@@ -53,6 +53,9 @@ use inker::{
 use crate::MarkdownEngine;
 
 mod expand;
+/// Djot-substrate proof-of-concept (design doc §10, Phase 1). Additive and not
+/// yet wired into the engine; parses a djot knot body into `DocumentBlock`s.
+pub mod djot;
 #[cfg(test)]
 mod tests;
 
@@ -108,64 +111,76 @@ impl Engine for KnotEngine {
         // per tag at the end of their containing paragraph.
         expand::rewrite_inline_extensions(&mut doc.blocks);
 
-        // Frontmatter `title` overrides whatever the markdown engine
-        // extracted from a body H1.
-        if let Some(FrontmatterValue::Scalar(title)) = frontmatter.get("title") {
-            doc.title = Some(title.clone());
-        }
-
-        // Provenance: start from this engine's own ID, then overlay the
-        // values the author put in the frontmatter.
-        let mut provenance = DocumentProvenance::for_engine(self.engine_id(), &input.address);
-        if let Some(FrontmatterValue::Scalar(source)) = frontmatter.get("source") {
-            provenance.canonical_uri = Some(source.clone());
-        }
-        if let Some(FrontmatterValue::Scalar(captured)) = frontmatter.get("captured") {
-            provenance.fetched_at = Some(captured.clone());
-        }
-        if let Some(FrontmatterValue::Scalar(label)) = frontmatter.get("source_label") {
-            provenance.source_label = Some(label.clone());
-        }
-        doc.provenance = provenance;
-
-        if let Some(FrontmatterValue::Scalar(trust)) = frontmatter.get("trust") {
-            doc.trust = parse_trust(trust);
-        }
-
-        doc.content_type = input
-            .content_type
-            .clone()
-            .unwrap_or_else(|| "text/x-knot".to_string());
-
-        // Prepend MetadataRow blocks for the frontmatter fields that don't
-        // map to first-class document metadata. `kind` and `tags` are
-        // structured semantics worth surfacing to the reader as well as to
-        // intelligence layers walking blocks.
-        let mut prefix: Vec<DocumentBlock> = Vec::new();
-        if let Some(FrontmatterValue::Scalar(kind)) = frontmatter.get("note_kind") {
-            prefix.push(DocumentBlock::MetadataRow {
-                label: "kind".to_string(),
-                value: kind.clone(),
-            });
-        }
-        if let Some(value) = frontmatter.get("tags") {
-            let joined = match value {
-                FrontmatterValue::Scalar(s) => s.clone(),
-                FrontmatterValue::List(items) => items.join(", "),
-            };
-            if !joined.is_empty() {
-                prefix.push(DocumentBlock::MetadataRow {
-                    label: "tags".to_string(),
-                    value: joined,
-                });
-            }
-        }
-        if !prefix.is_empty() {
-            prefix.append(&mut doc.blocks);
-            doc.blocks = prefix;
-        }
+        apply_frontmatter(
+            &mut doc,
+            &frontmatter,
+            self.engine_id(),
+            &input.address,
+            input.content_type.as_deref(),
+        );
 
         Ok(doc)
+    }
+}
+
+/// Apply a knot's frontmatter to a rendered document: title override,
+/// provenance (engine id + source / captured / label), trust state,
+/// content-type, and prefix `MetadataRow`s for `note_kind` / `tags`. Shared by
+/// the CommonMark [`KnotEngine`] and the experimental [`djot::DjotKnotEngine`]
+/// so both knot grammars carry identical note semantics.
+fn apply_frontmatter(
+    doc: &mut EngineDocument,
+    frontmatter: &HashMap<String, FrontmatterValue>,
+    engine_id: &str,
+    address: &str,
+    content_type: Option<&str>,
+) {
+    if let Some(FrontmatterValue::Scalar(title)) = frontmatter.get("title") {
+        doc.title = Some(title.clone());
+    }
+
+    let mut provenance = DocumentProvenance::for_engine(engine_id, address);
+    if let Some(FrontmatterValue::Scalar(source)) = frontmatter.get("source") {
+        provenance.canonical_uri = Some(source.clone());
+    }
+    if let Some(FrontmatterValue::Scalar(captured)) = frontmatter.get("captured") {
+        provenance.fetched_at = Some(captured.clone());
+    }
+    if let Some(FrontmatterValue::Scalar(label)) = frontmatter.get("source_label") {
+        provenance.source_label = Some(label.clone());
+    }
+    doc.provenance = provenance;
+
+    if let Some(FrontmatterValue::Scalar(trust)) = frontmatter.get("trust") {
+        doc.trust = parse_trust(trust);
+    }
+
+    doc.content_type = content_type
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "text/x-knot".to_string());
+
+    let mut prefix: Vec<DocumentBlock> = Vec::new();
+    if let Some(FrontmatterValue::Scalar(kind)) = frontmatter.get("note_kind") {
+        prefix.push(DocumentBlock::MetadataRow {
+            label: "kind".to_string(),
+            value: kind.clone(),
+        });
+    }
+    if let Some(value) = frontmatter.get("tags") {
+        let joined = match value {
+            FrontmatterValue::Scalar(s) => s.clone(),
+            FrontmatterValue::List(items) => items.join(", "),
+        };
+        if !joined.is_empty() {
+            prefix.push(DocumentBlock::MetadataRow {
+                label: "tags".to_string(),
+                value: joined,
+            });
+        }
+    }
+    if !prefix.is_empty() {
+        prefix.append(&mut doc.blocks);
+        doc.blocks = prefix;
     }
 }
 
