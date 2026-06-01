@@ -233,6 +233,23 @@ has a done-condition, not a date.
 - **Done:** a sample JSON-LD doc yields the expected nodes + typed edges; an
   unknown predicate lands as a raw-IRI `Semantic` edge with empty `sub_kinds`; a
   recognized one also sets its sub-kind; a literal maps to `title`/`tags`.
+- **Core landed 2026-06-01** (`linked-data::ingest`). `from_jsonld(&[u8]) ->
+  Result<GraphContribution, IngestError>` parses with `oxjsonld` (sync): a
+  resource predicate → `EdgeContribution`, `rdf:type` → a node type,
+  `schema:name` / `schema:keywords` → title / tags (other literals dropped),
+  blank nodes skolemized to `urn:mere:bnode:`. `apply_contribution(&mut Graph,
+  …)` (native; `add_node` is wasm-gated) creates a node per subject/object and
+  asserts each edge — recognized predicate → typed sub-kind + canonical IRI,
+  unrecognized → `assert_semantic_predicate` (the open-predicate kernel path).
+  Done condition met for expanded / inline-`@context` documents; 2 tests (parse +
+  materialize). Deps `oxjsonld = "0.2"`, `oxrdf = "0.3"`.
+- **Remaining:** (a) a **bundled-context loader** so a *remote* `@context`
+  (`"@context": "https://schema.org/"`) resolves offline — seam is
+  `JsonLdParser::with_load_document_callback(|url, _| …)`, a sync closure that
+  serves bundled context JSON and errors on anything else (oxjsonld already
+  errors when a remote context is referenced with no callback). (b) **inker
+  routing** for `application/ld+json` as a graph-contribution input (distinct
+  from `EngineDocument` / render).
 
 ### Phase 3 — Round-trip + coverage
 - Ingest → export → compare, modulo the by-design drops (uncurated literals).
@@ -289,3 +306,9 @@ has a done-condition, not a date.
   mirroring the traversal block). 2 kernel tests (assert + snapshot round-trip);
   kernel **234**, plus graph-layout / platen / session-runtime / inker /
   linked-data green. Ingest (Phase 2 proper) is now unblocked.
+- **2026-06-01 (later still)** — Phase 2 **core ingest landed** in
+  `linked-data::ingest`: `from_jsonld` (oxjsonld parse → `GraphContribution`) +
+  `apply_contribution` (materialize, recognized → sub-kind, raw →
+  `assert_semantic_predicate`). linked-data **4** (2 export + 2 ingest). API was
+  read from the oxjsonld/oxrdf source (not guessed). Remaining: bundled-context
+  loader + inker `application/ld+json` routing (see Phase 2).

@@ -29,10 +29,17 @@ use kernel::graph::{Graph, Node, NodeKey, SemanticData, predicate_iri};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
+/// JSON-LD ingest (Phase 2): `application/ld+json` → a graph contribution.
+pub mod ingest;
+
+pub use ingest::{EdgeContribution, GraphContribution, IngestError, NodeContribution, from_jsonld};
+#[cfg(not(target_arch = "wasm32"))]
+pub use ingest::{ApplyOutcome, apply_contribution};
+
 /// `schema:name` — the curated mapping target for a node's title.
-const SCHEMA_NAME: &str = "https://schema.org/name";
+pub(crate) const SCHEMA_NAME: &str = "https://schema.org/name";
 /// `schema:keywords` — the curated mapping target for a node's tags.
-const SCHEMA_KEYWORDS: &str = "https://schema.org/keywords";
+pub(crate) const SCHEMA_KEYWORDS: &str = "https://schema.org/keywords";
 
 /// Export the whole graph as expanded JSON-LD: a [`Value::Array`] of node
 /// objects, one per graph node, in node-insertion order. Deterministic (tags and
