@@ -1,10 +1,12 @@
 # Field/Coupling Kernel-Primitive Plan
 
 **Date**: 2026-05-31
-**Status**: Approved; decisions locked 2026-05-31. **P0–P2 landed, plus the aether
-seam (Phase 3) and the EdgePath/EdgePathRule slice of Phase 4. kernel 227 tests
-green (231 with `store`); aether 69; gyre 17. Remaining Phase 4 (open response
-vocabulary, federation, lifecycle UX) deferred.** This is **step 3** of the
+**Status**: Approved; decisions locked 2026-05-31. **P0–P3 landed; Phase 4 done at
+the kernel-truth level (EdgePath/EdgePathRule, the open response vocabulary, and
+the activate/retire lifecycle primitive). kernel 232 tests green (236 with
+`store`); aether 69; gyre 18. Only federation (needs the federation substrate) and
+the host-side lifecycle UX remain, both outside this kernel-truth plan, so this
+plan is effectively complete.** This is **step 3** of the
 [field-system extraction](../technical_architecture/2026-05-30_field_system_extraction.md)
 §8 ("the bigger, truth-level slice; its own plan"). Steps 0 (gyre rename) and 1
 (aether crate) have already landed (see Findings); the truth-level work of this
@@ -209,12 +211,23 @@ field→selector relation.
   `FieldId`); aether's `coupling.rs` collapsed to a thin re-export. Type relocation
   only; Graph storage + persistence for edge-path rules can follow when a consumer
   needs them persisted (they are aether-runtime today).
-- **Still deferred:**
-  - The **open response vocabulary** (visual / navigational / selection / semantic /
-    trigger) via the recognized-core-plus-open-tail hybrid, where the
-    statements-over-schema stance and the strum descriptor pattern pay off. v1 stays
-    force-only.
-  - Federation of fields/couplings; lifecycle UX (activate/retire).
+- **Done (landed 2026-06-01, `2ca940b`): the open response vocabulary.**
+  `CouplingResponse` is now a recognized-core-plus-open-tail hybrid: the six force
+  responses stay the recognized core gyre dispatches, and `Open { predicate }`
+  carries the families beyond force (visual / navigational / selection / semantic /
+  trigger) by IRI under `COUPLING_VOCAB`, stored faithfully and ignored by the
+  force integrator until a consumer recognizes it. Recognized-core IRIs round-trip
+  (`recognized_iri`/`from_iri`, pinned by `strum::EnumIter`); persistence mirrors
+  the tail. v1 behavior stays force-only: this opens the contract, no new behavior.
+- **Done (landed 2026-06-01, `66c26d0`): lifecycle primitive.** `activate_field`
+  joins `retire_field`, making the activate/retire lifecycle fully round-trippable
+  from the kernel. The lifecycle *UX* (host buttons) is host-layer work, outside
+  this kernel-truth plan.
+- **Still deferred — federation of fields/couplings.** Sharing fields/couplings
+  across instances needs the federation substrate (the engram/Willow/Keyhive layer),
+  not a field-specific slice. It lands when federation does, on the same
+  per-statement provenance + identity-as-merge-key seam the statements-over-schema
+  stance already names.
 
 ---
 
@@ -293,3 +306,13 @@ field→selector relation.
 - **2026-06-01** — Ownership: this plan is now driven by the field-system agent
   (the linked-data/djot work split to a separate owner). Remaining scope is the
   deferred Phase 4 tail (open response vocabulary, federation, lifecycle UX).
+
+- **2026-06-01** — **Phase 4 tail landed (kernel-truth level).** `2ca940b`: the
+  open response vocabulary — `CouplingResponse` becomes recognized-core (six force
+  responses, gyre-dispatched) plus an `Open { predicate }` tail carrying the
+  visual/navigational/selection/semantic/trigger families by IRI under
+  `COUPLING_VOCAB`; `recognized_iri`/`from_iri` round-trip (strum-pinned); gyre
+  ignores the tail; persistence mirrors it. `66c26d0`: `activate_field` completes
+  the activate/retire lifecycle primitive. kernel 232 (236 with `store`), gyre 18.
+  Federation and the host-side lifecycle UX remain (both outside kernel truth), so
+  the plan is effectively complete.
