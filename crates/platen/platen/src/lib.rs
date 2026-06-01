@@ -70,6 +70,10 @@ pub mod scene_paint;
 /// system's open response tail (the aether→platen seam, mirroring aether→gyre).
 pub mod coupling_paint;
 
+/// The orrery scene producer: graph → a painted `CanvasPaintList` underlay
+/// (host-agnostic; the serval-as-host orrery element's scene-paint layer).
+pub mod orrery;
+
 /// Document-canvas scene-input derivation. Wraps `document-canvas` for
 /// composition-time use; the sibling of `canvas_scene` for the document
 /// swatch. Hosts call this for any pane that holds a document tile (the

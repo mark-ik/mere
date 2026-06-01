@@ -1,0 +1,217 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+//! The orrery scene producer: graph → a painted `CanvasPaintList` underlay.
+//!
+//! This is the **host-agnostic scene-paint underlay** of the orrery under
+//! serval-as-host (the [serval-as-host evaluation](../../../../design_docs/mere_docs/technical_architecture/2026-05-29_serval_as_host_evaluation.md)
+//! §6, layer 1): edges + nodes + visual-coupling effects as one flat `PaintCmd`
+//! list. The brief's load-bearing claim is that this list "renders identically
+//! whether driven from a Masonry widget or a serval element", so the producer
+//! lives here, host-neutral; the eventual serval orrery element (or any host)
+//! calls it and contributes the result as its paint sublist.
+//!
+//! Node positions come from the graph's committed positions today (matching the
+//! current orrery's `scene_from_graph`). When the gyre field-physics layer is
+//! live, a force coupling moves a node and updates its position; this reprojects
+//! from the same accessor, so the producer is unchanged. The field's *visual*
+//! couplings are resolved here too, via [`crate::coupling_paint`].
+
+use std::collections::HashSet;
+
+use cartography::Projection;
+use cartography::projection::{PositionedEdge, PositionedNode, ProjectionMetadata};
+use kernel::geometry::{PortablePoint, PortableRect, PortableSize};
+use kernel::graph::Graph;
+use paint_list_api::DeviceIntSize;
+
+use crate::coupling_paint::paint_projection_with_visuals;
+use crate::scene_paint::{Camera, CanvasPaintList, ScenePaintStyle};
+
+/// Build a [`Projection`] from the graph's committed node positions and its
+/// relations (collapsed to undirected, de-duplicated pairs — the orrery draws one
+/// line per connected pair, not one per typed sidecar). Node radii are left `0.0`
+/// (the paint layer substitutes the style default); `content_bounds` is the
+/// axis-aligned box of the node positions, for a host that fits the view.
+pub fn projection_from_graph(graph: &Graph) -> Projection {
+    let mut nodes = Vec::new();
+    for (key, _node) in graph.nodes() {
+        nodes.push(PositionedNode {
+            node: key,
+            position: graph.node_committed_position(key).unwrap_or_default(),
+            radius: 0.0,
+        });
+    }
+
+    let mut seen = HashSet::new();
+    let mut edges = Vec::new();
+    for rel in graph.relations() {
+        let (a, b) = (rel.from, rel.to);
+        if a == b {
+            continue; // no self-loops in the scene
+        }
+        let pair = if a <= b { (a, b) } else { (b, a) };
+        if seen.insert(pair) {
+            edges.push(PositionedEdge {
+                edge: None, // relations() projects without a stable EdgeKey
+                from: a,
+                to: b,
+                path: Vec::new(),
+            });
+        }
+    }
+
+    let content_bounds = bounds_of_nodes(&nodes);
+    Projection {
+        nodes,
+        edges,
+        content_bounds,
+        metadata: ProjectionMetadata {
+            strategy_id: Some("orrery.stored".to_string()),
+            settled: true,
+        },
+        ..Projection::empty()
+    }
+}
+
+/// The orrery scene as one paint list: the graph projected from its committed
+/// positions, painted with edges, nodes, and the recognized visual-coupling
+/// overlays. The §6 layer-1 underlay in a single call, host-neutral.
+pub fn orrery_paint_list(
+    graph: &Graph,
+    viewport: DeviceIntSize,
+    camera: Camera,
+    style: &ScenePaintStyle,
+    generation: u64,
+) -> CanvasPaintList {
+    let projection = projection_from_graph(graph);
+    paint_projection_with_visuals(graph, &projection, viewport, camera, style, generation)
+}
+
+/// Axis-aligned bounds of the positioned nodes (a zero rect when there are none).
+fn bounds_of_nodes(nodes: &[PositionedNode]) -> PortableRect {
+    let mut iter = nodes.iter();
+    let Some(first) = iter.next() else {
+        return PortableRect::zero();
+    };
+    let (mut min_x, mut min_y) = (first.position.x, first.position.y);
+    let (mut max_x, mut max_y) = (min_x, min_y);
+    for n in iter {
+        min_x = min_x.min(n.position.x);
+        min_y = min_y.min(n.position.y);
+        max_x = max_x.max(n.position.x);
+        max_y = max_y.max(n.position.y);
+    }
+    PortableRect::new(
+        PortablePoint::new(min_x, min_y),
+        PortableSize::new(max_x - min_x, max_y - min_y),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kernel::graph::{
+        COUPLING_VOCAB, Coupling, CouplingId, CouplingResponse, EdgeAssertion, Field,
+        FieldDefinition, FieldId, NodeSelector, ScalarField, SemanticSubKind,
+    };
+    use paint_list_api::{PaintCmd, PaintList};
+    use uuid::Uuid;
+
+    fn node(g: &mut Graph, id: u128, x: f32, y: f32) -> kernel::graph::NodeKey {
+        let key = g.add_node_with_id(Uuid::from_u128(id), format!("mere://{id}"), PortablePoint::new(x, y));
+        g.set_node_position(key, PortablePoint::new(x, y));
+        key
+    }
+
+    fn draw_rect_count(list: &CanvasPaintList) -> usize {
+        list.commands()
+            .iter()
+            .filter(|c| matches!(c, PaintCmd::DrawRect(_)))
+            .count()
+    }
+
+    #[test]
+    fn projection_from_graph_carries_positions_and_dedupes_edges() {
+        let mut g = Graph::new();
+        let a = node(&mut g, 1, 10.0, 20.0);
+        let b = node(&mut g, 2, 30.0, 40.0);
+        // Two relations on the same pair (both directions) collapse to one edge.
+        let _ = g.assert_relation(a, b, hyperlink());
+        let _ = g.assert_relation(b, a, hyperlink());
+
+        let p = projection_from_graph(&g);
+        assert_eq!(p.nodes.len(), 2);
+        let pa = p.nodes.iter().find(|n| n.node == a).unwrap();
+        assert_eq!(pa.position, PortablePoint::new(10.0, 20.0));
+        assert_eq!(p.edges.len(), 1, "the bidirectional pair de-dupes to one edge");
+        // content_bounds spans the two nodes.
+        assert_eq!(p.content_bounds.min_x(), 10.0);
+        assert_eq!(p.content_bounds.max_y(), 40.0);
+    }
+
+    #[test]
+    fn empty_graph_projects_empty() {
+        let p = projection_from_graph(&Graph::new());
+        assert!(p.nodes.is_empty() && p.edges.is_empty());
+    }
+
+    #[test]
+    fn orrery_paint_list_composes_nodes_and_a_visual_overlay() {
+        // One node at the origin, a Gaussian field peaking there, and a visual/halo
+        // coupling over it. The paint list should carry the node rect *and* the
+        // resolved halo overlay — the underlay producer wiring the field's light in.
+        let mut g = Graph::new();
+        node(&mut g, 1, 0.0, 0.0);
+
+        // Baseline: no coupling → just the node rect.
+        let baseline = orrery_paint_list(
+            &g,
+            DeviceIntSize::new(200, 200),
+            Camera::default(),
+            &ScenePaintStyle::default(),
+            0,
+        );
+        assert_eq!(draw_rect_count(&baseline), 1, "node rect only");
+
+        // Add the field + a visual/halo coupling over all nodes.
+        let fid = FieldId::from_uuid(Uuid::from_u128(0xF1));
+        g.add_field(Field::new(
+            fid,
+            FieldDefinition::Scalar(ScalarField::gaussian_at(0.0, 0.0, 50.0)),
+        ));
+        g.add_coupling(Coupling::new(
+            CouplingId::from_uuid(Uuid::from_u128(1)),
+            fid,
+            NodeSelector::All,
+            CouplingResponse::open(format!("{COUPLING_VOCAB}visual/halo")),
+            1.0,
+        ));
+
+        let with_halo = orrery_paint_list(
+            &g,
+            DeviceIntSize::new(200, 200),
+            Camera::default(),
+            &ScenePaintStyle::default(),
+            0,
+        );
+        assert_eq!(
+            draw_rect_count(&with_halo),
+            2,
+            "node rect + the resolved visual/halo overlay"
+        );
+        assert!(matches!(
+            with_halo.commands().last(),
+            Some(PaintCmd::PopTransform)
+        ));
+    }
+
+    fn hyperlink() -> EdgeAssertion {
+        EdgeAssertion::Semantic {
+            sub_kind: SemanticSubKind::Hyperlink,
+            label: None,
+            decay_progress: None,
+        }
+    }
+}
