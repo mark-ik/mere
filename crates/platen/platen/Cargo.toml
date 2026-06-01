@@ -15,6 +15,10 @@ path = "src/lib.rs"
 
 [dependencies]
 cartography.workspace = true
+# Field algebra: the visual-coupling paint pass (coupling_paint) evaluates aether
+# fields to resolve a coupling's intensity at each node. One-way dep, mirroring
+# gyre's; aether stays renderer-free.
+aether.workspace = true
 graph-canvas.workspace = true
 graph-layout.workspace = true
 document-canvas.workspace = true

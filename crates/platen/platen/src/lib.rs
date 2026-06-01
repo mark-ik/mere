@@ -66,6 +66,10 @@ pub mod cartography_scene;
 /// host. Platen is the press; this is where a projection becomes paint.
 pub mod scene_paint;
 
+/// Visual couplings → paint overlays: the paint-side consumer of the field
+/// system's open response tail (the aether→platen seam, mirroring aether→gyre).
+pub mod coupling_paint;
+
 /// Document-canvas scene-input derivation. Wraps `document-canvas` for
 /// composition-time use; the sibling of `canvas_scene` for the document
 /// swatch. Hosts call this for any pane that holds a document tile (the

@@ -56,6 +56,18 @@ impl PaintList for CanvasPaintList {
     }
 }
 
+impl CanvasPaintList {
+    /// Splice world-space overlay commands in just inside the camera transform
+    /// (immediately before the trailing `PopTransform`), so they share the
+    /// scene's world→view mapping. Lists from [`paint_projection`] always end in
+    /// that `PopTransform`; on the (unreachable) empty list this is a no-op tail
+    /// insert. Used by the visual-coupling pass ([`crate::coupling_paint`]).
+    pub fn splice_world_overlays(&mut self, overlays: impl IntoIterator<Item = PaintCmd>) {
+        let before_pop = self.commands.len().saturating_sub(1);
+        self.commands.splice(before_pop..before_pop, overlays);
+    }
+}
+
 /// World-to-view camera: a pan offset plus a uniform zoom, emitted as the
 /// scene's `PushTransform`. Steal-the-shape target for `understory_view2d`.
 #[derive(Clone, Copy, Debug)]
