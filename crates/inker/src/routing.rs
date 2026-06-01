@@ -47,6 +47,22 @@ pub const ENGINE_NEMATIC_TEXT: &str = "nematic.text";
 pub const ENGINE_GRAPHSHELL_INTERNAL: &str = "graphshell.internal";
 pub const ENGINE_EXTERNAL_PROTOCOL: &str = "host.external-protocol";
 
+/// Marker route target for JSON-LD graph ingest (linked-data plan Phase 2).
+/// **Not a render engine.** A host that receives this decision feeds the body to
+/// [`linked-data::from_jsonld`](https://crates.io/crates/linked-data) to produce
+/// a `GraphContribution` it merges into the graph, instead of dispatching to the
+/// engine registry. Routed Headless (no surface), like the other host-handled
+/// target [`ENGINE_EXTERNAL_PROTOCOL`]; recognize it with
+/// [`is_graph_contribution_route`].
+pub const ENGINE_LINKED_DATA_INGEST: &str = "linked-data.ingest";
+
+/// Whether a route decision's `engine_id` is the JSON-LD ingest marker
+/// ([`ENGINE_LINKED_DATA_INGEST`]) rather than a render engine. A host checks
+/// this before dispatching a decision to the engine registry.
+pub fn is_graph_contribution_route(engine_id: &str) -> bool {
+    engine_id == ENGINE_LINKED_DATA_INGEST
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WorkspaceRouteId(pub String);
 
@@ -302,6 +318,13 @@ impl Default for EngineRoutePolicy {
                     // available by explicit pin for import/compat.
                     ENGINE_NEMATIC_KNOT_DJOT,
                     SurfaceContractMode::CompositedTexture,
+                ),
+                // JSON-LD is a graph contribution, not a render: the host feeds
+                // it to linked-data ingest rather than an engine. Headless.
+                EngineRouteRule::content_type(
+                    ["application/ld+json"],
+                    ENGINE_LINKED_DATA_INGEST,
+                    SurfaceContractMode::Headless,
                 ),
             ],
             fallback: EngineRouteRule::new(

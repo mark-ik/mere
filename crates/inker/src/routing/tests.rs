@@ -139,6 +139,20 @@ fn unknown_content_type_falls_back_to_scheme() {
 }
 
 #[test]
+fn ld_json_routes_to_graph_contribution_ingest() {
+    let decision = EngineRoutePolicy::default().route(&request_with_content_type(
+        "https://example.test/data",
+        "application/ld+json",
+    ));
+    assert_eq!(decision.engine_id, ENGINE_LINKED_DATA_INGEST);
+    // A graph contribution has no visible surface.
+    assert_eq!(decision.surface_contract.mode, SurfaceContractMode::Headless);
+    // And it is recognized as a non-render route the host handles itself.
+    assert!(is_graph_contribution_route(&decision.engine_id));
+    assert!(!is_graph_contribution_route(ENGINE_SERVAL_WEB));
+}
+
+#[test]
 fn content_type_match_is_case_insensitive() {
     let decision = EngineRoutePolicy::default().route(&request_with_content_type(
         "https://example.test/",

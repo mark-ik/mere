@@ -250,10 +250,19 @@ has a done-condition, not a date.
   ways (resolve + refuse). **Still open there:** the context *assets* — embed the
   real schema.org / Dublin Core / ActivityStreams context JSON (a bundle-size /
   which-vocabularies call) versus a minimal curated context. The cache takes
-  either; populating it is the decision.
-- **Remaining:** **inker routing** for `application/ld+json` as a
-  graph-contribution input (distinct from `EngineDocument` / render) — host
-  integration.
+  either; populating it is the decision. **Consumer note:** the curated
+  kernel-vocab context has no consumer yet. Its first would be **compacted
+  JSON-LD export** (the ergonomic dual of expanded `to_jsonld`, using the context
+  to shorten output); the same context is also the **interop seam** that aliases
+  Mere's `rel#` IRIs onto standard vocabularies (CiTO / schema.org) when Mere
+  publishes linked data. Both are downstream, so the context stays deferred.
+- **inker routing landed 2026-06-01.** `application/ld+json` routes to
+  `ENGINE_LINKED_DATA_INGEST` (`"linked-data.ingest"`), a **Headless marker route
+  target** (not a render engine), with `is_graph_contribution_route()` to
+  recognize it — the same host-handled pattern as `ENGINE_EXTERNAL_PROTOCOL`. A
+  host special-cases this decision to feed the body to `from_jsonld` instead of
+  dispatching an engine. 1 routing test; inker **73**. The host-side dispatch
+  (fetch → route → ingest → merge) is downstream, for when that loop exists.
 
 ### Phase 3 — Round-trip + coverage
 - Ingest → export → compare, modulo the by-design drops (uncurated literals).
