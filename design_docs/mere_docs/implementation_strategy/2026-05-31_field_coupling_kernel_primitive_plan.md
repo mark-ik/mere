@@ -1,11 +1,14 @@
 # Field/Coupling Kernel-Primitive Plan
 
 **Date**: 2026-05-31
-**Status**: Approved; decisions locked 2026-05-31; **P0 landed (216/216 kernel tests green); P1 next.** This is **step 3** of the
+**Status**: Approved; decisions locked 2026-05-31. **P0–P2 landed, plus the aether
+seam (Phase 3) and the EdgePath/EdgePathRule slice of Phase 4. kernel 227 tests
+green (231 with `store`); aether 69; gyre 17. Remaining Phase 4 (open response
+vocabulary, federation, lifecycle UX) deferred.** This is **step 3** of the
 [field-system extraction](../technical_architecture/2026-05-30_field_system_extraction.md)
 §8 ("the bigger, truth-level slice; its own plan"). Steps 0 (gyre rename) and 1
-(aether crate) have already landed (see Findings); this plan is the remaining
-truth-level work. No code written yet.
+(aether crate) have already landed (see Findings); the truth-level work of this
+plan is now done bar the deferred Phase 4 tail.
 **Scope**: Make `Field` and `Coupling` first-class **kernel truth** (persisted,
 stable-id, federatable), read by aether, rather than the in-memory aether
 registry they are today. Resolves the field-system doc's open kernel question.
@@ -147,16 +150,31 @@ field→selector relation.
 - Query API: `fields()`, `field(id)`, `couplings()`, `couplings_for_field(id)`, and
   **selector evaluation** `nodes_matching(&NodeSelector) -> impl Iterator<NodeKey>`
   against node tags/classifications.
-- **Done**: add/retire/query round-trips; selector eval correct against
-  tags + kind; all existing node/edge tests stay green.
+- **Done (landed 2026-05-31, `9a1f736`; kernel 220).** `Graph` gained the parallel
+  keyed `fields`/`couplings` stores + the mutators/queries above in `graph/field_ops.rs`;
+  `nodes_matching` resolves `All`/`Tagged`/`NotTagged` against node tags and `Kind`
+  against classification value. This commit also carried the P0 truth types to first
+  commit (they were drafted but uncommitted). add/retire/query round-trips +
+  selector eval tested; all node/edge tests stayed green.
 
 ### Phase 2 — Persistence
 
 - `PersistedField` / `PersistedCoupling` in `GraphSnapshot`; `to`/`from` snapshot;
   additive `#[serde(default)]` so old `graph.json` loads with an empty field layer;
   rkyv snapshot path updated.
-- **Done**: an old snapshot loads (empty fields/couplings); a seeded field +
-  coupling round-trips save/load; a migration test pins the additive behavior.
+- **The recursive-AST decision (resolved): serde-blob, not rkyv `omit_bounds`.** The
+  scalar/vector definition rides as a serde-JSON string (`PersistedField::definition_json`);
+  the flat enums (extent/lifecycle/selector/response) archive natively. Rationale:
+  the kernel AST is deliberately serde-only, the definition is loaded once and
+  evaluated in memory by aether (no zero-copy benefit), `serde_json` is already a
+  base kernel dep, and a blob keeps the archive flat and the round-trip robust. New
+  DTOs live in `persistence_fields.rs` (re-exported through `crate::persistence`)
+  since `persistence.rs` is already over the per-file ceiling.
+- **Done (landed 2026-06-01, `00bbb4c`; kernel 227, 231 with `store`).** An old
+  snapshot missing the field keys loads empty (additive migration pinned); a
+  field + coupling round-trips (name, Region extent, retired-keeps-definition,
+  DampenInside); DTO serde + rkyv round-trips. `from_snapshot` skips malformed
+  ids/definitions rather than failing the whole load.
 
 ### Phase 3 — The aether seam (coordinates with field-system step 2)
 
@@ -164,28 +182,56 @@ field→selector relation.
   `FieldRegistry` becomes derived, or is dropped).
 - Re-express one gyre built-in (e.g. `NodeExclusion`) as a kernel coupling to prove
   equivalence, keeping the built-in as the fast default path.
-- **Done**: aether evaluates a kernel-stored field; the coupling-expressed
-  built-in matches the built-in's output; gyre integrates it.
+- **Done (landed 2026-05-31: `7e077e1` flip + `ab5310f` seam; follow-up `aefa751`).**
+  - **3a, the flip:** aether deps kernel and consumes `kernel::graph::{field_ast,
+    coupling, field}`, deleting its duplicate AST/coupling/`FieldId`. The registry
+    keys on the UUID `FieldId`, minting registry-local ids as
+    `FieldId::from_uuid(Uuid::from_u128(counter))` (WASM-safe); the rhai i64 script
+    handle bridges through the uuid's low bits. The `FieldRegistry` survives as a
+    runtime cache rather than being dropped.
+  - **3b, the seam:** `gyre::CouplingForce` compiles a kernel `Coupling` into a
+    `gyre::Force`. `from_coupling(coupling, graph)` resolves the field definition
+    (`graph.field`) and the selector's nodes (`graph.nodes_matching`), and `apply`
+    evaluates via aether and maps the response to motion. Equivalence proven with
+    **`Boundary` ≡ `AttractToMin` on the paraboloid ½(x²+y²)** (gradient (x,y) ⇒
+    force −pos·strength): side-by-side sims track to ~1.5 units over a 580-unit
+    settle. `NodeExclusion` stays a native pairwise force (it is not a static field,
+    so it is not a clean single-coupling equivalence; Boundary is).
+  - **Follow-up (`aefa751`):** `from_coupling` seeds the registry from
+    `graph.fields()` (via the new `FieldRegistry::insert_with_id`) so inter-field
+    `Sample(FieldId)` references resolve.
 
-### Phase 4 — Deferred, each its own slice
+### Phase 4 — Each its own slice
 
-- The **open response vocabulary** (visual / navigational / selection / semantic /
-  trigger) via the recognized-core-plus-open-tail hybrid — this is where the
-  statements-over-schema stance and the just-landed strum descriptor pattern pay
-  off. v1 stays force-only.
-- Federation of fields/couplings; lifecycle UX (activate/retire); aether's
-  `EdgePath`/`EdgePathRule` (field-driven edge geometry) as a coupling concern.
+- **Done (landed 2026-06-01, `ac34907`): `EdgePath`/`EdgePathRule` into the kernel.**
+  The last field-layer definition types still living in aether moved down to
+  `kernel::graph::edge_path` (serde-only, `FieldLine` keyed on the kernel
+  `FieldId`); aether's `coupling.rs` collapsed to a thin re-export. Type relocation
+  only; Graph storage + persistence for edge-path rules can follow when a consumer
+  needs them persisted (they are aether-runtime today).
+- **Still deferred:**
+  - The **open response vocabulary** (visual / navigational / selection / semantic /
+    trigger) via the recognized-core-plus-open-tail hybrid, where the
+    statements-over-schema stance and the strum descriptor pattern pay off. v1 stays
+    force-only.
+  - Federation of fields/couplings; lifecycle UX (activate/retire).
 
 ---
 
 ## Open questions / non-goals
 
-- Definition ownership (i vs ii): recommend (i); confirm by reading `aether/ast.rs`
-  in full at Phase 0 before moving the AST.
-- aether `FieldId(u64)` reconciliation: kernel UUID id is canonical; whether aether
-  keeps the u64 as a runtime cache key or adopts the kernel id is a Phase-3 detail.
+- ~~Definition ownership (i vs ii)~~ **Resolved: (i).** Kernel owns the portable AST;
+  aether gained a `kernel` dep (P0/P3a).
+- ~~aether `FieldId(u64)` reconciliation~~ **Resolved (P3a):** the kernel UUID
+  `FieldId` is canonical and lives in the registry; aether mints registry-local ids
+  as `Uuid::from_u128(counter)` and the rhai i64 handle bridges through the uuid's
+  low bits. The `FieldRegistry` survives as a runtime/derived cache, not dropped.
+- ~~rkyv recursive-AST archiving (`omit_bounds` vs serde-blob)~~ **Resolved (P2):
+  serde-blob** the definition as a JSON string; flat enums archive natively.
 - Selector-eval performance (re-eval on graph mutation): acceptable for now;
-  optimize only under a real frame-rate signal.
+  optimize only under a real frame-rate signal. `CouplingForce` captures its target
+  set at build time, so callers rebuild it on graph mutation (still open: a
+  rebuild-on-change hook vs eager re-resolve).
 - **Non-goals**: moving Rhai/Burn into the kernel (they stay aether-side, optional);
   evaluating fields in the kernel (kernel stores, aether evaluates); the open
   response vocabulary in v1.
@@ -221,3 +267,29 @@ field→selector relation.
   migrated from aether's `u64` to the kernel UUID id. Verified `cargo test -p
   kernel` = **216 passed** (208 prior + 8 new), compile-clean. No `Graph`
   integration yet (that is P1).
+
+- **2026-05-31** — **P1 landed** (`9a1f736`, kernel 220). `Graph` gained the parallel
+  keyed `fields`/`couplings` stores + mutators/queries (`graph/field_ops.rs`) +
+  `nodes_matching` selector eval. The commit also carried P0's truth types to first
+  commit (they were drafted but still uncommitted at that point).
+
+- **2026-05-31** — **Aether seam (Phase 3) landed.** `7e077e1`: aether flipped onto
+  the kernel field types (duplicate AST / coupling / `FieldId` dropped; registry now
+  keys on the UUID id). `ab5310f`: `gyre::CouplingForce` compiles a kernel `Coupling`
+  to a `gyre::Force`; `Boundary` ≡ `AttractToMin` on the paraboloid proven by a
+  side-by-side sim. `aefa751`: `from_coupling` seeds the registry from
+  `graph.fields()` so inter-field `Sample` resolves (new `FieldRegistry::insert_with_id`).
+
+- **2026-06-01** — **P4 EdgePath slice landed** (`ac34907`, kernel 222).
+  `EdgePath`/`EdgePathRule` moved to `kernel::graph::edge_path`; aether re-exports.
+  The kernel now owns every field-layer definition type.
+
+- **2026-06-01** — **P2 landed** (`00bbb4c`, kernel 227 / 231 with `store`).
+  `PersistedField`/`PersistedCoupling` in `persistence_fields.rs`; `GraphSnapshot`
+  gained `#[serde(default)]` `fields`/`couplings` + to/from wiring. The recursive AST
+  rides as a serde-JSON blob (decision recorded under Phase 2). Round-trip +
+  additive-migration tests green. Truth-level plan done bar the deferred Phase 4 tail.
+
+- **2026-06-01** — Ownership: this plan is now driven by the field-system agent
+  (the linked-data/djot work split to a separate owner). Remaining scope is the
+  deferred Phase 4 tail (open response vocabulary, federation, lifecycle UX).
