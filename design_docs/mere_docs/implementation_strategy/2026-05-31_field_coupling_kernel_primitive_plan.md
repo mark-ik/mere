@@ -327,3 +327,14 @@ field→selector relation.
   side; the kernel stays force-core-only (platen owns its visual vocabulary, an
   unrecognized `visual/*` IRI is skipped). platen 43. The rhai `couple_open`
   authoring surface still waits on a `FieldProjection`→`Graph` commit path.
+
+- **2026-06-01** — **Authoring path closed** (`62bafc0`, aether).
+  `FieldProjection::commit_to_graph` writes an authored projection's registry fields
+  and couplings into the kernel `Graph` (the inverse of the gyre/platen read path), so
+  authored content reaches the truth those consumers read. rhai gains
+  `couple_open(kind, field_id, iri, strength)`, making the open-tail (e.g. `visual/*`)
+  couplings scriptable. Proven end to end: a script authors a `visual/halo` coupling,
+  commit lands it in the `Graph` with its open predicate and field. aether 72. The
+  field system now runs full-circle: author (rhai → `FieldProjection`) → commit →
+  kernel truth → consumers (gyre force, platen visual). `edge_path_rule` Graph
+  storage + stable cross-projection ids remain host/Phase-later concerns.
