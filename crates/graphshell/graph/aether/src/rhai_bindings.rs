@@ -43,11 +43,24 @@
 //! ```
 
 use rhai::{Engine, ImmutableString};
+use uuid::Uuid;
 
 use crate::ast::{ScalarField, VectorField};
 use crate::coupling::{Coupling, CouplingResponse, EdgePath, EdgePathRule, NodeSelector};
 use crate::projection::FieldProjection;
 use crate::registry::FieldId;
+use kernel::graph::CouplingId;
+
+// Scripts address fields by an `i64` handle. Registry ids are UUID-backed but
+// minted from a small `u64` counter (`Uuid::from_u128`), so the handle is just
+// that counter: round-trip through the UUID's low bits, lossless for any
+// registry-minted id.
+fn id_to_handle(id: FieldId) -> i64 {
+    id.as_uuid().as_u128() as i64
+}
+fn handle_to_id(handle: i64) -> FieldId {
+    FieldId::from_uuid(Uuid::from_u128(handle as u128))
+}
 
 /// Reasons a Rhai script could not be evaluated into a `FieldProjection`.
 #[derive(Debug, Clone, PartialEq)]
@@ -127,17 +140,17 @@ fn register_projection_methods(engine: &mut Engine) {
     engine.register_fn(
         "add_scalar",
         |p: &mut FieldProjection, name: ImmutableString, field: ScalarField| -> i64 {
-            p.add_scalar(name.to_string(), field).0 as i64
+            id_to_handle(p.add_scalar(name.to_string(), field))
         },
     );
     engine.register_fn(
         "add_vector",
         |p: &mut FieldProjection, name: ImmutableString, field: VectorField| -> i64 {
-            p.add_vector(name.to_string(), field).0 as i64
+            id_to_handle(p.add_vector(name.to_string(), field))
         },
     );
     engine.register_fn("set_z_field", |p: &mut FieldProjection, id: i64| {
-        p.z_field = Some(FieldId(id as u64));
+        p.z_field = Some(handle_to_id(id));
     });
     engine.register_fn("clear_z_field", |p: &mut FieldProjection| {
         p.z_field = None;
@@ -152,12 +165,18 @@ fn register_coupling_methods(engine: &mut Engine) {
         strength: f64,
         response: CouplingResponse,
     ) {
-        p.add_coupling(Coupling {
-            selector: NodeSelector::Kind(kind.to_string()),
-            field: FieldId(field_id as u64),
+        // Mint a projection-local coupling id from the current count (the kernel
+        // `Coupling` carries a stable `CouplingId`; rhai-authored rules get a
+        // deterministic, WASM-safe one). Persisted/Graph-sourced couplings carry
+        // their canonical id instead.
+        let id = CouplingId::from_uuid(Uuid::from_u128(p.couplings.len() as u128));
+        p.add_coupling(Coupling::new(
+            id,
+            handle_to_id(field_id),
+            NodeSelector::Kind(kind.to_string()),
             response,
-            strength: strength as f32,
-        });
+            strength as f32,
+        ));
     }
 
     engine.register_fn(
@@ -227,7 +246,7 @@ fn register_edge_path_methods(engine: &mut Engine) {
             p.add_edge_path_rule(EdgePathRule {
                 edge_kind: edge_kind.to_string(),
                 path: EdgePath::FieldLine {
-                    field: FieldId(field_id as u64),
+                    field: handle_to_id(field_id),
                     max_steps: max_steps as u32,
                     step_size: step_size as f32,
                 },

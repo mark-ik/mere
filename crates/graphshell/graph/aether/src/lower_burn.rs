@@ -514,8 +514,9 @@ mod tests {
     fn sample_unknown_id_errors() {
         let reg = FieldRegistry::new();
         let (xs, ys) = make_xs_ys(&[(0.0, 0.0)]);
-        let err = lower_scalar(&ScalarField::Sample(FieldId(99)), &reg, xs, ys, 0.0).unwrap_err();
-        assert_eq!(err, LowerError::UnknownField(FieldId(99)));
+        let missing = FieldId::from_uuid(uuid::Uuid::from_u128(99));
+        let err = lower_scalar(&ScalarField::Sample(missing), &reg, xs, ys, 0.0).unwrap_err();
+        assert_eq!(err, LowerError::UnknownField(missing));
     }
 
     #[test]

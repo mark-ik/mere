@@ -10,6 +10,14 @@ description = "Field algebra for Mere's graph canvas — scalar/vector fields ov
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
+# Field-system truth types live in the kernel (the portable AST, FieldId/CouplingId,
+# Field, Coupling/CouplingResponse/NodeSelector). aether is the runtime algebra over
+# them: it evaluates the definitions and derives forces. One-way dep, kernel never
+# pulls aether back.
+kernel = { path = "../graph-kernel" }
+# For minting registry-local FieldIds (from_u128, WASM-safe) and serde of the
+# UUID-backed kernel FieldId embedded in FieldRegistry.
+uuid = { version = "1", default-features = false, features = ["serde"] }
 # Burn-backed lowering of the field algebra (AST -> a fused tensor program).
 # ndarray backend for portable per-target compute; generic over `B: Backend`.
 burn = { version = "0.21", default-features = false, features = ["ndarray", "std"], optional = true }

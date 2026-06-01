@@ -347,7 +347,7 @@ mod tests {
     #[test]
     fn sample_returns_zero_for_missing() {
         let reg = FieldRegistry::new();
-        let f = ScalarField::Sample(crate::registry::FieldId(99));
+        let f = ScalarField::Sample(crate::registry::FieldId::from_uuid(uuid::Uuid::from_u128(99)));
         assert_eq!(eval_scalar(&f, &reg, 0.0, 0.0, 0.0), 0.0);
     }
 

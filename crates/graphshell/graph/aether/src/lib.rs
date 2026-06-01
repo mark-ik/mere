@@ -12,7 +12,9 @@
 //! In the substrate, `aether` is the *source* of influence: it defines fields
 //! and couplings and resolves them. Force couplings compile to forces the `gyre`
 //! rapier integrator applies to bodies; visual couplings feed paint. `aether`
-//! itself stays kernel-free and portable (serde + optional Rhai/Burn).
+//! reads the kernel's field-truth types (the AST, `FieldId`, `Coupling`) and
+//! evaluates them; it stays platform-free and WASM-portable (kernel + serde +
+//! optional Rhai/Burn), never pulling in a host or renderer.
 //!
 //! Architectural anchor: the
 //! [field-system extraction brief](../../../../design_docs/mere_docs/technical_architecture/2026-05-30_field_system_extraction.md).
@@ -26,7 +28,10 @@
 //! `field-burn` feature) will lower an entire field expression to a fused
 //! tensor program for vectorised evaluation; see `lower_burn`.
 
-pub mod ast;
+// The scalar/vector field AST is kernel truth (`kernel::graph::field_ast`).
+// aether re-exports it as `ast` so internal `crate::ast::` paths and external
+// `aether::ast::` callers keep resolving onto the canonical types.
+pub use kernel::graph::field_ast as ast;
 pub mod coupling;
 pub mod eval;
 #[cfg(feature = "field-burn")]

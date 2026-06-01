@@ -88,8 +88,9 @@ mod tests {
         let mut p = FieldProjection::new();
         let id = p.add_scalar("f", ScalarField::Const(1.0));
         p.add_coupling(Coupling::new(
-            NodeSelector::All,
+            kernel::graph::CouplingId::from_uuid(uuid::Uuid::from_u128(0)),
             id,
+            NodeSelector::All,
             CouplingResponse::AttractToMin,
             1.0,
         ));
@@ -112,8 +113,9 @@ mod tests {
         let id = p.add_scalar("focus", ScalarField::gaussian_at(0.0, 0.0, 10.0));
         p.z_field = Some(id);
         p.add_coupling(Coupling::new(
-            NodeSelector::Kind("paper".into()),
+            kernel::graph::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
             id,
+            NodeSelector::Kind("paper".into()),
             CouplingResponse::AttractToMin,
             0.8,
         ));

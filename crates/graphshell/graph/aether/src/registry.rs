@@ -11,19 +11,17 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use uuid::Uuid;
 
 use crate::ast::{ScalarField, VectorField};
 
-/// Opaque identifier for a registered field. Stable within a registry.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct FieldId(pub u64);
-
-/// A registered field — either scalar- or vector-valued.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum FieldDef {
-    Scalar(ScalarField),
-    Vector(VectorField),
-}
+// Field identity and the scalar/vector definition enum are kernel truth. The
+// registry keys on the canonical UUID `FieldId` and stores `FieldDefinition`
+// (re-exported here as `FieldDef` for call-site continuity). Registry-local ids
+// are minted deterministically from a counter (`Uuid::from_u128`) so the type
+// stays WASM-clean; once fields are sourced from the `Graph` (field-system
+// Phase 3b) kernel ids flow in directly and this minting falls away.
+pub use kernel::graph::{FieldDefinition as FieldDef, FieldId};
 
 /// Per-canvas field registry.
 ///
@@ -62,7 +60,7 @@ impl FieldRegistry {
         if let Some(&id) = self.names.get(name) {
             return id;
         }
-        let id = FieldId(self.next_id);
+        let id = FieldId::from_uuid(Uuid::from_u128(self.next_id as u128));
         self.next_id += 1;
         self.names.insert(name.to_string(), id);
         id
@@ -108,6 +106,7 @@ impl FieldRegistry {
 mod tests {
     use super::*;
     use crate::ast::Falloff;
+    use uuid::Uuid;
 
     #[test]
     fn insert_and_lookup_scalar() {
@@ -160,7 +159,7 @@ mod tests {
     #[test]
     fn remove_returns_false_for_unknown_id() {
         let mut reg = FieldRegistry::new();
-        assert!(!reg.remove(FieldId(42)));
+        assert!(!reg.remove(FieldId::from_uuid(Uuid::from_u128(42))));
     }
 
     #[test]

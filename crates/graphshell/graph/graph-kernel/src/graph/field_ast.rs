@@ -114,6 +114,14 @@ impl ScalarField {
             falloff,
         }
     }
+
+    /// `Linear` with a constant normal: `dot((nx, ny), p) + offset`.
+    pub fn linear(nx: f32, ny: f32, offset: f32) -> Self {
+        Self::Linear {
+            normal: Box::new(VectorField::ConstVec { x: nx, y: ny }),
+            offset,
+        }
+    }
 }
 
 impl VectorField {
