@@ -16,6 +16,11 @@ path = "src/lib.rs"
 # layer alongside vello and petgraph rather than a feature bolt-on.
 rapier2d = "0.22"
 kernel.workspace = true
+# Field algebra: gyre's CouplingForce evaluates aether fields (closed-form +
+# finite-difference gradients) to drive rapier bodies. One-way dep — aether is
+# the portable field source, gyre the integrator. (aether default features only;
+# no rhai/burn pulled into the simulator.)
+aether = { path = "../aether" }
 euclid = "0.22"
 tracing = "0.1"
 

@@ -49,6 +49,11 @@ use rapier2d::prelude::*;
 pub mod forces;
 pub use forces::{Boundary, EdgeSpring, NodeExclusion};
 
+/// The aether→gyre seam: a kernel [`kernel::graph::Coupling`] compiled to a
+/// [`Force`] (the general, scriptable path the built-in forces specialize).
+pub mod coupling_force;
+pub use coupling_force::CouplingForce;
+
 /// Physical radius used for every node body's collider.
 ///
 /// Mirrors `platen::CanvasSceneOptions::default()`'s
