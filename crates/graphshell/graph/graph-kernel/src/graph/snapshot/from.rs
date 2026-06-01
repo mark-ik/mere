@@ -18,9 +18,10 @@ use super::super::*;
 use super::containment_parent_url;
 use crate::address::{address_from_url, cached_host_from_url, detect_mime};
 use crate::persistence::{
-    GraphSnapshot, PersistedArrangementSubKind, PersistedContainmentSubKind, PersistedEdgeFamily,
-    PersistedImportedSubKind, PersistedNavigationTrigger, PersistedNodeSessionState,
-    PersistedProvenanceSubKind, PersistedSemanticSubKind,
+    GraphSnapshot, PersistedArrangementSubKind, PersistedContainmentSubKind,
+    PersistedCouplingResponse, PersistedEdgeFamily, PersistedFieldExtent, PersistedFieldLifecycle,
+    PersistedImportedSubKind, PersistedNavigationTrigger, PersistedNodeSelector,
+    PersistedNodeSessionState, PersistedProvenanceSubKind, PersistedSemanticSubKind,
 };
 
 impl Graph {
@@ -318,6 +319,77 @@ impl Graph {
                     }
                 }
             }
+        }
+
+        // Field layer (field-system Phase 2). Malformed ids / definitions skip the
+        // entry rather than failing the whole load, matching the node/edge loops.
+        for pfield in &snapshot.fields {
+            let Ok(id) = Uuid::parse_str(&pfield.id) else {
+                continue;
+            };
+            let Ok(definition) = serde_json::from_str::<FieldDefinition>(&pfield.definition_json)
+            else {
+                continue;
+            };
+            let extent = match &pfield.extent {
+                PersistedFieldExtent::Global => FieldExtent::Global,
+                PersistedFieldExtent::Region {
+                    min_x,
+                    min_y,
+                    max_x,
+                    max_y,
+                } => FieldExtent::Region {
+                    min_x: *min_x,
+                    min_y: *min_y,
+                    max_x: *max_x,
+                    max_y: *max_y,
+                },
+                PersistedFieldExtent::AttachedToNode(s) => match Uuid::parse_str(s) {
+                    Ok(node_id) => FieldExtent::AttachedToNode(node_id),
+                    Err(_) => FieldExtent::Global,
+                },
+            };
+            let mut field = Field::new(FieldId::from_uuid(id), definition).with_extent(extent);
+            if let Some(name) = &pfield.name {
+                field = field.with_name(name.clone());
+            }
+            field.lifecycle = match pfield.lifecycle {
+                PersistedFieldLifecycle::Active => FieldLifecycle::Active,
+                PersistedFieldLifecycle::Retired => FieldLifecycle::Retired,
+            };
+            graph.add_field(field);
+        }
+
+        for pcoupling in &snapshot.couplings {
+            let Ok(cid) = Uuid::parse_str(&pcoupling.id) else {
+                continue;
+            };
+            let Ok(fid) = Uuid::parse_str(&pcoupling.field_id) else {
+                continue;
+            };
+            let selector = match &pcoupling.selector {
+                PersistedNodeSelector::All => NodeSelector::All,
+                PersistedNodeSelector::Tagged(t) => NodeSelector::Tagged(t.clone()),
+                PersistedNodeSelector::Kind(k) => NodeSelector::Kind(k.clone()),
+                PersistedNodeSelector::NotTagged(t) => NodeSelector::NotTagged(t.clone()),
+            };
+            let response = match pcoupling.response {
+                PersistedCouplingResponse::AttractToMin => CouplingResponse::AttractToMin,
+                PersistedCouplingResponse::RepelFromMax => CouplingResponse::RepelFromMax,
+                PersistedCouplingResponse::AlignVelocity => CouplingResponse::AlignVelocity,
+                PersistedCouplingResponse::FlowAdvect => CouplingResponse::FlowAdvect,
+                PersistedCouplingResponse::DampenInside { factor } => {
+                    CouplingResponse::DampenInside { factor }
+                }
+                PersistedCouplingResponse::ContainmentWall => CouplingResponse::ContainmentWall,
+            };
+            graph.add_coupling(Coupling::new(
+                CouplingId::from_uuid(cid),
+                FieldId::from_uuid(fid),
+                selector,
+                response,
+                pcoupling.strength,
+            ));
         }
 
         if snapshot.import_records.is_empty() {

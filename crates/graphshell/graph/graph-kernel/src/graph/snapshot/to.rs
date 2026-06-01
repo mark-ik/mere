@@ -13,8 +13,10 @@ use petgraph::visit::EdgeRef;
 use super::super::*;
 use crate::persistence::{
     GraphSnapshot, PersistedAddress, PersistedArrangementEdgeData, PersistedArrangementSubKind,
-    PersistedContainmentEdgeData, PersistedContainmentSubKind, PersistedEdge, PersistedEdgeFamily,
-    PersistedImportedEdgeData, PersistedImportedSubKind, PersistedNavigationTrigger, PersistedNode,
+    PersistedContainmentEdgeData, PersistedContainmentSubKind, PersistedCoupling,
+    PersistedCouplingResponse, PersistedEdge, PersistedEdgeFamily, PersistedField,
+    PersistedFieldExtent, PersistedFieldLifecycle, PersistedImportedEdgeData,
+    PersistedImportedSubKind, PersistedNavigationTrigger, PersistedNode, PersistedNodeSelector,
     PersistedNodeSessionState, PersistedProvenanceEdgeData, PersistedProvenanceSubKind,
     PersistedSemanticEdgeData, PersistedSemanticSubKind, PersistedTraversalEdgeData,
     PersistedTraversalMetrics, PersistedTraversalRecord,
@@ -335,6 +337,62 @@ impl Graph {
             })
             .collect();
 
+        let fields = self
+            .fields()
+            .map(|f| PersistedField {
+                id: f.id.as_uuid().to_string(),
+                name: f.name.clone(),
+                // The recursive AST rides as a JSON blob (see persistence_fields).
+                definition_json: serde_json::to_string(&f.definition).unwrap_or_default(),
+                extent: match &f.extent {
+                    FieldExtent::Global => PersistedFieldExtent::Global,
+                    FieldExtent::Region {
+                        min_x,
+                        min_y,
+                        max_x,
+                        max_y,
+                    } => PersistedFieldExtent::Region {
+                        min_x: *min_x,
+                        min_y: *min_y,
+                        max_x: *max_x,
+                        max_y: *max_y,
+                    },
+                    FieldExtent::AttachedToNode(id) => {
+                        PersistedFieldExtent::AttachedToNode(id.to_string())
+                    }
+                },
+                lifecycle: match f.lifecycle {
+                    FieldLifecycle::Active => PersistedFieldLifecycle::Active,
+                    FieldLifecycle::Retired => PersistedFieldLifecycle::Retired,
+                },
+            })
+            .collect();
+
+        let couplings = self
+            .couplings()
+            .map(|c| PersistedCoupling {
+                id: c.id.as_uuid().to_string(),
+                field_id: c.field.as_uuid().to_string(),
+                selector: match &c.selector {
+                    NodeSelector::All => PersistedNodeSelector::All,
+                    NodeSelector::Tagged(t) => PersistedNodeSelector::Tagged(t.clone()),
+                    NodeSelector::Kind(k) => PersistedNodeSelector::Kind(k.clone()),
+                    NodeSelector::NotTagged(t) => PersistedNodeSelector::NotTagged(t.clone()),
+                },
+                response: match c.response {
+                    CouplingResponse::AttractToMin => PersistedCouplingResponse::AttractToMin,
+                    CouplingResponse::RepelFromMax => PersistedCouplingResponse::RepelFromMax,
+                    CouplingResponse::AlignVelocity => PersistedCouplingResponse::AlignVelocity,
+                    CouplingResponse::FlowAdvect => PersistedCouplingResponse::FlowAdvect,
+                    CouplingResponse::DampenInside { factor } => {
+                        PersistedCouplingResponse::DampenInside { factor }
+                    }
+                    CouplingResponse::ContainmentWall => PersistedCouplingResponse::ContainmentWall,
+                },
+                strength: c.strength,
+            })
+            .collect();
+
         let timestamp_secs = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -345,6 +403,8 @@ impl Graph {
             edges,
             import_records: self.import_records.clone(),
             timestamp_secs,
+            fields,
+            couplings,
         }
     }
 }

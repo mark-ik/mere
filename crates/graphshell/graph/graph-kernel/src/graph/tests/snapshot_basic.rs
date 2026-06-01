@@ -243,6 +243,8 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
         }],
         import_records: vec![],
         timestamp_secs: 0,
+        fields: vec![],
+        couplings: vec![],
     };
 
     let graph = Graph::from_snapshot(&snapshot);
@@ -312,6 +314,8 @@ fn test_snapshot_duplicate_urls_last_wins() {
         edges: vec![],
         import_records: vec![],
         timestamp_secs: 0,
+        fields: vec![],
+        couplings: vec![],
     };
 
     let graph = Graph::from_snapshot(&snapshot);
@@ -320,4 +324,92 @@ fn test_snapshot_duplicate_urls_last_wins() {
     assert_eq!(graph.node_count(), 2);
     let (_, node) = graph.get_node_by_url("https://same.com").unwrap();
     assert_eq!(node.title, "Second");
+}
+
+// --- Field layer (field-system Phase 2) ---
+
+#[test]
+fn test_snapshot_roundtrips_fields_and_couplings() {
+    let mut graph = Graph::new();
+    graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+
+    let fid = FieldId::from_uuid(Uuid::from_u128(0xF1));
+    graph.add_field(
+        Field::new(
+            fid,
+            FieldDefinition::Scalar(ScalarField::gaussian_at(1.0, 2.0, 10.0)),
+        )
+        .with_name("focus")
+        .with_extent(FieldExtent::Region {
+            min_x: -1.0,
+            min_y: -2.0,
+            max_x: 3.0,
+            max_y: 4.0,
+        }),
+    );
+    // A retired field must keep its definition through the round-trip.
+    let retired = FieldId::from_uuid(Uuid::from_u128(0xF2));
+    graph.add_field(Field::new(
+        retired,
+        FieldDefinition::Scalar(ScalarField::Const(1.0)),
+    ));
+    assert!(graph.retire_field(retired));
+
+    let cid = CouplingId::from_uuid(Uuid::from_u128(0xC1));
+    graph.add_coupling(Coupling::new(
+        cid,
+        fid,
+        NodeSelector::Kind("paper".into()),
+        CouplingResponse::DampenInside { factor: 0.4 },
+        2.5,
+    ));
+
+    let restored = Graph::from_snapshot(&graph.to_snapshot());
+
+    let f = restored.field(fid).expect("field restored");
+    assert_eq!(f.name.as_deref(), Some("focus"));
+    assert_eq!(
+        f.extent,
+        FieldExtent::Region {
+            min_x: -1.0,
+            min_y: -2.0,
+            max_x: 3.0,
+            max_y: 4.0
+        }
+    );
+    assert!(matches!(
+        f.definition,
+        FieldDefinition::Scalar(ScalarField::Gaussian { .. })
+    ));
+    assert!(f.is_active());
+
+    let rf = restored.field(retired).expect("retired field restored");
+    assert!(!rf.is_active(), "retired lifecycle survives");
+    assert!(matches!(
+        rf.definition,
+        FieldDefinition::Scalar(ScalarField::Const(_))
+    ));
+
+    let c = restored
+        .couplings_for_field(fid)
+        .next()
+        .expect("coupling restored");
+    assert_eq!(c.id, cid);
+    assert_eq!(c.selector, NodeSelector::Kind("paper".into()));
+    assert_eq!(c.response, CouplingResponse::DampenInside { factor: 0.4 });
+    assert_eq!(c.strength, 2.5);
+}
+
+#[test]
+fn test_snapshot_without_field_layer_loads_empty() {
+    // A pre-field-layer snapshot (JSON missing `fields`/`couplings`) must still
+    // load, with an empty field layer — the additive `#[serde(default)]` migration.
+    let json = r#"{"nodes":[],"edges":[],"import_records":[],"timestamp_secs":0}"#;
+    let snapshot: crate::persistence::GraphSnapshot = serde_json::from_str(json).unwrap();
+    assert!(snapshot.fields.is_empty());
+    assert!(snapshot.couplings.is_empty());
+
+    let restored = Graph::from_snapshot(&snapshot);
+    assert_eq!(restored.fields().count(), 0);
+    assert_eq!(restored.couplings().count(), 0);
 }

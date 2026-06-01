@@ -9,6 +9,13 @@
 
 use rkyv::{Archive, Deserialize, Serialize};
 
+// Field-layer DTOs live in their own file (per-file ceiling) but belong to this
+// module's vocabulary; re-export so `crate::persistence::PersistedField` resolves.
+pub use crate::persistence_fields::{
+    PersistedCoupling, PersistedCouplingResponse, PersistedField, PersistedFieldExtent,
+    PersistedFieldLifecycle, PersistedNodeSelector,
+};
+
 use crate::graph::NodeNavigationMemory;
 use crate::types::{
     FrameLayoutHint, ImportRecord, NodeClassification, NodeImportProvenance,
@@ -575,6 +582,12 @@ pub struct GraphSnapshot {
     pub edges: Vec<PersistedEdge>,
     pub import_records: Vec<ImportRecord>,
     pub timestamp_secs: u64,
+    /// Field-layer truth (field-system Phase 2). `#[serde(default)]` so snapshots
+    /// written before the field layer load with an empty one.
+    #[serde(default)]
+    pub fields: Vec<PersistedField>,
+    #[serde(default)]
+    pub couplings: Vec<PersistedCoupling>,
 }
 
 // ---------------------------------------------------------------------------

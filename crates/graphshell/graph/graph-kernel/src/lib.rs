@@ -31,6 +31,10 @@ pub mod pane;
 /// Settings/permissions scope hierarchy + the narrowing rule (R0 invariant).
 pub mod permissions;
 pub mod persistence;
+/// Field-layer persistence DTOs (`PersistedField`/`PersistedCoupling`),
+/// re-exported through [`persistence`]. Separate file to keep `persistence.rs`
+/// under the per-file ceiling.
+pub mod persistence_fields;
 /// Native on-disk graph persistence. Gated by the `store` feature so the kernel
 /// stays portable-by-default; the native host enables it.
 #[cfg(feature = "store")]

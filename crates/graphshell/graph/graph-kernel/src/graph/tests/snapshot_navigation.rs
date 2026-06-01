@@ -75,6 +75,8 @@ fn test_cold_restore_reapplies_history_index() {
         edges: vec![],
         import_records: vec![],
         timestamp_secs: 0,
+        fields: vec![],
+        couplings: vec![],
     };
 
     let restored = Graph::from_snapshot(&snapshot);
@@ -155,6 +157,8 @@ fn test_cold_restore_reapplies_scroll_offset() {
         edges: vec![],
         import_records: vec![],
         timestamp_secs: 0,
+        fields: vec![],
+        couplings: vec![],
     };
 
     let restored = Graph::from_snapshot(&snapshot);
@@ -198,6 +202,8 @@ fn test_restore_fallback_without_session_state() {
         edges: vec![],
         import_records: vec![],
         timestamp_secs: 0,
+        fields: vec![],
+        couplings: vec![],
     };
 
     let restored = Graph::from_snapshot(&snapshot);
