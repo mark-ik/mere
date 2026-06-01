@@ -194,7 +194,7 @@ impl EdgePayload {
             EdgeFamily::Semantic => self
                 .semantic
                 .as_ref()
-                .is_some_and(|data| !data.sub_kinds.is_empty()),
+                .is_some_and(|data| !data.sub_kinds.is_empty() || data.predicate.is_some()),
             EdgeFamily::Traversal => self.traversal.is_some(),
             EdgeFamily::Containment => self
                 .containment

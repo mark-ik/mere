@@ -24,6 +24,46 @@ fn user_grouped(label: Option<&str>) -> EdgeAssertion {
 }
 
 #[test]
+fn assert_semantic_predicate_creates_open_predicate_edge() {
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.test/".to_string(), Point2D::new(0.0, 0.0));
+    let b = graph.add_node("https://b.test/".to_string(), Point2D::new(0.0, 0.0));
+    let key = graph
+        .assert_semantic_predicate(a, b, "https://schema.org/citation".to_string())
+        .expect("edge created");
+    let payload = graph.get_edge(key).expect("payload");
+    // Carries no sub-kinds, yet still reports the Semantic family.
+    assert!(payload.has_relation(RelationSelector::Family(EdgeFamily::Semantic)));
+    assert!(!payload.is_empty());
+    assert!(payload.semantic_data().is_some_and(|d| d.sub_kinds.is_empty()));
+    assert_eq!(
+        payload.semantic_data().and_then(|d| d.predicate.as_deref()),
+        Some("https://schema.org/citation")
+    );
+}
+
+#[test]
+fn open_predicate_only_edge_survives_snapshot_roundtrip() {
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.test/".to_string(), Point2D::new(0.0, 0.0));
+    let b = graph.add_node("https://b.test/".to_string(), Point2D::new(0.0, 0.0));
+    graph.assert_semantic_predicate(a, b, "https://schema.org/citation".to_string());
+
+    let restored = Graph::from_snapshot(&graph.to_snapshot());
+
+    assert_eq!(restored.edge_count(), 1);
+    let (ra, _) = restored.get_node_by_url("https://a.test/").unwrap();
+    let (rb, _) = restored.get_node_by_url("https://b.test/").unwrap();
+    let key = restored.find_edge_key(ra, rb).expect("edge restored");
+    let payload = restored.get_edge(key).expect("payload");
+    assert!(payload.has_relation(RelationSelector::Family(EdgeFamily::Semantic)));
+    assert_eq!(
+        payload.semantic_data().and_then(|d| d.predicate.as_deref()),
+        Some("https://schema.org/citation")
+    );
+}
+
+#[test]
 fn test_snapshot_roundtrip() {
     let mut graph = Graph::new();
     let n1 = graph.add_node("https://a.com".to_string(), Point2D::new(10.0, 20.0));

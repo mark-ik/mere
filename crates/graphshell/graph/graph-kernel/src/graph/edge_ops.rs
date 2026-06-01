@@ -43,6 +43,30 @@ impl Graph {
         Some(self.inner.add_edge(from, to, payload))
     }
 
+    /// Assert an **open predicate** semantic relation from `from` to `to`,
+    /// identified by an IRI rather than a closed [`SemanticSubKind`]. Creates the
+    /// edge if absent and stamps the predicate on its semantic sidecar
+    /// (independent of any sub-kinds already present); an edge carrying only a
+    /// predicate still reports the `Semantic` family. Returns the edge, or `None`
+    /// if either endpoint is missing. Write path for raw web predicates
+    /// (linked-data ingest / knot `rel`s outside Mere's vocabulary).
+    pub fn assert_semantic_predicate(
+        &mut self,
+        from: NodeKey,
+        to: NodeKey,
+        predicate: String,
+    ) -> Option<EdgeKey> {
+        if !self.inner.contains_node(from) || !self.inner.contains_node(to) {
+            return None;
+        }
+        let edge_key = self
+            .find_edge_key(from, to)
+            .unwrap_or_else(|| self.inner.add_edge(from, to, EdgePayload::new()));
+        let payload = self.inner.edge_weight_mut(edge_key)?;
+        payload.set_semantic_predicate(Some(predicate));
+        Some(edge_key)
+    }
+
     /// Replay helper: add node only if UUID is not already present.
     pub fn replay_add_node_with_id_if_missing(
         &mut self,

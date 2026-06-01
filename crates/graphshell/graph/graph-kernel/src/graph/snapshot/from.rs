@@ -147,14 +147,15 @@ impl Graph {
                         };
                         let _ = graph.assert_relation(from, to, assertion);
                     }
-                    // Restore the open predicate IRI onto the (now-created) edge.
-                    // A raw predicate-only edge (no sub-kinds) is not yet
-                    // recreated here — that pairs with JSON-LD ingest (Phase 2).
+                    // Restore the open predicate IRI. Create the edge when the
+                    // sub-kind loop above made none — a raw predicate-only
+                    // Semantic edge (linked-data ingest) has empty `sub_kinds`.
                     if semantic.predicate.is_some() {
-                        if let Some(key) = graph.find_edge_key(from, to) {
-                            if let Some(payload) = graph.get_edge_mut(key) {
-                                payload.set_semantic_predicate(semantic.predicate.clone());
-                            }
+                        let key = graph
+                            .find_edge_key(from, to)
+                            .unwrap_or_else(|| graph.inner.add_edge(from, to, EdgePayload::new()));
+                        if let Some(payload) = graph.inner.edge_weight_mut(key) {
+                            payload.set_semantic_predicate(semantic.predicate.clone());
                         }
                     }
                 }

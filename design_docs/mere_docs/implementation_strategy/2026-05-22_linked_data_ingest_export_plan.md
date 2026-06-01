@@ -116,6 +116,41 @@ round-trip fidelity.**
   enrichment is a graph output, not document rendering, and export has no inker
   role. Flag for Mark: dedicated crate vs inker module.
 
+### JSON-LD processor: prior art + choice (resolves open question 1)
+
+Ingest (Phase 2) needs JSON-LD **expansion**: apply `@context`, resolve
+terms/CURIEs to full IRIs, yield triples. Surveyed against Mere's constraints —
+wasm-light, **no surprise network**, synchronous, output that maps onto the graph
+kernel:
+
+- **`oxjsonld`** (Oxigraph's JSON-LD parser; 0.2.5, MSRV 1.87) — **recommended.**
+  Synchronous; pure-Rust with minimal deps (`json-event-parser`, `oxiri`,
+  `oxrdf`, `ryu-js`, `thiserror`; `tokio` optional, stays off). Emits `oxrdf`
+  triples. Remote-context loading is **opt-in** through a
+  `JsonLdLoadDocumentCallback`: supply one that serves the bundled contexts
+  (schema.org, Dublin Core, ActivityStreams) and refuses everything else, and the
+  "bundled local cache, no remote fetch" requirement falls straight out of the
+  seam with no HTTP dependency in the tree. wasm-clean.
+- **`json-ld`** (Haudebourg; ~0.5) — full JSON-LD 1.1 (expansion / compaction /
+  flattening) via the `JsonLdProcessor` trait and an async `Loader`. Most
+  correct, but **async** (extra wasm ceremony) and a large crate family
+  (`json-ld-syntax` / `-core` / `-context-processing`). Overkill for
+  expand-with-fixed-contexts; revisit only if compaction or flattening is needed.
+- **Hand-rolled expander** — for the bundled-context subset, expansion is
+  term→IRI mapping; smallest footprint, but reinvents the CURIE / `@base` /
+  `@vocab` / value-object edge cases `oxjsonld` already handles. Not worth it now
+  that a lean sync parser exists.
+
+**Prior art (the NextGraph thread).** NextGraph — "convergence of P2P + Semantic
+Web on CRDTs" — built its RDF stack on **Oxigraph**, forked as `ng-oxigraph`
+(adds CRDTs to RDF/SPARQL plus an encrypted RocksDB backend). That independently
+validates the Oxigraph family as the Rust RDF substrate. Mere takes only the
+**parser** (`oxjsonld` + `oxrdf`), not the triplestore — the kernel is the store.
+The deeper NextGraph convergence (RDF-CRDT, SPARQL over the graph) is prior art
+for the **federation tiers** (murm / moot), not this effort; SPARQL stays
+"buildable on the predicate substrate," deferred. `sophia` (general RDF toolkit)
+is the other option but adds no advantage over the Oxigraph parser here.
+
 ---
 
 ## Plan
@@ -141,9 +176,11 @@ has a done-condition, not a date.
   `PersistedSemanticEdgeData.predicate` (`#[serde(default)]`) with
   `snapshot/{to,from}.rs` round-trip (restored via `find_edge_key` /
   `get_edge_mut`, so no `EdgeAssertion` sweep). Old graphs load with `None`;
-  kernel suite **228/228** green. **Deferred:** raw predicate-*only* edges (empty
-  `sub_kinds`) are not yet recreated on load — that pairs with JSON-LD ingest
-  (Phase 2).
+  kernel suite **228/228** green. **Open-predicate gap closed 2026-06-01:** a raw
+  predicate-*only* edge (empty `sub_kinds`) now asserts via
+  `Graph::assert_semantic_predicate`, reports the `Semantic` family (`has_family`
+  reads the predicate, not just sub-kinds), and round-trips through
+  `snapshot/{to,from}.rs`. Kernel **234** green.
 - **First consumer (2026-06-01):** the knot statements ingest (`inker::statements`;
   knot design §10.5 Phase 4). A djot link's `rel`
   (`[Topic](mere://node/topic){rel=cites}`) becomes a `Semantic` edge: `resolve_rel`
@@ -182,6 +219,17 @@ has a done-condition, not a date.
   literals → curated fields/tags or drop.
 - Wire as an inker-routed input for `application/ld+json` (a graph-contribution
   output, **separate from** `EngineDocument`/render).
+- **Tooling:** parse with `oxjsonld` (sync, wasm-light) behind a bundled-context
+  load callback; map the resulting `oxrdf` triples to `GraphContribution` (see the
+  JSON-LD-processor finding).
+- **Kernel prerequisite — done 2026-06-01.** A raw predicate lands as a
+  `Semantic` edge with **empty `sub_kinds`** via
+  `Graph::assert_semantic_predicate`; such an edge reports the `Semantic` family
+  and round-trips through snapshots. Ingest can now assert recognized rels
+  (sub-kind + canonical IRI) *and* raw/CURIE rels (predicate only). The matching
+  consumer wiring — pointing `inker::statements`' `unrecognized` path at
+  `assert_semantic_predicate`, plus CURIE→IRI expansion — is the first ingest
+  task.
 - **Done:** a sample JSON-LD doc yields the expected nodes + typed edges; an
   unknown predicate lands as a raw-IRI `Semantic` edge with empty `sub_kinds`; a
   recognized one also sets its sub-kind; a literal maps to `title`/`tags`.
@@ -203,12 +251,14 @@ has a done-condition, not a date.
 
 ## Open questions
 
-1. **JSON-LD lib:** the `json-ld` crate (Haudebourg) + `sophia`/`rdf-types`, vs a
-   minimal hand-rolled expander for the bundled-context subset. Decide on
-   wasm-weight grounds; full processors are heavy.
+1. **JSON-LD lib:** **Resolved 2026-06-01 → `oxjsonld`** (Oxigraph's sync,
+   wasm-light JSON-LD parser; opt-in bundled-context loader; the
+   NextGraph-validated Oxigraph family). See the JSON-LD-processor finding above
+   for the alternatives weighed (`json-ld`/Haudebourg, `sophia`, hand-rolled).
 2. **Interning home:** per-graph vs per-session symbol table for predicate IRIs.
-3. **Crate placement:** dedicated `linked-data` crate (proposed) vs `inker`
-   module.
+3. **Crate placement:** **Resolved 2026-06-01 → dedicated `linked-data` crate**
+   (landed at `crates/graphshell/graph/linked-data`). The knot statements ingest
+   is the document-derived exception and lives in `inker::statements`.
 4. **rkyv snapshot path:** the live path is `graph.json` (serde, trivially
    migratable). The compact rkyv/redb snapshot path (`persistence.rs`) needs a
    field-addition check if/when it's the active store — confirm before relying on
@@ -225,3 +275,17 @@ has a done-condition, not a date.
   migration); `Node` has no general property bag; `SemanticSubKind` consumers
   iterate the sub-kind set (→ unrecognized predicates render generically, ~zero
   forced consumer churn). No code written yet.
+- **2026-06-01** — Phase 1 (export) landed in the new `linked-data` crate (see
+  the Phase 1 note). Phase 2 researched: open question 1 resolved to `oxjsonld`
+  (sync, wasm-light, opt-in bundled-context loader), corroborated by NextGraph's
+  Oxigraph-based RDF stack; written up in the JSON-LD-processor finding. Surfaced
+  the Phase 2 **kernel prerequisite** — raw-predicate-only `Semantic` edges plus
+  their persistence round-trip. Open questions 1 and 3 closed; 2 (interning) and
+  4 (rkyv path) remain.
+- **2026-06-01 (later)** — Phase 2 **kernel prerequisite done**:
+  `EdgePayload::has_family(Semantic)` now counts a predicate-only sidecar;
+  `Graph::assert_semantic_predicate(from, to, iri)` is the open-predicate write
+  path; `snapshot/from.rs` recreates predicate-only edges (create-if-missing,
+  mirroring the traversal block). 2 kernel tests (assert + snapshot round-trip);
+  kernel **234**, plus graph-layout / platen / session-runtime / inker /
+  linked-data green. Ingest (Phase 2 proper) is now unblocked.
