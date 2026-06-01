@@ -74,12 +74,22 @@ impl CouplingForce {
     pub fn from_coupling(coupling: &Coupling, graph: &Graph) -> Option<Self> {
         let field = graph.field(coupling.field)?;
         let targets: Vec<NodeKey> = graph.nodes_matching(&coupling.selector).collect();
-        Some(Self::new(
-            coupling.response,
-            coupling.strength,
-            targets,
-            field.definition.clone(),
-        ))
+        // Seed the registry from the whole field layer so the coupling's field can
+        // reference others by `Sample(FieldId)` and resolve them. Without this an
+        // inter-field `Sample` evaluates to zero.
+        let mut registry = FieldRegistry::new();
+        for f in graph.fields() {
+            registry.insert_with_id(f.id, f.definition.clone());
+        }
+        Some(
+            Self::new(
+                coupling.response,
+                coupling.strength,
+                targets,
+                field.definition.clone(),
+            )
+            .with_registry(registry),
+        )
     }
 
     /// Number of nodes this force currently acts on.
@@ -288,6 +298,44 @@ mod tests {
         }
         assert!(radius(&sim, a) < ra0, "node a should center");
         assert!(radius(&sim, b) < rb0, "node b should center");
+    }
+
+    #[test]
+    fn from_coupling_resolves_sample_through_registry() {
+        // Field "referencing" is just Sample(base); base is the paraboloid. The
+        // coupling targets "referencing", so it only produces motion if
+        // from_coupling seeded the registry with base — exercises the follow-up.
+        let mut g = Graph::new();
+        let a = node_at(&mut g, 1, 400.0, 0.0);
+
+        let base = FieldId::from_uuid(uuid::Uuid::from_u128(10));
+        g.add_field(Field::new(base, FieldDefinition::Scalar(paraboloid())));
+        let referencing = FieldId::from_uuid(uuid::Uuid::from_u128(11));
+        g.add_field(Field::new(
+            referencing,
+            FieldDefinition::Scalar(ScalarField::Sample(base)),
+        ));
+
+        let coupling = Coupling::new(
+            kernel::graph::CouplingId::from_uuid(uuid::Uuid::from_u128(1)),
+            referencing,
+            kernel::graph::NodeSelector::All,
+            CouplingResponse::AttractToMin,
+            1.5,
+        );
+        let force = CouplingForce::from_coupling(&coupling, &g).expect("field resolves");
+
+        let mut sim = Simulation::new();
+        sim.sync_with_graph(&g);
+        let r0 = radius(&sim, a);
+        sim.add_force(force);
+        for _ in 0..120 {
+            sim.tick(1.0 / 60.0);
+        }
+        assert!(
+            radius(&sim, a) < r0,
+            "a Sample-referenced field should resolve and center the node"
+        );
     }
 
     #[test]

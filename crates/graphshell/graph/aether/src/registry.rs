@@ -56,6 +56,15 @@ impl FieldRegistry {
         id
     }
 
+    /// Insert a field definition under an explicit, caller-supplied id — used to
+    /// seed the registry from the graph's field layer, where the canonical
+    /// (kernel UUID) [`FieldId`] is already known. Overwrites any existing entry
+    /// for that id. No name is registered (these are id-addressed; `Sample`
+    /// resolves by id, and `lookup`/`name_of` stay name-keyed).
+    pub fn insert_with_id(&mut self, id: FieldId, def: FieldDef) {
+        self.fields.insert(id, def);
+    }
+
     fn assign_id(&mut self, name: &str) -> FieldId {
         if let Some(&id) = self.names.get(name) {
             return id;
