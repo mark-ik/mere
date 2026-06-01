@@ -321,6 +321,7 @@ fn rewrite_one_span(span: InlineSpan, out: &mut Vec<InlineSpan>, hashtags: &mut 
             url,
             title,
             spans: inner,
+            ..
         } => {
             // Don't rewrite anything inside an existing link — its display
             // text is already linked. Pass through verbatim.
@@ -328,6 +329,7 @@ fn rewrite_one_span(span: InlineSpan, out: &mut Vec<InlineSpan>, hashtags: &mut 
                 url,
                 title,
                 spans: inner,
+                predicate: None,
             });
         }
         other => out.push(other),
@@ -377,6 +379,7 @@ fn expand_text(text: &str, out: &mut Vec<InlineSpan>, hashtags: Option<&mut Vec<
                         url,
                         title: None,
                         spans: vec![InlineSpan::Text(display)],
+                        predicate: None,
                     });
                     i += 2 + end + 2;
                     continue;

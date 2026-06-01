@@ -5784,6 +5784,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4a5ff6bcca6c4867b1c4fd4ef63e4db7436ef363e0ad7531d1558856bae64f4"
 
 [[package]]
+name = "linked-data"
+version = "0.0.1"
+dependencies = [
+ "kernel",
+ "serde_json",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7950,6 +7958,7 @@ checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
 name = "platen"
 version = "0.0.1"
 dependencies = [
+ "aether",
  "cartography",
  "document-canvas",
  "forme",

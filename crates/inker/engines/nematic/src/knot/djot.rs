@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Djot substrate proof-of-concept for knot bodies (design doc §10, Phase 1).
+//! Djot substrate for knot bodies (design doc §10).
 //!
 //! Demonstrates that djot's *native* constructs replace the CommonMark knot's
 //! fenced-code-as-data hacks (§2.2):
@@ -12,13 +12,16 @@
 //! - a **div with a class** (`::: feed-entry`, `::: badge`) becomes the matching
 //!   semantic block, reading typed attributes via `Attributes::get_value` — no
 //!   `feed-entry` code-fence-as-data;
+//! - an **inline link** becomes an [`InlineSpan::Link`]; a djot `rel` attribute
+//!   (`[Topic](mere://node/topic){rel="schema:cites"}`) is captured into the
+//!   link's `predicate` — the statements-over-schema seam that knot→graph
+//!   ingest (§10.5 Phase 4) turns into a kernel `Semantic` edge;
 //! - headings / paragraphs / code blocks map structurally.
 //!
-//! This is **additive**: the shipped CommonMark [`super::KnotEngine`] is
-//! untouched, and this module is not wired into the engine registry. Inline
-//! link / wikilink-predicate handling (which needs an `InlineSpan` predicate
-//! slot, tied to the linked-data plan) and the `to_djot_knot` round-trip are
-//! later phases of §10.5. Parser: `jotdown` (the Rust djot pull-parser).
+//! Frontmatter is shared with the CommonMark [`super::KnotEngine`] via
+//! `super::apply_frontmatter`, so a djot knot and a CommonMark knot carry
+//! identical note semantics. The [`blocks_to_djot`] serializer round-trips the
+//! recognized block vocabulary. Parser: `jotdown` (the Rust djot pull-parser).
 
 use inker::{
     DocumentBlock, DocumentDiagnostic, DocumentProvenance, DocumentTrustState, Engine,
@@ -26,8 +29,9 @@ use inker::{
 };
 use jotdown::{Container, Event, Parser};
 
-/// Parse a djot knot body into [`DocumentBlock`]s. Proof-of-concept scope; see
-/// the module docs.
+#[cfg(test)]
+mod tests;
+
 /// Parse a djot knot body into [`DocumentBlock`]s (blocks only). See
 /// [`parse_djot_knot_body_validated`] for the schema diagnostics.
 pub fn parse_djot_knot_body(body: &str) -> Vec<DocumentBlock> {
@@ -43,15 +47,16 @@ pub fn parse_djot_knot_body_validated(
 ) -> (Vec<DocumentBlock>, Vec<DocumentDiagnostic>) {
     let mut out = Vec::new();
     let mut diagnostics = Vec::new();
-    let mut text = String::new();
+    let mut inline = Inline::default();
     let mut heading_level: Option<u8> = None;
     let mut code_language: Option<String> = None;
     let mut div: Option<DivCtx> = None;
     let mut dl: Option<DlCtx> = None;
     // A standalone attribute line (`{title=… url=…}`) is emitted by jotdown as
     // `Event::Attributes` and applies to the element that follows. Stash it and
-    // fold it into the next div, so attribute attachment works whether jotdown
-    // folds it into `Start(Div, attrs)` or emits it separately.
+    // fold it into the next div (block attrs) or link (`rel`), so attachment
+    // works whether jotdown folds attrs into the `Start` event or emits them
+    // separately.
     let mut pending = PendingAttrs::default();
 
     for event in Parser::new(body) {
@@ -60,16 +65,17 @@ pub fn parse_djot_knot_body_validated(
                 pending.title = attrs.get_value("title").map(|v| v.to_string());
                 pending.url = attrs.get_value("url").map(|v| v.to_string());
                 pending.date = attrs.get_value("date").map(|v| v.to_string());
+                pending.rel = attrs.get_value("rel").map(|v| v.to_string());
             }
             Event::Start(Container::Heading { level, .. }, _) => {
                 heading_level = Some(level as u8);
-                text.clear();
+                inline.clear();
             }
             Event::End(Container::Heading { .. }) => {
                 if let Some(level) = heading_level.take() {
                     out.push(DocumentBlock::Heading {
                         level,
-                        spans: text_spans(std::mem::take(&mut text)),
+                        spans: inline.take_spans(),
                     });
                 }
             }
@@ -80,57 +86,69 @@ pub fn parse_djot_knot_body_validated(
                     url: attrs.get_value("url").map(|v| v.to_string()).or(pending.url.take()),
                     date: attrs.get_value("date").map(|v| v.to_string()).or(pending.date.take()),
                 });
-                text.clear();
+                inline.clear();
             }
             Event::End(Container::Div { .. }) => {
                 if let Some(ctx) = div.take() {
                     if let Some(diagnostic) = validate_div(&ctx) {
                         diagnostics.push(diagnostic);
                     }
-                    out.push(ctx.into_block(std::mem::take(&mut text)));
+                    out.push(ctx.into_block(inline.take_text()));
                 }
             }
             Event::Start(Container::DescriptionList, _) => dl = Some(DlCtx::default()),
             Event::End(Container::DescriptionList) => dl = None,
-            Event::Start(Container::DescriptionTerm, _) => text.clear(),
+            Event::Start(Container::DescriptionTerm, _) => inline.clear(),
             Event::End(Container::DescriptionTerm) => {
                 if let Some(d) = dl.as_mut() {
-                    d.term = std::mem::take(&mut text).trim().to_string();
+                    d.term = inline.take_text().trim().to_string();
                 }
             }
-            Event::Start(Container::DescriptionDetails, _) => text.clear(),
+            Event::Start(Container::DescriptionDetails, _) => inline.clear(),
             Event::End(Container::DescriptionDetails) => {
                 if let Some(d) = dl.as_mut() {
                     out.push(DocumentBlock::MetadataRow {
                         label: d.term.clone(),
-                        value: std::mem::take(&mut text).trim().to_string(),
+                        value: inline.take_text().trim().to_string(),
                     });
                 }
             }
             Event::Start(Container::CodeBlock { language }, _) => {
                 code_language = Some(language.to_string());
-                text.clear();
+                inline.clear();
             }
             Event::End(Container::CodeBlock { .. }) => {
                 out.push(DocumentBlock::CodeBlock {
                     language: code_language.take().filter(|s| !s.is_empty()),
-                    text: std::mem::take(&mut text),
+                    text: inline.take_text(),
                 });
             }
+            // Inline link: capture the destination + the `rel` attribute (the
+            // statements-over-schema predicate). `rel` arrives folded into the
+            // link's `Start` attrs, with a standalone-`Attributes` fallback.
+            Event::Start(Container::Link(dst, _), attrs) => {
+                let title = attrs.get_value("title").map(|v| v.to_string());
+                let predicate = attrs
+                    .get_value("rel")
+                    .map(|v| v.to_string())
+                    .or(pending.rel.take());
+                inline.start_link(dst.to_string(), title, predicate);
+            }
+            Event::End(Container::Link(..)) => inline.end_link(),
             Event::End(Container::Paragraph) => {
                 // A *top-level* paragraph emits a block; a paragraph inside a div
-                // or description-details lets its text accumulate for that
+                // or description-details lets its spans accumulate for that
                 // container's own `End` handler instead.
                 if div.is_none() && dl.is_none() && heading_level.is_none() {
-                    let t = std::mem::take(&mut text);
-                    if !t.trim().is_empty() {
-                        out.push(DocumentBlock::Paragraph { spans: text_spans(t) });
+                    let spans = inline.take_spans();
+                    if !inline_text(&spans).trim().is_empty() {
+                        out.push(DocumentBlock::Paragraph { spans });
                     }
                 }
             }
-            Event::Str(s) => text.push_str(s.as_ref()),
-            Event::Softbreak => text.push(' '),
-            Event::Hardbreak => text.push('\n'),
+            Event::Str(s) => inline.push_str(s.as_ref()),
+            Event::Softbreak => inline.push_char(' '),
+            Event::Hardbreak => inline.push_char('\n'),
             _ => {}
         }
     }
@@ -145,11 +163,104 @@ fn text_spans(text: String) -> Vec<InlineSpan> {
     }
 }
 
+/// Accumulates inline events into [`InlineSpan`]s. Most knot inline content is
+/// plain text (one `Text` span), but a djot link becomes an [`InlineSpan::Link`]
+/// carrying its destination and `rel` predicate. Raw-text contexts (div bodies,
+/// definition values, code) recover a flat string via [`Inline::take_text`].
+///
+/// PoC scope: emphasis / strong still flatten to text; links don't nest.
+#[derive(Default)]
+struct Inline {
+    spans: Vec<InlineSpan>,
+    buf: String,
+    link: Option<LinkBuilder>,
+}
+
+struct LinkBuilder {
+    url: String,
+    title: Option<String>,
+    predicate: Option<String>,
+    spans: Vec<InlineSpan>,
+}
+
+impl Inline {
+    fn clear(&mut self) {
+        self.spans.clear();
+        self.buf.clear();
+        self.link = None;
+    }
+
+    fn push_str(&mut self, s: &str) {
+        self.buf.push_str(s);
+    }
+
+    fn push_char(&mut self, c: char) {
+        self.buf.push(c);
+    }
+
+    /// Flush the pending text run into the active span list — the link body when
+    /// inside a link, else the top level. Routing by *current* link state is why
+    /// every link boundary calls this.
+    fn flush_text(&mut self) {
+        if self.buf.is_empty() {
+            return;
+        }
+        let text = InlineSpan::Text(std::mem::take(&mut self.buf));
+        match &mut self.link {
+            Some(l) => l.spans.push(text),
+            None => self.spans.push(text),
+        }
+    }
+
+    fn start_link(&mut self, url: String, title: Option<String>, predicate: Option<String>) {
+        // Links don't nest in PoC scope; close an open one defensively.
+        if self.link.is_some() {
+            self.end_link();
+        }
+        self.flush_text();
+        self.link = Some(LinkBuilder {
+            url,
+            title,
+            predicate,
+            spans: Vec::new(),
+        });
+    }
+
+    fn end_link(&mut self) {
+        self.flush_text();
+        if let Some(l) = self.link.take() {
+            self.spans.push(InlineSpan::Link {
+                url: l.url,
+                title: l.title,
+                spans: l.spans,
+                predicate: l.predicate,
+            });
+        }
+    }
+
+    /// Finish the current run and yield the accumulated spans, leaving the
+    /// accumulator empty.
+    fn take_spans(&mut self) -> Vec<InlineSpan> {
+        if self.link.is_some() {
+            self.end_link();
+        }
+        self.flush_text();
+        std::mem::take(&mut self.spans)
+    }
+
+    /// Like [`take_spans`](Self::take_spans) but flattened to a plain string, for
+    /// raw-text contexts (div bodies, definition values, code blocks).
+    fn take_text(&mut self) -> String {
+        inline_text(&self.take_spans())
+    }
+}
+
 #[derive(Default)]
 struct PendingAttrs {
     title: Option<String>,
     url: Option<String>,
     date: Option<String>,
+    rel: Option<String>,
 }
 
 struct DivCtx {
@@ -456,157 +567,5 @@ impl Engine for DjotKnotEngine {
             input.content_type.as_deref(),
         );
         Ok(doc)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn unknown_div_class_renders_generically_with_a_diagnostic() {
-        let (blocks, diagnostics) = parse_djot_knot_body_validated("::: mystery\nx\n:::\n");
-        assert!(matches!(blocks.first(), Some(DocumentBlock::Quote { .. })));
-        assert!(matches!(
-            diagnostics.first(),
-            Some(DocumentDiagnostic::UnsupportedConstruct(m)) if m.contains("mystery")
-        ));
-    }
-
-    #[test]
-    fn feed_entry_missing_required_title_warns() {
-        let (blocks, diagnostics) = parse_djot_knot_body_validated("::: feed-entry\nbody\n:::\n");
-        assert!(matches!(blocks.first(), Some(DocumentBlock::FeedEntry { .. })));
-        assert!(matches!(
-            diagnostics.first(),
-            Some(DocumentDiagnostic::ParseWarning(m)) if m.contains("title")
-        ));
-    }
-
-    #[test]
-    fn recognized_div_with_required_attrs_has_no_diagnostics() {
-        let (_, diagnostics) =
-            parse_djot_knot_body_validated("{title=\"Article\"}\n::: feed-entry\nbody\n:::\n");
-        assert!(diagnostics.is_empty());
-    }
-
-    #[test]
-    fn djot_engine_expands_protocol_fences_for_parity() {
-        let input = EngineInput {
-            address: "knot:test".to_string(),
-            body: "---\ntitle: T\n---\n\n```gemtext\n=> gemini://x/ a link\n```\n".to_string(),
-            content_type: None,
-        };
-        let doc = DjotKnotEngine::new().render(&input).unwrap();
-        // The gemtext fence expanded into real blocks (the gemini link), so no
-        // raw gemtext code block remains — parity with the CommonMark knot.
-        assert!(!doc.blocks.iter().any(|b| matches!(
-            b,
-            DocumentBlock::CodeBlock { language, .. } if language.as_deref() == Some("gemtext")
-        )));
-        assert!(doc.outgoing_links().iter().any(|u| u.contains("gemini://x/")));
-    }
-
-    #[test]
-    fn round_trip_preserves_semantic_blocks() {
-        let source = concat!(
-            "# My research\n\n",
-            "A note about things.\n\n",
-            "{title=\"Article\" url=\"https://blog.test/post\" date=\"2026-05-08\"}\n",
-            "::: feed-entry\nA summary.\n:::\n\n",
-            "::: badge\nresearch\n:::\n\n",
-            ": Trust\n\n  tofu\n",
-        );
-        let blocks = parse_djot_knot_body(source);
-        let reparsed = parse_djot_knot_body(&blocks_to_djot(&blocks));
-        assert_eq!(blocks, reparsed);
-    }
-
-    #[test]
-    fn djot_engine_renders_frontmatter_and_body() {
-        let input = EngineInput {
-            address: "knot:test".to_string(),
-            body: "---\ntitle: My Note\ntrust: tofu\nnote_kind: clip\n---\n\n# Heading\n\nBody.\n"
-                .to_string(),
-            content_type: None,
-        };
-        let doc = DjotKnotEngine::new().render(&input).unwrap();
-        assert_eq!(doc.title.as_deref(), Some("My Note"));
-        assert_eq!(doc.trust, DocumentTrustState::Tofu);
-        assert_eq!(doc.content_type, "text/x-knot");
-        assert_eq!(doc.provenance.source_kind.as_deref(), Some(ENGINE_ID));
-        // `note_kind` prefixes a MetadataRow; the djot body follows.
-        assert!(matches!(
-            doc.blocks.first(),
-            Some(DocumentBlock::MetadataRow { label, value }) if label == "kind" && value == "clip"
-        ));
-        assert!(
-            doc.blocks
-                .iter()
-                .any(|b| matches!(b, DocumentBlock::Heading { .. }))
-        );
-    }
-
-    #[test]
-    fn description_list_becomes_metadata_rows() {
-        // Djot description-list syntax: `: term` then an indented definition.
-        let blocks = parse_djot_knot_body(": Trust\n\n  tofu\n\n: Login\n\n  alice\n");
-        assert_eq!(
-            blocks,
-            vec![
-                DocumentBlock::MetadataRow {
-                    label: "Trust".into(),
-                    value: "tofu".into(),
-                },
-                DocumentBlock::MetadataRow {
-                    label: "Login".into(),
-                    value: "alice".into(),
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn heading_and_paragraph_map_structurally() {
-        let blocks = parse_djot_knot_body("# My research\n\nA note about things.\n");
-        assert_eq!(
-            blocks,
-            vec![
-                DocumentBlock::Heading {
-                    level: 1,
-                    spans: vec![InlineSpan::Text("My research".into())],
-                },
-                DocumentBlock::Paragraph {
-                    spans: vec![InlineSpan::Text("A note about things.".into())],
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn badge_div_becomes_badge() {
-        let blocks = parse_djot_knot_body("::: badge\nresearch\n:::\n");
-        assert_eq!(
-            blocks,
-            vec![DocumentBlock::Badge {
-                text: "research".into()
-            }]
-        );
-    }
-
-    #[test]
-    fn feed_entry_div_reads_attributes() {
-        let body = "{title=\"Article\" url=\"https://blog.test/post\" date=\"2026-05-08\"}\n::: feed-entry\nA summary.\n:::\n";
-        let blocks = parse_djot_knot_body(body);
-        assert_eq!(
-            blocks,
-            vec![DocumentBlock::FeedEntry {
-                title: "Article".into(),
-                date: Some("2026-05-08".into()),
-                summary: Some("A summary.".into()),
-                article_url: Some("https://blog.test/post".into()),
-                source_url: None,
-            }]
-        );
     }
 }

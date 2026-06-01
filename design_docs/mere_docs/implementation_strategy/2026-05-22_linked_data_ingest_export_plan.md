@@ -144,6 +144,14 @@ has a done-condition, not a date.
   kernel suite **228/228** green. **Deferred:** raw predicate-*only* edges (empty
   `sub_kinds`) are not yet recreated on load — that pairs with JSON-LD ingest
   (Phase 2).
+- **First consumer (2026-06-01):** the knot statements ingest (`inker::statements`;
+  knot design §10.5 Phase 4). A djot link's `rel`
+  (`[Topic](mere://node/topic){rel=cites}`) becomes a `Semantic` edge: `resolve_rel`
+  recognizes a bare slug *or* full Mere IRI, `apply_link_statements` asserts the
+  sub-kind and stamps the canonical predicate via `set_semantic_predicate`. It
+  edges only *existing* targets (node creation is host/wasm-gated) and returns a
+  raw / CURIE `rel` as `unrecognized` — exercising, and confirming the user-facing
+  need for, the raw-predicate-edge path this plan defers to Phase 2.
 
 ### Phase 1 — Export (graph → JSON-LD)
 - New `linked-data` crate. `to_jsonld(subgraph) -> JSON-LD`: nodes → objects
@@ -152,6 +160,20 @@ has a done-condition, not a date.
   (`title` → `schema:name`, …).
 - **Done:** a seeded graph emits valid expanded JSON-LD; a golden test pins the
   output; recognized + raw predicates both appear correctly.
+- **Landed 2026-06-01.** New `linked-data` crate
+  (`crates/graphshell/graph/linked-data`, deps `kernel` + `serde_json`).
+  `to_jsonld(&Graph) -> serde_json::Value` emits expanded JSON-LD (array of node
+  objects, full IRIs, no `@context`): `@id` is the primary-address URL or a
+  skolemized `urn:uuid:` IRI; a node's `Semantic` edges become predicate IRIs —
+  an explicit open predicate verbatim, else each sub-kind via `predicate_iri`;
+  curated literals `title` → `schema:name`, `tags` → `schema:keywords`. Reads the
+  graph through the public surface (`nodes` / `out_neighbors` / `find_edge_key` /
+  `get_edge` / `semantic_data`), so the kernel was untouched. Deterministic
+  (sorted tags + targets, `BTreeMap` predicate keys); a golden test pins the
+  recognized-IRI + raw-IRI + literals output, plus an empty-graph case.
+  **Deferred from this slice:** `@type` from classifications (needs a class-IRI
+  scheme, like `REL_VOCAB` for types — avoided inventing vocabulary now); only the
+  `Semantic` family is exported (the other families are the experience layer).
 
 ### Phase 2 — Ingest (standalone `application/ld+json` → graph)
 - `from_jsonld(bytes) -> GraphContribution { nodes, edges }` using **bundled

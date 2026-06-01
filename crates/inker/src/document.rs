@@ -239,6 +239,11 @@ pub enum InlineSpan {
         url: String,
         title: Option<String>,
         spans: Vec<InlineSpan>,
+        /// Open predicate IRI (statements-over-schema): the link's `rel`, e.g. a
+        /// djot `[[Topic]]{rel=schema:cites}`. `None` for a plain link. Knot
+        /// ingestion maps this onto a kernel `Semantic` edge predicate.
+        #[serde(default)]
+        predicate: Option<String>,
     },
     LineBreak,
     SoftBreak,

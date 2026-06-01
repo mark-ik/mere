@@ -91,6 +91,7 @@ mod tests {
                     url: "mere://node/notes".into(),
                     title: None,
                     spans: vec![InlineSpan::Text("notes".into())],
+                    predicate: None,
                 }],
             }]),
             Viewport::new(640.0, 480.0),

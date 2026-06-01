@@ -206,6 +206,7 @@ impl State {
                 url,
                 title: None,
                 spans: vec![InlineSpan::Text(display)],
+                predicate: None,
             }],
         });
     }

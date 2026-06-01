@@ -13,18 +13,102 @@
 //!   orthogonal classification axes (privacy / provenance / trust). Kept
 //!   separate, never bundled — see the eidetic design pass §8.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// BLAKE3 content hash (32 bytes).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Hash(#[serde(with = "hash_serde")] pub [u8; 32]);
+/// Multicodec-tagged hash function.
+///
+/// Per the event-DAG substrate brief §13, every digest field carries its hash
+/// function identifier alongside the digest, so a future hash migration
+/// (BLAKE4, post-quantum, ...) needs no flag day: new writes carry a new tag
+/// and old reads still parse. BLAKE3 is the only function today; adding one is
+/// the only change a migration requires here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum HashFn {
+    /// BLAKE3-256. Multicodec `0x1e`, 32-byte digest.
+    Blake3,
+}
+
+impl HashFn {
+    /// Multicodec code (encoded as an unsigned-varint in the binary multihash).
+    pub const fn multicodec(self) -> u64 {
+        match self {
+            HashFn::Blake3 => 0x1e,
+        }
+    }
+
+    /// Short tag used in the self-describing string form `<fn>:<hex>`.
+    pub const fn name(self) -> &'static str {
+        match self {
+            HashFn::Blake3 => "blake3",
+        }
+    }
+
+    /// Digest length in bytes.
+    pub const fn digest_len(self) -> usize {
+        match self {
+            HashFn::Blake3 => 32,
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "blake3" => Some(HashFn::Blake3),
+            _ => None,
+        }
+    }
+
+    fn from_multicodec(code: u64) -> Option<Self> {
+        match code {
+            0x1e => Some(HashFn::Blake3),
+            _ => None,
+        }
+    }
+}
+
+/// Error parsing a [`Hash`] from its string or binary multihash form.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum HashError {
+    /// Hash-function tag / multicodec is not one this build understands.
+    UnknownFunction,
+    /// Digest length does not match the function's expected length.
+    BadLength,
+    /// Hex string contained a non-hex byte.
+    BadHex,
+    /// Binary multihash ended before a full code/length/digest could be read.
+    Truncated,
+}
+
+impl std::fmt::Display for HashError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            HashError::UnknownFunction => "unknown hash function",
+            HashError::BadLength => "digest length mismatch",
+            HashError::BadHex => "invalid hex in digest",
+            HashError::Truncated => "truncated multihash",
+        })
+    }
+}
+
+impl std::error::Error for HashError {}
+
+/// Content hash, multihash-aware: a digest tagged with the function that
+/// produced it. BLAKE3-256 today (32 bytes). The string form is `<fn>:<hex>`
+/// (human-inspectable, the [`Display`](std::fmt::Display) form); the binary
+/// form ([`to_multihash_bytes`](Hash::to_multihash_bytes)) is a self-describing
+/// multihash (`uvarint(code) ++ uvarint(len) ++ digest`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Hash {
+    func: HashFn,
+    digest: [u8; 32],
+}
 
 impl Hash {
     /// Compute the BLAKE3 hash of a byte slice.
     pub fn of(bytes: &[u8]) -> Self {
-        let digest = blake3::hash(bytes);
-        Self(*digest.as_bytes())
+        Self {
+            func: HashFn::Blake3,
+            digest: *blake3::hash(bytes).as_bytes(),
+        }
     }
 
     /// Compute the BLAKE3 hash by streaming chunks through the incremental
@@ -41,7 +125,10 @@ impl Hash {
         for chunk in chunks {
             hasher.update(chunk);
         }
-        Self(*hasher.finalize().as_bytes())
+        Self {
+            func: HashFn::Blake3,
+            digest: *hasher.finalize().as_bytes(),
+        }
     }
 
     /// Compute the BLAKE3 hash by streaming bytes from a `Read` source —
@@ -61,52 +148,130 @@ impl Hash {
             }
             hasher.update(&buffer[..n]);
         }
-        Ok(Self(*hasher.finalize().as_bytes()))
+        Ok(Self {
+            func: HashFn::Blake3,
+            digest: *hasher.finalize().as_bytes(),
+        })
     }
 
-    /// Hex-encoded representation (no algorithm prefix).
+    /// The hash function that produced this digest.
+    pub fn func(&self) -> HashFn {
+        self.func
+    }
+
+    /// The raw digest bytes (no function tag). BLAKE3 is 32 bytes.
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.digest
+    }
+
+    /// Hex-encoded digest (no algorithm prefix). For the self-describing form
+    /// use [`Display`](std::fmt::Display) (`<fn>:<hex>`).
     pub fn to_hex(&self) -> String {
-        let mut out = String::with_capacity(64);
-        for byte in &self.0 {
+        let mut out = String::with_capacity(self.digest.len() * 2);
+        for byte in &self.digest {
             out.push_str(&format!("{byte:02x}"));
         }
         out
+    }
+
+    /// Self-describing binary multihash: `uvarint(multicodec) ++ uvarint(len)
+    /// ++ digest`. Digest fields on the wire, in the event DAG, and in
+    /// capability scopes should use this form so a hash migration never needs a
+    /// flag day.
+    pub fn to_multihash_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(2 + self.digest.len());
+        write_uvarint(self.func.multicodec(), &mut out);
+        write_uvarint(self.func.digest_len() as u64, &mut out);
+        out.extend_from_slice(&self.digest);
+        out
+    }
+
+    /// Parse a [`Hash`] from its self-describing binary multihash form.
+    pub fn from_multihash_bytes(bytes: &[u8]) -> Result<Self, HashError> {
+        let (code, n1) = read_uvarint(bytes).ok_or(HashError::Truncated)?;
+        let func = HashFn::from_multicodec(code).ok_or(HashError::UnknownFunction)?;
+        let rest = &bytes[n1..];
+        let (len, n2) = read_uvarint(rest).ok_or(HashError::Truncated)?;
+        let digest_bytes = &rest[n2..];
+        if len as usize != func.digest_len() || digest_bytes.len() != func.digest_len() {
+            return Err(HashError::BadLength);
+        }
+        let mut digest = [0u8; 32];
+        digest.copy_from_slice(digest_bytes);
+        Ok(Self { func, digest })
+    }
+
+    /// Parse a [`Hash`] from its string form `<fn>:<hex>`. A bare hex string
+    /// (no `<fn>:` prefix) is accepted as legacy BLAKE3 for backward reads.
+    pub fn parse(s: &str) -> Result<Self, HashError> {
+        let (name, hex) = match s.split_once(':') {
+            Some((name, hex)) => (name, hex),
+            None => ("blake3", s),
+        };
+        let func = HashFn::from_name(name).ok_or(HashError::UnknownFunction)?;
+        if hex.len() != func.digest_len() * 2 {
+            return Err(HashError::BadLength);
+        }
+        let mut digest = [0u8; 32];
+        for (idx, pair) in hex.as_bytes().chunks(2).enumerate() {
+            let byte_str = std::str::from_utf8(pair).map_err(|_| HashError::BadHex)?;
+            digest[idx] = u8::from_str_radix(byte_str, 16).map_err(|_| HashError::BadHex)?;
+        }
+        Ok(Self { func, digest })
     }
 }
 
 impl std::fmt::Display for Hash {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "blake3:{}", self.to_hex())
+        write!(formatter, "{}:{}", self.func.name(), self.to_hex())
     }
 }
 
-/// Serde adapter that encodes a 32-byte hash as a hex string in JSON, so
-/// manifests stay human-inspectable.
-mod hash_serde {
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(bytes: &[u8; 32], serializer: S) -> Result<S::Ok, S::Error> {
-        let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-        serializer.serialize_str(&hex)
+impl Serialize for Hash {
+    /// Serialize as the self-describing string `<fn>:<hex>` so manifests stay
+    /// human-inspectable and the hash function travels with the digest.
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string())
     }
+}
 
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[u8; 32], D::Error> {
-        let hex = String::deserialize(deserializer)?;
-        if hex.len() != 64 {
-            return Err(serde::de::Error::custom(format!(
-                "expected 64 hex chars, got {}",
-                hex.len()
-            )));
-        }
-        let mut out = [0u8; 32];
-        for (idx, pair) in hex.as_bytes().chunks(2).enumerate() {
-            let byte_str =
-                std::str::from_utf8(pair).map_err(|_| serde::de::Error::custom("non-utf8 hex"))?;
-            out[idx] = u8::from_str_radix(byte_str, 16)
-                .map_err(|_| serde::de::Error::custom(format!("invalid hex byte: {byte_str}")))?;
-        }
-        Ok(out)
+impl<'de> Deserialize<'de> for Hash {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Hash::parse(&s).map_err(serde::de::Error::custom)
     }
+}
+
+/// Unsigned-varint (LEB128) encoder for multihash code/length prefixes.
+fn write_uvarint(mut value: u64, out: &mut Vec<u8>) {
+    loop {
+        let mut byte = (value & 0x7f) as u8;
+        value >>= 7;
+        if value != 0 {
+            byte |= 0x80;
+        }
+        out.push(byte);
+        if value == 0 {
+            break;
+        }
+    }
+}
+
+/// Unsigned-varint decoder; returns the value and the number of bytes read.
+fn read_uvarint(bytes: &[u8]) -> Option<(u64, usize)> {
+    let mut value = 0u64;
+    let mut shift = 0u32;
+    for (idx, &byte) in bytes.iter().enumerate() {
+        if shift >= 64 {
+            return None;
+        }
+        value |= ((byte & 0x7f) as u64) << shift;
+        if byte & 0x80 == 0 {
+            return Some((value, idx + 1));
+        }
+        shift += 7;
+    }
+    None
 }
 
 /// Stable identifier for a manifest. Equals the BLAKE3 hash of the blob the
@@ -322,13 +487,40 @@ mod tests {
     }
 
     #[test]
-    fn hash_serializes_as_hex_string() {
+    fn hash_serializes_as_self_describing_string() {
         let h = Hash::of(b"abc");
         let json = serde_json::to_string(&h).unwrap();
-        // serde_json wraps a string in quotes; verify the inner is 64 hex chars.
-        assert_eq!(json.len(), 66, "expected quoted 64-char hex string");
+        // Quoted "blake3:<64 hex>" — the function identifier travels with the
+        // digest, so a future hash migration needs no flag day (§13).
+        assert_eq!(json, format!("\"blake3:{}\"", h.to_hex()));
         let round: Hash = serde_json::from_str(&json).unwrap();
         assert_eq!(round, h);
+    }
+
+    #[test]
+    fn hash_multihash_bytes_round_trip() {
+        let h = Hash::of(b"payload");
+        let mh = h.to_multihash_bytes();
+        // BLAKE3 multihash = code 0x1e, length 0x20 (32), then 32 digest bytes.
+        assert_eq!(mh[0], 0x1e);
+        assert_eq!(mh[1], 0x20);
+        assert_eq!(mh.len(), 2 + 32);
+        assert_eq!(Hash::from_multihash_bytes(&mh).unwrap(), h);
+    }
+
+    #[test]
+    fn hash_parse_accepts_tagged_and_legacy_bare_hex() {
+        let h = Hash::of(b"legacy");
+        // Tagged form round-trips.
+        assert_eq!(Hash::parse(&h.to_string()).unwrap(), h);
+        // The old serialized form was bare hex with no function prefix; still
+        // readable so pre-migration fixtures load.
+        assert_eq!(Hash::parse(&h.to_hex()).unwrap(), h);
+        // An unknown function tag is rejected, not silently treated as BLAKE3.
+        assert_eq!(
+            Hash::parse(&format!("blake4:{}", h.to_hex())),
+            Err(HashError::UnknownFunction)
+        );
     }
 
     #[test]

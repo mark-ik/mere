@@ -109,6 +109,7 @@ fn render_directory(address: &str, body: &str) -> EngineDocument {
                     url,
                     title: None,
                     spans: vec![InlineSpan::Text(line.to_string())],
+                    predicate: None,
                 }],
             }]
         })

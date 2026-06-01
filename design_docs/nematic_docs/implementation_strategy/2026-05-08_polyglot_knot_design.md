@@ -302,9 +302,9 @@ express the same statements the kernel stores.**
    headings / paragraphs / code mapped structurally; then wired as a reachable `DjotKnotEngine` (engine id
    `nematic.knot-djot`, re-exported; shares `apply_frontmatter` with `KnotEngine`;
    kept out of the default `engines()` registry since it shares the `text/x-knot`
-   content-type). 44/44 knot + djot tests green. Deferred: inline `rel`/`typeof` predicates (need an
-   `InlineSpan` predicate slot, tied to the linked-data plan) and reusing the
-   existing protocol-fence expansion. Note: jotdown emits a standalone
+   content-type). 44/44 knot + djot tests green. Deferred at PoC (since landed):
+   inline `rel` predicates (Phase 4) and reusing the existing protocol-fence
+   expansion (Phase 5); `typeof` → classification stays future. Note: jotdown emits a standalone
    `{…}` attribute line as `Event::Attributes` applying to the next block, so the
    verified div form is an attribute line *preceding* `::: feed-entry`.
 2. **Round-trip:** `to_djot_knot()` as the dual; byte-faithful source-segment
@@ -323,16 +323,36 @@ express the same statements the kernel stores.**
    surfaced in the engine's `doc.diagnostics`; 3 tests. Unknown-*attribute*
    preservation (the rest of the open tail) needs jotdown attribute iteration and
    stays future.
-4. **Statements wiring:** map `rel`/`typeof` to kernel `Semantic` edges with
-   predicate IRIs + node classifications — depends on the
+4. **Statements wiring:** map `rel` to kernel `Semantic` edges with predicate
+   IRIs — depends on the
    [linked-data plan](../../mere_docs/implementation_strategy/2026-05-22_linked_data_ingest_export_plan.md)
-   Phase 0 (open the Semantic predicate). **Phase 0 landed 2026-05-31** (kernel
-   `SemanticData.predicate` + `predicate_iri` vocabulary + `set_semantic_predicate`),
-   so this is unblocked. Remaining, measured: a `predicate` slot on
-   `InlineSpan::Link` (constructed/matched across ~14 files — every engine) so a
-   djot link carries its `rel`, plus a knot→graph ingest that turns those into
-   `Semantic` edges via `set_semantic_predicate`. The wide `InlineSpan` change and
-   the absent ingest path make this its own focused pass.
+   Phase 0 (open the Semantic predicate). **Landed 2026-06-01** (Phase 0 itself
+   landed 2026-05-31). Three pieces:
+   - **`InlineSpan::Link.predicate`** (`#[serde(default)] Option<String>`): the
+     open `rel` slot on a link. Added by a compiler-guided sweep — 15
+     construction / match sites across 7 crates (every engine plus the
+     document-canvas / uxtree / platen / render consumers); read-only consumers
+     already destructured with `..`, so they were untouched.
+   - **djot `rel` capture:** the djot parser now builds real `InlineSpan::Link`s
+     (a small inline-span accumulator replacing the flat-text fold) and reads the
+     link's `rel` into `predicate`. jotdown folds an inline `{rel=…}` into the
+     link's `Start` attrs (verified empirically); a standalone-`Attributes`
+     fallback covers the block path. `[Topic](mere://node/topic){rel="schema:cites"}`
+     → `Link { url, predicate: Some("schema:cites"), … }`. (djot.rs passed the
+     600-LOC ceiling, so its tests moved to `knot/djot/tests.rs`.)
+   - **knot→graph ingest** (`inker::statements`): `link_statements` purely walks
+     a document's blocks for predicate-bearing links; `resolve_rel` recognizes a
+     `rel` (a bare slug like `cites` *or* a full Mere IRI) against the vocabulary;
+     `apply_link_statements` asserts `EdgeAssertion::Semantic { sub_kind, … }` and
+     stamps the canonical predicate IRI via `set_semantic_predicate`. Scope, matching
+     the plan's deferrals: edges only to *existing* targets — node creation is the
+     host's job and `add_node` is wasm-gated — so an absent target is reported as
+     `pending_targets`; only Mere-vocabulary relations are edged, with a raw / CURIE
+     `rel` (e.g. `schema:citation`) returned as `unrecognized` (the raw-predicate
+     `Semantic` edge pairs with linked-data Phase 2), never dropped.
+   nematic **157** + inker **72** green (5 statement tests + 3 djot link tests).
+   Deferred: `typeof` → node classification (needs a doc-level type source);
+   raw-predicate-only `Semantic` edges (linked-data Phase 2).
 5. **Default flip:** once parity + ergonomics hold, djot becomes the knot grammar;
    CommonMark stays as an import/compat mode rather than the author grammar.
    **Landed 2026-05-31.** `DjotKnotEngine` gained CommonMark parity by reusing the

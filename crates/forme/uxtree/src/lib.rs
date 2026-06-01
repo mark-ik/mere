@@ -359,7 +359,7 @@ where
 {
     for span in spans {
         match span {
-            InlineSpan::Link { url, title, spans } => {
+            InlineSpan::Link { url, title, spans, .. } => {
                 f(url.as_str(), title.as_ref(), spans.as_slice());
                 walk_inline_links(spans, f);
             }
@@ -521,6 +521,7 @@ mod tests {
                     url: "https://example.test/".to_string(),
                     title: None,
                     spans: vec![InlineSpan::Text("the docs".to_string())],
+                    predicate: None,
                 },
             ],
         }]);

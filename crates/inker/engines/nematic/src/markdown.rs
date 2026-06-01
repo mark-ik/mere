@@ -307,6 +307,7 @@ impl Converter {
                         url: builder.url,
                         title: builder.title,
                         spans,
+                        predicate: None,
                     });
                 }
             }

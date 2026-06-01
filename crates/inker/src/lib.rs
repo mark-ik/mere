@@ -40,6 +40,9 @@ pub mod surface_engine;
 /// Content-type sniffing for unlabelled byte streams.
 pub mod sniff;
 
+/// Statements-over-schema ingest — knot `rel` links → kernel `Semantic` edges.
+pub mod statements;
+
 pub use a11y::A11yCapability;
 pub use document::{
     BlockProvenance, BlockProvenanceMap, DocumentBlock, DocumentDiagnostic, DocumentProvenance,
@@ -51,6 +54,9 @@ pub use routing::{
     SurfaceContractMode, SurfaceTargetId, WorkspaceRouteId,
 };
 pub use sniff::sniff_content_type;
+pub use statements::{
+    LinkStatement, StatementOutcome, apply_link_statements, link_statements, resolve_rel,
+};
 pub use surface_engine::{
     CursorShape, EngineProfileBinding, FocusReason, KeyboardEvent, KeyboardModifiers, MouseButton,
     MouseEvent, MouseEventKind, NativeTextureHandle, NavigationEvent, PhysicalPosition,

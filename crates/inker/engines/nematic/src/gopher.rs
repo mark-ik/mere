@@ -182,6 +182,7 @@ fn link_paragraph(display: String, url: String) -> DocumentBlock {
             url,
             title: None,
             spans: vec![InlineSpan::Text(display)],
+            predicate: None,
         }],
     }
 }

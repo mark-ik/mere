@@ -9,6 +9,7 @@ members = [
     "crates/graphshell/graph/graph-canvas",
     "crates/graphshell/graph/graph-kernel",
     "crates/graphshell/graph/graph-layout",
+    "crates/graphshell/graph/linked-data",
     "crates/graphshell/graph/node-lineage",
     "crates/graphshell/graph/orrery",
     "crates/graphshell/shell/domain/chrome",
@@ -78,6 +79,7 @@ cartography = { path = "crates/graphshell/graph/cartography" }
 graph-canvas = { path = "crates/graphshell/graph/graph-canvas" }
 graph-layout = { path = "crates/graphshell/graph/graph-layout" }
 node-lineage = { path = "crates/graphshell/graph/node-lineage" }
+linked-data = { path = "crates/graphshell/graph/linked-data" }
 kernel = { path = "crates/graphshell/graph/graph-kernel" }
 orrery = { path = "crates/graphshell/graph/orrery" }
 

@@ -556,6 +556,8 @@ At that point: Cable is gone, BLAKE3 is central, the Mere-native event DAG is th
 
 **2026-05-11 implementation gap:** `eidetic::schema::Hash` currently serializes raw BLAKE3 `[u8; 32]` bytes and displays as `blake3:<hex>`. That is enough for current BLAKE3 integrity checks, but it is **not** the multihash-aware type this section requires. Before event hashes, adapter manifests, capability scopes, and engram receipts proliferate, either migrate `Hash` to a CIDv1/multihash-aware representation or explicitly introduce a second `ContentDigest` type and reserve raw `Hash` for legacy/local-only BLAKE3 values. Leaving this ambiguous will make the later hash-agility promise false.
 
+**Landed 2026-06-01.** `eidetic::schema::Hash` is now multihash-aware: a `HashFn` multicodec vocabulary (BLAKE3 = `0x1e`, 32 bytes) travels with the digest; serde emits the self-describing string `<fn>:<hex>` (lenient read still accepts legacy bare hex so pre-migration fixtures load); and `Hash::to_multihash_bytes` / `from_multihash_bytes` give the binary `uvarint(code) ++ uvarint(len) ++ digest` form for wire / event-DAG / cap-scope use. The in-memory digest stays `[u8; 32]` (BLAKE3's length); generalizing to a variable-length digest and auditing every other digest field across the workspace (`persona/identity`, `murmuring`, the future event-DAG core, the cap layer, `mere-namespace`) is the remaining follow-on. 69 eidetic-core tests green; eidetic-fjall builds; intel/embed and eidetic-iroh-fetcher use the preserved `of` / `to_hex` / `ManifestId` surface. Tracked in the [p2panda substrate spike plan](2026-06-01_p2panda_substrate_spike_plan.md) §9.
+
 ---
 
 ## 14. Graph-cluster-derived namespaces (see separate brief)

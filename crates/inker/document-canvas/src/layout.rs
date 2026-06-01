@@ -443,6 +443,7 @@ impl<'a> DocumentLayouter<'a> {
                     url: url.to_string(),
                     title: None,
                     spans: vec![InlineSpan::Text("Open source".to_string())],
+                    predicate: None,
                 }],
             });
         }
@@ -480,6 +481,7 @@ impl<'a> DocumentLayouter<'a> {
                     url: url.to_string(),
                     title: None,
                     spans: vec![InlineSpan::Text("Open article".to_string())],
+                    predicate: None,
                 }],
             });
         }
@@ -489,6 +491,7 @@ impl<'a> DocumentLayouter<'a> {
                     url: url.to_string(),
                     title: None,
                     spans: vec![InlineSpan::Text("Open source".to_string())],
+                    predicate: None,
                 }],
             });
         }
@@ -658,6 +661,7 @@ mod tests {
                         url: "https://x.test/".into(),
                         title: None,
                         spans: vec![InlineSpan::Text("docs".into())],
+                        predicate: None,
                     },
                     InlineSpan::Text(" please".into()),
                 ],
