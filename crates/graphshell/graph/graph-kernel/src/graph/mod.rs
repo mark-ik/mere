@@ -63,6 +63,7 @@ pub mod node_props;
 // in Phase 1 — these are not petgraph node weights or `EdgePayload` sidecars.
 // See `2026-05-31_field_coupling_kernel_primitive_plan.md`.
 pub mod coupling;
+pub mod edge_path;
 pub mod field;
 pub mod field_ast;
 /// Graph mutators + queries for the field layer (Phase 1): the parallel keyed
@@ -108,6 +109,7 @@ pub use edge_taxonomy::{
 // Field-system truth types (2026-05-31). Field/Coupling form a parallel field
 // layer beside the node/edge graph; aether reads them and evaluates.
 pub use coupling::{Coupling, CouplingResponse, NodeSelector};
+pub use edge_path::{EdgePath, EdgePathRule};
 pub use field::{CouplingId, Field, FieldDefinition, FieldExtent, FieldId, FieldLifecycle};
 pub use field_ast::{Falloff, ScalarField, VectorField};
 
