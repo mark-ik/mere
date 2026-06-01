@@ -108,7 +108,7 @@ pub use edge_taxonomy::{
 
 // Field-system truth types (2026-05-31). Field/Coupling form a parallel field
 // layer beside the node/edge graph; aether reads them and evaluates.
-pub use coupling::{Coupling, CouplingResponse, NodeSelector};
+pub use coupling::{COUPLING_VOCAB, Coupling, CouplingResponse, NodeSelector};
 pub use edge_path::{EdgePath, EdgePathRule};
 pub use field::{CouplingId, Field, FieldDefinition, FieldExtent, FieldId, FieldLifecycle};
 pub use field_ast::{Falloff, ScalarField, VectorField};

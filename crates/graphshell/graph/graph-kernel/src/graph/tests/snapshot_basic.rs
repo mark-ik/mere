@@ -414,3 +414,31 @@ fn test_snapshot_without_field_layer_loads_empty() {
     assert_eq!(restored.fields().count(), 0);
     assert_eq!(restored.couplings().count(), 0);
 }
+
+#[test]
+fn test_snapshot_roundtrips_open_coupling_response() {
+    // The open response tail (a non-force family carried by IRI) persists faithfully.
+    let mut graph = Graph::new();
+    graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
+    let fid = FieldId::from_uuid(Uuid::from_u128(0xF3));
+    graph.add_field(Field::new(
+        fid,
+        FieldDefinition::Scalar(ScalarField::Const(1.0)),
+    ));
+    let iri = format!("{COUPLING_VOCAB}visual/highlight");
+    graph.add_coupling(Coupling::new(
+        CouplingId::from_uuid(Uuid::from_u128(0xC2)),
+        fid,
+        NodeSelector::All,
+        CouplingResponse::open(iri.clone()),
+        1.0,
+    ));
+
+    let restored = Graph::from_snapshot(&graph.to_snapshot());
+    let c = restored
+        .couplings_for_field(fid)
+        .next()
+        .expect("open coupling restored");
+    assert_eq!(c.response, CouplingResponse::Open { predicate: iri.clone() });
+    assert_eq!(c.response.predicate(), Some(iri.as_str()));
+}

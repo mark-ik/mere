@@ -383,15 +383,18 @@ impl Graph {
                 PersistedNodeSelector::Kind(k) => NodeSelector::Kind(k.clone()),
                 PersistedNodeSelector::NotTagged(t) => NodeSelector::NotTagged(t.clone()),
             };
-            let response = match pcoupling.response {
+            let response = match &pcoupling.response {
                 PersistedCouplingResponse::AttractToMin => CouplingResponse::AttractToMin,
                 PersistedCouplingResponse::RepelFromMax => CouplingResponse::RepelFromMax,
                 PersistedCouplingResponse::AlignVelocity => CouplingResponse::AlignVelocity,
                 PersistedCouplingResponse::FlowAdvect => CouplingResponse::FlowAdvect,
                 PersistedCouplingResponse::DampenInside { factor } => {
-                    CouplingResponse::DampenInside { factor }
+                    CouplingResponse::DampenInside { factor: *factor }
                 }
                 PersistedCouplingResponse::ContainmentWall => CouplingResponse::ContainmentWall,
+                PersistedCouplingResponse::Open { predicate } => CouplingResponse::Open {
+                    predicate: predicate.clone(),
+                },
             };
             graph.add_coupling(Coupling::new(
                 CouplingId::from_uuid(cid),

@@ -386,15 +386,18 @@ impl Graph {
                     NodeSelector::Kind(k) => PersistedNodeSelector::Kind(k.clone()),
                     NodeSelector::NotTagged(t) => PersistedNodeSelector::NotTagged(t.clone()),
                 },
-                response: match c.response {
+                response: match &c.response {
                     CouplingResponse::AttractToMin => PersistedCouplingResponse::AttractToMin,
                     CouplingResponse::RepelFromMax => PersistedCouplingResponse::RepelFromMax,
                     CouplingResponse::AlignVelocity => PersistedCouplingResponse::AlignVelocity,
                     CouplingResponse::FlowAdvect => PersistedCouplingResponse::FlowAdvect,
                     CouplingResponse::DampenInside { factor } => {
-                        PersistedCouplingResponse::DampenInside { factor }
+                        PersistedCouplingResponse::DampenInside { factor: *factor }
                     }
                     CouplingResponse::ContainmentWall => PersistedCouplingResponse::ContainmentWall,
+                    CouplingResponse::Open { predicate } => PersistedCouplingResponse::Open {
+                        predicate: predicate.clone(),
+                    },
                 },
                 strength: c.strength,
             })

@@ -101,10 +101,11 @@ pub enum PersistedNodeSelector {
     NotTagged(String),
 }
 
-/// How a coupling's targets respond to its field (mirrors `graph::CouplingResponse`;
-/// v1 force-only).
+/// How a coupling's targets respond to its field (mirrors `graph::CouplingResponse`).
+/// The six force responses are the recognized core; `Open` carries the open-tail
+/// families by IRI. Not `Copy` (the `Open` variant owns a `String`).
 #[derive(
-    Archive, Serialize, Deserialize, Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize,
+    Archive, Serialize, Deserialize, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize,
 )]
 #[rkyv(derive(Debug, PartialEq))]
 pub enum PersistedCouplingResponse {
@@ -114,6 +115,7 @@ pub enum PersistedCouplingResponse {
     FlowAdvect,
     DampenInside { factor: f32 },
     ContainmentWall,
+    Open { predicate: String },
 }
 
 /// Persisted coupling. Identity + target field + selector + response + strength.

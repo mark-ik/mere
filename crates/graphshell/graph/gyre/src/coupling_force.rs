@@ -83,7 +83,7 @@ impl CouplingForce {
         }
         Some(
             Self::new(
-                coupling.response,
+                coupling.response.clone(),
                 coupling.strength,
                 targets,
                 field.definition.clone(),
@@ -126,7 +126,7 @@ impl Force for CouplingForce {
             }
         }
 
-        match self.response {
+        match &self.response {
             // Gradient descent / ascent on a scalar potential. Attract follows
             // -grad (toward minima); repel follows +grad (toward maxima).
             CouplingResponse::AttractToMin | CouplingResponse::RepelFromMax => {
@@ -166,7 +166,7 @@ impl Force for CouplingForce {
                     if eval_scalar(scalar, &self.registry, x, y, 0.0) > 0.0 {
                         if let Some(body) = ctx.bodies.get_mut(handle) {
                             let v = *body.linvel();
-                            body.set_linvel(v * factor, true);
+                            body.set_linvel(v * *factor, true);
                         }
                     }
                 }
@@ -193,6 +193,10 @@ impl Force for CouplingForce {
                     }
                 }
             }
+            // Open tail (visual / navigational / selection / semantic / trigger):
+            // not a force response, so the integrator leaves these bodies untouched.
+            // The consumer that owns the family acts on them elsewhere.
+            CouplingResponse::Open { .. } => {}
         }
     }
 }
@@ -350,5 +354,31 @@ mod tests {
             1.0,
         );
         assert!(CouplingForce::from_coupling(&coupling, &g).is_none());
+    }
+
+    #[test]
+    fn open_response_applies_no_force() {
+        // An open-tail response (e.g. a visual coupling) is not a force: the
+        // integrator must leave the body where it is, even on a field whose
+        // AttractToMin response would otherwise pull it to the origin.
+        let mut g = Graph::new();
+        let a = node_at(&mut g, 1, 300.0, 0.0);
+
+        let mut sim = Simulation::new();
+        sim.sync_with_graph(&g);
+        sim.add_force(CouplingForce::new(
+            CouplingResponse::open(format!("{}visual/highlight", kernel::graph::COUPLING_VOCAB)),
+            1.0,
+            [a],
+            FieldDefinition::Scalar(paraboloid()),
+        ));
+        let p0 = sim.position_of(a).unwrap();
+        for _ in 0..120 {
+            sim.tick(1.0 / 60.0);
+        }
+        assert!(
+            (sim.position_of(a).unwrap() - p0).length() < 1.0e-3,
+            "an open-tail response must apply no force"
+        );
     }
 }
