@@ -91,9 +91,12 @@ single-threaded (85/85) and parallel (10/10 full-suite runs clean):
 Memory-safety note (recorded in the serval spike doc): (A)'s first cut used stylo's
 `RESTYLE_STYLE_ATTRIBUTE` replacement hint, which reused a rule node from the prior
 pass against a per-pass-fresh `Stylist`/rule tree — a use-after-free that surfaced
-as parallel-only heap corruption. The `restyle_subtree` path (fresh rule nodes)
-fixes it; restoring the cheaper replacement path is gated on a future persistent
-`Stylist`, not needed for the flip.
+as parallel-only heap corruption. First fixed with the `restyle_subtree` full
+re-cascade (fresh rule nodes), then the proper fix landed: `IncrementalLayout` owns
+a **persistent `Stylist`/rule tree**, so the cheap `RESTYLE_STYLE_ATTRIBUTE`
+replacement path is restored and sound (per-frame inline-transform restyle no longer
+re-matches selectors). Verified clean single-threaded and parallel, incl. a
+400-frame sustained-motion test crossing Stylo's rule-tree GC interval.
 
 Net: the gate's fear is gone **and** the orrery's motion mechanism (A+B+C) is
 unblocked on the serval side. The tripwire tests were flipped to assert the
@@ -208,5 +211,17 @@ Xilem + Masonry host is removed.
   corruption); the `restyle_subtree` full-recascade path (fresh rule nodes) resolves
   it. Verified 85/85 single-threaded and 10/10 parallel full-suite runs clean. Tripwire
   tests flipped to assert corrected behaviour, pinned to stylo `572ecba`. **P1's
-  serval-side gates are clear**; the orrery element (Phase 1) can begin. Cheaper
-  replacement path deferred behind a future persistent `Stylist` (not flip-blocking).
+  serval-side gates are clear**; the orrery element (Phase 1) can begin.
+
+- **2026-06-01** — **Persistent Stylist (cheap replacement path restored).**
+  Follow-up to the A/B/C work: `IncrementalLayout` now owns a persistent `Stylist`
+  (device + sheets + rule tree) built once in `new()` and reused every pass
+  (`build_stylist` + `run_cascade_with_stylist`; `cascade_traverse` takes `&Stylist`;
+  `maybe_gc` per pass; session stylesheets fixed at `new()`, debug-asserted). With
+  the rule tree alive across passes, `restyle_with_snapshots` emits the cheap
+  `RESTYLE_STYLE_ATTRIBUTE` hint again (no per-frame selector re-match), and it is
+  sound — `rule_tree` is an owned field of `Stylist`, so the reused `ElementData`
+  rule node stays valid. Verified 86/86 single-threaded + parallel clean, plus a new
+  400-frame sustained-motion test crossing Stylo's rule-tree GC interval. The orrery
+  per-frame inline-transform path now runs on the efficient incremental restyle.
+  Remaining follow-up: stylesheet hot-reload (rebuild + full re-match that frame).
