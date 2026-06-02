@@ -26,8 +26,8 @@ use kernel::geometry::{PortablePoint, PortableRect, PortableSize};
 use kernel::graph::{Graph, NodeKey};
 use paint_list_api::DeviceIntSize;
 
-use crate::coupling_paint::paint_projection_with_visuals;
-use crate::scene_paint::{Camera, CanvasPaintList, ScenePaintStyle};
+use crate::coupling_paint::{paint_projection_with_visuals, visual_overlays};
+use crate::scene_paint::{paint_projection_filtered, Camera, CanvasPaintList, ScenePaintStyle};
 
 /// Build a [`Projection`] from the graph's committed node positions and its
 /// relations (collapsed to undirected, de-duplicated pairs — the orrery draws one
@@ -144,6 +144,38 @@ where
     paint_projection_with_visuals(graph, &projection, viewport, camera, style, generation)
 }
 
+/// The orrery underlay with off-screen nodes **demoted**: same edges + visual
+/// overlays as [`orrery_paint_list_from_positions`], but a node rect is drawn
+/// only for nodes where `is_demoted` returns `true` (the off-screen set). The
+/// host draws the on-screen nodes as richer DOM children and excludes them here,
+/// so the underlay and the DOM layer do not double-draw a node.
+///
+/// Edges still use every node's position, so an edge from an on-screen node to a
+/// demoted one renders. Generic over both lookups to keep platen gyre-free.
+///
+/// Visual-coupling overlays currently ride the underlay for every coupled node
+/// (the sample orrery has none); demoting overlays to the off-screen set as well
+/// is a follow-on, like the richer demoted-node glyphs.
+pub fn orrery_paint_list_demoted<F, G>(
+    graph: &Graph,
+    position_of: F,
+    is_demoted: G,
+    viewport: DeviceIntSize,
+    camera: Camera,
+    style: &ScenePaintStyle,
+    generation: u64,
+) -> CanvasPaintList
+where
+    F: Fn(NodeKey) -> Option<PortablePoint>,
+    G: Fn(NodeKey) -> bool,
+{
+    let projection = projection_from_positions(graph, position_of);
+    let mut list =
+        paint_projection_filtered(&projection, viewport, camera, style, generation, is_demoted);
+    list.splice_world_overlays(visual_overlays(graph, &projection, style));
+    list
+}
+
 /// Axis-aligned bounds of the positioned nodes (a zero rect when there are none).
 fn bounds_of_nodes(nodes: &[PositionedNode]) -> PortableRect {
     let mut iter = nodes.iter();
@@ -210,6 +242,45 @@ mod tests {
     fn empty_graph_projects_empty() {
         let p = projection_from_graph(&Graph::new());
         assert!(p.nodes.is_empty() && p.edges.is_empty());
+    }
+
+    #[test]
+    fn demoted_underlay_draws_only_the_off_screen_nodes() {
+        // Two connected nodes; demote only `a`. The underlay must draw a's rect
+        // but not b's, while still drawing the edge (which needs both positions).
+        let mut g = Graph::new();
+        let a = node(&mut g, 1, 0.0, 0.0);
+        let b = node(&mut g, 2, 100.0, 0.0);
+        let _ = g.assert_relation(a, b, hyperlink());
+
+        let full = orrery_paint_list_demoted(
+            &g,
+            |k| Some(if k == a { PortablePoint::new(0.0, 0.0) } else { PortablePoint::new(100.0, 0.0) }),
+            |_| true,
+            DeviceIntSize::new(200, 200),
+            Camera::default(),
+            &ScenePaintStyle::default(),
+            0,
+        );
+        assert_eq!(draw_rect_count(&full), 2, "both nodes drawn when all demoted");
+
+        let one = orrery_paint_list_demoted(
+            &g,
+            |k| Some(if k == a { PortablePoint::new(0.0, 0.0) } else { PortablePoint::new(100.0, 0.0) }),
+            |k| k == a,
+            DeviceIntSize::new(200, 200),
+            Camera::default(),
+            &ScenePaintStyle::default(),
+            0,
+        );
+        assert_eq!(draw_rect_count(&one), 1, "only the demoted node draws a rect");
+        // The edge still renders (one DrawStroke) even though b's rect is culled.
+        let strokes = one
+            .commands()
+            .iter()
+            .filter(|c| matches!(c, PaintCmd::DrawStroke(_)))
+            .count();
+        assert_eq!(strokes, 1, "the edge to the on-screen node still draws");
     }
 
     #[test]

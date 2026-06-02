@@ -122,6 +122,23 @@ pub fn paint_projection(
     style: &ScenePaintStyle,
     generation: u64,
 ) -> CanvasPaintList {
+    paint_projection_filtered(projection, viewport, camera, style, generation, |_| true)
+}
+
+/// [`paint_projection`], but a node's rect is painted only when `draw_node`
+/// returns `true` for it. Edges always use every node's position (so an edge to
+/// an undrawn node still renders), so the orrery can **demote** off-screen nodes
+/// to the underlay (drawn as rects here) while on-screen nodes are drawn as
+/// richer host DOM and excluded from this pass — see
+/// [`crate::orrery::orrery_paint_list_demoted`].
+pub fn paint_projection_filtered(
+    projection: &Projection,
+    viewport: DeviceIntSize,
+    camera: Camera,
+    style: &ScenePaintStyle,
+    generation: u64,
+    draw_node: impl Fn(NodeKey) -> bool,
+) -> CanvasPaintList {
     let mut commands = Vec::with_capacity(projection.edges.len() + projection.nodes.len() + 2);
 
     let transform = LayoutTransform::scale(camera.zoom, camera.zoom, 1.0)
@@ -164,8 +181,11 @@ pub fn paint_projection(
         }));
     }
 
-    // Nodes.
+    // Nodes (only those the filter draws; edges above used every position).
     for node in &projection.nodes {
+        if !draw_node(node.node) {
+            continue;
+        }
         let r = if node.radius > 0.0 {
             node.radius
         } else {

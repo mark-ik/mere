@@ -16,13 +16,14 @@
 //!    forces = exclusion + edge-springs + a centering boundary) ticks each frame;
 //!    [`orrery_paint_list_from_positions`] reprojects the underlay from the live
 //!    bodies, so the layout settles on screen. **This slice (1D.2).**
-//! 3. **abs-pos serval DOM node children** — one `<div>` per node, absolutely
-//!    positioned inside a camera-transformed container `<div>`, moved to its
-//!    world position by an inline transform; lowered to a `ServalPaintList` by
-//!    [`paint_list_from_scripted_dom`] and composited *over* the underlay (so
-//!    rich labelled nodes sit above the edges). **This slice (1D.3a)** — the full
-//!    document built each frame; the cull/demote split (3b) and the
-//!    pre-materialized pool + incremental layout (3c) refine it.
+//! 3. **abs-pos serval DOM node children** — one `<div>` per **on-screen** node,
+//!    absolutely positioned inside a camera-transformed container `<div>`, moved
+//!    to its world position by an inline transform; lowered to a `ServalPaintList`
+//!    by [`paint_list_from_scripted_dom`] and composited *over* the underlay.
+//!    Off-screen nodes (gyre `cull_aabb` against the world viewport) **demote** to
+//!    the underlay as plain rects via [`orrery_paint_list_demoted`], so the two
+//!    layers never double-draw a node (3a + 3b). The pre-materialized pool +
+//!    incremental layout (3c) replaces the per-frame rebuild next.
 //!
 //! Navigation (wheel=pan / ctrl+wheel=zoom / inertia) and the two-hit-test split
 //! are 1E. Space re-seeds the layout (a tight central spiral) and re-runs the
@@ -31,7 +32,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use euclid::default::Point2D;
+use euclid::default::{Box2D, Point2D};
 use gyre::{Boundary, EdgeSpring, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, Graph, NodeKey, SemanticSubKind};
@@ -41,7 +42,7 @@ use netrender::{ColorLoad, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList};
 use paint_list_render::{composite_paint_layers, CompositeLayer};
 use pelt_live::paint_list_from_scripted_dom;
-use platen::orrery::orrery_paint_list_from_positions;
+use platen::orrery::orrery_paint_list_demoted;
 use platen::scene_paint::{Camera, ScenePaintStyle};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
@@ -117,6 +118,16 @@ impl App {
         self.camera.offset = (self.width as f32 / 2.0, self.height as f32 / 2.0);
     }
 
+    /// The screen viewport mapped back to world space through the camera
+    /// (`world = (screen - offset) / zoom`) — the region gyre culls against to
+    /// decide which nodes are on screen.
+    fn world_viewport(&self) -> Box2D<f32> {
+        let (ox, oy) = self.camera.offset;
+        let z = self.camera.zoom.max(f32::EPSILON);
+        let to_world = |sx: f32, sy: f32| Point2D::new((sx - ox) / z, (sy - oy) / z);
+        Box2D::new(to_world(0.0, 0.0), to_world(self.width as f32, self.height as f32))
+    }
+
     /// Tick the layout (while settling), reproject the underlay from the live
     /// gyre positions, composite, and present. Chains another redraw while the
     /// settle is still running.
@@ -142,18 +153,24 @@ impl App {
             .positions()
             .map(|(k, p)| (k, PortablePoint::new(p.x, p.y)))
             .collect();
-        let underlay = orrery_paint_list_from_positions(
+        // On-screen nodes (gyre cull against the world-space viewport) become DOM
+        // children; the rest demote to underlay rects, so no node double-draws.
+        let on_screen: HashSet<NodeKey> =
+            self.sim.cull_aabb(self.world_viewport()).into_iter().collect();
+
+        let underlay = orrery_paint_list_demoted(
             &self.graph,
             |k| positions.get(&k).copied(),
+            |k| !on_screen.contains(&k),
             viewport,
             self.camera,
             &self.style,
             self.generation,
         );
 
-        // The node-children document: abs-pos labelled boxes under the camera
-        // transform, lowered to a ServalPaintList and composited over the underlay.
-        let nodes_dom = build_node_children_dom(&self.graph, &positions, self.camera);
+        // The node-children document: abs-pos labelled boxes for the on-screen
+        // nodes under the camera transform, composited over the underlay.
+        let nodes_dom = build_node_children_dom(&self.graph, &positions, &on_screen, self.camera);
         let nodes_plist = paint_list_from_scripted_dom(
             &nodes_dom,
             NODE_SHEET,
@@ -348,6 +365,7 @@ fn seed_cluster(sim: &mut Simulation, graph: &Graph) {
 fn build_node_children_dom(
     graph: &Graph,
     positions: &HashMap<NodeKey, PortablePoint>,
+    on_screen: &HashSet<NodeKey>,
     camera: Camera,
 ) -> ScriptedDom {
     let mut dom = ScriptedDom::new();
@@ -366,6 +384,9 @@ fn build_node_children_dom(
     dom.append_child(root, stage);
 
     for (i, (key, _node)) in graph.nodes().enumerate() {
+        if !on_screen.contains(&key) {
+            continue; // off-screen nodes are demoted to the underlay
+        }
         let pos = positions.get(&key).copied().unwrap_or_default();
         let gnode = dom.create_element(qual("div"));
         dom.set_attribute(gnode, qual("class"), "gnode");
