@@ -62,6 +62,15 @@ const CHROME_SHEET: &[&str] = &[
         background-color: rgb(255, 255, 255); padding: 8px 16px; }",
     ".suggestion-active { font-size: 18px; color: rgb(20, 24, 34); \
         background-color: rgb(216, 226, 244); padding: 8px 16px; }",
+    // Command palette: a centered panel floated over the page (flex centering;
+    // serval maps justify-content through stylo_taffy).
+    ".palette-overlay { display: flex; justify-content: center; padding-top: 56px; }",
+    ".palette { width: 540px; background-color: rgb(244, 246, 250); padding: 10px; }",
+    ".cmd-list { background-color: rgb(244, 246, 250); }",
+    ".cmd-row { font-size: 18px; color: rgb(40, 44, 54); \
+        background-color: rgb(244, 246, 250); padding: 8px 12px; }",
+    ".cmd-row-active { font-size: 18px; color: rgb(20, 24, 34); \
+        background-color: rgb(210, 222, 242); padding: 8px 12px; }",
 ];
 
 /// Author CSS for the **content** root — a separate document authority, so it
@@ -184,10 +193,11 @@ impl App {
         let toolbar_h = self.toolbar_height().min(h);
         let content_h = h.saturating_sub(toolbar_h).max(1);
 
-        // Chrome scene over the full window. Paint the omnibar caret / selection
-        // when focused (byte offsets from the field's char model).
+        // Chrome scene over the full window. Paint the caret / selection of the
+        // focused field — the palette query when open, else the omnibar (byte
+        // offsets from the field's char model).
         let cursor = self.runner.focus().map(|node| {
-            let field = &self.runner.state().omnibar;
+            let field = self.runner.state().active_field();
             let byte_of = |i: usize| {
                 field.text().char_indices().nth(i).map(|(b, _)| b).unwrap_or(field.text().len())
             };
@@ -260,11 +270,21 @@ impl App {
         }
     }
 
-    /// Handle a pressed key. Enter submits the omnibar (navigating the typed
-    /// text or the highlighted suggestion); Arrow Up/Down and Escape drive the
-    /// open suggestions dropdown; every other key edits the omnibar and
-    /// regenerates suggestions from the new text.
+    /// Handle a pressed key. Ctrl+K toggles the command palette; while the
+    /// palette is open all keys route to it. Otherwise Enter submits the omnibar,
+    /// Arrow Up/Down and Escape drive the suggestions dropdown, and every other
+    /// key edits the omnibar and regenerates suggestions.
     fn on_key_pressed(&mut self, key: &WinitKey) {
+        if self.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("k"))
+        {
+            self.toggle_palette();
+            return;
+        }
+        if self.runner.state().palette_open {
+            self.on_palette_key(key);
+            return;
+        }
         let suggestions_open = !self.runner.state().suggest.is_empty();
         match key {
             WinitKey::Named(WinitNamedKey::Enter) if self.runner.focus().is_some() => {
@@ -296,6 +316,68 @@ impl App {
                 }
             },
         }
+    }
+
+    /// Route a key to the open command palette: Enter runs the selection, Arrow
+    /// Up/Down step it, Escape closes, anything else edits the query.
+    fn on_palette_key(&mut self, key: &WinitKey) {
+        match key {
+            WinitKey::Named(WinitNamedKey::Enter) => {
+                self.runner.update(Chrome::run_palette_selection);
+                self.sync_content();
+                self.focus_after_palette_close();
+                self.request_redraw();
+            },
+            WinitKey::Named(WinitNamedKey::Escape) => {
+                self.runner.update(Chrome::close_palette);
+                self.focus_after_palette_close();
+                self.request_redraw();
+            },
+            WinitKey::Named(WinitNamedKey::ArrowDown) => {
+                self.runner.update(|c| c.step_palette(1));
+                self.request_redraw();
+            },
+            WinitKey::Named(WinitNamedKey::ArrowUp) => {
+                self.runner.update(|c| c.step_palette(-1));
+                self.request_redraw();
+            },
+            other => {
+                if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
+                    self.runner.dispatch_key(key_event);
+                    self.runner.update(Chrome::sync_palette_query);
+                    self.request_redraw();
+                }
+            },
+        }
+    }
+
+    /// Toggle the palette and move focus to match: into the palette query when
+    /// it opens, back to the omnibar when it closes.
+    fn toggle_palette(&mut self) {
+        self.runner.update(Chrome::toggle_palette);
+        if self.runner.state().palette_open {
+            if let Some(node) = self.input_under_class("palette") {
+                self.runner.set_focus(Some(node));
+            }
+        } else {
+            self.focus_after_palette_close();
+        }
+        self.request_redraw();
+    }
+
+    /// Restore focus to the omnibar after the palette closes (so keyboard use
+    /// continues there).
+    fn focus_after_palette_close(&mut self) {
+        let omnibar = self.input_under_class("toolbar");
+        self.runner.set_focus(omnibar);
+    }
+
+    /// The first `<input>` under the first element carrying CSS class `class`
+    /// (the omnibar under `.toolbar`, the query field under `.palette`).
+    fn input_under_class(&self, class: &str) -> Option<NodeId> {
+        let dom = self.dom.borrow();
+        let container = first_with_class(&dom, dom.document(), class)?;
+        first_tag(&dom, container, "input")
     }
 }
 
@@ -438,8 +520,14 @@ impl ApplicationHandler for App {
                 };
                 drop(dom); // release before dispatch_click mutates the same DOM
                 if let Some(node) = hit {
+                    let palette_was_open = self.runner.state().palette_open;
                     self.runner.dispatch_click(node, PointerClick::at((x, y)));
                     self.sync_content();
+                    // A palette row / backdrop click closes it; restore focus so
+                    // the caret doesn't reference the removed palette field.
+                    if palette_was_open && !self.runner.state().palette_open {
+                        self.focus_after_palette_close();
+                    }
                     self.request_redraw();
                 }
             },
@@ -472,6 +560,14 @@ fn first_with_class(dom: &ScriptedDom, id: NodeId, class: &str) -> Option<NodeId
         return Some(id);
     }
     dom.dom_children(id).find_map(|c| first_with_class(dom, c, class))
+}
+
+/// The first element with local tag `local` in pre-order under `id`.
+fn first_tag(dom: &ScriptedDom, id: NodeId, local: &str) -> Option<NodeId> {
+    if dom.element_name(id).is_some_and(|q| q.local.as_ref() == local) {
+        return Some(id);
+    }
+    dom.dom_children(id).find_map(|c| first_tag(dom, c, local))
 }
 
 /// Whether element `id` carries CSS class `class` (whitespace-split `class` attr).

@@ -40,6 +40,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
 use serval_scripted_dom::ScriptedDom;
@@ -48,10 +49,12 @@ use xilem_serval::{
     ServalElement, TextField, TextInput,
 };
 
+pub mod command;
 pub mod content;
 pub mod nav;
 pub mod suggest;
 
+use command::Command;
 use nav::History;
 
 /// Meerkat's chrome app state.
@@ -83,6 +86,15 @@ pub struct Chrome {
     /// Highlighted suggestion row, if any. `None` ⇒ Enter navigates the typed
     /// text; `Some(i)` ⇒ Enter (or a click) navigates `suggest[i]`.
     pub suggest_active: Option<usize>,
+    /// Whether the command palette overlay is open.
+    pub palette_open: bool,
+    /// The reused command-palette session — its `query`, `selected_index`, and
+    /// `step_selection` cursor logic drive meerkat's palette over a
+    /// meerkat-owned command set ([`command`]).
+    pub palette: CommandPaletteSession,
+    /// The palette's live query buffer (caret / editing), mirrored into
+    /// `palette.query` — the same host-owns-the-buffer split the omnibar uses.
+    pub palette_input: TextInput,
 }
 
 impl Chrome {
@@ -103,6 +115,9 @@ impl Chrome {
             history: History::new(location),
             suggest: Vec::new(),
             suggest_active: None,
+            palette_open: false,
+            palette: CommandPaletteSession::default(),
+            palette_input: TextInput::new(""),
         }
     }
 
@@ -149,6 +164,97 @@ impl Chrome {
         if let Some(url) = self.suggest.get(i).and_then(suggest::resolve_match) {
             self.history.visit(url);
             sync_chrome_from_history(self, true);
+        }
+    }
+
+    /// Toggle the command palette open/closed.
+    pub fn toggle_palette(&mut self) {
+        if self.palette_open {
+            self.close_palette();
+        } else {
+            self.open_palette();
+        }
+    }
+
+    /// Open the command palette: arm the reused session (fresh query, no
+    /// selection), clear the editing buffer, and close any omnibar dropdown.
+    pub fn open_palette(&mut self) {
+        self.palette_open = true;
+        self.palette.open_fresh(SearchPaletteScope::default());
+        self.palette_input = TextInput::new("");
+        self.close_suggestions();
+    }
+
+    /// Close the command palette without running anything.
+    pub fn close_palette(&mut self) {
+        self.palette_open = false;
+        self.palette.selected_index = None;
+    }
+
+    /// The commands matching the current palette query.
+    pub fn palette_commands(&self) -> Vec<Command> {
+        command::filter(self.palette_input.text())
+    }
+
+    /// Mirror the edited palette buffer into the reused session query and reset
+    /// the selection (the filtered list just changed). Called after each edit.
+    pub fn sync_palette_query(&mut self) {
+        self.palette.query = self.palette_input.text().to_string();
+        self.palette.selected_index = None;
+    }
+
+    /// Move the palette selection by `delta`, wrapping within the filtered
+    /// commands — the reused [`CommandPaletteSession::step_selection`] cursor.
+    pub fn step_palette(&mut self, delta: isize) {
+        let count = self.palette_commands().len();
+        self.palette.step_selection(delta, count);
+    }
+
+    /// Run the highlighted palette command (or the first, if none is
+    /// highlighted) and close. A no-op close when nothing matches.
+    pub fn run_palette_selection(&mut self) {
+        let cmds = self.palette_commands();
+        let pick = self.palette.selected_index.unwrap_or(0);
+        if let Some(&cmd) = cmds.get(pick) {
+            self.run_command(cmd);
+        }
+        self.close_palette();
+    }
+
+    /// Run `cmd` (e.g. a clicked palette row) and close the palette.
+    pub fn run_command_and_close(&mut self, cmd: Command) {
+        self.run_command(cmd);
+        self.close_palette();
+    }
+
+    /// Apply a command to the chrome state.
+    fn run_command(&mut self, cmd: Command) {
+        match cmd {
+            Command::Back => {
+                if self.history.back().is_some() {
+                    sync_chrome_from_history(self, false);
+                }
+            },
+            Command::Forward => {
+                if self.history.forward().is_some() {
+                    sync_chrome_from_history(self, false);
+                }
+            },
+            Command::Home => {
+                self.history.visit("mere://welcome".to_string());
+                sync_chrome_from_history(self, true);
+            },
+        }
+    }
+
+    /// The text field that currently owns editing / the caret: the palette query
+    /// when the palette is open, otherwise the omnibar. The host reads this to
+    /// paint the caret on the right field.
+    pub fn active_field(&self) -> &TextInput {
+        if self.palette_open {
+            &self.palette_input
+        } else {
+            &self.omnibar
         }
     }
 }
@@ -254,7 +360,49 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
         .collect();
     let suggestions = el::<_, Chrome, ()>("div", rows).attr("class", "suggestions");
 
-    Box::new(el::<_, Chrome, ()>("div", (toolbar, suggestions)).attr("class", "chrome"))
+    // The chrome tree is a Vec so the optional palette overlay can be appended.
+    let mut children: Vec<ChromeView> = vec![Box::new(toolbar), Box::new(suggestions)];
+    if c.palette_open {
+        children.push(palette_overlay(c));
+    }
+    Box::new(el::<_, Chrome, ()>("div", children).attr("class", "chrome"))
+}
+
+/// The command-palette overlay: a centered panel with the query field and the
+/// filtered command rows (the highlight carrying a distinct class). Clicking the
+/// backdrop closes it; clicking a row runs that command. Rendered into the
+/// chrome root, so the host composites it over the content (like the dropdown).
+fn palette_overlay(c: &Chrome) -> ChromeView {
+    let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
+    let to_input: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.palette_input;
+    let input = lens(make, to_input);
+
+    let rows: Vec<ChromeView> = c
+        .palette_commands()
+        .into_iter()
+        .enumerate()
+        .map(|(i, cmd)| {
+            let class = if c.palette.selected_index == Some(i) {
+                "cmd-row-active"
+            } else {
+                "cmd-row"
+            };
+            let row = on_click(
+                el::<_, Chrome, ()>("div", cmd.label()).attr("class", class),
+                move |c: &mut Chrome, _: PointerClick| c.run_command_and_close(cmd),
+            );
+            Box::new(row) as ChromeView
+        })
+        .collect();
+    let list = el::<_, Chrome, ()>("div", rows).attr("class", "cmd-list");
+    let panel = el::<_, Chrome, ()>("div", (input, list)).attr("class", "palette");
+    // The backdrop closes the palette on a click that misses the panel (a click
+    // on a row runs the command first, then bubbles here — close is idempotent).
+    let overlay = on_click(
+        el::<_, Chrome, ()>("div", panel).attr("class", "palette-overlay"),
+        |c: &mut Chrome, _: PointerClick| c.close_palette(),
+    );
+    Box::new(overlay)
 }
 
 /// Navigate on submit (Enter). If a suggestion row is highlighted, navigate it;
@@ -425,6 +573,65 @@ mod tests {
         });
         assert_eq!(runner.state().content_location(), "https://example.com");
         assert!(runner.state().suggest.is_empty(), "navigation closes the dropdown");
+    }
+
+    /// Toggling opens then closes the palette (the Ctrl+K path).
+    #[test]
+    fn palette_toggles_open_and_closed() {
+        let mut runner = runner("mere://welcome");
+        runner.update(Chrome::toggle_palette);
+        assert!(runner.state().palette_open);
+        runner.update(Chrome::toggle_palette);
+        assert!(!runner.state().palette_open);
+    }
+
+    /// An open palette renders its panel and one row per filtered command
+    /// (all three at an empty query) — the reused session driving meerkat's
+    /// command set into the DOM.
+    #[test]
+    fn palette_open_renders_rows() {
+        let mut runner = runner("mere://welcome");
+        runner.update(Chrome::open_palette);
+        let dom = runner.dom();
+        let dom = dom.borrow();
+        let root = runner.root();
+        assert_eq!(count_class(&dom, root, "palette"), 1, "the panel");
+        assert_eq!(count_class(&dom, root, "cmd-row"), 3, "Back / Forward / Home");
+    }
+
+    /// The palette filters by query and runs the match: after navigating away,
+    /// filtering to "back" and submitting steps history back and closes.
+    #[test]
+    fn palette_filters_and_runs_command() {
+        let mut runner = runner("mere://welcome");
+        runner.update(|c| {
+            c.omnibar = TextInput::new("example.com");
+            submit_omnibar(c);
+        });
+        assert_eq!(runner.state().content_location(), "https://example.com");
+
+        runner.update(|c| {
+            c.open_palette();
+            c.palette_input = TextInput::new("back");
+            c.sync_palette_query();
+        });
+        assert_eq!(runner.state().palette_commands(), vec![Command::Back]);
+
+        // No explicit highlight → run_palette_selection runs the first match.
+        runner.update(Chrome::run_palette_selection);
+        assert_eq!(runner.state().content_location(), "mere://welcome");
+        assert!(!runner.state().palette_open, "running closes the palette");
+    }
+
+    /// Palette selection stepping wraps via the reused `step_selection`.
+    #[test]
+    fn palette_step_wraps() {
+        let mut runner = runner("mere://welcome");
+        runner.update(Chrome::open_palette); // empty query → 3 commands
+        runner.update(|c| c.step_palette(-1));
+        assert_eq!(runner.state().palette.selected_index, Some(2), "up from none → last");
+        runner.update(|c| c.step_palette(1));
+        assert_eq!(runner.state().palette.selected_index, Some(0), "wrap to first");
     }
 
     /// Count elements carrying exactly class `class` in the subtree at `id`.
