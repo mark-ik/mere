@@ -7,38 +7,56 @@
 //!
 //! ## Layers (the plan's three, built incrementally)
 //!
-//! 1. **scene-paint underlay** — [`platen::orrery::orrery_paint_list`] turns the
-//!    graph into one `CanvasPaintList` (edges + node rects + visual-coupling
-//!    overlays) under a single camera transform. Composited to a `netrender::Scene`
-//!    via [`paint_list_render::composite_paint_layers`] and presented through the
-//!    shared [`SurfaceHost`]. **This slice (1D.1).**
-//! 2. live gyre positions driving the underlay (1D.2).
+//! 1. **scene-paint underlay** — [`platen::orrery`] turns the graph into one
+//!    `CanvasPaintList` (edges + node rects + visual-coupling overlays) under a
+//!    single camera transform. Composited to a `netrender::Scene` via
+//!    [`paint_list_render::composite_paint_layers`] and presented through the
+//!    shared [`SurfaceHost`]. (1D.1.)
+//! 2. **live gyre positions** — a [`gyre::Simulation`] (seeded from the graph,
+//!    forces = exclusion + edge-springs + a centering boundary) ticks each frame;
+//!    [`orrery_paint_list_from_positions`] reprojects the underlay from the live
+//!    bodies, so the layout settles on screen. **This slice (1D.2).**
 //! 3. abs-pos serval DOM node children under the camera transform, pooled +
 //!    culled, moved by per-frame inline transforms (1D.3).
 //!
 //! Navigation (wheel=pan / ctrl+wheel=zoom / inertia) and the two-hit-test split
-//! are 1E. This slice renders the graph statically, centered in the viewport.
+//! are 1E. Space re-seeds the layout (a tight central spiral) and re-runs the
+//! settle, so the force-directed motion is replayable.
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use euclid::default::Point2D;
+use gyre::{Boundary, EdgeSpring, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
-use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
+use kernel::graph::{EdgeAssertion, Graph, NodeKey, SemanticSubKind};
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList};
 use paint_list_render::{composite_paint_layers, CompositeLayer};
-use platen::orrery::orrery_paint_list;
+use platen::orrery::orrery_paint_list_from_positions;
 use platen::scene_paint::{Camera, ScenePaintStyle};
 use serval_winit_host::SurfaceHost;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::WindowEvent;
+use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use winit::window::{Window, WindowId};
 
-/// The orrery host application: the graph, the camera, and the present stack.
+/// Force-directed settle length (frames) after a (re)seed, ~6s at 60fps.
+const SETTLE_TICKS: u32 = 360;
+/// Per-tick timestep handed to the gyre simulation.
+const TICK_DT: f32 = 1.0 / 60.0;
+
+/// The orrery host application: the graph, its physics, the camera, and the
+/// present stack.
 struct App {
     graph: Graph,
+    /// The force-directed layout. The underlay reprojects from its live bodies.
+    sim: Simulation,
+    /// Remaining settle frames; while > 0 the sim ticks and redraws are chained.
+    ticks_remaining: u32,
     camera: Camera,
     style: ScenePaintStyle,
     /// Producer generation, bumped when the scene's semantic content changes.
@@ -51,8 +69,12 @@ struct App {
 
 impl App {
     fn new() -> Self {
+        let graph = sample_graph();
+        let sim = build_simulation(&graph);
         Self {
-            graph: sample_graph(),
+            graph,
+            sim,
+            ticks_remaining: SETTLE_TICKS,
             camera: Camera::default(),
             style: ScenePaintStyle::default(),
             generation: 0,
@@ -70,17 +92,43 @@ impl App {
         self.camera.offset = (self.width as f32 / 2.0, self.height as f32 / 2.0);
     }
 
-    /// Build the underlay, composite it into one scene, and present it.
+    /// Tick the layout (while settling), reproject the underlay from the live
+    /// gyre positions, composite, and present. Chains another redraw while the
+    /// settle is still running.
     fn render(&mut self) {
-        let Some(host) = self.host.as_ref() else { return };
+        if self.host.is_none() {
+            return;
+        }
         let (w, h) = (self.width.max(1), self.height.max(1));
         let viewport = DeviceIntSize::new(w as i32, h as i32);
 
-        let underlay =
-            orrery_paint_list(&self.graph, viewport, self.camera, &self.style, self.generation);
+        let animating = self.ticks_remaining > 0;
+        if animating {
+            self.sim.tick(TICK_DT);
+            self.ticks_remaining -= 1;
+            self.generation = self.generation.wrapping_add(1);
+        }
+
+        // Snapshot the live positions, then reproject the underlay from them
+        // (a node with no body falls back to its committed position inside the
+        // producer).
+        let positions: HashMap<NodeKey, PortablePoint> = self
+            .sim
+            .positions()
+            .map(|(k, p)| (k, PortablePoint::new(p.x, p.y)))
+            .collect();
+        let underlay = orrery_paint_list_from_positions(
+            &self.graph,
+            |k| positions.get(&k).copied(),
+            viewport,
+            self.camera,
+            &self.style,
+            self.generation,
+        );
         let layers = [CompositeLayer::commands_only(underlay.commands())];
         let scene = composite_paint_layers(viewport, &layers).scene;
 
+        let host = self.host.as_ref().unwrap();
         let (_tex, view) = host.rasterize(&scene, w, h, ColorLoad::Clear(wgpu::Color::WHITE));
         let Some(frame) = host.acquire() else { return };
         let target = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -93,6 +141,10 @@ impl App {
             ExternalTexturePlacement::new([0.0, 0.0, w as f32, h as f32]),
         );
         frame.present();
+
+        if animating {
+            self.request_redraw();
+        }
     }
 
     fn request_redraw(&self) {
@@ -149,6 +201,16 @@ impl ApplicationHandler for App {
                 self.recenter();
                 self.request_redraw();
             },
+            WindowEvent::KeyboardInput { event, .. } => {
+                // Space re-seeds the central spiral and replays the settle.
+                if event.state == ElementState::Pressed
+                    && matches!(event.logical_key, WinitKey::Named(WinitNamedKey::Space))
+                {
+                    seed_cluster(&mut self.sim, &self.graph);
+                    self.ticks_remaining = SETTLE_TICKS;
+                    self.request_redraw();
+                }
+            },
             WindowEvent::RedrawRequested => self.render(),
             _ => {},
         }
@@ -191,6 +253,48 @@ fn hyperlink() -> EdgeAssertion {
     }
 }
 
+/// Build the force-directed simulation from `graph`: a body per node, the
+/// undirected de-duplicated relation pairs as the spring topology, the standard
+/// force trio (exclusion + edge-springs + a centering boundary), seeded into a
+/// tight central spiral so the first settle is visible.
+fn build_simulation(graph: &Graph) -> Simulation {
+    let mut sim = Simulation::new();
+    sim.sync_with_graph(graph);
+
+    let mut seen = HashSet::new();
+    let edges: Vec<(NodeKey, NodeKey)> = graph
+        .relations()
+        .filter_map(|r| {
+            let pair = if r.from <= r.to { (r.from, r.to) } else { (r.to, r.from) };
+            seen.insert(pair).then_some((r.from, r.to))
+        })
+        .collect();
+    sim.sync_edges(edges);
+
+    sim.add_force(NodeExclusion::default());
+    sim.add_force(EdgeSpring::default());
+    sim.add_force(Boundary::default());
+
+    seed_cluster(&mut sim, graph);
+    sim
+}
+
+/// Seed every node into a tight central spiral (golden-angle), so a ticked
+/// settle visibly expands it into a readable layout (vs. starting from the
+/// already-spread committed ring).
+fn seed_cluster(sim: &mut Simulation, graph: &Graph) {
+    let seeds: Vec<(NodeKey, Point2D<f32>)> = graph
+        .nodes()
+        .enumerate()
+        .map(|(i, (key, _node))| {
+            let r = 6.0 + i as f32 * 3.0;
+            let theta = i as f32 * 2.399_963; // golden angle in radians
+            (key, Point2D::new(r * theta.cos(), r * theta.sin()))
+        })
+        .collect();
+    sim.seed_positions(seeds);
+}
+
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -203,4 +307,43 @@ fn main() {
     let event_loop = EventLoop::new().expect("failed to create event loop");
     let mut app = App::new();
     event_loop.run_app(&mut app).expect("event loop error");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sample_graph_has_nodes_and_edges() {
+        let g = sample_graph();
+        assert_eq!(g.nodes().count(), 12, "the ring has twelve nodes");
+        assert!(g.relations().count() >= 12, "at least the ring edges");
+    }
+
+    #[test]
+    fn simulation_has_a_body_per_node_and_the_edge_topology() {
+        let g = sample_graph();
+        let sim = build_simulation(&g);
+        assert_eq!(sim.body_count(), 12, "one physics body per node");
+        assert!(sim.edge_count() >= 12, "the spring topology carries the edges");
+    }
+
+    #[test]
+    fn ticking_moves_nodes_from_the_seed() {
+        // From the tight central spiral, the force trio must spread the layout:
+        // after a short settle at least one node has moved meaningfully.
+        let g = sample_graph();
+        let mut sim = build_simulation(&g);
+        let before: Vec<(NodeKey, Point2D<f32>)> = sim.positions().collect();
+        for _ in 0..60 {
+            sim.tick(TICK_DT);
+        }
+        let after: HashMap<NodeKey, Point2D<f32>> = sim.positions().collect();
+        let moved = before.iter().any(|(k, p0)| {
+            after
+                .get(k)
+                .is_some_and(|p1| (p1.x - p0.x).hypot(p1.y - p0.y) > 1.0)
+        });
+        assert!(moved, "the force-directed settle moves nodes off the seed");
+    }
 }

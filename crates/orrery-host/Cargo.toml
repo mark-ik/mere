@@ -34,6 +34,8 @@ wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = "1"
+# Constructing seed positions for the gyre simulation (its position type).
+euclid = "0.22"
 
 [lints]
 workspace = true
