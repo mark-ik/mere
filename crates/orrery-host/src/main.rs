@@ -28,9 +28,12 @@
 //! Navigation is wired (1E.1): wheel = pan, Ctrl+wheel = cursor-anchored zoom,
 //! middle-drag = pan, all with inertia — an infinite-canvas document, per the
 //! graph-canvas navigation directive. Zooming out makes the 3b demote visible
-//! (nodes leaving the viewport reappear as underlay rects). Node drag (gyre
-//! pin/unpin) and the node/edge/marquee hit-test split are 1E.2 / 1E.3. Space
-//! re-seeds the layout (a tight central spiral) and replays the settle.
+//! (nodes leaving the viewport reappear as underlay rects). Left-drag grabs the
+//! node under the cursor and pins it to the pointer (gyre pin/unpin) while the
+//! sim ticks, so neighbors follow through the springs; a press that stays within
+//! the slop is a click (node activation). The node/edge/marquee hit-test split
+//! is 1E.3. Space re-seeds the layout (a tight central spiral) and replays the
+//! settle.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -70,6 +73,19 @@ const PAN_DECAY: f32 = 0.85;
 /// Clamp for the camera zoom.
 const MIN_ZOOM: f32 = 0.1;
 const MAX_ZOOM: f32 = 8.0;
+/// Screen-px the pointer may move before a press counts as a drag, not a click.
+const CLICK_SLOP: f32 = 4.0;
+
+/// An in-progress left-button interaction on a node: a click until the pointer
+/// passes [`CLICK_SLOP`], then a drag that pins the node to the cursor.
+#[derive(Clone, Copy)]
+struct Drag {
+    node: NodeKey,
+    /// Press position in screen px (the click/drag-slop origin).
+    press: (f32, f32),
+    /// Set once the pointer has moved past the slop — a real drag.
+    moved: bool,
+}
 
 /// Node box half-extent (px) — matches the underlay's default node rect, so each
 /// DOM child sits centered on the same world position.
@@ -105,6 +121,8 @@ struct App {
     pan_velocity: (f32, f32),
     /// `Some(last_cursor)` while a middle-button pan drag is in progress.
     middle_drag: Option<(f32, f32)>,
+    /// An in-progress left-button node click/drag, if any.
+    drag: Option<Drag>,
     /// Whether Ctrl is held (gates wheel-zoom vs wheel-pan).
     ctrl: bool,
     window: Option<Arc<Window>>,
@@ -127,6 +145,7 @@ impl App {
             cursor: (0.0, 0.0),
             pan_velocity: (0.0, 0.0),
             middle_drag: None,
+            drag: None,
             ctrl: false,
             window: None,
             host: None,
@@ -151,14 +170,21 @@ impl App {
         self.camera.offset = (self.width as f32 / 2.0, self.height as f32 / 2.0);
     }
 
-    /// The screen viewport mapped back to world space through the camera
-    /// (`world = (screen - offset) / zoom`) — the region gyre culls against to
-    /// decide which nodes are on screen.
-    fn world_viewport(&self) -> Box2D<f32> {
+    /// Map a screen-px point back to world space through the camera
+    /// (`world = (screen - offset) / zoom`).
+    fn screen_to_world(&self, (sx, sy): (f32, f32)) -> Point2D<f32> {
         let (ox, oy) = self.camera.offset;
         let z = self.camera.zoom.max(f32::EPSILON);
-        let to_world = |sx: f32, sy: f32| Point2D::new((sx - ox) / z, (sy - oy) / z);
-        Box2D::new(to_world(0.0, 0.0), to_world(self.width as f32, self.height as f32))
+        Point2D::new((sx - ox) / z, (sy - oy) / z)
+    }
+
+    /// The screen viewport mapped to world space — the region gyre culls against
+    /// to decide which nodes are on screen.
+    fn world_viewport(&self) -> Box2D<f32> {
+        Box2D::new(
+            self.screen_to_world((0.0, 0.0)),
+            self.screen_to_world((self.width as f32, self.height as f32)),
+        )
     }
 
     /// Tick the layout (while settling), reproject the underlay from the live
@@ -171,10 +197,15 @@ impl App {
         let (w, h) = (self.width.max(1), self.height.max(1));
         let viewport = DeviceIntSize::new(w as i32, h as i32);
 
+        // Tick while settling or while a node is being dragged (so neighbors
+        // react to the pinned node through the springs).
         let settling = self.ticks_remaining > 0;
-        if settling {
+        let dragging = self.drag.is_some_and(|d| d.moved);
+        if settling || dragging {
             self.sim.tick(TICK_DT);
-            self.ticks_remaining -= 1;
+            if settling {
+                self.ticks_remaining -= 1;
+            }
         }
         // Pan inertia: glide + decay when not actively middle-dragging.
         let gliding = self.middle_drag.is_none()
@@ -248,7 +279,7 @@ impl App {
         );
         frame.present();
 
-        if settling || gliding {
+        if settling || gliding || dragging {
             self.request_redraw();
         }
     }
@@ -320,6 +351,18 @@ impl ApplicationHandler for App {
                     self.middle_drag = Some(new);
                     self.request_redraw();
                 }
+                // A left-button drag past the slop pins its node to the cursor.
+                if let Some(mut d) = self.drag {
+                    if !d.moved && (new.0 - d.press.0).hypot(new.1 - d.press.1) > CLICK_SLOP {
+                        d.moved = true;
+                    }
+                    if d.moved {
+                        let world = self.screen_to_world(new);
+                        self.sim.pin(d.node, world);
+                        self.request_redraw();
+                    }
+                    self.drag = Some(d);
+                }
                 self.cursor = new;
             },
             WindowEvent::MouseWheel { delta, .. } => {
@@ -340,12 +383,35 @@ impl ApplicationHandler for App {
                 }
                 self.request_redraw();
             },
-            WindowEvent::MouseInput { state, button: MouseButton::Middle, .. } => match state {
-                ElementState::Pressed => {
+            WindowEvent::MouseInput { state, button, .. } => match (button, state) {
+                (MouseButton::Middle, ElementState::Pressed) => {
                     self.middle_drag = Some(self.cursor);
                     self.pan_velocity = (0.0, 0.0);
                 },
-                ElementState::Released => self.middle_drag = None,
+                (MouseButton::Middle, ElementState::Released) => self.middle_drag = None,
+                (MouseButton::Left, ElementState::Pressed) => {
+                    // Grab the node under the cursor (gyre node-pick in world space).
+                    let world = self.screen_to_world(self.cursor);
+                    if let Some(node) = self.sim.hit_test(world) {
+                        self.drag = Some(Drag { node, press: self.cursor, moved: false });
+                    }
+                },
+                (MouseButton::Left, ElementState::Released) => {
+                    if let Some(d) = self.drag.take() {
+                        if d.moved {
+                            // Drop: release the pin so the node rejoins the
+                            // physics, and re-settle the neighborhood.
+                            self.sim.unpin(d.node);
+                            self.ticks_remaining = self.ticks_remaining.max(SETTLE_TICKS / 3);
+                            self.request_redraw();
+                        } else {
+                            // A click, not a drag: node activation (selection
+                            // rendering is 1E.3).
+                            tracing::info!(node = ?d.node, "node activated");
+                        }
+                    }
+                },
+                _ => {},
             },
             WindowEvent::KeyboardInput { event, .. } => {
                 // Space re-seeds the central spiral and replays the settle.
@@ -549,6 +615,18 @@ mod tests {
         assert!((after.0 - before.0).abs() < 0.01, "anchor world x fixed");
         assert!((after.1 - before.1).abs() < 0.01, "anchor world y fixed");
         assert_eq!(app.camera.zoom, 2.0, "zoom applied");
+    }
+
+    #[test]
+    fn screen_to_world_inverts_the_camera() {
+        // Hit-testing + cull map the cursor to world space through this; pin the
+        // inverse of `screen = world * zoom + offset`.
+        let mut app = App::new();
+        app.camera.offset = (100.0, 50.0);
+        app.camera.zoom = 2.0;
+        let w = app.screen_to_world((300.0, 150.0));
+        assert!((w.x - 100.0).abs() < 0.01, "world x = (300-100)/2");
+        assert!((w.y - 50.0).abs() < 0.01, "world y = (150-50)/2");
     }
 
     #[test]
