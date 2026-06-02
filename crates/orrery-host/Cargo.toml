@@ -1,0 +1,39 @@
+[package]
+name = "orrery-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+rust-version = "1.92.0"
+description = "Serval-on-winit host for the orrery (the graph field-canvas), build item 1D of the serval-as-host flip. Composites platen's scene-paint underlay (and, incrementally, gyre-positioned abs-pos node children under one camera transform) through the shared serval-winit-host present stack."
+
+[[bin]]
+name = "orrery-host"
+path = "src/main.rs"
+
+[dependencies]
+# Shared present stack (SurfaceHost: boot / resize / rasterize / acquire) + the
+# winit->serval key & modifier mapping, shared with meerkat.
+serval-winit-host = { path = "../serval-winit-host" }
+
+# The host-neutral orrery scene producer + camera/style, and its graph + physics.
+platen.workspace = true
+kernel.workspace = true
+gyre.workspace = true
+
+# Compose the underlay (+ later the node-children document) into one Scene, and
+# present it. Path deps on the sibling netrender checkout, like meerkat's.
+paint_list_render = { path = "../../../netrender/paint_list_render" }
+paint_list_api = { path = "../../../netrender/paint_list_api" }
+netrender = { path = "../../../netrender/netrender" }
+
+# Windowing + present (pins align with serval's: wgpu 29 / winit 0.30).
+winit = { workspace = true }
+wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = "1"
+
+[lints]
+workspace = true
