@@ -1,10 +1,13 @@
 # Serval-as-Host Flip Plan
 
 **Date**: 2026-06-01
-**Status**: Gate open on the interactive items; the orrery perf spike is Phase 0.
-Execution plan for flipping Mere's host from Xilem + Masonry (architecture 1) to
-serval-as-host (architecture 3). Cross-repo: sequences mere-side work against
-serval capabilities.
+**Status**: Gate open on the interactive items. **P0 (perf spike) run 2026-06-01:
+the relayout worry is retired (transform motion is paint-tier → `RepaintOnly`, not
+reflow), BUT it surfaced three serval prerequisites for the orrery's continuous
+motion — incremental inline-`style` invalidation, repeated-`apply()` restyle, and
+transform→paint-position — now Phase-1 gates (see Phase 0).** Execution plan for
+flipping Mere's host from Xilem + Masonry (architecture 1) to serval-as-host
+(architecture 3). Cross-repo: sequences mere-side work against serval capabilities.
 **Decision owner**: the [serval-as-host evaluation](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)
 owns the *call* and the §6/§7 worked consequences; this doc is the *execution*.
 **Related**: [host architecture roadmap](2026-05-20_host_architecture_roadmap.md),
@@ -52,11 +55,36 @@ pending the orrery perf spike**:
 
 Model node motion as `transform`, not `left`/`top`, and measure relayout incidence
 on a moving N-node orrery (hundreds to thousands of nodes, 60fps physics) against
-the `canvas_behavior_contract` scenarios, on serval. **Done:** transform-driven
-motion composites via `RepaintOnly` without `full_relayout` at scale, or, if it
-forces relayout, that is fixed in `serval-layout` first. Serval-side; gates the
-orrery phases below. Chrome phases (2–4) can proceed in parallel since they are
-flex/DOM, not transform-animated.
+the `canvas_behavior_contract` scenarios, on serval. Serval-side; gates the orrery
+phases below. Chrome phases (2–4) can proceed in parallel since they are flex/DOM,
+not transform-animated.
+
+**Done (2026-06-01, serval `6bf33947f`; spike + writeup in
+[serval/docs/2026-06-01_orrery_transform_perf_spike.md](../../../../serval/docs/2026-06-01_orrery_transform_perf_spike.md)).**
+The relayout worry is **retired**: a transform value change is paint-tier on
+serval's pinned stylo (`RECALCULATE_OVERFLOW` < `RELAYOUT`), so
+`IncrementalLayout::apply()` returns `RepaintOnly` — layout skipped, box geometry
+untouched, at N up to 1000 (test-proven + source-verified). Transform motion does
+NOT force reflow.
+
+But the spike surfaced **three serval prerequisites** the orrery's *continuous*
+transform-driven motion needs (the relayout classification is necessary, not
+sufficient). They move into Phase 1 as explicit gates, all serval-side:
+
+- **(A) incremental restyle ignores inline-`style` changes** — `snapshot.rs` marks
+  them `other_attributes_changed` (only `[attr]`-selector invalidation); inline-style
+  re-cascade needs a `RESTYLE_STYLE_ATTRIBUTE` hint. The full `run_cascade` does
+  apply inline style, so this is an incremental-path gap. The orrery moves nodes by
+  mutating inline `transform`, so this must be wired.
+- **(B) a second sequential `RepaintOnly` `apply()` drops the change** — repeated
+  per-frame applies don't re-register (the layout-skip leaves stylo restyle state
+  uncleared), so continuous motion via repeated `apply()` doesn't work yet.
+- **(C) paint doesn't fold the CSS transform into painted position** —
+  `paint_emit` uses the taffy `Layout.location`, so a cascaded transform wouldn't
+  visibly move the node.
+
+Net: the gate's fear is gone, but the orrery's motion mechanism is gated on A+B+C.
+A and B are pinned as tripwire tests in serval-layout that flip when fixed.
 
 ### Phase 1 — The orrery element (brief §6)
 
@@ -69,6 +97,10 @@ A serval custom-layout element composing three layers:
    each materializes as a serval DOM subtree, `position: absolute` + a per-frame
    `transform: translate(x, y)` from the sim. Off-screen nodes demote to underlay
    glyphs (virtualization rides `cull_aabb`); focus/state survive demotion.
+   **Gated on P0's prerequisites A+B+C** (serval-side): incremental inline-`style`
+   invalidation, repeated-`apply()` restyle correctness, and folding the CSS
+   transform into painted position. Until those land, per-frame inline-transform
+   motion is either ignored or invisible; this phase starts once they do.
 3. **Camera** — one `PushTransform(TransformSpec)` over both layers; the navigation
    defaults (wheel = pan, ctrl+wheel = zoom, inertia, infinite canvas) live in the
    element's input handling.
@@ -134,3 +166,17 @@ Xilem + Masonry host is removed.
   producer already landed host-neutral (`platen::orrery`, `1110a26`) and is Phase-1
   layer 1. No flip code written yet; this is the coordination artifact, and
   execution is cross-cutting across mere + serval.
+
+- **2026-06-01** — **P0 run (serval `6bf33947f`).** Orchestrated a read-only recon
+  workflow (6 agents) mapping serval's incremental-layout, then implemented the
+  spike in `serval-layout` (instrumentation + 4 tests; serval-layout 80 tests pass).
+  Verdict: the relayout fear is **retired** — a transform value change is paint-tier
+  (`RECALCULATE_OVERFLOW` < `RELAYOUT`) → `apply()` returns `RepaintOnly`, layout
+  skipped, box geometry untouched, N up to 1000 (test + pinned-stylo source). The
+  spike then surfaced three serval prerequisites for *continuous* transform motion,
+  now Phase-1 gates: (A) incremental restyle ignores inline-`style` changes; (B) a
+  second sequential `RepaintOnly` `apply()` drops the change; (C) paint doesn't fold
+  the CSS transform into painted position. A + B are pinned as serval-layout
+  tripwire tests. Writeup:
+  [serval/docs/2026-06-01_orrery_transform_perf_spike.md](../../../../serval/docs/2026-06-01_orrery_transform_perf_spike.md).
+  So P0's measurement is done; the orrery flip (P1) is gated on A+B+C, all serval-side.
