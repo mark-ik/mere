@@ -32,17 +32,18 @@ use layout_dom_api::LayoutDom;
 use meerkat::content::build_content_dom;
 use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
 use netrender::external_texture::ExternalTexturePlacement;
-use netrender::{ColorLoad, NetrenderOptions, Renderer, Scene};
+use netrender::{ColorLoad, NetrenderOptions};
 use pelt_live::{fragments_from_scripted_dom, hit_test_node, scene_from_scripted_dom, TextCursor};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::{NodeId, ScriptedDom};
+use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use winit::window::{Window, WindowId};
-use xilem_serval::{Key, KeyEvent, Modifiers, NamedKey, PointerClick, ServalAppRunner};
+use xilem_serval::{Modifiers, PointerClick, ServalAppRunner};
 
 /// Author CSS for the **chrome** root. The toolbar is a flex row (back / forward
 /// buttons + a growing omnibar); serval lays it out via taffy's flexbox. The
@@ -88,13 +89,6 @@ const CONTENT_SHEET: &[&str] = &[
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
 const FALLBACK_TOOLBAR_H: u32 = 64;
 
-/// wgpu/netrender state, built once a window exists.
-struct Gpu {
-    surface: wgpu::Surface<'static>,
-    surface_config: wgpu::SurfaceConfiguration,
-    renderer: Renderer,
-}
-
 /// The meerkat shell application: the shared chrome DOM, the runner that diffs
 /// the chrome view tree into it, the window + GPU, and input bookkeeping.
 struct App {
@@ -109,7 +103,8 @@ struct App {
     /// Cached measured height (px) of the chrome band; `0` until first measured.
     toolbar_h: u32,
     window: Option<Arc<Window>>,
-    gpu: Option<Gpu>,
+    /// The shared serval-on-winit present stack, built once a window exists.
+    host: Option<SurfaceHost>,
     /// Tracked keyboard modifiers, folded into each dispatched `KeyEvent`.
     modifiers: Modifiers,
     /// Last cursor position in physical pixels (window space == content space).
@@ -135,7 +130,7 @@ impl App {
             content_location,
             toolbar_h: 0,
             window: None,
-            gpu: None,
+            host: None,
             modifiers: Modifiers::default(),
             cursor: (0.0, 0.0),
             width: 1024,
@@ -169,15 +164,10 @@ impl App {
     fn resize(&mut self, width: u32, height: u32) {
         self.width = width.max(1);
         self.height = height.max(1);
-        if let Some(gpu) = self.gpu.as_mut() {
-            gpu.surface_config.width = self.width;
-            gpu.surface_config.height = self.height;
-            gpu.surface
-                .configure(&gpu.renderer.wgpu_device.core.device, &gpu.surface_config);
+        if let Some(host) = self.host.as_mut() {
+            host.resize(self.width, self.height);
         }
-        if let Some(window) = self.window.as_ref() {
-            window.request_redraw();
-        }
+        self.request_redraw();
     }
 
     /// Render the two document authorities and present them. The content root
@@ -186,7 +176,7 @@ impl App {
     /// suggestions dropdown float above the content while the rest lets the page
     /// show through. Composite order is content first, then chrome on top.
     fn render(&mut self) {
-        if self.gpu.is_none() {
+        if self.host.is_none() {
             return;
         }
         let (w, h) = (self.width.max(1), self.height.max(1));
@@ -219,32 +209,20 @@ impl App {
             &scroll,
         );
 
-        let gpu = self.gpu.as_ref().unwrap();
+        let host = self.host.as_ref().unwrap();
         let (_chrome_tex, chrome_view) =
-            gpu.rasterize(&chrome_scene, w, h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+            host.rasterize(&chrome_scene, w, h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
         let (_content_tex, content_view) =
-            gpu.rasterize(&content_scene, w, content_h, ColorLoad::Clear(wgpu::Color::WHITE));
+            host.rasterize(&content_scene, w, content_h, ColorLoad::Clear(wgpu::Color::WHITE));
 
-        let device = &gpu.renderer.wgpu_device.core.device;
-        let frame = match gpu.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                gpu.surface.configure(device, &gpu.surface_config);
-                return;
-            },
-            other => {
-                eprintln!("[meerkat] surface acquire skipped: {other:?}");
-                return;
-            },
-        };
+        let Some(frame) = host.acquire() else { return };
         let target_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let format = gpu.surface_config.format;
+        let format = host.format();
         // Content fills [toolbar_h, h] (dest_rect is [x0, y0, x1, y1] corners;
         // viewport is the full surface). Then the transparent-cleared chrome is
         // composited over the whole window — toolbar + dropdown on top, the rest
         // letting the content through.
-        gpu.renderer.compose_external_texture(
+        host.renderer().compose_external_texture(
             &content_view,
             &target_view,
             format,
@@ -252,7 +230,7 @@ impl App {
             h,
             ExternalTexturePlacement::new([0.0, toolbar_h as f32, w as f32, h as f32]),
         );
-        gpu.renderer.compose_external_texture(
+        host.renderer().compose_external_texture(
             &chrome_view,
             &target_view,
             format,
@@ -381,40 +359,6 @@ impl App {
     }
 }
 
-impl Gpu {
-    /// Run `scene` into a fresh `(w, h)` `Rgba8Unorm` texture (cleared to
-    /// `clear`) and return it with its view. The texture is returned (not just
-    /// the view) so the caller keeps it alive until the composite has sampled it.
-    fn rasterize(
-        &self,
-        scene: &Scene,
-        w: u32,
-        h: u32,
-        clear: ColorLoad,
-    ) -> (wgpu::Texture, wgpu::TextureView) {
-        let device = &self.renderer.wgpu_device.core.device;
-        let tex = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("meerkat scene"),
-            size: wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::STORAGE_BINDING
-                | wgpu::TextureUsages::TEXTURE_BINDING
-                | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[wgpu::TextureFormat::Rgba8UnormSrgb],
-        });
-        let view = tex.create_view(&wgpu::TextureViewDescriptor {
-            label: Some("meerkat scene view"),
-            format: Some(wgpu::TextureFormat::Rgba8Unorm),
-            ..Default::default()
-        });
-        self.renderer.render_vello(scene, &view, clear);
-        (tex, view)
-    }
-}
-
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
@@ -432,53 +376,18 @@ impl ApplicationHandler for App {
         self.width = size.width.max(1);
         self.height = size.height.max(1);
 
-        // wgpu handles via netrender::boot, then the netrender renderer.
-        let handles = match netrender::boot() {
-            Ok(handles) => handles,
+        // The shared serval-on-winit present stack: wgpu + netrender boot, surface
+        // configured at the window size.
+        let options =
+            NetrenderOptions { tile_cache_size: Some(64), enable_vello: true, ..Default::default() };
+        match SurfaceHost::boot(window.clone(), self.width, self.height, options) {
+            Ok(host) => self.host = Some(host),
             Err(err) => {
-                eprintln!("[meerkat] netrender wgpu boot failed: {err}");
+                eprintln!("[meerkat] {err}");
                 event_loop.exit();
                 return;
             },
-        };
-        let surface = match handles.instance.create_surface(window.clone()) {
-            Ok(surface) => surface,
-            Err(err) => {
-                eprintln!("[meerkat] create_surface failed: {err}");
-                event_loop.exit();
-                return;
-            },
-        };
-        let caps = surface.get_capabilities(&handles.adapter);
-        let format = caps
-            .formats
-            .iter()
-            .copied()
-            .find(wgpu::TextureFormat::is_srgb)
-            .unwrap_or(caps.formats[0]);
-        let surface_config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format,
-            width: self.width,
-            height: self.height,
-            present_mode: wgpu::PresentMode::Fifo,
-            desired_maximum_frame_latency: 2,
-            alpha_mode: caps.alpha_modes[0],
-            view_formats: vec![],
-        };
-        let renderer = match netrender::create_netrender_instance(
-            handles,
-            NetrenderOptions { tile_cache_size: Some(64), enable_vello: true, ..Default::default() },
-        ) {
-            Ok(renderer) => renderer,
-            Err(err) => {
-                eprintln!("[meerkat] netrender init failed: {err:?}");
-                event_loop.exit();
-                return;
-            },
-        };
-        surface.configure(&renderer.wgpu_device.core.device, &surface_config);
-        self.gpu = Some(Gpu { surface, surface_config, renderer });
+        }
         window.request_redraw();
         self.window = Some(window);
     }
@@ -494,13 +403,7 @@ impl ApplicationHandler for App {
                 self.cursor = (position.x as f32, position.y as f32);
             },
             WindowEvent::ModifiersChanged(mods) => {
-                let s = mods.state();
-                self.modifiers = Modifiers {
-                    shift: s.shift_key(),
-                    ctrl: s.control_key(),
-                    alt: s.alt_key(),
-                    meta: s.super_key(),
-                };
+                self.modifiers = modifiers_from_winit(mods.state());
             },
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
                 // Route by region. The chrome's interactive area is the toolbar
@@ -575,31 +478,6 @@ fn has_class(dom: &ScriptedDom, id: NodeId, class: &str) -> bool {
     dom.attributes(id).any(|attr| {
         attr.name.local.as_ref() == "class" && attr.value.split_whitespace().any(|c| c == class)
     })
-}
-
-/// Map a winit logical key + modifiers to a serval [`KeyEvent`]; `None` for dead
-/// / unidentified keys with no routable mapping.
-fn key_event_from_winit(key: &WinitKey, mods: Modifiers) -> Option<KeyEvent> {
-    let mapped = match key {
-        WinitKey::Character(s) => Key::Character(s.to_string()),
-        WinitKey::Named(named) => Key::Named(match named {
-            WinitNamedKey::Backspace => NamedKey::Backspace,
-            WinitNamedKey::Enter => NamedKey::Enter,
-            WinitNamedKey::Tab => NamedKey::Tab,
-            WinitNamedKey::Escape => NamedKey::Escape,
-            WinitNamedKey::Space => NamedKey::Space,
-            WinitNamedKey::ArrowLeft => NamedKey::ArrowLeft,
-            WinitNamedKey::ArrowRight => NamedKey::ArrowRight,
-            WinitNamedKey::ArrowUp => NamedKey::ArrowUp,
-            WinitNamedKey::ArrowDown => NamedKey::ArrowDown,
-            WinitNamedKey::Delete => NamedKey::Delete,
-            WinitNamedKey::Home => NamedKey::Home,
-            WinitNamedKey::End => NamedKey::End,
-            _ => NamedKey::Other,
-        }),
-        WinitKey::Dead(_) | WinitKey::Unidentified(_) => return None,
-    };
-    Some(KeyEvent::with_mods(mapped, mods))
 }
 
 fn main() {

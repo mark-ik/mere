@@ -1,0 +1,26 @@
+[package]
+name = "serval-winit-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+rust-version = "1.92.0"
+description = "Shared serval-on-winit host plumbing: a wgpu surface + netrender Renderer (boot / resize / rasterize / acquire) and winit->serval key/modifier mapping. Consumed by the meerkat chrome shell and the orrery host so each owns only its scene composition + input routing, not the present boilerplate."
+
+[lib]
+name = "serval_winit_host"
+path = "src/lib.rs"
+
+[dependencies]
+# The present stack: a netrender Renderer rasterizes serval scenes and composites
+# them onto the surface. Cross-repo path dep on the sibling netrender checkout.
+netrender = { path = "../../../netrender/netrender" }
+# Key / modifier mapping targets serval's input model (KeyEvent / Modifiers).
+xilem-serval = { path = "../../../serval/components/xilem-serval" }
+# Windowing + wgpu surface (pins align with serval's; wgpu 29 / winit 0.30).
+winit = { workspace = true }
+wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
+
+[lints]
+workspace = true

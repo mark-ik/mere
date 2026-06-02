@@ -49,6 +49,10 @@ netrender = { path = "../../../netrender/netrender" }
 # toolbar band. ScriptedDom implements them; same cross-repo path as xilem-serval.
 layout_dom_api = { package = "layout-dom-api", path = "../../../serval/components/shared/layout-dom" }
 
+# Shared serval-on-winit present plumbing (SurfaceHost: boot / resize / rasterize
+# / acquire, + winit->serval key & modifier mapping), shared with the orrery host.
+serval-winit-host = { path = "../serval-winit-host" }
+
 # Windowing + present (mirrors pelt-live's bin deps; mere's pins align with
 # serval's, so the wgpu 29 / winit 0.30 surface + netrender Renderer unify).
 winit = { workspace = true }
