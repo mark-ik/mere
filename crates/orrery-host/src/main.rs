@@ -25,9 +25,12 @@
 //!    layers never double-draw a node (3a + 3b). The pre-materialized pool +
 //!    incremental layout (3c) replaces the per-frame rebuild next.
 //!
-//! Navigation (wheel=pan / ctrl+wheel=zoom / inertia) and the two-hit-test split
-//! are 1E. Space re-seeds the layout (a tight central spiral) and re-runs the
-//! settle, so the force-directed motion is replayable.
+//! Navigation is wired (1E.1): wheel = pan, Ctrl+wheel = cursor-anchored zoom,
+//! middle-drag = pan, all with inertia — an infinite-canvas document, per the
+//! graph-canvas navigation directive. Zooming out makes the 3b demote visible
+//! (nodes leaving the viewport reappear as underlay rects). Node drag (gyre
+//! pin/unpin) and the node/edge/marquee hit-test split are 1E.2 / 1E.3. Space
+//! re-seeds the layout (a tight central spiral) and replays the settle.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -49,7 +52,7 @@ use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 use serval_winit_host::SurfaceHost;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use winit::window::{Window, WindowId};
@@ -58,6 +61,15 @@ use winit::window::{Window, WindowId};
 const SETTLE_TICKS: u32 = 360;
 /// Per-tick timestep handed to the gyre simulation.
 const TICK_DT: f32 = 1.0 / 60.0;
+/// Pixels per wheel line-notch (LineDelta → device px).
+const WHEEL_PAN_SCALE: f32 = 40.0;
+/// Zoom multiplier per wheel notch under Ctrl.
+const ZOOM_STEP: f32 = 1.15;
+/// Pan-inertia decay per frame (lower = stops sooner).
+const PAN_DECAY: f32 = 0.85;
+/// Clamp for the camera zoom.
+const MIN_ZOOM: f32 = 0.1;
+const MAX_ZOOM: f32 = 8.0;
 
 /// Node box half-extent (px) — matches the underlay's default node rect, so each
 /// DOM child sits centered on the same world position.
@@ -85,8 +97,16 @@ struct App {
     ticks_remaining: u32,
     camera: Camera,
     style: ScenePaintStyle,
-    /// Producer generation, bumped when the scene's semantic content changes.
+    /// Producer generation, bumped each rendered frame (positions / camera move).
     generation: u64,
+    /// Last cursor position in physical px (zoom anchor + drag origin).
+    cursor: (f32, f32),
+    /// Inertial pan velocity (px/frame); decays each frame when not dragging.
+    pan_velocity: (f32, f32),
+    /// `Some(last_cursor)` while a middle-button pan drag is in progress.
+    middle_drag: Option<(f32, f32)>,
+    /// Whether Ctrl is held (gates wheel-zoom vs wheel-pan).
+    ctrl: bool,
     window: Option<Arc<Window>>,
     host: Option<SurfaceHost>,
     width: u32,
@@ -104,11 +124,24 @@ impl App {
             camera: Camera::default(),
             style: ScenePaintStyle::default(),
             generation: 0,
+            cursor: (0.0, 0.0),
+            pan_velocity: (0.0, 0.0),
+            middle_drag: None,
+            ctrl: false,
             window: None,
             host: None,
             width: 1024,
             height: 600,
         }
+    }
+
+    /// Zoom by `factor`, keeping the world point under `anchor` (screen px) fixed.
+    fn zoom_at(&mut self, anchor: (f32, f32), factor: f32) {
+        let new_zoom = (self.camera.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
+        let applied = new_zoom / self.camera.zoom;
+        self.camera.offset.0 = anchor.0 - (anchor.0 - self.camera.offset.0) * applied;
+        self.camera.offset.1 = anchor.1 - (anchor.1 - self.camera.offset.1) * applied;
+        self.camera.zoom = new_zoom;
     }
 
     /// Put the world origin at the viewport center — the sample graph is laid out
@@ -138,12 +171,23 @@ impl App {
         let (w, h) = (self.width.max(1), self.height.max(1));
         let viewport = DeviceIntSize::new(w as i32, h as i32);
 
-        let animating = self.ticks_remaining > 0;
-        if animating {
+        let settling = self.ticks_remaining > 0;
+        if settling {
             self.sim.tick(TICK_DT);
             self.ticks_remaining -= 1;
-            self.generation = self.generation.wrapping_add(1);
         }
+        // Pan inertia: glide + decay when not actively middle-dragging.
+        let gliding = self.middle_drag.is_none()
+            && (self.pan_velocity.0.abs() > 0.05 || self.pan_velocity.1.abs() > 0.05);
+        if gliding {
+            self.camera.offset.0 += self.pan_velocity.0;
+            self.camera.offset.1 += self.pan_velocity.1;
+            self.pan_velocity.0 *= PAN_DECAY;
+            self.pan_velocity.1 *= PAN_DECAY;
+        } else if self.middle_drag.is_none() {
+            self.pan_velocity = (0.0, 0.0);
+        }
+        self.generation = self.generation.wrapping_add(1);
 
         // Snapshot the live positions, then reproject the underlay from them
         // (a node with no body falls back to its committed position inside the
@@ -204,7 +248,7 @@ impl App {
         );
         frame.present();
 
-        if animating {
+        if settling || gliding {
             self.request_redraw();
         }
     }
@@ -260,8 +304,48 @@ impl ApplicationHandler for App {
                 if let Some(host) = self.host.as_mut() {
                     host.resize(self.width, self.height);
                 }
-                self.recenter();
                 self.request_redraw();
+            },
+            WindowEvent::ModifiersChanged(mods) => {
+                self.ctrl = mods.state().control_key();
+            },
+            WindowEvent::CursorMoved { position, .. } => {
+                let new = (position.x as f32, position.y as f32);
+                // A middle-button drag pans; the last move's delta seeds inertia.
+                if let Some(prev) = self.middle_drag {
+                    let d = (new.0 - prev.0, new.1 - prev.1);
+                    self.camera.offset.0 += d.0;
+                    self.camera.offset.1 += d.1;
+                    self.pan_velocity = d;
+                    self.middle_drag = Some(new);
+                    self.request_redraw();
+                }
+                self.cursor = new;
+            },
+            WindowEvent::MouseWheel { delta, .. } => {
+                let (dx, dy) = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => {
+                        (x * WHEEL_PAN_SCALE, y * WHEEL_PAN_SCALE)
+                    },
+                    MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
+                };
+                if self.ctrl {
+                    // Ctrl+wheel = zoom, anchored at the cursor.
+                    let factor = ZOOM_STEP.powf(dy / WHEEL_PAN_SCALE);
+                    self.zoom_at(self.cursor, factor);
+                } else {
+                    // Wheel = pan (infinite-canvas), as an impulse into inertia.
+                    self.pan_velocity.0 += dx;
+                    self.pan_velocity.1 += dy;
+                }
+                self.request_redraw();
+            },
+            WindowEvent::MouseInput { state, button: MouseButton::Middle, .. } => match state {
+                ElementState::Pressed => {
+                    self.middle_drag = Some(self.cursor);
+                    self.pan_velocity = (0.0, 0.0);
+                },
+                ElementState::Released => self.middle_drag = None,
             },
             WindowEvent::KeyboardInput { event, .. } => {
                 // Space re-seeds the central spiral and replays the settle.
@@ -443,6 +527,28 @@ mod tests {
         let sim = build_simulation(&g);
         assert_eq!(sim.body_count(), 12, "one physics body per node");
         assert!(sim.edge_count() >= 12, "the spring topology carries the edges");
+    }
+
+    #[test]
+    fn zoom_at_keeps_the_anchor_world_point_fixed() {
+        // Cursor-anchored zoom: the world point under the anchor must not move on
+        // screen across a zoom change.
+        let mut app = App::new();
+        app.camera.offset = (100.0, 50.0);
+        app.camera.zoom = 1.0;
+        let anchor = (200.0, 80.0);
+        let world = |a: &App| {
+            (
+                (anchor.0 - a.camera.offset.0) / a.camera.zoom,
+                (anchor.1 - a.camera.offset.1) / a.camera.zoom,
+            )
+        };
+        let before = world(&app);
+        app.zoom_at(anchor, 2.0);
+        let after = world(&app);
+        assert!((after.0 - before.0).abs() < 0.01, "anchor world x fixed");
+        assert!((after.1 - before.1).abs() < 0.01, "anchor world y fixed");
+        assert_eq!(app.camera.zoom, 2.0, "zoom applied");
     }
 
     #[test]
