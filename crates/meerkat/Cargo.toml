@@ -1,0 +1,35 @@
+[package]
+name = "meerkat"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+rust-version = "1.92.0"
+description = "Mere's serval-as-host shell (the eventual replacement for the Xilem + Masonry mere-app host): chrome — toolbar / omnibar / command palette / frametree — built as xilem_serval views over the reused graphshell chrome domain, presented by serval. Holds the separate-roots discipline (chrome-root vs content-roots) from commit one."
+
+[lib]
+name = "meerkat"
+path = "src/lib.rs"
+
+[dependencies]
+# The chrome-as-DOM view layer: a xilem_core backend that diffs a Xilem view
+# tree into serval's mutable ScriptedDom. Cross-repo path dep on the sibling
+# serval checkout — mere and serval share the vello 0.9 / wgpu 29 pins, so there
+# is no renderer-stack reconciliation (serval-as-host flip plan, Findings).
+xilem-serval = { path = "../../../serval/components/xilem-serval" }
+serval-scripted-dom = { path = "../../../serval/components/serval-scripted-dom" }
+
+# Reused, host-neutral chrome view-models — toolbar / omnibar / command palette /
+# frame model / routing. meerkat is the next "host widget" that renders these as
+# DOM; the shell owns the mutations. The exact M4 contract these types were built
+# for ("host widgets render from these types through the view-model").
+chrome = { workspace = true }
+
+[dev-dependencies]
+# The `LayoutDom` read trait (element_name / dom_children) for the tests' DOM
+# walk. ScriptedDom implements it; same cross-repo path as xilem-serval's.
+layout_dom_api = { package = "layout-dom-api", path = "../../../serval/components/shared/layout-dom" }
+
+[lints]
+workspace = true
