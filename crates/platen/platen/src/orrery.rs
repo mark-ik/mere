@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use cartography::Projection;
 use cartography::projection::{PositionedEdge, PositionedNode, ProjectionMetadata};
 use kernel::geometry::{PortablePoint, PortableRect, PortableSize};
-use kernel::graph::Graph;
+use kernel::graph::{Graph, NodeKey};
 use paint_list_api::DeviceIntSize;
 
 use crate::coupling_paint::paint_projection_with_visuals;
@@ -35,15 +35,64 @@ use crate::scene_paint::{Camera, CanvasPaintList, ScenePaintStyle};
 /// (the paint layer substitutes the style default); `content_bounds` is the
 /// axis-aligned box of the node positions, for a host that fits the view.
 pub fn projection_from_graph(graph: &Graph) -> Projection {
-    let mut nodes = Vec::new();
-    for (key, _node) in graph.nodes() {
-        nodes.push(PositionedNode {
-            node: key,
-            position: graph.node_committed_position(key).unwrap_or_default(),
-            radius: 0.0,
-        });
-    }
+    project(graph, |k| graph.node_committed_position(k), "orrery.stored", true)
+}
 
+/// Build a [`Projection`] from a caller-supplied *live* position lookup (e.g. the
+/// gyre simulation's projected positions) instead of the committed positions —
+/// otherwise identical to [`projection_from_graph`] (same edge dedup,
+/// `content_bounds`). The orrery element feeds `position_of` from
+/// `gyre::Simulation::position_of` (mapped to [`PortablePoint`]), so the underlay
+/// reprojects from live motion each frame. A node with no live position
+/// (`position_of` returns `None`, e.g. not yet simulated) falls back to its
+/// committed position so it still draws.
+///
+/// Generic over the lookup so platen stays gyre-free — gyre is a sibling
+/// substrate, not a platen dependency.
+pub fn projection_from_positions<F>(graph: &Graph, position_of: F) -> Projection
+where
+    F: Fn(NodeKey) -> Option<PortablePoint>,
+{
+    project(
+        graph,
+        |k| position_of(k).or_else(|| graph.node_committed_position(k)),
+        "orrery.live",
+        false,
+    )
+}
+
+/// Shared projection core: positioned nodes from `position_of`, undirected
+/// de-duplicated edges, and `content_bounds`, tagged with the strategy metadata.
+fn project<F>(graph: &Graph, position_of: F, strategy_id: &str, settled: bool) -> Projection
+where
+    F: Fn(NodeKey) -> Option<PortablePoint>,
+{
+    let nodes: Vec<PositionedNode> = graph
+        .nodes()
+        .map(|(key, _node)| PositionedNode {
+            node: key,
+            position: position_of(key).unwrap_or_default(),
+            radius: 0.0,
+        })
+        .collect();
+    let edges = projected_undirected_edges(graph);
+    let content_bounds = bounds_of_nodes(&nodes);
+    Projection {
+        nodes,
+        edges,
+        content_bounds,
+        metadata: ProjectionMetadata {
+            strategy_id: Some(strategy_id.to_string()),
+            settled,
+        },
+        ..Projection::empty()
+    }
+}
+
+/// The graph's relations collapsed to undirected, de-duplicated `(from, to)`
+/// pairs — one [`PositionedEdge`] per connected pair, no self-loops. `relations()`
+/// projects without a stable `EdgeKey`, so `edge` is `None`.
+fn projected_undirected_edges(graph: &Graph) -> Vec<PositionedEdge> {
     let mut seen = HashSet::new();
     let mut edges = Vec::new();
     for rel in graph.relations() {
@@ -53,26 +102,10 @@ pub fn projection_from_graph(graph: &Graph) -> Projection {
         }
         let pair = if a <= b { (a, b) } else { (b, a) };
         if seen.insert(pair) {
-            edges.push(PositionedEdge {
-                edge: None, // relations() projects without a stable EdgeKey
-                from: a,
-                to: b,
-                path: Vec::new(),
-            });
+            edges.push(PositionedEdge { edge: None, from: a, to: b, path: Vec::new() });
         }
     }
-
-    let content_bounds = bounds_of_nodes(&nodes);
-    Projection {
-        nodes,
-        edges,
-        content_bounds,
-        metadata: ProjectionMetadata {
-            strategy_id: Some("orrery.stored".to_string()),
-            settled: true,
-        },
-        ..Projection::empty()
-    }
+    edges
 }
 
 /// The orrery scene as one paint list: the graph projected from its committed
@@ -86,6 +119,28 @@ pub fn orrery_paint_list(
     generation: u64,
 ) -> CanvasPaintList {
     let projection = projection_from_graph(graph);
+    paint_projection_with_visuals(graph, &projection, viewport, camera, style, generation)
+}
+
+/// The orrery underlay from *live* positions (the gyre-driven variant of
+/// [`orrery_paint_list`]): same edges + nodes + visual-coupling overlays, but the
+/// node positions come from `position_of` rather than the committed graph. The
+/// serval orrery element calls this each frame with `gyre::Simulation`'s
+/// positions, so the underlay tracks the simulation (the plan's "positions
+/// transition from committed to gyre-live"). Generic over the lookup to keep
+/// platen gyre-free.
+pub fn orrery_paint_list_from_positions<F>(
+    graph: &Graph,
+    position_of: F,
+    viewport: DeviceIntSize,
+    camera: Camera,
+    style: &ScenePaintStyle,
+    generation: u64,
+) -> CanvasPaintList
+where
+    F: Fn(NodeKey) -> Option<PortablePoint>,
+{
+    let projection = projection_from_positions(graph, position_of);
     paint_projection_with_visuals(graph, &projection, viewport, camera, style, generation)
 }
 
@@ -155,6 +210,23 @@ mod tests {
     fn empty_graph_projects_empty() {
         let p = projection_from_graph(&Graph::new());
         assert!(p.nodes.is_empty() && p.edges.is_empty());
+    }
+
+    #[test]
+    fn projection_from_positions_overrides_committed_and_falls_back() {
+        let mut g = Graph::new();
+        let a = node(&mut g, 1, 10.0, 20.0); // committed (10, 20)
+        let b = node(&mut g, 2, 30.0, 40.0); // committed (30, 40)
+        // A live position for `a` only; `b` has none → falls back to committed.
+        let live =
+            move |k: NodeKey| (k == a).then_some(PortablePoint::new(99.0, 99.0));
+        let p = projection_from_positions(&g, live);
+
+        let pa = p.nodes.iter().find(|n| n.node == a).unwrap();
+        let pb = p.nodes.iter().find(|n| n.node == b).unwrap();
+        assert_eq!(pa.position, PortablePoint::new(99.0, 99.0), "a uses the live position");
+        assert_eq!(pb.position, PortablePoint::new(30.0, 40.0), "b falls back to committed");
+        assert_eq!(p.metadata.strategy_id.as_deref(), Some("orrery.live"));
     }
 
     #[test]
