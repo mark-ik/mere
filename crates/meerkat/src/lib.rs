@@ -47,6 +47,7 @@ use xilem_serval::{
     ServalElement, TextField, TextInput,
 };
 
+pub mod content;
 pub mod nav;
 
 use nav::History;

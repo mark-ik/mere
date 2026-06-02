@@ -44,6 +44,10 @@ pelt-live = { path = "../../../serval/ports/pelt-live" }
 serval-layout = { path = "../../../serval/components/serval-layout" }
 # Scene / Renderer / ColorLoad / ExternalTexturePlacement for the present pass.
 netrender = { path = "../../../netrender/netrender" }
+# The `LayoutDom` / `LayoutDomMut` traits: `document()` + `set_inner_html()` to
+# build the content-root DOM, and `element_name` / `dom_children` to measure the
+# toolbar band. ScriptedDom implements them; same cross-repo path as xilem-serval.
+layout_dom_api = { package = "layout-dom-api", path = "../../../serval/components/shared/layout-dom" }
 
 # Windowing + present (mirrors pelt-live's bin deps; mere's pins align with
 # serval's, so the wgpu 29 / winit 0.30 surface + netrender Renderer unify).
@@ -51,11 +55,6 @@ winit = { workspace = true }
 wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-
-[dev-dependencies]
-# The `LayoutDom` read trait (element_name / dom_children) for the tests' DOM
-# walk. ScriptedDom implements it; same cross-repo path as xilem-serval's.
-layout_dom_api = { package = "layout-dom-api", path = "../../../serval/components/shared/layout-dom" }
 
 [lints]
 workspace = true
