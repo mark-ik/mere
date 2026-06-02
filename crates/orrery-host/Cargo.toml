@@ -28,10 +28,10 @@ paint_list_render = { path = "../../../netrender/paint_list_render" }
 paint_list_api = { path = "../../../netrender/paint_list_api" }
 netrender = { path = "../../../netrender/netrender" }
 
-# The node-children layer: a serval ScriptedDom (abs-pos node subtrees under the
-# camera-transformed container), lowered to a ServalPaintList by pelt-live and
+# The node-children layer: a persistent serval ScriptedDom (abs-pos node subtrees
+# under the camera-transformed container), driven through IncrementalLayout
+# (apply on the RepaintOnly path + emit_paint_list) from serval-layout and
 # composited with the underlay. layout_dom_api supplies the build traits + names.
-pelt-live = { path = "../../../serval/ports/pelt-live" }
 serval-scripted-dom = { path = "../../../serval/components/serval-scripted-dom" }
 serval-layout = { path = "../../../serval/components/serval-layout" }
 layout_dom_api = { package = "layout-dom-api", path = "../../../serval/components/shared/layout-dom" }
