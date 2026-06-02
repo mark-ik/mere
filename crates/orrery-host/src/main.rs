@@ -30,9 +30,11 @@
 //! graph-canvas navigation directive. Zooming out makes the 3b demote visible
 //! (nodes leaving the viewport reappear as underlay rects). Left-drag grabs the
 //! node under the cursor and pins it to the pointer (gyre pin/unpin) while the
-//! sim ticks, so neighbors follow through the springs; a press that stays within
-//! the slop is a click (node activation). The node/edge/marquee hit-test split
-//! is 1E.3. Space re-seeds the layout (a tight central spiral) and replays the
+//! sim ticks, so neighbors follow through the springs; a click (press within the
+//! slop) selects that node (highlighted via a `gnode-selected` class), and a
+//! click on empty space clears it (1E.3, node-pick). Marquee rect-select and
+//! edge-pick (gyre `rect_select` / `edge_hit_test`) are the remaining 1E.3
+//! pieces. Space re-seeds the layout (a tight central spiral) and replays the
 //! settle.
 
 use std::collections::{HashMap, HashSet};
@@ -101,6 +103,8 @@ const NODE_SHEET: &[&str] = &[
     ".stage { position: relative; }",
     ".gnode { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
+    ".gnode-selected { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
+        background-color: rgb(232, 150, 40); color: rgb(28, 22, 10); font-size: 15px; }",
 ];
 
 /// The orrery host application: the graph, its physics, the camera, and the
@@ -123,6 +127,8 @@ struct App {
     middle_drag: Option<(f32, f32)>,
     /// An in-progress left-button node click/drag, if any.
     drag: Option<Drag>,
+    /// Currently-selected nodes (click selects one; marquee selects many).
+    selected: HashSet<NodeKey>,
     /// Whether Ctrl is held (gates wheel-zoom vs wheel-pan).
     ctrl: bool,
     window: Option<Arc<Window>>,
@@ -146,6 +152,7 @@ impl App {
             pan_velocity: (0.0, 0.0),
             middle_drag: None,
             drag: None,
+            selected: HashSet::new(),
             ctrl: false,
             window: None,
             host: None,
@@ -245,7 +252,8 @@ impl App {
 
         // The node-children document: abs-pos labelled boxes for the on-screen
         // nodes under the camera transform, composited over the underlay.
-        let nodes_dom = build_node_children_dom(&self.graph, &positions, &on_screen, self.camera);
+        let nodes_dom =
+            build_node_children_dom(&self.graph, &positions, &on_screen, &self.selected, self.camera);
         let nodes_plist = paint_list_from_scripted_dom(
             &nodes_dom,
             NODE_SHEET,
@@ -394,6 +402,10 @@ impl ApplicationHandler for App {
                     let world = self.screen_to_world(self.cursor);
                     if let Some(node) = self.sim.hit_test(world) {
                         self.drag = Some(Drag { node, press: self.cursor, moved: false });
+                    } else if !self.selected.is_empty() {
+                        // Press on empty space clears the selection.
+                        self.selected.clear();
+                        self.request_redraw();
                     }
                 },
                 (MouseButton::Left, ElementState::Released) => {
@@ -403,12 +415,12 @@ impl ApplicationHandler for App {
                             // physics, and re-settle the neighborhood.
                             self.sim.unpin(d.node);
                             self.ticks_remaining = self.ticks_remaining.max(SETTLE_TICKS / 3);
-                            self.request_redraw();
                         } else {
-                            // A click, not a drag: node activation (selection
-                            // rendering is 1E.3).
-                            tracing::info!(node = ?d.node, "node activated");
+                            // A click, not a drag: select just this node.
+                            self.selected.clear();
+                            self.selected.insert(d.node);
                         }
+                        self.request_redraw();
                     }
                 },
                 _ => {},
@@ -516,6 +528,7 @@ fn build_node_children_dom(
     graph: &Graph,
     positions: &HashMap<NodeKey, PortablePoint>,
     on_screen: &HashSet<NodeKey>,
+    selected: &HashSet<NodeKey>,
     camera: Camera,
 ) -> ScriptedDom {
     let mut dom = ScriptedDom::new();
@@ -539,7 +552,8 @@ fn build_node_children_dom(
         }
         let pos = positions.get(&key).copied().unwrap_or_default();
         let gnode = dom.create_element(qual("div"));
-        dom.set_attribute(gnode, qual("class"), "gnode");
+        let class = if selected.contains(&key) { "gnode-selected" } else { "gnode" };
+        dom.set_attribute(gnode, qual("class"), class);
         dom.set_attribute(
             gnode,
             qual("style"),
