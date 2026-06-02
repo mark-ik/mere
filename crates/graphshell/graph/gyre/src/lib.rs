@@ -54,6 +54,12 @@ pub use forces::{Boundary, EdgeSpring, NodeExclusion};
 pub mod coupling_force;
 pub use coupling_force::CouplingForce;
 
+/// Scene-geometry queries for the orrery canvas: edge geometry, edge picking,
+/// and marquee rect-select (node point-pick + cull live on `Simulation`
+/// directly). Split out to keep `lib.rs` under the per-file size ceiling.
+mod query;
+pub use query::RectSelection;
+
 /// Physical radius used for every node body's collider.
 ///
 /// Mirrors `platen::CanvasSceneOptions::default()`'s
