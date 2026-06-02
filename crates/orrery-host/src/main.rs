@@ -54,10 +54,9 @@ use paint_list_api::{
     PathCommand, PathData, RectItem, StrokeCap, StrokeItem, StrokeJoin,
 };
 use paint_list_render::{composite_paint_layers, CompositeLayer};
-use pelt_live::paint_list_from_scripted_dom;
 use platen::orrery::orrery_paint_list_demoted;
 use platen::scene_paint::{Camera, ScenePaintStyle};
-use serval_layout::ScrollOffsets;
+use serval_layout::{Applied, IncrementalLayout, ScrollOffsets};
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 use serval_winit_host::SurfaceHost;
 use winit::application::ApplicationHandler;
@@ -120,6 +119,21 @@ struct App {
     graph: Graph,
     /// The force-directed layout. The underlay reprojects from its live bodies.
     sim: Simulation,
+    /// The pre-materialized node-children pool: a persistent serval DOM with one
+    /// `.gnode` per node under a `.stage` container (built once, mutated per
+    /// frame — never rebuilt structurally).
+    node_dom: ScriptedDom,
+    /// Incremental layout over `node_dom`; per-frame transform / class mutations
+    /// go through `apply` (paint-tier → `RepaintOnly`) and paint via
+    /// `emit_paint_list`. `None` until first built (or after a viewport change).
+    node_layout: Option<IncrementalLayout<DomNodeId>>,
+    /// node → its `.gnode` element in `node_dom`.
+    gnode_of: HashMap<NodeKey, DomNodeId>,
+    /// The `.stage` container element (carries the camera transform).
+    stage_node: DomNodeId,
+    /// Viewport `node_layout` was built at; a change rebuilds it.
+    pool_w: u32,
+    pool_h: u32,
     /// Remaining settle frames; while > 0 the sim ticks and redraws are chained.
     ticks_remaining: u32,
     camera: Camera,
@@ -154,9 +168,16 @@ impl App {
     fn new() -> Self {
         let graph = sample_graph();
         let sim = build_simulation(&graph);
+        let (node_dom, gnode_of, stage_node) = build_pool_dom(&graph);
         Self {
             graph,
             sim,
+            node_dom,
+            node_layout: None,
+            gnode_of,
+            stage_node,
+            pool_w: 0,
+            pool_h: 0,
             ticks_remaining: SETTLE_TICKS,
             camera: Camera::default(),
             style: ScenePaintStyle::default(),
@@ -270,18 +291,48 @@ impl App {
             underlay.splice_world_overlays(selected_edge_overlay(&self.sim, &self.selected_edges));
         }
 
-        // The node-children document: abs-pos labelled boxes for the on-screen
-        // nodes under the camera transform, composited over the underlay.
-        let nodes_dom =
-            build_node_children_dom(&self.graph, &positions, &on_screen, &self.selected, self.camera);
-        let nodes_plist = paint_list_from_scripted_dom(
-            &nodes_dom,
-            NODE_SHEET,
-            w,
-            h,
-            None,
-            &ScrollOffsets::<DomNodeId>::default(),
+        // The node-children layer — the pre-materialized pool. Ensure the
+        // incremental layout exists at this viewport, then mutate the .stage
+        // camera transform and each gnode's transform + selection class. These
+        // are attribute-only (paint-tier), so apply stays on the RepaintOnly
+        // path — no per-frame relayout or DOM rebuild. On-screen nodes show as
+        // DOM children; off-screen ones map off-viewport under the camera and
+        // demote to underlay rects.
+        if self.node_layout.is_none() || self.pool_w != w || self.pool_h != h {
+            let mut discard = Vec::new();
+            self.node_dom.drain_mutations(&mut discard);
+            self.node_layout =
+                Some(IncrementalLayout::new(&self.node_dom, NODE_SHEET, w as f32, h as f32));
+            self.pool_w = w;
+            self.pool_h = h;
+        }
+        set_style(
+            &mut self.node_dom,
+            self.stage_node,
+            &format!(
+                "transform: translate({}px, {}px) scale({});",
+                self.camera.offset.0, self.camera.offset.1, self.camera.zoom
+            ),
         );
+        let gnodes: Vec<(NodeKey, DomNodeId)> = self.gnode_of.iter().map(|(&k, &g)| (k, g)).collect();
+        for (key, gnode) in gnodes {
+            let pos = positions.get(&key).copied().unwrap_or_default();
+            set_style(
+                &mut self.node_dom,
+                gnode,
+                &format!("transform: translate({}px, {}px);", pos.x - NODE_HALF, pos.y - NODE_HALF),
+            );
+            let class = if self.selected.contains(&key) { "gnode-selected" } else { "gnode" };
+            set_class(&mut self.node_dom, gnode, class);
+        }
+        let mut muts = Vec::new();
+        self.node_dom.drain_mutations(&mut muts);
+        let applied = self.node_layout.as_mut().unwrap().apply(&self.node_dom, NODE_SHEET, &muts);
+        if !matches!(applied, Applied::RepaintOnly | Applied::Unchanged) {
+            tracing::warn!(?applied, "orrery pool: node layout left the RepaintOnly path");
+        }
+        let scroll = ScrollOffsets::<DomNodeId>::default();
+        let nodes_plist = self.node_layout.as_ref().unwrap().emit_paint_list(&self.node_dom, &scroll, viewport);
 
         // A third (screen-space) layer for the marquee rubber-band, when active.
         let marquee_cmds = self.marquee.map(|origin| marquee_rect_cmds(origin, self.cursor));
@@ -578,50 +629,42 @@ fn seed_cluster(sim: &mut Simulation, graph: &Graph) {
 /// a label and moved (via an inline transform) to its world position so it sits
 /// centered on the underlay's node rect. Rebuilt each frame in this slice (1D.3a);
 /// a pre-materialized pool replaces the rebuild in 1D.3c.
-fn build_node_children_dom(
-    graph: &Graph,
-    positions: &HashMap<NodeKey, PortablePoint>,
-    on_screen: &HashSet<NodeKey>,
-    selected: &HashSet<NodeKey>,
-    camera: Camera,
-) -> ScriptedDom {
+/// Build the pre-materialized node-children pool **once**: a `.stage` container
+/// (the camera transform's element) holding one `.gnode` per graph node, each
+/// labelled with its index and given an initial `transform` (so the per-frame
+/// updates are value→value changes — paint-tier — not the first none→value one
+/// that can relayout). Returns the DOM, the node→gnode map, and the stage id;
+/// the render loop mutates these elements' attributes and never rebuilds them.
+fn build_pool_dom(graph: &Graph) -> (ScriptedDom, HashMap<NodeKey, DomNodeId>, DomNodeId) {
     let mut dom = ScriptedDom::new();
     let root = dom.document();
 
     let stage = dom.create_element(qual("div"));
     dom.set_attribute(stage, qual("class"), "stage");
-    dom.set_attribute(
-        stage,
-        qual("style"),
-        &format!(
-            "transform: translate({}px, {}px) scale({});",
-            camera.offset.0, camera.offset.1, camera.zoom
-        ),
-    );
+    dom.set_attribute(stage, qual("style"), "transform: translate(0px, 0px) scale(1);");
     dom.append_child(root, stage);
 
+    let mut gnode_of = HashMap::new();
     for (i, (key, _node)) in graph.nodes().enumerate() {
-        if !on_screen.contains(&key) {
-            continue; // off-screen nodes are demoted to the underlay
-        }
-        let pos = positions.get(&key).copied().unwrap_or_default();
         let gnode = dom.create_element(qual("div"));
-        let class = if selected.contains(&key) { "gnode-selected" } else { "gnode" };
-        dom.set_attribute(gnode, qual("class"), class);
-        dom.set_attribute(
-            gnode,
-            qual("style"),
-            &format!(
-                "transform: translate({}px, {}px);",
-                pos.x - NODE_HALF,
-                pos.y - NODE_HALF
-            ),
-        );
+        dom.set_attribute(gnode, qual("class"), "gnode");
+        dom.set_attribute(gnode, qual("style"), "transform: translate(0px, 0px);");
         let label = dom.create_text(&i.to_string());
         dom.append_child(gnode, label);
         dom.append_child(stage, gnode);
+        gnode_of.insert(key, gnode);
     }
-    dom
+    (dom, gnode_of, stage)
+}
+
+/// Set an element's inline `style` (records an attribute mutation for `apply`).
+fn set_style(dom: &mut ScriptedDom, node: DomNodeId, style: &str) {
+    dom.set_attribute(node, qual("style"), style);
+}
+
+/// Set an element's `class` (records an attribute mutation for `apply`).
+fn set_class(dom: &mut ScriptedDom, node: DomNodeId, class: &str) {
+    dom.set_attribute(node, qual("class"), class);
 }
 
 /// A `QualName` in the null namespace (the shape `ScriptedDom` element / attribute
@@ -700,6 +743,17 @@ mod tests {
         let g = sample_graph();
         assert_eq!(g.nodes().count(), 12, "the ring has twelve nodes");
         assert!(g.relations().count() >= 12, "at least the ring edges");
+    }
+
+    #[test]
+    fn pool_has_a_gnode_per_node() {
+        let g = sample_graph();
+        let (_dom, gnode_of, _stage) = build_pool_dom(&g);
+        assert_eq!(
+            gnode_of.len(),
+            g.nodes().count(),
+            "the pre-materialized pool has one gnode per graph node",
+        );
     }
 
     #[test]
