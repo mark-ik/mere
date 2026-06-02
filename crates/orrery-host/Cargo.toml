@@ -22,11 +22,19 @@ platen.workspace = true
 kernel.workspace = true
 gyre.workspace = true
 
-# Compose the underlay (+ later the node-children document) into one Scene, and
+# Compose the underlay (+ the node-children document) into one Scene, and
 # present it. Path deps on the sibling netrender checkout, like meerkat's.
 paint_list_render = { path = "../../../netrender/paint_list_render" }
 paint_list_api = { path = "../../../netrender/paint_list_api" }
 netrender = { path = "../../../netrender/netrender" }
+
+# The node-children layer: a serval ScriptedDom (abs-pos node subtrees under the
+# camera-transformed container), lowered to a ServalPaintList by pelt-live and
+# composited with the underlay. layout_dom_api supplies the build traits + names.
+pelt-live = { path = "../../../serval/ports/pelt-live" }
+serval-scripted-dom = { path = "../../../serval/components/serval-scripted-dom" }
+serval-layout = { path = "../../../serval/components/serval-layout" }
+layout_dom_api = { package = "layout-dom-api", path = "../../../serval/components/shared/layout-dom" }
 
 # Windowing + present (pins align with serval's: wgpu 29 / winit 0.30).
 winit = { workspace = true }

@@ -16,8 +16,13 @@
 //!    forces = exclusion + edge-springs + a centering boundary) ticks each frame;
 //!    [`orrery_paint_list_from_positions`] reprojects the underlay from the live
 //!    bodies, so the layout settles on screen. **This slice (1D.2).**
-//! 3. abs-pos serval DOM node children under the camera transform, pooled +
-//!    culled, moved by per-frame inline transforms (1D.3).
+//! 3. **abs-pos serval DOM node children** — one `<div>` per node, absolutely
+//!    positioned inside a camera-transformed container `<div>`, moved to its
+//!    world position by an inline transform; lowered to a `ServalPaintList` by
+//!    [`paint_list_from_scripted_dom`] and composited *over* the underlay (so
+//!    rich labelled nodes sit above the edges). **This slice (1D.3a)** — the full
+//!    document built each frame; the cull/demote split (3b) and the
+//!    pre-materialized pool + incremental layout (3c) refine it.
 //!
 //! Navigation (wheel=pan / ctrl+wheel=zoom / inertia) and the two-hit-test split
 //! are 1E. Space re-seeds the layout (a tight central spiral) and re-runs the
@@ -30,12 +35,16 @@ use euclid::default::Point2D;
 use gyre::{Boundary, EdgeSpring, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, Graph, NodeKey, SemanticSubKind};
+use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
 use paint_list_api::{DeviceIntSize, PaintList};
 use paint_list_render::{composite_paint_layers, CompositeLayer};
+use pelt_live::paint_list_from_scripted_dom;
 use platen::orrery::orrery_paint_list_from_positions;
 use platen::scene_paint::{Camera, ScenePaintStyle};
+use serval_layout::ScrollOffsets;
+use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 use serval_winit_host::SurfaceHost;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -48,6 +57,22 @@ use winit::window::{Window, WindowId};
 const SETTLE_TICKS: u32 = 360;
 /// Per-tick timestep handed to the gyre simulation.
 const TICK_DT: f32 = 1.0 / 60.0;
+
+/// Node box half-extent (px) — matches the underlay's default node rect, so each
+/// DOM child sits centered on the same world position.
+const NODE_HALF: f32 = 18.0;
+
+/// Author CSS for the node-children document. `.stage` is the camera-transformed
+/// container (also `position: relative`, so it is the containing block for the
+/// abs-pos nodes); each `.gnode` is an absolutely-positioned labelled box moved
+/// to its world position by an inline transform (serval propagates `.stage`'s
+/// camera transform onto these abs-pos descendants — the 1A fix).
+const NODE_SHEET: &[&str] = &[
+    "div { display: block; }",
+    ".stage { position: relative; }",
+    ".gnode { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
+        background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
+];
 
 /// The orrery host application: the graph, its physics, the camera, and the
 /// present stack.
@@ -125,7 +150,27 @@ impl App {
             &self.style,
             self.generation,
         );
-        let layers = [CompositeLayer::commands_only(underlay.commands())];
+
+        // The node-children document: abs-pos labelled boxes under the camera
+        // transform, lowered to a ServalPaintList and composited over the underlay.
+        let nodes_dom = build_node_children_dom(&self.graph, &positions, self.camera);
+        let nodes_plist = paint_list_from_scripted_dom(
+            &nodes_dom,
+            NODE_SHEET,
+            w,
+            h,
+            None,
+            &ScrollOffsets::<DomNodeId>::default(),
+        );
+
+        let layers = [
+            CompositeLayer::commands_only(underlay.commands()),
+            CompositeLayer {
+                commands: nodes_plist.commands(),
+                fonts: nodes_plist.fonts(),
+                images: nodes_plist.images(),
+            },
+        ];
         let scene = composite_paint_layers(viewport, &layers).scene;
 
         let host = self.host.as_ref().unwrap();
@@ -293,6 +338,57 @@ fn seed_cluster(sim: &mut Simulation, graph: &Graph) {
         })
         .collect();
     sim.seed_positions(seeds);
+}
+
+/// Build the node-children document: a camera-transformed `.stage` container with
+/// one absolutely-positioned `.gnode` per graph node, each carrying its index as
+/// a label and moved (via an inline transform) to its world position so it sits
+/// centered on the underlay's node rect. Rebuilt each frame in this slice (1D.3a);
+/// a pre-materialized pool replaces the rebuild in 1D.3c.
+fn build_node_children_dom(
+    graph: &Graph,
+    positions: &HashMap<NodeKey, PortablePoint>,
+    camera: Camera,
+) -> ScriptedDom {
+    let mut dom = ScriptedDom::new();
+    let root = dom.document();
+
+    let stage = dom.create_element(qual("div"));
+    dom.set_attribute(stage, qual("class"), "stage");
+    dom.set_attribute(
+        stage,
+        qual("style"),
+        &format!(
+            "transform: translate({}px, {}px) scale({});",
+            camera.offset.0, camera.offset.1, camera.zoom
+        ),
+    );
+    dom.append_child(root, stage);
+
+    for (i, (key, _node)) in graph.nodes().enumerate() {
+        let pos = positions.get(&key).copied().unwrap_or_default();
+        let gnode = dom.create_element(qual("div"));
+        dom.set_attribute(gnode, qual("class"), "gnode");
+        dom.set_attribute(
+            gnode,
+            qual("style"),
+            &format!(
+                "transform: translate({}px, {}px);",
+                pos.x - NODE_HALF,
+                pos.y - NODE_HALF
+            ),
+        );
+        let label = dom.create_text(&i.to_string());
+        dom.append_child(gnode, label);
+        dom.append_child(stage, gnode);
+    }
+    dom
+}
+
+/// A `QualName` in the null namespace (the shape `ScriptedDom` element / attribute
+/// builders take).
+fn qual(local: &str) -> QualName {
+    QualName::new(None, Namespace::from(""), LocalName::from(local))
 }
 
 fn main() {
