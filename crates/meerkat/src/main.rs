@@ -45,7 +45,10 @@ use winit::window::{Window, WindowId};
 use xilem_serval::{Key, KeyEvent, Modifiers, NamedKey, PointerClick, ServalAppRunner};
 
 /// Author CSS for the **chrome** root. The toolbar is a flex row (back / forward
-/// buttons + a growing omnibar); serval lays it out via taffy's flexbox.
+/// buttons + a growing omnibar); serval lays it out via taffy's flexbox. The
+/// `.chrome` container has no background — the host composites it over the
+/// content root, so only the toolbar and the (opaque) suggestions dropdown paint
+/// over the page; everything else stays transparent.
 const CHROME_SHEET: &[&str] = &[
     "div, button, input { display: block; }",
     ".toolbar { display: flex; background-color: rgb(236, 238, 243); padding: 8px; }",
@@ -54,6 +57,11 @@ const CHROME_SHEET: &[&str] = &[
     ".disabled { color: rgb(170, 174, 184); background-color: rgb(228, 230, 236); }",
     "input { font-size: 22px; color: rgb(20, 20, 20); \
         background-color: rgb(255, 255, 255); padding: 8px; margin: 4px; flex-grow: 1; }",
+    ".suggestions { background-color: rgb(255, 255, 255); padding-bottom: 6px; }",
+    ".suggestion { font-size: 18px; color: rgb(40, 44, 54); \
+        background-color: rgb(255, 255, 255); padding: 8px 16px; }",
+    ".suggestion-active { font-size: 18px; color: rgb(20, 24, 34); \
+        background-color: rgb(216, 226, 244); padding: 8px 16px; }",
 ];
 
 /// Author CSS for the **content** root — a separate document authority, so it
@@ -136,12 +144,14 @@ impl App {
         }
     }
 
-    /// The chrome-band height, measuring + caching it on first use. The toolbar
-    /// is a single flex row, so its border-box height is independent of the
-    /// available width/height; measuring once suffices.
+    /// The toolbar-band height (px), measuring + caching it on first use. The
+    /// toolbar is a single flex row, so its border-box height is independent of
+    /// the available width/height; measuring once suffices. Used to place the
+    /// content root directly below the toolbar.
     fn toolbar_height(&mut self) -> u32 {
         if self.toolbar_h == 0 {
-            self.toolbar_h = measure_toolbar_height(&self.dom.borrow(), self.width, self.height);
+            self.toolbar_h = measure_class_bottom(&self.dom.borrow(), self.width, self.height, "toolbar")
+                .unwrap_or(FALLBACK_TOOLBAR_H);
         }
         self.toolbar_h
     }
@@ -161,11 +171,11 @@ impl App {
         }
     }
 
-    /// Render the two document authorities and present them. The chrome root
-    /// fills a top band (its measured height); the content root fills the rest.
-    /// Each is run through the serval engine into its own `netrender::Scene`,
-    /// rasterized to an `Rgba8Unorm` texture, and composited onto the surface at
-    /// its band — separate roots, separate scenes, one backbuffer.
+    /// Render the two document authorities and present them. The content root
+    /// fills everything below the toolbar; the chrome root is rendered over the
+    /// full window with a *transparent* clear, so its toolbar band and any open
+    /// suggestions dropdown float above the content while the rest lets the page
+    /// show through. Composite order is content first, then chrome on top.
     fn render(&mut self) {
         if self.gpu.is_none() {
             return;
@@ -174,8 +184,8 @@ impl App {
         let toolbar_h = self.toolbar_height().min(h);
         let content_h = h.saturating_sub(toolbar_h).max(1);
 
-        // Chrome scene (top band). Paint the omnibar caret / selection when the
-        // chrome omnibar is focused (byte offsets from the field's char model).
+        // Chrome scene over the full window. Paint the omnibar caret / selection
+        // when focused (byte offsets from the field's char model).
         let cursor = self.runner.focus().map(|node| {
             let field = &self.runner.state().omnibar;
             let byte_of = |i: usize| {
@@ -189,7 +199,7 @@ impl App {
         });
         let scroll = ScrollOffsets::<NodeId>::default();
         let chrome_scene =
-            scene_from_scripted_dom(&self.dom.borrow(), CHROME_SHEET, w, toolbar_h, cursor, &scroll);
+            scene_from_scripted_dom(&self.dom.borrow(), CHROME_SHEET, w, h, cursor, &scroll);
         let content_scene = scene_from_scripted_dom(
             &self.content_dom.borrow(),
             CONTENT_SHEET,
@@ -200,8 +210,10 @@ impl App {
         );
 
         let gpu = self.gpu.as_ref().unwrap();
-        let (_chrome_tex, chrome_view) = gpu.rasterize(&chrome_scene, w, toolbar_h);
-        let (_content_tex, content_view) = gpu.rasterize(&content_scene, w, content_h);
+        let (_chrome_tex, chrome_view) =
+            gpu.rasterize(&chrome_scene, w, h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+        let (_content_tex, content_view) =
+            gpu.rasterize(&content_scene, w, content_h, ColorLoad::Clear(wgpu::Color::WHITE));
 
         let device = &gpu.renderer.wgpu_device.core.device;
         let frame = match gpu.surface.get_current_texture() {
@@ -218,16 +230,10 @@ impl App {
         };
         let target_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let format = gpu.surface_config.format;
-        // Stack the two authorities. dest_rect is [x0, y0, x1, y1] (min/max
-        // corners); the viewport is the full surface for the NDC mapping.
-        gpu.renderer.compose_external_texture(
-            &chrome_view,
-            &target_view,
-            format,
-            w,
-            h,
-            ExternalTexturePlacement::new([0.0, 0.0, w as f32, toolbar_h as f32]),
-        );
+        // Content fills [toolbar_h, h] (dest_rect is [x0, y0, x1, y1] corners;
+        // viewport is the full surface). Then the transparent-cleared chrome is
+        // composited over the whole window — toolbar + dropdown on top, the rest
+        // letting the content through.
         gpu.renderer.compose_external_texture(
             &content_view,
             &target_view,
@@ -235,6 +241,14 @@ impl App {
             w,
             h,
             ExternalTexturePlacement::new([0.0, toolbar_h as f32, w as f32, h as f32]),
+        );
+        gpu.renderer.compose_external_texture(
+            &chrome_view,
+            &target_view,
+            format,
+            w,
+            h,
+            ExternalTexturePlacement::new([0.0, 0.0, w as f32, h as f32]),
         );
         frame.present();
     }
@@ -245,13 +259,57 @@ impl App {
             window.request_redraw();
         }
     }
+
+    /// Handle a pressed key. Enter submits the omnibar (navigating the typed
+    /// text or the highlighted suggestion); Arrow Up/Down and Escape drive the
+    /// open suggestions dropdown; every other key edits the omnibar and
+    /// regenerates suggestions from the new text.
+    fn on_key_pressed(&mut self, key: &WinitKey) {
+        let suggestions_open = !self.runner.state().suggest.is_empty();
+        match key {
+            WinitKey::Named(WinitNamedKey::Enter) if self.runner.focus().is_some() => {
+                self.runner.update(submit_omnibar);
+                tracing::info!(
+                    location = %self.runner.state().toolbar.editable.location,
+                    "omnibar submit"
+                );
+                self.sync_content();
+                self.request_redraw();
+            },
+            WinitKey::Named(WinitNamedKey::ArrowDown) if suggestions_open => {
+                self.runner.update(|c| c.step_suggestion(1));
+                self.request_redraw();
+            },
+            WinitKey::Named(WinitNamedKey::ArrowUp) if suggestions_open => {
+                self.runner.update(|c| c.step_suggestion(-1));
+                self.request_redraw();
+            },
+            WinitKey::Named(WinitNamedKey::Escape) if suggestions_open => {
+                self.runner.update(Chrome::close_suggestions);
+                self.request_redraw();
+            },
+            other => {
+                if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
+                    self.runner.dispatch_key(key_event);
+                    self.runner.update(Chrome::refresh_suggestions);
+                    self.request_redraw();
+                }
+            },
+        }
+    }
 }
 
 impl Gpu {
-    /// Run `scene` into a fresh `(w, h)` `Rgba8Unorm` texture and return it with
-    /// its view. The texture is returned (not just the view) so the caller keeps
-    /// it alive until the composite pass has sampled it.
-    fn rasterize(&self, scene: &Scene, w: u32, h: u32) -> (wgpu::Texture, wgpu::TextureView) {
+    /// Run `scene` into a fresh `(w, h)` `Rgba8Unorm` texture (cleared to
+    /// `clear`) and return it with its view. The texture is returned (not just
+    /// the view) so the caller keeps it alive until the composite has sampled it.
+    fn rasterize(
+        &self,
+        scene: &Scene,
+        w: u32,
+        h: u32,
+        clear: ColorLoad,
+    ) -> (wgpu::Texture, wgpu::TextureView) {
         let device = &self.renderer.wgpu_device.core.device;
         let tex = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("meerkat scene"),
@@ -270,8 +328,7 @@ impl Gpu {
             format: Some(wgpu::TextureFormat::Rgba8Unorm),
             ..Default::default()
         });
-        self.renderer
-            .render_vello(scene, &view, ColorLoad::Clear(wgpu::Color::WHITE));
+        self.renderer.render_vello(scene, &view, clear);
         (tex, view)
     }
 }
@@ -364,44 +421,31 @@ impl ApplicationHandler for App {
                 };
             },
             WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
-                // Route by region: a click in the chrome band hit-tests the
-                // chrome root and dispatches (the on_click handlers); a click in
-                // the content band is inert until the content root carries
-                // handlers. Each root is queried in its own coordinate space.
+                // Route by region. The chrome's interactive area is the toolbar
+                // plus any open dropdown (its `.chrome` border-box); a click there
+                // hit-tests the chrome root and dispatches (buttons + suggestion
+                // rows). Below it, the click falls to the content band, inert
+                // until the content root carries handlers.
                 let (x, y) = self.cursor;
-                let toolbar_h = self.toolbar_height();
-                if y < toolbar_h as f32 {
-                    let offsets = ScrollOffsets::<NodeId>::default();
-                    let hit = hit_test_node(
-                        &self.dom.borrow(), CHROME_SHEET, self.width, toolbar_h, x, y, &offsets,
-                    );
-                    if let Some(node) = hit {
-                        self.runner.dispatch_click(node, PointerClick::at((x, y)));
-                        self.sync_content();
-                        self.request_redraw();
-                    }
+                let offsets = ScrollOffsets::<NodeId>::default();
+                let dom = self.dom.borrow();
+                let chrome_h = measure_class_bottom(&dom, self.width, self.height, "chrome")
+                    .unwrap_or(self.toolbar_h.max(FALLBACK_TOOLBAR_H));
+                let hit = if y < chrome_h as f32 {
+                    hit_test_node(&dom, CHROME_SHEET, self.width, self.height, x, y, &offsets)
+                } else {
+                    None
+                };
+                drop(dom); // release before dispatch_click mutates the same DOM
+                if let Some(node) = hit {
+                    self.runner.dispatch_click(node, PointerClick::at((x, y)));
+                    self.sync_content();
+                    self.request_redraw();
                 }
             },
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed {
-                    let is_enter =
-                        matches!(event.logical_key, WinitKey::Named(WinitNamedKey::Enter));
-                    if is_enter && self.runner.focus().is_some() {
-                        // Submit the focused omnibar: navigate (history + toolbar)
-                        // then rebuild the content root for the new location.
-                        self.runner.update(submit_omnibar);
-                        tracing::info!(
-                            location = %self.runner.state().toolbar.editable.location,
-                            "omnibar submit"
-                        );
-                        self.sync_content();
-                        self.request_redraw();
-                    } else if let Some(key_event) =
-                        key_event_from_winit(&event.logical_key, self.modifiers)
-                    {
-                        self.runner.dispatch_key(key_event);
-                        self.request_redraw();
-                    }
+                    self.on_key_pressed(&event.logical_key);
                 }
             },
             WindowEvent::RedrawRequested => self.render(),
@@ -410,25 +454,31 @@ impl ApplicationHandler for App {
     }
 }
 
-/// Lay out the chrome root and return the toolbar div's border-box height (px),
-/// rounded up. The toolbar is a single flex row, so this is stable across the
-/// available width/height. Falls back to [`FALLBACK_TOOLBAR_H`] if the div is
-/// absent (e.g. an empty chrome tree).
-fn measure_toolbar_height(dom: &ScriptedDom, w: u32, h: u32) -> u32 {
+/// Lay out the chrome root and return the border-box bottom (px, rounded up) of
+/// the first element carrying CSS class `class` — `"toolbar"` for the content
+/// split, `"chrome"` for the click-region gate (toolbar + open dropdown).
+/// `None` if no such element is laid out.
+fn measure_class_bottom(dom: &ScriptedDom, w: u32, h: u32, class: &str) -> Option<u32> {
     let frags = fragments_from_scripted_dom(dom, CHROME_SHEET, w, h);
-    first_element(dom, dom.document(), "div")
-        .and_then(|div| frags.rect_of(div))
+    first_with_class(dom, dom.document(), class)
+        .and_then(|node| frags.rect_of(node))
         .map(|layout| (layout.location.y + layout.size.height).ceil() as u32)
         .filter(|&measured| measured > 0)
-        .unwrap_or(FALLBACK_TOOLBAR_H)
 }
 
-/// The first element with local tag `local` in pre-order under `id`.
-fn first_element(dom: &ScriptedDom, id: NodeId, local: &str) -> Option<NodeId> {
-    if dom.element_name(id).is_some_and(|q| q.local.as_ref() == local) {
+/// The first element carrying CSS class `class` in pre-order under `id`.
+fn first_with_class(dom: &ScriptedDom, id: NodeId, class: &str) -> Option<NodeId> {
+    if has_class(dom, id, class) {
         return Some(id);
     }
-    dom.dom_children(id).find_map(|c| first_element(dom, c, local))
+    dom.dom_children(id).find_map(|c| first_with_class(dom, c, class))
+}
+
+/// Whether element `id` carries CSS class `class` (whitespace-split `class` attr).
+fn has_class(dom: &ScriptedDom, id: NodeId, class: &str) -> bool {
+    dom.attributes(id).any(|attr| {
+        attr.name.local.as_ref() == "class" && attr.value.split_whitespace().any(|c| c == class)
+    })
 }
 
 /// Map a winit logical key + modifiers to a serval [`KeyEvent`]; `None` for dead

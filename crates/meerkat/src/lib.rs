@@ -40,6 +40,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
@@ -49,6 +50,7 @@ use xilem_serval::{
 
 pub mod content;
 pub mod nav;
+pub mod suggest;
 
 use nav::History;
 
@@ -74,6 +76,13 @@ pub struct Chrome {
     /// such viewer, so it owns the stack and mirrors the flags into
     /// [`ToolbarState`]. Its current entry is the URL the content root shows.
     pub history: History,
+    /// Live omnibar suggestions (history + search), in the reused
+    /// [`OmnibarMatch`] vocabulary. Empty ⇒ the dropdown is closed. Regenerated
+    /// from the omnibar text on each edit via [`Chrome::refresh_suggestions`].
+    pub suggest: Vec<OmnibarMatch>,
+    /// Highlighted suggestion row, if any. `None` ⇒ Enter navigates the typed
+    /// text; `Some(i)` ⇒ Enter (or a click) navigates `suggest[i]`.
+    pub suggest_active: Option<usize>,
 }
 
 impl Chrome {
@@ -92,6 +101,8 @@ impl Chrome {
             toolbar: ToolbarState::with_initial_location(location.clone()),
             omnibar: TextInput::new(location.clone()),
             history: History::new(location),
+            suggest: Vec::new(),
+            suggest_active: None,
         }
     }
 
@@ -99,6 +110,46 @@ impl Chrome {
     /// content-root slice loads this; the chrome shell never renders it itself.
     pub fn content_location(&self) -> &str {
         self.history.current()
+    }
+
+    /// Regenerate the omnibar suggestions from the current omnibar text and the
+    /// history, resetting the highlight. The host calls this after each omnibar
+    /// edit (keystroke / caret move).
+    pub fn refresh_suggestions(&mut self) {
+        self.suggest = suggest::suggestions(self.omnibar.text(), &self.history);
+        self.suggest_active = None;
+    }
+
+    /// Move the suggestion highlight by `delta` (wrapping), opening the
+    /// highlight at the first/last row when nothing is highlighted yet. A no-op
+    /// when there are no suggestions.
+    pub fn step_suggestion(&mut self, delta: isize) {
+        let count = self.suggest.len();
+        if count == 0 {
+            self.suggest_active = None;
+            return;
+        }
+        let n = count as isize;
+        self.suggest_active = Some(match self.suggest_active {
+            Some(cur) => ((cur as isize + delta).rem_euclid(n)) as usize,
+            None if delta >= 0 => 0,
+            None => (n - 1) as usize,
+        });
+    }
+
+    /// Close the suggestion dropdown without navigating.
+    pub fn close_suggestions(&mut self) {
+        self.suggest.clear();
+        self.suggest_active = None;
+    }
+
+    /// Navigate to suggestion row `i` (clicked or Enter-on-highlight): resolve
+    /// its URL, push history, and mirror into the toolbar + omnibar.
+    pub fn navigate_suggestion(&mut self, i: usize) {
+        if let Some(url) = self.suggest.get(i).and_then(suggest::resolve_match) {
+            self.history.visit(url);
+            sync_chrome_from_history(self, true);
+        }
     }
 }
 
@@ -142,6 +193,7 @@ fn sync_chrome_from_history(c: &mut Chrome, submitted: bool) {
     c.toolbar.can_go_back = c.history.can_back();
     c.toolbar.can_go_forward = c.history.can_forward();
     c.omnibar = TextInput::new(url);
+    c.close_suggestions();
 }
 
 /// The toolbar chrome as serval DOM: back / forward buttons and an **editable**
@@ -176,15 +228,45 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
     let to_omnibar: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.omnibar;
     let omnibar = lens(make, to_omnibar);
-    Box::new(el::<_, Chrome, ()>("div", (back, forward, omnibar)).attr("class", "toolbar"))
+    let toolbar =
+        el::<_, Chrome, ()>("div", (back, forward, omnibar)).attr("class", "toolbar");
+
+    // The suggestions dropdown: one row per reused `OmnibarMatch`, the highlight
+    // carrying a distinct class. Empty ⇒ a zero-height `div` (closed). The outer
+    // `.chrome` container has no background; the host composites it over the
+    // content root, so the toolbar and this dropdown float above the page.
+    let rows: Vec<ChromeView> = c
+        .suggest
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let class = if c.suggest_active == Some(i) {
+                "suggestion-active"
+            } else {
+                "suggestion"
+            };
+            let row = on_click(
+                el::<_, Chrome, ()>("div", suggest::match_label(m)).attr("class", class),
+                move |c: &mut Chrome, _: PointerClick| c.navigate_suggestion(i),
+            );
+            Box::new(row) as ChromeView
+        })
+        .collect();
+    let suggestions = el::<_, Chrome, ()>("div", rows).attr("class", "suggestions");
+
+    Box::new(el::<_, Chrome, ()>("div", (toolbar, suggestions)).attr("class", "chrome"))
 }
 
-/// Navigate to the omnibar's current text on submit (Enter): classify it into a
-/// [`NavTarget`](nav::NavTarget), resolve it to a URL, push it onto the history,
-/// and mirror the result into the reused `ToolbarState` + omnibar. Empty input
-/// is a no-op. The host calls this on Enter in the focused omnibar; the reused
-/// domain stays `String`-based and unchanged.
+/// Navigate on submit (Enter). If a suggestion row is highlighted, navigate it;
+/// otherwise classify the typed text into a [`NavTarget`](nav::NavTarget),
+/// resolve it to a URL, push history, and mirror into the reused `ToolbarState`
+/// + omnibar. Empty input with no highlight is a no-op. The host calls this on
+/// Enter in the focused omnibar; the reused domain stays `String`-based.
 pub fn submit_omnibar(c: &mut Chrome) {
+    if let Some(i) = c.suggest_active {
+        c.navigate_suggestion(i);
+        return;
+    }
     if c.omnibar.text().trim().is_empty() {
         return;
     }
@@ -214,8 +296,9 @@ mod tests {
     }
 
     /// The toolbar view diffs into the ScriptedDom from a reused `ToolbarState`:
-    /// two buttons (back / forward) and one omnibar input. The reuse smoke test —
-    /// the graphshell chrome domain renders through `xilem_serval`.
+    /// two buttons (back / forward) and one omnibar input, inside the chrome /
+    /// toolbar / (empty) suggestions div scaffold. The reuse smoke test — the
+    /// graphshell chrome domain renders through `xilem_serval`.
     #[test]
     fn toolbar_renders_from_reused_state() {
         let runner = runner("mere://welcome");
@@ -224,7 +307,8 @@ mod tests {
         let root = runner.root();
         assert_eq!(count_tag(&dom, root, "button"), 2, "back + forward buttons");
         assert_eq!(count_tag(&dom, root, "input"), 1, "the omnibar input");
-        assert_eq!(count_tag(&dom, root, "div"), 1, "the toolbar container");
+        // chrome container + toolbar row + (empty, closed) suggestions div.
+        assert_eq!(count_tag(&dom, root, "div"), 3, "chrome + toolbar + suggestions");
     }
 
     /// A back-button click steps the real history: after navigating away from
@@ -285,6 +369,71 @@ mod tests {
         assert_eq!(runner.state().content_location(), "mere://welcome");
         assert!(!runner.state().toolbar.can_go_back);
         assert!(!runner.state().toolbar.editable.location_submitted);
+    }
+
+    /// Refreshing populates the dropdown from the omnibar text, and the rendered
+    /// tree gains one `.suggestion*` row per match — the reused `OmnibarMatch`
+    /// types diffing into the DOM (the thread-3 reuse seam).
+    #[test]
+    fn refresh_renders_suggestion_rows() {
+        let mut runner = runner("mere://welcome");
+        runner.update(|c| {
+            c.omnibar = TextInput::new("example.com");
+            c.refresh_suggestions();
+        });
+        let n = runner.state().suggest.len();
+        assert!(n >= 2, "direct-nav + search rows at least, got {n}");
+        // Each match becomes a row div (class suggestion / suggestion-active).
+        let dom = runner.dom();
+        let dom = dom.borrow();
+        let rows = count_class(&dom, runner.root(), "suggestion")
+            + count_class(&dom, runner.root(), "suggestion-active");
+        assert_eq!(rows, n, "one rendered row per suggestion");
+    }
+
+    /// Arrow stepping wraps and seeds from either end; refreshing clears the
+    /// highlight (reusing the same cursor semantics as the command palette).
+    #[test]
+    fn step_suggestion_wraps_and_refresh_resets() {
+        let mut runner = runner("mere://welcome");
+        runner.update(|c| {
+            c.omnibar = TextInput::new("example.com");
+            c.refresh_suggestions();
+        });
+        let count = runner.state().suggest.len();
+        runner.update(|c| c.step_suggestion(-1));
+        assert_eq!(runner.state().suggest_active, Some(count - 1), "up from none → last");
+        runner.update(|c| c.step_suggestion(1));
+        assert_eq!(runner.state().suggest_active, Some(0), "wrap to first");
+        runner.update(Chrome::refresh_suggestions);
+        assert_eq!(runner.state().suggest_active, None, "refresh clears the highlight");
+    }
+
+    /// Enter on a highlighted suggestion navigates *that* row and closes the
+    /// dropdown. Typing `example.com` offers a direct-nav row first; stepping to
+    /// it and submitting navigates the resolved URL.
+    #[test]
+    fn enter_navigates_highlighted_suggestion() {
+        let mut runner = runner("mere://welcome");
+        runner.update(|c| {
+            c.omnibar = TextInput::new("example.com");
+            c.refresh_suggestions();
+        });
+        runner.update(|c| {
+            c.step_suggestion(1); // none → first row (the direct-nav URL)
+            submit_omnibar(c);
+        });
+        assert_eq!(runner.state().content_location(), "https://example.com");
+        assert!(runner.state().suggest.is_empty(), "navigation closes the dropdown");
+    }
+
+    /// Count elements carrying exactly class `class` in the subtree at `id`.
+    fn count_class(dom: &ScriptedDom, id: NodeId, class: &str) -> usize {
+        let here = usize::from(
+            dom.attributes(id)
+                .any(|a| a.name.local.as_ref() == "class" && a.value == class),
+        );
+        here + dom.dom_children(id).map(|c| count_class(dom, c, class)).sum::<usize>()
     }
 
     /// The painted omnibar caret tracks byte offsets correctly in the live

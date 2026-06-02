@@ -124,6 +124,11 @@ impl History {
         &self.entries[self.cursor]
     }
 
+    /// All visited URLs, oldest first. Used to source omnibar suggestions.
+    pub fn entries(&self) -> &[String] {
+        &self.entries
+    }
+
     /// Whether a back step is possible.
     pub fn can_back(&self) -> bool {
         self.cursor > 0
