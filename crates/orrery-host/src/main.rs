@@ -33,9 +33,11 @@
 //! sim ticks, so neighbors follow through the springs. Selection (1E.3): a click
 //! selects the node under the pointer (highlighted via `gnode-selected`); a
 //! left-drag on empty space rubber-bands a marquee (gyre `rect_select`) that
-//! selects every node it covers; a bare click on empty clears. Edge-pick (gyre
-//! `edge_hit_test`, with an edge highlight) is the remaining 1E.3 piece. Space
-//! re-seeds the layout and replays the settle.
+//! selects every node *and edge* it covers; a click near an edge picks it (gyre
+//! `edge_hit_test`), highlighted by a thicker stroke spliced into the underlay's
+//! camera transform; a bare click on empty clears. Space re-seeds the layout and
+//! replays the settle. (1E complete; 3c — the `IncrementalLayout` paint-emit
+//! bridge — is the remaining orrery item.)
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -48,7 +50,8 @@ use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
 use paint_list_api::{
-    ColorF, CommonPlacement, DeviceIntSize, LayoutPoint, LayoutRect, PaintCmd, PaintList, RectItem,
+    ColorF, CommonPlacement, DeviceIntSize, LayoutPoint, LayoutRect, PaintCmd, PaintList,
+    PathCommand, PathData, RectItem, StrokeCap, StrokeItem, StrokeJoin,
 };
 use paint_list_render::{composite_paint_layers, CompositeLayer};
 use pelt_live::paint_list_from_scripted_dom;
@@ -79,6 +82,8 @@ const MIN_ZOOM: f32 = 0.1;
 const MAX_ZOOM: f32 = 8.0;
 /// Screen-px the pointer may move before a press counts as a drag, not a click.
 const CLICK_SLOP: f32 = 4.0;
+/// Screen-px pick radius around an edge segment for edge_hit_test.
+const EDGE_PICK_TOL: f32 = 6.0;
 
 /// An in-progress left-button interaction on a node: a click until the pointer
 /// passes [`CLICK_SLOP`], then a drag that pins the node to the cursor.
@@ -131,6 +136,9 @@ struct App {
     drag: Option<Drag>,
     /// Currently-selected nodes (click selects one; marquee selects many).
     selected: HashSet<NodeKey>,
+    /// Currently-selected edges (edge-pick, or covered by a marquee), stored as
+    /// the `(from, to)` pairs gyre reports.
+    selected_edges: HashSet<(NodeKey, NodeKey)>,
     /// `Some(press_origin)` (screen px) while a left-drag marquee on empty space
     /// is in progress.
     marquee: Option<(f32, f32)>,
@@ -158,6 +166,7 @@ impl App {
             middle_drag: None,
             drag: None,
             selected: HashSet::new(),
+            selected_edges: HashSet::new(),
             marquee: None,
             ctrl: false,
             window: None,
@@ -246,7 +255,7 @@ impl App {
         let on_screen: HashSet<NodeKey> =
             self.sim.cull_aabb(self.world_viewport()).into_iter().collect();
 
-        let underlay = orrery_paint_list_demoted(
+        let mut underlay = orrery_paint_list_demoted(
             &self.graph,
             |k| positions.get(&k).copied(),
             |k| !on_screen.contains(&k),
@@ -255,6 +264,11 @@ impl App {
             &self.style,
             self.generation,
         );
+        // Highlight selected edges by splicing thicker strokes inside the
+        // underlay's camera transform (world space — no transform replication).
+        if !self.selected_edges.is_empty() {
+            underlay.splice_world_overlays(selected_edge_overlay(&self.sim, &self.selected_edges));
+        }
 
         // The node-children document: abs-pos labelled boxes for the on-screen
         // nodes under the camera transform, composited over the underlay.
@@ -432,6 +446,7 @@ impl ApplicationHandler for App {
                         } else {
                             // A click, not a drag: select just this node.
                             self.selected.clear();
+                            self.selected_edges.clear();
                             self.selected.insert(d.node);
                         }
                         self.request_redraw();
@@ -439,16 +454,25 @@ impl ApplicationHandler for App {
                         let dragged =
                             (self.cursor.0 - origin.0).hypot(self.cursor.1 - origin.1) > CLICK_SLOP;
                         if dragged {
-                            // Rubber-band → gyre rect-select (nodes whose center
-                            // is inside the world-space region).
+                            // Rubber-band → gyre rect-select: nodes whose center
+                            // and edges whose segment fall inside the region.
                             let region = Box2D::from_points([
                                 self.screen_to_world(origin),
                                 self.screen_to_world(self.cursor),
                             ]);
-                            self.selected = self.sim.rect_select(region).nodes.into_iter().collect();
+                            let sel = self.sim.rect_select(region);
+                            self.selected = sel.nodes.into_iter().collect();
+                            self.selected_edges = sel.edges.into_iter().collect();
                         } else {
-                            // A bare click on empty space clears the selection.
+                            // A bare click on empty: pick the nearest edge within
+                            // tolerance (constant in screen px), else clear.
+                            let world = self.screen_to_world(self.cursor);
+                            let tol = EDGE_PICK_TOL / self.camera.zoom.max(f32::EPSILON);
                             self.selected.clear();
+                            self.selected_edges.clear();
+                            if let Some(edge) = self.sim.edge_hit_test(world, tol) {
+                                self.selected_edges.insert(edge);
+                            }
                         }
                         self.request_redraw();
                     }
@@ -618,6 +642,39 @@ fn marquee_rect_cmds(a: (f32, f32), b: (f32, f32)) -> Vec<PaintCmd> {
         placement: CommonPlacement::new(rect),
         color: ColorF::new(0.30, 0.50, 0.92, 0.18),
     })]
+}
+
+/// Highlight strokes for the selected edges, in **world space** (no transform) —
+/// spliced inside the underlay's camera transform via
+/// [`CanvasPaintList::splice_world_overlays`], so they reuse the producer's
+/// camera rather than replicating it. Each selected edge redraws as a thicker
+/// orange line over the underlay's thin grey one.
+fn selected_edge_overlay(
+    sim: &Simulation,
+    selected_edges: &HashSet<(NodeKey, NodeKey)>,
+) -> Vec<PaintCmd> {
+    let mut cmds = Vec::new();
+    for (a, b, pa, pb) in sim.edge_segments() {
+        if !selected_edges.contains(&(a, b)) {
+            continue;
+        }
+        let p0 = LayoutPoint::new(pa.x, pa.y);
+        let p1 = LayoutPoint::new(pb.x, pb.y);
+        let bounds = LayoutRect::new(
+            LayoutPoint::new(p0.x.min(p1.x), p0.y.min(p1.y)),
+            LayoutPoint::new(p0.x.max(p1.x), p0.y.max(p1.y)),
+        );
+        cmds.push(PaintCmd::DrawStroke(StrokeItem {
+            placement: CommonPlacement::new(bounds),
+            path: PathData { commands: vec![PathCommand::MoveTo(p0), PathCommand::LineTo(p1)] },
+            color: ColorF::new(0.91, 0.59, 0.16, 1.0),
+            width: 3.5,
+            cap: StrokeCap::Round,
+            join: StrokeJoin::Round,
+            dash: None,
+        }));
+    }
+    cmds
 }
 
 fn main() {
