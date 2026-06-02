@@ -28,11 +28,14 @@
 //!
 //! ## Status
 //!
-//! First slice (headless): the toolbar renders from a reused
-//! [`chrome::toolbar::ToolbarState`] into a serval `ScriptedDom` via
-//! [`ServalAppRunner`] — proving the cross-repo wiring and the reuse seam. The
-//! windowing / present stack (pelt-live-shaped) and the editable omnibar
-//! (`TextInput` synced into `editable.location`) land next.
+//! The toolbar renders from a reused [`chrome::toolbar::ToolbarState`] into a
+//! serval `ScriptedDom` via [`ServalAppRunner`], on screen, with an editable
+//! omnibar ([`TextInput`] lensed into the view). Submitting (Enter) and the
+//! back / forward buttons drive a real linear [`History`](nav::History): the
+//! omnibar text is classified and resolved to a URL, pushed onto the stack, and
+//! mirrored back into the toolbar (location text, `can_go_*` flags). The current
+//! history entry — [`Chrome::content_location`] — is what the **content-root**
+//! slice (next) will load into a separate document authority.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -43,6 +46,10 @@ use xilem_serval::{
     el, lens, on_click, text_field_typed, AnyView, PointerClick, ServalAppRunner, ServalCtx,
     ServalElement, TextField, TextInput,
 };
+
+pub mod nav;
+
+use nav::History;
 
 /// Meerkat's chrome app state.
 ///
@@ -61,17 +68,36 @@ pub struct Chrome {
     /// buffer into the session state on submit (Enter), keeping the domain
     /// unchanged.
     pub omnibar: TextInput,
+    /// meerkat's own linear back/forward history. graphshell projects the
+    /// toolbar's `can_go_*` flags from a servo viewer's history; meerkat has no
+    /// such viewer, so it owns the stack and mirrors the flags into
+    /// [`ToolbarState`]. Its current entry is the URL the content root shows.
+    pub history: History,
 }
 
 impl Chrome {
-    /// A chrome state seeded with `initial_location` in both the reused toolbar
-    /// session state and the live omnibar buffer.
+    /// A chrome state seeded with `initial_location` (classified the same way a
+    /// submission is, so a bare host normalizes) across the history, the reused
+    /// toolbar session state, and the live omnibar buffer.
     pub fn new(initial_location: impl Into<String>) -> Self {
-        let location = initial_location.into();
+        let raw = initial_location.into();
+        // A blank cold-start stays blank (not a search for the empty string).
+        let location = if raw.trim().is_empty() {
+            String::new()
+        } else {
+            nav::classify(&raw).resolve()
+        };
         Self {
             toolbar: ToolbarState::with_initial_location(location.clone()),
-            omnibar: TextInput::new(location),
+            omnibar: TextInput::new(location.clone()),
+            history: History::new(location),
         }
+    }
+
+    /// The URL the content root should display — the current history entry. The
+    /// content-root slice loads this; the chrome shell never renders it itself.
+    pub fn content_location(&self) -> &str {
+        self.history.current()
     }
 }
 
@@ -82,16 +108,39 @@ pub type ChromeView = Box<dyn AnyView<Chrome, (), ServalCtx, ServalElement>>;
 /// Logic alias for the runner: chrome state → chrome view tree.
 pub type ChromeLogic = fn(&Chrome) -> ChromeView;
 
-/// Navigate back. Stub for now (real history wiring lands with the session
-/// runtime); it resets the omnibar to a visible placeholder so the click
-/// round-trip is observable on screen.
+/// Navigate back one history entry, mirroring the new current location into the
+/// toolbar and omnibar. A no-op (no chrome change) when already at the oldest
+/// entry, so a disabled Back button click does nothing.
 fn go_back(c: &mut Chrome, _: PointerClick) {
-    c.omnibar = TextInput::new("(back)");
+    if c.history.back().is_some() {
+        sync_chrome_from_history(c, false);
+    }
 }
 
-/// Navigate forward. Stub, mirroring [`go_back`].
+/// Navigate forward one history entry. Mirror of [`go_back`].
 fn go_forward(c: &mut Chrome, _: PointerClick) {
-    c.omnibar = TextInput::new("(forward)");
+    if c.history.forward().is_some() {
+        sync_chrome_from_history(c, false);
+    }
+}
+
+/// Mirror the current history entry into the reused chrome state: the toolbar
+/// location text and `can_go_*` flags, and the live omnibar buffer (so the bar
+/// shows the resolved URL after a navigation). `submitted` raises the one-shot
+/// `location_submitted` chrome signal — set for an omnibar Enter, cleared for a
+/// back/forward step (which is not a fresh user submission).
+///
+/// `load_status` is intentionally left untouched here: until the content-root
+/// engine reports real progress, forcing `Started` would strand the toolbar in
+/// a permanent false "loading" state.
+fn sync_chrome_from_history(c: &mut Chrome, submitted: bool) {
+    let url = c.history.current().to_string();
+    c.toolbar.editable.location = url.clone();
+    c.toolbar.editable.location_dirty = false;
+    c.toolbar.editable.location_submitted = submitted;
+    c.toolbar.can_go_back = c.history.can_back();
+    c.toolbar.can_go_forward = c.history.can_forward();
+    c.omnibar = TextInput::new(url);
 }
 
 /// The toolbar chrome as serval DOM: back / forward buttons and an **editable**
@@ -102,13 +151,22 @@ fn go_forward(c: &mut Chrome, _: PointerClick) {
 ///
 /// The chrome-as-DOM seam — meerkat is the next host widget over the graphshell
 /// chrome domain, after the egui and iced toolbars.
-pub fn chrome_view(_c: &Chrome) -> ChromeView {
+pub fn chrome_view(c: &Chrome) -> ChromeView {
+    // Reflect the reused nav-capability flags onto the buttons: a spent
+    // direction carries a `disabled` class (the host sheet greys it; the
+    // handler is already a no-op at the history's edge).
+    let back_class = if c.toolbar.can_go_back { "nav" } else { "nav disabled" };
+    let forward_class = if c.toolbar.can_go_forward {
+        "nav"
+    } else {
+        "nav disabled"
+    };
     let back = on_click(
-        el::<_, Chrome, ()>("button", "back"),
+        el::<_, Chrome, ()>("button", "back").attr("class", back_class),
         go_back as fn(&mut Chrome, PointerClick),
     );
     let forward = on_click(
-        el::<_, Chrome, ()>("button", "forward"),
+        el::<_, Chrome, ()>("button", "forward").attr("class", forward_class),
         go_forward as fn(&mut Chrome, PointerClick),
     );
     // The omnibar text_field, lensed onto `Chrome::omnibar`. `text_field_typed`
@@ -120,14 +178,18 @@ pub fn chrome_view(_c: &Chrome) -> ChromeView {
     Box::new(el::<_, Chrome, ()>("div", (back, forward, omnibar)).attr("class", "toolbar"))
 }
 
-/// Sync the live omnibar buffer into the reused `ToolbarState` on submit: copy
-/// the edited text into `editable.location` and raise the one-shot
-/// `location_submitted` signal (the session-runtime consumer clears it after
-/// dispatching the navigation). The host calls this on Enter in the focused
-/// omnibar; the domain stays `String`-based and unchanged.
+/// Navigate to the omnibar's current text on submit (Enter): classify it into a
+/// [`NavTarget`](nav::NavTarget), resolve it to a URL, push it onto the history,
+/// and mirror the result into the reused `ToolbarState` + omnibar. Empty input
+/// is a no-op. The host calls this on Enter in the focused omnibar; the reused
+/// domain stays `String`-based and unchanged.
 pub fn submit_omnibar(c: &mut Chrome) {
-    c.toolbar.editable.location = c.omnibar.text().to_string();
-    c.toolbar.editable.location_submitted = true;
+    if c.omnibar.text().trim().is_empty() {
+        return;
+    }
+    let url = nav::classify(c.omnibar.text()).resolve();
+    c.history.visit(url);
+    sync_chrome_from_history(c, true);
 }
 
 /// Build the chrome via a [`ServalAppRunner`] over a fresh [`ScriptedDom`] — the
@@ -164,11 +226,22 @@ mod tests {
         assert_eq!(count_tag(&dom, root, "div"), 1, "the toolbar container");
     }
 
-    /// A back-button click routes through the runner and resets the omnibar —
-    /// proving the host-owns-mutations half of the contract on the live editor.
+    /// A back-button click steps the real history: after navigating away from
+    /// the seed location, Back returns to it, updates the omnibar to the
+    /// restored URL, and flips the `can_go_*` flags (forward now available,
+    /// back spent). Proves the host-owns-mutations contract on live navigation.
     #[test]
-    fn back_click_resets_omnibar() {
+    fn back_click_navigates_history() {
         let mut runner = runner("mere://welcome");
+        // Navigate to a typed bare host (normalized to https://).
+        runner.update(|c| {
+            c.omnibar = TextInput::new("example.com");
+            submit_omnibar(c);
+        });
+        assert_eq!(runner.state().content_location(), "https://example.com");
+        assert!(runner.state().toolbar.can_go_back);
+        assert!(!runner.state().toolbar.can_go_forward);
+
         let root = runner.root();
         let back = {
             let dom = runner.dom();
@@ -176,12 +249,17 @@ mod tests {
             first_tag(&dom, root, "button").expect("a back button")
         };
         runner.dispatch_click(back, PointerClick::at((0.0, 0.0)));
-        assert_eq!(runner.state().omnibar.text(), "(back)");
+
+        assert_eq!(runner.state().content_location(), "mere://welcome");
+        assert_eq!(runner.state().omnibar.text(), "mere://welcome");
+        assert!(!runner.state().toolbar.can_go_back);
+        assert!(runner.state().toolbar.can_go_forward);
     }
 
     /// Submitting the omnibar syncs the live buffer into the reused
     /// `ToolbarState` — the editor edits a `TextInput`, the session state stays
-    /// the domain's `String` (location + the one-shot submit signal).
+    /// the domain's `String` (location + the one-shot submit signal) — and the
+    /// resolved URL lands as the content location.
     #[test]
     fn submit_syncs_omnibar_into_toolbar_state() {
         let mut runner = runner("mere://welcome");
@@ -191,6 +269,21 @@ mod tests {
         });
         assert_eq!(runner.state().toolbar.editable.location, "https://example.test");
         assert!(runner.state().toolbar.editable.location_submitted);
+        assert_eq!(runner.state().content_location(), "https://example.test");
+    }
+
+    /// An empty submission is a no-op: it neither grows the history nor raises
+    /// the submit signal (guards the blank-Enter guard in `submit_omnibar`).
+    #[test]
+    fn empty_submit_is_a_no_op() {
+        let mut runner = runner("mere://welcome");
+        runner.update(|c| {
+            c.omnibar = TextInput::new("   ");
+            submit_omnibar(c);
+        });
+        assert_eq!(runner.state().content_location(), "mere://welcome");
+        assert!(!runner.state().toolbar.can_go_back);
+        assert!(!runner.state().toolbar.editable.location_submitted);
     }
 
     /// The painted omnibar caret tracks byte offsets correctly in the live
