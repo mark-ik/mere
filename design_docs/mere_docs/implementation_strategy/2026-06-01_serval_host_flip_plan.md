@@ -3,11 +3,12 @@
 **Date**: 2026-06-01
 **Status**: Gate open on the interactive items. **P0 (perf spike) run 2026-06-01:
 the relayout worry is retired (transform motion is paint-tier → `RepaintOnly`, not
-reflow), BUT it surfaced three serval prerequisites for the orrery's continuous
-motion — incremental inline-`style` invalidation, repeated-`apply()` restyle, and
-transform→paint-position — now Phase-1 gates (see Phase 0).** Execution plan for
-flipping Mere's host from Xilem + Masonry (architecture 1) to serval-as-host
-(architecture 3). Cross-repo: sequences mere-side work against serval capabilities.
+reflow). The three serval prerequisites it surfaced for the orrery's continuous
+motion (incremental inline-`style` invalidation, repeated-`apply()` restyle, and
+transform→paint-position) are all RESOLVED in serval-layout (verified single-threaded
+and parallel; see Phase 0). The orrery flip (P1) is unblocked on the serval side.**
+Execution plan for flipping Mere's host from Xilem + Masonry (architecture 1) to
+serval-as-host (architecture 3). Cross-repo: sequences mere-side work against serval capabilities.
 **Decision owner**: the [serval-as-host evaluation](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)
 owns the *call* and the §6/§7 worked consequences; this doc is the *execution*.
 **Related**: [host architecture roadmap](2026-05-20_host_architecture_roadmap.md),
@@ -67,24 +68,36 @@ serval's pinned stylo (`RECALCULATE_OVERFLOW` < `RELAYOUT`), so
 untouched, at N up to 1000 (test-proven + source-verified). Transform motion does
 NOT force reflow.
 
-But the spike surfaced **three serval prerequisites** the orrery's *continuous*
+The spike surfaced **three serval prerequisites** the orrery's *continuous*
 transform-driven motion needs (the relayout classification is necessary, not
-sufficient). They move into Phase 1 as explicit gates, all serval-side:
+sufficient). **All three are now resolved in serval-layout**, verified
+single-threaded (85/85) and parallel (10/10 full-suite runs clean):
 
-- **(A) incremental restyle ignores inline-`style` changes** — `snapshot.rs` marks
-  them `other_attributes_changed` (only `[attr]`-selector invalidation); inline-style
-  re-cascade needs a `RESTYLE_STYLE_ATTRIBUTE` hint. The full `run_cascade` does
-  apply inline style, so this is an incremental-path gap. The orrery moves nodes by
-  mutating inline `transform`, so this must be wired.
-- **(B) a second sequential `RepaintOnly` `apply()` drops the change** — repeated
-  per-frame applies don't re-register (the layout-skip leaves stylo restyle state
-  uncleared), so continuous motion via repeated `apply()` doesn't work yet.
-- **(C) paint doesn't fold the CSS transform into painted position** —
-  `paint_emit` uses the taffy `Layout.location`, so a cascaded transform wouldn't
-  visibly move the node.
+- **(A) incremental restyle ignored inline-`style` changes** — `snapshot.rs` marks
+  them `other_attributes_changed` (only `[attr]`-selector invalidation), and serval
+  emitted no hint to re-apply the inline block. **Fixed**: on a `style`-attribute
+  mutation, force a full re-cascade of the element's subtree
+  (`RestyleHint::restyle_subtree`); the inline-style pass re-parses the attribute
+  each cascade, so the re-cascade re-applies it.
+- **(B) a second sequential `RepaintOnly` `apply()` dropped the change** — stylo's
+  `handled_snapshot` bit persisted across `apply()` calls, so a stale `true` skipped
+  the next pass's snapshot. **Fixed**: reset `handled_snapshot` per attribute-changed
+  element each pass. Continuous per-frame motion now re-registers.
+- **(C) paint didn't fold the CSS transform into painted position** — `paint_emit`
+  used the taffy `Layout.location` and emitted identity. **Fixed**:
+  `compute_transform_matrix` folds the computed `transform`/`translate` into the
+  in-flow `PushTransform`.
 
-Net: the gate's fear is gone, but the orrery's motion mechanism is gated on A+B+C.
-A and B are pinned as tripwire tests in serval-layout that flip when fixed.
+Memory-safety note (recorded in the serval spike doc): (A)'s first cut used stylo's
+`RESTYLE_STYLE_ATTRIBUTE` replacement hint, which reused a rule node from the prior
+pass against a per-pass-fresh `Stylist`/rule tree — a use-after-free that surfaced
+as parallel-only heap corruption. The `restyle_subtree` path (fresh rule nodes)
+fixes it; restoring the cheaper replacement path is gated on a future persistent
+`Stylist`, not needed for the flip.
+
+Net: the gate's fear is gone **and** the orrery's motion mechanism (A+B+C) is
+unblocked on the serval side. The tripwire tests were flipped to assert the
+corrected behaviour and pinned as regression guards (stylo `572ecba`).
 
 ### Phase 1 — The orrery element (brief §6)
 
@@ -97,10 +110,14 @@ A serval custom-layout element composing three layers:
    each materializes as a serval DOM subtree, `position: absolute` + a per-frame
    `transform: translate(x, y)` from the sim. Off-screen nodes demote to underlay
    glyphs (virtualization rides `cull_aabb`); focus/state survive demotion.
-   **Gated on P0's prerequisites A+B+C** (serval-side): incremental inline-`style`
+   **P0's prerequisites A+B+C are resolved** (serval-side): incremental inline-`style`
    invalidation, repeated-`apply()` restyle correctness, and folding the CSS
-   transform into painted position. Until those land, per-frame inline-transform
-   motion is either ignored or invisible; this phase starts once they do.
+   transform into painted position all land in serval-layout, so per-frame
+   inline-transform motion is honoured and visible. One materialization rule carries
+   over: a node going from no transform to a transform relayouts once (it gains a
+   containing block), then subsequent value-to-value changes are `RepaintOnly`; the
+   orrery should materialize nodes already transform-bearing so steady-state motion
+   never relayouts.
 3. **Camera** — one `PushTransform(TransformSpec)` over both layers; the navigation
    defaults (wheel = pan, ctrl+wheel = zoom, inertia, infinite canvas) live in the
    element's input handling.
@@ -180,3 +197,16 @@ Xilem + Masonry host is removed.
   tripwire tests. Writeup:
   [serval/docs/2026-06-01_orrery_transform_perf_spike.md](../../../../serval/docs/2026-06-01_orrery_transform_perf_spike.md).
   So P0's measurement is done; the orrery flip (P1) is gated on A+B+C, all serval-side.
+
+- **2026-06-01** — **A+B+C resolved (serval-layout).** Implemented all three P0
+  prerequisites in serval-layout: (A) inline-`style` incremental invalidation via a
+  forced subtree re-cascade, (B) `handled_snapshot` reset per pass for repeated-apply
+  correctness, (C) `compute_transform_matrix` folding the cascaded transform into the
+  paint `PushTransform`. While landing (A), found and fixed a memory-safety regression:
+  the narrower `RESTYLE_STYLE_ATTRIBUTE` replacement hint reused a rule node against a
+  per-pass-fresh `Stylist` rule tree (use-after-free, surfacing as parallel-only heap
+  corruption); the `restyle_subtree` full-recascade path (fresh rule nodes) resolves
+  it. Verified 85/85 single-threaded and 10/10 parallel full-suite runs clean. Tripwire
+  tests flipped to assert corrected behaviour, pinned to stylo `572ecba`. **P1's
+  serval-side gates are clear**; the orrery element (Phase 1) can begin. Cheaper
+  replacement path deferred behind a future persistent `Stylist` (not flip-blocking).
