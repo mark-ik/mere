@@ -18,10 +18,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use meerkat::{chrome_view, Chrome, ChromeLogic, ChromeView};
+use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions, Renderer};
-use pelt_live::{hit_test_node, scene_from_scripted_dom};
+use pelt_live::{hit_test_node, scene_from_scripted_dom, TextCursor};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use winit::application::ApplicationHandler;
@@ -39,7 +39,7 @@ const SHEET: &[&str] = &[
     ".toolbar { display: flex; background-color: rgb(236, 238, 243); padding: 8px; }",
     "button { font-size: 22px; color: rgb(30, 30, 40); \
         background-color: rgb(220, 224, 232); padding: 8px 14px; margin: 4px; }",
-    ".omnibar { font-size: 22px; color: rgb(20, 20, 20); \
+    "input { font-size: 22px; color: rgb(20, 20, 20); \
         background-color: rgb(255, 255, 255); padding: 8px; margin: 4px; flex-grow: 1; }",
 ];
 
@@ -109,10 +109,21 @@ impl App {
         let Some(gpu) = self.gpu.as_ref() else { return };
         let (w, h) = (self.width.max(1), self.height.max(1));
 
-        // 1. Engine pipeline → Scene. No focused-field cursor and no scrolling in
-        //    this slice (the editable omnibar + scrollable chrome land later).
+        // 1. Engine pipeline → Scene. When the omnibar is focused, paint its
+        //    caret / selection (byte offsets converted from the field's char model).
+        let cursor = self.runner.focus().map(|node| {
+            let field = &self.runner.state().omnibar;
+            let byte_of = |i: usize| {
+                field.text().char_indices().nth(i).map(|(b, _)| b).unwrap_or(field.text().len())
+            };
+            let selection = field.has_selection().then(|| {
+                let (s, e) = field.selection();
+                (byte_of(s), byte_of(e))
+            });
+            TextCursor { node, caret: field.caret_byte_in_render(), selection }
+        });
         let scroll_offsets = ScrollOffsets::<NodeId>::default();
-        let scene = scene_from_scripted_dom(&self.dom.borrow(), SHEET, w, h, None, &scroll_offsets);
+        let scene = scene_from_scripted_dom(&self.dom.borrow(), SHEET, w, h, cursor, &scroll_offsets);
 
         // 2. Rasterize the scene into a fresh Rgba8Unorm target.
         let device = &gpu.renderer.wgpu_device.core.device;
@@ -264,7 +275,22 @@ impl ApplicationHandler for App {
             },
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed {
-                    if let Some(key_event) = key_event_from_winit(&event.logical_key, self.modifiers) {
+                    let is_enter =
+                        matches!(event.logical_key, WinitKey::Named(WinitNamedKey::Enter));
+                    if is_enter && self.runner.focus().is_some() {
+                        // Submit the focused omnibar: sync the live buffer into the
+                        // reused ToolbarState (location + the one-shot signal).
+                        self.runner.update(submit_omnibar);
+                        tracing::info!(
+                            location = %self.runner.state().toolbar.editable.location,
+                            "omnibar submit"
+                        );
+                        if let Some(window) = self.window.as_ref() {
+                            window.request_redraw();
+                        }
+                    } else if let Some(key_event) =
+                        key_event_from_winit(&event.logical_key, self.modifiers)
+                    {
                         self.runner.dispatch_key(key_event);
                         if let Some(window) = self.window.as_ref() {
                             window.request_redraw();
