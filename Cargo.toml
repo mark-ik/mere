@@ -159,3 +159,16 @@ unsafe_code = "warn"
 
 [workspace.lints.clippy]
 all = "warn"
+
+# ─── Cross-repo render-stack alignment (meerkat → serval) ────────────────────
+# meerkat pulls serval-layout (via pelt-live) for the cascade → layout → paint
+# path. serval-layout's `stylo_taffy` deps crates.io `stylo`/`stylo_atoms`, while
+# serval pins the same crates from the servo/stylo git rev; `stylo` declares
+# `links = "servo_style_crate"` (only one Stylo allowed per graph). Redirect the
+# crates.io deps to the same git rev so they unify with serval's Stylo rather than
+# conflict — a root-workspace patch applies graph-wide, including transitive deps.
+# Mirrors serval's own patch (serval docs/2026-05-20_stylo_taffy_adoption_plan.md);
+# touches only the new serval-layout transitive dep (mere's crates don't use stylo).
+[patch.crates-io]
+stylo = { git = "https://github.com/servo/stylo", rev = "572ecba2d1600e7c3d490586692a209faf703baa" }
+stylo_atoms = { git = "https://github.com/servo/stylo", rev = "572ecba2d1600e7c3d490586692a209faf703baa" }
