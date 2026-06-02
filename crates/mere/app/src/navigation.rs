@@ -12,7 +12,15 @@
 
 use std::path::Path;
 
-use crate::engine_tile::{RenderedTile, render_address};
+use inker::routing::{
+    ENGINE_LINKED_DATA_INGEST, EngineRoutePolicy, EngineRouteRequest, WorkspaceRouteId,
+    is_graph_contribution_route,
+};
+use inker::{DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan};
+use kernel::graph::Graph;
+use linked_data::{apply_contribution, from_jsonld};
+
+use crate::engine_tile::{RenderedTile, error_document, render_address};
 
 /// Seeded welcome page, served at `mere://welcome`.
 pub(crate) const WELCOME_MD: &str = "\
@@ -30,11 +38,27 @@ engine policy; this page was parsed by the `nematic` markdown engine.
 - `file:///path/to/notes.md` — a local markdown / gemtext / text file
 - network schemes (`https://`, `gemini://`) — *not yet*; that is the
   `netfetcher` slice
+- `mere://demo.jsonld` — a JSON-LD document that *merges into the graph*
+  rather than rendering (open it, then watch the orrery)
 
 ---
 
     omnibar → fetch(address) → route(content_type) → Engine → EngineDocument
 ";
+
+/// A seeded linked-data document at `mere://demo.jsonld`, so the ingest path is
+/// exercisable without a network fetcher. Inline `@context` (no remote fetch);
+/// two papers joined by a `cites` edge.
+pub(crate) const DEMO_JSONLD: &str = r#"{
+  "@context": {
+    "name": "https://schema.org/name",
+    "cites": "https://mere.computer/ns/rel#cites"
+  },
+  "@graph": [
+    { "@id": "mere://node/paper-a", "name": "Paper A", "cites": { "@id": "mere://node/paper-b" } },
+    { "@id": "mere://node/paper-b", "name": "Paper B" }
+  ]
+}"#;
 
 /// Resolve `address` to content and render it. Always returns a tile (errors
 /// and unsupported schemes become a rendered page, never a panic).
@@ -43,10 +67,93 @@ pub fn open(address: &str) -> RenderedTile {
     render_address(address, &body, content_type.as_deref())
 }
 
+/// Resolve `address`, then either **ingest** it into `graph` (a
+/// graph-contribution route — currently `application/ld+json`) or **render** it
+/// (everything else, exactly as [`open`]). The ingest branch parses the body to
+/// a `GraphContribution` and merges it.
+///
+/// Classification uses the *unfiltered* policy on purpose: the linked-data
+/// marker ([`ENGINE_LINKED_DATA_INGEST`]) is not a registered engine, so a
+/// registry-filtered route (as in [`crate::engine_tile::render_address`]) would
+/// skip its rule and fall through.
+pub fn resolve(address: &str, graph: &mut Graph) -> RenderedTile {
+    let (body, content_type) = fetch(address);
+    let request = EngineRouteRequest {
+        workspace_id: WorkspaceRouteId::new("mere"),
+        view: None,
+        node: None,
+        address: address.to_string(),
+        content_type: content_type.clone(),
+        pinned_engine: None,
+    };
+    let decision = EngineRoutePolicy::default().route(&request);
+    if is_graph_contribution_route(&decision.engine_id) {
+        return ingest_jsonld(address, &body, graph);
+    }
+    render_address(address, &body, content_type.as_deref())
+}
+
+/// Parse `body` as JSON-LD and merge it into `graph`; the returned tile is a
+/// short summary, or an error page on a parse failure. `@id`s become nodes,
+/// `rel#` / raw predicates become `Semantic` edges, `schema:name` / `keywords`
+/// become title / tags. No remote `@context` is fetched (inline / expanded only).
+fn ingest_jsonld(address: &str, body: &str, graph: &mut Graph) -> RenderedTile {
+    match from_jsonld(body.as_bytes()) {
+        Ok(contribution) => {
+            let outcome = apply_contribution(graph, &contribution);
+            RenderedTile {
+                engine_id: ENGINE_LINKED_DATA_INGEST.to_string(),
+                document: ingest_summary_document(address, &outcome),
+            }
+        }
+        Err(err) => RenderedTile {
+            engine_id: ENGINE_LINKED_DATA_INGEST.to_string(),
+            document: error_document(address, ENGINE_LINKED_DATA_INGEST, &err.to_string()),
+        },
+    }
+}
+
+/// A small "what was ingested" page, shown in the document pane after a merge.
+fn ingest_summary_document(address: &str, outcome: &linked_data::ApplyOutcome) -> EngineDocument {
+    let mut blocks = vec![
+        DocumentBlock::Badge {
+            text: "linked data ingested".to_string(),
+        },
+        DocumentBlock::Paragraph {
+            spans: vec![InlineSpan::Text(format!(
+                "Merged {} node(s) and {} edge(s) from {address} into the graph.",
+                outcome.nodes_created, outcome.edges_asserted
+            ))],
+        },
+    ];
+    if outcome.edges_skipped > 0 {
+        blocks.push(DocumentBlock::Paragraph {
+            spans: vec![InlineSpan::Text(format!(
+                "{} edge(s) skipped (unresolved endpoint).",
+                outcome.edges_skipped
+            ))],
+        });
+    }
+    EngineDocument {
+        address: address.to_string(),
+        title: Some("Linked data ingested".to_string()),
+        content_type: "application/ld+json".to_string(),
+        lang: None,
+        provenance: DocumentProvenance::for_engine(ENGINE_LINKED_DATA_INGEST, address),
+        trust: DocumentTrustState::Unknown,
+        diagnostics: Vec::new(),
+        blocks,
+    }
+}
+
 /// Locally resolve an address to `(body, content_type)`. No network.
 fn fetch(address: &str) -> (String, Option<String>) {
     if address == "mere://welcome" {
         return (WELCOME_MD.to_string(), Some("text/markdown".to_string()));
+    }
+
+    if address == "mere://demo.jsonld" {
+        return (DEMO_JSONLD.to_string(), Some("application/ld+json".to_string()));
     }
 
     if let Some(name) = address.strip_prefix("mere://") {
@@ -105,6 +212,7 @@ fn content_type_for_path(path: &str) -> Option<String> {
         "md" | "markdown" => "text/markdown",
         "gmi" | "gemini" => "text/gemini",
         "txt" | "text" => "text/plain",
+        "jsonld" => "application/ld+json",
         _ => return None,
     };
     Some(ct.to_string())
@@ -113,6 +221,21 @@ fn content_type_for_path(path: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn jsonld_demo_ingests_papers_and_a_cites_edge() {
+        use kernel::graph::Graph;
+        let mut graph = Graph::new();
+        let tile = resolve("mere://demo.jsonld", &mut graph);
+        assert_eq!(tile.engine_id, ENGINE_LINKED_DATA_INGEST);
+        let (a, _) = graph
+            .get_node_by_url("mere://node/paper-a")
+            .expect("paper-a ingested");
+        let (b, _) = graph
+            .get_node_by_url("mere://node/paper-b")
+            .expect("paper-b ingested");
+        assert!(graph.find_edge_key(a, b).is_some(), "cites edge");
+    }
 
     #[test]
     fn welcome_routes_to_markdown_engine() {

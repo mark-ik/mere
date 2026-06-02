@@ -33,6 +33,10 @@ platen.workspace = true
 # engine's `EngineDocument` (the v1 "one live engine-backed tile").
 inker.workspace = true
 nematic.workspace = true
+# JSON-LD ingest: a fetched `application/ld+json` body is parsed to a
+# `GraphContribution` and merged into the live graph (linked-data plan Phase 2,
+# host consumer) rather than rendered as a document.
+linked-data.workspace = true
 
 # Mint the seed workbench forme's graph_id (forme's `GraphId` is a bare UUID).
 uuid = { version = "1", features = ["v4"] }

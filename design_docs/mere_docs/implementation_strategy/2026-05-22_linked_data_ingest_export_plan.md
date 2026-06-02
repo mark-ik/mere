@@ -261,13 +261,40 @@ has a done-condition, not a date.
   target** (not a render engine), with `is_graph_contribution_route()` to
   recognize it — the same host-handled pattern as `ENGINE_EXTERNAL_PROTOCOL`. A
   host special-cases this decision to feed the body to `from_jsonld` instead of
-  dispatching an engine. 1 routing test; inker **73**. The host-side dispatch
-  (fetch → route → ingest → merge) is downstream, for when that loop exists.
+  dispatching an engine. 1 routing test; inker **73**.
+- **Host consumer landed 2026-06-01** (`mere-app`). `navigation::resolve(address,
+  &mut Graph)` classifies via the *unfiltered* policy (the marker is not a
+  registered engine, so a registry-filtered route would skip it), and on a
+  graph-contribution route parses the body with `from_jsonld` + merges it with
+  `apply_contribution`; `navigate` / `back` / `forward` then rebuild the orrery
+  scene and persist. A seeded `mere://demo.jsonld` (plus local `.jsonld` files)
+  makes it exercisable: opening it merges two papers and a `cites` edge into the
+  live graph. mere-app **19**. linked-data is no longer inert — the fetch → route
+  → ingest → merge loop runs end to end.
+  - **Gated decisions made (light path):** standalone `application/ld+json` only;
+    native `apply_contribution` (a wasm host materializes via `add_node_with_id`);
+    inline / expanded `@context` only (remote-context bundling deferred);
+    re-ingest idempotent by URL; ingested nodes seed at the origin and the
+    orrery's layout spreads them.
+  - **Still gated / deferred:** real context assets, `@type` → classification, a
+    literal property bag, HTML-embedded extraction (Serval), the blank-node
+    skolemization collision, and the wasm materialization path.
 
 ### Phase 3 — Round-trip + coverage
 - Ingest → export → compare, modulo the by-design drops (uncurated literals).
 - Recognition-table coverage test (every `SemanticSubKind` ↔ a canonical IRI).
 - **Done:** round-trip is stable for the recognized vocabulary + raw predicates.
+- **Landed 2026-06-01.** `to_jsonld_compact(&Graph)` emits compacted JSON-LD
+  (`@graph` under an inline `@context`): a recognized relation + the curated
+  literals become short terms backed by the context (term → IRI, built from
+  `predicate_iri` / `sub_kind_from_iri`, so it cannot drift); a raw predicate
+  keeps its full IRI as the key (the open tail stays explicit). This is the
+  curated kernel-vocabulary context's **first consumer**. Round-trip tested both
+  ways: a seeded graph → `to_jsonld` *and* `to_jsonld_compact` → `from_jsonld`
+  yields the same logical content (A's literals, the `cites` edge at its canonical
+  IRI, the raw `schema:citation` edge). linked-data **9**. The full recognition
+  table (all 17 `SemanticSubKind` ↔ IRI) is covered at the kernel level (Phase 0);
+  linked-data round-trips a representative recognized + raw pair.
 
 ### Deferred (explicit non-goals for this effort)
 - HTML `<script type="application/ld+json">` / microdata extraction — needs

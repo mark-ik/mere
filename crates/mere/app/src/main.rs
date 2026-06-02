@@ -219,31 +219,40 @@ impl AppState {
         self.scene = scene_from_graph(&self.graph);
     }
 
-    /// Navigate to `address`: push history, resolve + render it, sync omnibar,
-    /// and switch the main pane to show the document.
+    /// Navigate to `address`: push history, resolve it (render *or* JSON-LD
+    /// ingest), then sync the omnibar and document pane.
     fn navigate(&mut self, address: &str) {
         self.history.push(address);
-        self.current = navigation::open(address);
-        self.omnibar = address.to_string();
-        self.main_view = MainView::Document;
+        self.current = navigation::resolve(address, &mut self.graph);
+        self.finish_navigation(address.to_string());
     }
 
-    /// Go back in history and render that entry (no-op at the start).
+    /// Go back in history and resolve that entry (no-op at the start).
     fn back(&mut self) {
         if let Some(address) = self.history.back().map(str::to_string) {
-            self.current = navigation::open(&address);
-            self.omnibar = address;
-            self.main_view = MainView::Document;
+            self.current = navigation::resolve(&address, &mut self.graph);
+            self.finish_navigation(address);
         }
     }
 
-    /// Go forward in history and render that entry (no-op at the end).
+    /// Go forward in history and resolve that entry (no-op at the end).
     fn forward(&mut self) {
         if let Some(address) = self.history.forward().map(str::to_string) {
-            self.current = navigation::open(&address);
-            self.omnibar = address;
-            self.main_view = MainView::Document;
+            self.current = navigation::resolve(&address, &mut self.graph);
+            self.finish_navigation(address);
         }
+    }
+
+    /// Shared tail of navigate / back / forward: sync the omnibar and switch to
+    /// the document pane. When the resolve was a JSON-LD *ingest* (it merged into
+    /// the graph), also rebuild the orrery scene and persist.
+    fn finish_navigation(&mut self, address: String) {
+        if self.current.engine_id == inker::routing::ENGINE_LINKED_DATA_INGEST {
+            self.rebuild_scene();
+            self.persist_graph();
+        }
+        self.omnibar = address;
+        self.main_view = MainView::Document;
     }
 
     /// Persist the workbench forme after an edit. Failures are surfaced to

@@ -177,7 +177,7 @@ fn blocks_to_text(blocks: &[DocumentBlock]) -> String {
 }
 
 /// Synthesize an error "page" so a routing / parse failure shows in the tile.
-fn error_document(address: &str, engine_id: &str, message: &str) -> EngineDocument {
+pub(crate) fn error_document(address: &str, engine_id: &str, message: &str) -> EngineDocument {
     EngineDocument {
         address: address.to_string(),
         title: Some("Engine error".to_string()),

@@ -7,25 +7,29 @@
 //! JSON-LD bridge between the Mere graph [`kernel`] and linked data (linked-data
 //! plan, `design_docs/mere_docs/implementation_strategy/2026-05-22_linked_data_ingest_export_plan.md`).
 //!
-//! Phase 1 — **export**. [`to_jsonld`] serializes a graph as *expanded* JSON-LD
-//! (an array of node objects, full IRIs, no `@context`). The
-//! statements-over-schema cut shows here: a node's `Semantic` edges become RDF
-//! predicates — a recognized [`kernel::graph::SemanticSubKind`] uses its
-//! canonical Mere IRI ([`kernel::graph::predicate_iri`]), and an open predicate
-//! (a raw / CURIE IRI stamped on the edge) passes through verbatim. The other
-//! edge families (Traversal, Containment, Arrangement, …) are Mere's *experience*
-//! layer and are not exported.
+//! **Export.** [`to_jsonld`] emits *expanded* JSON-LD (full IRIs, no `@context`);
+//! [`to_jsonld_compact`] emits the *compacted* form (a `@graph` under an inline
+//! `@context`). The statements-over-schema cut shows in both: a node's `Semantic`
+//! edges become RDF predicates — a recognized [`kernel::graph::SemanticSubKind`]
+//! uses its canonical Mere IRI ([`kernel::graph::predicate_iri`]) or short term,
+//! while an open predicate passes through verbatim. The other edge families
+//! (Traversal, Containment, …) are Mere's *experience* layer and are not exported.
+//! Curated literals only (no general property bag): `title` → `schema:name`,
+//! `tags` → `schema:keywords`; `@id` is the node's URL, or a skolemized
+//! `urn:uuid:` IRI when it has none.
 //!
-//! Curated literals only — the kernel has no general property bag: `title` →
-//! `schema:name`, `tags` → `schema:keywords`. A node's `@id` is its primary
-//! address URL, or a skolemized `urn:uuid:` IRI when it has none.
+//! **Ingest.** [`from_jsonld`] parses a document into a [`GraphContribution`]
+//! (via `oxjsonld`); [`from_jsonld_with_contexts`] resolves a remote `@context`
+//! from a bundled [`ContextCache`] rather than the network. [`apply_contribution`]
+//! materializes a contribution into a graph (recognized predicate → typed
+//! sub-kind, raw → open-predicate edge). Export ↔ ingest round-trips.
 //!
-//! Out of scope for Phase 1 (later phases): ingest (`from_jsonld`), `@type`
-//! mapping from classifications, and bundled `@context`s.
+//! Later: `@type` ↔ classification mapping, real bundled context assets, and the
+//! host-side `application/ld+json` dispatch.
 
 #![doc(html_root_url = "https://docs.rs/linked-data/0.0.1")]
 
-use kernel::graph::{Graph, Node, NodeKey, SemanticData, predicate_iri};
+use kernel::graph::{Graph, Node, NodeKey, SemanticData, predicate_iri, sub_kind_from_iri};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
@@ -139,25 +143,108 @@ fn node_object(graph: &Graph, key: NodeKey, node: &Node) -> Value {
     Value::Object(obj)
 }
 
+/// Export the whole graph as **compacted** JSON-LD: `{"@context": {…}, "@graph":
+/// […]}`. A recognized relation and the curated literals are emitted as short
+/// terms backed by an inline `@context` (term → IRI); an open / raw predicate
+/// keeps its full IRI as the key (the open tail stays explicit). This is the
+/// curated kernel-vocabulary context's first consumer, and it round-trips through
+/// [`from_jsonld`], which expands the inline context. Deterministic, like
+/// [`to_jsonld`].
+pub fn to_jsonld_compact(graph: &Graph) -> Value {
+    let mut context = Map::new();
+    let graph_nodes: Vec<Value> = graph
+        .nodes()
+        .map(|(key, node)| compact_node_object(graph, key, node, &mut context))
+        .collect();
+    json!({ "@context": Value::Object(context), "@graph": Value::Array(graph_nodes) })
+}
+
+/// The short term for a recognized predicate IRI: its fragment or last path
+/// segment (`…/rel#cites` → `cites`, `schema.org/name` → `name`).
+fn term_for(iri: &str) -> &str {
+    iri.rsplit(['#', '/']).next().unwrap_or(iri)
+}
+
+fn compact_node_object(
+    graph: &Graph,
+    key: NodeKey,
+    node: &Node,
+    context: &mut Map<String, Value>,
+) -> Value {
+    let url = node.primary_address().as_url_str();
+    let mut obj = Map::new();
+    obj.insert("@id".to_string(), Value::String(node_id(node)));
+
+    if !node.title.is_empty() && node.title != url {
+        context
+            .entry("name".to_string())
+            .or_insert_with(|| json!(SCHEMA_NAME));
+        obj.insert("name".to_string(), json!(node.title));
+    }
+    if !node.tags.is_empty() {
+        context
+            .entry("keywords".to_string())
+            .or_insert_with(|| json!(SCHEMA_KEYWORDS));
+        let mut tags: Vec<&str> = node.tags.iter().map(String::as_str).collect();
+        tags.sort_unstable();
+        obj.insert("keywords".to_string(), json!(tags));
+    }
+
+    // Group targets by the key we emit: a short term for a recognized predicate
+    // (registered in the inline context), the full IRI for a raw one.
+    let mut by_key: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for target in graph.out_neighbors(key) {
+        let Some(edge_key) = graph.find_edge_key(key, target) else {
+            continue;
+        };
+        let Some(semantic) = graph.get_edge(edge_key).and_then(|p| p.semantic_data()) else {
+            continue;
+        };
+        let Some(target_node) = graph.get_node(target) else {
+            continue;
+        };
+        let target_id = node_id(target_node);
+        for predicate in edge_predicates(semantic) {
+            let emit_key = if sub_kind_from_iri(&predicate).is_some() {
+                let term = term_for(&predicate).to_string();
+                context
+                    .entry(term.clone())
+                    .or_insert_with(|| json!(predicate));
+                term
+            } else {
+                predicate
+            };
+            by_key.entry(emit_key).or_default().push(target_id.clone());
+        }
+    }
+    for (emit_key, mut targets) in by_key {
+        targets.sort_unstable();
+        let refs: Vec<Value> = targets.into_iter().map(|id| json!({ "@id": id })).collect();
+        let value = if refs.len() == 1 {
+            refs.into_iter().next().expect("length checked")
+        } else {
+            Value::Array(refs)
+        };
+        obj.insert(emit_key, value);
+    }
+
+    Value::Object(obj)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::to_jsonld;
+    use super::{EdgeContribution, GraphContribution, from_jsonld, to_jsonld, to_jsonld_compact};
     use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
     use serde_json::json;
 
-    #[test]
-    fn empty_graph_exports_empty_array() {
-        assert_eq!(to_jsonld(&Graph::new()), json!([]));
-    }
-
-    #[test]
-    fn exports_recognized_and_raw_predicates_with_literals() {
+    /// A graph with one recognized edge (A cites B, canonical IRI), one raw
+    /// open-predicate edge (A → C, `schema:citation`), and curated literals on A.
+    fn seed() -> Graph {
         let mut graph = Graph::new();
         let a = graph.add_node("https://a.test/".to_string(), Default::default());
         let b = graph.add_node("https://b.test/".to_string(), Default::default());
         let c = graph.add_node("https://c.test/".to_string(), Default::default());
 
-        // A cites B: recognized sub-kind, no explicit predicate → canonical IRI.
         graph.assert_relation(
             a,
             b,
@@ -167,7 +254,6 @@ mod tests {
                 decay_progress: None,
             },
         );
-        // A → C with a raw (non-Mere) predicate stamped → emitted verbatim.
         let e = graph
             .assert_relation(
                 a,
@@ -184,15 +270,21 @@ mod tests {
             .expect("payload")
             .set_semantic_predicate(Some("https://schema.org/citation".to_string()));
 
-        // A real title + a tag on A; B and C stay untitled (title == url).
-        {
-            let node_a = graph.get_node_mut(a).expect("node a");
-            node_a.title = "Article A".to_string();
-            node_a.tags.insert("research".to_string());
-        }
+        let node_a = graph.get_node_mut(a).expect("node a");
+        node_a.title = "Article A".to_string();
+        node_a.tags.insert("research".to_string());
+        graph
+    }
 
+    #[test]
+    fn empty_graph_exports_empty_array() {
+        assert_eq!(to_jsonld(&Graph::new()), json!([]));
+    }
+
+    #[test]
+    fn exports_recognized_and_raw_predicates_with_literals() {
         assert_eq!(
-            to_jsonld(&graph),
+            to_jsonld(&seed()),
             json!([
                 {
                     "@id": "https://a.test/",
@@ -205,5 +297,69 @@ mod tests {
                 { "@id": "https://c.test/" }
             ])
         );
+    }
+
+    #[test]
+    fn compact_export_uses_terms_and_keeps_raw_iris() {
+        let compact = to_jsonld_compact(&seed());
+        // A recognized relation + the curated literals are short terms backed by
+        // the inline context.
+        assert_eq!(
+            compact["@context"]["cites"],
+            json!("https://mere.computer/ns/rel#cites")
+        );
+        assert_eq!(
+            compact["@context"]["name"],
+            json!("https://schema.org/name")
+        );
+        let a = compact["@graph"]
+            .as_array()
+            .expect("@graph array")
+            .iter()
+            .find(|n| n["@id"] == json!("https://a.test/"))
+            .expect("node a");
+        assert_eq!(a["name"], json!("Article A"));
+        assert_eq!(a["cites"], json!({ "@id": "https://b.test/" }));
+        // The raw predicate keeps its full IRI as the key, not a context term.
+        assert_eq!(
+            a["https://schema.org/citation"],
+            json!({ "@id": "https://c.test/" })
+        );
+        assert!(compact["@context"].get("citation").is_none());
+    }
+
+    #[test]
+    fn expanded_export_round_trips_through_ingest() {
+        let doc = serde_json::to_vec(&to_jsonld(&seed())).expect("serialize");
+        assert_round_trip(&from_jsonld(&doc).expect("round-trip parse"));
+    }
+
+    #[test]
+    fn compact_export_round_trips_through_ingest() {
+        let doc = serde_json::to_vec(&to_jsonld_compact(&seed())).expect("serialize");
+        assert_round_trip(&from_jsonld(&doc).expect("round-trip parse"));
+    }
+
+    /// Both export forms must ingest back to the same logical content: A's curated
+    /// literals, the recognized `cites` edge (canonical IRI), and the raw
+    /// `schema:citation` edge.
+    fn assert_round_trip(contribution: &GraphContribution) {
+        let a = contribution
+            .nodes
+            .iter()
+            .find(|n| n.id == "https://a.test/")
+            .expect("node a");
+        assert_eq!(a.title.as_deref(), Some("Article A"));
+        assert_eq!(a.tags, vec!["research".to_string()]);
+        assert!(contribution.edges.contains(&EdgeContribution {
+            subject: "https://a.test/".into(),
+            predicate: "https://mere.computer/ns/rel#cites".into(),
+            object: "https://b.test/".into(),
+        }));
+        assert!(contribution.edges.contains(&EdgeContribution {
+            subject: "https://a.test/".into(),
+            predicate: "https://schema.org/citation".into(),
+            object: "https://c.test/".into(),
+        }));
     }
 }
