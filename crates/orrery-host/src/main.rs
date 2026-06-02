@@ -30,12 +30,12 @@
 //! graph-canvas navigation directive. Zooming out makes the 3b demote visible
 //! (nodes leaving the viewport reappear as underlay rects). Left-drag grabs the
 //! node under the cursor and pins it to the pointer (gyre pin/unpin) while the
-//! sim ticks, so neighbors follow through the springs; a click (press within the
-//! slop) selects that node (highlighted via a `gnode-selected` class), and a
-//! click on empty space clears it (1E.3, node-pick). Marquee rect-select and
-//! edge-pick (gyre `rect_select` / `edge_hit_test`) are the remaining 1E.3
-//! pieces. Space re-seeds the layout (a tight central spiral) and replays the
-//! settle.
+//! sim ticks, so neighbors follow through the springs. Selection (1E.3): a click
+//! selects the node under the pointer (highlighted via `gnode-selected`); a
+//! left-drag on empty space rubber-bands a marquee (gyre `rect_select`) that
+//! selects every node it covers; a bare click on empty clears. Edge-pick (gyre
+//! `edge_hit_test`, with an edge highlight) is the remaining 1E.3 piece. Space
+//! re-seeds the layout and replays the settle.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -47,7 +47,9 @@ use kernel::graph::{EdgeAssertion, Graph, NodeKey, SemanticSubKind};
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
-use paint_list_api::{DeviceIntSize, PaintList};
+use paint_list_api::{
+    ColorF, CommonPlacement, DeviceIntSize, LayoutPoint, LayoutRect, PaintCmd, PaintList, RectItem,
+};
 use paint_list_render::{composite_paint_layers, CompositeLayer};
 use pelt_live::paint_list_from_scripted_dom;
 use platen::orrery::orrery_paint_list_demoted;
@@ -129,6 +131,9 @@ struct App {
     drag: Option<Drag>,
     /// Currently-selected nodes (click selects one; marquee selects many).
     selected: HashSet<NodeKey>,
+    /// `Some(press_origin)` (screen px) while a left-drag marquee on empty space
+    /// is in progress.
+    marquee: Option<(f32, f32)>,
     /// Whether Ctrl is held (gates wheel-zoom vs wheel-pan).
     ctrl: bool,
     window: Option<Arc<Window>>,
@@ -153,6 +158,7 @@ impl App {
             middle_drag: None,
             drag: None,
             selected: HashSet::new(),
+            marquee: None,
             ctrl: false,
             window: None,
             host: None,
@@ -263,7 +269,9 @@ impl App {
             &ScrollOffsets::<DomNodeId>::default(),
         );
 
-        let layers = [
+        // A third (screen-space) layer for the marquee rubber-band, when active.
+        let marquee_cmds = self.marquee.map(|origin| marquee_rect_cmds(origin, self.cursor));
+        let mut layers = vec![
             CompositeLayer::commands_only(underlay.commands()),
             CompositeLayer {
                 commands: nodes_plist.commands(),
@@ -271,6 +279,9 @@ impl App {
                 images: nodes_plist.images(),
             },
         ];
+        if let Some(cmds) = marquee_cmds.as_ref() {
+            layers.push(CompositeLayer::commands_only(cmds));
+        }
         let scene = composite_paint_layers(viewport, &layers).scene;
 
         let host = self.host.as_ref().unwrap();
@@ -372,6 +383,10 @@ impl ApplicationHandler for App {
                     self.drag = Some(d);
                 }
                 self.cursor = new;
+                // Grow the marquee rubber-band as the pointer moves.
+                if self.marquee.is_some() {
+                    self.request_redraw();
+                }
             },
             WindowEvent::MouseWheel { delta, .. } => {
                 let (dx, dy) = match delta {
@@ -398,14 +413,13 @@ impl ApplicationHandler for App {
                 },
                 (MouseButton::Middle, ElementState::Released) => self.middle_drag = None,
                 (MouseButton::Left, ElementState::Pressed) => {
-                    // Grab the node under the cursor (gyre node-pick in world space).
+                    // Grab the node under the cursor (gyre node-pick in world
+                    // space); on empty space, begin a marquee.
                     let world = self.screen_to_world(self.cursor);
                     if let Some(node) = self.sim.hit_test(world) {
                         self.drag = Some(Drag { node, press: self.cursor, moved: false });
-                    } else if !self.selected.is_empty() {
-                        // Press on empty space clears the selection.
-                        self.selected.clear();
-                        self.request_redraw();
+                    } else {
+                        self.marquee = Some(self.cursor);
                     }
                 },
                 (MouseButton::Left, ElementState::Released) => {
@@ -419,6 +433,22 @@ impl ApplicationHandler for App {
                             // A click, not a drag: select just this node.
                             self.selected.clear();
                             self.selected.insert(d.node);
+                        }
+                        self.request_redraw();
+                    } else if let Some(origin) = self.marquee.take() {
+                        let dragged =
+                            (self.cursor.0 - origin.0).hypot(self.cursor.1 - origin.1) > CLICK_SLOP;
+                        if dragged {
+                            // Rubber-band → gyre rect-select (nodes whose center
+                            // is inside the world-space region).
+                            let region = Box2D::from_points([
+                                self.screen_to_world(origin),
+                                self.screen_to_world(self.cursor),
+                            ]);
+                            self.selected = self.sim.rect_select(region).nodes.into_iter().collect();
+                        } else {
+                            // A bare click on empty space clears the selection.
+                            self.selected.clear();
                         }
                         self.request_redraw();
                     }
@@ -574,6 +604,20 @@ fn build_node_children_dom(
 /// builders take).
 fn qual(local: &str) -> QualName {
     QualName::new(None, Namespace::from(""), LocalName::from(local))
+}
+
+/// The marquee rubber-band as a single translucent screen-space fill from `a` to
+/// `b` (px). No transform, so it composites at screen coords over the camera-space
+/// layers.
+fn marquee_rect_cmds(a: (f32, f32), b: (f32, f32)) -> Vec<PaintCmd> {
+    let rect = LayoutRect::new(
+        LayoutPoint::new(a.0.min(b.0), a.1.min(b.1)),
+        LayoutPoint::new(a.0.max(b.0), a.1.max(b.1)),
+    );
+    vec![PaintCmd::DrawRect(RectItem {
+        placement: CommonPlacement::new(rect),
+        color: ColorF::new(0.30, 0.50, 0.92, 0.18),
+    })]
 }
 
 fn main() {
