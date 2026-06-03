@@ -177,7 +177,9 @@ plus a `CascadeGuard` thread-local and a leaked per-thread sharing cache. Confir
 by runtime test that the cascade initializes and runs correctly off the main
 thread and concurrently across N content-actor threads. That is the class of
 latent single-thread assumption that turns a "relocation" into a debugging week,
-so runtime-verify it rather than assume it.
+so runtime-verify it rather than assume it. **Confirmed 2026-06-03** by the
+`cascade-offthread` probe: identical glyph output on the main thread, off-thread,
+and across 8 concurrent threads, no panic (see Progress).
 
 **`Scene` is `Send` (confirmed); serializability is a separate, weaker claim.**
 `netrender`'s `Scene` is a display list of plain-data `SceneOp`s. Fonts are
@@ -424,13 +426,14 @@ Firefox, not yet Safari as of mid-2026).
   boundary, in armillary.
 - **P2 Static-DOM content actor.** Move `render_content_scene` onto a per-tile
   content-actor thread; the actor ships generation-tagged `SceneReady` and the
-  host kernel composites the latest. Clear the cascade off-thread caveat first
-  (runtime-confirm the serval cascade runs correctly off the main thread and
-  concurrently across threads). Split meerkat's `harvest(&mut Graph, ...)` into a
-  pure `harvest_contributions(...) -> Vec<GraphContribution>` the actor runs,
-  shipping `Contribution`s the kernel applies through `Orrery::ingest_graph` (the
-  actor never touches the graph). A panicking actor shows a broken-tile
-  placeholder via thread respawn. *Done:* content leaves the UI thread with the
+  host kernel composites the latest. (The cascade off-thread caveat is cleared by
+  the `cascade-offthread` probe; see Progress.) Split meerkat's
+  `harvest(&mut Graph, ...)` into a pure `harvest_contributions(...) ->
+  Vec<GraphContribution>` the actor runs, shipping `Contribution`s the kernel
+  applies through `Orrery::ingest_graph` (the actor never touches the graph). A
+  panicking actor is isolated to its thread, so the host survives (the broken-tile
+  placeholder + respawn from `ActorSpec` is P4). *Done:* content leaves the UI
+  thread with the
   cascade confirmed safe off-thread, the producer/applier split is honest, and a
   content panic no longer kills the host.
 - **P3 Nova.** A scripted page runs JS in the content actor (Nova, dedicated
@@ -479,9 +482,9 @@ what is most likely to break, the mitigation, and a pointer.
   access.
 - **`!Send` Nova needs a dedicated thread from P2,** so the content actor is
   thread-shaped before scripting lands and Nova drops in without a rewrite.
-- **Cascade off-thread (P2).** Runtime-verify the serval cascade's thread-local /
-  process-global behavior off the main thread and under concurrency before P2 is
-  called low-risk (see **Findings**).
+- **Cascade off-thread (P2) — cleared 2026-06-03.** The `cascade-offthread` probe
+  confirms the serval cascade runs correctly off the main thread and under 8-way
+  concurrency (see **Findings** / **Progress**).
 - **Declarative lifecycle.** Respawn from the kernel-owned `ActorSpec`, never ad
   hoc closure state, or fault recovery becomes another hidden shared-state seam
   (see **Actor lifecycle records**).
@@ -547,3 +550,28 @@ what is most likely to break, the mitigation, and a pointer.
   content events). Follow-ups: P6's shared-memory line trimmed to a pointer, the
   Tailwind bullet halved, JSPI given inline context in the defer list, and Progress
   entry 1's `Scene` serializability wording tagged as later-refined.
+- **2026-06-03 — P0-P2 implemented and smoke-validated.** First code. **`armillary`**
+  scaffolded as the host-neutral runtime: the `!Send` `KernelThread` boundary marker
+  (proven by a `compile_fail` doctest, not asserted), the actor harness
+  (`spawn(wake, run) -> (ActorHandle, Receiver)` with the runtime / engine built *on*
+  the actor thread so `!Send` internals never cross), and the generation types
+  (`39a8530`). The **serval cascade off-thread gate** flagged above is **cleared** by
+  the `cascade-offthread` probe ([`crates/probes/cascade-offthread`](../../../crates/probes/cascade-offthread)):
+  the `card.rs::html_scene` path renders identically on the main thread, off-thread,
+  and across 8 concurrent threads, no panic (`f8f79e5`). **P1:** the `fetch`
+  subsystem runs through the harness (`FetchCommand` / `FetchUpdate` via
+  `spawn_fetcher`; `8924018`). `harvest` split into the pure `harvest_contributions`
+  producer (`d02feb6`). **P2:** the `meerkat::content` actor renders the focused card
+  off the UI thread (`Show` / `Resize` / `Resource` -> `Scene` / `Wanted` /
+  `Contribution`, harvesting on `Show`; `9291c72`, `a6339f7`), wired into the render
+  loop (`render()` composites the actor's latest scene; `user_event` drains it; stale
+  scenes dropped by generation; the demand-fetch is `Wanted` -> host fetch ->
+  `Resource`; `dfe2153`). **Smoke-validated on screen:** `https://example.com`
+  renders off-thread *with its own CSS* (the full `Show` -> `Scene` -> `Wanted` ->
+  fetch -> `Resource` -> re-render loop), plus async card, resize, and
+  click-blank-then-show. meerkat 40 lib + 19 bin tests green throughout. **Carried
+  gaps:** fault recovery (detect a dead content actor -> broken-tile placeholder ->
+  respawn from `ActorSpec`) is **P4**, not built, so a content panic isolates the
+  host but freezes the card; fetch-on-focus (a node click loading its page) is an
+  open enhancement (pre-existing behavior, not a P2 regression); and
+  `sync`-via-armillary is deferred (the last I/O subsystem).
