@@ -1,0 +1,16 @@
+{"@context":{
+  "dc":"http://purl.org/dc/elements/1.1/",
+  "dcterms":"http://purl.org/dc/terms/",
+  "title":"http://purl.org/dc/terms/title",
+  "creator":"http://purl.org/dc/terms/creator",
+  "subject":"http://purl.org/dc/terms/subject",
+  "description":"http://purl.org/dc/terms/description",
+  "publisher":"http://purl.org/dc/terms/publisher",
+  "contributor":"http://purl.org/dc/terms/contributor",
+  "date":"http://purl.org/dc/terms/date",
+  "identifier":"http://purl.org/dc/terms/identifier",
+  "source":"http://purl.org/dc/terms/source",
+  "language":"http://purl.org/dc/terms/language",
+  "relation":"http://purl.org/dc/terms/relation",
+  "rights":"http://purl.org/dc/terms/rights"
+}}

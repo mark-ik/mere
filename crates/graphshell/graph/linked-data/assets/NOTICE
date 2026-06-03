@@ -16,3 +16,22 @@ schema.org.context.jsonld
   `http://schema.org/`, so Mere normalizes schema.org IRIs to their https form
   on ingest.
 ----------------------------------------------------------------------------
+activitystreams.context.jsonld
+
+  Source:  https://www.w3.org/ns/activitystreams
+  © W3C and contributors.
+  License: W3C Software and Document Notice and License
+           https://www.w3.org/copyright/software-license/
+
+  The normative ActivityStreams 2.0 / ActivityPub context. Used to expand
+  documents that reference `"@context": "https://www.w3.org/ns/activitystreams"`
+  offline (the fediverse).
+----------------------------------------------------------------------------
+dublin-core.context.jsonld
+
+  Authored by the Mere project (MPL-2.0, same as this crate — not a third-party
+  asset). A small convenience context mapping the `dc:` / `dcterms:` prefixes
+  and common Dublin Core terms to their IRIs, for the rare document that
+  references a remote Dublin Core context. Dublin Core term recognition
+  (`dcterms:title` -> title, etc.) does not depend on this file.
+----------------------------------------------------------------------------

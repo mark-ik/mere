@@ -299,8 +299,19 @@ has a done-condition, not a date.
     heavier if its *tables* are ever vendored (UDC Summary is a CC variant; the
     full UDC is commercially licensed) — using it as a scheme label, as now, is
     unencumbered.
-  - **Still open:** the wasm materialization path; optionally further packs
-    (Dublin Core, ActivityStreams) under the same feature.
+  - **AS2 + Dublin Core packs added 2026-06-02:** ActivityStreams 2.0 vendored
+    (the W3C context, ~8 KB, registered under `https://www.w3.org/ns/activitystreams`)
+    so fediverse objects resolve offline — `as:name` → title, and `inReplyTo` /
+    `tag` / `attributedTo` (all `@id` terms) become edges. Dublin Core handled by
+    **recognition** (`dcterms:title` / `dc:title` → title, `…:subject` → tags)
+    plus a small Mere-authored DC context (MPL, not third-party) for the rare
+    remote-context reference. `full()` now composes three independent pack
+    modules (schema.org, AS2, DC) via a private `register` helper; the curated
+    title/tags recognition spans all three vocabularies.
+  - **Still open:** the wasm materialization path. With a netfetcher now present,
+    the natural next step is a fetch-and-cache fallback in the `@context` loader
+    for the long tail beyond the bundled packs (bundled = fast/offline/common;
+    netfetch = the rest, cached).
 
 ### Phase 3 — Round-trip + coverage
 - Ingest → export → compare, modulo the by-design drops (uncurated literals).

@@ -135,6 +135,30 @@ fn normalize_schema_org(iri: &str) -> String {
     }
 }
 
+/// Literal predicates promoted to a node's title, across the curated
+/// vocabularies (schema.org, Dublin Core, ActivityStreams). Last one seen wins.
+const TITLE_PREDICATES: &[&str] = &[
+    SCHEMA_NAME,                                  // schema:name
+    "http://purl.org/dc/terms/title",             // dcterms:title
+    "http://purl.org/dc/elements/1.1/title",      // dc:title
+    "https://www.w3.org/ns/activitystreams#name", // as:name
+];
+
+/// Literal predicates promoted to a node's tags.
+const TAGS_PREDICATES: &[&str] = &[
+    SCHEMA_KEYWORDS,                          // schema:keywords
+    "http://purl.org/dc/terms/subject",       // dcterms:subject
+    "http://purl.org/dc/elements/1.1/subject", // dc:subject
+];
+
+fn is_title_predicate(predicate: &str) -> bool {
+    TITLE_PREDICATES.contains(&predicate)
+}
+
+fn is_tags_predicate(predicate: &str) -> bool {
+    TAGS_PREDICATES.contains(&predicate)
+}
+
 /// The IRI for a subject term (skolemizing a blank node within `namespace`).
 fn subject_iri(subject: &NamedOrBlankNode, namespace: &str) -> String {
     match subject {
@@ -261,13 +285,14 @@ fn collect_contribution<E: std::fmt::Display>(
         match &quad.object {
             Term::Literal(literal) => {
                 let node = nodes.get_mut(&subject).expect("subject just inserted");
-                match predicate {
-                    SCHEMA_NAME => node.title = Some(literal.value().to_string()),
-                    SCHEMA_KEYWORDS => node.tags.push(literal.value().to_string()),
+                let value = literal.value().to_string();
+                if is_title_predicate(predicate) {
+                    node.title = Some(value);
+                } else if is_tags_predicate(predicate) {
+                    node.tags.push(value);
+                } else {
                     // Any other literal goes into the open property bag.
-                    _ => node
-                        .properties
-                        .push((predicate.to_string(), literal.value().to_string())),
+                    node.properties.push((predicate.to_string(), value));
                 }
             }
             Term::NamedNode(object) => {
@@ -334,6 +359,23 @@ const SCHEMA_ORG_URLS: &[&str] = &[
     "http://schema.org",
 ];
 
+/// The vendored ActivityStreams 2.0 context (see `assets/NOTICE`; W3C license).
+#[cfg(feature = "bundled-contexts")]
+const ACTIVITYSTREAMS_CONTEXT: &[u8] = include_bytes!("../assets/activitystreams.context.jsonld");
+
+#[cfg(feature = "bundled-contexts")]
+const ACTIVITYSTREAMS_URLS: &[&str] = &[
+    "https://www.w3.org/ns/activitystreams",
+    "http://www.w3.org/ns/activitystreams",
+];
+
+/// A small Mere-authored Dublin Core context (MPL; not a third-party asset).
+#[cfg(feature = "bundled-contexts")]
+const DUBLIN_CORE_CONTEXT: &[u8] = include_bytes!("../assets/dublin-core.context.jsonld");
+
+#[cfg(feature = "bundled-contexts")]
+const DUBLIN_CORE_URLS: &[&str] = &["http://purl.org/dc/terms/", "http://purl.org/dc/elements/1.1/"];
+
 impl ContextCache {
     /// An empty cache (the **none** preset): every remote `@context` is refused.
     pub fn new() -> Self {
@@ -349,19 +391,32 @@ impl ContextCache {
     }
 
     /// The **full** preset (the host default): the minimal context plus the
-    /// vendored standard vocabularies (schema.org; see `assets/NOTICE`), so an
-    /// arbitrary `@context: "https://schema.org/"` resolves offline. With the
-    /// `bundled-contexts` feature off this equals [`minimal`](Self::minimal); a
-    /// user can also step down to `minimal` / `new`, or bring their own via
-    /// [`with`](Self::with).
+    /// vendored standard vocabularies (schema.org, ActivityStreams 2.0, Dublin
+    /// Core; see `assets/NOTICE`), so an arbitrary remote `@context` for any of
+    /// them resolves offline. Each pack is an independent module registered
+    /// here; with the `bundled-contexts` feature off this equals
+    /// [`minimal`](Self::minimal). A user can also step down to `minimal` /
+    /// `new`, or bring their own via [`with`](Self::with).
     pub fn full() -> Self {
         #[allow(unused_mut)]
         let mut cache = Self::minimal();
         #[cfg(feature = "bundled-contexts")]
-        for url in SCHEMA_ORG_URLS {
-            cache = cache.with(*url, SCHEMA_ORG_CONTEXT);
+        {
+            cache = cache
+                .register(SCHEMA_ORG_URLS, SCHEMA_ORG_CONTEXT)
+                .register(ACTIVITYSTREAMS_URLS, ACTIVITYSTREAMS_CONTEXT)
+                .register(DUBLIN_CORE_URLS, DUBLIN_CORE_CONTEXT);
         }
         cache
+    }
+
+    /// Register `document` as the context served for each of `urls`.
+    #[cfg(feature = "bundled-contexts")]
+    fn register(mut self, urls: &[&str], document: &'static [u8]) -> Self {
+        for url in urls {
+            self = self.with(*url, document);
+        }
+        self
     }
 
     /// Bundle a context document under its URL (builder style).
@@ -674,6 +729,41 @@ mod tests {
                 .iter()
                 .any(|(p, v)| p == "https://schema.org/datePublished" && v == "2026-06-02")
         );
+    }
+
+    #[cfg(feature = "bundled-contexts")]
+    #[test]
+    fn full_pack_resolves_activitystreams() {
+        // A fediverse-style object: as:name -> title, as:inReplyTo (an @id term)
+        // -> a Semantic edge.
+        let doc = br#"{"@context":"https://www.w3.org/ns/activitystreams","@id":"https://x.test/n1","name":"Hello","inReplyTo":"https://y.test/n0"}"#;
+        let c = from_jsonld_with_contexts(doc, ContextCache::full()).expect("AS2 resolved offline");
+        let node = c
+            .nodes
+            .iter()
+            .find(|n| n.id == "https://x.test/n1")
+            .expect("node n1");
+        assert_eq!(node.title.as_deref(), Some("Hello"));
+        assert!(
+            c.edges
+                .iter()
+                .any(|e| e.object == "https://y.test/n0" && e.predicate.contains("inReplyTo"))
+        );
+    }
+
+    #[test]
+    fn dublin_core_literals_are_recognized() {
+        // dcterms:title -> title, dcterms:subject -> tag. Recognition works on an
+        // inline prefix, with no remote context fetched.
+        let doc = br#"{"@context":{"dcterms":"http://purl.org/dc/terms/"},"@id":"https://d.test/","dcterms:title":"Doc","dcterms:subject":"alpha"}"#;
+        let c = from_jsonld(doc).expect("DC parsed");
+        let node = c
+            .nodes
+            .iter()
+            .find(|n| n.id == "https://d.test/")
+            .expect("node d");
+        assert_eq!(node.title.as_deref(), Some("Doc"));
+        assert!(node.tags.iter().any(|t| t == "alpha"));
     }
 
     #[test]

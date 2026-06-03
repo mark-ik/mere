@@ -14,10 +14,10 @@ path = "src/lib.rs"
 
 [features]
 default = ["bundled-contexts"]
-# Vendored standard-vocabulary JSON-LD contexts (currently schema.org, ~207 KB)
-# so an arbitrary remote `@context` resolves offline via `ContextCache::full()`.
-# Disable for a slimmer binary — `full()` then equals `minimal()`. The vendored
-# assets are third-party / separately-licensed; see `assets/NOTICE`.
+# Vendored standard-vocabulary JSON-LD contexts (schema.org, ActivityStreams 2.0,
+# plus a small Mere-authored Dublin Core context; ~220 KB) so an arbitrary remote
+# `@context` resolves offline via `ContextCache::full()`. Disable for a slimmer
+# binary — `full()` then equals `minimal()`. See `assets/NOTICE` for licensing.
 bundled-contexts = []
 
 [dependencies]
