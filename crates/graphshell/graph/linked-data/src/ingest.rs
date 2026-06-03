@@ -124,6 +124,17 @@ fn skolemize(namespace: &str, blank_id: &str) -> String {
     format!("urn:mere:bnode:{namespace}:{blank_id}")
 }
 
+/// Canonicalize a schema.org IRI to its `https` form. The schema.org `@context`
+/// uses `@vocab: http://schema.org/`, so a document referencing it expands terms
+/// to `http://schema.org/…`; Mere keys on (and stores) `https://schema.org/…`, so
+/// the two flavors of schema.org document unify.
+fn normalize_schema_org(iri: &str) -> String {
+    match iri.strip_prefix("http://schema.org/") {
+        Some(rest) => format!("https://schema.org/{rest}"),
+        None => iri.to_string(),
+    }
+}
+
 /// The IRI for a subject term (skolemizing a blank node within `namespace`).
 fn subject_iri(subject: &NamedOrBlankNode, namespace: &str) -> String {
     match subject {
@@ -196,6 +207,13 @@ pub fn from_jsonld_with_contexts(
 /// A host pairs this with rendering: a page both displays and contributes its
 /// linked data.
 pub fn from_html(html: &str) -> Vec<GraphContribution> {
+    from_html_with_contexts(html, ContextCache::new())
+}
+
+/// Like [`from_html`], but each embedded document is parsed with `contexts`, so a
+/// `<script>` block referencing a remote `@context` (e.g. schema.org) resolves
+/// from the bundled cache rather than being skipped.
+pub fn from_html_with_contexts(html: &str, contexts: ContextCache) -> Vec<GraphContribution> {
     let lower = html.to_ascii_lowercase();
     let mut out = Vec::new();
     let mut pos = 0;
@@ -211,7 +229,8 @@ pub fn from_html(html: &str) -> Vec<GraphContribution> {
         };
         let content_end = content_start + close_rel;
         if open_tag.contains("application/ld+json") {
-            if let Ok(contribution) = from_jsonld(html[content_start..content_end].as_bytes()) {
+            let block = html[content_start..content_end].as_bytes();
+            if let Ok(contribution) = from_jsonld_with_contexts(block, contexts.clone()) {
                 out.push(contribution);
             }
         }
@@ -233,7 +252,8 @@ fn collect_contribution<E: std::fmt::Display>(
     for quad in quads {
         let quad = quad.map_err(|err| IngestError::Parse(err.to_string()))?;
         let subject = subject_iri(&quad.subject, namespace);
-        let predicate = quad.predicate.as_str();
+        let predicate_norm = normalize_schema_org(quad.predicate.as_str());
+        let predicate = predicate_norm.as_str();
         nodes
             .entry(subject.clone())
             .or_insert_with(|| NodeContribution::new(&subject));
@@ -301,6 +321,19 @@ const MERE_CONTEXT_URL: &str = "https://mere.computer/ns/context";
 /// plus the `mere:` relation prefix.
 const MERE_MINIMAL_CONTEXT: &[u8] = br#"{"@context":{"name":"https://schema.org/name","keywords":"https://schema.org/keywords","mere":"https://mere.computer/ns/rel#"}}"#;
 
+/// The vendored schema.org context (see `assets/NOTICE`; CC BY-SA 3.0).
+#[cfg(feature = "bundled-contexts")]
+const SCHEMA_ORG_CONTEXT: &[u8] = include_bytes!("../assets/schema.org.context.jsonld");
+
+/// The `@context` URLs a document may reference for schema.org.
+#[cfg(feature = "bundled-contexts")]
+const SCHEMA_ORG_URLS: &[&str] = &[
+    "https://schema.org/",
+    "https://schema.org",
+    "http://schema.org/",
+    "http://schema.org",
+];
+
 impl ContextCache {
     /// An empty cache (the **none** preset): every remote `@context` is refused.
     pub fn new() -> Self {
@@ -316,15 +349,19 @@ impl ContextCache {
     }
 
     /// The **full** preset (the host default): the minimal context plus the
-    /// bundled standard vocabularies, so an arbitrary
-    /// `@context: "https://schema.org/"` resolves offline. Until those vocabulary
-    /// assets are vendored (a size / licensing decision), this equals
-    /// [`minimal`](Self::minimal); a user can always step down to `minimal` /
-    /// `new`, or bring their own via [`with`](Self::with).
+    /// vendored standard vocabularies (schema.org; see `assets/NOTICE`), so an
+    /// arbitrary `@context: "https://schema.org/"` resolves offline. With the
+    /// `bundled-contexts` feature off this equals [`minimal`](Self::minimal); a
+    /// user can also step down to `minimal` / `new`, or bring their own via
+    /// [`with`](Self::with).
     pub fn full() -> Self {
-        // Vendored standard-vocabulary contexts (schema.org, Dublin Core,
-        // ActivityStreams) register here once dropped into `assets/`.
-        Self::minimal()
+        #[allow(unused_mut)]
+        let mut cache = Self::minimal();
+        #[cfg(feature = "bundled-contexts")]
+        for url in SCHEMA_ORG_URLS {
+            cache = cache.with(*url, SCHEMA_ORG_CONTEXT);
+        }
+        cache
     }
 
     /// Bundle a context document under its URL (builder style).
@@ -616,6 +653,27 @@ mod tests {
         );
         assert!(from_jsonld_with_contexts(doc, ContextCache::full()).is_ok());
         assert!(from_jsonld_with_contexts(doc, ContextCache::new()).is_err());
+    }
+
+    #[cfg(feature = "bundled-contexts")]
+    #[test]
+    fn full_pack_resolves_a_schema_org_remote_context() {
+        // A page referencing schema.org's remote context resolves offline, and
+        // schema.org's http `@vocab` is normalized to https.
+        let doc = br#"{"@context":"https://schema.org/","@id":"https://a.test/","name":"Article A","datePublished":"2026-06-02"}"#;
+        let contribution =
+            from_jsonld_with_contexts(doc, ContextCache::full()).expect("schema.org resolved offline");
+        let node = contribution
+            .nodes
+            .iter()
+            .find(|n| n.id == "https://a.test/")
+            .expect("node a");
+        assert_eq!(node.title.as_deref(), Some("Article A"));
+        assert!(
+            node.properties
+                .iter()
+                .any(|(p, v)| p == "https://schema.org/datePublished" && v == "2026-06-02")
+        );
     }
 
     #[test]

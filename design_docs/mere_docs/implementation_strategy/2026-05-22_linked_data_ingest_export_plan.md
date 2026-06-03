@@ -284,9 +284,23 @@ has a done-condition, not a date.
     (oxjsonld already assigns unique labels, so collision was a non-issue; full
     idempotency needs canonicalization, deferred) (`8190220`); **context presets**
     `ContextCache::full` / `minimal` / `new` + a curated Mere context (`082de79`).
-  - **Still open:** vendoring the standard-vocabulary context assets (schema.org
-    ≈ 207 KB, CC-BY-SA into an MPL repo — a size / licensing call) so `full()` is
-    truly full; the wasm materialization path.
+  - **Full pack vendored 2026-06-02:** the schema.org context (≈ 211 KB) lives in
+    `assets/` with a CC-BY-SA attribution `NOTICE`, behind a default-on
+    `bundled-contexts` feature; `ContextCache::full()` registers it under the
+    `http(s)://schema.org[/]` `@context` URLs, so an arbitrary schema.org
+    document resolves offline. schema.org's `@vocab` is `http://schema.org/`, so
+    ingest normalizes schema.org IRIs to their `https` form (`normalize_schema_org`)
+    to unify the two flavors. The host now ingests through
+    `from_jsonld_with_contexts` / `from_html_with_contexts` with the full pack —
+    a local `@context: "https://schema.org/"` page resolves with no network.
+    Licensing note: a bundled CC-BY-SA *data* file is aggregation, not
+    adaptation; it stays CC-BY-SA with attribution and does not relicense the
+    MPL crate. UDC (Mere's default classification scheme) is the same shape but
+    heavier if its *tables* are ever vendored (UDC Summary is a CC variant; the
+    full UDC is commercially licensed) — using it as a scheme label, as now, is
+    unencumbered.
+  - **Still open:** the wasm materialization path; optionally further packs
+    (Dublin Core, ActivityStreams) under the same feature.
 
 ### Phase 3 — Round-trip + coverage
 - Ingest → export → compare, modulo the by-design drops (uncurated literals).

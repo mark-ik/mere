@@ -18,7 +18,9 @@ use inker::routing::{
 };
 use inker::{DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan};
 use kernel::graph::Graph;
-use linked_data::{apply_contribution, from_html, from_jsonld};
+use linked_data::{
+    ContextCache, apply_contribution, from_html_with_contexts, from_jsonld_with_contexts,
+};
 
 use crate::engine_tile::{RenderedTile, error_document, render_address};
 
@@ -109,7 +111,7 @@ pub fn resolve(address: &str, graph: &mut Graph) -> (RenderedTile, bool) {
     // An HTML page also contributes any embedded JSON-LD while it renders.
     let mut graph_changed = false;
     if content_type.as_deref().is_some_and(is_html) {
-        for contribution in from_html(&body) {
+        for contribution in from_html_with_contexts(&body, ContextCache::full()) {
             let outcome = apply_contribution(graph, &contribution);
             graph_changed |= outcome.nodes_created > 0 || outcome.edges_asserted > 0;
         }
@@ -130,9 +132,10 @@ fn is_html(content_type: &str) -> bool {
 /// Parse `body` as JSON-LD and merge it into `graph`; the returned tile is a
 /// short summary, or an error page on a parse failure. `@id`s become nodes,
 /// `rel#` / raw predicates become `Semantic` edges, `schema:name` / `keywords`
-/// become title / tags. No remote `@context` is fetched (inline / expanded only).
+/// become title / tags. A remote `@context` (e.g. schema.org) resolves from the
+/// bundled `full` pack offline; no network is touched.
 fn ingest_jsonld(address: &str, body: &str, graph: &mut Graph) -> RenderedTile {
-    match from_jsonld(body.as_bytes()) {
+    match from_jsonld_with_contexts(body.as_bytes(), ContextCache::full()) {
         Ok(contribution) => {
             let outcome = apply_contribution(graph, &contribution);
             RenderedTile {

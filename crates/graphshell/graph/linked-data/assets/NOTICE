@@ -1,0 +1,18 @@
+Third-party JSON-LD @context documents, vendored so Mere can resolve standard
+vocabularies offline (no network fetch during ingest). Bundled verbatim, not
+modified. Each is a separately-licensed data asset; the surrounding crate is
+MPL-2.0 and is unaffected (aggregation, not adaptation).
+
+----------------------------------------------------------------------------
+schema.org.context.jsonld
+
+  Source:  https://schema.org/docs/jsonldcontext.json
+  © schema.org and contributors.
+  License: Creative Commons Attribution-ShareAlike 3.0 (CC BY-SA 3.0)
+           https://creativecommons.org/licenses/by-sa/3.0/
+
+  Used to expand documents that reference `"@context": "https://schema.org/"`
+  (and the http:// variant) offline. The schema.org context's `@vocab` is
+  `http://schema.org/`, so Mere normalizes schema.org IRIs to their https form
+  on ingest.
+----------------------------------------------------------------------------
