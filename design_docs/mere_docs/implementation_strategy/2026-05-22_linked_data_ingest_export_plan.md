@@ -320,10 +320,41 @@ has a done-condition, not a date.
     remote-context reference. `full()` now composes three independent pack
     modules (schema.org, AS2, DC) via a private `register` helper; the curated
     title/tags recognition spans all three vocabularies.
-  - **Still open:** the wasm materialization path. With a netfetcher now present,
-    the natural next step is a fetch-and-cache fallback in the `@context` loader
-    for the long tail beyond the bundled packs (bundled = fast/offline/common;
-    netfetch = the rest, cached).
+  - **`@context` netfetch fallback (in progress 2026-06-03).** For a remote
+    context beyond the bundled packs, the host fetches it and folds it into the
+    cache before the (sync, network-free) parse. No sync/async bridge is needed,
+    because the fetch happens before the parse. Landed (`5fcab13`):
+    `referenced_context_urls` (scan a document for the remote `@context` URLs it
+    names) plus `is_bundled_context` (skip the ones the packs serve). Pending:
+    meerkat's fetch worker fetching the unbundled ones (reusing its `fetch_bytes`)
+    and a `harvest_with_contexts` folding them in. Held while meerkat's
+    HTML-document / subresource work lands. Guards: https-only (SSRF), best-effort
+    (a failed context drops its terms, not the document), netfetcher's own cache
+    for repeats.
+  - **Wasm materialization path: scope (deferred; no wasm host yet).**
+    - *The blocker, precisely.* `apply_contribution` is `not(wasm32)` only because
+      it calls `Graph::add_node`, which mints `Uuid::new_v4()` (getrandom). The
+      kernel is otherwise WASM-clean and already exposes the wasm-safe
+      `add_node_with_id(id, url, position)`. So the port is a wasm-clean
+      `apply_contribution` variant that materializes through `add_node_with_id`
+      with a host-supplied identity, not a rewrite.
+    - *The real decision: where node identity comes from.* (a) a host RNG closure
+      `FnMut() -> Uuid` (browser: `crypto` / js-getrandom), mirroring native's
+      random v4; or (b) deterministic `Uuid::new_v5(ns, @id)`: no RNG (wasm-clean
+      with no getrandom-js), and content-addressed, so the same `@id` yields the
+      same node identity across ingests and hosts. Option (b) makes re-ingest
+      idempotent by identity (not just URL-dedup), closes the skolem/idempotency
+      thread, and unifies native + wasm, at the cost of changing native from random
+      v4 (worth adopting natively too). Lean (b).
+    - *Adjacent wasm items to verify / decide.* Confirm `oxjsonld` / `oxrdf` build
+      to `wasm32-unknown-unknown` (pure-Rust expected; watch for a transitive
+      getrandom). Decide `bundled-contexts` on wasm: ~220 KB in the bundle vs
+      default-off plus browser-fetching the contexts. Context-fetch on wasm goes
+      through the browser fetch API (netfetcher is native-only), so the fallback
+      above is host-specific there.
+    - *Trigger.* A wasm/PWA Mere host that ingests linked data client-side. Until
+      one exists this blocks nothing, and the change is small and isolated when it
+      does.
 
 ### Phase 3 — Round-trip + coverage
 - Ingest → export → compare, modulo the by-design drops (uncurated literals).
