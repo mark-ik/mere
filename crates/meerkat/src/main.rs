@@ -56,6 +56,7 @@ use winit::window::{Window, WindowId};
 use xilem_serval::{Modifiers, PointerClick, ServalAppRunner};
 
 mod card;
+mod content;
 mod fetch;
 mod resources;
 mod sync;
