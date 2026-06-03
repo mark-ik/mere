@@ -13,6 +13,14 @@ kernel already exists (meerkat's winit `App`), the I/O actors already exist
 (`fetch`, `sync`), and the content pipeline is already a pure scene producer. The
 plan names the pattern and generalizes it.
 
+The runtime lives in a new host-neutral crate, **`armillary`**: the kernel harness
+(inbox router plus dispatch), the actor traits and lifecycle, and the message
+taxonomy. meerkat is the concrete kernel built on it (winit, wgpu, the graph);
+content and I/O actors are armillary actors. The name fits the shape: an armillary
+sphere is a frame of rings around a central point, which is exactly this structure,
+the kernel at the center with the actor rings around it (the content actors its
+constellation).
+
 Related: [modular integration plan](2026-06-02_modular_integration_plan.md) (the
 host model and S-phases), [linked-data ingest plan](2026-05-22_linked_data_ingest_export_plan.md)
 (the contribution boundary + v5 identity), [netfetcher plan](2026-05-25_netfetcher_plan.md)
@@ -111,17 +119,23 @@ Outbound to a content actor:
 - `Navigate { url }`, `Input { event }`, `Resize { w, h }`, `Teardown`
 - `EvalScript { source }` (Nova phase)
 
-## Decisions to make (track the whole space)
+## Decisions (resolved 2026-06-03)
 
-- **Granularity: per-origin vs per-page.** Per-origin lets same-origin tiles share
-  JS state (web-compat: `window.open`, synchronous DOM access); per-page is simpler
-  isolation. Lean per-origin where pages script, per-page for non-scripting graph
-  tiles. Expose as a setting rather than hardcode.
-- **How content actors fetch subresources.** Route through the I/O fetch actor by
-  message (centralizes the cache / cookie jar / netfetcher, keeps "Mere owns
-  networking" literal) rather than give each content actor its own netfetcher.
-- **Shared-read kernel state.** `Arc<Snapshot>` atomic swap for hot reads vs a
-  request/response message. Lean snapshots for theme and per-tile graph slices.
+- **Granularity: per-origin.** A content actor owns an origin, not a single page,
+  so same-origin tiles share JS state (web-compat: `window.open`, synchronous DOM
+  access). The Firefox content-process model. Non-scripting graph tiles can still
+  collapse to per-page; expose that as a setting rather than hardcode.
+- **Subresource fetch: through the I/O fetch actor, by message.** A content actor
+  requests a subresource from the fetch actor and receives bytes, rather than
+  owning its own netfetcher. This centralizes the cache / cookie jar / netfetcher
+  and keeps "Mere owns networking" literal.
+- **Runtime crate: `armillary`** (new, host-neutral). Houses the kernel harness,
+  the actor traits + lifecycle, and the message taxonomy. meerkat consumes it.
+
+Working defaults (not contested, revisit if they bite):
+
+- **Shared-read kernel state.** `Arc<Snapshot>` atomic swap for hot reads (theme,
+  per-tile graph slices) over a request/response round-trip.
 - **Fault model.** `catch_unwind` per actor loop; on death the kernel paints a
   broken-tile placeholder and can respawn from the last navigation. A reliability
   gain over today, where a content-render panic takes the whole host down.
@@ -131,10 +145,11 @@ Outbound to a content actor:
 - **P0 Name the kernel inbox.** A single inbox type (or a documented router)
   unifies the `fetch` / `sub` / `sync` drains; `user_event` dispatches by variant.
   No behavior change. *Done:* one place to read "what the kernel is told."
-- **P1 Generalize the actor harness.** Express `fetch` and `sync` through one
-  `Subsystem` shape (`spawn(proxy, ...) -> (Handle, Receiver<Update>)`); add a third
-  trivial actor (persistence-write or link-resolution) through it to prove
-  generality. *Done:* three actors, one harness.
+- **P1 The `armillary` harness.** Stand up the `armillary` crate: one `Subsystem`
+  shape (`spawn(proxy, ...) -> (Handle, Receiver<Update>)`) plus the inbox/dispatch
+  from P0. Express `fetch` and `sync` through it; add a third trivial actor
+  (persistence-write or link-resolution) to prove generality. *Done:* three actors,
+  one harness, in armillary.
 - **P2 Static-DOM content actor.** Move `render_content_scene` onto a
   content-actor thread; the focused tile's HTML renders off the UI thread and the
   kernel composites the delivered `Scene`. JSON-LD harvest ships a `Contribution`
@@ -179,3 +194,7 @@ Outbound to a content actor:
   `StaticDocument` is the near-term content engine and Nova is not yet in the tree;
   the linked-data contribution/apply split is the content-actor contract and v5 is
   the merge key. No code written yet; P0 is the first step.
+- **2026-06-03.** Decisions resolved (Mark): per-origin content actors (the Firefox
+  model); subresource fetch through the I/O fetch actor by message; the runtime
+  crate is **`armillary`** (new, host-neutral). Shared-read snapshots and the
+  `catch_unwind` fault model stand as the working defaults.
