@@ -41,7 +41,9 @@ pub enum ContentCommand {
     /// back so it can drop a scene built for a page/size the tile has left.
     Show {
         url: String,
-        fetched: Fetched,
+        /// The focused card's content state (`None` for a synthesized page such as
+        /// `mere://welcome`); the actor renders any state, harvesting only `Ready`.
+        state: Option<ContentState>,
         viewport: (u32, u32),
         nav: NavGeneration,
         viewport_gen: ViewportGeneration,
@@ -68,7 +70,7 @@ pub enum ContentUpdate {
 /// The actor-thread-local current document.
 struct Content {
     url: String,
-    fetched: Fetched,
+    state: Option<ContentState>,
     viewport: (u32, u32),
     nav: NavGeneration,
     viewport_gen: ViewportGeneration,
@@ -91,16 +93,18 @@ pub fn spawn_content(
 
         while let Ok(command) = commands.recv() {
             match command {
-                ContentCommand::Show { url, fetched, viewport, nav, viewport_gen } => {
-                    // Harvest the document's linked data once, on load.
-                    let contributions = meerkat::ingest::harvest_contributions(
-                        fetched.content_type.as_deref(),
-                        &fetched.body,
-                    );
-                    if !contributions.is_empty() {
-                        out.emit(ContentUpdate::Contribution { contributions });
+                ContentCommand::Show { url, state, viewport, nav, viewport_gen } => {
+                    // Harvest the document's linked data once, on load (Ready only).
+                    if let Some(ContentState::Ready(fetched)) = &state {
+                        let contributions = meerkat::ingest::harvest_contributions(
+                            fetched.content_type.as_deref(),
+                            &fetched.body,
+                        );
+                        if !contributions.is_empty() {
+                            out.emit(ContentUpdate::Contribution { contributions });
+                        }
                     }
-                    let content = Content { url, fetched, viewport, nav, viewport_gen };
+                    let content = Content { url, state, viewport, nav, viewport_gen };
                     render(&content, &store, &registry, &out);
                     current = Some(content);
                 },
@@ -132,9 +136,8 @@ fn render(
 ) {
     let wanted = RefCell::new(Vec::new());
     let loader = ResourceLoader::new(store, &content.url, &wanted);
-    let state = ContentState::Ready(content.fetched.clone());
     let (w, h) = content.viewport;
-    let scene = render_content_scene(&content.url, Some(&state), registry, &loader, w, h);
+    let scene = render_content_scene(&content.url, content.state.as_ref(), registry, &loader, w, h);
     out.emit(ContentUpdate::Scene { nav: content.nav, viewport_gen: content.viewport_gen, scene });
     let wanted = wanted.into_inner();
     if !wanted.is_empty() {
@@ -155,7 +158,10 @@ mod tests {
     fn show(url: &str, content_type: &str, body: &str) -> ContentCommand {
         ContentCommand::Show {
             url: url.to_string(),
-            fetched: Fetched { content_type: Some(content_type.to_string()), body: body.to_string() },
+            state: Some(ContentState::Ready(Fetched {
+                content_type: Some(content_type.to_string()),
+                body: body.to_string(),
+            })),
             viewport: (420, 360),
             nav: NavGeneration::default(),
             viewport_gen: ViewportGeneration::default(),
