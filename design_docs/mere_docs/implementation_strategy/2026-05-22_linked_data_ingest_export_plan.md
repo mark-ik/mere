@@ -271,6 +271,18 @@ has a done-condition, not a date.
   makes it exercisable: opening it merges two papers and a `cites` edge into the
   live graph. mere-app **19**. linked-data is no longer inert — the fetch → route
   → ingest → merge loop runs end to end.
+- **Re-homed to meerkat 2026-06-03 (the live host).** The `mere-app` consumer was
+  built on the *retiring* host (modular integration plan §1 / S7). The real
+  consumer is **meerkat**, which already fetches via the `netfetcher` sibling repo
+  off the UI thread (S2.2b). The ingest is now `meerkat::ingest::harvest(&mut
+  Graph, content_type, body)` (a host-neutral lib fn: `ld+json` parses against the
+  full pack then `apply_contribution`; HTML rides `from_html_with_contexts`), from
+  meerkat's `user_event` fetch-completion drain. To keep orrery-host free of the
+  linked-data bridge, the merge rides a new `Orrery::ingest_graph(closure)` that
+  mutates the graph then reconciles the gyre physics + node pool (extracted
+  `reconcile_derived` from `visit`); origin-minted nodes are fanned out so the
+  force sim doesn't stack them. orrery-host **13**, meerkat **35** (ingest 4). The
+  `mere-app` copy is left to retire with the crate, not migrated line-by-line.
   - **Gated decisions made (light path):** standalone `application/ld+json` only;
     native `apply_contribution` (a wasm host materializes via `add_node_with_id`);
     inline / expanded `@context` only (remote-context bundling deferred);

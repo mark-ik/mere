@@ -67,6 +67,13 @@ orrery-host = { path = "../orrery-host" }
 inker = { workspace = true }
 document-canvas = { workspace = true, features = ["netrender"] }
 
+# The graph kernel (the `Graph` type) and the linked-data bridge: a fetched
+# JSON-LD document (or JSON-LD embedded in HTML) merges into the session graph,
+# remote `@context`s resolved offline against the bundled full pack (schema.org /
+# ActivityStreams / Dublin Core). The merge rides `Orrery::ingest_graph`.
+kernel = { workspace = true }
+linked-data = { workspace = true }
+
 # Off-UI-thread fetch (S2.2b): netfetcher's async WHATWG Fetch runs on a tokio
 # worker pool; results are delivered back to the winit loop over a channel + an
 # EventLoopProxy wake. `url` builds the request; netfetcher is the sibling repo,

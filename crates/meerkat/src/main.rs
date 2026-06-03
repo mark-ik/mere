@@ -623,16 +623,28 @@ impl ApplicationHandler for App {
     /// Drain completed fetches (delivery model 2): a worker woke us via the proxy;
     /// fold each outcome into the content cache and re-render the card.
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
-        let mut changed = false;
+        let mut card_changed = false;
+        let mut graph_changed = false;
         while let Ok(outcome) = self.fetch_rx.try_recv() {
             let state = match outcome.result {
-                Ok(fetched) => fetch::ContentState::Ready(fetched),
+                Ok(fetched) => {
+                    // A fetched document also contributes any linked data it
+                    // carries (JSON-LD, or JSON-LD embedded in HTML) into the
+                    // graph, reconciled into the spatial field via `ingest_graph`.
+                    graph_changed |= self.orrery.ingest_graph(|g| {
+                        meerkat::ingest::harvest(g, fetched.content_type.as_deref(), &fetched.body)
+                    });
+                    fetch::ContentState::Ready(fetched)
+                },
                 Err(reason) => fetch::ContentState::Failed(reason),
             };
             self.content.insert(outcome.url, state);
-            changed = true;
+            card_changed = true;
         }
-        if changed {
+        if graph_changed {
+            self.save_session();
+        }
+        if card_changed || graph_changed {
             self.card_key = None; // force the card to re-render from the new state
             self.request_redraw();
         }

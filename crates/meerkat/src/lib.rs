@@ -50,6 +50,7 @@ use xilem_serval::{
 };
 
 pub mod command;
+pub mod ingest;
 pub mod nav;
 pub mod suggest;
 

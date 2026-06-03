@@ -512,20 +512,66 @@ impl Orrery {
         if let Some(from) = from {
             let _ = self.graph.assert_relation(from, key, hyperlink());
         }
-        // Re-sync derived state: a body for the new node, the refreshed edge
-        // topology, a seed near the anchor, and a rebuilt node-children pool (the
-        // pool is structural, so it is rebuilt, not grown incrementally).
+        // Re-sync derived state (bodies, edges, node pool), then seed the new node
+        // near the anchor and re-settle.
+        self.reconcile_derived();
+        self.sim.seed_positions([(key, seed)]);
+        self.select_only(key);
+        self.ticks_remaining = SETTLE_TICKS;
+        key
+    }
+
+    /// Re-sync the physics bodies, edge topology, and node-children pool to the
+    /// current graph after a structural change. Does not seed positions, alter the
+    /// selection, or restart the settle; callers do that as they need. The pool
+    /// is structural, so it is rebuilt, not grown incrementally.
+    fn reconcile_derived(&mut self) {
         self.sim.sync_with_graph(&self.graph);
         self.sim.sync_edges(dedup_edges(&self.graph));
-        self.sim.seed_positions([(key, seed)]);
         let (node_dom, gnode_of, stage_node) = build_pool_dom(&self.graph);
         self.node_dom = node_dom;
         self.gnode_of = gnode_of;
         self.stage_node = stage_node;
         self.node_layout = None;
-        self.select_only(key);
+    }
+
+    /// Apply a structural mutation to the session graph and reconcile every derived
+    /// view, so externally-ingested nodes/edges (e.g. a linked-data merge) join the
+    /// spatial field. `mutate` returns whether it changed the graph; on a change,
+    /// the newly-added nodes are fanned out around the current selection (they are
+    /// minted at the origin, which the force sim must not stack), and the settle
+    /// restarts. Returns whether the graph changed.
+    ///
+    /// orrery-host stays free of the linked-data bridge: the host passes the merge
+    /// in as a closure over [`Graph`].
+    pub fn ingest_graph<F: FnOnce(&mut Graph) -> bool>(&mut self, mutate: F) -> bool {
+        let before: HashSet<NodeKey> = self.graph.nodes().map(|(k, _)| k).collect();
+        if !mutate(&mut self.graph) {
+            return false;
+        }
+        self.reconcile_derived();
+        let anchor = self
+            .selected
+            .iter()
+            .copied()
+            .next()
+            .and_then(|k| self.sim.position_of(k))
+            .unwrap_or(Point2D::new(0.0, 0.0));
+        let seeds: Vec<_> = self
+            .graph
+            .nodes()
+            .map(|(k, _)| k)
+            .filter(|k| !before.contains(k))
+            .enumerate()
+            .map(|(i, k)| {
+                let col = (i % 6) as f32;
+                let row = (i / 6) as f32;
+                (k, Point2D::new(anchor.x + 12.0 + col * 16.0, anchor.y + 12.0 + row * 16.0))
+            })
+            .collect();
+        self.sim.seed_positions(seeds);
         self.ticks_remaining = SETTLE_TICKS;
-        key
+        true
     }
 
     /// Replace the selection with just `key` (clearing any selected nodes/edges).
@@ -658,6 +704,28 @@ mod tests {
         );
         assert!(orrery.graph.relations().count() >= 1, "an edge links the browse trail");
         assert_eq!(orrery.sim.body_count(), 2, "the simulation grew a body for the new node");
+    }
+
+    #[test]
+    fn ingest_graph_merges_nodes_and_grows_the_sim() {
+        let mut orrery = Orrery::new();
+        orrery.visit("mere://seed");
+        let before = orrery.graph.nodes().count();
+        let changed = orrery.ingest_graph(|g| {
+            let a = g.add_node("mere://x".to_string(), Default::default());
+            let b = g.add_node("mere://y".to_string(), Default::default());
+            let _ = g.assert_relation(a, b, hyperlink());
+            true
+        });
+        assert!(changed, "a mutating closure reports a change");
+        assert_eq!(orrery.graph.nodes().count(), before + 2, "both ingested nodes joined");
+        assert!(orrery.graph.get_node_by_url("mere://x").is_some());
+        assert_eq!(orrery.sim.body_count(), before + 2, "the sim grew a body per node");
+        // The origin-minted nodes are seeded apart, so the settle runs clean (no
+        // coincident-point blow-up / NaN).
+        let _ = orrery.frame(800, 600);
+        // A closure that reports no change is a no-op.
+        assert!(!orrery.ingest_graph(|_| false), "no-op mutation reports no change");
     }
 
     #[test]
