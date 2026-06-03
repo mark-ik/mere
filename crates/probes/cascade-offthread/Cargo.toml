@@ -1,0 +1,33 @@
+[package]
+name = "cascade-offthread"
+version = "0.0.0"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+
+# Probe (not a workspace member; crates/probes is excluded). Verifies that the
+# serval cascade runs off the main thread and concurrently, the P2 prerequisite
+# from the actor constellation plan.
+
+[[bin]]
+name = "cascade-offthread"
+path = "src/main.rs"
+
+[dependencies]
+# The same content-render path meerkat's card.rs drives, depended on directly so
+# the probe is independent of meerkat's (in-flight) host code.
+serval-static-dom = { path = "../../../../serval/components/serval-static-dom" }
+serval-layout = { path = "../../../../serval/components/serval-layout" }
+pelt-live = { path = "../../../../serval/ports/pelt-live" }
+netrender = { path = "../../../../netrender/netrender" }
+
+# Stand alone: a one-crate workspace, so cargo does not pull this probe into the
+# separate (and currently stale) crates/probes workspace.
+[workspace]
+
+# Unify Stylo (mirrors mere's + serval's patch): serval-layout's `stylo_taffy`
+# deps crates.io `stylo`, while serval pins the git rev; `stylo` declares
+# `links = "servo_style_crate"`, so only one is allowed. Redirect to the same rev.
+[patch.crates-io]
+stylo = { git = "https://github.com/servo/stylo", rev = "572ecba2d1600e7c3d490586692a209faf703baa" }
+stylo_atoms = { git = "https://github.com/servo/stylo", rev = "572ecba2d1600e7c3d490586692a209faf703baa" }
