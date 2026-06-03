@@ -178,14 +178,19 @@ impl App {
                 orrery
             },
         };
-        // Restore the camera (pan + zoom) so the spatial view persists across
-        // restarts; a restored camera suppresses the first-frame recenter.
-        let restored_camera = view_intent_store::load_view_intent(&session_dir, DEFAULT_FRAME, DEFAULT_PANE)
-            .ok()
-            .flatten()
-            .and_then(|intent| intent.camera);
+        // Restore the view-intent (camera + focused node) so the spatial view and
+        // the open card persist across restarts. A restored camera suppresses the
+        // first-frame recenter; the focused node re-selects (if it still exists).
+        let restored_view =
+            view_intent_store::load_view_intent(&session_dir, DEFAULT_FRAME, DEFAULT_PANE)
+                .ok()
+                .flatten();
+        let restored_camera = restored_view.as_ref().and_then(|v| v.camera);
         if let Some(snapshot) = &restored_camera {
             orrery.set_camera(snapshot_to_camera(snapshot));
+        }
+        if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
+            orrery.select_by_url(url);
         }
         let (fetcher, fetch_rx) = fetch::Fetcher::new(proxy);
         let mut engines = EngineRegistry::new();
@@ -384,8 +389,11 @@ impl App {
         if let Err(err) = session_graph_store::save(&graph_file, self.orrery.graph()) {
             tracing::warn!(%err, path = ?graph_file, "failed to persist the session graph");
         }
-        let intent =
-            ViewIntent { camera: Some(camera_to_snapshot(self.orrery.camera())), ..Default::default() };
+        let intent = ViewIntent {
+            camera: Some(camera_to_snapshot(self.orrery.camera())),
+            focus: self.orrery.focused_url().map(str::to_string),
+            ..Default::default()
+        };
         if let Err(err) =
             view_intent_store::save_view_intent(&self.session_dir, DEFAULT_FRAME, DEFAULT_PANE, &intent)
         {

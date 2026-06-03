@@ -535,6 +535,18 @@ impl Orrery {
         self.selected.insert(key);
     }
 
+    /// Select the existing node with `url` (URL identity), if present, without
+    /// adding one. Returns whether a node was found and focused. The host calls
+    /// this to restore the focused node from persisted view-intent.
+    pub fn select_by_url(&mut self, url: &str) -> bool {
+        if let Some((key, _)) = self.graph.get_node_by_url(url) {
+            self.select_only(key);
+            true
+        } else {
+            false
+        }
+    }
+
     /// The URL of the single focused (selected) node, if exactly one node is
     /// selected. The host reads this to project the focused node's media — e.g.
     /// meerkat's floating content card. `None` when zero or many are selected.
@@ -698,5 +710,16 @@ mod tests {
         // A zero / non-finite zoom falls back to 1.0 rather than collapsing.
         orrery.set_camera(CameraView { offset: (0.0, 0.0), zoom: 0.0 });
         assert_eq!(orrery.camera().zoom, 1.0);
+    }
+
+    #[test]
+    fn select_by_url_selects_existing_or_reports_missing() {
+        let mut orrery = Orrery::new();
+        orrery.visit("https://one.example");
+        orrery.visit("https://two.example"); // focus moves to two
+        assert!(orrery.select_by_url("https://one.example"), "an existing url is found + focused");
+        assert_eq!(orrery.focused_url(), Some("https://one.example"));
+        assert!(!orrery.select_by_url("https://absent.example"), "a missing url reports false");
+        assert_eq!(orrery.focused_url(), Some("https://one.example"), "a miss leaves selection intact");
     }
 }

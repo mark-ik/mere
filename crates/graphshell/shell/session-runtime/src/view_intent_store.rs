@@ -102,9 +102,10 @@ impl Default for CameraSnapshot {
 
 /// Persistable per-pane view state. v0 carried `hidden_relations`
 /// only; `camera` joined per the spatial-chrome IR brief §6's
-/// pan/zoom-as-substrate-camera framing. Future fields
-/// (`form_factor`, `focus`, `filter`, `strategy`, `overlays`) land
-/// as their producers wire up. Per the plan §2, bundling unwired
+/// pan/zoom-as-substrate-camera framing; `focus` (the focused node's
+/// URL) joined when the host began restoring it on reload. Future fields
+/// (`form_factor`, `filter`, `strategy`, `overlays`) land as their
+/// producers wire up. Per the plan §2, bundling unwired
 /// fields now would be the half-finished shape the user's memory
 /// warns against.
 ///
@@ -121,6 +122,12 @@ pub struct ViewIntent {
     /// wasted I/O.
     #[serde(default)]
     pub camera: Option<CameraSnapshot>,
+    /// URL of the node this pane is focused on, so a reload re-opens its media.
+    /// Keyed by URL (URL identity) rather than petgraph `NodeKey`, which isn't
+    /// stable across save/load — the same reason `GraphSnapshot` is URL-keyed.
+    /// `None` when nothing is focused.
+    #[serde(default)]
+    pub focus: Option<String>,
 }
 
 impl ViewIntent {
@@ -132,7 +139,7 @@ impl ViewIntent {
     /// The save path can skip the file for the empty case; the load
     /// path returns `Ok(None)` and the host falls back to default.
     pub fn is_empty(&self) -> bool {
-        self.hidden_relations.is_empty() && self.camera.is_none()
+        self.hidden_relations.is_empty() && self.camera.is_none() && self.focus.is_none()
     }
 }
 
@@ -253,6 +260,19 @@ mod tests {
             .unwrap()
             .expect("intent file should be present");
         assert_eq!(restored, original);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn focus_round_trips_and_counts_as_nonempty() {
+        let dir = temp_session_dir("focus");
+        let frame = fixture_frame();
+        let mut intent = ViewIntent::new();
+        intent.focus = Some("https://example.com/page".to_string());
+        assert!(!intent.is_empty(), "a focus alone is worth persisting");
+        save_view_intent(&dir, &frame, 1, &intent).unwrap();
+        let restored = load_view_intent(&dir, &frame, 1).unwrap().unwrap();
+        assert_eq!(restored.focus.as_deref(), Some("https://example.com/page"));
         fs::remove_dir_all(&dir).ok();
     }
 
