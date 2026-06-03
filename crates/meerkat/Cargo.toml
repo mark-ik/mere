@@ -85,7 +85,18 @@ linked-data = { workspace = true }
 # byte-consuming and never link netfetcher.
 netfetcher = { path = "../../../netfetcher" }
 url = "2"
-tokio = { version = "1", features = ["rt-multi-thread"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+
+# ─── P2P sync (S5.0 foundation) ──────────────────────────────────────────────
+# The host stands up one p2panda transport and joins a tessera moot's LogSync
+# session, surfacing real sync status in the chrome. The sync subsystem mirrors
+# the netfetcher seam (background tokio work -> mpsc channel -> EventLoopProxy
+# wake -> user_event drain) — see the host p2p wiring plan. `transport` is the
+# P2pandaTransport adapter; `moothold` supplies the tessera SyncedMoot + store;
+# `identity` the (ephemeral, for now) signing keypair.
+identity = { workspace = true }
+transport = { workspace = true }
+moothold = { workspace = true }
 
 # Content engines for the card (S2.2b-ii): nematic's document engines (markdown /
 # gemtext / plain text / feeds / …) turn fetched bytes into an EngineDocument,
@@ -97,6 +108,12 @@ nematic = { workspace = true }
 # session-runtime's session_graph_store; dirs resolves the per-user data dir.
 session-runtime = { workspace = true }
 dirs = "6"
+# Durable content cache (S3.2c): fetched pages + subresources persist through an
+# eidetic fjall store under the session dir, so a reload shows them without
+# re-fetching. pollster drives the async Store calls to completion on the UI
+# thread (the fjall backend's futures are ready, so this does not block on I/O).
+eidetic-fjall = { workspace = true }
+pollster = "0.4"
 
 # Windowing + present (mirrors pelt-live's bin deps; mere's pins align with
 # serval's, so the wgpu 29 / winit 0.30 surface + netrender Renderer unify).

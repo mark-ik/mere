@@ -261,6 +261,12 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
   a comms view; wire `eidetic-iroh-fetcher` + transport blobs as cheesecloth-pinning
   v0 (replicate engrams by hash). Build the host OS-keychain `IdentityStorage`.
   *Done*: a working bilateral comms surface; engrams replicate by hash.
+  **Detailed elaboration: [host p2p wiring plan](2026-06-03_host_p2p_wiring_plan.md)**
+  (the meerkat-side wiring of transport + `SyncedCabal` + tessera `SyncedMoot`,
+  sliced S5.0 foundation → S5.1 bootstrap → S5.2 persistence → S5.3 the comms
+  surface). Note §3 / gap #7 are stale: tessera is now far past "Phase 1" (a
+  productized `TesseraStore` + `SyncedMoot`, 60 tests), so both lanes are
+  host-ready over one transport's `sync_parts`.
 - **S6 — External content re-home (flip P4 embedded-frame).** Re-land scrying web
   tiles on meerkat via `ExternalTexturePlacement` (discard the dead Masonry fork
   edits; the scrying-engine crate is host-neutral). *Done*: a web/scrying tile

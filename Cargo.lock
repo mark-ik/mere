@@ -6769,6 +6769,7 @@ dependencies = [
  "chrome",
  "dirs",
  "document-canvas",
+ "eidetic-fjall",
  "identity",
  "inker",
  "kernel",
@@ -6780,6 +6781,7 @@ dependencies = [
  "netrender",
  "orrery-host",
  "pelt-live",
+ "pollster",
  "serval-layout",
  "serval-scripted-dom",
  "serval-static-dom",
@@ -11283,6 +11285,8 @@ dependencies = [
 name = "servo-paint"
 version = "0.2.0"
 dependencies = [
+ "ash",
+ "bytemuck",
  "crossbeam-channel",
  "dpi",
  "euclid",
@@ -11308,7 +11312,10 @@ dependencies = [
  "servo-paint-api",
  "servo-paint-types",
  "servo-profile-traits",
+ "smallvec",
  "stylo_traits",
+ "wayland-client",
+ "wayland-protocols",
  "wgpu",
  "windows 0.62.2",
 ]
@@ -13343,6 +13350,7 @@ dependencies = [
  "identity",
  "iroh",
  "iroh-blobs",
+ "iroh-tickets",
  "p2panda-core",
  "p2panda-net",
  "thiserror 1.0.69",

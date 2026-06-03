@@ -44,6 +44,7 @@ use std::task::{Context, Poll};
 use identity::Ed25519Keypair;
 use iroh::EndpointAddr;
 use iroh::endpoint::{Connection, RecvStream, SendStream};
+use iroh_tickets::endpoint::EndpointTicket;
 use iroh::protocol::{AcceptError, ProtocolHandler};
 use p2panda_core::{SigningKey, Topic, VerifyingKey};
 use p2panda_net::addrs::NodeInfo;
@@ -370,6 +371,32 @@ impl P2pandaTransport {
         Ok(())
     }
 
+    /// This node's dialable address as a shareable **ticket** string. A peer
+    /// pastes it into [`add_peer_ticket`](Self::add_peer_ticket) to dial this node
+    /// without discovery — the string-friendly form of [`endpoint_addr`] for an
+    /// out-of-band exchange (e.g. a host's "connect to peer" verb).
+    ///
+    /// [`endpoint_addr`]: Self::endpoint_addr
+    pub async fn ticket(&self) -> Result<String, TransportError> {
+        let addr = self.endpoint_addr().await?;
+        Ok(EndpointTicket::from(addr).to_string())
+    }
+
+    /// Parse a peer's [`ticket`](Self::ticket), register its transport info
+    /// ([`add_peer`](Self::add_peer)), and return its [`PeerID`] — so the caller
+    /// can tag it ([`set_topics`](Self::set_topics)) to bootstrap an overlay.
+    pub async fn add_peer_ticket(&self, ticket: &str) -> Result<PeerID, TransportError> {
+        let ticket: EndpointTicket = ticket
+            .trim()
+            .parse()
+            .map_err(|e| TransportError::Backend(format!("parse ticket: {e}")))?;
+        let addr = EndpointAddr::from(ticket);
+        let peer = PeerID::from_bytes(addr.id.as_bytes())
+            .map_err(|e| TransportError::Backend(format!("ticket peer id: {e}")))?;
+        self.add_peer(addr).await?;
+        Ok(peer)
+    }
+
     /// Join a space's gossip overlay (topic = e.g. a cabal / moot id) and return
     /// a [`GossipHandle`] to broadcast bytes to, and receive bytes from, peers
     /// subscribed to the same space. This is the **live-sync** path: peers
@@ -562,6 +589,25 @@ mod tests {
 
         let alice_recv = alice_task.await.expect("alice task");
         assert_eq!(alice_recv, reply);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn ticket_round_trips_identity_and_registers_the_peer() {
+        let (alice_kp, alice_id) = make_inputs(30);
+        let (bob_kp, _) = make_inputs(31);
+        let alice = P2pandaTransport::bind(&alice_kp, vec![Alpn::new("mere/test/v1")])
+            .await
+            .expect("bind alice");
+        let bob = P2pandaTransport::bind(&bob_kp, vec![Alpn::new("mere/test/v1")])
+            .await
+            .expect("bind bob");
+
+        // Alice shares a ticket string; bob parses it, which carries alice's
+        // identity and registers her transport info for dialing.
+        let ticket = alice.ticket().await.expect("alice ticket");
+        assert!(!ticket.is_empty(), "the ticket serializes to a non-empty string");
+        let learned = bob.add_peer_ticket(&ticket).await.expect("bob parses alice's ticket");
+        assert_eq!(learned, alice_id, "the ticket round-trips alice's PeerID");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

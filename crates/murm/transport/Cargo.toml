@@ -25,6 +25,10 @@ tracing = "0.1"
 # (on dalek 2.x) does not need to track iroh's pre-release dalek dep.
 iroh = "0.98"
 iroh-blobs = "0.100"
+# Shareable connection tickets: serialize this node's `EndpointAddr` to a string
+# a peer can paste to dial it (the explicit-bootstrap path, e.g. a host's
+# "connect to peer" verb), and parse it back. Pairs with `add_peer` / `set_topics`.
+iroh-tickets = "0.5"
 bytes = "1"
 # p2panda-net is the production endpoint authority (P2pandaTransport); it
 # pins iroh 0.98, unifying with the iroh/iroh-blobs deps above.

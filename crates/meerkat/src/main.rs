@@ -33,6 +33,7 @@ use std::rc::Rc;
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 
+use eidetic_fjall::FjallStore;
 use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
 use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
@@ -43,7 +44,9 @@ use pelt_live::{fragments_from_scripted_dom, hit_test_node, scene_from_scripted_
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
-use session_runtime::{session_graph_store, view_intent_store, CameraSnapshot, ViewIntent};
+use session_runtime::{
+    content_store, session_graph_store, view_intent_store, CameraSnapshot, ViewIntent,
+};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
@@ -55,6 +58,7 @@ use xilem_serval::{Modifiers, PointerClick, ServalAppRunner};
 mod card;
 mod fetch;
 mod resources;
+mod sync;
 
 /// Author CSS for the **chrome** root. The toolbar is a flex row (back / forward
 /// buttons + a growing omnibar); serval lays it out via taffy's flexbox. The
@@ -69,6 +73,10 @@ const CHROME_SHEET: &[&str] = &[
     ".disabled { color: rgb(170, 174, 184); background-color: rgb(228, 230, 236); }",
     "input { font-size: 22px; color: rgb(20, 20, 20); \
         background-color: rgb(255, 255, 255); padding: 8px; margin: 4px; flex-grow: 1; }",
+    // The p2p sync chip: small + muted, no flex-grow, so the omnibar pushes it to
+    // the toolbar's right edge.
+    ".sync-chip { font-size: 14px; color: rgb(96, 102, 116); \
+        background-color: rgb(226, 230, 238); padding: 8px 12px; margin: 4px; }",
     ".suggestions { background-color: rgb(255, 255, 255); padding-bottom: 6px; }",
     ".suggestion { font-size: 18px; color: rgb(40, 44, 54); \
         background-color: rgb(255, 255, 255); padding: 8px 16px; }",
@@ -124,6 +132,12 @@ struct App {
     fetcher: fetch::Fetcher,
     fetch_rx: Receiver<fetch::FetchOutcome>,
     sub_rx: Receiver<fetch::SubresourceOutcome>,
+    /// The p2p sync subsystem (S5.0): owns the transport + the tessera lane on
+    /// its own runtime, held for the app's lifetime (its drop stops sync). Status
+    /// changes arrive on `sync_rx` and fold into the chrome sync chip. `_`-named
+    /// because it is a lifetime guard today; S5.1 gives it called methods.
+    _sync: sync::SyncHost,
+    sync_rx: Receiver<sync::SyncUpdate>,
     /// Per-URL fetched content state, keyed by the node's URL (URL identity).
     content: HashMap<String, fetch::ContentState>,
     /// Subresource bytes (page `<link>` CSS, `<img>` media) the HTML card pulls
@@ -136,6 +150,10 @@ struct App {
     /// The session's data directory (`<data_dir>/mere`): holds `graph.json` and
     /// the `views/` view-intent sidecars.
     session_dir: PathBuf,
+    /// Durable content cache (S3.2c) under the session dir, persisting fetched
+    /// pages + subresources by URL. `None` if the store could not be opened
+    /// (caching disabled; the shell still runs).
+    store: Option<FjallStore>,
     /// Cached measured height (px) of the chrome band; `0` until first measured.
     toolbar_h: u32,
     window: Option<Arc<Window>>,
@@ -161,6 +179,16 @@ impl App {
         // The session lives under the per-user data dir; restore the graph + the
         // camera (view-intent) on launch, else seed fresh from the initial location.
         let session_dir = dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("mere");
+        let _ = std::fs::create_dir_all(&session_dir);
+        // Durable content cache (S3.2c) in a fjall keyspace under the session dir;
+        // `None` simply disables caching (the shell runs without it).
+        let store = match FjallStore::open(session_dir.join("content")) {
+            Ok(store) => Some(store),
+            Err(err) => {
+                tracing::warn!(%err, "content cache unavailable; running without it");
+                None
+            },
+        };
         let graph_file = session_dir.join(session_graph_store::GRAPH_FILE);
         let restored = match session_graph_store::load(&graph_file) {
             Ok(Some(graph)) => {
@@ -199,7 +227,11 @@ impl App {
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
             orrery.select_by_url(url);
         }
-        let (fetcher, fetch_rx, sub_rx) = fetch::Fetcher::new(proxy);
+        let (fetcher, fetch_rx, sub_rx) = fetch::Fetcher::new(proxy.clone());
+        // The p2p sync subsystem: binds the transport + joins the tessera demo
+        // moot on its own runtime, delivering status changes through `proxy` (the
+        // same wake the fetcher uses). Setup failure disables p2p, not the shell.
+        let (sync, sync_rx) = sync::SyncHost::new(proxy, sync::DEMO_MOOT, sync::DEMO_SEED);
         let mut engines = EngineRegistry::new();
         for engine in nematic::engines() {
             engines.register(engine);
@@ -215,10 +247,13 @@ impl App {
             fetcher,
             fetch_rx,
             sub_rx,
+            _sync: sync,
+            sync_rx,
             content: HashMap::new(),
             resources: RefCell::new(resources::ResourceStore::default()),
             engines,
             session_dir,
+            store,
             toolbar_h: 0,
             window: None,
             host: None,
@@ -312,10 +347,24 @@ impl App {
                 };
                 self.card_scene = Some(scene);
                 self.card_key = Some(key);
+                let mut refilled = false;
                 for res_url in wanted.into_inner() {
-                    if self.resources.borrow_mut().request(res_url.clone()) {
-                        self.fetcher.spawn_subresource(res_url);
+                    let newly = self.resources.borrow_mut().request(res_url.clone());
+                    if newly {
+                        // A durable cache hit fills the resource without a fetch;
+                        // a miss spawns one (its arrival re-renders the card).
+                        if let Some(stored) = self.load_cached(&res_url) {
+                            self.resources.borrow_mut().insert(res_url, stored.body);
+                            refilled = true;
+                        } else {
+                            self.fetcher.spawn_subresource(res_url);
+                        }
                     }
+                }
+                if refilled {
+                    // Re-render so the demand loader picks up the cache-filled resources.
+                    self.card_key = None;
+                    self.request_redraw();
                 }
             }
         } else {
@@ -423,12 +472,38 @@ impl App {
         }
     }
 
-    /// Kick off a fetch for `url` if it is a network address not already started,
-    /// marking it `Loading` so the card shows progress immediately.
+    /// Make the focused node's content available. A network address already in
+    /// this session's content map is left as-is; otherwise a durable cache hit is
+    /// shown without re-fetching (so a reload need not hit the network), and a
+    /// miss marks it `Loading` and spawns a fetch.
     fn ensure_content(&mut self, url: &str) {
-        if fetch::is_fetchable(url) && !self.content.contains_key(url) {
-            self.content.insert(url.to_string(), fetch::ContentState::Loading);
-            self.fetcher.spawn(url.to_string());
+        if !fetch::is_fetchable(url) || self.content.contains_key(url) {
+            return;
+        }
+        if let Some(stored) = self.load_cached(url) {
+            self.content.insert(url.to_string(), fetch::ContentState::Ready(fetched_from(stored)));
+            return;
+        }
+        self.content.insert(url.to_string(), fetch::ContentState::Loading);
+        self.fetcher.spawn(url.to_string());
+    }
+
+    /// Load durably-cached content for `url` (page or subresource), or `None`.
+    /// The fjall store's futures are ready, so `block_on` does not stall the UI.
+    fn load_cached(&mut self, url: &str) -> Option<content_store::StoredContent> {
+        let store = self.store.as_mut()?;
+        pollster::block_on(content_store::load_content(store, url)).ok().flatten()
+    }
+
+    /// Persist `body` (+ its content-type) for `url` to the durable content cache,
+    /// so a reload need not re-fetch it. Best-effort; a write failure is logged.
+    fn save_cached(&mut self, url: &str, content_type: Option<String>, body: &[u8]) {
+        let Some(store) = self.store.as_mut() else {
+            return;
+        };
+        let stored = content_store::StoredContent { content_type, body: body.to_vec() };
+        if let Err(err) = pollster::block_on(content_store::save_content(store, url, &stored)) {
+            tracing::warn!(%err, url, "failed to cache content");
         }
     }
 
@@ -640,6 +715,13 @@ impl ApplicationHandler for App {
         }
         window.request_redraw();
         self.window = Some(window);
+
+        // Show the restored focused node's content from the durable cache (so a
+        // reload re-opens its card without a navigation). A fresh `mere://welcome`
+        // focus is not fetchable, so this is a no-op there.
+        if let Some(url) = self.orrery.focused_url().map(str::to_string) {
+            self.ensure_content(&url);
+        }
     }
 
     /// Drain completed fetches (delivery model 2): a worker woke us via the proxy;
@@ -656,6 +738,12 @@ impl ApplicationHandler for App {
                     graph_changed |= self.orrery.ingest_graph(|g| {
                         meerkat::ingest::harvest(g, fetched.content_type.as_deref(), &fetched.body)
                     });
+                    // Persist so a reload shows this page without re-fetching.
+                    self.save_cached(
+                        &outcome.url,
+                        fetched.content_type.clone(),
+                        fetched.body.as_bytes(),
+                    );
                     fetch::ContentState::Ready(fetched)
                 },
                 Err(reason) => fetch::ContentState::Failed(reason),
@@ -666,8 +754,21 @@ impl ApplicationHandler for App {
         // Subresources (page CSS / media) on their own channel: fill the cache so
         // the next render's demand loader hits instead of missing.
         while let Ok(sub) = self.sub_rx.try_recv() {
+            // Persist the subresource (its content-type is unknown here) so a
+            // page's CSS / media survive restart alongside the page itself.
+            self.save_cached(&sub.url, None, &sub.bytes);
             self.resources.borrow_mut().insert(sub.url, sub.bytes);
             card_changed = true;
+        }
+        // P2P sync status (S5.0): the same wake also carries lane-status changes.
+        // Fold the latest into the chrome chip (the host owns the mutation).
+        let mut latest_sync = None;
+        while let Ok(update) = self.sync_rx.try_recv() {
+            latest_sync = Some(sync::to_indicator(&update.status, sync::LANE_LABEL));
+        }
+        if let Some(indicator) = latest_sync {
+            self.runner.update(|c| c.sync = indicator.clone());
+            self.request_redraw();
         }
         if graph_changed {
             self.save_session();
@@ -783,6 +884,16 @@ fn camera_to_snapshot(camera: CameraView) -> CameraSnapshot {
 fn snapshot_to_camera(snapshot: &CameraSnapshot) -> CameraView {
     let c = snapshot.coefficients;
     CameraView { offset: (c[4] as f32, c[5] as f32), zoom: c[0] as f32 }
+}
+
+/// A durably-cached entry as a [`fetch::Fetched`], decoding the stored body as
+/// text (lossily). Binary subresources are served from the resource cache as
+/// bytes; this text view is for the page-document lane.
+fn fetched_from(stored: content_store::StoredContent) -> fetch::Fetched {
+    fetch::Fetched {
+        content_type: stored.content_type,
+        body: String::from_utf8_lossy(&stored.body).into_owned(),
+    }
 }
 
 fn main() {

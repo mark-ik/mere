@@ -1,0 +1,53 @@
+# Standalone spike probe (own [workspace]). Tessera's own sync — the convergence
+# proof. `redb-logstore` proved LogSync's offline-catch-up lane runs over a
+# pure-Rust redb store for murm's `CabalExt` posts; this probe proves the SAME
+# substrate carries tessera: two peers replicate a moot's signed tessera event
+# log over LogSync, and both fold the synced events into the SAME scores (the
+# `Ledger` projection). The tessera equivalent of murm's two-peer catch-up test —
+# bounded, because the substrate is already proven; the new thing is that
+# `Operation<TesseraExt>` events converge and the projection agrees.
+#
+# Path-deps the live `moothold` (tessera wire bridge + `Ledger`) and `identity`
+# (persona signing keys), mirroring the `p2panda-transport-adapter` probe; the
+# heavy p2panda-net / iroh / redb deps stay OUT of the mere workspace (probes are
+# excluded). Both p2panda-core pins are 0.6.1, so moothold's `Operation<TesseraExt>`
+# and the probe's store agree on the type.
+#
+# See design_docs/moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md
+[package]
+name = "probe-tessera-logsync"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "probe-tessera-logsync"
+path = "src/main.rs"
+
+[dependencies]
+# The live tessera layer under test: the wire bridge (TesseraEvent <-> signed
+# Operation<TesseraExt>) and the Ledger projection. Type identity with the
+# probe's p2panda-core (both 0.6.1) is what lets the redb store hold moothold's
+# operations and feed them back to the projection.
+moothold = { path = "../../moot/moothold" }
+# Persona signing keypair for the op author (the vault derivation — real keys).
+identity = { path = "../../persona/identity" }
+# LogStore + TopicStore — the two traits LogSync requires. No `macros`
+# (OperationStore) and no SQLite backend, exactly as murmuring's store: received
+# ops persist via an inherent `insert`, not OperationStore.
+p2panda-store = { version = "0.6.1", default-features = false }
+p2panda-net = "0.6.1"
+p2panda-core = "0.6.1"
+# Sync event types (FromSync, TopicLogSyncEvent) for the two-peer catch-up.
+p2panda-sync = "0.6.1"
+# iroh 0.98 matches p2panda-net 0.6.1's pin; only used to build a node's own
+# dialable loopback EndpointAddr for the explicit test bootstrap.
+iroh = "0.98"
+redb = "2"
+serde = { version = "1", features = ["derive"] }
+blake3 = "1.5"
+thiserror = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tokio-stream = "0.1"
+
+[workspace]

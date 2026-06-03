@@ -53,9 +53,11 @@ pub mod command;
 pub mod ingest;
 pub mod nav;
 pub mod suggest;
+pub mod sync_indicator;
 
 use command::Command;
 use nav::History;
+pub use sync_indicator::SyncIndicator;
 
 /// Meerkat's chrome app state.
 ///
@@ -95,6 +97,9 @@ pub struct Chrome {
     /// The palette's live query buffer (caret / editing), mirrored into
     /// `palette.query` — the same host-owns-the-buffer split the omnibar uses.
     pub palette_input: TextInput,
+    /// The p2p sync-status chip's view-model (S5.0). The host folds the joined
+    /// lane's real `SyncStatus` in here; default reads "p2p off".
+    pub sync: SyncIndicator,
 }
 
 impl Chrome {
@@ -118,6 +123,7 @@ impl Chrome {
             palette_open: false,
             palette: CommandPaletteSession::default(),
             palette_input: TextInput::new(""),
+            sync: SyncIndicator::default(),
         }
     }
 
@@ -334,8 +340,12 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
     let to_omnibar: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.omnibar;
     let omnibar = lens(make, to_omnibar);
-    let toolbar =
-        el::<_, Chrome, ()>("div", (back, forward, omnibar)).attr("class", "toolbar");
+    // The p2p sync-status chip (S5.0): an honest one-line readout of the joined
+    // lane, sitting at the toolbar's right (the omnibar's flex-grow pushes it
+    // there). The host folds the real `SyncStatus` into `c.sync`.
+    let sync_chip = el::<_, Chrome, ()>("div", c.sync.summary()).attr("class", "sync-chip");
+    let toolbar = el::<_, Chrome, ()>("div", (back, forward, omnibar, sync_chip))
+        .attr("class", "toolbar");
 
     // The suggestions dropdown: one row per reused `OmnibarMatch`, the highlight
     // carrying a distinct class. Empty ⇒ a zero-height `div` (closed). The outer
@@ -455,8 +465,8 @@ mod tests {
         let root = runner.root();
         assert_eq!(count_tag(&dom, root, "button"), 2, "back + forward buttons");
         assert_eq!(count_tag(&dom, root, "input"), 1, "the omnibar input");
-        // chrome container + toolbar row + (empty, closed) suggestions div.
-        assert_eq!(count_tag(&dom, root, "div"), 3, "chrome + toolbar + suggestions");
+        // chrome container + toolbar row + sync chip + (empty, closed) suggestions.
+        assert_eq!(count_tag(&dom, root, "div"), 4, "chrome + toolbar + sync-chip + suggestions");
     }
 
     /// A back-button click steps the real history: after navigating away from
