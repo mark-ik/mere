@@ -81,6 +81,15 @@ pub enum PointerButton {
     Right,
 }
 
+/// The orrery's camera as plain pan + zoom, for the host to persist and restore
+/// (the host maps it to/from its own serialized form). `offset` is the screen-px
+/// translation, `zoom` the uniform scale: `screen = world * zoom + offset`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CameraView {
+    pub offset: (f32, f32),
+    pub zoom: f32,
+}
+
 /// An in-progress left-button interaction on a node: a click until the pointer
 /// passes [`CLICK_SLOP`], then a drag that pins the node to the cursor.
 #[derive(Clone, Copy)]
@@ -542,6 +551,24 @@ impl Orrery {
         &self.graph
     }
 
+    /// The current camera (pan + zoom), for the host to persist as view-intent.
+    pub fn camera(&self) -> CameraView {
+        CameraView { offset: self.camera.offset, zoom: self.camera.zoom }
+    }
+
+    /// Restore the camera from persisted view-intent. A non-finite or
+    /// non-positive zoom falls back to `1.0`; the zoom is clamped to the orrery's
+    /// range. The host suppresses its own first-frame recenter when it restores a
+    /// camera, so this value is not immediately overwritten.
+    pub fn set_camera(&mut self, view: CameraView) {
+        self.camera.zoom = if view.zoom.is_finite() && view.zoom > 0.0 {
+            view.zoom.clamp(MIN_ZOOM, MAX_ZOOM)
+        } else {
+            1.0
+        };
+        self.camera.offset = view.offset;
+    }
+
     /// Zoom by `factor`, keeping the world point under `anchor` (screen px) fixed.
     fn zoom_at(&mut self, anchor: (f32, f32), factor: f32) {
         let new_zoom = (self.camera.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
@@ -659,5 +686,17 @@ mod tests {
             (pos.x - 100.0).abs() < 1.0 && (pos.y - 50.0).abs() < 1.0,
             "the saved position is preserved (no spiral re-seed), got {pos:?}",
         );
+    }
+
+    #[test]
+    fn camera_round_trips_and_guards_bad_zoom() {
+        let mut orrery = Orrery::new();
+        orrery.set_camera(CameraView { offset: (123.0, -45.0), zoom: 2.5 });
+        let cv = orrery.camera();
+        assert_eq!(cv.offset, (123.0, -45.0));
+        assert_eq!(cv.zoom, 2.5);
+        // A zero / non-finite zoom falls back to 1.0 rather than collapsing.
+        orrery.set_camera(CameraView { offset: (0.0, 0.0), zoom: 0.0 });
+        assert_eq!(orrery.camera().zoom, 1.0);
     }
 }

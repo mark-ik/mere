@@ -38,12 +38,12 @@ use layout_dom_api::LayoutDom;
 use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
-use orrery_host::{Orrery, PointerButton, WHEEL_PAN_SCALE};
+use orrery_host::{CameraView, Orrery, PointerButton, WHEEL_PAN_SCALE};
 use pelt_live::{fragments_from_scripted_dom, hit_test_node, scene_from_scripted_dom, TextCursor};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
-use session_runtime::session_graph_store;
+use session_runtime::{session_graph_store, view_intent_store, CameraSnapshot, ViewIntent};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
@@ -91,6 +91,12 @@ const FALLBACK_TOOLBAR_H: u32 = 64;
 /// surface tint), so the card reads as a card over the white orrery band.
 const CARD_BG: wgpu::Color = wgpu::Color { r: 0.957, g: 0.965, b: 0.980, a: 1.0 };
 
+/// Single-pane view-intent identity for the default session (one frame, one
+/// pane). Per-frame / per-pane ids arrive with the tiled workbench (S4) and
+/// session manifests (S3.2b).
+const DEFAULT_FRAME: &str = "00000000-0000-0000-0000-0000000f1a3e";
+const DEFAULT_PANE: u64 = 0;
+
 /// The meerkat shell application: the shared chrome DOM, the runner that diffs
 /// the chrome view tree into it, the orrery content-root, the window + GPU, and
 /// input bookkeeping.
@@ -120,8 +126,9 @@ struct App {
     /// Content engines for the card: nematic's document engines, routed by
     /// content-type. (HTML rides the serval lane instead, in `card`.)
     engines: EngineRegistry,
-    /// Where the session graph is persisted (`<data_dir>/mere/graph.json`).
-    graph_path: PathBuf,
+    /// The session's data directory (`<data_dir>/mere`): holds `graph.json` and
+    /// the `views/` view-intent sidecars.
+    session_dir: PathBuf,
     /// Cached measured height (px) of the chrome band; `0` until first measured.
     toolbar_h: u32,
     window: Option<Arc<Window>>,
@@ -144,22 +151,22 @@ impl App {
             Chrome::new("mere://welcome"),
         );
         let content_location = runner.state().content_location().to_string();
-        // Persist the session graph under the per-user data dir; restore it on
-        // launch if present, else seed the root from the initial location.
-        let graph_path =
-            dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("mere").join("graph.json");
-        let restored = match session_graph_store::load(&graph_path) {
+        // The session lives under the per-user data dir; restore the graph + the
+        // camera (view-intent) on launch, else seed fresh from the initial location.
+        let session_dir = dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("mere");
+        let graph_file = session_dir.join(session_graph_store::GRAPH_FILE);
+        let restored = match session_graph_store::load(&graph_file) {
             Ok(Some(graph)) => {
-                tracing::info!(path = ?graph_path, "restored the session graph");
+                tracing::info!(path = ?graph_file, "restored the session graph");
                 Some(graph)
             },
             Ok(None) => None,
             Err(err) => {
-                tracing::warn!(%err, path = ?graph_path, "session graph load failed; starting fresh");
+                tracing::warn!(%err, path = ?graph_file, "session graph load failed; starting fresh");
                 None
             },
         };
-        let orrery = match restored {
+        let mut orrery = match restored {
             Some(graph) => Orrery::with_graph(graph),
             None => {
                 // The orrery opens on one node and grows from there as the user
@@ -171,6 +178,15 @@ impl App {
                 orrery
             },
         };
+        // Restore the camera (pan + zoom) so the spatial view persists across
+        // restarts; a restored camera suppresses the first-frame recenter.
+        let restored_camera = view_intent_store::load_view_intent(&session_dir, DEFAULT_FRAME, DEFAULT_PANE)
+            .ok()
+            .flatten()
+            .and_then(|intent| intent.camera);
+        if let Some(snapshot) = &restored_camera {
+            orrery.set_camera(snapshot_to_camera(snapshot));
+        }
         let (fetcher, fetch_rx) = fetch::Fetcher::new(proxy);
         let mut engines = EngineRegistry::new();
         for engine in nematic::engines() {
@@ -181,14 +197,14 @@ impl App {
             runner,
             orrery,
             content_location,
-            centered: false,
+            centered: restored_camera.is_some(),
             card_scene: None,
             card_key: None,
             fetcher,
             fetch_rx,
             content: HashMap::new(),
             engines,
-            graph_path,
+            session_dir,
             toolbar_h: 0,
             window: None,
             host: None,
@@ -355,16 +371,25 @@ impl App {
             self.orrery.visit(&loc);
             self.ensure_content(&loc);
             self.content_location = loc;
-            self.save_graph();
+            self.save_session();
             self.request_redraw();
         }
     }
 
-    /// Persist the session graph (best-effort; a write failure is logged, not
-    /// fatal). Called after each navigation grows or re-selects the graph.
-    fn save_graph(&self) {
-        if let Err(err) = session_graph_store::save(&self.graph_path, self.orrery.graph()) {
-            tracing::warn!(%err, path = ?self.graph_path, "failed to persist the session graph");
+    /// Persist the session (graph + camera view-intent) under the session dir.
+    /// Best-effort: a write failure is logged, not fatal. Called after each
+    /// navigation and on window close.
+    fn save_session(&self) {
+        let graph_file = self.session_dir.join(session_graph_store::GRAPH_FILE);
+        if let Err(err) = session_graph_store::save(&graph_file, self.orrery.graph()) {
+            tracing::warn!(%err, path = ?graph_file, "failed to persist the session graph");
+        }
+        let intent =
+            ViewIntent { camera: Some(camera_to_snapshot(self.orrery.camera())), ..Default::default() };
+        if let Err(err) =
+            view_intent_store::save_view_intent(&self.session_dir, DEFAULT_FRAME, DEFAULT_PANE, &intent)
+        {
+            tracing::warn!(%err, dir = ?self.session_dir, "failed to persist the view intent");
         }
     }
 
@@ -610,7 +635,10 @@ impl ApplicationHandler for App {
             return;
         }
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                self.save_session();
+                event_loop.exit();
+            },
             WindowEvent::Resized(size) => self.resize(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x as f32, position.y as f32);
@@ -688,6 +716,25 @@ fn has_class(dom: &ScriptedDom, id: NodeId, class: &str) -> bool {
     dom.attributes(id).any(|attr| {
         attr.name.local.as_ref() == "class" && attr.value.split_whitespace().any(|c| c == class)
     })
+}
+
+/// Map the orrery camera (pan + zoom) to a serialized [`CameraSnapshot`] — the
+/// kurbo `Affine` coefficient order `[a, b, c, d, e, f]`. The orrery camera is a
+/// pure scale + translate (no rotation / skew), so `a = d = zoom`, `b = c = 0`,
+/// and `(e, f)` is the offset.
+fn camera_to_snapshot(camera: CameraView) -> CameraSnapshot {
+    let zoom = camera.zoom as f64;
+    CameraSnapshot {
+        coefficients: [zoom, 0.0, 0.0, zoom, camera.offset.0 as f64, camera.offset.1 as f64],
+    }
+}
+
+/// The inverse of [`camera_to_snapshot`]: recover pan + zoom from the affine
+/// coefficients (scale from `a`, offset from `e` / `f`; rotation / skew are
+/// ignored, as the orrery never sets them).
+fn snapshot_to_camera(snapshot: &CameraSnapshot) -> CameraView {
+    let c = snapshot.coefficients;
+    CameraView { offset: (c[4] as f32, c[5] as f32), zoom: c[0] as f32 }
 }
 
 fn main() {
