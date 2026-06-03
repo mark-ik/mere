@@ -78,6 +78,11 @@ document-canvas = { workspace = true, features = ["netrender"] }
 kernel = { workspace = true }
 linked-data = { workspace = true }
 
+# The actor-kernel runtime: the !Send host-kernel boundary + the Send actor
+# harness. meerkat's I/O subsystems (fetch, ...) are expressed as armillary
+# actors; the kernel context is pinned to the UI thread by type.
+armillary = { workspace = true }
+
 # Off-UI-thread fetch (S2.2b): netfetcher's async WHATWG Fetch runs on a tokio
 # worker pool; results are delivered back to the winit loop over a channel + an
 # EventLoopProxy wake. `url` builds the request; netfetcher is the sibling repo,

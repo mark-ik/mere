@@ -15,10 +15,10 @@
 //! S2.2b-i carries the decoded body as text and renders it plainly; content-type
 //! routing to the nematic + serval engines is S2.2b-ii.
 
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::Receiver;
 
-use tokio::runtime::Runtime;
-use winit::event_loop::EventLoopProxy;
+use armillary::{spawn, ActorHandle, Emitter, Wake};
+use tokio::runtime::Builder;
 
 /// Successfully fetched content: the response content-type (if any) and the
 /// decoded body as text.
@@ -75,58 +75,58 @@ pub fn is_fetchable(url: &str) -> bool {
     url.starts_with("http://") || url.starts_with("https://")
 }
 
-/// Owns the fetch runtime + the wake/deliver seam. [`spawn`](Fetcher::spawn) runs
-/// a fetch off the UI thread; on completion it pushes a [`FetchOutcome`] and wakes
-/// the event loop.
-pub struct Fetcher {
-    runtime: Runtime,
-    proxy: EventLoopProxy<()>,
-    tx: Sender<FetchOutcome>,
-    sub_tx: Sender<SubresourceOutcome>,
+/// A command to the fetch actor.
+pub enum FetchCommand {
+    /// Fetch `url` as a page document (decoded body as text).
+    Page(String),
+    /// Fetch the subresource at the (already absolute) `url` as raw bytes.
+    Subresource(String),
 }
 
-impl Fetcher {
-    /// Build a fetcher over a multi-thread tokio runtime, returning it plus the
-    /// receivers the host drains in `user_event`: page documents and, on a
-    /// separate typed channel sharing the same wake, fetched subresources.
-    pub fn new(
-        proxy: EventLoopProxy<()>,
-    ) -> (Self, Receiver<FetchOutcome>, Receiver<SubresourceOutcome>) {
-        let (tx, rx) = channel();
-        let (sub_tx, sub_rx) = channel();
-        let runtime = tokio::runtime::Builder::new_multi_thread()
+/// An update from the fetch actor: one completed page or subresource fetch.
+pub enum FetchUpdate {
+    Page(FetchOutcome),
+    Subresource(SubresourceOutcome),
+}
+
+/// Spawn the fetch actor on its own thread (armillary harness). It owns a
+/// multi-thread tokio runtime; each [`FetchCommand`] dispatches a concurrent async
+/// fetch that emits a [`FetchUpdate`] on completion and wakes the loop. Returns the
+/// kernel's command handle plus the receiver to drain in `user_event`. Dropping the
+/// handle ends the actor (its runtime drops, aborting any in-flight fetches).
+///
+/// The internals stay `!Send` where they want to be: the runtime is built *on the
+/// actor thread* inside the closure, never moved across the boundary; only the
+/// `Send` handle and the `Send` `FetchUpdate`s cross.
+pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUpdate>) {
+    spawn(wake, |commands, out: Emitter<FetchUpdate>| {
+        let runtime = Builder::new_multi_thread()
             .enable_all()
             .build()
             .expect("build the fetch runtime");
-        (Self { runtime, proxy, tx, sub_tx }, rx, sub_rx)
-    }
-
-    /// Fetch `url` off the UI thread; push the outcome and wake the loop when done.
-    pub fn spawn(&self, url: String) {
-        let tx = self.tx.clone();
-        let proxy = self.proxy.clone();
-        self.runtime.spawn(async move {
-            let result = do_fetch(&url).await;
-            // Send first, then wake: the UI-thread drain reads the channel on wake.
-            let _ = tx.send(FetchOutcome { url, result });
-            let _ = proxy.send_event(());
-        });
-    }
-
-    /// Fetch a subresource (`url` is already absolute) off the UI thread,
-    /// delivering its raw bytes. A failed/empty fetch is dropped silently — the
-    /// demand loader keeps the resource absent, and the host's requested-set
-    /// stops it being re-spawned.
-    pub fn spawn_subresource(&self, url: String) {
-        let sub_tx = self.sub_tx.clone();
-        let proxy = self.proxy.clone();
-        self.runtime.spawn(async move {
-            if let Some(bytes) = fetch_bytes(&url).await {
-                let _ = sub_tx.send(SubresourceOutcome { url, bytes });
-                let _ = proxy.send_event(());
+        while let Ok(command) = commands.recv() {
+            match command {
+                FetchCommand::Page(url) => {
+                    let out = out.clone();
+                    runtime.spawn(async move {
+                        let result = do_fetch(&url).await;
+                        out.emit(FetchUpdate::Page(FetchOutcome { url, result }));
+                    });
+                },
+                FetchCommand::Subresource(url) => {
+                    let out = out.clone();
+                    runtime.spawn(async move {
+                        // A failed / empty subresource fetch is dropped silently:
+                        // the demand loader keeps the resource absent and the
+                        // host's requested-set stops it being re-spawned.
+                        if let Some(bytes) = fetch_bytes(&url).await {
+                            out.emit(FetchUpdate::Subresource(SubresourceOutcome { url, bytes }));
+                        }
+                    });
+                },
             }
-        });
-    }
+        }
+    })
 }
 
 /// Run one WHATWG-Fetch GET and collect the decoded body as text.

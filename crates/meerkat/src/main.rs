@@ -127,11 +127,10 @@ struct App {
     /// card size, or fetch state changes. `None` when no single node is focused.
     card_scene: Option<netrender::Scene>,
     card_key: Option<(String, u32, u32, u8)>,
-    /// Off-UI-thread fetch worker + the channels its outcomes arrive on: page
-    /// documents (`fetch_rx`) and subresources (`sub_rx`).
-    fetcher: fetch::Fetcher,
-    fetch_rx: Receiver<fetch::FetchOutcome>,
-    sub_rx: Receiver<fetch::SubresourceOutcome>,
+    /// The fetch actor's command handle and the single channel its outcomes arrive
+    /// on (page documents and subresources, one `FetchUpdate` stream).
+    fetch_handle: armillary::ActorHandle<fetch::FetchCommand>,
+    fetch_rx: Receiver<fetch::FetchUpdate>,
     /// The p2p sync subsystem (S5.0 / S5.1): owns the transport + the tessera lane
     /// on its own runtime. Status changes arrive on `sync_rx` and fold into the
     /// chrome sync chip; the "connect to peer" verb drives it via `sync.connect`.
@@ -226,10 +225,16 @@ impl App {
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
             orrery.select_by_url(url);
         }
-        let (fetcher, fetch_rx, sub_rx) = fetch::Fetcher::new(proxy.clone());
+        // The fetch actor wakes the loop through the winit proxy; armillary takes
+        // the wake as a host-neutral callback.
+        let fetch_proxy = proxy.clone();
+        let fetch_wake: armillary::Wake = Arc::new(move || {
+            let _ = fetch_proxy.send_event(());
+        });
+        let (fetch_handle, fetch_rx) = fetch::spawn_fetcher(fetch_wake);
         // The p2p sync subsystem: binds the transport + joins the tessera demo
         // moot on its own runtime, delivering status changes through `proxy` (the
-        // same wake the fetcher uses). Setup failure disables p2p, not the shell.
+        // same wake the fetch actor uses). Setup failure disables p2p, not the shell.
         let (sync, sync_rx) = sync::SyncHost::new(proxy, sync::DEMO_MOOT);
         let mut engines = EngineRegistry::new();
         for engine in nematic::engines() {
@@ -243,9 +248,8 @@ impl App {
             centered: restored_camera.is_some(),
             card_scene: None,
             card_key: None,
-            fetcher,
+            fetch_handle,
             fetch_rx,
-            sub_rx,
             sync,
             sync_rx,
             content: HashMap::new(),
@@ -356,7 +360,8 @@ impl App {
                             self.resources.borrow_mut().insert(res_url, stored.body);
                             refilled = true;
                         } else {
-                            self.fetcher.spawn_subresource(res_url);
+                            self.fetch_handle
+                                .command(fetch::FetchCommand::Subresource(res_url));
                         }
                     }
                 }
@@ -484,7 +489,7 @@ impl App {
             return;
         }
         self.content.insert(url.to_string(), fetch::ContentState::Loading);
-        self.fetcher.spawn(url.to_string());
+        self.fetch_handle.command(fetch::FetchCommand::Page(url.to_string()));
     }
 
     /// Load durably-cached content for `url` (page or subresource), or `None`.
@@ -751,36 +756,44 @@ impl ApplicationHandler for App {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
         let mut card_changed = false;
         let mut graph_changed = false;
-        while let Ok(outcome) = self.fetch_rx.try_recv() {
-            let state = match outcome.result {
-                Ok(fetched) => {
-                    // A fetched document also contributes any linked data it
-                    // carries (JSON-LD, or JSON-LD embedded in HTML) into the
-                    // graph, reconciled into the spatial field via `ingest_graph`.
-                    graph_changed |= self.orrery.ingest_graph(|g| {
-                        meerkat::ingest::harvest(g, fetched.content_type.as_deref(), &fetched.body)
-                    });
-                    // Persist so a reload shows this page without re-fetching.
-                    self.save_cached(
-                        &outcome.url,
-                        fetched.content_type.clone(),
-                        fetched.body.as_bytes(),
-                    );
-                    fetch::ContentState::Ready(fetched)
+        // One `FetchUpdate` stream carries both page documents and subresources.
+        while let Ok(update) = self.fetch_rx.try_recv() {
+            match update {
+                fetch::FetchUpdate::Page(outcome) => {
+                    let state = match outcome.result {
+                        Ok(fetched) => {
+                            // A fetched document also contributes any linked data
+                            // it carries (JSON-LD, or JSON-LD embedded in HTML)
+                            // into the graph, reconciled via `ingest_graph`.
+                            graph_changed |= self.orrery.ingest_graph(|g| {
+                                meerkat::ingest::harvest(
+                                    g,
+                                    fetched.content_type.as_deref(),
+                                    &fetched.body,
+                                )
+                            });
+                            // Persist so a reload shows this page without re-fetching.
+                            self.save_cached(
+                                &outcome.url,
+                                fetched.content_type.clone(),
+                                fetched.body.as_bytes(),
+                            );
+                            fetch::ContentState::Ready(fetched)
+                        },
+                        Err(reason) => fetch::ContentState::Failed(reason),
+                    };
+                    self.content.insert(outcome.url, state);
+                    card_changed = true;
                 },
-                Err(reason) => fetch::ContentState::Failed(reason),
-            };
-            self.content.insert(outcome.url, state);
-            card_changed = true;
-        }
-        // Subresources (page CSS / media) on their own channel: fill the cache so
-        // the next render's demand loader hits instead of missing.
-        while let Ok(sub) = self.sub_rx.try_recv() {
-            // Persist the subresource (its content-type is unknown here) so a
-            // page's CSS / media survive restart alongside the page itself.
-            self.save_cached(&sub.url, None, &sub.bytes);
-            self.resources.borrow_mut().insert(sub.url, sub.bytes);
-            card_changed = true;
+                // A subresource (page CSS / media): persist it (its content-type is
+                // unknown here) so a page's assets survive restart, and fill the
+                // cache so the next render's demand loader hits instead of missing.
+                fetch::FetchUpdate::Subresource(sub) => {
+                    self.save_cached(&sub.url, None, &sub.bytes);
+                    self.resources.borrow_mut().insert(sub.url, sub.bytes);
+                    card_changed = true;
+                },
+            }
         }
         // P2P sync status (S5.0): the same wake also carries lane-status changes.
         // Fold the latest into the chrome chip (the host owns the mutation).
