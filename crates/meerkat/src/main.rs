@@ -27,7 +27,9 @@
 //! so the omnibar drives the graph rather than a synthesized page.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 
 use layout_dom_api::LayoutDom;
@@ -42,12 +44,13 @@ use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost}
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use winit::window::{Window, WindowId};
 use xilem_serval::{Modifiers, PointerClick, ServalAppRunner};
 
 mod card;
+mod fetch;
 
 /// Author CSS for the **chrome** root. The toolbar is a flex row (back / forward
 /// buttons + a growing omnibar); serval lays it out via taffy's flexbox. The
@@ -102,10 +105,15 @@ struct App {
     /// the first render after the toolbar height is known).
     centered: bool,
     /// The focused node's content card, laid out lazily and cached by
-    /// `(url, card_w, card_h)` so it re-renders only when the focus or card size
-    /// changes. `None` when no single node is focused.
+    /// `(url, card_w, card_h, content_tag)` so it re-renders only when the focus,
+    /// card size, or fetch state changes. `None` when no single node is focused.
     card_scene: Option<netrender::Scene>,
-    card_key: Option<(String, u32, u32)>,
+    card_key: Option<(String, u32, u32, u8)>,
+    /// Off-UI-thread fetch worker + the channel its outcomes arrive on.
+    fetcher: fetch::Fetcher,
+    fetch_rx: Receiver<fetch::FetchOutcome>,
+    /// Per-URL fetched content state, keyed by the node's URL (URL identity).
+    content: HashMap<String, fetch::ContentState>,
     /// Cached measured height (px) of the chrome band; `0` until first measured.
     toolbar_h: u32,
     window: Option<Arc<Window>>,
@@ -120,7 +128,7 @@ struct App {
 }
 
 impl App {
-    fn new() -> Self {
+    fn new(proxy: EventLoopProxy<()>) -> Self {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         let runner = ServalAppRunner::new(
             dom.clone(),
@@ -134,6 +142,7 @@ impl App {
         if !content_location.is_empty() {
             orrery.visit(&content_location);
         }
+        let (fetcher, fetch_rx) = fetch::Fetcher::new(proxy);
         Self {
             dom,
             runner,
@@ -142,6 +151,9 @@ impl App {
             centered: false,
             card_scene: None,
             card_key: None,
+            fetcher,
+            fetch_rx,
+            content: HashMap::new(),
             toolbar_h: 0,
             window: None,
             host: None,
@@ -221,9 +233,11 @@ impl App {
         let focus_url = self.orrery.focused_url().map(str::to_string);
         let card_geom = focus_url.as_ref().and_then(|_| card::card_rect(w, toolbar_h, h));
         if let (Some(url), Some((.., cw, ch))) = (focus_url.as_deref(), card_geom) {
-            let key = (url.to_string(), cw, ch);
+            let state = self.content.get(url);
+            let key = (url.to_string(), cw, ch, fetch::ContentState::tag(state));
             if self.card_key.as_ref() != Some(&key) {
-                self.card_scene = Some(card::render_card_scene(&card::node_document(url), cw, ch));
+                let doc = card::content_document(url, state);
+                self.card_scene = Some(card::render_card_scene(&doc, cw, ch));
                 self.card_key = Some(key);
             }
         } else {
@@ -304,8 +318,18 @@ impl App {
         let loc = self.runner.state().content_location().to_string();
         if loc != self.content_location {
             self.orrery.visit(&loc);
+            self.ensure_content(&loc);
             self.content_location = loc;
             self.request_redraw();
+        }
+    }
+
+    /// Kick off a fetch for `url` if it is a network address not already started,
+    /// marking it `Loading` so the card shows progress immediately.
+    fn ensure_content(&mut self, url: &str) {
+        if fetch::is_fetchable(url) && !self.content.contains_key(url) {
+            self.content.insert(url.to_string(), fetch::ContentState::Loading);
+            self.fetcher.spawn(url.to_string());
         }
     }
 
@@ -519,6 +543,24 @@ impl ApplicationHandler for App {
         self.window = Some(window);
     }
 
+    /// Drain completed fetches (delivery model 2): a worker woke us via the proxy;
+    /// fold each outcome into the content cache and re-render the card.
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+        let mut changed = false;
+        while let Ok(outcome) = self.fetch_rx.try_recv() {
+            let state = match outcome.result {
+                Ok(fetched) => fetch::ContentState::Ready(fetched),
+                Err(reason) => fetch::ContentState::Failed(reason),
+            };
+            self.content.insert(outcome.url, state);
+            changed = true;
+        }
+        if changed {
+            self.card_key = None; // force the card to re-render from the new state
+            self.request_redraw();
+        }
+    }
+
     fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
         if self.window.as_ref().map(|w| w.id()) != Some(window_id) {
             return;
@@ -614,6 +656,7 @@ fn main() {
     tracing::info!("meerkat-shell starting");
 
     let event_loop = EventLoop::new().expect("failed to create event loop");
-    let mut app = App::new();
+    let proxy = event_loop.create_proxy();
+    let mut app = App::new(proxy);
     event_loop.run_app(&mut app).expect("event loop error");
 }

@@ -67,6 +67,15 @@ orrery-host = { path = "../orrery-host" }
 inker = { workspace = true }
 document-canvas = { workspace = true, features = ["netrender"] }
 
+# Off-UI-thread fetch (S2.2b): netfetcher's async WHATWG Fetch runs on a tokio
+# worker pool; results are delivered back to the winit loop over a channel + an
+# EventLoopProxy wake. `url` builds the request; netfetcher is the sibling repo,
+# path-dep'd like netrender. Network I/O is the host's job — engines stay
+# byte-consuming and never link netfetcher.
+netfetcher = { path = "../../../netfetcher" }
+url = "2"
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
 # Windowing + present (mirrors pelt-live's bin deps; mere's pins align with
 # serval's, so the wgpu 29 / winit 0.30 surface + netrender Renderer unify).
 winit = { workspace = true }

@@ -18,32 +18,70 @@ use document_canvas::{layout_document, ColorVocabulary, StyleConfig, Viewport};
 use inker::{DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan};
 use netrender::Scene;
 
+use crate::fetch::{ContentState, Fetched};
+
 /// Margin (px) between the card and the content-band edges.
 const CARD_MARGIN: f32 = 24.0;
 
-/// The synthesized document for the node at `url` (S2.2a placeholder content):
-/// the built-in welcome page for `mere://welcome`, else a card naming the
-/// address until live fetching lands.
-pub fn node_document(url: &str) -> EngineDocument {
+/// The document for the focused node's card, given its fetch [`ContentState`].
+/// `mere://welcome` is the built-in welcome page; a fetchable URL renders its
+/// loading / fetched-text / error state; anything else (an unfetched `mere://`
+/// address) just names the node.
+pub fn content_document(url: &str, state: Option<&ContentState>) -> EngineDocument {
     let blocks = if url == "mere://welcome" {
-        vec![
-            heading(1, "Mere"),
-            paragraph("A graph-shaped browser, hosted on serval."),
-            paragraph(
-                "Type a URL or a search above and press Enter. Each place you visit \
-                 becomes a node in the graph behind this card; Back and Forward move \
-                 through it.",
-            ),
-        ]
+        welcome_blocks()
     } else {
-        vec![
-            heading(1, url),
-            paragraph(
-                "This is the focused node's media card. Live fetching is not wired \
-                 yet (S2.2b); for now the card names the node's address.",
-            ),
-        ]
+        match state {
+            Some(ContentState::Loading) => vec![heading(1, url), paragraph("Fetching…")],
+            Some(ContentState::Ready(fetched)) => ready_blocks(url, fetched),
+            Some(ContentState::Failed(reason)) => {
+                vec![heading(1, url), paragraph(&format!("Could not load: {reason}"))]
+            },
+            None => vec![heading(1, url), paragraph("This node has no fetched media yet.")],
+        }
     };
+    document(url, blocks)
+}
+
+/// The built-in `mere://welcome` page.
+fn welcome_blocks() -> Vec<DocumentBlock> {
+    vec![
+        heading(1, "Mere"),
+        paragraph("A graph-shaped browser, hosted on serval."),
+        paragraph(
+            "Type a URL or a search above and press Enter. Each place you visit \
+             becomes a node in the graph behind this card; Back and Forward move \
+             through it.",
+        ),
+    ]
+}
+
+/// Fetched content as a plain document (S2.2b-i): the address, its content-type,
+/// then the decoded body split into paragraphs on blank lines. Bounded so a large
+/// page can't make an unbounded card. Content-type-aware engines (markdown, HTML
+/// via serval, …) replace this plain split in S2.2b-ii.
+fn ready_blocks(url: &str, fetched: &Fetched) -> Vec<DocumentBlock> {
+    let mut blocks = vec![heading(1, url)];
+    if let Some(ct) = &fetched.content_type {
+        blocks.push(paragraph(&format!("({ct})")));
+    }
+    let text: String = fetched.body.chars().take(4000).collect();
+    let mut paras = 0;
+    for para in text.split("\n\n").map(str::trim).filter(|p| !p.is_empty()) {
+        blocks.push(paragraph(para));
+        paras += 1;
+        if paras >= 40 {
+            break;
+        }
+    }
+    if paras == 0 {
+        blocks.push(paragraph("(empty response)"));
+    }
+    blocks
+}
+
+/// Assemble an [`EngineDocument`] over `blocks`, addressed at `url`.
+fn document(url: &str, blocks: Vec<DocumentBlock>) -> EngineDocument {
     EngineDocument {
         address: url.to_string(),
         title: None,
@@ -96,27 +134,60 @@ fn paragraph(text: &str) -> DocumentBlock {
 mod tests {
     use super::*;
 
+    fn heads_with(doc: &EngineDocument, text: &str) -> bool {
+        matches!(
+            doc.blocks.first(),
+            Some(DocumentBlock::Heading { spans, .. })
+                if matches!(spans.first(), Some(InlineSpan::Text(t)) if t == text)
+        )
+    }
+
+    fn body_text(doc: &EngineDocument) -> String {
+        doc.blocks
+            .iter()
+            .filter_map(|b| match b {
+                DocumentBlock::Paragraph { spans } | DocumentBlock::Heading { spans, .. } => {
+                    Some(spans.iter().filter_map(|s| match s {
+                        InlineSpan::Text(t) => Some(t.as_str()),
+                        _ => None,
+                    }))
+                },
+                _ => None,
+            })
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
     #[test]
     fn welcome_document_leads_with_a_heading() {
-        let doc = node_document("mere://welcome");
+        let doc = content_document("mere://welcome", None);
         assert_eq!(doc.address, "mere://welcome");
         assert!(matches!(doc.blocks.first(), Some(DocumentBlock::Heading { level: 1, .. })));
     }
 
     #[test]
-    fn other_url_names_the_address() {
-        let doc = node_document("https://example.com");
-        let heads_with_url = matches!(
-            doc.blocks.first(),
-            Some(DocumentBlock::Heading { spans, .. })
-                if matches!(spans.first(), Some(InlineSpan::Text(t)) if t == "https://example.com")
-        );
-        assert!(heads_with_url, "the card heads with the node's address");
+    fn fetch_states_render_distinctly() {
+        let url = "https://example.com";
+        assert!(heads_with(&content_document(url, Some(&ContentState::Loading)), url));
+        assert!(body_text(&content_document(url, Some(&ContentState::Loading))).contains("Fetching"));
+
+        let ready = ContentState::Ready(Fetched {
+            content_type: Some("text/plain".into()),
+            body: "First paragraph.\n\nSecond paragraph.".into(),
+        });
+        let doc = content_document(url, Some(&ready));
+        let text = body_text(&doc);
+        assert!(text.contains("First paragraph."), "fetched body renders");
+        assert!(text.contains("Second paragraph."), "blank lines split paragraphs");
+
+        let failed = ContentState::Failed("HTTP 404".into());
+        assert!(body_text(&content_document(url, Some(&failed))).contains("404"));
     }
 
     #[test]
     fn card_scene_lowers_text_to_glyph_runs() {
-        let doc = node_document("mere://welcome");
+        let doc = content_document("mere://welcome", None);
         let scene = render_card_scene(&doc, 420, 360);
         let glyph_runs = scene
             .ops
