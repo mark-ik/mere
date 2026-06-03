@@ -35,7 +35,11 @@ use std::sync::Arc;
 
 use eidetic_fjall::FjallStore;
 use layout_dom_api::LayoutDom;
+use forme::GraphMemberId;
+use kernel::geometry::PortableSize;
+use meerkat::workbench::Workbench;
 use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
+use platen::LayoutConfig;
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
 use orrery_host::{CameraView, Orrery, PointerButton, WHEEL_PAN_SCALE};
@@ -110,6 +114,21 @@ const CARD_BG: wgpu::Color = wgpu::Color { r: 0.110, g: 0.122, b: 0.145, a: 1.0 
 const DEFAULT_FRAME: &str = "00000000-0000-0000-0000-0000000f1a3e";
 const DEFAULT_PANE: u64 = 0;
 
+/// One tiled-workbench tile's content runtime: its own content actor (so tiles
+/// render concurrently, off the UI thread) plus the per-tile generation /
+/// last-shown / latest-scene bookkeeping the single focused card uses. Keyed by
+/// the tile's graph member (node UUID) in [`App::tiles`] (P4).
+struct TileRuntime {
+    handle: armillary::ActorHandle<content::ContentCommand>,
+    rx: Receiver<content::ContentUpdate>,
+    gens: armillary::Generations,
+    /// `(url, content-tag, w, h)` the actor was last told to show; a change drives
+    /// a `Show` (new document) or `Resize` (same document, new size).
+    shown: Option<(String, u8, u32, u32)>,
+    /// The latest generation-accepted scene, composited into the tile's rect.
+    scene: Option<netrender::Scene>,
+}
+
 /// The meerkat shell application: the shared chrome DOM, the runner that diffs
 /// the chrome view tree into it, the orrery content-root, the window + GPU, and
 /// input bookkeeping.
@@ -171,6 +190,15 @@ struct App {
     cursor: (f32, f32),
     width: u32,
     height: u32,
+    /// The winit event-loop proxy, kept so the host can spawn a content actor per
+    /// tile on demand (each tile's actor wakes the loop through it).
+    proxy: EventLoopProxy<()>,
+    /// The tiled-workbench composition (S4): the open tiles + the projection mode
+    /// (Cartography = the orrery, Tree = the tiled view).
+    workbench: Workbench,
+    /// The per-tile content-actor pool (P4), keyed by graph member. Populated in
+    /// Tree mode; one content actor per tile, each composited at its laid-out rect.
+    tiles: HashMap<GraphMemberId, TileRuntime>,
 }
 
 impl App {
@@ -252,7 +280,7 @@ impl App {
         // The p2p sync subsystem: binds the transport + joins the tessera demo
         // moot on its own runtime, delivering status changes through `proxy` (the
         // same wake the fetch actor uses). Setup failure disables p2p, not the shell.
-        let (sync, sync_rx) = sync::SyncHost::new(proxy, sync::DEMO_MOOT);
+        let (sync, sync_rx) = sync::SyncHost::new(proxy.clone(), sync::DEMO_MOOT);
         Self {
             dom,
             runner,
@@ -278,6 +306,9 @@ impl App {
             cursor: (0.0, 0.0),
             width: 1024,
             height: 600,
+            proxy,
+            workbench: Workbench::new(),
+            tiles: HashMap::new(),
         }
     }
 
@@ -344,43 +375,61 @@ impl App {
         }
         let (content_scene, orrery_redraw) = self.orrery.frame(w, content_h);
 
-        // Focused-node content card (S2.2a): the selected node's synthesized media
-        // as a floating card. Lay it out once per (url, card size) and cache; this
-        // skips parley layout on every settle frame.
-        let focus_url = self.orrery.focused_url().map(str::to_string);
-        let card_geom = focus_url.as_ref().and_then(|_| card::card_rect(w, toolbar_h, h));
-        if let (Some(url), Some((.., cw, ch))) = (focus_url.as_deref(), card_geom) {
-            // Drive the content actor. A new focused document (url or fetch-state
-            // change) is a `Show` (fresh nav generation; blank the card until the
-            // actor delivers the new scene); a same-document size change is a
-            // `Resize`. The actor renders off the UI thread and its scene returns
-            // via `content_rx`; this pass only composites whatever it last sent.
-            let tag = fetch::ContentState::tag(self.content.get(url));
-            let key = (url.to_string(), tag, cw, ch);
-            if self.shown.as_ref() != Some(&key) {
-                let same_doc = self.shown.as_ref().is_some_and(|(u, t, ..)| u == url && *t == tag);
-                if same_doc {
-                    self.content_gens.viewport.bump();
-                    self.content_handle.command(content::ContentCommand::Resize {
-                        viewport: (cw, ch),
-                        viewport_gen: self.content_gens.viewport,
-                    });
-                } else {
-                    self.content_gens.nav.bump();
-                    self.card_scene = None; // blank until the new document renders
-                    self.content_handle.command(content::ContentCommand::Show {
-                        url: url.to_string(),
-                        state: self.content.get(url).cloned(),
-                        viewport: (cw, ch),
-                        nav: self.content_gens.nav,
-                        viewport_gen: self.content_gens.viewport,
-                    });
-                }
-                self.shown = Some(key);
+        // Content tiles floating over the orrery. In Cartography there is one: the
+        // focused-node card at `card_rect`. In Tree (the tiled workbench) there is
+        // one per laid-out tile, each driven by its own content actor (P4); the
+        // orrery stays the dimmed backdrop, showing through the splitter gutters.
+        // Each entry is `(source, window dest rect, raster size)`; the source picks
+        // the scene at composite time — the focused card (`None`) or a tile.
+        let mut cards: Vec<(Option<GraphMemberId>, [f32; 4], (u32, u32))> = Vec::new();
+        if self.workbench.is_tiled() {
+            let band = PortableSize::new(w as f32, content_h as f32);
+            let laid = self.workbench.laid_out_tiles(band, &LayoutConfig::default(), self.orrery.graph());
+            for tile in &laid {
+                let Some(url) = tile.url.as_deref() else { continue };
+                self.ensure_content(url);
+                let cw = tile.rect.size.width.round().max(1.0) as u32;
+                let ch = tile.rect.size.height.round().max(1.0) as u32;
+                self.drive_tile(tile.member, url, cw, ch);
+                let x0 = tile.rect.origin.x;
+                let y0 = toolbar_h as f32 + tile.rect.origin.y;
+                cards.push((Some(tile.member), [x0, y0, x0 + cw as f32, y0 + ch as f32], (cw, ch)));
             }
         } else {
-            self.shown = None;
-            self.card_scene = None;
+            // Focused-node content card (S2.2a): the selected node's synthesized
+            // media. Lay it out once per (url, card size) and cache; the actor
+            // renders off the UI thread, its scene returning via `content_rx`.
+            let focus_url = self.orrery.focused_url().map(str::to_string);
+            let card_geom = focus_url.as_ref().and_then(|_| card::card_rect(w, toolbar_h, h));
+            if let (Some(url), Some((x0, y0, x1, y1, cw, ch))) = (focus_url.as_deref(), card_geom) {
+                let tag = fetch::ContentState::tag(self.content.get(url));
+                let key = (url.to_string(), tag, cw, ch);
+                if self.shown.as_ref() != Some(&key) {
+                    let same_doc = self.shown.as_ref().is_some_and(|(u, t, ..)| u == url && *t == tag);
+                    if same_doc {
+                        self.content_gens.viewport.bump();
+                        self.content_handle.command(content::ContentCommand::Resize {
+                            viewport: (cw, ch),
+                            viewport_gen: self.content_gens.viewport,
+                        });
+                    } else {
+                        self.content_gens.nav.bump();
+                        self.card_scene = None; // blank until the new document renders
+                        self.content_handle.command(content::ContentCommand::Show {
+                            url: url.to_string(),
+                            state: self.content.get(url).cloned(),
+                            viewport: (cw, ch),
+                            nav: self.content_gens.nav,
+                            viewport_gen: self.content_gens.viewport,
+                        });
+                    }
+                    self.shown = Some(key);
+                }
+                cards.push((None, [x0, y0, x1, y1], (cw, ch)));
+            } else {
+                self.shown = None;
+                self.card_scene = None;
+            }
         }
 
         let host = self.host.as_ref().unwrap();
@@ -394,22 +443,28 @@ impl App {
             content_h,
             ColorLoad::Clear(wgpu::Color { r: 0.067, g: 0.078, b: 0.100, a: 1.0 }),
         );
-        // The focused-node card to its own offscreen target (kept alive — the view
-        // borrows nothing, but mirror the chrome/content pattern of holding both).
-        let card_raster = match (card_geom, self.card_scene.as_ref()) {
-            (Some((.., cw, ch)), Some(scene)) => {
-                Some(host.rasterize(scene, cw, ch, ColorLoad::Clear(CARD_BG)))
-            },
-            _ => None,
-        };
+        // Rasterize each card's latest scene (the focused card, or a tile) to its
+        // own offscreen target, kept alive in the Vec through the present. A card
+        // whose actor has not delivered a scene yet is skipped this frame.
+        let card_rasters: Vec<_> = cards
+            .iter()
+            .filter_map(|(src, dest, (cw, ch))| {
+                let scene = match src {
+                    None => self.card_scene.as_ref(),
+                    Some(member) => self.tiles.get(member).and_then(|rt| rt.scene.as_ref()),
+                }?;
+                let (tex, view) = host.rasterize(scene, *cw, *ch, ColorLoad::Clear(CARD_BG));
+                Some((*dest, tex, view))
+            })
+            .collect();
 
         let Some(frame) = host.acquire() else { return };
         let target_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
         let format = host.format();
         // Content fills [toolbar_h, h] (dest_rect is [x0, y0, x1, y1] corners;
-        // viewport is the full surface). Then the transparent-cleared chrome is
-        // composited over the whole window — toolbar + dropdown on top, the rest
-        // letting the orrery through.
+        // viewport is the full surface). Then each content card floats over it, and
+        // the transparent-cleared chrome composites over the whole window — toolbar
+        // + dropdown on top, the rest letting the content through.
         host.renderer().compose_external_texture(
             &content_view,
             &target_view,
@@ -418,17 +473,14 @@ impl App {
             h,
             ExternalTexturePlacement::new([0.0, toolbar_h as f32, w as f32, h as f32]),
         );
-        // The focused-node card floats over the orrery, under the chrome.
-        if let (Some((x0, y0, x1, y1, ..)), Some((_card_tex, card_view))) =
-            (card_geom, card_raster.as_ref())
-        {
+        for (dest, _tex, view) in &card_rasters {
             host.renderer().compose_external_texture(
-                card_view,
+                view,
                 &target_view,
                 format,
                 w,
                 h,
-                ExternalTexturePlacement::new([x0, y0, x1, y1]),
+                ExternalTexturePlacement::new(*dest),
             );
         }
         host.renderer().compose_external_texture(
@@ -503,6 +555,93 @@ impl App {
         }
         self.content.insert(url.to_string(), fetch::ContentState::Loading);
         self.fetch_handle.command(fetch::FetchCommand::Page(url.to_string()));
+    }
+
+    /// Toggle between the orrery (Cartography) and the tiled workbench (Tree). On
+    /// first entry to Tree with no open tiles, seed it from the focused node and
+    /// its graph neighbors, so the tiled view opens populated and the per-tile
+    /// content actors render plural and concurrent (P4). Tiles persist across
+    /// toggles (the actors idle on their command channel when not rendered).
+    fn toggle_workbench(&mut self) {
+        self.workbench.toggle_mode();
+        if self.workbench.is_tiled() && self.workbench.tile_count() == 0 {
+            for member in self.focus_and_neighbors(4) {
+                self.open_tile(member);
+            }
+        }
+        self.request_redraw();
+    }
+
+    /// The focused node's graph member plus up to `max` of its neighbors' members
+    /// (resolved URL → node UUID via the kernel node id). Empty when nothing is
+    /// focused or the focus has no node.
+    fn focus_and_neighbors(&self, max: usize) -> Vec<GraphMemberId> {
+        let graph = self.orrery.graph();
+        let Some(url) = self.orrery.focused_url() else {
+            return Vec::new();
+        };
+        let Some((key, node)) = graph.get_node_by_url(url) else {
+            return Vec::new();
+        };
+        let mut members = vec![node.id];
+        for neighbor in graph.neighbors_undirected_sorted(key).into_iter().take(max) {
+            if let Some(n) = graph.get_node(neighbor) {
+                members.push(n.id);
+            }
+        }
+        members
+    }
+
+    /// Open a tile for `member`, spawning its content actor (which wakes the loop
+    /// through the stored proxy). A no-op if the member already has a tile.
+    fn open_tile(&mut self, member: GraphMemberId) {
+        if !self.workbench.open_tile(member) {
+            return;
+        }
+        let proxy = self.proxy.clone();
+        let wake: armillary::Wake = Arc::new(move || {
+            let _ = proxy.send_event(());
+        });
+        let (handle, rx) = content::spawn_content(wake);
+        self.tiles.insert(
+            member,
+            TileRuntime { handle, rx, gens: armillary::Generations::default(), shown: None, scene: None },
+        );
+    }
+
+    /// Drive one tile's content actor for the current frame: a fresh document
+    /// (url / fetch-state change) is a `Show` (new nav generation; blank the tile
+    /// until it re-renders), a same-document size change a `Resize`. The per-tile
+    /// mirror of the focused card's drive (P4).
+    fn drive_tile(&mut self, member: GraphMemberId, url: &str, cw: u32, ch: u32) {
+        let tag = fetch::ContentState::tag(self.content.get(url));
+        let state = self.content.get(url).cloned();
+        let Some(rt) = self.tiles.get_mut(&member) else {
+            return;
+        };
+        let key = (url.to_string(), tag, cw, ch);
+        if rt.shown.as_ref() == Some(&key) {
+            return;
+        }
+        let same_doc = rt.shown.as_ref().is_some_and(|(u, t, ..)| u == url && *t == tag);
+        if same_doc {
+            rt.gens.viewport.bump();
+            rt.handle.command(content::ContentCommand::Resize {
+                viewport: (cw, ch),
+                viewport_gen: rt.gens.viewport,
+            });
+        } else {
+            rt.gens.nav.bump();
+            rt.scene = None;
+            rt.handle.command(content::ContentCommand::Show {
+                url: url.to_string(),
+                state,
+                viewport: (cw, ch),
+                nav: rt.gens.nav,
+                viewport_gen: rt.gens.viewport,
+            });
+        }
+        rt.shown = Some(key);
     }
 
     /// Load durably-cached content for `url` (page or subresource), or `None`.
@@ -621,6 +760,14 @@ impl App {
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("k"))
         {
             self.toggle_palette();
+            return;
+        }
+        // Ctrl+T toggles the tiled workbench (Tree projection) and the orrery
+        // (Cartography projection) of the same graph.
+        if self.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("t"))
+        {
+            self.toggle_workbench();
             return;
         }
         if self.runner.state().palette_open {
@@ -792,11 +939,22 @@ impl ApplicationHandler for App {
                 },
                 // A subresource (page CSS / media): persist it (its content-type is
                 // unknown here) so the page's assets survive restart, then hand the
-                // bytes to the content actor, which caches them and re-renders.
+                // bytes to the content actors, which cache them and re-render. The
+                // fetch stream is keyed by URL, not by which actor wanted it, so
+                // feed the focused-card actor and every tile actor; each dedups via
+                // its own resource store and only the one that wanted it re-renders.
                 fetch::FetchUpdate::Subresource(sub) => {
                     self.save_cached(&sub.url, None, &sub.bytes);
-                    self.content_handle
-                        .command(content::ContentCommand::Resource { url: sub.url, bytes: sub.bytes });
+                    self.content_handle.command(content::ContentCommand::Resource {
+                        url: sub.url.clone(),
+                        bytes: sub.bytes.clone(),
+                    });
+                    for rt in self.tiles.values() {
+                        rt.handle.command(content::ContentCommand::Resource {
+                            url: sub.url.clone(),
+                            bytes: sub.bytes.clone(),
+                        });
+                    }
                 },
             }
         }
@@ -839,6 +997,57 @@ impl ApplicationHandler for App {
                         changed
                     });
                 },
+            }
+        }
+        // Tile content actors (P4): drain each tile's channel and route its updates
+        // to that tile's runtime + handle — the per-tile mirror of the focused-card
+        // handling above. Drain into an owned Vec first so the receiver borrow ends
+        // before applying (which re-borrows `self.tiles` / the graph).
+        let tile_members: Vec<GraphMemberId> = self.tiles.keys().copied().collect();
+        for member in tile_members {
+            let updates: Vec<content::ContentUpdate> = match self.tiles.get(&member) {
+                Some(rt) => rt.rx.try_iter().collect(),
+                None => continue,
+            };
+            for update in updates {
+                match update {
+                    content::ContentUpdate::Scene { nav, viewport_gen, scene } => {
+                        if let Some(rt) = self.tiles.get_mut(&member) {
+                            let stamp = armillary::Generations { nav, viewport: viewport_gen };
+                            if rt.gens.accepts(stamp) {
+                                rt.scene = Some(scene);
+                                card_changed = true;
+                            }
+                        }
+                    },
+                    content::ContentUpdate::Wanted { nav, urls } => {
+                        let current = self.tiles.get(&member).is_some_and(|rt| rt.gens.nav == nav);
+                        if current {
+                            for url in urls {
+                                if let Some(stored) = self.load_cached(&url) {
+                                    if let Some(rt) = self.tiles.get(&member) {
+                                        rt.handle.command(content::ContentCommand::Resource {
+                                            url,
+                                            bytes: stored.body,
+                                        });
+                                    }
+                                } else {
+                                    self.fetch_handle.command(fetch::FetchCommand::Subresource(url));
+                                }
+                            }
+                        }
+                    },
+                    content::ContentUpdate::Contribution { contributions } => {
+                        graph_changed |= self.orrery.ingest_graph(|g| {
+                            let mut changed = false;
+                            for contribution in &contributions {
+                                let outcome = linked_data::apply_contribution(g, contribution);
+                                changed |= outcome.nodes_created > 0 || outcome.edges_asserted > 0;
+                            }
+                            changed
+                        });
+                    },
+                }
             }
         }
         // P2P sync status (S5.0): the same wake also carries lane-status changes.
