@@ -294,10 +294,37 @@ pub struct ContextCache {
     documents: std::collections::HashMap<String, Vec<u8>>,
 }
 
+/// The URL Mere's curated context is served at.
+const MERE_CONTEXT_URL: &str = "https://mere.computer/ns/context";
+
+/// Mere's curated context (the "minimal" pack): `schema:name` / `schema:keywords`
+/// plus the `mere:` relation prefix.
+const MERE_MINIMAL_CONTEXT: &[u8] = br#"{"@context":{"name":"https://schema.org/name","keywords":"https://schema.org/keywords","mere":"https://mere.computer/ns/rel#"}}"#;
+
 impl ContextCache {
-    /// An empty cache: every remote `@context` is refused.
+    /// An empty cache (the **none** preset): every remote `@context` is refused.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The **minimal** preset: only Mere's curated context (`schema:name` /
+    /// `schema:keywords` + the `mere:` relation prefix), served at
+    /// `https://mere.computer/ns/context`. Tiny; resolves Mere-authored documents
+    /// but not arbitrary schema.org pages — those need [`full`](Self::full).
+    pub fn minimal() -> Self {
+        Self::new().with(MERE_CONTEXT_URL, MERE_MINIMAL_CONTEXT)
+    }
+
+    /// The **full** preset (the host default): the minimal context plus the
+    /// bundled standard vocabularies, so an arbitrary
+    /// `@context: "https://schema.org/"` resolves offline. Until those vocabulary
+    /// assets are vendored (a size / licensing decision), this equals
+    /// [`minimal`](Self::minimal); a user can always step down to `minimal` /
+    /// `new`, or bring their own via [`with`](Self::with).
+    pub fn full() -> Self {
+        // Vendored standard-vocabulary contexts (schema.org, Dublin Core,
+        // ActivityStreams) register here once dropped into `assets/`.
+        Self::minimal()
     }
 
     /// Bundle a context document under its URL (builder style).
@@ -569,6 +596,27 @@ mod tests {
         "cites": "https://mere.computer/ns/rel#cites"
       }
     }"#;
+
+    #[test]
+    fn context_presets_resolve_mere_docs() {
+        let doc = br#"{"@context":"https://mere.computer/ns/context","@id":"https://a.test/","name":"A","mere:cites":{"@id":"https://b.test/"}}"#;
+        // minimal + full resolve the Mere context; none refuses the remote URL.
+        let resolved = from_jsonld_with_contexts(doc, ContextCache::minimal()).expect("minimal");
+        assert!(
+            resolved
+                .nodes
+                .iter()
+                .any(|n| n.id == "https://a.test/" && n.title.as_deref() == Some("A"))
+        );
+        assert!(
+            resolved
+                .edges
+                .iter()
+                .any(|e| e.predicate == "https://mere.computer/ns/rel#cites")
+        );
+        assert!(from_jsonld_with_contexts(doc, ContextCache::full()).is_ok());
+        assert!(from_jsonld_with_contexts(doc, ContextCache::new()).is_err());
+    }
 
     #[test]
     fn bundled_context_expands_a_remote_context() {
