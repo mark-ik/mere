@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/mere/app",
     "crates/meerkat",
+    "crates/armillary",
     "crates/serval-winit-host",
     "crates/orrery-host",
     "crates/persona/identity",
@@ -85,6 +86,10 @@ node-lineage = { path = "crates/graphshell/graph/node-lineage" }
 linked-data = { path = "crates/graphshell/graph/linked-data" }
 kernel = { path = "crates/graphshell/graph/graph-kernel" }
 orrery = { path = "crates/graphshell/graph/orrery" }
+
+# The actor-kernel runtime (host-neutral): the !Send host-kernel boundary + the
+# Send actor harness the constellation is built on.
+armillary = { path = "crates/armillary" }
 
 shell-state = { path = "crates/graphshell/shell/state" }
 frame = { path = "crates/graphshell/shell/domain/frame" }

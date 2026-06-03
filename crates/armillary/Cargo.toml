@@ -1,0 +1,13 @@
+[package]
+name = "armillary"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Mere's host-neutral actor-kernel runtime: a !Send host-kernel boundary and a Send actor harness for the constellation of subsystems around the kernel."
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
