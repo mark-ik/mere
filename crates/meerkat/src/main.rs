@@ -34,7 +34,6 @@ use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 
 use eidetic_fjall::FjallStore;
-use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
 use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
 use netrender::external_texture::ExternalTexturePlacement;
@@ -123,15 +122,26 @@ struct App {
     /// Whether the orrery has been centered on its content band yet (done once,
     /// the first render after the toolbar height is known).
     centered: bool,
-    /// The focused node's content card, laid out lazily and cached by
-    /// `(url, card_w, card_h, content_tag)` so it re-renders only when the focus,
-    /// card size, or fetch state changes. `None` when no single node is focused.
+    /// The focused node's content card scene, delivered by the content actor; the
+    /// render pass composites it. `None` when no node is focused, or while a fresh
+    /// document is still rendering off-thread.
     card_scene: Option<netrender::Scene>,
-    card_key: Option<(String, u32, u32, u8)>,
     /// The fetch actor's command handle and the single channel its outcomes arrive
     /// on (page documents and subresources, one `FetchUpdate` stream).
     fetch_handle: armillary::ActorHandle<fetch::FetchCommand>,
     fetch_rx: Receiver<fetch::FetchUpdate>,
+    /// The content actor: renders the focused card off the UI thread. Commands go
+    /// through the handle; rendered scenes / wanted subresources / harvested
+    /// contributions arrive on `content_rx`.
+    content_handle: armillary::ActorHandle<content::ContentCommand>,
+    content_rx: Receiver<content::ContentUpdate>,
+    /// The generation pair the kernel stamps `Show` / `Resize` with, so a scene
+    /// built for a document or size the card has left is dropped on arrival.
+    content_gens: armillary::Generations,
+    /// What the content actor was last told to show: `(url, content-tag, card_w,
+    /// card_h)`. A change drives a `Show` (new document) or `Resize` (same
+    /// document, new size).
+    shown: Option<(String, u8, u32, u32)>,
     /// The p2p sync subsystem (S5.0 / S5.1): owns the transport + the tessera lane
     /// on its own runtime. Status changes arrive on `sync_rx` and fold into the
     /// chrome sync chip; the "connect to peer" verb drives it via `sync.connect`.
@@ -139,13 +149,6 @@ struct App {
     sync_rx: Receiver<sync::SyncUpdate>,
     /// Per-URL fetched content state, keyed by the node's URL (URL identity).
     content: HashMap<String, fetch::ContentState>,
-    /// Subresource bytes (page `<link>` CSS, `<img>` media) the HTML card pulls
-    /// on demand while rendering, keyed by absolute URL. `RefCell` so the
-    /// render-time loader can read it through a shared borrow of `self`.
-    resources: RefCell<resources::ResourceStore>,
-    /// Content engines for the card: nematic's document engines, routed by
-    /// content-type. (HTML rides the serval lane instead, in `card`.)
-    engines: EngineRegistry,
     /// The session's data directory (`<data_dir>/mere`): holds `graph.json` and
     /// the `views/` view-intent sidecars.
     session_dir: PathBuf,
@@ -233,14 +236,19 @@ impl App {
             let _ = fetch_proxy.send_event(());
         });
         let (fetch_handle, fetch_rx) = fetch::spawn_fetcher(fetch_wake);
+        // The content actor renders the focused card off the UI thread (it owns the
+        // serval cascade + nematic engines + a per-tile subresource cache on its own
+        // thread) and ships scenes / wanted subresources / harvested linked data
+        // back through the same wake.
+        let content_proxy = proxy.clone();
+        let content_wake: armillary::Wake = Arc::new(move || {
+            let _ = content_proxy.send_event(());
+        });
+        let (content_handle, content_rx) = content::spawn_content(content_wake);
         // The p2p sync subsystem: binds the transport + joins the tessera demo
         // moot on its own runtime, delivering status changes through `proxy` (the
         // same wake the fetch actor uses). Setup failure disables p2p, not the shell.
         let (sync, sync_rx) = sync::SyncHost::new(proxy, sync::DEMO_MOOT);
-        let mut engines = EngineRegistry::new();
-        for engine in nematic::engines() {
-            engines.register(engine);
-        }
         Self {
             dom,
             runner,
@@ -248,14 +256,15 @@ impl App {
             content_location,
             centered: restored_camera.is_some(),
             card_scene: None,
-            card_key: None,
             fetch_handle,
             fetch_rx,
+            content_handle,
+            content_rx,
+            content_gens: armillary::Generations::default(),
+            shown: None,
             sync,
             sync_rx,
             content: HashMap::new(),
-            resources: RefCell::new(resources::ResourceStore::default()),
-            engines,
             session_dir,
             store,
             toolbar_h: 0,
@@ -337,43 +346,36 @@ impl App {
         let focus_url = self.orrery.focused_url().map(str::to_string);
         let card_geom = focus_url.as_ref().and_then(|_| card::card_rect(w, toolbar_h, h));
         if let (Some(url), Some((.., cw, ch))) = (focus_url.as_deref(), card_geom) {
-            let state = self.content.get(url);
-            let key = (url.to_string(), cw, ch, fetch::ContentState::tag(state));
-            if self.card_key.as_ref() != Some(&key) {
-                // The HTML lane pulls subresources (`<link>` CSS, `<img>`) through
-                // a demand loader: a miss records the absolute URL in `wanted` and
-                // renders without it. After the render we fetch each wanted URL we
-                // have not already requested; its arrival re-renders the card.
-                let wanted = RefCell::new(Vec::new());
-                let scene = {
-                    let loader = resources::ResourceLoader::new(&self.resources, url, &wanted);
-                    card::render_content_scene(url, state, &self.engines, &loader, cw, ch)
-                };
-                self.card_scene = Some(scene);
-                self.card_key = Some(key);
-                let mut refilled = false;
-                for res_url in wanted.into_inner() {
-                    let newly = self.resources.borrow_mut().request(res_url.clone());
-                    if newly {
-                        // A durable cache hit fills the resource without a fetch;
-                        // a miss spawns one (its arrival re-renders the card).
-                        if let Some(stored) = self.load_cached(&res_url) {
-                            self.resources.borrow_mut().insert(res_url, stored.body);
-                            refilled = true;
-                        } else {
-                            self.fetch_handle
-                                .command(fetch::FetchCommand::Subresource(res_url));
-                        }
-                    }
+            // Drive the content actor. A new focused document (url or fetch-state
+            // change) is a `Show` (fresh nav generation; blank the card until the
+            // actor delivers the new scene); a same-document size change is a
+            // `Resize`. The actor renders off the UI thread and its scene returns
+            // via `content_rx`; this pass only composites whatever it last sent.
+            let tag = fetch::ContentState::tag(self.content.get(url));
+            let key = (url.to_string(), tag, cw, ch);
+            if self.shown.as_ref() != Some(&key) {
+                let same_doc = self.shown.as_ref().is_some_and(|(u, t, ..)| u == url && *t == tag);
+                if same_doc {
+                    self.content_gens.viewport.bump();
+                    self.content_handle.command(content::ContentCommand::Resize {
+                        viewport: (cw, ch),
+                        viewport_gen: self.content_gens.viewport,
+                    });
+                } else {
+                    self.content_gens.nav.bump();
+                    self.card_scene = None; // blank until the new document renders
+                    self.content_handle.command(content::ContentCommand::Show {
+                        url: url.to_string(),
+                        state: self.content.get(url).cloned(),
+                        viewport: (cw, ch),
+                        nav: self.content_gens.nav,
+                        viewport_gen: self.content_gens.viewport,
+                    });
                 }
-                if refilled {
-                    // Re-render so the demand loader picks up the cache-filled resources.
-                    self.card_key = None;
-                    self.request_redraw();
-                }
+                self.shown = Some(key);
             }
         } else {
-            self.card_key = None;
+            self.shown = None;
             self.card_scene = None;
         }
 
@@ -763,17 +765,9 @@ impl ApplicationHandler for App {
                 fetch::FetchUpdate::Page(outcome) => {
                     let state = match outcome.result {
                         Ok(fetched) => {
-                            // A fetched document also contributes any linked data
-                            // it carries (JSON-LD, or JSON-LD embedded in HTML)
-                            // into the graph, reconciled via `ingest_graph`.
-                            graph_changed |= self.orrery.ingest_graph(|g| {
-                                meerkat::ingest::harvest(
-                                    g,
-                                    fetched.content_type.as_deref(),
-                                    &fetched.body,
-                                )
-                            });
-                            // Persist so a reload shows this page without re-fetching.
+                            // Persist so a reload shows this page without
+                            // re-fetching. Linked-data harvest now happens in the
+                            // content actor (on `Show`), which ships a `Contribution`.
                             self.save_cached(
                                 &outcome.url,
                                 fetched.content_type.clone(),
@@ -787,12 +781,53 @@ impl ApplicationHandler for App {
                     card_changed = true;
                 },
                 // A subresource (page CSS / media): persist it (its content-type is
-                // unknown here) so a page's assets survive restart, and fill the
-                // cache so the next render's demand loader hits instead of missing.
+                // unknown here) so the page's assets survive restart, then hand the
+                // bytes to the content actor, which caches them and re-renders.
                 fetch::FetchUpdate::Subresource(sub) => {
                     self.save_cached(&sub.url, None, &sub.bytes);
-                    self.resources.borrow_mut().insert(sub.url, sub.bytes);
-                    card_changed = true;
+                    self.content_handle
+                        .command(content::ContentCommand::Resource { url: sub.url, bytes: sub.bytes });
+                },
+            }
+        }
+        // Content actor: rendered scenes, the subresources a render wants, and the
+        // linked data harvested from the document.
+        while let Ok(update) = self.content_rx.try_recv() {
+            match update {
+                content::ContentUpdate::Scene { nav, viewport_gen, scene } => {
+                    // Composite only the scene for the current document + size; a
+                    // late one (the card has since navigated or resized) is dropped.
+                    let stamp = armillary::Generations { nav, viewport: viewport_gen };
+                    if self.content_gens.accepts(stamp) {
+                        self.card_scene = Some(scene);
+                        card_changed = true;
+                    }
+                },
+                content::ContentUpdate::Wanted { nav, urls } => {
+                    // The actor has already deduped these; fetch each (a durable
+                    // cache hit feeds the actor directly, a miss spawns a network
+                    // fetch whose bytes return as a `Resource` command).
+                    if self.content_gens.nav == nav {
+                        for url in urls {
+                            if let Some(stored) = self.load_cached(&url) {
+                                self.content_handle.command(
+                                    content::ContentCommand::Resource { url, bytes: stored.body },
+                                );
+                            } else {
+                                self.fetch_handle.command(fetch::FetchCommand::Subresource(url));
+                            }
+                        }
+                    }
+                },
+                content::ContentUpdate::Contribution { contributions } => {
+                    graph_changed |= self.orrery.ingest_graph(|g| {
+                        let mut changed = false;
+                        for contribution in &contributions {
+                            let outcome = linked_data::apply_contribution(g, contribution);
+                            changed |= outcome.nodes_created > 0 || outcome.edges_asserted > 0;
+                        }
+                        changed
+                    });
                 },
             }
         }
@@ -810,7 +845,6 @@ impl ApplicationHandler for App {
             self.save_session();
         }
         if card_changed || graph_changed {
-            self.card_key = None; // force the card to re-render from the new state
             self.request_redraw();
         }
     }

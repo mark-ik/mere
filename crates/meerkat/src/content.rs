@@ -19,10 +19,6 @@
 //! [`Contribution`](ContentUpdate::Contribution) harvested from the document (the
 //! kernel applies it to the graph). The actor never touches the graph or the GPU.
 
-// Built and headless-tested here; the render loop wires it in next (P2b), so the
-// API reads as unused until then.
-#![allow(dead_code)]
-
 use std::cell::RefCell;
 
 use armillary::{spawn, ActorHandle, Emitter, NavGeneration, ViewportGeneration, Wake};
@@ -31,7 +27,7 @@ use linked_data::GraphContribution;
 use netrender::Scene;
 
 use crate::card::render_content_scene;
-use crate::fetch::{ContentState, Fetched};
+use crate::fetch::ContentState;
 use crate::resources::{ResourceLoader, ResourceStore};
 
 /// A command from the kernel to a content actor.
@@ -135,13 +131,21 @@ fn render(
     out: &Emitter<ContentUpdate>,
 ) {
     let wanted = RefCell::new(Vec::new());
-    let loader = ResourceLoader::new(store, &content.url, &wanted);
     let (w, h) = content.viewport;
-    let scene = render_content_scene(&content.url, content.state.as_ref(), registry, &loader, w, h);
+    let scene = {
+        let loader = ResourceLoader::new(store, &content.url, &wanted);
+        render_content_scene(&content.url, content.state.as_ref(), registry, &loader, w, h)
+    };
     out.emit(ContentUpdate::Scene { nav: content.nav, viewport_gen: content.viewport_gen, scene });
-    let wanted = wanted.into_inner();
-    if !wanted.is_empty() {
-        out.emit(ContentUpdate::Wanted { nav: content.nav, urls: wanted });
+    // Ship only never-requested subresources, so a re-render before the bytes
+    // arrive does not re-request them (the store dedups).
+    let fresh: Vec<String> = wanted
+        .into_inner()
+        .into_iter()
+        .filter(|url| store.borrow_mut().request(url.clone()))
+        .collect();
+    if !fresh.is_empty() {
+        out.emit(ContentUpdate::Wanted { nav: content.nav, urls: fresh });
     }
 }
 
@@ -150,6 +154,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::fetch::Fetched;
 
     fn noop_wake() -> Wake {
         Arc::new(|| {})
