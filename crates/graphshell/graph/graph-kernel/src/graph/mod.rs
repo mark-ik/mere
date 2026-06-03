@@ -298,6 +298,7 @@ impl Graph {
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: Vec::new(),
             classifications: Vec::new(),
+            properties: Vec::new(),
             is_pinned: false,
             last_visited: now,
             navigation_memory: NodeNavigationMemory::empty(),

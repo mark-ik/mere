@@ -162,6 +162,22 @@ fn node_object(graph: &Graph, key: NodeKey, node: &Node) -> Value {
         );
     }
 
+    // Open literal properties → `@value` entries, merged into the predicate's
+    // array (expanded values are always arrays).
+    let mut props: Vec<(&str, &str)> = node
+        .properties
+        .iter()
+        .map(|p| (p.predicate.as_str(), p.value.as_str()))
+        .collect();
+    props.sort_unstable();
+    for (predicate, value) in props {
+        obj.entry(predicate.to_string())
+            .or_insert_with(|| Value::Array(Vec::new()))
+            .as_array_mut()
+            .expect("expanded predicate value is an array")
+            .push(json!({ "@value": value }));
+    }
+
     Value::Object(obj)
 }
 
@@ -251,6 +267,25 @@ fn compact_node_object(
         obj.insert(emit_key, value);
     }
 
+    // Open literal properties: a full-IRI key → literal value (scalar, or array
+    // for repeats). Not short-termed — the open tail stays explicit.
+    let mut props: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for property in &node.properties {
+        props
+            .entry(property.predicate.clone())
+            .or_default()
+            .push(property.value.clone());
+    }
+    for (predicate, mut values) in props {
+        values.sort();
+        let value = if values.len() == 1 {
+            Value::String(values.into_iter().next().expect("length checked"))
+        } else {
+            Value::Array(values.into_iter().map(Value::String).collect())
+        };
+        obj.insert(predicate, value);
+    }
+
     Value::Object(obj)
 }
 
@@ -305,6 +340,39 @@ mod tests {
     #[test]
     fn empty_graph_exports_empty_array() {
         assert_eq!(to_jsonld(&Graph::new()), json!([]));
+    }
+
+    #[test]
+    fn properties_round_trip_via_the_property_bag() {
+        // A non-curated literal survives ingest → graph property bag → export.
+        let doc = br#"{"@id":"https://a.test/","https://schema.org/datePublished":[{"@value":"2026-06-02"}]}"#;
+        let contribution = from_jsonld(doc).expect("parse");
+        let node = contribution
+            .nodes
+            .iter()
+            .find(|n| n.id == "https://a.test/")
+            .expect("node a");
+        assert_eq!(
+            node.properties,
+            vec![(
+                "https://schema.org/datePublished".to_string(),
+                "2026-06-02".to_string()
+            )]
+        );
+
+        let mut graph = Graph::new();
+        apply_contribution(&mut graph, &contribution);
+        let exported = to_jsonld(&graph);
+        let a = exported
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["@id"] == json!("https://a.test/"))
+            .expect("exported node a");
+        assert_eq!(
+            a["https://schema.org/datePublished"],
+            json!([{ "@value": "2026-06-02" }])
+        );
     }
 
     #[test]

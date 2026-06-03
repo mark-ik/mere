@@ -67,6 +67,7 @@ impl Graph {
                 mime_hint: node.mime_hint.clone(),
                 frame_layout_hints: node.frame_layout_hints.clone(),
                 frame_split_offer_suppressed: node.frame_split_offer_suppressed,
+                properties: node.properties.clone(),
             })
             .collect();
 

@@ -64,6 +64,30 @@ fn open_predicate_only_edge_survives_snapshot_roundtrip() {
 }
 
 #[test]
+fn node_properties_survive_snapshot_roundtrip() {
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.test/".to_string(), Point2D::new(0.0, 0.0));
+    graph
+        .get_node_mut(a)
+        .unwrap()
+        .properties
+        .push(crate::types::NodeProperty {
+            predicate: "https://schema.org/datePublished".to_string(),
+            value: "2026-06-02".to_string(),
+        });
+
+    let restored = Graph::from_snapshot(&graph.to_snapshot());
+
+    let (_, node) = restored.get_node_by_url("https://a.test/").unwrap();
+    assert_eq!(node.properties.len(), 1);
+    assert_eq!(
+        node.properties[0].predicate,
+        "https://schema.org/datePublished"
+    );
+    assert_eq!(node.properties[0].value, "2026-06-02");
+}
+
+#[test]
 fn test_snapshot_roundtrip() {
     let mut graph = Graph::new();
     let n1 = graph.add_node("https://a.com".to_string(), Point2D::new(10.0, 20.0));
@@ -265,6 +289,7 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
             classifications: Vec::new(),
             frame_layout_hints: Vec::new(),
             frame_split_offer_suppressed: false,
+            properties: Vec::new(),
         }],
         edges: vec![PersistedEdge {
             from_node_id: Uuid::new_v4().to_string(),
@@ -325,6 +350,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 classifications: Vec::new(),
                 frame_layout_hints: Vec::new(),
                 frame_split_offer_suppressed: false,
+                properties: Vec::new(),
             },
             PersistedNode {
                 node_id: Uuid::new_v4().to_string(),
@@ -350,6 +376,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 classifications: Vec::new(),
                 frame_layout_hints: Vec::new(),
                 frame_split_offer_suppressed: false,
+                properties: Vec::new(),
             },
         ],
         edges: vec![],

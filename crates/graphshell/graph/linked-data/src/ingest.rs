@@ -35,6 +35,7 @@ use kernel::graph::{EdgeAssertion, Graph, NodeKey, predicate_iri, sub_kind_from_
 #[cfg(not(target_arch = "wasm32"))]
 use kernel::types::{
     ClassificationProvenance, ClassificationScheme, ClassificationStatus, NodeClassification,
+    NodeProperty,
 };
 
 /// `rdf:type` — the predicate JSON-LD `@type` expands to.
@@ -52,6 +53,9 @@ pub struct NodeContribution {
     pub title: Option<String>,
     /// `schema:keywords` values.
     pub tags: Vec<String>,
+    /// Non-curated literal properties: `(predicate IRI, value)` pairs — every
+    /// literal beyond `schema:name` / `schema:keywords`.
+    pub properties: Vec<(String, String)>,
 }
 
 impl NodeContribution {
@@ -61,6 +65,7 @@ impl NodeContribution {
             types: Vec::new(),
             title: None,
             tags: Vec::new(),
+            properties: Vec::new(),
         }
     }
 }
@@ -208,8 +213,10 @@ fn collect_contribution<E: std::fmt::Display>(
                 match predicate {
                     SCHEMA_NAME => node.title = Some(literal.value().to_string()),
                     SCHEMA_KEYWORDS => node.tags.push(literal.value().to_string()),
-                    // Uncurated literal: dropped (no general property bag).
-                    _ => {}
+                    // Any other literal goes into the open property bag.
+                    _ => node
+                        .properties
+                        .push((predicate.to_string(), literal.value().to_string())),
                 }
             }
             Term::NamedNode(object) => {
@@ -239,6 +246,8 @@ fn collect_contribution<E: std::fmt::Display>(
             node.types.dedup();
             node.tags.sort();
             node.tags.dedup();
+            node.properties.sort();
+            node.properties.dedup();
             node
         })
         .collect();
@@ -319,13 +328,22 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
                 outcome.nodes_created += 1;
                 graph.add_node(node.id.clone(), Default::default())
             });
-        if node.title.is_some() || !node.tags.is_empty() {
+        if node.title.is_some() || !node.tags.is_empty() || !node.properties.is_empty() {
             if let Some(target) = graph.get_node_mut(key) {
                 if let Some(title) = &node.title {
                     target.title = title.clone();
                 }
                 for tag in &node.tags {
                     target.tags.insert(tag.clone());
+                }
+                for (predicate, value) in &node.properties {
+                    let property = NodeProperty {
+                        predicate: predicate.clone(),
+                        value: value.clone(),
+                    };
+                    if !target.properties.contains(&property) {
+                        target.properties.push(property);
+                    }
                 }
             }
         }
@@ -433,6 +451,7 @@ mod tests {
                     types: vec!["https://schema.org/Article".into()],
                     title: Some("Article A".into()),
                     tags: vec!["research".into()],
+                    properties: vec![],
                 },
                 NodeContribution::new("https://b.test/"),
                 NodeContribution::new("https://c.test/"),

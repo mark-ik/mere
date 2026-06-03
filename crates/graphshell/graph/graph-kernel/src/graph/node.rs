@@ -23,7 +23,8 @@ use super::{
 };
 use crate::address::{Address, AddressClaim, address_from_url, cached_host_from_url};
 use crate::types::{
-    FrameLayoutHint, NodeClassification, NodeImportProvenance, NodeTagPresentationState,
+    FrameLayoutHint, NodeClassification, NodeImportProvenance, NodeProperty,
+    NodeTagPresentationState,
 };
 
 /// A webpage node in the graph
@@ -71,6 +72,10 @@ pub struct Node {
     /// Spec: `graph_enrichment_plan.md §Core Data Model` — carries scheme, value,
     /// label, confidence, provenance, and status for each classification.
     pub classifications: Vec<NodeClassification>,
+
+    /// Open literal properties: non-curated `(predicate IRI, value)` pairs an
+    /// ingest preserves (`title` / `tags` are the curated fast-paths).
+    pub properties: Vec<NodeProperty>,
 
     /// Whether this node's position is pinned (doesn't move with physics)
     pub is_pinned: bool,
@@ -236,6 +241,7 @@ impl Node {
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: Vec::new(),
             classifications: Vec::new(),
+            properties: Vec::new(),
             is_pinned: false,
             last_visited: std::time::SystemTime::now(),
             navigation_memory: NodeNavigationMemory::empty(),

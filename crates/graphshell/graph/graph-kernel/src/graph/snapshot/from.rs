@@ -58,6 +58,7 @@ impl Graph {
                 node.tag_presentation = pnode.tag_presentation.clone();
                 node.import_provenance = pnode.import_provenance.clone();
                 node.classifications = pnode.classifications.clone();
+                node.properties = pnode.properties.clone();
                 node.is_pinned = pnode.is_pinned;
                 node.navigation_memory = pnode.navigation_memory.clone();
                 node.thumbnail_png = pnode.thumbnail_png.clone();

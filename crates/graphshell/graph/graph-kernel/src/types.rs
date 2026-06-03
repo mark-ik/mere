@@ -290,6 +290,27 @@ pub struct NodeClassification {
     pub primary: bool,
 }
 
+/// A literal property on a node: an open predicate IRI and its value. Holds the
+/// non-curated literals an ingest preserves — the kernel has no other general
+/// key→value bag (`title` / `tags` stay the curated fast-paths).
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Archive,
+    Serialize,
+    Deserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct NodeProperty {
+    /// The predicate IRI (e.g. `https://schema.org/datePublished`).
+    pub predicate: String,
+    /// The literal value.
+    pub value: String,
+}
+
 // ---------------------------------------------------------------------------
 // Badge / tag presentation types (from badge.rs carve-out)
 // ---------------------------------------------------------------------------

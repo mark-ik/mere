@@ -18,7 +18,7 @@ pub use crate::persistence_fields::{
 
 use crate::graph::NodeNavigationMemory;
 use crate::types::{
-    FrameLayoutHint, ImportRecord, NodeClassification, NodeImportProvenance,
+    FrameLayoutHint, ImportRecord, NodeClassification, NodeImportProvenance, NodeProperty,
     NodeTagPresentationState,
 };
 
@@ -166,6 +166,9 @@ pub struct PersistedNode {
     /// Durable split-offer suppression for frame-anchor nodes.
     #[serde(default)]
     pub frame_split_offer_suppressed: bool,
+    /// Open literal properties (non-curated literals preserved on ingest).
+    #[serde(default)]
+    pub properties: Vec<NodeProperty>,
 }
 
 // ---------------------------------------------------------------------------
