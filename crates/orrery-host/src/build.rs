@@ -65,12 +65,28 @@ pub(crate) fn sample_graph() -> Graph {
 }
 
 /// A plain hyperlink relation (the orrery draws one undirected line per pair).
-fn hyperlink() -> EdgeAssertion {
+pub(crate) fn hyperlink() -> EdgeAssertion {
     EdgeAssertion::Semantic {
         sub_kind: SemanticSubKind::Hyperlink,
         label: None,
         decay_progress: None,
     }
+}
+
+/// The undirected, de-duplicated relation pairs that feed the layout springs.
+/// gyre stays relation-taxonomy agnostic, so the orrery picks the topology: one
+/// edge per unordered node pair (a reciprocal A↔B counts once). Reused by
+/// [`build_simulation`] at startup and [`Orrery::visit`](crate::Orrery::visit)
+/// when the graph grows.
+pub(crate) fn dedup_edges(graph: &Graph) -> Vec<(NodeKey, NodeKey)> {
+    let mut seen = HashSet::new();
+    graph
+        .relations()
+        .filter_map(|r| {
+            let pair = if r.from <= r.to { (r.from, r.to) } else { (r.to, r.from) };
+            seen.insert(pair).then_some((r.from, r.to))
+        })
+        .collect()
 }
 
 /// Build the force-directed simulation from `graph`: a body per node, the
@@ -80,16 +96,7 @@ fn hyperlink() -> EdgeAssertion {
 pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
     let mut sim = Simulation::new();
     sim.sync_with_graph(graph);
-
-    let mut seen = HashSet::new();
-    let edges: Vec<(NodeKey, NodeKey)> = graph
-        .relations()
-        .filter_map(|r| {
-            let pair = if r.from <= r.to { (r.from, r.to) } else { (r.to, r.from) };
-            seen.insert(pair).then_some((r.from, r.to))
-        })
-        .collect();
-    sim.sync_edges(edges);
+    sim.sync_edges(dedup_edges(graph));
 
     sim.add_force(NodeExclusion::default());
     sim.add_force(EdgeSpring::default());

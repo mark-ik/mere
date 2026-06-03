@@ -89,6 +89,9 @@ struct App {
     /// The content root: the [`Orrery`] — the graph's spatial presentation,
     /// rendered into the band below the chrome and driven by content-band input.
     orrery: Orrery,
+    /// The navigation target last synced into the orrery via `visit`; guards
+    /// re-visiting. Mirrors the chrome's `content_location`.
+    content_location: String,
     /// Whether the orrery has been centered on its content band yet (done once,
     /// the first render after the toolbar height is known).
     centered: bool,
@@ -113,10 +116,18 @@ impl App {
             chrome_view as ChromeLogic,
             Chrome::new("mere://welcome"),
         );
+        // Seed the session graph with the initial location as the root node, so
+        // the orrery opens on one node and grows from there as the user navigates.
+        let mut orrery = Orrery::new();
+        let content_location = runner.state().content_location().to_string();
+        if !content_location.is_empty() {
+            orrery.visit(&content_location);
+        }
         Self {
             dom,
             runner,
-            orrery: Orrery::new(),
+            orrery,
+            content_location,
             centered: false,
             toolbar_h: 0,
             window: None,
@@ -235,6 +246,19 @@ impl App {
         }
     }
 
+    /// Sync the orrery to the chrome's current navigation target: when the
+    /// location changes, `visit` it — adding a node and a browse-trail edge, or
+    /// selecting the existing node (URL identity). Called after any input that can
+    /// navigate (omnibar submit, suggestion / back / forward clicks, palette).
+    fn sync_orrery(&mut self) {
+        let loc = self.runner.state().content_location().to_string();
+        if loc != self.content_location {
+            self.orrery.visit(&loc);
+            self.content_location = loc;
+            self.request_redraw();
+        }
+    }
+
     /// Route a mouse button press/release by region. A left press in the chrome
     /// band (toolbar + any open dropdown) hit-tests + dispatches the chrome; any
     /// other press in the content band, and every release, goes to the orrery in
@@ -293,6 +317,7 @@ impl App {
         if let Some(node) = hit {
             let palette_was_open = self.runner.state().palette_open;
             self.runner.dispatch_click(node, PointerClick::at((x, y)));
+            self.sync_orrery();
             if palette_was_open && !self.runner.state().palette_open {
                 self.focus_after_palette_close();
             }
@@ -323,6 +348,7 @@ impl App {
                     location = %self.runner.state().toolbar.editable.location,
                     "omnibar submit"
                 );
+                self.sync_orrery();
                 self.request_redraw();
             },
             WinitKey::Named(WinitNamedKey::ArrowDown) if suggestions_open => {
@@ -353,6 +379,7 @@ impl App {
         match key {
             WinitKey::Named(WinitNamedKey::Enter) => {
                 self.runner.update(Chrome::run_palette_selection);
+                self.sync_orrery();
                 self.focus_after_palette_close();
                 self.request_redraw();
             },

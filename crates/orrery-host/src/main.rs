@@ -45,7 +45,9 @@ struct App {
 impl App {
     fn new() -> Self {
         Self {
-            orrery: Orrery::new(),
+            // The standalone bin shows the built-in sample graph; meerkat drives a
+            // live session graph through `Orrery::visit`.
+            orrery: Orrery::with_sample_graph(),
             cursor: (0.0, 0.0),
             window: None,
             host: None,

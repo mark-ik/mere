@@ -47,8 +47,8 @@ use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 
 mod build;
 use build::{
-    build_pool_dom, build_simulation, marquee_rect_cmds, sample_graph, seed_cluster, set_class,
-    set_style, selected_edge_overlay, NODE_SHEET,
+    build_pool_dom, build_simulation, dedup_edges, hyperlink, marquee_rect_cmds, sample_graph,
+    seed_cluster, set_class, set_style, selected_edge_overlay, NODE_SHEET,
 };
 
 /// Force-directed settle length (frames) after a (re)seed, ~6s at 60fps.
@@ -150,11 +150,26 @@ impl Default for Orrery {
 }
 
 impl Orrery {
-    /// A new orrery over a small built-in sample graph (a ring + spokes), seeded
-    /// into a tight central spiral so the first settle is visible. (S2 of the plan
-    /// replaces the sample graph with the host's live graph session.)
+    /// A new orrery over an **empty** session graph. The host grows it with
+    /// [`visit`](Orrery::visit) as the user navigates (the graph-rooted browse
+    /// loop). For an isolated demo / the standalone bin, use
+    /// [`with_sample_graph`](Orrery::with_sample_graph).
     pub fn new() -> Self {
-        let graph = sample_graph();
+        Self::from_graph(Graph::new())
+    }
+
+    /// A new orrery over a small built-in sample graph (a ring + spokes), seeded
+    /// into a tight central spiral so the first settle is visible. The standalone
+    /// `orrery-host` bin and the orrery tests use this; meerkat uses
+    /// [`new`](Orrery::new) and drives the graph through [`visit`](Orrery::visit).
+    pub fn with_sample_graph() -> Self {
+        Self::from_graph(sample_graph())
+    }
+
+    /// Build an orrery over `graph`: its [`build_simulation`], the node-children
+    /// pool, and a default camera. Shared by [`new`](Orrery::new) (empty) and
+    /// [`with_sample_graph`](Orrery::with_sample_graph).
+    fn from_graph(graph: Graph) -> Self {
         let sim = build_simulation(&graph);
         let (node_dom, gnode_of, stage_node) = build_pool_dom(&graph);
         Self {
@@ -409,9 +424,7 @@ impl Orrery {
                         self.sim.unpin(d.node);
                         self.ticks_remaining = self.ticks_remaining.max(SETTLE_TICKS / 3);
                     } else {
-                        self.selected.clear();
-                        self.selected_edges.clear();
-                        self.selected.insert(d.node);
+                        self.select_only(d.node);
                     }
                     true
                 } else if let Some(origin) = self.marquee.take() {
@@ -448,6 +461,49 @@ impl Orrery {
         seed_cluster(&mut self.sim, &self.graph);
         self.ticks_remaining = SETTLE_TICKS;
         true
+    }
+
+    /// Visit `url`: if a node with that URL already exists (URL identity), select
+    /// it; otherwise add a new node — linked from the currently-selected node, if
+    /// any, so the browse trail grows as graph structure — re-sync the physics and
+    /// node-children pool, and re-settle. Returns the node either way. The host
+    /// calls this on navigation (the graph-rooted browse loop, S2).
+    pub fn visit(&mut self, url: &str) -> NodeKey {
+        if let Some((key, _)) = self.graph.get_node_by_url(url) {
+            self.select_only(key);
+            return key;
+        }
+        // Place the new node just off the one we came from (the current
+        // selection), so the trail spreads outward; the first node lands at the
+        // origin and the settle takes over.
+        let from = self.selected.iter().copied().next();
+        let anchor = from.and_then(|k| self.sim.position_of(k)).unwrap_or(Point2D::new(0.0, 0.0));
+        let seed = Point2D::new(anchor.x + 12.0, anchor.y + 12.0);
+        let key = self.graph.add_node(url.to_string(), PortablePoint::new(seed.x, seed.y));
+        if let Some(from) = from {
+            let _ = self.graph.assert_relation(from, key, hyperlink());
+        }
+        // Re-sync derived state: a body for the new node, the refreshed edge
+        // topology, a seed near the anchor, and a rebuilt node-children pool (the
+        // pool is structural, so it is rebuilt, not grown incrementally).
+        self.sim.sync_with_graph(&self.graph);
+        self.sim.sync_edges(dedup_edges(&self.graph));
+        self.sim.seed_positions([(key, seed)]);
+        let (node_dom, gnode_of, stage_node) = build_pool_dom(&self.graph);
+        self.node_dom = node_dom;
+        self.gnode_of = gnode_of;
+        self.stage_node = stage_node;
+        self.node_layout = None;
+        self.select_only(key);
+        self.ticks_remaining = SETTLE_TICKS;
+        key
+    }
+
+    /// Replace the selection with just `key` (clearing any selected nodes/edges).
+    fn select_only(&mut self, key: NodeKey) {
+        self.selected.clear();
+        self.selected_edges.clear();
+        self.selected.insert(key);
     }
 
     /// Zoom by `factor`, keeping the world point under `anchor` (screen px) fixed.
@@ -509,5 +565,34 @@ mod tests {
         let w = orrery.screen_to_world((300.0, 150.0));
         assert!((w.x - 100.0).abs() < 0.01, "world x = (300-100)/2");
         assert!((w.y - 50.0).abs() < 0.01, "world y = (150-50)/2");
+    }
+
+    #[test]
+    fn visit_adds_a_linked_node_and_selects_it() {
+        let mut orrery = Orrery::new(); // empty session
+        let a = orrery.visit("mere://welcome");
+        assert_eq!(orrery.graph.nodes().count(), 1, "the first visit seeds the root node");
+        assert!(orrery.selected.contains(&a), "the visited node is selected");
+
+        let b = orrery.visit("https://example.com");
+        assert_eq!(orrery.graph.nodes().count(), 2, "a fresh URL adds a node");
+        assert_ne!(a, b);
+        assert!(
+            orrery.selected.contains(&b) && !orrery.selected.contains(&a),
+            "selection moves to the newly visited node",
+        );
+        assert!(orrery.graph.relations().count() >= 1, "an edge links the browse trail");
+        assert_eq!(orrery.sim.body_count(), 2, "the simulation grew a body for the new node");
+    }
+
+    #[test]
+    fn visit_dedups_by_url() {
+        let mut orrery = Orrery::new();
+        let a = orrery.visit("https://example.com");
+        let _ = orrery.visit("https://other.com");
+        let again = orrery.visit("https://example.com");
+        assert_eq!(a, again, "revisiting a URL selects the existing node, not a duplicate");
+        assert_eq!(orrery.graph.nodes().count(), 2, "no duplicate node is added");
+        assert!(orrery.selected.contains(&a), "selection returns to the revisited node");
     }
 }
