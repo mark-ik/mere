@@ -21,8 +21,8 @@ use inker::{
 };
 use layout_dom_api::{LayoutDom, LayoutDomMut};
 use netrender::Scene;
-use pelt_live::scene_from_scripted_dom;
-use serval_layout::{inline_stylesheets_from_source, ScrollOffsets};
+use pelt_live::scene_from_layout_dom;
+use serval_layout::{inline_stylesheets_from_source, NoImageLoader, ScrollOffsets};
 use serval_scripted_dom::{NodeId, ScriptedDom};
 
 use crate::fetch::{ContentState, Fetched};
@@ -186,10 +186,14 @@ fn base_type(content_type: &str) -> String {
     content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase()
 }
 
-/// Parse `body` as HTML into a serval DOM and render it to a scene — the serval
-/// content lane, reusing the host's own renderer for full-web HTML. The page's
-/// own inline `<style>` CSS is layered over [`HTML_SHEET`] so equal-specificity
-/// page rules win over the card defaults.
+/// Parse `body` as HTML into a serval DOM and render it through the shared
+/// content core ([`pelt_live::scene_from_layout_dom`]) — the same cascade →
+/// image-decode → layout → emit pipeline the static viewer uses. The page's own
+/// inline `<style>` CSS is layered over [`HTML_SHEET`] so equal-specificity page
+/// rules win over the card defaults, and `data:`-URI `<img>` / background images
+/// decode inline ([`NoImageLoader`]). Remote subresources (external
+/// `<link rel=stylesheet>`, remote `<img>`) await a subresource fetch stage:
+/// the card's [`Fetched`] carries only the page body today.
 fn html_scene(body: &str, w: u32, h: u32) -> Scene {
     let mut dom = ScriptedDom::new();
     let root = dom.document();
@@ -201,7 +205,7 @@ fn html_scene(body: &str, w: u32, h: u32) -> Scene {
     let mut sheets: Vec<&str> = HTML_SHEET.to_vec();
     sheets.extend(page_css.iter().map(String::as_str));
     let scroll = ScrollOffsets::<NodeId>::default();
-    scene_from_scripted_dom(&dom, &sheets, w, h, None, &scroll)
+    scene_from_layout_dom(&dom, &sheets, &NoImageLoader, w, h, &scroll)
 }
 
 /// The floating card rectangle within the content band (top-right, inset by
