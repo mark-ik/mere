@@ -1,8 +1,9 @@
 # Actor Constellation Plan
 
-A message-passing runtime for Mere: a single-threaded **kernel** (graph + frame +
-compositor + routing) surrounded by a constellation of **actors** (I/O, content,
-compute). It is Servo's constellation done **in-process**: the kernel fuses the
+A message-passing runtime for Mere: a single-threaded **host kernel** (graph +
+frame + compositor + routing) surrounded by a constellation of **actors** (I/O,
+content, compute). "Host kernel" throughout this doc means the runtime center, not
+the `kernel` graph crate. It is Servo's constellation done **in-process**: the kernel fuses the
 constellation and compositor; content actors are the pipelines; scenes travel as
 messages rather than IPC-serialized surfaces. The big simplification over Servo is
 that an in-process content actor hands the kernel a `Scene` directly, so there is
@@ -28,9 +29,9 @@ host model and S-phases), [linked-data ingest plan](2026-05-22_linked_data_inges
 
 ## The four layers
 
-- **Kernel (one thread).** Owns the graph, the frame (tile layout), message
+- **Host kernel (one thread).** Owns the graph, the frame (tile layout), message
   routing, and render. Simple and lock-free because it is the single owner of the
-  two things everything else wants: the GPU and the graph.
+  two things everything else wants: the render GPU and the graph.
 - **I/O actors.** Network fetch, p2p sync, persistence writes, link resolution.
   Background work that returns data, never UI.
 - **Content actors (the real constellation).** One per page/origin running
@@ -74,13 +75,17 @@ appears only when the kernel's `Renderer` lowers the scene to `vello::Scene` at
 rasterize time. So a content actor builds a `Scene` and ships it; the kernel
 remains the sole GPU owner. **This is the fact the whole architecture rests on.**
 
-**The graph/contribution boundary already exists.** This session's linked-data
-work made `harvest(...) -> GraphContribution` a pure producer and
-`Orrery::ingest_graph(closure)` the single-threaded applier. That producer/applier
-split *is* the content-actor to kernel contract: an actor ships a `Contribution`,
-the kernel applies it. The v5 deterministic node id
-(`Graph::node_namespace_id`) is the merge key, so contributions from different
-content actors citing the same `@id` converge to one node.
+**The graph/contribution boundary exists one level down.** The pure producers are
+in `linked-data`: `from_jsonld_with_contexts(...) -> GraphContribution` and
+`from_html_with_contexts(...) -> Vec<GraphContribution>`. meerkat's current
+`harvest(&mut Graph, ...)` *fuses* produce and apply, so it is not the actor
+boundary as written. P2 splits it into a pure `harvest_contributions(...) ->
+Vec<GraphContribution>` (the content-actor half) plus the host kernel applying
+through `Orrery::ingest_graph`. That producer/applier split *is* the
+content-actor to host-kernel contract: an actor ships `Contribution`s, the kernel
+applies them, the actor never touches the graph. v5 (`Graph::node_namespace_id`)
+is the merge key, so contributions from different content actors citing the same
+`@id` converge to one node.
 
 **Nova is not in the tree yet.** No `nova` dependency anywhere in the workspace.
 The content actor's first incarnation is the script-free `StaticDocument` (already
@@ -88,8 +93,9 @@ in `card.rs`); Nova is a later phase, and `!Send` from the day it lands.
 
 ## Load-bearing invariants
 
-1. **The kernel is the sole owner of the GPU and the graph.** Nothing else holds
-   the wgpu device or a mutable graph reference.
+1. **The host kernel is the sole owner of the render/present GPU path and the
+   graph.** Nothing else holds the render surface / compositor or a mutable graph
+   reference. (GPU *compute*, P6, is a separate concern handled there.)
 2. **Actors are CPU-only producers of two `Send` message kinds:** `Scene`s and
    `GraphContribution`s. They never hold a GPU handle or mutate the graph.
 3. **State has one owner; cross-actor reads use an immutable snapshot.** Hot reads
@@ -105,11 +111,12 @@ gone and the kernel is no longer lock-free. Guard that boundary above all.
 
 ## Message taxonomy
 
-Inbound to the kernel (one router behind the single wake; the existing `fetch` /
-`sub` / `sync` receivers are early instances):
+Inbound to the host kernel (the existing typed `fetch` / `sub` / `sync` receivers
+behind the one bare wake, plus the new ones; a thin `KernelInbox` holds them, P0):
 
 - `FetchDone`, `SubresourceDone`, `SyncStatus` (exist today)
-- `SceneReady { tile, scene }` — a content actor's new visual
+- `SceneReady { tile, nav_generation, viewport_generation, scene }` — a content
+  actor's new visual; dropped if either generation is stale (see Backpressure)
 - `Contribution { actor, contribution }` — a graph mutation to apply
 - `Title { tile, text }`, `LinkClicked { url }` — content events
 - `ActorDied { tile, reason }` — fault, for the broken-tile placeholder
@@ -119,12 +126,26 @@ Outbound to a content actor:
 - `Navigate { url }`, `Input { event }`, `Resize { w, h }`, `Teardown`
 - `EvalScript { source }` (Nova phase)
 
+## Backpressure and generations
+
+Async scenes can arrive stale: a scene built for an old URL or an old size lands
+after the tile navigated or resized. So every `SceneReady` carries a
+`nav_generation` and a `viewport_generation`. The host kernel keeps the current
+pair per tile, bumps them on navigate / resize, and **drops any scene whose
+generations do not match**. Delivery is bounded and coalesced per tile (keep the
+latest, never queue a backlog). Input is generation-aware too: an `Input` event
+carries the generation it was hit-tested against, so a content actor ignores input
+meant for a page it has already replaced.
+
 ## Decisions (resolved 2026-06-03)
 
-- **Granularity: per-origin.** A content actor owns an origin, not a single page,
-  so same-origin tiles share JS state (web-compat: `window.open`, synchronous DOM
-  access). The Firefox content-process model. Non-scripting graph tiles can still
-  collapse to per-page; expose that as a setting rather than hardcode.
+- **Granularity: per-origin once scripting lands, per-tile before then.** With
+  Nova, a content actor owns a *browsing-context group / agent cluster* (the web
+  platform's unit for same-origin synchronous scripting), keyed by origin. That is
+  platform semantics, not a user toggle. The Firefox content-process model. For the
+  script-free P2 there is no shared JS state, so per-tile is enough; the
+  agent-cluster grouping arrives with Nova (P3). Whether *non-scripting* graph
+  tiles ever group by origin can stay a setting; the scripting semantics cannot.
 - **Subresource fetch: through the I/O fetch actor, by message.** A content actor
   requests a subresource from the fetch actor and receives bytes, rather than
   owning its own netfetcher. This centralizes the cache / cookie jar / netfetcher
@@ -142,20 +163,25 @@ Working defaults (not contested, revisit if they bite):
 
 ## Phases (done-conditions, not dates)
 
-- **P0 Name the kernel inbox.** A single inbox type (or a documented router)
-  unifies the `fetch` / `sub` / `sync` drains; `user_event` dispatches by variant.
-  No behavior change. *Done:* one place to read "what the kernel is told."
+- **P0 Name the host-kernel inbox.** A thin `KernelInbox` that *holds* the existing
+  typed receivers (`fetch` / `sub` / `sync`) behind the one bare `EventLoopProxy<()>`
+  wake, with a documented dispatch in `user_event`. Keep the
+  typed-channel-per-subsystem ownership; do not collapse it into one mega enum
+  (that worsens ownership). No behavior change. *Done:* one documented place that
+  reads what the kernel is told, the wake/receiver seam intact.
 - **P1 The `armillary` harness.** Stand up the `armillary` crate: one `Subsystem`
   shape (`spawn(proxy, ...) -> (Handle, Receiver<Update>)`) plus the inbox/dispatch
   from P0. Express `fetch` and `sync` through it; add a third trivial actor
   (persistence-write or link-resolution) to prove generality. *Done:* three actors,
   one harness, in armillary.
-- **P2 Static-DOM content actor.** Move `render_content_scene` onto a
-  content-actor thread; the focused tile's HTML renders off the UI thread and the
-  kernel composites the delivered `Scene`. JSON-LD harvest ships a `Contribution`
-  the kernel applies (wiring this session's linked-data path through the actor
-  boundary). A panicking actor shows a broken-tile placeholder. *Done:* content
-  leaves the UI thread; a content panic no longer kills the host.
+- **P2 Static-DOM content actor.** Move `render_content_scene` onto a per-tile
+  content-actor thread; the actor ships generation-tagged `SceneReady` and the host
+  kernel composites the latest. Split meerkat's `harvest(&mut Graph, ...)` into a
+  pure `harvest_contributions(...) -> Vec<GraphContribution>` the actor runs,
+  shipping `Contribution`s the kernel applies through `Orrery::ingest_graph` (the
+  actor never touches the graph). A panicking actor shows a broken-tile placeholder.
+  *Done:* content leaves the UI thread, the producer/applier split is honest, and a
+  content panic no longer kills the host.
 - **P3 Nova.** A scripted page runs JS in the content actor (Nova, dedicated
   thread, `!Send`); DOM mutations reflow to a new `Scene`; the input -> script ->
   paint protocol is real. *Done:* a scripted page is interactive in a tile.
@@ -166,10 +192,13 @@ Working defaults (not contested, revisit if they bite):
   inside a native wasm sandbox (wasmtime) for memory isolation, behind a flag.
   Absent on the browser/PWA target, where the browser is the sandbox. *Done:* an
   opt-in hardened mode on desktop.
-- **P6 Compute actors.** Gyre physics / heavy layout / Burn-wgpu spill to a compute
+- **P6 Compute actors.** Gyre physics / heavy layout / Burn spill to a compute
   actor when the kernel's frame budget is blown; results composite async
-  (last-writer-wins). *Done:* a frame that cannot hold the work sheds it without
-  stalling.
+  (last-writer-wins). GPU compute (Burn-wgpu) is the boundary case: it must not
+  touch the render/present path, so it either submits jobs through a kernel-owned
+  GPU service or runs on a separate compute device/queue. CPU compute
+  (Burn-ndarray, physics) has no such constraint. *Done:* a frame that cannot hold
+  the work sheds it without stalling, and GPU compute never contends with render.
 
 ## Risks and hard parts
 
@@ -179,8 +208,9 @@ Working defaults (not contested, revisit if they bite):
 - **`!Send` Nova forces a dedicated thread per content actor** and a careful
   message API: no shared DOM, no shared engine handle, everything by message. Build
   the content actor as a dedicated thread from P2 so Nova lands without a rewrite.
-- **Backpressure discipline.** The kernel must never await an actor. Last-scene
-  compositing per tile is the mechanism.
+- **Backpressure discipline.** The host kernel must never await an actor.
+  Generation-tagged, coalesced last-scene-per-tile compositing is the mechanism
+  (see Backpressure and generations).
 - **The wasm sandbox is the least-specified layer and is native-only.** Two
   isolation stories by target: wasmtime on desktop, the browser on the PWA target.
 - **The graph boundary.** Contributions in, snapshots out, never a mutable graph
@@ -198,3 +228,13 @@ Working defaults (not contested, revisit if they bite):
   model); subresource fetch through the I/O fetch actor by message; the runtime
   crate is **`armillary`** (new, host-neutral). Shared-read snapshots and the
   `catch_unwind` fault model stand as the working defaults.
+- **2026-06-03.** Incorporated an external review. Two load-bearing edits: the
+  contribution boundary was overstated (the pure producer is `linked-data`'s
+  `from_*_with_contexts`, not meerkat's `harvest`, which fuses produce + apply), so
+  P2 now splits it into `harvest_contributions`; and `SceneReady` gained a
+  generation / backpressure protocol (drop stale scenes by `nav_generation` /
+  `viewport_generation`, coalesce, extended to input). Also: "host kernel"
+  terminology vs the `kernel` crate; invariant 1 narrowed to the render/present GPU
+  path with P6 GPU-compute called out; granularity refined to the agent-cluster
+  model (per-tile for P2, not a user setting); P0 kept as a `KernelInbox` wrapper,
+  not a mega enum.
