@@ -163,10 +163,14 @@ host-wired), `intel/embed` (Tier-2 embeddings, persists through eidetic),
 2. **Two serval bins (meerkat + orrery-host) should be one shell** — *functionally
    folded* (S1.2): both run the same `Orrery` over the shared `serval-winit-host`.
    Remaining: the orrery-host bin's physical retirement, deferred to the S7 cutover.
-3. **Node-media tiles** — *first cut shipped* (S2.2a): the focused node's media renders
-   as a floating card via `document-canvas`. Remaining: real (fetched) content, the
-   fullweb-via-serval and web-via-scrying lanes, and multiple/at-node tiles (S4).
-4. **netfetcher unconsumed** — the host fetch organ exists; nothing calls it.
+3. **Node-media tiles** — *shipped* (S2.2): the focused node's media renders as a
+   floating card from real fetched content — document lane (nematic) + HTML lane
+   (serval). Remaining: web-via-scrying (S6), binary media, multiple / at-node tiles
+   and the tiled workbench (S4).
+4. **netfetcher** — *consumed* (S2.2b): meerkat fetches off the UI thread (tokio
+   worker + `EventLoopProxy` wake) and routes the bytes to engines. Remaining: a
+   durable cookie jar / cache (host-backed `FetchContext`), binary content, and a
+   real `FetchContext` policy instead of `permissive()`.
 5. **Persistence not host-wired** — meerkat depends on no `eidetic`/`session-runtime`;
    graphs reset on restart; `session_graph_store` does not exist.
 6. **No tiled-workbench mode / peripheral panes** — `FrameLayout` exists but meerkat
@@ -210,10 +214,15 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
     the orrery (Mark's placement pick), via the proven synchronous document pipeline
     (`EngineDocument → layout_document → scene_from_packet → composite`). Content is
     synthesized (welcome page / address placeholder) — only the byte source is a stub.
-  - *S2.2b* (remaining): swap the synthesized `node_document` for a real
-    `netfetcher::fetch` off the UI thread (worker + `EventLoopProxy` wake) → `inker`
-    route by content-type → engine dispatch → the same card path. This is the
-    netfetcher-consumes-first wiring (gap #4) and the async-host architecture.
+  - *S2.2b-i* (`1d9d9c0`): real `netfetcher::fetch` off the UI thread — a tokio
+    worker + an `mpsc` channel + an `EventLoopProxy<()>` wake (delivery model 2),
+    drained in `user_event`; per-URL content cache (Loading / Ready / Failed) with
+    real loading + error card states. Renders fetched bytes as plain text.
+  - *S2.2b-ii* (`7c03a93`): content-type routing — a nematic `EngineRegistry`
+    (markdown / gemtext / plain / feeds) through the document lane, and `text/html`
+    through the **serval lane** (`set_inner_html` → `scene_from_scripted_dom`,
+    reusing the host renderer). This consumes netfetcher first (gap #4) and is the
+    async-host architecture S3/S5 reuse. **S2 done `2026-06-02`.**
 - **S3 — Persistence host seam (R-data).** meerkat constructs a per-identity `eidetic`
   Store + a `ManifestStore`, `load_from_disk` on startup, `mark_dirty`→debounced
   flush. Build `session_graph_store` (the eidetic↔`kernel::graph` glue; serde
@@ -357,6 +366,23 @@ consumer appears.
     synchronous) → `layout_document` → `scene_from_packet` → composited card, cached
     by `(url, size)`. `Orrery::focused_url()` feeds it. meerkat gained inker +
     document-canvas (netrender feature); 4 card tests. Only the byte source is a stub.
-  - *Next (S2.2b)*: real `netfetcher::fetch` off the UI thread (worker +
-    `EventLoopProxy` wake) → `inker` route by content-type → engine dispatch → the
-    same card path. Introduces the async-host architecture; closes gaps #3/#4.
+- **2026-06-02 — S2.2b done: real fetch + content-type routing. S2 complete.**
+  - *S2.2b-i* (`1d9d9c0`): off-UI-thread fetch. `meerkat::fetch` runs netfetcher on a
+    tokio worker; outcomes return over an `mpsc` channel and wake the loop via an
+    `EventLoopProxy<()>` (delivery model 2), drained in `user_event`. Per-URL content
+    cache (Loading / Ready / Failed) keyed by URL identity; the card shows real
+    loading + error states. Deps: netfetcher (sibling), url, tokio. 6 bin tests.
+  - *S2.2b-ii* (`7c03a93`): content-type routing. A nematic `EngineRegistry`
+    (markdown / gemtext / plain / feeds) feeds the document lane; `text/html` rides
+    the **serval lane** (`set_inner_html` → `scene_from_scripted_dom`), confirming
+    Mark's point that serval is free here (already the host). 10 bin tests
+    (markdown-through-nematic + HTML-through-serval). Deps: nematic.
+  - The full graph-rooted browse loop now runs: navigate → graph grows a linked node
+    → fetch off-thread → route by type → the focused node's media renders as a card,
+    chrome on top. The async-host seam (worker + channel + proxy wake) is the
+    foundation S3 (persistence flush) and S5 (murm sync) push results through.
+  - *Process note*: `Cargo.lock` left unstaged across S2.2b — a sibling crate's
+    concurrent fastbloom/zstd change is interleaved in the shared lock; the next lock
+    commit carries meerkat's netfetcher / tokio / url / nematic entries with it.
+  - *Deferred from S2*: durable `FetchContext` (cookie jar / cache / real CSP) instead
+    of `permissive()`; binary media; page-supplied CSS in the serval HTML lane.
