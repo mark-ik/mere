@@ -171,8 +171,10 @@ host-wired), `intel/embed` (Tier-2 embeddings, persists through eidetic),
    worker + `EventLoopProxy` wake) and routes the bytes to engines. Remaining: a
    durable cookie jar / cache (host-backed `FetchContext`), binary content, and a
    real `FetchContext` policy instead of `permissive()`.
-5. **Persistence not host-wired** — meerkat depends on no `eidetic`/`session-runtime`;
-   graphs reset on restart; `session_graph_store` does not exist.
+5. **Persistence** — *graph wired* (S3.1): `session-runtime::session_graph_store`
+   persists the session graph as `graph.json`; meerkat restores it on launch.
+   Remaining: per-persona/session/manifest threading, camera + view-intent restore,
+   and the eidetic content store for media + history (S3.2).
 6. **No tiled-workbench mode / peripheral panes** — `FrameLayout` exists but meerkat
    has a single content pane; gloss/apparatus are latent a11y projections.
 7. **murm/moot unsurfaced** — `SyncedCabal` works but no comms surface exists.
@@ -228,6 +230,15 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
   flush. Build `session_graph_store` (the eidetic↔`kernel::graph` glue; serde
   `graph.json` as the live store). *Done*: a graph survives restart; view-intent
   persists per pane.
+  - *S3.1* (`900253e`): `session-runtime::session_graph_store` saves / loads the
+    graph through its serde `GraphSnapshot` as `graph.json` (native-only); meerkat
+    restores `<data_dir>/mere/graph.json` on launch (`Orrery::with_graph`, positions
+    preserved, no re-settle) and saves after each navigation. Load failure falls
+    back to a fresh session. **The graph survives restart.**
+  - *S3.2* (remaining): thread persona / session / manifest (the `ManifestStore` +
+    `sessions/<id>` layout already exist); restore the camera + focused node via
+    `view_intent_store` (`CameraSnapshot`); add the eidetic content store for
+    fetched media + history (debounced `mark_dirty` flush).
 - **S4 — Tiled-workbench mode + peripheral panes (flip P2 + verso, R2).** `FrameLayout`
   becomes the cross-graph tiled-analysis mode over node-tiles; retarget
   `platen::layout` Morphorm→taffy under serval; light up gloss/apparatus projections;
@@ -386,3 +397,20 @@ consumer appears.
     commit carries meerkat's netfetcher / tokio / url / nematic entries with it.
   - *Deferred from S2*: durable `FetchContext` (cookie jar / cache / real CSP) instead
     of `permissive()`; binary media; page-supplied CSS in the serval HTML lane.
+- **2026-06-02 — S3.1 done: the session graph survives restart.**
+  - `session-runtime::session_graph_store` (`900253e`, native-only): `save` / `load`
+    the graph through its serde `GraphSnapshot` (URL-stable) as pretty `graph.json`,
+    plus a `sessions/<id>` path helper for when manifests thread the session id.
+  - `orrery-host`: `Orrery::with_graph` restores a graph keeping each node's saved
+    position (no spiral re-seed, no auto-settle), and `graph()` exposes it to persist.
+  - `meerkat`: loads `<data_dir>/mere/graph.json` on launch (else seeds fresh from the
+    initial location) and saves after each navigation; load failure falls back to a
+    fresh session. Deps add session-runtime + dirs. 3 store + 10 orrery tests pass.
+  - *Next (S3.2)*: persona / session / manifest threading (the `ManifestStore` +
+    `sessions/<id>` layout exist), camera + focused-node restore via
+    `view_intent_store::CameraSnapshot`, and the eidetic content store for media.
+  - *Also batched this session* (`91d94bd` + `f93a257`): committed the concurrent
+    working tree on request — the p2panda/p2p + social lane (murm / transport /
+    persona / moothold-tessera / probes / docs) and the register-renderer-types
+    scaffold. Not build-verified here (sibling-agent WIP); two new p2p/tessera docs
+    are committed without `DOC_README` index lines (flagged for their authors).
