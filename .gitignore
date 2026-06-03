@@ -3,6 +3,12 @@
 # — `crates/probes/` is a separate workspace whose target/ is multi-GB.
 target/
 
+# Probes are throwaway experiments in a separate workspace. Ignore probe content
+# so it never clutters git status or lands in a `git add -A` (the multi-GB
+# p2panda / willow clones live here). Already-committed probes stay tracked;
+# `git add -f` to keep a new one, `git rm --cached` to drop one.
+/crates/probes/
+
 # Backup / swap files
 **/*.rs.bk
 *.swp
