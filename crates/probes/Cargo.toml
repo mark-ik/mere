@@ -1,9 +1,0 @@
-[workspace]
-resolver = "2"
-members = ["markdown-v0"]
-
-[workspace.package]
-version = "0.0.0"
-edition = "2024"
-license = "MPL-2.0"
-publish = false
