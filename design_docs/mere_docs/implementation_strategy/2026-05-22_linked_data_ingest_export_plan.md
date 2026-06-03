@@ -350,6 +350,16 @@ has a done-condition, not a date.
       the same document independently mint the *same* node UUID, so federated
       merges (moot / moothold) need no identity reconciliation. Worth adopting
       natively ahead of any wasm host.
+    - **Landed 2026-06-03 at the ingest layer, not raw `add_node`.** A first pass
+      put v5 in `add_node` and a kernel test caught the conflict: the kernel
+      deliberately treats a node's *address* as a property, not its identity — it
+      supports several nodes per URL (`get_nodes_by_url`), each with a distinct id.
+      So URL-derived identity belongs only where the URL genuinely *is* the
+      identity. `Graph::node_namespace_id(url)` is the canonical v5 deriver (in the
+      kernel, wasm-safe, no RNG); `apply_contribution` mints an ingested `@id`
+      node via `add_node_with_id(node_namespace_id(id), …)`. Raw `add_node` keeps
+      random v4 and the address-as-property invariant. kernel **236**,
+      linked-data **21**.
     - *Adjacent wasm items to verify / decide.* Confirm `oxjsonld` / `oxrdf` build
       to `wasm32-unknown-unknown` (pure-Rust expected; watch for a transitive
       getrandom). Decide `bundled-contexts` on wasm: ~220 KB in the bundle vs

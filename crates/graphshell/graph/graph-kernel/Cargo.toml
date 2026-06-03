@@ -27,7 +27,9 @@ url = "2.5"
 mime_guess = "2.0"
 infer = "0.19"
 petgraph = { version = "0.8.3", features = ["serde-1"] }
-uuid = { version = "1", features = ["serde"] }
+# v5 (SHA-1 name-based) is available on every target, including wasm — it needs
+# no RNG, unlike v4 (native-only, below). Node ids derive from the URL via v5.
+uuid = { version = "1", features = ["serde", "v5"] }
 euclid = { version = "0.22", features = ["serde"] }
 serde_json = "1.0"
 accesskit = { workspace = true, features = ["serde"] }

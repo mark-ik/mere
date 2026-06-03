@@ -542,7 +542,14 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
             .map(|(key, _)| key)
             .unwrap_or_else(|| {
                 outcome.nodes_created += 1;
-                graph.add_node(node.id.clone(), Default::default())
+                // The `@id` is the node's identity here, so mint a deterministic
+                // UUIDv5 from it: two hosts ingesting the same document agree on
+                // node ids, so a federated merge needs no reconciliation.
+                graph.add_node_with_id(
+                    Graph::node_namespace_id(&node.id),
+                    node.id.clone(),
+                    Default::default(),
+                )
             });
         if node.title.is_some() || !node.tags.is_empty() || !node.properties.is_empty() {
             if let Some(target) = graph.get_node_mut(key) {
@@ -815,6 +822,22 @@ mod tests {
                 .iter()
                 .any(|e| e.object == "https://y.test/n0" && e.predicate.contains("inReplyTo"))
         );
+    }
+
+    #[test]
+    fn ingested_node_ids_are_deterministic_across_graphs() {
+        // Two hosts ingesting the same document mint the same node ids (federation
+        // identity), each derived from its `@id`.
+        let doc = br#"{"@context":{"name":"https://schema.org/name"},"@id":"https://x.test/","name":"X"}"#;
+        let contribution = from_jsonld(doc).expect("parsed");
+        let mut g1 = Graph::new();
+        let mut g2 = Graph::new();
+        apply_contribution(&mut g1, &contribution);
+        apply_contribution(&mut g2, &contribution);
+        let id1 = g1.get_node_by_url("https://x.test/").expect("node in g1").1.id;
+        let id2 = g2.get_node_by_url("https://x.test/").expect("node in g2").1.id;
+        assert_eq!(id1, id2, "same @id yields the same node id on every host");
+        assert_eq!(id1, Graph::node_namespace_id("https://x.test/"));
     }
 
     #[test]

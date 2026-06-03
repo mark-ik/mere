@@ -274,10 +274,26 @@ impl Graph {
     // replay/recovery). Other runtime/shell code paths should route through
     // reducer intents rather than calling topology mutators directly.
 
+    /// The fixed namespace for the deterministic node id (see
+    /// [`node_namespace_id`](Self::node_namespace_id)). Fixed forever: changing it
+    /// would renumber every node derived from it.
+    const NODE_NAMESPACE: Uuid = Uuid::from_u128(0x6D65_7265_4E4F_4445_6E61_6D65_7370_6163);
+
+    /// The deterministic node UUID for `url`: a name-based UUIDv5 under
+    /// [`NODE_NAMESPACE`](Self::NODE_NAMESPACE). Two hosts that materialize the
+    /// same `url` mint the same id, so a federated merge needs no identity
+    /// reconciliation. The linked-data ingest layer uses this for a document's
+    /// `@id`, where the URL *is* the identity. Raw [`add_node`] keeps a fresh
+    /// random id, because the kernel treats a node's address as a property and
+    /// lets several nodes share one (see `get_nodes_by_url`).
+    pub fn node_namespace_id(url: &str) -> Uuid {
+        Uuid::new_v5(&Self::NODE_NAMESPACE, url.as_bytes())
+    }
+
     /// Add a new node to the graph.
     ///
-    /// Not available on `wasm32` — use [`add_node_with_id`] with a
-    /// host-provided UUID instead.
+    /// Not available on `wasm32`; use [`add_node_with_id`] with a host-provided
+    /// UUID (e.g. from [`node_namespace_id`](Self::node_namespace_id)) instead.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn add_node(&mut self, url: String, position: Point2D<f32>) -> NodeKey {
         self.add_node_with_id(Uuid::new_v4(), url, position)

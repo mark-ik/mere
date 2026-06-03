@@ -49,6 +49,22 @@ fn test_add_node() {
 }
 
 #[test]
+fn node_namespace_id_is_deterministic_v5() {
+    // The deriver the ingest layer uses for cross-host identity: a URL maps to a
+    // stable name-based UUIDv5, and distinct URLs map to distinct ids. (Raw
+    // add_node keeps random ids; see test_duplicate_url_nodes_have_distinct_ids.)
+    let a = Graph::node_namespace_id("https://example.com/x");
+    let b = Graph::node_namespace_id("https://example.com/x");
+    assert_eq!(a, b, "same URL yields the same id on any host");
+    assert_eq!(a.get_version_num(), 5, "a name-based UUIDv5, not random");
+    assert_ne!(
+        a,
+        Graph::node_namespace_id("https://example.com/y"),
+        "a different URL gets a different id",
+    );
+}
+
+#[test]
 fn test_add_multiple_nodes() {
     let mut graph = Graph::new();
     let key1 = graph.add_node("https://a.com".to_string(), Point2D::new(0.0, 0.0));
