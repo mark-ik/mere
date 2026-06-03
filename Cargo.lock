@@ -6769,10 +6769,12 @@ dependencies = [
  "chrome",
  "dirs",
  "document-canvas",
+ "identity",
  "inker",
  "kernel",
  "layout-dom-api",
  "linked-data",
+ "moothold",
  "nematic",
  "netfetcher",
  "netrender",
@@ -6780,11 +6782,13 @@ dependencies = [
  "pelt-live",
  "serval-layout",
  "serval-scripted-dom",
+ "serval-static-dom",
  "serval-winit-host",
  "session-runtime",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "transport",
  "url",
  "wgpu",
  "winit",
@@ -6970,7 +6974,16 @@ version = "0.0.1"
 dependencies = [
  "identity",
  "p2panda-core",
+ "p2panda-net",
+ "p2panda-store",
+ "p2panda-sync",
+ "redb",
  "serde",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "transport",
 ]
 
 [[package]]
@@ -11445,11 +11458,14 @@ dependencies = [
 name = "session-runtime"
 version = "0.0.1"
 dependencies = [
+ "async-trait",
+ "eidetic",
  "euclid",
  "forme",
  "frame",
  "identity",
  "kernel",
+ "pollster",
  "serde",
  "serde_json",
  "tile-state",

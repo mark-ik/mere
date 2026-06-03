@@ -41,6 +41,10 @@
 
 #![doc(html_root_url = "https://docs.rs/host-runtime/0.0.1")]
 
+// Durable web-content cache over an eidetic Store (wasm-clean; the host supplies
+// the concrete backend). Persists fetched pages / subresources so a reload need
+// not re-fetch.
+pub mod content_store;
 pub mod engine_profile_store;
 pub mod manifest;
 pub mod manifest_store;

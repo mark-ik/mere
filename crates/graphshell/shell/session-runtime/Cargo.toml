@@ -14,6 +14,9 @@ kernel.workspace = true
 forme.workspace = true
 identity.workspace = true
 tile-state.workspace = true
+# The blob Store trait the content cache persists through (wasm-clean; the host
+# supplies the concrete fjall / OPFS backend).
+eidetic.workspace = true
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -23,3 +26,7 @@ uuid = { version = "1", features = ["serde", "v4"] }
 # Tests construct sample graphs that need positions; kernel
 # exposes the petgraph-backed API expecting `euclid::Point2D`.
 euclid = "0.22"
+# content_store tests implement an in-memory Store (async-trait) and drive the
+# async calls to completion (pollster), mirroring eidetic's own tests.
+async-trait = "0.1"
+pollster = "0.4"
