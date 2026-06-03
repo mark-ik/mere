@@ -276,9 +276,17 @@ has a done-condition, not a date.
     inline / expanded `@context` only (remote-context bundling deferred);
     re-ingest idempotent by URL; ingested nodes seed at the origin and the
     orrery's layout spreads them.
-  - **Still gated / deferred:** real context assets, `@type` → classification, a
-    literal property bag, HTML-embedded extraction (Serval), the blank-node
-    skolemization collision, and the wasm materialization path.
+  - **Gated decisions resolved 2026-06-02:** `@type` → `rdf:type` classifications
+    (`8190220`); a kernel literal **property bag** `Node.properties` so
+    non-curated literals survive ingest/export round-trip (`1f47b4d`); **HTML
+    harvest** — `linked-data::from_html` + the host harvesting embedded JSON-LD
+    while rendering (`c957164`); blank-node skolemization scoped per document
+    (oxjsonld already assigns unique labels, so collision was a non-issue; full
+    idempotency needs canonicalization, deferred) (`8190220`); **context presets**
+    `ContextCache::full` / `minimal` / `new` + a curated Mere context (`082de79`).
+  - **Still open:** vendoring the standard-vocabulary context assets (schema.org
+    ≈ 207 KB, CC-BY-SA into an MPL repo — a size / licensing call) so `full()` is
+    truly full; the wasm materialization path.
 
 ### Phase 3 — Round-trip + coverage
 - Ingest → export → compare, modulo the by-design drops (uncurated literals).
