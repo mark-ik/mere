@@ -121,6 +121,12 @@ impl Workbench {
         self.open.len() != before
     }
 
+    /// Close every open tile (the projection mode is left unchanged). The host
+    /// pairs this with reaping the tiles' content actors.
+    pub fn clear_tiles(&mut self) {
+        self.open.clear();
+    }
+
     /// The forme arrangement for the open tiles: one root-attached `TileIntent`
     /// per member, in order. This is the projection input; v1 has no stacking, so
     /// `project_tree` yields one split slot per tile.
@@ -222,6 +228,17 @@ mod tests {
         assert!(wb.close_tile(a));
         assert!(!wb.close_tile(a), "closing an absent member reports false");
         assert_eq!(wb.open_tiles(), &[b]);
+    }
+
+    #[test]
+    fn clear_tiles_closes_all_but_keeps_the_mode() {
+        let mut wb = Workbench::new();
+        wb.set_mode(ProjectionKind::Tree);
+        wb.open_tile(Uuid::from_u128(1));
+        wb.open_tile(Uuid::from_u128(2));
+        wb.clear_tiles();
+        assert_eq!(wb.tile_count(), 0);
+        assert!(wb.is_tiled(), "clearing tiles leaves the projection mode unchanged");
     }
 
     #[test]

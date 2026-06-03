@@ -557,19 +557,28 @@ impl App {
         self.fetch_handle.command(fetch::FetchCommand::Page(url.to_string()));
     }
 
-    /// Toggle between the orrery (Cartography) and the tiled workbench (Tree). On
-    /// first entry to Tree with no open tiles, seed it from the focused node and
-    /// its graph neighbors, so the tiled view opens populated and the per-tile
-    /// content actors render plural and concurrent (P4). Tiles persist across
-    /// toggles (the actors idle on their command channel when not rendered).
+    /// Toggle between the orrery (Cartography) and the tiled workbench (Tree).
+    /// Reap any prior tiles first (dropping each handle winds its actor down);
+    /// then, on entry to Tree, re-seed from the focused node and its graph
+    /// neighbors, so the tiled view always reflects the node you toggled on and
+    /// the per-tile content actors render plural and concurrent (P4).
     fn toggle_workbench(&mut self) {
         self.workbench.toggle_mode();
-        if self.workbench.is_tiled() && self.workbench.tile_count() == 0 {
+        self.reap_tiles();
+        if self.workbench.is_tiled() {
             for member in self.focus_and_neighbors(4) {
                 self.open_tile(member);
             }
         }
         self.request_redraw();
+    }
+
+    /// Close every tile and wind down its content actor. Dropping each
+    /// [`TileRuntime`] drops its `ActorHandle`, which closes the actor's command
+    /// channel so its thread ends; the open-tile set is cleared to match.
+    fn reap_tiles(&mut self) {
+        self.tiles.clear();
+        self.workbench.clear_tiles();
     }
 
     /// The focused node's graph member plus up to `max` of its neighbors' members
