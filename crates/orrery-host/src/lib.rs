@@ -166,9 +166,29 @@ impl Orrery {
         Self::from_graph(sample_graph())
     }
 
+    /// Build an orrery over a **restored** session `graph`: keep each node at its
+    /// saved (committed) position and do not auto-settle, so a reloaded session
+    /// looks as it was left rather than re-scrambling into a fresh spiral.
+    /// (Persistence host seam, S3.)
+    pub fn with_graph(graph: Graph) -> Self {
+        let mut orrery = Self::from_graph(graph);
+        let positions: Vec<(NodeKey, Point2D<f32>)> = orrery
+            .graph
+            .nodes()
+            .map(|(key, node)| {
+                let p = node.projected_position();
+                (key, Point2D::new(p.x, p.y))
+            })
+            .collect();
+        orrery.sim.seed_positions(positions);
+        orrery.ticks_remaining = 0;
+        orrery
+    }
+
     /// Build an orrery over `graph`: its [`build_simulation`], the node-children
-    /// pool, and a default camera. Shared by [`new`](Orrery::new) (empty) and
-    /// [`with_sample_graph`](Orrery::with_sample_graph).
+    /// pool, and a default camera. Shared by [`new`](Orrery::new) (empty),
+    /// [`with_sample_graph`](Orrery::with_sample_graph), and
+    /// [`with_graph`](Orrery::with_graph).
     fn from_graph(graph: Graph) -> Self {
         let sim = build_simulation(&graph);
         let (node_dom, gnode_of, stage_node) = build_pool_dom(&graph);
@@ -517,6 +537,11 @@ impl Orrery {
         self.graph.get_node(key).map(|n| n.url())
     }
 
+    /// The session graph, for the host to persist (`to_snapshot` → `graph.json`).
+    pub fn graph(&self) -> &Graph {
+        &self.graph
+    }
+
     /// Zoom by `factor`, keeping the world point under `anchor` (screen px) fixed.
     fn zoom_at(&mut self, anchor: (f32, f32), factor: f32) {
         let new_zoom = (self.camera.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
@@ -617,5 +642,22 @@ mod tests {
         assert_eq!(orrery.focused_url(), Some("https://second.com"), "focus follows the new node");
         orrery.visit("https://example.com");
         assert_eq!(orrery.focused_url(), Some("https://example.com"), "revisit re-focuses");
+    }
+
+    #[test]
+    fn with_graph_restores_nodes_and_positions() {
+        let mut graph = Graph::new();
+        graph.add_node("https://one.example".to_string(), PortablePoint::new(100.0, 50.0));
+        graph.add_node("https://two.example".to_string(), PortablePoint::new(-30.0, 80.0));
+        let orrery = Orrery::with_graph(graph);
+        assert_eq!(orrery.graph().nodes().count(), 2, "the restored graph keeps its nodes");
+        assert_eq!(orrery.sim.body_count(), 2, "a body per restored node");
+        assert_eq!(orrery.ticks_remaining, 0, "a restored session does not auto-resettle");
+        let key = orrery.graph().get_node_by_url("https://one.example").unwrap().0;
+        let pos = orrery.sim.position_of(key).expect("a body position");
+        assert!(
+            (pos.x - 100.0).abs() < 1.0 && (pos.y - 50.0).abs() < 1.0,
+            "the saved position is preserved (no spiral re-seed), got {pos:?}",
+        );
     }
 }

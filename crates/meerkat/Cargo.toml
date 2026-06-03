@@ -82,6 +82,11 @@ tokio = { version = "1", features = ["rt-multi-thread"] }
 # scene_from_scripted_dom via the pelt-live dep already present).
 nematic = { workspace = true }
 
+# Session persistence (S3): the session graph survives restart as graph.json via
+# session-runtime's session_graph_store; dirs resolves the per-user data dir.
+session-runtime = { workspace = true }
+dirs = "6"
+
 # Windowing + present (mirrors pelt-live's bin deps; mere's pins align with
 # serval's, so the wgpu 29 / winit 0.30 surface + netrender Renderer unify).
 winit = { workspace = true }

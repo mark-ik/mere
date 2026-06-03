@@ -44,6 +44,10 @@
 pub mod engine_profile_store;
 pub mod manifest;
 pub mod manifest_store;
+// Filesystem persistence of the session graph (graph.json); native-only so the
+// crate stays wasm-clean (wasm hosts use a different storage backend).
+#[cfg(not(target_arch = "wasm32"))]
+pub mod session_graph_store;
 pub mod session_service_runner;
 pub mod switcher_thumbnail;
 pub mod tearout;

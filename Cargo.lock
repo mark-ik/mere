@@ -6767,6 +6767,7 @@ name = "meerkat"
 version = "0.0.1"
 dependencies = [
  "chrome",
+ "dirs",
  "document-canvas",
  "inker",
  "layout-dom-api",
@@ -6778,6 +6779,7 @@ dependencies = [
  "serval-layout",
  "serval-scripted-dom",
  "serval-winit-host",
+ "session-runtime",
  "tokio",
  "tracing",
  "tracing-subscriber",

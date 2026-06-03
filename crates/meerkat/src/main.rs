@@ -28,6 +28,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
@@ -42,6 +43,7 @@ use pelt_live::{fragments_from_scripted_dom, hit_test_node, scene_from_scripted_
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
+use session_runtime::session_graph_store;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
@@ -118,6 +120,8 @@ struct App {
     /// Content engines for the card: nematic's document engines, routed by
     /// content-type. (HTML rides the serval lane instead, in `card`.)
     engines: EngineRegistry,
+    /// Where the session graph is persisted (`<data_dir>/mere/graph.json`).
+    graph_path: PathBuf,
     /// Cached measured height (px) of the chrome band; `0` until first measured.
     toolbar_h: u32,
     window: Option<Arc<Window>>,
@@ -139,13 +143,34 @@ impl App {
             chrome_view as ChromeLogic,
             Chrome::new("mere://welcome"),
         );
-        // Seed the session graph with the initial location as the root node, so
-        // the orrery opens on one node and grows from there as the user navigates.
-        let mut orrery = Orrery::new();
         let content_location = runner.state().content_location().to_string();
-        if !content_location.is_empty() {
-            orrery.visit(&content_location);
-        }
+        // Persist the session graph under the per-user data dir; restore it on
+        // launch if present, else seed the root from the initial location.
+        let graph_path =
+            dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("mere").join("graph.json");
+        let restored = match session_graph_store::load(&graph_path) {
+            Ok(Some(graph)) => {
+                tracing::info!(path = ?graph_path, "restored the session graph");
+                Some(graph)
+            },
+            Ok(None) => None,
+            Err(err) => {
+                tracing::warn!(%err, path = ?graph_path, "session graph load failed; starting fresh");
+                None
+            },
+        };
+        let orrery = match restored {
+            Some(graph) => Orrery::with_graph(graph),
+            None => {
+                // The orrery opens on one node and grows from there as the user
+                // navigates (the graph-rooted browse loop).
+                let mut orrery = Orrery::new();
+                if !content_location.is_empty() {
+                    orrery.visit(&content_location);
+                }
+                orrery
+            },
+        };
         let (fetcher, fetch_rx) = fetch::Fetcher::new(proxy);
         let mut engines = EngineRegistry::new();
         for engine in nematic::engines() {
@@ -163,6 +188,7 @@ impl App {
             fetch_rx,
             content: HashMap::new(),
             engines,
+            graph_path,
             toolbar_h: 0,
             window: None,
             host: None,
@@ -329,7 +355,16 @@ impl App {
             self.orrery.visit(&loc);
             self.ensure_content(&loc);
             self.content_location = loc;
+            self.save_graph();
             self.request_redraw();
+        }
+    }
+
+    /// Persist the session graph (best-effort; a write failure is logged, not
+    /// fatal). Called after each navigation grows or re-selects the graph.
+    fn save_graph(&self) {
+        if let Err(err) = session_graph_store::save(&self.graph_path, self.orrery.graph()) {
+            tracing::warn!(%err, path = ?self.graph_path, "failed to persist the session graph");
         }
     }
 
