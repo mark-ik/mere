@@ -104,13 +104,14 @@ against the tree.
 **Host / present (serval-as-host, live):**
 - `meerkat` — chrome-as-DOM shell on screen: toolbar/omnibar/command-palette/linear
   history via xilem-serval over reused `chrome`; two-root composition. Content-root
-  is synthesized HTML (the gap).
+  is now the `Orrery` (S1, `8786484`); fetch + a live engine behind it is the S2 gap.
 - `serval-winit-host` — shared wgpu+netrender present stack (boot, rasterize,
   acquire, input mapping). Used by both serval bins. (Two copies exist; mere's is live.)
 - `orrery-host` — the full interactive orrery (platen underlay + live gyre + abs-pos
   DOM node children under one camera + pan/zoom/inertia/drag/pick/marquee/edge-pick +
-  pre-materialized pool). Standalone bin; final incremental-layout polish aside, the
-  orrery itself is done.
+  pre-materialized pool), now factored into a reusable window-agnostic `Orrery` lib
+  (`frame -> (Scene, needs_redraw)` + semantic input) that meerkat hosts as its
+  content-root (S1.1 `64ebe44`); the bin is a thin shell over it.
 
 **Render substrate (frozen, build on it):** `netrender` (Scene, `composite_paint_layers`,
 external-texture, box-shadow masks), `paint_list_render` (`PaintCmd`→Scene;
@@ -156,12 +157,12 @@ host-wired), `intel/embed` (Tier-2 embeddings, persists through eidetic),
 
 ## 4. The integration gaps (the actual work)
 
-1. **meerkat content-root is synthesized HTML** — no fetch, no live engine, and not
-   yet the orrery. The content pipeline + the orrery both exist; meerkat consumes
-   neither. This is the keystone gap.
-2. **Two serval bins (meerkat + orrery-host) should be one shell** — fold orrery-host
-   in as the content-root (the spatial graph surface). They already share
-   `serval-winit-host`.
+1. **meerkat content-root** — ~~synthesized HTML, not the orrery~~ **the orrery now
+   (S1)**. Remaining: no fetch and no live engine behind a node yet. The content
+   pipeline exists; meerkat does not yet consume it. This is the S2 keystone gap.
+2. **Two serval bins (meerkat + orrery-host) should be one shell** — *functionally
+   folded* (S1.2): both run the same `Orrery` over the shared `serval-winit-host`.
+   Remaining: the orrery-host bin's physical retirement, deferred to the S7 cutover.
 3. **No node-media tiles** — a node's content rendered as a tile (document via
    `document-canvas`, fullweb via serval, web via scrying) is unwired in meerkat.
 4. **netfetcher unconsumed** — the host fetch organ exists; nothing calls it.
@@ -192,7 +193,9 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
   orrery-host's loop into meerkat as the content-root spatial surface (the graph,
   rendered), chrome composited over it. *Leverage*: orrery-host is done;
   `serval-winit-host` is shared. *Done*: meerkat opens to an interactive orrery of a
-  graph, pan/zoom/drag/pick working, chrome on top. Retire the orrery-host bin.
+  graph, pan/zoom/drag/pick working, chrome on top. **Done `2026-06-02`** (S1.1
+  `64ebe44` + S1.2 `8786484`); the orrery-host bin's physical retirement folds into
+  the S7 cutover (it stays a lib test-harness over the shared `Orrery` until then).
 - **S2 — Node media as tiles + fetch (flip P4 in-scene part + netfetcher).** Wire the
   engine pipeline so a node's content renders as a tile (in-scene): omnibar URL →
   `netfetcher::fetch` → `inker` route → engine → `document-canvas`/serval →
@@ -307,3 +310,25 @@ consumer appears.
   S3 persistence → S4 workbench → S5 comms → S6 external → S7 cutover+cleanup), the
   cross-cutting decisions, and the cleanup/doc-reconciliation list. No code this pass;
   next is S1 (fold orrery-host into meerkat as the content-root).
+- **2026-06-02 — S1 (substance) done: orrery is meerkat's content-root.**
+  - *S1.1* (`64ebe44`): extracted orrery-host's standalone `App` into a reusable,
+    window-agnostic `Orrery` lib (`orrery-host` gained a `[lib]` target) —
+    `frame(w, h) -> (Scene, needs_redraw)` (composites the underlay + abs-pos node
+    pool + marquee; no present) plus semantic input methods (`pointer_down`/`up`,
+    `cursor_moved`, `wheel`, `set_ctrl`, `reseed`) returning a redraw flag, and a
+    `PointerButton` enum. Construction + paint/DOM helpers split into `build.rs`
+    (every file < the 600-LOC ceiling: lib 481, build 226, main 190). The bin is now
+    a thin winit shell over the lib. 6/6 lib tests pass.
+  - *S1.2* (`8786484`): meerkat depends on the orrery-host lib; the content band
+    below the chrome is now an `Orrery` instead of synthesized HTML. `render()`
+    composites the orrery's scene at the content band and chains a redraw while it
+    animates; content-band input (cursor / wheel / press / release / modifiers)
+    routes to the orrery in band-local coordinates; the chrome band keeps its
+    hit-test. Removed the synthesized content seam (`content.rs` + the `content`
+    module). 31/31 meerkat lib tests pass; meerkat builds clean.
+  - *Deferred*: the orrery-host bin's **physical** retirement (gap #2's last step)
+    folds into the S7 cutover, alongside `mere-app`, rather than deleting a working
+    isolated harness mid-stream. It shares the `Orrery` lib + `serval-winit-host`
+    with meerkat (no divergent engine), so it is a lib test-harness bin, not a
+    competing app host. Done-condition for S1's interactive-orrery-in-the-shell is
+    met; only the cleanup tail moves.
