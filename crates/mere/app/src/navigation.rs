@@ -18,7 +18,7 @@ use inker::routing::{
 };
 use inker::{DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan};
 use kernel::graph::Graph;
-use linked_data::{apply_contribution, from_jsonld};
+use linked_data::{apply_contribution, from_html, from_jsonld};
 
 use crate::engine_tile::{RenderedTile, error_document, render_address};
 
@@ -40,6 +40,8 @@ engine policy; this page was parsed by the `nematic` markdown engine.
   `netfetcher` slice
 - `mere://demo.jsonld` — a JSON-LD document that *merges into the graph*
   rather than rendering (open it, then watch the orrery)
+- `mere://demo.html` — an HTML page whose embedded JSON-LD is *harvested* into
+  the graph as it opens
 
 ---
 
@@ -60,6 +62,20 @@ pub(crate) const DEMO_JSONLD: &str = r#"{
   ]
 }"#;
 
+/// A seeded HTML page at `mere://demo.html` with embedded JSON-LD, so the
+/// HTML-harvest path is exercisable. Opening it renders the page (no HTML
+/// renderer is registered yet, so the tile is a placeholder) and merges the
+/// embedded data into the graph.
+pub(crate) const DEMO_HTML: &str = r#"<!doctype html>
+<html><head><title>Demo HTML</title>
+<script type="application/ld+json">
+{"@context":{"name":"https://schema.org/name","cites":"https://mere.computer/ns/rel#cites"},
+ "@id":"mere://node/html-a","name":"HTML Paper A","cites":{"@id":"mere://node/html-b"}}
+</script>
+</head><body>
+<h1>A page with embedded linked data</h1>
+</body></html>"#;
+
 /// Resolve `address` to content and render it. Always returns a tile (errors
 /// and unsupported schemes become a rendered page, never a panic).
 pub fn open(address: &str) -> RenderedTile {
@@ -76,7 +92,7 @@ pub fn open(address: &str) -> RenderedTile {
 /// marker ([`ENGINE_LINKED_DATA_INGEST`]) is not a registered engine, so a
 /// registry-filtered route (as in [`crate::engine_tile::render_address`]) would
 /// skip its rule and fall through.
-pub fn resolve(address: &str, graph: &mut Graph) -> RenderedTile {
+pub fn resolve(address: &str, graph: &mut Graph) -> (RenderedTile, bool) {
     let (body, content_type) = fetch(address);
     let request = EngineRouteRequest {
         workspace_id: WorkspaceRouteId::new("mere"),
@@ -88,9 +104,27 @@ pub fn resolve(address: &str, graph: &mut Graph) -> RenderedTile {
     };
     let decision = EngineRoutePolicy::default().route(&request);
     if is_graph_contribution_route(&decision.engine_id) {
-        return ingest_jsonld(address, &body, graph);
+        return (ingest_jsonld(address, &body, graph), true);
     }
-    render_address(address, &body, content_type.as_deref())
+    // An HTML page also contributes any embedded JSON-LD while it renders.
+    let mut graph_changed = false;
+    if content_type.as_deref().is_some_and(is_html) {
+        for contribution in from_html(&body) {
+            let outcome = apply_contribution(graph, &contribution);
+            graph_changed |= outcome.nodes_created > 0 || outcome.edges_asserted > 0;
+        }
+    }
+    (render_address(address, &body, content_type.as_deref()), graph_changed)
+}
+
+/// Whether a content type is HTML (ignoring any `; charset=…` suffix).
+fn is_html(content_type: &str) -> bool {
+    content_type
+        .split(';')
+        .next()
+        .unwrap_or(content_type)
+        .trim()
+        .eq_ignore_ascii_case("text/html")
 }
 
 /// Parse `body` as JSON-LD and merge it into `graph`; the returned tile is a
@@ -156,6 +190,10 @@ fn fetch(address: &str) -> (String, Option<String>) {
         return (DEMO_JSONLD.to_string(), Some("application/ld+json".to_string()));
     }
 
+    if address == "mere://demo.html" {
+        return (DEMO_HTML.to_string(), Some("text/html".to_string()));
+    }
+
     if let Some(name) = address.strip_prefix("mere://") {
         // Any other mere:// address gets a generated page, so orrery nodes
         // (seeded with mere:// urls) open to real rendered content.
@@ -213,6 +251,7 @@ fn content_type_for_path(path: &str) -> Option<String> {
         "gmi" | "gemini" => "text/gemini",
         "txt" | "text" => "text/plain",
         "jsonld" => "application/ld+json",
+        "html" | "htm" => "text/html",
         _ => return None,
     };
     Some(ct.to_string())
@@ -226,7 +265,8 @@ mod tests {
     fn jsonld_demo_ingests_papers_and_a_cites_edge() {
         use kernel::graph::Graph;
         let mut graph = Graph::new();
-        let tile = resolve("mere://demo.jsonld", &mut graph);
+        let (tile, changed) = resolve("mere://demo.jsonld", &mut graph);
+        assert!(changed, "ingest mutated the graph");
         assert_eq!(tile.engine_id, ENGINE_LINKED_DATA_INGEST);
         let (a, _) = graph
             .get_node_by_url("mere://node/paper-a")
@@ -235,6 +275,16 @@ mod tests {
             .get_node_by_url("mere://node/paper-b")
             .expect("paper-b ingested");
         assert!(graph.find_edge_key(a, b).is_some(), "cites edge");
+    }
+
+    #[test]
+    fn html_demo_harvests_embedded_jsonld_into_the_graph() {
+        use kernel::graph::Graph;
+        let mut graph = Graph::new();
+        let (_, changed) = resolve("mere://demo.html", &mut graph);
+        assert!(changed, "harvest mutated the graph");
+        assert!(graph.get_node_by_url("mere://node/html-a").is_some());
+        assert!(graph.get_node_by_url("mere://node/html-b").is_some());
     }
 
     #[test]

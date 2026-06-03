@@ -189,6 +189,37 @@ pub fn from_jsonld_with_contexts(
     collect_contribution(quads, &namespace)
 }
 
+/// Extract every `<script type="application/ld+json">` block from an HTML body
+/// and parse each as JSON-LD, returning the contributions that parsed (parse
+/// failures and other `<script>` types are skipped). A lightweight tag scan, not
+/// a full HTML parser — enough to harvest the structured data most pages embed.
+/// A host pairs this with rendering: a page both displays and contributes its
+/// linked data.
+pub fn from_html(html: &str) -> Vec<GraphContribution> {
+    let lower = html.to_ascii_lowercase();
+    let mut out = Vec::new();
+    let mut pos = 0;
+    while let Some(rel) = lower[pos..].find("<script") {
+        let tag_start = pos + rel;
+        let Some(gt) = lower[tag_start..].find('>') else {
+            break;
+        };
+        let open_tag = &lower[tag_start..tag_start + gt];
+        let content_start = tag_start + gt + 1;
+        let Some(close_rel) = lower[content_start..].find("</script>") else {
+            break;
+        };
+        let content_end = content_start + close_rel;
+        if open_tag.contains("application/ld+json") {
+            if let Ok(contribution) = from_jsonld(html[content_start..content_end].as_bytes()) {
+                out.push(contribution);
+            }
+        }
+        pos = content_end + "</script>".len();
+    }
+    out
+}
+
 /// Group a stream of RDF quads into a [`GraphContribution`] — shared by the
 /// network-free and bundled-context parsers. `namespace` scopes blank-node
 /// skolemization to the source document.
@@ -411,6 +442,23 @@ mod tests {
         "https://schema.org/citation": [{"@id": "https://c.test/"}]
       }
     ]"#;
+
+    #[test]
+    fn from_html_harvests_embedded_jsonld_scripts() {
+        let html = r#"<!doctype html><html><head>
+          <title>A page</title>
+          <script type="application/ld+json">
+            {"@context":{"name":"https://schema.org/name","cites":"https://mere.computer/ns/rel#cites"},
+             "@id":"https://a.test/","name":"Paper A","cites":{"@id":"https://b.test/"}}
+          </script>
+          <script type="text/javascript">console.log("ignored");</script>
+        </head><body>body</body></html>"#;
+        let contributions = from_html(html);
+        assert_eq!(contributions.len(), 1, "only the ld+json script is harvested");
+        let nodes = &contributions[0].nodes;
+        assert!(nodes.iter().any(|n| n.id == "https://a.test/" && n.title.as_deref() == Some("Paper A")));
+        assert!(contributions[0].edges.iter().any(|e| e.predicate.ends_with("#cites")));
+    }
 
     #[test]
     fn blank_nodes_skolemize_under_a_document_namespace() {

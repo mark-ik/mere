@@ -38,8 +38,8 @@ use std::collections::BTreeMap;
 pub mod ingest;
 
 pub use ingest::{
-    ContextCache, EdgeContribution, GraphContribution, IngestError, NodeContribution, from_jsonld,
-    from_jsonld_with_contexts,
+    ContextCache, EdgeContribution, GraphContribution, IngestError, NodeContribution, from_html,
+    from_jsonld, from_jsonld_with_contexts,
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use ingest::{ApplyOutcome, apply_contribution};

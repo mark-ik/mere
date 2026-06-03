@@ -223,31 +223,34 @@ impl AppState {
     /// ingest), then sync the omnibar and document pane.
     fn navigate(&mut self, address: &str) {
         self.history.push(address);
-        self.current = navigation::resolve(address, &mut self.graph);
-        self.finish_navigation(address.to_string());
+        let (tile, changed) = navigation::resolve(address, &mut self.graph);
+        self.current = tile;
+        self.finish_navigation(address.to_string(), changed);
     }
 
     /// Go back in history and resolve that entry (no-op at the start).
     fn back(&mut self) {
         if let Some(address) = self.history.back().map(str::to_string) {
-            self.current = navigation::resolve(&address, &mut self.graph);
-            self.finish_navigation(address);
+            let (tile, changed) = navigation::resolve(&address, &mut self.graph);
+            self.current = tile;
+            self.finish_navigation(address, changed);
         }
     }
 
     /// Go forward in history and resolve that entry (no-op at the end).
     fn forward(&mut self) {
         if let Some(address) = self.history.forward().map(str::to_string) {
-            self.current = navigation::resolve(&address, &mut self.graph);
-            self.finish_navigation(address);
+            let (tile, changed) = navigation::resolve(&address, &mut self.graph);
+            self.current = tile;
+            self.finish_navigation(address, changed);
         }
     }
 
     /// Shared tail of navigate / back / forward: sync the omnibar and switch to
-    /// the document pane. When the resolve was a JSON-LD *ingest* (it merged into
-    /// the graph), also rebuild the orrery scene and persist.
-    fn finish_navigation(&mut self, address: String) {
-        if self.current.engine_id == inker::routing::ENGINE_LINKED_DATA_INGEST {
+    /// the document pane. When the resolve mutated the graph (a JSON-LD ingest or
+    /// an HTML harvest), also rebuild the orrery scene and persist.
+    fn finish_navigation(&mut self, address: String, graph_changed: bool) {
+        if graph_changed {
             self.rebuild_scene();
             self.persist_graph();
         }
