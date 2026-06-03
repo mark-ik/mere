@@ -83,6 +83,15 @@ linked-data = { workspace = true }
 # actors; the kernel context is pinned to the UI thread by type.
 armillary = { workspace = true }
 
+# Tiled-workbench composition (S4): forme owns the geometry-free arrangement
+# (a graph of tile / member intents); platen projects it into a WorkbenchPlan
+# and lays each slot out as a concrete rect (morphorm). meerkat holds the open
+# tiles, drives the projection, and resolves each tile's member UUID to a node
+# URL against the session graph. The orrery is that same arrangement's
+# Cartography projection; the tiled mode is its Tree projection.
+forme = { workspace = true }
+platen = { workspace = true }
+
 # Off-UI-thread fetch (S2.2b): netfetcher's async WHATWG Fetch runs on a tokio
 # worker pool; results are delivered back to the winit loop over a channel + an
 # EventLoopProxy wake. `url` builds the request; netfetcher is the sibling repo,
@@ -126,6 +135,11 @@ winit = { workspace = true }
 wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+# Workbench-composition tests mint graph-member ids (kernel node UUIDs) and
+# build small session graphs to resolve tiles against.
+uuid = { workspace = true }
 
 [lints]
 workspace = true

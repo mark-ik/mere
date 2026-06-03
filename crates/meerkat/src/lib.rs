@@ -54,6 +54,7 @@ pub mod ingest;
 pub mod nav;
 pub mod suggest;
 pub mod sync_indicator;
+pub mod workbench;
 
 use command::Command;
 use nav::History;
