@@ -22,14 +22,15 @@ use inker::{
 use layout_dom_api::{LayoutDom, LayoutDomMut};
 use netrender::Scene;
 use pelt_live::scene_from_scripted_dom;
-use serval_layout::ScrollOffsets;
+use serval_layout::{inline_stylesheets_from_source, ScrollOffsets};
 use serval_scripted_dom::{NodeId, ScriptedDom};
 
 use crate::fetch::{ContentState, Fetched};
 
-/// A minimal default stylesheet for fetched HTML rendered through serval — block
-/// defaults + readable type. Page-supplied CSS (`<style>` / `<link>`) is serval's
-/// deeper job; this gives structured, legible output for the card.
+/// The card's default stylesheet for fetched HTML — block defaults + readable
+/// type. The page's own inline `<style>` CSS is layered on top of this (see
+/// [`html_scene`]), so a page styles itself over these defaults; external
+/// `<link rel=stylesheet>` is a fetch and is not yet resolved here.
 const HTML_SHEET: &[&str] = &[
     "html, body, div, p, section, article, header, footer, nav, main, ul, ol, li, \
      blockquote, pre, table, tr, h1, h2, h3, h4, h5, h6 { display: block; }",
@@ -186,13 +187,21 @@ fn base_type(content_type: &str) -> String {
 }
 
 /// Parse `body` as HTML into a serval DOM and render it to a scene — the serval
-/// content lane, reusing the host's own renderer for full-web HTML.
+/// content lane, reusing the host's own renderer for full-web HTML. The page's
+/// own inline `<style>` CSS is layered over [`HTML_SHEET`] so equal-specificity
+/// page rules win over the card defaults.
 fn html_scene(body: &str, w: u32, h: u32) -> Scene {
     let mut dom = ScriptedDom::new();
     let root = dom.document();
     dom.set_inner_html(root, body);
+    // Author CSS = card defaults first, then the page's `<style>` blocks (later
+    // sheets win at equal specificity). Scanned from source, not the DOM, so
+    // `<head>` styles survive `set_inner_html`'s body-only parse.
+    let page_css = inline_stylesheets_from_source(body);
+    let mut sheets: Vec<&str> = HTML_SHEET.to_vec();
+    sheets.extend(page_css.iter().map(String::as_str));
     let scroll = ScrollOffsets::<NodeId>::default();
-    scene_from_scripted_dom(&dom, HTML_SHEET, w, h, None, &scroll)
+    scene_from_scripted_dom(&dom, &sheets, w, h, None, &scroll)
 }
 
 /// The floating card rectangle within the content band (top-right, inset by
@@ -345,5 +354,27 @@ mod tests {
         });
         let scene = render_content_scene("https://example.com", Some(&ready), &registry, 420, 360);
         assert!(glyph_runs(&scene) >= 1, "HTML renders text via the serval lane");
+    }
+
+    #[test]
+    fn html_lane_applies_page_supplied_style() {
+        let registry = EngineRegistry::new();
+        // A page `<style>` that hides the only paragraph suppresses its text —
+        // proof the page's own CSS reaches the cascade (this rule is not in
+        // HTML_SHEET, which only sets `p`'s font-size).
+        let hidden = ContentState::Ready(Fetched {
+            content_type: Some("text/html".into()),
+            body: "<style>p { display: none; }</style><p>Hidden by the page.</p>".into(),
+        });
+        let scene = render_content_scene("https://example.com", Some(&hidden), &registry, 420, 360);
+        assert_eq!(glyph_runs(&scene), 0, "a page `display:none` style suppresses the paragraph");
+
+        // Without the hiding style the same paragraph renders.
+        let shown = ContentState::Ready(Fetched {
+            content_type: Some("text/html".into()),
+            body: "<p>Visible.</p>".into(),
+        });
+        let scene = render_content_scene("https://example.com", Some(&shown), &registry, 420, 360);
+        assert!(glyph_runs(&scene) >= 1, "without a hiding style the paragraph renders");
     }
 }
