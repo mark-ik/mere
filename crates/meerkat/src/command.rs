@@ -23,11 +23,15 @@ pub enum Command {
     Forward,
     /// Navigate to the built-in `mere://welcome` page.
     Home,
+    /// Connect the p2p sync to a peer, using the ticket pasted in the address bar
+    /// (S5.1). The chrome records the intent; the host routes it to the sync actor.
+    ConnectPeer,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 3] = [Command::Back, Command::Forward, Command::Home];
+    pub const ALL: [Command; 4] =
+        [Command::Back, Command::Forward, Command::Home, Command::ConnectPeer];
 
     /// The user-facing label shown in the palette and matched against the query.
     pub fn label(self) -> &'static str {
@@ -35,6 +39,7 @@ impl Command {
             Command::Back => "Back",
             Command::Forward => "Forward",
             Command::Home => "Home (mere://welcome)",
+            Command::ConnectPeer => "Connect to peer (ticket in address bar)",
         }
     }
 }

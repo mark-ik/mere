@@ -2,45 +2,149 @@
 
 A message-passing runtime for Mere: a single-threaded **host kernel** (graph +
 frame + compositor + routing) surrounded by a constellation of **actors** (I/O,
-content, compute). "Host kernel" throughout this doc means the runtime center, not
-the `kernel` graph crate. It is Servo's constellation done **in-process**: the kernel fuses the
-constellation and compositor; content actors are the pipelines; scenes travel as
-messages rather than IPC-serialized surfaces. The big simplification over Servo is
-that an in-process content actor hands the kernel a `Scene` directly, so there is
-no cross-process surface sharing to engineer.
+content, compute). "Host kernel" throughout this doc means the runtime center,
+not the `kernel` graph crate. It is Servo's constellation done **in-process**:
+the kernel fuses the constellation and compositor; content actors are the
+pipelines; scenes travel as messages rather than IPC-serialized surfaces. The
+big simplification over Servo is that an in-process content actor hands the
+kernel a `Scene` directly, so there is no cross-process surface sharing to
+engineer.
+
+The spine is the **actor kernel** (the converged shape of Zed/GPUI, Flutter,
+Figma): one thread owns canonical state, heavy work is offloaded, results return
+as messages. The discipline that keeps it safe is GPUI's: **the kernel/actor
+boundary is a type, not a convention.** A `!Send` kernel context versus `Send`
+actors makes a violation a compile error rather than a code-review catch. The
+reactive view layer (`xilem_serval`) is the kernel-thread programming model that
+runs on that `!Send` context. This plan names the pattern, encodes the boundary
+in types, and shows how the other concurrency models compose into it rather than
+compete with it.
 
 This is an evolution of [meerkat](../../../crates/meerkat), not a rewrite. The
 kernel already exists (meerkat's winit `App`), the I/O actors already exist
 (`fetch`, `sync`), and the content pipeline is already a pure scene producer. The
 plan names the pattern and generalizes it.
 
-The runtime lives in a new host-neutral crate, **`armillary`**: the kernel harness
-(inbox router plus dispatch), the actor traits and lifecycle, and the message
-taxonomy. meerkat is the concrete kernel built on it (winit, wgpu, the graph);
-content and I/O actors are armillary actors. The name fits the shape: an armillary
-sphere is a frame of rings around a central point, which is exactly this structure,
-the kernel at the center with the actor rings around it (the content actors its
-constellation).
+The runtime lives in a new host-neutral crate, **`armillary`**: the kernel
+harness (inbox router plus dispatch), the actor traits and lifecycle, the typed
+boundary, and the message taxonomy. meerkat is the concrete kernel built on it
+(winit, wgpu, the graph); content and I/O actors are armillary actors. The name
+fits the shape: an armillary sphere is a frame of rings around a central point,
+which is exactly this structure, the kernel at the center with the actor rings
+(its constellation) around it.
 
 Related: [modular integration plan](2026-06-02_modular_integration_plan.md) (the
 host model and S-phases), [linked-data ingest plan](2026-05-22_linked_data_ingest_export_plan.md)
 (the contribution boundary + v5 identity), [netfetcher plan](2026-05-25_netfetcher_plan.md)
-(the network I/O actor).
+(the network I/O actor). The concurrency ground truth (wasm-in-browser, browser
+threading, the model menu) was researched and adversarially verified 2026-06-03;
+the load-bearing facts are inlined under **Technical ground truth** below.
 
 ## The four layers
 
-- **Host kernel (one thread).** Owns the graph, the frame (tile layout), message
-  routing, and render. Simple and lock-free because it is the single owner of the
-  two things everything else wants: the render GPU and the graph.
+- **Host kernel (one thread).** Owns the graph, the frame (tile layout), the
+  reactive view (`xilem_serval`), message routing, and render. Lock-free because
+  it is the single owner of the two things everything else wants: the render GPU
+  and the graph.
 - **I/O actors.** Network fetch, p2p sync, persistence writes, link resolution.
   Background work that returns data, never UI.
-- **Content actors (the real constellation).** One per page/origin running
-  untrusted content: owns its DOM (and later its Nova JS engine, `!Send`, pinned
-  to the thread), ships paint-lists/scenes to the kernel. Isolation is the actor
-  boundary, optionally hardened by a native wasm sandbox. A Servo content process,
-  minus the process.
-- **Compute actors (later).** Heavy layout, graph physics, Burn-wgpu. Offloaded
-  only when a frame cannot hold the work.
+- **Content actors (the constellation).** One per origin (agent cluster) once
+  scripting lands, per-tile before then. Owns its DOM (and later its Nova JS
+  engine, `!Send`, pinned to the thread), ships paint-lists/scenes to the kernel.
+  Isolation is the actor boundary. A Servo content pipeline, minus the process.
+  Confidentiality limits are real: see **Threat model**.
+- **Compute actors (later).** Heavy layout, graph physics, Burn. Offloaded only
+  when a frame cannot hold the work.
+
+## The typed boundary (the GPUI lesson, made structural)
+
+Invariants 1 and 2 below are not prose discipline to "guard above all";
+`armillary` encodes them in the type system, so the compiler refuses violations.
+This is the single commitment that is cheapest to make now and a multi-year
+retrofit later (see **Decide now vs defer**).
+
+- The **kernel context** (owns the `Orrery`, the `SurfaceHost` / wgpu device, the
+  chrome DOM, and every graph mutation path) is `!Send` by construction, via a
+  `PhantomData<Rc<()>>` marker modelled on GPUI's `ForegroundExecutor`. It cannot
+  be moved onto an actor thread even by accident.
+- Kernel authority is private, not just `!Send`: `armillary` must not expose a
+  graph handle, GPU handle, or `Arc<Mutex<...>>` escape hatch through a `Send`
+  wrapper. The only public actor-facing state is an immutable snapshot DTO or a
+  command/update message. This is what keeps the marker from becoming decorative.
+- An **actor** has a `Send` handle and `Send` boundary messages; its internals
+  may be `!Send` and pinned to its own thread (Nova, DOM, Stylo). The boundary
+  shape is `spawn(...) -> (Handle: Send, Receiver<Update: Send>)`, and produced
+  messages are owned `Send` values (`Scene`, `GraphContribution`, status/events).
+  Invariant 2 becomes structural without requiring actor-local engine state to be
+  movable.
+- The **Xilem view layer** runs on the kernel thread, reaching the graph and
+  frame through the `!Send` kernel context (GPUI's `Context` / `cx` pattern). The
+  view layer is the kernel's programming model; actors are the off-thread escape
+  hatch that talk to it only by message. That is "GPUI discipline + Xilem top" in
+  one sentence, and it is the architectural through-line of this plan.
+
+## Composing the alternative models
+
+The actor kernel is the spine. The other concurrency and isolation models are not
+competitors; each contributes a lesson at a specific layer. Borrow the lesson,
+not the whole engine. (Sourced from the verified model menu, 2026-06-03.)
+
+- **ECS / staged-parallel (Bevy).** Borrow the *data layout* for the graph
+  canvas: archetype-packed node/edge storage with tick-based change detection is
+  cache-friendly at high node counts. Do **not** adopt the parallel scheduler. It
+  is the one model that does not compose here, because its value is a multicore
+  scheduler that does not run on wasm (Bevy itself ships single-threaded there).
+  Lives in: the `Orrery` / gyre node storage, kernel-side.
+- **Incremental computation (salsa, self-adjusting computation).** Recompute only
+  what a changed input invalidated. Serval already has the *domain-specific*
+  instance: `IncrementalLayout` with damage classes (RepaintOnly / Restyled /
+  Spliced / FullRecompute) over Stylo's restyle-with-snapshots. Keep it
+  domain-specific; a generic salsa graph would carry heavier dependency-tracking
+  overhead than the damage classification for this domain. Lives in:
+  serval-layout, inside the content actor. The kernel-side lesson: derived state
+  (frame layout, LOD, arrangement) carries explicit invalidation, never a shared
+  mutable cache.
+- **Structured concurrency / fork-join (rayon).** Parallelize *inside* one
+  bounded operation (a single graph relayout, a Burn batch) over owned data,
+  opportunistically. Gate it off on wasm (it needs `SharedArrayBuffer`; see
+  ground truth). Servo's Layout 2020 lesson holds: opportunistic over a clean
+  data model, never mandatory parallelism (mandatory broke on floats). Lives in:
+  compute actors (P6), feature-gated.
+- **Reactive dataflow (Xilem, signals).** The view layer. Declarative views
+  diffed into serval's DOM, running on the `!Send` kernel context. Composes
+  directly: actor kernel for state and ownership, reactive dataflow for the view.
+  Lives in: `xilem_serval`, the kernel's programming model.
+- **Utility-first systems (Tailwind).** Borrow the *bounded primitive vocabulary*
+  with static lowering, not class-string authoring: a small token set the runtime
+  sees as a finite, normalized representation beats open-ended per-component style
+  APIs. For Mere, typed tokens / variants / primitives that lower to
+  `netrender::Scene` or serval styles. Lives in: chrome/style tokens and
+  projection lowering. Do **not** make Tailwind a dependency or utility strings a
+  protocol.
+- **Capability / wasm-component isolation.** Shared-nothing linking with explicit
+  capabilities, for memory-safety isolation of semi-trusted modules. A *future
+  plugin seam*, not a near-term primitive, and not a confidentiality boundary
+  (see ground truth). Lives in: a deferred actor variant, decided when a plugin
+  use-case is real.
+- **OS multiprocess (Servo constellation, Chrome Site Isolation).** The only real
+  confidentiality boundary, and the one Mere cut. Because `armillary`'s boundary
+  is message-passing from day one, running a subsystem in its own OS process on
+  native becomes a deployment toggle, not a rewrite. Servo's constellation works
+  precisely because the message boundary predated the processes. Lives in: a
+  deferred native-only switch. Do not build it; do not foreclose it.
+- **CRDT / local-first (p2panda, Automerge).** The tessera sync layer. One
+  reconciliation actor per peer: range-based set reconciliation (RBSR) to catch
+  up, then gossip live-mode, feeding *validated, ordered* contributions to the
+  kernel as messages, applied transactionally. The trust check (authorization as
+  data, p2panda-auth / Keyhive style) is a validation pass inside that same
+  actor, never a separate privileged guard. Lives in: the `sync` actor,
+  generalized. It is the constellation pattern applied to peers instead of pages.
+
+The convergent shape is one stack: **actor kernel (ownership) + reactive-dataflow
+view (Xilem) + bounded utility primitives (Tailwind's lesson) + incremental
+recompute (IncrementalLayout) + opportunistic in-operation parallelism (rayon,
+gated) + per-peer sync actors (CRDT/log)**, with capability and multiprocess
+isolation as deferred seams the message boundary keeps cheap.
 
 ## Findings (verified against the codebase, 2026-06-03)
 
@@ -56,24 +160,37 @@ kernel inbox in embryo.
 `sync::SyncHost` are the same pattern with different payloads: own a tokio
 runtime, run background work, push a typed update over an `mpsc` channel plus an
 `EventLoopProxy<()>` wake ("delivery model 2"), drained in `user_event`. Both
-return `(Handle, Receiver<Update>)`; both treat networking as never-fatal. This is
-the harness to generalize. The comment in `fetch.rs` already anticipates it: the
-wake stays trivial "so persistence and sync can push their own typed channels."
+return `(Handle, Receiver<Update>)`; both treat networking as never-fatal. This
+is the harness to generalize. The comment in `fetch.rs` already anticipates it:
+the wake stays trivial "so persistence and sync can push their own typed
+channels."
 
-**The content pipeline is already a pure `Scene` producer.**
-`crates/meerkat/src/card.rs::render_content_scene(url, state, registry, loader, w,
-h) -> Scene` is pure CPU: HTML parses through `serval_static_dom::StaticDocument`
-and the shared serval cascade/layout to a scene; markdown/gemtext/text/feed route
-through a nematic `EngineDocument`; everything else renders a synthesized
-document. It runs on the UI thread today. Moving it onto a content-actor thread is
-a relocation, not a rewrite.
+**The content pipeline is a pure `Scene` producer, but verify it off-thread.**
+`crates/meerkat/src/card.rs::render_content_scene(url, state, registry, loader,
+w, h) -> Scene` is pure CPU and runs on the UI thread today: HTML parses through
+`serval_static_dom::StaticDocument` and the shared serval cascade/layout to a
+scene; markdown/gemtext/text/feed route through a nematic `EngineDocument`;
+everything else renders a synthesized document. Moving it onto a content-actor
+thread is a relocation in principle. The caveat to clear before P2 is called
+low-risk: the serval cascade leans on Stylo's process-global `GLOBAL_STYLE_DATA`
+plus a `CascadeGuard` thread-local and a leaked per-thread sharing cache. Confirm
+by runtime test that the cascade initializes and runs correctly off the main
+thread and concurrently across N content-actor threads. That is the class of
+latent single-thread assumption that turns a "relocation" into a debugging week,
+so runtime-verify it rather than assume it.
 
-**`Scene` is `Send` and serializable.** `netrender`'s `Scene` is a display list of
-plain-data `SceneOp`s (`scene.rs`: every op derives `Clone` and, under the `serde`
-feature, `Serialize`/`Deserialize`; no `Rc`, no GPU handles, no `!Send`). The GPU
+**`Scene` is `Send` (confirmed); serializability is a separate, weaker claim.**
+`netrender`'s `Scene` is a display list of plain-data `SceneOp`s. Fonts are
+`FontBlob { data: peniko::Blob<u8>, index }` with custom blob serde; image
+sources are CPU-side data keyed by `ImageKey` with custom deterministic serde.
+The type holds no `Rc` and no GPU handle, so `Scene: Send` holds. That is the
+fact the in-process architecture rests on: a content actor builds a `Scene` and
+moves it to the kernel thread, and the kernel stays the sole GPU owner (GPU
 appears only when the kernel's `Renderer` lowers the scene to `vello::Scene` at
-rasterize time. So a content actor builds a `Scene` and ships it; the kernel
-remains the sole GPU owner. **This is the fact the whole architecture rests on.**
+rasterize time). *Serializability* (the `serde` feature) is a separate and weaker
+property: before any cross-process path (P5 or a future multiprocess form)
+relies on it, round-trip-test fonts and images. In-process P2-P4 need only
+`Send`, which is solid.
 
 **The graph/contribution boundary exists one level down.** The pure producers are
 in `linked-data`: `from_jsonld_with_contexts(...) -> GraphContribution` and
@@ -94,20 +211,29 @@ in `card.rs`); Nova is a later phase, and `!Send` from the day it lands.
 ## Load-bearing invariants
 
 1. **The host kernel is the sole owner of the render/present GPU path and the
-   graph.** Nothing else holds the render surface / compositor or a mutable graph
-   reference. (GPU *compute*, P6, is a separate concern handled there.)
-2. **Actors are CPU-only producers of two `Send` message kinds:** `Scene`s and
-   `GraphContribution`s. They never hold a GPU handle or mutate the graph.
-3. **State has one owner; cross-actor reads use an immutable snapshot.** Hot reads
-   (theme, a tile's graph slice) are an `Arc<Snapshot>` swapped atomically. This is
-   what makes "lock-free" literal.
+   graph.** Enforced by types, not vigilance: the kernel context is `!Send` (see
+   **The typed boundary**). GPU *compute* (P6) is a separate concern handled
+   there.
+2. **Actors are CPU-only producers of `Send` messages** (`Scene`s,
+   `GraphContribution`s, content events). Enforced by the actor produce signature
+   returning only `Send` messages, so an actor holding a GPU handle or a mutable
+   graph reference does not compile.
+3. **State has one owner; cross-actor reads use immutable, purpose-built
+   snapshots.** Hot reads (theme, a tile's graph slice) are `Arc` DTOs swapped by
+   generation, which is what makes "lock-free" literal. Do **not** publish the
+   whole `Graph` or `Graph::to_snapshot()` on every mutation: that snapshot is a
+   persistence DTO and clones node metadata, media sidecars, edges, imports,
+   fields, and couplings. Actor read models are narrow (`TileGraphSlice`,
+   `ThemeSnapshot`, `NodeMediaSnapshot`) and rebuilt only when their inputs
+   change.
 4. **The kernel never blocks on an actor.** It composites each tile's
-   last-delivered scene (stale-but-live) and keeps rendering. A slow actor degrades
-   its own tile, not the frame. This discipline *is* the "offload only when a frame
-   can't hold the work" rule.
+   last-delivered scene (stale-but-live) and keeps rendering. A slow actor
+   degrades its own tile, not the frame. This discipline *is* the "offload only
+   when a frame can't hold the work" rule.
 
-If an actor ever gets a mutable graph handle or a wgpu handle, invariants 1-2 are
-gone and the kernel is no longer lock-free. Guard that boundary above all.
+The typed boundary makes invariants 1-2 compile-enforced rather than guarded; the
+drift failure mode it prevents is the dominant risk (see **Risks**), and the
+general law behind it is in **Decide now vs defer**.
 
 ## Message taxonomy
 
@@ -126,6 +252,58 @@ Outbound to a content actor:
 - `Navigate { url }`, `Input { event }`, `Resize { w, h }`, `Teardown`
 - `EvalScript { source }` (Nova phase)
 
+## Actor lifecycle records
+
+The host kernel owns a declarative `ActorSpec` per live tile / origin. This is
+the respawn source of truth, not an actor-held state bag:
+
+```rust
+ActorSpec {
+    tile_id,
+    actor_kind,
+    agent_cluster,
+    current_url,
+    nav_generation,
+    viewport_generation,
+    viewport,
+    profile,
+    capabilities,
+}
+```
+
+On crash or channel disconnect, the kernel marks the tile broken, drops stale
+messages by generation, spawns a fresh actor from the `ActorSpec`, and replays
+only `Navigate` + `Resize` (plus the profile/capability setup). It does not replay
+graph contributions as history; contributions are kernel-applied, idempotent
+facts. If an actor needs restored document/session state later, that state is a
+separate explicit snapshot in the spec, not an implicit borrow from the graph.
+
+For script-free P2, the spec is per tile. When scripting lands, specs are keyed by
+agent cluster (origin / browsing-context group semantics); non-scripting graph
+tiles should remain projection-shaped by default, not origin-shaped, while sharing
+fetch/cache/render assets underneath.
+
+## Script protocol floor
+
+P3's protocol is still real design work, but the minimum message families are
+already constrained:
+
+- **Lifecycle:** create actor, navigate, resize, teardown, crash/dead.
+- **Input:** generation-tagged pointer/keyboard/text events, delivered only after
+  kernel hit-testing and ignored by the actor if stale.
+- **Script turns:** input task / timer task / fetch callback runs to completion;
+  microtasks drain at checkpoints before a paint commit.
+- **Network:** actor requests subresources from the I/O fetch actor; fetch replies
+  are generation-tagged and delivered as actor input, not direct netfetcher calls.
+- **Paint:** actor emits `SceneReady` only after DOM/style/layout has reached a
+  coherent commit point; the kernel composites the latest accepted scene.
+- **Graph output:** actor emits `Contribution` messages; the kernel validates and
+  applies them through the graph boundary.
+
+Borrow Servo's constellation/pipeline taxonomy for lifecycle and responsibility
+names, but keep Mere's protocol explicit and channel-shaped rather than importing
+Servo's process/IPC model.
+
 ## Backpressure and generations
 
 Async scenes can arrive stale: a scene built for an old URL or an old size lands
@@ -134,107 +312,238 @@ after the tile navigated or resized. So every `SceneReady` carries a
 pair per tile, bumps them on navigate / resize, and **drops any scene whose
 generations do not match**. Delivery is bounded and coalesced per tile (keep the
 latest, never queue a backlog). Input is generation-aware too: an `Input` event
-carries the generation it was hit-tested against, so a content actor ignores input
-meant for a page it has already replaced.
+carries the generation it was hit-tested against, so a content actor ignores
+input meant for a page it has already replaced.
 
-## Decisions (resolved 2026-06-03)
+## Threat model
 
-- **Granularity: per-origin once scripting lands, per-tile before then.** With
-  Nova, a content actor owns a *browsing-context group / agent cluster* (the web
-  platform's unit for same-origin synchronous scripting), keyed by origin. That is
-  platform semantics, not a user toggle. The Firefox content-process model. For the
-  script-free P2 there is no shared JS state, so per-tile is enough; the
-  agent-cluster grouping arrives with Nova (P3). Whether *non-scripting* graph
-  tiles ever group by origin can stay a setting; the scripting semantics cannot.
-- **Subresource fetch: through the I/O fetch actor, by message.** A content actor
-  requests a subresource from the fetch actor and receives bytes, rather than
-  owning its own netfetcher. This centralizes the cache / cookie jar / netfetcher
-  and keeps "Mere owns networking" literal.
-- **Runtime crate: `armillary`** (new, host-neutral). Houses the kernel harness,
-  the actor traits + lifecycle, and the message taxonomy. meerkat consumes it.
+Pinned: **Mere's content is semi-trusted.** Own code, audited engines (serval,
+Nova), authenticated federation peers. Not arbitrary hostile multi-origin web
+content.
 
-Working defaults (not contested, revisit if they bite):
+This legitimizes the cut process boundary. In-process content actors give failure
+isolation and memory-safety (a panicking or buggy page degrades its tile, see
+Backpressure), which is sufficient for semi-trusted content. It is not a
+confidentiality boundary. Inside a single browser renderer or OS process every
+in-process boundary shares one address space; Chrome's own model assumes "any
+active code can read any data in the same address space"
+(<https://chromium.googlesource.com/chromium/src/+/HEAD/docs/security/side-channel-threat-model.md>).
+Actor boundaries, a wasm sandbox, and component isolation all give memory-safety
+and failure isolation, not Spectre resistance.
 
-- **Shared-read kernel state.** `Arc<Snapshot>` atomic swap for hot reads (theme,
-  per-tile graph slices) over a request/response round-trip.
-- **Fault model.** `catch_unwind` per actor loop; on death the kernel paints a
-  broken-tile placeholder and can respawn from the last navigation. A reliability
-  gain over today, where a content-render panic takes the whole host down.
+**The tripwire.** The day Mere wants to render genuinely hostile content
+(arbitrary multi-origin web pages, untrusted third-party plugins), the in-process
+constellation is not enough, and the answer is the OS-process boundary (native)
+or the browser's own cross-origin isolation (PWA) that this design cut. On the
+browser/PWA target, content Mere fetches and renders itself in its own origin
+gets no Site Isolation; only content delegated to a cross-origin iframe or worker
+does. Treat any feature that crosses the semi-trusted line as the feature that
+pays for the process boundary, and design it knowing the cost is coming.
+
+## Technical ground truth (verified 2026-06-03)
+
+Grounds P5 (sandbox) and the browser target. Researched and adversarially
+verified against current primary sources.
+
+- **Wasmtime cannot JIT inside browser-wasm.** WebAssembly is a Harvard-architecture
+  model with no instruction to emit and then execute machine code; Wasmtime's
+  Cranelift and Winch backends require host-OS executable pages the browser never
+  grants a guest (<https://docs.wasmtime.dev/stability-platform-support.html>).
+  Wasmtime's **Pulley** interpreter backend can in principle compile to wasm32 and
+  interpret guests, but an in-browser end-to-end run is undemonstrated as of
+  mid-2026 and self-estimates roughly 10x slowdown. So even the technically
+  possible path is slow and unproven. This confirms the scripting decision: Rhai
+  (a Rust interpreter that runs anywhere wasm32 ships) plus Burn-wgpu (which
+  delegates to WebGPU), with no Wasmtime.
+- **Browser parallelism: Web Workers are the baseline; shared-memory threads are
+  gated.** Message-passing Web Workers need no special headers and work
+  everywhere; this is the guaranteed path and the one any hot path may depend on.
+  Shared-memory threads (`SharedArrayBuffer` plus atomics, what rayon and
+  `wasm-bindgen-rayon` need) require cross-origin isolation (COOP plus COEP,
+  <https://web.dev/articles/coop-coep>) and a nightly toolchain with `build-std`
+  that has been intermittently broken through 2025 (rust-lang #145101). Treat SAB
+  threads as an optional, feature-gated accelerator with a clean single-threaded
+  fallback; never let a hot path require them.
+- **There is no in-process Spectre boundary** (see Threat model). Confidentiality
+  isolation is OS processes (native) or the browser (PWA), not anything Mere
+  builds in-process.
+
+P5 follows from this. An in-process wasmtime sandbox would require compiling the
+entire serval + Nova content engine to wasm32 to run under it, for a boundary
+that is memory-safety rather than Spectre resistance anyway. For semi-trusted
+content the actor-thread boundary already gives the failure and memory-safety
+isolation that matters, so P5 is descoped: real isolation, if ever needed, is an
+OS subprocess on native or the browser on PWA.
+
+## Decide now vs defer
+
+The historical law (Stylo parallelized cheaply because its cascade data model was
+already a pure function of parent values plus matched rules; Chrome's Site
+Isolation cost roughly five years and about four thousand commits because the web
+assumed synchronous cross-frame scripting): **the cost of adding a boundary later
+is set almost entirely by whether the surrounding code assumed synchronous
+shared-memory access across it.** Designed-in is near-free; retrofitted against
+synchronous shared state is a multi-year ordeal. The test for any commitment:
+does it establish or violate the message-passing boundary?
+
+Decide now (expensive to retrofit), addressed in P0-P1:
+
+- The async message-passing boundary, universal: no subsystem ever gets a
+  synchronous handle into kernel state. Mere is already about 90% there.
+- `Send`-ness on the *messages*, not the state: the chrome DOM stays `!Send` on
+  the host-kernel thread, while content DOM / Nova / Stylo may be `!Send` on
+  their owning actor thread. Only boundary messages and handles are `Send`.
+- The unit of isolation: kernel plus one task per long-lived subsystem, one sync
+  actor per peer, the graph-session / window as the coarse unit.
+- Owned-not-shared data with explicit invalidation (IncrementalLayout,
+  kernel-owned physics).
+- The written threat model (semi-trusted).
+
+Defer (cheap once the boundary holds): extra workers, executor choice, leaf
+parallelization (rayon, gated), SAB threads, the CRDT library and reconciliation
+primitive, capability/plugin isolation, the OS-multiprocess toggle, and JSPI
+adoption (the wasm stack-switching API for ergonomic async; stable in Chrome and
+Firefox, not yet Safari as of mid-2026).
 
 ## Phases (done-conditions, not dates)
 
-- **P0 Name the host-kernel inbox.** A thin `KernelInbox` that *holds* the existing
-  typed receivers (`fetch` / `sub` / `sync`) behind the one bare `EventLoopProxy<()>`
-  wake, with a documented dispatch in `user_event`. Keep the
-  typed-channel-per-subsystem ownership; do not collapse it into one mega enum
-  (that worsens ownership). No behavior change. *Done:* one documented place that
-  reads what the kernel is told, the wake/receiver seam intact.
+- **P0 Name the host-kernel inbox and the typed boundary.** A thin `KernelInbox`
+  that *holds* the existing typed receivers (`fetch` / `sub` / `sync`) behind the
+  one bare `EventLoopProxy<()>` wake, with a documented dispatch in `user_event`;
+  and the `!Send` kernel-context marker plus the `Send` actor-handle shape
+  introduced in `armillary`'s types. Keep the typed-channel-per-subsystem
+  ownership; do not collapse it into one mega enum (that worsens ownership). No
+  behavior change. *Done:* one documented place that reads what the kernel is
+  told, the wake/receiver seam intact, and the kernel context is `!Send` while
+  actor handles are `Send` by type.
 - **P1 The `armillary` harness.** Stand up the `armillary` crate: one `Subsystem`
-  shape (`spawn(proxy, ...) -> (Handle, Receiver<Update>)`) plus the inbox/dispatch
-  from P0. Express `fetch` and `sync` through it; add a third trivial actor
-  (persistence-write or link-resolution) to prove generality. *Done:* three actors,
-  one harness, in armillary.
+  shape (`spawn(proxy, ...) -> (Handle, Receiver<Update>)`) plus the
+  inbox/dispatch from P0 and the typed boundary. Express `fetch` and `sync`
+  through it; add a third trivial actor (persistence-write or link-resolution) to
+  prove generality. *Done:* three actors, one harness, one type-enforced
+  boundary, in armillary.
 - **P2 Static-DOM content actor.** Move `render_content_scene` onto a per-tile
-  content-actor thread; the actor ships generation-tagged `SceneReady` and the host
-  kernel composites the latest. Split meerkat's `harvest(&mut Graph, ...)` into a
+  content-actor thread; the actor ships generation-tagged `SceneReady` and the
+  host kernel composites the latest. Clear the cascade off-thread caveat first
+  (runtime-confirm the serval cascade runs correctly off the main thread and
+  concurrently across threads). Split meerkat's `harvest(&mut Graph, ...)` into a
   pure `harvest_contributions(...) -> Vec<GraphContribution>` the actor runs,
   shipping `Contribution`s the kernel applies through `Orrery::ingest_graph` (the
-  actor never touches the graph). A panicking actor shows a broken-tile placeholder.
-  *Done:* content leaves the UI thread, the producer/applier split is honest, and a
+  actor never touches the graph). A panicking actor shows a broken-tile
+  placeholder via thread respawn. *Done:* content leaves the UI thread with the
+  cascade confirmed safe off-thread, the producer/applier split is honest, and a
   content panic no longer kills the host.
 - **P3 Nova.** A scripted page runs JS in the content actor (Nova, dedicated
   thread, `!Send`); DOM mutations reflow to a new `Scene`; the input -> script ->
-  paint protocol is real. *Done:* a scripted page is interactive in a tile.
+  paint protocol implements the **Script protocol floor** above, including
+  run-to-completion script turns, microtask checkpoints, subresource requests by
+  message, and generation-tagged scene commits. *Done:* a scripted page is
+  interactive in a tile without giving the actor synchronous kernel access.
 - **P4 N actors + lifecycle.** One actor per open origin; the kernel spawns and
-  reaps; per-origin pooling; respawn-from-last-navigation on fault. *Done:* the
-  constellation is plural and self-healing.
-- **P5 Sandbox hardening (native-only, optional).** A content actor's engine runs
-  inside a native wasm sandbox (wasmtime) for memory isolation, behind a flag.
-  Absent on the browser/PWA target, where the browser is the sandbox. *Done:* an
-  opt-in hardened mode on desktop.
+  reaps; per-origin pooling; respawn uses the kernel-owned `ActorSpec`. The fault
+  default is thread respawn, not in-place `catch_unwind`: a panic mid-cascade can
+  leave Stylo's thread-local sharing cache inconsistent, so let the actor thread
+  die (the kernel observes the channel disconnect, paints the broken-tile
+  placeholder, and respawns a fresh thread with fresh thread-locals from the
+  spec). *Done:* the constellation is plural and self-healing.
+- **P5 Isolation, if ever needed (descoped).** No in-process wasm sandbox (see
+  **Technical ground truth** for why it is the wrong boundary). If a feature
+  crosses the semi-trusted line, the isolation answer is an OS subprocess on
+  native or the browser on PWA, and the P0 message boundary makes the
+  native-subprocess form a toggle, not a rewrite. *Done:* the tripwire is
+  documented and the subprocess path is a known option, not built until a real
+  untrusted-content use-case exists.
 - **P6 Compute actors.** Gyre physics / heavy layout / Burn spill to a compute
   actor when the kernel's frame budget is blown; results composite async
-  (last-writer-wins). GPU compute (Burn-wgpu) is the boundary case: it must not
-  touch the render/present path, so it either submits jobs through a kernel-owned
-  GPU service or runs on a separate compute device/queue. CPU compute
-  (Burn-ndarray, physics) has no such constraint. *Done:* a frame that cannot hold
-  the work sheds it without stalling, and GPU compute never contends with render.
+  (last-writer-wins). Shared-memory parallelism (rayon over `SharedArrayBuffer`)
+  is feature-gated per **Technical ground truth**, never load-bearing. GPU compute
+  (Burn-wgpu) is the boundary case: it must not touch the render/present path, so
+  it either submits jobs through a kernel-owned GPU service or runs on a separate
+  compute device/queue. CPU compute (Burn-ndarray, physics) has no such
+  constraint. *Done:* a frame that cannot hold the work sheds it without
+  stalling, and GPU compute never contends with render.
 
 ## Risks and hard parts
 
-- **The script-to-kernel protocol is the real design work.** Borrow Servo's
-  constellation/pipeline message taxonomy (pipeline lifecycle, the
-  script/layout/compositor splits) as a reference and implement it over channels.
-- **`!Send` Nova forces a dedicated thread per content actor** and a careful
-  message API: no shared DOM, no shared engine handle, everything by message. Build
-  the content actor as a dedicated thread from P2 so Nova lands without a rewrite.
-- **Backpressure discipline.** The host kernel must never await an actor.
-  Generation-tagged, coalesced last-scene-per-tile compositing is the mechanism
-  (see Backpressure and generations).
-- **The wasm sandbox is the least-specified layer and is native-only.** Two
-  isolation stories by target: wasmtime on desktop, the browser on the PWA target.
-- **The graph boundary.** Contributions in, snapshots out, never a mutable graph
-  handle to an actor.
+Each risk's full treatment lives in its home section; this is the short list of
+what is most likely to break, the mitigation, and a pointer.
+
+- **Boundary drift (dominant).** An actor acquiring a synchronous handle into
+  kernel state re-creates the synchronous-shared-memory assumption that cost the
+  Gecko/Chrome-Site-Isolation retrofits. Mitigation: the `!Send` kernel context +
+  `Send`-only messages make it a compile error (P0). Cheapest-now,
+  most-expensive-later.
+- **The script-to-kernel protocol (P3) is the real design work.** The message
+  families are constrained (see **Script protocol floor**); the work is
+  implementing them over channels without giving the actor synchronous kernel
+  access.
+- **`!Send` Nova needs a dedicated thread from P2,** so the content actor is
+  thread-shaped before scripting lands and Nova drops in without a rewrite.
+- **Cascade off-thread (P2).** Runtime-verify the serval cascade's thread-local /
+  process-global behavior off the main thread and under concurrency before P2 is
+  called low-risk (see **Findings**).
+- **Declarative lifecycle.** Respawn from the kernel-owned `ActorSpec`, never ad
+  hoc closure state, or fault recovery becomes another hidden shared-state seam
+  (see **Actor lifecycle records**).
+- **Live constraints, not open problems.** The kernel never awaits an actor (see
+  **Backpressure**); any feature crossing the semi-trusted line pays for a process
+  boundary (see **Threat model**).
 
 ## Progress
 
 - **2026-06-03.** Examined the codebase and wrote this plan. Verified: meerkat's
   `App` is the kernel; `fetch`/`sync` are one actor shape; `render_content_scene`
-  is a pure `Scene` producer; `netrender::Scene` is `Send` + serializable;
-  `StaticDocument` is the near-term content engine and Nova is not yet in the tree;
-  the linked-data contribution/apply split is the content-actor contract and v5 is
-  the merge key. No code written yet; P0 is the first step.
-- **2026-06-03.** Decisions resolved (Mark): per-origin content actors (the Firefox
-  model); subresource fetch through the I/O fetch actor by message; the runtime
-  crate is **`armillary`** (new, host-neutral). Shared-read snapshots and the
-  `catch_unwind` fault model stand as the working defaults.
+  is a pure `Scene` producer; `netrender::Scene` is `Send` + serializable
+  (refined later: `Send` confirmed, serializability is the weaker separate claim);
+  `StaticDocument` is the near-term content engine and Nova is not yet in the
+  tree; the linked-data contribution/apply split is the content-actor contract
+  and v5 is the merge key. No code written yet; P0 is the first step.
+- **2026-06-03.** Decisions resolved (Mark): per-origin content actors (the
+  Firefox model); subresource fetch through the I/O fetch actor by message; the
+  runtime crate is **`armillary`** (new, host-neutral). Shared-read snapshots and
+  the fault model stand as working defaults.
 - **2026-06-03.** Incorporated an external review. Two load-bearing edits: the
   contribution boundary was overstated (the pure producer is `linked-data`'s
-  `from_*_with_contexts`, not meerkat's `harvest`, which fuses produce + apply), so
-  P2 now splits it into `harvest_contributions`; and `SceneReady` gained a
-  generation / backpressure protocol (drop stale scenes by `nav_generation` /
-  `viewport_generation`, coalesce, extended to input). Also: "host kernel"
-  terminology vs the `kernel` crate; invariant 1 narrowed to the render/present GPU
-  path with P6 GPU-compute called out; granularity refined to the agent-cluster
-  model (per-tile for P2, not a user setting); P0 kept as a `KernelInbox` wrapper,
-  not a mega enum.
+  `from_*_with_contexts`, not meerkat's `harvest`, which fuses produce + apply),
+  so P2 now splits it into `harvest_contributions`; and `SceneReady` gained a
+  generation / backpressure protocol. Also: "host kernel" terminology vs the
+  `kernel` crate; invariant 1 narrowed to the render/present GPU path with P6
+  GPU-compute called out; granularity refined to the agent-cluster model; P0 kept
+  as a `KernelInbox` wrapper, not a mega enum.
+- **2026-06-03.** Refactored against verified concurrency research (wasm-in-browser,
+  browser threading, the model menu) and a codebase critique. Major changes: the
+  kernel/actor boundary is now **type-enforced** (`!Send` kernel context, `Send`
+  actors), making the GPUI lesson structural, with the Xilem view layer named as
+  the kernel-thread programming model on that context. Added a **Composing the
+  alternative models** section (ECS data layout, incremental-query,
+  rayon, reactive-dataflow, capability isolation, OS-multiprocess, CRDT) showing
+  each as a borrowed lesson at a layer rather than a competitor. Pinned the
+  **threat model** to semi-trusted with the Spectre / Site-Isolation tripwire, and
+  descoped **P5** (in-process wasmtime) accordingly. Added the **Technical ground
+  truth** (verified, cited). Affirmed `Scene: Send` by code inspection and
+  separated it from the weaker serializability claim. Flagged the serval cascade's
+  off-thread and concurrent thread-local/global behavior as a P2 verification
+  gate. Added the **Decide now vs defer** framing, switched the fault default to
+  thread respawn over in-place `catch_unwind`, and recorded the snapshot
+  granularity/cost open question (invariant 3).
+- **2026-06-03.** Added the Tailwind lesson to the model menu: borrow the bounded
+  primitive vocabulary and static lowering pattern, not Tailwind itself. For Mere,
+  that means typed tokens / variants / small composable primitives that lower into
+  serval styles or `netrender::Scene`, never utility strings as protocol and never
+  a styling framework inside `armillary`.
+- **2026-06-03.** Tightened the implementation constraints: kernel authority must
+  remain private (`!Send` alone is not enough if a `Send` wrapper leaks graph/GPU
+  access); actor internals may be `!Send` on their own thread while handles and
+  boundary messages are `Send`; actor read models are purpose-built immutable DTOs
+  rather than whole-graph persistence snapshots; respawn is driven by a
+  kernel-owned `ActorSpec`; and P3 now has a script-protocol floor (lifecycle,
+  generation-tagged input, run-to-completion turns, microtask checkpoints,
+  message-based fetch, coherent paint commits, contribution output).
+- **2026-06-03.** Redundancy pass. The Risks section had become a restatement of
+  its home sections, so it was compressed to terse risk + mitigation + pointer
+  bullets; P5 and the invariants-closing note were trimmed to point at
+  **Technical ground truth** and **Risks** rather than re-argue them; invariant 2
+  broadened from "two message kinds" to match the taxonomy (scenes, contributions,
+  content events). Follow-ups: P6's shared-memory line trimmed to a pointer, the
+  Tailwind bullet halved, JSPI given inline context in the defer list, and Progress
+  entry 1's `Scene` serializability wording tagged as later-refined.

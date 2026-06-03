@@ -100,6 +100,11 @@ pub struct Chrome {
     /// The p2p sync-status chip's view-model (S5.0). The host folds the joined
     /// lane's real `SyncStatus` in here; default reads "p2p off".
     pub sync: SyncIndicator,
+    /// A pending "connect to peer" request the host must execute (S5.1): the
+    /// ticket string captured from the address bar when the verb ran. The chrome
+    /// records the intent; the host drains it, drives the sync actor, and clears
+    /// it. (The chrome cannot reach the sync actor itself.)
+    pub pending_connect: Option<String>,
 }
 
 impl Chrome {
@@ -124,6 +129,7 @@ impl Chrome {
             palette: CommandPaletteSession::default(),
             palette_input: TextInput::new(""),
             sync: SyncIndicator::default(),
+            pending_connect: None,
         }
     }
 
@@ -250,7 +256,18 @@ impl Chrome {
                 self.history.visit("mere://welcome".to_string());
                 sync_chrome_from_history(self, true);
             },
+            Command::ConnectPeer => {
+                // Record the intent; the host executes it (the chrome cannot reach
+                // the sync actor). The ticket is whatever is in the address bar.
+                self.pending_connect = Some(self.omnibar.text().trim().to_string());
+            },
         }
+    }
+
+    /// Take a pending "connect to peer" request, if one is queued. The host calls
+    /// this after running a palette command, then drives the sync actor with it.
+    pub fn take_pending_connect(&mut self) -> Option<String> {
+        self.pending_connect.take()
     }
 
     /// The text field that currently owns editing / the caret: the palette query
@@ -606,7 +623,7 @@ mod tests {
         let dom = dom.borrow();
         let root = runner.root();
         assert_eq!(count_class(&dom, root, "palette"), 1, "the panel");
-        assert_eq!(count_class(&dom, root, "cmd-row"), 3, "Back / Forward / Home");
+        assert_eq!(count_class(&dom, root, "cmd-row"), 4, "Back / Forward / Home / Connect");
     }
 
     /// The palette filters by query and runs the match: after navigating away,
@@ -637,9 +654,9 @@ mod tests {
     #[test]
     fn palette_step_wraps() {
         let mut runner = runner("mere://welcome");
-        runner.update(Chrome::open_palette); // empty query → 3 commands
+        runner.update(Chrome::open_palette); // empty query → 4 commands
         runner.update(|c| c.step_palette(-1));
-        assert_eq!(runner.state().palette.selected_index, Some(2), "up from none → last");
+        assert_eq!(runner.state().palette.selected_index, Some(3), "up from none → last");
         runner.update(|c| c.step_palette(1));
         assert_eq!(runner.state().palette.selected_index, Some(0), "wrap to first");
     }

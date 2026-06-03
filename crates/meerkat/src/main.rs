@@ -132,11 +132,10 @@ struct App {
     fetcher: fetch::Fetcher,
     fetch_rx: Receiver<fetch::FetchOutcome>,
     sub_rx: Receiver<fetch::SubresourceOutcome>,
-    /// The p2p sync subsystem (S5.0): owns the transport + the tessera lane on
-    /// its own runtime, held for the app's lifetime (its drop stops sync). Status
-    /// changes arrive on `sync_rx` and fold into the chrome sync chip. `_`-named
-    /// because it is a lifetime guard today; S5.1 gives it called methods.
-    _sync: sync::SyncHost,
+    /// The p2p sync subsystem (S5.0 / S5.1): owns the transport + the tessera lane
+    /// on its own runtime. Status changes arrive on `sync_rx` and fold into the
+    /// chrome sync chip; the "connect to peer" verb drives it via `sync.connect`.
+    sync: sync::SyncHost,
     sync_rx: Receiver<sync::SyncUpdate>,
     /// Per-URL fetched content state, keyed by the node's URL (URL identity).
     content: HashMap<String, fetch::ContentState>,
@@ -231,7 +230,7 @@ impl App {
         // The p2p sync subsystem: binds the transport + joins the tessera demo
         // moot on its own runtime, delivering status changes through `proxy` (the
         // same wake the fetcher uses). Setup failure disables p2p, not the shell.
-        let (sync, sync_rx) = sync::SyncHost::new(proxy, sync::DEMO_MOOT, sync::DEMO_SEED);
+        let (sync, sync_rx) = sync::SyncHost::new(proxy, sync::DEMO_MOOT);
         let mut engines = EngineRegistry::new();
         for engine in nematic::engines() {
             engines.register(engine);
@@ -247,7 +246,7 @@ impl App {
             fetcher,
             fetch_rx,
             sub_rx,
-            _sync: sync,
+            sync,
             sync_rx,
             content: HashMap::new(),
             resources: RefCell::new(resources::ResourceStore::default()),
@@ -565,12 +564,34 @@ impl App {
         if let Some(node) = hit {
             let palette_was_open = self.runner.state().palette_open;
             self.runner.dispatch_click(node, PointerClick::at((x, y)));
+            self.drain_pending_connect();
             self.sync_orrery();
             if palette_was_open && !self.runner.state().palette_open {
                 self.focus_after_palette_close();
             }
             self.request_redraw();
         }
+    }
+
+    /// Execute a pending "connect to peer" request the chrome queued (S5.1): take
+    /// the ticket the verb captured from the address bar and drive the sync actor.
+    /// The chrome records the intent; this is the host executing it.
+    fn drain_pending_connect(&mut self) {
+        let Some(ticket) = self.runner.state().pending_connect.clone() else {
+            return;
+        };
+        self.runner.update(|c| {
+            c.pending_connect = None;
+        });
+        if ticket.is_empty() {
+            tracing::warn!("connect to peer: paste the peer's ticket in the address bar first");
+            return;
+        }
+        match self.sync.connect(&ticket) {
+            Ok(()) => tracing::info!("connect to peer: ticket accepted, overlay forming"),
+            Err(err) => tracing::warn!(%err, "connect to peer failed"),
+        }
+        self.request_redraw();
     }
 
     /// Handle a pressed key. Ctrl+K toggles the command palette; while the
@@ -627,6 +648,7 @@ impl App {
         match key {
             WinitKey::Named(WinitNamedKey::Enter) => {
                 self.runner.update(Chrome::run_palette_selection);
+                self.drain_pending_connect();
                 self.sync_orrery();
                 self.focus_after_palette_close();
                 self.request_redraw();

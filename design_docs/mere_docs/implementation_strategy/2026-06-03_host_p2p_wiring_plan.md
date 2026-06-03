@@ -216,3 +216,25 @@ pattern, not building one.
   verb will call is already proven, so the remaining work is host plumbing, not
   protocol. Note: the final two-instance demo is interactive (drive two shells'
   palettes), so it is Mark's to run; the headless test is the convergence proof.
+- **2026-06-03 — S5.1 complete: the "connect to peer" verb is wired in the host**
+  (Mark gave the go-ahead once S3.2c had landed). The verb is `Command::ConnectPeer`
+  ("Connect to peer (ticket in address bar)") in meerkat's palette. Routing follows
+  the chrome-records-intent / host-executes pattern — and the actor-constellation
+  framing, where it is an outbound command to the sync I/O actor:
+  `Chrome::run_command(ConnectPeer)` captures the address-bar text as the ticket
+  into `Chrome.pending_connect`; the host drains it after either palette-run path
+  (Enter or click) via `App::drain_pending_connect` and calls
+  `SyncHost::connect(ticket)`, which parses the ticket, registers the peer, and
+  tags it on the moot's overlay topic (the proven path). The `SyncHost` now uses a
+  **random per-launch identity** (`InMemoryProvider::random`, so two instances are
+  distinct peers), **authors a starter `commit -> fulfil -> govern` tessera log**
+  on launch (so a connecting peer has something to catch up), and **logs its
+  dialable ticket** at startup to hand out. **Runtime-verified**: the host boots
+  and logs `p2p sync up ... ticket=endpoint...` (~1.3s); the ticket is a real iroh
+  `EndpointTicket`. meerkat 56 tests pass (the palette-row + step-wrap tests
+  updated for the 4th command), no new clippy warnings. **The two-instance demo**
+  (Mark's to run): launch two shells, copy instance A's ticket from its startup
+  log, paste it into instance B's address bar, Ctrl+K → "Connect to peer" → both
+  chips move `tessera: idle` → `tessera: 3 ops` as the logs converge. S5.1 done;
+  S5.2 (persistent identity + on-disk stores) and S5.3 (a real moot / comms
+  surface) remain.
