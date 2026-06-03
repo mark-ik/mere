@@ -1,9 +1,8 @@
 //! Ed25519 keypair, public key, and signature types.
 
-use blake2::{Blake2b, Digest, digest::consts::U32};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand_core::{CryptoRng, RngCore};
-use zeroize::ZeroizeOnDrop;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::IdentityError;
 
@@ -55,29 +54,26 @@ impl Ed25519Keypair {
         Ed25519Signature(self.0.sign(message))
     }
 
-    /// Derive a child keypair from a salt using BLAKE2b.
+    /// Derive a child keypair from a salt using BLAKE3 keyed-hash.
     ///
-    /// `child_seed = BLAKE2b-256(self.signing_key_bytes || salt)`
+    /// `child_seed = BLAKE3-keyed(key = self.signing_key_bytes, data = salt)`
     /// `child_keypair = Ed25519::from_seed(child_seed)`
     ///
-    /// This matches the per-protocol-key derivation pattern from the inherited
-    /// Cable spec §2.2.
+    /// BLAKE3 in keyed-hash mode (the master seed is the key) gives
+    /// domain-separated, deterministic per-protocol key derivation. The
+    /// workspace hashes with BLAKE3 throughout; BLAKE2b is gone.
     ///
     /// The master signing-key bytes never leave this method; the caller
     /// receives only the derived keypair.
     pub fn derive_child(&self, salt: &[u8]) -> Ed25519Keypair {
-        let master_seed = self.0.to_bytes();
+        let mut master_seed = self.0.to_bytes();
 
-        let mut hasher = Blake2b::<U32>::new();
-        hasher.update(master_seed);
-        hasher.update(salt);
-        let digest = hasher.finalize();
+        let digest = blake3::keyed_hash(&master_seed, salt);
+        let child_seed = *digest.as_bytes();
 
-        let mut child_seed = [0u8; 32];
-        child_seed.copy_from_slice(&digest);
+        // Scrub the copied master seed; the SigningKey itself zeroizes on drop.
+        master_seed.zeroize();
 
-        // Note: master_seed is on the stack; it goes out of scope at end of
-        // function. SigningKey internally zeroizes on drop.
         Ed25519Keypair::from_seed(child_seed)
     }
 }

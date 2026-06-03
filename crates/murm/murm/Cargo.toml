@@ -18,8 +18,18 @@ path = "src/lib.rs"
 identity.workspace = true
 transport.workspace = true
 murmuring.workspace = true
-tokio = { version = "1", features = ["io-util"] }
+# LogSync (offline catch-up) is assembled here over a cabal's redb store: the
+# protocol (`p2panda-net`), its sync-event types (`p2panda-sync`), and `Topic`
+# (`p2panda-core`). The store traits live in murmuring; murm only drives the
+# session and drains received operations into the engine.
+p2panda-net = "0.6.1"
+p2panda-sync = "0.6.1"
+p2panda-core = "0.6.1"
+# `rt` for the sync tasks (`tokio::spawn`); `time` bounds the manual `resync`
+# round; `tokio-stream` for the gossip + LogSync subscription streams.
+tokio = { version = "1", features = ["io-util", "rt", "time"] }
+tokio-stream = "0.1"
 thiserror = "1"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["io-util", "macros", "rt", "rt-multi-thread"] }
+tokio = { version = "1", features = ["io-util", "macros", "rt", "rt-multi-thread", "time"] }

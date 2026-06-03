@@ -48,7 +48,7 @@ the calling layer moves them.
 
 ```text
                        murm
-                         │ open_cabal, ingest_post, all_posts,
+                         │ open_cabal, ingest_post, ingest_operation,
                          │ encode / decode / sign / verify / hash_post
                          ▼
                      murmuring

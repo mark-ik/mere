@@ -29,10 +29,17 @@ consumes generically.
   - `Transport` trait — `dial(PeerID, Alpn) -> Stream`, `accept() -> Stream`,
     PeerID / capability surface. Generic associated types for the stream
     type.
-- **`iroh_transport`** — the real implementation.
-  - `IrohTransport` — backed by `iroh` (Phase 2C v0). Real QUIC, real
-    discovery, real gossip topics.
-  - `IrohStream` — the QUIC stream type implementing `AsyncRead + AsyncWrite`.
+- **`p2panda_transport`** — the production implementation.
+  - `P2pandaTransport` — backed by `p2panda-net`'s `Endpoint` (the endpoint
+    authority). Real QUIC, with p2panda-net discovery, relay/hole-punching,
+    and actor supervision. Replaced a hand-rolled iroh `Router`.
+  - `P2pandaStream` — the QUIC stream type implementing `AsyncRead + AsyncWrite`.
+  - **Gossip space sync** — `builder().gossip()` enables a gossip overlay;
+    `subscribe(topic) -> GossipHandle` joins a space topic to broadcast / receive
+    operations (live convergence for online peers); `set_topics(peer, …)`
+    bootstraps the overlay (discovery does this in production). RBSR offline
+    catch-up via `LogSync` is the heavier follow-on (needs `p2panda-store`
+    `LogStore`/`TopicStore` adopted for the post store).
 - **`memory`** — the in-memory test fixture.
   - `MemoryTransport` — paired channels, no network. Used for unit tests of
     higher-level protocols without booting iroh.
@@ -98,9 +105,10 @@ for communities where membership-graph leakage is unacceptable.
 ## Status
 
 Pre-1.0. The `Transport` trait, `MemoryTransport` (in-memory test fixture),
-and `IrohTransport` (real iroh-backed implementation, Phase 2C v0) are in
-place. Gossip-topic surface and persistent `BlobStore` backend continue to
-land. Veilid backend is planned but not yet wired.
+and `P2pandaTransport` (production, p2panda-net `Endpoint` as the endpoint
+authority) are in place; the hand-rolled iroh `Router` was retired. Production
+discovery wiring and a persistent `BlobStore` backend continue to land. Veilid
+backend is planned but not yet wired.
 
 Forward direction is tracked in the
 [event-DAG substrate brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/implementation_strategy/2026-05-07_event_dag_substrate_brief.md):

@@ -6,14 +6,14 @@
 //! - A 32-byte symmetric **cabal key** ([`CabalKey`], shared secret,
 //!   distributed out-of-band among members)
 //! - A **cabal id** ([`CabalId`], public identifier, derived from the key
-//!   via BLAKE2b — used for addressing and discovery without revealing the
+//!   via BLAKE3 — used for addressing and discovery without revealing the
 //!   secret)
 //! - One or more **named channels** (per Cable spec §2.5: `"session"`,
 //!   `"links"`, etc.)
 //! - A persistent or ephemeral post store (Phase 2B uses in-memory)
 //!
 //! Per Cable spec §2.2, the user's per-cabal Ed25519 keypair is derived
-//! from `BLAKE2b(master_secret || cabal_key)` — that derivation lives in
+//! from `BLAKE3(master_secret || cabal_key)` — that derivation lives in
 //! [`identity::IdentityProvider::derive_keypair`].
 
 use std::sync::Arc;
@@ -69,7 +69,7 @@ impl std::fmt::Debug for CabalKey {
     }
 }
 
-/// A cabal's public identifier (`BLAKE2b(cabal_key)`).
+/// A cabal's public identifier (`BLAKE3(cabal_key)`).
 ///
 /// Suitable as a routing identifier without revealing the secret. Two
 /// peers who hold the same cabal key compute the same `CabalId`.

@@ -1,0 +1,38 @@
+# Standalone spike probe (own [workspace]). Step 2 of the sync-as-projection
+# plan: prove the LogSync *offline catch-up* lane can be backed by a PURE-RUST
+# store. We adopt p2panda's storage-agnostic traits (LogStore / OperationStore /
+# TopicStore) and implement them over redb (transactional, ordered keys, range
+# scans, in-memory backend) rather than p2panda-store's SQLite store — keeping
+# the stack pure-Rust and reusing a dep Mere already has. The decisive proof:
+# `LogSync::builder(redb_store, endpoint, gossip).spawn()` accepts our store.
+#
+# See design_docs/mere_docs/implementation_strategy/2026-06-02_logsync_sync_as_projection_plan.md
+[package]
+name = "probe-redb-logstore"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "probe-redb-logstore"
+path = "src/main.rs"
+
+[dependencies]
+# Traits only: `logs`/`topics` are always available; `operations` (OperationStore)
+# is behind `macros`. `default-features = false` keeps the SQLite (C) backend out.
+p2panda-store = { version = "0.6.1", default-features = false, features = ["macros"] }
+p2panda-net = "0.6.1"
+p2panda-core = "0.6.1"
+# Sync event types (`FromSync`, `TopicLogSyncEvent`) for the two-peer catch-up.
+p2panda-sync = "0.6.1"
+# iroh 0.98 matches p2panda-net 0.6.1's pin; only used to build a node's own
+# dialable loopback `EndpointAddr` for the explicit test bootstrap.
+iroh = "0.98"
+redb = "2"
+serde = { version = "1", features = ["derive"] }
+blake3 = "1.5"
+thiserror = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tokio-stream = "0.1"
+
+[workspace]

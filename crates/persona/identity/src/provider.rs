@@ -31,9 +31,9 @@ pub trait IdentityProvider: Send + Sync {
 
     /// Derive a per-protocol keypair from a salt.
     ///
-    /// Derivation is BLAKE2b-256 of `master_seed || salt`, the result
+    /// Derivation is `BLAKE3-keyed(master_seed, salt)`, the result
     /// becoming the seed of a new Ed25519 keypair (see
-    /// [`Ed25519Keypair::derive_child`]). Per the inherited Cable spec §2.2.
+    /// [`Ed25519Keypair::derive_child`]).
     ///
     /// Salts are protocol- or use-case-specific. Typical salts:
     /// - Cable: the cabal key (32 bytes)

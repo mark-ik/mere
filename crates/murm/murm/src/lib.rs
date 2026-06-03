@@ -43,9 +43,11 @@
 
 mod cabal;
 mod error;
+mod gossip_sync;
 
 pub use crate::cabal::{CabalHandle, CabalId, CabalKey};
 pub use crate::error::MurmError;
+pub use crate::gossip_sync::SyncedCabal;
 
 // Re-export key types from the layers we sit on, so consumers don't all
 // need direct dependencies on the lower crates.
@@ -60,8 +62,6 @@ pub use murmuring::cable::{decode_post, encode_post, hash_post, sign_post, verif
 use std::sync::Arc;
 
 use murmuring::CableEngine;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-// AsyncWriteExt is used for write_all/flush/shutdown; AsyncReadExt for read_exact/read_to_end.
 
 /// The Mere bilateral-comms supercrate entry point.
 ///
@@ -133,7 +133,7 @@ impl<T: Transport> Murm<T> {
     /// Open or join a Cable cabal by its secret cabal key.
     ///
     /// Derives the per-cabal Ed25519 keypair (Cable spec §2.2),
-    /// computes the public cabal id (BLAKE2b of the key), and creates an
+    /// computes the public cabal id (BLAKE3 of the key), and creates an
     /// in-memory store for the cabal. Idempotent: opening the same key
     /// twice returns equivalent handles backed by the same underlying
     /// session.
@@ -147,7 +147,7 @@ impl<T: Transport> Murm<T> {
 
     /// Compute the per-cabal keypair for a given cabal key.
     ///
-    /// Per Cable spec §2.2: `child = BLAKE2b(master_seed || cabal_key)`,
+    /// Per Cable spec §2.2: `child = BLAKE3(master_seed || cabal_key)`,
     /// `keypair = Ed25519::from_seed(child)`.
     ///
     /// The returned keypair signs cabal posts authored by this user. The
@@ -159,158 +159,6 @@ impl<T: Transport> Murm<T> {
         Ok(self.identity.derive_keypair(cabal_key.as_bytes())?)
     }
 
-    /// Open one Cable connection to a peer and push all current posts in
-    /// the given cabal to them.
-    ///
-    /// Connection layout:
-    /// - 32 bytes: cabal_id (peers verify they share the same cabal)
-    /// - Then: a sequence of `(varint length-prefix, encoded post bytes)`
-    ///   tuples, one per post
-    /// - Sender drops the stream when done; receiver detects EOF and stops
-    ///
-    /// Returns the number of posts pushed.
-    ///
-    /// **Phase 2B scope**: a one-shot snapshot push. Live "send-as-you-post"
-    /// broadcast is a future chunk; for now the caller invokes
-    /// `push_cabal_to_peer` whenever they want to share state.
-    pub async fn push_cabal_to_peer(
-        &self,
-        peer: PeerID,
-        cabal_id: &CabalId,
-    ) -> Result<usize, MurmError> {
-        let alpn = Alpn::new("mere/cable/v1");
-        let mut stream = self.transport.connect(peer, alpn).await?;
-
-        // Send cabal_id header.
-        stream
-            .write_all(cabal_id.as_bytes())
-            .await
-            .map_err(|e| MurmError::Backend(format!("write cabal_id: {e}")))?;
-
-        // Send all posts in this cabal.
-        let posts = self.cable.all_posts(cabal_id.as_bytes());
-        let n = posts.len();
-        for post in &posts {
-            let bytes = encode_post(post);
-            let len_prefix = encode_varint_for_len(bytes.len() as u64);
-            stream
-                .write_all(&len_prefix)
-                .await
-                .map_err(|e| MurmError::Backend(format!("write len: {e}")))?;
-            stream
-                .write_all(&bytes)
-                .await
-                .map_err(|e| MurmError::Backend(format!("write post: {e}")))?;
-        }
-        stream
-            .flush()
-            .await
-            .map_err(|e| MurmError::Backend(format!("flush: {e}")))?;
-
-        // Clean half-close + ACK-by-EOF:
-        // 1. Shutdown the write half (sends QUIC FIN). Peer's reader
-        //    sees EOF; their loop returns.
-        // 2. Read the recv side to EOF. Peer's drop (after their loop
-        //    returns) closes their send half, sending FIN back to us.
-        //    This gates our drop on the peer's completion — without it,
-        //    our connection-drop would race with their stream-drain and
-        //    truncate the last in-flight QUIC frame(s) on a multi-post
-        //    push (observed: 2/3 posts arriving on iroh transport).
-        stream
-            .shutdown()
-            .await
-            .map_err(|e| MurmError::Backend(format!("shutdown: {e}")))?;
-        let mut ack = Vec::new();
-        let _ = stream.read_to_end(&mut ack).await;
-        Ok(n)
-    }
-
-    /// Accept a single incoming Cable connection and ingest posts from
-    /// it into the matching cabal's store.
-    ///
-    /// Returns the number of posts successfully ingested.
-    ///
-    /// **Phase 2B scope**: handles one connection per call (no internal
-    /// loop). Production deployments will call this in a loop on a
-    /// dedicated tokio task.
-    ///
-    /// Errors if the peer's claimed cabal_id is not currently open in
-    /// this Murm, or on any I/O / protocol error.
-    pub async fn accept_cable_connection(&self) -> Result<usize, MurmError> {
-        let alpn = Alpn::new("mere/cable/v1");
-        let stream = self.transport.accept(alpn).await?;
-        self.handle_cable_stream(stream).await
-    }
-
-    /// Internal: process one fully-established Cable stream.
-    async fn handle_cable_stream<S>(&self, mut stream: S) -> Result<usize, MurmError>
-    where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin,
-    {
-        // Read cabal_id header.
-        let mut cabal_id_bytes = [0u8; 32];
-        stream
-            .read_exact(&mut cabal_id_bytes)
-            .await
-            .map_err(|e| MurmError::Backend(format!("read cabal_id: {e}")))?;
-
-        if !self.cable.has_cabal(&cabal_id_bytes) {
-            return Err(MurmError::CabalNotFound);
-        }
-
-        // Read varint-prefixed posts until EOF.
-        let mut count = 0usize;
-        loop {
-            let len = match read_varint_async(&mut stream).await {
-                Ok(n) => n,
-                Err(_) => break, // EOF or error → done.
-            };
-            let mut buf = vec![0u8; len as usize];
-            if stream.read_exact(&mut buf).await.is_err() {
-                break;
-            }
-            let post = decode_post(&buf)?;
-            self.cable.ingest_post(&cabal_id_bytes, post)?;
-            count += 1;
-        }
-        Ok(count)
-    }
-}
-
-/// LEB128 varint encode for a length prefix. Internal helper for the
-/// snapshot-push wire framing.
-fn encode_varint_for_len(mut value: u64) -> Vec<u8> {
-    let mut out = Vec::with_capacity(10);
-    loop {
-        let byte = (value & 0x7F) as u8;
-        value >>= 7;
-        if value == 0 {
-            out.push(byte);
-            return out;
-        }
-        out.push(byte | 0x80);
-    }
-}
-
-/// Read a LEB128 varint from an async reader. Returns `Err` on EOF or
-/// read error (caller treats either as "done").
-async fn read_varint_async<R: AsyncReadExt + Unpin>(reader: &mut R) -> std::io::Result<u64> {
-    let mut value = 0u64;
-    let mut shift = 0u32;
-    let mut buf = [0u8; 1];
-    for _ in 0..10 {
-        reader.read_exact(&mut buf).await?;
-        let byte = buf[0];
-        value |= ((byte & 0x7F) as u64) << shift;
-        if byte & 0x80 == 0 {
-            return Ok(value);
-        }
-        shift += 7;
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::InvalidData,
-        "varint overflow",
-    ))
 }
 
 /// Crate version.
@@ -397,7 +245,7 @@ mod tests {
         let murm = make_murm();
         let key = CabalKey::new([42; 32]);
         let cabal = murm.open_cabal(&key).unwrap();
-        // The id is BLAKE2b of the key — independent of which Murm
+        // The id is BLAKE3 of the key — independent of which Murm
         // instance opened it. Two different Murms with the same cabal_key
         // see the same id.
         let murm2 = make_murm();
@@ -433,59 +281,6 @@ mod tests {
         // can be passed across tasks/threads.
         fn assert_send_sync<T: Send + Sync + Clone + 'static>() {}
         assert_send_sync::<CabalHandle>();
-    }
-
-    /// **Transport-level sync demo.** Two Murm instances on a paired
-    /// memory transport. Alice posts locally; Bob accepts a Cable
-    /// connection and ingests Alice's snapshot. After the exchange,
-    /// Bob's history matches Alice's.
-    #[tokio::test]
-    async fn cable_snapshot_sync_via_transport() {
-        use transport::memory::MemoryTransport;
-
-        let alice_provider: Arc<dyn IdentityProvider> =
-            Arc::new(identity::InMemoryProvider::from_seed([100; 32]));
-        let bob_provider: Arc<dyn IdentityProvider> =
-            Arc::new(identity::InMemoryProvider::from_seed([200; 32]));
-
-        let alice_node = PeerID::from_public_key(alice_provider.master_public_key());
-        let bob_node = PeerID::from_public_key(bob_provider.master_public_key());
-
-        let (alice_t, bob_t) = MemoryTransport::pair(alice_node, bob_node);
-
-        let alice = Murm::new(alice_provider, alice_t);
-        let bob = Murm::new(bob_provider, bob_t);
-
-        let cabal_key = CabalKey::new([0xab; 32]);
-        let alice_cabal = alice.open_cabal(&cabal_key).unwrap();
-        let bob_cabal = bob.open_cabal(&cabal_key).unwrap();
-        assert_eq!(alice_cabal.id(), bob_cabal.id());
-
-        // Alice authors three posts locally.
-        alice_cabal.send_text_at("session", "one", 1).unwrap();
-        alice_cabal.send_text_at("session", "two", 2).unwrap();
-        alice_cabal.send_text_at("session", "three", 3).unwrap();
-        assert_eq!(alice_cabal.history("session").len(), 3);
-        assert!(bob_cabal.history("session").is_empty());
-
-        // Concurrent push (alice → bob) and accept (bob).
-        let cabal_id = *alice_cabal.id();
-        let push_fut = alice.push_cabal_to_peer(bob_node, &cabal_id);
-        let accept_fut = bob.accept_cable_connection();
-        let (push_res, accept_res) = tokio::join!(push_fut, accept_fut);
-
-        let pushed = push_res.expect("push succeeded");
-        let ingested = accept_res.expect("accept succeeded");
-        assert_eq!(pushed, 3, "alice pushed 3 posts");
-        assert_eq!(ingested, 3, "bob ingested 3 posts");
-
-        // Bob's history now mirrors alice's.
-        assert_eq!(bob_cabal.history("session").len(), 3);
-        for post in bob_cabal.history("session") {
-            // All ingested posts pass signature verification (ingest_post
-            // enforces this); double-check explicitly.
-            assert!(verify_post(&post));
-        }
     }
 
     #[test]
@@ -605,16 +400,20 @@ mod tests {
 
         let (alice_t, bob_t) = MemoryTransport::pair(alice_id, bob_id);
 
-        // Alice signs a post addressed to a (made-up for this test) cabal key.
+        // Alice signs a post addressed to a (made-up for this test) cabal.
         let cabal_key = CabalKey::new([0x42; 32]);
+        let cabal_id = [0x42; 32]; // opaque cabal id; this test exercises the wire
         let alice_kp = alice_provider.derive_keypair(cabal_key.as_bytes()).unwrap();
 
         let post = sign_post(
             &alice_kp,
+            cabal_id,
+            0,
+            None,
             vec![],
             PostKind::Text {
                 channel: ChannelName::new("session"),
-                text: "hello, bob — this is alice from a real signed post".to_string(),
+                text: "hello, bob, this is alice from a real signed post".to_string(),
                 timestamp_ms: 1_700_000_000_000,
             },
         );
@@ -672,92 +471,10 @@ mod tests {
                 timestamp_ms,
             } => {
                 assert_eq!(channel.as_str(), "session");
-                assert_eq!(text, "hello, bob — this is alice from a real signed post");
+                assert_eq!(text, "hello, bob, this is alice from a real signed post");
                 assert_eq!(*timestamp_ms, 1_700_000_000_000);
             }
             _ => panic!("expected Text post"),
-        }
-    }
-
-    /// **Real iroh transport.** Same shape as
-    /// [`cable_snapshot_sync_via_transport`] (memory-transport version) but
-    /// using [`IrohTransport`] over loopback QUIC. Validates that the
-    /// generic-over-transport `Murm` works against the production
-    /// transport without code changes — only test setup differs (binding
-    /// real endpoints, cross-registering EndpointAddrs).
-    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-    async fn cable_snapshot_sync_via_iroh_transport() {
-        use transport::IrohTransport;
-
-        let alice_provider = identity::InMemoryProvider::from_seed([101; 32]);
-        let bob_provider = identity::InMemoryProvider::from_seed([202; 32]);
-
-        let alice_kp = alice_provider.master_keypair().clone();
-        let bob_kp = bob_provider.master_keypair().clone();
-
-        let cable_alpn = Alpn::new("mere/cable/v1");
-
-        let alice_transport = IrohTransport::bind(&alice_kp, vec![cable_alpn.clone()])
-            .await
-            .expect("alice bind");
-        let bob_transport = IrohTransport::bind(&bob_kp, vec![cable_alpn.clone()])
-            .await
-            .expect("bob bind");
-
-        // Cross-register so connect-by-PeerID works without DNS.
-        alice_transport
-            .add_peer(bob_transport.endpoint_addr())
-            .expect("alice.add_peer");
-        bob_transport
-            .add_peer(alice_transport.endpoint_addr())
-            .expect("bob.add_peer");
-
-        let bob_node = bob_transport.local_peer_id();
-
-        let alice_provider_arc: Arc<dyn IdentityProvider> = Arc::new(alice_provider);
-        let bob_provider_arc: Arc<dyn IdentityProvider> = Arc::new(bob_provider);
-
-        let alice = Murm::new(alice_provider_arc, alice_transport);
-        let bob = Arc::new(Murm::new(bob_provider_arc, bob_transport));
-
-        let cabal_key = CabalKey::new([0xcd; 32]);
-        let alice_cabal = alice.open_cabal(&cabal_key).unwrap();
-        let bob_cabal = bob.open_cabal(&cabal_key).unwrap();
-        assert_eq!(alice_cabal.id(), bob_cabal.id());
-
-        // Alice authors three posts.
-        alice_cabal.send_text_at("session", "uno", 1).unwrap();
-        alice_cabal.send_text_at("session", "dos", 2).unwrap();
-        alice_cabal.send_text_at("session", "tres", 3).unwrap();
-        assert_eq!(alice_cabal.history("session").len(), 3);
-        assert!(bob_cabal.history("session").is_empty());
-
-        // Spawn Bob's accept first so the queue is being drained when
-        // Alice's connection arrives. (Push and accept don't deadlock here
-        // because push writes the cabal_id immediately after connect,
-        // unblocking Bob's underlying accept_bi.)
-        let bob_for_accept = Arc::clone(&bob);
-        let bob_task = tokio::spawn(async move {
-            bob_for_accept
-                .accept_cable_connection()
-                .await
-                .expect("bob accept")
-        });
-
-        let cabal_id = *alice_cabal.id();
-        let pushed = alice
-            .push_cabal_to_peer(bob_node, &cabal_id)
-            .await
-            .expect("alice push");
-        let ingested = bob_task.await.expect("bob task");
-
-        assert_eq!(pushed, 3);
-        assert_eq!(ingested, 3);
-
-        let bob_history = bob_cabal.history("session");
-        assert_eq!(bob_history.len(), 3);
-        for post in bob_history {
-            assert!(verify_post(&post));
         }
     }
 
@@ -780,6 +497,9 @@ mod tests {
             .unwrap();
         let post = sign_post(
             &alice_kp,
+            [0x42; 32],
+            0,
+            None,
             vec![],
             PostKind::Text {
                 channel: ChannelName::new("session"),
@@ -789,9 +509,11 @@ mod tests {
         );
         let mut post_bytes = encode_post(&post);
 
-        // Tamper: flip a byte in the body region (after the 96-byte
-        // pubkey+signature prefix). Bob should detect this.
-        post_bytes[100] ^= 0x01;
+        // Tamper: flip a byte partway through the encoded operation. Bob must
+        // reject it, whether that surfaces as a decode failure or a bad
+        // signature.
+        let mid = post_bytes.len() / 2;
+        post_bytes[mid] ^= 0x01;
 
         let alpn = Alpn::new("mere/cable/v1");
         let (alice_stream_res, bob_stream_res) =
@@ -808,10 +530,13 @@ mod tests {
         let mut received = vec![0u8; post_len];
         bob_stream.read_exact(&mut received).await.unwrap();
 
-        let decoded = decode_post(&received).expect("decode succeeds; tamper is in body");
+        let detected = match decode_post(&received) {
+            Ok(post) => !verify_post(&post),
+            Err(_) => true,
+        };
         assert!(
-            !verify_post(&decoded),
-            "tampered post should fail signature verification"
+            detected,
+            "tampered post must be rejected (decode failure or bad signature)"
         );
     }
 }

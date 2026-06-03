@@ -20,7 +20,7 @@
 //! ## What's NOT in here yet (Phase 2B)
 //!
 //! - Cable wire-protocol encoding/decoding (`protocols/cable/wire.rs`)
-//! - BLAKE2b-256 post-hash computation
+//! - BLAKE3-256 post-hash computation
 //! - Causal-DAG management (links resolution, head tracking)
 //! - Channel time-range request sync
 //! - Concrete `BilateralProtocol` implementations

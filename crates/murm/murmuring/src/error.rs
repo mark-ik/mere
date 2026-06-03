@@ -13,6 +13,11 @@ pub enum MurmuringError {
     #[error("invalid post signature")]
     InvalidSignature,
 
+    /// A post's claimed `cabal_id` does not match the cabal it was ingested
+    /// into — the post belongs to a different cabal (space).
+    #[error("post belongs to a different cabal")]
+    CabalMismatch,
+
     /// A required field is missing from a post (e.g. text body on `post/text`).
     #[error("missing required field: {0}")]
     MissingField(&'static str),

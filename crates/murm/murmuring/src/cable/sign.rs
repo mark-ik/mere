@@ -1,57 +1,93 @@
-//! Cable post signing and verification.
+//! Cabal post signing and verification — p2panda-core operation semantics.
 //!
-//! Per Cable spec, the post signature is an Ed25519 signature over the
-//! "signed region" of the canonical wire encoding: every byte after the
-//! signature field itself, i.e.,
+//! A post's signature is the Ed25519 signature its author's per-cabal key
+//! places over the canonical operation header (see [`crate::cable::wire`]).
+//! Signing and verification go through p2panda-core's [`Header::sign`] /
+//! [`Header::verify`], so murm posts are authenticated exactly like any other
+//! operation on the substrate.
 //!
-//! ```text
-//! num_links | links | post_type | timestamp | body
-//! ```
-//!
-//! [`sign_post`] constructs a signed [`Post`] from a keypair, links, and
-//! payload kind. [`verify_post`] checks that an existing `Post`'s signature
-//! is valid against its `author` field.
+//! [`sign_post`] constructs a signed [`Post`] in a cabal from a keypair, its
+//! per-author log position (`seq_num`/`backlink`), links, and payload kind.
+//! [`verify_post`] checks an existing `Post`'s signature against its `author`.
 
 use identity::Ed25519Keypair;
+use p2panda_core::{Signature, SigningKey, VerifyingKey};
 
-use crate::cable::wire::encode_signed_region;
+use crate::cable::wire::{from_p2_sig, to_p2_sig, unsigned_header};
 use crate::{Post, PostId, PostKind};
 
-/// Sign a new [`Post`] with the given keypair.
+/// Sign a new [`Post`] in the given cabal with the given per-cabal keypair.
 ///
-/// The post's `author` field is set to the keypair's public key; the
-/// `signature` field is set to the Ed25519 signature over the canonical
-/// signed-region bytes.
-pub fn sign_post(keypair: &Ed25519Keypair, links: Vec<PostId>, kind: PostKind) -> Post {
-    let mut signed_region = Vec::new();
-    encode_signed_region(&mut signed_region, &links, &kind);
-    let signature = keypair.sign(&signed_region);
+/// `cabal_id` (= `BLAKE3(cabal_key)`) is written into the signed header, so the
+/// resulting post is self-describing. `seq_num`/`backlink` place the operation
+/// in this author's per-cabal log (`0`/`None` for the author's first operation;
+/// thereafter `seq_num` increments and `backlink` is the previous operation's
+/// id). The keypair's secret seed builds the p2panda [`SigningKey`] (both are
+/// ed25519-dalek underneath); `Post.signature` is the operation header's Ed25519
+/// signature, and `Post.author` is the keypair's public key.
+pub fn sign_post(
+    keypair: &Ed25519Keypair,
+    cabal_id: [u8; 32],
+    seq_num: u64,
+    backlink: Option<PostId>,
+    links: Vec<PostId>,
+    kind: PostKind,
+) -> Post {
+    let signing_key = SigningKey::from_bytes(&keypair.to_seed());
+    let (mut header, _body) = unsigned_header(
+        signing_key.verifying_key(),
+        cabal_id,
+        seq_num,
+        backlink,
+        &links,
+        &kind,
+    );
+    header.sign(&signing_key);
+    let signature: Signature = header.signature.expect("header.sign sets the signature");
     Post {
         author: keypair.public_key(),
+        cabal_id,
+        seq_num,
+        backlink,
         links,
         kind,
-        signature,
+        signature: from_p2_sig(&signature),
     }
 }
 
 /// Verify a post's signature.
 ///
-/// Returns `true` iff the signature is a valid Ed25519 signature by
-/// `post.author` over the canonical signed-region bytes computed from
-/// `post.links` and `post.kind`. A `false` return covers signature
-/// invalidity, mismatched author, or a tampered body.
+/// Returns `true` iff `post.signature` is a valid Ed25519 signature by
+/// `post.author` over the canonical operation header reconstructed from the
+/// post's `cabal_id`, `seq_num`, `backlink`, `links`, and `kind`. A `false`
+/// return covers signature invalidity, a mismatched author, a different cabal, a
+/// tampered log position, or a tampered body — anything that changes the header
+/// preimage.
 pub fn verify_post(post: &Post) -> bool {
-    let mut signed_region = Vec::new();
-    encode_signed_region(&mut signed_region, &post.links, &post.kind);
-    post.author.verify(&signed_region, &post.signature)
+    let Ok(verifying_key) = VerifyingKey::from_bytes(&post.author.to_bytes()) else {
+        return false;
+    };
+    let (mut header, _body) = unsigned_header(
+        verifying_key,
+        post.cabal_id,
+        post.seq_num,
+        post.backlink,
+        &post.links,
+        &post.kind,
+    );
+    header.signature = Some(to_p2_sig(&post.signature));
+    header.verify()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cable::wire::{decode_post, encode_post};
-    use crate::{ChannelName, InfoEntry, PostKind};
+    use crate::cable::wire::{decode_post, encode_post, operation_id};
+    use crate::{ChannelName, InfoEntry};
     use identity::{IdentityProvider, InMemoryProvider};
+
+    /// A fixed cabal id for the signing tests.
+    const CABAL: [u8; 32] = [0xca; 32];
 
     fn keypair() -> Ed25519Keypair {
         InMemoryProvider::from_seed([99; 32])
@@ -59,10 +95,23 @@ mod tests {
             .unwrap()
     }
 
+    /// Sign a root operation (first in the log: seq 0, no backlink).
+    fn root(kp: &Ed25519Keypair, links: Vec<PostId>, kind: PostKind) -> Post {
+        sign_post(kp, CABAL, 0, None, links, kind)
+    }
+
+    fn text(t: &str) -> PostKind {
+        PostKind::Text {
+            channel: ChannelName::new("c"),
+            text: t.to_string(),
+            timestamp_ms: 1,
+        }
+    }
+
     #[test]
     fn sign_then_verify_text() {
         let kp = keypair();
-        let post = sign_post(
+        let post = root(
             &kp,
             vec![],
             PostKind::Text {
@@ -73,18 +122,16 @@ mod tests {
         );
         assert!(verify_post(&post));
         assert_eq!(post.author.to_bytes(), kp.public_key().to_bytes());
+        assert_eq!(post.cabal_id, CABAL);
+        assert_eq!(post.seq_num, 0);
+        assert_eq!(post.backlink, None);
     }
 
     #[test]
     fn sign_then_verify_all_post_types() {
         let kp = keypair();
-
         let cases: Vec<PostKind> = vec![
-            PostKind::Text {
-                channel: ChannelName::new("c"),
-                text: "x".to_string(),
-                timestamp_ms: 1,
-            },
+            text("x"),
             PostKind::Delete {
                 posts: vec![PostId::new([1; 32]), PostId::new([2; 32])],
                 timestamp_ms: 2,
@@ -107,18 +154,53 @@ mod tests {
                 timestamp_ms: 6,
             },
         ];
-
         for kind in cases {
             let kind_name = kind.kind_name();
-            let post = sign_post(&kp, vec![], kind);
+            let post = root(&kp, vec![], kind);
             assert!(verify_post(&post), "verify failed for {kind_name}");
         }
     }
 
     #[test]
+    fn per_author_log_chain_verifies_and_round_trips() {
+        // op0 is the log root; op1 chains onto it via seq_num + backlink.
+        let kp = keypair();
+        let op0 = root(&kp, vec![], text("a"));
+        assert!(verify_post(&op0));
+        let id0 = operation_id(&op0);
+
+        let op1 = sign_post(&kp, CABAL, 1, Some(id0), vec![], text("b"));
+        assert!(verify_post(&op1));
+        assert_eq!(op1.seq_num, 1);
+        assert_eq!(op1.backlink, Some(id0));
+
+        // The log position survives the wire round trip.
+        let decoded = decode_post(&encode_post(&op1)).expect("decode");
+        assert_eq!(decoded.seq_num, 1);
+        assert_eq!(decoded.backlink, Some(id0));
+        assert!(verify_post(&decoded));
+    }
+
+    #[test]
+    fn verify_rejects_tampered_log_position() {
+        // seq_num and backlink are signed; tampering either breaks verification.
+        let kp = keypair();
+        let id0 = operation_id(&root(&kp, vec![], text("a")));
+        let op1 = sign_post(&kp, CABAL, 1, Some(id0), vec![], text("b"));
+
+        let mut bad_seq = op1.clone();
+        bad_seq.seq_num = 2;
+        assert!(!verify_post(&bad_seq));
+
+        let mut bad_backlink = op1.clone();
+        bad_backlink.backlink = Some(PostId::new([0xee; 32]));
+        assert!(!verify_post(&bad_backlink));
+    }
+
+    #[test]
     fn verify_rejects_tampered_text() {
         let kp = keypair();
-        let mut post = sign_post(
+        let mut post = root(
             &kp,
             vec![],
             PostKind::Text {
@@ -127,8 +209,6 @@ mod tests {
                 timestamp_ms: 1,
             },
         );
-
-        // Mutate the text — signature should no longer verify.
         if let PostKind::Text { ref mut text, .. } = post.kind {
             *text = "tampered".to_string();
         }
@@ -136,24 +216,12 @@ mod tests {
     }
 
     #[test]
-    fn verify_rejects_tampered_timestamp() {
+    fn verify_rejects_tampered_cabal_id() {
+        // The cabal id is signed, so swapping it invalidates the signature —
+        // a post can't be replayed into a different cabal.
         let kp = keypair();
-        let mut post = sign_post(
-            &kp,
-            vec![],
-            PostKind::Join {
-                channel: ChannelName::new("c"),
-                timestamp_ms: 100,
-            },
-        );
-
-        if let PostKind::Join {
-            ref mut timestamp_ms,
-            ..
-        } = post.kind
-        {
-            *timestamp_ms = 200;
-        }
+        let mut post = root(&kp, vec![], text("x"));
+        post.cabal_id = [0xff; 32];
         assert!(!verify_post(&post));
     }
 
@@ -163,8 +231,7 @@ mod tests {
         let kp_bob = InMemoryProvider::from_seed([0; 32])
             .derive_keypair(b"signing-test")
             .unwrap();
-
-        let mut post = sign_post(
+        let mut post = root(
             &kp_alice,
             vec![],
             PostKind::Text {
@@ -173,9 +240,8 @@ mod tests {
                 timestamp_ms: 1,
             },
         );
-
-        // Replace the author claim with bob's public key — signature was
-        // alice's, so verification should fail.
+        // Replace the author claim with bob's key — alice's signature no longer
+        // matches the (now bob-authored) header preimage.
         post.author = kp_bob.public_key();
         assert!(!verify_post(&post));
     }
@@ -183,7 +249,7 @@ mod tests {
     #[test]
     fn signed_post_round_trips_through_wire_encoding() {
         let kp = keypair();
-        let post = sign_post(
+        let post = root(
             &kp,
             vec![PostId::new([7; 32])],
             PostKind::Text {
@@ -192,71 +258,45 @@ mod tests {
                 timestamp_ms: 1_700_000_000_000,
             },
         );
-
-        // Encode → decode → re-verify.
         let encoded = encode_post(&post);
         let decoded = decode_post(&encoded).expect("decode failed");
         assert!(
             verify_post(&decoded),
             "decoded post failed signature verification"
         );
-
-        // And re-encoding the decoded post yields the same bytes.
-        let re_encoded = encode_post(&decoded);
-        assert_eq!(encoded, re_encoded);
+        assert_eq!(encoded, encode_post(&decoded));
     }
 
     #[test]
     fn deterministic_signing_for_same_input() {
-        // Ed25519 signatures are deterministic per RFC 8032: signing the
-        // same message with the same keypair yields the same signature.
-        // We rely on this for content-addressing stability.
+        // Ed25519 signing is deterministic (RFC 8032): same input → same
+        // signature. We rely on this for content-addressing stability.
         let kp = keypair();
-        let post1 = sign_post(
-            &kp,
-            vec![],
-            PostKind::Text {
-                channel: ChannelName::new("c"),
-                text: "x".to_string(),
-                timestamp_ms: 1,
-            },
-        );
-        let post2 = sign_post(
-            &kp,
-            vec![],
-            PostKind::Text {
-                channel: ChannelName::new("c"),
-                text: "x".to_string(),
-                timestamp_ms: 1,
-            },
-        );
-        assert_eq!(
-            post1.signature.to_bytes(),
-            post2.signature.to_bytes(),
-            "Ed25519 signing is supposed to be deterministic"
-        );
+        let mk = || root(&kp, vec![], text("x"));
+        assert_eq!(mk().signature.to_bytes(), mk().signature.to_bytes());
     }
 
     #[test]
     fn different_links_yield_different_signatures() {
         let kp = keypair();
-        let kind = || PostKind::Text {
-            channel: ChannelName::new("c"),
-            text: "x".to_string(),
-            timestamp_ms: 1,
-        };
-        let post_no_links = sign_post(&kp, vec![], kind());
-        let post_with_links = sign_post(&kp, vec![PostId::new([1; 32])], kind());
-
-        // Signatures should differ because the signed region differs (links
-        // are part of it).
+        let no_links = root(&kp, vec![], text("x"));
+        let with_links = root(&kp, vec![PostId::new([1; 32])], text("x"));
+        // The signed header carries `parents`, so the signatures differ.
         assert_ne!(
-            post_no_links.signature.to_bytes(),
-            post_with_links.signature.to_bytes()
+            no_links.signature.to_bytes(),
+            with_links.signature.to_bytes()
         );
+        assert!(verify_post(&no_links));
+        assert!(verify_post(&with_links));
+    }
 
-        // And both verify against their own posts.
-        assert!(verify_post(&post_no_links));
-        assert!(verify_post(&post_with_links));
+    #[test]
+    fn different_cabals_yield_different_signatures() {
+        // Same author, same content, different cabal → different signature,
+        // because the cabal id is part of the signed header.
+        let kp = keypair();
+        let a = sign_post(&kp, [1; 32], 0, None, vec![], text("x"));
+        let b = sign_post(&kp, [2; 32], 0, None, vec![], text("x"));
+        assert_ne!(a.signature.to_bytes(), b.signature.to_bytes());
     }
 }

@@ -36,6 +36,11 @@ pub struct InMemoryCabalStore {
 struct StoreInner {
     posts: HashMap<PostId, Post>,
     by_channel: HashMap<String, Vec<PostId>>,
+    /// Per-author log frontier: author public-key bytes → (highest `seq_num`
+    /// seen, that operation's id). This is what LogSync advertises and requests
+    /// per author. (Frontier, not contiguous head: gap-detection/back-fill is
+    /// LogSync's job once topic sync is wired.)
+    heads: HashMap<[u8; 32], (u64, PostId)>,
 }
 
 impl InMemoryCabalStore {
@@ -60,6 +65,16 @@ impl InMemoryCabalStore {
                 .entry(channel.as_str().to_string())
                 .or_default()
                 .push(post_id);
+        }
+        // Advance this author's log frontier (highest seq_num seen).
+        let author = post.author.to_bytes();
+        let advance = inner
+            .heads
+            .get(&author)
+            .map(|&(seq, _)| post.seq_num >= seq)
+            .unwrap_or(true);
+        if advance {
+            inner.heads.insert(author, (post.seq_num, post_id));
         }
         inner.posts.insert(post_id, post);
         true
@@ -104,12 +119,19 @@ impl InMemoryCabalStore {
         let inner = self.inner.lock().unwrap();
         inner.posts.values().cloned().collect()
     }
+
+    /// The per-author log frontier: the highest `seq_num` seen from `author` in
+    /// this cabal and that operation's id, or `None` if we hold nothing from
+    /// them. Used by sync to advertise our heads and request what we're missing.
+    pub fn author_head(&self, author: &[u8; 32]) -> Option<(u64, PostId)> {
+        self.inner.lock().unwrap().heads.get(author).copied()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cable::hash::hash_post_bytes;
+    use crate::cable::hash_post;
     use crate::cable::sign::sign_post;
     use crate::cable::wire::encode_post;
     use crate::{ChannelName, PostKind};
@@ -121,6 +143,9 @@ mod tests {
             .unwrap();
         let post = sign_post(
             &kp,
+            [0x07; 32],
+            0,
+            None,
             vec![],
             PostKind::Text {
                 channel: ChannelName::new(channel),
@@ -128,8 +153,7 @@ mod tests {
                 timestamp_ms,
             },
         );
-        let bytes = encode_post(&post);
-        let id = hash_post_bytes(&bytes);
+        let id = hash_post(&post);
         (id, post)
     }
 
@@ -194,5 +218,52 @@ mod tests {
         assert_eq!(store.channel_posts("links").len(), 1);
         assert!(store.channel_posts("notes").is_empty());
         assert_eq!(store.len(), 2);
+    }
+
+    #[test]
+    fn author_head_tracks_the_log_frontier() {
+        let store = InMemoryCabalStore::new();
+        let kp = InMemoryProvider::from_seed([7; 32])
+            .derive_keypair(b"test")
+            .unwrap();
+        let author = kp.public_key().to_bytes();
+        assert!(store.author_head(&author).is_none());
+
+        let op0 = sign_post(
+            &kp,
+            [0x07; 32],
+            0,
+            None,
+            vec![],
+            PostKind::Text {
+                channel: ChannelName::new("s"),
+                text: "a".to_string(),
+                timestamp_ms: 1,
+            },
+        );
+        let id0 = hash_post(&op0);
+        assert!(store.insert(id0, op0));
+        assert_eq!(store.author_head(&author), Some((0, id0)));
+
+        let op1 = sign_post(
+            &kp,
+            [0x07; 32],
+            1,
+            Some(id0),
+            vec![],
+            PostKind::Text {
+                channel: ChannelName::new("s"),
+                text: "b".to_string(),
+                timestamp_ms: 2,
+            },
+        );
+        let id1 = hash_post(&op1);
+        assert!(store.insert(id1, op1.clone()));
+        assert_eq!(store.author_head(&author), Some((1, id1)));
+
+        // Re-inserting an op we already hold is an idempotent no-op and does
+        // not regress the frontier.
+        assert!(!store.insert(id1, op1));
+        assert_eq!(store.author_head(&author), Some((1, id1)));
     }
 }

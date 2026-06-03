@@ -1,0 +1,22 @@
+# Standalone spike probe (own [workspace]). Low-level S1: can a single
+# p2panda-net::Endpoint host a Cable-shaped custom-ALPN raw bi-stream between
+# two nodes, and expose the underlying iroh endpoint (for blobs coexistence)?
+[package]
+name = "probe-p2panda-cable"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "probe-p2panda-cable"
+path = "src/main.rs"
+
+[dependencies]
+p2panda-net = "0.6.1"
+p2panda-core = "0.6.1"
+# Matches p2panda-net's iroh pin (0.98) so the Connection / ProtocolHandler /
+# EndpointAddr types line up. This is the same iroh line `transport` pins.
+iroh = "0.98"
+tokio = { version = "1", features = ["full"] }
+
+[workspace]

@@ -4,8 +4,7 @@
 //! workspace. Owns the user's master Ed25519 keypair, integrates with OS
 //! keychain via a backend trait that platform-specific code in
 //! [`graphshell`](https://crates.io/crates/graphshell) implements, and provides
-//! deterministic per-protocol identity derivation (BLAKE2b-seeded, per the
-//! pattern established in the inherited Cable spec §2.2).
+//! deterministic per-protocol identity derivation (BLAKE3 keyed-hash).
 //!
 //! ## Quick start
 //!
@@ -30,11 +29,10 @@
 //! - **Master secret never leaves the [`IdentityProvider`].** All key
 //!   derivation happens inside the provider; consumers receive only the
 //!   derived keypair.
-//! - **Derivation is BLAKE2b-256(master_seed || salt) → Ed25519 seed**,
-//!   matching the inherited Cable spec §2.2.
-//! - **Pure-Rust crypto** — `ed25519-dalek` + `blake2`, no `sodiumoxide` /
-//!   libsodium dependency. Trade-off vs cable.rs upstream is documented in
-//!   the Cable migration plan.
+//! - **Derivation is `BLAKE3-keyed(master_seed, salt)` → Ed25519 seed**
+//!   (the per-protocol-derivation pattern; BLAKE2b is gone, BLAKE3 throughout).
+//! - **Pure-Rust crypto** — `ed25519-dalek` + `blake3`, no `sodiumoxide` /
+//!   libsodium dependency.
 //!
 //! ## Consumers
 //!

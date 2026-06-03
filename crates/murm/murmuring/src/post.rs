@@ -16,9 +16,8 @@ use crate::MurmuringError;
 /// is more than generous for channel-naming use.
 pub const MAX_CHANNEL_NAME_BYTES: usize = 255;
 
-/// A post identifier — the BLAKE2b-256 hash of a post's canonical wire
-/// encoding (with Cable-specific salt and personalization parameters; see
-/// [`crate::cable::hash`]).
+/// A post identifier — the BLAKE3-256 hash of a post's canonical wire
+/// encoding (see [`crate::cable::hash`]).
 ///
 /// Per Cable's content-addressing model, posts are identified by their
 /// hash; references to posts (in subsequent posts' `links` field, or in
@@ -152,22 +151,43 @@ impl InfoEntry {
 
 /// A signed Cable post.
 ///
-/// Posts are content-addressed via their `PostId` (BLAKE2b-256 hash of the
-/// canonical wire encoding) and form a causal DAG via their `links` field.
-/// The author signs everything *after* the signature field in the canonical
-/// encoding (i.e., `links`, `post_type`, `timestamp`, and the type-specific
-/// body).
+/// On the wire a post is a p2panda-core operation (see [`crate::cable::wire`]):
+/// content-addressed via its `PostId` (the operation's **signed-header hash** =
+/// `Header::hash()`, which transitively binds the body via `payload_hash`),
+/// belonging to a cabal (`cabal_id`), positioned in its author's per-cabal log
+/// (`seq_num` / `backlink`), and forming a cross-author causal DAG via `links`.
+/// The author's signature covers the whole operation header, including
+/// `cabal_id`, `seq_num`, `backlink`, `links`, the kind metadata, and a hash of
+/// the body.
+///
+/// ## Two notions of order
+///
+/// - `seq_num` / `backlink` are the **per-author append-only log** (one chain
+///   per `(author, cabal)`): the unit p2panda-net LogSync reconciles. Each
+///   author's operations form a single hash-linked chain.
+/// - `links` are **cross-author causal references** (the DAG view), layered on
+///   top of the per-author logs.
 #[derive(Clone, Debug)]
 pub struct Post {
     /// The author's public key.
     pub author: Ed25519PublicKey,
-    /// Causal-DAG predecessors (BLAKE2b-256 hashes of preceding posts).
+    /// The cabal (space) this post belongs to: `BLAKE3(cabal_key)`. Carried in
+    /// the signed operation header, so a post is self-describing and cannot be
+    /// replayed into a different cabal.
+    pub cabal_id: [u8; 32],
+    /// Position in this author's per-cabal log: `0` for the author's first
+    /// operation in the cabal, incrementing by exactly 1 thereafter. Signed.
+    pub seq_num: u64,
+    /// The author's previous operation in this cabal (its `PostId`), or `None`
+    /// for the first. When set it must equal that operation's signed-header
+    /// hash; per the p2panda log rule, `backlink.is_some()` iff `seq_num > 0`.
+    pub backlink: Option<PostId>,
+    /// Cross-author causal-DAG predecessors (operation ids of preceding posts).
     pub links: Vec<PostId>,
     /// The post's payload kind (also implicitly carries `post_type` and
     /// `timestamp_ms`).
     pub kind: PostKind,
-    /// The author's signature over the canonical encoding starting at the
-    /// `num_links` field.
+    /// The author's Ed25519 signature over the canonical operation header.
     pub signature: Ed25519Signature,
 }
 

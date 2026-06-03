@@ -7,7 +7,7 @@
 //! Implements `eidetic::BlobFetcher` for `BlobSource::Iroh { ticket }` by
 //! parsing the ticket as `"<node-id-hex>/<blob-hash-hex>"`, fetching the
 //! blob from the named peer through [`transport`]'s `BlobStore` /
-//! `IrohTransport`, and returning the bytes.
+//! `P2pandaTransport`, and returning the bytes.
 //!
 //! Returns `Ok(None)` for any other source kind so
 //! [`eidetic::manifest::resolve_blob`] can fall through.
@@ -31,23 +31,23 @@
 
 use async_trait::async_trait;
 use eidetic::{BlobFetcher, BlobSource, Error, Result};
-use transport::{BlobHash, BlobStore, IrohTransport, PeerID};
+use transport::{BlobHash, BlobStore, P2pandaTransport, PeerID};
 use std::sync::Arc;
 
 /// Iroh-only [`BlobFetcher`].
 ///
-/// Holds shared references to a [`BlobStore`] and [`IrohTransport`] —
+/// Holds shared references to a [`BlobStore`] and [`P2pandaTransport`] —
 /// typically the host's already-running iroh stack. Construction does
 /// not start a new iroh node; the references must already be alive.
 pub struct IrohFetcher {
     blobs: Arc<BlobStore>,
-    transport: Arc<IrohTransport>,
+    transport: Arc<P2pandaTransport>,
 }
 
 impl IrohFetcher {
     /// Construct from shared references to an existing [`BlobStore`] and
-    /// [`IrohTransport`].
-    pub fn new(blobs: Arc<BlobStore>, transport: Arc<IrohTransport>) -> Self {
+    /// [`P2pandaTransport`].
+    pub fn new(blobs: Arc<BlobStore>, transport: Arc<P2pandaTransport>) -> Self {
         Self { blobs, transport }
     }
 
@@ -192,21 +192,23 @@ mod tests {
         let bob_blobs = Arc::new(BlobStore::new());
 
         let alice_transport = Arc::new(
-            IrohTransport::bind_with_blobs(&alice_kp, vec![], Some(&alice_blobs))
+            P2pandaTransport::bind_with_blobs(&alice_kp, vec![], Some(&alice_blobs))
                 .await
                 .expect("alice bind"),
         );
         let bob_transport = Arc::new(
-            IrohTransport::bind_with_blobs(&bob_kp, vec![], Some(&bob_blobs))
+            P2pandaTransport::bind_with_blobs(&bob_kp, vec![], Some(&bob_blobs))
                 .await
                 .expect("bob bind"),
         );
 
         alice_transport
-            .add_peer(bob_transport.endpoint_addr())
+            .add_peer(bob_transport.endpoint_addr().await.unwrap())
+            .await
             .unwrap();
         bob_transport
-            .add_peer(alice_transport.endpoint_addr())
+            .add_peer(alice_transport.endpoint_addr().await.unwrap())
+            .await
             .unwrap();
 
         let alice_peer_id = PeerID::from_public_key(alice_provider.master_public_key());
@@ -234,7 +236,7 @@ mod tests {
         let kp = provider.master_keypair().clone();
         let blobs = Arc::new(BlobStore::new());
         let transport = Arc::new(
-            IrohTransport::bind_with_blobs(&kp, vec![], Some(&blobs))
+            P2pandaTransport::bind_with_blobs(&kp, vec![], Some(&blobs))
                 .await
                 .unwrap(),
         );

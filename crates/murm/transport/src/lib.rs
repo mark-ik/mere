@@ -24,8 +24,9 @@
 //!
 //! Pre-1.0. The trait surface and the in-memory test fixture
 //! ([`memory::MemoryTransport`]) shipped in 0.0.1 (Phase 2B).
-//! [`iroh_transport::IrohTransport`] is the real iroh-backed implementation
-//! (Phase 2C v0).
+//! [`p2panda_transport::P2pandaTransport`] is the production transport: it makes
+//! p2panda-net's `Endpoint` the endpoint authority (gaining discovery + sync +
+//! relay/hole-punching), and replaced a hand-rolled iroh `Router`.
 //!
 //! ## Consumers
 //!
@@ -41,15 +42,18 @@
 mod alpn;
 pub mod blobs;
 mod error;
-pub mod iroh_transport;
 pub mod memory;
+pub mod p2panda_transport;
 mod peer_id;
 mod transport;
 
 pub use crate::alpn::Alpn;
 pub use crate::blobs::{BlobError, BlobHash, BlobStore};
 pub use crate::error::TransportError;
-pub use crate::iroh_transport::{IrohStream, IrohTransport};
+pub use crate::p2panda_transport::{sync_overlay_topic, P2pandaStream, P2pandaTransport};
+// The gossip handle returned by `P2pandaTransport::subscribe` (space live-sync):
+// `publish(bytes)` to broadcast, `subscribe()` for the received-bytes stream.
+pub use p2panda_net::gossip::GossipHandle;
 pub use crate::peer_id::PeerID;
 pub use crate::transport::Transport;
 

@@ -20,8 +20,11 @@ the moving parts stay behind it.
     32-byte secret key.
   - `derive_cabal_keypair(&CabalKey)` — the per-cabal Ed25519 keypair
     derivation.
-  - `push_cabal_to_peer(NodeId, &CabalId)` / `accept_cable_connection()` —
-    Phase 2B snapshot-push over the bilateral ALPN.
+  - `subscribe_cabal(&CabalKey) -> SyncedCabal` (on `Murm<P2pandaTransport>`) —
+    join a cabal's sync overlays. Authoring through the returned `SyncedCabal`
+    broadcasts each post live over gossip; offline peers catch up via LogSync
+    (RBSR) over the redb store. Both lanes ingest idempotently, so history
+    converges across online members and catches up peers that were away.
 - **`CabalHandle` / `CabalId` / `CabalKey`** — cabal addressing.
   - `CabalKey` is the 32-byte secret shared between members; `CabalId` is
     the public derivation; `CabalHandle` is what callers send / query

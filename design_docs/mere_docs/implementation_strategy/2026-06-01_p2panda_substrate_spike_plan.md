@@ -1,7 +1,7 @@
 # p2panda substrate spike (adopt-vs-build), and the iroh-transport refactor it decides
 
 **Date**: 2026-06-01
-**Status**: Spike plan. Phase 0 is probes in a throwaway crate (no live-crate edits); a decision gate follows; Phase 1+ is a conditional migration, sketched but gated on Mark's go-ahead after the gate.
+**Status**: Decision made and executed (Mark greenlit). Adopt p2panda-net (transport/discovery) + p2panda-core (operations) for the wire; p2panda-encryption is the watch/adopt engine for E2EE (not the spaces bundle). Live: P2pandaTransport (IrohTransport retired), murm-on-operations with signed `cabal_id`, BLAKE3 unified, mDNS + random-walk discovery, the encryption-fit probe (caps + data + forward-secret schemes green). Follow-on builds spun out to dedicated plans: [sync-as-projection / LogSync](2026-06-02_logsync_sync_as_projection_plan.md) and [tessera](../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md). This doc is the decision record + probe log; not yet archived because both follow-on plans reference it.
 **Scope**: Decide whether the Mere event-DAG substrate and its iroh transport are **built on our own iroh wrapper** or **adopted from the p2panda modular stack** (`p2panda-net` / `p2panda-core` / `p2panda-sync` / `p2panda-blobs` / `p2panda-auth` / `p2panda-encryption`). The iroh-transport refactor is not a separate task: its shape is the output of this decision.
 **Related**:
 
@@ -156,6 +156,19 @@ Mark's framing (2026-06-01): whether we keep Cable is not the crux. The crux is 
 - **Spatial namespace + caps:** evaluate Willow / Meadowcap / Mere-native *against* p2panda-auth/spaces; lean toward whatever preserves graph-cluster paths.
 - **Group/key + E2EE:** p2panda-encryption / -spaces as donors, evaluated, not assumed.
 
+## 12. How Cable lives in this picture
+
+Mark (2026-06-01): how does Cable live here? Resolved by separating three layers Cable conflated.
+
+- **Trust model (the keeper).** A cabal is defined by a shared secret (`cabal_key`): anyone with it is in, symmetric, no roster, no capability issuance, no server; the per-cabal Ed25519 is derived from it (murm already does this). This is genuinely distinct from the moot's model (Meadowcap cluster-path caps, author-owned subspaces, rostered, asymmetric). So the sharpest murm-vs-moot axis is **shared-secret symmetric (cabal) vs capability-based asymmetric (moot)**, not "1:1 vs many" or "ad-hoc vs durable." Cable is the canonical shared-secret lane: bilateral DMs, co-op sessions, invite-by-secret small groups.
+- **As a MereSpace.** A cabal is `SpaceId::Cabal(cabal_key)` carrying signed events. The Probe 1 causal-completeness constraint lands softly here: a cabal's members ARE everyone-with-the-key, so the space associates all member logs by construction and cross-member refs resolve automatically. Cable is the *easy* case for the substrate, not the hard one.
+- **Wire (interop-only).** Cable's literal wire (BLAKE2b posts, cable.club spec, channel time-range sync) is structurally a cousin of MereEvent / p2panda-core (signed per-author posts, causal links, channel sync), so it is redundant with the substrate unless cabal.club client interop is wanted. If interop matters: keep Cable as a literal protocol module in murmuring (BLAKE2b preserved), one bilateral protocol among others, an interop bridge (same status as Matrix/Nostr/Misfin, consistent with "smolweb exchange protocols can live in murm"). If not: run MereEvents / p2panda-core operations over the cabal trust model (BLAKE3, unified), no separate wire.
+- **Transport.** Either way Cable rides `p2panda-net::Endpoint` on `mere/cable/v1` (Probe S1 proved the exact snapshot framing round-trips), sharing one endpoint with blobs, gossip, and moot sync. It does not need the hand-rolled router.
+
+**This reconciles the standing contradiction.** The substrate brief's "drop Cable" meant drop the *wire as the protocol identity*; the moot-tiers "keep Cable" meant keep the *bilateral lane*. Both hold: keep the trust model as the bilateral lane, the wire is interop-only, transport is p2panda-net. The murm/moothold boundary sharpens to the trust model: murm = shared-secret/bilateral (cabals, DMs, co-op, future MLS), moothold = capability/rostered/spatial (cluster-path caps, moots).
+
+**Resolved 2026-06-01 (Mark): no cabal.club interop; model cabals natively, BLAKE3 only.** The open product question is answered: Mere does not pursue cabal.club client interop, so the literal Cable wire's reason-to-exist (BLAKE2b posts, Cable-spec salt/personalization) is gone. **BLAKE2b is removed from the code:** identity derivation is now `BLAKE3-keyed(master_seed, salt)`; murm post ids and cabal ids are plain BLAKE3-256 (the Cable salt/personalization params dropped). 19 identity + 79 murmuring/murm tests pass on BLAKE3. A cabal is a shared-secret-keyed BLAKE3 space. Also decided: **no WILLIAM3** — stay pure BLAKE3 everywhere, which means the spatial namespace layer is the Mere-native BLAKE3 cluster-path cap (Probe 2), not willow25's Bab/WILLIAM3 payload digests. This closes landscape-brief contradiction (B) and the substrate brief's hash-unification gap.
+
 ## Findings
 
 ### 2026-06-01 — Phase 0 spikes run
@@ -233,6 +246,40 @@ Probe: [`crates/probes/willow-cluster-cap`](../../../crates/probes/willow-cluste
 - **Owning a willow-esque interpretation is cheap and ours.** The probe (one file, ed25519 only) is the working core of a Mere-native Meadowcap-shaped cap: `Area`, path-prefix containment, signed monotonic delegation, `grants(entry)`. We do not need to adopt `willow25` wholesale to get the spatial benefit; we own the interpretation (and could still adopt `willow25` for the data model + sync later, behind the projection boundary). Per Mark: owning the interpretation is fine.
 - **Net shape across both probes:** transport + discovery + bilateral/event sync → p2panda-net (+ core, behind the projection boundary); **spatial namespace + capability → Mere-native Meadowcap-shaped cluster-paths** (this probe), or willow25 if its data model earns adoption later. The moot's content truth is event-sourced (p2panda or Mere-native), addressed by cluster-paths, projected into the spatial graph view. p2panda stays a toolkit beneath the projection boundary; the spatial identity stays ours.
 
+### 2026-06-01 — First build slice: P2pandaTransport adapter validated with real Murm/Cable
+
+Probe: [`crates/probes/p2panda-transport-adapter`](../../../crates/probes/p2panda-transport-adapter), runs green.
+
+- **`P2pandaTransport: transport::Transport` is implemented over `p2panda-net::Endpoint`** in one file: a `P2pandaStream` (AsyncRead+AsyncWrite over `Connection::open_bi`/`accept_bi`), a per-ALPN accept queue fed by an iroh `ProtocolHandler` (the `IrohTransport` pattern), `bind` from the Mere master key (bridged to p2panda's `SigningKey` via the raw ed25519 seed), `connect`, `accept`, and loopback `node_info`/`add_peer`.
+- **The unchanged `murm` + Cable code runs over it.** The probe path-depends on the *real* `transport`, `murm`, `identity` crates and runs `Murm<P2pandaTransport>`: Alice opens a cabal, authors 3 posts, `push_cabal_to_peer`; Bob `accept_cable_connection` ingests all 3; signatures verify. No murm or Cable change.
+- **Cross-workspace path-deps and iroh unification work in practice.** The probe (own workspace) path-deps the real workspace crates; iroh resolves to 0.98.x satisfying both `transport` (iroh 0.98 / iroh-blobs 0.100 / iroh-gossip 0.98) and p2panda-net (iroh 0.98.2). The S5 no-skew finding holds when actually compiled together.
+- **Conclusion:** "replace the router, keep the behavior" is not just feasible (S1) but *mechanical*. P2pandaTransport is ~200 lines mirroring `IrohTransport` on `p2panda-net::Endpoint`; the `Transport` trait is the clean seam, and the murm side is untouched.
+
+**The live-crate wiring is the gated next step** (needs Mark's sign-off): move `P2pandaTransport` into the `transport` crate (adding `p2panda-net` as a dep, with the heavy dep tree noted in S1), expose discovery + `node_info`/`add_peer`, and either keep `IrohTransport` as a fallback or retire it. That is the dependency swap the plan flagged as gated; the probe shows it is safe to make.
+
+### 2026-06-01 — Live-crate wiring landed: P2pandaTransport is the transport, IrohTransport retired
+
+Per Mark ("go for it ... prefer the best implementation over the inertial one"), the adapter moved from probe into the live `transport` crate, and the hand-rolled iroh Router retired.
+
+- **`transport::P2pandaTransport` is now the production `Transport`** ([`crates/murm/transport/src/p2panda_transport.rs`](../../../crates/murm/transport/src/p2panda_transport.rs)): `bind` / `bind_with_blobs` / `builder`, `connect`, `accept` (per-ALPN queue via p2panda-net `Endpoint::accept`), `connect_raw`, `endpoint_addr` / `add_peer` (loopback), and it serves iroh-blobs off the same endpoint. p2panda-net is the endpoint authority, so discovery (`Discovery`/`MdnsDiscovery`), relay/hole-punching, NAT port-mapping, and actor supervision come for free.
+- **`IrohTransport` (the hand-rolled iroh `Router` + `MemoryLookup` + per-ALPN queues + gossip wiring) is deleted.** `iroh-gossip` (only IrohTransport used it) is dropped from the transport deps; p2panda-net provides gossip when needed.
+- **Consumers migrated, all green:** `blobs::BlobStore::fetch_from` takes `&P2pandaTransport`; the murm Cable-over-transport test (`cable_snapshot_sync_via_p2panda_transport`) and the `eidetic-iroh-fetcher` blob-fetch tests run over P2pandaTransport. transport 23 tests, plus the murm + eidetic suites, pass.
+- **Dep-surface change (accepted):** the live `transport` crate now pulls p2panda-net's tree (noq, sqlx/SQLite, ractor, hickory DNS, reqwest, igd/portmapper). This affects crates that depend on `transport` (murm, eidetic-iroh-fetcher), not the dormant `mere-app` live path.
+- **What remains:** wire p2panda-net discovery into a production path (today the transport uses explicit `add_peer` loopback, as IrohTransport did); plus the bilateral lane's move to a MereEvent space and the `p2panda-spaces` eval, both independent. The transport-layer router replacement is done.
+
+### 2026-06-01 — Threads 1-3: discovery wired, cabal-as-space proven, p2panda-spaces evaluated
+
+**Thread 1 (discovery wired, code landed).** `P2pandaTransport::builder().mdns(MdnsDiscoveryMode)` spawns p2panda-net's mDNS discovery off the same endpoint, so LAN peers auto-populate the address book (no explicit `add_peer`); the handle is held on the transport. transport at 24 tests (a smoke test confirms the service spawns; end-to-end LAN discovery is multi-host, not single-machine-deterministic). Random-walk `Discovery` (internet, needs bootstrap + relay config) is the follow-on.
+
+**Thread 2 (cabal-as-BLAKE3-space, proven).** Probe [`crates/probes/cabal-space`](../../../crates/probes/cabal-space), green. A cabal is modeled as a BLAKE3 signed-event space on our stack, realizing §12: a shared secret `cabal_key` defines membership (symmetric, no roster); space id = `BLAKE3(cabal_key)`; per-member per-cabal signing key = `BLAKE3-keyed(member_master, cabal_key)` (the Cable §2.2 pattern, BLAKE3); events are p2panda-core Operations carrying a `CabalExt` extension (cabal_id, channel, event_type, parents). CBOR round-trips, Ed25519 signatures verify, multi-parent refs ride as app-level data (per Probe 1), and a different secret yields a different space (no impersonation). This is "Cable on our stack": the bilateral shared-secret trust model, BLAKE3 throughout, no literal Cable wire. Promoting it into murm (retiring the Cable wire) is the follow-on refactor.
+
+**Thread 3 (p2panda-spaces eval, source-based).** `p2panda-spaces` is github-only (unpublished; 404 on crates.io and docs.rs), pre-v1, APIs unstable. It establishes encryption contexts for dynamic groups across devices, built on p2panda-auth (group coordination via a conflict-resistant structure) + p2panda-encryption (key agreement): forward secrecy, post-compromise security, and concurrent/offline membership conflict resolution; nested groups model multi-device profiles. Its **data-model precondition is exactly our model** — messages causally ordered + cryptographically signed, which p2panda-core Operations and the Thread 2 cabal-space already satisfy. So:
+
+- p2panda-spaces fills §8.8's "live group/key state" slot (the **Keyhive** comparison) *and* the planned **MLS** E2EE module (consistent with S4).
+- vs Keyhive: p2panda-spaces is the **lower-friction** candidate *given the adopt lean* — no translation layer (Keyhive is Automerge/Beelay-shaped and would need one), and it co-evolves with the net/core stack. Both are early (p2panda-spaces pre-v1; Keyhive pre-alpha/unaudited), so neither is adopt-now.
+- **Stance:** p2panda-spaces becomes the preferred **watch/eval** candidate for the group/key + E2EE slot, over Keyhive, if Mere is on the p2panda stack. Revisit at its v1; a git-dep runnable eval is the next step when adoption is seriously considered.
+- **Synthesis:** the Thread 2 cabal-space (and the moot's cluster-path-capability spaces) already meet p2panda-spaces' preconditions, so E2EE group encryption layers cleanly on top of the event model we built, when it matures.
+
 ## Progress
 
 ### 2026-06-01
@@ -273,8 +320,125 @@ Probe: [`crates/probes/willow-cluster-cap`](../../../crates/probes/willow-cluste
 
 - `crates/probes/willow-cluster-cap` implements a Meadowcap-shaped capability over graph-cluster paths (ed25519 only) and runs green: path-prefix containment shares a coherent sub-graph neighborhood (cap over `[3]` covers `[3,7,1]`/`[3,9,5]` not `[4,1,1]`), signed delegation narrows it (`[3,7]` drops `[3,9,5]`), widening is rejected. Confirms the spatial namespace + capability layer wants this Willow-esque shape, which p2panda's flat topics cannot express. Per Mark, owning the interpretation is fine; this probe is its core. Net shape: p2panda-net for transport/discovery (+ core behind the boundary), Mere-native cluster-path caps for the spatial layer.
 
+### 2026-06-01 — BLAKE2b removed, BLAKE3 unified (code landed)
+
+- Per Mark ("Blake2b can go ... stick to blake3, not blake2b or william3"): swapped identity derivation to `BLAKE3-keyed(master_seed, salt)` (`persona/identity/keypair.rs`, blake2 dep dropped) and murm post-id + cabal-id hashing to plain BLAKE3-256 (`murm/murmuring/cable/hash.rs`, Cable-spec salt/personalization + blake2/blake2b_simd deps dropped). 19 identity + 79 murmuring/murm tests green. No BLAKE2b remains in the code. Decisions recorded in §12: no cabal.club interop (cabals modeled natively, BLAKE3), and no WILLIAM3 (spatial layer = Mere-native BLAKE3 cluster-path cap, not willow25's Bab digests). Resolves landscape-brief contradiction (B).
+
+### 2026-06-01 — P2pandaTransport adapter slice (green)
+
+- `crates/probes/p2panda-transport-adapter` implements `P2pandaTransport: transport::Transport` over `p2panda-net::Endpoint` and runs the REAL `Murm` Cable snapshot sync over it (two nodes, loopback): 3 posts pushed + ingested, signatures verify. Cross-workspace path-deps to the real transport/murm/identity crates compile; iroh 0.98 unifies. Proves the router-replacement is mechanical via the `Transport` trait (murm side untouched). The live-crate dependency swap (p2panda-net into the `transport` crate, retire the iroh Router) remains gated on Mark.
+
+### 2026-06-01 — IrohTransport retired; P2pandaTransport is the live transport
+
+- Moved P2pandaTransport from probe into the live `transport` crate as the production `Transport` (bind/bind_with_blobs/connect/accept/connect_raw/endpoint_addr/add_peer + iroh-blobs serving). Deleted `iroh_transport.rs` and dropped the `iroh-gossip` dep. Migrated `blobs::fetch_from`, the murm Cable test, and `eidetic-iroh-fetcher` to P2pandaTransport. transport (23) + murm + eidetic tests green. The hand-rolled iroh Router is gone; p2panda-net's `Endpoint` is the endpoint authority. Remaining: production discovery wiring, the bilateral-lane-on-MereEvent move, and the p2panda-spaces eval.
+
+### 2026-06-01 — Threads 1-3 done
+
+- **Thread 1:** mDNS discovery wired into `P2pandaTransport` (`builder().mdns(..)` spawns + holds the service); transport at 24 tests. Random-walk Discovery (needs bootstrap+relay) is the follow-on.
+- **Thread 2:** `crates/probes/cabal-space` (green) models a cabal as a BLAKE3 signed-event space (shared secret → cabal_id, per-member BLAKE3-keyed signing, events as p2panda-core Operations + CabalExt). "Cable on our stack," no literal wire; promoting into murm is the follow-on refactor.
+- **Thread 3:** p2panda-spaces evaluated from source (github-only, pre-v1). It fills the §8.8 group/key-state slot (and the MLS E2EE module), is lower-friction than Keyhive given the adopt lean (its causal-order+signed precondition is exactly our event model, no translation layer), and the Thread 2 cabal-space already satisfies its preconditions. Stance: preferred watch/eval candidate for the slot; revisit at v1.
+
+### 2026-06-01 — Cable wire retired in murm; random-walk discovery wired
+
+Two follow-ons from Threads 1-2 landed in the live crates.
+
+- **Cable wire retired; a murm post IS a p2panda operation.** Rewrote `murmuring`'s `cable::wire` and `cable::sign` so a `Post` encodes to / decodes from a p2panda-core `Operation` (a signed `Header<CabalExt>` + body): BLAKE3, CBOR, Ed25519 via `Header::{sign,verify}`. The `CabalExt` header extension carries `{channel, post_type, timestamp_ms, parents, info, deletes}`; text/topic ride in the body (bound into the signature via `payload_hash`). Identity bridges through `Ed25519Keypair::to_seed()` → `p2panda_core::SigningKey` (both ed25519-dalek). Deleted `cable/varint.rs` (the LEB128 framing) and dropped the byte-layout/varint tests. The `Post`/`PostKind`/`CableEngine`/store/`murm` APIs are unchanged — only the wire/crypto layer moved — so the swap is behavior-preserving. **murmuring 63 + murm 13 green**, including the cross-crate `cable_snapshot_sync_via_p2panda_transport` round-trip over the real transport. This is the §12 "Cable on our stack" promotion realized in the live path; the cabal-space probe was the proof, this is the production code. Follow-on still open: use p2panda's native per-author `seq_num`/`backlink` log instead of app-level `parents`.
+- **`cabal_id` is now in the signed event (self-describing posts).** Added `cabal_id: [u8; 32]` to `CabalExt` (so it is signed) and to `Post`; `sign_post` takes the cabal id; `verify_post` reconstructs and checks it. Because the cabal id is signed, a post cannot be replayed into a different cabal: tampering it fails verification, and `CableEngine::ingest_post` now rejects a post whose `cabal_id` differs from the cabal it is ingested into (new `MurmuringError::CabalMismatch`). The cabal id was previously only the store key. **murmuring 66 + murm 13 green** (added tampered-cabal-id, different-cabals-differ-in-signature, and foreign-cabal-ingest-rejected tests).
+- **Random-walk discovery wired into `P2pandaTransport`.** `builder().discovery()` / `.discovery_config(DiscoveryConfig)` spawns `p2panda_net::Discovery` off the same endpoint; walkers explore outward from the bootstrap nodes already in the address book (added via `add_peer` or surfaced by mDNS). The handle is held for the transport's life (dropping it stops the walkers). mDNS (LAN) and random-walk (internet) coexist on one endpoint. **transport at 26 tests** (added the random-walk smoke test and a combined mDNS+random-walk test). End-to-end internet discovery still needs a populated bootstrap set + reachable peers (a deployment concern); the tests verify the services spawn and stay alive.
+
+### 2026-06-01 — p2panda-spaces: take the encryption engine, not the bundle
+
+Verified (docs.rs/p2panda-encryption, issue #774): **p2panda-encryption is a standalone crate with pluggable authorization.** Its `traits` module exists to plug in "custom data- and messaging types, group management- and ordering strategies"; the caller supplies the member set and key bundles. It carries no built-in access-control model. `p2panda-spaces` is the (git-only, `spaces`-branch) bundle that layers `p2panda-auth` (an authorization CRDT) on top of it.
+
+**Decision input:** if Mere stays on the p2panda stack for the encrypted-group slot, take **p2panda-encryption** (the crypto engine) and supply our own policy layers, rather than adopting the full `p2panda-spaces` bundle. `p2panda-auth` would be a second authorization model competing with the cluster-path capabilities we already build (Probe 2), so we skip it. This reframes the Thread 3 stance: the watch/eval target narrows from the bundle to the engine.
+
+**Layer map (who owns what):**
+
+- **Trust / admission** (who is allowed in): **tessera** (the trust receipt). p2panda-encryption has no opinion on who deserves a key bundle; this is the layer it deliberately leaves empty.
+- **Capability / permission** (what a member may do; role changes): **our cluster-path capabilities** (meadowcap-shaped, BLAKE3, Probe 2; see the event-DAG brief §8.8 capability stack and the 2026-05-10 cluster-namespaces brief).
+- **Membership → keys** (group key agreement, ratchets, encrypt/decrypt): **p2panda-encryption** (data scheme + message scheme), behind a Mere-side trait.
+- **Ordering** (causal dependencies feeding the above): **our event-DAG** (the operations murm now rides on), through p2panda-encryption's ordering trait.
+- **Key / pre-key distribution**: **identity vault + the address book / discovery** (mDNS + random-walk, now wired).
+- **Metadata privacy**: **Veilid backend** (per-moot policy) + cluster-path scoping.
+
+**Gaps that dissolve under this split** (they were `p2panda-auth`/spaces gaps, not ours):
+
+- Role demote/promote (a spaces TODO) becomes an ordinary capability grant/revoke.
+- "Strong removal" and concurrent-membership resolution become our caps' semantics.
+- `AuthoredMessage` trait churn and serde-for-auth-state sit in the layer we skip; our seam is p2panda-encryption's `traits` module, pluggable by design.
+- "Declare app-level message dependencies" (a spaces TODO) is our DAG's `parents`, fed through the ordering trait.
+- Metadata-privacy-vs-sync (upstream undecided, Willow vs Beelay) has a Mere position already (Veilid + cluster-path scoping).
+- Pre-key / PKI distribution (upstream "unexplored") has a plausible home in our identity + discovery substrate.
+
+**Gaps that remain (crypto-intrinsic, not erased by owning the upper layers):**
+
+- ~128-member ceiling (DCGKA, not TreeKEM). Mitigated by topology, not cryptography: federation shards a community into many smaller spaces (moot → moothold → demesne), so one huge encrypted group is rarely the shape. Mitigated, not fixed.
+- Post-compromise healing delay offline (healed only once the last member hears the removal). Faster discovery helps at the margin.
+- Strong forward secrecy vs local-first (use-a-pre-key-exactly-once). Fundamental; choose per lane (data scheme where late joiners should read history, message scheme where they must not).
+
+**Other solutions considered for the crypto slot:**
+
+- **Keyhive / Beehive** (Ink & Switch): TreeKEM, so `O(log n)` and better at scale, but Automerge/Beelay-shaped and ships its own capability model that competes with our caps; pre-alpha, unaudited. Scales better, couples harder.
+- **OpenMLS / MLS proper**: mature TreeKEM, but assumes a Delivery Service for ordering; adapting it to a DAG is the work p2panda-encryption already did.
+- **Server-centric** (Matrix megolm, Signal sender-keys): mature but not local-first.
+- Net: for our constraints the real field is p2panda-encryption vs Keyhive, both early; p2panda-encryption is the lower-friction one precisely because its authorization is pluggable, so tessera and our caps slot in.
+
+**Cost of this path:** we own the glue p2panda-spaces would have written (cap decision → member set, DAG → ordering strategy, key-bundle distribution). More integration work, but in our domain, and it avoids reconciling a second authorization model.
+
+**Probe retarget:** the Thread 3 follow-on eval should target **p2panda-encryption's `traits` seam**, not the spaces bundle. A `crates/probes/p2panda-encryption-fit` that (1) feeds a murm/cabal operation as the authored + ordered message, (2) supplies a member set from a stub cluster-path capability, and (3) drives one data-scheme and one message-scheme round trip. Confirms the seam is real against current code, quarantined behind a Mere-side trait.
+
+### 2026-06-01 — Probe result: p2panda-encryption-fit (green, data scheme)
+
+Built [`crates/probes/p2panda-encryption-fit`](../../../crates/probes/p2panda-encryption-fit) against the published `p2panda-encryption` 0.6.1 (the engine **is** on crates.io; only the spaces bundle is git-only). Runs green. The "engine, not the bundle" decision is workable today:
+
+- **Pluggable authorization is real.** Implemented `GroupMembership` (DGM) as `CapDgm`, fed by a stub `cap_members` standing in for cluster-path caps + tessera. p2panda-encryption decided nothing about membership; we did.
+- **Our event is the payload.** Encrypted a real signed `Header<CabalExt>` operation (a murm post on the wire); after the DCGKA-established `GroupSecret` round trip Alice → Bob it decoded and `verify()`'d with `cabal_id` and author intact. A non-member (no secret) could not open it.
+- **Quarantine boundary works.** The whole flow sits behind a Mere-side `EncryptedSpace` trait; the rest of Mere never touches p2panda-encryption directly.
+
+**New findings (integration friction, not surfaced in the upstream docs):**
+
+- **Data scheme is low-friction; the message scheme is not.** `encrypt_data`/`decrypt_data` take a `GroupSecret` you hold directly, so a thin DGM is the only trait you must supply (proven green). The message scheme (forward secrecy) has **no external shortcut**: its ratchet seed type `Secret<32>` has only `pub(crate)` constructors, so you cannot drive the low-level ratchet yourself — you must run the full `MessageGroup` with a `ForwardSecureOrdering` state machine (queue / dependency resolution / welcome handling) + `AckedGroupMembership`. That ordering layer is the heavy integration piece. **Data scheme is the adoption path; the message scheme's FS is deferred behind that ordering work.** This sharpens the earlier "gaps that remain" note: the FS-vs-local-first cost shows up concretely as "you must own the ordering state machine."
+- **The published examples lean on `test_utils`.** `Rng::from_seed`, `KeyManager::init_and_generate_prekey`, `SecretKey::from_bytes`, and `Secret::from_bytes` are all test- or crate-internal-gated. The public setup path is `Rng::default()` + `KeyManager::init` + `PreKeyManager::rotate_prekey` + `prekey_bundle`. Minor, but a first integrator hits it immediately.
+- **Two key kinds.** Cabal operations are Ed25519-signed (p2panda-core); the encryption identity is X25519 (p2panda-encryption X3DH). Both derive from the identity vault in Mere; distinct keys for distinct jobs.
+
+**Net:** the data-scheme seam is proven against real code, and the residual cost is exactly what the decomposition predicted — we own the glue (DGM from caps, key-bundle distribution, and, for FS, the ordering state machine). Next step when adoption is greenlit: wire the DGM to real cluster-path caps (drop the stub), and implement `ForwardSecureOrdering` over our event-DAG to unlock the message scheme's forward secrecy.
+
+#### 2026-06-01 — both follow-ups landed (caps + forward secrecy)
+
+- **Real cluster-path caps (drop the stub).** The data-scheme bin now derives membership from signed cluster-path capabilities ported from Probe 2 (`Capability`/`Area` over p2panda-core's ed25519): the moot owner roots a Read cap per member over the space's cluster-path, `cap_members` admits the holders of valid caps covering that path, and an outsider holding no cap is rejected. p2panda still decides nothing about membership. Green.
+- **Forward-secret message scheme (`src/bin/message_scheme.rs`).** Implemented the full trait stack ourselves: a minimal `AckedGroupMembership`, a `ForwardSecureOrdering` driven by our event-DAG's causal `previous`/parent links (ready when parents are processed; FIFO since the probe delivers in order), and a `ForwardSecureGroupMessage` envelope. Drove `MessageGroup` create → receive(welcome) → send → receive; Bob decrypted Alice's signed cabal operation under the message ratchet (269 bytes) and it still verifies. Green.
+- **Confirmed adoption costs (now from working code, not inference):** the message scheme needs one-time pre-key bundles (`generate_onetime_bundle` after `rotate_prekey`), and the integrator must bring `AckedGroupMembership` + `ForwardSecureOrdering` + a message type — upstream ships these only as test-only/crate-private code. The data scheme remains the low-friction path; the FS path is real integration work, warranted for sensitive lanes (e.g. private moot threads). Our event-DAG slots cleanly into the ordering trait, which is the load-bearing confirmation.
+
+## Synthesis: the spike vs murm + moothold goals (2026-06-02)
+
+Read against the [moot tiers brief](2026-05-07_moot_tiers_and_voluntary_hosting_brief.md) §10 and the [substrate brief](2026-05-07_event_dag_substrate_brief.md) §8.8, the spike landed two-thirds of moothold's capability stack and reframed the third:
+
+| §8.8 slot | Intent | Status |
+|---|---|---|
+| Structural namespace caps | meadowcap-shaped "which cluster/path you may touch" | **Proven** — cluster-path caps (Probe 2), now gating encryption membership (Follow-up A) |
+| Group / key-state | was "Keyhive eval" | **Reframed + proven** — p2panda-encryption (engine, not the spaces bundle); caps supply auth, event-DAG supplies ordering |
+| Moot policy authorization | "Biscuit candidate": tessera / quota / heartbeat / role facts | **Open** — this is where tessera lives |
+
+**Can do (proven, green):** one signed-operation wire for all event kinds (murm posts are p2panda operations, self-describing via signed `cabal_id`); real QUIC transport + mDNS + random-walk discovery; membership from signed cluster-path caps; E2EE with our authorization + our event-DAG ordering plugged in (data scheme durable, message scheme forward-secret).
+
+**Should do (gaps to the goals):** **sync-as-projection** (the event-DAG isn't replicated between peers yet — we have transport + the operation type, but p2panda-net Gossip/LogSync isn't wired; the spike used explicit push/accept); the **graph-view CRDT**; **tessera** + the policy layer; the pin/reciprocity **ledgers**; **tier transitions** + forking; **mooting** thin clients.
+
+**Sidequests:** production `ForwardSecureOrdering` (ours is FIFO-over-DAG, correct for in-order only); misfin/smolweb in murm; Veilid privacy backend; p2panda-spaces v1 re-eval.
+
+**Pitfalls:** the ~128-member encryption ceiling versus the 5K-10K moot ceiling (E2EE is for small private lanes, never the moot-wide view); forward secrecy fights durability (see contradictions); one-time-prekey distribution is ours to solve; tessera is load-bearing yet unbuilt.
+
+**Contradictions (resolve deliberately):** FS drops keys after decrypt, which is incompatible with lapse-and-revive + durable archives, so FS is for ephemeral lanes only and the data scheme (durable group key) is for anything that must survive a lapse — the two encryption modes map onto the two content lifecycles. E2EE versus cheesecloth "any pinner serves any blob" resolves into a synergy: pinners serve ciphertext for availability, members decrypt; the data scheme's late-joiner-reads-history property lets a new member decrypt pinned history. Key-state maintenance (rekey on membership change) is itself a hosting commitment and needs heartbeats like pinning.
+
+**Synergies:** the event-DAG is the spine and the ordering seam is the proof — murm posts, governance, hosting commitments, stake+agreement, cap grants are all signed operations on one substrate, and the spike proved our DAG plugs into the ordering trait that the graph-view CRDT and ledgers will reuse. One cap system gates read-access, crypto membership, and (with tessera facts) hosting scope. Discovery + LogSync + iroh-blobs/cheesecloth already align with the federation shape. One identity root derives Ed25519 (events/caps), X25519 (encryption), and the persona/tessera chain.
+
+**Strategic read:** the substrate question is settled in shape — one signed-operation event-DAG, synced over p2panda-net, gated by cluster-path caps, optionally encrypted per lane, with tessera as the missing policy layer the whole federation design waits on. The two highest-leverage next builds are **sync-as-projection** and **tessera**, planned in [`2026-06-02_logsync_sync_as_projection_plan.md`](2026-06-02_logsync_sync_as_projection_plan.md) and [`../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md`](../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md).
+
 ## Sources (external, verified 2026-06-01)
 
 - p2panda-core / p2panda-net license (dual MIT/Apache): <https://crates.io/crates/p2panda-core>, <https://crates.io/crates/p2panda-net>
 - p2panda-core Operation/Header + Extension trait: <https://docs.rs/p2panda-core>, <https://docs.rs/p2panda-core/latest/p2panda_core/extensions/trait.Extension.html>
 - iroh 1.0 migration (Endpoint takeover, relay/connection/0-RTT changes): <https://www.iroh.computer/blog/iroh-0-94-0-the-endpoint-takeover>, <https://www.iroh.computer/blog/iroh-0-95-0-new-relay>
+- p2panda-spaces status / TODO (git-only, `spaces` branch): <https://github.com/p2panda/p2panda/issues/774>
+- p2panda-encryption (standalone crate, pluggable authorization, data + message schemes): <https://docs.rs/p2panda-encryption>, <https://crates.io/crates/p2panda-encryption>
+- p2panda group encryption design + limitations (DCGKA ~128 members, FS/PCS trade-offs, metadata-vs-sync): <https://p2panda.org/2025/02/24/group-encryption.html>
+- p2panda convergent access-control CRDT (causal-DAG + signed preconditions): <https://p2panda.org/2025/08/27/notes-convergent-access-control-crdt.html>

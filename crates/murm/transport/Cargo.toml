@@ -25,8 +25,11 @@ tracing = "0.1"
 # (on dalek 2.x) does not need to track iroh's pre-release dalek dep.
 iroh = "0.98"
 iroh-blobs = "0.100"
-iroh-gossip = "0.98"
 bytes = "1"
+# p2panda-net is the production endpoint authority (P2pandaTransport); it
+# pins iroh 0.98, unifying with the iroh/iroh-blobs deps above.
+p2panda-net = "0.6.1"
+p2panda-core = "0.6.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["io-util", "sync", "macros", "rt", "rt-multi-thread", "time"] }

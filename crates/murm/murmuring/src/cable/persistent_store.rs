@@ -43,7 +43,9 @@ use redb::{
 use crate::cable::wire::{decode_post, encode_post};
 use crate::{MurmuringError, Post, PostId};
 
-const POSTS: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("posts");
+/// `post_id(32)` → canonical wire bytes. `pub(crate)` so the sync layer
+/// ([`crate::cable::log_store`]) can read posts back as operations.
+pub(crate) const POSTS: TableDefinition<&[u8; 32], &[u8]> = TableDefinition::new("posts");
 const CHANNEL_POSTS: MultimapTableDefinition<&str, &[u8; 32]> =
     MultimapTableDefinition::new("channel_posts");
 
@@ -52,29 +54,59 @@ const CHANNEL_POSTS: MultimapTableDefinition<&str, &[u8; 32]> =
 /// Each instance corresponds to one `.redb` file holding one cabal's posts.
 /// Per the migration plan §5.1, the host (`murm`) is responsible for
 /// choosing the per-cabal directory layout under the user data dir.
+///
+/// Alongside the post/channel tables it maintains a per-author-log index and a
+/// topic table (see [`crate::cable::log_store`]) so it doubles as the
+/// p2panda-net `LogStore` + `TopicStore` that LogSync reconciles — one store of
+/// record serving both the post view and the sync log.
+///
+/// `Clone` shares the same underlying redb database (cheap `Arc` clone), so a
+/// clone handed to `LogSync::builder` reads and writes the same cabal file.
+#[derive(Clone)]
 pub struct PersistentCabalStore {
-    db: Arc<Database>,
+    pub(crate) db: Arc<Database>,
+}
+
+/// Touch the post / channel / sync-index tables so they exist before the first
+/// read, even if no post is inserted. Shared by [`PersistentCabalStore::open`]
+/// (on-disk) and [`PersistentCabalStore::in_memory`].
+fn init_tables(db: &Database) -> Result<(), MurmuringError> {
+    let txn = db
+        .begin_write()
+        .map_err(|e| MurmuringError::Backend(e.to_string()))?;
+    {
+        txn.open_table(POSTS)
+            .map_err(|e| MurmuringError::Backend(e.to_string()))?;
+        txn.open_multimap_table(CHANNEL_POSTS)
+            .map_err(|e| MurmuringError::Backend(e.to_string()))?;
+        // Sync index tables (per-author log + topic), so LogSync can read this
+        // store even before the first post is inserted.
+        crate::cable::log_store::create_index_tables(&txn)?;
+    }
+    txn.commit()
+        .map_err(|e| MurmuringError::Backend(e.to_string()))?;
+    Ok(())
 }
 
 impl PersistentCabalStore {
     /// Open or create a redb file at `path`.
     pub fn open(path: impl AsRef<Path>) -> Result<Self, MurmuringError> {
         let db = Database::create(path).map_err(|e| MurmuringError::Backend(e.to_string()))?;
-        // Touch the tables once so they exist on disk even if no posts are
-        // inserted before the first read.
-        let txn = db
-            .begin_write()
+        init_tables(&db)?;
+        Ok(Self { db: Arc::new(db) })
+    }
+
+    /// Open an **in-memory** cabal store (redb's in-memory backend).
+    ///
+    /// Same schema and trait impls as [`open`](Self::open), but nothing is
+    /// persisted — the store is dropped with the process. This is the ephemeral
+    /// cabal mode: trait-backed (so LogSync works over it) and `Clone` (so a
+    /// handle can be given to `LogSync::builder`), without needing a file path.
+    pub fn in_memory() -> Result<Self, MurmuringError> {
+        let db = Database::builder()
+            .create_with_backend(redb::backends::InMemoryBackend::new())
             .map_err(|e| MurmuringError::Backend(e.to_string()))?;
-        {
-            let _ = txn
-                .open_table(POSTS)
-                .map_err(|e| MurmuringError::Backend(e.to_string()))?;
-            let _ = txn
-                .open_multimap_table(CHANNEL_POSTS)
-                .map_err(|e| MurmuringError::Backend(e.to_string()))?;
-        }
-        txn.commit()
-            .map_err(|e| MurmuringError::Backend(e.to_string()))?;
+        init_tables(&db)?;
         Ok(Self { db: Arc::new(db) })
     }
 
@@ -119,6 +151,11 @@ impl PersistentCabalStore {
                         .insert(channel.as_str(), &id_bytes)
                         .map_err(|e| MurmuringError::Backend(e.to_string()))?;
                 }
+
+                // Index into the per-author log + topic tables (same txn, so
+                // post bytes and sync indexes commit atomically). This is what
+                // makes the store double as a p2panda `LogStore`/`TopicStore`.
+                crate::cable::log_store::index_post_in_txn(&txn, &post_id, post)?;
             }
         }
         txn.commit()
@@ -202,12 +239,13 @@ impl PersistentCabalStore {
     pub fn is_empty(&self) -> Result<bool, MurmuringError> {
         Ok(self.len()? == 0)
     }
+
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cable::hash::hash_post_bytes;
+    use crate::cable::hash_post;
     use crate::cable::sign::sign_post;
     use crate::{ChannelName, PostKind};
     use identity::{IdentityProvider, InMemoryProvider};
@@ -219,6 +257,9 @@ mod tests {
             .unwrap();
         let post = sign_post(
             &kp,
+            [0x07; 32],
+            0,
+            None,
             vec![],
             PostKind::Text {
                 channel: ChannelName::new(channel),
@@ -226,8 +267,7 @@ mod tests {
                 timestamp_ms,
             },
         );
-        let bytes = encode_post(&post);
-        let id = hash_post_bytes(&bytes);
+        let id = hash_post(&post);
         (id, post)
     }
 
@@ -363,13 +403,16 @@ mod tests {
             .unwrap();
         let post = sign_post(
             &kp,
+            [0x07; 32],
+            0,
+            None,
             vec![],
             PostKind::Info {
                 entries: vec![crate::InfoEntry::name("alice")],
                 timestamp_ms: 1,
             },
         );
-        let id = hash_post_bytes(&encode_post(&post));
+        let id = hash_post(&post);
         store.insert(id, &post).unwrap();
 
         // Retrievable by id.

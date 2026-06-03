@@ -7,7 +7,7 @@
 //!   derivation)
 //! - A map of open cabals, keyed by their derived `cabal_id`
 //! - Each cabal's per-cabal Ed25519 keypair (for signing posts as this user)
-//! - Each cabal's in-memory post store
+//! - Each cabal's post store (redb; doubles as the LogSync log/topic store)
 //!
 //! Cabals are opened via [`CableEngine::open_cabal`] (returns the public
 //! cabal id derived from the secret cabal key). Posts are composed via
@@ -15,9 +15,11 @@
 //!
 //! ## Storage
 //!
-//! Phase 2B uses an in-memory store ([`crate::cable::store::InMemoryCabalStore`]).
-//! Persistent storage (fjall + redb + rkyv) is murm-level Phase 2C work
-//! per the migration plan §5.1.
+//! Each cabal is backed by a [`PersistentCabalStore`] (redb), which also
+//! implements the p2panda `LogStore` / `TopicStore` that LogSync reconciles, so
+//! authoring and sync share one store of record. Cabals use redb's in-memory
+//! backend for now (ephemeral); the same store type opens on disk for
+//! persistence.
 //!
 //! ## Transport / sync
 //!
@@ -31,10 +33,13 @@ use std::sync::{Arc, Mutex};
 
 use identity::{Ed25519Keypair, Ed25519PublicKey, IdentityProvider};
 
-use crate::cable::hash::{hash_cabal_id, hash_post_bytes};
+use p2panda_core::Operation;
+
+use crate::cable::hash::hash_cabal_id;
+use crate::cable::hash_post;
+use crate::cable::persistent_store::PersistentCabalStore;
 use crate::cable::sign::sign_post;
-use crate::cable::store::InMemoryCabalStore;
-use crate::cable::wire::encode_post;
+use crate::cable::wire::{operation_to_post, CabalExt};
 use crate::{BilateralProtocol, ChannelName, MurmuringError, Post, PostId, PostKind};
 
 /// Cable protocol concrete runtime.
@@ -51,8 +56,16 @@ struct CabalSession {
     /// `IdentityProvider::derive_keypair(&cabal_key)`. Used to sign posts
     /// authored by this user in this cabal.
     keypair: Ed25519Keypair,
-    /// In-memory post store for this cabal.
-    store: InMemoryCabalStore,
+    /// Per-cabal post store (redb), which doubles as the p2panda `LogStore` /
+    /// `TopicStore` that LogSync reconciles. In-memory backend for now (ephemeral
+    /// cabals); the same type opens on disk for persistence.
+    store: PersistentCabalStore,
+    /// This author's per-cabal log position for the *next* operation:
+    /// `(next_seq_num, backlink)`. Starts `(0, None)`; each authored post
+    /// advances it to `(seq + 1, Some(new_op_id))`, forming a hash-linked
+    /// single-author chain (the unit LogSync reconciles). Behind a mutex so
+    /// concurrent authoring in the same cabal serializes (no seq/backlink race).
+    author_head: Mutex<(u64, Option<PostId>)>,
 }
 
 impl CableEngine {
@@ -67,7 +80,7 @@ impl CableEngine {
     /// Open or rejoin a cabal.
     ///
     /// Derives the per-cabal Ed25519 keypair via the identity provider,
-    /// computes the cabal id (BLAKE2b of the key), and creates an empty
+    /// computes the cabal id (BLAKE3 of the key), and creates an empty
     /// in-memory store if one doesn't already exist for this id.
     ///
     /// Returns the cabal id (32 bytes). Idempotent: opening the same cabal
@@ -79,7 +92,8 @@ impl CableEngine {
             let keypair = self.identity.derive_keypair(&cabal_key)?;
             e.insert(Arc::new(CabalSession {
                 keypair,
-                store: InMemoryCabalStore::new(),
+                store: PersistentCabalStore::in_memory()?,
+                author_head: Mutex::new((0, None)),
             }));
         }
         Ok(id)
@@ -213,51 +227,38 @@ impl CableEngine {
         kind: PostKind,
     ) -> Result<PostId, MurmuringError> {
         let session = self.session(cabal_id)?;
-        // Future work: causal-DAG `links` resolution. For now, posts have
-        // no links (effectively each post is a DAG root).
-        let post = sign_post(&session.keypair, vec![], kind);
-        let bytes = encode_post(&post);
-        let post_id = hash_post_bytes(&bytes);
-        session.store.insert(post_id, post);
+        // Serialize authoring in this cabal so our per-author log chains without
+        // a seq/backlink race.
+        let mut head = session.author_head.lock().unwrap();
+        let (seq_num, backlink) = *head;
+        // Cross-author causal `links` are future work; each post is a DAG root
+        // for now. The cabal id is signed so posts are self-describing.
+        let post = sign_post(&session.keypair, *cabal_id, seq_num, backlink, vec![], kind);
+        let post_id = hash_post(&post);
+        // Store first; only advance the per-author log head once the post is
+        // durably recorded, so a storage failure doesn't burn a seq number.
+        session.store.insert(post_id, &post)?;
+        *head = (seq_num + 1, Some(post_id));
         Ok(post_id)
     }
 
     /// Get a single post by id within a cabal.
     pub fn get_post(&self, cabal_id: &[u8; 32], post_id: &PostId) -> Option<Post> {
-        self.session(cabal_id).ok()?.store.get(post_id)
+        self.session(cabal_id).ok()?.store.get(post_id).ok().flatten()
     }
 
-    /// All posts in a channel of a cabal, in insertion order.
+    /// All posts in a channel of a cabal, in author-asserted time order.
     pub fn channel_history(&self, cabal_id: &[u8; 32], channel: &str) -> Vec<Post> {
-        match self.session(cabal_id) {
-            Ok(s) => s.store.channel_posts(channel),
-            Err(_) => Vec::new(),
-        }
-    }
-
-    /// All posts in a cabal across all channels.
-    ///
-    /// Used by transport-level sync: when a peer connects, we send our
-    /// entire cabal history. Posts are returned across all channels
-    /// (channel-less posts like `Info` and `Delete` included).
-    ///
-    /// Order is implementation-defined (currently insertion order within a
-    /// channel, then by channel insertion order). For Phase 2B sync this
-    /// is acceptable; future work may add explicit ordering primitives.
-    pub fn all_posts(&self, cabal_id: &[u8; 32]) -> Vec<Post> {
-        let session = match self.session(cabal_id) {
-            Ok(s) => s,
-            Err(_) => return Vec::new(),
+        let Ok(session) = self.session(cabal_id) else {
+            return Vec::new();
         };
-        // Walk the in-memory store. We don't have an "all posts" method
-        // on `InMemoryCabalStore` directly, so we approximate by walking
-        // every known channel plus a synthetic empty-channel walk for
-        // channel-less posts. Phase 2C with persistent storage gets a
-        // proper iterate-all method; for now, we handle the common case.
-        //
-        // For the in-memory store, we expose a passthrough: all posts the
-        // store holds. We can iterate by post_id which is an O(n) scan.
-        session.store.all_posts()
+        let mut posts = session.store.channel_posts(channel).unwrap_or_default();
+        // The redb store returns posts in post-id order; present chat history in
+        // author-asserted time order. Stable sort, so equal timestamps keep the
+        // deterministic post-id order. (Cross-author causal ordering is a later
+        // projection concern — see the sync plan's open questions.)
+        posts.sort_by_key(|p| p.kind.timestamp_ms());
+        posts
     }
 
     /// The cabal-derived public key — the `author` field on posts authored
@@ -269,6 +270,15 @@ impl CableEngine {
         Ok(self.session(cabal_id)?.keypair.public_key())
     }
 
+    /// A `Clone` of this cabal's store, sharing the same underlying redb.
+    ///
+    /// Handed to `LogSync::builder` so sync reconciles the very store the engine
+    /// authors into (the store is the p2panda `LogStore` + `TopicStore`).
+    /// `None` if the cabal isn't open.
+    pub fn cabal_store(&self, cabal_id: &[u8; 32]) -> Option<PersistentCabalStore> {
+        self.session(cabal_id).ok().map(|s| s.store.clone())
+    }
+
     /// Inject a post that arrived from a peer (e.g. via transport sync).
     ///
     /// Verifies the signature, computes the post id, and inserts into the
@@ -277,14 +287,42 @@ impl CableEngine {
     /// Used by transport-sync code (to land); also useful in tests for
     /// simulating "a post from another peer arrived."
     pub fn ingest_post(&self, cabal_id: &[u8; 32], post: Post) -> Result<PostId, MurmuringError> {
+        // Self-describing events: a post must claim the cabal it's ingested
+        // into. This rejects a (validly signed) post replayed from another cabal.
+        if post.cabal_id != *cabal_id {
+            return Err(MurmuringError::CabalMismatch);
+        }
+        // Per-author log rule (p2panda `validate_header`): a backlink is present
+        // iff seq_num > 0. Contiguity (backlink actually matches the prior op,
+        // no gaps) is LogSync's job once topic sync lands; here we reject only
+        // structurally-impossible log positions.
+        if post.backlink.is_some() != (post.seq_num > 0) {
+            return Err(MurmuringError::MalformedPost);
+        }
         if !crate::cable::sign::verify_post(&post) {
             return Err(MurmuringError::InvalidSignature);
         }
         let session = self.session(cabal_id)?;
-        let bytes = encode_post(&post);
-        let post_id = hash_post_bytes(&bytes);
-        session.store.insert(post_id, post);
+        // The store records the op and advances the per-author log frontier.
+        let post_id = hash_post(&post);
+        session.store.insert(post_id, &post)?;
         Ok(post_id)
+    }
+
+    /// Ingest a p2panda [`Operation`] received from a peer over sync (LogSync's
+    /// `OperationReceived`). Converts it to a [`Post`] and runs the same checks
+    /// as [`ingest_post`](Self::ingest_post) — signature, self-describing cabal
+    /// id, log position. Returns the computed post id.
+    ///
+    /// This is the offline-catch-up counterpart to the gossip ingest path: where
+    /// gossip delivers encoded posts, LogSync delivers reconciled operations.
+    pub fn ingest_operation(
+        &self,
+        cabal_id: &[u8; 32],
+        op: &Operation<CabalExt>,
+    ) -> Result<PostId, MurmuringError> {
+        let post = operation_to_post(op)?;
+        self.ingest_post(cabal_id, post)
     }
 }
 
@@ -503,6 +541,83 @@ mod tests {
         let result = bob_engine.ingest_post(&bob_cabal, post);
         assert!(matches!(result, Err(MurmuringError::InvalidSignature)));
         assert!(bob_engine.channel_history(&bob_cabal, "session").is_empty());
+    }
+
+    #[test]
+    fn ingest_operation_lands_a_received_operation() {
+        // The LogSync drain path: alice authors, the post is served as an
+        // operation, bob ingests the *operation* (not the encoded post) and his
+        // history converges. Same effect as `ingest_post`, different wire form.
+        let alice = engine_with_seed([10; 32]);
+        let bob = engine_with_seed([20; 32]);
+        let cabal_key = [42u8; 32];
+        let alice_cabal = alice.open_cabal(cabal_key).unwrap();
+        let bob_cabal = bob.open_cabal(cabal_key).unwrap();
+
+        let post_id = alice
+            .post_text(&alice_cabal, "session", "via operation", 1)
+            .unwrap();
+        let post = alice.get_post(&alice_cabal, &post_id).unwrap();
+        let op = crate::cable::wire::post_to_operation(&post).unwrap();
+
+        let bob_post_id = bob.ingest_operation(&bob_cabal, &op).unwrap();
+        assert_eq!(post_id, bob_post_id, "operation id matches the post id");
+        assert_eq!(bob.channel_history(&bob_cabal, "session").len(), 1);
+    }
+
+    #[test]
+    fn ingest_operation_rejects_foreign_cabal() {
+        // The same self-describing-cabal guard applies to operations.
+        let engine = engine_with_seed([10; 32]);
+        let cabal_a = engine.open_cabal([1; 32]).unwrap();
+        let cabal_b = engine.open_cabal([2; 32]).unwrap();
+        let post_id = engine.post_text(&cabal_a, "session", "in a", 1).unwrap();
+        let post = engine.get_post(&cabal_a, &post_id).unwrap();
+        let op = crate::cable::wire::post_to_operation(&post).unwrap();
+        assert!(matches!(
+            engine.ingest_operation(&cabal_b, &op),
+            Err(MurmuringError::CabalMismatch)
+        ));
+    }
+
+    #[test]
+    fn ingest_post_rejects_foreign_cabal() {
+        // A validly-signed post authored in cabal A can't be ingested into
+        // cabal B: its self-describing cabal_id won't match.
+        let engine = engine_with_seed([10; 32]);
+        let cabal_a = engine.open_cabal([1; 32]).unwrap();
+        let cabal_b = engine.open_cabal([2; 32]).unwrap();
+
+        let post_id = engine.post_text(&cabal_a, "session", "in a", 1).unwrap();
+        let post = engine.get_post(&cabal_a, &post_id).unwrap();
+
+        let result = engine.ingest_post(&cabal_b, post);
+        assert!(matches!(result, Err(MurmuringError::CabalMismatch)));
+        assert!(engine.channel_history(&cabal_b, "session").is_empty());
+    }
+
+    #[test]
+    fn authoring_forms_a_per_author_log_chain() {
+        // Sequential posts in a cabal form a hash-linked single-author log:
+        // seq 0,1,2 with each backlink pointing at the previous op's id.
+        let engine = engine_with_seed([1; 32]);
+        let cabal = engine.open_cabal([42; 32]).unwrap();
+
+        let id0 = engine.post_text(&cabal, "session", "a", 1).unwrap();
+        let id1 = engine.post_text(&cabal, "session", "b", 2).unwrap();
+        let id2 = engine.post_text(&cabal, "session", "c", 3).unwrap();
+
+        let p0 = engine.get_post(&cabal, &id0).unwrap();
+        let p1 = engine.get_post(&cabal, &id1).unwrap();
+        let p2 = engine.get_post(&cabal, &id2).unwrap();
+
+        assert_eq!((p0.seq_num, p0.backlink), (0, None));
+        assert_eq!((p1.seq_num, p1.backlink), (1, Some(id0)));
+        assert_eq!((p2.seq_num, p2.backlink), (2, Some(id1)));
+
+        for p in [&p0, &p1, &p2] {
+            assert!(crate::cable::sign::verify_post(p));
+        }
     }
 
     #[test]

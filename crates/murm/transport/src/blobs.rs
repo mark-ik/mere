@@ -13,9 +13,9 @@
 //! - Local in-memory store via `iroh_blobs::store::mem::MemStore`.
 //! - `put_bytes(...) -> BlobHash`, `get_bytes(hash) -> Bytes`, `has(hash) -> bool`.
 //! - **Network transfer**: [`BlobStore::fetch_from`] downloads a blob
-//!   from a peer via [`IrohTransport`](crate::IrohTransport). The peer
+//!   from a peer via [`P2pandaTransport`](crate::P2pandaTransport). The peer
 //!   must have been constructed with
-//!   [`IrohTransport::bind_with_blobs`](crate::IrohTransport::bind_with_blobs)
+//!   [`P2pandaTransport::bind_with_blobs`](crate::P2pandaTransport::bind_with_blobs)
 //!   so its router serves the iroh-blobs protocol.
 
 use bytes::Bytes;
@@ -146,8 +146,8 @@ impl BlobStore {
     /// Fetch a blob from a remote peer over iroh.
     ///
     /// The peer must have been constructed via
-    /// [`IrohTransport::bind_with_blobs`](crate::IrohTransport::bind_with_blobs)
-    /// so its iroh `Router` serves the iroh-blobs protocol against a
+    /// [`P2pandaTransport::bind_with_blobs`](crate::P2pandaTransport::bind_with_blobs)
+    /// so its p2panda-net endpoint serves the iroh-blobs protocol against a
     /// store that holds the blob.
     ///
     /// On success the bytes are persisted into this local store; you
@@ -159,7 +159,7 @@ impl BlobStore {
     )]
     pub async fn fetch_from(
         &self,
-        transport: &crate::IrohTransport,
+        transport: &crate::P2pandaTransport,
         peer: crate::PeerID,
         hash: BlobHash,
     ) -> Result<(), BlobError> {
@@ -255,13 +255,13 @@ mod tests {
 
     /// End-to-end p2p blob fetch over real iroh.
     ///
-    /// Alice puts a blob into her local store. Bob's IrohTransport is
+    /// Alice puts a blob into her local store. Bob's P2pandaTransport is
     /// bound with his own (initially empty) BlobStore. Bob calls
     /// `fetch_from` to pull the blob from Alice, then reads it locally.
-    /// Validates the Router-routed iroh-blobs ALPN end-to-end.
+    /// Validates the p2panda-net-served iroh-blobs ALPN end-to-end.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn fetch_from_remote_peer_round_trips_blob() {
-        use crate::IrohTransport;
+        use crate::P2pandaTransport;
         use identity::{IdentityProvider, InMemoryProvider};
 
         let alice_provider = InMemoryProvider::from_seed([10; 32]);
@@ -273,19 +273,21 @@ mod tests {
         let alice_blobs = BlobStore::new();
         let bob_blobs = BlobStore::new();
 
-        let alice_transport = IrohTransport::bind_with_blobs(&alice_kp, vec![], Some(&alice_blobs))
+        let alice_transport = P2pandaTransport::bind_with_blobs(&alice_kp, vec![], Some(&alice_blobs))
             .await
             .expect("alice bind");
-        let bob_transport = IrohTransport::bind_with_blobs(&bob_kp, vec![], Some(&bob_blobs))
+        let bob_transport = P2pandaTransport::bind_with_blobs(&bob_kp, vec![], Some(&bob_blobs))
             .await
             .expect("bob bind");
 
         // Cross-register addresses.
         alice_transport
-            .add_peer(bob_transport.endpoint_addr())
+            .add_peer(bob_transport.endpoint_addr().await.unwrap())
+            .await
             .unwrap();
         bob_transport
-            .add_peer(alice_transport.endpoint_addr())
+            .add_peer(alice_transport.endpoint_addr().await.unwrap())
+            .await
             .unwrap();
 
         let alice_peer_id = crate::PeerID::from_public_key(alice_provider.master_public_key());
