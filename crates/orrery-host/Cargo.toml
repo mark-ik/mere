@@ -8,6 +8,14 @@ publish = false
 rust-version = "1.92.0"
 description = "Serval-on-winit host for the orrery (the graph field-canvas), build item 1D of the serval-as-host flip. Composites platen's scene-paint underlay (and, incrementally, gyre-positioned abs-pos node children under one camera transform) through the shared serval-winit-host present stack."
 
+# The reusable orrery content-root (window-agnostic): graph + gyre physics + camera
+# + the abs-pos node-children pool, with `frame(w, h) -> (Scene, needs_redraw)` and
+# semantic input methods. The bin below is a thin winit shell over it; meerkat hosts
+# the same `Orrery` as its content-root (S1 of the modular integration plan).
+[lib]
+name = "orrery_host"
+path = "src/lib.rs"
+
 [[bin]]
 name = "orrery-host"
 path = "src/main.rs"
