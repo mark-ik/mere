@@ -8,38 +8,40 @@
 //! [`meerkat::Chrome`] wrapping the graphshell `ToolbarState`) through serval and
 //! presents via netrender — pelt-live-shaped. It reuses pelt-live's lib for the
 //! cascade → layout → paint → `Scene` builder ([`scene_from_scripted_dom`]) and
-//! the point→node hit-test ([`hit_test_node`]), so this file is just the window +
+//! the point→node hit-test ([`hit_test_node`]), so this file is the window +
 //! present + input-dispatch harness, not a second engine.
 //!
 //! ## Two roots, one window
 //!
-//! The window composites **two document authorities**: the chrome root (the
-//! reused toolbar / omnibar, diffed by the runner) in a top band, and the
-//! content root ([`meerkat::content`], rebuilt from the navigated location) in
-//! the rest. Each is run through serval into its own `Scene`, rasterized, and
-//! composited at its band — neither root sees the other's tree. Clicks route by
-//! region; the chrome band hit-tests the chrome root, the content band is inert
-//! until the content root carries handlers.
+//! The window composites **two authorities**: the chrome root (the reused toolbar
+//! / omnibar, diffed by the runner) in a top band, and the content root — an
+//! [`Orrery`], the graph's spatial presentation — filling the rest. The chrome
+//! runs through serval into a `Scene`; the orrery produces its own composited
+//! `Scene` from the graph + physics. Each is rasterized and composited at its
+//! band, neither root seeing the other's tree. Input routes by region: the chrome
+//! band hit-tests the chrome root, the content band drives the orrery (pan / zoom
+//! / drag / select), and keyboard modifiers feed both.
 //!
-//! Next: a live content engine (fetch + parse) behind the content root, content
-//! scrolling, a11y, and IME.
+//! The orrery is the graph-rooted content surface (modular integration plan, S1).
+//! Next (S2): navigating a location adds a node and projects its media as a tile,
+//! so the omnibar drives the graph rather than a synthesized page.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use layout_dom_api::LayoutDom;
-use meerkat::content::build_content_dom;
 use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
+use orrery_host::{Orrery, PointerButton, WHEEL_PAN_SCALE};
 use pelt_live::{fragments_from_scripted_dom, hit_test_node, scene_from_scripted_dom, TextCursor};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, MouseButton, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use winit::window::{Window, WindowId};
@@ -74,32 +76,22 @@ const CHROME_SHEET: &[&str] = &[
         background-color: rgb(210, 222, 242); padding: 8px 12px; }",
 ];
 
-/// Author CSS for the **content** root — a separate document authority, so it
-/// carries its own sheet (no chrome rules leak in).
-const CONTENT_SHEET: &[&str] = &[
-    "div, h1, p { display: block; }",
-    ".page { padding: 32px; background-color: rgb(255, 255, 255); }",
-    "h1 { font-size: 40px; color: rgb(20, 22, 30); margin-bottom: 16px; }",
-    ".loc { font-size: 30px; color: rgb(30, 34, 44); }",
-    ".lead { font-size: 22px; color: rgb(60, 64, 76); margin-bottom: 12px; }",
-    "p { font-size: 17px; color: rgb(70, 74, 84); margin-bottom: 8px; }",
-    ".note { font-size: 16px; color: rgb(120, 124, 134); }",
-];
-
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
 const FALLBACK_TOOLBAR_H: u32 = 64;
 
 /// The meerkat shell application: the shared chrome DOM, the runner that diffs
-/// the chrome view tree into it, the window + GPU, and input bookkeeping.
+/// the chrome view tree into it, the orrery content-root, the window + GPU, and
+/// input bookkeeping.
 struct App {
     /// The chrome DOM the runner mutates and the render path reads.
     dom: Rc<RefCell<ScriptedDom>>,
     runner: ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
-    /// The content root — a separate document authority, rebuilt from the
-    /// chrome's `content_location` whenever navigation changes it.
-    content_dom: Rc<RefCell<ScriptedDom>>,
-    /// The location currently built into `content_dom`; guards rebuilds.
-    content_location: String,
+    /// The content root: the [`Orrery`] — the graph's spatial presentation,
+    /// rendered into the band below the chrome and driven by content-band input.
+    orrery: Orrery,
+    /// Whether the orrery has been centered on its content band yet (done once,
+    /// the first render after the toolbar height is known).
+    centered: bool,
     /// Cached measured height (px) of the chrome band; `0` until first measured.
     toolbar_h: u32,
     window: Option<Arc<Window>>,
@@ -121,13 +113,11 @@ impl App {
             chrome_view as ChromeLogic,
             Chrome::new("mere://welcome"),
         );
-        let content_location = runner.state().content_location().to_string();
-        let content_dom = Rc::new(RefCell::new(build_content_dom(&content_location)));
         Self {
             dom,
             runner,
-            content_dom,
-            content_location,
+            orrery: Orrery::new(),
+            centered: false,
             toolbar_h: 0,
             window: None,
             host: None,
@@ -135,16 +125,6 @@ impl App {
             cursor: (0.0, 0.0),
             width: 1024,
             height: 600,
-        }
-    }
-
-    /// Rebuild the content root if the chrome's `content_location` has changed
-    /// since it was last built. Called after any input that can navigate.
-    fn sync_content(&mut self) {
-        let loc = self.runner.state().content_location().to_string();
-        if loc != self.content_location {
-            *self.content_dom.borrow_mut() = build_content_dom(&loc);
-            self.content_location = loc;
         }
     }
 
@@ -170,11 +150,11 @@ impl App {
         self.request_redraw();
     }
 
-    /// Render the two document authorities and present them. The content root
-    /// fills everything below the toolbar; the chrome root is rendered over the
-    /// full window with a *transparent* clear, so its toolbar band and any open
-    /// suggestions dropdown float above the content while the rest lets the page
-    /// show through. Composite order is content first, then chrome on top.
+    /// Render the two authorities and present them. The orrery content root fills
+    /// everything below the toolbar; the chrome root is rendered over the full
+    /// window with a *transparent* clear, so its toolbar band and any open
+    /// dropdown float above the content while the rest lets the orrery show
+    /// through. Composite order is content first, then chrome on top.
     fn render(&mut self) {
         if self.host.is_none() {
             return;
@@ -200,14 +180,16 @@ impl App {
         let scroll = ScrollOffsets::<NodeId>::default();
         let chrome_scene =
             scene_from_scripted_dom(&self.dom.borrow(), CHROME_SHEET, w, h, cursor, &scroll);
-        let content_scene = scene_from_scripted_dom(
-            &self.content_dom.borrow(),
-            CONTENT_SHEET,
-            w,
-            content_h,
-            None,
-            &scroll,
-        );
+
+        // The content root: the orrery's own composited scene over the content
+        // band. Keep its viewport in sync each frame; center it once, the first
+        // time the band height is known.
+        self.orrery.resize(w, content_h);
+        if !self.centered {
+            self.orrery.recenter();
+            self.centered = true;
+        }
+        let (content_scene, orrery_redraw) = self.orrery.frame(w, content_h);
 
         let host = self.host.as_ref().unwrap();
         let (_chrome_tex, chrome_view) =
@@ -221,7 +203,7 @@ impl App {
         // Content fills [toolbar_h, h] (dest_rect is [x0, y0, x1, y1] corners;
         // viewport is the full surface). Then the transparent-cleared chrome is
         // composited over the whole window — toolbar + dropdown on top, the rest
-        // letting the content through.
+        // letting the orrery through.
         host.renderer().compose_external_texture(
             &content_view,
             &target_view,
@@ -239,12 +221,82 @@ impl App {
             ExternalTexturePlacement::new([0.0, 0.0, w as f32, h as f32]),
         );
         frame.present();
+
+        // Keep animating while the orrery is settling / gliding / dragging.
+        if orrery_redraw {
+            self.request_redraw();
+        }
     }
 
     /// Request a redraw if a window exists.
     fn request_redraw(&self) {
         if let Some(window) = self.window.as_ref() {
             window.request_redraw();
+        }
+    }
+
+    /// Route a mouse button press/release by region. A left press in the chrome
+    /// band (toolbar + any open dropdown) hit-tests + dispatches the chrome; any
+    /// other press in the content band, and every release, goes to the orrery in
+    /// content-band coordinates (its viewport top sits at the toolbar bottom).
+    fn on_mouse_input(&mut self, state: ElementState, button: MouseButton) {
+        let orrery_button = match button {
+            MouseButton::Left => Some(PointerButton::Left),
+            MouseButton::Middle => Some(PointerButton::Middle),
+            MouseButton::Right => Some(PointerButton::Right),
+            _ => None,
+        };
+        let (x, y) = self.cursor;
+        let th = self.toolbar_height() as f32;
+        match state {
+            ElementState::Pressed => {
+                // The chrome's interactive area is the toolbar plus any open
+                // dropdown (its `.chrome` border-box). A left press there dispatches
+                // the chrome; below it (the content band) goes to the orrery.
+                let chrome_h = {
+                    let dom = self.dom.borrow();
+                    measure_class_bottom(&dom, self.width, self.height, "chrome")
+                        .unwrap_or(self.toolbar_h.max(FALLBACK_TOOLBAR_H))
+                };
+                if y < chrome_h as f32 {
+                    if button == MouseButton::Left {
+                        self.chrome_click(x, y);
+                    }
+                } else if let Some(b) = orrery_button {
+                    if self.orrery.pointer_down(b, x, y - th) {
+                        self.request_redraw();
+                    }
+                }
+            },
+            ElementState::Released => {
+                // Releases always reach the orrery: it acts only if it owns an
+                // in-progress pan / drag / marquee, so a chrome-band release is a
+                // harmless no-op.
+                if let Some(b) = orrery_button {
+                    if self.orrery.pointer_up(b, x, y - th) {
+                        self.request_redraw();
+                    }
+                }
+            },
+        }
+    }
+
+    /// Hit-test the chrome root at `(x, y)` and dispatch the click (buttons +
+    /// suggestion / palette rows). A row / backdrop click that closes the palette
+    /// restores focus so the caret doesn't dangle on the removed field.
+    fn chrome_click(&mut self, x: f32, y: f32) {
+        let offsets = ScrollOffsets::<NodeId>::default();
+        let hit = {
+            let dom = self.dom.borrow();
+            hit_test_node(&dom, CHROME_SHEET, self.width, self.height, x, y, &offsets)
+        };
+        if let Some(node) = hit {
+            let palette_was_open = self.runner.state().palette_open;
+            self.runner.dispatch_click(node, PointerClick::at((x, y)));
+            if palette_was_open && !self.runner.state().palette_open {
+                self.focus_after_palette_close();
+            }
+            self.request_redraw();
         }
     }
 
@@ -271,7 +323,6 @@ impl App {
                     location = %self.runner.state().toolbar.editable.location,
                     "omnibar submit"
                 );
-                self.sync_content();
                 self.request_redraw();
             },
             WinitKey::Named(WinitNamedKey::ArrowDown) if suggestions_open => {
@@ -302,7 +353,6 @@ impl App {
         match key {
             WinitKey::Named(WinitNamedKey::Enter) => {
                 self.runner.update(Chrome::run_palette_selection);
-                self.sync_content();
                 self.focus_after_palette_close();
                 self.request_redraw();
             },
@@ -401,39 +451,36 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => self.resize(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x as f32, position.y as f32);
-            },
-            WindowEvent::ModifiersChanged(mods) => {
-                self.modifiers = modifiers_from_winit(mods.state());
-            },
-            WindowEvent::MouseInput { state: ElementState::Pressed, button: MouseButton::Left, .. } => {
-                // Route by region. The chrome's interactive area is the toolbar
-                // plus any open dropdown (its `.chrome` border-box); a click there
-                // hit-tests the chrome root and dispatches (buttons + suggestion
-                // rows). Below it, the click falls to the content band, inert
-                // until the content root carries handlers.
-                let (x, y) = self.cursor;
-                let offsets = ScrollOffsets::<NodeId>::default();
-                let dom = self.dom.borrow();
-                let chrome_h = measure_class_bottom(&dom, self.width, self.height, "chrome")
-                    .unwrap_or(self.toolbar_h.max(FALLBACK_TOOLBAR_H));
-                let hit = if y < chrome_h as f32 {
-                    hit_test_node(&dom, CHROME_SHEET, self.width, self.height, x, y, &offsets)
-                } else {
-                    None
-                };
-                drop(dom); // release before dispatch_click mutates the same DOM
-                if let Some(node) = hit {
-                    let palette_was_open = self.runner.state().palette_open;
-                    self.runner.dispatch_click(node, PointerClick::at((x, y)));
-                    self.sync_content();
-                    // A palette row / backdrop click closes it; restore focus so
-                    // the caret doesn't reference the removed palette field.
-                    if palette_was_open && !self.runner.state().palette_open {
-                        self.focus_after_palette_close();
-                    }
+                // Forward to the orrery in content-band coordinates, so an
+                // in-progress pan / drag / marquee tracks even when the pointer
+                // strays over the chrome.
+                let th = self.toolbar_height() as f32;
+                if self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th) {
                     self.request_redraw();
                 }
             },
+            WindowEvent::ModifiersChanged(mods) => {
+                self.modifiers = modifiers_from_winit(mods.state());
+                self.orrery.set_ctrl(self.modifiers.ctrl);
+            },
+            WindowEvent::MouseWheel { delta, .. } => {
+                // Wheel over the content band drives the orrery (pan, or zoom under
+                // Ctrl). LineDelta is scaled to device px the way the orrery
+                // expects; PixelDelta passes through.
+                let th = self.toolbar_height() as f32;
+                if self.cursor.1 >= th {
+                    let (dx, dy) = match delta {
+                        MouseScrollDelta::LineDelta(x, y) => {
+                            (x * WHEEL_PAN_SCALE, y * WHEEL_PAN_SCALE)
+                        },
+                        MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
+                    };
+                    if self.orrery.wheel(dx, dy) {
+                        self.request_redraw();
+                    }
+                }
+            },
+            WindowEvent::MouseInput { state, button, .. } => self.on_mouse_input(state, button),
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed {
                     self.on_key_pressed(&event.logical_key);
