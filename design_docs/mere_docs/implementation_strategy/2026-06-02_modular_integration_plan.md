@@ -171,10 +171,11 @@ host-wired), `intel/embed` (Tier-2 embeddings, persists through eidetic),
    worker + `EventLoopProxy` wake) and routes the bytes to engines. Remaining: a
    durable cookie jar / cache (host-backed `FetchContext`), binary content, and a
    real `FetchContext` policy instead of `permissive()`.
-5. **Persistence** — *graph wired* (S3.1): `session-runtime::session_graph_store`
-   persists the session graph as `graph.json`; meerkat restores it on launch.
-   Remaining: per-persona/session/manifest threading, camera + view-intent restore,
-   and the eidetic content store for media + history (S3.2).
+5. **Persistence** — *graph + camera wired* (S3.1 / S3.2a): `session_graph_store`
+   persists the graph (`graph.json`) and `view_intent_store` the camera
+   (`CameraSnapshot`); meerkat restores both on launch. Remaining: focused-node
+   restore (`ViewIntent.focus`), per-persona/session/manifest threading, and the
+   eidetic content store for media + history (S3.2b).
 6. **No tiled-workbench mode / peripheral panes** — `FrameLayout` exists but meerkat
    has a single content pane; gloss/apparatus are latent a11y projections.
 7. **murm/moot unsurfaced** — `SyncedCabal` works but no comms surface exists.
@@ -235,10 +236,16 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
     restores `<data_dir>/mere/graph.json` on launch (`Orrery::with_graph`, positions
     preserved, no re-settle) and saves after each navigation. Load failure falls
     back to a fresh session. **The graph survives restart.**
-  - *S3.2* (remaining): thread persona / session / manifest (the `ManifestStore` +
-    `sessions/<id>` layout already exist); restore the camera + focused node via
-    `view_intent_store` (`CameraSnapshot`); add the eidetic content store for
-    fetched media + history (debounced `mark_dirty` flush).
+  - *S3.2a* (`8de3946`): the **camera persists** via `view_intent_store`. The orrery
+    exposes `CameraView` (pan + zoom); meerkat treats `<data_dir>/mere` as the
+    session dir (`graph.json` + `views/` siblings), maps the camera to/from the
+    `CameraSnapshot` affine, restores it on launch (suppressing the recenter), and
+    saves graph + camera after each navigation and on close. **View-intent (camera)
+    persists.**
+  - *S3.2b* (remaining): a new `ViewIntent.focus` field to restore the focused node
+    (re-open its card on reload); persona / session / manifest threading (the
+    `ManifestStore` + per-id `sessions/<id>` layout already exist); the eidetic
+    content store for fetched media + history (debounced `mark_dirty` flush).
 - **S4 — Tiled-workbench mode + peripheral panes (flip P2 + verso, R2).** `FrameLayout`
   becomes the cross-graph tiled-analysis mode over node-tiles; retarget
   `platen::layout` Morphorm→taffy under serval; light up gloss/apparatus projections;
@@ -414,3 +421,15 @@ consumer appears.
     persona / moothold-tessera / probes / docs) and the register-renderer-types
     scaffold. Not build-verified here (sibling-agent WIP); two new p2p/tessera docs
     are committed without `DOC_README` index lines (flagged for their authors).
+- **2026-06-03 — S3.2a done: the camera survives restart.**
+  - `orrery-host`: `CameraView` (plain pan + zoom) with `camera()` / `set_camera()`
+    (guards a non-finite / zero zoom, clamps to range).
+  - `meerkat` (`8de3946`): `<data_dir>/mere` is the session dir (`graph.json` +
+    `views/` siblings, per the view-intent spec); the camera maps to/from the
+    `CameraSnapshot` affine and restores on launch (suppressing the first-frame
+    recenter); graph + camera save after each navigation and on window close. Reuses
+    `view_intent_store` (atomic writes); no new deps. 11 orrery + 11 meerkat tests.
+  - The serval HTML lane also gained page-supplied inline `<style>` layering
+    (`inline_stylesheets_from_source`), landed alongside by a sibling change.
+  - *Next (S3.2b)*: `ViewIntent.focus` to re-open the focused node's card on reload;
+    persona / session / manifest threading; the eidetic content store for media.
