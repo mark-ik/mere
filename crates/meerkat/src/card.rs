@@ -30,6 +30,17 @@ use crate::fetch::{ContentState, Fetched};
 /// type. The page's own inline `<style>` and external `<link rel=stylesheet>`
 /// CSS are layered on top of this (see [`html_scene`]), so a page styles itself
 /// over these defaults.
+/// The card's default stylesheet for fetched HTML — block defaults + readable
+/// type. The page's own inline `<style>` and external `<link rel=stylesheet>`
+/// CSS are layered on top of this (see [`html_scene`]), so a page styles itself
+/// over these defaults.
+///
+/// These defaults stay **light**. A fetched web page renders on its own terms —
+/// most assume a white canvas — so Mere does not force third-party pages dark
+/// (that is a separate reader / dark-inject feature, and forcing it here would
+/// drop a page's own dark text onto a dark default). Dark mode themes Mere's
+/// *own* surfaces: the chrome, the orrery, and the synthesized / nematic card
+/// lanes (via [`card_vocabulary`]). Web content is rendered faithfully.
 const HTML_SHEET: &[&str] = &[
     "html, body, div, p, section, article, header, footer, nav, main, ul, ol, li, \
      blockquote, pre, table, tr, h1, h2, h3, h4, h5, h6 { display: block; }",
@@ -119,7 +130,24 @@ fn document(url: &str, blocks: Vec<DocumentBlock>) -> EngineDocument {
 /// caller composites the scene at the card rect with an opaque card background.
 pub fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> Scene {
     let laid = layout_document(doc, Viewport::new(w as f32, h as f32), &StyleConfig::default());
-    scene_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default())
+    scene_from_packet(&laid.packet, &laid.fonts, &card_vocabulary())
+}
+
+/// Light-on-dark text palette for the card's synthesized + nematic document
+/// lanes (welcome / loading / plain / markdown / …), matching the dark
+/// `CARD_BG`. The HTML lane themes through `HTML_SHEET` + the page's own CSS, so
+/// it does not use this. (The document-canvas default is near-black-on-light.)
+fn card_vocabulary() -> ColorVocabulary {
+    ColorVocabulary {
+        body_text: [0.88, 0.90, 0.94, 1.0],
+        heading_text: [0.96, 0.97, 1.0, 1.0],
+        link_text: [0.50, 0.70, 1.0, 1.0],
+        code_text: [0.80, 0.85, 0.78, 1.0],
+        badge_text: [0.66, 0.71, 0.81, 1.0],
+        rule: [0.45, 0.48, 0.55, 1.0],
+        placeholder_text: [0.88, 0.90, 0.94, 0.12],
+        placeholder_image: [0.55, 0.60, 0.70, 0.20],
+    }
 }
 
 /// Render the focused node's card scene, routing Ready content by type: HTML

@@ -47,8 +47,9 @@ use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 
 mod build;
 use build::{
-    build_pool_dom, build_simulation, dedup_edges, hyperlink, marquee_rect_cmds, sample_graph,
-    seed_cluster, set_class, set_style, selected_edge_overlay, NODE_SHEET,
+    background_cmds, build_pool_dom, build_simulation, dark_scene_style, dedup_edges, hyperlink,
+    marquee_rect_cmds, sample_graph, seed_cluster, set_class, set_style, selected_edge_overlay,
+    surface_bg, NODE_SHEET,
 };
 
 /// Force-directed settle length (frames) after a (re)seed, ~6s at 60fps.
@@ -212,7 +213,7 @@ impl Orrery {
             pool_h: 0,
             ticks_remaining: SETTLE_TICKS,
             camera: Camera::default(),
-            style: ScenePaintStyle::default(),
+            style: dark_scene_style(),
             generation: 0,
             cursor: (0.0, 0.0),
             pan_velocity: (0.0, 0.0),
@@ -345,7 +346,12 @@ impl Orrery {
 
         // A third (screen-space) layer for the marquee rubber-band, when active.
         let marquee_cmds = self.marquee.map(|origin| marquee_rect_cmds(origin, self.cursor));
+        // The orrery's own opaque backdrop is the bottom layer (so the surface is
+        // dark without depending on the host clear color); then the underlay edges
+        // + demoted rects, then the on-screen node DOM, then any marquee on top.
+        let bg_cmds = background_cmds(w, h, surface_bg());
         let mut layers = vec![
+            CompositeLayer::commands_only(&bg_cmds),
             CompositeLayer::commands_only(underlay.commands()),
             CompositeLayer {
                 commands: nodes_plist.commands(),

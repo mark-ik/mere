@@ -21,6 +21,7 @@ use paint_list_api::{
     ColorF, CommonPlacement, LayoutPoint, LayoutRect, PaintCmd, PathCommand, PathData, RectItem,
     StrokeCap, StrokeItem, StrokeJoin,
 };
+use platen::scene_paint::ScenePaintStyle;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 
 /// Author CSS for the node-children document. `.stage` is the camera-transformed
@@ -176,6 +177,37 @@ pub(crate) fn marquee_rect_cmds(a: (f32, f32), b: (f32, f32)) -> Vec<PaintCmd> {
         placement: CommonPlacement::new(rect),
         color: ColorF::new(0.30, 0.50, 0.92, 0.18),
     })]
+}
+
+// ----- Dark-mode palette + backdrop -----------------------------------------
+// The orrery paints its own opaque backdrop as the bottom composite layer, so
+// the content surface is dark regardless of the host's clear color (and stops
+// silently depending on a WHITE clear). A light variant + a runtime toggle are
+// the follow-up; these three are the single seam to flip when that lands.
+
+/// The content-surface backdrop (opaque, dark slate).
+pub(crate) fn surface_bg() -> ColorF {
+    ColorF::new(0.067, 0.078, 0.100, 1.0)
+}
+
+/// Scene-paint style tuned for the dark backdrop: a luminous node fill and
+/// lifted, lightly-translucent edge strokes that read on near-black (the
+/// platen default is tuned for a white canvas). `default_node_radius` matches
+/// the lib's `NODE_HALF`, so demoted-underlay rects align with the DOM gnodes.
+pub(crate) fn dark_scene_style() -> ScenePaintStyle {
+    ScenePaintStyle {
+        node_color: ColorF::new(0.50, 0.68, 0.92, 1.0),
+        default_node_radius: 18.0,
+        edge_color: ColorF::new(0.56, 0.61, 0.72, 0.65),
+        edge_width: 1.5,
+    }
+}
+
+/// The backdrop as a single screen-space fill over the whole viewport (no
+/// camera transform) — the orrery's bottom composite layer.
+pub(crate) fn background_cmds(w: u32, h: u32, color: ColorF) -> Vec<PaintCmd> {
+    let rect = LayoutRect::new(LayoutPoint::zero(), LayoutPoint::new(w as f32, h as f32));
+    vec![PaintCmd::DrawRect(RectItem { placement: CommonPlacement::new(rect), color })]
 }
 
 /// Highlight strokes for the selected edges, in **world space** (no transform) —

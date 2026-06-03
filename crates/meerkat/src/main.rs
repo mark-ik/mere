@@ -65,40 +65,44 @@ mod sync;
 /// `.chrome` container has no background — the host composites it over the
 /// content root, so only the toolbar and the (opaque) suggestions dropdown paint
 /// over the page; everything else stays transparent.
+// Dark-mode palette, coherent with the orrery's `surface_bg` (~rgb(17,20,26)):
+// the toolbar band sits a step above it, fields/buttons a step above that, text
+// near-white, accents blue-tinted. A light variant + a runtime toggle are the
+// follow-up; this sheet is the chrome half of that seam.
 const CHROME_SHEET: &[&str] = &[
     "div, button, input { display: block; }",
-    ".toolbar { display: flex; background-color: rgb(236, 238, 243); padding: 8px; }",
-    "button { font-size: 22px; color: rgb(30, 30, 40); \
-        background-color: rgb(220, 224, 232); padding: 8px 14px; margin: 4px; }",
-    ".disabled { color: rgb(170, 174, 184); background-color: rgb(228, 230, 236); }",
-    "input { font-size: 22px; color: rgb(20, 20, 20); \
-        background-color: rgb(255, 255, 255); padding: 8px; margin: 4px; flex-grow: 1; }",
+    ".toolbar { display: flex; background-color: rgb(28, 31, 38); padding: 8px; }",
+    "button { font-size: 22px; color: rgb(222, 226, 234); \
+        background-color: rgb(44, 48, 58); padding: 8px 14px; margin: 4px; }",
+    ".disabled { color: rgb(108, 114, 126); background-color: rgb(34, 37, 45); }",
+    "input { font-size: 22px; color: rgb(232, 234, 240); \
+        background-color: rgb(36, 39, 48); padding: 8px; margin: 4px; flex-grow: 1; }",
     // The p2p sync chip: small + muted, no flex-grow, so the omnibar pushes it to
     // the toolbar's right edge.
-    ".sync-chip { font-size: 14px; color: rgb(96, 102, 116); \
-        background-color: rgb(226, 230, 238); padding: 8px 12px; margin: 4px; }",
-    ".suggestions { background-color: rgb(255, 255, 255); padding-bottom: 6px; }",
-    ".suggestion { font-size: 18px; color: rgb(40, 44, 54); \
-        background-color: rgb(255, 255, 255); padding: 8px 16px; }",
-    ".suggestion-active { font-size: 18px; color: rgb(20, 24, 34); \
-        background-color: rgb(216, 226, 244); padding: 8px 16px; }",
+    ".sync-chip { font-size: 14px; color: rgb(150, 156, 168); \
+        background-color: rgb(38, 42, 52); padding: 8px 12px; margin: 4px; }",
+    ".suggestions { background-color: rgb(30, 33, 41); padding-bottom: 6px; }",
+    ".suggestion { font-size: 18px; color: rgb(206, 210, 220); \
+        background-color: rgb(30, 33, 41); padding: 8px 16px; }",
+    ".suggestion-active { font-size: 18px; color: rgb(234, 238, 246); \
+        background-color: rgb(48, 58, 82); padding: 8px 16px; }",
     // Command palette: a centered panel floated over the page (flex centering;
     // serval maps justify-content through stylo_taffy).
     ".palette-overlay { display: flex; justify-content: center; padding-top: 56px; }",
-    ".palette { width: 540px; background-color: rgb(244, 246, 250); padding: 10px; }",
-    ".cmd-list { background-color: rgb(244, 246, 250); }",
-    ".cmd-row { font-size: 18px; color: rgb(40, 44, 54); \
-        background-color: rgb(244, 246, 250); padding: 8px 12px; }",
-    ".cmd-row-active { font-size: 18px; color: rgb(20, 24, 34); \
-        background-color: rgb(210, 222, 242); padding: 8px 12px; }",
+    ".palette { width: 540px; background-color: rgb(34, 37, 46); padding: 10px; }",
+    ".cmd-list { background-color: rgb(34, 37, 46); }",
+    ".cmd-row { font-size: 18px; color: rgb(206, 210, 220); \
+        background-color: rgb(34, 37, 46); padding: 8px 12px; }",
+    ".cmd-row-active { font-size: 18px; color: rgb(234, 238, 246); \
+        background-color: rgb(46, 56, 80); padding: 8px 12px; }",
 ];
 
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
 const FALLBACK_TOOLBAR_H: u32 = 64;
 
-/// Background of the floating content card — a light panel (the chrome palette's
-/// surface tint), so the card reads as a card over the white orrery band.
-const CARD_BG: wgpu::Color = wgpu::Color { r: 0.957, g: 0.965, b: 0.980, a: 1.0 };
+/// Background of the floating content card — a panel a step above the orrery
+/// backdrop, so the card reads as a raised surface over the dark orrery band.
+const CARD_BG: wgpu::Color = wgpu::Color { r: 0.110, g: 0.122, b: 0.145, a: 1.0 };
 
 /// Single-pane view-intent identity for the default session (one frame, one
 /// pane). Per-frame / per-pane ids arrive with the tiled workbench (S4) and
@@ -382,8 +386,14 @@ impl App {
         let host = self.host.as_ref().unwrap();
         let (_chrome_tex, chrome_view) =
             host.rasterize(&chrome_scene, w, h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
-        let (_content_tex, content_view) =
-            host.rasterize(&content_scene, w, content_h, ColorLoad::Clear(wgpu::Color::WHITE));
+        // The orrery paints its own opaque backdrop, but clear to the same dark
+        // tone so a resize frame cannot flash white before the backdrop lands.
+        let (_content_tex, content_view) = host.rasterize(
+            &content_scene,
+            w,
+            content_h,
+            ColorLoad::Clear(wgpu::Color { r: 0.067, g: 0.078, b: 0.100, a: 1.0 }),
+        );
         // The focused-node card to its own offscreen target (kept alive — the view
         // borrows nothing, but mirror the chrome/content pattern of holding both).
         let card_raster = match (card_geom, self.card_scene.as_ref()) {
