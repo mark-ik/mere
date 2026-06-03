@@ -1,0 +1,16 @@
+[package]
+name = "register-renderer-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Wasm32-clean data-only vocabulary for Mere's host ports + renderer registry: the input a host hands a pane renderer and the region it renders into. No logic, no host/render-backend deps, so wasm and native builds share it."
+
+[dependencies]
+# Reuse the existing key taxonomy rather than mint a parallel one.
+register-input = { path = "../register-input" }
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
