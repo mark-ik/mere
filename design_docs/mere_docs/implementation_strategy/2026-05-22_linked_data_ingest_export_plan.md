@@ -345,7 +345,11 @@ has a done-condition, not a date.
       same node identity across ingests and hosts. Option (b) makes re-ingest
       idempotent by identity (not just URL-dedup), closes the skolem/idempotency
       thread, and unifies native + wasm, at the cost of changing native from random
-      v4 (worth adopting natively too). Lean (b).
+      v4. **Decided 2026-06-03: (b),** `Uuid::new_v5(<fixed Mere namespace>, @id)`.
+      Beyond wasm, deterministic identity is the real prize: two hosts ingesting
+      the same document independently mint the *same* node UUID, so federated
+      merges (moot / moothold) need no identity reconciliation. Worth adopting
+      natively ahead of any wasm host.
     - *Adjacent wasm items to verify / decide.* Confirm `oxjsonld` / `oxrdf` build
       to `wasm32-unknown-unknown` (pure-Rust expected; watch for a transitive
       getrandom). Decide `bundled-contexts` on wasm: ~220 KB in the bundle vs
