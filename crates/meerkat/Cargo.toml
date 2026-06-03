@@ -76,6 +76,12 @@ netfetcher = { path = "../../../netfetcher" }
 url = "2"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 
+# Content engines for the card (S2.2b-ii): nematic's document engines (markdown /
+# gemtext / plain text / feeds / …) turn fetched bytes into an EngineDocument,
+# routed by content-type. HTML rides the serval lane instead (set_inner_html →
+# scene_from_scripted_dom via the pelt-live dep already present).
+nematic = { workspace = true }
+
 # Windowing + present (mirrors pelt-live's bin deps; mere's pins align with
 # serval's, so the wgpu 29 / winit 0.30 surface + netrender Renderer unify).
 winit = { workspace = true }

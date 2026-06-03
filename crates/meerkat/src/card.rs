@@ -15,10 +15,30 @@
 
 use document_canvas::netrender_backend::scene_from_packet;
 use document_canvas::{layout_document, ColorVocabulary, StyleConfig, Viewport};
-use inker::{DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan};
+use inker::{
+    DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput,
+    EngineRegistry, InlineSpan,
+};
+use layout_dom_api::{LayoutDom, LayoutDomMut};
 use netrender::Scene;
+use pelt_live::scene_from_scripted_dom;
+use serval_layout::ScrollOffsets;
+use serval_scripted_dom::{NodeId, ScriptedDom};
 
 use crate::fetch::{ContentState, Fetched};
+
+/// A minimal default stylesheet for fetched HTML rendered through serval — block
+/// defaults + readable type. Page-supplied CSS (`<style>` / `<link>`) is serval's
+/// deeper job; this gives structured, legible output for the card.
+const HTML_SHEET: &[&str] = &[
+    "html, body, div, p, section, article, header, footer, nav, main, ul, ol, li, \
+     blockquote, pre, table, tr, h1, h2, h3, h4, h5, h6 { display: block; }",
+    "body { padding: 16px; background-color: rgb(250, 250, 252); color: rgb(22, 24, 32); }",
+    "h1 { font-size: 30px; } h2 { font-size: 24px; } h3 { font-size: 20px; }",
+    "p, li, td { font-size: 16px; }",
+    "a { color: rgb(40, 80, 170); }",
+    "pre, code { font-size: 14px; color: rgb(50, 54, 64); }",
+];
 
 /// Margin (px) between the card and the content-band edges.
 const CARD_MARGIN: f32 = 24.0;
@@ -100,6 +120,79 @@ fn document(url: &str, blocks: Vec<DocumentBlock>) -> EngineDocument {
 pub fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> Scene {
     let laid = layout_document(doc, Viewport::new(w as f32, h as f32), &StyleConfig::default());
     scene_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default())
+}
+
+/// Render the focused node's card scene, routing Ready content by type: HTML goes
+/// through serval (`set_inner_html` → `scene_from_scripted_dom`); a content-type
+/// with a matching nematic engine goes through the document lane; everything else
+/// (welcome / loading / failed / unrouted) renders the synthesized document.
+pub fn render_content_scene(
+    url: &str,
+    state: Option<&ContentState>,
+    registry: &EngineRegistry,
+    w: u32,
+    h: u32,
+) -> Scene {
+    if let Some(ContentState::Ready(fetched)) = state {
+        if is_html(fetched.content_type.as_deref()) {
+            return html_scene(&fetched.body, w, h);
+        }
+        if let Some(doc) = routed_document(url, fetched, registry) {
+            return render_card_scene(&doc, w, h);
+        }
+    }
+    render_card_scene(&content_document(url, state), w, h)
+}
+
+/// Dispatch Ready content to the nematic engine matching its content-type, if any,
+/// producing an [`EngineDocument`]. `None` when no engine matches (the caller then
+/// falls back to the plain rendering).
+fn routed_document(url: &str, fetched: &Fetched, registry: &EngineRegistry) -> Option<EngineDocument> {
+    let id = engine_id_for(fetched.content_type.as_deref())?;
+    let engine = registry.engine(id)?;
+    let mut input = EngineInput::new(url, fetched.body.clone());
+    if let Some(ct) = &fetched.content_type {
+        input = input.with_content_type(ct.clone());
+    }
+    engine.render(&input).ok()
+}
+
+/// Map an HTTP content-type to a nematic document engine id (the base type, minus
+/// any `; charset=…`). `None` for HTML (the serval lane) or unknown types.
+fn engine_id_for(content_type: Option<&str>) -> Option<&'static str> {
+    let base = base_type(content_type?);
+    Some(match base.as_str() {
+        "text/markdown" | "text/x-markdown" => nematic::ENGINE_MARKDOWN,
+        "text/gemini" => nematic::ENGINE_GEMTEXT,
+        "text/plain" => nematic::ENGINE_TEXT,
+        "application/rss+xml" | "application/atom+xml" | "application/feed+json" => {
+            nematic::ENGINE_FEED
+        },
+        _ => return None,
+    })
+}
+
+/// Whether the content-type is HTML (handled by the serval lane).
+fn is_html(content_type: Option<&str>) -> bool {
+    content_type
+        .map(base_type)
+        .is_some_and(|b| b == "text/html" || b == "application/xhtml+xml")
+}
+
+/// The lowercased base media type, dropping parameters
+/// (`text/HTML; charset=utf-8` → `text/html`).
+fn base_type(content_type: &str) -> String {
+    content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase()
+}
+
+/// Parse `body` as HTML into a serval DOM and render it to a scene — the serval
+/// content lane, reusing the host's own renderer for full-web HTML.
+fn html_scene(body: &str, w: u32, h: u32) -> Scene {
+    let mut dom = ScriptedDom::new();
+    let root = dom.document();
+    dom.set_inner_html(root, body);
+    let scroll = ScrollOffsets::<NodeId>::default();
+    scene_from_scripted_dom(&dom, HTML_SHEET, w, h, None, &scroll)
 }
 
 /// The floating card rectangle within the content band (top-right, inset by
@@ -205,5 +298,52 @@ mod tests {
         assert!(y0 >= 64.0, "below the toolbar band");
         assert!(cw >= 1 && ch >= 1);
         assert!(card_rect(120, 64, 120).is_none(), "no card when the band is too small");
+    }
+
+    #[test]
+    fn engine_id_for_maps_known_types() {
+        assert_eq!(engine_id_for(Some("text/markdown")), Some(nematic::ENGINE_MARKDOWN));
+        assert_eq!(engine_id_for(Some("text/plain; charset=utf-8")), Some(nematic::ENGINE_TEXT));
+        assert_eq!(engine_id_for(Some("text/gemini")), Some(nematic::ENGINE_GEMTEXT));
+        assert_eq!(engine_id_for(Some("text/html")), None, "HTML uses the serval lane");
+        assert_eq!(engine_id_for(None), None);
+    }
+
+    #[test]
+    fn is_html_detects_html_types() {
+        assert!(is_html(Some("text/html; charset=utf-8")));
+        assert!(is_html(Some("application/xhtml+xml")));
+        assert!(!is_html(Some("text/markdown")));
+        assert!(!is_html(None));
+    }
+
+    fn glyph_runs(scene: &netrender::Scene) -> usize {
+        scene.ops.iter().filter(|op| matches!(op, netrender::SceneOp::GlyphRun(_))).count()
+    }
+
+    #[test]
+    fn markdown_routes_through_nematic_to_glyph_runs() {
+        let mut registry = EngineRegistry::new();
+        for engine in nematic::engines() {
+            registry.register(engine);
+        }
+        let ready = ContentState::Ready(Fetched {
+            content_type: Some("text/markdown".into()),
+            body: "# Heading\n\nA paragraph.".into(),
+        });
+        let scene = render_content_scene("https://example.com", Some(&ready), &registry, 420, 360);
+        assert!(glyph_runs(&scene) >= 1, "markdown renders text via the nematic document lane");
+    }
+
+    #[test]
+    fn html_routes_through_serval_to_glyph_runs() {
+        // The serval lane needs no document engine registered.
+        let registry = EngineRegistry::new();
+        let ready = ContentState::Ready(Fetched {
+            content_type: Some("text/html".into()),
+            body: "<h1>Hello</h1><p>World</p>".into(),
+        });
+        let scene = render_content_scene("https://example.com", Some(&ready), &registry, 420, 360);
+        assert!(glyph_runs(&scene) >= 1, "HTML renders text via the serval lane");
     }
 }

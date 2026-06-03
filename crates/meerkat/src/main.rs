@@ -32,6 +32,7 @@ use std::rc::Rc;
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 
+use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
 use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
 use netrender::external_texture::ExternalTexturePlacement;
@@ -114,6 +115,9 @@ struct App {
     fetch_rx: Receiver<fetch::FetchOutcome>,
     /// Per-URL fetched content state, keyed by the node's URL (URL identity).
     content: HashMap<String, fetch::ContentState>,
+    /// Content engines for the card: nematic's document engines, routed by
+    /// content-type. (HTML rides the serval lane instead, in `card`.)
+    engines: EngineRegistry,
     /// Cached measured height (px) of the chrome band; `0` until first measured.
     toolbar_h: u32,
     window: Option<Arc<Window>>,
@@ -143,6 +147,10 @@ impl App {
             orrery.visit(&content_location);
         }
         let (fetcher, fetch_rx) = fetch::Fetcher::new(proxy);
+        let mut engines = EngineRegistry::new();
+        for engine in nematic::engines() {
+            engines.register(engine);
+        }
         Self {
             dom,
             runner,
@@ -154,6 +162,7 @@ impl App {
             fetcher,
             fetch_rx,
             content: HashMap::new(),
+            engines,
             toolbar_h: 0,
             window: None,
             host: None,
@@ -236,8 +245,8 @@ impl App {
             let state = self.content.get(url);
             let key = (url.to_string(), cw, ch, fetch::ContentState::tag(state));
             if self.card_key.as_ref() != Some(&key) {
-                let doc = card::content_document(url, state);
-                self.card_scene = Some(card::render_card_scene(&doc, cw, ch));
+                self.card_scene =
+                    Some(card::render_content_scene(url, state, &self.engines, cw, ch));
                 self.card_key = Some(key);
             }
         } else {
