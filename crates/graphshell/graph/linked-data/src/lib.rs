@@ -30,6 +30,7 @@
 #![doc(html_root_url = "https://docs.rs/linked-data/0.0.1")]
 
 use kernel::graph::{Graph, Node, NodeKey, SemanticData, predicate_iri, sub_kind_from_iri};
+use kernel::types::ClassificationScheme;
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
@@ -92,10 +93,31 @@ fn edge_predicates(semantic: &SemanticData) -> Vec<String> {
     }
 }
 
+/// Insert an `@type` array — the node's `rdf:type` classification IRIs (what
+/// ingest writes from JSON-LD `@type`), sorted — when present. Shared by the
+/// expanded and compacted exports.
+fn insert_types(obj: &mut Map<String, Value>, node: &Node) {
+    let mut types: Vec<String> = node
+        .classifications
+        .iter()
+        .filter(|c| matches!(&c.scheme, ClassificationScheme::Custom(s) if s == "rdf:type"))
+        .map(|c| c.value.clone())
+        .collect();
+    types.sort();
+    types.dedup();
+    if !types.is_empty() {
+        obj.insert(
+            "@type".to_string(),
+            Value::Array(types.into_iter().map(Value::String).collect()),
+        );
+    }
+}
+
 fn node_object(graph: &Graph, key: NodeKey, node: &Node) -> Value {
     let url = node.primary_address().as_url_str();
     let mut obj = Map::new();
     obj.insert("@id".to_string(), Value::String(node_id(node)));
+    insert_types(&mut obj, node);
 
     // Curated literals. Skip a title that is only the URL fallback (`add_node`
     // seeds `title = url` for an untitled node) — that is not a real name.
@@ -174,6 +196,7 @@ fn compact_node_object(
     let url = node.primary_address().as_url_str();
     let mut obj = Map::new();
     obj.insert("@id".to_string(), Value::String(node_id(node)));
+    insert_types(&mut obj, node);
 
     if !node.title.is_empty() && node.title != url {
         context
@@ -233,7 +256,10 @@ fn compact_node_object(
 
 #[cfg(test)]
 mod tests {
-    use super::{EdgeContribution, GraphContribution, from_jsonld, to_jsonld, to_jsonld_compact};
+    use super::{
+        EdgeContribution, GraphContribution, apply_contribution, from_jsonld, to_jsonld,
+        to_jsonld_compact,
+    };
     use kernel::graph::{EdgeAssertion, Graph, SemanticSubKind};
     use serde_json::json;
 
@@ -279,6 +305,31 @@ mod tests {
     #[test]
     fn empty_graph_exports_empty_array() {
         assert_eq!(to_jsonld(&Graph::new()), json!([]));
+    }
+
+    #[test]
+    fn type_round_trips_via_rdf_type_classification() {
+        // @type → node types on ingest, applied as an `rdf:type` classification,
+        // re-exported as @type.
+        let doc = br#"{"@id":"https://a.test/","@type":["https://schema.org/Article"]}"#;
+        let contribution = from_jsonld(doc).expect("parse");
+        let node = contribution
+            .nodes
+            .iter()
+            .find(|n| n.id == "https://a.test/")
+            .expect("node a");
+        assert_eq!(node.types, vec!["https://schema.org/Article".to_string()]);
+
+        let mut graph = Graph::new();
+        apply_contribution(&mut graph, &contribution);
+        let exported = to_jsonld(&graph);
+        let a = exported
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|n| n["@id"] == json!("https://a.test/"))
+            .expect("exported node a");
+        assert_eq!(a["@type"], json!(["https://schema.org/Article"]));
     }
 
     #[test]

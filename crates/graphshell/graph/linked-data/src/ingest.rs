@@ -32,6 +32,10 @@ use std::collections::BTreeMap;
 
 #[cfg(not(target_arch = "wasm32"))]
 use kernel::graph::{EdgeAssertion, Graph, NodeKey, predicate_iri, sub_kind_from_iri};
+#[cfg(not(target_arch = "wasm32"))]
+use kernel::types::{
+    ClassificationProvenance, ClassificationScheme, ClassificationStatus, NodeClassification,
+};
 
 /// `rdf:type` — the predicate JSON-LD `@type` expands to.
 const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -41,7 +45,8 @@ const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 pub struct NodeContribution {
     /// The subject IRI (a URL, or a skolemized `urn:` IRI for a blank node).
     pub id: String,
-    /// `@type` IRIs (carried for a future class-IRI mapping; not yet applied).
+    /// `@type` IRIs — applied as `rdf:type` classifications by
+    /// [`apply_contribution`].
     pub types: Vec<String>,
     /// `schema:name`, if present.
     pub title: Option<String>,
@@ -94,16 +99,31 @@ impl std::fmt::Display for IngestError {
 
 impl std::error::Error for IngestError {}
 
-/// Skolemize a blank-node id (document-scoped) to a stable Mere IRI.
-fn skolemize(blank_id: &str) -> String {
-    format!("urn:mere:bnode:{blank_id}")
+/// A stable per-document namespace (FNV-1a over the bytes, hex) that scopes a
+/// blank node's skolemized IRI to its source document. oxjsonld already assigns
+/// each blank a unique label per parse, so this is defensive scoping rather than
+/// strict collision-avoidance; full re-ingest idempotency for blanks would need
+/// RDF canonicalization (URDNA2015), which is out of scope.
+fn doc_namespace(bytes: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &byte in bytes {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
 }
 
-/// The IRI for a subject term (skolemizing a blank node).
-fn subject_iri(subject: &NamedOrBlankNode) -> String {
+/// Skolemize a blank-node id to a Mere IRI, scoped to its source document via
+/// `namespace`.
+fn skolemize(namespace: &str, blank_id: &str) -> String {
+    format!("urn:mere:bnode:{namespace}:{blank_id}")
+}
+
+/// The IRI for a subject term (skolemizing a blank node within `namespace`).
+fn subject_iri(subject: &NamedOrBlankNode, namespace: &str) -> String {
     match subject {
         NamedOrBlankNode::NamedNode(node) => node.as_str().to_string(),
-        NamedOrBlankNode::BlankNode(node) => skolemize(node.as_str()),
+        NamedOrBlankNode::BlankNode(node) => skolemize(namespace, node.as_str()),
     }
 }
 
@@ -135,7 +155,7 @@ fn route_resource(
 /// graph, no kernel mutation. Expects inline-`@context` or expanded JSON-LD; a
 /// remote `@context` is not fetched (a bundled-context loader is a later step).
 pub fn from_jsonld(bytes: &[u8]) -> Result<GraphContribution, IngestError> {
-    collect_contribution(JsonLdParser::new().for_slice(bytes))
+    collect_contribution(JsonLdParser::new().for_slice(bytes), &doc_namespace(bytes))
 }
 
 /// Like [`from_jsonld`], but a remote `@context` is resolved from `contexts`
@@ -147,6 +167,7 @@ pub fn from_jsonld_with_contexts(
     bytes: &[u8],
     contexts: ContextCache,
 ) -> Result<GraphContribution, IngestError> {
+    let namespace = doc_namespace(bytes);
     let quads = JsonLdParser::new()
         .for_slice(bytes)
         .with_load_document_callback(move |url, _options| {
@@ -160,20 +181,22 @@ pub fn from_jsonld_with_contexts(
                     format!("refused remote @context (not in the bundled cache): {url}").into()
                 })
         });
-    collect_contribution(quads)
+    collect_contribution(quads, &namespace)
 }
 
 /// Group a stream of RDF quads into a [`GraphContribution`] — shared by the
-/// network-free and bundled-context parsers.
+/// network-free and bundled-context parsers. `namespace` scopes blank-node
+/// skolemization to the source document.
 fn collect_contribution<E: std::fmt::Display>(
     quads: impl Iterator<Item = Result<Quad, E>>,
+    namespace: &str,
 ) -> Result<GraphContribution, IngestError> {
     let mut nodes: BTreeMap<String, NodeContribution> = BTreeMap::new();
     let mut edges: Vec<EdgeContribution> = Vec::new();
 
     for quad in quads {
         let quad = quad.map_err(|err| IngestError::Parse(err.to_string()))?;
-        let subject = subject_iri(&quad.subject);
+        let subject = subject_iri(&quad.subject, namespace);
         let predicate = quad.predicate.as_str();
         nodes
             .entry(subject.clone())
@@ -192,9 +215,13 @@ fn collect_contribution<E: std::fmt::Display>(
             Term::NamedNode(object) => {
                 route_resource(&mut nodes, &mut edges, &subject, predicate, object.as_str().to_string())
             }
-            Term::BlankNode(object) => {
-                route_resource(&mut nodes, &mut edges, &subject, predicate, skolemize(object.as_str()))
-            }
+            Term::BlankNode(object) => route_resource(
+                &mut nodes,
+                &mut edges,
+                &subject,
+                predicate,
+                skolemize(namespace, object.as_str()),
+            ),
         }
     }
 
@@ -267,6 +294,20 @@ pub struct ApplyOutcome {
 pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -> ApplyOutcome {
     use std::collections::HashMap;
 
+    /// An ingested `@type` IRI as a classification under the `rdf:type` scheme
+    /// (the full type IRI is the value — lossless).
+    fn rdf_type_classification(type_iri: &str) -> NodeClassification {
+        NodeClassification {
+            scheme: ClassificationScheme::Custom("rdf:type".to_string()),
+            value: type_iri.to_string(),
+            label: None,
+            confidence: 1.0,
+            provenance: ClassificationProvenance::Imported,
+            status: ClassificationStatus::Imported,
+            primary: false,
+        }
+    }
+
     let mut outcome = ApplyOutcome::default();
     let mut key_for: HashMap<&str, NodeKey> = HashMap::new();
 
@@ -287,6 +328,10 @@ pub fn apply_contribution(graph: &mut Graph, contribution: &GraphContribution) -
                     target.tags.insert(tag.clone());
                 }
             }
+        }
+        // `@type` IRIs become `rdf:type` classifications (kernel dedups them).
+        for type_iri in &node.types {
+            graph.add_node_classification(key, rdf_type_classification(type_iri));
         }
         key_for.insert(node.id.as_str(), key);
     }
@@ -348,6 +393,33 @@ mod tests {
         "https://schema.org/citation": [{"@id": "https://c.test/"}]
       }
     ]"#;
+
+    #[test]
+    fn blank_nodes_skolemize_under_a_document_namespace() {
+        // A blank node becomes `urn:mere:bnode:<doc-namespace>:<label>`. The
+        // namespace is stable per document content; oxjsonld assigns the label
+        // fresh per parse (so blanks are not idempotent across re-ingests without
+        // canonicalization), but distinct documents get distinct namespaces.
+        let blank = |doc: &[u8]| {
+            from_jsonld(doc)
+                .unwrap()
+                .edges
+                .iter()
+                .find(|e| e.predicate.ends_with("#cites"))
+                .expect("cites edge")
+                .object
+                .clone()
+        };
+        let doc_a = br#"{"@context":{"cites":"https://mere.computer/ns/rel#cites"},"@id":"https://a.test/","cites":{"@type":"https://schema.org/Thing"}}"#;
+        let doc_b = br#"{"@context":{"cites":"https://mere.computer/ns/rel#cites"},"@id":"https://b.test/","cites":{"@type":"https://schema.org/Thing"}}"#;
+        let a = blank(doc_a);
+        assert!(a.starts_with("urn:mere:bnode:"), "skolemized: {a}");
+        // Everything before the final `:` is the `urn:mere:bnode:<namespace>`
+        // prefix; the label after it is what oxjsonld varies per parse.
+        let prefix = |iri: &str| iri.rsplit_once(':').map(|(p, _)| p.to_string()).unwrap();
+        assert_eq!(prefix(&a), prefix(&blank(doc_a)), "namespace is content-stable");
+        assert_ne!(prefix(&a), prefix(&blank(doc_b)), "different doc, different namespace");
+    }
 
     #[test]
     fn from_jsonld_parses_nodes_literals_types_and_edges() {
