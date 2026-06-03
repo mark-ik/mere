@@ -230,6 +230,55 @@ pub fn from_jsonld_with_contexts(
 /// a full HTML parser — enough to harvest the structured data most pages embed.
 /// A host pairs this with rendering: a page both displays and contributes its
 /// linked data.
+/// Scan a JSON-LD document for the remote `@context` URLs it references — the
+/// string entries of any `@context`, top-level or nested, including inside
+/// `@graph`. A host fetches these (minus the ones the bundled packs already
+/// cover, see [`is_bundled_context`]) and folds them into a [`ContextCache`]
+/// before ingest, so an unbundled vocabulary resolves. Pure and network-free;
+/// returns `[]` for non-JSON input.
+pub fn referenced_context_urls(body: &[u8]) -> Vec<String> {
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(body) else {
+        return Vec::new();
+    };
+    let mut urls = Vec::new();
+    collect_context_urls(&value, &mut urls);
+    urls.sort();
+    urls.dedup();
+    urls
+}
+
+/// Walk every object for an `@context`, collecting its remote string references.
+fn collect_context_urls(value: &serde_json::Value, out: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            if let Some(ctx) = map.get("@context") {
+                collect_context_strings(ctx, out);
+            }
+            for (key, child) in map {
+                if key != "@context" {
+                    collect_context_urls(child, out);
+                }
+            }
+        },
+        serde_json::Value::Array(items) => items.iter().for_each(|i| collect_context_urls(i, out)),
+        _ => {},
+    }
+}
+
+/// A `@context` value is a URL string, an array (URL strings + inline objects), or
+/// an inline object. Collect only the remote (`http(s)`) string references.
+fn collect_context_strings(ctx: &serde_json::Value, out: &mut Vec<String>) {
+    match ctx {
+        serde_json::Value::String(s) if s.starts_with("http://") || s.starts_with("https://") => {
+            out.push(s.clone());
+        },
+        serde_json::Value::Array(items) => {
+            items.iter().for_each(|i| collect_context_strings(i, out))
+        },
+        _ => {},
+    }
+}
+
 pub fn from_html(html: &str) -> Vec<GraphContribution> {
     from_html_with_contexts(html, ContextCache::new())
 }
@@ -375,6 +424,23 @@ const DUBLIN_CORE_CONTEXT: &[u8] = include_bytes!("../assets/dublin-core.context
 
 #[cfg(feature = "bundled-contexts")]
 const DUBLIN_CORE_URLS: &[&str] = &["http://purl.org/dc/terms/", "http://purl.org/dc/elements/1.1/"];
+
+/// Whether `url` is a remote `@context` the bundled packs already cover, so a host
+/// need not fetch it before ingest. Always `false` when `bundled-contexts` is off
+/// (then `full()` equals `minimal()`, so every remote context must be fetched).
+pub fn is_bundled_context(url: &str) -> bool {
+    #[cfg(feature = "bundled-contexts")]
+    {
+        SCHEMA_ORG_URLS.contains(&url)
+            || ACTIVITYSTREAMS_URLS.contains(&url)
+            || DUBLIN_CORE_URLS.contains(&url)
+    }
+    #[cfg(not(feature = "bundled-contexts"))]
+    {
+        let _ = url;
+        false
+    }
+}
 
 impl ContextCache {
     /// An empty cache (the **none** preset): every remote `@context` is refused.
@@ -764,6 +830,31 @@ mod tests {
             .expect("node d");
         assert_eq!(node.title.as_deref(), Some("Doc"));
         assert!(node.tags.iter().any(|t| t == "alpha"));
+    }
+
+    #[test]
+    fn referenced_context_urls_finds_remote_refs() {
+        let doc = br#"{"@context":["https://schema.org/",{"x":"https://ex/#x"}],"@graph":[{"@context":"https://www.w3.org/ns/activitystreams","@id":"a"}]}"#;
+        let urls = referenced_context_urls(doc);
+        assert!(urls.contains(&"https://schema.org/".to_string()));
+        assert!(urls.contains(&"https://www.w3.org/ns/activitystreams".to_string()));
+        assert_eq!(urls.len(), 2, "inline object entries are not URL references");
+    }
+
+    #[test]
+    fn referenced_context_urls_ignores_inline_and_nonjson() {
+        let inline = br#"{"@context":{"name":"https://schema.org/name"},"@id":"a"}"#;
+        assert!(referenced_context_urls(inline).is_empty(), "inline context has no remote ref");
+        assert!(referenced_context_urls(b"not json at all").is_empty());
+    }
+
+    #[cfg(feature = "bundled-contexts")]
+    #[test]
+    fn is_bundled_context_covers_the_packs() {
+        assert!(is_bundled_context("https://schema.org/"));
+        assert!(is_bundled_context("https://www.w3.org/ns/activitystreams"));
+        assert!(is_bundled_context("http://purl.org/dc/terms/"));
+        assert!(!is_bundled_context("https://example.com/ctx"));
     }
 
     #[test]
