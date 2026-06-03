@@ -19,18 +19,17 @@ use inker::{
     DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput,
     EngineRegistry, InlineSpan,
 };
-use layout_dom_api::{LayoutDom, LayoutDomMut};
 use netrender::Scene;
 use pelt_live::scene_from_layout_dom;
-use serval_layout::{inline_stylesheets_from_source, NoImageLoader, ScrollOffsets};
-use serval_scripted_dom::{NodeId, ScriptedDom};
+use serval_layout::{inline_stylesheets, linked_stylesheets_with_loader, ImageLoader, ScrollOffsets};
+use serval_static_dom::StaticDocument;
 
 use crate::fetch::{ContentState, Fetched};
 
 /// The card's default stylesheet for fetched HTML — block defaults + readable
-/// type. The page's own inline `<style>` CSS is layered on top of this (see
-/// [`html_scene`]), so a page styles itself over these defaults; external
-/// `<link rel=stylesheet>` is a fetch and is not yet resolved here.
+/// type. The page's own inline `<style>` and external `<link rel=stylesheet>`
+/// CSS are layered on top of this (see [`html_scene`]), so a page styles itself
+/// over these defaults.
 const HTML_SHEET: &[&str] = &[
     "html, body, div, p, section, article, header, footer, nav, main, ul, ol, li, \
      blockquote, pre, table, tr, h1, h2, h3, h4, h5, h6 { display: block; }",
@@ -123,20 +122,22 @@ pub fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> Scene {
     scene_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default())
 }
 
-/// Render the focused node's card scene, routing Ready content by type: HTML goes
-/// through serval (`set_inner_html` → `scene_from_scripted_dom`); a content-type
-/// with a matching nematic engine goes through the document lane; everything else
-/// (welcome / loading / failed / unrouted) renders the synthesized document.
+/// Render the focused node's card scene, routing Ready content by type: HTML
+/// parses + renders through serval ([`html_scene`], resolving subresources via
+/// `loader`); a content-type with a matching nematic engine goes through the
+/// document lane; everything else (welcome / loading / failed / unrouted)
+/// renders the synthesized document.
 pub fn render_content_scene(
     url: &str,
     state: Option<&ContentState>,
     registry: &EngineRegistry,
+    loader: &impl ImageLoader,
     w: u32,
     h: u32,
 ) -> Scene {
     if let Some(ContentState::Ready(fetched)) = state {
         if is_html(fetched.content_type.as_deref()) {
-            return html_scene(&fetched.body, w, h);
+            return html_scene(&fetched.body, loader, w, h);
         }
         if let Some(doc) = routed_document(url, fetched, registry) {
             return render_card_scene(&doc, w, h);
@@ -186,26 +187,25 @@ fn base_type(content_type: &str) -> String {
     content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase()
 }
 
-/// Parse `body` as HTML into a serval DOM and render it through the shared
-/// content core ([`pelt_live::scene_from_layout_dom`]) — the same cascade →
-/// image-decode → layout → emit pipeline the static viewer uses. The page's own
-/// inline `<style>` CSS is layered over [`HTML_SHEET`] so equal-specificity page
-/// rules win over the card defaults, and `data:`-URI `<img>` / background images
-/// decode inline ([`NoImageLoader`]). Remote subresources (external
-/// `<link rel=stylesheet>`, remote `<img>`) await a subresource fetch stage:
-/// the card's [`Fetched`] carries only the page body today.
-fn html_scene(body: &str, w: u32, h: u32) -> Scene {
-    let mut dom = ScriptedDom::new();
-    let root = dom.document();
-    dom.set_inner_html(root, body);
-    // Author CSS = card defaults first, then the page's `<style>` blocks (later
-    // sheets win at equal specificity). Scanned from source, not the DOM, so
-    // `<head>` styles survive `set_inner_html`'s body-only parse.
-    let page_css = inline_stylesheets_from_source(body);
+/// Parse `body` as a full HTML document and render it through the shared content
+/// core ([`pelt_live::scene_from_layout_dom`]) — the same cascade → image-decode
+/// → layout → emit pipeline the static viewer uses. A full-document parse (not a
+/// body-only fragment) keeps `<head>`, so head `<style>` / `<link>` are seen.
+///
+/// Author CSS layers card defaults, then the page's inline `<style>`, then
+/// external `<link rel=stylesheet>` (later sheets win at equal specificity).
+/// `<img>` / `background-image` and `<link>` bytes resolve through `loader`:
+/// `data:` URIs decode inline; remote URLs come from the host's resource cache,
+/// absent on the first frame and filled by the demand fetch that re-renders.
+fn html_scene(body: &str, loader: &impl ImageLoader, w: u32, h: u32) -> Scene {
+    let doc = StaticDocument::parse(body);
+    let inline = inline_stylesheets(&doc);
+    let linked = linked_stylesheets_with_loader(&doc, loader);
     let mut sheets: Vec<&str> = HTML_SHEET.to_vec();
-    sheets.extend(page_css.iter().map(String::as_str));
-    let scroll = ScrollOffsets::<NodeId>::default();
-    scene_from_layout_dom(&dom, &sheets, &NoImageLoader, w, h, &scroll)
+    sheets.extend(inline.iter().map(String::as_str));
+    sheets.extend(linked.iter().map(String::as_str));
+    let scroll = ScrollOffsets::default();
+    scene_from_layout_dom(&doc, &sheets, loader, w, h, &scroll)
 }
 
 /// The floating card rectangle within the content band (top-right, inset by
@@ -238,6 +238,8 @@ fn paragraph(text: &str) -> DocumentBlock {
 
 #[cfg(test)]
 mod tests {
+    use serval_layout::NoImageLoader;
+
     use super::*;
 
     fn heads_with(doc: &EngineDocument, text: &str) -> bool {
@@ -344,7 +346,7 @@ mod tests {
             content_type: Some("text/markdown".into()),
             body: "# Heading\n\nA paragraph.".into(),
         });
-        let scene = render_content_scene("https://example.com", Some(&ready), &registry, 420, 360);
+        let scene = render_content_scene("https://example.com", Some(&ready), &registry, &NoImageLoader, 420, 360);
         assert!(glyph_runs(&scene) >= 1, "markdown renders text via the nematic document lane");
     }
 
@@ -356,7 +358,7 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<h1>Hello</h1><p>World</p>".into(),
         });
-        let scene = render_content_scene("https://example.com", Some(&ready), &registry, 420, 360);
+        let scene = render_content_scene("https://example.com", Some(&ready), &registry, &NoImageLoader, 420, 360);
         assert!(glyph_runs(&scene) >= 1, "HTML renders text via the serval lane");
     }
 
@@ -370,7 +372,7 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<style>p { display: none; }</style><p>Hidden by the page.</p>".into(),
         });
-        let scene = render_content_scene("https://example.com", Some(&hidden), &registry, 420, 360);
+        let scene = render_content_scene("https://example.com", Some(&hidden), &registry, &NoImageLoader, 420, 360);
         assert_eq!(glyph_runs(&scene), 0, "a page `display:none` style suppresses the paragraph");
 
         // Without the hiding style the same paragraph renders.
@@ -378,7 +380,39 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<p>Visible.</p>".into(),
         });
-        let scene = render_content_scene("https://example.com", Some(&shown), &registry, 420, 360);
+        let scene = render_content_scene("https://example.com", Some(&shown), &registry, &NoImageLoader, 420, 360);
         assert!(glyph_runs(&scene) >= 1, "without a hiding style the paragraph renders");
+    }
+
+    #[test]
+    fn html_lane_applies_head_linked_stylesheet_through_the_loader() {
+        use std::cell::RefCell;
+
+        use crate::resources::{ResourceLoader, ResourceStore};
+
+        let registry = EngineRegistry::new();
+        // A `<head>` `<link>` to a sheet that hides the paragraph, with its bytes
+        // already cached. The link must be seen despite living in `<head>` (full
+        // document parse) and apply through the loader seam.
+        let store = RefCell::new(ResourceStore::default());
+        store
+            .borrow_mut()
+            .insert("https://example.com/hide.css".into(), b"p { display: none; }".to_vec());
+        let wanted = RefCell::new(Vec::new());
+        let loader = ResourceLoader::new(&store, "https://example.com/page.html", &wanted);
+
+        let ready = ContentState::Ready(Fetched {
+            content_type: Some("text/html".into()),
+            body: "<head><link rel=\"stylesheet\" href=\"hide.css\"></head>\
+                   <body><p>Hidden by the linked sheet.</p></body>"
+                .into(),
+        });
+        let scene =
+            render_content_scene("https://example.com/page.html", Some(&ready), &registry, &loader, 420, 360);
+        assert_eq!(
+            glyph_runs(&scene),
+            0,
+            "a head <link> stylesheet fetched through the loader hides the paragraph",
+        );
     }
 }

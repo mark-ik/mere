@@ -35,6 +35,15 @@ pub struct FetchOutcome {
     pub result: Result<Fetched, String>,
 }
 
+/// A fetched subresource: raw bytes for an absolute URL (page CSS via
+/// `<link>`, an `<img>`, ...). Carried as bytes, not text, since media is
+/// binary. Only successful fetches are delivered; a failure simply never
+/// arrives (the demand loader keeps treating the resource as absent).
+pub struct SubresourceOutcome {
+    pub url: String,
+    pub bytes: Vec<u8>,
+}
+
 /// Per-URL content state behind the focused-node card.
 #[derive(Clone, Debug)]
 pub enum ContentState {
@@ -73,18 +82,23 @@ pub struct Fetcher {
     runtime: Runtime,
     proxy: EventLoopProxy<()>,
     tx: Sender<FetchOutcome>,
+    sub_tx: Sender<SubresourceOutcome>,
 }
 
 impl Fetcher {
     /// Build a fetcher over a multi-thread tokio runtime, returning it plus the
-    /// receiver the host drains in `user_event`.
-    pub fn new(proxy: EventLoopProxy<()>) -> (Self, Receiver<FetchOutcome>) {
+    /// receivers the host drains in `user_event`: page documents and, on a
+    /// separate typed channel sharing the same wake, fetched subresources.
+    pub fn new(
+        proxy: EventLoopProxy<()>,
+    ) -> (Self, Receiver<FetchOutcome>, Receiver<SubresourceOutcome>) {
         let (tx, rx) = channel();
+        let (sub_tx, sub_rx) = channel();
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .expect("build the fetch runtime");
-        (Self { runtime, proxy, tx }, rx)
+        (Self { runtime, proxy, tx, sub_tx }, rx, sub_rx)
     }
 
     /// Fetch `url` off the UI thread; push the outcome and wake the loop when done.
@@ -96,6 +110,21 @@ impl Fetcher {
             // Send first, then wake: the UI-thread drain reads the channel on wake.
             let _ = tx.send(FetchOutcome { url, result });
             let _ = proxy.send_event(());
+        });
+    }
+
+    /// Fetch a subresource (`url` is already absolute) off the UI thread,
+    /// delivering its raw bytes. A failed/empty fetch is dropped silently — the
+    /// demand loader keeps the resource absent, and the host's requested-set
+    /// stops it being re-spawned.
+    pub fn spawn_subresource(&self, url: String) {
+        let sub_tx = self.sub_tx.clone();
+        let proxy = self.proxy.clone();
+        self.runtime.spawn(async move {
+            if let Some(bytes) = fetch_bytes(&url).await {
+                let _ = sub_tx.send(SubresourceOutcome { url, bytes });
+                let _ = proxy.send_event(());
+            }
         });
     }
 }
@@ -120,6 +149,18 @@ async fn do_fetch(url: &str) -> Result<Fetched, String> {
     let bytes = response.bytes().await.map_err(|e| format!("read error: {e}"))?;
     let body = String::from_utf8_lossy(&bytes).into_owned();
     Ok(Fetched { content_type, body })
+}
+
+/// Run one WHATWG-Fetch GET and collect the raw response bytes, or `None` on any
+/// network / HTTP / read error. The subresource counterpart to [`do_fetch`].
+async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
+    let parsed = url::Url::parse(url).ok()?;
+    let cx = netfetcher::FetchContext::permissive();
+    let response = netfetcher::fetch(netfetcher::Request::get(parsed), &cx).await;
+    if response.is_network_error() || !(200..300).contains(&response.status) {
+        return None;
+    }
+    response.bytes().await.ok().map(|b| b.to_vec())
 }
 
 #[cfg(test)]

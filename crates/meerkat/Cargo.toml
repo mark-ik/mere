@@ -26,6 +26,10 @@ path = "src/main.rs"
 # is no renderer-stack reconciliation (serval-as-host flip plan, Findings).
 xilem-serval = { path = "../../../serval/components/xilem-serval" }
 serval-scripted-dom = { path = "../../../serval/components/serval-scripted-dom" }
+# The content card parses fetched pages as full HTML documents (keeping <head>,
+# so head <style> / <link> are seen) and renders them through the shared serval
+# content core; StaticDocument is serval's script-free document DOM.
+serval-static-dom = { path = "../../../serval/components/serval-static-dom" }
 
 # Reused, host-neutral chrome view-models — toolbar / omnibar / command palette /
 # frame model / routing. meerkat is the next "host widget" that renders these as

@@ -54,6 +54,7 @@ use xilem_serval::{Modifiers, PointerClick, ServalAppRunner};
 
 mod card;
 mod fetch;
+mod resources;
 
 /// Author CSS for the **chrome** root. The toolbar is a flex row (back / forward
 /// buttons + a growing omnibar); serval lays it out via taffy's flexbox. The
@@ -118,11 +119,17 @@ struct App {
     /// card size, or fetch state changes. `None` when no single node is focused.
     card_scene: Option<netrender::Scene>,
     card_key: Option<(String, u32, u32, u8)>,
-    /// Off-UI-thread fetch worker + the channel its outcomes arrive on.
+    /// Off-UI-thread fetch worker + the channels its outcomes arrive on: page
+    /// documents (`fetch_rx`) and subresources (`sub_rx`).
     fetcher: fetch::Fetcher,
     fetch_rx: Receiver<fetch::FetchOutcome>,
+    sub_rx: Receiver<fetch::SubresourceOutcome>,
     /// Per-URL fetched content state, keyed by the node's URL (URL identity).
     content: HashMap<String, fetch::ContentState>,
+    /// Subresource bytes (page `<link>` CSS, `<img>` media) the HTML card pulls
+    /// on demand while rendering, keyed by absolute URL. `RefCell` so the
+    /// render-time loader can read it through a shared borrow of `self`.
+    resources: RefCell<resources::ResourceStore>,
     /// Content engines for the card: nematic's document engines, routed by
     /// content-type. (HTML rides the serval lane instead, in `card`.)
     engines: EngineRegistry,
@@ -192,7 +199,7 @@ impl App {
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
             orrery.select_by_url(url);
         }
-        let (fetcher, fetch_rx) = fetch::Fetcher::new(proxy);
+        let (fetcher, fetch_rx, sub_rx) = fetch::Fetcher::new(proxy);
         let mut engines = EngineRegistry::new();
         for engine in nematic::engines() {
             engines.register(engine);
@@ -207,7 +214,9 @@ impl App {
             card_key: None,
             fetcher,
             fetch_rx,
+            sub_rx,
             content: HashMap::new(),
+            resources: RefCell::new(resources::ResourceStore::default()),
             engines,
             session_dir,
             toolbar_h: 0,
@@ -292,9 +301,22 @@ impl App {
             let state = self.content.get(url);
             let key = (url.to_string(), cw, ch, fetch::ContentState::tag(state));
             if self.card_key.as_ref() != Some(&key) {
-                self.card_scene =
-                    Some(card::render_content_scene(url, state, &self.engines, cw, ch));
+                // The HTML lane pulls subresources (`<link>` CSS, `<img>`) through
+                // a demand loader: a miss records the absolute URL in `wanted` and
+                // renders without it. After the render we fetch each wanted URL we
+                // have not already requested; its arrival re-renders the card.
+                let wanted = RefCell::new(Vec::new());
+                let scene = {
+                    let loader = resources::ResourceLoader::new(&self.resources, url, &wanted);
+                    card::render_content_scene(url, state, &self.engines, &loader, cw, ch)
+                };
+                self.card_scene = Some(scene);
                 self.card_key = Some(key);
+                for res_url in wanted.into_inner() {
+                    if self.resources.borrow_mut().request(res_url.clone()) {
+                        self.fetcher.spawn_subresource(res_url);
+                    }
+                }
             }
         } else {
             self.card_key = None;
@@ -639,6 +661,12 @@ impl ApplicationHandler for App {
                 Err(reason) => fetch::ContentState::Failed(reason),
             };
             self.content.insert(outcome.url, state);
+            card_changed = true;
+        }
+        // Subresources (page CSS / media) on their own channel: fill the cache so
+        // the next render's demand loader hits instead of missing.
+        while let Ok(sub) = self.sub_rx.try_recv() {
+            self.resources.borrow_mut().insert(sub.url, sub.bytes);
             card_changed = true;
         }
         if graph_changed {
