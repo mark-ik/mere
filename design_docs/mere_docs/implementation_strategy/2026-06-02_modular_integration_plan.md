@@ -171,11 +171,11 @@ host-wired), `intel/embed` (Tier-2 embeddings, persists through eidetic),
    worker + `EventLoopProxy` wake) and routes the bytes to engines. Remaining: a
    durable cookie jar / cache (host-backed `FetchContext`), binary content, and a
    real `FetchContext` policy instead of `permissive()`.
-5. **Persistence** — *graph + camera wired* (S3.1 / S3.2a): `session_graph_store`
-   persists the graph (`graph.json`) and `view_intent_store` the camera
-   (`CameraSnapshot`); meerkat restores both on launch. Remaining: focused-node
-   restore (`ViewIntent.focus`), per-persona/session/manifest threading, and the
-   eidetic content store for media + history (S3.2b).
+5. **Persistence** — *graph + full view-intent wired* (S3.1 / S3.2a / S3.2b):
+   `session_graph_store` persists the graph and `view_intent_store` the camera +
+   focused node; meerkat restores all three on launch (a reload re-opens where you
+   were, card and all). Remaining: per-persona/session/manifest threading and the
+   eidetic content store for media + history (S3.2c).
 6. **No tiled-workbench mode / peripheral panes** — `FrameLayout` exists but meerkat
    has a single content pane; gloss/apparatus are latent a11y projections.
 7. **murm/moot unsurfaced** — `SyncedCabal` works but no comms surface exists.
@@ -242,10 +242,15 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
     `CameraSnapshot` affine, restores it on launch (suppressing the recenter), and
     saves graph + camera after each navigation and on close. **View-intent (camera)
     persists.**
-  - *S3.2b* (remaining): a new `ViewIntent.focus` field to restore the focused node
-    (re-open its card on reload); persona / session / manifest threading (the
-    `ManifestStore` + per-id `sessions/<id>` layout already exist); the eidetic
-    content store for fetched media + history (debounced `mark_dirty` flush).
+  - *S3.2b* (`fe5fdd3`): the **focused node persists**. `ViewIntent` gained a `focus`
+    field (the node's URL); `Orrery::select_by_url` re-selects an existing node
+    without adding one; meerkat saves the focused URL with the camera and re-selects
+    it on launch. **View-intent persistence is complete: graph + camera + focus all
+    survive restart, so a reload re-opens the card you had open.**
+  - *S3.2c* (remaining): persona / session / manifest threading (the `ManifestStore`
+    and per-id `sessions/<id>` layout already exist) for multi-session / multi-window;
+    the eidetic content store for fetched media + history (debounced `mark_dirty`
+    flush), so pages survive restart without re-fetching.
 - **S4 — Tiled-workbench mode + peripheral panes (flip P2 + verso, R2).** `FrameLayout`
   becomes the cross-graph tiled-analysis mode over node-tiles; retarget
   `platen::layout` Morphorm→taffy under serval; light up gloss/apparatus projections;
@@ -433,3 +438,14 @@ consumer appears.
     (`inline_stylesheets_from_source`), landed alongside by a sibling change.
   - *Next (S3.2b)*: `ViewIntent.focus` to re-open the focused node's card on reload;
     persona / session / manifest threading; the eidetic content store for media.
+- **2026-06-03 — S3.2b done: the focused node survives restart. View-intent complete.**
+  - `session-runtime` (`fe5fdd3`): `ViewIntent` gained a `focus` field (the focused
+    node's URL, by URL identity); `is_empty` + a round-trip test updated. Two distinct
+    `ViewIntent` types exist — this persistence one (extended) vs `cartography`'s
+    projection-request one (`focus: Option<NodeKey>`); the persistence one is URL-keyed.
+  - `orrery-host`: `Orrery::select_by_url` re-selects an existing node by URL without
+    adding one. `meerkat`: saves the focused URL with the camera, re-selects it on
+    launch after the graph + camera restore. 10 view-intent + 12 orrery tests pass.
+  - **View-intent persistence is complete**: graph (S3.1) + camera (S3.2a) + focus
+    (S3.2b) all survive restart. *Remaining S3.2c*: persona / manifest threading for
+    multi-session / multi-window, and the eidetic content store (no re-fetch on reload).
