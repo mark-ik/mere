@@ -47,6 +47,8 @@ use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use winit::window::{Window, WindowId};
 use xilem_serval::{Modifiers, PointerClick, ServalAppRunner};
 
+mod card;
+
 /// Author CSS for the **chrome** root. The toolbar is a flex row (back / forward
 /// buttons + a growing omnibar); serval lays it out via taffy's flexbox. The
 /// `.chrome` container has no background — the host composites it over the
@@ -79,6 +81,10 @@ const CHROME_SHEET: &[&str] = &[
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
 const FALLBACK_TOOLBAR_H: u32 = 64;
 
+/// Background of the floating content card — a light panel (the chrome palette's
+/// surface tint), so the card reads as a card over the white orrery band.
+const CARD_BG: wgpu::Color = wgpu::Color { r: 0.957, g: 0.965, b: 0.980, a: 1.0 };
+
 /// The meerkat shell application: the shared chrome DOM, the runner that diffs
 /// the chrome view tree into it, the orrery content-root, the window + GPU, and
 /// input bookkeeping.
@@ -95,6 +101,11 @@ struct App {
     /// Whether the orrery has been centered on its content band yet (done once,
     /// the first render after the toolbar height is known).
     centered: bool,
+    /// The focused node's content card, laid out lazily and cached by
+    /// `(url, card_w, card_h)` so it re-renders only when the focus or card size
+    /// changes. `None` when no single node is focused.
+    card_scene: Option<netrender::Scene>,
+    card_key: Option<(String, u32, u32)>,
     /// Cached measured height (px) of the chrome band; `0` until first measured.
     toolbar_h: u32,
     window: Option<Arc<Window>>,
@@ -129,6 +140,8 @@ impl App {
             orrery,
             content_location,
             centered: false,
+            card_scene: None,
+            card_key: None,
             toolbar_h: 0,
             window: None,
             host: None,
@@ -202,11 +215,35 @@ impl App {
         }
         let (content_scene, orrery_redraw) = self.orrery.frame(w, content_h);
 
+        // Focused-node content card (S2.2a): the selected node's synthesized media
+        // as a floating card. Lay it out once per (url, card size) and cache; this
+        // skips parley layout on every settle frame.
+        let focus_url = self.orrery.focused_url().map(str::to_string);
+        let card_geom = focus_url.as_ref().and_then(|_| card::card_rect(w, toolbar_h, h));
+        if let (Some(url), Some((.., cw, ch))) = (focus_url.as_deref(), card_geom) {
+            let key = (url.to_string(), cw, ch);
+            if self.card_key.as_ref() != Some(&key) {
+                self.card_scene = Some(card::render_card_scene(&card::node_document(url), cw, ch));
+                self.card_key = Some(key);
+            }
+        } else {
+            self.card_key = None;
+            self.card_scene = None;
+        }
+
         let host = self.host.as_ref().unwrap();
         let (_chrome_tex, chrome_view) =
             host.rasterize(&chrome_scene, w, h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
         let (_content_tex, content_view) =
             host.rasterize(&content_scene, w, content_h, ColorLoad::Clear(wgpu::Color::WHITE));
+        // The focused-node card to its own offscreen target (kept alive — the view
+        // borrows nothing, but mirror the chrome/content pattern of holding both).
+        let card_raster = match (card_geom, self.card_scene.as_ref()) {
+            (Some((.., cw, ch)), Some(scene)) => {
+                Some(host.rasterize(scene, cw, ch, ColorLoad::Clear(CARD_BG)))
+            },
+            _ => None,
+        };
 
         let Some(frame) = host.acquire() else { return };
         let target_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -223,6 +260,19 @@ impl App {
             h,
             ExternalTexturePlacement::new([0.0, toolbar_h as f32, w as f32, h as f32]),
         );
+        // The focused-node card floats over the orrery, under the chrome.
+        if let (Some((x0, y0, x1, y1, ..)), Some((_card_tex, card_view))) =
+            (card_geom, card_raster.as_ref())
+        {
+            host.renderer().compose_external_texture(
+                card_view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new([x0, y0, x1, y1]),
+            );
+        }
         host.renderer().compose_external_texture(
             &chrome_view,
             &target_view,

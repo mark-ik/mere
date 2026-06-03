@@ -506,6 +506,17 @@ impl Orrery {
         self.selected.insert(key);
     }
 
+    /// The URL of the single focused (selected) node, if exactly one node is
+    /// selected. The host reads this to project the focused node's media — e.g.
+    /// meerkat's floating content card. `None` when zero or many are selected.
+    pub fn focused_url(&self) -> Option<&str> {
+        if self.selected.len() != 1 {
+            return None;
+        }
+        let key = *self.selected.iter().next()?;
+        self.graph.get_node(key).map(|n| n.url())
+    }
+
     /// Zoom by `factor`, keeping the world point under `anchor` (screen px) fixed.
     fn zoom_at(&mut self, anchor: (f32, f32), factor: f32) {
         let new_zoom = (self.camera.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
@@ -594,5 +605,17 @@ mod tests {
         assert_eq!(a, again, "revisiting a URL selects the existing node, not a duplicate");
         assert_eq!(orrery.graph.nodes().count(), 2, "no duplicate node is added");
         assert!(orrery.selected.contains(&a), "selection returns to the revisited node");
+    }
+
+    #[test]
+    fn focused_url_is_the_single_selected_nodes_url() {
+        let mut orrery = Orrery::new();
+        assert_eq!(orrery.focused_url(), None, "nothing selected yet → no focus");
+        orrery.visit("https://example.com");
+        assert_eq!(orrery.focused_url(), Some("https://example.com"), "visit focuses the node");
+        orrery.visit("https://second.com");
+        assert_eq!(orrery.focused_url(), Some("https://second.com"), "focus follows the new node");
+        orrery.visit("https://example.com");
+        assert_eq!(orrery.focused_url(), Some("https://example.com"), "revisit re-focuses");
     }
 }

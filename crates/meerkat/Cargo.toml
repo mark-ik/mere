@@ -60,6 +60,13 @@ serval-winit-host = { path = "../serval-winit-host" }
 # its own window. (Modular integration plan, S1.)
 orrery-host = { path = "../orrery-host" }
 
+# The content-card pipeline: a focused node's media as a document. inker supplies
+# the portable EngineDocument model; document-canvas lays it out (parley) and,
+# behind its `netrender` feature, lowers it to a netrender::Scene the host
+# composites as a floating card over the orrery. (Modular integration plan, S2.)
+inker = { workspace = true }
+document-canvas = { workspace = true, features = ["netrender"] }
+
 # Windowing + present (mirrors pelt-live's bin deps; mere's pins align with
 # serval's, so the wgpu 29 / winit 0.30 surface + netrender Renderer unify).
 winit = { workspace = true }

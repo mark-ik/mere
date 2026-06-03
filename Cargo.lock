@@ -6684,8 +6684,11 @@ name = "meerkat"
 version = "0.0.1"
 dependencies = [
  "chrome",
+ "document-canvas",
+ "inker",
  "layout-dom-api",
  "netrender",
+ "orrery-host",
  "pelt-live",
  "serval-layout",
  "serval-scripted-dom",
