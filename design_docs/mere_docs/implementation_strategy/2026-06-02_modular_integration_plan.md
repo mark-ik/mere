@@ -163,8 +163,9 @@ host-wired), `intel/embed` (Tier-2 embeddings, persists through eidetic),
 2. **Two serval bins (meerkat + orrery-host) should be one shell** — *functionally
    folded* (S1.2): both run the same `Orrery` over the shared `serval-winit-host`.
    Remaining: the orrery-host bin's physical retirement, deferred to the S7 cutover.
-3. **No node-media tiles** — a node's content rendered as a tile (document via
-   `document-canvas`, fullweb via serval, web via scrying) is unwired in meerkat.
+3. **Node-media tiles** — *first cut shipped* (S2.2a): the focused node's media renders
+   as a floating card via `document-canvas`. Remaining: real (fetched) content, the
+   fullweb-via-serval and web-via-scrying lanes, and multiple/at-node tiles (S4).
 4. **netfetcher unconsumed** — the host fetch organ exists; nothing calls it.
 5. **Persistence not host-wired** — meerkat depends on no `eidetic`/`session-runtime`;
    graphs reset on restart; `session_graph_store` does not exist.
@@ -202,6 +203,17 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
   `PaintList` → composited tile, bound to the node (`graph_id`). *Leverage*: the
   whole pipeline + netfetcher exist. *Done*: navigating populates the graph and shows
   a node's media as a tile. This is the graph-rooted browse loop.
+  - *S2.1* (`df50602`): `Orrery::visit(url)` grows the session graph on navigation
+    (URL identity dedups; new nodes link from the current selection as a browse
+    trail); meerkat seeds the root and visits on every navigation.
+  - *S2.2a* (`415bd88`): the focused node's media renders as a **floating card** over
+    the orrery (Mark's placement pick), via the proven synchronous document pipeline
+    (`EngineDocument → layout_document → scene_from_packet → composite`). Content is
+    synthesized (welcome page / address placeholder) — only the byte source is a stub.
+  - *S2.2b* (remaining): swap the synthesized `node_document` for a real
+    `netfetcher::fetch` off the UI thread (worker + `EventLoopProxy` wake) → `inker`
+    route by content-type → engine dispatch → the same card path. This is the
+    netfetcher-consumes-first wiring (gap #4) and the async-host architecture.
 - **S3 — Persistence host seam (R-data).** meerkat constructs a per-identity `eidetic`
   Store + a `ManifestStore`, `load_from_disk` on startup, `mark_dirty`→debounced
   flush. Build `session_graph_store` (the eidetic↔`kernel::graph` glue; serde
@@ -332,3 +344,19 @@ consumer appears.
     with meerkat (no divergent engine), so it is a lib test-harness bin, not a
     competing app host. Done-condition for S1's interactive-orrery-in-the-shell is
     met; only the cleanup tail moves.
+- **2026-06-02 — S2 (synchronous browse loop) done; real fetch (S2.2b) is next.**
+  - *S2.1* (`df50602`): `Orrery::visit(url)` grows the session graph as you navigate
+    — URL identity selects an existing node, else a new node is added and linked from
+    the current selection (the browse trail as graph structure), re-syncing physics +
+    the node pool and re-settling. `Orrery::new` now starts empty; the sample ring
+    moved to `with_sample_graph` (bin + tests). meerkat seeds the root from the
+    initial location and `visit`s after each navigation. 8 orrery lib tests.
+  - *S2.2a* (`415bd88`): the focused node's media renders as a **floating card** over
+    the orrery (Mark's placement pick; composite order orrery → card → chrome). Proves
+    the document pipeline in the shell: `node_document(url)` (synthesized content,
+    synchronous) → `layout_document` → `scene_from_packet` → composited card, cached
+    by `(url, size)`. `Orrery::focused_url()` feeds it. meerkat gained inker +
+    document-canvas (netrender feature); 4 card tests. Only the byte source is a stub.
+  - *Next (S2.2b)*: real `netfetcher::fetch` off the UI thread (worker +
+    `EventLoopProxy` wake) → `inker` route by content-type → engine dispatch → the
+    same card path. Introduces the async-host architecture; closes gaps #3/#4.
