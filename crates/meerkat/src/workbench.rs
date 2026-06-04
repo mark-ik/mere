@@ -118,6 +118,17 @@ impl Workbench {
         self.mode = mode;
     }
 
+    /// Switch into the tiled (Tree) projection if not already there, returning
+    /// whether the mode changed (so the caller can do entry work just once).
+    pub fn ensure_tiled(&mut self) -> bool {
+        if self.is_tiled() {
+            false
+        } else {
+            self.mode = ProjectionKind::Tree;
+            true
+        }
+    }
+
     /// Every open member, flattened across all slots (the host's reconcile needed
     /// set: every tab stays a warm actor, the active one is what renders).
     pub fn open_members(&self) -> Vec<GraphMemberId> {
@@ -149,12 +160,48 @@ impl Workbench {
         true
     }
 
+    /// Open `members` as separate single-tile slots (each appended, de-duplicated);
+    /// already-open members stay where they are. Returns how many were newly opened.
+    pub fn open_split(&mut self, members: &[GraphMemberId]) -> usize {
+        members.iter().filter(|&&m| self.open_tile(m)).count()
+    }
+
+    /// Open `members` as one tab-stack slot: gather them into a single new slot
+    /// (first tab active), pulling any that were already open elsewhere into it so
+    /// a member never sits in two slots. A no-op for an empty list.
+    pub fn open_stack(&mut self, members: &[GraphMemberId]) {
+        let mut stack: Vec<GraphMemberId> = Vec::new();
+        for &m in members {
+            if !stack.contains(&m) {
+                stack.push(m);
+            }
+        }
+        if stack.is_empty() {
+            return;
+        }
+        for &m in &stack {
+            self.detach(m);
+        }
+        self.slots.push(Slot { members: stack, active: 0 });
+    }
+
     /// Close the tab showing `member`: drop it from its slot (removing the slot if
     /// it empties, clamping the active index otherwise). Returns whether one was
     /// removed.
     pub fn close_tile(&mut self, member: GraphMemberId) -> bool {
-        let Some(i) = self.slots.iter().position(|s| s.members.contains(&member)) else {
+        if !self.has_tile(member) {
             return false;
+        }
+        self.detach(member);
+        true
+    }
+
+    /// Remove `member` from whatever slot holds it, dropping the slot if it empties
+    /// and clamping the active index otherwise. Shared by `close_tile` (a user
+    /// close) and `open_stack` (re-homing a member into a new stack).
+    fn detach(&mut self, member: GraphMemberId) {
+        let Some(i) = self.slots.iter().position(|s| s.members.contains(&member)) else {
+            return;
         };
         let slot = &mut self.slots[i];
         slot.members.retain(|m| *m != member);
@@ -163,7 +210,6 @@ impl Workbench {
         } else if slot.active >= slot.members.len() {
             slot.active = slot.members.len() - 1;
         }
-        true
     }
 
     /// Make `member` the active (visible) tab of its slot. Returns whether it was
@@ -336,6 +382,40 @@ mod tests {
         let slots = wb.laid_out_slots(band(), &LayoutConfig::default(), &graph);
         assert_eq!(slots[0].active, 2, "the active tab switched");
         assert_eq!(slots[0].active_tab().unwrap().member, m(3));
+    }
+
+    #[test]
+    fn open_split_opens_each_as_its_own_slot_and_dedups() {
+        let mut wb = Workbench::new();
+        assert_eq!(wb.open_split(&[m(1), m(2), m(3)]), 3, "all three are new");
+        assert_eq!(wb.slot_count(), 3, "one slot per member");
+        assert_eq!(wb.open_split(&[m(2), m(4)]), 1, "only the unseen member opens");
+        assert_eq!(wb.slot_count(), 4);
+    }
+
+    #[test]
+    fn open_stack_gathers_into_one_slot_and_rehomes_open_members() {
+        let mut wb = Workbench::new();
+        wb.open_split(&[m(1), m(2)]); // two single slots
+        wb.open_stack(&[m(2), m(3)]); // m(2) is pulled out of its slot into the stack
+        assert_eq!(wb.slot_count(), 2, "m(1)'s slot + the new [2,3] stack");
+        assert_eq!(wb.tile_count(), 3, "no member is lost or duplicated");
+        // The stack is the appended slot; activating m(3) proves they share it.
+        assert!(wb.activate(m(3)));
+        assert!(wb.has_tile(m(2)) && wb.has_tile(m(3)));
+        // De-dup within the input: a repeated member appears once.
+        let mut wb2 = Workbench::new();
+        wb2.open_stack(&[m(7), m(7), m(8)]);
+        assert_eq!(wb2.slot_count(), 1);
+        assert_eq!(wb2.tile_count(), 2, "the repeat collapses");
+    }
+
+    #[test]
+    fn ensure_tiled_switches_once() {
+        let mut wb = Workbench::new();
+        assert!(wb.ensure_tiled(), "first call flips Cartography → Tree");
+        assert!(wb.is_tiled());
+        assert!(!wb.ensure_tiled(), "already tiled → no change");
     }
 
     #[test]

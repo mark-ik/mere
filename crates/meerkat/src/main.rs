@@ -39,7 +39,10 @@ use forme::GraphMemberId;
 use kernel::geometry::PortableSize;
 use meerkat::command::Command;
 use meerkat::workbench::Workbench;
-use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView, TileAction, TileStrip, TileTab};
+use meerkat::{
+    chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView, ContextAction, ContextItem,
+    TileAction, TileStrip, TileTab,
+};
 use platen::LayoutConfig;
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
@@ -125,6 +128,10 @@ const CHROME_SHEET: &[&str] = &[
         background-color: rgb(52, 58, 74); padding: 6px 12px; margin-right: 2px; }",
     ".tile-btn { font-size: 15px; color: rgb(214, 218, 228); \
         background-color: rgb(40, 44, 54); padding: 5px 10px; }",
+    // Right-click context menu: a small panel of action rows floated at the cursor.
+    ".context-menu { background-color: rgb(38, 42, 52); padding: 4px; }",
+    ".context-item { font-size: 16px; color: rgb(216, 220, 230); \
+        background-color: rgb(38, 42, 52); padding: 8px 18px; }",
 ];
 
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
@@ -193,6 +200,9 @@ struct App {
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
     /// (Cartography = the orrery, Tree = the tiled view).
     workbench: Workbench,
+    /// The members the open right-click context menu acts on (the selection's
+    /// working set, captured when the menu opened). Empty when no menu is open.
+    context_set: Vec<GraphMemberId>,
 }
 
 impl App {
@@ -297,6 +307,7 @@ impl App {
             width: 1024,
             height: 600,
             workbench: Workbench::new(),
+            context_set: Vec::new(),
         }
     }
 
@@ -578,22 +589,23 @@ impl App {
         self.workbench.toggle_mode();
         self.workbench.clear_tiles();
         if self.workbench.is_tiled() {
-            for member in self.workbench_seed() {
+            for member in self.selection_working_set() {
                 self.workbench.open_tile(member);
             }
         }
         self.request_redraw();
     }
 
-    /// The members to tile when entering the workbench. A multi-selection opens
-    /// its nodes (in splits). A single selection opens the **active tabs in that
-    /// node's graphlet** — its connected component intersected with the warm-tab
-    /// set, plus the node itself — so you gather the live cluster around it. An
-    /// empty selection opens nothing.
-    fn workbench_seed(&self) -> Vec<GraphMemberId> {
+    /// The members a selection-driven open acts on. A multi-selection is its own
+    /// nodes (opened in splits). A single selection expands to the **active tabs in
+    /// that node's graphlet** — its connected component intersected with the warm-tab
+    /// set, plus the node itself — so you gather the live cluster around it. An empty
+    /// selection yields nothing. Shared by entering the workbench and the right-click
+    /// menu.
+    fn selection_working_set(&self) -> Vec<GraphMemberId> {
         let selected = self.orrery.selected_members();
         if selected.len() > 1 {
-            return selected; // multi-select → the selection, in splits
+            return selected; // multi-select → the selection
         }
         match selected.first() {
             Some(&focus) => self
@@ -604,6 +616,63 @@ impl App {
                 .collect(),
             None => Vec::new(),
         }
+    }
+
+    /// Open the right-click context menu over the current selection's working set,
+    /// at window `(x, y)`. A no-op when nothing is selected (no set to act on). A
+    /// single-member set offers one "open tile"; a larger set offers splits vs a
+    /// stack. The host remembers the set; the chrome renders the rows.
+    fn open_context_menu_at(&mut self, x: f32, y: f32) {
+        let set = self.selection_working_set();
+        if set.is_empty() {
+            return;
+        }
+        let items = if set.len() == 1 {
+            vec![ContextItem::new("Open tile", ContextAction::OpenSplits)]
+        } else {
+            vec![
+                ContextItem::new("Open in splits", ContextAction::OpenSplits),
+                ContextItem::new("Group into one stack", ContextAction::TileGroup),
+            ]
+        };
+        self.context_set = set;
+        self.runner.update(move |c| c.open_context_menu(x, y, items));
+        self.request_redraw();
+    }
+
+    /// Dismiss the context menu (an outside click / Escape), dropping its set.
+    fn close_context_menu(&mut self) {
+        self.context_set.clear();
+        self.runner.update(Chrome::close_context_menu);
+        self.request_redraw();
+    }
+
+    /// Run a pending context-menu action the chrome captured: open the menu's
+    /// member set as splits or as one stack, switching into the tiled (Tree)
+    /// projection first if needed.
+    fn drain_pending_context(&mut self) {
+        let Some(action) = self.runner.state().pending_context else {
+            return;
+        };
+        self.runner.update(|c| c.pending_context = None);
+        let set = std::mem::take(&mut self.context_set);
+        if set.is_empty() {
+            return;
+        }
+        // These open tiles, so surface the tiled view (closing the suggestions
+        // dropdown on the way in, like Ctrl+T does).
+        if self.workbench.ensure_tiled() {
+            self.runner.update(Chrome::close_suggestions);
+        }
+        match action {
+            ContextAction::OpenSplits => {
+                self.workbench.open_split(&set);
+            },
+            ContextAction::TileGroup => {
+                self.workbench.open_stack(&set);
+            },
+        }
+        self.request_redraw();
     }
 
     /// Delete the focused node from the graph and reap its activation (the actor
@@ -711,9 +780,22 @@ impl App {
         let th = self.toolbar_height() as f32;
         match state {
             ElementState::Pressed => {
+                // A context menu swallows the next press: a left click on one of its
+                // rows runs that action (the chrome closes the menu); a click
+                // anywhere else just dismisses it.
+                if self.runner.state().context_menu.is_some() {
+                    if button == MouseButton::Left {
+                        self.chrome_click(x, y);
+                    }
+                    if self.runner.state().context_menu.is_some() {
+                        self.close_context_menu();
+                    }
+                    return;
+                }
                 // The chrome's interactive area is the toolbar plus any open
                 // dropdown (its `.chrome` border-box). A left press there dispatches
-                // the chrome; below it (the content band) goes to the orrery.
+                // the chrome; below it (the content band) a right press opens the
+                // context menu, anything else drives the orrery.
                 let chrome_h = {
                     let dom = self.dom.borrow();
                     measure_class_bottom(&dom, self.width, self.height, "chrome")
@@ -723,6 +805,8 @@ impl App {
                     if button == MouseButton::Left {
                         self.chrome_click(x, y);
                     }
+                } else if button == MouseButton::Right {
+                    self.open_context_menu_at(x, y);
                 } else if let Some(b) = orrery_button {
                     if self.orrery.pointer_down(b, x, y - th) {
                         self.request_redraw();
@@ -757,6 +841,7 @@ impl App {
             self.drain_pending_connect();
             self.drain_pending_command();
             self.drain_pending_tile();
+            self.drain_pending_context();
             self.sync_settings();
             self.sync_orrery();
             if palette_was_open && !self.runner.state().palette_open {
@@ -865,6 +950,13 @@ impl App {
     /// Arrow Up/Down and Escape drive the suggestions dropdown, and every other
     /// key edits the omnibar and regenerates suggestions.
     fn on_key_pressed(&mut self, key: &WinitKey) {
+        // An open context menu eats Escape to dismiss (other keys fall through).
+        if self.runner.state().context_menu.is_some()
+            && matches!(key, WinitKey::Named(WinitNamedKey::Escape))
+        {
+            self.close_context_menu();
+            return;
+        }
         // While the settings overlay is open, Escape closes it and other keys are
         // swallowed (clicks on its controls go through the chrome path).
         if self.runner.state().settings_open {

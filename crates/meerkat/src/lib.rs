@@ -122,6 +122,12 @@ pub struct Chrome {
     pub tile_strips: Vec<TileStrip>,
     /// A by-hand tile action a strip button / tab captured, for the host to run.
     pub pending_tile: Option<TileAction>,
+    /// The open right-click context menu (host-populated from the selection), or
+    /// `None` when no menu is showing.
+    pub context_menu: Option<ContextMenu>,
+    /// A context-menu action a row captured, for the host to run over the menu's
+    /// member set.
+    pub pending_context: Option<ContextAction>,
 }
 
 /// User-tunable settings the chrome surfaces. Small for now (the active-tab cap);
@@ -172,6 +178,39 @@ pub enum TileAction {
     Activate(GraphMemberId),
 }
 
+/// A right-click context menu the chrome floats at the cursor. The host computes
+/// the rows from the current selection (open in splits / group into one stack) and
+/// remembers which members they act on; the chrome renders the menu and routes a
+/// row click back as a [`ContextAction`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct ContextMenu {
+    pub x: f32,
+    pub y: f32,
+    pub items: Vec<ContextItem>,
+}
+
+/// One row of a [`ContextMenu`]: its label + the action it runs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ContextItem {
+    pub label: String,
+    pub action: ContextAction,
+}
+
+impl ContextItem {
+    /// A row pairing `label` with the `action` it captures when clicked.
+    pub fn new(label: impl Into<String>, action: ContextAction) -> Self {
+        Self { label: label.into(), action }
+    }
+}
+
+/// What a context-menu row asks the host to do with the menu's member set: open
+/// each in its own split, or gather them into one tab-stack.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContextAction {
+    OpenSplits,
+    TileGroup,
+}
+
 impl Chrome {
     /// A chrome state seeded with `initial_location` (classified the same way a
     /// submission is, so a bare host normalizes) across the history, the reused
@@ -200,6 +239,8 @@ impl Chrome {
             settings_open: false,
             tile_strips: Vec::new(),
             pending_tile: None,
+            context_menu: None,
+            pending_context: None,
         }
     }
 
@@ -403,6 +444,30 @@ impl Chrome {
         self.pending_tile.take()
     }
 
+    /// Open the right-click context menu at window `(x, y)` with host-computed
+    /// `items` (closing the suggestions dropdown so it can't overlap).
+    pub fn open_context_menu(&mut self, x: f32, y: f32, items: Vec<ContextItem>) {
+        self.close_suggestions();
+        self.context_menu = Some(ContextMenu { x, y, items });
+    }
+
+    /// Close the context menu without running anything.
+    pub fn close_context_menu(&mut self) {
+        self.context_menu = None;
+    }
+
+    /// Capture `action` from a clicked menu row and close the menu; the host drains
+    /// it and applies it to the menu's member set.
+    pub fn pick_context(&mut self, action: ContextAction) {
+        self.pending_context = Some(action);
+        self.close_context_menu();
+    }
+
+    /// Take the pending context-menu action, if any.
+    pub fn take_pending_context(&mut self) -> Option<ContextAction> {
+        self.pending_context.take()
+    }
+
     /// The text field that currently owns editing / the caret: the palette query
     /// when the palette is open, otherwise the omnibar. The host reads this to
     /// paint the caret on the right field.
@@ -538,7 +603,34 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     if c.settings_open {
         children.push(settings_overlay(c));
     }
+    // The context menu floats over everything (it is a transient cursor pop-up).
+    if let Some(menu) = &c.context_menu {
+        children.push(context_menu_view(menu));
+    }
     Box::new(el::<_, Chrome, ()>("div", children).attr("class", "chrome"))
+}
+
+/// The right-click context menu: a small panel of action rows floated at the
+/// cursor (abs-positioned in window coords). Each row captures its
+/// [`ContextAction`] for the host. Rendered in the chrome root over everything.
+fn context_menu_view(menu: &ContextMenu) -> ChromeView {
+    let rows: Vec<ChromeView> = menu
+        .items
+        .iter()
+        .map(|item| {
+            let action = item.action;
+            let row = on_click(
+                el::<_, Chrome, ()>("div", item.label.clone()).attr("class", "context-item"),
+                move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
+            );
+            Box::new(row) as ChromeView
+        })
+        .collect();
+    let panel = el::<_, Chrome, ()>("div", rows).attr("class", "context-menu").attr(
+        "style",
+        format!("position: absolute; left: {}px; top: {}px;", menu.x, menu.y),
+    );
+    Box::new(panel)
 }
 
 /// One slot's tab strip: a row of clickable tabs (one per stacked member) plus
@@ -966,6 +1058,34 @@ mod tests {
             Some(TileAction::Close(a)),
             "the close button captures a Close action on the active member",
         );
+    }
+
+    /// The context menu renders a row per item, and a row click captures its action
+    /// (closing the menu) for the host to drain.
+    #[test]
+    fn context_menu_renders_and_captures_an_action() {
+        let mut runner = runner("mere://welcome");
+        runner.update(|c| {
+            c.open_context_menu(
+                120.0,
+                240.0,
+                vec![
+                    ContextItem::new("Open in splits", ContextAction::OpenSplits),
+                    ContextItem::new("Group into one stack", ContextAction::TileGroup),
+                ],
+            );
+        });
+        assert!(runner.state().context_menu.is_some(), "the menu opens");
+        {
+            let dom = runner.dom();
+            let dom = dom.borrow();
+            assert_eq!(count_class(&dom, runner.root(), "context-menu"), 1, "the panel renders");
+            assert_eq!(count_class(&dom, runner.root(), "context-item"), 2, "a row per item");
+        }
+        // Picking a row captures its action and closes the menu.
+        runner.update(|c| c.pick_context(ContextAction::TileGroup));
+        assert_eq!(runner.state().pending_context, Some(ContextAction::TileGroup));
+        assert!(runner.state().context_menu.is_none(), "the menu closes on pick");
     }
 
     /// Count elements carrying exactly class `class` in the subtree at `id`.
