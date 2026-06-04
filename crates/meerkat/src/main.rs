@@ -39,7 +39,7 @@ use forme::GraphMemberId;
 use kernel::geometry::PortableSize;
 use meerkat::command::Command;
 use meerkat::workbench::Workbench;
-use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
+use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView, TileAction, TileHeader};
 use platen::LayoutConfig;
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
@@ -114,10 +114,21 @@ const CHROME_SHEET: &[&str] = &[
         background-color: rgb(34, 37, 46); padding: 8px 14px; flex-grow: 1; }",
     ".set-btn { font-size: 20px; color: rgb(222, 226, 234); \
         background-color: rgb(48, 52, 62); padding: 6px 16px; margin: 0 4px; }",
+    // Tile header strips (the tiled workbench's by-hand chrome): a flex bar with
+    // the label growing and the pin / close buttons at the right.
+    ".tile-strip { display: flex; height: 28px; background-color: rgb(40, 44, 54); }",
+    ".tile-label { font-size: 13px; color: rgb(206, 210, 220); \
+        background-color: rgb(40, 44, 54); padding: 6px 10px; flex-grow: 1; }",
+    ".tile-btn { font-size: 15px; color: rgb(214, 218, 228); \
+        background-color: rgb(40, 44, 54); padding: 5px 10px; }",
 ];
 
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
 const FALLBACK_TOOLBAR_H: u32 = 64;
+
+/// Height (px) of a tile's header strip (the by-hand chrome: label + pin +
+/// close). The tile's content renders below it.
+const TILE_STRIP_H: u32 = 28;
 
 /// Background of the floating content card — a panel a step above the orrery
 /// backdrop, so the card reads as a raised surface over the dark orrery band.
@@ -381,25 +392,41 @@ impl App {
         if self.workbench.is_tiled() {
             let band = PortableSize::new(w as f32, content_h as f32);
             let laid = self.workbench.laid_out_tiles(band, &LayoutConfig::default(), self.orrery.graph());
+            let mut headers = Vec::with_capacity(laid.len());
             for tile in &laid {
+                let x0 = tile.rect.origin.x;
+                let strip_top = toolbar_h as f32 + tile.rect.origin.y;
+                // The header strip sits across the tile's top; content renders below
+                // it (the tile's content height shrinks by the strip).
+                headers.push(TileHeader {
+                    member: tile.member,
+                    label: tile.url.clone().unwrap_or_else(|| "(gone)".to_string()),
+                    x: x0,
+                    y: strip_top,
+                    width: tile.rect.size.width,
+                    pinned: self.constellation.is_background(tile.member),
+                });
                 let Some(url) = tile.url.as_deref() else { continue };
                 self.ensure_content(url);
                 let cw = tile.rect.size.width.round().max(1.0) as u32;
-                let ch = tile.rect.size.height.round().max(1.0) as u32;
+                let ch = (tile.rect.size.height - TILE_STRIP_H as f32).round().max(1.0) as u32;
                 let state = self.content.get(url).cloned();
                 self.constellation.drive(tile.member, url, state, cw, ch);
-                let x0 = tile.rect.origin.x;
-                let y0 = toolbar_h as f32 + tile.rect.origin.y;
-                cards.push((tile.member, [x0, y0, x0 + cw as f32, y0 + ch as f32], (cw, ch)));
+                let cy0 = strip_top + TILE_STRIP_H as f32;
+                cards.push((tile.member, [x0, cy0, x0 + cw as f32, cy0 + ch as f32], (cw, ch)));
             }
-        } else if let (Some(member), Some(url)) =
-            (self.focused_member(), self.orrery.focused_url().map(str::to_string))
-        {
-            if let Some((x0, y0, x1, y1, cw, ch)) = card::card_rect(w, toolbar_h, h) {
-                self.ensure_content(&url);
-                let state = self.content.get(&url).cloned();
-                self.constellation.drive(member, &url, state, cw, ch);
-                cards.push((member, [x0, y0, x1, y1], (cw, ch)));
+            self.set_tile_headers(headers);
+        } else {
+            self.set_tile_headers(Vec::new());
+            if let (Some(member), Some(url)) =
+                (self.focused_member(), self.orrery.focused_url().map(str::to_string))
+            {
+                if let Some((x0, y0, x1, y1, cw, ch)) = card::card_rect(w, toolbar_h, h) {
+                    self.ensure_content(&url);
+                    let state = self.content.get(&url).cloned();
+                    self.constellation.drive(member, &url, state, cw, ch);
+                    cards.push((member, [x0, y0, x1, y1], (cw, ch)));
+                }
             }
         }
 
@@ -713,6 +740,7 @@ impl App {
             self.runner.dispatch_click(node, PointerClick::at((x, y)));
             self.drain_pending_connect();
             self.drain_pending_command();
+            self.drain_pending_tile();
             self.sync_settings();
             self.sync_orrery();
             if palette_was_open && !self.runner.state().palette_open {
@@ -779,6 +807,37 @@ impl App {
     /// actor pool. Called after a chrome interaction that could have changed them.
     fn sync_settings(&mut self) {
         self.constellation.set_cap(self.runner.state().settings.tab_cap);
+    }
+
+    /// Push the tile header strips to the chrome, requesting a redraw if they
+    /// changed (they're computed after this frame's chrome scene is built, so the
+    /// next frame is what renders them).
+    fn set_tile_headers(&mut self, headers: Vec<TileHeader>) {
+        if self.runner.state().tile_headers != headers {
+            self.runner.update(|c| c.tile_headers = headers);
+            self.request_redraw();
+        }
+    }
+
+    /// Run a pending by-hand tile action the chrome captured: close a tile (reap
+    /// its tab + drop it from the workbench) or toggle its pin (the background
+    /// flag, which keeps the tab active + exempt from eviction).
+    fn drain_pending_tile(&mut self) {
+        let Some(action) = self.runner.state().pending_tile else {
+            return;
+        };
+        self.runner.update(|c| c.pending_tile = None);
+        match action {
+            TileAction::Close(member) => {
+                self.workbench.close_tile(member);
+                self.constellation.reap(member);
+            },
+            TileAction::TogglePin(member) => {
+                let pinned = self.constellation.is_background(member);
+                self.constellation.set_background(member, !pinned);
+            },
+        }
+        self.request_redraw();
     }
 
     /// Handle a pressed key. Ctrl+K toggles the command palette; while the

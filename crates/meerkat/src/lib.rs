@@ -117,6 +117,11 @@ pub struct Chrome {
     pub settings: Settings,
     /// Whether the settings overlay is open.
     pub settings_open: bool,
+    /// The tile header strips the chrome renders over the open tiles, set by the
+    /// host each frame from the tile layout (empty outside the tiled view).
+    pub tile_headers: Vec<TileHeader>,
+    /// A by-hand tile action a header button captured, for the host to run.
+    pub pending_tile: Option<TileAction>,
 }
 
 /// User-tunable settings the chrome surfaces. Small for now (the active-tab cap);
@@ -182,6 +187,8 @@ impl Chrome {
             pending_command: None,
             settings: Settings::default(),
             settings_open: false,
+            tile_headers: Vec::new(),
+            pending_tile: None,
         }
     }
 
@@ -363,6 +370,23 @@ impl Chrome {
         self.settings.tab_cap = self.settings.tab_cap.saturating_sub(1).max(1);
     }
 
+    /// Request closing the tile showing `member` (the host reaps its tab).
+    pub fn close_tile(&mut self, member: GraphMemberId) {
+        self.pending_tile = Some(TileAction::Close(member));
+    }
+
+    /// Request toggling the pin on the tile showing `member` (the host flips its
+    /// background-keep flag, which also exempts it from cap eviction).
+    pub fn toggle_pin(&mut self, member: GraphMemberId) {
+        self.pending_tile = Some(TileAction::TogglePin(member));
+    }
+
+    /// Take the pending by-hand tile action, if any. The host drains this after a
+    /// chrome click and applies it.
+    pub fn take_pending_tile(&mut self) -> Option<TileAction> {
+        self.pending_tile.take()
+    }
+
     /// The text field that currently owns editing / the caret: the palette query
     /// when the palette is open, otherwise the omnibar. The host reads this to
     /// paint the caret on the right field.
@@ -488,6 +512,10 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
 
     // The chrome tree is a Vec so the optional palette overlay can be appended.
     let mut children: Vec<ChromeView> = vec![Box::new(toolbar), Box::new(suggestions)];
+    // Tile header strips (the tiled workbench's chrome), under any open overlay.
+    for header in &c.tile_headers {
+        children.push(tile_header_view(header));
+    }
     if c.palette_open {
         children.push(palette_overlay(c));
     }
@@ -495,6 +523,39 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
         children.push(settings_overlay(c));
     }
     Box::new(el::<_, Chrome, ()>("div", children).attr("class", "chrome"))
+}
+
+/// One tile's header strip: a label + pin + close button, abs-positioned in
+/// window coordinates over the tile's top. The buttons capture a [`TileAction`]
+/// for the host to drain. Rendered in the chrome root, composited over the tiles.
+fn tile_header_view(h: &TileHeader) -> ChromeView {
+    let member = h.member;
+    let label = el::<_, Chrome, ()>("div", tile_label(&h.label)).attr("class", "tile-label");
+    let pin = on_click(
+        el::<_, Chrome, ()>("button", if h.pinned { "\u{2605}" } else { "\u{2606}" })
+            .attr("class", "tile-btn"),
+        move |c: &mut Chrome, _: PointerClick| c.toggle_pin(member),
+    );
+    let close = on_click(
+        el::<_, Chrome, ()>("button", "\u{00d7}").attr("class", "tile-btn"),
+        move |c: &mut Chrome, _: PointerClick| c.close_tile(member),
+    );
+    let strip = el::<_, Chrome, ()>("div", (label, pin, close)).attr("class", "tile-strip").attr(
+        "style",
+        format!("position: absolute; left: {}px; top: {}px; width: {}px;", h.x, h.y, h.width),
+    );
+    Box::new(strip)
+}
+
+/// A tile-strip label: the URL with its scheme trimmed and truncated to fit.
+fn tile_label(url: &str) -> String {
+    let trimmed =
+        url.strip_prefix("https://").or_else(|| url.strip_prefix("http://")).unwrap_or(url);
+    if trimmed.chars().count() > 36 {
+        format!("{}\u{2026}", trimmed.chars().take(35).collect::<String>())
+    } else {
+        trimmed.to_string()
+    }
 }
 
 /// The settings overlay: a centered panel of controls (just the active-tab cap
@@ -821,6 +882,36 @@ mod tests {
         assert_eq!(runner.state().settings.tab_cap, before - 1, "- lowers it");
         runner.update(Chrome::close_settings);
         assert!(!runner.state().settings_open, "and it closes");
+    }
+
+    /// A tile header strip renders (label + pin + close), and its close button
+    /// captures a `TileAction::Close` for the host to drain.
+    #[test]
+    fn tile_headers_render_and_capture_close() {
+        let mut runner = runner("mere://welcome");
+        let member = uuid::Uuid::from_u128(7);
+        runner.update(|c| {
+            c.tile_headers = vec![TileHeader {
+                member,
+                label: "https://a.example".to_string(),
+                x: 0.0,
+                y: 64.0,
+                width: 300.0,
+                pinned: false,
+            }];
+        });
+        {
+            let dom = runner.dom();
+            let dom = dom.borrow();
+            assert_eq!(count_class(&dom, runner.root(), "tile-strip"), 1, "one header strip renders");
+            assert_eq!(count_class(&dom, runner.root(), "tile-btn"), 2, "pin + close buttons");
+        }
+        runner.update(|c| c.close_tile(member));
+        assert_eq!(
+            runner.state().pending_tile,
+            Some(TileAction::Close(member)),
+            "the close button captures a Close action",
+        );
     }
 
     /// Count elements carrying exactly class `class` in the subtree at `id`.
