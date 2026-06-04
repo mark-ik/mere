@@ -48,6 +48,8 @@ pub const WORKBENCH_SHEET: &[&str] = &[
         background-color: rgb(34, 38, 48); padding: 6px 12px; margin-right: 2px; }",
     ".wb-tab-active { font-size: 13px; color: rgb(234, 238, 246); \
         background-color: rgb(52, 58, 74); padding: 6px 12px; margin-right: 2px; }",
+    ".wb-pin { font-size: 15px; color: rgb(214, 218, 228); \
+        background-color: rgb(40, 44, 54); padding: 5px 10px; }",
     ".wb-close { font-size: 15px; color: rgb(214, 218, 228); \
         background-color: rgb(40, 44, 54); padding: 5px 10px; }",
     ".wb-content { flex-grow: 1; background-color: rgb(17, 20, 26); }",
@@ -61,11 +63,14 @@ pub struct TabView {
     pub label: String,
 }
 
-/// One slot to render: its tabs in order and which is the visible (active) one.
+/// One slot to render: its tabs in order, which is the visible (active) one, and
+/// whether the active tab is pinned (kept active in the background + exempt from
+/// the actor pool's eviction).
 #[derive(Clone, Debug, PartialEq)]
 pub struct SlotPlan {
     pub tabs: Vec<TabView>,
     pub active: usize,
+    pub pinned: bool,
 }
 
 impl SlotPlan {
@@ -83,6 +88,9 @@ pub enum WorkbenchAction {
     Activate(GraphMemberId),
     /// Close this tab (a strip close button) — the host reaps its actor.
     Close(GraphMemberId),
+    /// Toggle this tab's pin (a strip pin button) — the background-keep flag, which
+    /// also exempts it from the actor pool's eviction.
+    TogglePin(GraphMemberId),
 }
 
 /// The render model the workbench view diffs into serval DOM: the slots to draw
@@ -98,22 +106,30 @@ impl WorkbenchScene {
     /// Build the render model from a `workbench`, resolving each member's URL label
     /// against `graph`. Geometry-free: serval lays the flex tree out, so no
     /// viewport is needed here (unlike [`Workbench::laid_out_slots`]).
-    pub fn from_workbench(workbench: &Workbench, graph: &Graph) -> Self {
+    pub fn from_workbench(
+        workbench: &Workbench,
+        graph: &Graph,
+        is_pinned: impl Fn(GraphMemberId) -> bool,
+    ) -> Self {
         let slots = workbench
             .slot_views()
-            .map(|slot| SlotPlan {
-                tabs: slot
-                    .members
-                    .iter()
-                    .map(|&member| TabView {
-                        member,
-                        label: graph
-                            .get_node_by_id(member)
-                            .map(|(_, node)| tile_label(node.url()))
-                            .unwrap_or_else(|| "(gone)".to_string()),
-                    })
-                    .collect(),
-                active: slot.active,
+            .map(|slot| {
+                let active_member = slot.members.get(slot.active).or_else(|| slot.members.first());
+                SlotPlan {
+                    tabs: slot
+                        .members
+                        .iter()
+                        .map(|&member| TabView {
+                            member,
+                            label: graph
+                                .get_node_by_id(member)
+                                .map(|(_, node)| tile_label(node.url()))
+                                .unwrap_or_else(|| "(gone)".to_string()),
+                        })
+                        .collect(),
+                    active: slot.active,
+                    pinned: active_member.copied().is_some_and(&is_pinned),
+                }
             })
             .collect();
         Self { slots, pending: None }
@@ -127,6 +143,11 @@ impl WorkbenchScene {
     /// Capture a "close this tab" request (a strip close button).
     pub fn close(&mut self, member: GraphMemberId) {
         self.pending = Some(WorkbenchAction::Close(member));
+    }
+
+    /// Capture a "toggle this tab's pin" request (a strip pin button).
+    pub fn toggle_pin(&mut self, member: GraphMemberId) {
+        self.pending = Some(WorkbenchAction::TogglePin(member));
     }
 
     /// Take the captured action, if any. The host drains this after a click and
@@ -169,8 +190,17 @@ fn slot_column(slot: &SlotPlan) -> WorkbenchTreeView {
         .collect();
     let tabs_row = el::<_, WorkbenchScene, ()>("div", tabs).attr("class", "wb-tabs");
 
-    // Close acts on the slot's active tab (the visible member).
+    // Pin + close act on the slot's active tab (the visible member).
     let active_member = slot.active_member();
+    let pin_glyph = if slot.pinned { "\u{2605}" } else { "\u{2606}" };
+    let pin = on_click(
+        el::<_, WorkbenchScene, ()>("button", pin_glyph).attr("class", "wb-pin"),
+        move |s: &mut WorkbenchScene, _: PointerClick| {
+            if let Some(m) = active_member {
+                s.toggle_pin(m);
+            }
+        },
+    );
     let close = on_click(
         el::<_, WorkbenchScene, ()>("button", "\u{00d7}").attr("class", "wb-close"),
         move |s: &mut WorkbenchScene, _: PointerClick| {
@@ -179,7 +209,8 @@ fn slot_column(slot: &SlotPlan) -> WorkbenchTreeView {
             }
         },
     );
-    let strip = el::<_, WorkbenchScene, ()>("div", (tabs_row, close)).attr("class", "wb-strip");
+    let strip =
+        el::<_, WorkbenchScene, ()>("div", (tabs_row, pin, close)).attr("class", "wb-strip");
 
     // The content placeholder, tagged with the active member so the host can find
     // its laid-out rect and composite that tile's actor texture there.
@@ -242,8 +273,8 @@ mod tests {
     #[test]
     fn two_split_slots_render_a_column_strip_and_content_each() {
         let r = runner(scene(vec![
-            SlotPlan { tabs: vec![tab(1, "https://a.example")], active: 0 },
-            SlotPlan { tabs: vec![tab(2, "https://b.example")], active: 0 },
+            SlotPlan { tabs: vec![tab(1, "https://a.example")], active: 0, pinned: false },
+            SlotPlan { tabs: vec![tab(2, "https://b.example")], active: 0, pinned: false },
         ]));
         let dom = r.dom();
         let dom = dom.borrow();
@@ -260,6 +291,7 @@ mod tests {
         let r = runner(scene(vec![SlotPlan {
             tabs: vec![tab(1, "a"), tab(2, "b"), tab(3, "c")],
             active: 1,
+            pinned: false,
         }]));
         let dom = r.dom();
         let dom = dom.borrow();
@@ -288,20 +320,35 @@ mod tests {
         let mut graph = Graph::new();
         graph.add_node_with_id(Uuid::from_u128(1), "https://x.example".to_string(), PortablePoint::new(0.0, 0.0));
         graph.add_node_with_id(Uuid::from_u128(2), "https://y.example".to_string(), PortablePoint::new(0.0, 0.0));
-        let scene = WorkbenchScene::from_workbench(&wb, &graph);
+        let scene = WorkbenchScene::from_workbench(&wb, &graph, |_| false);
         assert_eq!(scene.slots.len(), 1, "grouped into one slot");
         assert_eq!(scene.slots[0].tabs.len(), 2);
         assert_eq!(scene.slots[0].tabs[0].label, "x.example", "scheme trimmed");
+        assert!(!scene.slots[0].pinned);
         // A member missing from the graph resolves to a placeholder label.
         let mut wb2 = Workbench::new();
         wb2.open_tile(Uuid::from_u128(9));
-        let scene2 = WorkbenchScene::from_workbench(&wb2, &Graph::new());
+        let scene2 = WorkbenchScene::from_workbench(&wb2, &Graph::new(), |_| false);
         assert_eq!(scene2.slots[0].tabs[0].label, "(gone)");
+    }
+
+    /// The pin predicate marks a slot pinned when its active member is pinned, and
+    /// the pin button captures a TogglePin.
+    #[test]
+    fn pin_predicate_and_toggle() {
+        let mut wb = Workbench::new();
+        wb.open_tile(Uuid::from_u128(1));
+        let pinned = Uuid::from_u128(1);
+        let scene = WorkbenchScene::from_workbench(&wb, &Graph::new(), |m| m == pinned);
+        assert!(scene.slots[0].pinned, "the active member is pinned");
+        let mut s = scene;
+        s.toggle_pin(Uuid::from_u128(1));
+        assert_eq!(s.pending, Some(WorkbenchAction::TogglePin(Uuid::from_u128(1))));
     }
 
     #[test]
     fn action_methods_capture_pending() {
-        let mut s = scene(vec![SlotPlan { tabs: vec![tab(1, "a")], active: 0 }]);
+        let mut s = scene(vec![SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false }]);
         s.activate(Uuid::from_u128(1));
         assert_eq!(s.pending, Some(WorkbenchAction::Activate(Uuid::from_u128(1))));
         assert_eq!(s.take_pending(), Some(WorkbenchAction::Activate(Uuid::from_u128(1))));

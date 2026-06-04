@@ -6614,6 +6614,7 @@ dependencies = [
  "orrery-host",
  "pelt-live",
  "platen",
+ "platen-view",
  "pollster",
  "serval-layout",
  "serval-scripted-dom",

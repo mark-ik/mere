@@ -36,14 +36,16 @@ use std::sync::Arc;
 use eidetic_fjall::FjallStore;
 use layout_dom_api::LayoutDom;
 use forme::GraphMemberId;
-use kernel::geometry::PortableSize;
 use meerkat::command::Command;
 use platen::Workbench;
+use platen_view::{
+    workbench_view, WorkbenchAction, WorkbenchLogic, WorkbenchScene, WorkbenchTreeView,
+    WORKBENCH_SHEET,
+};
 use meerkat::{
     chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView, ContextAction, ContextItem,
-    TileAction, TileStrip, TileTab,
+    TileAction, TileStrip,
 };
-use platen::LayoutConfig;
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
 use orrery_host::{CameraView, NodeState, Orrery, PointerButton, WHEEL_PAN_SCALE};
@@ -201,6 +203,13 @@ struct App {
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
     /// (Cartography = the orrery, Tree = the tiled view).
     workbench: Workbench,
+    /// The workbench root: a second serval document authority (separate from the
+    /// chrome root) that renders the tile tree as flex DOM via [`platen_view`].
+    /// In Tree mode the host syncs it from `workbench`, rasterizes it as the content
+    /// band, reads each tile's content rect back, and composites that tile's actor
+    /// texture there. taffy lays it out — the morphorm path is gone.
+    workbench_dom: Rc<RefCell<ScriptedDom>>,
+    workbench_runner: ServalAppRunner<WorkbenchScene, WorkbenchLogic, WorkbenchTreeView>,
     /// The members the open right-click context menu acts on (the selection's
     /// working set, captured when the menu opened). Empty when no menu is open.
     context_set: Vec<GraphMemberId>,
@@ -212,6 +221,9 @@ struct App {
 impl App {
     fn new(proxy: EventLoopProxy<()>) -> Self {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
+        // The workbench root's own document, separate from the chrome root (the
+        // separate-roots discipline). Empty until the tiled view syncs it.
+        let workbench_dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         // The session lives under the per-user data dir; restore the graph + the
         // camera (view-intent) + the settings on launch, else seed fresh.
         let session_dir = dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("mere");
@@ -314,6 +326,12 @@ impl App {
             width: 1024,
             height: 600,
             workbench: Workbench::new(),
+            workbench_dom: workbench_dom.clone(),
+            workbench_runner: ServalAppRunner::new(
+                workbench_dom,
+                workbench_view as WorkbenchLogic,
+                WorkbenchScene::default(),
+            ),
             context_set: Vec::new(),
             saved_tab_cap: saved_settings.tab_cap,
         }
@@ -386,7 +404,25 @@ impl App {
         // settle / glide redraw loop, which would otherwise re-rasterize every tile
         // each frame behind the cover.
         let (content_scene, orrery_redraw) = if self.workbench.is_tiled() {
-            (netrender::Scene::new(w, content_h), false)
+            // Tree: the workbench root (a serval flex-DOM document) is the band. Sync
+            // it from the model + graph + pin state, then rasterize it — taffy lays
+            // the tiles out (no morphorm). The orrery is hidden, so its physics +
+            // paint are skipped.
+            let scene = WorkbenchScene::from_workbench(&self.workbench, self.orrery.graph(), |m| {
+                self.constellation.is_background(m)
+            });
+            if self.workbench_runner.state() != &scene {
+                self.workbench_runner.update(move |s| *s = scene);
+            }
+            let wb = scene_from_scripted_dom(
+                &self.workbench_dom.borrow(),
+                WORKBENCH_SHEET,
+                w,
+                content_h,
+                None,
+                &scroll,
+            );
+            (wb, false)
         } else {
             self.orrery.resize(w, content_h);
             if !self.centered {
@@ -407,59 +443,49 @@ impl App {
         // `(member, window dest rect, raster size)`; the scene comes from that
         // node's activation at composite time. Driving an activation re-renders it
         // off the UI thread only when its document or size changed.
+        // The chrome-composited tile strips are retired — the serval workbench root
+        // owns its own strips now.
+        self.set_tile_strips(Vec::new());
         let mut cards: Vec<(GraphMemberId, [f32; 4], (u32, u32))> = Vec::new();
         if self.workbench.is_tiled() {
-            let band = PortableSize::new(w as f32, content_h as f32);
-            let slots =
-                self.workbench.laid_out_slots(band, &LayoutConfig::default(), self.orrery.graph());
-            let mut strips = Vec::with_capacity(slots.len());
-            for slot in &slots {
-                // The tab strip spans the slot's top (window coords: the orrery band
-                // begins at `toolbar_h`). Every tab is its own warm actor; the pin
-                // glyph tracks the active tab's background-keep flag.
-                let tabs: Vec<TileTab> = slot
-                    .tabs
-                    .iter()
-                    .map(|t| TileTab {
-                        member: t.member,
-                        label: t.url.clone().unwrap_or_else(|| "(gone)".to_string()),
+            // Read each content placeholder's laid-out rect + member straight out of
+            // the workbench DOM (taffy laid it out above), then drive that tile's
+            // actor and queue it to composite at that rect (window coords add
+            // `toolbar_h`). The collect releases the DOM borrow before we mutate self.
+            let placements: Vec<(GraphMemberId, f32, f32, f32, f32)> = {
+                let dom = self.workbench_dom.borrow();
+                let frags = fragments_from_scripted_dom(&dom, WORKBENCH_SHEET, w, content_h);
+                all_with_class(&dom, dom.document(), "wb-content")
+                    .into_iter()
+                    .filter_map(|node| {
+                        let member = member_attr(&dom, node)?;
+                        let r = frags.rect_of(node)?;
+                        Some((member, r.location.x, r.location.y, r.size.width, r.size.height))
                     })
-                    .collect();
-                let active_member = slot.active_tab().map(|t| t.member);
-                strips.push(TileStrip {
-                    x: slot.strip.origin.x,
-                    y: toolbar_h as f32 + slot.strip.origin.y,
-                    width: slot.strip.size.width,
-                    tabs,
-                    active: slot.active,
-                    pinned: active_member.is_some_and(|m| self.constellation.is_background(m)),
-                });
-                // Drive only the visible tab; the others stay warm with their last
-                // scene, so clicking a tab switches instantly. Content renders below
-                // the strip, at the slot's carved content rect.
-                let Some(tab) = slot.active_tab() else { continue };
-                let Some(url) = tab.url.as_deref() else { continue };
-                self.ensure_content(url);
-                let cw = slot.content.size.width.round().max(1.0) as u32;
-                let ch = slot.content.size.height.round().max(1.0) as u32;
-                let state = self.content.get(url).cloned();
-                self.constellation.drive(tab.member, url, state, cw, ch);
-                let cx0 = slot.content.origin.x;
-                let cy0 = toolbar_h as f32 + slot.content.origin.y;
-                cards.push((tab.member, [cx0, cy0, cx0 + cw as f32, cy0 + ch as f32], (cw, ch)));
+                    .collect()
+            };
+            for (member, lx, ly, sw, sh) in placements {
+                let Some(url) =
+                    self.orrery.graph().get_node_by_id(member).map(|(_, n)| n.url().to_string())
+                else {
+                    continue;
+                };
+                self.ensure_content(&url);
+                let cw = sw.round().max(1.0) as u32;
+                let ch = sh.round().max(1.0) as u32;
+                let state = self.content.get(&url).cloned();
+                self.constellation.drive(member, &url, state, cw, ch);
+                let cy0 = toolbar_h as f32 + ly;
+                cards.push((member, [lx, cy0, lx + cw as f32, cy0 + ch as f32], (cw, ch)));
             }
-            self.set_tile_strips(strips);
-        } else {
-            self.set_tile_strips(Vec::new());
-            if let (Some(member), Some(url)) =
-                (self.focused_member(), self.orrery.focused_url().map(str::to_string))
-            {
-                if let Some((x0, y0, x1, y1, cw, ch)) = card::card_rect(w, toolbar_h, h) {
-                    self.ensure_content(&url);
-                    let state = self.content.get(&url).cloned();
-                    self.constellation.drive(member, &url, state, cw, ch);
-                    cards.push((member, [x0, y0, x1, y1], (cw, ch)));
-                }
+        } else if let (Some(member), Some(url)) =
+            (self.focused_member(), self.orrery.focused_url().map(str::to_string))
+        {
+            if let Some((x0, y0, x1, y1, cw, ch)) = card::card_rect(w, toolbar_h, h) {
+                self.ensure_content(&url);
+                let state = self.content.get(&url).cloned();
+                self.constellation.drive(member, &url, state, cw, ch);
+                cards.push((member, [x0, y0, x1, y1], (cw, ch)));
             }
         }
 
@@ -813,6 +839,12 @@ impl App {
                     if button == MouseButton::Left {
                         self.chrome_click(x, y);
                     }
+                } else if self.workbench.is_tiled() {
+                    // Tree mode: the content band is the workbench root. A left press
+                    // routes to it (tab switch / close / pin); the orrery is hidden.
+                    if button == MouseButton::Left {
+                        self.workbench_click(x, y);
+                    }
                 } else if button == MouseButton::Right {
                     self.open_context_menu_at(x, y);
                 } else if let Some(b) = orrery_button {
@@ -857,6 +889,48 @@ impl App {
             }
             self.request_redraw();
         }
+    }
+
+    /// Hit-test the workbench root at window `(x, y)` (content-band coords) and
+    /// dispatch the click — a tab switch, a close, or a pin toggle. The action is
+    /// captured in the workbench scene and drained immediately onto the model.
+    fn workbench_click(&mut self, x: f32, y: f32) {
+        let th = self.toolbar_height() as f32;
+        let content_h = self.height.saturating_sub(self.toolbar_height()).max(1);
+        let offsets = ScrollOffsets::<NodeId>::default();
+        let hit = {
+            let dom = self.workbench_dom.borrow();
+            hit_test_node(&dom, WORKBENCH_SHEET, self.width, content_h, x, y - th, &offsets)
+        };
+        if let Some(node) = hit {
+            self.workbench_runner.dispatch_click(node, PointerClick::at((x, y - th)));
+            self.drain_workbench_action();
+            self.request_redraw();
+        }
+    }
+
+    /// Apply a pending workbench action the workbench root captured: switch the
+    /// visible tab, close a tab (reaping its actor), or toggle its pin (the
+    /// background-keep flag, which also exempts it from cap eviction).
+    fn drain_workbench_action(&mut self) {
+        let Some(action) = self.workbench_runner.state().pending else {
+            return;
+        };
+        self.workbench_runner.update(|s| s.pending = None);
+        match action {
+            WorkbenchAction::Activate(member) => {
+                self.workbench.activate(member);
+            },
+            WorkbenchAction::Close(member) => {
+                self.workbench.close_tile(member);
+                self.constellation.reap(member);
+            },
+            WorkbenchAction::TogglePin(member) => {
+                let pinned = self.constellation.is_background(member);
+                self.constellation.set_background(member, !pinned);
+            },
+        }
+        self.request_redraw();
     }
 
     /// Execute a pending "connect to peer" request the chrome queued (S5.1): take
@@ -1314,6 +1388,27 @@ fn first_with_class(dom: &ScriptedDom, id: NodeId, class: &str) -> Option<NodeId
         return Some(id);
     }
     dom.dom_children(id).find_map(|c| first_with_class(dom, c, class))
+}
+
+/// Every element carrying CSS class `class` in pre-order under `id`. Used to find
+/// the workbench root's content placeholders, one per tile.
+fn all_with_class(dom: &ScriptedDom, id: NodeId, class: &str) -> Vec<NodeId> {
+    let mut out = Vec::new();
+    if has_class(dom, id, class) {
+        out.push(id);
+    }
+    for child in dom.dom_children(id) {
+        out.extend(all_with_class(dom, child, class));
+    }
+    out
+}
+
+/// The `data-member` attribute of element `id`, parsed as a graph member id — the
+/// tile whose content composites at this placeholder's rect.
+fn member_attr(dom: &ScriptedDom, id: NodeId) -> Option<GraphMemberId> {
+    dom.attributes(id)
+        .find(|a| a.name.local.as_ref() == "data-member")
+        .and_then(|a| a.value.parse::<GraphMemberId>().ok())
 }
 
 /// The first element with local tag `local` in pre-order under `id`.

@@ -91,6 +91,11 @@ armillary = { workspace = true }
 # Cartography projection; the tiled mode is its Tree projection.
 forme = { workspace = true }
 platen = { workspace = true }
+# The serval view layer for the tiled workbench (taffy retarget, Phase 2): emits
+# the Workbench as flex DOM that serval lays out. meerkat owns a second runner over
+# it (the workbench root), composites its band in Tree mode, reads each tile's
+# content rect back, and composites that tile's actor texture there.
+platen-view = { workspace = true }
 
 # Off-UI-thread fetch (S2.2b): netfetcher's async WHATWG Fetch runs on a tokio
 # worker pool; results are delivered back to the winit loop over a channel + an

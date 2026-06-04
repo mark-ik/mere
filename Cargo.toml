@@ -107,6 +107,7 @@ forme = { path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }
 
 platen = { path = "crates/platen/platen" }
+platen-view = { path = "crates/platen/view" }
 apparatus = { path = "crates/platen/domain/apparatus" }
 gloss = { path = "crates/platen/domain/gloss" }
 workbench = { path = "crates/platen/domain/workbench" }
