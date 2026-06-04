@@ -207,6 +207,17 @@ impl Chrome {
         self.history.current()
     }
 
+    /// Display `url` as the current location (toolbar text + omnibar) without
+    /// touching history — the omnibar follows the focused tile / node. The host
+    /// gates this so it does not clobber the omnibar mid-edit.
+    pub fn show_location(&mut self, url: &str) {
+        self.toolbar.editable.location = url.to_string();
+        self.toolbar.editable.location_dirty = false;
+        self.toolbar.editable.location_submitted = false;
+        self.omnibar = TextInput::new(url.to_string());
+        self.close_suggestions();
+    }
+
     /// Regenerate the omnibar suggestions from the current omnibar text and the
     /// history, resetting the highlight. The host calls this after each omnibar
     /// edit (keystroke / caret move).

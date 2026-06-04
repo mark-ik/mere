@@ -190,6 +190,12 @@ struct App {
     /// The last left-button release (time + window pos), for double-click detection.
     /// A double-click on an orrery node opens the tiled workbench from it.
     last_left_release: Option<(Instant, (f32, f32))>,
+    /// The tile in focus in the tiled view (the last activated / opened member), so
+    /// the omnibar can show its URL. `None` outside the tiled view or with no tiles.
+    focused_tile: Option<GraphMemberId>,
+    /// The location last pushed into the omnibar by focus-follow, so it only updates
+    /// when the focused tile / node actually changes (not every frame).
+    shown_location: Option<String>,
     width: u32,
     height: u32,
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
@@ -316,6 +322,8 @@ impl App {
             modifiers: Modifiers::default(),
             cursor: (0.0, 0.0),
             last_left_release: None,
+            focused_tile: None,
+            shown_location: None,
             width: 1024,
             height: 600,
             workbench: Workbench::new(),
@@ -482,6 +490,11 @@ impl App {
             }
         }
 
+        // The omnibar follows focus: point it at the focused tile / node when that
+        // changed (next frame, like the chrome strips were — the scene above is
+        // already built).
+        self.sync_location();
+
         let host = self.host.as_ref().unwrap();
         let (_chrome_tex, chrome_view) =
             host.rasterize(&chrome_scene, w, h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
@@ -553,6 +566,32 @@ impl App {
         }
     }
 
+    /// The URL of whatever is in focus: in the tiled view the focused tile's node,
+    /// in the orrery the focused node. `None` when nothing is focused.
+    fn current_focus_url(&self) -> Option<String> {
+        if self.workbench.is_tiled() {
+            let member = self.focused_tile?;
+            self.orrery.graph().get_node_by_id(member).map(|(_, node)| node.url().to_string())
+        } else {
+            self.orrery.focused_url().map(str::to_string)
+        }
+    }
+
+    /// Point the omnibar at the focused tile / node (the address bar follows focus),
+    /// but only when that focus actually changed and the user isn't editing the
+    /// omnibar (no chrome field holds the caret) — so it never clobbers typing.
+    fn sync_location(&mut self) {
+        let url = self.current_focus_url();
+        if url == self.shown_location {
+            return;
+        }
+        self.shown_location = url.clone();
+        if let (Some(url), None) = (url, self.runner.focus()) {
+            self.runner.update(move |c| c.show_location(&url));
+            self.request_redraw();
+        }
+    }
+
     /// Sync the orrery to the chrome's current navigation target: when the
     /// location changes, `visit` it — adding a node and a browse-trail edge, or
     /// selecting the existing node (URL identity). Called after any input that can
@@ -619,6 +658,14 @@ impl App {
             for member in self.selection_working_set() {
                 self.workbench.open_tile(member);
             }
+            // Focus the node the open was seeded from (the primary selection), so the
+            // omnibar shows its URL; fall back to the first opened tile.
+            self.focused_tile = self
+                .orrery
+                .selected_members()
+                .first()
+                .copied()
+                .or_else(|| self.workbench.open_members().first().copied());
         }
         self.request_redraw();
     }
@@ -926,10 +973,14 @@ impl App {
         match action {
             WorkbenchAction::Activate(member) => {
                 self.workbench.activate(member);
+                self.focused_tile = Some(member);
             },
             WorkbenchAction::Close(member) => {
                 self.workbench.close_tile(member);
                 self.constellation.reap(member);
+                if self.focused_tile == Some(member) {
+                    self.focused_tile = self.workbench.open_members().first().copied();
+                }
             },
             WorkbenchAction::TogglePin(member) => {
                 let pinned = self.constellation.is_background(member);
