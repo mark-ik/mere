@@ -44,7 +44,6 @@ use platen_view::{
 };
 use meerkat::{
     chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView, ContextAction, ContextItem,
-    TileAction, TileStrip,
 };
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
@@ -120,17 +119,6 @@ const CHROME_SHEET: &[&str] = &[
         background-color: rgb(34, 37, 46); padding: 8px 14px; flex-grow: 1; }",
     ".set-btn { font-size: 20px; color: rgb(222, 226, 234); \
         background-color: rgb(48, 52, 62); padding: 6px 16px; margin: 0 4px; }",
-    // Tile tab strips (the tiled workbench's by-hand chrome): a flex bar with the
-    // tab row growing and the pin / close buttons at the right. The active tab is
-    // brighter; inactive tabs are recessed.
-    ".tile-strip { display: flex; height: 28px; background-color: rgb(40, 44, 54); }",
-    ".tile-tabs { display: flex; background-color: rgb(40, 44, 54); flex-grow: 1; }",
-    ".tile-tab { font-size: 13px; color: rgb(176, 182, 196); \
-        background-color: rgb(34, 38, 48); padding: 6px 12px; margin-right: 2px; }",
-    ".tile-tab-active { font-size: 13px; color: rgb(234, 238, 246); \
-        background-color: rgb(52, 58, 74); padding: 6px 12px; margin-right: 2px; }",
-    ".tile-btn { font-size: 15px; color: rgb(214, 218, 228); \
-        background-color: rgb(40, 44, 54); padding: 5px 10px; }",
     // Right-click context menu: a small panel of action rows floated at the cursor.
     ".context-menu { background-color: rgb(38, 42, 52); padding: 4px; }",
     ".context-item { font-size: 16px; color: rgb(216, 220, 230); \
@@ -443,9 +431,6 @@ impl App {
         // `(member, window dest rect, raster size)`; the scene comes from that
         // node's activation at composite time. Driving an activation re-renders it
         // off the UI thread only when its document or size changed.
-        // The chrome-composited tile strips are retired — the serval workbench root
-        // owns its own strips now.
-        self.set_tile_strips(Vec::new());
         let mut cards: Vec<(GraphMemberId, [f32; 4], (u32, u32))> = Vec::new();
         if self.workbench.is_tiled() {
             // Read each content placeholder's laid-out rect + member straight out of
@@ -880,7 +865,6 @@ impl App {
             self.runner.dispatch_click(node, PointerClick::at((x, y)));
             self.drain_pending_connect();
             self.drain_pending_command();
-            self.drain_pending_tile();
             self.drain_pending_context();
             self.sync_settings();
             self.sync_orrery();
@@ -1006,41 +990,6 @@ impl App {
         if let Err(err) = settings_store::save_settings(&self.session_dir, &settings) {
             tracing::warn!(%err, "failed to persist settings");
         }
-    }
-
-    /// Push the tile tab strips to the chrome, requesting a redraw if they changed
-    /// (they're computed after this frame's chrome scene is built, so the next
-    /// frame is what renders them).
-    fn set_tile_strips(&mut self, strips: Vec<TileStrip>) {
-        if self.runner.state().tile_strips != strips {
-            self.runner.update(|c| c.tile_strips = strips);
-            self.request_redraw();
-        }
-    }
-
-    /// Run a pending by-hand tile action the chrome captured: close a tab (reap its
-    /// actor + drop it from its slot), toggle its pin (the background flag, which
-    /// keeps the tab active + exempt from eviction), or activate it (make it the
-    /// visible tab of its stack).
-    fn drain_pending_tile(&mut self) {
-        let Some(action) = self.runner.state().pending_tile else {
-            return;
-        };
-        self.runner.update(|c| c.pending_tile = None);
-        match action {
-            TileAction::Close(member) => {
-                self.workbench.close_tile(member);
-                self.constellation.reap(member);
-            },
-            TileAction::TogglePin(member) => {
-                let pinned = self.constellation.is_background(member);
-                self.constellation.set_background(member, !pinned);
-            },
-            TileAction::Activate(member) => {
-                self.workbench.activate(member);
-            },
-        }
-        self.request_redraw();
     }
 
     /// Handle a pressed key. Ctrl+K toggles the command palette; while the

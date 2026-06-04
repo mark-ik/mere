@@ -43,7 +43,6 @@ use std::rc::Rc;
 use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
-use forme::GraphMemberId;
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
     el, lens, on_click, text_field_typed, AnyView, PointerClick, ServalAppRunner, ServalCtx,
@@ -116,11 +115,6 @@ pub struct Chrome {
     pub settings: Settings,
     /// Whether the settings overlay is open.
     pub settings_open: bool,
-    /// The tab strips the chrome renders over the open slots, set by the host each
-    /// frame from the layout (empty outside the tiled view).
-    pub tile_strips: Vec<TileStrip>,
-    /// A by-hand tile action a strip button / tab captured, for the host to run.
-    pub pending_tile: Option<TileAction>,
     /// The open right-click context menu (host-populated from the selection), or
     /// `None` when no menu is showing.
     pub context_menu: Option<ContextMenu>,
@@ -141,40 +135,6 @@ impl Default for Settings {
     fn default() -> Self {
         Self { tab_cap: 12 }
     }
-}
-
-/// A slot's tab strip — the chrome the host renders over each open slot: a row of
-/// tabs (one per stacked member) plus pin / close on the active tab, abs-positioned
-/// in window coordinates. The host recomputes these from the layout each frame; the
-/// chrome renders them and routes button / tab clicks back as a [`TileAction`].
-#[derive(Clone, Debug, PartialEq)]
-pub struct TileStrip {
-    pub x: f32,
-    pub y: f32,
-    pub width: f32,
-    /// The slot's tabs, in order (one for a plain tile, several for a stack).
-    pub tabs: Vec<TileTab>,
-    /// Index into `tabs` of the visible tab.
-    pub active: usize,
-    /// Whether the active tab is pinned (its tab kept active + exempt from eviction).
-    pub pinned: bool,
-}
-
-/// One tab in a [`TileStrip`]: its graph member and display label.
-#[derive(Clone, Debug, PartialEq)]
-pub struct TileTab {
-    pub member: GraphMemberId,
-    pub label: String,
-}
-
-/// A by-hand tile action the chrome captured for the host to run: close the tab
-/// (reap its actor), toggle its pin (the background-keep flag), or activate it
-/// (make it the visible tab of its stack).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TileAction {
-    Close(GraphMemberId),
-    TogglePin(GraphMemberId),
-    Activate(GraphMemberId),
 }
 
 /// A right-click context menu the chrome floats at the cursor. The host computes
@@ -236,8 +196,6 @@ impl Chrome {
             pending_command: None,
             settings: Settings::default(),
             settings_open: false,
-            tile_strips: Vec::new(),
-            pending_tile: None,
             context_menu: None,
             pending_context: None,
         }
@@ -421,28 +379,6 @@ impl Chrome {
         self.settings.tab_cap = self.settings.tab_cap.saturating_sub(1).max(1);
     }
 
-    /// Request closing the tile showing `member` (the host reaps its tab).
-    pub fn close_tile(&mut self, member: GraphMemberId) {
-        self.pending_tile = Some(TileAction::Close(member));
-    }
-
-    /// Request toggling the pin on the tile showing `member` (the host flips its
-    /// background-keep flag, which also exempts it from cap eviction).
-    pub fn toggle_pin(&mut self, member: GraphMemberId) {
-        self.pending_tile = Some(TileAction::TogglePin(member));
-    }
-
-    /// Request making `member` the visible tab of its stack.
-    pub fn activate_tab(&mut self, member: GraphMemberId) {
-        self.pending_tile = Some(TileAction::Activate(member));
-    }
-
-    /// Take the pending by-hand tile action, if any. The host drains this after a
-    /// chrome click and applies it.
-    pub fn take_pending_tile(&mut self) -> Option<TileAction> {
-        self.pending_tile.take()
-    }
-
     /// Open the right-click context menu at window `(x, y)` with host-computed
     /// `items` (closing the suggestions dropdown so it can't overlap).
     pub fn open_context_menu(&mut self, x: f32, y: f32, items: Vec<ContextItem>) {
@@ -592,10 +528,6 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
 
     // The chrome tree is a Vec so the optional palette overlay can be appended.
     let mut children: Vec<ChromeView> = vec![Box::new(toolbar), Box::new(suggestions)];
-    // Tab strips (the tiled workbench's chrome), under any open overlay.
-    for strip in &c.tile_strips {
-        children.push(tile_strip_view(strip));
-    }
     if c.palette_open {
         children.push(palette_overlay(c));
     }
@@ -630,66 +562,6 @@ fn context_menu_view(menu: &ContextMenu) -> ChromeView {
         format!("position: absolute; left: {}px; top: {}px;", menu.x, menu.y),
     );
     Box::new(panel)
-}
-
-/// One slot's tab strip: a row of clickable tabs (one per stacked member) plus
-/// pin + close acting on the active tab, abs-positioned in window coordinates
-/// over the slot's top. Clicking an inactive tab switches the stack; the buttons
-/// capture a [`TileAction`] for the host to drain. Rendered in the chrome root,
-/// composited over the tiles.
-fn tile_strip_view(s: &TileStrip) -> ChromeView {
-    // One clickable tab per stacked member; the visible one carries the active
-    // class. A click routes `Activate(member)` so the host switches the stack.
-    let tabs: Vec<ChromeView> = s
-        .tabs
-        .iter()
-        .enumerate()
-        .map(|(i, t)| {
-            let member = t.member;
-            let class = if i == s.active { "tile-tab-active" } else { "tile-tab" };
-            let tab = on_click(
-                el::<_, Chrome, ()>("div", tile_label(&t.label)).attr("class", class),
-                move |c: &mut Chrome, _: PointerClick| c.activate_tab(member),
-            );
-            Box::new(tab) as ChromeView
-        })
-        .collect();
-    let tabs_row = el::<_, Chrome, ()>("div", tabs).attr("class", "tile-tabs");
-    // Pin + close act on the active tab's member (the visible one).
-    let active_member = s.tabs.get(s.active).map(|t| t.member);
-    let pin_glyph = if s.pinned { "\u{2605}" } else { "\u{2606}" };
-    let pin = on_click(
-        el::<_, Chrome, ()>("button", pin_glyph).attr("class", "tile-btn"),
-        move |c: &mut Chrome, _: PointerClick| {
-            if let Some(m) = active_member {
-                c.toggle_pin(m);
-            }
-        },
-    );
-    let close = on_click(
-        el::<_, Chrome, ()>("button", "\u{00d7}").attr("class", "tile-btn"),
-        move |c: &mut Chrome, _: PointerClick| {
-            if let Some(m) = active_member {
-                c.close_tile(m);
-            }
-        },
-    );
-    let strip = el::<_, Chrome, ()>("div", (tabs_row, pin, close)).attr("class", "tile-strip").attr(
-        "style",
-        format!("position: absolute; left: {}px; top: {}px; width: {}px;", s.x, s.y, s.width),
-    );
-    Box::new(strip)
-}
-
-/// A tile-strip label: the URL with its scheme trimmed and truncated to fit.
-fn tile_label(url: &str) -> String {
-    let trimmed =
-        url.strip_prefix("https://").or_else(|| url.strip_prefix("http://")).unwrap_or(url);
-    if trimmed.chars().count() > 36 {
-        format!("{}\u{2026}", trimmed.chars().take(35).collect::<String>())
-    } else {
-        trimmed.to_string()
-    }
 }
 
 /// The settings overlay: a centered panel of controls (just the active-tab cap
@@ -1016,47 +888,6 @@ mod tests {
         assert_eq!(runner.state().settings.tab_cap, before - 1, "- lowers it");
         runner.update(Chrome::close_settings);
         assert!(!runner.state().settings_open, "and it closes");
-    }
-
-    /// A slot's tab strip renders a tab per stacked member (the visible one
-    /// active), plus pin + close. Clicking an inactive tab captures `Activate`;
-    /// the close button captures `Close` of the active member.
-    #[test]
-    fn tile_strip_renders_tabs_and_captures_actions() {
-        let mut runner = runner("mere://welcome");
-        let a = uuid::Uuid::from_u128(7);
-        let b = uuid::Uuid::from_u128(8);
-        runner.update(|c| {
-            c.tile_strips = vec![TileStrip {
-                x: 0.0,
-                y: 64.0,
-                width: 300.0,
-                tabs: vec![
-                    TileTab { member: a, label: "https://a.example".to_string() },
-                    TileTab { member: b, label: "https://b.example".to_string() },
-                ],
-                active: 0,
-                pinned: false,
-            }];
-        });
-        {
-            let dom = runner.dom();
-            let dom = dom.borrow();
-            assert_eq!(count_class(&dom, runner.root(), "tile-strip"), 1, "one strip renders");
-            assert_eq!(count_class(&dom, runner.root(), "tile-tab-active"), 1, "the visible tab");
-            assert_eq!(count_class(&dom, runner.root(), "tile-tab"), 1, "the other (inactive) tab");
-            assert_eq!(count_class(&dom, runner.root(), "tile-btn"), 2, "pin + close buttons");
-        }
-        // Clicking the inactive tab (member b) asks the host to switch the stack.
-        runner.update(|c| c.activate_tab(b));
-        assert_eq!(runner.state().pending_tile, Some(TileAction::Activate(b)));
-        // The close button acts on the active member (a).
-        runner.update(|c| c.close_tile(a));
-        assert_eq!(
-            runner.state().pending_tile,
-            Some(TileAction::Close(a)),
-            "the close button captures a Close action on the active member",
-        );
     }
 
     /// The context menu renders a row per item, and a row click captures its action
