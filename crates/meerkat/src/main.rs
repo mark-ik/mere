@@ -52,7 +52,8 @@ use serval_layout::ScrollOffsets;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::{key_event_from_winit, modifiers_from_winit, SurfaceHost};
 use session_runtime::{
-    content_store, session_graph_store, view_intent_store, CameraSnapshot, ViewIntent,
+    content_store, session_graph_store, settings_store, view_intent_store, CameraSnapshot,
+    PersistedSettings, ViewIntent,
 };
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
@@ -203,21 +204,26 @@ struct App {
     /// The members the open right-click context menu acts on (the selection's
     /// working set, captured when the menu opened). Empty when no menu is open.
     context_set: Vec<GraphMemberId>,
+    /// The active-tab cap last written to the settings sidecar. Guards the persist
+    /// path so an unchanged value isn't re-written on every chrome click.
+    saved_tab_cap: usize,
 }
 
 impl App {
     fn new(proxy: EventLoopProxy<()>) -> Self {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
-        let runner = ServalAppRunner::new(
-            dom.clone(),
-            chrome_view as ChromeLogic,
-            Chrome::new("mere://welcome"),
-        );
-        let content_location = runner.state().content_location().to_string();
         // The session lives under the per-user data dir; restore the graph + the
-        // camera (view-intent) on launch, else seed fresh from the initial location.
+        // camera (view-intent) + the settings on launch, else seed fresh.
         let session_dir = dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("mere");
         let _ = std::fs::create_dir_all(&session_dir);
+        // Restore persisted settings (the active-tab cap) so the chrome + actor pool
+        // open at the user's saved value rather than the default.
+        let saved_settings =
+            settings_store::load_settings(&session_dir).ok().flatten().unwrap_or_default();
+        let mut chrome = Chrome::new("mere://welcome");
+        chrome.settings.tab_cap = saved_settings.tab_cap;
+        let runner = ServalAppRunner::new(dom.clone(), chrome_view as ChromeLogic, chrome);
+        let content_location = runner.state().content_location().to_string();
         // Durable content cache (S3.2c) in a fjall keyspace under the session dir;
         // `None` simply disables caching (the shell runs without it).
         let store = match FjallStore::open(session_dir.join("content")) {
@@ -280,7 +286,8 @@ impl App {
         let content_wake: armillary::Wake = Arc::new(move || {
             let _ = content_proxy.send_event(());
         });
-        let constellation = Constellation::new(content_wake);
+        let mut constellation = Constellation::new(content_wake);
+        constellation.set_cap(saved_settings.tab_cap);
         // The p2p sync subsystem: binds the transport + joins the tessera demo
         // moot on its own runtime, delivering status changes through `proxy` (the
         // same wake the fetch actor uses). Setup failure disables p2p, not the shell.
@@ -308,6 +315,7 @@ impl App {
             height: 600,
             workbench: Workbench::new(),
             context_set: Vec::new(),
+            saved_tab_cap: saved_settings.tab_cap,
         }
     }
 
@@ -906,8 +914,24 @@ impl App {
 
     /// Apply the chrome's current settings to the host: the active-tab cap to the
     /// actor pool. Called after a chrome interaction that could have changed them.
+    /// Persists to the settings sidecar when the value actually changed (so an
+    /// unrelated chrome click doesn't re-write the file).
     fn sync_settings(&mut self) {
-        self.constellation.set_cap(self.runner.state().settings.tab_cap);
+        let cap = self.runner.state().settings.tab_cap;
+        self.constellation.set_cap(cap);
+        if cap != self.saved_tab_cap {
+            self.saved_tab_cap = cap;
+            self.persist_settings();
+        }
+    }
+
+    /// Write the current settings to the session's `settings.json` sidecar. A
+    /// failure is logged, not fatal (the shell runs without persistence).
+    fn persist_settings(&self) {
+        let settings = PersistedSettings { tab_cap: self.saved_tab_cap };
+        if let Err(err) = settings_store::save_settings(&self.session_dir, &settings) {
+            tracing::warn!(%err, "failed to persist settings");
+        }
     }
 
     /// Push the tile tab strips to the chrome, requesting a redraw if they changed

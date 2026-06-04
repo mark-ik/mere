@@ -53,6 +53,9 @@ pub mod manifest_store;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod session_graph_store;
 pub mod session_service_runner;
+// Session-wide settings sidecar (settings.json). A flat JSON document beside
+// graph.json; the host loads it on launch and saves on change.
+pub mod settings_store;
 pub mod switcher_thumbnail;
 pub mod tearout;
 pub mod view_intent_store;
@@ -74,6 +77,7 @@ pub use switcher_thumbnail::{
     SwitcherThumbnail, SwitcherThumbnailOptions, ThumbnailEdge, ThumbnailNode,
     build_switcher_thumbnail,
 };
+pub use settings_store::{PersistedSettings, SETTINGS_FILENAME};
 pub use tearout::{PaneDragPayload, TileDragPayload};
 pub use tile_state::{
     HistoryEntry, NavigateMode, SurfaceTileState, SurfaceTileStep, TileManager, TileState,
