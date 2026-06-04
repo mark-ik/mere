@@ -24,7 +24,6 @@ graph-layout.workspace = true
 document-canvas.workspace = true
 inker.workspace = true
 kernel.workspace = true
-morphorm.workspace = true
 # The engine-agnostic paint vocabulary (PaintCmd). Platen renders a cartography
 # Projection into a PaintList here; netrender (behind the host) consumes it.
 # Direct path dep like inker/document-canvas, so the heavy renderer stays

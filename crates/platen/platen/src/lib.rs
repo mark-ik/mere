@@ -92,16 +92,6 @@ pub mod workbench;
 /// lattice) are added when a surface needs one.
 pub mod tree_projection;
 
-/// Between-tiles layout — assigns each [`tree_projection::WorkbenchPlan`] slot
-/// a concrete rect inside a viewport via the [morphorm](https://crates.io/crates/morphorm)
-/// engine. Platen owns the arrangement *between* tiles; the host owns content
-/// *within* each tile.
-pub mod layout;
-
-/// Morphorm glue: platen's [`morphorm::Node`] / [`morphorm::Cache`]
-/// implementation backing [`layout`]. Mechanical; not part of the public API.
-mod layout_node;
-
 pub use canvas_scene::{
     CanvasSceneOptions, HiddenRelationKey, build_canvas_scene_input, graph_view_id_to_canvas,
 };
@@ -109,9 +99,8 @@ pub use cartography_scene::{
     CartographySceneOptions, build_projection_request, project_with, step_with,
 };
 pub use document_scene::build_document_scene;
-pub use layout::{LaidOutPlan, LaidOutSlot, LayoutConfig, layout_plan};
 pub use tree_projection::{PlanSlot, ProjectionKind, TilePlan, WorkbenchPlan, project_tree};
-pub use workbench::{PlacedSlot, PlacedTab, SlotView, Workbench};
+pub use workbench::{SlotView, Workbench};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

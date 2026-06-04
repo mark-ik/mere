@@ -13,19 +13,17 @@
 //!
 //! A workbench is a list of slots laid side by side. A slot holds one or more graph
 //! members: one member is a plain tile, several are a **tab-stack** (a tab strip,
-//! one tab visible at a time). Geometry comes from [`project_tree`] + [`layout_plan`]:
-//! one tile-intent per slot yields the side-by-side rects, then the slot carves its
-//! own strip off the top and resolves its members to URLs. (One rect per slot, not
-//! platen's `Tabs` slot, so the tab set + active index stay the model's.)
+//! one tab visible at a time). The model is geometry-free: it owns the slots, the
+//! grouping, and the active tab; layout is the host's serval/taffy job (see
+//! [`platen-view`](https://crates.io/crates/platen-view)), reading the structure
+//! via [`Workbench::slot_views`].
 //!
 //! Replaces the legacy `FrameState` / `PaneBinding` frame model (the pre-spine
 //! pane-binding workbench), per the 2026-06-04 platen taffy-retarget plan.
 
-use forme::{Arrangement, GraphMemberId};
-use kernel::geometry::{PortablePoint, PortableRect, PortableSize};
-use kernel::graph::Graph;
+use forme::GraphMemberId;
 
-use crate::{layout_plan, project_tree, LaidOutSlot, LayoutConfig, ProjectionKind};
+use crate::ProjectionKind;
 
 /// One workbench slot: a stack of one or more graph members sharing a column,
 /// with `active` the index of the visible tab. A single member is a plain tile.
@@ -43,35 +41,6 @@ impl Slot {
     /// The visible tab's member (the active one, or the first as a fallback).
     fn active_member(&self) -> Option<GraphMemberId> {
         self.members.get(self.active).or_else(|| self.members.first()).copied()
-    }
-}
-
-/// One tab within a placed slot: its graph member + resolved URL.
-#[derive(Clone, Debug, PartialEq)]
-pub struct PlacedTab {
-    pub member: GraphMemberId,
-    /// The node's URL, or `None` if the member has left the graph.
-    pub url: Option<String>,
-}
-
-/// A placed workbench slot: where its active tab's content renders, its tab
-/// strip, and the tabs themselves (one for a plain tile, several for a stack).
-#[derive(Clone, Debug, PartialEq)]
-pub struct PlacedSlot {
-    /// Where the active tab's content renders (below the strip).
-    pub content: PortableRect,
-    /// The tab-strip band across the slot's top.
-    pub strip: PortableRect,
-    /// The slot's tabs, in order.
-    pub tabs: Vec<PlacedTab>,
-    /// Index into `tabs` of the visible tab.
-    pub active: usize,
-}
-
-impl PlacedSlot {
-    /// The active tab, if the slot has any.
-    pub fn active_tab(&self) -> Option<&PlacedTab> {
-        self.tabs.get(self.active)
     }
 }
 
@@ -261,88 +230,16 @@ impl Workbench {
     pub fn clear_tiles(&mut self) {
         self.slots.clear();
     }
-
-    /// The forme arrangement: one root-attached tile-intent per slot (the slot's
-    /// active member), so `project_tree` yields one split slot per column. The
-    /// stack's tabs are ours, carved off the slot rect, not platen's `Tabs`.
-    fn arrangement(&self) -> Arrangement {
-        let mut arrangement = Arrangement::new();
-        for slot in &self.slots {
-            arrangement.add_tile_intent(slot.active_member());
-        }
-        arrangement
-    }
-
-    /// Lay the slots out side by side inside `viewport` and resolve each tab's URL
-    /// via `graph`. Each slot carves a `tab_strip_height` strip off its top for the
-    /// tab strip; its active tab's content renders below. Band-relative rects.
-    pub fn laid_out_slots(
-        &self,
-        viewport: PortableSize,
-        config: &LayoutConfig,
-        graph: &Graph,
-    ) -> Vec<PlacedSlot> {
-        let plan = project_tree(&self.arrangement());
-        let laid = layout_plan(&plan, viewport, config);
-        laid
-            .slots
-            .into_iter()
-            .zip(self.slots.iter())
-            .map(|(laid_slot, slot)| {
-                let rect = slot_rect(&laid_slot);
-                let strip_h = config.tab_strip_height.min(rect.size.height);
-                let strip = PortableRect::new(
-                    rect.origin,
-                    PortableSize::new(rect.size.width, strip_h),
-                );
-                let content = PortableRect::new(
-                    PortablePoint::new(rect.origin.x, rect.origin.y + strip_h),
-                    PortableSize::new(rect.size.width, (rect.size.height - strip_h).max(1.0)),
-                );
-                let tabs = slot
-                    .members
-                    .iter()
-                    .map(|&member| PlacedTab {
-                        member,
-                        url: graph.get_node_by_id(member).map(|(_, node)| node.url().to_string()),
-                    })
-                    .collect();
-                PlacedSlot { content, strip, tabs, active: slot.active }
-            })
-            .collect()
-    }
-}
-
-/// The rect of a laid-out slot (a plain Tile, since our arrangement never stacks).
-fn slot_rect(slot: &LaidOutSlot) -> PortableRect {
-    match slot {
-        LaidOutSlot::Tile { rect, .. } => *rect,
-        LaidOutSlot::Tabs { rect, .. } => *rect,
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use kernel::geometry::PortablePoint;
     use uuid::Uuid;
 
     use super::*;
 
     fn m(n: u128) -> GraphMemberId {
         Uuid::from_u128(n)
-    }
-
-    fn band() -> PortableSize {
-        PortableSize::new(1000.0, 600.0)
-    }
-
-    /// A graph with one node per `(uuid, url)`, positioned at the origin.
-    fn graph_with(nodes: &[(Uuid, &str)]) -> Graph {
-        let mut graph = Graph::new();
-        for (id, url) in nodes {
-            graph.add_node_with_id(*id, (*url).to_string(), PortablePoint::new(0.0, 0.0));
-        }
-        graph
     }
 
     #[test]
@@ -385,21 +282,14 @@ mod tests {
         wb.open_tile(m(2));
         wb.open_tile(m(3));
         wb.group_all();
-        let graph = graph_with(&[
-            (m(1), "https://a.example"),
-            (m(2), "https://b.example"),
-            (m(3), "https://c.example"),
-        ]);
-        let slots = wb.laid_out_slots(band(), &LayoutConfig::default(), &graph);
-        assert_eq!(slots.len(), 1, "one stacked slot");
-        assert_eq!(slots[0].tabs.len(), 3, "three tabs");
-        assert_eq!(slots[0].active, 0, "first tab active by default");
-        assert_eq!(slots[0].active_tab().unwrap().member, m(1));
-
+        // One stacked slot, first tab active by default (read structurally).
+        {
+            let view = wb.slot_views().next().unwrap();
+            assert_eq!(view.members, &[m(1), m(2), m(3)], "three stacked tabs");
+            assert_eq!(view.active, 0, "first tab active by default");
+        }
         assert!(wb.activate(m(3)), "activating a member in the stack succeeds");
-        let slots = wb.laid_out_slots(band(), &LayoutConfig::default(), &graph);
-        assert_eq!(slots[0].active, 2, "the active tab switched");
-        assert_eq!(slots[0].active_tab().unwrap().member, m(3));
+        assert_eq!(wb.slot_views().next().unwrap().active, 2, "the active tab switched");
     }
 
     #[test]
@@ -447,31 +337,5 @@ mod tests {
         assert_eq!(wb.slot_count(), 1, "the slot survives with one tab");
         assert!(wb.close_tile(m(2)), "closing the last tab");
         assert_eq!(wb.slot_count(), 0, "the emptied slot is removed");
-    }
-
-    #[test]
-    fn slots_split_the_band_with_a_strip_carved_off_each() {
-        let graph = graph_with(&[(m(1), "https://a.example"), (m(2), "https://b.example")]);
-        let mut wb = Workbench::new();
-        wb.open_tile(m(1));
-        wb.open_tile(m(2));
-        let cfg = LayoutConfig { gap: 10.0, tab_strip_height: 28.0 };
-        let slots = wb.laid_out_slots(PortableSize::new(810.0, 600.0), &cfg, &graph);
-
-        assert_eq!(slots.len(), 2, "one slot per open tile");
-        // (810 - 10 gap) / 2 = 400 wide each; the second begins at 410.
-        assert_eq!(slots[0].strip.origin.x, 0.0);
-        assert_eq!(slots[0].strip.size, PortableSize::new(400.0, 28.0), "strip across the top");
-        assert_eq!(slots[0].content.origin, PortablePoint::new(0.0, 28.0), "content below the strip");
-        assert_eq!(slots[0].content.size, PortableSize::new(400.0, 572.0));
-        assert_eq!(slots[0].tabs[0].url.as_deref(), Some("https://a.example"));
-        assert_eq!(slots[1].strip.origin.x, 410.0);
-        assert_eq!(slots[1].tabs[0].url.as_deref(), Some("https://b.example"));
-    }
-
-    #[test]
-    fn no_slots_lays_out_nothing() {
-        let wb = Workbench::new();
-        assert!(wb.laid_out_slots(band(), &LayoutConfig::default(), &graph_with(&[])).is_empty());
     }
 }
