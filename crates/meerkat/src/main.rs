@@ -204,6 +204,9 @@ struct App {
     /// recomputed each tiled frame. The drag uses it to resolve the drop target
     /// under the pointer + which zone (center = move/stack, edge = split).
     tile_rects: Vec<(GraphMemberId, [f32; 4])>,
+    /// An in-progress divider drag: the left-slot index, the press x, and the slot
+    /// weights snapshot at press. Cursor moves reweight the two neighbouring slots.
+    divider_drag: Option<(usize, f32, Vec<f32>)>,
     width: u32,
     height: u32,
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
@@ -334,6 +337,7 @@ impl App {
             shown_location: None,
             tab_drag: None,
             tile_rects: Vec::new(),
+            divider_drag: None,
             width: 1024,
             height: 600,
             workbench: Workbench::new(),
@@ -915,9 +919,14 @@ impl App {
                     }
                 } else if self.workbench.is_tiled() {
                     // Tree mode: the content band is the workbench root. A left press
-                    // routes to it (tab switch / close / pin); the orrery is hidden.
+                    // on a divider starts a resize; otherwise it routes to the root
+                    // (tab switch / close / pin). The orrery is hidden.
                     if button == MouseButton::Left {
-                        self.workbench_click(x, y);
+                        if let Some(i) = self.divider_at(x, y) {
+                            self.divider_drag = Some((i, x, self.workbench.weights()));
+                        } else {
+                            self.workbench_click(x, y);
+                        }
                     }
                 } else if button == MouseButton::Right {
                     self.open_context_menu_at(x, y);
@@ -935,6 +944,10 @@ impl App {
                     if self.orrery.pointer_up(b, x, y - th) {
                         self.request_redraw();
                     }
+                }
+                // A divider resize ends on release.
+                if button == MouseButton::Left {
+                    self.divider_drag = None;
                 }
                 // Resolve a tab drag (tiled view): if the press moved past the slop
                 // and released over a tile, drop by zone — the outer quarter on
@@ -1033,6 +1046,41 @@ impl App {
             .iter()
             .find(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
             .copied()
+    }
+
+    /// If `(x, y)` is over a divider (the gutter between two slots), its left-slot
+    /// index — the start of a resize drag.
+    fn divider_at(&mut self, x: f32, y: f32) -> Option<usize> {
+        let th = self.toolbar_height() as f32;
+        let content_h = self.height.saturating_sub(self.toolbar_height()).max(1);
+        let offsets = ScrollOffsets::<NodeId>::default();
+        let dom = self.workbench_dom.borrow();
+        let node = hit_test_node(&dom, WORKBENCH_SHEET, self.width, content_h, x, y - th, &offsets)?;
+        if !has_class(&dom, node, "wb-divider") {
+            return None;
+        }
+        dom.attributes(node)
+            .find(|a| a.name.local.as_ref() == "data-divider")
+            .and_then(|a| a.value.parse::<usize>().ok())
+    }
+
+    /// Resize on a divider drag: shift width between the two slots the divider sits
+    /// between, by the cursor's offset from the press as a fraction of the band.
+    fn drag_divider(&mut self) {
+        let Some((i, press_x, snapshot)) = self.divider_drag.clone() else {
+            return;
+        };
+        if i + 1 >= snapshot.len() {
+            return;
+        }
+        let band_w = self.width.max(1) as f32;
+        let sum: f32 = snapshot.iter().sum();
+        let dw = (self.cursor.0 - press_x) / band_w * sum;
+        let mut weights = snapshot;
+        weights[i] = (weights[i] + dw).max(0.05);
+        weights[i + 1] = (weights[i + 1] - dw).max(0.05);
+        self.workbench.set_weights(&weights);
+        self.request_redraw();
     }
 
     /// While a tab is being dragged (moved past the slop), the member of the tile
@@ -1436,7 +1484,9 @@ impl ApplicationHandler for App {
                 // only — in the tiled view the orrery is hidden, so a stray drag
                 // must not animate it and force every tile to re-rasterize).
                 let th = self.toolbar_height() as f32;
-                if !self.workbench.is_tiled()
+                if self.divider_drag.is_some() {
+                    self.drag_divider();
+                } else if !self.workbench.is_tiled()
                     && self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th)
                 {
                     self.request_redraw();

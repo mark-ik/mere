@@ -42,6 +42,8 @@ pub const WORKBENCH_SHEET: &[&str] = &[
     "div, button { display: block; }",
     ".workbench { display: flex; background-color: rgb(17, 20, 26); }",
     ".wb-slot { display: flex; flex-direction: column; flex-grow: 1; }",
+    // Draggable gutter between slots — a fixed-width column the host resizes on.
+    ".wb-divider { width: 6px; flex-grow: 0; flex-shrink: 0; background-color: rgb(24, 27, 34); }",
     ".wb-strip { display: flex; height: 28px; background-color: rgb(40, 44, 54); }",
     // The drag drop-target slot's strip lights up (the content area is under the
     // tile's composited texture, so the cue rides the strip).
@@ -66,14 +68,16 @@ pub struct TabView {
     pub label: String,
 }
 
-/// One slot to render: its tabs in order, which is the visible (active) one, and
+/// One slot to render: its tabs in order, which is the visible (active) one,
 /// whether the active tab is pinned (kept active in the background + exempt from
-/// the actor pool's eviction).
+/// the actor pool's eviction), and the slot's width weight (flex-grow).
 #[derive(Clone, Debug, PartialEq)]
 pub struct SlotPlan {
     pub tabs: Vec<TabView>,
     pub active: usize,
     pub pinned: bool,
+    /// The slot's share of the row width (flex-grow). Equal (1.0) by default.
+    pub weight: f32,
 }
 
 impl SlotPlan {
@@ -143,6 +147,7 @@ impl WorkbenchScene {
                         .collect(),
                     active: slot.active,
                     pinned: active_member.copied().is_some_and(&is_pinned),
+                    weight: slot.weight,
                 }
             })
             .collect();
@@ -182,15 +187,21 @@ pub type WorkbenchLogic = fn(&WorkbenchScene) -> WorkbenchTreeView;
 /// and [`WORKBENCH_SHEET`] for the shape). serval/taffy lays the flex out.
 pub fn workbench_view(scene: &WorkbenchScene) -> WorkbenchTreeView {
     let (w, h) = scene.viewport;
-    let columns: Vec<WorkbenchTreeView> = scene
-        .slots
-        .iter()
-        .map(|slot| {
-            // Highlight the slot the drag is over (the drop target).
-            let targeted = scene.drag_target.is_some() && slot.active_member() == scene.drag_target;
-            slot_column(slot, targeted)
-        })
-        .collect();
+    // Slot columns with a draggable divider between each pair. The divider carries
+    // its left-slot index (`data-divider`) so the host can resize on drag.
+    let last = scene.slots.len().saturating_sub(1);
+    let mut columns: Vec<WorkbenchTreeView> = Vec::new();
+    for (i, slot) in scene.slots.iter().enumerate() {
+        let targeted = scene.drag_target.is_some() && slot.active_member() == scene.drag_target;
+        columns.push(slot_column(slot, targeted));
+        if i < last {
+            columns.push(Box::new(
+                el::<_, WorkbenchScene, ()>("div", ())
+                    .attr("class", "wb-divider")
+                    .attr("data-divider", i.to_string()),
+            ));
+        }
+    }
     // The root carries a *definite* size (the host's band) so the flex row fills the
     // width (slots grow equally) and the height (each slot's content area fills below
     // its strip). taffy hands the root the viewport as available space, not a definite
@@ -254,7 +265,12 @@ fn slot_column(slot: &SlotPlan, targeted: bool) -> WorkbenchTreeView {
         .attr("class", "wb-content")
         .attr("data-member", member_attr);
 
-    Box::new(el::<_, WorkbenchScene, ()>("div", (strip, content)).attr("class", "wb-slot"))
+    // flex-grow = the slot's weight, so a divider drag reweights the columns.
+    Box::new(
+        el::<_, WorkbenchScene, ()>("div", (strip, content))
+            .attr("class", "wb-slot")
+            .attr("style", format!("flex-grow: {};", slot.weight)),
+    )
 }
 
 /// A tab label: the URL with its scheme trimmed and truncated to fit. Mirrors
@@ -308,8 +324,8 @@ mod tests {
     #[test]
     fn two_split_slots_render_a_column_strip_and_content_each() {
         let r = runner(scene(vec![
-            SlotPlan { tabs: vec![tab(1, "https://a.example")], active: 0, pinned: false },
-            SlotPlan { tabs: vec![tab(2, "https://b.example")], active: 0, pinned: false },
+            SlotPlan { tabs: vec![tab(1, "https://a.example")], active: 0, pinned: false, weight: 1.0 },
+            SlotPlan { tabs: vec![tab(2, "https://b.example")], active: 0, pinned: false, weight: 1.0 },
         ]));
         let dom = r.dom();
         let dom = dom.borrow();
@@ -327,6 +343,7 @@ mod tests {
             tabs: vec![tab(1, "a"), tab(2, "b"), tab(3, "c")],
             active: 1,
             pinned: false,
+            weight: 1.0,
         }]));
         let dom = r.dom();
         let dom = dom.borrow();
@@ -371,8 +388,8 @@ mod tests {
     #[test]
     fn drag_target_highlights_its_slot_strip() {
         let mut s = scene(vec![
-            SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false },
-            SlotPlan { tabs: vec![tab(2, "b")], active: 0, pinned: false },
+            SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false, weight: 1.0 },
+            SlotPlan { tabs: vec![tab(2, "b")], active: 0, pinned: false, weight: 1.0 },
         ]);
         s.drag_target = Some(Uuid::from_u128(2));
         let r = runner(s);
@@ -399,7 +416,7 @@ mod tests {
 
     #[test]
     fn action_methods_capture_pending() {
-        let mut s = scene(vec![SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false }]);
+        let mut s = scene(vec![SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false, weight: 1.0 }]);
         s.activate(Uuid::from_u128(1));
         assert_eq!(s.pending, Some(WorkbenchAction::Activate(Uuid::from_u128(1))));
         assert_eq!(s.take_pending(), Some(WorkbenchAction::Activate(Uuid::from_u128(1))));

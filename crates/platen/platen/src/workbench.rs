@@ -27,15 +27,23 @@ use crate::ProjectionKind;
 
 /// One workbench slot: a stack of one or more graph members sharing a column,
 /// with `active` the index of the visible tab. A single member is a plain tile.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// `weight` is the slot's share of the row width (flex-grow); equal by default,
+/// changed by a divider drag.
+#[derive(Clone, Debug, PartialEq)]
 struct Slot {
     members: Vec<GraphMemberId>,
     active: usize,
+    weight: f32,
 }
 
 impl Slot {
     fn single(member: GraphMemberId) -> Self {
-        Self { members: vec![member], active: 0 }
+        Self { members: vec![member], active: 0, weight: 1.0 }
+    }
+
+    /// A stack of `members` with the first active, equal weight.
+    fn stack(members: Vec<GraphMemberId>) -> Self {
+        Self { members, active: 0, weight: 1.0 }
     }
 
     /// The visible tab's member (the active one, or the first as a fallback).
@@ -51,6 +59,8 @@ impl Slot {
 pub struct SlotView<'a> {
     pub members: &'a [GraphMemberId],
     pub active: usize,
+    /// The slot's share of the row width (flex-grow). Equal by default.
+    pub weight: f32,
 }
 
 /// The host's tiled-workbench composition: the slots and the projection mode.
@@ -129,7 +139,23 @@ impl Workbench {
     /// and active index). The projection-friendly read of the model, used by the
     /// a11y / automation tree without needing a viewport or a graph.
     pub fn slot_views(&self) -> impl Iterator<Item = SlotView<'_>> {
-        self.slots.iter().map(|s| SlotView { members: &s.members, active: s.active })
+        self.slots
+            .iter()
+            .map(|s| SlotView { members: &s.members, active: s.active, weight: s.weight })
+    }
+
+    /// Each slot's width weight (flex-grow), in slot order.
+    pub fn weights(&self) -> Vec<f32> {
+        self.slots.iter().map(|s| s.weight).collect()
+    }
+
+    /// Set each slot's width weight (flex-grow), in slot order — a divider drag.
+    /// Extra / missing entries are ignored; each weight is floored at a small
+    /// minimum so no slot collapses to nothing.
+    pub fn set_weights(&mut self, weights: &[f32]) {
+        for (slot, &w) in self.slots.iter_mut().zip(weights) {
+            slot.weight = w.max(0.05);
+        }
     }
 
     /// Whether `member` is open in some slot.
@@ -169,7 +195,7 @@ impl Workbench {
         for &m in &stack {
             self.detach(m);
         }
-        self.slots.push(Slot { members: stack, active: 0 });
+        self.slots.push(Slot::stack(stack));
     }
 
     /// Close the tab showing `member`: drop it from its slot (removing the slot if
@@ -263,7 +289,7 @@ impl Workbench {
     pub fn stack_all(&mut self) {
         let members = self.open_members();
         if members.len() > 1 {
-            self.slots = vec![Slot { members, active: 0 }];
+            self.slots = vec![Slot::stack(members)];
         }
     }
 
@@ -425,5 +451,16 @@ mod tests {
         let members: Vec<_> = wb.slot_views().map(|s| s.members.to_vec()).collect();
         assert_eq!(members, vec![vec![m(1)], vec![m(2)]], "m(1) inserted before m(2)");
         assert!(!wb.split_beside(m(1), m(1), true), "self is a no-op");
+    }
+
+    #[test]
+    fn weights_default_equal_and_set_clamps() {
+        let mut wb = Workbench::new();
+        wb.open_split(&[m(1), m(2)]);
+        assert_eq!(wb.weights(), vec![1.0, 1.0], "equal by default");
+        wb.set_weights(&[2.0, 0.5]);
+        assert_eq!(wb.weights(), vec![2.0, 0.5]);
+        wb.set_weights(&[-1.0, 0.0]);
+        assert_eq!(wb.weights(), vec![0.05, 0.05], "floored so no slot collapses");
     }
 }
