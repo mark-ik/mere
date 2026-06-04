@@ -241,6 +241,23 @@ impl Workbench {
         true
     }
 
+    /// Split `dragged` out as its own new single-tile slot, placed immediately
+    /// before (`after == false`) or after `target`'s slot — a drag onto a slot's
+    /// edge. `dragged` leaves its old slot (dropping it if it empties). Returns
+    /// whether it moved. A no-op when `dragged == target` or either is not open.
+    pub fn split_beside(&mut self, dragged: GraphMemberId, target: GraphMemberId, after: bool) -> bool {
+        if dragged == target || !self.has_tile(dragged) || !self.has_tile(target) {
+            return false;
+        }
+        self.detach(dragged);
+        let Some(ti) = self.slots.iter().position(|s| s.members.contains(&target)) else {
+            return false;
+        };
+        let at = if after { ti + 1 } else { ti };
+        self.slots.insert(at, Slot::single(dragged));
+        true
+    }
+
     /// Collapse every open member into a single tab-stack (stack everything). The
     /// first member's tab stays active. A no-op below two members.
     pub fn stack_all(&mut self) {
@@ -387,5 +404,26 @@ mod tests {
         // No-ops: self-drop, or an unknown member.
         assert!(!wb.move_to_slot_of(m(1), m(1)));
         assert!(!wb.move_to_slot_of(m(99), m(1)));
+    }
+
+    #[test]
+    fn split_beside_pulls_a_tab_into_its_own_slot() {
+        let mut wb = Workbench::new();
+        wb.open_tile(m(1));
+        wb.open_tile(m(2));
+        wb.stack_all(); // one stack [1, 2]
+        assert_eq!(wb.slot_count(), 1);
+        // Split m(2) out to the right of the stack's slot.
+        assert!(wb.split_beside(m(2), m(1), true));
+        assert_eq!(wb.slot_count(), 2, "m(2) is its own slot now");
+        assert_eq!(wb.tile_count(), 2);
+        // m(1)'s slot is first, m(2)'s new slot second (after).
+        let members: Vec<_> = wb.slot_views().map(|s| s.members.to_vec()).collect();
+        assert_eq!(members, vec![vec![m(1)], vec![m(2)]]);
+        // before: split m(1) to the left of m(2).
+        assert!(wb.split_beside(m(1), m(2), false));
+        let members: Vec<_> = wb.slot_views().map(|s| s.members.to_vec()).collect();
+        assert_eq!(members, vec![vec![m(1)], vec![m(2)]], "m(1) inserted before m(2)");
+        assert!(!wb.split_beside(m(1), m(1), true), "self is a no-op");
     }
 }

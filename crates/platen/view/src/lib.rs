@@ -43,6 +43,9 @@ pub const WORKBENCH_SHEET: &[&str] = &[
     ".workbench { display: flex; background-color: rgb(17, 20, 26); }",
     ".wb-slot { display: flex; flex-direction: column; flex-grow: 1; }",
     ".wb-strip { display: flex; height: 28px; background-color: rgb(40, 44, 54); }",
+    // The drag drop-target slot's strip lights up (the content area is under the
+    // tile's composited texture, so the cue rides the strip).
+    ".wb-strip-drop { display: flex; height: 28px; background-color: rgb(58, 86, 138); }",
     ".wb-tabs { display: flex; background-color: rgb(40, 44, 54); flex-grow: 1; }",
     ".wb-tab { font-size: 13px; color: rgb(176, 182, 196); \
         background-color: rgb(34, 38, 48); padding: 6px 12px; margin-right: 2px; }",
@@ -108,6 +111,9 @@ pub struct WorkbenchScene {
     /// The content band the tile tree fills, in px (width, height).
     pub viewport: (f32, f32),
     pub pending: Option<WorkbenchAction>,
+    /// During a tab drag, the slot the pointer is over (its active member) — the
+    /// drop target, highlighted for feedback. `None` when nothing is being dragged.
+    pub drag_target: Option<GraphMemberId>,
 }
 
 impl WorkbenchScene {
@@ -140,7 +146,7 @@ impl WorkbenchScene {
                 }
             })
             .collect();
-        Self { slots, viewport, pending: None }
+        Self { slots, viewport, pending: None, drag_target: None }
     }
 
     /// Capture an "activate this tab" request (a tab click).
@@ -176,7 +182,15 @@ pub type WorkbenchLogic = fn(&WorkbenchScene) -> WorkbenchTreeView;
 /// and [`WORKBENCH_SHEET`] for the shape). serval/taffy lays the flex out.
 pub fn workbench_view(scene: &WorkbenchScene) -> WorkbenchTreeView {
     let (w, h) = scene.viewport;
-    let columns: Vec<WorkbenchTreeView> = scene.slots.iter().map(slot_column).collect();
+    let columns: Vec<WorkbenchTreeView> = scene
+        .slots
+        .iter()
+        .map(|slot| {
+            // Highlight the slot the drag is over (the drop target).
+            let targeted = scene.drag_target.is_some() && slot.active_member() == scene.drag_target;
+            slot_column(slot, targeted)
+        })
+        .collect();
     // The root carries a *definite* size (the host's band) so the flex row fills the
     // width (slots grow equally) and the height (each slot's content area fills below
     // its strip). taffy hands the root the viewport as available space, not a definite
@@ -188,8 +202,9 @@ pub fn workbench_view(scene: &WorkbenchScene) -> WorkbenchTreeView {
     )
 }
 
-/// One slot column: a tab strip over a content placeholder.
-fn slot_column(slot: &SlotPlan) -> WorkbenchTreeView {
+/// One slot column: a tab strip over a content placeholder. `targeted` highlights
+/// it as the current drag drop target.
+fn slot_column(slot: &SlotPlan, targeted: bool) -> WorkbenchTreeView {
     // The tab strip: one clickable tab per member, the visible one marked active.
     let tabs: Vec<WorkbenchTreeView> = slot
         .tabs
@@ -226,8 +241,11 @@ fn slot_column(slot: &SlotPlan) -> WorkbenchTreeView {
             }
         },
     );
+    // The strip brightens when this slot is the drag drop target (the content area
+    // is covered by the tile's composited texture, so the strip carries the cue).
+    let strip_class = if targeted { "wb-strip-drop" } else { "wb-strip" };
     let strip =
-        el::<_, WorkbenchScene, ()>("div", (tabs_row, pin, close)).attr("class", "wb-strip");
+        el::<_, WorkbenchScene, ()>("div", (tabs_row, pin, close)).attr("class", strip_class);
 
     // The content placeholder, tagged with the active member so the host can find
     // its laid-out rect and composite that tile's actor texture there.
@@ -269,7 +287,7 @@ mod tests {
     }
 
     fn scene(slots: Vec<SlotPlan>) -> WorkbenchScene {
-        WorkbenchScene { slots, viewport: (800.0, 600.0), pending: None }
+        WorkbenchScene { slots, viewport: (800.0, 600.0), pending: None, drag_target: None }
     }
 
     fn runner(
@@ -347,6 +365,22 @@ mod tests {
         wb2.open_tile(Uuid::from_u128(9));
         let scene2 = WorkbenchScene::from_workbench(&wb2, &Graph::new(), (800.0, 600.0), |_| false);
         assert_eq!(scene2.slots[0].tabs[0].label, "(gone)");
+    }
+
+    /// The drag drop target highlights its slot's strip.
+    #[test]
+    fn drag_target_highlights_its_slot_strip() {
+        let mut s = scene(vec![
+            SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false },
+            SlotPlan { tabs: vec![tab(2, "b")], active: 0, pinned: false },
+        ]);
+        s.drag_target = Some(Uuid::from_u128(2));
+        let r = runner(s);
+        let dom = r.dom();
+        let dom = dom.borrow();
+        let root = r.root();
+        assert_eq!(count_class(&dom, root, "wb-strip-drop"), 1, "the target slot's strip lit");
+        assert_eq!(count_class(&dom, root, "wb-strip"), 1, "the other slot's plain strip");
     }
 
     /// The pin predicate marks a slot pinned when its active member is pinned, and

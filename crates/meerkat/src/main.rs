@@ -200,6 +200,10 @@ struct App {
     /// press position. Resolved on release — a move when dragged past the slop, else
     /// it was a plain click (the tab already activated on press).
     tab_drag: Option<(GraphMemberId, (f32, f32))>,
+    /// Each open tile's content rect in window coords (member, [x0, y0, x1, y1]),
+    /// recomputed each tiled frame. The drag uses it to resolve the drop target
+    /// under the pointer + which zone (center = move/stack, edge = split).
+    tile_rects: Vec<(GraphMemberId, [f32; 4])>,
     width: u32,
     height: u32,
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
@@ -329,6 +333,7 @@ impl App {
             focused_tile: None,
             shown_location: None,
             tab_drag: None,
+            tile_rects: Vec::new(),
             width: 1024,
             height: 600,
             workbench: Workbench::new(),
@@ -414,12 +419,16 @@ impl App {
             // it from the model + graph + pin state, then rasterize it — taffy lays
             // the tiles out (no morphorm). The orrery is hidden, so its physics +
             // paint are skipped.
-            let scene = WorkbenchScene::from_workbench(
+            let mut scene = WorkbenchScene::from_workbench(
                 &self.workbench,
                 self.orrery.graph(),
                 (w as f32, content_h as f32),
                 |m| self.constellation.is_background(m),
             );
+            // Highlight the slot under the pointer while a tab is being dragged
+            // (uses last frame's tile rects; the slots don't move, so the lag is
+            // imperceptible).
+            scene.drag_target = self.drag_target_member();
             if self.workbench_runner.state() != &scene {
                 self.workbench_runner.update(move |s| *s = scene);
             }
@@ -506,6 +515,14 @@ impl App {
                 cards.push((member, [x0, y0, x1, y1], (cw, ch)));
             }
         }
+
+        // Remember each tile's window rect (Tree only) so a tab drag can resolve the
+        // drop target + zone under the pointer.
+        self.tile_rects = if self.workbench.is_tiled() {
+            cards.iter().map(|(m, dest, _)| (*m, *dest)).collect()
+        } else {
+            Vec::new()
+        };
 
         // The omnibar follows focus: point it at the focused tile / node when that
         // changed (next frame, like the chrome strips were — the scene above is
@@ -920,14 +937,23 @@ impl App {
                     }
                 }
                 // Resolve a tab drag (tiled view): if the press moved past the slop
-                // and released over another tile, move the dragged tab into that
-                // slot (reorder within / move across). A release in place was a plain
-                // click — the tab already activated on press, so nothing more to do.
+                // and released over a tile, drop by zone — the outer quarter on
+                // either side splits the tab out to a new slot there, the center
+                // moves / stacks it into that slot (reorder within, move across). A
+                // release in place was a plain click (the tab activated on press).
                 if button == MouseButton::Left {
                     if let Some((member, (px, py))) = self.tab_drag.take() {
                         if (x - px).hypot(y - py) > 6.0 {
-                            if let Some(target) = self.workbench_member_at(x, y) {
-                                if self.workbench.move_to_slot_of(member, target) {
+                            if let Some((target, [x0, _, x1, _])) = self.tile_at(x, y) {
+                                let edge = (x1 - x0).max(1.0) * 0.25;
+                                let moved = if x < x0 + edge {
+                                    self.workbench.split_beside(member, target, false)
+                                } else if x > x1 - edge {
+                                    self.workbench.split_beside(member, target, true)
+                                } else {
+                                    self.workbench.move_to_slot_of(member, target)
+                                };
+                                if moved {
                                     self.focused_tile = Some(member);
                                     self.request_redraw();
                                 }
@@ -1000,15 +1026,24 @@ impl App {
         }
     }
 
-    /// The member of the tile under window `(x, y)` in the tiled view — read from
-    /// the `data-member` of the content placeholder there (the slot's drop target).
-    fn workbench_member_at(&mut self, x: f32, y: f32) -> Option<GraphMemberId> {
-        let th = self.toolbar_height() as f32;
-        let content_h = self.height.saturating_sub(self.toolbar_height()).max(1);
-        let offsets = ScrollOffsets::<NodeId>::default();
-        let dom = self.workbench_dom.borrow();
-        let node = hit_test_node(&dom, WORKBENCH_SHEET, self.width, content_h, x, y - th, &offsets)?;
-        member_attr(&dom, node)
+    /// The tile (member + window rect) under `(x, y)` — the drag drop target, from
+    /// this frame's laid-out tile rects.
+    fn tile_at(&self, x: f32, y: f32) -> Option<(GraphMemberId, [f32; 4])> {
+        self.tile_rects
+            .iter()
+            .find(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
+            .copied()
+    }
+
+    /// While a tab is being dragged (moved past the slop), the member of the tile
+    /// under the pointer — the highlighted drop target. `None` otherwise.
+    fn drag_target_member(&self) -> Option<GraphMemberId> {
+        let (_, (px, py)) = self.tab_drag?;
+        let (cx, cy) = self.cursor;
+        if (cx - px).hypot(cy - py) <= 6.0 {
+            return None; // not dragging yet (still a click)
+        }
+        self.tile_at(cx, cy).map(|(m, _)| m)
     }
 
     /// Apply a pending workbench action the workbench root captured: switch the
@@ -1404,6 +1439,9 @@ impl ApplicationHandler for App {
                 if !self.workbench.is_tiled()
                     && self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th)
                 {
+                    self.request_redraw();
+                } else if self.workbench.is_tiled() && self.tab_drag.is_some() {
+                    // Follow the drag: the drop-target highlight tracks the pointer.
                     self.request_redraw();
                 }
             },
