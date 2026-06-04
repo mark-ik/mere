@@ -569,20 +569,24 @@ impl App {
         }
     }
 
-    /// The per-node activation state for the orrery's node coloring: a node with
-    /// a live actor is `Open` (green), one with fetched `Ready` content but no
-    /// actor is `Closed` (red), and one with no content yet is `New` (blue).
+    /// The per-node activation state for the orrery's node coloring. A node with
+    /// real fetched (`Ready`) content is `Open` (green) when a live actor is
+    /// showing it, else `Closed` (red); everything else — a local / synthesized
+    /// page, a blank (loading) one, or an errored one — is `Idle` (blue).
     fn node_states(&self) -> HashMap<GraphMemberId, NodeState> {
         self.orrery
             .graph()
             .nodes()
             .map(|(_key, node)| {
-                let state = if self.constellation.is_active(node.id) {
-                    NodeState::Open
-                } else if matches!(self.content.get(node.url()), Some(fetch::ContentState::Ready(_))) {
-                    NodeState::Closed
-                } else {
-                    NodeState::New
+                let state = match self.content.get(node.url()) {
+                    Some(fetch::ContentState::Ready(_)) => {
+                        if self.constellation.is_active(node.id) {
+                            NodeState::Open
+                        } else {
+                            NodeState::Closed
+                        }
+                    },
+                    _ => NodeState::Idle,
                 };
                 (node.id, state)
             })

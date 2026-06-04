@@ -92,15 +92,18 @@ pub struct CameraView {
 }
 
 /// A node's coarse activation state, for the orrery to color its on-screen
-/// nodes: `Open` (a live actor is showing it — green), `Closed` (it has content
-/// but no actor — red), or `New` (no fetched content yet — blue). The host
-/// computes these from the actor pool + content cache and pushes them via
-/// [`Orrery::set_node_states`]; a node absent from the map falls back to `New`.
+/// nodes. The host computes these from the actor pool + content cache and pushes
+/// them via [`Orrery::set_node_states`]; a node absent from the map colors as
+/// [`Idle`](NodeState::Idle).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NodeState {
+    /// A live actor is showing real (fetched) content — green.
     Open,
+    /// Real fetched content, but no actor showing it right now — red.
     Closed,
-    New,
+    /// Idle: a local / settings page, or one that is synthesized, blank
+    /// (loading), or errored — blue. The "kinda idle" nodes.
+    Idle,
 }
 
 /// An in-progress left-button interaction on a node: a click until the pointer
@@ -160,7 +163,7 @@ pub struct Orrery {
     /// persistence rides view-intent's `hidden_relations`.
     hidden_edges: HashSet<(NodeKey, NodeKey)>,
     /// Per-node activation state the host pushes for node coloring (open / closed
-    /// / new). Resolved to `NodeKey` on set; a node absent here colors as `New`.
+    /// / idle). Resolved to `NodeKey` on set; a node absent here colors as `Idle`.
     node_states: HashMap<NodeKey, NodeState>,
     /// `Some(press_origin)` (screen px) while a left-drag marquee on empty space
     /// is in progress.
@@ -360,14 +363,14 @@ impl Orrery {
                 &format!("transform: translate({}px, {}px);", pos.x - NODE_HALF, pos.y - NODE_HALF),
             );
             // Selection wins (orange); otherwise color by activation state —
-            // green open, red closed, blue new (the default for an unset node).
+            // green open, red closed, blue idle (the default for an unset node).
             let class = if self.selected.contains(&key) {
                 "gnode-selected"
             } else {
                 match self.node_states.get(&key) {
                     Some(NodeState::Open) => "gnode-open",
                     Some(NodeState::Closed) => "gnode-closed",
-                    _ => "gnode-new",
+                    _ => "gnode-idle",
                 }
             };
             set_class(&mut self.node_dom, gnode, class);
@@ -679,7 +682,7 @@ impl Orrery {
     /// Set the per-node activation states the orrery colors its on-screen nodes
     /// by, keyed by node UUID (the host's member id); the orrery resolves each to
     /// its `NodeKey`. The host recomputes + pushes this as the actor pool / content
-    /// cache change; a node absent from `states` colors as [`NodeState::New`].
+    /// cache change; a node absent from `states` colors as [`NodeState::Idle`].
     pub fn set_node_states(&mut self, states: HashMap<uuid::Uuid, NodeState>) {
         self.node_states = states
             .into_iter()

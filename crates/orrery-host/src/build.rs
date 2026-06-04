@@ -36,13 +36,13 @@ pub(crate) const NODE_SHEET: &[&str] = &[
         background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
     ".gnode-selected { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(232, 150, 40); color: rgb(28, 22, 10); font-size: 15px; }",
-    // Activation-state colors: open (green), closed (red), new/blank (blue, the
-    // same fill as the default `.gnode`). The host pushes the state per node.
+    // Activation-state colors: open (green), closed (red), idle (blue, the same
+    // fill as the default `.gnode`). The host pushes the state per node.
     ".gnode-open { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(58, 140, 94); color: rgb(238, 250, 243); font-size: 15px; }",
     ".gnode-closed { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(166, 72, 72); color: rgb(250, 240, 240); font-size: 15px; }",
-    ".gnode-new { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
+    ".gnode-idle { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
 ];
 
