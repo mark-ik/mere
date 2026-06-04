@@ -106,6 +106,11 @@ pub struct Chrome {
     /// records the intent; the host drains it, drives the sync actor, and clears
     /// it. (The chrome cannot reach the sync actor itself.)
     pub pending_connect: Option<String>,
+    /// A pending host action the shell must run — the payload-free host verbs
+    /// (toggle workbench / delete node / background a node). Like `pending_connect`
+    /// but for actions the chrome can't reach (the orrery, the actor pool): the
+    /// chrome records the intent, the host drains it and runs the matching method.
+    pub pending_command: Option<Command>,
 }
 
 impl Chrome {
@@ -131,6 +136,7 @@ impl Chrome {
             palette_input: TextInput::new(""),
             sync: SyncIndicator::default(),
             pending_connect: None,
+            pending_command: None,
         }
     }
 
@@ -262,6 +268,11 @@ impl Chrome {
                 // the sync actor). The ticket is whatever is in the address bar.
                 self.pending_connect = Some(self.omnibar.text().trim().to_string());
             },
+            Command::ToggleWorkbench | Command::DeleteNode | Command::BackgroundNode => {
+                // Host actions over the orrery / workbench / actor pool: record the
+                // intent; the host drains it and runs the matching method.
+                self.pending_command = Some(cmd);
+            },
         }
     }
 
@@ -269,6 +280,12 @@ impl Chrome {
     /// this after running a palette command, then drives the sync actor with it.
     pub fn take_pending_connect(&mut self) -> Option<String> {
         self.pending_connect.take()
+    }
+
+    /// Take a pending host action, if one is queued. The host calls this after a
+    /// palette run / row click and dispatches it to the matching shell method.
+    pub fn take_pending_command(&mut self) -> Option<Command> {
+        self.pending_command.take()
     }
 
     /// The text field that currently owns editing / the caret: the palette query
@@ -624,7 +641,11 @@ mod tests {
         let dom = dom.borrow();
         let root = runner.root();
         assert_eq!(count_class(&dom, root, "palette"), 1, "the panel");
-        assert_eq!(count_class(&dom, root, "cmd-row"), 4, "Back / Forward / Home / Connect");
+        assert_eq!(
+            count_class(&dom, root, "cmd-row"),
+            7,
+            "Back / Forward / Home / Connect + Tile / Delete / Background",
+        );
     }
 
     /// The palette filters by query and runs the match: after navigating away,
@@ -643,9 +664,13 @@ mod tests {
             c.palette_input = TextInput::new("back");
             c.sync_palette_query();
         });
-        assert_eq!(runner.state().palette_commands(), vec![Command::Back]);
+        // "back" matches Back and "...active in background" (substring).
+        assert_eq!(
+            runner.state().palette_commands(),
+            vec![Command::Back, Command::BackgroundNode],
+        );
 
-        // No explicit highlight → run_palette_selection runs the first match.
+        // No explicit highlight → run_palette_selection runs the first match (Back).
         runner.update(Chrome::run_palette_selection);
         assert_eq!(runner.state().content_location(), "mere://welcome");
         assert!(!runner.state().palette_open, "running closes the palette");
@@ -655,9 +680,9 @@ mod tests {
     #[test]
     fn palette_step_wraps() {
         let mut runner = runner("mere://welcome");
-        runner.update(Chrome::open_palette); // empty query → 4 commands
+        runner.update(Chrome::open_palette); // empty query → 7 commands
         runner.update(|c| c.step_palette(-1));
-        assert_eq!(runner.state().palette.selected_index, Some(3), "up from none → last");
+        assert_eq!(runner.state().palette.selected_index, Some(6), "up from none → last");
         runner.update(|c| c.step_palette(1));
         assert_eq!(runner.state().palette.selected_index, Some(0), "wrap to first");
     }

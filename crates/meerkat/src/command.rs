@@ -26,12 +26,37 @@ pub enum Command {
     /// Connect the p2p sync to a peer, using the ticket pasted in the address bar
     /// (S5.1). The chrome records the intent; the host routes it to the sync actor.
     ConnectPeer,
+    /// Toggle the tiled workbench (Tree) and the orrery (Cartography) projections.
+    /// A host action: the chrome records the intent, the host runs it.
+    ToggleWorkbench,
+    /// Delete the focused node from the graph (host action).
+    DeleteNode,
+    /// Toggle the focused node's background-keep flag — keep its actor running
+    /// when focus moves away (host action).
+    BackgroundNode,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 4] =
-        [Command::Back, Command::Forward, Command::Home, Command::ConnectPeer];
+    pub const ALL: [Command; 7] = [
+        Command::Back,
+        Command::Forward,
+        Command::Home,
+        Command::ConnectPeer,
+        Command::ToggleWorkbench,
+        Command::DeleteNode,
+        Command::BackgroundNode,
+    ];
+
+    /// Whether this command is a *host* action (run by the shell over the graph /
+    /// workbench / actors) rather than a chrome-level history verb. Host actions
+    /// are recorded as a pending intent the host drains, like `ConnectPeer`.
+    pub fn is_host_action(self) -> bool {
+        matches!(
+            self,
+            Command::ToggleWorkbench | Command::DeleteNode | Command::BackgroundNode
+        )
+    }
 
     /// The user-facing label shown in the palette and matched against the query.
     pub fn label(self) -> &'static str {
@@ -40,6 +65,9 @@ impl Command {
             Command::Forward => "Forward",
             Command::Home => "Home (mere://welcome)",
             Command::ConnectPeer => "Connect to peer (ticket in address bar)",
+            Command::ToggleWorkbench => "Tile view (toggle workbench)",
+            Command::DeleteNode => "Delete focused node",
+            Command::BackgroundNode => "Keep focused node active in background",
         }
     }
 }
@@ -69,8 +97,17 @@ mod tests {
     fn query_filters_by_label_substring() {
         assert_eq!(filter("for"), vec![Command::Forward]);
         assert_eq!(filter("home"), vec![Command::Home]);
-        // Case-insensitive.
-        assert_eq!(filter("BACK"), vec![Command::Back]);
+        // Case-insensitive; "back" also matches "...active in background".
+        assert_eq!(filter("BACK"), vec![Command::Back, Command::BackgroundNode]);
+    }
+
+    #[test]
+    fn host_action_commands_filter_and_flag() {
+        assert_eq!(filter("tile"), vec![Command::ToggleWorkbench]);
+        assert_eq!(filter("delete"), vec![Command::DeleteNode]);
+        assert!(Command::DeleteNode.is_host_action());
+        assert!(Command::BackgroundNode.is_host_action());
+        assert!(!Command::Back.is_host_action(), "history verbs are not host actions");
     }
 
     #[test]

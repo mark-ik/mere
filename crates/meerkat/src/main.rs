@@ -37,6 +37,7 @@ use eidetic_fjall::FjallStore;
 use layout_dom_api::LayoutDom;
 use forme::GraphMemberId;
 use kernel::geometry::PortableSize;
+use meerkat::command::Command;
 use meerkat::workbench::Workbench;
 use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
 use platen::LayoutConfig;
@@ -667,6 +668,7 @@ impl App {
             let palette_was_open = self.runner.state().palette_open;
             self.runner.dispatch_click(node, PointerClick::at((x, y)));
             self.drain_pending_connect();
+            self.drain_pending_command();
             self.sync_orrery();
             if palette_was_open && !self.runner.state().palette_open {
                 self.focus_after_palette_close();
@@ -694,6 +696,23 @@ impl App {
             Err(err) => tracing::warn!(%err, "connect to peer failed"),
         }
         self.request_redraw();
+    }
+
+    /// Execute a pending host action the palette queued (toggle workbench / delete
+    /// node / background a node): take it from the chrome and dispatch to the
+    /// matching shell method. Mirrors [`drain_pending_connect`](Self::drain_pending_connect).
+    fn drain_pending_command(&mut self) {
+        let Some(cmd) = self.runner.state().pending_command else {
+            return;
+        };
+        self.runner.update(|c| c.pending_command = None);
+        match cmd {
+            Command::ToggleWorkbench => self.toggle_workbench(),
+            Command::DeleteNode => self.delete_focused_node(),
+            Command::BackgroundNode => self.toggle_focus_background(),
+            // History / connect verbs run in the chrome; never queued here.
+            Command::Back | Command::Forward | Command::Home | Command::ConnectPeer => {},
+        }
     }
 
     /// Handle a pressed key. Ctrl+K toggles the command palette; while the
@@ -773,6 +792,7 @@ impl App {
             WinitKey::Named(WinitNamedKey::Enter) => {
                 self.runner.update(Chrome::run_palette_selection);
                 self.drain_pending_connect();
+                self.drain_pending_command();
                 self.sync_orrery();
                 self.focus_after_palette_close();
                 self.request_redraw();
