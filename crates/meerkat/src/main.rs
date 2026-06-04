@@ -710,6 +710,16 @@ impl App {
             Command::ToggleWorkbench => self.toggle_workbench(),
             Command::DeleteNode => self.delete_focused_node(),
             Command::BackgroundNode => self.toggle_focus_background(),
+            Command::HideSelectedEdge => {
+                if self.orrery.hide_selected_edges() > 0 {
+                    self.request_redraw();
+                }
+            },
+            Command::ShowAllEdges => {
+                if self.orrery.show_all_edges() > 0 {
+                    self.request_redraw();
+                }
+            },
             // History / connect verbs run in the chrome; never queued here.
             Command::Back | Command::Forward | Command::Home | Command::ConnectPeer => {},
         }

@@ -34,11 +34,16 @@ pub enum Command {
     /// Toggle the focused node's background-keep flag — keep its actor running
     /// when focus moves away (host action).
     BackgroundNode,
+    /// Hide the selected edge(s) from the orrery — display-only, the relations
+    /// persist (host action).
+    HideSelectedEdge,
+    /// Reveal every hidden edge (host action).
+    ShowAllEdges,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 7] = [
+    pub const ALL: [Command; 9] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -46,6 +51,8 @@ impl Command {
         Command::ToggleWorkbench,
         Command::DeleteNode,
         Command::BackgroundNode,
+        Command::HideSelectedEdge,
+        Command::ShowAllEdges,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -54,7 +61,11 @@ impl Command {
     pub fn is_host_action(self) -> bool {
         matches!(
             self,
-            Command::ToggleWorkbench | Command::DeleteNode | Command::BackgroundNode
+            Command::ToggleWorkbench
+                | Command::DeleteNode
+                | Command::BackgroundNode
+                | Command::HideSelectedEdge
+                | Command::ShowAllEdges
         )
     }
 
@@ -68,6 +79,8 @@ impl Command {
             Command::ToggleWorkbench => "Tile view (toggle workbench)",
             Command::DeleteNode => "Delete focused node",
             Command::BackgroundNode => "Keep focused node active in background",
+            Command::HideSelectedEdge => "Hide selected edge",
+            Command::ShowAllEdges => "Show all edges",
         }
     }
 }

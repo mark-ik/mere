@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use cartography::Projection;
 use cartography::projection::{PositionedEdge, PositionedNode, ProjectionMetadata};
 use kernel::geometry::{PortablePoint, PortableRect, PortableSize};
-use kernel::graph::{Graph, NodeKey};
+use kernel::graph::{Graph, NodeKey, RelationView};
 use paint_list_api::DeviceIntSize;
 
 use crate::coupling_paint::{paint_projection_with_visuals, visual_overlays};
@@ -35,7 +35,7 @@ use crate::scene_paint::{paint_projection_filtered, Camera, CanvasPaintList, Sce
 /// (the paint layer substitutes the style default); `content_bounds` is the
 /// axis-aligned box of the node positions, for a host that fits the view.
 pub fn projection_from_graph(graph: &Graph) -> Projection {
-    project(graph, |k| graph.node_committed_position(k), "orrery.stored", true)
+    project(graph, |k| graph.node_committed_position(k), |_| true, "orrery.stored", true)
 }
 
 /// Build a [`Projection`] from a caller-supplied *live* position lookup (e.g. the
@@ -56,16 +56,27 @@ where
     project(
         graph,
         |k| position_of(k).or_else(|| graph.node_committed_position(k)),
+        |_| true,
         "orrery.live",
         false,
     )
 }
 
 /// Shared projection core: positioned nodes from `position_of`, undirected
-/// de-duplicated edges, and `content_bounds`, tagged with the strategy metadata.
-fn project<F>(graph: &Graph, position_of: F, strategy_id: &str, settled: bool) -> Projection
+/// de-duplicated edges (filtered by `edge_visible`), and `content_bounds`, tagged
+/// with the strategy metadata. `edge_visible` is checked per *relation* before
+/// the pair-collapse, so a host can hide edges by node-pair or by relation family
+/// (the kind is gone once the pair collapses to one line).
+fn project<F, V>(
+    graph: &Graph,
+    position_of: F,
+    edge_visible: V,
+    strategy_id: &str,
+    settled: bool,
+) -> Projection
 where
     F: Fn(NodeKey) -> Option<PortablePoint>,
+    V: Fn(&RelationView) -> bool,
 {
     let nodes: Vec<PositionedNode> = graph
         .nodes()
@@ -75,7 +86,7 @@ where
             radius: 0.0,
         })
         .collect();
-    let edges = projected_undirected_edges(graph);
+    let edges = projected_undirected_edges(graph, &edge_visible);
     let content_bounds = bounds_of_nodes(&nodes);
     Projection {
         nodes,
@@ -92,13 +103,19 @@ where
 /// The graph's relations collapsed to undirected, de-duplicated `(from, to)`
 /// pairs — one [`PositionedEdge`] per connected pair, no self-loops. `relations()`
 /// projects without a stable `EdgeKey`, so `edge` is `None`.
-fn projected_undirected_edges(graph: &Graph) -> Vec<PositionedEdge> {
+fn projected_undirected_edges(
+    graph: &Graph,
+    edge_visible: &impl Fn(&RelationView) -> bool,
+) -> Vec<PositionedEdge> {
     let mut seen = HashSet::new();
     let mut edges = Vec::new();
     for rel in graph.relations() {
         let (a, b) = (rel.from, rel.to);
         if a == b {
             continue; // no self-loops in the scene
+        }
+        if !edge_visible(&rel) {
+            continue; // the host hid this relation (by node-pair or by family)
         }
         let pair = if a <= b { (a, b) } else { (b, a) };
         if seen.insert(pair) {
@@ -156,10 +173,11 @@ where
 /// Visual-coupling overlays currently ride the underlay for every coupled node
 /// (the sample orrery has none); demoting overlays to the off-screen set as well
 /// is a follow-on, like the richer demoted-node glyphs.
-pub fn orrery_paint_list_demoted<F, G>(
+pub fn orrery_paint_list_demoted<F, G, V>(
     graph: &Graph,
     position_of: F,
     is_demoted: G,
+    edge_visible: V,
     viewport: DeviceIntSize,
     camera: Camera,
     style: &ScenePaintStyle,
@@ -168,8 +186,17 @@ pub fn orrery_paint_list_demoted<F, G>(
 where
     F: Fn(NodeKey) -> Option<PortablePoint>,
     G: Fn(NodeKey) -> bool,
+    V: Fn(&RelationView) -> bool,
 {
-    let projection = projection_from_positions(graph, position_of);
+    // Build the live projection directly (mirroring `projection_from_positions`'s
+    // committed-position fallback) so the edge-visibility predicate threads in.
+    let projection = project(
+        graph,
+        |k| position_of(k).or_else(|| graph.node_committed_position(k)),
+        edge_visible,
+        "orrery.live",
+        false,
+    );
     let mut list =
         paint_projection_filtered(&projection, viewport, camera, style, generation, is_demoted);
     list.splice_world_overlays(visual_overlays(graph, &projection, style));
@@ -257,6 +284,7 @@ mod tests {
             &g,
             |k| Some(if k == a { PortablePoint::new(0.0, 0.0) } else { PortablePoint::new(100.0, 0.0) }),
             |_| true,
+            |_| true,
             DeviceIntSize::new(200, 200),
             Camera::default(),
             &ScenePaintStyle::default(),
@@ -268,6 +296,7 @@ mod tests {
             &g,
             |k| Some(if k == a { PortablePoint::new(0.0, 0.0) } else { PortablePoint::new(100.0, 0.0) }),
             |k| k == a,
+            |_| true,
             DeviceIntSize::new(200, 200),
             Camera::default(),
             &ScenePaintStyle::default(),
@@ -281,6 +310,36 @@ mod tests {
             .filter(|c| matches!(c, PaintCmd::DrawStroke(_)))
             .count();
         assert_eq!(strokes, 1, "the edge to the on-screen node still draws");
+    }
+
+    #[test]
+    fn edge_visibility_predicate_hides_relations() {
+        // Two connected nodes; hiding the relation drops the edge stroke but keeps
+        // the node rects — the host's edge-visibility filter in action.
+        let mut g = Graph::new();
+        let a = node(&mut g, 1, 0.0, 0.0);
+        let b = node(&mut g, 2, 100.0, 0.0);
+        let _ = g.assert_relation(a, b, hyperlink());
+
+        let strokes = |edge_visible: fn(&RelationView) -> bool| {
+            orrery_paint_list_demoted(
+                &g,
+                |k| Some(if k == a { PortablePoint::new(0.0, 0.0) } else { PortablePoint::new(100.0, 0.0) }),
+                |_| true,
+                edge_visible,
+                DeviceIntSize::new(200, 200),
+                Camera::default(),
+                &ScenePaintStyle::default(),
+                0,
+            )
+            .commands()
+            .iter()
+            .filter(|c| matches!(c, PaintCmd::DrawStroke(_)))
+            .count()
+        };
+
+        assert_eq!(strokes(|_| true), 1, "the edge draws when visible");
+        assert_eq!(strokes(|_| false), 0, "hiding the relation drops the edge");
     }
 
     #[test]

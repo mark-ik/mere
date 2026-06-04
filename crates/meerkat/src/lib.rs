@@ -268,7 +268,11 @@ impl Chrome {
                 // the sync actor). The ticket is whatever is in the address bar.
                 self.pending_connect = Some(self.omnibar.text().trim().to_string());
             },
-            Command::ToggleWorkbench | Command::DeleteNode | Command::BackgroundNode => {
+            Command::ToggleWorkbench
+            | Command::DeleteNode
+            | Command::BackgroundNode
+            | Command::HideSelectedEdge
+            | Command::ShowAllEdges => {
                 // Host actions over the orrery / workbench / actor pool: record the
                 // intent; the host drains it and runs the matching method.
                 self.pending_command = Some(cmd);
@@ -643,8 +647,8 @@ mod tests {
         assert_eq!(count_class(&dom, root, "palette"), 1, "the panel");
         assert_eq!(
             count_class(&dom, root, "cmd-row"),
-            7,
-            "Back / Forward / Home / Connect + Tile / Delete / Background",
+            9,
+            "Back / Forward / Home / Connect + Tile / Delete / Background / Hide edge / Show edges",
         );
     }
 
@@ -680,9 +684,9 @@ mod tests {
     #[test]
     fn palette_step_wraps() {
         let mut runner = runner("mere://welcome");
-        runner.update(Chrome::open_palette); // empty query → 7 commands
+        runner.update(Chrome::open_palette); // empty query → 9 commands
         runner.update(|c| c.step_palette(-1));
-        assert_eq!(runner.state().palette.selected_index, Some(6), "up from none → last");
+        assert_eq!(runner.state().palette.selected_index, Some(8), "up from none → last");
         runner.update(|c| c.step_palette(1));
         assert_eq!(runner.state().palette.selected_index, Some(0), "wrap to first");
     }

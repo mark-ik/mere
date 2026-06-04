@@ -142,6 +142,11 @@ pub struct Orrery {
     /// Currently-selected edges (edge-pick, or covered by a marquee), as the
     /// `(from, to)` pairs gyre reports.
     selected_edges: HashSet<(NodeKey, NodeKey)>,
+    /// Edges the user has hidden, as undirected `(from, to)` pairs (`from <= to`).
+    /// The edge pass skips any relation whose pair is here; the relation and its
+    /// physics spring persist (hiding is display-only). In-session for now;
+    /// persistence rides view-intent's `hidden_relations`.
+    hidden_edges: HashSet<(NodeKey, NodeKey)>,
     /// `Some(press_origin)` (screen px) while a left-drag marquee on empty space
     /// is in progress.
     marquee: Option<(f32, f32)>,
@@ -221,6 +226,7 @@ impl Orrery {
             drag: None,
             selected: HashSet::new(),
             selected_edges: HashSet::new(),
+            hidden_edges: HashSet::new(),
             marquee: None,
             ctrl: false,
             view_w: 1024,
@@ -291,6 +297,12 @@ impl Orrery {
             &self.graph,
             |k| positions.get(&k).copied(),
             |k| !on_screen.contains(&k),
+            // Skip relations whose undirected pair the user has hidden.
+            |rel| {
+                let pair =
+                    if rel.from <= rel.to { (rel.from, rel.to) } else { (rel.to, rel.from) };
+                !self.hidden_edges.contains(&pair)
+            },
             viewport,
             self.camera,
             &self.style,
@@ -618,6 +630,26 @@ impl Orrery {
         Some(id)
     }
 
+    /// Hide the currently-selected edges: move them into the hidden set (as
+    /// undirected pairs) so the edge pass skips them, and clear the selection.
+    /// Returns how many were hidden. The relations and their physics springs
+    /// persist — this hides the drawn lines, it does not delete the relations.
+    pub fn hide_selected_edges(&mut self) -> usize {
+        let count = self.selected_edges.len();
+        for (a, b) in self.selected_edges.drain() {
+            let pair = if a <= b { (a, b) } else { (b, a) };
+            self.hidden_edges.insert(pair);
+        }
+        count
+    }
+
+    /// Reveal every hidden edge. Returns how many were shown.
+    pub fn show_all_edges(&mut self) -> usize {
+        let count = self.hidden_edges.len();
+        self.hidden_edges.clear();
+        count
+    }
+
     /// The URL of the single focused (selected) node, if exactly one node is
     /// selected. The host reads this to project the focused node's media — e.g.
     /// meerkat's floating content card. `None` when zero or many are selected.
@@ -830,5 +862,24 @@ mod tests {
         assert_eq!(orrery.sim.body_count(), before - 1, "the physics body is reconciled away");
         // Nothing focused → a second remove is a no-op.
         assert!(orrery.remove_focused().is_none(), "no focus → no removal");
+    }
+
+    #[test]
+    fn hide_selected_edges_then_show_all_round_trips() {
+        let mut orrery = Orrery::new();
+        orrery.visit("https://a.example");
+        orrery.visit("https://b.example"); // the browse trail links a — b
+        let a = orrery.graph().get_node_by_url("https://a.example").unwrap().0;
+        let b = orrery.graph().get_node_by_url("https://b.example").unwrap().0;
+        orrery.selected_edges.insert((a, b)); // the host edge-picks this normally
+
+        assert_eq!(orrery.hide_selected_edges(), 1, "the selected edge is hidden");
+        assert!(orrery.selected_edges.is_empty(), "hiding clears the selection");
+        assert_eq!(orrery.hidden_edges.len(), 1);
+        // The relation itself survives (hiding is display-only).
+        assert!(orrery.graph().relations().count() >= 1, "the relation is not deleted");
+
+        assert_eq!(orrery.show_all_edges(), 1, "show-all reveals the hidden edge");
+        assert!(orrery.hidden_edges.is_empty());
     }
 }
