@@ -524,6 +524,33 @@ impl App {
         self.request_redraw();
     }
 
+    /// Delete the focused node from the graph and reap its activation (the actor
+    /// winds down on drop). A no-op when zero or many nodes are focused. Deletion
+    /// removes the node's data; deactivation just stops its actor — this does
+    /// both, because the node itself is gone.
+    fn delete_focused_node(&mut self) {
+        if let Some(member) = self.orrery.remove_focused() {
+            self.constellation.reap(member);
+            self.save_session();
+            self.request_redraw();
+        }
+    }
+
+    /// Toggle the focused node's background flag: when set, its actor keeps
+    /// running after focus moves away (the headless-active state for background
+    /// work). A no-op when nothing is focused or the focused node has no live
+    /// actor yet (focused but not rendered — press again once it has).
+    fn toggle_focus_background(&mut self) {
+        let Some(member) = self.focused_member() else {
+            return;
+        };
+        let next = !self.constellation.is_background(member);
+        if self.constellation.set_background(member, next) {
+            tracing::info!(%member, background = next, "toggled node background");
+            self.request_redraw();
+        }
+    }
+
     /// The set of graph members that should be active this frame: in Tree the open
     /// tiles, in Cartography just the focused node (if any). The constellation
     /// reconciles its actor pool to this.
@@ -686,6 +713,20 @@ impl App {
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("t"))
         {
             self.toggle_workbench();
+            return;
+        }
+        // Ctrl+B flags the focused node to keep working in the background (its
+        // actor outlives the view); Ctrl+Backspace deletes the focused node from
+        // the graph. Both are modifier-gated so they don't collide with omnibar
+        // editing, and intercepted here before the keystroke reaches the field.
+        if self.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("b"))
+        {
+            self.toggle_focus_background();
+            return;
+        }
+        if self.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::Backspace)) {
+            self.delete_focused_node();
             return;
         }
         if self.runner.state().palette_open {

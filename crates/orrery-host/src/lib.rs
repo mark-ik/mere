@@ -599,6 +599,25 @@ impl Orrery {
         }
     }
 
+    /// Remove the single focused node from the session graph (if exactly one is
+    /// selected), returning its member id (the kernel node UUID) so the host can
+    /// reap any activation for it. Clears the selection and reconciles the physics
+    /// + node pool to the smaller graph. Returns `None` when zero or many nodes
+    /// are selected, leaving the graph untouched. The host calls this on a
+    /// delete-node gesture; deactivation (reaping the actor) is the host's job.
+    pub fn remove_focused(&mut self) -> Option<uuid::Uuid> {
+        if self.selected.len() != 1 {
+            return None;
+        }
+        let key = *self.selected.iter().next()?;
+        let id = self.graph.get_node(key)?.id;
+        self.graph.remove_node(key);
+        self.selected.clear();
+        self.selected_edges.clear();
+        self.reconcile_derived();
+        Some(id)
+    }
+
     /// The URL of the single focused (selected) node, if exactly one node is
     /// selected. The host reads this to project the focused node's media — e.g.
     /// meerkat's floating content card. `None` when zero or many are selected.
@@ -795,5 +814,21 @@ mod tests {
         assert_eq!(orrery.focused_url(), Some("https://one.example"));
         assert!(!orrery.select_by_url("https://absent.example"), "a missing url reports false");
         assert_eq!(orrery.focused_url(), Some("https://one.example"), "a miss leaves selection intact");
+    }
+
+    #[test]
+    fn remove_focused_drops_the_node_and_reports_its_id() {
+        let mut orrery = Orrery::new();
+        orrery.visit("https://a.example");
+        orrery.visit("https://b.example"); // focus on b
+        let before = orrery.graph().nodes().count();
+        let removed = orrery.remove_focused();
+        assert!(removed.is_some(), "the focused node is removed and its id returned");
+        assert_eq!(orrery.graph().nodes().count(), before - 1, "the graph shrinks by one");
+        assert!(orrery.graph().get_node_by_url("https://b.example").is_none(), "the node is gone");
+        assert_eq!(orrery.focused_url(), None, "the selection clears");
+        assert_eq!(orrery.sim.body_count(), before - 1, "the physics body is reconciled away");
+        // Nothing focused → a second remove is a no-op.
+        assert!(orrery.remove_focused().is_none(), "no focus → no removal");
     }
 }

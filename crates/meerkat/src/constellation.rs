@@ -85,12 +85,8 @@ impl Constellation {
     }
 
     /// How many nodes are active.
-    pub fn len(&self) -> usize {
+    pub fn active_count(&self) -> usize {
         self.active.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.active.is_empty()
     }
 
     /// Spawn actors for needed-but-dormant nodes and reap active-but-unneeded
@@ -157,6 +153,12 @@ impl Constellation {
     /// The latest composited scene for `member`, if it has rendered one.
     pub fn scene(&self, member: GraphMemberId) -> Option<&Scene> {
         self.active.get(&member).and_then(|a| a.scene.as_ref())
+    }
+
+    /// Deactivate `member` now — its actor winds down on drop. For when the node
+    /// itself is gone (deleted), so `reconcile` would not re-spawn it anyway.
+    pub fn reap(&mut self, member: GraphMemberId) {
+        self.active.remove(&member);
     }
 
     /// Whether `member` is flagged to keep working in the background.
@@ -300,11 +302,11 @@ mod tests {
         let wake: Wake = std::sync::Arc::new(|| {});
         let mut c = Constellation::new(wake);
         c.reconcile(&[m(1), m(2)]);
-        assert_eq!(c.len(), 2, "two needed nodes spawned");
+        assert_eq!(c.active_count(), 2, "two needed nodes spawned");
         assert!(c.is_active(m(1)) && c.is_active(m(2)));
 
         c.reconcile(&[m(2)]); // node 1 drops out of the needed set
-        assert_eq!(c.len(), 1, "the unneeded node was reaped");
+        assert_eq!(c.active_count(), 1, "the unneeded node was reaped");
         assert!(c.is_active(m(2)) && !c.is_active(m(1)));
     }
 
