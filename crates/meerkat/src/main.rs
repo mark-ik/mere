@@ -365,15 +365,23 @@ impl App {
         let chrome_scene =
             scene_from_scripted_dom(&self.dom.borrow(), CHROME_SHEET, w, h, cursor, &scroll);
 
-        // The content root: the orrery's own composited scene over the content
-        // band. Keep its viewport in sync each frame; center it once, the first
-        // time the band height is known.
-        self.orrery.resize(w, content_h);
-        if !self.centered {
-            self.orrery.recenter();
-            self.centered = true;
-        }
-        let (content_scene, orrery_redraw) = self.orrery.frame(w, content_h);
+        // The content root. In Cartography the orrery composites its own scene over
+        // the band (kept in sync, centered once). In the tiled workbench the orrery
+        // is hidden behind the tiles, so skip its physics + paint entirely and back
+        // the band with an empty dark-cleared scene — the tiles composite over it,
+        // the splitter gutters show the dark. Skipping it also stops the orrery's
+        // settle / glide redraw loop, which would otherwise re-rasterize every tile
+        // each frame behind the cover.
+        let (content_scene, orrery_redraw) = if self.workbench.is_tiled() {
+            (netrender::Scene::new(w, content_h), false)
+        } else {
+            self.orrery.resize(w, content_h);
+            if !self.centered {
+                self.orrery.recenter();
+                self.centered = true;
+            }
+            self.orrery.frame(w, content_h)
+        };
 
         // Content tiles floating over the orrery. In Cartography there is one: the
         // focused-node card at `card_rect`. In Tree (the tiled workbench) there is
@@ -1089,11 +1097,13 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => self.resize(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x as f32, position.y as f32);
-                // Forward to the orrery in content-band coordinates, so an
-                // in-progress pan / drag / marquee tracks even when the pointer
-                // strays over the chrome.
+                // Forward to the orrery in content-band coordinates (Cartography
+                // only — in the tiled view the orrery is hidden, so a stray drag
+                // must not animate it and force every tile to re-rasterize).
                 let th = self.toolbar_height() as f32;
-                if self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th) {
+                if !self.workbench.is_tiled()
+                    && self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th)
+                {
                     self.request_redraw();
                 }
             },
@@ -1104,9 +1114,10 @@ impl ApplicationHandler for App {
             WindowEvent::MouseWheel { delta, .. } => {
                 // Wheel over the content band drives the orrery (pan, or zoom under
                 // Ctrl). LineDelta is scaled to device px the way the orrery
-                // expects; PixelDelta passes through.
+                // expects; PixelDelta passes through. Ignored in the tiled view (the
+                // orrery is hidden; tiles don't scroll yet).
                 let th = self.toolbar_height() as f32;
-                if self.cursor.1 >= th {
+                if self.cursor.1 >= th && !self.workbench.is_tiled() {
                     let (dx, dy) = match delta {
                         MouseScrollDelta::LineDelta(x, y) => {
                             (x * WHEEL_PAN_SCALE, y * WHEEL_PAN_SCALE)
