@@ -92,8 +92,6 @@ dependencies = [
  "futures-lite",
  "futures-util",
  "serde",
- "tokio",
- "tokio-stream",
  "zbus",
 ]
 
@@ -300,25 +298,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "android_trace"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0d564b0f7a9c9e272c7e43c59f1f09ba04d060774ba7c5fa14c2f966bbd6c4e"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "anyhow"
 version = "1.0.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
-
-[[package]]
-name = "anymap3"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "170433209e817da6aae2c51aa0dd443009a613425dd041ebfb2492d1c4c11a25"
 
 [[package]]
 name = "anymore"
@@ -1662,38 +1645,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "calloop"
-version = "0.14.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dbf9978365bac10f54d1d4b04f7ce4427e51f71d61f2fe15e3fed5166474df7"
-dependencies = [
- "bitflags 2.11.1",
- "polling",
- "rustix 1.1.4",
- "slab",
- "tracing",
-]
-
-[[package]]
 name = "calloop-wayland-source"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95a66a987056935f7efce4ab5668920b5d0dac4a7c99991a67395f13702ddd20"
 dependencies = [
- "calloop 0.13.0",
+ "calloop",
  "rustix 0.38.44",
- "wayland-backend",
- "wayland-client",
-]
-
-[[package]]
-name = "calloop-wayland-source"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "138efcf0940a02ebf0cc8d1eff41a1682a46b431630f4c52450d6265876021fa"
-dependencies = [
- "calloop 0.14.4",
- "rustix 1.1.4",
  "wayland-backend",
  "wayland-client",
 ]
@@ -2047,16 +2005,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "console_error_panic_hook"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
-dependencies = [
- "cfg-if",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2158,20 +2106,6 @@ checksum = "4ddef33a339a91ea89fb53151bd0a4689cfce27055c291dfa69945475d22c747"
 dependencies = [
  "time",
  "version_check",
-]
-
-[[package]]
-name = "copypasta"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e6811e17f81fe246ef2bc553f76b6ee6ab41a694845df1d37e52a92b7bbd38a"
-dependencies = [
- "clipboard-win",
- "objc2 0.5.2",
- "objc2-app-kit 0.2.2",
- "objc2-foundation 0.2.2",
- "smithay-clipboard",
- "x11-clipboard",
 ]
 
 [[package]]
@@ -5592,36 +5526,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09e54e57b4c48b40f7aec75635392b12b3421fa26fe8b4332e63138ed278459c"
 
 [[package]]
-name = "imaging"
-version = "0.0.1"
-source = "git+https://github.com/mark-ik/imaging?branch=mere-wgpu-29-vello-0-9#a8ac08d498b4266cd340b6a3cd66eef8fc4a5ab9"
-dependencies = [
- "kurbo",
- "peniko",
-]
-
-[[package]]
-name = "imaging_vello"
-version = "0.0.1"
-source = "git+https://github.com/mark-ik/imaging?branch=mere-wgpu-29-vello-0-9#a8ac08d498b4266cd340b6a3cd66eef8fc4a5ab9"
-dependencies = [
- "imaging",
- "imaging_wgpu",
- "kurbo",
- "peniko",
- "vello",
-]
-
-[[package]]
-name = "imaging_wgpu"
-version = "0.0.1"
-source = "git+https://github.com/mark-ik/imaging?branch=mere-wgpu-29-vello-0-9#a8ac08d498b4266cd340b6a3cd66eef8fc4a5ab9"
-dependencies = [
- "imaging",
- "wgpu",
-]
-
-[[package]]
 name = "imgref"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6437,15 +6341,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "linebender_include_doc_path"
-version = "0.1.0"
-source = "git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9#86937309b81db2f36d309700902d6b8cb0bfc18b"
-dependencies = [
- "proc-macro2",
- "quote",
-]
-
-[[package]]
 name = "linebender_resource_handle"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6653,75 +6548,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "masonry"
-version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9#86937309b81db2f36d309700902d6b8cb0bfc18b"
-dependencies = [
- "accesskit",
- "linebender_include_doc_path",
- "masonry_core",
- "resvg",
- "smallvec",
- "tracing",
-]
-
-[[package]]
-name = "masonry_core"
-version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9#86937309b81db2f36d309700902d6b8cb0bfc18b"
-dependencies = [
- "accesskit",
- "anymap3",
- "anymore",
- "console_error_panic_hook",
- "cursor-icon",
- "dpi",
- "imaging",
- "kurbo",
- "parley",
- "peniko",
- "smallvec",
- "time",
- "tracing",
- "tracing-core",
- "tracing-subscriber",
- "tracing-wasm",
- "tracing_android_trace",
- "tree_arena",
- "ui-events",
- "web-time",
-]
-
-[[package]]
-name = "masonry_imaging"
-version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9#86937309b81db2f36d309700902d6b8cb0bfc18b"
-dependencies = [
- "imaging",
- "imaging_vello",
- "imaging_wgpu",
- "kurbo",
- "peniko",
- "wgpu",
-]
-
-[[package]]
-name = "masonry_winit"
-version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9#86937309b81db2f36d309700902d6b8cb0bfc18b"
-dependencies = [
- "accesskit_winit",
- "copypasta",
- "masonry_core",
- "masonry_imaging",
- "pollster",
- "tracing",
- "ui-events-winit",
- "wgpu",
- "winit",
-]
-
-[[package]]
 name = "matchers"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6828,26 +6654,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "488016bfae457b036d996092f6cb448677611ce4449e970ceaf42695203f218a"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "mere-app"
-version = "0.0.1"
-dependencies = [
- "dpi",
- "forme",
- "frame",
- "inker",
- "kernel",
- "linked-data",
- "nematic",
- "platen",
- "raw-window-handle",
- "scrying 0.4.0 (git+https://github.com/mark-ik/wgpu-scry?branch=main)",
- "uuid",
- "wgpu",
- "windows 0.62.2",
- "xilem",
 ]
 
 [[package]]
@@ -8643,7 +8449,6 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fad031076f48f0d4d85ce1aea9b94b4e715a4d636a030a123038f8f5b5e4343"
 dependencies = [
- "accesskit",
  "fontique",
  "harfrust",
  "hashbrown 0.17.0",
@@ -10634,44 +10439,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "scrying"
-version = "0.4.0"
-source = "git+https://github.com/mark-ik/wgpu-scry?branch=main#7c3c91d5780e15e6b950afe8a90063cad27d6738"
-dependencies = [
- "ash",
- "block2 0.6.2",
- "dispatch2",
- "dpi",
- "image",
- "libc",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-core-media",
- "objc2-core-video",
- "objc2-foundation 0.3.2",
- "objc2-io-surface",
- "objc2-metal 0.3.2",
- "objc2-screen-capture-kit",
- "objc2-web-kit",
- "palette",
- "thiserror 2.0.18",
- "webview2-com",
- "wgpu",
- "wgpu-hal",
- "wgpu-types",
- "windows 0.62.2",
- "windows-numerics 0.3.1",
-]
-
-[[package]]
 name = "scrying-engine"
 version = "0.0.1"
 dependencies = [
  "dpi",
  "inker",
- "scrying 0.4.0",
+ "scrying",
  "tracing",
 ]
 
@@ -10684,7 +10457,7 @@ dependencies = [
  "ab_glyph",
  "log",
  "memmap2",
- "smithay-client-toolkit 0.19.2",
+ "smithay-client-toolkit",
  "tiny-skia 0.11.4",
 ]
 
@@ -11723,8 +11496,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3457dea1f0eb631b4034d61d4d8c32074caa6cd1ab2d59f2327bd8461e2c0016"
 dependencies = [
  "bitflags 2.11.1",
- "calloop 0.13.0",
- "calloop-wayland-source 0.3.0",
+ "calloop",
+ "calloop-wayland-source",
  "cursor-icon",
  "libc",
  "log",
@@ -11739,44 +11512,6 @@ dependencies = [
  "wayland-protocols-wlr",
  "wayland-scanner",
  "xkeysym",
-]
-
-[[package]]
-name = "smithay-client-toolkit"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0512da38f5e2b31201a93524adb8d3136276fa4fe4aafab4e1f727a82b534cc0"
-dependencies = [
- "bitflags 2.11.1",
- "calloop 0.14.4",
- "calloop-wayland-source 0.4.1",
- "cursor-icon",
- "libc",
- "log",
- "memmap2",
- "rustix 1.1.4",
- "thiserror 2.0.18",
- "wayland-backend",
- "wayland-client",
- "wayland-csd-frame",
- "wayland-cursor",
- "wayland-protocols",
- "wayland-protocols-experimental",
- "wayland-protocols-misc",
- "wayland-protocols-wlr",
- "wayland-scanner",
- "xkeysym",
-]
-
-[[package]]
-name = "smithay-clipboard"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71704c03f739f7745053bde45fa203a46c58d25bc5c4efba1d9a60e9dba81226"
-dependencies = [
- "libc",
- "smithay-client-toolkit 0.20.0",
- "wayland-backend",
 ]
 
 [[package]]
@@ -13320,35 +13055,9 @@ dependencies = [
  "sharded-slab",
  "smallvec",
  "thread_local",
- "time",
  "tracing",
  "tracing-core",
  "tracing-log",
-]
-
-[[package]]
-name = "tracing-wasm"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4575c663a174420fa2d78f4108ff68f65bf2fbb7dd89f33749b6e826b3626e07"
-dependencies = [
- "tracing",
- "tracing-subscriber",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "tracing_android_trace"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84fae205f9c07bfae3d36d199ab985118c90d225ff70a38e7ff3ecbdb4ef61bc"
-dependencies = [
- "android_trace",
- "smallvec",
- "thread_local",
- "tracing",
- "tracing-core",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -13366,14 +13075,6 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tracing",
-]
-
-[[package]]
-name = "tree_arena"
-version = "0.2.0"
-source = "git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9#86937309b81db2f36d309700902d6b8cb0bfc18b"
-dependencies = [
- "hashbrown 0.17.0",
 ]
 
 [[package]]
@@ -13454,28 +13155,6 @@ dependencies = [
  "memoffset",
  "tempfile",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "ui-events"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3e29e3e199888d594edd191c5917a2d5c1893b8bf20076c2bf4df7a40a2ee71"
-dependencies = [
- "dpi",
- "keyboard-types",
- "kurbo",
-]
-
-[[package]]
-name = "ui-events-winit"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de12c5f7e256ff97aa9a710a5e2fb345bb59302c98d77a3d2f249100d92145d4"
-dependencies = [
- "ui-events",
- "web-time",
- "winit",
 ]
 
 [[package]]
@@ -14154,32 +13833,6 @@ dependencies = [
  "bitflags 2.11.1",
  "wayland-backend",
  "wayland-client",
- "wayland-scanner",
-]
-
-[[package]]
-name = "wayland-protocols-experimental"
-version = "20250721.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40a1f863128dcaaec790d7b4b396cc9b9a7a079e878e18c47e6c2d2c5a8dcbb1"
-dependencies = [
- "bitflags 2.11.1",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
- "wayland-scanner",
-]
-
-[[package]]
-name = "wayland-protocols-misc"
-version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e9567599ef23e09b8dad6e429e5738d4509dfc46b3b21f32841a304d16b29c8"
-dependencies = [
- "bitflags 2.11.1",
- "wayland-backend",
- "wayland-client",
- "wayland-protocols",
  "wayland-scanner",
 ]
 
@@ -15022,7 +14675,7 @@ dependencies = [
  "bitflags 2.11.1",
  "block2 0.5.1",
  "bytemuck",
- "calloop 0.13.0",
+ "calloop",
  "cfg_aliases",
  "concurrent-queue",
  "core-foundation 0.9.4",
@@ -15044,7 +14697,7 @@ dependencies = [
  "redox_syscall 0.4.1",
  "rustix 0.38.44",
  "sctk-adwaita",
- "smithay-client-toolkit 0.19.2",
+ "smithay-client-toolkit",
  "smol_str 0.2.2",
  "tracing",
  "unicode-segmentation",
@@ -15243,16 +14896,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "x11-clipboard"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "662d74b3d77e396b8e5beb00b9cad6a9eccf40b2ef68cc858784b14c41d535a3"
-dependencies = [
- "libc",
- "x11rb",
-]
-
-[[package]]
 name = "x11-dl"
 version = "2.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15319,26 +14962,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 
 [[package]]
-name = "xilem"
-version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9#86937309b81db2f36d309700902d6b8cb0bfc18b"
-dependencies = [
- "masonry",
- "masonry_winit",
- "tokio",
- "tracing",
- "winit",
- "xilem_core 0.4.0 (git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9)",
- "xilem_masonry",
-]
-
-[[package]]
 name = "xilem-serval"
 version = "0.2.0"
 dependencies = [
  "layout-dom-api",
  "serval-scripted-dom",
- "xilem_core 0.4.0",
+ "xilem_core",
 ]
 
 [[package]]
@@ -15348,29 +14977,6 @@ dependencies = [
  "anymore",
  "hashbrown 0.17.0",
  "tracing",
-]
-
-[[package]]
-name = "xilem_core"
-version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9#86937309b81db2f36d309700902d6b8cb0bfc18b"
-dependencies = [
- "anymore",
- "hashbrown 0.17.0",
- "tracing",
-]
-
-[[package]]
-name = "xilem_masonry"
-version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9#86937309b81db2f36d309700902d6b8cb0bfc18b"
-dependencies = [
- "masonry",
- "smallvec",
- "tokio",
- "tracing",
- "usvg",
- "xilem_core 0.4.0 (git+https://github.com/mark-ik/xilem?branch=mere-wgpu-29-vello-0-9)",
 ]
 
 [[package]]
