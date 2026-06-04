@@ -39,6 +39,7 @@ members = [
     "crates/platen/domain/gloss",
     "crates/platen/domain/workbench",
     "crates/platen/platen",
+    "crates/platen/view",
     "crates/verso/tile-state",
     "crates/verso/verso-core",
     "crates/eidetic/eidetic-core",

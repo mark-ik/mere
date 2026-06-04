@@ -1,0 +1,35 @@
+[package]
+name = "platen-view"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Serval view layer for platen's tiled workbench — emits the Workbench tile-tree as xilem_serval flex DOM (taffy lays it out), so platen-core stays serval-free and only this crate couples to serval."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# The tiling model this renders, the graph it resolves tab labels against, and
+# the member-id type the actions carry.
+platen.workspace = true
+kernel.workspace = true
+forme.workspace = true
+
+# The serval authoring layer: diff a Xilem view tree into serval's mutable
+# ScriptedDom, laid out by taffy. Cross-repo path deps on the sibling serval
+# checkout (same as meerkat's), one directory deeper. Keeping these here (not in
+# platen-core) is the whole point: platen-core stays GUI-free; only this view
+# crate is serval-coupled, and only meerkat depends on it.
+xilem-serval = { path = "../../../../serval/components/xilem-serval" }
+serval-scripted-dom = { path = "../../../../serval/components/serval-scripted-dom" }
+tracing = "0.1"
+
+[dev-dependencies]
+# Walk + inspect the diffed ScriptedDom in the headless DOM-shape tests.
+layout_dom_api = { package = "layout-dom-api", path = "../../../../serval/components/shared/layout-dom" }
+uuid = { version = "1", features = ["serde"] }
+
+[lints]
+workspace = true

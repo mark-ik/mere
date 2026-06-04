@@ -8812,6 +8812,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "platen-view"
+version = "0.0.1"
+dependencies = [
+ "forme",
+ "kernel",
+ "layout-dom-api",
+ "platen",
+ "serval-scripted-dom",
+ "tracing",
+ "uuid",
+ "xilem-serval",
+]
+
+[[package]]
 name = "plist"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
