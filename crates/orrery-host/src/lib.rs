@@ -30,7 +30,7 @@
 //! The sample graph, simulation, node-children pool, and the small paint/DOM
 //! helpers live in [`mod@build`].
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use euclid::default::{Box2D, Point2D};
 use gyre::Simulation;
@@ -701,6 +701,40 @@ impl Orrery {
         self.graph.get_node(key).map(|n| n.url())
     }
 
+    /// The graph members (node UUIDs) of the currently-selected nodes. The host
+    /// reads this for a selection-driven open: a single selection opens that
+    /// node's graphlet, a multi-selection opens the selected nodes.
+    pub fn selected_members(&self) -> Vec<uuid::Uuid> {
+        self.selected.iter().filter_map(|&k| self.graph.get_node(k).map(|n| n.id)).collect()
+    }
+
+    /// The members in `member`'s connected component — `member` plus every node
+    /// reachable from it through relations (undirected), breadth-first from the
+    /// queried node. Empty if `member` is not in the graph. This is the node's
+    /// "graphlet"; the host intersects it with the warm-tab set to decide what to
+    /// tile.
+    pub fn connected_members(&self, member: uuid::Uuid) -> Vec<uuid::Uuid> {
+        let Some((start, _)) = self.graph.get_node_by_id(member) else {
+            return Vec::new();
+        };
+        let mut seen = HashSet::new();
+        let mut order = Vec::new();
+        let mut queue = VecDeque::new();
+        seen.insert(start);
+        queue.push_back(start);
+        while let Some(key) = queue.pop_front() {
+            if let Some(node) = self.graph.get_node(key) {
+                order.push(node.id);
+            }
+            for neighbor in self.graph.neighbors_undirected_sorted(key) {
+                if seen.insert(neighbor) {
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+        order
+    }
+
     /// The session graph, for the host to persist (`to_snapshot` → `graph.json`).
     pub fn graph(&self) -> &Graph {
         &self.graph
@@ -941,5 +975,29 @@ mod tests {
         other.insert(uuid::Uuid::from_u128(0xdead_beef), NodeState::Closed);
         orrery.set_node_states(other);
         assert!(orrery.node_states.is_empty(), "an unknown node id is dropped");
+    }
+
+    #[test]
+    fn connected_members_reaches_the_whole_trail() {
+        let mut orrery = Orrery::new();
+        let a = orrery.visit("https://a.example");
+        orrery.visit("https://b.example"); // a — b (browse trail)
+        orrery.visit("https://c.example"); // b — c
+        let a_id = orrery.graph().get_node(a).unwrap().id;
+        let comp = orrery.connected_members(a_id);
+        assert_eq!(comp.len(), 3, "the a — b — c trail is one connected component");
+        assert_eq!(comp.first(), Some(&a_id), "BFS leads with the queried node");
+        assert!(
+            orrery.connected_members(uuid::Uuid::from_u128(0xabcd)).is_empty(),
+            "an unknown member yields nothing",
+        );
+    }
+
+    #[test]
+    fn selected_members_reflects_the_selection() {
+        let mut orrery = Orrery::new();
+        let a = orrery.visit("https://a.example"); // visit selects the node
+        let a_id = orrery.graph().get_node(a).unwrap().id;
+        assert_eq!(orrery.selected_members(), vec![a_id]);
     }
 }

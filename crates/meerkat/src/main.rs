@@ -524,11 +524,32 @@ impl App {
         self.workbench.toggle_mode();
         self.workbench.clear_tiles();
         if self.workbench.is_tiled() {
-            for member in self.focus_and_neighbors(4) {
+            for member in self.workbench_seed() {
                 self.workbench.open_tile(member);
             }
         }
         self.request_redraw();
+    }
+
+    /// The members to tile when entering the workbench. A multi-selection opens
+    /// its nodes (in splits). A single selection opens the **active tabs in that
+    /// node's graphlet** — its connected component intersected with the warm-tab
+    /// set, plus the node itself — so you gather the live cluster around it. An
+    /// empty selection opens nothing.
+    fn workbench_seed(&self) -> Vec<GraphMemberId> {
+        let selected = self.orrery.selected_members();
+        if selected.len() > 1 {
+            return selected; // multi-select → the selection, in splits
+        }
+        match selected.first() {
+            Some(&focus) => self
+                .orrery
+                .connected_members(focus)
+                .into_iter()
+                .filter(|m| *m == focus || self.constellation.is_active(*m))
+                .collect(),
+            None => Vec::new(),
+        }
     }
 
     /// Delete the focused node from the graph and reap its activation (the actor
@@ -598,26 +619,6 @@ impl App {
     fn focused_member(&self) -> Option<GraphMemberId> {
         let url = self.orrery.focused_url()?;
         self.orrery.graph().get_node_by_url(url).map(|(_, node)| node.id)
-    }
-
-    /// The focused node's graph member plus up to `max` of its neighbors' members
-    /// (resolved URL → node UUID via the kernel node id). Empty when nothing is
-    /// focused or the focus has no node.
-    fn focus_and_neighbors(&self, max: usize) -> Vec<GraphMemberId> {
-        let graph = self.orrery.graph();
-        let Some(url) = self.orrery.focused_url() else {
-            return Vec::new();
-        };
-        let Some((key, node)) = graph.get_node_by_url(url) else {
-            return Vec::new();
-        };
-        let mut members = vec![node.id];
-        for neighbor in graph.neighbors_undirected_sorted(key).into_iter().take(max) {
-            if let Some(n) = graph.get_node(neighbor) {
-                members.push(n.id);
-            }
-        }
-        members
     }
 
     /// Load durably-cached content for `url` (page or subresource), or `None`.
