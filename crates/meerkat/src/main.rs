@@ -103,6 +103,16 @@ const CHROME_SHEET: &[&str] = &[
         background-color: rgb(34, 37, 46); padding: 8px 12px; }",
     ".cmd-row-active { font-size: 18px; color: rgb(234, 238, 246); \
         background-color: rgb(46, 56, 80); padding: 8px 12px; }",
+    // Settings overlay: a centered panel (like the palette) with rows of controls.
+    ".settings-overlay { display: flex; justify-content: center; padding-top: 56px; }",
+    ".settings { width: 380px; background-color: rgb(34, 37, 46); padding: 14px; }",
+    ".set-title { font-size: 20px; color: rgb(234, 238, 246); \
+        background-color: rgb(34, 37, 46); padding: 4px 8px 12px 8px; }",
+    ".set-row { display: flex; background-color: rgb(34, 37, 46); padding: 6px 8px; }",
+    ".set-value { font-size: 18px; color: rgb(206, 210, 220); \
+        background-color: rgb(34, 37, 46); padding: 8px 14px; flex-grow: 1; }",
+    ".set-btn { font-size: 20px; color: rgb(222, 226, 234); \
+        background-color: rgb(48, 52, 62); padding: 6px 16px; margin: 0 4px; }",
 ];
 
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
@@ -700,6 +710,7 @@ impl App {
             self.runner.dispatch_click(node, PointerClick::at((x, y)));
             self.drain_pending_connect();
             self.drain_pending_command();
+            self.sync_settings();
             self.sync_orrery();
             if palette_was_open && !self.runner.state().palette_open {
                 self.focus_after_palette_close();
@@ -751,9 +762,20 @@ impl App {
                     self.request_redraw();
                 }
             },
-            // History / connect verbs run in the chrome; never queued here.
-            Command::Back | Command::Forward | Command::Home | Command::ConnectPeer => {},
+            // History / connect / settings verbs run in the chrome; never queued
+            // here as host intents.
+            Command::Back
+            | Command::Forward
+            | Command::Home
+            | Command::ConnectPeer
+            | Command::OpenSettings => {},
         }
+    }
+
+    /// Apply the chrome's current settings to the host: the active-tab cap to the
+    /// actor pool. Called after a chrome interaction that could have changed them.
+    fn sync_settings(&mut self) {
+        self.constellation.set_cap(self.runner.state().settings.tab_cap);
     }
 
     /// Handle a pressed key. Ctrl+K toggles the command palette; while the
@@ -761,6 +783,15 @@ impl App {
     /// Arrow Up/Down and Escape drive the suggestions dropdown, and every other
     /// key edits the omnibar and regenerates suggestions.
     fn on_key_pressed(&mut self, key: &WinitKey) {
+        // While the settings overlay is open, Escape closes it and other keys are
+        // swallowed (clicks on its controls go through the chrome path).
+        if self.runner.state().settings_open {
+            if matches!(key, WinitKey::Named(WinitNamedKey::Escape)) {
+                self.runner.update(Chrome::close_settings);
+                self.request_redraw();
+            }
+            return;
+        }
         if self.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("k"))
         {

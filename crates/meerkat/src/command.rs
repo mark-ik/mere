@@ -39,11 +39,14 @@ pub enum Command {
     HideSelectedEdge,
     /// Reveal every hidden edge (host action).
     ShowAllEdges,
+    /// Open the settings overlay. A chrome-level action (opens the panel right
+    /// there, like toggling the palette), not a host intent.
+    OpenSettings,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 9] = [
+    pub const ALL: [Command; 10] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -53,6 +56,7 @@ impl Command {
         Command::BackgroundNode,
         Command::HideSelectedEdge,
         Command::ShowAllEdges,
+        Command::OpenSettings,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -81,6 +85,7 @@ impl Command {
             Command::BackgroundNode => "Keep focused node active in background",
             Command::HideSelectedEdge => "Hide selected edge",
             Command::ShowAllEdges => "Show all edges",
+            Command::OpenSettings => "Settings",
         }
     }
 }

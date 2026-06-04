@@ -111,6 +111,25 @@ pub struct Chrome {
     /// but for actions the chrome can't reach (the orrery, the actor pool): the
     /// chrome records the intent, the host drains it and runs the matching method.
     pub pending_command: Option<Command>,
+    /// User settings the chrome renders + edits (the settings overlay). The host
+    /// applies them (e.g. the tab cap to the actor pool) and persists them.
+    pub settings: Settings,
+    /// Whether the settings overlay is open.
+    pub settings_open: bool,
+}
+
+/// User-tunable settings the chrome surfaces. Small for now (the active-tab cap);
+/// dark/light, edge-family visibility, and the rest join as their controls land.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Settings {
+    /// The most warm tabs the actor pool keeps before LRU eviction.
+    pub tab_cap: usize,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { tab_cap: 12 }
+    }
 }
 
 impl Chrome {
@@ -137,6 +156,8 @@ impl Chrome {
             sync: SyncIndicator::default(),
             pending_connect: None,
             pending_command: None,
+            settings: Settings::default(),
+            settings_open: false,
         }
     }
 
@@ -268,6 +289,9 @@ impl Chrome {
                 // the sync actor). The ticket is whatever is in the address bar.
                 self.pending_connect = Some(self.omnibar.text().trim().to_string());
             },
+            // A chrome-level action: open the settings overlay right here (no host
+            // intent needed, like toggling the palette).
+            Command::OpenSettings => self.open_settings(),
             Command::ToggleWorkbench
             | Command::DeleteNode
             | Command::BackgroundNode
@@ -290,6 +314,29 @@ impl Chrome {
     /// palette run / row click and dispatches it to the matching shell method.
     pub fn take_pending_command(&mut self) -> Option<Command> {
         self.pending_command.take()
+    }
+
+    /// Open the settings overlay (closing the palette + suggestions dropdown).
+    pub fn open_settings(&mut self) {
+        self.settings_open = true;
+        self.close_palette();
+        self.close_suggestions();
+    }
+
+    /// Close the settings overlay.
+    pub fn close_settings(&mut self) {
+        self.settings_open = false;
+    }
+
+    /// Raise the active-tab cap by one (bounded, so the overlay can't set an
+    /// absurd value). The host applies + persists the change.
+    pub fn inc_tab_cap(&mut self) {
+        self.settings.tab_cap = (self.settings.tab_cap + 1).min(64);
+    }
+
+    /// Lower the active-tab cap by one (never below 1).
+    pub fn dec_tab_cap(&mut self) {
+        self.settings.tab_cap = self.settings.tab_cap.saturating_sub(1).max(1);
     }
 
     /// The text field that currently owns editing / the caret: the palette query
@@ -414,7 +461,35 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     if c.palette_open {
         children.push(palette_overlay(c));
     }
+    if c.settings_open {
+        children.push(settings_overlay(c));
+    }
     Box::new(el::<_, Chrome, ()>("div", children).attr("class", "chrome"))
+}
+
+/// The settings overlay: a centered panel of controls (just the active-tab cap
+/// for now — a value flanked by − / + buttons). Clicking the backdrop closes it;
+/// the buttons edit [`Chrome::settings`], which the host applies + persists.
+/// Rendered into the chrome root, composited over the content like the palette.
+fn settings_overlay(c: &Chrome) -> ChromeView {
+    let dec = on_click(
+        el::<_, Chrome, ()>("button", "\u{2212}").attr("class", "set-btn"),
+        |c: &mut Chrome, _: PointerClick| c.dec_tab_cap(),
+    );
+    let value = el::<_, Chrome, ()>("div", format!("Active tab cap: {}", c.settings.tab_cap))
+        .attr("class", "set-value");
+    let inc = on_click(
+        el::<_, Chrome, ()>("button", "+").attr("class", "set-btn"),
+        |c: &mut Chrome, _: PointerClick| c.inc_tab_cap(),
+    );
+    let cap_row = el::<_, Chrome, ()>("div", (dec, value, inc)).attr("class", "set-row");
+    let title = el::<_, Chrome, ()>("div", "Settings").attr("class", "set-title");
+    let panel = el::<_, Chrome, ()>("div", (title, cap_row)).attr("class", "settings");
+    let overlay = on_click(
+        el::<_, Chrome, ()>("div", panel).attr("class", "settings-overlay"),
+        |c: &mut Chrome, _: PointerClick| c.close_settings(),
+    );
+    Box::new(overlay)
 }
 
 /// The command-palette overlay: a centered panel with the query field and the
@@ -647,8 +722,8 @@ mod tests {
         assert_eq!(count_class(&dom, root, "palette"), 1, "the panel");
         assert_eq!(
             count_class(&dom, root, "cmd-row"),
-            9,
-            "Back / Forward / Home / Connect + Tile / Delete / Background / Hide edge / Show edges",
+            10,
+            "the 4 chrome verbs + Tile / Delete / Background / Hide edge / Show edges / Settings",
         );
     }
 
@@ -684,11 +759,34 @@ mod tests {
     #[test]
     fn palette_step_wraps() {
         let mut runner = runner("mere://welcome");
-        runner.update(Chrome::open_palette); // empty query → 9 commands
+        runner.update(Chrome::open_palette); // empty query → 10 commands
         runner.update(|c| c.step_palette(-1));
-        assert_eq!(runner.state().palette.selected_index, Some(8), "up from none → last");
+        assert_eq!(runner.state().palette.selected_index, Some(9), "up from none → last");
         runner.update(|c| c.step_palette(1));
         assert_eq!(runner.state().palette.selected_index, Some(0), "wrap to first");
+    }
+
+    /// The settings overlay opens, renders its panel + the cap controls, and the
+    /// − / + buttons edit the tab cap (the host applies + persists it).
+    #[test]
+    fn settings_overlay_opens_and_edits_the_tab_cap() {
+        let mut runner = runner("mere://welcome");
+        runner.update(Chrome::open_settings);
+        assert!(runner.state().settings_open, "the overlay opens");
+        {
+            let dom = runner.dom();
+            let dom = dom.borrow();
+            assert_eq!(count_class(&dom, runner.root(), "settings"), 1, "the panel renders");
+            assert_eq!(count_class(&dom, runner.root(), "set-btn"), 2, "two cap buttons");
+        }
+        let before = runner.state().settings.tab_cap;
+        runner.update(Chrome::inc_tab_cap);
+        assert_eq!(runner.state().settings.tab_cap, before + 1, "+ raises the cap");
+        runner.update(Chrome::dec_tab_cap);
+        runner.update(Chrome::dec_tab_cap);
+        assert_eq!(runner.state().settings.tab_cap, before - 1, "- lowers it");
+        runner.update(Chrome::close_settings);
+        assert!(!runner.state().settings_open, "and it closes");
     }
 
     /// Count elements carrying exactly class `class` in the subtree at `id`.
