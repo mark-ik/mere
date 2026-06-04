@@ -43,7 +43,7 @@ use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView};
 use platen::LayoutConfig;
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
-use orrery_host::{CameraView, Orrery, PointerButton, WHEEL_PAN_SCALE};
+use orrery_host::{CameraView, NodeState, Orrery, PointerButton, WHEEL_PAN_SCALE};
 use pelt_live::{fragments_from_scripted_dom, hit_test_node, scene_from_scripted_dom, TextCursor};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::{NodeId, ScriptedDom};
@@ -331,6 +331,12 @@ impl App {
         let chrome_scene =
             scene_from_scripted_dom(&self.dom.borrow(), CHROME_SHEET, w, h, cursor, &scroll);
 
+        // Color the orrery's nodes by activation state (green open / red closed /
+        // blue new) so the graph shows at a glance what's live. (Visible in
+        // Cartography; the orrery is hidden in the tiled view.)
+        let states = self.node_states();
+        self.orrery.set_node_states(states);
+
         // The content root. In Cartography the orrery composites its own scene over
         // the band (kept in sync, centered once). In the tiled workbench the orrery
         // is hidden behind the tiles, so skip its physics + paint entirely and back
@@ -561,6 +567,26 @@ impl App {
         } else {
             self.focused_member().into_iter().collect()
         }
+    }
+
+    /// The per-node activation state for the orrery's node coloring: a node with
+    /// a live actor is `Open` (green), one with fetched `Ready` content but no
+    /// actor is `Closed` (red), and one with no content yet is `New` (blue).
+    fn node_states(&self) -> HashMap<GraphMemberId, NodeState> {
+        self.orrery
+            .graph()
+            .nodes()
+            .map(|(_key, node)| {
+                let state = if self.constellation.is_active(node.id) {
+                    NodeState::Open
+                } else if matches!(self.content.get(node.url()), Some(fetch::ContentState::Ready(_))) {
+                    NodeState::Closed
+                } else {
+                    NodeState::New
+                };
+                (node.id, state)
+            })
+            .collect()
     }
 
     /// The focused node's graph member, if a node is focused (resolved URL → node

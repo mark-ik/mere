@@ -91,6 +91,18 @@ pub struct CameraView {
     pub zoom: f32,
 }
 
+/// A node's coarse activation state, for the orrery to color its on-screen
+/// nodes: `Open` (a live actor is showing it — green), `Closed` (it has content
+/// but no actor — red), or `New` (no fetched content yet — blue). The host
+/// computes these from the actor pool + content cache and pushes them via
+/// [`Orrery::set_node_states`]; a node absent from the map falls back to `New`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NodeState {
+    Open,
+    Closed,
+    New,
+}
+
 /// An in-progress left-button interaction on a node: a click until the pointer
 /// passes [`CLICK_SLOP`], then a drag that pins the node to the cursor.
 #[derive(Clone, Copy)]
@@ -147,6 +159,9 @@ pub struct Orrery {
     /// physics spring persist (hiding is display-only). In-session for now;
     /// persistence rides view-intent's `hidden_relations`.
     hidden_edges: HashSet<(NodeKey, NodeKey)>,
+    /// Per-node activation state the host pushes for node coloring (open / closed
+    /// / new). Resolved to `NodeKey` on set; a node absent here colors as `New`.
+    node_states: HashMap<NodeKey, NodeState>,
     /// `Some(press_origin)` (screen px) while a left-drag marquee on empty space
     /// is in progress.
     marquee: Option<(f32, f32)>,
@@ -227,6 +242,7 @@ impl Orrery {
             selected: HashSet::new(),
             selected_edges: HashSet::new(),
             hidden_edges: HashSet::new(),
+            node_states: HashMap::new(),
             marquee: None,
             ctrl: false,
             view_w: 1024,
@@ -343,7 +359,17 @@ impl Orrery {
                 gnode,
                 &format!("transform: translate({}px, {}px);", pos.x - NODE_HALF, pos.y - NODE_HALF),
             );
-            let class = if self.selected.contains(&key) { "gnode-selected" } else { "gnode" };
+            // Selection wins (orange); otherwise color by activation state —
+            // green open, red closed, blue new (the default for an unset node).
+            let class = if self.selected.contains(&key) {
+                "gnode-selected"
+            } else {
+                match self.node_states.get(&key) {
+                    Some(NodeState::Open) => "gnode-open",
+                    Some(NodeState::Closed) => "gnode-closed",
+                    _ => "gnode-new",
+                }
+            };
             set_class(&mut self.node_dom, gnode, class);
         }
         let mut muts = Vec::new();
@@ -650,6 +676,17 @@ impl Orrery {
         count
     }
 
+    /// Set the per-node activation states the orrery colors its on-screen nodes
+    /// by, keyed by node UUID (the host's member id); the orrery resolves each to
+    /// its `NodeKey`. The host recomputes + pushes this as the actor pool / content
+    /// cache change; a node absent from `states` colors as [`NodeState::New`].
+    pub fn set_node_states(&mut self, states: HashMap<uuid::Uuid, NodeState>) {
+        self.node_states = states
+            .into_iter()
+            .filter_map(|(id, state)| self.graph.get_node_by_id(id).map(|(key, _)| (key, state)))
+            .collect();
+    }
+
     /// The URL of the single focused (selected) node, if exactly one node is
     /// selected. The host reads this to project the focused node's media — e.g.
     /// meerkat's floating content card. `None` when zero or many are selected.
@@ -881,5 +918,25 @@ mod tests {
 
         assert_eq!(orrery.show_all_edges(), 1, "show-all reveals the hidden edge");
         assert!(orrery.hidden_edges.is_empty());
+    }
+
+    #[test]
+    fn set_node_states_resolves_uuids_to_keys() {
+        let mut orrery = Orrery::new();
+        orrery.visit("https://a.example");
+        let (key, id) = {
+            let (k, n) = orrery.graph().get_node_by_url("https://a.example").unwrap();
+            (k, n.id)
+        };
+        let mut states = HashMap::new();
+        states.insert(id, NodeState::Open);
+        orrery.set_node_states(states);
+        assert_eq!(orrery.node_states.get(&key), Some(&NodeState::Open), "uuid resolves to its key");
+
+        // An unknown node id is filtered out (no panic, no stale entry).
+        let mut other = HashMap::new();
+        other.insert(uuid::Uuid::from_u128(0xdead_beef), NodeState::Closed);
+        orrery.set_node_states(other);
+        assert!(orrery.node_states.is_empty(), "an unknown node id is dropped");
     }
 }
