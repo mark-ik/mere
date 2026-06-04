@@ -33,8 +33,10 @@ use crate::content::{spawn_content, ContentCommand, ContentUpdate};
 use crate::fetch::ContentState;
 
 /// A node brought to life: its content actor plus the per-activation
-/// bookkeeping. Reaped (actor wound down) when the node leaves the needed set,
-/// unless `background` is set.
+/// bookkeeping. Kept **warm** once spawned — an open tab persists after you
+/// navigate away — and reaped only on explicit close ([`Constellation::reap`]) or
+/// LRU eviction when the active-tab cap is exceeded, unless `background` protects
+/// it.
 struct Activation {
     handle: ActorHandle<ContentCommand>,
     rx: Receiver<ContentUpdate>,
@@ -46,16 +48,30 @@ struct Activation {
     shown: Option<(String, u8, u32, u32)>,
     /// The latest generation-accepted scene, composited at the node's pane.
     scene: Option<Scene>,
-    /// Keep the actor alive even when the node is not in the needed set (headless
-    /// background work outlives the view).
+    /// Keep the actor working even when the tab is not shown (headless background
+    /// work), and exempt it from cap eviction.
     background: bool,
+    /// The pool clock at this tab's last spawn / drive, for LRU eviction: the
+    /// least-recently-touched evictable tab is reaped first over the cap.
+    last_touched: u64,
 }
+
+/// Default cap on warm tabs (active actors) before LRU eviction kicks in. A
+/// configurable setting later; the per-tab resource cost keeps real tab counts
+/// well under it in practice.
+pub const DEFAULT_TAB_CAP: usize = 12;
 
 /// The pool of active nodes (the live half of the graph).
 pub struct Constellation {
     /// The wake every spawned actor pokes to drive the host's event loop.
     wake: Wake,
     active: HashMap<GraphMemberId, Activation>,
+    /// The most warm tabs to keep; over this, the least-recently-touched
+    /// evictable tab is reaped on reconcile.
+    cap: usize,
+    /// Monotonic clock, bumped on each spawn / drive and stamped into a tab's
+    /// `last_touched`, so eviction picks the genuinely-stalest tab.
+    touch_clock: u64,
 }
 
 /// What a [`Constellation::drain`] surfaced for the host to act on. Scenes are
@@ -76,7 +92,12 @@ pub struct Drained {
 impl Constellation {
     /// A new, empty pool. `wake` is cloned into every actor it spawns.
     pub fn new(wake: Wake) -> Self {
-        Self { wake, active: HashMap::new() }
+        Self { wake, active: HashMap::new(), cap: DEFAULT_TAB_CAP, touch_clock: 0 }
+    }
+
+    /// Set the active-tab cap (the configurable setting; clamped to at least 1).
+    pub fn set_cap(&mut self, cap: usize) {
+        self.cap = cap.max(1);
     }
 
     /// Whether `member` currently has a live actor.
@@ -89,30 +110,50 @@ impl Constellation {
         self.active.len()
     }
 
-    /// Spawn actors for needed-but-dormant nodes and reap active-but-unneeded
-    /// ones (keeping any flagged `background`). Called each frame with the
-    /// presentation's needed set (the focused node, or the open tiles).
+    /// Reconcile the pool to the needed set: spawn an actor for any
+    /// needed-but-dormant node, then **keep every active node warm** — an open tab
+    /// persists after you navigate away; it is *not* reaped on blur. The only
+    /// involuntary reaping is the active-tab cap: when the pool exceeds
+    /// [`cap`](Self::cap), the least-recently-touched tab that is neither needed
+    /// now nor `background` is evicted, until within the cap (or none remain to
+    /// evict). Explicit close is [`reap`](Self::reap).
     pub fn reconcile(&mut self, needed: &[GraphMemberId]) {
-        let active: Vec<GraphMemberId> = self.active.keys().copied().collect();
-        let background: Vec<GraphMemberId> =
-            self.active.iter().filter(|(_, a)| a.background).map(|(m, _)| *m).collect();
-        let (to_spawn, to_reap) = plan(&active, needed, &background);
-        for member in to_reap {
-            self.active.remove(&member); // drop → ActorHandle closes the channel → thread ends
+        // Spawn needed-but-dormant nodes, each touch-stamped so LRU is well-ordered.
+        for &member in needed {
+            if !self.active.contains_key(&member) {
+                self.touch_clock += 1;
+                let touch = self.touch_clock;
+                let (handle, rx) = spawn_content(self.wake.clone());
+                self.active.insert(
+                    member,
+                    Activation {
+                        handle,
+                        rx,
+                        gens: Generations::default(),
+                        shown: None,
+                        scene: None,
+                        background: false,
+                        last_touched: touch,
+                    },
+                );
+            }
         }
-        for member in to_spawn {
-            let (handle, rx) = spawn_content(self.wake.clone());
-            self.active.insert(
-                member,
-                Activation {
-                    handle,
-                    rx,
-                    gens: Generations::default(),
-                    shown: None,
-                    scene: None,
-                    background: false,
+        // Enforce the cap: evict the least-recently-touched evictable tab (neither
+        // needed now nor backgrounded) until within the cap, or until none remain.
+        let needed_set: HashSet<GraphMemberId> = needed.iter().copied().collect();
+        while self.active.len() > self.cap {
+            let victim = self
+                .active
+                .iter()
+                .filter(|(member, a)| !needed_set.contains(member) && !a.background)
+                .min_by_key(|(_, a)| a.last_touched)
+                .map(|(member, _)| *member);
+            match victim {
+                Some(member) => {
+                    self.active.remove(&member); // drop → channel closes → thread ends
                 },
-            );
+                None => break, // every remaining tab is needed or background
+            }
         }
     }
 
@@ -122,9 +163,12 @@ impl Constellation {
     /// is not active or nothing changed.
     pub fn drive(&mut self, member: GraphMemberId, url: &str, state: Option<ContentState>, cw: u32, ch: u32) {
         let tag = ContentState::tag(state.as_ref());
+        self.touch_clock += 1;
+        let touch = self.touch_clock;
         let Some(activation) = self.active.get_mut(&member) else {
             return;
         };
+        activation.last_touched = touch; // shown this frame → freshest against eviction
         let key = (url.to_string(), tag, cw, ch);
         if activation.shown.as_ref() == Some(&key) {
             return;
@@ -239,27 +283,6 @@ impl Constellation {
     }
 }
 
-/// The pure spawn/reap decision (no threads), so the activation policy is
-/// testable: a needed-but-inactive node is spawned; an active node that is
-/// neither needed nor flagged background is reaped.
-fn plan(
-    active: &[GraphMemberId],
-    needed: &[GraphMemberId],
-    background: &[GraphMemberId],
-) -> (Vec<GraphMemberId>, Vec<GraphMemberId>) {
-    let needed_set: HashSet<GraphMemberId> = needed.iter().copied().collect();
-    let active_set: HashSet<GraphMemberId> = active.iter().copied().collect();
-    let background_set: HashSet<GraphMemberId> = background.iter().copied().collect();
-    let to_spawn: Vec<GraphMemberId> =
-        needed.iter().copied().filter(|m| !active_set.contains(m)).collect();
-    let to_reap: Vec<GraphMemberId> = active
-        .iter()
-        .copied()
-        .filter(|m| !needed_set.contains(m) && !background_set.contains(m))
-        .collect();
-    (to_spawn, to_reap)
-}
-
 #[cfg(test)]
 mod tests {
     use uuid::Uuid;
@@ -270,54 +293,41 @@ mod tests {
         Uuid::from_u128(n)
     }
 
-    #[test]
-    fn plan_spawns_needed_and_reaps_unneeded() {
-        let active = [m(1), m(2)];
-        let needed = [m(2), m(3)];
-        let (spawn, reap) = plan(&active, &needed, &[]);
-        assert_eq!(spawn, vec![m(3)], "a needed node with no actor is spawned");
-        assert_eq!(reap, vec![m(1)], "an active node no longer needed is reaped");
+    fn noop_wake() -> Wake {
+        std::sync::Arc::new(|| {})
     }
 
     #[test]
-    fn plan_keeps_background_nodes_even_when_unneeded() {
-        let active = [m(1), m(2)];
-        let needed = [m(2)]; // node 1 is no longer needed...
-        let background = [m(1)]; // ...but it is doing background work
-        let (spawn, reap) = plan(&active, &needed, &background);
-        assert!(spawn.is_empty());
-        assert!(reap.is_empty(), "a backgrounded node survives leaving the needed set");
-    }
-
-    #[test]
-    fn plan_is_a_no_op_when_active_matches_needed() {
-        let active = [m(1), m(2)];
-        let needed = [m(1), m(2)];
-        let (spawn, reap) = plan(&active, &needed, &[]);
-        assert!(spawn.is_empty() && reap.is_empty());
-    }
-
-    #[test]
-    fn reconcile_spawns_then_reaps_against_the_pool() {
-        let wake: Wake = std::sync::Arc::new(|| {});
-        let mut c = Constellation::new(wake);
+    fn reconcile_keeps_tabs_warm() {
+        let mut c = Constellation::new(noop_wake());
         c.reconcile(&[m(1), m(2)]);
         assert_eq!(c.active_count(), 2, "two needed nodes spawned");
-        assert!(c.is_active(m(1)) && c.is_active(m(2)));
-
-        c.reconcile(&[m(2)]); // node 1 drops out of the needed set
-        assert_eq!(c.active_count(), 1, "the unneeded node was reaped");
-        assert!(c.is_active(m(2)) && !c.is_active(m(1)));
+        c.reconcile(&[m(2)]); // m(1) is no longer needed...
+        assert!(c.is_active(m(1)), "...but stays a warm tab — no reap on blur");
+        assert_eq!(c.active_count(), 2);
     }
 
     #[test]
-    fn a_backgrounded_node_survives_reconcile() {
-        let wake: Wake = std::sync::Arc::new(|| {});
-        let mut c = Constellation::new(wake);
+    fn reconcile_evicts_least_recently_touched_over_cap() {
+        let mut c = Constellation::new(noop_wake());
+        c.set_cap(2);
+        c.reconcile(&[m(1)]); // touch 1
+        c.reconcile(&[m(2)]); // touch 2 — m(1) is now the stalest
+        c.reconcile(&[m(3)]); // touch 3, over the cap of 2 → evict the stalest evictable
+        assert_eq!(c.active_count(), 2, "the cap holds");
+        assert!(!c.is_active(m(1)), "the least-recently-touched, non-needed tab is evicted");
+        assert!(c.is_active(m(2)) && c.is_active(m(3)));
+    }
+
+    #[test]
+    fn a_background_tab_is_exempt_from_eviction() {
+        let mut c = Constellation::new(noop_wake());
+        c.set_cap(1);
         c.reconcile(&[m(1)]);
         assert!(c.set_background(m(1), true), "flagging an active node succeeds");
-        c.reconcile(&[]); // nothing needed...
-        assert!(c.is_active(m(1)), "...but the backgrounded node keeps its actor");
-        assert!(!c.set_background(m(2), true), "flagging a dormant node reports false");
+        c.reconcile(&[m(2)]); // over the cap of 1, but m(1) is background → not evictable
+        assert!(c.is_active(m(1)), "a background tab survives cap pressure");
+        assert!(c.is_active(m(2)), "the needed node is still spawned");
+        assert!(!c.set_background(m(3), true), "flagging a dormant node reports false");
     }
 }
