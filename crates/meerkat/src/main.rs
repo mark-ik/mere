@@ -39,7 +39,7 @@ use forme::GraphMemberId;
 use kernel::geometry::PortableSize;
 use meerkat::command::Command;
 use meerkat::workbench::Workbench;
-use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView, TileAction, TileHeader};
+use meerkat::{chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView, TileAction, TileStrip, TileTab};
 use platen::LayoutConfig;
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
@@ -114,21 +114,21 @@ const CHROME_SHEET: &[&str] = &[
         background-color: rgb(34, 37, 46); padding: 8px 14px; flex-grow: 1; }",
     ".set-btn { font-size: 20px; color: rgb(222, 226, 234); \
         background-color: rgb(48, 52, 62); padding: 6px 16px; margin: 0 4px; }",
-    // Tile header strips (the tiled workbench's by-hand chrome): a flex bar with
-    // the label growing and the pin / close buttons at the right.
+    // Tile tab strips (the tiled workbench's by-hand chrome): a flex bar with the
+    // tab row growing and the pin / close buttons at the right. The active tab is
+    // brighter; inactive tabs are recessed.
     ".tile-strip { display: flex; height: 28px; background-color: rgb(40, 44, 54); }",
-    ".tile-label { font-size: 13px; color: rgb(206, 210, 220); \
-        background-color: rgb(40, 44, 54); padding: 6px 10px; flex-grow: 1; }",
+    ".tile-tabs { display: flex; background-color: rgb(40, 44, 54); flex-grow: 1; }",
+    ".tile-tab { font-size: 13px; color: rgb(176, 182, 196); \
+        background-color: rgb(34, 38, 48); padding: 6px 12px; margin-right: 2px; }",
+    ".tile-tab-active { font-size: 13px; color: rgb(234, 238, 246); \
+        background-color: rgb(52, 58, 74); padding: 6px 12px; margin-right: 2px; }",
     ".tile-btn { font-size: 15px; color: rgb(214, 218, 228); \
         background-color: rgb(40, 44, 54); padding: 5px 10px; }",
 ];
 
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
 const FALLBACK_TOOLBAR_H: u32 = 64;
-
-/// Height (px) of a tile's header strip (the by-hand chrome: label + pin +
-/// close). The tile's content renders below it.
-const TILE_STRIP_H: u32 = 28;
 
 /// Background of the floating content card — a panel a step above the orrery
 /// backdrop, so the card reads as a raised surface over the dark orrery band.
@@ -391,33 +391,47 @@ impl App {
         let mut cards: Vec<(GraphMemberId, [f32; 4], (u32, u32))> = Vec::new();
         if self.workbench.is_tiled() {
             let band = PortableSize::new(w as f32, content_h as f32);
-            let laid = self.workbench.laid_out_tiles(band, &LayoutConfig::default(), self.orrery.graph());
-            let mut headers = Vec::with_capacity(laid.len());
-            for tile in &laid {
-                let x0 = tile.rect.origin.x;
-                let strip_top = toolbar_h as f32 + tile.rect.origin.y;
-                // The header strip sits across the tile's top; content renders below
-                // it (the tile's content height shrinks by the strip).
-                headers.push(TileHeader {
-                    member: tile.member,
-                    label: tile.url.clone().unwrap_or_else(|| "(gone)".to_string()),
-                    x: x0,
-                    y: strip_top,
-                    width: tile.rect.size.width,
-                    pinned: self.constellation.is_background(tile.member),
+            let slots =
+                self.workbench.laid_out_slots(band, &LayoutConfig::default(), self.orrery.graph());
+            let mut strips = Vec::with_capacity(slots.len());
+            for slot in &slots {
+                // The tab strip spans the slot's top (window coords: the orrery band
+                // begins at `toolbar_h`). Every tab is its own warm actor; the pin
+                // glyph tracks the active tab's background-keep flag.
+                let tabs: Vec<TileTab> = slot
+                    .tabs
+                    .iter()
+                    .map(|t| TileTab {
+                        member: t.member,
+                        label: t.url.clone().unwrap_or_else(|| "(gone)".to_string()),
+                    })
+                    .collect();
+                let active_member = slot.active_tab().map(|t| t.member);
+                strips.push(TileStrip {
+                    x: slot.strip.origin.x,
+                    y: toolbar_h as f32 + slot.strip.origin.y,
+                    width: slot.strip.size.width,
+                    tabs,
+                    active: slot.active,
+                    pinned: active_member.is_some_and(|m| self.constellation.is_background(m)),
                 });
-                let Some(url) = tile.url.as_deref() else { continue };
+                // Drive only the visible tab; the others stay warm with their last
+                // scene, so clicking a tab switches instantly. Content renders below
+                // the strip, at the slot's carved content rect.
+                let Some(tab) = slot.active_tab() else { continue };
+                let Some(url) = tab.url.as_deref() else { continue };
                 self.ensure_content(url);
-                let cw = tile.rect.size.width.round().max(1.0) as u32;
-                let ch = (tile.rect.size.height - TILE_STRIP_H as f32).round().max(1.0) as u32;
+                let cw = slot.content.size.width.round().max(1.0) as u32;
+                let ch = slot.content.size.height.round().max(1.0) as u32;
                 let state = self.content.get(url).cloned();
-                self.constellation.drive(tile.member, url, state, cw, ch);
-                let cy0 = strip_top + TILE_STRIP_H as f32;
-                cards.push((tile.member, [x0, cy0, x0 + cw as f32, cy0 + ch as f32], (cw, ch)));
+                self.constellation.drive(tab.member, url, state, cw, ch);
+                let cx0 = slot.content.origin.x;
+                let cy0 = toolbar_h as f32 + slot.content.origin.y;
+                cards.push((tab.member, [cx0, cy0, cx0 + cw as f32, cy0 + ch as f32], (cw, ch)));
             }
-            self.set_tile_headers(headers);
+            self.set_tile_strips(strips);
         } else {
-            self.set_tile_headers(Vec::new());
+            self.set_tile_strips(Vec::new());
             if let (Some(member), Some(url)) =
                 (self.focused_member(), self.orrery.focused_url().map(str::to_string))
             {
@@ -624,7 +638,9 @@ impl App {
     /// reconciles its actor pool to this.
     fn needed_members(&self) -> Vec<GraphMemberId> {
         if self.workbench.is_tiled() {
-            self.workbench.open_tiles().to_vec()
+            // Every tab across every slot stays warm, not just the visible ones, so
+            // switching a stack's tab is instant (the actor already has its scene).
+            self.workbench.open_members()
         } else {
             self.focused_member().into_iter().collect()
         }
@@ -809,19 +825,20 @@ impl App {
         self.constellation.set_cap(self.runner.state().settings.tab_cap);
     }
 
-    /// Push the tile header strips to the chrome, requesting a redraw if they
-    /// changed (they're computed after this frame's chrome scene is built, so the
-    /// next frame is what renders them).
-    fn set_tile_headers(&mut self, headers: Vec<TileHeader>) {
-        if self.runner.state().tile_headers != headers {
-            self.runner.update(|c| c.tile_headers = headers);
+    /// Push the tile tab strips to the chrome, requesting a redraw if they changed
+    /// (they're computed after this frame's chrome scene is built, so the next
+    /// frame is what renders them).
+    fn set_tile_strips(&mut self, strips: Vec<TileStrip>) {
+        if self.runner.state().tile_strips != strips {
+            self.runner.update(|c| c.tile_strips = strips);
             self.request_redraw();
         }
     }
 
-    /// Run a pending by-hand tile action the chrome captured: close a tile (reap
-    /// its tab + drop it from the workbench) or toggle its pin (the background
-    /// flag, which keeps the tab active + exempt from eviction).
+    /// Run a pending by-hand tile action the chrome captured: close a tab (reap its
+    /// actor + drop it from its slot), toggle its pin (the background flag, which
+    /// keeps the tab active + exempt from eviction), or activate it (make it the
+    /// visible tab of its stack).
     fn drain_pending_tile(&mut self) {
         let Some(action) = self.runner.state().pending_tile else {
             return;
@@ -835,6 +852,9 @@ impl App {
             TileAction::TogglePin(member) => {
                 let pinned = self.constellation.is_background(member);
                 self.constellation.set_background(member, !pinned);
+            },
+            TileAction::Activate(member) => {
+                self.workbench.activate(member);
             },
         }
         self.request_redraw();

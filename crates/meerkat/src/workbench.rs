@@ -7,48 +7,78 @@
 //! The orrery and the tiled workbench are two **projections of one
 //! arrangement** (the composition spine): the orrery is the
 //! [`ProjectionKind::Cartography`] projection (graph members positioned
-//! spatially), the tiled workbench the [`ProjectionKind::Tree`] one (members
-//! laid out as splits of tab-stacks). This module owns the host-side state for
-//! that — which tiles are open, and the current projection mode — and turns it
-//! into placed, content-resolved tiles for the render loop.
+//! spatially), the tiled workbench the [`ProjectionKind::Tree`] one. This module
+//! owns the host-side state — which tiles are open, how they're grouped into
+//! tab-stacks, the active tab per stack, and the projection mode — and turns it
+//! into placed, content-resolved slots for the render loop.
 //!
-//! The geometry is not ours: [`platen::project_tree`] turns the arrangement into
-//! a geometry-free [`WorkbenchPlan`](platen::WorkbenchPlan), and
-//! [`platen::layout_plan`] assigns each slot a concrete rect (morphorm-backed).
-//! This module adds only the two host concerns platen leaves open: holding the
-//! open-tile set, and resolving each tile's member id (a kernel node UUID) to a
-//! node URL against the session graph, so the content lane has something to
-//! render.
-//!
-//! v1 scope: tiles are a flat ordered set, each bound to one graph member, laid
-//! side-by-side. Tab-stacks, groups, and re-ordering are forme/platen features
-//! already (`StackedWith`, `Group`); surfacing them here waits on the UX that
-//! needs them. The render integration (one content actor per laid-out tile) is
-//! the actor-constellation plan's P4 and lives in the kernel, not here.
+//! A workbench is a list of [`Slot`]s laid side by side. A slot holds one or more
+//! graph members: one member is a plain tile, several members are a **tab-stack**
+//! (a tab strip; one tab visible at a time). Geometry is platen's: one tile-intent
+//! per slot feeds [`platen::project_tree`] → [`platen::layout_plan`] for the
+//! side-by-side rects; the slot then carves its own strip off the top and resolves
+//! its members to URLs. (We lay one rect per slot rather than lean on platen's
+//! `Tabs` slot, so the tab set + active index stay ours.)
 
 use forme::{Arrangement, GraphMemberId};
-use kernel::geometry::{PortableRect, PortableSize};
+use kernel::geometry::{PortablePoint, PortableRect, PortableSize};
 use kernel::graph::Graph;
 use platen::{layout_plan, project_tree, LaidOutSlot, LayoutConfig, ProjectionKind};
 
-/// A placed workbench tile: the band-relative rect it occupies, the graph member
-/// it shows, and that member's resolved URL (`None` if the node has since left
-/// the graph, so the host can show a "gone" placeholder rather than guess).
+/// One workbench slot: a stack of one or more graph members sharing a column,
+/// with `active` the index of the visible tab. A single member is a plain tile.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Slot {
+    members: Vec<GraphMemberId>,
+    active: usize,
+}
+
+impl Slot {
+    fn single(member: GraphMemberId) -> Self {
+        Self { members: vec![member], active: 0 }
+    }
+
+    /// The visible tab's member (the active one, or the first as a fallback).
+    fn active_member(&self) -> Option<GraphMemberId> {
+        self.members.get(self.active).or_else(|| self.members.first()).copied()
+    }
+}
+
+/// One tab within a placed slot: its graph member + resolved URL.
 #[derive(Clone, Debug, PartialEq)]
-pub struct WorkbenchTile {
-    pub rect: PortableRect,
+pub struct PlacedTab {
     pub member: GraphMemberId,
+    /// The node's URL, or `None` if the member has left the graph.
     pub url: Option<String>,
 }
 
-/// The host's tiled-workbench composition: the open tiles and the projection
-/// mode. Cartography (the orrery) is the default; the host flips to Tree for the
-/// tiled view.
+/// A placed workbench slot: where its active tab's content renders, its tab
+/// strip, and the tabs themselves (one for a plain tile, several for a stack).
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlacedSlot {
+    /// Where the active tab's content renders (below the strip).
+    pub content: PortableRect,
+    /// The tab-strip band across the slot's top.
+    pub strip: PortableRect,
+    /// The slot's tabs, in order.
+    pub tabs: Vec<PlacedTab>,
+    /// Index into `tabs` of the visible tab.
+    pub active: usize,
+}
+
+impl PlacedSlot {
+    /// The active tab, if the slot has any.
+    pub fn active_tab(&self) -> Option<&PlacedTab> {
+        self.tabs.get(self.active)
+    }
+}
+
+/// The host's tiled-workbench composition: the slots and the projection mode.
+/// Cartography (the orrery) is the default; the host flips to Tree for tiles.
 #[derive(Clone, Debug)]
 pub struct Workbench {
     mode: ProjectionKind,
-    /// Open tiles, in placement order; each bound to a graph member (node UUID).
-    open: Vec<GraphMemberId>,
+    slots: Vec<Slot>,
 }
 
 impl Default for Workbench {
@@ -58,9 +88,9 @@ impl Default for Workbench {
 }
 
 impl Workbench {
-    /// A new workbench: no open tiles, in Cartography (orrery) mode.
+    /// A new workbench: no slots, in Cartography (orrery) mode.
     pub fn new() -> Self {
-        Self { mode: ProjectionKind::Cartography, open: Vec::new() }
+        Self { mode: ProjectionKind::Cartography, slots: Vec::new() }
     }
 
     /// The current projection mode.
@@ -68,8 +98,7 @@ impl Workbench {
         self.mode
     }
 
-    /// Whether the workbench is in the tiled (Tree) projection. In Cartography
-    /// mode the host renders the orrery as usual and ignores the open-tile set.
+    /// Whether the workbench is in the tiled (Tree) projection.
     pub fn is_tiled(&self) -> bool {
         matches!(self.mode, ProjectionKind::Tree)
     }
@@ -89,83 +118,142 @@ impl Workbench {
         self.mode = mode;
     }
 
-    /// The open tiles' graph members, in placement order.
-    pub fn open_tiles(&self) -> &[GraphMemberId] {
-        &self.open
+    /// Every open member, flattened across all slots (the host's reconcile needed
+    /// set: every tab stays a warm actor, the active one is what renders).
+    pub fn open_members(&self) -> Vec<GraphMemberId> {
+        self.slots.iter().flat_map(|s| s.members.iter().copied()).collect()
     }
 
-    /// How many tiles are open.
+    /// How many tabs are open across all slots.
     pub fn tile_count(&self) -> usize {
-        self.open.len()
+        self.slots.iter().map(|s| s.members.len()).sum()
     }
 
-    /// Whether `member` already has an open tile.
+    /// How many slots (side-by-side columns) are open.
+    pub fn slot_count(&self) -> usize {
+        self.slots.len()
+    }
+
+    /// Whether `member` is open in some slot.
     pub fn has_tile(&self, member: GraphMemberId) -> bool {
-        self.open.contains(&member)
+        self.slots.iter().any(|s| s.members.contains(&member))
     }
 
-    /// Open a tile for `member` (appended last). Deduplicates: a member already
-    /// open is left in place. Returns whether a new tile was added.
+    /// Open `member` as a new single-tile slot (appended). A no-op if it is
+    /// already open somewhere. Returns whether a new slot was added.
     pub fn open_tile(&mut self, member: GraphMemberId) -> bool {
-        if self.open.contains(&member) {
+        if self.has_tile(member) {
             return false;
         }
-        self.open.push(member);
+        self.slots.push(Slot::single(member));
         true
     }
 
-    /// Close the tile showing `member`. Returns whether one was removed.
+    /// Close the tab showing `member`: drop it from its slot (removing the slot if
+    /// it empties, clamping the active index otherwise). Returns whether one was
+    /// removed.
     pub fn close_tile(&mut self, member: GraphMemberId) -> bool {
-        let before = self.open.len();
-        self.open.retain(|m| *m != member);
-        self.open.len() != before
+        let Some(i) = self.slots.iter().position(|s| s.members.contains(&member)) else {
+            return false;
+        };
+        let slot = &mut self.slots[i];
+        slot.members.retain(|m| *m != member);
+        if slot.members.is_empty() {
+            self.slots.remove(i);
+        } else if slot.active >= slot.members.len() {
+            slot.active = slot.members.len() - 1;
+        }
+        true
     }
 
-    /// Close every open tile (the projection mode is left unchanged). The host
-    /// pairs this with reaping the tiles' content actors.
+    /// Make `member` the active (visible) tab of its slot. Returns whether it was
+    /// found.
+    pub fn activate(&mut self, member: GraphMemberId) -> bool {
+        for slot in &mut self.slots {
+            if let Some(pos) = slot.members.iter().position(|m| *m == member) {
+                slot.active = pos;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Collapse every open member into a single tab-stack (group everything). The
+    /// first member's tab stays active. A no-op below two members.
+    pub fn group_all(&mut self) {
+        let members = self.open_members();
+        if members.len() > 1 {
+            self.slots = vec![Slot { members, active: 0 }];
+        }
+    }
+
+    /// Split every tab into its own single-tile slot (the inverse of `group_all`).
+    pub fn split_all(&mut self) {
+        let members = self.open_members();
+        self.slots = members.into_iter().map(Slot::single).collect();
+    }
+
+    /// Close every slot (the projection mode is left unchanged).
     pub fn clear_tiles(&mut self) {
-        self.open.clear();
+        self.slots.clear();
     }
 
-    /// The forme arrangement for the open tiles: one root-attached `TileIntent`
-    /// per member, in order. This is the projection input; v1 has no stacking, so
-    /// `project_tree` yields one split slot per tile.
+    /// The forme arrangement: one root-attached tile-intent per slot (the slot's
+    /// active member), so `project_tree` yields one split slot per column. The
+    /// stack's tabs are ours, carved off the slot rect, not platen's `Tabs`.
     fn arrangement(&self) -> Arrangement {
         let mut arrangement = Arrangement::new();
-        for member in &self.open {
-            arrangement.add_tile_intent(Some(*member));
+        for slot in &self.slots {
+            arrangement.add_tile_intent(slot.active_member());
         }
         arrangement
     }
 
-    /// Lay the open tiles out inside the content band `viewport` and resolve each
-    /// to its node URL via `graph`. Band-relative rects (origin at the band's top
-    /// left); the host offsets by the band origin when compositing. Empty when no
-    /// tiles are open. A tile whose member has left the graph resolves to
-    /// `url: None`.
-    pub fn laid_out_tiles(
+    /// Lay the slots out side by side inside `viewport` and resolve each tab's URL
+    /// via `graph`. Each slot carves a `tab_strip_height` strip off its top for the
+    /// tab strip; its active tab's content renders below. Band-relative rects.
+    pub fn laid_out_slots(
         &self,
         viewport: PortableSize,
         config: &LayoutConfig,
         graph: &Graph,
-    ) -> Vec<WorkbenchTile> {
+    ) -> Vec<PlacedSlot> {
         let plan = project_tree(&self.arrangement());
         let laid = layout_plan(&plan, viewport, config);
         laid
             .slots
             .into_iter()
-            .filter_map(|slot| match slot {
-                LaidOutSlot::Tile { tile, rect } => {
-                    // v1 tiles are always member-bound (see `arrangement`).
-                    let member = tile.member?;
-                    let url = graph.get_node_by_id(member).map(|(_, node)| node.url().to_string());
-                    Some(WorkbenchTile { rect, member, url })
-                },
-                // No stacking in v1; a stack slot would need a tab strip + active
-                // tab, which the render integration grows when the UX lands.
-                LaidOutSlot::Tabs { .. } => None,
+            .zip(self.slots.iter())
+            .map(|(laid_slot, slot)| {
+                let rect = slot_rect(&laid_slot);
+                let strip_h = config.tab_strip_height.min(rect.size.height);
+                let strip = PortableRect::new(
+                    rect.origin,
+                    PortableSize::new(rect.size.width, strip_h),
+                );
+                let content = PortableRect::new(
+                    PortablePoint::new(rect.origin.x, rect.origin.y + strip_h),
+                    PortableSize::new(rect.size.width, (rect.size.height - strip_h).max(1.0)),
+                );
+                let tabs = slot
+                    .members
+                    .iter()
+                    .map(|&member| PlacedTab {
+                        member,
+                        url: graph.get_node_by_id(member).map(|(_, node)| node.url().to_string()),
+                    })
+                    .collect();
+                PlacedSlot { content, strip, tabs, active: slot.active }
             })
             .collect()
+    }
+}
+
+/// The rect of a laid-out slot (a plain Tile, since our arrangement never stacks).
+fn slot_rect(slot: &LaidOutSlot) -> PortableRect {
+    match slot {
+        LaidOutSlot::Tile { rect, .. } => *rect,
+        LaidOutSlot::Tabs { rect, .. } => *rect,
     }
 }
 
@@ -175,6 +263,10 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+
+    fn m(n: u128) -> GraphMemberId {
+        Uuid::from_u128(n)
+    }
 
     fn band() -> PortableSize {
         PortableSize::new(1000.0, 600.0)
@@ -195,92 +287,93 @@ mod tests {
         assert_eq!(wb.mode(), ProjectionKind::Cartography);
         assert!(!wb.is_tiled());
         assert_eq!(wb.tile_count(), 0);
+        assert_eq!(wb.slot_count(), 0);
     }
 
     #[test]
-    fn toggle_mode_flips_between_orrery_and_tiled() {
+    fn open_tile_appends_single_slots_and_dedups() {
         let mut wb = Workbench::new();
-        assert_eq!(wb.toggle_mode(), ProjectionKind::Tree);
-        assert!(wb.is_tiled());
-        assert_eq!(wb.toggle_mode(), ProjectionKind::Cartography);
-        assert!(!wb.is_tiled());
-    }
-
-    #[test]
-    fn open_tile_appends_and_dedups() {
-        let mut wb = Workbench::new();
-        let a = Uuid::from_u128(1);
-        let b = Uuid::from_u128(2);
-        assert!(wb.open_tile(a), "first open is new");
-        assert!(wb.open_tile(b), "a distinct member is new");
-        assert!(!wb.open_tile(a), "re-opening an open member is a no-op");
-        assert_eq!(wb.open_tiles(), &[a, b], "placement order is insertion order");
+        assert!(wb.open_tile(m(1)), "first open is new");
+        assert!(wb.open_tile(m(2)), "a distinct member is new");
+        assert!(!wb.open_tile(m(1)), "re-opening an open member is a no-op");
+        assert_eq!(wb.open_members(), vec![m(1), m(2)]);
+        assert_eq!(wb.slot_count(), 2, "two single-tile slots");
         assert_eq!(wb.tile_count(), 2);
     }
 
     #[test]
-    fn close_tile_removes_only_the_named_member() {
+    fn group_all_stacks_then_split_all_separates() {
         let mut wb = Workbench::new();
-        let a = Uuid::from_u128(1);
-        let b = Uuid::from_u128(2);
-        wb.open_tile(a);
-        wb.open_tile(b);
-        assert!(wb.close_tile(a));
-        assert!(!wb.close_tile(a), "closing an absent member reports false");
-        assert_eq!(wb.open_tiles(), &[b]);
+        wb.open_tile(m(1));
+        wb.open_tile(m(2));
+        wb.open_tile(m(3));
+        wb.group_all();
+        assert_eq!(wb.slot_count(), 1, "all three collapse into one stack");
+        assert_eq!(wb.tile_count(), 3, "all three tabs are still open");
+        wb.split_all();
+        assert_eq!(wb.slot_count(), 3, "each tab back to its own slot");
     }
 
     #[test]
-    fn clear_tiles_closes_all_but_keeps_the_mode() {
+    fn activate_switches_the_visible_tab_in_a_stack() {
         let mut wb = Workbench::new();
-        wb.set_mode(ProjectionKind::Tree);
-        wb.open_tile(Uuid::from_u128(1));
-        wb.open_tile(Uuid::from_u128(2));
-        wb.clear_tiles();
-        assert_eq!(wb.tile_count(), 0);
-        assert!(wb.is_tiled(), "clearing tiles leaves the projection mode unchanged");
+        wb.open_tile(m(1));
+        wb.open_tile(m(2));
+        wb.open_tile(m(3));
+        wb.group_all();
+        let graph = graph_with(&[
+            (m(1), "https://a.example"),
+            (m(2), "https://b.example"),
+            (m(3), "https://c.example"),
+        ]);
+        let slots = wb.laid_out_slots(band(), &LayoutConfig::default(), &graph);
+        assert_eq!(slots.len(), 1, "one stacked slot");
+        assert_eq!(slots[0].tabs.len(), 3, "three tabs");
+        assert_eq!(slots[0].active, 0, "first tab active by default");
+        assert_eq!(slots[0].active_tab().unwrap().member, m(1));
+
+        assert!(wb.activate(m(3)), "activating a member in the stack succeeds");
+        let slots = wb.laid_out_slots(band(), &LayoutConfig::default(), &graph);
+        assert_eq!(slots[0].active, 2, "the active tab switched");
+        assert_eq!(slots[0].active_tab().unwrap().member, m(3));
     }
 
     #[test]
-    fn two_tiles_split_the_band_and_resolve_urls() {
-        let a = Uuid::from_u128(1);
-        let b = Uuid::from_u128(2);
-        let graph = graph_with(&[(a, "https://a.example"), (b, "https://b.example")]);
+    fn close_tab_drops_it_and_removes_an_empty_slot() {
         let mut wb = Workbench::new();
-        wb.open_tile(a);
-        wb.open_tile(b);
+        wb.open_tile(m(1));
+        wb.open_tile(m(2));
+        wb.group_all(); // one stack of [1, 2]
+        assert!(wb.close_tile(m(1)), "closing a tab in the stack");
+        assert_eq!(wb.tile_count(), 1, "the other tab remains");
+        assert_eq!(wb.slot_count(), 1, "the slot survives with one tab");
+        assert!(wb.close_tile(m(2)), "closing the last tab");
+        assert_eq!(wb.slot_count(), 0, "the emptied slot is removed");
+    }
 
+    #[test]
+    fn slots_split_the_band_with_a_strip_carved_off_each() {
+        let graph = graph_with(&[(m(1), "https://a.example"), (m(2), "https://b.example")]);
+        let mut wb = Workbench::new();
+        wb.open_tile(m(1));
+        wb.open_tile(m(2));
         let cfg = LayoutConfig { gap: 10.0, tab_strip_height: 28.0 };
-        let tiles = wb.laid_out_tiles(PortableSize::new(810.0, 600.0), &cfg, &graph);
+        let slots = wb.laid_out_slots(PortableSize::new(810.0, 600.0), &cfg, &graph);
 
-        assert_eq!(tiles.len(), 2, "one placed tile per open member");
-        // (810 - 10 gap) / 2 = 400 each, full band height; second begins at 410.
-        assert_eq!(tiles[0].member, a);
-        assert_eq!(tiles[0].rect.origin.x, 0.0);
-        assert_eq!(tiles[0].rect.size.width, 400.0);
-        assert_eq!(tiles[0].rect.size.height, 600.0);
-        assert_eq!(tiles[0].url.as_deref(), Some("https://a.example"));
-        assert_eq!(tiles[1].member, b);
-        assert_eq!(tiles[1].rect.origin.x, 410.0);
-        assert_eq!(tiles[1].url.as_deref(), Some("https://b.example"));
+        assert_eq!(slots.len(), 2, "one slot per open tile");
+        // (810 - 10 gap) / 2 = 400 wide each; the second begins at 410.
+        assert_eq!(slots[0].strip.origin.x, 0.0);
+        assert_eq!(slots[0].strip.size, PortableSize::new(400.0, 28.0), "strip across the top");
+        assert_eq!(slots[0].content.origin, PortablePoint::new(0.0, 28.0), "content below the strip");
+        assert_eq!(slots[0].content.size, PortableSize::new(400.0, 572.0));
+        assert_eq!(slots[0].tabs[0].url.as_deref(), Some("https://a.example"));
+        assert_eq!(slots[1].strip.origin.x, 410.0);
+        assert_eq!(slots[1].tabs[0].url.as_deref(), Some("https://b.example"));
     }
 
     #[test]
-    fn an_unknown_member_resolves_to_no_url() {
-        let a = Uuid::from_u128(1);
-        let graph = graph_with(&[]); // member `a` is not in the graph
-        let mut wb = Workbench::new();
-        wb.open_tile(a);
-        let tiles = wb.laid_out_tiles(band(), &LayoutConfig::default(), &graph);
-        assert_eq!(tiles.len(), 1, "the tile is still placed");
-        assert_eq!(tiles[0].member, a);
-        assert_eq!(tiles[0].url, None, "a member gone from the graph has no URL");
-    }
-
-    #[test]
-    fn no_open_tiles_lays_out_nothing() {
+    fn no_slots_lays_out_nothing() {
         let wb = Workbench::new();
-        let graph = graph_with(&[]);
-        assert!(wb.laid_out_tiles(band(), &LayoutConfig::default(), &graph).is_empty());
+        assert!(wb.laid_out_slots(band(), &LayoutConfig::default(), &graph_with(&[])).is_empty());
     }
 }
