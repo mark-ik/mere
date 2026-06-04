@@ -106,8 +106,9 @@ const CHROME_SHEET: &[&str] = &[
     // Settings overlay: a centered panel (like the palette) with rows of controls.
     ".settings-overlay { display: flex; justify-content: center; padding-top: 56px; }",
     ".settings { width: 380px; background-color: rgb(34, 37, 46); padding: 14px; }",
-    ".set-title { font-size: 20px; color: rgb(234, 238, 246); \
-        background-color: rgb(34, 37, 46); padding: 4px 8px 12px 8px; }",
+    ".set-title { display: flex; background-color: rgb(34, 37, 46); padding: 4px 4px 12px 4px; }",
+    ".set-title-text { font-size: 20px; color: rgb(234, 238, 246); \
+        background-color: rgb(34, 37, 46); flex-grow: 1; padding: 4px 8px; }",
     ".set-row { display: flex; background-color: rgb(34, 37, 46); padding: 6px 8px; }",
     ".set-value { font-size: 18px; color: rgb(206, 210, 220); \
         background-color: rgb(34, 37, 46); padding: 8px 14px; flex-grow: 1; }",
@@ -531,6 +532,8 @@ impl App {
     /// set on the next frame — spawning the tiles, reaping what's no longer shown
     /// (background-flagged nodes excepted).
     fn toggle_workbench(&mut self) {
+        // Clear the omnibar suggestions dropdown so it doesn't hang over the tiles.
+        self.runner.update(Chrome::close_suggestions);
         self.workbench.toggle_mode();
         self.workbench.clear_tiles();
         if self.workbench.is_tiled() {

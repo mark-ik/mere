@@ -43,6 +43,7 @@ use std::rc::Rc;
 use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
+use forme::GraphMemberId;
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
     el, lens, on_click, text_field_typed, AnyView, PointerClick, ServalAppRunner, ServalCtx,
@@ -130,6 +131,29 @@ impl Default for Settings {
     fn default() -> Self {
         Self { tab_cap: 12 }
     }
+}
+
+/// A tile's header strip — the chrome the host renders over each open tile (its
+/// label plus close / pin controls), positioned in window coordinates. The host
+/// recomputes these from the tile layout each frame; the chrome renders them as
+/// abs-positioned strips and routes their button clicks back as a [`TileAction`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct TileHeader {
+    pub member: GraphMemberId,
+    pub label: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    /// Whether the tile is pinned (its tab kept active + exempt from eviction).
+    pub pinned: bool,
+}
+
+/// A by-hand tile action the chrome captured for the host to run: close the tab
+/// (reap its actor) or toggle its pin (the background-keep flag).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TileAction {
+    Close(GraphMemberId),
+    TogglePin(GraphMemberId),
 }
 
 impl Chrome {
@@ -430,7 +454,13 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // lane, sitting at the toolbar's right (the omnibar's flex-grow pushes it
     // there). The host folds the real `SyncStatus` into `c.sync`.
     let sync_chip = el::<_, Chrome, ()>("div", c.sync.summary()).attr("class", "sync-chip");
-    let toolbar = el::<_, Chrome, ()>("div", (back, forward, omnibar, sync_chip))
+    // A workbench toggle next to the omnibar — the reliable way to flip the tiled
+    // view (Ctrl+T can be flaky), routed through the `ToggleWorkbench` host action.
+    let workbench_btn = on_click(
+        el::<_, Chrome, ()>("button", "\u{229e}").attr("class", "workbench-btn"),
+        |c: &mut Chrome, _: PointerClick| c.run_command(Command::ToggleWorkbench),
+    );
+    let toolbar = el::<_, Chrome, ()>("div", (back, forward, omnibar, workbench_btn, sync_chip))
         .attr("class", "toolbar");
 
     // The suggestions dropdown: one row per reused `OmnibarMatch`, the highlight
@@ -483,12 +513,16 @@ fn settings_overlay(c: &Chrome) -> ChromeView {
         |c: &mut Chrome, _: PointerClick| c.inc_tab_cap(),
     );
     let cap_row = el::<_, Chrome, ()>("div", (dec, value, inc)).attr("class", "set-row");
-    let title = el::<_, Chrome, ()>("div", "Settings").attr("class", "set-title");
-    let panel = el::<_, Chrome, ()>("div", (title, cap_row)).attr("class", "settings");
-    let overlay = on_click(
-        el::<_, Chrome, ()>("div", panel).attr("class", "settings-overlay"),
+    let title_text = el::<_, Chrome, ()>("div", "Settings").attr("class", "set-title-text");
+    let close_x = on_click(
+        el::<_, Chrome, ()>("button", "\u{00d7}").attr("class", "set-btn"),
         |c: &mut Chrome, _: PointerClick| c.close_settings(),
     );
+    let title = el::<_, Chrome, ()>("div", (title_text, close_x)).attr("class", "set-title");
+    let panel = el::<_, Chrome, ()>("div", (title, cap_row)).attr("class", "settings");
+    // No backdrop-close: a click inside the panel must not bubble to a close, so
+    // the overlay is just a centering container — close via the × button or Escape.
+    let overlay = el::<_, Chrome, ()>("div", panel).attr("class", "settings-overlay");
     Box::new(overlay)
 }
 
@@ -577,7 +611,7 @@ mod tests {
         let dom = runner.dom();
         let dom = dom.borrow();
         let root = runner.root();
-        assert_eq!(count_tag(&dom, root, "button"), 2, "back + forward buttons");
+        assert_eq!(count_tag(&dom, root, "button"), 3, "back + forward + workbench buttons");
         assert_eq!(count_tag(&dom, root, "input"), 1, "the omnibar input");
         // chrome container + toolbar row + sync chip + (empty, closed) suggestions.
         assert_eq!(count_tag(&dom, root, "div"), 4, "chrome + toolbar + sync-chip + suggestions");
@@ -777,7 +811,7 @@ mod tests {
             let dom = runner.dom();
             let dom = dom.borrow();
             assert_eq!(count_class(&dom, runner.root(), "settings"), 1, "the panel renders");
-            assert_eq!(count_class(&dom, runner.root(), "set-btn"), 2, "two cap buttons");
+            assert_eq!(count_class(&dom, runner.root(), "set-btn"), 3, "− / + cap buttons + close ×");
         }
         let before = runner.state().settings.tab_cap;
         runner.update(Chrome::inc_tab_cap);
