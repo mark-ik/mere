@@ -94,21 +94,29 @@ pub enum WorkbenchAction {
 }
 
 /// The render model the workbench view diffs into serval DOM: the slots to draw
-/// (geometry-free; serval/taffy lays them out) plus a captured pending action. The
-/// host syncs this from its [`Workbench`] each frame and drains `pending`.
+/// plus the band size to fill and a captured pending action. The host syncs this
+/// from its [`Workbench`] each frame and drains `pending`.
+///
+/// The slots are laid out by serval/taffy, but the flex root needs a *definite*
+/// size to lay into (taffy's root gets the viewport as available space, not a
+/// definite size, so an `auto` root would shrink to its content). So the host
+/// passes the band's `viewport` (content-band width × height in px) and the root
+/// is sized to it; everything below is flex.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WorkbenchScene {
     pub slots: Vec<SlotPlan>,
+    /// The content band the tile tree fills, in px (width, height).
+    pub viewport: (f32, f32),
     pub pending: Option<WorkbenchAction>,
 }
 
 impl WorkbenchScene {
     /// Build the render model from a `workbench`, resolving each member's URL label
-    /// against `graph`. Geometry-free: serval lays the flex tree out, so no
-    /// viewport is needed here (unlike [`Workbench::laid_out_slots`]).
+    /// against `graph`, to fill `viewport` (the content band, width × height in px).
     pub fn from_workbench(
         workbench: &Workbench,
         graph: &Graph,
+        viewport: (f32, f32),
         is_pinned: impl Fn(GraphMemberId) -> bool,
     ) -> Self {
         let slots = workbench
@@ -132,7 +140,7 @@ impl WorkbenchScene {
                 }
             })
             .collect();
-        Self { slots, pending: None }
+        Self { slots, viewport, pending: None }
     }
 
     /// Capture an "activate this tab" request (a tab click).
@@ -167,8 +175,17 @@ pub type WorkbenchLogic = fn(&WorkbenchScene) -> WorkbenchTreeView;
 /// Build the tiled-workbench view: a flex row of slot columns (see the module docs
 /// and [`WORKBENCH_SHEET`] for the shape). serval/taffy lays the flex out.
 pub fn workbench_view(scene: &WorkbenchScene) -> WorkbenchTreeView {
+    let (w, h) = scene.viewport;
     let columns: Vec<WorkbenchTreeView> = scene.slots.iter().map(slot_column).collect();
-    Box::new(el::<_, WorkbenchScene, ()>("div", columns).attr("class", "workbench"))
+    // The root carries a *definite* size (the host's band) so the flex row fills the
+    // width (slots grow equally) and the height (each slot's content area fills below
+    // its strip). taffy hands the root the viewport as available space, not a definite
+    // size, so an auto root would shrink to its content.
+    Box::new(
+        el::<_, WorkbenchScene, ()>("div", columns)
+            .attr("class", "workbench")
+            .attr("style", format!("width: {w}px; height: {h}px;")),
+    )
 }
 
 /// One slot column: a tab strip over a content placeholder.
@@ -252,7 +269,7 @@ mod tests {
     }
 
     fn scene(slots: Vec<SlotPlan>) -> WorkbenchScene {
-        WorkbenchScene { slots, pending: None }
+        WorkbenchScene { slots, viewport: (800.0, 600.0), pending: None }
     }
 
     fn runner(
@@ -316,11 +333,11 @@ mod tests {
         let mut wb = Workbench::new();
         wb.open_tile(Uuid::from_u128(1));
         wb.open_tile(Uuid::from_u128(2));
-        wb.group_all(); // one stack of two
+        wb.stack_all(); // one stack of two
         let mut graph = Graph::new();
         graph.add_node_with_id(Uuid::from_u128(1), "https://x.example".to_string(), PortablePoint::new(0.0, 0.0));
         graph.add_node_with_id(Uuid::from_u128(2), "https://y.example".to_string(), PortablePoint::new(0.0, 0.0));
-        let scene = WorkbenchScene::from_workbench(&wb, &graph, |_| false);
+        let scene = WorkbenchScene::from_workbench(&wb, &graph, (800.0, 600.0), |_| false);
         assert_eq!(scene.slots.len(), 1, "grouped into one slot");
         assert_eq!(scene.slots[0].tabs.len(), 2);
         assert_eq!(scene.slots[0].tabs[0].label, "x.example", "scheme trimmed");
@@ -328,7 +345,7 @@ mod tests {
         // A member missing from the graph resolves to a placeholder label.
         let mut wb2 = Workbench::new();
         wb2.open_tile(Uuid::from_u128(9));
-        let scene2 = WorkbenchScene::from_workbench(&wb2, &Graph::new(), |_| false);
+        let scene2 = WorkbenchScene::from_workbench(&wb2, &Graph::new(), (800.0, 600.0), |_| false);
         assert_eq!(scene2.slots[0].tabs[0].label, "(gone)");
     }
 
@@ -339,7 +356,7 @@ mod tests {
         let mut wb = Workbench::new();
         wb.open_tile(Uuid::from_u128(1));
         let pinned = Uuid::from_u128(1);
-        let scene = WorkbenchScene::from_workbench(&wb, &Graph::new(), |m| m == pinned);
+        let scene = WorkbenchScene::from_workbench(&wb, &Graph::new(), (800.0, 600.0), |m| m == pinned);
         assert!(scene.slots[0].pinned, "the active member is pinned");
         let mut s = scene;
         s.toggle_pin(Uuid::from_u128(1));

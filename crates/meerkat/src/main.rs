@@ -32,6 +32,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use eidetic_fjall::FjallStore;
 use layout_dom_api::LayoutDom;
@@ -186,6 +187,9 @@ struct App {
     modifiers: Modifiers,
     /// Last cursor position in physical pixels (window space == content space).
     cursor: (f32, f32),
+    /// The last left-button release (time + window pos), for double-click detection.
+    /// A double-click on an orrery node opens the tiled workbench from it.
+    last_left_release: Option<(Instant, (f32, f32))>,
     width: u32,
     height: u32,
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
@@ -311,6 +315,7 @@ impl App {
             host: None,
             modifiers: Modifiers::default(),
             cursor: (0.0, 0.0),
+            last_left_release: None,
             width: 1024,
             height: 600,
             workbench: Workbench::new(),
@@ -396,9 +401,12 @@ impl App {
             // it from the model + graph + pin state, then rasterize it — taffy lays
             // the tiles out (no morphorm). The orrery is hidden, so its physics +
             // paint are skipped.
-            let scene = WorkbenchScene::from_workbench(&self.workbench, self.orrery.graph(), |m| {
-                self.constellation.is_background(m)
-            });
+            let scene = WorkbenchScene::from_workbench(
+                &self.workbench,
+                self.orrery.graph(),
+                (w as f32, content_h as f32),
+                |m| self.constellation.is_background(m),
+            );
             if self.workbench_runner.state() != &scene {
                 self.workbench_runner.update(move |s| *s = scene);
             }
@@ -651,7 +659,7 @@ impl App {
         } else {
             vec![
                 ContextItem::new("Open in splits", ContextAction::OpenSplits),
-                ContextItem::new("Group into one stack", ContextAction::TileGroup),
+                ContextItem::new("Open in a stack", ContextAction::Stack),
             ]
         };
         self.context_set = set;
@@ -687,7 +695,7 @@ impl App {
             ContextAction::OpenSplits => {
                 self.workbench.open_split(&set);
             },
-            ContextAction::TileGroup => {
+            ContextAction::Stack => {
                 self.workbench.open_stack(&set);
             },
         }
@@ -841,10 +849,24 @@ impl App {
             ElementState::Released => {
                 // Releases always reach the orrery: it acts only if it owns an
                 // in-progress pan / drag / marquee, so a chrome-band release is a
-                // harmless no-op.
+                // harmless no-op. A click-release selects the node under the cursor.
                 if let Some(b) = orrery_button {
                     if self.orrery.pointer_up(b, x, y - th) {
                         self.request_redraw();
+                    }
+                }
+                // A double-click on a node (in Cartography) opens the tiled workbench
+                // from it: the first release selected it, so the working set is ready.
+                if button == MouseButton::Left && !self.workbench.is_tiled() {
+                    let now = Instant::now();
+                    let double = self.last_left_release.is_some_and(|(t, (lx, ly))| {
+                        now.duration_since(t) < Duration::from_millis(400)
+                            && (x - lx).hypot(y - ly) < 6.0
+                    });
+                    self.last_left_release = Some((now, (x, y)));
+                    if double && !self.orrery.selected_members().is_empty() {
+                        self.last_left_release = None; // don't chain a triple-click
+                        self.toggle_workbench();
                     }
                 }
             },

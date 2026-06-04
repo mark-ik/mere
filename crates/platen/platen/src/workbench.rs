@@ -211,16 +211,16 @@ impl Workbench {
         false
     }
 
-    /// Collapse every open member into a single tab-stack (group everything). The
+    /// Collapse every open member into a single tab-stack (stack everything). The
     /// first member's tab stays active. A no-op below two members.
-    pub fn group_all(&mut self) {
+    pub fn stack_all(&mut self) {
         let members = self.open_members();
         if members.len() > 1 {
             self.slots = vec![Slot { members, active: 0 }];
         }
     }
 
-    /// Split every tab into its own single-tile slot (the inverse of `group_all`).
+    /// Split every tab into its own single-tile slot (the inverse of `stack_all`).
     pub fn split_all(&mut self) {
         let members = self.open_members();
         self.slots = members.into_iter().map(Slot::single).collect();
@@ -263,12 +263,12 @@ mod tests {
     }
 
     #[test]
-    fn group_all_stacks_then_split_all_separates() {
+    fn stack_all_then_split_all_separates() {
         let mut wb = Workbench::new();
         wb.open_tile(m(1));
         wb.open_tile(m(2));
         wb.open_tile(m(3));
-        wb.group_all();
+        wb.stack_all();
         assert_eq!(wb.slot_count(), 1, "all three collapse into one stack");
         assert_eq!(wb.tile_count(), 3, "all three tabs are still open");
         wb.split_all();
@@ -281,7 +281,7 @@ mod tests {
         wb.open_tile(m(1));
         wb.open_tile(m(2));
         wb.open_tile(m(3));
-        wb.group_all();
+        wb.stack_all();
         // One stacked slot, first tab active by default (read structurally).
         {
             let view = wb.slot_views().next().unwrap();
@@ -331,7 +331,7 @@ mod tests {
         let mut wb = Workbench::new();
         wb.open_tile(m(1));
         wb.open_tile(m(2));
-        wb.group_all(); // one stack of [1, 2]
+        wb.stack_all(); // one stack of [1, 2]
         assert!(wb.close_tile(m(1)), "closing a tab in the stack");
         assert_eq!(wb.tile_count(), 1, "the other tab remains");
         assert_eq!(wb.slot_count(), 1, "the slot survives with one tab");

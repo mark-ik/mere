@@ -167,7 +167,7 @@ impl ContextItem {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ContextAction {
     OpenSplits,
-    TileGroup,
+    Stack,
 }
 
 impl Chrome {
@@ -901,7 +901,7 @@ mod tests {
                 240.0,
                 vec![
                     ContextItem::new("Open in splits", ContextAction::OpenSplits),
-                    ContextItem::new("Group into one stack", ContextAction::TileGroup),
+                    ContextItem::new("Open in a stack", ContextAction::Stack),
                 ],
             );
         });
@@ -913,8 +913,8 @@ mod tests {
             assert_eq!(count_class(&dom, runner.root(), "context-item"), 2, "a row per item");
         }
         // Picking a row captures its action and closes the menu.
-        runner.update(|c| c.pick_context(ContextAction::TileGroup));
-        assert_eq!(runner.state().pending_context, Some(ContextAction::TileGroup));
+        runner.update(|c| c.pick_context(ContextAction::Stack));
+        assert_eq!(runner.state().pending_context, Some(ContextAction::Stack));
         assert!(runner.state().context_menu.is_none(), "the menu closes on pick");
     }
 

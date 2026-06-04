@@ -121,7 +121,7 @@ mod tests {
         wb.open_tile(m(1));
         wb.open_tile(m(2));
         wb.open_tile(m(3));
-        wb.group_all(); // one stack of three; first active
+        wb.stack_all(); // one stack of three; first active
         let tree = project_workbench(&wb);
         let tabs: Vec<_> = tree.nodes.iter().filter(|(_, n)| n.role() == Role::Tab).collect();
         assert_eq!(tabs.len(), 3, "three stacked tabs");
