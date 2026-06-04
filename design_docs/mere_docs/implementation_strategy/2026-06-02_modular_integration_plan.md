@@ -498,5 +498,22 @@ consumer appears.
   - *Tile chrome* (`5768c62`): each tile gets a header strip (label + pin + close),
     abs-positioned chrome interactive through the existing click path. Close reaps the
     tab; pin toggles background. Content renders below the strip.
-  - *Remaining*: tab-stacks (composable tiles / tab-strip switching), the right-click
-    context menu (tile-group vs splits), settings persistence, then the S5–S7 tail.
+  - *Composable tiles* (`6fb6e01`): the workbench reshaped from one-member tiles to
+    slots that each hold a stack of members (a tab strip, one visible at a time). One
+    platen tile-intent per slot lays the columns; the slot carves its own strip and
+    owns its tab set + active index (not platen's `Tabs` slot). Clicking a tab switches
+    the stack instantly, since every tab stays a warm actor (reconcile covers all tabs,
+    only the visible one is driven). `group_all` / `split_all` collapse and separate.
+  - *Right-click context menu* (`73c5d6a`): right-clicking the orrery over a selection
+    floats a menu at the cursor to tile that selection's working set, either each in
+    its own split or gathered into one stack. The working set is shared with entering
+    the workbench (multi-select is its nodes; single-select expands to the active
+    graphlet). `open_split` / `open_stack` on the workbench; the chrome renders the
+    menu, the host computes the rows and drains the choice.
+  - *Settings persistence* (`847ebfd`): a `settings.json` sidecar in session-runtime
+    (`settings_store`, the view-intent sidecar's I/O shape) persists the active-tab
+    cap. The host loads it before building the chrome (overlay + pool open at the saved
+    value) and saves on change only.
+  - *Remaining*: the S5 comms tail (sync status UI, connect-by-ticket polish), S6
+    external content re-home, S7 cutover + cleanup. Per-family edge toggles and
+    `hidden_relations` persistence stay follow-ons.
