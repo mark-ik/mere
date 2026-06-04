@@ -211,6 +211,36 @@ impl Workbench {
         false
     }
 
+    /// Drag-drop `dragged` onto `target`'s slot. In the same slot it reorders
+    /// `dragged` to just after `target` (tab reorder); across slots it pulls
+    /// `dragged` out of its slot (dropping an emptied one) and appends it to
+    /// `target`'s slot. Either way `dragged` becomes that slot's active tab.
+    /// Returns whether anything moved. A no-op when `dragged == target` or either
+    /// is not open.
+    pub fn move_to_slot_of(&mut self, dragged: GraphMemberId, target: GraphMemberId) -> bool {
+        if dragged == target || !self.has_tile(dragged) || !self.has_tile(target) {
+            return false;
+        }
+        // Same slot: reorder dragged to just after target.
+        if let Some(slot) = self.slots.iter_mut().find(|s| s.members.contains(&target)) {
+            if slot.members.contains(&dragged) {
+                let from = slot.members.iter().position(|m| *m == dragged).unwrap();
+                slot.members.remove(from);
+                let after = slot.members.iter().position(|m| *m == target).unwrap() + 1;
+                slot.members.insert(after, dragged);
+                slot.active = after;
+                return true;
+            }
+        }
+        // Across slots: detach dragged, append to target's slot, make it active.
+        self.detach(dragged);
+        let ti = self.slots.iter().position(|s| s.members.contains(&target)).unwrap();
+        let slot = &mut self.slots[ti];
+        slot.members.push(dragged);
+        slot.active = slot.members.len() - 1;
+        true
+    }
+
     /// Collapse every open member into a single tab-stack (stack everything). The
     /// first member's tab stays active. A no-op below two members.
     pub fn stack_all(&mut self) {
@@ -337,5 +367,25 @@ mod tests {
         assert_eq!(wb.slot_count(), 1, "the slot survives with one tab");
         assert!(wb.close_tile(m(2)), "closing the last tab");
         assert_eq!(wb.slot_count(), 0, "the emptied slot is removed");
+    }
+
+    #[test]
+    fn move_to_slot_of_moves_across_and_reorders_within() {
+        let mut wb = Workbench::new();
+        wb.open_split(&[m(1), m(2), m(3)]); // three single slots
+        // Drag m(1) onto m(3)'s slot: m(1) leaves its (now empty, dropped) slot.
+        assert!(wb.move_to_slot_of(m(1), m(3)));
+        assert_eq!(wb.slot_count(), 2, "m(1)'s slot emptied + dropped");
+        assert_eq!(wb.tile_count(), 3, "no tab lost");
+        let stack = wb.slot_views().find(|s| s.members.contains(&m(1))).unwrap();
+        assert_eq!(stack.members, &[m(3), m(1)], "m(1) appended to m(3)'s slot");
+        assert_eq!(stack.members[stack.active], m(1), "the dragged tab is active");
+        // Reorder within the stack: drag m(3) after m(1).
+        assert!(wb.move_to_slot_of(m(3), m(1)));
+        let stack = wb.slot_views().find(|s| s.members.contains(&m(3))).unwrap();
+        assert_eq!(stack.members, &[m(1), m(3)], "m(3) reordered to after m(1)");
+        // No-ops: self-drop, or an unknown member.
+        assert!(!wb.move_to_slot_of(m(1), m(1)));
+        assert!(!wb.move_to_slot_of(m(99), m(1)));
     }
 }

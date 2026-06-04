@@ -196,6 +196,10 @@ struct App {
     /// The location last pushed into the omnibar by focus-follow, so it only updates
     /// when the focused tile / node actually changes (not every frame).
     shown_location: Option<String>,
+    /// An in-progress tab drag in the tiled view: the pressed tab's member + the
+    /// press position. Resolved on release — a move when dragged past the slop, else
+    /// it was a plain click (the tab already activated on press).
+    tab_drag: Option<(GraphMemberId, (f32, f32))>,
     width: u32,
     height: u32,
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
@@ -324,6 +328,7 @@ impl App {
             last_left_release: None,
             focused_tile: None,
             shown_location: None,
+            tab_drag: None,
             width: 1024,
             height: 600,
             workbench: Workbench::new(),
@@ -902,6 +907,22 @@ impl App {
                         self.request_redraw();
                     }
                 }
+                // Resolve a tab drag (tiled view): if the press moved past the slop
+                // and released over another tile, move the dragged tab into that
+                // slot (reorder within / move across). A release in place was a plain
+                // click — the tab already activated on press, so nothing more to do.
+                if button == MouseButton::Left {
+                    if let Some((member, (px, py))) = self.tab_drag.take() {
+                        if (x - px).hypot(y - py) > 6.0 {
+                            if let Some(target) = self.workbench_member_at(x, y) {
+                                if self.workbench.move_to_slot_of(member, target) {
+                                    self.focused_tile = Some(member);
+                                    self.request_redraw();
+                                }
+                            }
+                        }
+                    }
+                }
                 // A double-click on a node (in Cartography) opens the tiled workbench
                 // from it: the first release selected it, so the working set is ready.
                 if button == MouseButton::Left && !self.workbench.is_tiled() {
@@ -957,9 +978,25 @@ impl App {
         };
         if let Some(node) = hit {
             self.workbench_runner.dispatch_click(node, PointerClick::at((x, y - th)));
+            // A tab activated → remember it as a drag candidate (resolved on
+            // release: a move when dragged onto another slot, else a plain click).
+            if let Some(WorkbenchAction::Activate(member)) = self.workbench_runner.state().pending {
+                self.tab_drag = Some((member, (x, y)));
+            }
             self.drain_workbench_action();
             self.request_redraw();
         }
+    }
+
+    /// The member of the tile under window `(x, y)` in the tiled view — read from
+    /// the `data-member` of the content placeholder there (the slot's drop target).
+    fn workbench_member_at(&mut self, x: f32, y: f32) -> Option<GraphMemberId> {
+        let th = self.toolbar_height() as f32;
+        let content_h = self.height.saturating_sub(self.toolbar_height()).max(1);
+        let offsets = ScrollOffsets::<NodeId>::default();
+        let dom = self.workbench_dom.borrow();
+        let node = hit_test_node(&dom, WORKBENCH_SHEET, self.width, content_h, x, y - th, &offsets)?;
+        member_attr(&dom, node)
     }
 
     /// Apply a pending workbench action the workbench root captured: switch the
