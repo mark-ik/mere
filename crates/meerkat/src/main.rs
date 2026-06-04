@@ -454,19 +454,31 @@ impl App {
         // off the UI thread only when its document or size changed.
         let mut cards: Vec<(GraphMemberId, [f32; 4], (u32, u32))> = Vec::new();
         if self.workbench.is_tiled() {
-            // Read each content placeholder's laid-out rect + member straight out of
-            // the workbench DOM (taffy laid it out above), then drive that tile's
-            // actor and queue it to composite at that rect (window coords add
-            // `toolbar_h`). The collect releases the DOM borrow before we mutate self.
+            // Read each content placeholder's laid-out rect + member out of the
+            // workbench DOM (taffy laid it out above), then drive that tile's actor
+            // and queue it to composite at that rect (window coords add `toolbar_h`).
+            // taffy layouts are *parent-relative*, so sum the workbench > slot >
+            // content chain for an absolute rect — otherwise every slot's content
+            // reports the same slot-local origin and the tiles stack on each other.
+            // The collect releases the DOM borrow before we mutate self.
             let placements: Vec<(GraphMemberId, f32, f32, f32, f32)> = {
                 let dom = self.workbench_dom.borrow();
                 let frags = fragments_from_scripted_dom(&dom, WORKBENCH_SHEET, w, content_h);
-                all_with_class(&dom, dom.document(), "wb-content")
+                let root = dom.document();
+                let (wx, wy) = first_with_class(&dom, root, "workbench")
+                    .and_then(|n| frags.rect_of(n))
+                    .map(|l| (l.location.x, l.location.y))
+                    .unwrap_or((0.0, 0.0));
+                all_with_class(&dom, root, "wb-slot")
                     .into_iter()
-                    .filter_map(|node| {
-                        let member = member_attr(&dom, node)?;
-                        let r = frags.rect_of(node)?;
-                        Some((member, r.location.x, r.location.y, r.size.width, r.size.height))
+                    .filter_map(|slot| {
+                        let sl = frags.rect_of(slot)?;
+                        let content = first_with_class(&dom, slot, "wb-content")?;
+                        let member = member_attr(&dom, content)?;
+                        let cl = frags.rect_of(content)?;
+                        let x = wx + sl.location.x + cl.location.x;
+                        let y = wy + sl.location.y + cl.location.y;
+                        Some((member, x, y, cl.size.width, cl.size.height))
                     })
                     .collect()
             };
