@@ -80,10 +80,10 @@ pub mod orrery;
 /// output of a nematic engine).
 pub mod document_scene;
 
-/// Portable workbench / frame model and selectors. Defines pane bindings,
-/// frame arrangement snapshots, and the projection from arrangements into
-/// hosted surface placements. Independent of which canvas kind sits in any
-/// given pane.
+/// The tiled-workbench model: slots of tab-stacks over a forme [`forme::Arrangement`],
+/// the active tab per stack, and the projection mode. platen's canonical tiling state
+/// (it replaces the legacy `FrameState` / `PaneBinding` frame model), projected to
+/// side-by-side placed slots via [`tree_projection`] + [`layout`].
 pub mod workbench;
 
 /// Tree projection — compiles a forme [`forme::Arrangement`] into a
@@ -111,14 +111,7 @@ pub use cartography_scene::{
 pub use document_scene::build_document_scene;
 pub use layout::{LaidOutPlan, LaidOutSlot, LayoutConfig, layout_plan};
 pub use tree_projection::{PlanSlot, ProjectionKind, TilePlan, WorkbenchPlan, project_tree};
-pub use workbench::{
-    ArrangementContainer, ArrangementMember, ArrangementSnapshot, FrameId, FrameState, PaneBinding,
-    ProjectedPane, TileSlot, WorkbenchProjection, assign_frame_pane, assign_view_and_frame_pane,
-    clear_frame_pane, project_active_workbench, project_frame, remove_pane_binding,
-    remove_view_and_frame_pane, select_active_frame, select_active_root_view,
-    set_binding_surface_host, set_frame_root_view, set_view_and_frame_surface_host, slot_for_index,
-    snapshot_active_arrangement, snapshot_frame_arrangement, upsert_pane_binding,
-};
+pub use workbench::{PlacedSlot, PlacedTab, SlotView, Workbench};
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

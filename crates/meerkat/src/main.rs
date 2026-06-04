@@ -38,7 +38,7 @@ use layout_dom_api::LayoutDom;
 use forme::GraphMemberId;
 use kernel::geometry::PortableSize;
 use meerkat::command::Command;
-use meerkat::workbench::Workbench;
+use platen::Workbench;
 use meerkat::{
     chrome_view, submit_omnibar, Chrome, ChromeLogic, ChromeView, ContextAction, ContextItem,
     TileAction, TileStrip, TileTab,
