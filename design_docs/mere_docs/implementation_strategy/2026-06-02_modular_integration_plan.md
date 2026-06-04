@@ -455,3 +455,48 @@ consumer appears.
   - **View-intent persistence is complete**: graph (S3.1) + camera (S3.2a) + focus
     (S3.2b) all survive restart. *Remaining S3.2c*: persona / manifest threading for
     multi-session / multi-window, and the eidetic content store (no re-fetch on reload).
+- **2026-06-03 — S3.2c (content store) + S4 + P4 shipped.** A durable content store
+  and the tiled workbench landed; the field was clear (sibling on docs / research).
+  - *S3.2c content store* (`45b448d` primitive over `eidetic::Store`; wired `a4253f0`):
+    fetched pages + subresources persist through an eidetic fjall store under the
+    session dir, so a reload shows them without re-fetching. Persona / manifest
+    threading held (overlaps the sibling's active tessera persona work).
+  - *Dark mode* (`c0df60e`): orrery + chrome + synthesized / nematic cards go dark;
+    fetched HTML stays faithful (light, as authored). A light variant + toggle is a
+    future setting (the named seams are isolated).
+  - *S4 workbench composition* (`84c7771`): `meerkat::workbench::Workbench` — holds
+    the open tiles + projection mode, builds a forme `Arrangement`, projects it with
+    platen `project_tree` → `layout_plan` (morphorm rects). The discovery: forme +
+    platen already had the portable pipeline, tested. The orrery (Cartography) and
+    the tiled workbench (Tree) are two projections of one arrangement.
+  - *P4 per-tile actors* (`6f82bce`, lifecycle `6c3b9a2`, perf `ffd3d14`): Ctrl+T
+    tiles the workbench, each tile its own `spawn_content` actor (the constellation
+    goes plural); the hidden orrery is skipped while tiled (perf).
+- **2026-06-04 — The by-hand-tiles UX arc (node activation, curation, settings, tile chrome).**
+  - *Activation lifecycle* (`10618a8`): extracted `meerkat::constellation` — one pool
+    of active nodes; the focused card and the tiles share it (dormant ↔ active ↔
+    background), reconciled to the needed set each frame. Then **flipped to keep-warm
+    tabs** (`e48e0f2`): an opened node stays a warm tab (actor alive) until closed or
+    LRU-evicted over the cap (default 12; `Constellation::set_cap`). Background shifts
+    from "stay alive" (now every tab's default) to "keep working + exempt eviction".
+  - *Gestures + palette* (`9f5af2c`, `e107231`): delete-node, background-keep, and
+    toggle-workbench surfaced as command-palette verbs via a pending-host-intent
+    pattern (the chrome records, the host drains).
+  - *Edge visibility* (`37709fe`): platen gained a relation-level edge-visibility
+    predicate (`Fn(&RelationView) -> bool`, before the pair-collapse); the orrery
+    hides / shows selected edges (display-only; relations persist), surfaced as
+    palette verbs. Per-family toggles + `hidden_relations` persistence are follow-ons.
+  - *Node colors* (`f2caa07`, `db178d8`): green = open (a live actor shows Ready
+    content), red = closed (Ready content, no actor), blue = idle (local / settings /
+    synthesized / blank / errored). Pushed from the host's actor pool + content cache.
+  - *Selection-driven open* (`364fd4a`): single-select opens the active tabs in the
+    node's graphlet (orrery BFS over the connected component); multi-select opens the
+    selection in splits.
+  - *Settings overlay* (`e1b5dd8`, fixes `f7c5dc4`): a chrome overlay (xilem-serval,
+    same shape as the palette) with the active-tab cap control; a workbench toggle
+    button next to the omnibar; settings close on × / Escape (backdrop-close dropped).
+  - *Tile chrome* (`5768c62`): each tile gets a header strip (label + pin + close),
+    abs-positioned chrome interactive through the existing click path. Close reaps the
+    tab; pin toggles background. Content renders below the strip.
+  - *Remaining*: tab-stacks (composable tiles / tab-strip switching), the right-click
+    context menu (tile-group vs splits), settings persistence, then the S5–S7 tail.
