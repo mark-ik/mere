@@ -155,20 +155,18 @@ struct App {
     /// Whether the orrery has been centered on its content band yet (done once,
     /// the first render after the toolbar height is known).
     centered: bool,
-    /// The fetch actor's command handle and the single channel its outcomes arrive
-    /// on (page documents and subresources, one `FetchUpdate` stream).
+    /// The fetch actor's command handle (the kernel commands it over this; its
+    /// outcomes arrive on `inbox.fetch`).
     fetch_handle: armillary::ActorHandle<fetch::FetchCommand>,
-    fetch_rx: Receiver<fetch::FetchUpdate>,
     /// The constellation: the pool of active nodes (their content actors). The
     /// focused card (Cartography) and the workbench tiles (Tree) both draw their
     /// scenes from here — one activation lifecycle, not two. Reconciled to the
     /// needed set each frame; backgrounded nodes outlive the view.
     constellation: Constellation,
     /// The p2p sync subsystem (S5.0 / S5.1): owns the transport + the tessera lane
-    /// on its own runtime. Status changes arrive on `sync_rx` and fold into the
+    /// on its own runtime. Status changes arrive on `inbox.sync` and fold into the
     /// chrome sync chip; the "connect to peer" verb drives it via `sync.connect`.
     sync: sync::SyncHost,
-    sync_rx: Receiver<sync::SyncUpdate>,
     /// Per-URL fetched content state, keyed by the node's URL (URL identity).
     content: HashMap<String, fetch::ContentState>,
     /// The session's data directory (`<data_dir>/mere`): holds `graph.json` and
@@ -225,6 +223,24 @@ struct App {
     /// The active-tab cap last written to the settings sidecar. Guards the persist
     /// path so an unchanged value isn't re-written on every chrome click.
     saved_tab_cap: usize,
+    /// The kernel inbox: the typed receivers the I/O actors deliver on, behind the
+    /// one winit wake. `user_event` is the single documented place that reads them.
+    inbox: KernelInbox,
+    /// Marks this struct as the kernel-thread context: `!Send` by construction
+    /// (armillary's typed boundary), so kernel authority cannot be moved onto an
+    /// actor thread — the attempt is a compile error, not a review catch.
+    _kernel: armillary::KernelThread,
+}
+
+/// The host kernel's inbox: the typed receivers each I/O actor delivers updates on,
+/// all woken by the one bare `EventLoopProxy<()>`. Grouping them names the seam (the
+/// kernel/actor boundary's inbound half) without collapsing the per-subsystem
+/// channels into one mega enum, which would muddy ownership. The constellation's
+/// per-tile content channels are drained separately (`Constellation::drain`); this
+/// holds only the I/O streams.
+struct KernelInbox {
+    fetch: Receiver<fetch::FetchUpdate>,
+    sync: Receiver<sync::SyncUpdate>,
 }
 
 impl App {
@@ -320,10 +336,8 @@ impl App {
             content_location,
             centered: restored_camera.is_some(),
             fetch_handle,
-            fetch_rx,
             constellation,
             sync,
-            sync_rx,
             content: HashMap::new(),
             session_dir,
             store,
@@ -349,6 +363,8 @@ impl App {
             ),
             context_set: Vec::new(),
             saved_tab_cap: saved_settings.tab_cap,
+            inbox: KernelInbox { fetch: fetch_rx, sync: sync_rx },
+            _kernel: armillary::KernelThread::new(),
         }
     }
 
@@ -1397,10 +1413,13 @@ impl ApplicationHandler for App {
     /// Drain completed fetches (delivery model 2): a worker woke us via the proxy;
     /// fold each outcome into the content cache and re-render the card.
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+        // The kernel inbox dispatch: the one documented place that applies what the
+        // actors tell the kernel. Each typed stream is drained and folded into
+        // canonical state here on the kernel thread; the actors never touch it.
         let mut card_changed = false;
         let mut graph_changed = false;
         // One `FetchUpdate` stream carries both page documents and subresources.
-        while let Ok(update) = self.fetch_rx.try_recv() {
+        while let Ok(update) = self.inbox.fetch.try_recv() {
             match update {
                 fetch::FetchUpdate::Page(outcome) => {
                     let state = match outcome.result {
@@ -1459,7 +1478,7 @@ impl ApplicationHandler for App {
         // P2P sync status (S5.0): the same wake also carries lane-status changes.
         // Fold the latest into the chrome chip (the host owns the mutation).
         let mut latest_sync = None;
-        while let Ok(update) = self.sync_rx.try_recv() {
+        while let Ok(update) = self.inbox.sync.try_recv() {
             latest_sync = Some(sync::to_indicator(&update.status, sync::LANE_LABEL));
         }
         if let Some(indicator) = latest_sync {
