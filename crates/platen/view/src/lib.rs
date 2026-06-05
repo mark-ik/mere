@@ -44,6 +44,8 @@ pub const WORKBENCH_SHEET: &[&str] = &[
     ".wb-slot { display: flex; flex-direction: column; flex-grow: 1; }",
     // Draggable gutter between slots — a fixed-width column the host resizes on.
     ".wb-divider { width: 6px; flex-grow: 0; flex-shrink: 0; background-color: rgb(24, 27, 34); }",
+    // The recovering-tile placeholder label, shown until the respawned actor renders.
+    ".wb-reloading { font-size: 15px; color: rgb(150, 156, 168); padding: 16px; }",
     ".wb-strip { display: flex; height: 28px; background-color: rgb(40, 44, 54); }",
     // The drag drop-target slot's strip lights up (the content area is under the
     // tile's composited texture, so the cue rides the strip).
@@ -78,6 +80,9 @@ pub struct SlotPlan {
     pub pinned: bool,
     /// The slot's share of the row width (flex-grow). Equal (1.0) by default.
     pub weight: f32,
+    /// The active tile is recovering from a crash (respawned, not yet re-rendered),
+    /// so the content placeholder shows a "reloading" label instead of a blank area.
+    pub recovering: bool,
 }
 
 impl SlotPlan {
@@ -128,6 +133,7 @@ impl WorkbenchScene {
         graph: &Graph,
         viewport: (f32, f32),
         is_pinned: impl Fn(GraphMemberId) -> bool,
+        is_recovering: impl Fn(GraphMemberId) -> bool,
     ) -> Self {
         let slots = workbench
             .slot_views()
@@ -148,6 +154,7 @@ impl WorkbenchScene {
                     active: slot.active,
                     pinned: active_member.copied().is_some_and(&is_pinned),
                     weight: slot.weight,
+                    recovering: active_member.copied().is_some_and(&is_recovering),
                 }
             })
             .collect();
@@ -259,9 +266,16 @@ fn slot_column(slot: &SlotPlan, targeted: bool) -> WorkbenchTreeView {
         el::<_, WorkbenchScene, ()>("div", (tabs_row, pin, close)).attr("class", strip_class);
 
     // The content placeholder, tagged with the active member so the host can find
-    // its laid-out rect and composite that tile's actor texture there.
+    // its laid-out rect and composite that tile's actor texture there. While the
+    // tile is recovering from a crash it carries a "reloading" label, shown through
+    // until the respawned actor delivers a scene (whose texture then covers it).
     let member_attr = active_member.map(|m| m.to_string()).unwrap_or_default();
-    let content = el::<_, WorkbenchScene, ()>("div", ())
+    let label: WorkbenchTreeView = if slot.recovering {
+        Box::new(el::<_, WorkbenchScene, ()>("div", "Reloading\u{2026}").attr("class", "wb-reloading"))
+    } else {
+        Box::new(el::<_, WorkbenchScene, ()>("div", ()))
+    };
+    let content = el::<_, WorkbenchScene, ()>("div", label)
         .attr("class", "wb-content")
         .attr("data-member", member_attr);
 
@@ -324,8 +338,8 @@ mod tests {
     #[test]
     fn two_split_slots_render_a_column_strip_and_content_each() {
         let r = runner(scene(vec![
-            SlotPlan { tabs: vec![tab(1, "https://a.example")], active: 0, pinned: false, weight: 1.0 },
-            SlotPlan { tabs: vec![tab(2, "https://b.example")], active: 0, pinned: false, weight: 1.0 },
+            SlotPlan { tabs: vec![tab(1, "https://a.example")], active: 0, pinned: false, weight: 1.0, recovering: false },
+            SlotPlan { tabs: vec![tab(2, "https://b.example")], active: 0, pinned: false, weight: 1.0, recovering: false },
         ]));
         let dom = r.dom();
         let dom = dom.borrow();
@@ -344,6 +358,7 @@ mod tests {
             active: 1,
             pinned: false,
             weight: 1.0,
+            recovering: false,
         }]));
         let dom = r.dom();
         let dom = dom.borrow();
@@ -372,7 +387,7 @@ mod tests {
         let mut graph = Graph::new();
         graph.add_node_with_id(Uuid::from_u128(1), "https://x.example".to_string(), PortablePoint::new(0.0, 0.0));
         graph.add_node_with_id(Uuid::from_u128(2), "https://y.example".to_string(), PortablePoint::new(0.0, 0.0));
-        let scene = WorkbenchScene::from_workbench(&wb, &graph, (800.0, 600.0), |_| false);
+        let scene = WorkbenchScene::from_workbench(&wb, &graph, (800.0, 600.0), |_| false, |_| false);
         assert_eq!(scene.slots.len(), 1, "grouped into one slot");
         assert_eq!(scene.slots[0].tabs.len(), 2);
         assert_eq!(scene.slots[0].tabs[0].label, "x.example", "scheme trimmed");
@@ -380,7 +395,8 @@ mod tests {
         // A member missing from the graph resolves to a placeholder label.
         let mut wb2 = Workbench::new();
         wb2.open_tile(Uuid::from_u128(9));
-        let scene2 = WorkbenchScene::from_workbench(&wb2, &Graph::new(), (800.0, 600.0), |_| false);
+        let scene2 =
+            WorkbenchScene::from_workbench(&wb2, &Graph::new(), (800.0, 600.0), |_| false, |_| false);
         assert_eq!(scene2.slots[0].tabs[0].label, "(gone)");
     }
 
@@ -388,8 +404,8 @@ mod tests {
     #[test]
     fn drag_target_highlights_its_slot_strip() {
         let mut s = scene(vec![
-            SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false, weight: 1.0 },
-            SlotPlan { tabs: vec![tab(2, "b")], active: 0, pinned: false, weight: 1.0 },
+            SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false, weight: 1.0, recovering: false },
+            SlotPlan { tabs: vec![tab(2, "b")], active: 0, pinned: false, weight: 1.0, recovering: false },
         ]);
         s.drag_target = Some(Uuid::from_u128(2));
         let r = runner(s);
@@ -400,6 +416,27 @@ mod tests {
         assert_eq!(count_class(&dom, root, "wb-strip"), 1, "the other slot's plain strip");
     }
 
+    /// A recovering tile (crashed, respawned, not yet re-rendered) shows the
+    /// reloading placeholder label in its content area.
+    #[test]
+    fn recovering_slot_shows_a_reloading_label() {
+        let mut wb = Workbench::new();
+        wb.open_tile(Uuid::from_u128(1));
+        let recovering = Uuid::from_u128(1);
+        let scene = WorkbenchScene::from_workbench(
+            &wb,
+            &Graph::new(),
+            (800.0, 600.0),
+            |_| false,
+            |m| m == recovering,
+        );
+        assert!(scene.slots[0].recovering, "the active member is recovering");
+        let r = runner(scene);
+        let dom = r.dom();
+        let dom = dom.borrow();
+        assert_eq!(count_class(&dom, r.root(), "wb-reloading"), 1, "the reloading label renders");
+    }
+
     /// The pin predicate marks a slot pinned when its active member is pinned, and
     /// the pin button captures a TogglePin.
     #[test]
@@ -407,7 +444,8 @@ mod tests {
         let mut wb = Workbench::new();
         wb.open_tile(Uuid::from_u128(1));
         let pinned = Uuid::from_u128(1);
-        let scene = WorkbenchScene::from_workbench(&wb, &Graph::new(), (800.0, 600.0), |m| m == pinned);
+        let scene =
+            WorkbenchScene::from_workbench(&wb, &Graph::new(), (800.0, 600.0), |m| m == pinned, |_| false);
         assert!(scene.slots[0].pinned, "the active member is pinned");
         let mut s = scene;
         s.toggle_pin(Uuid::from_u128(1));
@@ -416,7 +454,7 @@ mod tests {
 
     #[test]
     fn action_methods_capture_pending() {
-        let mut s = scene(vec![SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false, weight: 1.0 }]);
+        let mut s = scene(vec![SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false, weight: 1.0, recovering: false }]);
         s.activate(Uuid::from_u128(1));
         assert_eq!(s.pending, Some(WorkbenchAction::Activate(Uuid::from_u128(1))));
         assert_eq!(s.take_pending(), Some(WorkbenchAction::Activate(Uuid::from_u128(1))));

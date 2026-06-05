@@ -461,6 +461,7 @@ impl App {
                 self.orrery.graph(),
                 (w as f32, content_h as f32),
                 |m| self.constellation.is_background(m),
+                |m| self.constellation.is_recovering(m),
             );
             // Highlight the slot under the pointer while a tab is being dragged
             // (uses last frame's tile rects; the slots don't move, so the lag is

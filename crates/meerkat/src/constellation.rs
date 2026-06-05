@@ -223,6 +223,14 @@ impl Constellation {
         self.active.get(&member).map_or(0, |a| a.scene_version)
     }
 
+    /// Whether `member` is recovering from a crash: its actor was respawned and has
+    /// not delivered a fresh scene yet. The host shows a placeholder for it (a tab
+    /// that crashed before ever rendering would otherwise be blank). A tab that
+    /// crashed *after* rendering keeps its last scene and reads as not-recovering.
+    pub fn is_recovering(&self, member: GraphMemberId) -> bool {
+        self.active.get(&member).is_some_and(|a| a.respawns > 0 && a.scene.is_none())
+    }
+
     /// Deactivate `member` now — its actor winds down on drop. For when the node
     /// itself is gone (deleted), so `reconcile` would not re-spawn it anyway.
     pub fn reap(&mut self, member: GraphMemberId) {
