@@ -444,37 +444,37 @@ arc, but its self-healing does not). Per phase, with evidence:
   meerkat's `App`, and the I/O receivers are grouped behind a named `KernelInbox`
   (fetch + sync) with `user_event` documented as the single dispatch. Per-subsystem
   channels kept; no mega enum.
-- **P1 harness — substantially done.** `armillary::{spawn, ActorHandle, Emitter,
-  Wake}` + `Generations` (`actor.rs`, `message.rs`). `fetch` (`spawn_fetcher`) and
-  the content actor (`spawn_content`) run through it. The exception is `sync`: it
-  owns its own tokio runtime (`SyncHost`), not expressed through armillary.
-  Remaining: route sync through the harness, or accept it as a tokio-shaped
-  subsystem; the planned "third trivial actor" is effectively the content actor.
+- **P1 harness — done** (sync landed 2026-06-04, `1131de2`). `armillary::{spawn,
+  spawn_on, ActorHandle, Emitter, Wake, Pool}` + `Generations`. All three I/O actors
+  run through it: `fetch` (`spawn_fetcher`), the content actor (`spawn_content`, now
+  pooled), and `sync` (`spawn_sync`) — sync's run closure builds its tokio runtime on
+  the actor thread, so armillary stays runtime-free / wasm-clean while sync joins the
+  typed boundary. (The "third trivial actor" is effectively the content actor.)
 - **P2 content off-thread + producer/applier split — done.** `spawn_content` runs
   the cascade off the UI thread and ships generation-tagged `ContentUpdate::Scene`;
   the constellation accepts the latest. `ingest::harvest_contributions` is the pure
   producer, split from `harvest` (the kernel-side apply). Cascade-off-thread is
   guarded by serval's `cascade_is_deterministic_off_thread_and_concurrent` test.
 - **P3 Nova — not started.** Content is `StaticDocument`; no JS engine yet.
-- **P4 N actors + lifecycle — mostly done** (self-healing landed 2026-06-04,
-  `a3d6f8e`). `meerkat::Constellation` is the plural, per-tile actor pool: spawn /
-  reap / LRU eviction over a cap / keep-warm / background. **Self-healing now works:**
-  `drain` detects a dead actor's disconnected channel and respawns it (fresh thread,
-  `shown` cleared so the next `drive` re-`Show`s the page — the kernel-owned spec is
-  the tab's url + size), keeping the last scene until it recovers, capped at
-  `MAX_RESPAWNS` to stop a storm. *Remaining:* a labeled broken-tile placeholder for
-  a tab that died before ever rendering (today it shows the blank content bg), and
-  content-thread pooling for the leaked-Stylo-thread-local caveat.
+- **P4 N actors + lifecycle — done** (2026-06-04). `meerkat::Constellation` is the
+  plural, per-tile actor pool: spawn / reap / LRU eviction over a cap / keep-warm /
+  background. **Self-healing** (`a3d6f8e`): `drain` detects a dead actor's
+  disconnected channel and respawns it (fresh worker, `shown` cleared so the next
+  `drive` re-`Show`s the page), keeping the last scene until it recovers, capped at
+  `MAX_RESPAWNS`. **Broken-tile placeholder** (`120f8e3`): a tab that died before
+  rendering shows a "Reloading…" label (`is_recovering`). **Thread pooling**
+  (`251e205`): content actors run on `armillary::Pool`, a growable reusing worker
+  pool, so OS threads (and the leaked Stylo thread-local) are bounded by peak
+  concurrent tabs, not total opened.
 - **P5 — descoped** (as written).
 - **P6 compute actors — not started.**
 
-P0 and P4's self-healing are now done (2026-06-04), as is the compositor perf fix
-(a per-tile texture cache keyed by the scene generation; not a phase, a kernel
-concern). The remaining gaps are: **P3** (a JS engine in the content actor — the big
-one); P4 polish (a labeled broken-tile placeholder + content-thread pooling for the
-Stylo-leak caveat); **P1**'s `sync`-through-armillary (deferred — armillary's actor
-loop is sync, sync needs an async runtime, so this waits on an async-actor shape);
-and **P6** compute (untouched).
+P0, P1, P2, and P4 are now done (2026-06-04), as is the compositor perf fix (a
+per-tile texture cache keyed by the scene generation; not a phase, a kernel
+concern). **The only phases left are the two big features: P3** (a JS engine in the
+content actor) and **P6** (compute / mesh actors). The actor spine — typed boundary,
+harness, all three I/O actors, off-thread content, the plural self-healing pooled
+constellation — is complete.
 
 ## Phases (done-conditions, not dates)
 
@@ -715,3 +715,17 @@ what is most likely to break, the mitigation, and a pointer.
   thread, clearing `shown` to replay the page, capped at `MAX_RESPAWNS`; the last scene
   holds until recovery. Remaining: P3 (JS engine), P4 polish (labeled placeholder +
   thread pooling), sync-through-armillary (needs an async-actor shape), P6.
+- **2026-06-04 — P4 polish + P1 closed; the actor spine is complete.** **Broken-tile
+  placeholder** (`120f8e3`): `Constellation::is_recovering` drives a "Reloading…"
+  label (platen-view `SlotPlan.recovering`) for a tab that died before rendering.
+  **Thread pooling** (`251e205`): `armillary::Pool` — a growable, reusing worker pool
+  (`Mutex<queue + idle>` + `Condvar`, the grow decision under the lock so no job is
+  stranded); content actors run on it via `spawn_on`, bounding OS threads and the
+  leaked Stylo thread-local to peak concurrent tabs. The fetcher stays a plain
+  thread (one long-lived actor). **sync through armillary** (`1131de2`): the prior
+  "needs an async-actor shape" worry was wrong — armillary's `run` closure can build
+  the tokio runtime on the actor thread, so `sync::spawn_sync` makes sync an actor
+  (poll task emits via the `Emitter`; `connect` is `SyncCommand::Connect`) with
+  armillary still tokio-free. So **P0-P2 + P4** and **P1** are all done; only P3 and
+  P6 (the two big features) remain. Whole workspace builds; armillary 7, meerkat
+  43+23 green.
