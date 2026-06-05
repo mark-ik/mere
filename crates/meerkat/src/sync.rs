@@ -24,18 +24,16 @@
 //! is in-memory (S5.2 moves it under the session dir), the moot is a fixed demo
 //! id (real moot selection is S5.3).
 
-use std::sync::mpsc::{channel, Receiver};
-use std::sync::Arc;
+use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
+use armillary::{spawn, ActorHandle, Emitter, Wake};
 use identity::{IdentityProvider, InMemoryProvider};
 use moothold::tessera::{
     to_operation, ChainRoot, CommitmentId, Scope, SyncStatus, SyncedMoot, TesseraEvent,
     TesseraStore,
 };
-use tokio::runtime::Runtime;
 use transport::{sync_overlay_topic, P2pandaTransport};
-use winit::event_loop::EventLoopProxy;
 
 use meerkat::SyncIndicator;
 
@@ -61,41 +59,38 @@ pub fn to_indicator(status: &SyncStatus, label: &str) -> SyncIndicator {
     }
 }
 
-/// Owns the sync runtime + the joined lane. Construction binds the transport and
-/// joins the moot (once, at startup); a background poller then pushes status
-/// changes to the UI. If setup fails, p2p is simply off (no updates, the chip
-/// stays `p2p off`, [`connect`](Self::connect) errors) — networking is never
-/// fatal to the shell.
-pub struct SyncHost {
-    /// The sync runtime: holds the lane + poller tasks, and runs the brief
-    /// transport calls of [`connect`](Self::connect) to completion (called from
-    /// the UI thread, which is never a runtime worker).
-    runtime: Runtime,
-    /// The moot this lane syncs (the LogSync topic; its overlay is the
-    /// [`connect`](Self::connect) target).
-    moot_id: [u8; 32],
-    /// The bound transport, kept for `connect` / `my_ticket`. `None` if setup
-    /// failed (p2p off).
-    transport: Option<P2pandaTransport>,
-    /// The joined lane, held so its drain task lives. `None` if setup failed.
-    _moot: Option<Arc<SyncedMoot>>,
+/// The sync actor's outbound commands. Today just "connect to a peer by ticket"
+/// (the S5.1 verb); more sync verbs join here as their wiring lands.
+pub enum SyncCommand {
+    /// Dial a peer from its ticket string so the LogSync overlay forms and the two
+    /// converge.
+    Connect(String),
 }
 
-impl SyncHost {
-    /// Build the sync subsystem: a runtime, the transport (random identity), and
-    /// the tessera lane (seeded with a starter log), plus a status poller that
-    /// wakes the loop on change. Returns the host and the receiver the UI drains
-    /// in `user_event`.
-    pub fn new(proxy: EventLoopProxy<()>, moot_id: [u8; 32]) -> (Self, Receiver<SyncUpdate>) {
-        let (tx, rx) = channel();
+/// Spawn the sync subsystem as an [`armillary`] I/O actor. Its `run` closure builds
+/// the tokio runtime *on the actor thread* (so armillary stays runtime-free), binds
+/// one `P2pandaTransport` (random per-launch identity), joins the tessera moot's
+/// `SyncedMoot` (seeded with a starter log), and:
+///
+/// - a background poll task emits a [`SyncUpdate`] (via the actor's `Emitter`, which
+///   wakes the kernel) whenever the lane's `SyncStatus` changes;
+/// - the command loop runs each [`SyncCommand`] to completion on the runtime.
+///
+/// If setup fails, p2p is simply off (no updates, the chip stays `p2p off`, a
+/// `Connect` just logs the failure) — networking is never fatal to the shell.
+/// Returns the kernel's command handle plus the receiver it drains in `user_event`.
+pub fn spawn_sync(
+    wake: Wake,
+    moot_id: [u8; 32],
+) -> (ActorHandle<SyncCommand>, Receiver<SyncUpdate>) {
+    spawn(wake, move |commands, out: Emitter<SyncUpdate>| {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .expect("build the sync runtime");
 
-        // Bind the transport + join the moot once at startup (both async — iroh
-        // endpoint + LogSync session). A random identity makes each launched
-        // instance a distinct peer. The lane's own drain task runs on this runtime.
+        // Bind the transport + join the moot once at startup (both async). A random
+        // identity makes each launched instance a distinct peer.
         let setup: Result<(P2pandaTransport, SyncedMoot), String> = runtime.block_on(async {
             let provider = InMemoryProvider::random();
             let keypair = provider.master_keypair().clone();
@@ -118,73 +113,67 @@ impl SyncHost {
             Ok((transport, moot))
         });
 
-        let host = match setup {
+        let transport = match setup {
             Ok((transport, moot)) => {
-                let moot = Arc::new(moot);
-                // Log this node's dialable ticket so it can be shared with a peer
-                // (the S5.1 "connect to peer" exchange).
+                // Log this node's dialable ticket so it can be shared with a peer.
                 if let Ok(ticket) = runtime.block_on(transport.ticket()) {
                     tracing::info!(%ticket, "p2p sync up: joined tessera demo moot — share this ticket with a peer");
                 }
-                let poll_moot = Arc::clone(&moot);
-                let poll_tx = tx.clone();
-                let poll_proxy = proxy.clone();
+                // The status poll task emits each change through the actor's Emitter
+                // (which wakes the kernel), running on the runtime's workers in the
+                // background while the command loop below blocks on `recv`.
+                // The task owns an Arc clone, so the moot (and its own LogSync drain
+                // task) stays alive as long as this poll loop runs.
+                let poll_out = out.clone();
                 runtime.spawn(async move {
                     let mut last: Option<SyncStatus> = None;
                     loop {
-                        let status = poll_moot.sync_status();
+                        let status = moot.sync_status();
                         if last.as_ref() != Some(&status) {
-                            if poll_tx.send(SyncUpdate { status: status.clone() }).is_err() {
-                                break; // the UI receiver is gone (shutting down)
-                            }
-                            let _ = poll_proxy.send_event(());
+                            poll_out.emit(SyncUpdate { status: status.clone() });
                             last = Some(status);
                         }
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }
                 });
-                SyncHost {
-                    runtime,
-                    moot_id,
-                    transport: Some(transport),
-                    _moot: Some(moot),
-                }
+                Some(transport)
             }
             Err(err) => {
                 tracing::warn!(%err, "p2p sync disabled: transport / moot setup failed");
-                SyncHost {
-                    runtime,
-                    moot_id,
-                    transport: None,
-                    _moot: None,
-                }
+                None
             }
         };
-        (host, rx)
-    }
 
-    /// Connect the lane to a peer from its `ticket` string: register it and tag it
-    /// on this moot's overlay topic so the LogSync overlay forms and the two
-    /// converge. The outbound command of the sync I/O actor (the "connect to
-    /// peer" verb). Brief (it does not wait on convergence); errors if p2p is off
-    /// or the ticket is malformed.
-    pub fn connect(&self, ticket: &str) -> Result<(), String> {
-        let transport = self.transport.as_ref().ok_or("p2p is off")?;
-        let overlay = sync_overlay_topic(self.moot_id);
-        self.runtime.block_on(async {
-            let peer = transport
-                .add_peer_ticket(ticket)
-                .await
-                .map_err(|e| format!("add peer: {e}"))?;
-            transport
-                .set_topics(peer, &[overlay])
-                .await
-                .map_err(|e| format!("set topics: {e}"))?;
-            Ok::<(), String>(())
-        })?;
-        tracing::info!("p2p: connecting to peer (ticket bootstrap)");
-        Ok(())
-    }
+        // The command loop: outbound verbs the kernel routes here, run to completion
+        // on the runtime. Ends when the handle drops (the channel closes), which also
+        // drops the runtime and stops the poll task.
+        let overlay = sync_overlay_topic(moot_id);
+        while let Ok(command) = commands.recv() {
+            match command {
+                SyncCommand::Connect(ticket) => {
+                    let Some(transport) = transport.as_ref() else {
+                        tracing::warn!("connect to peer: p2p is off");
+                        continue;
+                    };
+                    let result = runtime.block_on(async {
+                        let peer = transport
+                            .add_peer_ticket(&ticket)
+                            .await
+                            .map_err(|e| format!("add peer: {e}"))?;
+                        transport
+                            .set_topics(peer, &[overlay])
+                            .await
+                            .map_err(|e| format!("set topics: {e}"))?;
+                        Ok::<(), String>(())
+                    });
+                    match result {
+                        Ok(()) => tracing::info!("p2p: connecting to peer (ticket bootstrap)"),
+                        Err(err) => tracing::warn!(%err, "connect to peer failed"),
+                    }
+                },
+            }
+        }
+    })
 }
 
 /// Author a small `commit -> fulfil -> govern` tessera log for this host's own

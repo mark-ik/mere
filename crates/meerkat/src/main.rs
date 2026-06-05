@@ -163,10 +163,10 @@ struct App {
     /// scenes from here — one activation lifecycle, not two. Reconciled to the
     /// needed set each frame; backgrounded nodes outlive the view.
     constellation: Constellation,
-    /// The p2p sync subsystem (S5.0 / S5.1): owns the transport + the tessera lane
-    /// on its own runtime. Status changes arrive on `inbox.sync` and fold into the
-    /// chrome sync chip; the "connect to peer" verb drives it via `sync.connect`.
-    sync: sync::SyncHost,
+    /// The p2p sync actor's command handle (S5.0 / S5.1). The actor owns the
+    /// transport + tessera lane on its own tokio runtime; status arrives on
+    /// `inbox.sync`, and the "connect to peer" verb is a `SyncCommand` sent here.
+    sync_handle: armillary::ActorHandle<sync::SyncCommand>,
     /// Per-URL fetched content state, keyed by the node's URL (URL identity).
     content: HashMap<String, fetch::ContentState>,
     /// The session's data directory (`<data_dir>/mere`): holds `graph.json` and
@@ -341,10 +341,15 @@ impl App {
         });
         let mut constellation = Constellation::new(content_wake);
         constellation.set_cap(saved_settings.tab_cap);
-        // The p2p sync subsystem: binds the transport + joins the tessera demo
-        // moot on its own runtime, delivering status changes through `proxy` (the
-        // same wake the fetch actor uses). Setup failure disables p2p, not the shell.
-        let (sync, sync_rx) = sync::SyncHost::new(proxy.clone(), sync::DEMO_MOOT);
+        // The p2p sync actor: an armillary actor whose run closure owns a tokio
+        // runtime (built on its thread) that binds the transport + joins the tessera
+        // demo moot, polling status back through the same wake shape as fetch/content.
+        // Setup failure disables p2p, not the shell.
+        let sync_proxy = proxy.clone();
+        let sync_wake: armillary::Wake = Arc::new(move || {
+            let _ = sync_proxy.send_event(());
+        });
+        let (sync_handle, sync_rx) = sync::spawn_sync(sync_wake, sync::DEMO_MOOT);
         Self {
             dom,
             runner,
@@ -353,7 +358,7 @@ impl App {
             centered: restored_camera.is_some(),
             fetch_handle,
             constellation,
-            sync,
+            sync_handle,
             content: HashMap::new(),
             session_dir,
             store,
@@ -1190,10 +1195,9 @@ impl App {
             tracing::warn!("connect to peer: paste the peer's ticket in the address bar first");
             return;
         }
-        match self.sync.connect(&ticket) {
-            Ok(()) => tracing::info!("connect to peer: ticket accepted, overlay forming"),
-            Err(err) => tracing::warn!(%err, "connect to peer failed"),
-        }
+        // Route the verb to the sync actor; it runs the dial on its runtime and logs
+        // the outcome (the actor boundary, so no synchronous result here).
+        self.sync_handle.command(sync::SyncCommand::Connect(ticket));
         self.request_redraw();
     }
 
