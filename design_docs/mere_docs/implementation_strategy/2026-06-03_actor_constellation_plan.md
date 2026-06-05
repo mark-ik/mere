@@ -439,12 +439,11 @@ against the tree, and surfaces the gaps the log leaves implicit (P0 is built but
 yet embedded in the `App`; P4's plural pool exists, arrived via the by-hand-tiles
 arc, but its self-healing does not). Per phase, with evidence:
 
-- **P0 typed boundary — partial.** `armillary::KernelThread` (the `!Send` kernel
-  marker) is built and tested (`boundary.rs`, with a `compile_fail` proof and a
-  zero-size test). *Not yet* embedded in meerkat's `App`, and there is no named
-  `KernelInbox`: the kernel drains raw typed receivers (`fetch_rx`, `sync_rx`, the
-  constellation) directly in `user_event`. Remaining: embed the marker in the kernel
-  context; optionally name the inbox.
+- **P0 typed boundary — done** (2026-06-04, `bf7b9b1`). `armillary::KernelThread`
+  (the `!Send` kernel marker, built + tested in `boundary.rs`) is now embedded in
+  meerkat's `App`, and the I/O receivers are grouped behind a named `KernelInbox`
+  (fetch + sync) with `user_event` documented as the single dispatch. Per-subsystem
+  channels kept; no mega enum.
 - **P1 harness — substantially done.** `armillary::{spawn, ActorHandle, Emitter,
   Wake}` + `Generations` (`actor.rs`, `message.rs`). `fetch` (`spawn_fetcher`) and
   the content actor (`spawn_content`) run through it. The exception is `sync`: it
@@ -457,20 +456,25 @@ arc, but its self-healing does not). Per phase, with evidence:
   producer, split from `harvest` (the kernel-side apply). Cascade-off-thread is
   guarded by serval's `cascade_is_deterministic_off_thread_and_concurrent` test.
 - **P3 Nova — not started.** Content is `StaticDocument`; no JS engine yet.
-- **P4 N actors + lifecycle — partial.** `meerkat::Constellation` is the plural,
-  per-tile actor pool: spawn / reap / LRU eviction over a cap / keep-warm / the
-  background-keep flag. *Remaining:* self-healing — `ActorSpec`-driven respawn, the
-  broken-tile placeholder on a content-actor panic, and content-thread pooling (the
-  leaked-Stylo-thread-local caveat).
+- **P4 N actors + lifecycle — mostly done** (self-healing landed 2026-06-04,
+  `a3d6f8e`). `meerkat::Constellation` is the plural, per-tile actor pool: spawn /
+  reap / LRU eviction over a cap / keep-warm / background. **Self-healing now works:**
+  `drain` detects a dead actor's disconnected channel and respawns it (fresh thread,
+  `shown` cleared so the next `drive` re-`Show`s the page — the kernel-owned spec is
+  the tab's url + size), keeping the last scene until it recovers, capped at
+  `MAX_RESPAWNS` to stop a storm. *Remaining:* a labeled broken-tile placeholder for
+  a tab that died before ever rendering (today it shows the blank content bg), and
+  content-thread pooling for the leaked-Stylo-thread-local caveat.
 - **P5 — descoped** (as written).
 - **P6 compute actors — not started.**
 
-So the real next steps are: finish **P0** (embed the marker, optionally name the
-inbox), close **P4**'s self-healing (respawn + broken-tile), then **P3** (a JS
-engine in the content actor). Routing sync through armillary (P1) is optional
-cleanup. Note: the tiled-view render perf issue (re-rasterizing every tile's scene
-each frame) is a kernel/compositor concern, not one of these phases — a per-tile
-texture cache keyed by the scene generation, separate work.
+P0 and P4's self-healing are now done (2026-06-04), as is the compositor perf fix
+(a per-tile texture cache keyed by the scene generation; not a phase, a kernel
+concern). The remaining gaps are: **P3** (a JS engine in the content actor — the big
+one); P4 polish (a labeled broken-tile placeholder + content-thread pooling for the
+Stylo-leak caveat); **P1**'s `sync`-through-armillary (deferred — armillary's actor
+loop is sync, sync needs an async runtime, so this waits on an async-actor shape);
+and **P6** compute (untouched).
 
 ## Phases (done-conditions, not dates)
 
@@ -700,3 +704,14 @@ what is most likely to break, the mitigation, and a pointer.
   self-healing, then P3. Separately, the tiled-view perf cost (re-rasterizing every
   tile each frame) is a compositor concern — a per-tile texture cache keyed by the
   scene generation — not one of these phases.
+- **2026-06-04 — P0 + P4 self-healing + the perf fix landed.** **P0** (`bf7b9b1`):
+  `armillary::KernelThread` embedded in `App` (the kernel context is `!Send` by type)
+  and the I/O receivers grouped behind a named `KernelInbox`, with `user_event` the
+  documented dispatch. **Perf** (`158354f`): the constellation stamps a `scene_version`
+  per accepted scene; the host caches each tile's rasterized texture and re-rasterizes
+  only on a version/size change (idle tiles cost ~zero per frame, where before every
+  tile was re-rasterized every frame). **P4 self-healing** (`a3d6f8e`): `drain` detects
+  a disconnected actor channel (its thread died) and respawns the tab on a fresh
+  thread, clearing `shown` to replay the page, capped at `MAX_RESPAWNS`; the last scene
+  holds until recovery. Remaining: P3 (JS engine), P4 polish (labeled placeholder +
+  thread pooling), sync-through-armillary (needs an async-actor shape), P6.
