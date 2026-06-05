@@ -21,7 +21,7 @@
 
 use std::cell::RefCell;
 
-use armillary::{spawn, ActorHandle, Emitter, NavGeneration, ViewportGeneration, Wake};
+use armillary::{spawn_on, ActorHandle, Emitter, NavGeneration, ViewportGeneration, Pool, Wake};
 use inker::EngineRegistry;
 use linked_data::GraphContribution;
 use netrender::Scene;
@@ -77,9 +77,10 @@ struct Content {
 /// crosses the boundary), then renders on each command. Returns the kernel's
 /// command handle plus the receiver of [`ContentUpdate`]s to drain.
 pub fn spawn_content(
+    pool: &Pool,
     wake: Wake,
 ) -> (ActorHandle<ContentCommand>, std::sync::mpsc::Receiver<ContentUpdate>) {
-    spawn(wake, |commands, out: Emitter<ContentUpdate>| {
+    spawn_on(pool, wake, |commands, out: Emitter<ContentUpdate>| {
         let mut registry = EngineRegistry::new();
         for engine in nematic::engines() {
             registry.register(engine);
@@ -179,7 +180,7 @@ mod tests {
 
     #[test]
     fn show_renders_a_scene_off_thread() {
-        let (handle, updates) = spawn_content(noop_wake());
+        let (handle, updates) = spawn_content(&Pool::new(), noop_wake());
         handle.command(show("https://example.com/", "text/html", "<h1>Hi</h1><p>There</p>"));
         handle.join();
 
@@ -195,7 +196,7 @@ mod tests {
 
     #[test]
     fn show_harvests_embedded_jsonld_into_a_contribution() {
-        let (handle, updates) = spawn_content(noop_wake());
+        let (handle, updates) = spawn_content(&Pool::new(), noop_wake());
         handle.command(show(
             "https://example.com/",
             "text/html",

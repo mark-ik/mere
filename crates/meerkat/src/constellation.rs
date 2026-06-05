@@ -24,7 +24,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{Receiver, TryRecvError};
 
-use armillary::{ActorHandle, Generations, Wake};
+use armillary::{ActorHandle, Generations, Pool, Wake};
 use forme::GraphMemberId;
 use linked_data::GraphContribution;
 use netrender::Scene;
@@ -78,6 +78,10 @@ pub struct Constellation {
     /// The wake every spawned actor pokes to drive the host's event loop.
     wake: Wake,
     active: HashMap<GraphMemberId, Activation>,
+    /// The pool every content actor runs on. Workers are reused across tab
+    /// lifetimes, so OS threads (and the leaked Stylo thread-local per thread) are
+    /// bounded by peak concurrent tabs, not the total ever opened / respawned.
+    pool: Pool,
     /// The most warm tabs to keep; over this, the least-recently-touched
     /// evictable tab is reaped on reconcile.
     cap: usize,
@@ -107,7 +111,13 @@ pub struct Drained {
 impl Constellation {
     /// A new, empty pool. `wake` is cloned into every actor it spawns.
     pub fn new(wake: Wake) -> Self {
-        Self { wake, active: HashMap::new(), cap: DEFAULT_TAB_CAP, touch_clock: 0 }
+        Self {
+            wake,
+            active: HashMap::new(),
+            pool: Pool::new(),
+            cap: DEFAULT_TAB_CAP,
+            touch_clock: 0,
+        }
     }
 
     /// Set the active-tab cap (the configurable setting; clamped to at least 1).
@@ -138,7 +148,7 @@ impl Constellation {
             if !self.active.contains_key(&member) {
                 self.touch_clock += 1;
                 let touch = self.touch_clock;
-                let (handle, rx) = spawn_content(self.wake.clone());
+                let (handle, rx) = spawn_content(&self.pool, self.wake.clone());
                 self.active.insert(
                     member,
                     Activation {
@@ -348,7 +358,7 @@ impl Constellation {
         if activation.respawns >= MAX_RESPAWNS {
             return false;
         }
-        let (handle, rx) = spawn_content(self.wake.clone());
+        let (handle, rx) = spawn_content(&self.pool, self.wake.clone());
         activation.handle = handle;
         activation.rx = rx;
         activation.gens = Generations::default();

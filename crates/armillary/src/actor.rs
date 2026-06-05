@@ -22,6 +22,8 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
+use crate::pool::Pool;
+
 /// A thread-safe wake callback the actor calls after emitting an update, so the
 /// kernel's event loop knows to drain. The host supplies it (meerkat pokes the
 /// winit `EventLoopProxy`); armillary stays host-neutral by taking it as a value.
@@ -113,6 +115,29 @@ where
     let emitter = Emitter { updates: update_tx, wake };
     let join = thread::spawn(move || run(command_rx, emitter));
     (ActorHandle { commands: command_tx, join: Some(join) }, update_rx)
+}
+
+/// Spawn an actor on a pooled worker thread instead of a fresh one.
+///
+/// Identical to [`spawn`] except the actor's `run` loop occupies a worker from
+/// `pool` for its lifetime; when it ends (the handle drops, the command channel
+/// closes), the worker is reused for the next actor. This bounds the OS-thread
+/// count — and any leaked per-thread state, such as Stylo's leaked sharing cache —
+/// to *peak concurrent* actors rather than the total ever spawned, which matters
+/// for the churny, long-lived content actors. The returned [`ActorHandle`] carries
+/// no `JoinHandle` (the worker is the pool's, not the handle's); dropping it still
+/// ends the actor by closing the command channel.
+pub fn spawn_on<C, U, F>(pool: &Pool, wake: Wake, run: F) -> (ActorHandle<C>, Receiver<U>)
+where
+    C: Send + 'static,
+    U: Send + 'static,
+    F: FnOnce(Receiver<C>, Emitter<U>) + Send + 'static,
+{
+    let (command_tx, command_rx) = mpsc::channel::<C>();
+    let (update_tx, update_rx) = mpsc::channel::<U>();
+    let emitter = Emitter { updates: update_tx, wake };
+    pool.submit(Box::new(move || run(command_rx, emitter)));
+    (ActorHandle { commands: command_tx, join: None }, update_rx)
 }
 
 #[cfg(test)]
