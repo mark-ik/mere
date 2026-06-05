@@ -45,25 +45,36 @@
 ### Phase 2 — branch / new-node gestures
 
 - Explicit "open in new node/tile": context-menu item, middle-click, Ctrl+left-click on a link, Ctrl/Cmd-Enter in the omnibar (per the 05-18 `OpenAddressAsNewNode` decision).
-- Each mints a new node (`create_node_for_address`, never dedup) and a **navigated-from** edge from the source node, carrying the source's current visit id/index as the anchor.
+- Each mints a new node (`create_node_for_address`, never dedup) and a **navigated-from** edge = `Semantic::Hyperlink` (the strongest tier, P3; via `assert_relation`) from the source node. A weak `Traversal` event is also recorded for the chronology layer (P3 tier 4).
+- **Anchor — resolved to (b):** history moves to a **shared `GraphMemory`** with each node an `Owner`, so a child node's `origin`/`pending_origin_parent` points natively at the parent's current visit (node-lineage's `creator` machinery). This restructures `history.rs` from one `GraphMemory`-per-node into one shared visit space with node-owners; the anchor becomes correct-by-construction and within-node + cross-node lineage unify in one tree. Bigger lift than carrying a visit id on the edge, chosen for faithfulness.
 - New nodes **stack into the active slot by default** (per Mark): they join the focused tile's slot as a new tab, active.
 - A "new node with no origin" path (empty omnibar / explicit new) mints a node with no navigated-from edge (graphlet candidate).
 - **Done when:** the gestures mint distinct nodes with correct anchors; new nodes stack into the active slot; revisiting an origin page yields a fresh distinct anchor.
 
-### Phase 3 — three edge buckets + styles
+### Phase 3 — relation strength tiers + styles (reviewed + corrected 2026-06-05)
 
-- Map navigated-from / containment / chronology onto the relation taxonomy (`EdgeFamily` + sub-kind); render each with a distinct style in the orrery.
-- chronology edges fall out of the MRU adjacency (Phase 4); containment from graphlet grouping.
-- **Done when:** the three relation kinds are distinguishable in Cartography with distinct styles, and lineage (navigated-from) reads as strongest.
+Not three buckets onto three families — the 6 `EdgeFamily` variants ordered by association strength, each a distinct style. Order **strong → weak** (corrected; the first audit had it inverted), against [`edge_taxonomy.rs`](../../../crates/graphshell/graph/graph-kernel/src/graph/edge_taxonomy.rs):
 
-### Phase 4 — across-node MRU (previous/next) + gloss
+1. **Semantic (strongest)** — direct navigation links. `Semantic::Hyperlink` is the spine (the link followed A→B); other semantic sub-kinds (Cites/DependsOn/Contradicts/…) ride the same tier. **This is "navigated-from."** The current browse trail already uses `Semantic::Hyperlink` (`orrery build::hyperlink()`), so the strong family is correct — **keep it** (reverses the earlier "replace with Traversal").
+2. **Containment** — hierarchical nesting (UrlPath/Domain/FileSystem/UserFolder/CollectionMember).
+3. **Arrangement + Provenance (middle)** — `Arrangement` is the graphlet tier (neighbors-of-neighbors, "tiled together"); graphlets are *also* formed by user-grouping, tags, edge-family filtering/toggling, and search, not only spatial arrangement. `Provenance` (origin/derivation: ClippedFrom/GeneratedFrom/…) sits near here as "origin" (least-discussed; tentative).
+4. **Traversal (weakest)** — the temporal / UI-UX / **chronology** layer (timestamped events + `EdgeMetrics`; recorded via `append_traversal`, no sub-kind, keyed by `NavigationTrigger`). This is the chronology home (reverses the earlier "no family"). Short-term traversal logs in-graph; **long-term browse history scopes to `eidetic`**, not the live graph.
 
-- An MRU log of node activations (focus events). previous/next step through it.
-- Controls live in **gloss** (the navigator strip). Build the minimal gloss surface in the live shell if absent.
-- Decide session-only vs persisted (default: session-only first; persist if cheap).
-- **Done when:** previous/next walk the MRU across nodes from gloss, distinct from within-node back/forward.
+`Imported` is the remaining family (external import provenance) — weak/external, its own style.
 
-### Phase 5 (future, not scheduled) — diffable node-history similarity → relations.
+- **Done when:** edges render by tier (Semantic strongest → Traversal faintest), visually distinct in cartography (orrery and swatches).
+
+### Phase 4 — across-node MRU (previous/next) + gloss + lineage swatch
+
+- The MRU is a **projection over the Traversal layer** (`EdgeMetrics.last_navigated_at` / a node-activation log), not net-new substrate (corrects the earlier "no substrate"). previous/next step the MRU.
+- Controls live in **gloss** (the navigator strip; the graphshell-era "navigator"). Build the minimal gloss surface in the live shell if absent.
+- **Long-term browse history scopes to `eidetic`**, not the live graph; the in-graph Traversal layer is short-term.
+- **Lineage swatch:** project a node's within-node history (its visit tree) as discrete nodes in a side **swatch** (a mini-cartography), arrangeable like the orrery. Cartography arrangement applies in the orrery *and* in swatches.
+- **Done when:** previous/next walk the MRU from gloss (distinct from within-node back/forward); a node's lineage renders as a swatch.
+
+### Phase 5 (future, not scheduled) — diffable node-history similarity
+
+- Compare two nodes' visit trees for similarity, derive relations from the overlap.
 
 ## 4. Risks / watch-items
 
@@ -75,7 +86,7 @@
 
 ## Findings
 
-(Populated during build.)
+- **2026-06-05 — P3 audited + corrected against `edge_taxonomy.rs`.** `EdgeFamily` has 6; the write contract `EdgeAssertion` has 5 (no Traversal — recorded as timestamped events via `append_traversal`, the chronology layer). Strength order **corrected** (the first audit inverted it): **Semantic::Hyperlink strongest** (= navigated-from; the current browse-trail family is right, keep it) → Containment (hierarchical) → Arrangement (graphlets; also from user-grouping/tags/filter/search) + Provenance (origin) → **Traversal weakest** (temporal/chronology; long-term history → `eidetic`). Anchor fork **resolved to (b)**: shared `GraphMemory` with node-owners (`history.rs` restructures from per-node to one shared visit space). MRU = projection over Traversal, not net-new. Lineage projects as a side swatch (mini-cartography); cartography arrangement applies in orrery and swatches.
 
 ## Progress
 
