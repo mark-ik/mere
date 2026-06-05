@@ -474,7 +474,12 @@ impl App {
             // content chain for an absolute rect — otherwise every slot's content
             // reports the same slot-local origin and the tiles stack on each other.
             // The collect releases the DOM borrow before we mutate self.
-            let placements: Vec<(GraphMemberId, f32, f32, f32, f32)> = {
+            // (member, content rect, full slot rect) in window coords. The content
+            // rect is where the tile's texture composites (below the strip); the slot
+            // rect is the whole column (strip + content), used as the drag target so
+            // dragging along the strip still resolves + highlights its slot.
+            let placements: Vec<(GraphMemberId, [f32; 4], [f32; 4])> = {
+                let th = toolbar_h as f32;
                 let dom = self.workbench_dom.borrow();
                 let frags = fragments_from_scripted_dom(&dom, WORKBENCH_SHEET, w, content_h);
                 let root = dom.document();
@@ -489,26 +494,32 @@ impl App {
                         let content = first_with_class(&dom, slot, "wb-content")?;
                         let member = member_attr(&dom, content)?;
                         let cl = frags.rect_of(content)?;
-                        let x = wx + sl.location.x + cl.location.x;
-                        let y = wy + sl.location.y + cl.location.y;
-                        Some((member, x, y, cl.size.width, cl.size.height))
+                        let cx = wx + sl.location.x + cl.location.x;
+                        let cy = th + wy + sl.location.y + cl.location.y;
+                        let content_rect = [cx, cy, cx + cl.size.width, cy + cl.size.height];
+                        let sx = wx + sl.location.x;
+                        let sy = th + wy + sl.location.y;
+                        let slot_rect = [sx, sy, sx + sl.size.width, sy + sl.size.height];
+                        Some((member, content_rect, slot_rect))
                     })
                     .collect()
             };
-            for (member, lx, ly, sw, sh) in placements {
+            let mut slot_rects = Vec::with_capacity(placements.len());
+            for (member, content, slot) in placements {
+                slot_rects.push((member, slot));
                 let Some(url) =
                     self.orrery.graph().get_node_by_id(member).map(|(_, n)| n.url().to_string())
                 else {
                     continue;
                 };
                 self.ensure_content(&url);
-                let cw = sw.round().max(1.0) as u32;
-                let ch = sh.round().max(1.0) as u32;
+                let cw = (content[2] - content[0]).round().max(1.0) as u32;
+                let ch = (content[3] - content[1]).round().max(1.0) as u32;
                 let state = self.content.get(&url).cloned();
                 self.constellation.drive(member, &url, state, cw, ch);
-                let cy0 = toolbar_h as f32 + ly;
-                cards.push((member, [lx, cy0, lx + cw as f32, cy0 + ch as f32], (cw, ch)));
+                cards.push((member, content, (cw, ch)));
             }
+            self.tile_rects = slot_rects;
         } else if let (Some(member), Some(url)) =
             (self.focused_member(), self.orrery.focused_url().map(str::to_string))
         {
@@ -518,15 +529,10 @@ impl App {
                 self.constellation.drive(member, &url, state, cw, ch);
                 cards.push((member, [x0, y0, x1, y1], (cw, ch)));
             }
-        }
-
-        // Remember each tile's window rect (Tree only) so a tab drag can resolve the
-        // drop target + zone under the pointer.
-        self.tile_rects = if self.workbench.is_tiled() {
-            cards.iter().map(|(m, dest, _)| (*m, *dest)).collect()
+            self.tile_rects.clear(); // no drag targets outside the tiled view
         } else {
-            Vec::new()
-        };
+            self.tile_rects.clear();
+        }
 
         // The omnibar follows focus: point it at the focused tile / node when that
         // changed (next frame, like the chrome strips were — the scene above is
