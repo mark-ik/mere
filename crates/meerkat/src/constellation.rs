@@ -22,7 +22,7 @@
 //! so the node simply returns to dormant.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, TryRecvError};
 
 use armillary::{ActorHandle, Generations, Wake};
 use forme::GraphMemberId;
@@ -57,7 +57,16 @@ struct Activation {
     /// The pool clock at this tab's last spawn / drive, for LRU eviction: the
     /// least-recently-touched evictable tab is reaped first over the cap.
     last_touched: u64,
+    /// How many times this tab's actor has been respawned after a fault, so a tab
+    /// that panics on every load stops storming the pool. Reset when a fresh actor
+    /// delivers a scene (it recovered).
+    respawns: u32,
 }
+
+/// The most times a faulted tab's actor is respawned before the pool gives up (and
+/// leaves the tab on its last scene). Guards against a respawn storm from content
+/// that panics on every load.
+const MAX_RESPAWNS: u32 = 3;
 
 /// Default cap on warm tabs (active actors) before LRU eviction kicks in. A
 /// configurable setting later; the per-tab resource cost keeps real tab counts
@@ -90,6 +99,9 @@ pub struct Drained {
     /// Linked data harvested from active documents, for the host to apply to the
     /// graph.
     pub contributions: Vec<GraphContribution>,
+    /// Tabs whose content actor died (its thread panicked or exited) and was
+    /// respawned this drain. The host redraws so the next frame re-`Show`s them.
+    pub respawned: Vec<GraphMemberId>,
 }
 
 impl Constellation {
@@ -138,6 +150,7 @@ impl Constellation {
                         scene_version: 0,
                         background: false,
                         last_touched: touch,
+                        respawns: 0,
                     },
                 );
             }
@@ -256,17 +269,32 @@ impl Constellation {
 
     /// Drain every active node's update channel, applying generation-accepted
     /// scenes into the pool and returning the wanted subresources + harvested
-    /// contributions for the host to handle.
+    /// contributions for the host to handle. A channel that has **disconnected**
+    /// means its content actor's thread died (a panic mid-render, isolated to that
+    /// thread); the pool respawns it (self-healing, P4) up to [`MAX_RESPAWNS`],
+    /// keeping the tab's last scene until the fresh actor renders.
     pub fn drain(&mut self) -> Drained {
         let mut out = Drained::default();
         let members: Vec<GraphMemberId> = self.active.keys().copied().collect();
+        let mut dead: Vec<GraphMemberId> = Vec::new();
         for member in members {
             // Drain into an owned Vec first so the receiver borrow ends before we
-            // re-borrow the activation to apply scenes.
-            let updates: Vec<ContentUpdate> = match self.active.get(&member) {
-                Some(activation) => activation.rx.try_iter().collect(),
+            // re-borrow the activation to apply scenes. A `Disconnected` means the
+            // actor thread is gone.
+            let mut updates: Vec<ContentUpdate> = Vec::new();
+            match self.active.get(&member) {
+                Some(activation) => loop {
+                    match activation.rx.try_recv() {
+                        Ok(update) => updates.push(update),
+                        Err(TryRecvError::Empty) => break,
+                        Err(TryRecvError::Disconnected) => {
+                            dead.push(member);
+                            break;
+                        },
+                    }
+                },
                 None => continue,
-            };
+            }
             for update in updates {
                 match update {
                     ContentUpdate::Scene { nav, viewport_gen, scene } => {
@@ -275,6 +303,7 @@ impl Constellation {
                             if activation.gens.accepts(stamp) {
                                 activation.scene = Some(scene);
                                 activation.scene_version += 1;
+                                activation.respawns = 0; // a fresh scene = recovered
                                 out.any_scene = true;
                             }
                         }
@@ -291,7 +320,33 @@ impl Constellation {
                 }
             }
         }
+        for member in dead {
+            if self.respawn(member) {
+                out.respawned.push(member);
+            }
+        }
         out
+    }
+
+    /// Respawn a dead tab's content actor with a fresh thread (the kernel-owned
+    /// spec is the tab's own `url`/size, replayed by clearing `shown` so the next
+    /// [`drive`](Self::drive) re-`Show`s it). Keeps the last scene (stale-but-live)
+    /// until the fresh actor renders. A no-op past [`MAX_RESPAWNS`] (the tab is left
+    /// on its last scene rather than storming). Returns whether it respawned.
+    fn respawn(&mut self, member: GraphMemberId) -> bool {
+        let Some(activation) = self.active.get_mut(&member) else {
+            return false;
+        };
+        if activation.respawns >= MAX_RESPAWNS {
+            return false;
+        }
+        let (handle, rx) = spawn_content(self.wake.clone());
+        activation.handle = handle;
+        activation.rx = rx;
+        activation.gens = Generations::default();
+        activation.shown = None; // force the next drive() to re-Show, replaying the page
+        activation.respawns += 1;
+        true
     }
 }
 
@@ -341,5 +396,23 @@ mod tests {
         assert!(c.is_active(m(1)), "a background tab survives cap pressure");
         assert!(c.is_active(m(2)), "the needed node is still spawned");
         assert!(!c.set_background(m(3), true), "flagging a dormant node reports false");
+    }
+
+    #[test]
+    fn respawn_replays_the_tab_and_caps_the_storm() {
+        let mut c = Constellation::new(noop_wake());
+        c.reconcile(&[m(1)]);
+        c.drive(m(1), "mere://welcome", None, 100, 100); // gives it a `shown` state
+        assert!(c.active.get(&m(1)).unwrap().shown.is_some());
+        // A respawn replaces the actor and clears `shown` so the next drive re-Shows.
+        assert!(c.respawn(m(1)));
+        assert!(c.active.get(&m(1)).unwrap().shown.is_none(), "shown cleared for replay");
+        assert_eq!(c.active.get(&m(1)).unwrap().respawns, 1);
+        // The cap stops a storm: MAX_RESPAWNS respawns, then give up.
+        assert!(c.respawn(m(1))); // 2
+        assert!(c.respawn(m(1))); // 3
+        assert!(!c.respawn(m(1)), "past MAX_RESPAWNS the pool leaves the tab on its last scene");
+        // A respawn on a node that is not active is a no-op.
+        assert!(!c.respawn(m(99)));
     }
 }

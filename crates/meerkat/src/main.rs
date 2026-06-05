@@ -1485,6 +1485,12 @@ impl ApplicationHandler for App {
         // wanted subresources + harvested contributions come back for the host.
         let drained = self.constellation.drain();
         card_changed |= drained.any_scene;
+        if !drained.respawned.is_empty() {
+            // A content tile's actor died (panic, isolated to its thread) and the
+            // pool respawned it; redraw so the next frame re-Shows it (self-healing).
+            tracing::warn!(count = drained.respawned.len(), "respawned crashed content tile(s)");
+            card_changed = true;
+        }
         for (member, urls) in drained.wanted {
             // The actor deduped these; a durable-cache hit feeds that node directly,
             // a miss spawns a network fetch whose bytes broadcast back on arrival.
