@@ -466,15 +466,22 @@ arc, but its self-healing does not). Per phase, with evidence:
   (`251e205`): content actors run on `armillary::Pool`, a growable reusing worker
   pool, so OS threads (and the leaked Stylo thread-local) are bounded by peak
   concurrent tabs, not total opened.
-- **P5 — descoped** (as written).
+- **P5 isolation — done as descoped.** Its done-condition is documentation, not
+  code: the **Threat model** records the tripwire (content is semi-trusted; the day
+  genuinely hostile content arrives the answer is the OS-process boundary on native
+  or the browser's cross-origin isolation on PWA), and P0's message boundary already
+  makes a future subprocess content-actor a swap (same Command/Update messages over
+  IPC) rather than a rewrite. Nothing to build until a real untrusted-content
+  use-case exists.
 - **P6 compute actors — not started.**
 
 P0, P1, P2, and P4 are now done (2026-06-04), as is the compositor perf fix (a
 per-tile texture cache keyed by the scene generation; not a phase, a kernel
-concern). **The only phases left are the two big features: P3** (a JS engine in the
-content actor) and **P6** (compute / mesh actors). The actor spine — typed boundary,
-harness, all three I/O actors, off-thread content, the plural self-healing pooled
-constellation — is complete.
+concern). **P5 is done as descoped** (documentation, above). **The only phases left
+that need code are the two big features: P3** (a JS engine in the content actor) and
+**P6** (compute / mesh actors). The actor spine — typed boundary, harness, all three
+I/O actors, off-thread content, the plural self-healing pooled constellation — is
+complete.
 
 ## Phases (done-conditions, not dates)
 
