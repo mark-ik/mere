@@ -36,17 +36,17 @@ For terms not addressed here, defer to the inherited [`graphshell/design_docs/TE
 
 - **Murm** — bilateral peer-to-peer comms supercrate. One-to-one messaging across protocols. Cable + co-op session chat + bilateral identity derivation live here.
   - **Murmuring** — inner protocol-core for selecting bilateral chat protocols (Cable, MLS, Tox, etc.). Gerund form names the plumbing; singular *murmur* falls out as user-facing term.
-- **Moothold** — community/federation supercrate. Manages moots, demesnes, social primitives. (Will switch to `moot` if that crate name frees up.)
+- **Moothold** — community/federation supercrate. Manages moots, coalitions, social primitives. (Will switch to `moot` if that crate name frees up.)
   - **Mooting** — inner protocol-core for selecting community social protocols (Matrix, Nostr, IRC, ATproto, ActivityPub, etc.). Gerund form names the plumbing; singular *moot* falls out as user-facing term.
 
 ## In-product vocabulary
 
 - **moot** *(count noun)* — a single persistent themed federatable graph-view community
-- **demesne** *(count noun)* — a federation of moots; a sovereign cluster
-- **suzerainty** *(relation)* — demesne ↔ moot relationship; overlordship without absorbing internal sovereignty
+- **coalition** *(count noun)* — a sovereign cluster of mootholds (t4; renamed from *demesne* 2026-06-04)
+- **suzerainty** *(relation)* — the outer-tier ↔ inner-member relationship (moothold ↔ moot, coalition ↔ moothold); overlordship without absorbing internal sovereignty
 - **volvelle** — UI form factor: a moot expanded radially in the Navigator (medieval rotating-disc knowledge instrument)
 - **astroid** — internal UX vocab for graphlet hub-collapse: collapsing a graphlet to its central node forms an astroid-shaped boundary curve
-- **tessera** — trust / contribution / reputation token; validated across demesnes (Roman *tessera hospitalis* — guest-friendship token between communities)
+- **tessera** — trust / contribution / reputation token; validated across coalitions (Roman *tessera hospitalis* — guest-friendship token between communities)
 - **engram** — canonical portable contribution payload; `TransferProfile` envelope plus typed `EngramMemory` items (see inherited `graphshell/design_docs/verse_docs/implementation_strategy/engram_spec.md`)
 - **flora** — accumulated body of engrams that constitutes a moot's culture / geist
 - **kith / kin** — contact tier distinction: *kith* = those known to you; *kin* = close. Orthogonal to moot membership.

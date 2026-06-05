@@ -18,7 +18,7 @@
 
 ## 2. The printing-press metaphor
 
-The architectural through-line. Engines (Wry, Serval, Nematic) produce content. The **inker** pairs each engine to its content. The **platen** composes the layout (graph-aware). The **verso-tile** receives the impression (places it into GraphTree tile slots). The user sees the printed result via `mere`-on-`graphshell`. **Eidetic** keeps the impressions over time. **Murm** carries bilateral comms; **moothold** carries federation across moots; **demesne** (t4) carries coalition across mootholds.
+The architectural through-line. Engines (Wry, Serval, Nematic) produce content. The **inker** pairs each engine to its content. The **platen** composes the layout (graph-aware). The **verso-tile** receives the impression (places it into GraphTree tile slots). The user sees the printed result via `mere`-on-`graphshell`. **Eidetic** keeps the impressions over time. **Murm** carries bilateral comms; **moothold** carries federation across moots; **coalition** (t4) carries coalition across mootholds.
 
 ```
                           ┌─────────────┐
@@ -58,7 +58,7 @@ All scaffolded at `c:\Users\mark_\Code\repos\mere\crates\`. Reserved on crates.i
 | **`nematic`** | Smolweb engine — Gemini, Gopher, HTML, Markdown, RSS/Atom |
 | **`murm`** | Bilateral peer-to-peer comms supercrate |
 | **`murmuring`** | Inner protocol-core for bilateral chat-protocol selection (within `murm`) |
-| **`moothold`** | Federation of moots (Tier 3). The crate hosts t1–t3 logic; t4 demesne logic may end up in a sibling `demesne` crate. (Will switch to `moot` if that crate name frees up.) |
+| **`moothold`** | Federation of moots (Tier 3). The crate hosts t1–t3 logic; t4 coalition logic may end up in a sibling `coalition` crate. (Will switch to `moot` if that crate name frees up.) |
 | **`mooting`** | Inner protocol-core for moot internal coordination + thin protocol-client orchestration (within `moothold`) |
 | **`eidetic`** | Private local memory crate — owner-scoped blob storage substrate the orrery (Tier 1) lives on |
 
@@ -76,7 +76,7 @@ Mere's social-graph structures form a four-tier scale. Full design in
 | **T1** | **orrery** | A single user's root graph view. *"Your orrery is your moot."* Backed by `eidetic`. |
 | **T2** | **moot** | A persistent themed federatable graph-view community. Members pin and govern. Dissolves if nobody pins. |
 | **T3** | **moothold** | A federation of moots — *a holding of moots*, in the Anglo-Saxon sense (cf. household, stronghold, freehold). ILL-shaped reciprocity between member moots. |
-| **T4** | **demesne** | A sovereign coalition of mootholds. Provides organizing defaults; per-moothold override + clean fork-out always possible. |
+| **T4** | **coalition** | A sovereign coalition of mootholds. Provides organizing defaults; per-moothold override + clean fork-out always possible. |
 
 All four tiers are **forkable**.
 
@@ -87,11 +87,11 @@ All four tiers are **forkable**.
 | **orrery** *(t1)* | A user's root graph view — the whole knowledge-cosmos seen at once. Their personal moot-of-one. |
 | **moot** *(t2, count noun)* | A single persistent themed federatable graph-view community |
 | **moothold** *(t3, count noun)* | A federation of moots — a sovereign holding (Anglo-Saxon *-hold* sense) |
-| **demesne** *(t4, count noun)* | A coalition of mootholds — a sovereign cluster of holdings (Latin *demesne* sense: directly-controlled lands) |
-| **suzerainty** *(relation)* | The relation between an outer tier and its inner members — overlordship without absorbing internal sovereignty. Applies at moothold ↔ moot and demesne ↔ moothold. |
+| **coalition** *(t4, count noun)* | A sovereign cluster of mootholds (renamed from *demesne* 2026-06-04 for familiarity; *demesne* sounds like *domain*, which already names the domain layer) |
+| **suzerainty** *(relation)* | The relation between an outer tier and its inner members — overlordship without absorbing internal sovereignty. Applies at moothold ↔ moot and coalition ↔ moothold. |
 | **volvelle** | UI form factor — a moot expanded radially in the Navigator (medieval rotating-disc knowledge instrument) |
 | **astroid** | Internal UX vocab for graphlet hub-collapse: collapsing a graphlet to its central node forms an astroid-shaped boundary curve |
-| **tessera** | Trust / contribution / reputation token; validated across mootholds and demesnes (Roman *tessera hospitalis*). Accrues against an identity's chain root (per the substrate brief's persona-id-chain insight). |
+| **tessera** | Trust / contribution / reputation token; validated across mootholds and coalitions (Roman *tessera hospitalis*). Accrues against an identity's chain root (per the substrate brief's persona-id-chain insight). |
 | **engram** | Portable, durable, schematicized memory unit — the canonical contribution payload. `TransferProfile` envelope plus typed `EngramMemory` items (see inherited [`engram_spec.md`](../../graphshell/design_docs/verse_docs/implementation_strategy/engram_spec.md)) |
 | **flora** | Accumulated body of engrams composing a moot's culture / geist |
 | **eidetic** | Private local memory — owner-scoped, the substrate engrams are distilled from. *Distinct from any moot's flora.* |

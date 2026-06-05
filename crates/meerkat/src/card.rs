@@ -195,6 +195,8 @@ fn engine_id_for(content_type: Option<&str>) -> Option<&'static str> {
         "text/markdown" | "text/x-markdown" => nematic::ENGINE_MARKDOWN,
         "text/gemini" => nematic::ENGINE_GEMTEXT,
         "text/plain" => nematic::ENGINE_TEXT,
+        "application/gopher-menu" => nematic::ENGINE_GOPHER,
+        "text/x-finger" => nematic::ENGINE_FINGER,
         "application/rss+xml" | "application/atom+xml" | "application/feed+json" => {
             nematic::ENGINE_FEED
         },

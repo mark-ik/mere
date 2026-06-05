@@ -5,7 +5,8 @@
 **Scope**: Captures today's architectural sharpening on moot semantics, the
 four-tier scale, voluntary hosting with reputational stakes, cheesecloth
 pinning, ILL-shaped reciprocity at federation tiers, and the
-demesne→moothold→demesne lexicon shift. Updates the
+demesne→moothold→demesne lexicon shift (t4 "demesne" since renamed "coalition",
+see §1). Updates the
 [2026-05-07 event-DAG substrate brief](2026-05-07_event_dag_substrate_brief.md)
 §7 and the moot-related lexicon entries.
 **Related**:
@@ -13,7 +14,7 @@ demesne→moothold→demesne lexicon shift. Updates the
 - [`2026-05-07_event_dag_substrate_brief.md`](2026-05-07_event_dag_substrate_brief.md) — earlier brief from today; this one supersedes its §7 framing of moot hosting and refines §8.7 (personas) and §8.9 (spam resistance).
 - [`2026-05-05_protocol_architecture_plan.md`](2026-05-05_protocol_architecture_plan.md) — original protocol architecture plan; §5 protocol-mod framing is now interpreted through the tier and hosting-model lens captured here.
 - [`../../moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md`](../../moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md) — the Pattern A / Pattern B distinction; reframed as routing-only-clients (Pattern A becomes "the moot links to the resource and members open it via a thin client") and outbound bridges (Pattern B; one-way publishing).
-- [`../../2026-05-04_lexicon_brief.md`](../../2026-05-04_lexicon_brief.md) — current lexicon; needs the demesne / moothold rename pass after this brief lands.
+- [`../../2026-05-04_lexicon_brief.md`](../../2026-05-04_lexicon_brief.md) — current lexicon; needs the coalition / moothold rename pass after this brief lands.
 
 ---
 
@@ -38,31 +39,39 @@ resources without trying to absorb every protocol's behavior.
 
 ---
 
-## 1. The lexicon shift: demesne → moothold → (new) demesne
+## 1. The lexicon shift: demesne → moothold → (new) demesne (t4 since renamed coalition)
 
-Effective from this brief:
+> **Rename note (2026-06-04):** the tier this brief named **demesne** (t4) was
+> later renamed to **coalition** for familiarity, because "demesne" is pronounced
+> like "domain" and "domain" already names Mere's domain layer. Everywhere outside
+> this naming-history section, t4 is **coalition**. The original demesne rationale
+> is kept below as the record of the 2026-05-07 decision.
+
+Effective from this brief (with t4's name updated to coalition per the note above):
 
 | Term (was) | Term (now) | Meaning |
 |---|---|---|
 | moothold | moothold | Tier 3 — *a holding of moots*. A federation of moots. (Was: umbrella term for any moot-related structure.) |
-| demesne | moothold | (At t3.) Demesne is no longer the federation tier. |
-| — | demesne | Tier 4 — *a sovereign cluster of mootholds*. A coalition that organizes member mootholds with optional shared defaults, per-moothold override, and clean fork-out. (New tier; Latin sense of *demesne* preserved: a sovereign domain.) |
+| demesne | moothold | (At t3.) The old umbrella/federation term *demesne* is no longer the federation tier. |
+| — | coalition (orig. *demesne*) | Tier 4 — *a sovereign cluster of mootholds*. Organizes member mootholds with optional shared defaults, per-moothold override, and clean fork-out. |
 | moot | moot | Tier 2 — a single persistent themed federatable graph-view community. Unchanged. |
 | orrery | orrery | Tier 1 — a single user's root graph view. *"Your orrery is your moot."* The personal moot. |
 
-**Why the rename is right:** *household*, *stronghold*, *freehold* are all
+**Why the moothold rename is right:** *household*, *stronghold*, *freehold* are all
 **holdings of bounded units**. A federation of moots literally IS a
 holding-of-moots. The previous use of *moothold* as an umbrella term lost
 the etymological precision; restoring it to the federation tier matches the
 Anglo-Saxon sense exactly.
 
-**Why demesne earns t4:** the original Latin sense of *demesne* is "a
-lord's directly-controlled lands, distinct from tenant holdings." It carries
-a sovereignty-over-multiple-holdings connotation, which is exactly what t4
-needs: a sovereign coalition that organizes member mootholds without
-collapsing them into one.
+**Why t4 was first named *demesne*, and why it is now *coalition*:** the original
+Latin sense of *demesne* ("a lord's directly-controlled lands, distinct from tenant
+holdings") carried the sovereignty-over-multiple-holdings connotation t4 needs. But
+*demesne* is obscure on the page and sounds like *domain* when spoken, and *domain*
+already names Mere's domain layer, so t4 was renamed **coalition** (2026-06-04): a
+plain, familiar word that says exactly what t4 is, a coalition of mootholds that
+organizes them without collapsing them into one.
 
-**Forkability throughout:** all structures (moot, moothold, demesne) are
+**Forkability throughout:** all structures (moot, moothold, coalition) are
 forkable. A fork is a first-class operation, not a disaster recovery. A
 moot can fork over a governance disagreement; members of the fork commit
 their own pins; the original keeps going. Mature federations fork well.
@@ -176,16 +185,16 @@ infrastructure cost (their old laptop running a mooting server, their
 bandwidth, their pinned storage allocation) and mutually agree (signed
 events) to establish the federation.
 
-### Tier 4: Demesne (coalition of mootholds, organizing default)
+### Tier 4: Coalition (coalition of mootholds, organizing default)
 
-A demesne organizes member mootholds. It defines shared defaults that
+A coalition organizes member mootholds. It defines shared defaults that
 member mootholds adopt unless they override; per-moothold override is
-always possible; **forking out of the demesne is always possible**.
+always possible; **forking out of the coalition is always possible**.
 
 Being in a t4 changes the character of the lower tiers — a moothold
-inside a demesne can compose with sibling mootholds more easily, share
+inside a coalition can compose with sibling mootholds more easily, share
 defaults (governance templates, capability schemas, archive policies),
-and benefit from demesne-wide reciprocity ledgers.
+and benefit from coalition-wide reciprocity ledgers.
 
 Without a t4 around it, a moothold is fully sovereign; with a t4, it's
 sovereign-but-cooperating.
@@ -274,7 +283,7 @@ mere's design, that intuition is wrong:
   copies for off-hours).
 - **Resurrection is normal.** A community lapse for a season and revive a
   year later, with the original engrams intact (because someone preserved
-  them locally or via demesne reciprocity).
+  them locally or via coalition reciprocity).
 
 Whether something is currently online is **not** its total existence.
 Communities have rhythms. Mere's design respects them.
@@ -284,7 +293,7 @@ Communities have rhythms. Mere's design respects them.
 ## 7. Stake + agreement: the universal coordination protocol
 
 At every tier transition (member → moot, moot → moothold, moothold →
-demesne), the coordination pattern is the same:
+coalition), the coordination pattern is the same:
 
 1. **Stake.** Participants pay a real infrastructure cost — bytes pinned,
    storage allocated, server hours pledged, bandwidth committed. *Real*
@@ -332,7 +341,7 @@ This applies at every tier:
 - A research-group moot might use daily heartbeats and strict quotas
   on archive retention.
 - A moothold might use monthly heartbeats for federation pledges.
-- A demesne might use quarterly review cadences for member-moothold
+- A coalition might use quarterly review cadences for member-moothold
   standing.
 
 Defaults ship with the protocol; configuration ships with each
@@ -390,7 +399,7 @@ Smaller, cleaner responsibilities than the protocol-translation framing.
   content-addressed archive).
 - Reciprocity ledger (at t3 and above; ILL-shaped credits between
   member structures).
-- Tier transitions (moot → moothold; moothold → demesne).
+- Tier transitions (moot → moothold; moothold → coalition).
 - Forking primitives (clean fork at any tier).
 
 **`mooting` (the crate) owns:**
@@ -426,7 +435,7 @@ ripples through previously-written docs. Touch-ups required (deferred
 to a follow-up pass; not done in this brief):
 
 - **`design_docs/2026-05-04_lexicon_brief.md`** — update *moothold* /
-  *demesne* entries to match this brief's tier framework.
+  *coalition* entries to match this brief's tier framework.
 - **`design_docs/DOC_README.md`** — update working-principles vocabulary
   line.
 - **`design_docs/mere_docs/implementation_strategy/2026-05-07_event_dag_substrate_brief.md`**
@@ -441,7 +450,7 @@ to a follow-up pass; not done in this brief):
   "outbound bridge."
 - **Crate READMEs** — `crates/mere/mere`, `crates/moot/moothold`,
   `crates/moot/mooting`, `crates/mere/mere-identity`, `crates/mere/mere-transport`,
-  `crates/murm/murm`, `crates/murm/murmuring` — touch up *demesne* and
+  `crates/murm/murm`, `crates/murm/murmuring` — touch up *coalition* and
   *moothold* references and the moot-as-graph-view framing.
 - **Memory** (`project_naming_state.md`, `memory/MEMORY.md` index) —
   update lexicon entries to match.
@@ -450,9 +459,9 @@ to a follow-up pass; not done in this brief):
 
 ## 12. Open questions
 
-- **T4 demesne crate split.** Does t4 demesne functionality live as a
-  module inside `moothold`, or as a separate `demesne` crate? Probably
-  defer until t3 lands; the answer falls out of how complex demesne
+- **T4 coalition crate split.** Does t4 coalition functionality live as a
+  module inside `moothold`, or as a separate `coalition` crate? Probably
+  defer until t3 lands; the answer falls out of how complex coalition
   governance turns out to be.
 - **Bootstrap-by-vouching mechanics.** What fraction of voucher tessera
   transfers? How long does a vouched-tessera boost last? Per-moot
@@ -517,7 +526,7 @@ sharpen the protocol architecture beyond the substrate brief:
 2. **Voluntary commitment + reputational stakes** — hosting is never
    imposed; tessera rewards good follow-through and penalizes ghosting,
    never coerces participation.
-3. **Tier framework (t1 personal → t2 moot → t3 moothold → t4 demesne)**
+3. **Tier framework (t1 personal → t2 moot → t3 moothold → t4 coalition)**
    with a clean lexicon shift restoring etymological precision.
 
 Cheesecloth pinning, ILL-shaped reciprocity, lapse-and-revive as a
@@ -537,7 +546,7 @@ tier transitions for scale.
 ### 2026-05-07
 
 - Brief drafted to consolidate today's architectural conversation on
-  moot tiers, voluntary hosting, and the demesne / moothold lexicon
+  moot tiers, voluntary hosting, and the coalition / moothold lexicon
   shift.
 - Touch-up list (§11) enumerates the docs that need updating to match;
   follow-up pass deferred.

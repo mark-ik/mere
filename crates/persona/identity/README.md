@@ -11,7 +11,7 @@ When a user runs mere, they have one identity. But that identity has to play mul
 
 - a network identity (their iroh `NodeId` in transport)
 - a per-conversation identity (Ed25519 keys for each cabal in murm)
-- a per-community identity across the tier framework (future moothold for t1–t3, demesne for t4)
+- a per-community identity across the tier framework (future moothold for t1–t3, coalition for t4)
 - at-rest encryption keys (future eidetic)
 
 You don't want to use one keypair for all of those: if one has a vulnerability, you don't want it to leak your master identity. You also don't want to store N separate keys forever; that's an attack surface and a backup nightmare.
@@ -90,8 +90,8 @@ only third-party crypto. Consumers reach for it as the identity trust root.
   derived identity; a vulnerability in the conversation protocol does not
   leak the master.
 - [`moothold`](https://crates.io/crates/moothold) (planned) —
-  moot / moothold / demesne credentials across the tier framework
-  (t1 orrery → t2 moot → t3 moothold → t4 demesne), including
+  moot / moothold / coalition credentials across the tier framework
+  (t1 orrery → t2 moot → t3 moothold → t4 coalition), including
   capability-based delegation per the meadowcap pattern.
 - [`eidetic`](https://crates.io/crates/eidetic) (planned) — at-rest
   encryption keys for owner-private memory.

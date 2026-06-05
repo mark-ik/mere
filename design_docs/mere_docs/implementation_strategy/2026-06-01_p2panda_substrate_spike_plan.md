@@ -372,7 +372,7 @@ Verified (docs.rs/p2panda-encryption, issue #774): **p2panda-encryption is a sta
 
 **Gaps that remain (crypto-intrinsic, not erased by owning the upper layers):**
 
-- ~128-member ceiling (DCGKA, not TreeKEM). Mitigated by topology, not cryptography: federation shards a community into many smaller spaces (moot → moothold → demesne), so one huge encrypted group is rarely the shape. Mitigated, not fixed.
+- ~128-member ceiling (DCGKA, not TreeKEM). Mitigated by topology, not cryptography: federation shards a community into many smaller spaces (moot → moothold → coalition), so one huge encrypted group is rarely the shape. Mitigated, not fixed.
 - Post-compromise healing delay offline (healed only once the last member hears the removal). Faster discovery helps at the margin.
 - Strong forward secrecy vs local-first (use-a-pre-key-exactly-once). Fundamental; choose per lane (data scheme where late joiners should read history, message scheme where they must not).
 

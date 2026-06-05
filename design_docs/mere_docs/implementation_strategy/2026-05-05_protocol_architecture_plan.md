@@ -4,7 +4,7 @@
 **Status**: Draft / canonical direction (architecture-level; per-protocol module plans branch off). **Partially superseded by the 2026-05-07 briefs:**
 
 - [`2026-05-07_event_dag_substrate_brief.md`](2026-05-07_event_dag_substrate_brief.md) reframes wire-format / sync-layer / schema-locality / privacy-transport / persona-design decisions. §2 (iroh layering), §3 (identity vault), §4 (self-host-with-fallback) of *this* plan remain authoritative.
-- [`2026-05-07_moot_tiers_and_voluntary_hosting_brief.md`](2026-05-07_moot_tiers_and_voluntary_hosting_brief.md) reframes §5 (Protocol Mods and Primitive Moot Nodes) through a four-tier scale (orrery → moot → moothold → demesne) with voluntary hosting, cheesecloth pinning, and ILL-shaped reciprocity. Notable lexicon shift: *moothold* now means t3 (federation of moots), *demesne* now means t4 (sovereign coalition of mootholds). The earlier "demesne = federation of moots" framing in this plan is superseded.
+- [`2026-05-07_moot_tiers_and_voluntary_hosting_brief.md`](2026-05-07_moot_tiers_and_voluntary_hosting_brief.md) reframes §5 (Protocol Mods and Primitive Moot Nodes) through a four-tier scale (orrery → moot → moothold → coalition) with voluntary hosting, cheesecloth pinning, and ILL-shaped reciprocity. Notable lexicon shift: *moothold* now means t3 (federation of moots), *coalition* now means t4 (sovereign coalition of mootholds). The earlier "coalition = federation of moots" framing in this plan is superseded.
 **Scope**: Cross-cutting plan governing how Mere composes peer-to-peer transports, identity, identity-discovery (WebFinger), and protocol mods (Cable, Matrix, Nostr, IRC, ATproto, ActivityPub, Misfin, …) into a coherent whole. Defines the layered relationship between Cable and the iroh toolkit, the multi-protocol identity vault, the self-host-with-fallback pattern for identity publication, and the "primitive node" pattern by which any protocol — whether the user's mod is installed or not — can appear in the orrery.
 
 **Drives**: The Mere Phase 2C → Phase 3 work program, plus per-protocol mod specs that branch from this plan.
@@ -13,7 +13,7 @@
 
 - [`../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md`](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md) — Murm's authority + boundaries (this plan extends Murm with sibling-protocol layers and identity-vault elaboration)
 - [`../../murm_docs/implementation_strategy/2026-05-04_cable_migration_from_verso_plan.md`](../../murm_docs/implementation_strategy/2026-05-04_cable_migration_from_verso_plan.md) — Cable's Phase 0–5 migration plan (this plan's iroh-layering work picks up after Cable Phase 2 ships)
-- [`../../2026-05-04_lexicon_brief.md`](../../2026-05-04_lexicon_brief.md) — Mere lexicon (orrery, moot, demesne, kith/kin, tessera)
+- [`../../2026-05-04_lexicon_brief.md`](../../2026-05-04_lexicon_brief.md) — Mere lexicon (orrery, moot, coalition, kith/kin, tessera)
 - [`../../TERMINOLOGY.md`](../../TERMINOLOGY.md) — canonical terms
 - Inherited: [`protocol_modularity_and_host_capability_model.md`](../../../../graphshell/design_docs/graphshell_docs/technical_architecture/2026-03-30_protocol_modularity_and_host_capability_model.md) — packaging classes (`CoreBuiltins`, `DefaultPortableProtocolSet`, `OptionalPortableProtocolAdapters`, `NativeFeatureMods`, `NonEngineNetworkLayers`); this plan extends that taxonomy with "primitive moot node" semantics for `NonEngineNetworkLayers` protocols
 - Inherited: [`SUBSYSTEM_MODS.md`](../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/subsystem_mods/SUBSYSTEM_MODS.md) — mod lifecycle authority
@@ -50,7 +50,7 @@ These four premises run concurrently; none gate the others. The phases below are
         ┌───────▼─────────┐                              ┌──────────▼────────┐
         │  murm           │                              │  moothold         │
         │  bilateral      │                              │  community        │
-        │  (Cable, MLS)   │                              │  (moots, demesnes,│
+        │  (Cable, MLS)   │                              │  (moots, coalitions,│
         └───────┬─────────┘                              │   primitive nodes)│
                 │                                        └──────────┬────────┘
                 │                                                   │

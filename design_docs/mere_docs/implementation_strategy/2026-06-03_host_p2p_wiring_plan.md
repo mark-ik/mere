@@ -238,3 +238,25 @@ pattern, not building one.
   chips move `tessera: idle` → `tessera: 3 ops` as the logs converge. S5.1 done;
   S5.2 (persistent identity + on-disk stores) and S5.3 (a real moot / comms
   surface) remain.
+- **2026-06-04 — S5 re-scoped against the real tree; ThinkPad L14 (Fedora 44)
+  designated the second peer.** Re-confirmed in code that S5.0 + S5.1 are built and
+  wired (`sync.rs` `spawn_sync` / `SyncCommand::Connect`; `command.rs`
+  `Command::ConnectPeer`; `lib.rs` `pending_connect`; `main.rs`
+  `drain_pending_connect`), with random per-launch identity, in-memory
+  `TesseraStore`, and a starter log. (The DOC_README summary calling S5 "no code
+  yet" was stale.) **Immediate gate, Mark's to run: cross-machine validation** of
+  the built ConnectPeer path across the Windows laptop and the Fedora L14 over the
+  LAN — the first cross-machine, cross-OS convergence (prior proofs were headless /
+  loopback), which also validates the full meerkat GUI build on Fedora 44. Steps:
+  `cargo run -p meerkat` on both; copy A's startup `ticket=...`; paste into B's
+  address bar; Ctrl+K → "Connect to peer"; both chips move `tessera: idle →
+  tessera: 3 ops`. Gotchas: same-LAN direct dial from the ticket's `EndpointAddr`
+  (firewall may need the UDP port opened on both OSes; cross-network would need
+  relay/hole-punch, not needed on one LAN). **Next build, S5.2 (persistent identity +
+  on-disk stores):** in `sync.rs`, swap `InMemoryProvider::random()` for a
+  seed-file-backed identity under the data dir (stable peer identity across
+  restarts) and `TesseraStore::in_memory()` for
+  `TesseraStore::open(<session_dir>/moots/<moot>.redb)` (log survives restart).
+  Done-when: the L14 restarts as the same peer with its log intact and reconnects
+  without re-authoring. Small; stays in `sync.rs`, under the ceiling. S5.3 (real
+  moot surface) after.

@@ -46,7 +46,7 @@ Willow's data model is `(NamespaceId, SubspaceId, Path)` where `Path` is a seque
 
 | Willow concept | Mere reframe |
 |---|---|
-| `NamespaceId` | A space's root identity — `Moot(MootId)`, `Personal(MasterPubkey)`, `SharedSession(SessionId)`, `Demesne(DemesneId)` (matches `SpaceId` in the event DAG brief §4) |
+| `NamespaceId` | A space's root identity — `Moot(MootId)`, `Personal(MasterPubkey)`, `SharedSession(SessionId)`, `Coalition(CoalitionId)` (matches `SpaceId` in the event DAG brief §4) |
 | `SubspaceId` | An author identity within the space — usually a persona's pubkey (matches `AuthorId` in the event DAG brief) |
 | `Path` | **The node's cluster decomposition: super-cluster → cluster → sub-cluster → … → node-id** |
 
@@ -199,7 +199,7 @@ struct ClusterDecomposition {
 
 Each `ClusterDecomposition` event references the prior decomposition (so the history of cluster evolution is itself a DAG). Caps over cluster paths can reference *which* decomposition they were issued under, providing strict cap stability without freezing cluster membership in the cap itself — the cap points at the decomposition; the decomposition points at the membership.
 
-This is the right shape for spaces that need cluster-governance as a first-class concern (large mootholds, demesnes with formal cluster admins). Defer until a real space demands it; ship v1 with §3.2(b) canonical rule.
+This is the right shape for spaces that need cluster-governance as a first-class concern (large mootholds, coalitions with formal cluster admins). Defer until a real space demands it; ship v1 with §3.2(b) canonical rule.
 
 ---
 

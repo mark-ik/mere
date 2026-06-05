@@ -103,6 +103,11 @@ platen-view = { workspace = true }
 # path-dep'd like netrender. Network I/O is the host's job — engines stay
 # byte-consuming and never link netfetcher.
 netfetcher = { path = "../../../netfetcher" }
+# Small-web (smolweb) transport: gemini / gopher / finger / spartan, routed by
+# scheme. The standalone, crates.io-only sibling crate (publishable; Mere consumes
+# it one-way like netfetcher). The fetch actor routes http(s) -> netfetcher and
+# smolweb schemes -> errand; the bytes ride the same nematic engines either way.
+errand = { path = "../../../errand" }
 url = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 

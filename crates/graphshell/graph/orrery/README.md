@@ -11,7 +11,7 @@ viewport.
 In the printing-press / tier-framework metaphor, the *orrery* is the
 moving model of the local universe — your graph as the personal-tier
 artifact (orrery is the t1 name in the orrery → moot → moothold →
-demesne tier ladder).
+coalition tier ladder).
 
 ## What it produces
 

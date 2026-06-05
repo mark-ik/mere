@@ -7,7 +7,7 @@
 
 - [`../research/2026-05-08_local_intelligence_integration_research.md`](2026-05-08_local_intelligence_integration_research.md) — tier-1 embeddings landed; tier-3+ LLM serving deferred behind Distillation Boundary + AWAL prerequisites. This brief is the architectural sketch for that deferred tier.
 - [`../implementation_strategy/2026-05-07_event_dag_substrate_brief.md`](../implementation_strategy/2026-05-07_event_dag_substrate_brief.md) — substrate; particularly §8.7 (persona keypair derivation) and the engram envelope shape.
-- [`../implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md`](../implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md) — tier framework (orrery → moot → moothold → demesne) and voluntary-hosting-with-stakes pattern that compute hosting extends.
+- [`../implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md`](../implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md) — tier framework (orrery → moot → moothold → coalition) and voluntary-hosting-with-stakes pattern that compute hosting extends.
 - [`../implementation_strategy/2026-05-10_graph_cluster_namespaces_brief.md`](../implementation_strategy/2026-05-10_graph_cluster_namespaces_brief.md) — graph-cluster namespaces; relevant for scoping which engrams a tier-specific adapter trains on.
 - [`../../eidetic_docs/implementation_strategy/2026-05-09_eidetic_layered_stack_plan.md`](../../eidetic_docs/implementation_strategy/2026-05-09_eidetic_layered_stack_plan.md) — Phase 5 already stores model weights as content-addressed engrams; this brief uses that as substrate.
 
@@ -22,7 +22,7 @@ Two questions surfaced during the 2026-05-10 conversation:
 
 The answer to both is **yes, with shared architecture.** This brief sketches that architecture. The substrate is mostly already in place (eidetic Phase 5 stores model weights; tessera exists as a compensation primitive; persona keypair derivation gives scoped identity; the Distillery framing already nominates a moment of "compress local memory into a portable payload"). What's missing is the layer that turns these pieces into an inference-and-training system.
 
-**The unifying concept: a geist model is a base open-weight model plus one or more LoRA adapters, each adapter trained on a defined-scope corpus (personal, moot, moothold, demesne), each adapter an engram, composed at inference time by the user.** Personal and community models are one mechanism applied at different scopes.
+**The unifying concept: a geist model is a base open-weight model plus one or more LoRA adapters, each adapter trained on a defined-scope corpus (personal, moot, moothold, coalition), each adapter an engram, composed at inference time by the user.** Personal and community models are one mechanism applied at different scopes.
 
 ---
 
@@ -35,7 +35,7 @@ The tier framework already structures mere's data model:
 | **t1 — Orrery** | A single user's graph view (`SpaceId::Personal(master_pubkey)`) | A model that thinks in the user's voice over their own annotated content |
 | **t2 — Moot** | A themed federatable graph community (`SpaceId::Moot(MootId)`) | A model that thinks in the moot's idiom over the moot's flora |
 | **t3 — Moothold** | A federation of moots | A model trained across multiple moots' floras (cross-moot synthesis) |
-| **t4 — Demesne** | A sovereign coalition of mootholds | Very rare, very large; speculative |
+| **t4 — Coalition** | A sovereign coalition of mootholds | Very rare, very large; speculative |
 
 **The geist of a thing is its accumulated, schema-typed knowledge plus an inference primitive that thinks in its idiom.** Engrams are the memory; the geist model is the thinking. Distillation is the moment knowledge becomes shareable; training a geist adapter is the moment knowledge becomes inference-ready. Two products of the same operation.
 

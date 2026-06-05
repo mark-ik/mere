@@ -150,7 +150,7 @@ enum SpaceId {
     Moot(MootId),
     Personal(UserMasterPubkey),
     SharedSession(SessionId),
-    Demesne(DemesneId),
+    Coalition(CoalitionId),
 }
 ```
 
@@ -224,7 +224,7 @@ This satisfies Mark's "privacy as an option, possibly enabled by a mod" framing.
 
 ## 7. Multi-protocol moot hosting; bridges only for non-hostable systems
 
-**Revised again 2026-05-07 (still later):** §7's framing — even after the Pattern A / Pattern B restoration below — has been **further reframed by the [moot tiers and voluntary hosting brief](2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)**. The newer brief reframes moots as *graph views that link to and store, not translate*: foreign protocols stay themselves, and `mooting-*` adapters become **thin protocol clients** that help members reach foreign resources rather than bidirectional native moot hosts. The newer brief also introduces the four-tier scale (orrery → moot → moothold → demesne) and renames *moothold* to mean "federation of moots" specifically (t3), with *demesne* reserved for t4 (sovereign coalition of mootholds). Read the moot-tiers brief for the authoritative shape.
+**Revised again 2026-05-07 (still later):** §7's framing — even after the Pattern A / Pattern B restoration below — has been **further reframed by the [moot tiers and voluntary hosting brief](2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)**. The newer brief reframes moots as *graph views that link to and store, not translate*: foreign protocols stay themselves, and `mooting-*` adapters become **thin protocol clients** that help members reach foreign resources rather than bidirectional native moot hosts. The newer brief also introduces the four-tier scale (orrery → moot → moothold → coalition) and renames *moothold* to mean "federation of moots" specifically (t3), with *coalition* reserved for t4 (sovereign coalition of mootholds). Read the moot-tiers brief for the authoritative shape.
 
 The Pattern A / Pattern B framing below remains useful as a coarse shape: thin-client adapters fit Pattern A's slot; outbound publishing fits Pattern B. The earlier "bridges-only" framing in this section collapsed the two patterns:
 
@@ -406,6 +406,14 @@ This is essentially "the user is a one-member moot" — same protocol, scoped to
 
 Treating those as one decision hides the real architecture. Meadowcap, Biscuit, UCAN, and Keyhive cover different parts of the stack.
 
+**Resolution status (2026-06-03).** Two of the three layers are now settled and the substrate moved to p2panda; the options below are kept as the design record. Current state (canonical in the newer plans):
+
+- *Layer 1 (structural caps):* meadowcap-shaped mere-native cluster-path caps, **proven** (Option B, not the Willow25 data-model import of Option A).
+- *Layer 2 (moot policy):* split into facts and engine. The **facts** are built: [`tessera`](../../../crates/moot/moothold/src/tessera) per the [tessera plan](../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md), the event-sourced reputation / standing / role a policy reads. The **engine** is a configurable preset authorizer today (`OpenWithFloor` / `VouchedOrScore` / `MembersOnly`); the Biscuit Datalog backend (Option C) is the deferred next layer that a preset compiles to.
+- *Layer 3 (group/key state):* the leading candidate moved from Keyhive to **p2panda-encryption** (the [`p2panda-encryption-fit` probe](../../../crates/probes/p2panda-encryption-fit) + [p2panda spike](2026-06-01_p2panda_substrate_spike_plan.md)): its data and forward-secret message schemes fit *without* the p2panda-spaces bundle, with our cluster-path caps supplying authorization and our event-DAG the ordering. Fit proven; production wiring still deferred.
+- *Substrate:* all three now ride **p2panda** (p2panda-core event DAG + p2panda-net LogSync), adopted 2026-06-01, replacing the Willow / iroh-docs framing the options below assume.
+- *UCAN:* unchanged, the interop / delegation envelope, not the internal policy brain.
+
 **Option A - Meadowcap via current Willow25 (structural namespace layer; refreshed 2026-05-30).** If Mere adopts Willow's data model (see §5 and §14), current `willow25` provides the structural capability layer natively. Reuse avoids re-deriving path-prefix delegation, logical time-interval bounds, recursive delegation, and signed credentials. It is not a zero-cost BLAKE3 mapping: Willow25 payload digests use the WILLIAM3/Bab line, and a spike must measure the dual-address boundary with iroh-blobs plus current storage and sync gaps.
 
 Pros: purpose-built for Willow entries; maps cleanly to graph-cluster-derived paths; simple deterministic verification for "does this cap authorize this event area?"; good fit for `mere-namespace`.
@@ -480,7 +488,7 @@ Concrete moves implied by this brief, in rough order:
 Open questions, deferred:
 
 - **Concrete sync-backend choice for cross-moot federation.** iroh-docs is the baseline (and already does RBSR — this is no longer a discriminator). Whether Willow's data model + meadowcap (via `mere-namespace`) earn adoption, or p2panda earns a slot for engram publishing, is now a near-term decision rather than a deferred one — see §5 (revised) and §14.
-- **Capability stack proof.** See §8.8. Live decision is now layered, not "meadowcap vs Keyhive": structural namespace caps (meadowcap / meadowcap-shaped), moothold policy tokens (Biscuit candidate), and live group/key state (Keyhive candidate) each need a focused proof before `mere-namespace` and `moothold` lock their surfaces.
+- **Capability stack proof.** See §8.8 (resolution status, 2026-06-03). Largely resolved: structural caps proven (meadowcap-shaped cluster-path), group/key-state fit proven (p2panda-encryption, not Keyhive), and the moot-policy facts built (tessera) with a preset authorizer standing in. The two remaining proofs are the **Biscuit** policy engine over those facts and production group-key wiring.
 - **Recovery default.** Backup-code vs Shamir-shards vs cypherpunk-loss. Probably product-driven, not architecturally forced.
 - **WebRTC / calls strategy.** Element Call as a Matrix-bridge service, LiveKit over iroh, or something else. Independent of the substrate decisions here.
 - **The Distillery's first concrete shape.** Where it lives (mere-side vs eidetic-side vs new crate), what its first transform pipelines are. Out of scope for this brief; covered by the inherited STM/LTM/Engrams plan.

@@ -1,7 +1,7 @@
 # IRC Mod Plan
 
 **Date**: 2026-05-05
-**Status**: Draft / branching from the cross-cutting protocol architecture plan. **Reframed by the 2026-05-07 [moot-tiers brief](../../mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md):** Pattern A is now "thin-client routing — the moot links to an IRC channel and members open it via a `mooting-irc` adapter that doesn't translate IRC into moot semantics," and Pattern B is "outbound bridge in a separate `mere-bridge-irc` crate, not a `mooting-*` adapter, since IRC's wire format can't fully express tessera or engrams." The plan's T1 / T2 / T3 cost tiers also reinterpret through the new tier framework (orrery → moot → moothold → demesne). Re-read the moot-tiers brief before extending this plan.
+**Status**: Draft / branching from the cross-cutting protocol architecture plan. **Reframed by the 2026-05-07 [moot-tiers brief](../../mere_docs/implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md):** Pattern A is now "thin-client routing — the moot links to an IRC channel and members open it via a `mooting-irc` adapter that doesn't translate IRC into moot semantics," and Pattern B is "outbound bridge in a separate `mere-bridge-irc` crate, not a `mooting-*` adapter, since IRC's wire format can't fully express tessera or engrams." The plan's T1 / T2 / T3 cost tiers also reinterpret through the new tier framework (orrery → moot → moothold → coalition). Re-read the moot-tiers brief before extending this plan.
 
 **Scope**: Concrete plan for IRC as the **first T1 protocol mod** in Moothold (per
 [`../../mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md`](../../mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md) §5.5).

@@ -14,11 +14,21 @@
 //!
 //! S2.2b-i carries the decoded body as text and renders it plainly; content-type
 //! routing to the nematic + serval engines is S2.2b-ii.
+//!
+//! Smolweb: the same actor also speaks the small web. A page request is routed by
+//! scheme, http(s) runs through netfetcher (WHATWG Fetch) and gemini / gopher /
+//! finger / spartan run through the [`errand`] transport crate. Either way the
+//! result is the same [`Fetched`] (decoded body + content-type), so the render
+//! side (nematic engines) is unchanged. Subresources stay http-only: smolweb
+//! documents reference links but do not inline fetched media.
 
 use std::sync::mpsc::Receiver;
 
 use armillary::{spawn, ActorHandle, Emitter, Wake};
 use tokio::runtime::Builder;
+
+/// The most redirects a smolweb fetch will follow before giving up.
+const MAX_REDIRECTS: usize = 5;
 
 /// Successfully fetched content: the response content-type (if any) and the
 /// decoded body as text.
@@ -69,10 +79,22 @@ impl ContentState {
     }
 }
 
-/// Whether `url` is a network address meerkat fetches, vs a synthesized `mere://`
-/// page or another non-network scheme.
+/// Whether `url` is a network address meerkat fetches (http(s) or a smolweb
+/// scheme), vs a synthesized `mere://` page or another non-network scheme.
 pub fn is_fetchable(url: &str) -> bool {
-    url.starts_with("http://") || url.starts_with("https://")
+    match scheme_of(url) {
+        Some(scheme) => {
+            scheme == "http" || scheme == "https" || errand::Scheme::parse(scheme).is_some()
+        },
+        None => false,
+    }
+}
+
+/// The scheme of a `scheme://…` URL, if it has an authority component. Returns
+/// `None` for schemeless or `scheme:opaque` forms (e.g. `about:blank`), which are
+/// never network-fetched.
+fn scheme_of(url: &str) -> Option<&str> {
+    url.split_once("://").map(|(scheme, _)| scheme)
 }
 
 /// A command to the fetch actor.
@@ -109,7 +131,7 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
                 FetchCommand::Page(url) => {
                     let out = out.clone();
                     runtime.spawn(async move {
-                        let result = do_fetch(&url).await;
+                        let result = fetch_page(&url).await;
                         out.emit(FetchUpdate::Page(FetchOutcome { url, result }));
                     });
                 },
@@ -127,6 +149,72 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
             }
         }
     })
+}
+
+/// Fetch a page, routing by scheme: smolweb schemes go through [`errand`], every
+/// other (http(s)) address through netfetcher's WHATWG Fetch.
+async fn fetch_page(url: &str) -> Result<Fetched, String> {
+    match scheme_of(url).and_then(errand::Scheme::parse) {
+        Some(scheme) => {
+            tracing::info!(%url, ?scheme, "smolweb fetch");
+            let result = smolweb_fetch(url).await;
+            match &result {
+                Ok(fetched) => tracing::info!(
+                    %url,
+                    content_type = ?fetched.content_type,
+                    bytes = fetched.body.len(),
+                    "smolweb ok",
+                ),
+                Err(error) => tracing::warn!(%url, %error, "smolweb failed"),
+            }
+            result
+        },
+        None => do_fetch(url).await,
+    }
+}
+
+/// Fetch a smolweb URL through [`errand`], following redirects up to
+/// [`MAX_REDIRECTS`], and fold the response into a [`Fetched`] the nematic engines
+/// render. Non-success statuses (input wanted, cert required, failure) surface as
+/// an error string the card shows.
+async fn smolweb_fetch(url: &str) -> Result<Fetched, String> {
+    let mut current = url::Url::parse(url).map_err(|e| format!("bad URL: {e}"))?;
+    for _ in 0..MAX_REDIRECTS {
+        let response = errand::fetch_url(&current).await.map_err(|e| e.to_string())?;
+        match response.status {
+            errand::Status::Success => {
+                let content_type = smolweb_content_type(&current, &response);
+                let body = String::from_utf8_lossy(&response.body).into_owned();
+                return Ok(Fetched { content_type: Some(content_type), body });
+            },
+            errand::Status::Redirect => {
+                current = current
+                    .join(&response.meta)
+                    .map_err(|e| format!("bad redirect target: {e}"))?;
+            },
+            errand::Status::Input => return Err(format!("input required: {}", response.meta)),
+            errand::Status::CertRequired => return Err("client certificate required".to_string()),
+            errand::Status::Failure => {
+                return Err(if response.meta.is_empty() {
+                    "request failed".to_string()
+                } else {
+                    response.meta
+                });
+            },
+        }
+    }
+    Err("too many redirects".to_string())
+}
+
+/// The content-type to render a smolweb response under, in nematic's vocabulary.
+/// Most schemes carry their own media type (gemini/spartan `text/gemini`, a gopher
+/// menu `application/gopher-menu`, a gopher text file `text/plain`); finger has no
+/// type of its own, so it is tagged `text/x-finger` to reach the finger engine.
+fn smolweb_content_type(url: &url::Url, response: &errand::Response) -> String {
+    match errand::Scheme::parse(url.scheme()) {
+        Some(errand::Scheme::Finger) => "text/x-finger".to_string(),
+        _ => response.mime().unwrap_or("text/gemini").to_string(),
+    }
 }
 
 /// Run one WHATWG-Fetch GET and collect the decoded body as text.
@@ -168,11 +256,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn fetchable_only_for_http_schemes() {
+    fn fetchable_for_http_and_smolweb_schemes() {
         assert!(is_fetchable("http://example.com"));
         assert!(is_fetchable("https://example.com"));
+        assert!(is_fetchable("gemini://capsule.example/"));
+        assert!(is_fetchable("gopher://example.org/"));
+        assert!(is_fetchable("finger://example.org/alice"));
+        assert!(is_fetchable("spartan://example.org/"));
         assert!(!is_fetchable("mere://welcome"));
         assert!(!is_fetchable("about:blank"));
+    }
+
+    #[test]
+    fn smolweb_content_type_tags_finger_and_passes_others_through() {
+        let finger = url::Url::parse("finger://example.org/alice").unwrap();
+        let resp = errand::Response {
+            url: finger.clone(),
+            status: errand::Status::Success,
+            raw_status: None,
+            meta: "text/plain".into(),
+            body: Vec::new(),
+        };
+        assert_eq!(smolweb_content_type(&finger, &resp), "text/x-finger");
+
+        let gem = url::Url::parse("gemini://capsule.example/").unwrap();
+        let resp = errand::Response {
+            url: gem.clone(),
+            status: errand::Status::Success,
+            raw_status: Some(20),
+            meta: "text/gemini; charset=utf-8".into(),
+            body: Vec::new(),
+        };
+        assert_eq!(smolweb_content_type(&gem, &resp), "text/gemini");
     }
 
     #[test]
