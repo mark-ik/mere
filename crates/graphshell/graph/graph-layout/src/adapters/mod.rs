@@ -24,10 +24,10 @@
 //! ## Current adapters
 //!
 //! - [`ForceDirectedAdapter`] — wraps
-//!   [`graph_canvas::layout::ForceDirected`] as a
+//!   [`canvas_ir::layout::ForceDirected`] as a
 //!   [`crate::StreamingLayoutStrategy`].
 //! - [`PhyllotaxisAdapter`] — wraps
-//!   [`graph_canvas::layout::Phyllotaxis`] as a
+//!   [`canvas_ir::layout::Phyllotaxis`] as a
 //!   [`crate::LayoutStrategy`] (analytic — closed-form target
 //!   positions, no iteration).
 //!

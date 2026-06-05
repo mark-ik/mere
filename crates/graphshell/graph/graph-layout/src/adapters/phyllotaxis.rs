@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! [`LayoutStrategy`] adapter for
-//! [`graph_canvas::layout::Phyllotaxis`].
+//! [`canvas_ir::layout::Phyllotaxis`].
 //!
 //! Phyllotaxis is *analytic* — for a given node ordering, the
 //! formula `angle_n = n × 137.508°`, `radius_n = scale × √n` produces
@@ -14,7 +14,7 @@
 //! adapter just computes target positions from node ordinals and
 //! emits them as a [`Projection`] with absolute positions.
 //!
-//! The existing `graph_canvas::layout::Phyllotaxis` uses an iterative
+//! The existing `canvas_ir::layout::Phyllotaxis` uses an iterative
 //! `Layout::step()` that returns *deltas* toward target positions —
 //! to support eased-in motion via the shared `StaticLayoutState`'s
 //! damping. The cartography adapter bypasses that machinery and emits
@@ -32,7 +32,7 @@ use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
 use cartography::request::ProjectionRequest;
 use cartography::strategy::LayoutStrategy;
 
-/// Cartography-side adapter for [`graph_canvas::layout::Phyllotaxis`].
+/// Cartography-side adapter for [`canvas_ir::layout::Phyllotaxis`].
 ///
 /// Holds a [`PhyllotaxisConfig`] — center, scale, divergence angle,
 /// radius curve, spiral orientation. The default config (golden-angle

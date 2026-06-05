@@ -19,7 +19,7 @@ cartography.workspace = true
 # fields to resolve a coupling's intensity at each node. One-way dep, mirroring
 # gyre's; aether stays renderer-free.
 aether.workspace = true
-graph-canvas.workspace = true
+canvas-ir.workspace = true
 graph-layout.workspace = true
 document-canvas.workspace = true
 inker.workspace = true

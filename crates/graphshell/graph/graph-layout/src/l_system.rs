@@ -30,8 +30,8 @@ use euclid::default::{Point2D, Vector2D};
 use serde::{Deserialize, Serialize};
 
 use super::{Layout, LayoutExtras, StaticLayoutState};
-use graph_canvas::camera::CanvasViewport;
-use graph_canvas::scene::CanvasSceneInput;
+use canvas_ir::camera::CanvasViewport;
+use canvas_ir::scene::CanvasSceneInput;
 
 /// Opaque handle to a future user-authored grammar. Current first-pass
 /// implementations fall back to `Hilbert` when this variant is selected.
@@ -316,8 +316,8 @@ fn normalize_path(raw: &[Point2D<f32>], config: &LSystemConfig) -> Vec<Point2D<f
 mod tests {
     use super::*;
     use euclid::default::{Rect, Size2D};
-    use graph_canvas::projection::ProjectionMode;
-    use graph_canvas::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use canvas_ir::projection::ProjectionMode;
+    use canvas_ir::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
 
     fn viewport() -> CanvasViewport {
         CanvasViewport {

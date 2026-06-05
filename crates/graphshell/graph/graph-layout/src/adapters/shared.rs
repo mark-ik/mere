@@ -23,8 +23,8 @@ use std::collections::HashMap;
 
 use crate::LayoutExtras;
 use euclid::default::{Point2D, Rect, Size2D};
-use graph_canvas::camera::CanvasViewport;
-use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
+use canvas_ir::camera::CanvasViewport;
+use canvas_ir::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
 use kernel::graph::{NodeKey, RelationKind};
 
 use cartography::projection::{PositionedEdge, Projection};
@@ -74,8 +74,8 @@ pub fn build_scene_input(
         edges,
         scene_objects: Vec::new(),
         overlays: Vec::new(),
-        scene_mode: graph_canvas::scene::SceneMode::default(),
-        projection: graph_canvas::projection::ProjectionMode::default(),
+        scene_mode: canvas_ir::scene::SceneMode::default(),
+        projection: canvas_ir::projection::ProjectionMode::default(),
     }
 }
 
@@ -133,7 +133,7 @@ pub fn build_layout_extras(request: &ProjectionRequest<'_>) -> LayoutExtras<Node
         for (key, value) in values {
             extras
                 .axis_value_by_node
-                .insert(*key, axis_value_to_graph_canvas(value));
+                .insert(*key, axis_value_to_canvas_ir(value));
         }
     }
 
@@ -144,7 +144,7 @@ pub fn build_layout_extras(request: &ProjectionRequest<'_>) -> LayoutExtras<Node
 /// [`crate::AxisValue`]. Structurally identical;
 /// cartography keeps its own enum so the contract stays decoupled
 /// from graph-canvas's internals.
-fn axis_value_to_graph_canvas(value: &cartography::request::AxisValue) -> crate::AxisValue {
+fn axis_value_to_canvas_ir(value: &cartography::request::AxisValue) -> crate::AxisValue {
     match value {
         cartography::request::AxisValue::Numeric(n) => crate::AxisValue::Numeric(*n),
         cartography::request::AxisValue::Categorical(tag) => {
@@ -221,7 +221,7 @@ where
 /// Extract absolute target positions from a static (analytic) layout
 /// using the **origin trick**.
 ///
-/// Static layouts in `graph_canvas::layout` are wrapped in the
+/// Static layouts in `canvas_ir::layout` are wrapped in the
 /// iterative `Layout::step()` trait which returns *deltas* from
 /// scene positions to target positions, damped by `state.damping`.
 /// For cartography's analytic [`crate::LayoutStrategy`] contract we
@@ -272,14 +272,14 @@ where
         edges,
         scene_objects: Vec::new(),
         overlays: Vec::new(),
-        scene_mode: graph_canvas::scene::SceneMode::default(),
-        projection: graph_canvas::projection::ProjectionMode::default(),
+        scene_mode: canvas_ir::scene::SceneMode::default(),
+        projection: canvas_ir::projection::ProjectionMode::default(),
     };
     let mut state = crate::StaticLayoutState {
         damping: 1.0,
         step_count: 0,
     };
-    let viewport = graph_canvas::camera::CanvasViewport::default();
+    let viewport = canvas_ir::camera::CanvasViewport::default();
     // Build the full LayoutExtras bridge so axial strategies (Timeline,
     // Kanban) can read `axis_value_by_node` and embedding-aware ones
     // see their inputs. Static strategies that don't consume extras

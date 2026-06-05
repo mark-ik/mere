@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! [`LayoutStrategy`] adapter for [`graph_canvas::layout::Kanban`].
+//! [`LayoutStrategy`] adapter for [`canvas_ir::layout::Kanban`].
 //!
 //! Categorical-bucket layout: nodes placed by their
 //! [`crate::AxisValue::Categorical`] tag into named columns.

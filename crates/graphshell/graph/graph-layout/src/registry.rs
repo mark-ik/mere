@@ -29,8 +29,8 @@ use euclid::default::Vector2D;
 use serde::{Deserialize, Serialize};
 
 use super::{Layout, LayoutExtras};
-use graph_canvas::camera::CanvasViewport;
-use graph_canvas::scene::CanvasSceneInput;
+use canvas_ir::camera::CanvasViewport;
+use canvas_ir::scene::CanvasSceneInput;
 
 /// URN-style layout identifier. Format: `<namespace>:<family>[:<variant>]`.
 /// Examples: `graph_layout:force_directed`, `graph_layout:penrose`,
@@ -771,8 +771,8 @@ mod tests {
     #[test]
     fn resolved_provider_creates_usable_layout() {
         use euclid::default::{Point2D, Rect, Size2D};
-        use graph_canvas::projection::ProjectionMode;
-        use graph_canvas::scene::{CanvasNode, SceneMode, ViewId};
+        use canvas_ir::projection::ProjectionMode;
+        use canvas_ir::scene::{CanvasNode, SceneMode, ViewId};
 
         let registry = LayoutRegistry::<Id>::default();
         let provider = registry

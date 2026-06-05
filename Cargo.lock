@@ -1681,6 +1681,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "canvas-ir"
+version = "0.0.1"
+dependencies = [
+ "aether",
+ "euclid",
+ "kernel",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cartography"
 version = "0.0.1"
 dependencies = [
@@ -4622,24 +4633,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "graph-canvas"
-version = "0.0.1"
-dependencies = [
- "aether",
- "euclid",
- "kernel",
- "serde",
- "serde_json",
- "tracing",
-]
-
-[[package]]
 name = "graph-layout"
 version = "0.0.1"
 dependencies = [
+ "canvas-ir",
  "cartography",
  "euclid",
- "graph-canvas",
  "kernel",
  "serde",
  "serde_json",
@@ -8798,10 +8797,10 @@ name = "platen"
 version = "0.0.1"
 dependencies = [
  "aether",
+ "canvas-ir",
  "cartography",
  "document-canvas",
  "forme",
- "graph-canvas",
  "graph-layout",
  "inker",
  "kernel",

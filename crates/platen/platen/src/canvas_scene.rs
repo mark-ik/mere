@@ -6,9 +6,9 @@
 
 use std::collections::HashSet;
 
-use graph_canvas::packet::Color;
-use graph_canvas::projection::{ProjectionMode, ViewDimension};
-use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, SceneMode, ViewId};
+use canvas_ir::packet::Color;
+use canvas_ir::projection::{ProjectionMode, ViewDimension};
+use canvas_ir::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, SceneMode, ViewId};
 use kernel::graph::{EdgeFamily, Graph, GraphViewId, NodeKey, RelationKind};
 
 /// View-local relation-hide key. One stored edge between a node pair

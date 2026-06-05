@@ -179,9 +179,10 @@ host-wired), `intel/embed` (Tier-2 embeddings, persists through eidetic),
 6. **No tiled-workbench mode / peripheral panes** — `FrameLayout` exists but meerkat
    has a single content pane; gloss/apparatus are latent a11y projections.
 7. **murm/moot unsurfaced** — `SyncedCabal` works but no comms surface exists.
-8. **graph-canvas not deleted** — physics/fields/projection/paint are re-homed, but
-   `platen::canvas_scene` + `graph-layout` still type-couple to it; IR types must be
-   re-homed before deletion.
+8. **graph-canvas deleted (2026-06-05)** — the IR cluster (`{camera, packet, projection,
+   scene, scripting}`) extracted into the new `canvas-ir` crate; `graph-layout` + `platen`
+   re-pointed; stale deps dropped from `cartography`/`document-canvas`/`embed`; behavioral
+   modules deleted (zero live consumers); workspace rewired. Builds + tests green.
 9. **register-\* latent + dual routing** — `register-viewer` (mime→viewer) duplicates
    `inker::routing` (engine-id); reconcile.
 10. **Pervasive doc staleness** — README lists cut crates; many docs predate the
@@ -311,11 +312,14 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
 
 Schedule these so they stop polluting the topology and misleading readers:
 
-- **Delete graph-canvas** after re-homing its shared IR types (`CanvasSceneInput`,
-  `CanvasViewport`, `ProjectionMode`, `Color`) out of the monolith (into
-  `cartography` or a thin canvas-ir crate) and dropping `platen::canvas_scene` +
-  `graph-layout`'s type-coupling. Behavioral modules already have zero live
-  consumers (orrery-host + mere-app bypass it).
+- **Delete graph-canvas — DONE 2026-06-05.** Extracted the full IR cluster
+  (`{camera, packet, projection, scene, scripting}`, not just the 4 headline types;
+  `Color` was already in `kernel::paint`) into the new `canvas-ir` crate
+  (deps: kernel/aether/euclid/serde); re-pointed `graph-layout` (~10 files) +
+  `platen::canvas_scene`; dropped stale graph-canvas deps from
+  `cartography`/`document-canvas`/`embed`; deleted the behavioral modules; rewired the
+  workspace. Targeted tests green (canvas-ir 57, graph-layout 14, platen 130,
+  cartography 44); meerkat builds.
 - **Relocate `kernel` + `cartography` + `graph-layout` out of `crates/graphshell/`**
   (R4, pure move) — kernel-under-shell is upside down.
 - **Sync `crates/graphshell/README.md`** to drop the cut `host-ports/` /

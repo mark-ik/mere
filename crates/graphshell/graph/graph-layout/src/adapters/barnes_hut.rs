@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! [`StreamingLayoutStrategy`] adapter for
-//! [`graph_canvas::layout::BarnesHut`].
+//! [`canvas_ir::layout::BarnesHut`].
 //!
 //! Same shape as [`super::ForceDirectedAdapter`] — BarnesHut shares
 //! [`ForceDirectedState`] with `ForceDirected` (the two are drop-in
@@ -30,7 +30,7 @@ use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
 use cartography::request::ProjectionRequest;
 use cartography::strategy::StreamingLayoutStrategy;
 
-/// Cartography-side adapter for [`graph_canvas::layout::BarnesHut`].
+/// Cartography-side adapter for [`canvas_ir::layout::BarnesHut`].
 #[derive(Debug, Default, Clone, Copy)]
 pub struct BarnesHutAdapter {
     pub config: BarnesHutConfig,

@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! [`LayoutStrategy`] adapter for
-//! [`graph_canvas::layout::SemanticEmbedding`].
+//! [`canvas_ir::layout::SemanticEmbedding`].
 //!
 //! Places nodes at host-precomputed embedding coordinates from
 //! [`crate::IntelligenceSignals::embeddings`] — UMAP / t-SNE / PCA /
@@ -14,7 +14,7 @@
 //! Analytic for the cartography contract: given the same embeddings,
 //! placement is deterministic and produced in one call. The math is
 //! implemented directly here rather than delegating to
-//! `graph_canvas::layout::SemanticEmbedding::step()` because the
+//! `canvas_ir::layout::SemanticEmbedding::step()` because the
 //! underlying step() uses `StatelessPassState`, not the
 //! `StaticLayoutState` that the shared `run_static_layout_one_shot`
 //! helper takes — re-implementing the closed-form placement is
@@ -44,7 +44,7 @@ use cartography::request::ProjectionRequest;
 use cartography::strategy::LayoutStrategy;
 
 /// Cartography-side adapter for
-/// [`graph_canvas::layout::SemanticEmbedding`].
+/// [`canvas_ir::layout::SemanticEmbedding`].
 #[derive(Debug, Default, Clone)]
 pub struct SemanticEmbeddingAdapter {
     pub config: SemanticEmbeddingConfig,

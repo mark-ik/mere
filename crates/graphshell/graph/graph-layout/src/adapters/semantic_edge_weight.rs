@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! [`StreamingLayoutStrategy`] adapter for
-//! [`graph_canvas::layout::SemanticEdgeWeight`].
+//! [`canvas_ir::layout::SemanticEdgeWeight`].
 //!
 //! Iterative force-based projection where each pair's attraction is
 //! weighted by `similarity(a, b)` (from
@@ -17,7 +17,7 @@
 //! is below research-grade embedding, but it works without any
 //! external dep.
 //!
-//! Use [`crate::adapters::graph_canvas::ForceDirectedAdapter`] when
+//! Use [`crate::adapters::canvas_ir::ForceDirectedAdapter`] when
 //! similarity isn't available (or just to compare visually);
 //! `SemanticEdgeWeightAdapter` when similarity drives the layout
 //! shape.
@@ -37,7 +37,7 @@ use cartography::request::ProjectionRequest;
 use cartography::strategy::StreamingLayoutStrategy;
 
 /// Cartography-side adapter for
-/// [`graph_canvas::layout::SemanticEdgeWeight`].
+/// [`canvas_ir::layout::SemanticEdgeWeight`].
 #[derive(Debug, Default, Clone)]
 pub struct SemanticEdgeWeightAdapter {
     pub config: SemanticEdgeWeightConfig,

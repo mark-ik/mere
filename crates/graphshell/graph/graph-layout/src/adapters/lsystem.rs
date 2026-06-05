@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! [`LayoutStrategy`] adapter for [`graph_canvas::layout::LSystem`].
+//! [`LayoutStrategy`] adapter for [`canvas_ir::layout::LSystem`].
 //!
 //! Analytic: nodes are placed along the path of an L-system fractal
 //! expansion. Built-in grammars include Hilbert (cache-coherent
@@ -17,7 +17,7 @@ use cartography::projection::Projection;
 use cartography::request::ProjectionRequest;
 use cartography::strategy::LayoutStrategy;
 
-/// Cartography-side adapter for [`graph_canvas::layout::LSystem`].
+/// Cartography-side adapter for [`canvas_ir::layout::LSystem`].
 #[derive(Debug, Default, Clone)]
 pub struct LSystemAdapter {
     pub config: LSystemConfig,

@@ -101,8 +101,8 @@ mod tests {
         let presets = [
             TwoDPreset::Plain,
             TwoDPreset::Paper,
-            TwoDPreset::Terrain { field: FieldId(3) },
-            TwoDPreset::Heatmap { field: FieldId(7) },
+            TwoDPreset::Terrain { field: FieldId::new() },
+            TwoDPreset::Heatmap { field: FieldId::new() },
             TwoDPreset::Grid,
         ];
         for p in &presets {

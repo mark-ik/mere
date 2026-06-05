@@ -24,8 +24,8 @@ use serde::{Deserialize, Serialize};
 
 use super::force_directed::ForceDirectedState;
 use super::{Layout, LayoutExtras};
-use graph_canvas::camera::CanvasViewport;
-use graph_canvas::scene::CanvasSceneInput;
+use canvas_ir::camera::CanvasViewport;
+use canvas_ir::scene::CanvasSceneInput;
 
 /// Barnes-Hut-specific tuning. Separate from [`ForceDirectedState`] since
 /// these knobs are algorithmic to the tree traversal, not to the shared
@@ -428,8 +428,8 @@ mod tests {
     use super::super::force_directed::ForceDirected;
     use super::*;
     use euclid::default::{Rect, Size2D};
-    use graph_canvas::projection::ProjectionMode;
-    use graph_canvas::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use canvas_ir::projection::ProjectionMode;
+    use canvas_ir::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
 
     fn viewport(w: f32, h: f32) -> CanvasViewport {
         CanvasViewport {

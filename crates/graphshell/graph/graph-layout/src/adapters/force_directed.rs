@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! [`StreamingLayoutStrategy`] adapter for
-//! [`graph_canvas::layout::ForceDirected`].
+//! [`canvas_ir::layout::ForceDirected`].
 //!
 //! Snapshots graph positions into adapter state on the first step,
 //! then evolves the working positions each frame by delegating to
@@ -24,7 +24,7 @@ use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
 use cartography::request::ProjectionRequest;
 use cartography::strategy::StreamingLayoutStrategy;
 
-/// Cartography-side adapter for [`graph_canvas::layout::ForceDirected`].
+/// Cartography-side adapter for [`canvas_ir::layout::ForceDirected`].
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ForceDirectedAdapter;
 

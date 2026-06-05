@@ -145,7 +145,7 @@ mod tests {
     fn from_view_dimension_is_identity() {
         let v = ViewDimension::TwoPointFive {
             projection: TwoPointFiveProjection::cabinet_default(),
-            z_field: Some(FieldId(7)),
+            z_field: Some(FieldId::new()),
         };
         assert_eq!(ViewDimension::from_view_dimension(&v), v);
     }
@@ -154,11 +154,11 @@ mod tests {
     fn serde_roundtrip_view_dimension() {
         let dims = [
             ViewDimension::TwoD {
-                preset: TwoDPreset::Heatmap { field: FieldId(2) },
+                preset: TwoDPreset::Heatmap { field: FieldId::new() },
             },
             ViewDimension::TwoPointFive {
                 projection: TwoPointFiveProjection::isometric_default(),
-                z_field: Some(FieldId(11)),
+                z_field: Some(FieldId::new()),
             },
             ViewDimension::ThreeD,
         ];

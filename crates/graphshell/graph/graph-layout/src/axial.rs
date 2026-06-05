@@ -21,8 +21,8 @@ use euclid::default::{Point2D, Vector2D};
 use serde::{Deserialize, Serialize};
 
 use super::{AxisValue, Layout, LayoutExtras, StaticLayoutState};
-use graph_canvas::camera::CanvasViewport;
-use graph_canvas::scene::CanvasSceneInput;
+use canvas_ir::camera::CanvasViewport;
+use canvas_ir::scene::CanvasSceneInput;
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
 
@@ -306,8 +306,8 @@ where
 mod tests {
     use super::*;
     use euclid::default::{Rect, Size2D};
-    use graph_canvas::projection::ProjectionMode;
-    use graph_canvas::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use canvas_ir::projection::ProjectionMode;
+    use canvas_ir::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
 
     fn viewport() -> CanvasViewport {
         CanvasViewport {

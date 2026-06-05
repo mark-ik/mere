@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! [`LayoutStrategy`] adapter for [`graph_canvas::layout::Penrose`].
+//! [`LayoutStrategy`] adapter for [`canvas_ir::layout::Penrose`].
 //!
 //! Analytic: nodes placed at vertices of a Penrose aperiodic tiling
 //! (P2 kite-dart or P3 rhombus). The tiling is non-periodic — it
@@ -18,7 +18,7 @@ use cartography::projection::Projection;
 use cartography::request::ProjectionRequest;
 use cartography::strategy::LayoutStrategy;
 
-/// Cartography-side adapter for [`graph_canvas::layout::Penrose`].
+/// Cartography-side adapter for [`canvas_ir::layout::Penrose`].
 #[derive(Debug, Default, Clone)]
 pub struct PenroseAdapter {
     pub config: PenroseConfig,

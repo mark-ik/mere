@@ -7,7 +7,7 @@
 //! Graph layout algorithms that operate on `CanvasSceneInput` snapshots
 //! and return per-node position deltas for the host to apply.
 //!
-//! Extracted from `graph_canvas::layout` per the [cartography layer
+//! Extracted from `canvas_ir::layout` per the [cartography layer
 //! brief](../../../../design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
 //! §9 step 4 — the sibling-crate move. `graph-canvas` is now the
 //! renderer; this crate is the layout subsystem. `graph-canvas` still
@@ -36,8 +36,8 @@ use std::hash::Hash;
 use euclid::default::Vector2D;
 use serde::{Deserialize, Serialize};
 
-use graph_canvas::camera::CanvasViewport;
-use graph_canvas::scene::CanvasSceneInput;
+use canvas_ir::camera::CanvasViewport;
+use canvas_ir::scene::CanvasSceneInput;
 
 pub mod barnes_hut;
 pub mod curves;

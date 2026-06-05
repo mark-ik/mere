@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! [`LayoutStrategy`] adapter for [`graph_canvas::layout::Grid`].
+//! [`LayoutStrategy`] adapter for [`canvas_ir::layout::Grid`].
 //!
 //! Analytic: places nodes in a `columns × rows` arrangement at fixed
 //! pixel intervals. Selectable column-count strategy (Auto / Explicit
@@ -17,7 +17,7 @@ use cartography::projection::Projection;
 use cartography::request::ProjectionRequest;
 use cartography::strategy::LayoutStrategy;
 
-/// Cartography-side adapter for [`graph_canvas::layout::Grid`].
+/// Cartography-side adapter for [`canvas_ir::layout::Grid`].
 #[derive(Debug, Default, Clone, Copy)]
 pub struct GridAdapter {
     pub config: GridConfig,

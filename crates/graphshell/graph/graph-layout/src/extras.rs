@@ -34,8 +34,8 @@ use serde::{Deserialize, Serialize};
 
 use super::curves::{DegreeWeighting, ProximityFalloff, SimilarityCurve};
 use super::{Layout, LayoutExtras};
-use graph_canvas::camera::CanvasViewport;
-use graph_canvas::scene::CanvasSceneInput;
+use canvas_ir::camera::CanvasViewport;
+use canvas_ir::scene::CanvasSceneInput;
 
 /// Shared persistent state for stateless extras passes.
 ///
@@ -605,11 +605,11 @@ where
 
 /// A derived frame-affinity region passed in via [`LayoutExtras::frame_regions`].
 ///
-/// **Definition lives in `graph_canvas::scene`** (since 2026-05-18 sibling-
-/// crate move) because `graph_canvas::derive` also consumes this type as
+/// **Definition lives in `canvas_ir::scene`** (since 2026-05-18 sibling-
+/// crate move) because `canvas_ir::derive` also consumes this type as
 /// host-provided scene-derivation input. Re-exported here for back-compat;
-/// future code should import from `graph_canvas` directly.
-pub use graph_canvas::scene::FrameRegion;
+/// future code should import from `canvas_ir` directly.
+pub use canvas_ir::scene::FrameRegion;
 
 /// Tuning for the frame-affinity extras pass.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -709,8 +709,8 @@ where
 mod tests {
     use super::*;
     use euclid::default::{Rect, Size2D};
-    use graph_canvas::projection::ProjectionMode;
-    use graph_canvas::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use canvas_ir::projection::ProjectionMode;
+    use canvas_ir::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
 
     fn viewport() -> CanvasViewport {
         CanvasViewport {

@@ -81,8 +81,8 @@ pub struct CanvasEdge<N> {
     pub target: N,
     /// Edge weight (used for visual thickness, opacity, etc.).
     pub weight: f32,
-    /// Optional per-edge stroke override. `None` falls back to
-    /// [`crate::derive::DeriveConfig::default_edge_color`]. Hosts that
+    /// Optional per-edge stroke override. `None` falls back to the
+    /// consumer's default edge colour. Hosts that
     /// want family-coloured edges (one stored kernel edge between two
     /// nodes can carry several typed relations) supply a colour per
     /// emitted `CanvasEdge`.

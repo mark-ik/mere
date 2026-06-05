@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! [`LayoutStrategy`] adapter for [`graph_canvas::layout::Radial`].
+//! [`LayoutStrategy`] adapter for [`canvas_ir::layout::Radial`].
 //!
 //! Radial places nodes on concentric rings via BFS from a focal node:
 //! the focal node sits at `center`, its direct neighbors at radius
@@ -25,7 +25,7 @@ use crate::{
     Layout, Radial, RadialAngularPolicy, RadialConfig, RadialUnreachablePolicy, StaticLayoutState,
 };
 use euclid::default::Point2D;
-use graph_canvas::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
+use canvas_ir::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
 use kernel::graph::NodeKey;
 
 use super::shared::{bounds_of, build_positioned_edges};
@@ -33,7 +33,7 @@ use cartography::projection::{PositionedNode, Projection, ProjectionMetadata};
 use cartography::request::ProjectionRequest;
 use cartography::strategy::LayoutStrategy;
 
-/// Cartography-side adapter for [`graph_canvas::layout::Radial`].
+/// Cartography-side adapter for [`canvas_ir::layout::Radial`].
 ///
 /// The focal node comes from [`crate::ViewIntent::focus`]; if no focus
 /// is set on the request, the adapter returns an empty projection
@@ -117,8 +117,8 @@ impl LayoutStrategy for RadialAdapter {
             edges,
             scene_objects: Vec::new(),
             overlays: Vec::new(),
-            scene_mode: graph_canvas::scene::SceneMode::default(),
-            projection: graph_canvas::projection::ProjectionMode::default(),
+            scene_mode: canvas_ir::scene::SceneMode::default(),
+            projection: canvas_ir::projection::ProjectionMode::default(),
         };
 
         let mut radial = Radial::new(RadialConfig {
@@ -133,7 +133,7 @@ impl LayoutStrategy for RadialAdapter {
             damping: 1.0,
             step_count: 0,
         };
-        let viewport = graph_canvas::camera::CanvasViewport::default();
+        let viewport = canvas_ir::camera::CanvasViewport::default();
         let extras = crate::LayoutExtras::<NodeKey>::default();
         let deltas = radial.step(&scene, &mut state, 0.0, &viewport, &extras);
 

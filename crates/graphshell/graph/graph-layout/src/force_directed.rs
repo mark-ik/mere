@@ -24,8 +24,8 @@ use serde::{Deserialize, Serialize};
 
 use super::curves::Falloff;
 use super::{Layout, LayoutExtras};
-use graph_canvas::camera::CanvasViewport;
-use graph_canvas::scene::CanvasSceneInput;
+use canvas_ir::camera::CanvasViewport;
+use canvas_ir::scene::CanvasSceneInput;
 
 /// Persistent state for the force-directed layout.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,7 +239,7 @@ fn compute_repulsion(
 }
 
 fn compute_attraction<N>(
-    edges: &[graph_canvas::scene::CanvasEdge<N>],
+    edges: &[canvas_ir::scene::CanvasEdge<N>],
     positions: &[Point2D<f32>],
     index_by_id: &HashMap<&N, usize>,
     disp: &mut [Vector2D<f32>],
@@ -330,8 +330,8 @@ where
 mod tests {
     use super::*;
     use euclid::default::{Rect, Size2D};
-    use graph_canvas::projection::ProjectionMode;
-    use graph_canvas::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use canvas_ir::projection::ProjectionMode;
+    use canvas_ir::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
 
     fn viewport(w: f32, h: f32) -> CanvasViewport {
         CanvasViewport {
