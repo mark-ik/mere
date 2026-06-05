@@ -54,7 +54,23 @@ the load-bearing facts are inlined under **Technical ground truth** below.
   Isolation is the actor boundary. A Servo content pipeline, minus the process.
   Confidentiality limits are real: see **Threat model**.
 - **Compute actors (later).** Heavy layout, graph physics, Burn. Offloaded only
-  when a frame cannot hold the work.
+  when a frame cannot hold the work. The tier splits in two: **raw compute** (Burn,
+  gyre physics, aether fields) and **orchestration**, an async agent/intelligence
+  actor that chains model and tool calls and drives state by message. The scripting
+  layers map onto the actors (2026-06-04): **Rust + per-owner arena** = kernel and
+  actor internals (hot paths); **JS (Nova/Boa)** = content actors; **Rune** = the
+  orchestration/agent actor (async); **Rhai** = declarative authoring (aether
+  fields, scene effects, and sandboxed coordination policy on the sync/mesh actor).
+  Placement verified 2026-06-04: Rune (0.14.2, pre-1.0, Runestick stack-VM,
+  first-class async) wins the orchestration role because Rhai has no async at all;
+  Rhai keeps the untrusted-policy and declarative roles **on maturity, not a
+  capability gap** (Rune has an opt-in empty `Context`, a per-instruction budget,
+  and allocator-level memory caps, but self-labels its sandbox "work in progress,
+  no warranty" at 0.x, while Rhai v1.25 markets untrusted scripts with a Don't-Panic
+  guarantee and a documented limit suite). Both run in wasm32/browser with no JIT.
+  Caveat: **determinism is documented by neither**, so any re-run-to-a-hash
+  verification must enforce it host-side (no floats, canonical iteration order, no
+  host nondeterminism).
 
 ## The typed boundary (the GPUI lesson, made structural)
 
@@ -227,7 +243,15 @@ in `card.rs`); Nova is a later phase, and `!Send` from the day it lands.
    persistence DTO and clones node metadata, media sidecars, edges, imports,
    fields, and couplings. Actor read models are narrow (`TileGraphSlice`,
    `ThemeSnapshot`, `NodeMediaSnapshot`) and rebuilt only when their inputs
-   change.
+   change. **Arena discipline lives inside this, not across it (2026-06-04):** an
+   owner may store its state as a data-oriented arena (handle-indexed contiguous
+   vectors, Nova-shaped; the ECS lesson for the graph), which is where deep arena
+   integration belongs, within one owner on one thread; the arena is never shared
+   across the boundary, and cross-owner data still moves as `Send`, handle-shaped
+   snapshots. Actors between owners, arenas within owners: the boundary is the
+   long-term structural commitment, the arena the within-owner optimization that
+   also keeps the boundary cheap by keeping each owner's data clean and
+   value-shaped.
 4. **The kernel never blocks on an actor.** It composites each tile's
    last-delivered scene (stale-but-live) and keeps rendering. A slow actor
    degrades its own tile, not the frame. This discipline *is* the "offload only
@@ -407,6 +431,47 @@ primitive, capability/plugin isolation, the OS-multiprocess toggle, and JSPI
 adoption (the wasm stack-switching API for ergonomic async; stable in Chrome and
 Firefox, not yet Safari as of mid-2026).
 
+## Implementation status (audited 2026-06-04 against the code)
+
+The first Progress entry ("no code written yet") is superseded; a later entry logs
+P0-P2 as implemented. This consolidates the per-phase status in one place, audited
+against the tree, and surfaces the gaps the log leaves implicit (P0 is built but not
+yet embedded in the `App`; P4's plural pool exists, arrived via the by-hand-tiles
+arc, but its self-healing does not). Per phase, with evidence:
+
+- **P0 typed boundary — partial.** `armillary::KernelThread` (the `!Send` kernel
+  marker) is built and tested (`boundary.rs`, with a `compile_fail` proof and a
+  zero-size test). *Not yet* embedded in meerkat's `App`, and there is no named
+  `KernelInbox`: the kernel drains raw typed receivers (`fetch_rx`, `sync_rx`, the
+  constellation) directly in `user_event`. Remaining: embed the marker in the kernel
+  context; optionally name the inbox.
+- **P1 harness — substantially done.** `armillary::{spawn, ActorHandle, Emitter,
+  Wake}` + `Generations` (`actor.rs`, `message.rs`). `fetch` (`spawn_fetcher`) and
+  the content actor (`spawn_content`) run through it. The exception is `sync`: it
+  owns its own tokio runtime (`SyncHost`), not expressed through armillary.
+  Remaining: route sync through the harness, or accept it as a tokio-shaped
+  subsystem; the planned "third trivial actor" is effectively the content actor.
+- **P2 content off-thread + producer/applier split — done.** `spawn_content` runs
+  the cascade off the UI thread and ships generation-tagged `ContentUpdate::Scene`;
+  the constellation accepts the latest. `ingest::harvest_contributions` is the pure
+  producer, split from `harvest` (the kernel-side apply). Cascade-off-thread is
+  guarded by serval's `cascade_is_deterministic_off_thread_and_concurrent` test.
+- **P3 Nova — not started.** Content is `StaticDocument`; no JS engine yet.
+- **P4 N actors + lifecycle — partial.** `meerkat::Constellation` is the plural,
+  per-tile actor pool: spawn / reap / LRU eviction over a cap / keep-warm / the
+  background-keep flag. *Remaining:* self-healing — `ActorSpec`-driven respawn, the
+  broken-tile placeholder on a content-actor panic, and content-thread pooling (the
+  leaked-Stylo-thread-local caveat).
+- **P5 — descoped** (as written).
+- **P6 compute actors — not started.**
+
+So the real next steps are: finish **P0** (embed the marker, optionally name the
+inbox), close **P4**'s self-healing (respawn + broken-tile), then **P3** (a JS
+engine in the content actor). Routing sync through armillary (P1) is optional
+cleanup. Note: the tiled-view render perf issue (re-rasterizing every tile's scene
+each frame) is a kernel/compositor concern, not one of these phases — a per-tile
+texture cache keyed by the scene generation, separate work.
+
 ## Phases (done-conditions, not dates)
 
 - **P0 Name the host-kernel inbox and the typed boundary.** A thin `KernelInbox`
@@ -441,14 +506,27 @@ Firefox, not yet Safari as of mid-2026).
   paint protocol implements the **Script protocol floor** above, including
   run-to-completion script turns, microtask checkpoints, subresource requests by
   message, and generation-tagged scene commits. *Done:* a scripted page is
-  interactive in a tile without giving the actor synchronous kernel access.
+  interactive in a tile without giving the actor synchronous kernel access. **The
+  JS engine is a per-target binding, not fixed to Nova** (2026-06-04): Nova is 1.0
+  (2026-03-15) but ~80% Test262 with no wasm execution, and its data-oriented
+  arenas hit the wasm32 4GB ceiling in-browser, relieved only by Memory64 (shipped
+  in Chrome/Firefox/Node, absent in Safari/WebKit, so absent on iOS). So the
+  content actor runs **Nova native** and **Boa in-browser** (v0.21.1, ~94% Test262,
+  wasm-safe), especially on Safari/iOS; Nova-in-browser waits on a wasm32 build plus
+  WebKit Memory64. The engine is internal to the content actor, so swapping it is
+  actor-local, not a boundary change.
 - **P4 N actors + lifecycle.** One actor per open origin; the kernel spawns and
   reaps; per-origin pooling; respawn uses the kernel-owned `ActorSpec`. The fault
   default is thread respawn, not in-place `catch_unwind`: a panic mid-cascade can
   leave Stylo's thread-local sharing cache inconsistent, so let the actor thread
   die (the kernel observes the channel disconnect, paints the broken-tile
   placeholder, and respawns a fresh thread with fresh thread-locals from the
-  spec). *Done:* the constellation is plural and self-healing.
+  spec). **Leak caveat (verified 2026-06-04):** Stylo's per-thread sharing cache
+  is a *leaked* thread-local, so every fresh content-actor thread leaks one that
+  is never reclaimed. Recycle content-actor threads (a bounded pool, which the
+  per-origin pooling above already wants) rather than spinning a brand-new OS
+  thread per fault / navigation, or thread churn leaks unboundedly. *Done:* the
+  constellation is plural and self-healing.
 - **P5 Isolation, if ever needed (descoped).** No in-process wasm sandbox (see
   **Technical ground truth** for why it is the wrong boundary). If a feature
   crosses the semi-trusted line, the isolation answer is an OS subprocess on
@@ -464,7 +542,12 @@ Firefox, not yet Safari as of mid-2026).
   it either submits jobs through a kernel-owned GPU service or runs on a separate
   compute device/queue. CPU compute (Burn-ndarray, physics) has no such
   constraint. *Done:* a frame that cannot hold the work sheds it without
-  stalling, and GPU compute never contends with render.
+  stalling, and GPU compute never contends with render. **A compute actor is the
+  local case of the mesh (2026-06-04):** the same request-to-result message can
+  target a local thread or a remote device over p2panda, so local frame-spill,
+  federated mesh compute, and communal big-model hosting are one abstraction at two
+  scopes (the mesh is a compute actor with a remote recipient). See the
+  [resource-coordination brief](../research/2026-06-04_resource_coordination_brief.md).
 
 ## Risks and hard parts
 
@@ -542,6 +625,17 @@ what is most likely to break, the mitigation, and a pointer.
   kernel-owned `ActorSpec`; and P3 now has a script-protocol floor (lifecycle,
   generation-tagged input, run-to-completion turns, microtask checkpoints,
   message-based fetch, coherent paint commits, contribution output).
+- **2026-06-04.** Cascade off-thread guarantee hardened on the serval side
+  (lesson #1). Added `cascade_is_deterministic_off_thread_and_concurrent` to
+  `ports/pelt-live` (serval): the Scene's draw ops are byte-identical on the main
+  thread, off-thread, and across 8 concurrent threads, so the property P2 leans on
+  is now a `cargo test` regression guard living with the engine (stronger than the
+  mere-side glyph-count probe, which counts rather than compares). Path audit: safe
+  because Stylo's `GLOBAL_STYLE_DATA` is read-shared, the `Stylist` is built fresh
+  per call, and the cascade context (`CascadeGuard`) + Stylo's sharing cache are
+  thread-locals. The one finding fed back into **P4**: that sharing cache is a
+  *leaked* thread-local, so respawn-by-fresh-thread leaks one per thread; pool /
+  recycle content-actor threads rather than spinning a new OS thread per fault.
 - **2026-06-03.** Redundancy pass. The Risks section had become a restatement of
   its home sections, so it was compressed to terse risk + mitigation + pointer
   bullets; P5 and the invariants-closing note were trimmed to point at
@@ -575,3 +669,34 @@ what is most likely to break, the mitigation, and a pointer.
   host but freezes the card; fetch-on-focus (a node click loading its page) is an
   open enhancement (pre-existing behavior, not a P2 regression); and
   `sync`-via-armillary is deferred (the last I/O subsystem).
+- **2026-06-04.** Scripting/engine layer folded in (from the resource-coordination
+  thread). Four consequences recorded: (1) **P3** is now a per-target JS-engine
+  binding (Nova native; Boa in-browser, the only option on Safari/iOS until WebKit
+  ships Memory64; Nova-in-browser waits on a wasm32 build + Memory64), an
+  actor-local swap not a boundary change; engine facts verified 2026-06-04 (Nova 1.0
+  but ~80% Test262 and no wasm execution; Boa v0.21.1 ~94%, wasm-safe; Memory64 in
+  Chrome/Firefox/Node, not Safari). (2) **Invariant 3** sharpened: arena discipline
+  is per-owner, never shared across the boundary (actors between owners, arenas
+  within owners). (3) **P6** compute actors are the local case of the mesh (same
+  request-to-result message, local thread or remote device over p2panda). (4) The
+  compute tier splits into raw compute and an async **Rune agent/intelligence
+  actor**, with the scripting layers mapped onto the actor tiers (Rust+arena / JS
+  content / Rune orchestration / Rhai declarative + coordination policy). The Rune
+  verification pass landed same day (23/25 claims confirmed) and **confirmed the
+  placement with one correction**: Rhai's edge for untrusted policy is maturity and
+  breadth of documented limits, not a Rune capability gap (Rune has opt-in Context +
+  per-instruction budget + memory caps but self-labels its sandbox WIP at 0.x), and
+  **determinism is documented by neither engine**, so re-run-to-a-hash verification
+  must be constrained host-side. No code; design-dissemination edit.
+- **2026-06-04 — Status audit against the code.** Added the **Implementation status**
+  section above, verified by reading the tree, not the log. Confirms the P0-P2 entry
+  and surfaces what it left implicit: `armillary::KernelThread` is built + tested but
+  **not embedded** in meerkat's `App`, and there is no named `KernelInbox` (the kernel
+  drains `fetch_rx` / `sync_rx` / the constellation raw in `user_event`); `sync` is
+  still its own tokio runtime, not an armillary actor. **P4's plural pool is done**
+  (`meerkat::Constellation`: spawn / reap / LRU / keep-warm / background, arrived via
+  the by-hand-tiles arc), but its **self-healing is not** (no `ActorSpec` respawn or
+  broken-tile placeholder). Real next steps: finish P0 (embed the marker), close P4's
+  self-healing, then P3. Separately, the tiled-view perf cost (re-rasterizing every
+  tile each frame) is a compositor concern — a per-tile texture cache keyed by the
+  scene generation — not one of these phases.
