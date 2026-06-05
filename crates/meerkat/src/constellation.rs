@@ -48,6 +48,9 @@ struct Activation {
     shown: Option<(String, u8, u32, u32)>,
     /// The latest generation-accepted scene, composited at the node's pane.
     scene: Option<Scene>,
+    /// Bumped each time a new scene is accepted, so the host can cache a tile's
+    /// rasterized texture and re-rasterize only when this changes (not every frame).
+    scene_version: u64,
     /// Keep the actor working even when the tab is not shown (headless background
     /// work), and exempt it from cap eviction.
     background: bool,
@@ -132,6 +135,7 @@ impl Constellation {
                         gens: Generations::default(),
                         shown: None,
                         scene: None,
+                        scene_version: 0,
                         background: false,
                         last_touched: touch,
                     },
@@ -199,6 +203,13 @@ impl Constellation {
         self.active.get(&member).and_then(|a| a.scene.as_ref())
     }
 
+    /// The member's scene version — bumped each time a new scene is accepted. The
+    /// host caches a tile's rasterized texture against this so an unchanged tile is
+    /// not re-rasterized every frame. `0` if the member is not active or has no scene.
+    pub fn scene_version(&self, member: GraphMemberId) -> u64 {
+        self.active.get(&member).map_or(0, |a| a.scene_version)
+    }
+
     /// Deactivate `member` now — its actor winds down on drop. For when the node
     /// itself is gone (deleted), so `reconcile` would not re-spawn it anyway.
     pub fn reap(&mut self, member: GraphMemberId) {
@@ -263,6 +274,7 @@ impl Constellation {
                             let stamp = Generations { nav, viewport: viewport_gen };
                             if activation.gens.accepts(stamp) {
                                 activation.scene = Some(scene);
+                                activation.scene_version += 1;
                                 out.any_scene = true;
                             }
                         }

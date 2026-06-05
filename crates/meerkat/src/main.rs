@@ -202,6 +202,11 @@ struct App {
     /// recomputed each tiled frame. The drag uses it to resolve the drop target
     /// under the pointer + which zone (center = move/stack, edge = split).
     tile_rects: Vec<(GraphMemberId, [f32; 4])>,
+    /// Cached rasterized texture per tile, keyed by member. Re-rasterized only when
+    /// the tile's scene version or size changes, so an unchanged tile is composited
+    /// from its cached texture instead of re-rasterized every frame (the cost that
+    /// scaled with tile count). Evicted when a tile closes.
+    tile_textures: HashMap<GraphMemberId, CachedTile>,
     /// An in-progress divider drag: the left-slot index, the press x, and the slot
     /// weights snapshot at press. Cursor moves reweight the two neighbouring slots.
     divider_drag: Option<(usize, f32, Vec<f32>)>,
@@ -230,6 +235,17 @@ struct App {
     /// (armillary's typed boundary), so kernel authority cannot be moved onto an
     /// actor thread — the attempt is a compile error, not a review catch.
     _kernel: armillary::KernelThread,
+}
+
+/// A tile's cached rasterized texture: the scene version + size it was rasterized
+/// at, plus the GPU texture and its view. Reused across frames while the version +
+/// size hold, so an idle tile is not re-rasterized.
+struct CachedTile {
+    version: u64,
+    size: (u32, u32),
+    #[allow(dead_code)] // owns the texture the `view` references; kept alive here
+    tex: wgpu::Texture,
+    view: wgpu::TextureView,
 }
 
 /// The host kernel's inbox: the typed receivers each I/O actor delivers updates on,
@@ -351,6 +367,7 @@ impl App {
             shown_location: None,
             tab_drag: None,
             tile_rects: Vec::new(),
+            tile_textures: HashMap::new(),
             divider_drag: None,
             width: 1024,
             height: 600,
@@ -566,17 +583,30 @@ impl App {
             content_h,
             ColorLoad::Clear(wgpu::Color { r: 0.067, g: 0.078, b: 0.100, a: 1.0 }),
         );
-        // Rasterize each active node's latest scene to its own offscreen target,
-        // kept alive in the Vec through the present. A node whose actor has not
-        // delivered a scene yet is skipped this frame.
-        let card_rasters: Vec<_> = cards
-            .iter()
-            .filter_map(|(member, dest, (cw, ch))| {
-                let scene = self.constellation.scene(*member)?;
-                let (tex, view) = host.rasterize(scene, *cw, *ch, ColorLoad::Clear(CARD_BG));
-                Some((*dest, tex, view))
-            })
-            .collect();
+        // Rasterize each tile's scene to an offscreen texture only when its version
+        // or size changed; reuse the cached texture otherwise, so an unchanged tile
+        // is not re-rasterized every frame (the cost that scaled with tile count).
+        // The cache (self.tile_textures) keeps the textures alive across frames; evict
+        // closed tiles first so theirs free. `composite` is what to draw, in order.
+        self.tile_textures.retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
+        let mut composite: Vec<([f32; 4], GraphMemberId)> = Vec::with_capacity(cards.len());
+        for (member, dest, (cw, ch)) in &cards {
+            let version = self.constellation.scene_version(*member);
+            let fresh = self
+                .tile_textures
+                .get(member)
+                .is_some_and(|c| c.version == version && c.size == (*cw, *ch));
+            if !fresh {
+                if let Some(scene) = self.constellation.scene(*member) {
+                    let (tex, view) = host.rasterize(scene, *cw, *ch, ColorLoad::Clear(CARD_BG));
+                    self.tile_textures
+                        .insert(*member, CachedTile { version, size: (*cw, *ch), tex, view });
+                }
+            }
+            if self.tile_textures.contains_key(member) {
+                composite.push((*dest, *member));
+            }
+        }
 
         let Some(frame) = host.acquire() else { return };
         let target_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -593,9 +623,10 @@ impl App {
             h,
             ExternalTexturePlacement::new([0.0, toolbar_h as f32, w as f32, h as f32]),
         );
-        for (dest, _tex, view) in &card_rasters {
+        for (dest, member) in &composite {
+            let Some(cached) = self.tile_textures.get(member) else { continue };
             host.renderer().compose_external_texture(
-                view,
+                &cached.view,
                 &target_view,
                 format,
                 w,
