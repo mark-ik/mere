@@ -46,7 +46,7 @@ logs/
 # validation). Multi-MB binaries; do not commit. Devs set MERE_MINILM_DIR
 # to point at this directory after running the download recipe in
 # crates/intelligence-embeddings/README.md.
-models/
+/models/
 
 # Host session store — runtime artifact written by `cargo run -p host`
 # (./mere-sessions relative to the run cwd). Never commit session state.
