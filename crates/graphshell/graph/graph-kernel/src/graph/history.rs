@@ -2,31 +2,38 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Per-node navigation history.
+//! Navigation history — one **shared** visit space for the whole graph.
 //!
-//! Carries each node's webview navigation history projection over the
-//! shared `node_lineage::GraphMemory` substrate. The history is
-//! addressable per-owner (one node has one `Primary` owner today);
-//! projections expose a linear-history view, a branching-history view,
-//! and a coarse semantic summary used by intelligence layers.
+//! Every node is an `Owner` within a single `node_lineage::GraphMemory`, keyed by
+//! the node's UUID. A node's own browse history is its owner's path (within-node
+//! back/forward); a node minted by an "open in new node" gesture is **spawned**
+//! with its creator set to the origin node, so its first visit attaches under the
+//! origin's *current* visit — the navigated-from anchor is correct-by-construction
+//! and within-node + cross-node lineage live in one tree (the (b) anchor design,
+//! 2026-06-06; see the node-navigation-lineage plan).
 //!
-//! Extracted from `graph/mod.rs` per the 2026-05-11 kernel-mod
-//! decomposition pass — the kernel's `graph/mod.rs` was 5102 LOC and
-//! well over the 600-LOC ceiling. Earlier work moved
-//! identity types to `identity.rs` and `Node` / `NodeLifecycle` to
-//! `node.rs`; node history was already documented as the next natural
-//! split target in `node.rs`'s module header.
+//! The store keeps the serializable [`GraphMemorySnapshot`] and rehydrates the
+//! live `GraphMemory` (a non-serializable `SlotMap`) per operation — the same
+//! pattern the per-node predecessor used, now over one shared space. (A live
+//! in-memory copy with custom (de)serialization is the future optimization if the
+//! per-op rehydrate cost matters.)
+//!
+//! Extracted from `graph/mod.rs` per the 2026-05-11 kernel-mod decomposition pass.
 
 use node_lineage::{
     EntryPrivacy as MemoryEntryPrivacy, GraphMemory as OwnerScopedMemory, GraphMemorySnapshot,
     TransitionKind as MemoryTransitionKind,
 };
 use rkyv::{Archive, Deserialize, Serialize};
+use uuid::Uuid;
 
+/// Owner identity in the shared visit space: one owner per graph node, keyed by
+/// the node's UUID (string form — rkyv/serde-clean without a uuid feature). The
+/// enum (rather than a bare `String`) keeps the identity namespaced and leaves
+/// room for non-node owners later.
 #[derive(
     Debug,
     Clone,
-    Copy,
     PartialEq,
     Eq,
     Hash,
@@ -38,7 +45,13 @@ use rkyv::{Archive, Deserialize, Serialize};
 )]
 #[rkyv(derive(Debug, PartialEq, Eq))]
 pub enum NodeHistoryOwner {
-    Primary,
+    Node(String),
+}
+
+impl NodeHistoryOwner {
+    fn of(node: Uuid) -> Self {
+        NodeHistoryOwner::Node(node.to_string())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +89,13 @@ pub struct NodeHistorySemanticSummary {
     pub visit_count: usize,
 }
 
+type Memory = OwnerScopedMemory<String, String, NodeHistoryOwner, ()>;
+type Snapshot = GraphMemorySnapshot<String, String, NodeHistoryOwner, ()>;
+
+/// The graph's whole navigation history: one shared visit space, one owner per
+/// node. Methods key by node [`Uuid`]; an absent owner reads as empty history and
+/// is created lazily on the node's first [`record_visit`](Self::record_visit) (or
+/// eagerly via [`spawn`](Self::spawn) for an anchored branch).
 #[derive(
     Debug,
     Clone,
@@ -87,17 +107,17 @@ pub struct NodeHistorySemanticSummary {
     serde::Serialize,
     serde::Deserialize,
 )]
-pub struct NodeNavigationMemory {
-    snapshot: GraphMemorySnapshot<String, String, NodeHistoryOwner, ()>,
+pub struct SharedNavigationMemory {
+    snapshot: Snapshot,
 }
 
-impl Default for NodeNavigationMemory {
+impl Default for SharedNavigationMemory {
     fn default() -> Self {
         Self::empty()
     }
 }
 
-impl NodeNavigationMemory {
+impl SharedNavigationMemory {
     pub fn empty() -> Self {
         Self {
             snapshot: GraphMemorySnapshot {
@@ -108,83 +128,113 @@ impl NodeNavigationMemory {
         }
     }
 
-    pub fn from_linear_history(entries: Vec<String>, current_index: usize) -> Self {
-        if entries.is_empty() {
-            return Self::empty();
-        }
-
-        let mut memory = OwnerScopedMemory::<String, String, NodeHistoryOwner, ()>::new();
-        let owner = memory.ensure_owner(NodeHistoryOwner::Primary, None);
-        for (idx, url) in entries.iter().enumerate() {
-            let entry = memory.resolve_or_create_entry(
-                url.clone(),
-                url.clone(),
-                idx as u64,
-                MemoryEntryPrivacy::LocalOnly,
-            );
-            let transition = if idx == 0 {
-                MemoryTransitionKind::UrlTyped
-            } else {
-                MemoryTransitionKind::Unknown
-            };
-            let _ = memory.visit_entry(owner, entry, (), transition, idx as u64);
-        }
-
-        let clamped_index = current_index.min(entries.len().saturating_sub(1));
-        let steps_back = entries
-            .len()
-            .saturating_sub(1)
-            .saturating_sub(clamped_index);
-        if steps_back > 0 {
-            let _ = memory.back(owner, steps_back, entries.len() as u64);
-        }
-
-        Self {
-            snapshot: memory.to_snapshot(),
-        }
+    /// Wrap an existing snapshot (snapshot restore).
+    pub fn from_snapshot(snapshot: Snapshot) -> Self {
+        Self { snapshot }
     }
 
-    pub fn projection(&self) -> NodeHistoryProjection {
-        let memory = OwnerScopedMemory::<String, String, NodeHistoryOwner, ()>::from_snapshot(
-            self.snapshot.clone(),
-        );
-        let Some(owner) = memory.owner_id_by_identity(&NodeHistoryOwner::Primary) else {
-            return NodeHistoryProjection {
-                entries: Vec::new(),
-                current_index: 0,
-            };
-        };
+    /// The serializable snapshot, for persistence.
+    pub fn snapshot(&self) -> &Snapshot {
+        &self.snapshot
+    }
 
+    fn hydrate(&self) -> Memory {
+        Memory::from_snapshot(self.snapshot.clone())
+    }
+
+    /// Ensure `node` has an owner (no creator — a root history). Lazy: also done
+    /// by [`record_visit`]; explicit calls are harmless (idempotent).
+    pub fn ensure(&mut self, node: Uuid) {
+        let mut memory = self.hydrate();
+        memory.ensure_owner(NodeHistoryOwner::of(node), None);
+        self.snapshot = memory.to_snapshot();
+    }
+
+    /// Spawn `child`'s owner anchored under `parent`'s **current visit** (the
+    /// navigated-from point), via node-lineage's creator machinery. Call **before**
+    /// the child's first [`record_visit`] so that first visit attaches under the
+    /// parent's current visit in the shared tree. A no-op-ish fallback to a root
+    /// owner if `parent` has no owner yet.
+    pub fn spawn(&mut self, child: Uuid, parent: Uuid) {
+        let mut memory = self.hydrate();
+        let creator = memory.owner_id_by_identity(&NodeHistoryOwner::of(parent));
+        memory.ensure_owner(NodeHistoryOwner::of(child), creator);
+        self.snapshot = memory.to_snapshot();
+    }
+
+    /// Record navigating `node` to `url` as a new current visit. Forward-fork:
+    /// navigating after [`back`](Self::back) branches off the current visit and
+    /// preserves the prior forward path. Entries dedup by URL; each navigation is
+    /// a distinct visit. Creates the owner (root) if absent.
+    pub fn record_visit(&mut self, node: Uuid, url: &str, transition: MemoryTransitionKind, at_ms: u64) {
+        let mut memory = self.hydrate();
+        let owner = memory.ensure_owner(NodeHistoryOwner::of(node), None);
+        let entry = memory.resolve_or_create_entry(
+            url.to_string(),
+            url.to_string(),
+            at_ms,
+            MemoryEntryPrivacy::LocalOnly,
+        );
+        let _ = memory.visit_entry(owner, entry, (), transition, at_ms);
+        self.snapshot = memory.to_snapshot();
+    }
+
+    /// Move `node`'s cursor back one visit. Returns the revealed URL, or `None` at
+    /// the root (cursor did not move).
+    pub fn back(&mut self, node: Uuid, at_ms: u64) -> Option<String> {
+        self.step(node, true, at_ms)
+    }
+
+    /// Move `node`'s cursor forward one visit. Returns the revealed URL, or `None`
+    /// at the tip.
+    pub fn forward(&mut self, node: Uuid, at_ms: u64) -> Option<String> {
+        self.step(node, false, at_ms)
+    }
+
+    fn step(&mut self, node: Uuid, backward: bool, at_ms: u64) -> Option<String> {
+        let mut memory = self.hydrate();
+        let owner = memory.owner_id_by_identity(&NodeHistoryOwner::of(node))?;
+        let moved = if backward {
+            memory.back(owner, 1, at_ms)
+        } else {
+            memory.forward(owner, 1, at_ms)
+        }
+        .ok()
+        .flatten()?;
+        let url = memory
+            .visit(moved)
+            .and_then(|visit| memory.entry(visit.entry))
+            .map(|entry| entry.payload.clone());
+        self.snapshot = memory.to_snapshot();
+        url
+    }
+
+    /// `node`'s linear-history projection (active path + cursor).
+    pub fn projection(&self, node: Uuid) -> NodeHistoryProjection {
+        let memory = self.hydrate();
+        let Some(owner) = memory.owner_id_by_identity(&NodeHistoryOwner::of(node)) else {
+            return NodeHistoryProjection { entries: Vec::new(), current_index: 0 };
+        };
         let entries = memory
             .linear_history_entries_of_owner(owner)
             .unwrap_or_default()
             .into_iter()
             .filter_map(|entry_id| memory.entry(entry_id).map(|entry| entry.payload.clone()))
             .collect::<Vec<_>>();
-        let current_index = memory
-            .current_index_of_owner(owner)
-            .ok()
-            .flatten()
-            .unwrap_or(0);
-
-        NodeHistoryProjection {
-            entries,
-            current_index,
-        }
+        let current_index =
+            memory.current_index_of_owner(owner).ok().flatten().unwrap_or(0);
+        NodeHistoryProjection { entries, current_index }
     }
 
-    pub fn branch_projection(&self) -> NodeHistoryBranchProjection {
-        let memory = OwnerScopedMemory::<String, String, NodeHistoryOwner, ()>::from_snapshot(
-            self.snapshot.clone(),
-        );
-        let Some(owner) = memory.owner_id_by_identity(&NodeHistoryOwner::Primary) else {
+    /// `node`'s branching-history projection (visit tree with alternates).
+    pub fn branch_projection(&self, node: Uuid) -> NodeHistoryBranchProjection {
+        let memory = self.hydrate();
+        let Some(owner) = memory.owner_id_by_identity(&NodeHistoryOwner::of(node)) else {
             return NodeHistoryBranchProjection::default();
         };
-
         let Ok(branch) = memory.owner_branch_projection(owner) else {
             return NodeHistoryBranchProjection::default();
         };
-
         NodeHistoryBranchProjection {
             visits: branch
                 .visits
@@ -209,185 +259,82 @@ impl NodeNavigationMemory {
         }
     }
 
-    pub fn current_url(&self) -> Option<String> {
-        let projection = self.projection();
-        projection.entries.get(projection.current_index).cloned()
-    }
-
-    pub fn semantic_summary(&self) -> NodeHistorySemanticSummary {
-        let memory = OwnerScopedMemory::<String, String, NodeHistoryOwner, ()>::from_snapshot(
-            self.snapshot.clone(),
-        );
-        let Some(owner) = memory.owner_id_by_identity(&NodeHistoryOwner::Primary) else {
+    /// A coarse semantic summary of `node`'s history, for intelligence layers.
+    pub fn semantic_summary(&self, node: Uuid) -> NodeHistorySemanticSummary {
+        let memory = self.hydrate();
+        let Some(owner) = memory.owner_id_by_identity(&NodeHistoryOwner::of(node)) else {
             return NodeHistorySemanticSummary::default();
         };
-
         let current_url = memory
             .current_entry_of_owner(owner)
             .and_then(|entry_id| memory.entry(entry_id).map(|entry| entry.payload.clone()));
+        // Last visit timestamp, scoped to this owner's visits.
         let last_visit_at_ms = memory
-            .visits()
-            .map(|(_, visit)| visit.created_at_ms)
+            .linear_history_visits_of_owner(owner)
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|visit_id| memory.visit(visit_id).map(|v| v.created_at_ms))
             .max()
             .filter(|timestamp| *timestamp > 0);
+        let visit_count =
+            memory.linear_history_visits_of_owner(owner).map(|v| v.len()).unwrap_or(0);
+        NodeHistorySemanticSummary { current_url, last_visit_at_ms, visit_count }
+    }
 
-        NodeHistorySemanticSummary {
-            current_url,
-            last_visit_at_ms,
-            visit_count: memory.visit_count(),
+    /// `node`'s current page (its cursor's URL), if any.
+    pub fn current_url(&self, node: Uuid) -> Option<String> {
+        let projection = self.projection(node);
+        projection.entries.get(projection.current_index).cloned()
+    }
+
+    /// Whether [`back`](Self::back) would move `node`'s cursor.
+    pub fn can_back(&self, node: Uuid) -> bool {
+        self.projection(node).current_index > 0
+    }
+
+    /// Whether [`forward`](Self::forward) would move `node`'s cursor.
+    pub fn can_forward(&self, node: Uuid) -> bool {
+        let projection = self.projection(node);
+        projection.current_index + 1 < projection.entries.len()
+    }
+
+    /// Drop `node`'s owner and its visits (on node removal).
+    pub fn remove(&mut self, node: Uuid) {
+        let mut memory = self.hydrate();
+        if let Some(owner) = memory.owner_id_by_identity(&NodeHistoryOwner::of(node)) {
+            let _ = memory.delete_owner(owner);
+            self.snapshot = memory.to_snapshot();
         }
     }
 
-    pub fn replace_linear_history(&mut self, entries: Vec<String>, current_index: usize) {
+    /// Seed `node`'s linear history from `entries` with `current_index` current
+    /// (a fresh root owner). Used by tests and any linear-history import path.
+    pub fn seed_linear(&mut self, node: Uuid, entries: Vec<String>, current_index: usize) {
         if entries.is_empty() {
-            *self = Self::empty();
             return;
         }
-
-        let mut memory = OwnerScopedMemory::<String, String, NodeHistoryOwner, ()>::from_snapshot(
-            self.snapshot.clone(),
-        );
-        let owner = memory.ensure_owner(NodeHistoryOwner::Primary, None);
-        let existing_visits = memory
-            .linear_history_visits_of_owner(owner)
-            .unwrap_or_default();
-        let existing_entries = existing_visits
-            .iter()
-            .filter_map(|visit_id| {
-                let visit = memory.visit(*visit_id)?;
-                let entry = memory.entry(visit.entry)?;
-                Some(entry.payload.clone())
-            })
-            .collect::<Vec<_>>();
-
-        if existing_entries.first() != entries.first() {
-            *self = Self::from_linear_history(entries, current_index);
-            return;
-        }
-
-        let mut path = vec![existing_visits[0]];
-        let mut parent = existing_visits[0];
-
-        for (idx, url) in entries.iter().enumerate().skip(1) {
-            let entry_id = memory.resolve_or_create_entry(
+        let mut memory = self.hydrate();
+        let owner = memory.ensure_owner(NodeHistoryOwner::of(node), None);
+        for (idx, url) in entries.iter().enumerate() {
+            let entry = memory.resolve_or_create_entry(
                 url.clone(),
                 url.clone(),
                 idx as u64,
                 MemoryEntryPrivacy::LocalOnly,
             );
-            let reusable_child = memory.visit(parent).and_then(|visit| {
-                visit.children.iter().copied().find(|child_id| {
-                    memory
-                        .visit(*child_id)
-                        .is_some_and(|child| child.entry == entry_id)
-                })
-            });
-
-            let child_id = if let Some(child_id) = reusable_child {
-                child_id
+            let transition = if idx == 0 {
+                MemoryTransitionKind::UrlTyped
             } else {
-                let parent_index = path.len().saturating_sub(1);
-                if memory
-                    .rebind_owner_to_path(owner, &path, parent_index, idx as u64)
-                    .is_err()
-                {
-                    *self = Self::from_linear_history(entries, current_index);
-                    return;
-                }
-                let transition = if idx == 0 {
-                    MemoryTransitionKind::UrlTyped
-                } else {
-                    MemoryTransitionKind::Unknown
-                };
-                let Ok(child_id) = memory.visit_entry(owner, entry_id, (), transition, idx as u64)
-                else {
-                    *self = Self::from_linear_history(entries, current_index);
-                    return;
-                };
-                child_id
+                MemoryTransitionKind::Unknown
             };
-
-            path.push(child_id);
-            parent = child_id;
+            let _ = memory.visit_entry(owner, entry, (), transition, idx as u64);
         }
-
-        if memory
-            .rebind_owner_to_path(owner, &path, current_index, entries.len() as u64)
-            .is_err()
-        {
-            *self = Self::from_linear_history(entries, current_index);
-            return;
+        let clamped = current_index.min(entries.len().saturating_sub(1));
+        let steps_back = entries.len().saturating_sub(1).saturating_sub(clamped);
+        if steps_back > 0 {
+            let _ = memory.back(owner, steps_back, entries.len() as u64);
         }
-
         self.snapshot = memory.to_snapshot();
-    }
-
-    /// Record navigating to `url` as a new visit under the `Primary` owner,
-    /// which becomes current. Forward-fork: navigating after [`back`](Self::back)
-    /// branches a new child off the current visit and preserves the prior
-    /// forward path (temporal-integrity R0). The entry is deduplicated by URL,
-    /// but each navigation is a distinct visit (revisiting a URL is a new
-    /// occurrence).
-    pub fn record_visit(&mut self, url: &str, transition: MemoryTransitionKind, at_ms: u64) {
-        let mut memory = OwnerScopedMemory::<String, String, NodeHistoryOwner, ()>::from_snapshot(
-            self.snapshot.clone(),
-        );
-        let owner = memory.ensure_owner(NodeHistoryOwner::Primary, None);
-        let entry = memory.resolve_or_create_entry(
-            url.to_string(),
-            url.to_string(),
-            at_ms,
-            MemoryEntryPrivacy::LocalOnly,
-        );
-        let _ = memory.visit_entry(owner, entry, (), transition, at_ms);
-        self.snapshot = memory.to_snapshot();
-    }
-
-    /// Move the cursor back one visit along the owner's path. Returns the new
-    /// current URL, or `None` if already at the root (the cursor did not move).
-    pub fn back(&mut self, at_ms: u64) -> Option<String> {
-        self.step(true, at_ms)
-    }
-
-    /// Move the cursor forward one visit. Returns the new current URL, or `None`
-    /// if already at the tip (the cursor did not move).
-    pub fn forward(&mut self, at_ms: u64) -> Option<String> {
-        self.step(false, at_ms)
-    }
-
-    fn step(&mut self, backward: bool, at_ms: u64) -> Option<String> {
-        let mut memory = OwnerScopedMemory::<String, String, NodeHistoryOwner, ()>::from_snapshot(
-            self.snapshot.clone(),
-        );
-        let owner = memory.owner_id_by_identity(&NodeHistoryOwner::Primary)?;
-        let moved = if backward {
-            memory.back(owner, 1, at_ms)
-        } else {
-            memory.forward(owner, 1, at_ms)
-        }
-        .ok()
-        .flatten()?;
-        let url = memory
-            .visit(moved)
-            .and_then(|visit| memory.entry(visit.entry))
-            .map(|entry| entry.payload.clone());
-        self.snapshot = memory.to_snapshot();
-        url
-    }
-
-    /// Whether [`back`](Self::back) would move (the cursor is not at the root).
-    pub fn can_back(&self) -> bool {
-        self.projection().current_index > 0
-    }
-
-    /// Whether [`forward`](Self::forward) would move (the cursor is not at the tip).
-    pub fn can_forward(&self) -> bool {
-        let projection = self.projection();
-        projection.current_index + 1 < projection.entries.len()
-    }
-
-    pub fn snapshot(&self) -> &GraphMemorySnapshot<String, String, NodeHistoryOwner, ()> {
-        &self.snapshot
     }
 }
 
@@ -395,28 +342,32 @@ impl NodeNavigationMemory {
 mod tests {
     use super::*;
 
+    fn n(x: u128) -> Uuid {
+        Uuid::from_u128(x)
+    }
+
     #[test]
     fn record_visit_back_forward_and_forward_fork() {
-        let mut m = NodeNavigationMemory::empty();
-        m.record_visit("a", MemoryTransitionKind::UrlTyped, 1);
-        m.record_visit("b", MemoryTransitionKind::LinkClick, 2);
-        m.record_visit("c", MemoryTransitionKind::LinkClick, 3);
-        assert_eq!(m.current_url().as_deref(), Some("c"));
-        assert!(m.can_back());
-        assert!(!m.can_forward());
+        let node = n(1);
+        let mut m = SharedNavigationMemory::empty();
+        m.record_visit(node, "a", MemoryTransitionKind::UrlTyped, 1);
+        m.record_visit(node, "b", MemoryTransitionKind::LinkClick, 2);
+        m.record_visit(node, "c", MemoryTransitionKind::LinkClick, 3);
+        assert_eq!(m.current_url(node).as_deref(), Some("c"));
+        assert!(m.can_back(node));
+        assert!(!m.can_forward(node));
 
-        assert_eq!(m.back(4).as_deref(), Some("b"));
-        assert_eq!(m.back(5).as_deref(), Some("a"));
-        assert_eq!(m.back(6), None, "at the root, back does not move");
-        assert!(!m.can_back());
-        assert!(m.can_forward());
-        assert_eq!(m.forward(7).as_deref(), Some("b"));
+        assert_eq!(m.back(node, 4).as_deref(), Some("b"));
+        assert_eq!(m.back(node, 5).as_deref(), Some("a"));
+        assert_eq!(m.back(node, 6), None, "at the root, back does not move");
+        assert!(!m.can_back(node));
+        assert!(m.can_forward(node));
+        assert_eq!(m.forward(node, 7).as_deref(), Some("b"));
 
-        // Forward-fork: from b, navigate to d. b now parents both c (old) and d
-        // (new); d is current; c is preserved as an alternate branch.
-        m.record_visit("d", MemoryTransitionKind::UrlTyped, 8);
-        assert_eq!(m.current_url().as_deref(), Some("d"));
-        let branch = m.branch_projection();
+        // Forward-fork: from b, navigate to d. c is preserved as an alternate.
+        m.record_visit(node, "d", MemoryTransitionKind::UrlTyped, 8);
+        assert_eq!(m.current_url(node).as_deref(), Some("d"));
+        let branch = m.branch_projection(node);
         let b_visit = branch.visits.iter().find(|v| v.url == "b").expect("b on the active path");
         assert!(
             b_visit.alternate_children.iter().any(|alt| alt.url == "c"),
@@ -425,11 +376,49 @@ mod tests {
     }
 
     #[test]
+    fn nodes_have_independent_histories_in_one_space() {
+        let (a, b) = (n(1), n(2));
+        let mut m = SharedNavigationMemory::empty();
+        m.record_visit(a, "a1", MemoryTransitionKind::UrlTyped, 1);
+        m.record_visit(a, "a2", MemoryTransitionKind::LinkClick, 2);
+        m.record_visit(b, "b1", MemoryTransitionKind::UrlTyped, 3);
+        assert_eq!(m.current_url(a).as_deref(), Some("a2"));
+        assert_eq!(m.current_url(b).as_deref(), Some("b1"));
+        assert!(m.can_back(a) && !m.can_back(b), "each node walks only its own path");
+    }
+
+    #[test]
+    fn spawned_child_anchors_under_the_parents_current_visit() {
+        let (parent, child) = (n(1), n(2));
+        let mut m = SharedNavigationMemory::empty();
+        m.record_visit(parent, "p1", MemoryTransitionKind::UrlTyped, 1);
+        m.record_visit(parent, "p2", MemoryTransitionKind::LinkClick, 2); // parent current = p2
+        // Branch: spawn child anchored at the parent, then its first visit.
+        m.spawn(child, parent);
+        m.record_visit(child, "c1", MemoryTransitionKind::UrlTyped, 3);
+        assert_eq!(m.current_url(child).as_deref(), Some("c1"));
+        // The child is its own history; the parent is unchanged (still at p2).
+        assert_eq!(m.current_url(parent).as_deref(), Some("p2"));
+        assert!(!m.can_back(child), "the child's first visit is its root");
+    }
+
+    #[test]
     fn revisiting_a_url_is_a_distinct_visit() {
-        let mut m = NodeNavigationMemory::empty();
-        m.record_visit("a", MemoryTransitionKind::UrlTyped, 1);
-        m.record_visit("a", MemoryTransitionKind::Reload, 2);
-        // Same URL, two visits on the path (entry deduped, occurrences distinct).
-        assert_eq!(m.projection().entries, vec!["a".to_string(), "a".to_string()]);
+        let node = n(1);
+        let mut m = SharedNavigationMemory::empty();
+        m.record_visit(node, "a", MemoryTransitionKind::UrlTyped, 1);
+        m.record_visit(node, "a", MemoryTransitionKind::Reload, 2);
+        assert_eq!(m.projection(node).entries, vec!["a".to_string(), "a".to_string()]);
+    }
+
+    #[test]
+    fn seed_linear_and_remove() {
+        let node = n(1);
+        let mut m = SharedNavigationMemory::empty();
+        m.seed_linear(node, vec!["a".into(), "b".into(), "c".into()], 1);
+        assert_eq!(m.current_url(node).as_deref(), Some("b"), "cursor at the seeded index");
+        assert!(m.can_back(node) && m.can_forward(node));
+        m.remove(node);
+        assert_eq!(m.current_url(node), None, "owner dropped on remove");
     }
 }

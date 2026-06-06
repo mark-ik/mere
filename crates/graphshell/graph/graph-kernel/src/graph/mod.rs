@@ -90,7 +90,7 @@ pub use node::{Node, NodeLifecycle};
 // (`kernel::graph::NodeNavigationMemory`, etc.) keep resolving.
 pub use history::{
     NodeHistoryBranchAlternative, NodeHistoryBranchProjection, NodeHistoryBranchVisit,
-    NodeHistoryOwner, NodeHistoryProjection, NodeHistorySemanticSummary, NodeNavigationMemory,
+    NodeHistoryOwner, NodeHistoryProjection, NodeHistorySemanticSummary, SharedNavigationMemory,
 };
 
 // Edge taxonomy (family/sub-kind enums) and per-family runtime data structs
@@ -258,6 +258,11 @@ pub struct Graph {
     /// are content truth that `aether` reads and evaluates (derived).
     pub(crate) fields: HashMap<FieldId, Field>,
     pub(crate) couplings: HashMap<CouplingId, Coupling>,
+
+    /// The graph's whole navigation history: one shared visit space, one owner
+    /// per node (the (b) anchor design). In-place navigation extends a node's own
+    /// path; a branch node is spawned anchored under its origin's current visit.
+    pub(crate) nav: SharedNavigationMemory,
 }
 
 impl Graph {
@@ -270,6 +275,7 @@ impl Graph {
             import_records: Vec::new(),
             fields: HashMap::new(),
             couplings: HashMap::new(),
+            nav: SharedNavigationMemory::empty(),
         }
     }
 
@@ -321,7 +327,6 @@ impl Graph {
             properties: Vec::new(),
             is_pinned: false,
             last_visited: now,
-            navigation_memory: NodeNavigationMemory::empty(),
             thumbnail_png: None,
             thumbnail_width: 0,
             thumbnail_height: 0,
@@ -348,6 +353,11 @@ impl Graph {
     pub fn remove_node(&mut self, key: NodeKey) -> bool {
         if let Some(node) = self.inner.remove_node(key) {
             self.id_to_node.remove(&node.id);
+            // The node's navigation owner is intentionally *kept* in the shared
+            // visit space: a node branched from it still anchors to its visits, so
+            // erasing the lineage on node removal would orphan those anchors. The
+            // owner is simply never queried once the node is gone (pruning belongs
+            // to a future GC / `eidetic` scope, not graph removal).
             // Deregister every URL claim this node carried — Primary plus
             // any aliases. (Aliases are not yet wired into add paths but the
             // index handles them when they land.)
@@ -398,21 +408,32 @@ impl Graph {
     /// (the navigated-from relation) is a separate, explicit edge.
     pub fn navigate_node(&mut self, key: NodeKey, url: &str) {
         let at_ms = Self::epoch_ms();
-        if let Some(node) = self.inner.node_weight_mut(key) {
-            node.navigation_memory.record_visit(
-                url,
-                node_lineage::TransitionKind::UrlTyped,
-                at_ms,
-            );
+        if let Some(id) = self.inner.node_weight(key).map(|n| n.id) {
+            self.nav.record_visit(id, url, node_lineage::TransitionKind::UrlTyped, at_ms);
         }
         self.update_node_url(key, url.to_string());
+    }
+
+    /// Anchor a freshly-minted `child` node's history under `parent`'s current
+    /// visit — the navigated-from anchor. Call **before** the child's first
+    /// [`navigate_node`](Self::navigate_node) so that first visit attaches there in
+    /// the shared lineage tree (the (b) cross-node anchor; the branch-mint path).
+    pub fn branch_history(&mut self, child: NodeKey, parent: NodeKey) {
+        let (Some(child_id), Some(parent_id)) = (
+            self.inner.node_weight(child).map(|n| n.id),
+            self.inner.node_weight(parent).map(|n| n.id),
+        ) else {
+            return;
+        };
+        self.nav.spawn(child_id, parent_id);
     }
 
     /// Step `key` back one visit in its own history, updating its Primary URL to
     /// the revealed page. Returns the new URL, or `None` if already at the root.
     pub fn node_history_back(&mut self, key: NodeKey) -> Option<String> {
         let at_ms = Self::epoch_ms();
-        let url = self.inner.node_weight_mut(key)?.navigation_memory.back(at_ms)?;
+        let id = self.inner.node_weight(key)?.id;
+        let url = self.nav.back(id, at_ms)?;
         self.update_node_url(key, url.clone());
         Some(url)
     }
@@ -421,9 +442,50 @@ impl Graph {
     /// `None` if already at the tip.
     pub fn node_history_forward(&mut self, key: NodeKey) -> Option<String> {
         let at_ms = Self::epoch_ms();
-        let url = self.inner.node_weight_mut(key)?.navigation_memory.forward(at_ms)?;
+        let id = self.inner.node_weight(key)?.id;
+        let url = self.nav.forward(id, at_ms)?;
         self.update_node_url(key, url.clone());
         Some(url)
+    }
+
+    /// Whether `key`'s within-node history can step back (toolbar gating).
+    pub fn node_can_back(&self, key: NodeKey) -> bool {
+        self.inner.node_weight(key).is_some_and(|n| self.nav.can_back(n.id))
+    }
+
+    /// Whether `key`'s within-node history can step forward (toolbar gating).
+    pub fn node_can_forward(&self, key: NodeKey) -> bool {
+        self.inner.node_weight(key).is_some_and(|n| self.nav.can_forward(n.id))
+    }
+
+    /// `key`'s current page (its history cursor's URL), if any.
+    pub fn node_current_url(&self, key: NodeKey) -> Option<String> {
+        let id = self.inner.node_weight(key)?.id;
+        self.nav.current_url(id)
+    }
+
+    /// `key`'s linear-history projection (active path + cursor).
+    pub fn node_history_projection(&self, key: NodeKey) -> NodeHistoryProjection {
+        match self.inner.node_weight(key) {
+            Some(node) => self.nav.projection(node.id),
+            None => NodeHistoryProjection { entries: Vec::new(), current_index: 0 },
+        }
+    }
+
+    /// `key`'s branching-history projection (visit tree with alternates).
+    pub fn node_history_branch_projection(&self, key: NodeKey) -> NodeHistoryBranchProjection {
+        self.inner
+            .node_weight(key)
+            .map(|node| self.nav.branch_projection(node.id))
+            .unwrap_or_default()
+    }
+
+    /// A coarse semantic summary of `key`'s history.
+    pub fn node_history_semantic_summary(&self, key: NodeKey) -> NodeHistorySemanticSummary {
+        self.inner
+            .node_weight(key)
+            .map(|node| self.nav.semantic_summary(node.id))
+            .unwrap_or_default()
     }
 
     /// Milliseconds since the Unix epoch, for visit timestamps (live-app clock).

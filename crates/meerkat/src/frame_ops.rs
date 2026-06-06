@@ -66,7 +66,18 @@ impl App {
         if self.runner.state().open_as_new_node {
             self.runner.update(|c| c.open_as_new_node = false);
             let origin = self.nav_target_member();
-            self.orrery.open_member_as_new_node(origin, &loc);
+            let new_member = self.orrery.open_member_as_new_node(origin, &loc);
+            // In Tree, tile the new node: stack it into the focused tile's slot as
+            // the active tab (or a fresh slot when nothing is focused), and focus
+            // it so the next navigation targets it. In Cartography the orrery has
+            // already selected it, so it shows as the focused-node card.
+            if self.workbench.is_tiled() {
+                let stacked = origin.is_some_and(|o| self.workbench.open_in_slot_of(new_member, o));
+                if !stacked {
+                    self.workbench.open_tile(new_member);
+                }
+                self.focused_tile = Some(new_member);
+            }
             self.ensure_content(&loc);
             self.content_location = loc;
             self.save_session();
@@ -460,13 +471,14 @@ impl App {
                     self.request_redraw();
                 }
             },
-            // History / connect / settings verbs run in the chrome; never queued
-            // here as host intents.
+            // History / connect / settings / comms verbs run in the chrome; never
+            // queued here as host intents.
             Command::Back
             | Command::Forward
             | Command::Home
             | Command::ConnectPeer
-            | Command::OpenSettings => {},
+            | Command::OpenSettings
+            | Command::ToggleComms => {},
         }
     }
 

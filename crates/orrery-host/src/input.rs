@@ -201,6 +201,12 @@ impl Orrery {
             .unwrap_or(Point2D::new(0.0, 0.0));
         let seed = Point2D::new(anchor.x + 12.0, anchor.y + 12.0);
         let key = self.graph.add_node(url.to_string(), PortablePoint::new(seed.x, seed.y));
+        // Anchor the new node's history under the origin's current visit (the
+        // navigated-from point) BEFORE its first visit, so that first visit
+        // attaches there in the shared lineage tree (the (b) cross-node anchor).
+        if let Some(origin) = origin {
+            self.graph.branch_history(key, origin);
+        }
         // The new surface opens on `url`: seed its own history with that first
         // visit (the node is born with one page, not an empty history).
         self.graph.navigate_node(key, url);

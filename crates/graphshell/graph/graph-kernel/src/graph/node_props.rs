@@ -434,7 +434,7 @@ impl Graph {
         history_entries: Vec<String>,
         history_index: usize,
     ) -> bool {
-        let Some(node) = self.inner.node_weight_mut(key) else {
+        let Some(id) = self.inner.node_weight(key).map(|n| n.id) else {
             return false;
         };
         let clamped_index = if history_entries.is_empty() {
@@ -442,11 +442,14 @@ impl Graph {
         } else {
             history_index.min(history_entries.len() - 1)
         };
-        let current = node.history_projection();
+        let current = self.nav.projection(id);
         if current.entries == history_entries && current.current_index == clamped_index {
             return false;
         }
-        node.replace_history_state(history_entries, clamped_index);
+        // Reset this node's history to the given linear path (the shared visit
+        // space owns it now; a linear reset replaces any prior tree for the node).
+        self.nav.remove(id);
+        self.nav.seed_linear(id, history_entries, clamped_index);
         true
     }
 

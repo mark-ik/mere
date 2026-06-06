@@ -181,8 +181,8 @@ fn palette_open_renders_rows() {
     assert_eq!(count_class(&dom, root, "palette"), 1, "the panel");
     assert_eq!(
         count_class(&dom, root, "cmd-row"),
-        10,
-        "the 4 chrome verbs + Tile / Delete / Background / Hide edge / Show edges / Settings",
+        11,
+        "chrome verbs + Tile / Delete / Background / Hide edge / Show edges / Settings / Comms",
     );
 }
 
@@ -220,9 +220,9 @@ fn palette_filters_and_runs_command() {
 #[test]
 fn palette_step_wraps() {
     let mut runner = runner("mere://welcome");
-    runner.update(Chrome::open_palette); // empty query → 10 commands
+    runner.update(Chrome::open_palette); // empty query → 11 commands
     runner.update(|c| c.step_palette(-1));
-    assert_eq!(runner.state().palette.selected_index, Some(9), "up from none → last");
+    assert_eq!(runner.state().palette.selected_index, Some(10), "up from none → last");
     runner.update(|c| c.step_palette(1));
     assert_eq!(runner.state().palette.selected_index, Some(0), "wrap to first");
 }

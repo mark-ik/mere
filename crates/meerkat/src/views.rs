@@ -11,6 +11,8 @@ use xilem_serval::{
     ServalElement, TextField, TextInput,
 };
 
+use comms::Direction;
+
 use super::{Chrome, ContextMenu, HistoryStep};
 use super::command::Command;
 use super::nav;
@@ -132,6 +134,9 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     if c.settings_open {
         children.push(settings_overlay(c));
     }
+    if c.comms.is_open() {
+        children.push(comms_pane(c));
+    }
     // The context menu floats over everything (it is a transient cursor pop-up).
     if let Some(menu) = &c.context_menu {
         children.push(context_menu_view(menu));
@@ -226,6 +231,100 @@ fn palette_overlay(c: &Chrome) -> ChromeView {
         |c: &mut Chrome, _: PointerClick| c.close_palette(),
     );
     Box::new(overlay)
+}
+
+/// The docked comms pane (P6): a right-edge panel of conversations, an open
+/// thread, and a compose field. Rendered into the chrome root and composited over
+/// the content like the settings panel; mirrors its structure. Placeholder data
+/// for now — the live misfin / murm adapters fill `c.comms` through the event loop
+/// in a later slice.
+fn comms_pane(c: &Chrome) -> ChromeView {
+    let mut children: Vec<ChromeView> = Vec::new();
+
+    // Header: title + close.
+    let title_text = el::<_, Chrome, ()>("div", "Comms").attr("class", "comms-title-text");
+    let close_x = on_click(
+        el::<_, Chrome, ()>("button", "\u{00d7}").attr("class", "comms-btn"),
+        |c: &mut Chrome, _: PointerClick| c.close_comms(),
+    );
+    children.push(Box::new(
+        el::<_, Chrome, ()>("div", (title_text, close_x)).attr("class", "comms-title"),
+    ));
+
+    // Surfaced backend failures (never hidden) — empty for the placeholder phase.
+    for failure in &c.comms.failures {
+        let line =
+            el::<_, Chrome, ()>("div", format!("{:?}: {}", failure.protocol, failure.error))
+                .attr("class", "comms-failure");
+        children.push(Box::new(line));
+    }
+
+    if c.comms.selected().is_some() {
+        // Thread view: back to the list, the conversation title, its messages, and
+        // a compose row.
+        let back = on_click(
+            el::<_, Chrome, ()>("button", "\u{2039} Conversations").attr("class", "comms-back"),
+            |c: &mut Chrome, _: PointerClick| c.comms.clear_selection(),
+        );
+        children.push(Box::new(back));
+
+        if let Some(conversation) = c.comms.selected_conversation() {
+            children.push(Box::new(
+                el::<_, Chrome, ()>("div", conversation.title.clone())
+                    .attr("class", "comms-thread-title"),
+            ));
+        }
+
+        for message in &c.comms.thread {
+            let class = match message.direction {
+                Direction::Outgoing => "comms-msg-out",
+                Direction::Incoming => "comms-msg-in",
+            };
+            let mut text = String::new();
+            if let Some(subject) = &message.subject {
+                text.push_str(subject);
+                text.push('\n');
+            }
+            text.push_str(message.body.text());
+            children.push(Box::new(
+                el::<_, Chrome, ()>("div", text).attr("class", class),
+            ));
+        }
+
+        // Compose: a text field lensed onto `comms_draft` + a Send button.
+        let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
+        let to_draft: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.comms_draft;
+        let field = lens(make, to_draft);
+        let send = on_click(
+            el::<_, Chrome, ()>("button", "Send").attr("class", "comms-send"),
+            |c: &mut Chrome, _: PointerClick| c.send_comms(),
+        );
+        children.push(Box::new(
+            el::<_, Chrome, ()>("div", (field, send)).attr("class", "comms-compose"),
+        ));
+    } else {
+        // The conversation list: one row per conversation (unread count appended).
+        for conversation in &c.comms.inbox {
+            let id = conversation.id.clone();
+            let label = if conversation.unread > 0 {
+                format!("{}  ({})", conversation.title, conversation.unread)
+            } else {
+                conversation.title.clone()
+            };
+            let row = on_click(
+                el::<_, Chrome, ()>("div", label).attr("class", "comms-row"),
+                move |c: &mut Chrome, _: PointerClick| c.select_conversation(id.clone()),
+            );
+            children.push(Box::new(row));
+        }
+        if c.comms.inbox.is_empty() {
+            children.push(Box::new(
+                el::<_, Chrome, ()>("div", "No conversations yet.").attr("class", "comms-empty"),
+            ));
+        }
+    }
+
+    Box::new(el::<_, Chrome, ()>("div", children).attr("class", "comms-pane"))
 }
 
 /// Navigate on submit (Enter). If a suggestion row is highlighted, navigate it;

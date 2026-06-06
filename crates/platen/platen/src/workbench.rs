@@ -198,6 +198,29 @@ impl Workbench {
         self.slots.push(Slot::stack(stack));
     }
 
+    /// Open `member` as a new tab in the slot holding `target`, made the active
+    /// (visible) tab — "stack into the active slot." Returns `false` if `target`
+    /// is not open in any slot (the caller then falls back to [`open_tile`]). If
+    /// `member` was open elsewhere it is pulled into this slot, never duplicated.
+    /// Used by the open-as-new-node gesture so a minted node tiles beside the one
+    /// it branched from rather than spawning a stray column.
+    pub fn open_in_slot_of(&mut self, member: GraphMemberId, target: GraphMemberId) -> bool {
+        if member != target && self.has_tile(member) {
+            self.detach(member);
+        }
+        let Some(slot) = self.slots.iter_mut().find(|s| s.members.contains(&target)) else {
+            return false;
+        };
+        match slot.members.iter().position(|m| *m == member) {
+            Some(pos) => slot.active = pos,
+            None => {
+                slot.members.push(member);
+                slot.active = slot.members.len() - 1;
+            },
+        }
+        true
+    }
+
     /// Close the tab showing `member`: drop it from its slot (removing the slot if
     /// it empties, clamping the active index otherwise). Returns whether one was
     /// removed.
@@ -430,6 +453,24 @@ mod tests {
         // No-ops: self-drop, or an unknown member.
         assert!(!wb.move_to_slot_of(m(1), m(1)));
         assert!(!wb.move_to_slot_of(m(99), m(1)));
+    }
+
+    #[test]
+    fn open_in_slot_of_stacks_a_new_tab_and_activates_it() {
+        let mut wb = Workbench::new();
+        wb.open_split(&[m(1), m(2)]); // two single slots
+        // A brand-new member stacks into m(1)'s slot and becomes active.
+        assert!(wb.open_in_slot_of(m(3), m(1)));
+        assert_eq!(wb.slot_count(), 2, "no new slot — it joined m(1)'s");
+        let stack = wb.slot_views().find(|s| s.members.contains(&m(3))).unwrap();
+        assert_eq!(stack.members, &[m(1), m(3)], "appended to m(1)'s slot");
+        assert_eq!(stack.members[stack.active], m(3), "the new tab is active");
+        // A member open elsewhere is pulled in, never duplicated.
+        assert!(wb.open_in_slot_of(m(2), m(1)));
+        assert_eq!(wb.tile_count(), 3, "m(2) moved, not copied");
+        assert_eq!(wb.slot_count(), 1, "m(2)'s old slot emptied + dropped");
+        // An unknown target reports false (caller falls back to open_tile).
+        assert!(!wb.open_in_slot_of(m(9), m(404)));
     }
 
     #[test]

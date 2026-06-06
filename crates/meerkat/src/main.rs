@@ -111,6 +111,32 @@ const CHROME_SHEET: &[&str] = &[
     ".context-menu { background-color: rgb(38, 42, 52); padding: 4px; }",
     ".context-item { font-size: 16px; color: rgb(216, 220, 230); \
         background-color: rgb(38, 42, 52); padding: 8px 18px; }",
+    // Comms pane (P6): a right-edge docked panel over the content. (Geometry is a
+    // first cut — top offset + right dock get tuned on the first run.)
+    ".comms-pane { position: absolute; top: 64px; right: 0; width: 360px; \
+        background-color: rgb(30, 33, 41); padding: 10px; }",
+    ".comms-title { display: flex; background-color: rgb(30, 33, 41); padding: 4px 4px 10px 4px; }",
+    ".comms-title-text { font-size: 20px; color: rgb(234, 238, 246); \
+        background-color: rgb(30, 33, 41); flex-grow: 1; padding: 4px 8px; }",
+    ".comms-btn { font-size: 18px; color: rgb(222, 226, 234); \
+        background-color: rgb(48, 52, 62); padding: 4px 12px; }",
+    ".comms-failure { font-size: 14px; color: rgb(240, 184, 184); \
+        background-color: rgb(50, 32, 32); padding: 6px 10px; margin-bottom: 6px; }",
+    ".comms-row { font-size: 17px; color: rgb(210, 214, 224); \
+        background-color: rgb(34, 37, 46); padding: 10px 12px; margin: 3px 0; }",
+    ".comms-empty { font-size: 15px; color: rgb(150, 156, 168); \
+        background-color: rgb(30, 33, 41); padding: 10px 12px; }",
+    ".comms-back { font-size: 15px; color: rgb(206, 210, 220); \
+        background-color: rgb(40, 44, 54); padding: 6px 12px; margin-bottom: 6px; }",
+    ".comms-thread-title { font-size: 18px; color: rgb(234, 238, 246); \
+        background-color: rgb(30, 33, 41); padding: 8px 4px; }",
+    ".comms-msg-in { font-size: 16px; color: rgb(214, 218, 228); \
+        background-color: rgb(38, 42, 52); padding: 8px 12px; margin: 4px 24px 4px 0; }",
+    ".comms-msg-out { font-size: 16px; color: rgb(220, 230, 240); \
+        background-color: rgb(40, 52, 74); padding: 8px 12px; margin: 4px 0 4px 24px; }",
+    ".comms-compose { display: flex; background-color: rgb(30, 33, 41); padding-top: 8px; }",
+    ".comms-send { font-size: 16px; color: rgb(222, 226, 234); \
+        background-color: rgb(48, 58, 82); padding: 8px 16px; margin: 4px; }",
 ];
 
 /// Fallback chrome-band height (px) if the toolbar can't be measured.

@@ -6,14 +6,19 @@
 how capabilities are granted and how reputation gates them, plus the rule for
 changing the ruleset itself. Consolidates the scattered "the moot's constitution
 declares X" references across the existing briefs into one layer model, names the
-constitution's place in the §8.8 capability stack (the open *policy-authorization*
-slot), and proposes a minimal first build that mirrors tessera's event-sourced
-fold. The governance organ identified as the keystone in the moot-synthesis
-discussion: today a moot can *remember and rank* (tessera) but cannot yet *decide*.
-**Grounded in**: a read of the live tree (2026-06-06) confirming no
-governance / capability / role primitive exists in code (the only `role` hits are
-UX/accesskit); tessera is the sole built coordination layer (`Ledger::scores`,
-`composite_score`); meadowcap exists only as a probe (`crates/probes/willow-cluster-cap`).
+constitution's place in the §8.8 capability stack (the amendable owner of the
+*policy-authorization* layer), and proposes a minimal first build that mirrors
+tessera's event-sourced fold. The governance organ identified as the keystone in
+the moot-synthesis discussion: today a moot can *remember and rank* (tessera), and
+has a reference gate (`tessera::gate::authorize`), but cannot yet *durably decide*
+or amend its own law.
+**Grounded in**: a read of the live tree (2026-06-06) confirming no constitution /
+amendment / role-bundle / cap-grant primitive exists in code; tessera is the sole
+built coordination layer (`Ledger::scores`, `composite_score`) and already includes
+a configurable preset authorizer (`tessera::gate::Policy` +
+`tessera::gate::authorize`) that the constitution must own rather than duplicate;
+meadowcap-shaped structural caps exist only as a proof/probe
+(`crates/probes/willow-cluster-cap`).
 **Related**:
 
 - [`2026-05-07_moot_tiers_and_voluntary_hosting_brief.md`](2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
@@ -24,8 +29,9 @@ UX/accesskit); tessera is the sole built coordination layer (`Ledger::scores`,
 - [`2026-05-07_event_dag_substrate_brief.md`](2026-05-07_event_dag_substrate_brief.md)
   — every `MereEvent` carries a `capabilities` field; §8.8 corrects the capability
   layer into a **stack** (structural namespace caps Meadowcap-shaped → moothold
-  *policy authorization* Biscuit-candidate → live group/key state Keyhive). This
-  brief defines that middle, open layer.
+  *policy authorization* facts + preset authorizer today / Biscuit candidate later
+  → live group/key state, now p2panda-encryption as the leading fit). This brief
+  defines the durable, amendable owner of that middle layer.
 - [`2026-05-10_graph_cluster_namespaces_brief.md`](2026-05-10_graph_cluster_namespaces_brief.md)
   — "each space's **constitution** declares an algorithm + parameters + RNG seed"
   for canonical clustering; "switching algorithms requires a **constitutional
@@ -38,12 +44,15 @@ UX/accesskit); tessera is the sole built coordination layer (`Ledger::scores`,
 - [`../research/2026-05-14_persona_model_brief.md`](../research/2026-05-14_persona_model_brief.md)
   — personas are the actors a constitution authorizes; the vault holds their keys.
 - [`../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md`](../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md)
-  — the reputation layer the constitution consumes, and the event-sourced fold
-  (`from_events` / `apply` / `scores`) this brief proposes to mirror.
+  — the reputation layer the constitution consumes, the existing preset authorizer
+  the constitution should wrap / own, and the event-sourced fold (`from_events` /
+  `apply` / `scores`) this brief proposes to mirror.
 - [`../research/2026-06-04_resource_coordination_brief.md`](../research/2026-06-04_resource_coordination_brief.md)
   and [`../research/2026-05-10_geist_models_brief.md`](../research/2026-05-10_geist_models_brief.md)
   — two of the briefs that defer load-bearing rules ("the moot's constitution
-  declares...") to a primitive that did not exist. This is that primitive.
+  declares...") to a primitive that did not exist. This is that primitive, with the
+  caveat that fast-changing operational knobs remain governed configs/modules, not
+  constitutional law by default.
 
 ---
 
@@ -52,10 +61,11 @@ UX/accesskit); tessera is the sole built coordination layer (`Ledger::scores`,
 "Constitution" felt like fog because **three different things were wearing the
 one word**, and the instinct was to start with the wrong one (the crunchy crypto
 of capabilities). The references are already scattered across four briefs but were
-never consolidated, and no governance primitive exists in code. This brief draws
-the layer boundaries, names the thesis (the amendment rule is the DNA), places the
-constitution in the existing §8.8 stack, and proposes a first build small enough to
-land beside tessera.
+never consolidated, and no constitutional amendment primitive exists in code. The
+closest existing code is tessera's reference policy gate; that is a seed to own, not
+a substitute for a shared amendable law. This brief draws the layer boundaries,
+names the thesis (the amendment rule is the DNA), places the constitution in the
+existing §8.8 stack, and proposes a first build small enough to land beside tessera.
 
 The motivating observation from the moot synthesis: every recent brief bottoms out
 in the same sentence. Geist training consent, trainer roles, adapter adoption,
@@ -70,9 +80,9 @@ turns a half-dozen deferrals into "evaluate against the constitution."
 
 | Layer | Plain reading | Status in tree |
 | --- | --- | --- |
-| **Capability** (meadowcap-shaped) | Authority you were *granted*: a delegable, attenuable, offline-verifiable token, "key K may write scope S" (scope = `(SpaceId, grantee, cluster-path)`), carried in each event's `capabilities` field. | Probe only (`willow-cluster-cap`). |
-| **Reputation** (tessera) | Standing you *earned*: a log-derived score per `(Scope, persona)`. **Not** authority. An *input*. | Built (`Ledger`, `scores`, `composite_score`). |
-| **Constitution** | The law that says how grants get minted and how standing gates them, **plus the rule for changing the law**. | Referenced in 4 briefs, built nowhere. |
+| **Capability** (meadowcap-shaped) | Authority you were *granted*: a delegable, attenuable, offline-verifiable token, "key K may write scope S" (scope = `(SpaceId, grantee, cluster-path)`), carried in each event's `capabilities` field. | Probe / proof only (`willow-cluster-cap`). |
+| **Reputation** (tessera) | Standing you *earned*: a log-derived score per `(Scope, persona)`. **Not** authority. An *input*. | Built (`Ledger`, `scores`, `composite_score`), with a non-amendable preset gate (`tessera::gate`). |
+| **Constitution** | The law that says how grants get minted and how standing gates them, **plus the rule for changing the law**. | Referenced in briefs; amendment log / durable policy owner built nowhere. |
 
 The line that unlocks it: **meadowcap and tessera are instruments; the
 constitution is the score that tells them when to play.** A capability is a key
@@ -124,7 +134,7 @@ holder is the recursive container.
 ## 4. Where it sits in the §8.8 capability stack
 
 The substrate brief §8.8 already corrected the capability layer into a stack. The
-constitution is the open middle layer:
+constitution is the amendable owner of the middle layer:
 
 ```text
   UCAN                         interop envelope only (cross-system), not the brain
@@ -132,9 +142,10 @@ constitution is the open middle layer:
   Structural namespace caps    meadowcap-shaped: who may write which cluster-path
    (meadowcap)                 (probe: willow-cluster-cap)            ── below ──
   Policy authorization         THE CONSTITUTION: which caps get minted, gated by
-   (Biscuit candidate)         tessera / quorum; how the rules change  ◀── here
-  Live group / key state       Keyhive eval: membership, key rotation  ── beside ─
-   (Keyhive)
+   (preset authorizer today,   tessera / quorum; how the rules change  ◀── here
+    Biscuit candidate later)
+  Live group / key state       p2panda-encryption fit: membership →    ── beside ─
+   (engine behind Mere trait)  keys, key rotation, encrypted sync
 ```
 
 Three reads fall out of this placement:
@@ -146,28 +157,30 @@ Three reads fall out of this placement:
    Dependency order is constitution → caps, not the reverse. (Another reason not to
    start with meadowcap.)
 2. **Biscuit is a candidate *expression mechanism*, not the constitution itself.**
-   The constitution is the policy; Biscuit (or a simpler internal evaluator) is one
-   way to encode and check it. Start with a native enum (§6); evaluate Biscuit when
-   the rule language outgrows it.
-3. **tessera is the input this layer reads**, Keyhive the group-state it consults
-   for "who is a member right now." Neither *is* the constitution.
+   The constitution is the policy owner; Biscuit (or a simpler internal evaluator)
+   is one way to encode and check it. The current `tessera::gate::Policy` presets
+   are the accessible seed of that layer; start native (§6), and evaluate Biscuit
+   when the rule language outgrows it.
+3. **tessera is the input this layer reads**, while p2panda-encryption is the
+   current group/key-state engine candidate it consults indirectly for "who can
+   receive keys right now." Neither *is* the constitution.
 
 ---
 
-## 5. The `authorize` seam
+## 5. The authorization seam
 
 There is exactly one place all three layers meet, and it is a single function:
 
 ```rust
 // Illustrative signature only (not implementation-ready).
-fn authorize(
+fn authorize_governed(
     action: &GovernedAction,   // amend, grant-cap, adopt-adapter, set-policy, ...
     actor: PersonaId,
     constitution: &Constitution,   // supplies the RULE
-    tessera: &Ledger,              // an INPUT (earned standing)
+    facts: &TesseraFacts,          // an INPUT (earned standing / membership facts)
     held_caps: &[CapabilityRef],   // an INPUT (granted authority)
     now_ms: u64,
-) -> bool
+) -> AuthorizationDecision
 ```
 
 The constitution supplies the *rule*; tessera and caps are *inputs*. In v0 the rule
@@ -175,6 +188,10 @@ body is just "is `actor` the founder." The seam never changes again; only the ru
 language behind it grows. Every future governance action and every capability grant
 routes through this one chokepoint, which is what keeps the policy auditable and
 keeps "what can this persona do here" answerable in one call.
+
+Implementation note: moothold already exports `tessera::gate::authorize(policy,
+cap_covers, facts, now)`. The constitution should wrap, own, or eventually move
+that authorizer. Do **not** ship a second sibling policy gate with the same job.
 
 ---
 
@@ -217,10 +234,11 @@ the same machine with a different fold:
 - `Constitution::from_events(..)` folds the amendment log into the current ruleset;
   `apply` advances it; an amendment is accepted only if it satisfies the *prior*
   constitution's amendment rule (the self-amendment check).
-- It **rides the existing `SyncedMoot` lane unchanged**: constitution ops are just
-  more ops on the same log over the same `MootId`, so two peers converge on the same
-  current constitution for free (the same convergence the tessera two-peer test and
-  the live loopback demo already showed).
+- It **rides the same LogSync substrate and moot topic shape**, not the existing
+  tessera store unchanged. Today `SyncedMoot` / `TesseraStore` are specialized to
+  `Operation<TesseraExt>` and `TesseraEvent`; constitution ops need either a generic
+  moothold operation store/session or a sibling `ConstitutionStore` following the
+  tessera pattern. No new transport is implied.
 
 Home: **`moothold`**, beside `tessera`. moothold is the governance / coordination
 layer per the tiers brief and the recursive holder per §3. `mooting` is the
@@ -249,8 +267,17 @@ thresholds, which the relevant subsystem then reads:
   params (resource-coordination brief's "configurable params").
 - **Fork rule**: the conditions and procedure for a constitutional fork (§9).
 
-Each is a field or sub-policy the constitution carries; each subsystem stays the
-implementer and reads its clause through `authorize` or a direct constitution query.
+Not every knob should be constitutional law. Split the catalogue in two:
+
+- **Constitutional clauses**: amendment rule, cap-grant authority, role-bundle
+  definitions, fork rule, who may adopt / update governed policy modules.
+- **Governed configs**: scheduler parameters, resource strategy scripts, verifier
+  thresholds, model defaults, training cadence. These are controlled *by* the
+  constitution, but can live as ordinary signed config/module events with their own
+  lower amendment bars.
+
+Each subsystem stays the implementer and reads its clause through the constitutional
+authorization seam or through a direct query for the current governed config.
 
 ---
 
@@ -260,9 +287,12 @@ The tiers brief makes forking first-class ("a moot can fork over a governance
 disagreement; the fork commits its own pins; the original keeps going"). In this
 model a fork is clean: a new constitution whose `Genesis` cites the parent
 constitution hash and the divergence point, carried forward by whoever signs the
-new genesis. Membership, flora pins, and tessera history are inherited by reference;
-the amendment rule is what the forkers chose to change. Fork is not disaster
-recovery; it is the amendment rule's escape valve when amendment fails.
+new genesis. That `Genesis` must bind the new `MootId`, founder / initial governance
+key, parent constitution (if any), divergence point, and initial rules hash; otherwise
+joiners cannot distinguish a fork from a squat. Membership, flora pins, and tessera
+history are inherited by reference; the amendment rule is what the forkers chose to
+change. Fork is not disaster recovery; it is the amendment rule's escape valve when
+amendment fails.
 
 ---
 
@@ -291,17 +321,22 @@ quorum nor a remote gate.
 
 In `moothold`, beside `tessera`:
 
-1. `Constitution`, `ConstitutionEvent::{Genesis, Amended}`, `AmendmentRule::FounderSigned`,
-   folded by a `from_events` / `apply` pair mirroring `Ledger`.
-2. `authorize(action, actor, ..)` with the v0 founder-only body, the single seam.
-3. Rides the existing `SyncedMoot` lane (constitution ops on the same log); no
-   transport or sync change.
-4. Tests mirroring the tessera suite: founder amends, non-founder rejected; the
+1. `Constitution`, `ConstitutionEvent::{Genesis, Amended}`, and
+   `AmendmentRule::FounderSigned`, folded by a `from_events` / `apply` pair
+   mirroring `Ledger`.
+2. `Genesis` binds `MootId`, founder / initial governance key, parent constitution
+   (optional), divergence point (optional), and initial rules hash.
+3. `authorize_governed(action, actor, ..)` with the v0 founder-only body, wrapping
+   or owning the existing `tessera::gate` authorizer rather than duplicating it.
+4. A `ConstitutionStore` or generalized moothold store/session that reuses the same
+   p2panda LogSync transport + moot topic shape; no new transport, but not the
+   tessera-specific `SyncedMoot` unchanged.
+5. Tests mirroring the tessera suite: founder amends, non-founder rejected; the
    fold is deterministic; an amendment that fails the prior rule is rejected; two
    peers converge on the same current constitution.
 
 **Done-when**: a moot has a readable, signed, amendable ruleset whose v0 rule is
-"founder decides," reachable through one `authorize` chokepoint that every future
+"founder decides," reachable through one authorization chokepoint that every future
 governance action and capability grant will route through.
 
 Sequencing note: this is upstream of the comms shell's mooting adapters and of
@@ -315,10 +350,11 @@ S5.3's moot surface (a constitution is what a moot surface would *display* and
 - **Native enum vs Biscuit for the rule language.** Start native (§6); the Biscuit
   evaluation (§8.8) triggers when the rule language needs delegation/attenuation
   the enum cannot express.
-- **Membership source of truth.** `authorize` needs "who is a member now." Does that
-  live in the constitution (a roster clause), in tessera (anyone with standing > 0),
-  or in Keyhive group-state (§4)? Likely Keyhive for live membership, the
-  constitution for *roles*, tessera for *standing*. Settle when v2 quorum lands.
+- **Membership source of truth.** The authorization seam needs "who is a member
+  now." Does that live in the constitution (a roster clause), in tessera (anyone with
+  standing > 0), or in the group/key-state engine (§4)? Likely constitution for
+  admission / roles, tessera for *standing*, and p2panda-encryption for "which
+  admitted members receive key material right now." Settle when v2 quorum lands.
 - **Quorum over a partition.** A tessera-weighted quorum computed during a network
   split can disagree across peers. The amendment fold must be deterministic on the
   *converged* log; in-flight amendments are proposals until the log settles (the
@@ -328,9 +364,10 @@ S5.3's moot surface (a constitution is what a moot surface would *display* and
   should arguably carry different bars (loosening one's own constraints is the
   classic capture vector). A `meta_amendment` bar, or simply the strictest current
   rule, decided at v2.
-- **Genesis trust.** Who may author a moot's `Genesis`, and how a joiner verifies
-  they hold the *real* genesis for a `MootId` rather than a squatted one. Ties to
-  the `MootId` derivation (a self-describing id like murm's `cabal_id`).
+- **MootId derivation / discovery UX.** v0 must bind `Genesis` to `MootId` (§11);
+  still open is whether `MootId` is directly derived from genesis bytes, points to
+  a self-describing genesis record, or is introduced through an invite/ticket flow
+  that carries the accepted genesis hash.
 - **Cross-tier composition.** When a persona acts in moot M under moothold H, do
   both constitutions gate the action, and in what order? Probably innermost-first
   (M then H), mirroring §10's local-then-shared composition.
@@ -345,7 +382,7 @@ S5.3's moot surface (a constitution is what a moot surface would *display* and
 - The quorum weighting function beyond "by tessera" (linear / sqrt / capped: a
   policy choice, configurable per the configurability rule).
 - The moot surface UX (S5.3 territory).
-- meadowcap / Keyhive adoption timing (their own evaluations).
+- meadowcap / p2panda-encryption production wiring timing (their own evaluations).
 
 ---
 
@@ -353,20 +390,25 @@ S5.3's moot surface (a constitution is what a moot surface would *display* and
 
 (Captured during the 2026-06-06 drafting session.)
 
-- Three layers wore one word. Capability = granted authority (meadowcap, probe-only);
-  reputation = earned standing (tessera, built); constitution = the rule binding them
-  plus its amendment rule (unbuilt). The fog was starting with capabilities.
+- Three layers wore one word. Capability = granted authority (meadowcap-shaped,
+  probe/proof-only); reputation = earned standing (tessera, built); constitution =
+  the durable, amendable owner of the rule binding them. The fog was starting with
+  capabilities, and a second fog was treating tessera's existing preset gate as if
+  it were already shared constitutional law.
 - The amendment rule is the DNA: a constitution is an append-only amendment log
   folded into current rules, and the tiers are one primitive with different amendment
   clauses (orrery `FounderSigned` → moot quorum → moothold quorum-of-moots).
-- The constitution is the §8.8 stack's open *policy-authorization* layer. Dependency
-  runs constitution → caps (cluster-path caps need the constitution's clustering rule
-  to verify), so meadowcap is the wrong place to start.
-- It builds cheaply because tessera already proves the event-sourced fold + rides
-  `SyncedMoot`; the constitution is the same machine with a different fold, in the
-  same crate.
-- One `authorize` seam is where constitution (rule) meets tessera + caps (inputs);
-  the seam is stable, only the rule language grows.
+- The constitution is the amendable owner of the §8.8 stack's
+  *policy-authorization* layer. Dependency runs constitution → caps (cluster-path
+  caps need the constitution's clustering rule to verify), so meadowcap is the wrong
+  place to start.
+- It builds cheaply because tessera already proves the event-sourced fold + LogSync
+  convergence shape; the constitution is the same pattern with a different fold, in
+  the same crate. The store/session may need to generalize because current
+  `SyncedMoot` is tessera-specific.
+- One authorization seam is where constitution (rule) meets tessera + caps (inputs);
+  the seam is stable, only the rule language grows. It should wrap/own
+  `tessera::gate::authorize`, not compete with it.
 - The local capability gate (one device, one user) and the constitution (one
   community, shared log) compose; a governed action satisfies both. orrery collapses
   them.
@@ -381,11 +423,20 @@ S5.3's moot surface (a constitution is what a moot surface would *display* and
 - **Do not merge the local gate and the constitution.** Local = my device's policy;
   constitution = the community's. They are different rings; merging them loses both
   the privacy boundary and the convergence guarantee.
-- **Keep the rule body behind the `authorize` seam.** Subsystems call `authorize`;
-  they never branch on tessera scores or cap chains themselves, or the policy stops
-  being auditable in one place.
+- **Keep the rule body behind the authorization seam.** Subsystems ask the shared
+  authorizer; they never branch on tessera scores or cap chains themselves, or the
+  policy stops being auditable in one place.
+- **Do not duplicate tessera's gate.** The existing preset authorizer is the seed /
+  reference evaluator. Constitution owns its durable selection and amendment, rather
+  than growing a second policy engine beside it.
+- **Do not constitutionalize every operational knob.** Scheduler scripts, verifier
+  thresholds, model defaults, and resource strategies are governed configs/modules
+  unless the moot deliberately raises them to constitutional clauses.
 - **Amendments fold deterministically on the converged log only.** Treat in-flight
   amendments as proposals; do not act on a quorum computed mid-partition.
+- **Do not claim `SyncedMoot` is reusable unchanged.** Reuse p2panda LogSync and the
+  moot-topic shape; generalize the store/session or build a sibling constitution
+  store.
 - **`mooting` is not the home.** The constitution is moot DNA, not protocol
   plumbing; it lives in `moothold` beside tessera.
 
@@ -394,11 +445,13 @@ S5.3's moot surface (a constitution is what a moot surface would *display* and
 ### 2026-06-06
 
 - Brief drafted from the moot-synthesis conversation. Grounded against the live tree
-  (no governance primitive in code; tessera the only built coordination layer;
-  meadowcap probe-only) and the four briefs that already reference "constitution."
-  Drew the three-layer model, named the amendment rule as the DNA and the tier-unifier,
-  placed the constitution in the §8.8 stack's open policy-authorization slot, defined
-  the `authorize` seam and the amendment-rule ladder, and proposed a v0 first slice
-  that mirrors tessera's fold and rides `SyncedMoot`. DOC_README index updated.
-  Next: Mark's steer on building the v0 fold beside tessera, or refining the layer
-  model further first.
+  (no constitution/amendment primitive in code; tessera is the built facts layer and
+  already has a preset reference authorizer; meadowcap-shaped caps are probe/proof
+  only) and the four briefs that already reference "constitution." Drew the
+  three-layer model, named the amendment rule as the DNA and the tier-unifier, placed
+  the constitution as the amendable owner of the §8.8 policy-authorization layer,
+  defined the authorization seam and the amendment-rule ladder, and proposed a v0
+  first slice that mirrors tessera's fold while reusing the LogSync substrate rather
+  than assuming `SyncedMoot` itself accepts constitution ops unchanged. DOC_README
+  index updated. Next: Mark's steer on building the v0 fold beside tessera, or
+  refining the layer model further first.

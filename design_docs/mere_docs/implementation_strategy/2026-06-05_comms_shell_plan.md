@@ -303,3 +303,71 @@ make it a live shell (compose, send, read, conversation list) with murm cabals
     firing end to end over a real `P2pandaTransport`). Both crates clippy-clean.
     Deferred (later phases, not blocking the shell): the host-led co-op session flows
     (`host_coop`/`join_coop`). Worked inline/foreground.
+- **2026-06-06 — P5 (the comms domain crate) built + green.** New crate
+  `comms` at `crates/graphshell/shell/domain/chrome`'s sibling
+  `crates/graphshell/shell/domain/comms` (registered in workspace members +
+  `[workspace.dependencies]`; `misfin` added to the deps table). Built as chrome's
+  twin: a **WASM-clean core** (the model + the seam, no tokio/egui/platform I/O,
+  headless-tested) with the heavy backends behind features.
+  + **Model** (`model.rs`) — `ProtocolKind` (Misfin / Murm), `Identity`
+    (protocol + address + optional display name), `ConversationId` /`MessageId`,
+    `Direction`, `MessageBody` (Gemtext for misfin / PlainText for murm — so the
+    pane knows when to run nematic), `Message`, `Conversation` (lightweight list
+    metadata; messages load on demand), `Draft`.
+  + **Seam** (`adapter.rs`) — `ProtocolAdapter`, an `async` object-safe trait (via
+    `async_trait`): `protocol` / `identity` / `conversations` / `messages` / `send`,
+    with `AdapterError`. Object-safe so the host holds a heterogeneous
+    `Vec<Box<dyn ProtocolAdapter>>` and lights each protocol up as it matures.
+  + **Aggregator** (`comms.rs`) — `Comms` holds the adapters and is the unified
+    model: `inbox()` merges every backend's conversations (recency-sorted) and
+    returns an `Inbox { conversations, failures }` that **surfaces** a down backend
+    rather than blanking the list or hiding it; `messages` / `send` route to the
+    owning adapter by protocol.
+  + **murm adapter** (feature `murm-adapter`) — a `CabalSink` seam (implemented for
+    both `CabalHandle` and `SyncedCabal`, so the host hands it gossiping cabals and
+    tests hand it light ones) maps cabals → conversations and `Text` posts →
+    messages (control posts filtered), with direction from the cabal author key and
+    send through the sink. Pulls murm (tokio + iroh), so it is opt-in.
+  + **misfin adapter** (feature `misfin-adapter`) — reads the receive server's
+    `MailboxStore`, groups mail by correspondent (by resolved address when present,
+    else fingerprint), and parses each gemmail for its subject + gemtext body.
+    Read-only for now: `send` reports `Unsupported` (misfin sending rides errand +
+    a vault identity, wired in the pane). Pulls misfin's `server` feature.
+  + **Status: green in all four configs** (no-feature core, `murm-adapter`,
+    `misfin-adapter`, both): 7 core tests + 4 murm-adapter + 4 misfin-adapter + a
+    doctest, plus an `InMemoryAdapter` test double (the `test-support` feature) that
+    drives the headless core tests (merge, recency sort, routing, capability,
+    failure surfacing). comms is clippy-clean. The core compiles to wasm32 (the PWA
+    path); adapters that can't are opt-out. Deferred to P6: wiring the adapters to a
+    live host (a running misfin server's store, the user's synced cabals, the
+    persona's misfin identity) and the misfin send path (errand + vault).
+    Worked inline/foreground.
+- **2026-06-06 — P6 started: P6a done (verified), P6b written (verification blocked).**
+  Approach (chosen with Mark): render the pane first with **placeholder data**,
+  then run meerkat and iterate the visuals; live backends after. The peripheral-panes
+  architecture (`technical_architecture/2026-06-06_peripheral_panes_architecture.md`)
+  frames comms as the **first** docked pane, so P6 establishes the dock pattern.
+  + **P6a — the comms pane view-model (done, headless-verified).** `comms::pane`:
+    `DockSide` / `DockState` (the minimal dock contract — open / side / size / focus)
+    and `CommsPane` (dock + the inbox snapshot + surfaced failures + selection + the
+    open thread + the draft) with its logic (toggle, select aims the draft + clears
+    the thread, `set_inbox` keeps/drops the selection, send-readiness). 6 new tests
+    (comms now 13 green); clippy-clean. This is what the host renders, the way
+    meerkat renders `chrome`'s `ToolbarState`.
+  + **P6b — the meerkat docked pane (written, mirrors the settings overlay).**
+    `comms` dep added to meerkat; `Chrome` gains `comms: CommsPane` + a `comms_draft`
+    editing buffer (seeded with placeholder conversations + threads); a `ToggleComms`
+    palette command; a `comms_pane` view in `views.rs` (header + close, a surfaced
+    failures line, a conversation list whose rows select, a thread view with
+    in/out message bubbles, and a lensed compose field + Send); CSS in `CHROME_SHEET`
+    for a right-edge docked panel. Send echoes the draft into the thread (placeholder).
+  + **Blocked: meerkat compile-verification.** The working tree has **pre-existing,
+    unrelated WIP** in `graph-kernel` — a mid-flight `NodeNavigationMemory` →
+    `SharedNavigationMemory` restructure (per-node memory → a shared snapshot with
+    owners; `graph/history.rs` renamed + restructured the type, but `node.rs` / `mod.rs`
+    / `query.rs` / `snapshot` / `node_props` / `import_records` still import the old
+    name, and the rkyv archived shape changed). `kernel` fails to compile, which
+    blocks the whole meerkat build *before* the comms code is reached. The P6b code
+    touches no kernel; it could not be compiled to confirm. Next step: finish (or
+    stash) the kernel refactor, then compile-verify P6b and run meerkat to tune the
+    pane geometry + interaction; then wire live backends. Worked inline/foreground.

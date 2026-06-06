@@ -43,6 +43,10 @@ use std::rc::Rc;
 use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
+use comms::{
+    CommsPane, Conversation, ConversationId, Direction, Identity, Inbox, Message, MessageBody,
+    MessageId, ProtocolKind,
+};
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
     el, lens, on_click, text_field_typed, AnyView, PointerClick, ServalAppRunner, ServalCtx,
@@ -137,6 +141,15 @@ pub struct Chrome {
     /// focused node (navigated-from edge) instead of navigating in place, then
     /// clears it. P2 of the node-navigation-lineage plan.
     pub open_as_new_node: bool,
+    /// The docked comms pane's view-model (P6): conversations + the open thread +
+    /// the draft + dock geometry. meerkat renders it the way it renders the other
+    /// reused view-models. Seeded with placeholder data; the live misfin / murm
+    /// adapters fill it through the event loop in a later slice.
+    pub comms: CommsPane,
+    /// The comms compose field's live editing buffer (caret / IME), the same
+    /// host-owns-the-buffer split as the omnibar. Synced into `comms.draft` on
+    /// send.
+    pub comms_draft: TextInput,
 }
 
 /// A within-node history step the host applies to the focused node.
@@ -224,6 +237,12 @@ impl Chrome {
             settings_open: false,
             context_menu: None,
             pending_context: None,
+            comms: {
+                let mut pane = CommsPane::new();
+                pane.set_inbox(placeholder_inbox());
+                pane
+            },
+            comms_draft: TextInput::new(""),
         }
     }
 
@@ -369,6 +388,8 @@ impl Chrome {
             // A chrome-level action: open the settings overlay right here (no host
             // intent needed, like toggling the palette).
             Command::OpenSettings => self.open_settings(),
+            // Chrome-level too: toggle the docked comms pane in place.
+            Command::ToggleComms => self.toggle_comms(),
             Command::ToggleWorkbench
             | Command::DeleteNode
             | Command::BackgroundNode
@@ -447,16 +468,107 @@ impl Chrome {
         self.pending_context.take()
     }
 
-    /// The text field that currently owns editing / the caret: the palette query
-    /// when the palette is open, otherwise the omnibar. The host reads this to
-    /// paint the caret on the right field.
+    /// Toggle the docked comms pane open/closed.
+    pub fn toggle_comms(&mut self) {
+        self.comms.toggle();
+    }
+
+    /// Close the comms pane.
+    pub fn close_comms(&mut self) {
+        self.comms.close();
+    }
+
+    /// Open conversation `id` in the comms pane: select it, load its thread
+    /// (placeholder for now), and arm a fresh compose buffer. The live adapters
+    /// will load the real thread through the event loop later.
+    pub fn select_conversation(&mut self, id: ConversationId) {
+        self.comms.select(id.clone());
+        self.comms.set_thread(placeholder_thread(&id));
+        self.comms_draft = TextInput::new("");
+    }
+
+    /// Send the composed reply. Placeholder: echoes the draft into the open thread
+    /// as an outgoing message and clears the buffer. The live path routes the
+    /// draft to `Comms::send` through the event loop.
+    pub fn send_comms(&mut self) {
+        let body = self.comms_draft.text().trim().to_string();
+        if body.is_empty() {
+            return;
+        }
+        if let Some(id) = self.comms.selected().cloned() {
+            self.comms.thread.push(Message {
+                id: MessageId(format!("local-{}", self.comms.thread.len())),
+                author: Identity::new(id.protocol, "me"),
+                body: MessageBody::PlainText(body),
+                subject: None,
+                timestamp_ms: None,
+                direction: Direction::Outgoing,
+            });
+            self.comms.clear_draft();
+            self.comms_draft = TextInput::new("");
+        }
+    }
+
+    /// The text field that currently owns editing / the caret: the comms compose
+    /// buffer when the pane has focus, the palette query when the palette is open,
+    /// otherwise the omnibar. The host reads this to paint the caret on the right
+    /// field.
     pub fn active_field(&self) -> &TextInput {
-        if self.palette_open {
+        if self.comms.is_open() && self.comms.dock.focused {
+            &self.comms_draft
+        } else if self.palette_open {
             &self.palette_input
         } else {
             &self.omnibar
         }
     }
+}
+
+/// Placeholder conversation list for the comms pane shell, until the live misfin /
+/// murm adapters fill it through the event loop. One murm cabal, one misfin
+/// correspondent.
+fn placeholder_inbox() -> Inbox {
+    Inbox {
+        conversations: vec![
+            Conversation {
+                id: ConversationId::new(ProtocolKind::Murm, "cabal-demo"),
+                title: "Project cabal".to_string(),
+                participants: Vec::new(),
+                last_activity_ms: Some(5_000),
+                unread: 2,
+            },
+            Conversation {
+                id: ConversationId::new(ProtocolKind::Misfin, "ana@example.test"),
+                title: "ana@example.test".to_string(),
+                participants: Vec::new(),
+                last_activity_ms: Some(3_000),
+                unread: 1,
+            },
+        ],
+        failures: Vec::new(),
+    }
+}
+
+/// A placeholder thread for `id`, so selecting a conversation shows something.
+fn placeholder_thread(id: &ConversationId) -> Vec<Message> {
+    vec![
+        Message {
+            id: MessageId("d1".to_string()),
+            author: Identity::new(id.protocol, "peer"),
+            body: MessageBody::PlainText("Hey — this is a placeholder conversation.".to_string()),
+            subject: None,
+            timestamp_ms: Some(1_000),
+            direction: Direction::Incoming,
+        },
+        Message {
+            id: MessageId("d2".to_string()),
+            author: Identity::new(id.protocol, "me"),
+            body: MessageBody::PlainText("Yep. Live misfin + murm backends wire in next.".to_string()),
+            subject: None,
+            timestamp_ms: Some(2_000),
+            direction: Direction::Outgoing,
+        },
+    ]
 }
 
 mod views;

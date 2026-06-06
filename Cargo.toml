@@ -16,6 +16,7 @@ members = [
     "crates/graphshell/graph/node-lineage",
     "crates/graphshell/graph/orrery",
     "crates/graphshell/shell/domain/chrome",
+    "crates/graphshell/shell/domain/comms",
     "crates/graphshell/shell/domain/frame",
     "crates/graphshell/shell/session-runtime",
     "crates/graphshell/shell/state",
@@ -94,6 +95,7 @@ armillary = { path = "crates/armillary" }
 shell-state = { path = "crates/graphshell/shell/state" }
 frame = { path = "crates/graphshell/shell/domain/frame" }
 chrome = { path = "crates/graphshell/shell/domain/chrome" }
+comms = { path = "crates/graphshell/shell/domain/comms" }
 session-runtime = { path = "crates/graphshell/shell/session-runtime" }
 ux-events = { path = "crates/graphshell/shell/ux-events" }
 register-diagnostics = { path = "crates/graphshell/shell/system/registry/register-diagnostics" }
@@ -122,6 +124,7 @@ eidetic-iroh-fetcher = { path = "crates/eidetic/eidetic-iroh-fetcher" }
 
 embed = { path = "crates/intel/embed" }
 
+misfin = { path = "crates/murm/misfin" }
 murm = { path = "crates/murm/murm" }
 murmuring = { path = "crates/murm/murmuring" }
 transport = { path = "crates/murm/transport" }

@@ -42,11 +42,14 @@ pub enum Command {
     /// Open the settings overlay. A chrome-level action (opens the panel right
     /// there, like toggling the palette), not a host intent.
     OpenSettings,
+    /// Toggle the docked comms pane (conversations: misfin mail + murm cabals). A
+    /// chrome-level action, like opening settings.
+    ToggleComms,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 10] = [
+    pub const ALL: [Command; 11] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -57,6 +60,7 @@ impl Command {
         Command::HideSelectedEdge,
         Command::ShowAllEdges,
         Command::OpenSettings,
+        Command::ToggleComms,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -86,6 +90,7 @@ impl Command {
             Command::HideSelectedEdge => "Hide selected edge",
             Command::ShowAllEdges => "Show all edges",
             Command::OpenSettings => "Settings",
+            Command::ToggleComms => "Comms (conversations)",
         }
     }
 }

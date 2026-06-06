@@ -96,7 +96,7 @@ fn open_as_new_node_mints_distinct_node_with_navigated_from_edge() {
     // The new node opens on its URL — its own within-node history is seeded.
     let (new_key, _) = orrery.graph().get_node_by_id(new_id).unwrap();
     assert_eq!(
-        orrery.graph().get_node(new_key).unwrap().navigation_memory.current_url().as_deref(),
+        orrery.graph().node_current_url(new_key).as_deref(),
         Some("https://example.com"),
         "the minted node carries its opening page as its first visit",
     );

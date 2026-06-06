@@ -1952,6 +1952,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "comms"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "identity",
+ "misfin",
+ "murm",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "compact_str"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2176,18 +2189,6 @@ checksum = "45390e6114f68f718cc7a830514a96f903cccd70d02a8f6d9f643ac4ba45afaf"
 dependencies = [
  "bitflags 1.3.2",
  "core-foundation 0.9.4",
- "libc",
-]
-
-[[package]]
-name = "core-text"
-version = "20.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9d2790b5c08465d49f8dc05c8bcae9fea467855947db39b0f8145c091aaced5"
-dependencies = [
- "core-foundation 0.9.4",
- "core-graphics",
- "foreign-types",
  "libc",
 ]
 
@@ -4038,29 +4039,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fontsan"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52fd401b496627c46f35318272508fcdcb77927868507ed2ad796408aa903923"
-dependencies = [
- "cc",
- "fontsan-woff2",
- "glob",
- "libc",
- "libz-sys",
-]
-
-[[package]]
-name = "fontsan-woff2"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106ebe29445505f3860765d2597ddad20a3e90174d6e8539a10d58253b3e5c0f"
-dependencies = [
- "brotli-decompressor",
- "cc",
-]
-
-[[package]]
 name = "foreign-types"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4128,17 +4106,6 @@ dependencies = [
  "tracing",
  "uuid",
  "uxtree",
-]
-
-[[package]]
-name = "freetype-sys"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e7edc5b9669349acfda99533e9e0bcf26a51862ab43b08ee7745c55d28eb134"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
 ]
 
 [[package]]
@@ -4751,21 +4718,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "harfbuzz-sys"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb86e2fef3ba40cebffb8fa2cba811f06aa5c5fd296a4e469473e5398d166594"
-dependencies = [
- "cc",
- "core-graphics",
- "core-text",
- "foreign-types",
- "freetype-sys",
- "pkg-config",
- "winapi",
-]
-
-[[package]]
 name = "harfrust"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5244,28 +5196,7 @@ dependencies = [
  "litemap 0.7.5",
  "tinystr 0.7.6",
  "writeable 0.5.5",
- "zerovec 0.10.4",
 ]
-
-[[package]]
-name = "icu_locid_transform"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01d11ac35de8e40fdeda00d9e1e9d92525f3f9d887cdd7aa81d727596788b54e"
-dependencies = [
- "displaydoc",
- "icu_locid",
- "icu_locid_transform_data",
- "icu_provider 1.5.0",
- "tinystr 0.7.6",
- "zerovec 0.10.4",
-]
-
-[[package]]
-name = "icu_locid_transform_data"
-version = "1.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7515e6d781098bf9f7205ab3fc7e9709d34554ae0b21ddbcb5febfa4bc7df11d"
 
 [[package]]
 name = "icu_normalizer"
@@ -5275,7 +5206,7 @@ checksum = "c56e5ee99d6e3d33bd91c5d85458b6005a22140021cc324cea84dd0e72cff3b4"
 dependencies = [
  "icu_collections 2.2.0",
  "icu_normalizer_data",
- "icu_properties 2.2.0",
+ "icu_properties",
  "icu_provider 2.2.0",
  "smallvec",
  "zerovec 0.11.6",
@@ -5289,38 +5220,17 @@ checksum = "da3be0ae77ea334f4da67c12f149704f19f81d1adf7c51cf482943e84a2bad38"
 
 [[package]]
 name = "icu_properties"
-version = "1.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93d6020766cfc6302c15dbbc9c8778c37e62c14427cb7f6e601d849e092aeef5"
-dependencies = [
- "displaydoc",
- "icu_collections 1.5.0",
- "icu_locid_transform",
- "icu_properties_data 1.5.1",
- "icu_provider 1.5.0",
- "tinystr 0.7.6",
- "zerovec 0.10.4",
-]
-
-[[package]]
-name = "icu_properties"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bee3b67d0ea5c2cca5003417989af8996f8604e34fb9ddf96208a033901e70de"
 dependencies = [
  "icu_collections 2.2.0",
  "icu_locale_core",
- "icu_properties_data 2.2.0",
+ "icu_properties_data",
  "icu_provider 2.2.0",
  "zerotrie",
  "zerovec 0.11.6",
 ]
-
-[[package]]
-name = "icu_properties_data"
-version = "1.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85fb8799753b75aee8d2a21d7c14d9f38921b54b3dbda10f5a3c7a7b82dba5e2"
 
 [[package]]
 name = "icu_properties_data"
@@ -5472,7 +5382,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
 dependencies = [
  "icu_normalizer",
- "icu_properties 2.2.0",
+ "icu_properties",
 ]
 
 [[package]]
@@ -6339,18 +6249,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libz-sys"
-version = "1.1.29"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85bc9657773828b90eeb625adff10eeac83cc21bbfd8e23a03eaa8a33c9e28d9"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
- "vcpkg",
-]
-
-[[package]]
 name = "linebender_resource_handle"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6609,6 +6507,7 @@ dependencies = [
  "arboard",
  "armillary",
  "chrome",
+ "comms",
  "dirs",
  "document-canvas",
  "eidetic-fjall",
@@ -7798,8 +7697,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cde0dfb48d25d2b4862161a4d5fcc0e3c24367869ad306b0c9ec0073bfed92d"
 dependencies = [
  "bitflags 2.11.1",
- "block2 0.6.2",
- "libc",
  "objc2 0.6.4",
  "objc2-core-foundation",
  "objc2-core-graphics",
@@ -8461,7 +8358,7 @@ dependencies = [
  "harfrust",
  "hashbrown 0.17.0",
  "icu_normalizer",
- "icu_properties 2.2.0",
+ "icu_properties",
  "icu_segmenter 2.2.0",
  "linebender_resource_handle",
  "parlance",
@@ -8475,7 +8372,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19ab9ace3fad1b9ed603ddac5b595e69931fc50263d7e04e4055015b77b02da5"
 dependencies = [
- "icu_properties 2.2.0",
+ "icu_properties",
 ]
 
 [[package]]
@@ -10673,8 +10570,6 @@ dependencies = [
  "rustc-hash 2.1.2",
  "selectors",
  "serde",
- "servo-base",
- "servo-layout-api",
  "servo-malloc-size-of",
  "servo-paint-types",
  "servo-pixels",
@@ -10875,60 +10770,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "servo-fonts"
-version = "0.2.0"
-dependencies = [
- "app_units",
- "bitflags 2.11.1",
- "byteorder",
- "content-security-policy",
- "dwrote",
- "euclid",
- "fontsan",
- "freetype-sys",
- "harfbuzz-sys",
- "icu_locid",
- "icu_properties 1.5.1",
- "itertools 0.14.0",
- "libc",
- "log",
- "malloc_size_of_derive",
- "memmap2",
- "num-traits",
- "objc2 0.6.4",
- "objc2-core-foundation",
- "objc2-core-graphics",
- "objc2-core-text",
- "parking_lot",
- "read-fonts",
- "rustc-hash 2.1.2",
- "serde",
- "servo-allocator",
- "servo-base",
- "servo-config",
- "servo-fonts-traits",
- "servo-malloc-size-of",
- "servo-net-traits",
- "servo-paint-api",
- "servo-paint-types",
- "servo-profile-traits",
- "servo-tracing",
- "servo-url",
- "servo_arc",
- "skrifa",
- "smallvec",
- "stylo",
- "stylo_atoms",
- "unicode-properties",
- "unicode-script",
- "url",
- "uuid",
- "winapi",
- "xml",
- "yeslogic-fontconfig-sys",
-]
-
-[[package]]
 name = "servo-fonts-traits"
 version = "0.2.0"
 dependencies = [
@@ -10974,37 +10815,6 @@ dependencies = [
  "mime",
  "serde_bytes",
  "serde_core",
-]
-
-[[package]]
-name = "servo-layout-api"
-version = "0.2.0"
-dependencies = [
- "app_units",
- "atomic_refcell",
- "bitflags 2.11.1",
- "crossbeam-channel",
- "euclid",
- "html5ever",
- "libc",
- "malloc_size_of_derive",
- "parking_lot",
- "rustc-hash 2.1.2",
- "selectors",
- "serde",
- "servo-base",
- "servo-embedder-traits",
- "servo-fonts",
- "servo-malloc-size-of",
- "servo-net-traits",
- "servo-paint-api",
- "servo-paint-types",
- "servo-pixels",
- "servo-profile-traits",
- "servo-url",
- "servo_arc",
- "stylo",
- "stylo_traits",
 ]
 
 [[package]]
@@ -12541,7 +12351,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9117f5d4db391c1cf6927e7bea3db74b9a1c1add8f7eda9ffd5364f40f57b82f"
 dependencies = [
  "displaydoc",
- "zerovec 0.10.4",
 ]
 
 [[package]]
@@ -15018,12 +14827,6 @@ name = "xkeysym"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
-
-[[package]]
-name = "xml"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "636f85e5ca6488e96401b61eb7de54f4e44755c988af0f52cf90230c312a1a89"
 
 [[package]]
 name = "xml-rs"

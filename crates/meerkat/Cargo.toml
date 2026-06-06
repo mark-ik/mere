@@ -37,6 +37,12 @@ serval-static-dom = { path = "../../../serval/components/serval-static-dom" }
 # for ("host widgets render from these types through the view-model").
 chrome = { workspace = true }
 
+# The comms domain (P5): the host-neutral conversation / message / identity model
+# + pane view-model. meerkat renders `comms::CommsPane` the way it renders
+# `chrome`'s view-models. The bare core (no backend adapters) is enough for the
+# docked pane shell; the live misfin / murm adapter features wire in later.
+comms = { workspace = true }
+
 # ─── On-screen bin: the serval render + present stack (pelt-live-shaped) ──────
 # Reuse pelt-live's lib for the cascade -> layout -> paint -> netrender::Scene
 # builder (scene_from_scripted_dom) and the point->node hit-test (hit_test_node),

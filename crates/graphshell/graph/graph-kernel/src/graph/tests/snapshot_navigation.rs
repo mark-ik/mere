@@ -2,10 +2,54 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! URL update + cold-restore + navigation-memory tests — exercises
-//! the snapshot path through per-node navigation state.
+//! URL update + cold-restore + navigation-history tests — exercises the snapshot
+//! path through the graph-level shared navigation history (one visit space, owner
+//! per node; the (b) anchor design).
 
 use super::super::*;
+
+/// A `GraphSnapshot` carrying one node and the given shared navigation history.
+fn snapshot_with(node: crate::persistence::PersistedNode, nav: SharedNavigationMemory) -> crate::persistence::GraphSnapshot {
+    crate::persistence::GraphSnapshot {
+        nodes: vec![node],
+        edges: vec![],
+        import_records: vec![],
+        timestamp_secs: 0,
+        fields: vec![],
+        couplings: vec![],
+        navigation: nav,
+    }
+}
+
+/// A minimal `PersistedNode` at `url` with id `node_id` (no session state).
+fn persisted_node(node_id: Uuid, url: &str) -> crate::persistence::PersistedNode {
+    use crate::persistence::{PersistedAddress, PersistedNode};
+    PersistedNode {
+        node_id: node_id.to_string(),
+        url: url.to_string(),
+        cached_host: None,
+        title: "Node".to_string(),
+        position_x: 0.0,
+        position_y: 0.0,
+        tags: vec![],
+        tag_presentation: NodeTagPresentationState::default(),
+        import_provenance: vec![],
+        is_pinned: false,
+        thumbnail_png: None,
+        thumbnail_width: 0,
+        thumbnail_height: 0,
+        favicon_rgba: None,
+        favicon_width: 0,
+        favicon_height: 0,
+        session_state: None,
+        mime_hint: None,
+        address: PersistedAddress::Http(url.to_string()),
+        classifications: Vec::new(),
+        frame_layout_hints: Vec::new(),
+        frame_split_offer_suppressed: false,
+        properties: Vec::new(),
+    }
+}
 
 #[test]
 fn test_update_node_url() {
@@ -30,138 +74,65 @@ fn test_update_node_url_nonexistent() {
 
 #[test]
 fn test_cold_restore_reapplies_history_index() {
-    use crate::persistence::{
-        GraphSnapshot, PersistedAddress, PersistedNode, PersistedNodeSessionState,
-    };
-
     let node_id = Uuid::new_v4();
-    let snapshot = GraphSnapshot {
-        nodes: vec![PersistedNode {
-            node_id: node_id.to_string(),
-            url: "https://fallback.example".to_string(),
-            cached_host: None,
-            title: "Node".to_string(),
-            position_x: 0.0,
-            position_y: 0.0,
-            tags: vec![],
-            tag_presentation: NodeTagPresentationState::default(),
-            import_provenance: vec![],
-            is_pinned: false,
-            navigation_memory: NodeNavigationMemory::from_linear_history(
-                vec![
-                    "https://example.com/one".to_string(),
-                    "https://example.com/two".to_string(),
-                    "https://example.com/three".to_string(),
-                ],
-                2,
-            ),
-            thumbnail_png: None,
-            thumbnail_width: 0,
-            thumbnail_height: 0,
-            favicon_rgba: None,
-            favicon_width: 0,
-            favicon_height: 0,
-            session_state: Some(PersistedNodeSessionState {
-                scroll_x: Some(4.0),
-                scroll_y: Some(120.0),
-                form_draft: None,
-            }),
-            mime_hint: None,
-            address: PersistedAddress::Http("https://fallback.example".to_string()),
-            classifications: Vec::new(),
-            frame_layout_hints: Vec::new(),
-            frame_split_offer_suppressed: false,
-            properties: Vec::new(),
-        }],
-        edges: vec![],
-        import_records: vec![],
-        timestamp_secs: 0,
-        fields: vec![],
-        couplings: vec![],
-    };
+    let mut nav = SharedNavigationMemory::empty();
+    nav.seed_linear(
+        node_id,
+        vec![
+            "https://example.com/one".to_string(),
+            "https://example.com/two".to_string(),
+            "https://example.com/three".to_string(),
+        ],
+        2,
+    );
+    let snapshot = snapshot_with(persisted_node(node_id, "https://fallback.example"), nav);
 
     let restored = Graph::from_snapshot(&snapshot);
-    let (_, node) = restored.get_node_by_id(node_id).unwrap();
-    let history = node.history_projection();
+    let (key, _) = restored.get_node_by_id(node_id).unwrap();
+    let history = restored.node_history_projection(key);
     assert_eq!(history.entries.len(), 3);
     assert_eq!(history.current_index, 2);
+    // The restored current page follows the history cursor.
+    assert_eq!(restored.node_current_url(key).as_deref(), Some("https://example.com/three"));
 }
 
 #[test]
-fn test_navigation_memory_preserves_alternate_branch_when_history_diverges() {
-    let mut memory = NodeNavigationMemory::from_linear_history(
-        vec![
-            "https://example.com/a".to_string(),
-            "https://example.com/b".to_string(),
-        ],
-        1,
-    );
+fn navigate_forward_fork_preserves_the_alternate_branch() {
+    // The real user path (navigate / back / navigate) forward-forks: from `a`,
+    // navigating to `b`, stepping back, then navigating to `c` keeps `b` as an
+    // alternate child of `a` (temporal integrity), now over the shared space.
+    let mut graph = Graph::new();
+    let key = graph.add_node("https://example.com/a".to_string(), Point2D::new(0.0, 0.0));
+    graph.navigate_node(key, "https://example.com/a");
+    graph.navigate_node(key, "https://example.com/b");
+    assert_eq!(graph.node_history_back(key).as_deref(), Some("https://example.com/a"));
+    graph.navigate_node(key, "https://example.com/c");
 
-    memory.replace_linear_history(vec!["https://example.com/a".to_string()], 0);
-    memory.replace_linear_history(
-        vec![
-            "https://example.com/a".to_string(),
-            "https://example.com/c".to_string(),
-        ],
-        1,
+    let branch = graph.node_history_branch_projection(key);
+    let a_visit = branch
+        .visits
+        .iter()
+        .find(|v| v.url == "https://example.com/a")
+        .expect("a on the active path");
+    assert!(
+        a_visit.alternate_children.iter().any(|alt| alt.url == "https://example.com/b"),
+        "b is preserved as an alternate branch off a after the forward-fork",
     );
-
-    let branch = memory.branch_projection();
-    assert_eq!(branch.current_index, Some(1));
-    assert_eq!(branch.visits.len(), 2);
-    assert_eq!(branch.visits[0].url, "https://example.com/a");
-    assert_eq!(branch.visits[1].url, "https://example.com/c");
-    assert!(branch.visits[1].is_current);
-    assert_eq!(branch.visits[0].alternate_children.len(), 1);
-    assert_eq!(
-        branch.visits[0].alternate_children[0].url,
-        "https://example.com/b"
-    );
+    assert_eq!(graph.node_current_url(key).as_deref(), Some("https://example.com/c"));
 }
 
 #[test]
 fn test_cold_restore_reapplies_scroll_offset() {
-    use crate::persistence::{
-        GraphSnapshot, PersistedAddress, PersistedNode, PersistedNodeSessionState,
-    };
+    use crate::persistence::PersistedNodeSessionState;
 
-    let snapshot = GraphSnapshot {
-        nodes: vec![PersistedNode {
-            node_id: Uuid::new_v4().to_string(),
-            url: "https://example.com".to_string(),
-            cached_host: None,
-            title: "Node".to_string(),
-            position_x: 0.0,
-            position_y: 0.0,
-            tags: vec![],
-            tag_presentation: NodeTagPresentationState::default(),
-            import_provenance: vec![],
-            is_pinned: false,
-            navigation_memory: NodeNavigationMemory::empty(),
-            thumbnail_png: None,
-            thumbnail_width: 0,
-            thumbnail_height: 0,
-            favicon_rgba: None,
-            favicon_width: 0,
-            favicon_height: 0,
-            session_state: Some(PersistedNodeSessionState {
-                scroll_x: Some(20.0),
-                scroll_y: Some(640.0),
-                form_draft: None,
-            }),
-            mime_hint: None,
-            address: PersistedAddress::Http("https://example.com".to_string()),
-            classifications: Vec::new(),
-            frame_layout_hints: Vec::new(),
-            frame_split_offer_suppressed: false,
-            properties: Vec::new(),
-        }],
-        edges: vec![],
-        import_records: vec![],
-        timestamp_secs: 0,
-        fields: vec![],
-        couplings: vec![],
-    };
+    let node_id = Uuid::new_v4();
+    let mut node = persisted_node(node_id, "https://example.com");
+    node.session_state = Some(PersistedNodeSessionState {
+        scroll_x: Some(20.0),
+        scroll_y: Some(640.0),
+        form_draft: None,
+    });
+    let snapshot = snapshot_with(node, SharedNavigationMemory::empty());
 
     let restored = Graph::from_snapshot(&snapshot);
     let (_, node) = restored.get_node_by_url("https://example.com").unwrap();
@@ -170,53 +141,15 @@ fn test_cold_restore_reapplies_scroll_offset() {
 
 #[test]
 fn test_restore_fallback_without_session_state() {
-    use crate::persistence::{GraphSnapshot, PersistedAddress, PersistedNode};
-
-    let snapshot = GraphSnapshot {
-        nodes: vec![PersistedNode {
-            node_id: Uuid::new_v4().to_string(),
-            url: "https://fallback.example".to_string(),
-            cached_host: None,
-            title: "Node".to_string(),
-            position_x: 0.0,
-            position_y: 0.0,
-            tags: vec![],
-            tag_presentation: NodeTagPresentationState::default(),
-            import_provenance: vec![],
-            is_pinned: false,
-            navigation_memory: NodeNavigationMemory::from_linear_history(
-                vec!["https://legacy-one.example".to_string()],
-                0,
-            ),
-            thumbnail_png: None,
-            thumbnail_width: 0,
-            thumbnail_height: 0,
-            favicon_rgba: None,
-            favicon_width: 0,
-            favicon_height: 0,
-            session_state: None,
-            mime_hint: None,
-            address: PersistedAddress::Http("https://fallback.example".to_string()),
-            classifications: Vec::new(),
-            frame_layout_hints: Vec::new(),
-            frame_split_offer_suppressed: false,
-            properties: Vec::new(),
-        }],
-        edges: vec![],
-        import_records: vec![],
-        timestamp_secs: 0,
-        fields: vec![],
-        couplings: vec![],
-    };
+    let node_id = Uuid::new_v4();
+    let mut nav = SharedNavigationMemory::empty();
+    nav.seed_linear(node_id, vec!["https://legacy-one.example".to_string()], 0);
+    let snapshot = snapshot_with(persisted_node(node_id, "https://fallback.example"), nav);
 
     let restored = Graph::from_snapshot(&snapshot);
-    let (_, node) = restored
-        .get_node_by_url("https://fallback.example")
-        .unwrap();
-    assert_eq!(
-        node.history_entries(),
-        vec!["https://legacy-one.example".to_string()]
-    );
-    assert_eq!(node.history_index(), 0);
-    assert_eq!(node.session_scroll, None);
+    let (key, _) = restored.get_node_by_id(node_id).unwrap();
+    let history = restored.node_history_projection(key);
+    assert_eq!(history.entries, vec!["https://legacy-one.example".to_string()]);
+    assert_eq!(history.current_index, 0);
+    assert_eq!(restored.get_node(key).unwrap().session_scroll, None);
 }

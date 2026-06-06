@@ -470,12 +470,18 @@ impl Orrery {
 
     /// Whether `member`'s history can step back (toolbar enablement).
     pub fn member_can_back(&self, member: uuid::Uuid) -> bool {
-        self.graph.get_node_by_id(member).is_some_and(|(_, n)| n.navigation_memory.can_back())
+        match self.graph.get_node_by_id(member) {
+            Some((key, _)) => self.graph.node_can_back(key),
+            None => false,
+        }
     }
 
     /// Whether `member`'s history can step forward (toolbar enablement).
     pub fn member_can_forward(&self, member: uuid::Uuid) -> bool {
-        self.graph.get_node_by_id(member).is_some_and(|(_, n)| n.navigation_memory.can_forward())
+        match self.graph.get_node_by_id(member) {
+            Some((key, _)) => self.graph.node_can_forward(key),
+            None => false,
+        }
     }
 
     /// The graph members (node UUIDs) of the currently-selected nodes. The host

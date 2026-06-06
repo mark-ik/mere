@@ -17,10 +17,6 @@ use rkyv::{Archive, Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::identity::{Point2DAsTuple, UuidAsBytes, Vector2DAsTuple};
-use super::{
-    NodeHistoryBranchProjection, NodeHistoryProjection, NodeHistorySemanticSummary,
-    NodeNavigationMemory,
-};
 use crate::address::{Address, AddressClaim, address_from_url, cached_host_from_url};
 use crate::types::{
     FrameLayoutHint, NodeClassification, NodeImportProvenance, NodeProperty,
@@ -84,8 +80,6 @@ pub struct Node {
     #[rkyv(with = rkyv::with::AsUnixTime)]
     pub last_visited: std::time::SystemTime,
 
-    /// Owner-scoped persisted navigation memory for this node's mapped webview.
-    pub navigation_memory: NodeNavigationMemory,
 
     /// Optional thumbnail bytes (PNG), persisted in snapshots.
     pub thumbnail_png: Option<Vec<u8>>,
@@ -199,34 +193,9 @@ impl Node {
         self.primary_address().as_url_str()
     }
 
-    pub fn history_projection(&self) -> NodeHistoryProjection {
-        self.navigation_memory.projection()
-    }
-
-    pub fn history_entries(&self) -> Vec<String> {
-        self.history_projection().entries
-    }
-
-    pub fn history_index(&self) -> usize {
-        self.history_projection().current_index
-    }
-
-    pub fn current_history_url(&self) -> Option<String> {
-        self.navigation_memory.current_url()
-    }
-
-    pub fn history_branch_projection(&self) -> NodeHistoryBranchProjection {
-        self.navigation_memory.branch_projection()
-    }
-
-    pub fn history_semantic_summary(&self) -> NodeHistorySemanticSummary {
-        self.navigation_memory.semantic_summary()
-    }
-
-    pub fn replace_history_state(&mut self, entries: Vec<String>, current_index: usize) {
-        self.navigation_memory
-            .replace_linear_history(entries, current_index);
-    }
+    // Per-node navigation history moved to the graph-level shared visit space
+    // (`Graph.nav` / `SharedNavigationMemory`); read it via the `Graph::node_history_*`
+    // / `Graph::node_current_url` methods. (The (b) anchor design, 2026-06-06.)
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn test_stub(url: &str) -> Self {
@@ -244,7 +213,6 @@ impl Node {
             properties: Vec::new(),
             is_pinned: false,
             last_visited: std::time::SystemTime::now(),
-            navigation_memory: NodeNavigationMemory::empty(),
             thumbnail_png: None,
             thumbnail_width: 0,
             thumbnail_height: 0,

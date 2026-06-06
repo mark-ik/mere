@@ -27,7 +27,7 @@ pub use crate::persistence_edge::{
     PersistedTraversalMetrics, PersistedTraversalRecord,
 };
 
-use crate::graph::NodeNavigationMemory;
+use crate::graph::SharedNavigationMemory;
 use crate::types::{
     FrameLayoutHint, ImportRecord, NodeClassification, NodeImportProvenance, NodeProperty,
     NodeTagPresentationState,
@@ -157,8 +157,6 @@ pub struct PersistedNode {
     #[serde(default)]
     pub import_provenance: Vec<NodeImportProvenance>,
     pub is_pinned: bool,
-    #[serde(default)]
-    pub navigation_memory: NodeNavigationMemory,
     pub thumbnail_png: Option<Vec<u8>>,
     pub thumbnail_width: u32,
     pub thumbnail_height: u32,
@@ -201,6 +199,12 @@ pub struct GraphSnapshot {
     pub fields: Vec<PersistedField>,
     #[serde(default)]
     pub couplings: Vec<PersistedCoupling>,
+    /// The graph's shared navigation history (one visit space, owner per node —
+    /// the (b) anchor design). `#[serde(default)]` so snapshots written before the
+    /// shared-history migration (per-node `navigation_memory`, now ignored) load
+    /// with an empty history rather than failing.
+    #[serde(default)]
+    pub navigation: SharedNavigationMemory,
 }
 
 // ---------------------------------------------------------------------------

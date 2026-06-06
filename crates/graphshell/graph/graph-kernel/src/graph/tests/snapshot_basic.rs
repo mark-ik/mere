@@ -276,7 +276,6 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: vec![],
             is_pinned: false,
-            navigation_memory: NodeNavigationMemory::empty(),
             thumbnail_png: None,
             thumbnail_width: 0,
             thumbnail_height: 0,
@@ -311,6 +310,7 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
         timestamp_secs: 0,
         fields: vec![],
         couplings: vec![],
+        navigation: SharedNavigationMemory::empty(),
     };
 
     let graph = Graph::from_snapshot(&snapshot);
@@ -337,7 +337,6 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 tag_presentation: NodeTagPresentationState::default(),
                 import_provenance: vec![],
                 is_pinned: false,
-                navigation_memory: NodeNavigationMemory::empty(),
                 thumbnail_png: None,
                 thumbnail_width: 0,
                 thumbnail_height: 0,
@@ -363,7 +362,6 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 tag_presentation: NodeTagPresentationState::default(),
                 import_provenance: vec![],
                 is_pinned: false,
-                navigation_memory: NodeNavigationMemory::empty(),
                 thumbnail_png: None,
                 thumbnail_width: 0,
                 thumbnail_height: 0,
@@ -384,6 +382,7 @@ fn test_snapshot_duplicate_urls_last_wins() {
         timestamp_secs: 0,
         fields: vec![],
         couplings: vec![],
+        navigation: SharedNavigationMemory::empty(),
     };
 
     let graph = Graph::from_snapshot(&snapshot);

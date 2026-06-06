@@ -27,6 +27,9 @@ use crate::persistence::{
 impl Graph {
     pub fn from_snapshot(snapshot: &GraphSnapshot) -> Self {
         let mut graph = Graph::new();
+        // Restore the shared navigation history (one visit space, owner per node)
+        // before the node loop, so each node's restored current page reads from it.
+        graph.nav = snapshot.navigation.clone();
 
         for pnode in &snapshot.nodes {
             let Ok(node_id) = Uuid::parse_str(&pnode.node_id) else {
@@ -60,7 +63,6 @@ impl Graph {
                 node.classifications = pnode.classifications.clone();
                 node.properties = pnode.properties.clone();
                 node.is_pinned = pnode.is_pinned;
-                node.navigation_memory = pnode.navigation_memory.clone();
                 node.thumbnail_png = pnode.thumbnail_png.clone();
                 node.thumbnail_width = pnode.thumbnail_width;
                 node.thumbnail_height = pnode.thumbnail_height;
@@ -71,12 +73,13 @@ impl Graph {
                 // address was already set by add_node_with_id from pnode.url; no re-derivation needed.
                 node.frame_layout_hints = pnode.frame_layout_hints.clone();
                 node.frame_split_offer_suppressed = pnode.frame_split_offer_suppressed;
-                restore_url_from_session = node.current_history_url();
                 if let Some(session) = &pnode.session_state {
                     node.session_scroll = session.scroll_x.zip(session.scroll_y);
                     node.session_form_draft = session.form_draft.clone();
                 }
             }
+            // The node's restored current page comes from the shared nav history.
+            restore_url_from_session = graph.nav.current_url(node_id);
             if let Some(current_url) = restore_url_from_session
                 && !current_url.is_empty()
             {

@@ -41,7 +41,6 @@ impl Graph {
                 tag_presentation: node.tag_presentation.clone(),
                 import_provenance: node.import_provenance.clone(),
                 is_pinned: node.is_pinned,
-                navigation_memory: node.navigation_memory.clone(),
                 thumbnail_png: node.thumbnail_png.clone(),
                 thumbnail_width: node.thumbnail_width,
                 thumbnail_height: node.thumbnail_height,
@@ -416,6 +415,7 @@ impl Graph {
             timestamp_secs,
             fields,
             couplings,
+            navigation: self.nav.clone(),
         }
     }
 }
