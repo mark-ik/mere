@@ -200,7 +200,16 @@ impl Orrery {
             .and_then(|k| self.view.position_of(k))
             .unwrap_or(Point2D::new(0.0, 0.0));
         let seed = Point2D::new(anchor.x + 12.0, anchor.y + 12.0);
-        let key = self.graph.add_node(url.to_string(), PortablePoint::new(seed.x, seed.y));
+        // `Graph::add_node` is native-only (it self-generates the UUID); on wasm the
+        // host supplies it via `add_node_with_id`. mint_node opens a fresh surface, so
+        // a new random id is the right one here (node_namespace_id is for convergent
+        // linked-data ingest, not user-minted nodes). new_v4 works on wasm via the
+        // unified uuid `js` backend.
+        let key = self.graph.add_node_with_id(
+            uuid::Uuid::new_v4(),
+            url.to_string(),
+            PortablePoint::new(seed.x, seed.y),
+        );
         // The new surface opens on `url`: seed its own history with that first
         // visit (the node is born with one page, not an empty history).
         self.graph.navigate_node(key, url);
