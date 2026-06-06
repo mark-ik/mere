@@ -197,6 +197,10 @@ fn engine_id_for(content_type: Option<&str>) -> Option<&'static str> {
         "text/plain" => nematic::ENGINE_TEXT,
         "application/gopher-menu" => nematic::ENGINE_GOPHER,
         "text/x-finger" => nematic::ENGINE_FINGER,
+        "application/x-nex" => nematic::ENGINE_NEX,
+        "application/x-guppy" => nematic::ENGINE_GUPPY,
+        "application/x-titan" => nematic::ENGINE_TITAN,
+        "message/x-misfin" => nematic::ENGINE_MISFIN,
         "application/rss+xml" | "application/atom+xml" | "application/feed+json" => {
             nematic::ENGINE_FEED
         },
@@ -350,6 +354,10 @@ mod tests {
         assert_eq!(engine_id_for(Some("text/markdown")), Some(nematic::ENGINE_MARKDOWN));
         assert_eq!(engine_id_for(Some("text/plain; charset=utf-8")), Some(nematic::ENGINE_TEXT));
         assert_eq!(engine_id_for(Some("text/gemini")), Some(nematic::ENGINE_GEMTEXT));
+        assert_eq!(engine_id_for(Some("application/x-nex")), Some(nematic::ENGINE_NEX));
+        assert_eq!(engine_id_for(Some("application/x-guppy")), Some(nematic::ENGINE_GUPPY));
+        assert_eq!(engine_id_for(Some("application/x-titan")), Some(nematic::ENGINE_TITAN));
+        assert_eq!(engine_id_for(Some("message/x-misfin")), Some(nematic::ENGINE_MISFIN));
         assert_eq!(engine_id_for(Some("text/html")), None, "HTML uses the serval lane");
         assert_eq!(engine_id_for(None), None);
     }

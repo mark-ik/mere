@@ -35,6 +35,9 @@ pub mod persistence;
 /// re-exported through [`persistence`]. Separate file to keep `persistence.rs`
 /// under the per-file ceiling.
 pub mod persistence_fields;
+/// Edge persistence types (`PersistedEdge` et al.), re-exported through
+/// [`persistence`]. Separate file to keep `persistence.rs` under the ceiling.
+pub mod persistence_edge;
 /// Native on-disk graph persistence. Gated by the `store` feature so the kernel
 /// stays portable-by-default; the native host enables it.
 #[cfg(feature = "store")]
@@ -43,3 +46,6 @@ pub mod signal_router;
 pub mod time;
 pub mod types;
 pub mod verso_address;
+
+#[cfg(test)]
+mod tests;

@@ -48,6 +48,7 @@ use crate::types::{
 };
 
 pub mod apply;
+pub mod edge_data;
 pub mod edge_payload;
 pub mod edge_taxonomy;
 pub mod facet_projection;
@@ -92,18 +93,21 @@ pub use history::{
     NodeHistoryOwner, NodeHistoryProjection, NodeHistorySemanticSummary, NodeNavigationMemory,
 };
 
-// Edge taxonomy (family/sub-kind enums, family-specific data structs)
-// and `EdgePayload` extracted to their own modules (2026-05-11
-// kernel-mod decomposition pass). Stage 4 of the 2026-05-11
-// relation-taxonomy plan removed `EdgeType` and `EdgeKind`; reads go
-// through [`RelationKind`] + [`RelationSelector`], writes through
-// [`EdgeAssertion`].
+// Edge taxonomy (family/sub-kind enums) and per-family runtime data structs
+// extracted to their own modules. edge_taxonomy holds classifiers; edge_data
+// holds runtime payload types (Data structs, Traversal, EdgeMetrics, IRI fns).
+// Stage 4 of the 2026-05-11 relation-taxonomy plan removed `EdgeType` and
+// `EdgeKind`; reads go through [`RelationKind`] + [`RelationSelector`], writes
+// through [`EdgeAssertion`].
 pub use edge_payload::EdgePayload;
 pub use edge_taxonomy::{
-    ArrangementData, ArrangementSubKind, ContainmentData, ContainmentSubKind, EdgeAssertion,
-    EdgeFamily, EdgeMetrics, ImportedData, ImportedSubKind, NavigationTrigger, ProvenanceData,
-    ProvenanceSubKind, RelationDurability, RelationKind, RelationSelector, SemanticData,
-    SemanticSubKind, Traversal, TraversalData, predicate_iri, sub_kind_from_iri, REL_VOCAB,
+    ArrangementSubKind, ContainmentSubKind, EdgeAssertion, EdgeFamily, ImportedSubKind,
+    NavigationTrigger, ProvenanceSubKind, RelationDurability, RelationKind, RelationSelector,
+    SemanticSubKind,
+};
+pub use edge_data::{
+    ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, SemanticData,
+    Traversal, TraversalData, predicate_iri, sub_kind_from_iri, REL_VOCAB,
 };
 
 // Field-system truth types (2026-05-31). Field/Coupling form a parallel field
@@ -385,6 +389,49 @@ impl Graph {
         self.remove_url_mapping(&old_url, key);
         self.url_to_nodes.entry(new_url).or_default().push(key);
         Some(old_url)
+    }
+
+    /// Navigate `key` in place to `url`: record the visit in the node's own
+    /// browse history (a forward-fork if the cursor had stepped back) and update
+    /// its Primary URL. No new node and no edge — the node is a browsing surface
+    /// whose content changes; the graph shape does not. Cross-node lineage
+    /// (the navigated-from relation) is a separate, explicit edge.
+    pub fn navigate_node(&mut self, key: NodeKey, url: &str) {
+        let at_ms = Self::epoch_ms();
+        if let Some(node) = self.inner.node_weight_mut(key) {
+            node.navigation_memory.record_visit(
+                url,
+                node_lineage::TransitionKind::UrlTyped,
+                at_ms,
+            );
+        }
+        self.update_node_url(key, url.to_string());
+    }
+
+    /// Step `key` back one visit in its own history, updating its Primary URL to
+    /// the revealed page. Returns the new URL, or `None` if already at the root.
+    pub fn node_history_back(&mut self, key: NodeKey) -> Option<String> {
+        let at_ms = Self::epoch_ms();
+        let url = self.inner.node_weight_mut(key)?.navigation_memory.back(at_ms)?;
+        self.update_node_url(key, url.clone());
+        Some(url)
+    }
+
+    /// Step `key` forward one visit in its own history. Returns the new URL, or
+    /// `None` if already at the tip.
+    pub fn node_history_forward(&mut self, key: NodeKey) -> Option<String> {
+        let at_ms = Self::epoch_ms();
+        let url = self.inner.node_weight_mut(key)?.navigation_memory.forward(at_ms)?;
+        self.update_node_url(key, url.clone());
+        Some(url)
+    }
+
+    /// Milliseconds since the Unix epoch, for visit timestamps (live-app clock).
+    fn epoch_ms() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
     }
 
     pub fn recompute_cached_hosts(&mut self) {

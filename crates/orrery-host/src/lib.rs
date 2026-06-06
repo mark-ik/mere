@@ -34,23 +34,19 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use euclid::default::{Box2D, Point2D};
 use gyre::Simulation;
-use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NodeKey};
-use layout_dom_api::LayoutDomMut;
-use netrender::Scene;
-use paint_list_api::{DeviceIntSize, PaintList};
-use paint_list_render::{composite_paint_layers, CompositeLayer};
-use platen::orrery::orrery_paint_list_demoted;
 use platen::scene_paint::{Camera, ScenePaintStyle};
-use serval_layout::{Applied, IncrementalLayout, ScrollOffsets};
+use serval_layout::IncrementalLayout;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 
 mod build;
-use build::{
-    background_cmds, build_pool_dom, build_simulation, dark_scene_style, dedup_edges, hyperlink,
-    marquee_rect_cmds, sample_graph, seed_cluster, set_class, set_style, selected_edge_overlay,
-    surface_bg, NODE_SHEET,
-};
+use build::{build_pool_dom, build_simulation, dark_scene_style, dedup_edges, sample_graph};
+
+mod types;
+pub use types::{CameraView, NodeState, PointerButton};
+
+mod input;
+mod frame;
 
 /// Force-directed settle length (frames) after a (re)seed, ~6s at 60fps.
 const SETTLE_TICKS: u32 = 360;
@@ -74,37 +70,6 @@ const EDGE_PICK_TOL: f32 = 6.0;
 /// DOM child sits centered on the same world position.
 const NODE_HALF: f32 = 18.0;
 
-/// A pointer button the host reports to the orrery (winit / serval / … map onto it).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PointerButton {
-    Left,
-    Middle,
-    Right,
-}
-
-/// The orrery's camera as plain pan + zoom, for the host to persist and restore
-/// (the host maps it to/from its own serialized form). `offset` is the screen-px
-/// translation, `zoom` the uniform scale: `screen = world * zoom + offset`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct CameraView {
-    pub offset: (f32, f32),
-    pub zoom: f32,
-}
-
-/// A node's coarse activation state, for the orrery to color its on-screen
-/// nodes. The host computes these from the actor pool + content cache and pushes
-/// them via [`Orrery::set_node_states`]; a node absent from the map colors as
-/// [`Idle`](NodeState::Idle).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NodeState {
-    /// A live actor is showing real (fetched) content — green.
-    Open,
-    /// Real fetched content, but no actor showing it right now — red.
-    Closed,
-    /// Idle: a local / settings page, or one that is synthesized, blank
-    /// (loading), or errored — blue. The "kinda idle" nodes.
-    Idle,
-}
 
 /// An in-progress left-button interaction on a node: a click until the pointer
 /// passes [`CLICK_SLOP`], then a drag that pins the node to the cursor.
@@ -268,306 +233,6 @@ impl Orrery {
         self.camera.offset = (self.view_w as f32 / 2.0, self.view_h as f32 / 2.0);
     }
 
-    /// Advance one frame at viewport `(w, h)` and return the composited content
-    /// scene plus whether the host should request another frame (sim still
-    /// settling, pan still gliding, or a node being dragged). Does not present.
-    pub fn frame(&mut self, w: u32, h: u32) -> (Scene, bool) {
-        let (w, h) = (w.max(1), h.max(1));
-        self.view_w = w;
-        self.view_h = h;
-        let viewport = DeviceIntSize::new(w as i32, h as i32);
-
-        // Tick while settling or while a node is being dragged (so neighbors react
-        // to the pinned node through the springs).
-        let settling = self.ticks_remaining > 0;
-        let dragging = self.drag.is_some_and(|d| d.moved);
-        if settling || dragging {
-            self.sim.tick(TICK_DT);
-            if settling {
-                self.ticks_remaining -= 1;
-            }
-        }
-        // Pan inertia: glide + decay when not actively middle-dragging.
-        let gliding = self.middle_drag.is_none()
-            && (self.pan_velocity.0.abs() > 0.05 || self.pan_velocity.1.abs() > 0.05);
-        if gliding {
-            self.camera.offset.0 += self.pan_velocity.0;
-            self.camera.offset.1 += self.pan_velocity.1;
-            self.pan_velocity.0 *= PAN_DECAY;
-            self.pan_velocity.1 *= PAN_DECAY;
-        } else if self.middle_drag.is_none() {
-            self.pan_velocity = (0.0, 0.0);
-        }
-        self.generation = self.generation.wrapping_add(1);
-
-        // Snapshot the live positions, then reproject the underlay from them (a
-        // node with no body falls back to its committed position in the producer).
-        let positions: HashMap<NodeKey, PortablePoint> = self
-            .sim
-            .positions()
-            .map(|(k, p)| (k, PortablePoint::new(p.x, p.y)))
-            .collect();
-        // On-screen nodes (gyre cull against the world-space viewport) become DOM
-        // children; the rest demote to underlay rects, so no node double-draws.
-        let on_screen: HashSet<NodeKey> =
-            self.sim.cull_aabb(self.world_viewport()).into_iter().collect();
-
-        let mut underlay = orrery_paint_list_demoted(
-            &self.graph,
-            |k| positions.get(&k).copied(),
-            |k| !on_screen.contains(&k),
-            // Skip relations whose undirected pair the user has hidden.
-            |rel| {
-                let pair =
-                    if rel.from <= rel.to { (rel.from, rel.to) } else { (rel.to, rel.from) };
-                !self.hidden_edges.contains(&pair)
-            },
-            viewport,
-            self.camera,
-            &self.style,
-            self.generation,
-        );
-        // Highlight selected edges by splicing thicker strokes inside the
-        // underlay's camera transform (world space — no transform replication).
-        if !self.selected_edges.is_empty() {
-            underlay.splice_world_overlays(selected_edge_overlay(&self.sim, &self.selected_edges));
-        }
-
-        // The node-children layer — the pre-materialized pool. Ensure the
-        // incremental layout exists at this viewport, then mutate the `.stage`
-        // camera transform and each gnode's transform + selection class. These are
-        // attribute-only (paint-tier), so `apply` stays on the RepaintOnly path —
-        // no per-frame relayout or DOM rebuild.
-        if self.node_layout.is_none() || self.pool_w != w || self.pool_h != h {
-            let mut discard = Vec::new();
-            self.node_dom.drain_mutations(&mut discard);
-            self.node_layout =
-                Some(IncrementalLayout::new(&self.node_dom, NODE_SHEET, w as f32, h as f32));
-            self.pool_w = w;
-            self.pool_h = h;
-        }
-        set_style(
-            &mut self.node_dom,
-            self.stage_node,
-            &format!(
-                "transform: translate({}px, {}px) scale({});",
-                self.camera.offset.0, self.camera.offset.1, self.camera.zoom
-            ),
-        );
-        let gnodes: Vec<(NodeKey, DomNodeId)> = self.gnode_of.iter().map(|(&k, &g)| (k, g)).collect();
-        for (key, gnode) in gnodes {
-            let pos = positions.get(&key).copied().unwrap_or_default();
-            set_style(
-                &mut self.node_dom,
-                gnode,
-                &format!("transform: translate({}px, {}px);", pos.x - NODE_HALF, pos.y - NODE_HALF),
-            );
-            // Selection wins (orange); otherwise color by activation state —
-            // green open, red closed, blue idle (the default for an unset node).
-            let class = if self.selected.contains(&key) {
-                "gnode-selected"
-            } else {
-                match self.node_states.get(&key) {
-                    Some(NodeState::Open) => "gnode-open",
-                    Some(NodeState::Closed) => "gnode-closed",
-                    _ => "gnode-idle",
-                }
-            };
-            set_class(&mut self.node_dom, gnode, class);
-        }
-        let mut muts = Vec::new();
-        self.node_dom.drain_mutations(&mut muts);
-        let applied = self.node_layout.as_mut().unwrap().apply(&self.node_dom, NODE_SHEET, &muts);
-        if !matches!(applied, Applied::RepaintOnly | Applied::Unchanged) {
-            tracing::warn!(?applied, "orrery pool: node layout left the RepaintOnly path");
-        }
-        let scroll = ScrollOffsets::<DomNodeId>::default();
-        let nodes_plist =
-            self.node_layout.as_ref().unwrap().emit_paint_list(&self.node_dom, &scroll, viewport);
-
-        // A third (screen-space) layer for the marquee rubber-band, when active.
-        let marquee_cmds = self.marquee.map(|origin| marquee_rect_cmds(origin, self.cursor));
-        // The orrery's own opaque backdrop is the bottom layer (so the surface is
-        // dark without depending on the host clear color); then the underlay edges
-        // + demoted rects, then the on-screen node DOM, then any marquee on top.
-        let bg_cmds = background_cmds(w, h, surface_bg());
-        let mut layers = vec![
-            CompositeLayer::commands_only(&bg_cmds),
-            CompositeLayer::commands_only(underlay.commands()),
-            CompositeLayer {
-                commands: nodes_plist.commands(),
-                fonts: nodes_plist.fonts(),
-                images: nodes_plist.images(),
-            },
-        ];
-        if let Some(cmds) = marquee_cmds.as_ref() {
-            layers.push(CompositeLayer::commands_only(cmds));
-        }
-        let scene = composite_paint_layers(viewport, &layers).scene;
-
-        let needs_redraw = settling || gliding || dragging;
-        (scene, needs_redraw)
-    }
-
-    // ----- Input (semantic; each returns whether the host should redraw) --------
-
-    /// Update whether Ctrl is held (gates wheel-zoom vs wheel-pan).
-    pub fn set_ctrl(&mut self, ctrl: bool) {
-        self.ctrl = ctrl;
-    }
-
-    /// The pointer moved to screen px `(x, y)`: pans on a middle-drag, pins the
-    /// grabbed node on a left-drag past the slop, grows an active marquee.
-    pub fn cursor_moved(&mut self, x: f32, y: f32) -> bool {
-        let new = (x, y);
-        let mut redraw = false;
-        if let Some(prev) = self.middle_drag {
-            let d = (new.0 - prev.0, new.1 - prev.1);
-            self.camera.offset.0 += d.0;
-            self.camera.offset.1 += d.1;
-            self.pan_velocity = d;
-            self.middle_drag = Some(new);
-            redraw = true;
-        }
-        if let Some(mut d) = self.drag {
-            if !d.moved && (new.0 - d.press.0).hypot(new.1 - d.press.1) > CLICK_SLOP {
-                d.moved = true;
-            }
-            if d.moved {
-                self.sim.pin(d.node, self.screen_to_world(new));
-                redraw = true;
-            }
-            self.drag = Some(d);
-        }
-        self.cursor = new;
-        if self.marquee.is_some() {
-            redraw = true;
-        }
-        redraw
-    }
-
-    /// A wheel/scroll event, `(dx, dy)` already in device px (the host maps
-    /// `LineDelta` by [`WHEEL_PAN_SCALE`] / `PixelDelta` straight through). Ctrl =
-    /// cursor-anchored zoom; otherwise an infinite-canvas pan impulse into inertia.
-    pub fn wheel(&mut self, dx: f32, dy: f32) -> bool {
-        if self.ctrl {
-            let factor = ZOOM_STEP.powf(dy / WHEEL_PAN_SCALE);
-            self.zoom_at(self.cursor, factor);
-        } else {
-            self.pan_velocity.0 += dx;
-            self.pan_velocity.1 += dy;
-        }
-        true
-    }
-
-    /// A pointer button pressed at screen px `(x, y)`. Middle begins a pan; left
-    /// grabs the node under the cursor (gyre node-pick) or, on empty space, begins
-    /// a marquee.
-    pub fn pointer_down(&mut self, button: PointerButton, x: f32, y: f32) -> bool {
-        self.cursor = (x, y);
-        match button {
-            PointerButton::Middle => {
-                self.middle_drag = Some(self.cursor);
-                self.pan_velocity = (0.0, 0.0);
-            },
-            PointerButton::Left => {
-                let world = self.screen_to_world(self.cursor);
-                if let Some(node) = self.sim.hit_test(world) {
-                    self.drag = Some(Drag { node, press: self.cursor, moved: false });
-                } else {
-                    self.marquee = Some(self.cursor);
-                }
-            },
-            PointerButton::Right => {},
-        }
-        false
-    }
-
-    /// A pointer button released at screen px `(x, y)`. Ends a middle-pan; drops a
-    /// dragged node (re-settling its neighborhood) or selects a clicked node; ends
-    /// a marquee (rect-select) or, on a bare empty click, picks the nearest edge
-    /// within tolerance, else clears the selection.
-    pub fn pointer_up(&mut self, button: PointerButton, x: f32, y: f32) -> bool {
-        self.cursor = (x, y);
-        match button {
-            PointerButton::Middle => {
-                self.middle_drag = None;
-                false
-            },
-            PointerButton::Left => {
-                if let Some(d) = self.drag.take() {
-                    if d.moved {
-                        self.sim.unpin(d.node);
-                        self.ticks_remaining = self.ticks_remaining.max(SETTLE_TICKS / 3);
-                    } else {
-                        self.select_only(d.node);
-                    }
-                    true
-                } else if let Some(origin) = self.marquee.take() {
-                    let dragged =
-                        (self.cursor.0 - origin.0).hypot(self.cursor.1 - origin.1) > CLICK_SLOP;
-                    if dragged {
-                        let region = Box2D::from_points([
-                            self.screen_to_world(origin),
-                            self.screen_to_world(self.cursor),
-                        ]);
-                        let sel = self.sim.rect_select(region);
-                        self.selected = sel.nodes.into_iter().collect();
-                        self.selected_edges = sel.edges.into_iter().collect();
-                    } else {
-                        let world = self.screen_to_world(self.cursor);
-                        let tol = EDGE_PICK_TOL / self.camera.zoom.max(f32::EPSILON);
-                        self.selected.clear();
-                        self.selected_edges.clear();
-                        if let Some(edge) = self.sim.edge_hit_test(world, tol) {
-                            self.selected_edges.insert(edge);
-                        }
-                    }
-                    true
-                } else {
-                    false
-                }
-            },
-            PointerButton::Right => false,
-        }
-    }
-
-    /// Re-seed the central spiral and replay the settle (the `Space` gesture).
-    pub fn reseed(&mut self) -> bool {
-        seed_cluster(&mut self.sim, &self.graph);
-        self.ticks_remaining = SETTLE_TICKS;
-        true
-    }
-
-    /// Visit `url`: if a node with that URL already exists (URL identity), select
-    /// it; otherwise add a new node — linked from the currently-selected node, if
-    /// any, so the browse trail grows as graph structure — re-sync the physics and
-    /// node-children pool, and re-settle. Returns the node either way. The host
-    /// calls this on navigation (the graph-rooted browse loop, S2).
-    pub fn visit(&mut self, url: &str) -> NodeKey {
-        if let Some((key, _)) = self.graph.get_node_by_url(url) {
-            self.select_only(key);
-            return key;
-        }
-        // Place the new node just off the one we came from (the current
-        // selection), so the trail spreads outward; the first node lands at the
-        // origin and the settle takes over.
-        let from = self.selected.iter().copied().next();
-        let anchor = from.and_then(|k| self.sim.position_of(k)).unwrap_or(Point2D::new(0.0, 0.0));
-        let seed = Point2D::new(anchor.x + 12.0, anchor.y + 12.0);
-        let key = self.graph.add_node(url.to_string(), PortablePoint::new(seed.x, seed.y));
-        if let Some(from) = from {
-            let _ = self.graph.assert_relation(from, key, hyperlink());
-        }
-        // Re-sync derived state (bodies, edges, node pool), then seed the new node
-        // near the anchor and re-settle.
-        self.reconcile_derived();
-        self.sim.seed_positions([(key, seed)]);
-        self.select_only(key);
-        self.ticks_remaining = SETTLE_TICKS;
-        key
-    }
-
     /// Re-sync the physics bodies, edge topology, and node-children pool to the
     /// current graph after a structural change. Does not seed positions, alter the
     /// selection, or restart the settle; callers do that as they need. The pool
@@ -701,6 +366,52 @@ impl Orrery {
         self.graph.get_node(key).map(|n| n.url())
     }
 
+    /// The member id (node UUID) of the single focused node, if exactly one is
+    /// selected. The host targets per-node navigation (omnibar, back/forward) at
+    /// it in Cartography; in Tree the host uses the focused tile's member.
+    pub fn focused_member(&self) -> Option<uuid::Uuid> {
+        if self.selected.len() != 1 {
+            return None;
+        }
+        let key = *self.selected.iter().next()?;
+        self.graph.get_node(key).map(|n| n.id)
+    }
+
+    /// Navigate `member` in place to `url`: the node is a browsing surface whose
+    /// content changes; its position does not (no new node, no edge, no
+    /// re-settle). The within-node history grows. Returns false if `member` is
+    /// unknown. Per-node navigation (the node-lineage model).
+    pub fn navigate_member(&mut self, member: uuid::Uuid, url: &str) -> bool {
+        let Some((key, _)) = self.graph.get_node_by_id(member) else {
+            return false;
+        };
+        self.graph.navigate_node(key, url);
+        true
+    }
+
+    /// Step `member` back one visit in its own browse history, returning the
+    /// revealed URL (the host re-fetches / re-renders it). `None` at the root.
+    pub fn member_history_back(&mut self, member: uuid::Uuid) -> Option<String> {
+        let (key, _) = self.graph.get_node_by_id(member)?;
+        self.graph.node_history_back(key)
+    }
+
+    /// Step `member` forward one visit in its own history. `None` at the tip.
+    pub fn member_history_forward(&mut self, member: uuid::Uuid) -> Option<String> {
+        let (key, _) = self.graph.get_node_by_id(member)?;
+        self.graph.node_history_forward(key)
+    }
+
+    /// Whether `member`'s history can step back (toolbar enablement).
+    pub fn member_can_back(&self, member: uuid::Uuid) -> bool {
+        self.graph.get_node_by_id(member).is_some_and(|(_, n)| n.navigation_memory.can_back())
+    }
+
+    /// Whether `member`'s history can step forward (toolbar enablement).
+    pub fn member_can_forward(&self, member: uuid::Uuid) -> bool {
+        self.graph.get_node_by_id(member).is_some_and(|(_, n)| n.navigation_memory.can_forward())
+    }
+
     /// The graph members (node UUIDs) of the currently-selected nodes. The host
     /// reads this for a selection-driven open: a single selection opens that
     /// node's graphlet, a multi-selection opens the selected nodes.
@@ -786,218 +497,4 @@ impl Orrery {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn zoom_at_keeps_the_anchor_world_point_fixed() {
-        let mut orrery = Orrery::new();
-        orrery.camera.offset = (100.0, 50.0);
-        orrery.camera.zoom = 1.0;
-        let anchor = (200.0, 80.0);
-        let world = |o: &Orrery| {
-            (
-                (anchor.0 - o.camera.offset.0) / o.camera.zoom,
-                (anchor.1 - o.camera.offset.1) / o.camera.zoom,
-            )
-        };
-        let before = world(&orrery);
-        orrery.zoom_at(anchor, 2.0);
-        let after = world(&orrery);
-        assert!((after.0 - before.0).abs() < 0.01, "anchor world x fixed");
-        assert!((after.1 - before.1).abs() < 0.01, "anchor world y fixed");
-        assert_eq!(orrery.camera.zoom, 2.0, "zoom applied");
-    }
-
-    #[test]
-    fn screen_to_world_inverts_the_camera() {
-        let mut orrery = Orrery::new();
-        orrery.camera.offset = (100.0, 50.0);
-        orrery.camera.zoom = 2.0;
-        let w = orrery.screen_to_world((300.0, 150.0));
-        assert!((w.x - 100.0).abs() < 0.01, "world x = (300-100)/2");
-        assert!((w.y - 50.0).abs() < 0.01, "world y = (150-50)/2");
-    }
-
-    #[test]
-    fn visit_adds_a_linked_node_and_selects_it() {
-        let mut orrery = Orrery::new(); // empty session
-        let a = orrery.visit("mere://welcome");
-        assert_eq!(orrery.graph.nodes().count(), 1, "the first visit seeds the root node");
-        assert!(orrery.selected.contains(&a), "the visited node is selected");
-
-        let b = orrery.visit("https://example.com");
-        assert_eq!(orrery.graph.nodes().count(), 2, "a fresh URL adds a node");
-        assert_ne!(a, b);
-        assert!(
-            orrery.selected.contains(&b) && !orrery.selected.contains(&a),
-            "selection moves to the newly visited node",
-        );
-        assert!(orrery.graph.relations().count() >= 1, "an edge links the browse trail");
-        assert_eq!(orrery.sim.body_count(), 2, "the simulation grew a body for the new node");
-    }
-
-    #[test]
-    fn ingest_graph_merges_nodes_and_grows_the_sim() {
-        let mut orrery = Orrery::new();
-        orrery.visit("mere://seed");
-        let before = orrery.graph.nodes().count();
-        let changed = orrery.ingest_graph(|g| {
-            let a = g.add_node("mere://x".to_string(), Default::default());
-            let b = g.add_node("mere://y".to_string(), Default::default());
-            let _ = g.assert_relation(a, b, hyperlink());
-            true
-        });
-        assert!(changed, "a mutating closure reports a change");
-        assert_eq!(orrery.graph.nodes().count(), before + 2, "both ingested nodes joined");
-        assert!(orrery.graph.get_node_by_url("mere://x").is_some());
-        assert_eq!(orrery.sim.body_count(), before + 2, "the sim grew a body per node");
-        // The origin-minted nodes are seeded apart, so the settle runs clean (no
-        // coincident-point blow-up / NaN).
-        let _ = orrery.frame(800, 600);
-        // A closure that reports no change is a no-op.
-        assert!(!orrery.ingest_graph(|_| false), "no-op mutation reports no change");
-    }
-
-    #[test]
-    fn visit_dedups_by_url() {
-        let mut orrery = Orrery::new();
-        let a = orrery.visit("https://example.com");
-        let _ = orrery.visit("https://other.com");
-        let again = orrery.visit("https://example.com");
-        assert_eq!(a, again, "revisiting a URL selects the existing node, not a duplicate");
-        assert_eq!(orrery.graph.nodes().count(), 2, "no duplicate node is added");
-        assert!(orrery.selected.contains(&a), "selection returns to the revisited node");
-    }
-
-    #[test]
-    fn focused_url_is_the_single_selected_nodes_url() {
-        let mut orrery = Orrery::new();
-        assert_eq!(orrery.focused_url(), None, "nothing selected yet → no focus");
-        orrery.visit("https://example.com");
-        assert_eq!(orrery.focused_url(), Some("https://example.com"), "visit focuses the node");
-        orrery.visit("https://second.com");
-        assert_eq!(orrery.focused_url(), Some("https://second.com"), "focus follows the new node");
-        orrery.visit("https://example.com");
-        assert_eq!(orrery.focused_url(), Some("https://example.com"), "revisit re-focuses");
-    }
-
-    #[test]
-    fn with_graph_restores_nodes_and_positions() {
-        let mut graph = Graph::new();
-        graph.add_node("https://one.example".to_string(), PortablePoint::new(100.0, 50.0));
-        graph.add_node("https://two.example".to_string(), PortablePoint::new(-30.0, 80.0));
-        let orrery = Orrery::with_graph(graph);
-        assert_eq!(orrery.graph().nodes().count(), 2, "the restored graph keeps its nodes");
-        assert_eq!(orrery.sim.body_count(), 2, "a body per restored node");
-        assert_eq!(orrery.ticks_remaining, 0, "a restored session does not auto-resettle");
-        let key = orrery.graph().get_node_by_url("https://one.example").unwrap().0;
-        let pos = orrery.sim.position_of(key).expect("a body position");
-        assert!(
-            (pos.x - 100.0).abs() < 1.0 && (pos.y - 50.0).abs() < 1.0,
-            "the saved position is preserved (no spiral re-seed), got {pos:?}",
-        );
-    }
-
-    #[test]
-    fn camera_round_trips_and_guards_bad_zoom() {
-        let mut orrery = Orrery::new();
-        orrery.set_camera(CameraView { offset: (123.0, -45.0), zoom: 2.5 });
-        let cv = orrery.camera();
-        assert_eq!(cv.offset, (123.0, -45.0));
-        assert_eq!(cv.zoom, 2.5);
-        // A zero / non-finite zoom falls back to 1.0 rather than collapsing.
-        orrery.set_camera(CameraView { offset: (0.0, 0.0), zoom: 0.0 });
-        assert_eq!(orrery.camera().zoom, 1.0);
-    }
-
-    #[test]
-    fn select_by_url_selects_existing_or_reports_missing() {
-        let mut orrery = Orrery::new();
-        orrery.visit("https://one.example");
-        orrery.visit("https://two.example"); // focus moves to two
-        assert!(orrery.select_by_url("https://one.example"), "an existing url is found + focused");
-        assert_eq!(orrery.focused_url(), Some("https://one.example"));
-        assert!(!orrery.select_by_url("https://absent.example"), "a missing url reports false");
-        assert_eq!(orrery.focused_url(), Some("https://one.example"), "a miss leaves selection intact");
-    }
-
-    #[test]
-    fn remove_focused_drops_the_node_and_reports_its_id() {
-        let mut orrery = Orrery::new();
-        orrery.visit("https://a.example");
-        orrery.visit("https://b.example"); // focus on b
-        let before = orrery.graph().nodes().count();
-        let removed = orrery.remove_focused();
-        assert!(removed.is_some(), "the focused node is removed and its id returned");
-        assert_eq!(orrery.graph().nodes().count(), before - 1, "the graph shrinks by one");
-        assert!(orrery.graph().get_node_by_url("https://b.example").is_none(), "the node is gone");
-        assert_eq!(orrery.focused_url(), None, "the selection clears");
-        assert_eq!(orrery.sim.body_count(), before - 1, "the physics body is reconciled away");
-        // Nothing focused → a second remove is a no-op.
-        assert!(orrery.remove_focused().is_none(), "no focus → no removal");
-    }
-
-    #[test]
-    fn hide_selected_edges_then_show_all_round_trips() {
-        let mut orrery = Orrery::new();
-        orrery.visit("https://a.example");
-        orrery.visit("https://b.example"); // the browse trail links a — b
-        let a = orrery.graph().get_node_by_url("https://a.example").unwrap().0;
-        let b = orrery.graph().get_node_by_url("https://b.example").unwrap().0;
-        orrery.selected_edges.insert((a, b)); // the host edge-picks this normally
-
-        assert_eq!(orrery.hide_selected_edges(), 1, "the selected edge is hidden");
-        assert!(orrery.selected_edges.is_empty(), "hiding clears the selection");
-        assert_eq!(orrery.hidden_edges.len(), 1);
-        // The relation itself survives (hiding is display-only).
-        assert!(orrery.graph().relations().count() >= 1, "the relation is not deleted");
-
-        assert_eq!(orrery.show_all_edges(), 1, "show-all reveals the hidden edge");
-        assert!(orrery.hidden_edges.is_empty());
-    }
-
-    #[test]
-    fn set_node_states_resolves_uuids_to_keys() {
-        let mut orrery = Orrery::new();
-        orrery.visit("https://a.example");
-        let (key, id) = {
-            let (k, n) = orrery.graph().get_node_by_url("https://a.example").unwrap();
-            (k, n.id)
-        };
-        let mut states = HashMap::new();
-        states.insert(id, NodeState::Open);
-        orrery.set_node_states(states);
-        assert_eq!(orrery.node_states.get(&key), Some(&NodeState::Open), "uuid resolves to its key");
-
-        // An unknown node id is filtered out (no panic, no stale entry).
-        let mut other = HashMap::new();
-        other.insert(uuid::Uuid::from_u128(0xdead_beef), NodeState::Closed);
-        orrery.set_node_states(other);
-        assert!(orrery.node_states.is_empty(), "an unknown node id is dropped");
-    }
-
-    #[test]
-    fn connected_members_reaches_the_whole_trail() {
-        let mut orrery = Orrery::new();
-        let a = orrery.visit("https://a.example");
-        orrery.visit("https://b.example"); // a — b (browse trail)
-        orrery.visit("https://c.example"); // b — c
-        let a_id = orrery.graph().get_node(a).unwrap().id;
-        let comp = orrery.connected_members(a_id);
-        assert_eq!(comp.len(), 3, "the a — b — c trail is one connected component");
-        assert_eq!(comp.first(), Some(&a_id), "BFS leads with the queried node");
-        assert!(
-            orrery.connected_members(uuid::Uuid::from_u128(0xabcd)).is_empty(),
-            "an unknown member yields nothing",
-        );
-    }
-
-    #[test]
-    fn selected_members_reflects_the_selection() {
-        let mut orrery = Orrery::new();
-        let a = orrery.visit("https://a.example"); // visit selects the node
-        let a_id = orrery.graph().get_node(a).unwrap().id;
-        assert_eq!(orrery.selected_members(), vec![a_id]);
-    }
-}
+mod tests;

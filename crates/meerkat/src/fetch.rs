@@ -17,18 +17,24 @@
 //!
 //! Smolweb: the same actor also speaks the small web. A page request is routed by
 //! scheme, http(s) runs through netfetcher (WHATWG Fetch) and gemini / gopher /
-//! finger / spartan run through the [`errand`] transport crate. Either way the
-//! result is the same [`Fetched`] (decoded body + content-type), so the render
-//! side (nematic engines) is unchanged. Subresources stay http-only: smolweb
-//! documents reference links but do not inline fetched media.
+//! finger / spartan / nex / guppy / titan run through the [`errand`] transport
+//! crate. Either way the result is the same [`Fetched`] (decoded body +
+//! content-type), so the render side (nematic engines) is unchanged.
+//! Subresources stay http-only: smolweb documents reference links but do not
+//! inline fetched media.
 
 use std::sync::mpsc::Receiver;
+use std::time::Duration;
 
 use armillary::{spawn, ActorHandle, Emitter, Wake};
 use tokio::runtime::Builder;
 
 /// The most redirects a smolweb fetch will follow before giving up.
 const MAX_REDIRECTS: usize = 5;
+
+/// Per-hop timeout for smolweb fetches. Applied to each request in a redirect
+/// chain independently so a chain of N slow hops can take up to N × this value.
+const SMOLWEB_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Successfully fetched content: the response content-type (if any) and the
 /// decoded body as text.
@@ -180,7 +186,9 @@ async fn fetch_page(url: &str) -> Result<Fetched, String> {
 async fn smolweb_fetch(url: &str) -> Result<Fetched, String> {
     let mut current = url::Url::parse(url).map_err(|e| format!("bad URL: {e}"))?;
     for _ in 0..MAX_REDIRECTS {
-        let response = errand::fetch_url(&current).await.map_err(|e| e.to_string())?;
+        let response = errand::fetch_url_timeout(&current, SMOLWEB_TIMEOUT)
+            .await
+            .map_err(|e| e.to_string())?;
         match response.status {
             errand::Status::Success => {
                 let content_type = smolweb_content_type(&current, &response);
@@ -212,7 +220,12 @@ async fn smolweb_fetch(url: &str) -> Result<Fetched, String> {
 /// type of its own, so it is tagged `text/x-finger` to reach the finger engine.
 fn smolweb_content_type(url: &url::Url, response: &errand::Response) -> String {
     match errand::Scheme::parse(url.scheme()) {
+        // Protocols whose content type must be fixed regardless of the response
+        // meta field, so the host routes to the correct nematic engine.
         Some(errand::Scheme::Finger) => "text/x-finger".to_string(),
+        Some(errand::Scheme::Nex) => "application/x-nex".to_string(),
+        Some(errand::Scheme::Guppy) => "application/x-guppy".to_string(),
+        Some(errand::Scheme::Titan) => "application/x-titan".to_string(),
         _ => response.mime().unwrap_or("text/gemini").to_string(),
     }
 }
@@ -263,31 +276,46 @@ mod tests {
         assert!(is_fetchable("gopher://example.org/"));
         assert!(is_fetchable("finger://example.org/alice"));
         assert!(is_fetchable("spartan://example.org/"));
+        assert!(is_fetchable("nex://nightfall.city/"));
+        assert!(is_fetchable("guppy://mozz.us/"));
+        assert!(is_fetchable("titan://capsule.example/page"));
         assert!(!is_fetchable("mere://welcome"));
         assert!(!is_fetchable("about:blank"));
     }
 
     #[test]
-    fn smolweb_content_type_tags_finger_and_passes_others_through() {
+    fn smolweb_content_type_tags_fixed_schemes_and_passes_others_through() {
+        fn resp_for(url: &url::Url, mime: &str) -> errand::Response {
+            errand::Response {
+                url: url.clone(),
+                status: errand::Status::Success,
+                raw_status: None,
+                meta: mime.to_string(),
+                body: Vec::new(),
+            }
+        }
+
         let finger = url::Url::parse("finger://example.org/alice").unwrap();
-        let resp = errand::Response {
-            url: finger.clone(),
-            status: errand::Status::Success,
-            raw_status: None,
-            meta: "text/plain".into(),
-            body: Vec::new(),
-        };
-        assert_eq!(smolweb_content_type(&finger, &resp), "text/x-finger");
+        assert_eq!(smolweb_content_type(&finger, &resp_for(&finger, "text/plain")), "text/x-finger");
+
+        let nex = url::Url::parse("nex://nightfall.city/").unwrap();
+        assert_eq!(smolweb_content_type(&nex, &resp_for(&nex, "")), "application/x-nex");
+
+        let guppy = url::Url::parse("guppy://mozz.us/").unwrap();
+        assert_eq!(smolweb_content_type(&guppy, &resp_for(&guppy, "text/gemini")), "application/x-guppy");
+
+        let titan = url::Url::parse("titan://capsule.example/page").unwrap();
+        assert_eq!(smolweb_content_type(&titan, &resp_for(&titan, "text/gemini")), "application/x-titan");
 
         let gem = url::Url::parse("gemini://capsule.example/").unwrap();
-        let resp = errand::Response {
+        let gem_resp = errand::Response {
             url: gem.clone(),
             status: errand::Status::Success,
             raw_status: Some(20),
             meta: "text/gemini; charset=utf-8".into(),
             body: Vec::new(),
         };
-        assert_eq!(smolweb_content_type(&gem, &resp), "text/gemini");
+        assert_eq!(smolweb_content_type(&gem, &gem_resp), "text/gemini");
     }
 
     #[test]

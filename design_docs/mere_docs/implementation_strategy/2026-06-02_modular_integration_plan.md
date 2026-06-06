@@ -468,7 +468,7 @@ consumer appears.
   - *Dark mode* (`c0df60e`): orrery + chrome + synthesized / nematic cards go dark;
     fetched HTML stays faithful (light, as authored). A light variant + toggle is a
     future setting (the named seams are isolated).
-  - *S4 workbench composition* (`84c7771`): `meerkat::workbench::Workbench` — holds
+  - *S4 workbench composition* (`84c7771`): `platen::workbench::Workbench` — holds
     the open tiles + projection mode, builds a forme `Arrangement`, projects it with
     platen `project_tree` → `layout_plan` (morphorm rects). The discovery: forme +
     platen already had the portable pipeline, tested. The orrery (Cartography) and

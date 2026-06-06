@@ -18,10 +18,12 @@ use std::collections::BTreeSet;
 
 use rkyv::{Archive, Deserialize, Serialize};
 
+use super::edge_data::{
+    ArrangementData, ContainmentData, EdgeMetrics, ImportedData, ProvenanceData, SemanticData,
+    Traversal, TraversalData,
+};
 use super::edge_taxonomy::{
-    ArrangementData, ArrangementSubKind, ContainmentData, EdgeAssertion, EdgeFamily, EdgeMetrics,
-    ImportedData, ProvenanceData, RelationSelector, SemanticData, SemanticSubKind, Traversal,
-    TraversalData,
+    ArrangementSubKind, EdgeAssertion, EdgeFamily, RelationSelector, SemanticSubKind,
 };
 
 /// Edge semantics payload: structural assertions + temporal traversal events.

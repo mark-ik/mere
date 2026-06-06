@@ -103,11 +103,12 @@ platen-view = { workspace = true }
 # path-dep'd like netrender. Network I/O is the host's job — engines stay
 # byte-consuming and never link netfetcher.
 netfetcher = { path = "../../../netfetcher" }
-# Small-web (smolweb) transport: gemini / gopher / finger / spartan, routed by
-# scheme. The standalone, crates.io-only sibling crate (publishable; Mere consumes
-# it one-way like netfetcher). The fetch actor routes http(s) -> netfetcher and
-# smolweb schemes -> errand; the bytes ride the same nematic engines either way.
-errand = { path = "../../../errand" }
+# Small-web (smolweb) transport: gemini / gopher / finger / spartan / nex / guppy
+# / titan, routed by scheme. A standalone, crates.io-only sibling crate consumed
+# one-way; a **git dep** (not a path dep) so any machine pulls just mere and Cargo
+# fetches errand from GitHub — no `../../../errand` layout to replicate. The fetch
+# actor routes http(s) -> netfetcher and smolweb schemes -> errand.
+errand = { git = "https://github.com/mark-ik/errand.git" }
 url = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 
@@ -143,6 +144,9 @@ pollster = "0.4"
 # serval's, so the wgpu 29 / winit 0.30 surface + netrender Renderer unify).
 winit = { workspace = true }
 wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
+# System clipboard for the omnibar / command-palette Ctrl(Cmd)+C/X/V, the same
+# crate pelt-live's bin uses for its serval text field.
+arboard = "3"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 

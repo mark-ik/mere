@@ -17,8 +17,9 @@ use petgraph::Direction;
 use petgraph::visit::{EdgeRef, IntoEdgeReferences};
 use uuid::Uuid;
 
+use super::edge_data::Traversal;
 use super::edge_payload::EdgePayload;
-use super::edge_taxonomy::{EdgeAssertion, RelationSelector, Traversal};
+use super::edge_taxonomy::{EdgeAssertion, RelationSelector};
 use super::identity::{EdgeKey, NodeKey};
 use super::{DissolvedTraversalRecord, Graph};
 

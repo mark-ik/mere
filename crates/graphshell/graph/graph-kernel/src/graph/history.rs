@@ -322,7 +322,114 @@ impl NodeNavigationMemory {
         self.snapshot = memory.to_snapshot();
     }
 
+    /// Record navigating to `url` as a new visit under the `Primary` owner,
+    /// which becomes current. Forward-fork: navigating after [`back`](Self::back)
+    /// branches a new child off the current visit and preserves the prior
+    /// forward path (temporal-integrity R0). The entry is deduplicated by URL,
+    /// but each navigation is a distinct visit (revisiting a URL is a new
+    /// occurrence).
+    pub fn record_visit(&mut self, url: &str, transition: MemoryTransitionKind, at_ms: u64) {
+        let mut memory = OwnerScopedMemory::<String, String, NodeHistoryOwner, ()>::from_snapshot(
+            self.snapshot.clone(),
+        );
+        let owner = memory.ensure_owner(NodeHistoryOwner::Primary, None);
+        let entry = memory.resolve_or_create_entry(
+            url.to_string(),
+            url.to_string(),
+            at_ms,
+            MemoryEntryPrivacy::LocalOnly,
+        );
+        let _ = memory.visit_entry(owner, entry, (), transition, at_ms);
+        self.snapshot = memory.to_snapshot();
+    }
+
+    /// Move the cursor back one visit along the owner's path. Returns the new
+    /// current URL, or `None` if already at the root (the cursor did not move).
+    pub fn back(&mut self, at_ms: u64) -> Option<String> {
+        self.step(true, at_ms)
+    }
+
+    /// Move the cursor forward one visit. Returns the new current URL, or `None`
+    /// if already at the tip (the cursor did not move).
+    pub fn forward(&mut self, at_ms: u64) -> Option<String> {
+        self.step(false, at_ms)
+    }
+
+    fn step(&mut self, backward: bool, at_ms: u64) -> Option<String> {
+        let mut memory = OwnerScopedMemory::<String, String, NodeHistoryOwner, ()>::from_snapshot(
+            self.snapshot.clone(),
+        );
+        let owner = memory.owner_id_by_identity(&NodeHistoryOwner::Primary)?;
+        let moved = if backward {
+            memory.back(owner, 1, at_ms)
+        } else {
+            memory.forward(owner, 1, at_ms)
+        }
+        .ok()
+        .flatten()?;
+        let url = memory
+            .visit(moved)
+            .and_then(|visit| memory.entry(visit.entry))
+            .map(|entry| entry.payload.clone());
+        self.snapshot = memory.to_snapshot();
+        url
+    }
+
+    /// Whether [`back`](Self::back) would move (the cursor is not at the root).
+    pub fn can_back(&self) -> bool {
+        self.projection().current_index > 0
+    }
+
+    /// Whether [`forward`](Self::forward) would move (the cursor is not at the tip).
+    pub fn can_forward(&self) -> bool {
+        let projection = self.projection();
+        projection.current_index + 1 < projection.entries.len()
+    }
+
     pub fn snapshot(&self) -> &GraphMemorySnapshot<String, String, NodeHistoryOwner, ()> {
         &self.snapshot
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn record_visit_back_forward_and_forward_fork() {
+        let mut m = NodeNavigationMemory::empty();
+        m.record_visit("a", MemoryTransitionKind::UrlTyped, 1);
+        m.record_visit("b", MemoryTransitionKind::LinkClick, 2);
+        m.record_visit("c", MemoryTransitionKind::LinkClick, 3);
+        assert_eq!(m.current_url().as_deref(), Some("c"));
+        assert!(m.can_back());
+        assert!(!m.can_forward());
+
+        assert_eq!(m.back(4).as_deref(), Some("b"));
+        assert_eq!(m.back(5).as_deref(), Some("a"));
+        assert_eq!(m.back(6), None, "at the root, back does not move");
+        assert!(!m.can_back());
+        assert!(m.can_forward());
+        assert_eq!(m.forward(7).as_deref(), Some("b"));
+
+        // Forward-fork: from b, navigate to d. b now parents both c (old) and d
+        // (new); d is current; c is preserved as an alternate branch.
+        m.record_visit("d", MemoryTransitionKind::UrlTyped, 8);
+        assert_eq!(m.current_url().as_deref(), Some("d"));
+        let branch = m.branch_projection();
+        let b_visit = branch.visits.iter().find(|v| v.url == "b").expect("b on the active path");
+        assert!(
+            b_visit.alternate_children.iter().any(|alt| alt.url == "c"),
+            "c is preserved as an alternate branch off b after the forward-fork",
+        );
+    }
+
+    #[test]
+    fn revisiting_a_url_is_a_distinct_visit() {
+        let mut m = NodeNavigationMemory::empty();
+        m.record_visit("a", MemoryTransitionKind::UrlTyped, 1);
+        m.record_visit("a", MemoryTransitionKind::Reload, 2);
+        // Same URL, two visits on the path (entry deduped, occurrences distinct).
+        assert_eq!(m.projection().entries, vec!["a".to_string(), "a".to_string()]);
     }
 }
