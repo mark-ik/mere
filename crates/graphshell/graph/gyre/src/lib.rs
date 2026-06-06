@@ -58,7 +58,12 @@ pub use coupling_force::CouplingForce;
 /// and marquee rect-select (node point-pick + cull live on `Simulation`
 /// directly). Split out to keep `lib.rs` under the per-file size ceiling.
 mod query;
-pub use query::RectSelection;
+
+/// The rapier-free read model — a position-only [`LayoutView`] the host renders
+/// and hit-tests from, plus the [`LayoutSnapshot`] a physics actor emits to
+/// refresh it. The seam that lets the simulation run off the UI thread.
+mod view;
+pub use view::{LayoutSnapshot, LayoutView, RectSelection};
 
 /// Physical radius used for every node body's collider.
 ///
@@ -259,6 +264,23 @@ impl Simulation {
         })
     }
 
+    /// A rapier-free [`LayoutView`] over the current layout: the live positions,
+    /// the spring edge topology, and the node radius the picks/cull use. The host
+    /// reads node picks, edge picks, and cull from this rather than the rapier
+    /// query index, so those reads can run on the UI thread while the simulation
+    /// itself ticks elsewhere (the always-offload physics actor, P6).
+    pub fn view(&self) -> LayoutView {
+        LayoutView::from_parts(self.positions(), self.edges.iter().copied(), NODE_BODY_RADIUS)
+    }
+
+    /// A `Send` [`LayoutSnapshot`] of the current positions, stamped with
+    /// `generation` — the payload a physics actor emits each tick for the host to
+    /// fold into its [`LayoutView`]. Positions only; edges stay with the host's
+    /// graph, so they need not cross the actor boundary every frame.
+    pub fn snapshot(&self, generation: u64) -> LayoutSnapshot {
+        LayoutSnapshot { positions: self.positions().collect(), generation }
+    }
+
     /// Refresh the spatial query index so [`Self::hit_test`] and
     /// [`Self::cull_aabb`] reflect the colliders' current positions.
     /// [`Self::tick`] already updates the index each step; call this when
@@ -325,18 +347,39 @@ impl Simulation {
     ///
     /// Idempotent: safe to call every frame, every graph mutation,
     /// or once at startup — does nothing when the graph and bimap
-    /// are already in sync.
+    /// are already in sync. A thin convenience over [`Self::sync_nodes`]
+    /// that reads each node's projected position from the graph.
     pub fn sync_with_graph(&mut self, graph: &Graph) {
+        let nodes: Vec<(NodeKey, Point2D<f32>)> = graph
+            .nodes()
+            .map(|(key, node)| {
+                let p = node.projected_position();
+                (key, Point2D::new(p.x, p.y))
+            })
+            .collect();
+        self.sync_nodes(nodes);
+    }
+
+    /// Reconcile the body set to exactly `nodes` (keyed by [`NodeKey`]): spawn a
+    /// body at the given position for every key without one, remove bodies whose
+    /// key is absent. The position is only used for *new* bodies (an existing
+    /// body keeps its simulated position; use [`Self::seed_positions`] to move
+    /// one).
+    ///
+    /// Decoupled from [`Graph`] on purpose: a physics actor drives the sim from a
+    /// `Send` node list the host computed, so the graph never crosses the actor
+    /// boundary. [`Self::sync_with_graph`] is the in-thread convenience wrapper.
+    /// Idempotent.
+    pub fn sync_nodes(&mut self, nodes: impl IntoIterator<Item = (NodeKey, Point2D<f32>)>) {
         let mut changed = false;
 
-        // 1. Add bodies for new nodes.
+        // 1. Add bodies for new nodes (at the supplied position).
         let mut seen = std::collections::HashSet::with_capacity(self.bodies_by_node.len());
-        for (key, node) in graph.nodes() {
+        for (key, position) in nodes {
             seen.insert(key);
             if self.bodies_by_node.contains_key(&key) {
                 continue;
             }
-            let position = node.projected_position();
             let body = RigidBodyBuilder::dynamic()
                 .translation(vector![position.x, position.y])
                 .linear_damping(DEFAULT_LINEAR_DAMPING)
@@ -512,6 +555,15 @@ pub(crate) fn collider_to_node(
     let body = colliders.get(handle)?.parent()?;
     nodes_by_body.get(&body).copied()
 }
+
+// The simulation must be `Send` so a host can build it on, and run its tick on,
+// a dedicated physics actor thread (P6 always-offload). It is intentionally not
+// required to be `Sync` — only one thread (the actor) ever touches it.
+const _: fn() = || {
+    fn assert_send<T: Send>() {}
+    assert_send::<Simulation>();
+    assert_send::<LayoutSnapshot>();
+};
 
 #[cfg(test)]
 mod tests;

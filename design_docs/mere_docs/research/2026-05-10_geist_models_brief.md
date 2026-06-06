@@ -471,7 +471,7 @@ Mitigations should be part of the adapter contract rather than an afterthought:
 
 ## 11. Open questions
 
-- **Runtime/provider choice.** Burn is the Rust-native statistical stack, but geist needs an `intelligence-llm`-style provider seam. Near-term candidates: `mistral.rs` or `llama.cpp` for local inference, PEFT/Axolotl for training, LoRAX for production multi-LoRA serving, Burn only where its model/runtime support is actually competitive.
+- **Runtime/provider choice.** Burn is the Rust-native statistical stack, but geist needs an `intelligence-llm`-style provider seam. Near-term candidates: `mistral.rs` or `llama.cpp` for local inference, PEFT/Axolotl for training, LoRAX for production multi-LoRA serving, Burn only where its model/runtime support is actually competitive. See §12 for `bunsen`, the Rust-native prior art on the Burn path (param descriptors + group optimizer).
 - **Inference-time adapter composition limits.** How many adapters can stack before quality degrades or latency explodes? Empirical question; needs measurement.
 - **Adapter format interoperability.** PEFT (HuggingFace) format vs GGUF/llama.cpp vs `mistral.rs`-loadable adapters vs MLX vs Burn-native. Probably PEFT/safetensors as the canonical training artifact and runtime-specific converted adapter engrams at the edges.
 - **Trainer reproducibility.** Floating-point nondeterminism in GPU training means re-runs don't bit-match. How strict is the reproducibility claim, and what does third-party verification actually establish?
@@ -484,7 +484,72 @@ Mitigations should be part of the adapter contract rather than an afterthought:
 
 ---
 
-## 12. First experiments
+## 12. Prior art: bunsen (Rust-native Burn extensions)
+
+[`zspacelabs/bunsen`](https://github.com/zspacelabs/bunsen) (Apache-2.0 / MIT, on
+crates.io + docs.rs) is a "batteries-included" community standard library
+extending [burn](https://burn.dev). It pins **burn 0.21** (the version Mere
+already runs in `aether` and `intel/embed`), and its stated mission is to track
+burn's release cycle and absorb the extension churn. Evaluated 2026-06-06. It
+matters here because it is the Rust-native prior art for the LoRA / model-surgery
+machinery this brief's tier-3+ path needs, and it sits inside the Burn lane the
+provider seam already permits (§5, §11).
+
+**Verdict: borrow technique now; adopt wholesale only when geist runs a real
+in-house Burn transformer.** Today `intel/embed` is a hash-based provider with
+only a *future* Burn-BERT slot, so bunsen's model body (blocks, kits, dataloader,
+PyTorch import) has no consumer yet, while the small high-value pieces are cleanly
+liftable.
+
+### 12.1 Borrow list (technique, liftable at burn 0.21)
+
+- **Type-erased parameter descriptors** (`burner::descriptors::TensorParamDesc` /
+  `TensorDesc` / `TensorKindDesc`). Capture a `Param<Tensor<B,R,K>>`'s ParamId,
+  shape, rank, dtype, kind, and size estimate via `From<&Tensor<..>>`, dropping the
+  const-generic rank and kind. This is the escape hatch from Burn's generics that
+  makes generic parameter manipulation possible. The keystone lift: one small
+  module, no heavy deps. Serves §5 adapter-target selection (find the rank-2
+  attention / MLP weights to attach a LoRA to).
+- **Group optimizer** (`burner::optim::GroupOptimizerAdaptorN`). Partitions params
+  into disjoint `ParamId` groups, mounts a separate `SimpleOptimizer` plus a
+  per-group learning-rate selector on each, and implements Burn's own
+  `Optimizer<M,B>` with duplicate-ParamId detection. This is the §4.2 LoRA
+  training shape directly: one optimizer / LR for adapter params, another (or
+  frozen) for the base. Their example drives Muon for matrix params and AdamW for
+  the rest.
+- **The reflection *pattern*, not their realization.** bunsen walks a `Module`
+  into a queryable tree (`burner::module::reflection::XmlModuleTree`) and selects
+  param groups by XPath. The idea (visitor to addressable param list to query to
+  groups) is exactly the §5 model-surgery shape. Their realization is an XML
+  document plus an XPath engine (`xot` + `xee-xpath`), which is heavy and
+  wasm-hostile. Borrow the idea; back it with predicate closures or a path-glob
+  over ParamId paths, not an XML stack.
+- **Shape contracts** (`shape_contract![]`, the `contracts` module). Runtime
+  tensor-shape assertions. Optional, useful if the intel tensor code grows.
+
+### 12.2 What the whole dependency would buy later
+
+If geist / intel commits to an in-house Burn transformer, bunsen's `blocks`
+(attention with KV-cache, rotary embeddings, SDPA, patch-embed, drop-path /
+drop-block, Swin and transformer families), `kits` (whole models),
+`bunsen-firehose` (columnar dataloader plus a Burn batcher), and PyTorch
+checkpoint import (Whisper / ResNet via `burn-store`) become a broad, burn-aligned
+foundation, and bunsen's churn-buffering answers the workspace-pins doctrine
+directly. That is the moment to re-evaluate the "use the whole buffalo" question.
+
+### 12.3 Adoption caveat (wasm)
+
+The browser / PWA target is load-bearing, and bunsen's heavy parts are
+native-only: `reflection` (XML), `cache` (downloader + TLS), `store` (PyTorch
+import), and the preview chat dataloader (arrow / parquet). All are feature-gated,
+but `default` enables reflection + train + store, so any adoption means
+`default-features = false` and cherry-picking. The portable core (blocks,
+descriptors, ops, contracts, group-optimizer) extends Burn's modules and tensors
+and should ride burn-wgpu to wasm.
+
+---
+
+## 13. First experiments
 
 In rough order of leverage:
 
@@ -502,7 +567,7 @@ Each experiment is independently useful; later experiments don't strand earlier 
 
 ---
 
-## 13. What this brief does not decide
+## 14. What this brief does not decide
 
 - **Specific base-model defaults.** The brief recommends starting points (Phi-3 mini for personal CPU, Llama 3 8B for personal GPU, Llama 3 70B for moot) but defers binding selection to per-space configuration.
 - **LLM runtime and training backend.** The brief commits to a provider seam and adapter artifact contract, not to Burn, PEFT, `mistral.rs`, `llama.cpp`, LoRAX, or MLX as the universal runtime.
@@ -524,6 +589,7 @@ Each experiment is independently useful; later experiments don't strand earlier 
 - The honest deliverable for personal-geist is "writes like you, knows what you know" — not "thinks like you." Don't promise the third row.
 - Privacy of training data is the hardest design question (§10.2). Forward-only deletion is the realistic answer; document the right-to-be-forgotten incompatibility honestly.
 - Burn is not the committed geist runtime. Use Burn where it is strong (embeddings / tensor work / field algebra) and keep tier-3+ behind a provider seam.
+- `bunsen` (zspacelabs, Apache-2.0 / MIT, burn 0.21) is the Rust-native prior art for the tier-3+ LoRA path. Borrow now: type-erased param descriptors plus a group optimizer; borrow the reflection idea without its XML / XPath deps. Adopt wholesale only when geist runs an in-house Burn transformer (blocks / kits / firehose / PyTorch import); wasm adoption needs `default-features = false`. See §12.
 - LoRA stacking is the architectural keystone — it unifies personal + moot + moothold under one composition mechanism, mirrors the tier framework, and respects the user-authority principle.
 - LoRA stacking needs a strict compatibility envelope. Base bytes, tokenizer, prompt template, target modules, adapter format, quantization, and runtime loader are part of adapter identity.
 - Distillery-as-trainer is the natural sibling operation to Distillery-as-engram-publisher. Same source corpus, two output types, picked per invocation.
@@ -545,3 +611,7 @@ Each experiment is independently useful; later experiments don't strand earlier 
 
 - Hardened after repo/upstream audit: Burn narrowed to statistical/tensor stack rather than universal geist runtime; tier-3+ moved behind a provider seam.
 - Added strict adapter compatibility envelope, audit-not-bit-reproducibility wording, trainer/evaluator separation, canary/poisoning gates, and revised first experiments around manifest/load proof before training.
+
+### 2026-06-06
+
+- Evaluated `zspacelabs/bunsen` (Rust-native burn-extension suite, burn 0.21) as prior art for the tier-3+ path. Added §12 (prior art) with a borrow list (type-erased param descriptors, group optimizer, the reflection pattern minus its XML / XPath deps), the whole-dependency case, and the wasm adoption caveat. Cross-linked from §11 (runtime/provider choice) and Findings. Renumbered the trailing sections (First experiments → §13, What this brief does not decide → §14). Confirmed Mere is on burn 0.21 (`aether`, `intel/embed`).

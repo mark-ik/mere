@@ -48,6 +48,10 @@ struct Activation {
     shown: Option<(String, u8, u32, u32)>,
     /// The latest generation-accepted scene, composited at the node's pane.
     scene: Option<Scene>,
+    /// The full laid-out content height (px) of the latest scene — the document
+    /// grows past the visible card, so the host rasterizes a texture this tall and
+    /// scrolls a window of it on the GPU. Defaults to 0 until the first scene.
+    content_height: u32,
     /// Bumped each time a new scene is accepted, so the host can cache a tile's
     /// rasterized texture and re-rasterize only when this changes (not every frame).
     scene_version: u64,
@@ -157,6 +161,7 @@ impl Constellation {
                         gens: Generations::default(),
                         shown: None,
                         scene: None,
+                        content_height: 0,
                         scene_version: 0,
                         background: false,
                         last_touched: touch,
@@ -231,6 +236,13 @@ impl Constellation {
     /// not re-rasterized every frame. `0` if the member is not active or has no scene.
     pub fn scene_version(&self, member: GraphMemberId) -> u64 {
         self.active.get(&member).map_or(0, |a| a.scene_version)
+    }
+
+    /// The full content height (px) of `member`'s latest scene — the tall texture
+    /// height the host rasterizes and scrolls a window of. `0` if not active or
+    /// not yet rendered.
+    pub fn content_height(&self, member: GraphMemberId) -> u32 {
+        self.active.get(&member).map_or(0, |a| a.content_height)
     }
 
     /// Whether `member` is recovering from a crash: its actor was respawned and has
@@ -315,11 +327,12 @@ impl Constellation {
             }
             for update in updates {
                 match update {
-                    ContentUpdate::Scene { nav, viewport_gen, scene } => {
+                    ContentUpdate::Scene { nav, viewport_gen, scene, content_height } => {
                         if let Some(activation) = self.active.get_mut(&member) {
                             let stamp = Generations { nav, viewport: viewport_gen };
                             if activation.gens.accepts(stamp) {
                                 activation.scene = Some(scene);
+                                activation.content_height = content_height;
                                 activation.scene_version += 1;
                                 activation.respawns = 0; // a fresh scene = recovered
                                 out.any_scene = true;

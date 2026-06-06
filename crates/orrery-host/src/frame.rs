@@ -21,7 +21,7 @@ use super::build::{
     background_cmds, marquee_rect_cmds, selected_edge_overlay, set_class, set_style, surface_bg,
     NODE_SHEET,
 };
-use super::{NodeState, Orrery, NODE_HALF, PAN_DECAY, TICK_DT};
+use super::{NodeState, Orrery, NODE_HALF, PAN_DECAY};
 
 impl Orrery {
     /// Advance one frame at viewport `(w, h)` and return the composited content
@@ -33,14 +33,17 @@ impl Orrery {
         self.view_h = h;
         let viewport = DeviceIntSize::new(w as i32, h as i32);
 
-        // Tick while settling or while a node is being dragged (so neighbors react
-        // to the pinned node through the springs).
-        let settling = self.ticks_remaining > 0;
+        // Advance physics (the in-thread tick, or the freshest actor snapshot)
+        // into the read model, and learn whether the layout is still settling.
+        // Everything below reprojects from the view — never the rapier world.
+        let settling = self.physics.advance_frame(&mut self.view);
+        // A dragged node tracks the cursor with zero round-trip: re-pin it locally
+        // over whatever the backend just reported (the actor lags a frame behind,
+        // and the in-thread snapshot already agrees, so this is a no-op there).
         let dragging = self.drag.is_some_and(|d| d.moved);
-        if settling || dragging {
-            self.sim.tick(TICK_DT);
-            if settling {
-                self.ticks_remaining -= 1;
+        if let Some(d) = self.drag {
+            if d.moved {
+                self.view.set_position(d.node, self.screen_to_world(self.cursor));
             }
         }
         // Pan inertia: glide + decay when not actively middle-dragging.
@@ -56,17 +59,17 @@ impl Orrery {
         }
         self.generation = self.generation.wrapping_add(1);
 
-        // Snapshot the live positions, then reproject the underlay from them (a
+        // Reproject the underlay from the view positions (a
         // node with no body falls back to its committed position in the producer).
         let positions: HashMap<NodeKey, PortablePoint> = self
-            .sim
+            .view
             .positions()
             .map(|(k, p)| (k, PortablePoint::new(p.x, p.y)))
             .collect();
-        // On-screen nodes (gyre cull against the world-space viewport) become DOM
+        // On-screen nodes (cull against the world-space viewport) become DOM
         // children; the rest demote to underlay rects, so no node double-draws.
         let on_screen: HashSet<NodeKey> =
-            self.sim.cull_aabb(self.world_viewport()).into_iter().collect();
+            self.view.cull_aabb(self.world_viewport()).into_iter().collect();
 
         let mut underlay = orrery_paint_list_demoted(
             &self.graph,
@@ -86,7 +89,7 @@ impl Orrery {
         // Highlight selected edges by splicing thicker strokes inside the
         // underlay's camera transform (world space — no transform replication).
         if !self.selected_edges.is_empty() {
-            underlay.splice_world_overlays(selected_edge_overlay(&self.sim, &self.selected_edges));
+            underlay.splice_world_overlays(selected_edge_overlay(&self.view, &self.selected_edges));
         }
 
         // The node-children layer — the pre-materialized pool. Ensure the

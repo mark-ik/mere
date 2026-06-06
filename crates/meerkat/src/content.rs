@@ -54,8 +54,15 @@ pub enum ContentCommand {
 /// An update from a content actor to the kernel. All variants are `Send`.
 pub enum ContentUpdate {
     /// A freshly rendered scene, generation-tagged; the kernel composites the
-    /// latest and drops any whose generations are stale.
-    Scene { nav: NavGeneration, viewport_gen: ViewportGeneration, scene: Scene },
+    /// latest and drops any whose generations are stale. `content_height` is the
+    /// full laid-out document height in px (≥ the viewport height): the host
+    /// rasterizes a texture this tall and scrolls a window of it on the GPU.
+    Scene {
+        nav: NavGeneration,
+        viewport_gen: ViewportGeneration,
+        scene: Scene,
+        content_height: u32,
+    },
     /// Subresource URLs (absolute) the last render needs but did not have cached.
     /// The kernel fetches them and feeds the bytes back as [`ContentCommand::Resource`].
     Wanted { nav: NavGeneration, urls: Vec<String> },
@@ -133,11 +140,16 @@ fn render(
 ) {
     let wanted = RefCell::new(Vec::new());
     let (w, h) = content.viewport;
-    let scene = {
+    let (scene, content_height) = {
         let loader = ResourceLoader::new(store, &content.url, &wanted);
         render_content_scene(&content.url, content.state.as_ref(), registry, &loader, w, h)
     };
-    out.emit(ContentUpdate::Scene { nav: content.nav, viewport_gen: content.viewport_gen, scene });
+    out.emit(ContentUpdate::Scene {
+        nav: content.nav,
+        viewport_gen: content.viewport_gen,
+        scene,
+        content_height,
+    });
     // Ship only never-requested subresources, so a re-render before the bytes
     // arrive does not re-request them (the store dedups).
     let fresh: Vec<String> = wanted

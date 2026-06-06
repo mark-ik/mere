@@ -34,6 +34,7 @@ use std::sync::{Arc, Mutex};
 use identity::{Ed25519Keypair, Ed25519PublicKey, IdentityProvider};
 
 use p2panda_core::Operation;
+use tokio::sync::broadcast;
 
 use crate::cable::hash::hash_cabal_id;
 use crate::cable::hash_post;
@@ -51,6 +52,12 @@ pub struct CableEngine {
     cabals: Mutex<HashMap<[u8; 32], Arc<CabalSession>>>,
 }
 
+/// Per-cabal capacity of the live-`subscribe` broadcast buffer. A consumer that
+/// falls more than this many posts behind gets a `Lagged` error and should
+/// reconcile from [`CableEngine::channel_history`]; 256 is generous for
+/// interactive use.
+const EVENT_CHANNEL_CAPACITY: usize = 256;
+
 struct CabalSession {
     /// The per-cabal Ed25519 keypair, derived from
     /// `IdentityProvider::derive_keypair(&cabal_key)`. Used to sign posts
@@ -66,6 +73,12 @@ struct CabalSession {
     /// single-author chain (the unit LogSync reconciles). Behind a mutex so
     /// concurrent authoring in the same cabal serializes (no seq/backlink race).
     author_head: Mutex<(u64, Option<PostId>)>,
+    /// Live-`subscribe` fan-out. Every post that lands *for the first time* —
+    /// authored locally, gossiped, or caught up via LogSync — is broadcast here
+    /// once (gated on the store's first-insert, so a post arriving on two lanes
+    /// emits once). Subscribers see posts stored after they subscribe; the
+    /// backlog is [`channel_history`](CableEngine::channel_history).
+    events: broadcast::Sender<Post>,
 }
 
 impl CableEngine {
@@ -94,6 +107,7 @@ impl CableEngine {
                 keypair,
                 store: PersistentCabalStore::in_memory()?,
                 author_head: Mutex::new((0, None)),
+                events: broadcast::channel(EVENT_CHANNEL_CAPACITY).0,
             }));
         }
         Ok(id)
@@ -237,8 +251,14 @@ impl CableEngine {
         let post_id = hash_post(&post);
         // Store first; only advance the per-author log head once the post is
         // durably recorded, so a storage failure doesn't burn a seq number.
-        session.store.insert(post_id, &post)?;
+        let inserted = session.store.insert(post_id, &post)?;
         *head = (seq_num + 1, Some(post_id));
+        drop(head);
+        // Fan out to live subscribers. Gated on first insert (a re-authored id is
+        // a no-op) so each post emits once; ignore "no subscribers".
+        if inserted {
+            let _ = session.events.send(post);
+        }
         Ok(post_id)
     }
 
@@ -305,8 +325,29 @@ impl CableEngine {
         let session = self.session(cabal_id)?;
         // The store records the op and advances the per-author log frontier.
         let post_id = hash_post(&post);
-        session.store.insert(post_id, &post)?;
+        let inserted = session.store.insert(post_id, &post)?;
+        // Fan out to live subscribers, once. A post arriving on both the gossip
+        // and LogSync lanes inserts once, so it emits once.
+        if inserted {
+            let _ = session.events.send(post);
+        }
         Ok(post_id)
+    }
+
+    /// Subscribe to posts as they land in a cabal.
+    ///
+    /// The returned receiver yields each post stored *after* it subscribes —
+    /// authored locally, gossiped by a peer, or caught up via LogSync — exactly
+    /// once (a post arriving on two lanes lands, and emits, once). It does not
+    /// replay the backlog; pair it with
+    /// [`channel_history`](Self::channel_history) for what came before. A slow
+    /// consumer that overruns the buffer gets a `Lagged` error and should
+    /// reconcile from history. Errors only if the cabal isn't open.
+    pub fn subscribe(
+        &self,
+        cabal_id: &[u8; 32],
+    ) -> Result<broadcast::Receiver<Post>, MurmuringError> {
+        Ok(self.session(cabal_id)?.events.subscribe())
     }
 
     /// Ingest a p2panda [`Operation`] received from a peer over sync (LogSync's

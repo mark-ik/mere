@@ -125,12 +125,22 @@ fn document(url: &str, blocks: Vec<DocumentBlock>) -> EngineDocument {
     }
 }
 
-/// Lay out `doc` at `(w, h)` and lower it to a `netrender::Scene` — the proven
-/// document pipeline (parley layout + the shared paint-list translator). The
-/// caller composites the scene at the card rect with an opaque card background.
-pub fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> Scene {
-    let laid = layout_document(doc, Viewport::new(w as f32, h as f32), &StyleConfig::default());
-    scene_from_packet(&laid.packet, &laid.fonts, &card_vocabulary())
+/// Lay out `doc` at width `w` and lower it to a `netrender::Scene` — the proven
+/// document pipeline (parley layout + the shared paint-list translator). Returns
+/// the scene plus the **full content height** in px (the document grows past `h`;
+/// see [`layout_document`]'s `content_bounds`), so the host can rasterize a tall
+/// texture and scroll a window of it on the GPU. The caller composites the scene
+/// at the card rect with an opaque card background.
+pub fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> (Scene, u32) {
+    let mut laid = layout_document(doc, Viewport::new(w as f32, h as f32), &StyleConfig::default());
+    let content_height = laid.packet.content_bounds.size.height.ceil().max(1.0);
+    // Expand the paint-list viewport to the full content height before lowering, so
+    // the rasterizer renders the *whole* document into the tall texture. The paint
+    // list otherwise inherits the visible viewport (`h`) and culls everything below
+    // it — which would leave a tall texture blank past `h` and nothing to scroll to.
+    laid.packet.viewport = Viewport::new(w as f32, content_height);
+    let scene = scene_from_packet(&laid.packet, &laid.fonts, &card_vocabulary());
+    (scene, content_height as u32)
 }
 
 /// Light-on-dark text palette for the card's synthesized + nematic document
@@ -162,7 +172,7 @@ pub fn render_content_scene(
     loader: &impl ImageLoader,
     w: u32,
     h: u32,
-) -> Scene {
+) -> (Scene, u32) {
     if let Some(ContentState::Ready(fetched)) = state {
         if is_html(fetched.content_type.as_deref()) {
             return html_scene(&fetched.body, loader, w, h);
@@ -231,7 +241,7 @@ fn base_type(content_type: &str) -> String {
 /// `<img>` / `background-image` and `<link>` bytes resolve through `loader`:
 /// `data:` URIs decode inline; remote URLs come from the host's resource cache,
 /// absent on the first frame and filled by the demand fetch that re-renders.
-fn html_scene(body: &str, loader: &impl ImageLoader, w: u32, h: u32) -> Scene {
+fn html_scene(body: &str, loader: &impl ImageLoader, w: u32, h: u32) -> (Scene, u32) {
     let doc = StaticDocument::parse(body);
     let inline = inline_stylesheets(&doc);
     let linked = linked_stylesheets_with_loader(&doc, loader);
@@ -239,7 +249,12 @@ fn html_scene(body: &str, loader: &impl ImageLoader, w: u32, h: u32) -> Scene {
     sheets.extend(inline.iter().map(String::as_str));
     sheets.extend(linked.iter().map(String::as_str));
     let scroll = ScrollOffsets::default();
-    scene_from_layout_dom(&doc, &sheets, loader, w, h, &scroll)
+    let scene = scene_from_layout_dom(&doc, &sheets, loader, w, h, &scroll);
+    // The serval lane lays out to the viewport height and does not yet report a
+    // taller content extent, so HTML cards report `h` and simply do not scroll
+    // until that serval-side change lands. The document lane (most smolweb content)
+    // reports its true content height and scrolls.
+    (scene, h.max(1))
 }
 
 /// The floating card rectangle within the content band (top-right, inset by
@@ -330,7 +345,7 @@ mod tests {
     #[test]
     fn card_scene_lowers_text_to_glyph_runs() {
         let doc = content_document("mere://welcome", None);
-        let scene = render_card_scene(&doc, 420, 360);
+        let (scene, _) = render_card_scene(&doc, 420, 360);
         let glyph_runs = scene
             .ops
             .iter()
@@ -384,7 +399,7 @@ mod tests {
             content_type: Some("text/markdown".into()),
             body: "# Heading\n\nA paragraph.".into(),
         });
-        let scene = render_content_scene("https://example.com", Some(&ready), &registry, &NoImageLoader, 420, 360);
+        let (scene, _) = render_content_scene("https://example.com", Some(&ready), &registry, &NoImageLoader, 420, 360);
         assert!(glyph_runs(&scene) >= 1, "markdown renders text via the nematic document lane");
     }
 
@@ -396,7 +411,7 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<h1>Hello</h1><p>World</p>".into(),
         });
-        let scene = render_content_scene("https://example.com", Some(&ready), &registry, &NoImageLoader, 420, 360);
+        let (scene, _) = render_content_scene("https://example.com", Some(&ready), &registry, &NoImageLoader, 420, 360);
         assert!(glyph_runs(&scene) >= 1, "HTML renders text via the serval lane");
     }
 
@@ -410,7 +425,7 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<style>p { display: none; }</style><p>Hidden by the page.</p>".into(),
         });
-        let scene = render_content_scene("https://example.com", Some(&hidden), &registry, &NoImageLoader, 420, 360);
+        let (scene, _) = render_content_scene("https://example.com", Some(&hidden), &registry, &NoImageLoader, 420, 360);
         assert_eq!(glyph_runs(&scene), 0, "a page `display:none` style suppresses the paragraph");
 
         // Without the hiding style the same paragraph renders.
@@ -418,7 +433,7 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<p>Visible.</p>".into(),
         });
-        let scene = render_content_scene("https://example.com", Some(&shown), &registry, &NoImageLoader, 420, 360);
+        let (scene, _) = render_content_scene("https://example.com", Some(&shown), &registry, &NoImageLoader, 420, 360);
         assert!(glyph_runs(&scene) >= 1, "without a hiding style the paragraph renders");
     }
 
@@ -445,7 +460,7 @@ mod tests {
                    <body><p>Hidden by the linked sheet.</p></body>"
                 .into(),
         });
-        let scene =
+        let (scene, _) =
             render_content_scene("https://example.com/page.html", Some(&ready), &registry, &loader, 420, 360);
         assert_eq!(
             glyph_runs(&scene),

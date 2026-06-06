@@ -207,10 +207,16 @@ impl App {
             self.tile_rects.clear();
         }
 
+        // Record each card's on-screen content rect so a wheel over it scrolls the
+        // card (resolved in the wheel handler) rather than panning the orrery.
+        self.content_rects = cards.iter().map(|(member, dest, _)| (*member, *dest)).collect();
+
         // The omnibar follows focus: point it at the focused tile / node when that
         // changed (next frame, like the chrome strips were — the scene above is
         // already built).
         self.sync_location();
+        // Back/forward enabled-state tracks the focused node's own history.
+        self.sync_nav_buttons();
 
         let host = self.host.as_ref().unwrap();
         let (_chrome_tex, chrome_view) =
@@ -229,19 +235,24 @@ impl App {
         // The cache (self.tile_textures) keeps the textures alive across frames; evict
         // closed tiles first so theirs free. `composite` is what to draw, in order.
         self.tile_textures.retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
+        // Rasterize each card at its FULL content height (clamped to the cap), so
+        // scrolling is a GPU UV-window shift over the cached tall texture rather
+        // than a re-layout per tick (the gpui-flavored path).
+        const MAX_CARD_TEX_H: u32 = 8192;
         let mut composite: Vec<([f32; 4], GraphMemberId)> = Vec::with_capacity(cards.len());
         for (member, dest, (cw, ch)) in &cards {
             let version = self.constellation.scene_version(*member);
+            let tex_h = self.constellation.content_height(*member).max(*ch).min(MAX_CARD_TEX_H);
             let fresh = self
                 .tile_textures
                 .get(member)
-                .is_some_and(|c| c.version == version && c.size == (*cw, *ch));
+                .is_some_and(|c| c.version == version && c.size == (*cw, tex_h));
             if !fresh {
                 if let Some(scene) = self.constellation.scene(*member) {
-                    let (tex, view) = host.rasterize(scene, *cw, *ch, ColorLoad::Clear(CARD_BG));
+                    let (tex, view) = host.rasterize(scene, *cw, tex_h, ColorLoad::Clear(CARD_BG));
                     self.tile_textures.insert(
                         *member,
-                        super::CachedTile { version, size: (*cw, *ch), tex, view },
+                        super::CachedTile { version, size: (*cw, tex_h), tex, view },
                     );
                 }
             }
@@ -267,13 +278,20 @@ impl App {
         );
         for (dest, member) in &composite {
             let Some(cached) = self.tile_textures.get(member) else { continue };
+            // Scroll is a vertical UV window over the tall cached texture — a GPU
+            // sample shift, no re-raster. Clamp the offset to the scrollable range.
+            let tex_h = cached.size.1 as f32;
+            let visible_h = (dest[3] - dest[1]).max(1.0);
+            let max_scroll = (tex_h - visible_h).max(0.0);
+            let scroll = self.scroll.get(member).copied().unwrap_or(0.0).clamp(0.0, max_scroll);
+            let uv = [0.0, scroll / tex_h, 1.0, (scroll + visible_h) / tex_h];
             host.renderer().compose_external_texture(
                 &cached.view,
                 &target_view,
                 format,
                 w,
                 h,
-                ExternalTexturePlacement::new(*dest),
+                ExternalTexturePlacement::new(*dest).with_uv(uv),
             );
         }
         host.renderer().compose_external_texture(

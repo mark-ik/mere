@@ -221,6 +221,15 @@ impl SyncedCabal {
         self.handle.history(channel)
     }
 
+    /// Subscribe to posts as they land in this cabal — authored locally, received
+    /// live over gossip, or caught up via LogSync — once each. Pair with
+    /// [`history`](Self::history) for the backlog; this stream carries everything
+    /// after. The shell drives a live conversation view from it instead of
+    /// polling `history`. See [`CabalHandle::subscribe`] for the lag contract.
+    pub fn subscribe(&self) -> Result<tokio::sync::broadcast::Receiver<Post>, MurmError> {
+        self.handle.subscribe()
+    }
+
     /// The underlying cabal handle, for operations not exposed here.
     pub fn handle(&self) -> &CabalHandle {
         &self.handle
@@ -285,6 +294,33 @@ mod tests {
     use identity::{IdentityProvider, InMemoryProvider};
     use std::time::Duration;
     use transport::{PeerID, P2pandaTransport};
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn synced_cabal_subscribe_emits_a_locally_sent_post() {
+        // A SyncedCabal's subscribe stream fires end to end: bind a transport,
+        // subscribe to the cabal, send a post, and the live receiver yields it.
+        let provider = Arc::new(InMemoryProvider::from_seed([50; 32]));
+        let kp = provider.master_keypair().clone();
+        let transport = P2pandaTransport::builder(&kp)
+            .gossip()
+            .bind()
+            .await
+            .expect("bind");
+        let murm = Murm::new(provider, transport);
+        let cabal = murm
+            .subscribe_cabal(&CabalKey::new([0x99; 32]))
+            .await
+            .expect("cabal");
+
+        let mut rx = cabal.subscribe().expect("subscribe");
+        let id = cabal.send_text("session", "hello").await.expect("send");
+
+        let got = tokio::time::timeout(Duration::from_secs(5), rx.recv())
+            .await
+            .expect("subscribe delivers within the timeout")
+            .expect("a post, not a lag/closed error");
+        assert_eq!(crate::hash_post(&got), id);
+    }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn two_murm_peers_converge_over_gossip() {

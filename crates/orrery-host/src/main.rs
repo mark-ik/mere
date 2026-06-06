@@ -25,7 +25,7 @@ use serval_winit_host::SurfaceHost;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use winit::window::{Window, WindowId};
 
@@ -33,6 +33,8 @@ use winit::window::{Window, WindowId};
 /// window + present stack that drives it.
 struct App {
     orrery: Orrery,
+    /// Wakes the loop when the physics actor has a fresh layout snapshot ready.
+    proxy: EventLoopProxy<()>,
     /// Last cursor position in physical px. winit's `MouseInput` carries no
     /// position, so the shell tracks it from `CursorMoved` to drive press/release.
     cursor: (f32, f32),
@@ -43,11 +45,12 @@ struct App {
 }
 
 impl App {
-    fn new() -> Self {
+    fn new(proxy: EventLoopProxy<()>) -> Self {
         Self {
             // The standalone bin shows the built-in sample graph; meerkat drives a
             // live session graph through `Orrery::visit`.
             orrery: Orrery::with_sample_graph(),
+            proxy,
             cursor: (0.0, 0.0),
             window: None,
             host: None,
@@ -121,8 +124,24 @@ impl ApplicationHandler for App {
                 return;
             },
         }
+        // Always-offload physics (P6): move the simulation onto an armillary actor
+        // thread, waking this loop through the proxy when a layout snapshot lands.
+        // Done here (once — `resumed` early-returns if a window already exists) so
+        // the settle animates from the first visible frame.
+        let proxy = self.proxy.clone();
+        let physics_wake: armillary::Wake = Arc::new(move || {
+            let _ = proxy.send_event(());
+        });
+        self.orrery.offload_physics(physics_wake);
+
         window.request_redraw();
         self.window = Some(window);
+    }
+
+    /// The physics actor woke us through the proxy: a fresh layout snapshot is
+    /// waiting. Redraw so `frame()` folds it in (and chains on while settling).
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+        self.request_redraw();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId, event: WindowEvent) {
@@ -201,6 +220,7 @@ fn main() {
     tracing::info!("orrery-host starting");
 
     let event_loop = EventLoop::new().expect("failed to create event loop");
-    let mut app = App::new();
+    let proxy = event_loop.create_proxy();
+    let mut app = App::new(proxy);
     event_loop.run_app(&mut app).expect("event loop error");
 }

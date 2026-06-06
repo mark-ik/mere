@@ -6719,11 +6719,14 @@ dependencies = [
  "dirs",
  "log",
  "rcgen 0.13.2",
+ "redb",
  "rustls",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
+ "tokio",
+ "tokio-rustls",
  "url",
 ]
 
@@ -8204,6 +8207,7 @@ dependencies = [
 name = "orrery-host"
 version = "0.0.1"
 dependencies = [
+ "armillary",
  "euclid",
  "gyre",
  "kernel",

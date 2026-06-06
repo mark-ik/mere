@@ -37,6 +37,11 @@ serde = { version = "1", features = ["derive"] }
 # this layer.
 redb = "2"
 thiserror = "1"
+# `sync` only: the engine fans out newly-stored posts to subscribers over a
+# `broadcast` channel (the live `subscribe` lane). Runtime-free — `send` is
+# non-blocking; only a consumer's `recv().await` needs an executor, which is the
+# consumer's concern. murmuring stays sync (no `rt`, no task spawning).
+tokio = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
 tempfile = "3"

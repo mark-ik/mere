@@ -13,7 +13,7 @@
 use std::collections::{HashMap, HashSet};
 
 use euclid::default::Point2D;
-use gyre::{Boundary, EdgeSpring, NodeExclusion, Simulation};
+use gyre::{Boundary, EdgeSpring, LayoutView, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, Graph, NodeKey, SemanticSubKind};
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
@@ -111,14 +111,16 @@ pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
     sim.add_force(EdgeSpring::default());
     sim.add_force(Boundary::default());
 
-    seed_cluster(&mut sim, graph);
+    sim.seed_positions(seed_cluster(graph));
     sim
 }
 
-/// Seed every node into a tight central spiral (golden-angle), so a ticked settle
-/// visibly expands it into a readable layout.
-pub(crate) fn seed_cluster(sim: &mut Simulation, graph: &Graph) {
-    let seeds: Vec<(NodeKey, Point2D<f32>)> = graph
+/// The tight central spiral (golden-angle) seed for every node, so a ticked
+/// settle visibly expands it into a readable layout. Returns the `(node,
+/// position)` pairs; the caller applies them to the simulation (in-thread) or
+/// sends them to the physics actor (offloaded), and mirrors them into the view.
+pub(crate) fn seed_cluster(graph: &Graph) -> Vec<(NodeKey, Point2D<f32>)> {
+    graph
         .nodes()
         .enumerate()
         .map(|(i, (key, _node))| {
@@ -126,8 +128,7 @@ pub(crate) fn seed_cluster(sim: &mut Simulation, graph: &Graph) {
             let theta = i as f32 * 2.399_963; // golden angle in radians
             (key, Point2D::new(r * theta.cos(), r * theta.sin()))
         })
-        .collect();
-    sim.seed_positions(seeds);
+        .collect()
 }
 
 /// Build the pre-materialized node-children pool **once**: a `.stage` container
@@ -223,11 +224,11 @@ pub(crate) fn background_cmds(w: u32, h: u32, color: ColorF) -> Vec<PaintCmd> {
 /// camera rather than replicating it. Each selected edge redraws as a thicker
 /// orange line over the underlay's thin grey one.
 pub(crate) fn selected_edge_overlay(
-    sim: &Simulation,
+    view: &LayoutView,
     selected_edges: &HashSet<(NodeKey, NodeKey)>,
 ) -> Vec<PaintCmd> {
     let mut cmds = Vec::new();
-    for (a, b, pa, pb) in sim.edge_segments() {
+    for (a, b, pa, pb) in view.edge_segments() {
         if !selected_edges.contains(&(a, b)) {
             continue;
         }

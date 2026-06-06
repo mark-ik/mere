@@ -33,7 +33,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use euclid::default::{Box2D, Point2D};
-use gyre::Simulation;
+use gyre::{LayoutSnapshot, LayoutView};
 use kernel::graph::{Graph, NodeKey};
 use platen::scene_paint::{Camera, ScenePaintStyle};
 use serval_layout::IncrementalLayout;
@@ -47,6 +47,9 @@ pub use types::{CameraView, NodeState, PointerButton};
 
 mod input;
 mod frame;
+
+mod physics;
+use physics::Physics;
 
 /// Force-directed settle length (frames) after a (re)seed, ~6s at 60fps.
 const SETTLE_TICKS: u32 = 360;
@@ -86,8 +89,16 @@ struct Drag {
 /// node-children pool. Window-agnostic — see the module docs.
 pub struct Orrery {
     graph: Graph,
-    /// The force-directed layout. The underlay reprojects from its live bodies.
-    sim: Simulation,
+    /// The force-directed layout backend — in-thread (tests / wasm) or an
+    /// off-thread armillary actor (native always-offload). The orrery never reads
+    /// it directly; it feeds positions into `view` each frame.
+    physics: Physics,
+    /// The rapier-free read model the frame loop and input handlers read from —
+    /// positions, node/edge picks, cull. Refreshed from `sim` each frame (and on
+    /// every structural / seed change). This is the seam that lets `sim` move to
+    /// an off-thread physics actor (P6): swap the snapshot source feeding this
+    /// view, and the read sites here are untouched.
+    view: LayoutView,
     /// The pre-materialized node-children pool: a persistent serval DOM with one
     /// `.gnode` per node under a `.stage` container (built once, mutated per
     /// frame — never rebuilt structurally).
@@ -103,8 +114,6 @@ pub struct Orrery {
     /// Viewport `node_layout` was built at; a change rebuilds it.
     pool_w: u32,
     pool_h: u32,
-    /// Remaining settle frames; while > 0 the sim ticks and redraws are chained.
-    ticks_remaining: u32,
     camera: Camera,
     style: ScenePaintStyle,
     /// Producer generation, bumped each rendered frame (positions / camera move).
@@ -178,8 +187,11 @@ impl Orrery {
                 (key, Point2D::new(p.x, p.y))
             })
             .collect();
-        orrery.sim.seed_positions(positions);
-        orrery.ticks_remaining = 0;
+        for &(key, pos) in &positions {
+            orrery.view.set_position(key, pos);
+        }
+        orrery.physics.seed(positions);
+        orrery.physics.halt();
         orrery
     }
 
@@ -189,17 +201,19 @@ impl Orrery {
     /// [`with_graph`](Orrery::with_graph).
     fn from_graph(graph: Graph) -> Self {
         let sim = build_simulation(&graph);
+        let view = sim.view();
+        let physics = Physics::inline(sim, SETTLE_TICKS);
         let (node_dom, gnode_of, stage_node) = build_pool_dom(&graph);
         Self {
             graph,
-            sim,
+            physics,
+            view,
             node_dom,
             node_layout: None,
             gnode_of,
             stage_node,
             pool_w: 0,
             pool_h: 0,
-            ticks_remaining: SETTLE_TICKS,
             camera: Camera::default(),
             style: dark_scene_style(),
             generation: 0,
@@ -238,13 +252,62 @@ impl Orrery {
     /// selection, or restart the settle; callers do that as they need. The pool
     /// is structural, so it is rebuilt, not grown incrementally.
     fn reconcile_derived(&mut self) {
-        self.sim.sync_with_graph(&self.graph);
-        self.sim.sync_edges(dedup_edges(&self.graph));
+        let nodes: Vec<(NodeKey, Point2D<f32>)> = self
+            .graph
+            .nodes()
+            .map(|(key, node)| {
+                let p = node.projected_position();
+                (key, Point2D::new(p.x, p.y))
+            })
+            .collect();
+        self.physics.sync_nodes(nodes);
+        self.physics.sync_edges(dedup_edges(&self.graph));
         let (node_dom, gnode_of, stage_node) = build_pool_dom(&self.graph);
         self.node_dom = node_dom;
         self.gnode_of = gnode_of;
         self.stage_node = stage_node;
         self.node_layout = None;
+        self.resync_view_to_graph();
+    }
+
+    /// Make the read model's node set match the graph after a structural change,
+    /// **backend-free**: keep the live position of every node still present, fall
+    /// back to its committed position for a node the view has not placed yet, drop
+    /// departed nodes, and refresh the edge topology. This gives the next input
+    /// read (hit-test, edge-pick) a correct node set synchronously, without
+    /// waiting for the physics backend's next snapshot; the per-frame
+    /// [`Physics::advance_frame`] then overwrites positions with authoritative
+    /// ones. A subsequent seed overrides newly-added nodes' positions.
+    fn resync_view_to_graph(&mut self) {
+        let positions: Vec<(NodeKey, Point2D<f32>)> = self
+            .graph
+            .nodes()
+            .map(|(key, node)| {
+                let pos = self.view.position_of(key).unwrap_or_else(|| {
+                    let p = node.projected_position();
+                    Point2D::new(p.x, p.y)
+                });
+                (key, pos)
+            })
+            .collect();
+        self.view.apply_snapshot(&LayoutSnapshot { positions, generation: self.generation });
+        self.view.set_edges(dedup_edges(&self.graph));
+    }
+
+    /// Whether the layout is still settling or a node is being dragged — the host
+    /// chains another frame while true.
+    pub fn is_settling(&self) -> bool {
+        self.physics.is_settling()
+    }
+
+    /// Move physics onto an off-thread actor (the native always-offload path).
+    /// The host calls this once, just after construction, with a [`Wake`] that
+    /// pokes its event loop when a layout snapshot is ready. Left uncalled, the
+    /// orrery keeps ticking in-thread (tests; the no-threads wasm profile).
+    ///
+    /// [`Wake`]: armillary::Wake
+    pub fn offload_physics(&mut self, wake: armillary::Wake) {
+        self.physics.offload(wake);
     }
 
     /// Apply a structural mutation to the session graph and reconcile every derived
@@ -267,7 +330,7 @@ impl Orrery {
             .iter()
             .copied()
             .next()
-            .and_then(|k| self.sim.position_of(k))
+            .and_then(|k| self.view.position_of(k))
             .unwrap_or(Point2D::new(0.0, 0.0));
         let seeds: Vec<_> = self
             .graph
@@ -281,8 +344,11 @@ impl Orrery {
                 (k, Point2D::new(anchor.x + 12.0 + col * 16.0, anchor.y + 12.0 + row * 16.0))
             })
             .collect();
-        self.sim.seed_positions(seeds);
-        self.ticks_remaining = SETTLE_TICKS;
+        for &(key, pos) in &seeds {
+            self.view.set_position(key, pos);
+        }
+        self.physics.seed(seeds);
+        self.physics.settle(SETTLE_TICKS);
         true
     }
 

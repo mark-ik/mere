@@ -1,0 +1,362 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+//! The physics backend: where the gyre [`Simulation`] actually ticks.
+//!
+//! Two shapes behind one [`Physics`] interface (the dual-backend decision, P6):
+//!
+//! - [`Physics::Inline`] — the simulation ticks **in the frame loop**, on the UI
+//!   thread. Deterministic (no thread race), so it is what the orrery's tests
+//!   drive; it is also the path for the no-threads `wasm32` browser/PWA profile,
+//!   where [`armillary`] cannot spawn an OS thread.
+//! - [`Physics::Actor`] — the simulation runs on an [`armillary`] **actor
+//!   thread** (always-offload). A heavy settle (`pipeline.step` over hundreds of
+//!   bodies) never blocks compositing or input; the actor emits a
+//!   [`LayoutSnapshot`] per step and the host folds it into its [`LayoutView`].
+//!
+//! Native builds construct [`Physics::Inline`] and immediately
+//! [`offload`](Physics::offload) onto an actor (so native always offloads); the
+//! host supplies the [`Wake`] that pokes its event loop when a snapshot lands.
+//! Either way the orrery reads only its [`LayoutView`] — the backend just feeds
+//! authoritative positions into it.
+
+use std::sync::mpsc::{Receiver, TryRecvError};
+use std::time::Duration;
+
+use armillary::{spawn, ActorHandle, Emitter, Wake};
+use euclid::default::Point2D;
+use gyre::{LayoutSnapshot, LayoutView, Simulation};
+use kernel::graph::NodeKey;
+
+use super::TICK_DT;
+
+/// A command the host sends to the physics actor. Mirrors the mutating surface
+/// of [`Simulation`] plus the settle/drag drivers; all payloads are `Send`
+/// (positions and node keys), so the graph itself never crosses the boundary.
+pub(crate) enum PhysicsCommand {
+    /// Reconcile the body set to exactly these `(node, position)` pairs (position
+    /// used only for newly-spawned bodies). See [`Simulation::sync_nodes`].
+    SyncNodes(Vec<(NodeKey, Point2D<f32>)>),
+    /// Replace the spring edge topology.
+    SyncEdges(Vec<(NodeKey, NodeKey)>),
+    /// Override the positions of existing bodies (a seed / reseed).
+    Seed(Vec<(NodeKey, Point2D<f32>)>),
+    /// Pin a node to a world position (a drag in progress).
+    Pin(NodeKey, Point2D<f32>),
+    /// Release a pinned node back to dynamic.
+    Unpin(NodeKey),
+    /// Extend the settle budget to at least `n` ticks.
+    Settle(u32),
+    /// Stop settling now (a restored session that must not re-scramble).
+    Halt,
+    /// Whether a drag is in progress (keep ticking so neighbors react).
+    SetDragging(bool),
+}
+
+/// One layout the actor produced: the positions plus whether it is still
+/// settling (so the host knows to keep requesting frames).
+pub(crate) struct PhysicsUpdate {
+    pub snapshot: LayoutSnapshot,
+    pub settling: bool,
+}
+
+/// The in-thread backend: the simulation plus the settle/drag state the frame
+/// loop steps it with.
+pub(crate) struct InlinePhysics {
+    sim: Simulation,
+    ticks_remaining: u32,
+    dragging: bool,
+    generation: u64,
+}
+
+/// The off-thread backend: the actor handle, its update channel, and the last
+/// settling flag the host saw.
+pub(crate) struct ActorPhysics {
+    handle: ActorHandle<PhysicsCommand>,
+    updates: Receiver<PhysicsUpdate>,
+    settling: bool,
+}
+
+/// The physics backend the [`Orrery`](crate::Orrery) talks to. Inline by
+/// default (tests + wasm); [`offload`](Physics::offload) swaps in the actor.
+pub(crate) enum Physics {
+    Inline(InlinePhysics),
+    Actor(ActorPhysics),
+}
+
+impl Physics {
+    /// A new in-thread backend over `sim`, with an initial settle budget.
+    pub fn inline(sim: Simulation, initial_settle: u32) -> Self {
+        Physics::Inline(InlinePhysics {
+            sim,
+            ticks_remaining: initial_settle,
+            dragging: false,
+            generation: 0,
+        })
+    }
+
+    /// Move the simulation onto an [`armillary`] actor thread (always-offload).
+    /// A no-op if already offloaded. `wake` pokes the host's event loop when a
+    /// snapshot is ready. The actor inherits the current settle budget so an
+    /// in-flight first settle continues uninterrupted across the move.
+    pub fn offload(&mut self, wake: Wake) {
+        let Physics::Inline(inline) = self else {
+            return;
+        };
+        // Move the real simulation out (swap in a throwaway empty one) so it can
+        // be built-into the actor thread; `Simulation: Send` makes this sound.
+        let sim = std::mem::replace(&mut inline.sim, Simulation::new());
+        let initial_settle = inline.ticks_remaining;
+        let dragging = inline.dragging;
+        let (handle, updates) = spawn(wake, move |commands, out| {
+            run(sim, initial_settle, dragging, commands, out);
+        });
+        *self = Physics::Actor(ActorPhysics { handle, updates, settling: initial_settle > 0 });
+    }
+
+    /// Reconcile the body set (see [`PhysicsCommand::SyncNodes`]).
+    pub fn sync_nodes(&mut self, nodes: Vec<(NodeKey, Point2D<f32>)>) {
+        match self {
+            Physics::Inline(p) => p.sim.sync_nodes(nodes),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::SyncNodes(nodes));
+            },
+        }
+    }
+
+    /// Replace the spring edge topology.
+    pub fn sync_edges(&mut self, edges: Vec<(NodeKey, NodeKey)>) {
+        match self {
+            Physics::Inline(p) => p.sim.sync_edges(edges),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::SyncEdges(edges));
+            },
+        }
+    }
+
+    /// Override existing bodies' positions (a seed / reseed).
+    pub fn seed(&mut self, positions: Vec<(NodeKey, Point2D<f32>)>) {
+        match self {
+            Physics::Inline(p) => p.sim.seed_positions(positions),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::Seed(positions));
+            },
+        }
+    }
+
+    /// Pin a node to a world position (a drag in progress).
+    pub fn pin(&mut self, node: NodeKey, position: Point2D<f32>) {
+        match self {
+            Physics::Inline(p) => p.sim.pin(node, position),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::Pin(node, position));
+            },
+        }
+    }
+
+    /// Release a pinned node back to dynamic.
+    pub fn unpin(&mut self, node: NodeKey) {
+        match self {
+            Physics::Inline(p) => p.sim.unpin(node),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::Unpin(node));
+            },
+        }
+    }
+
+    /// Extend the settle budget to at least `ticks` (start / prolong a settle).
+    pub fn settle(&mut self, ticks: u32) {
+        match self {
+            Physics::Inline(p) => p.ticks_remaining = p.ticks_remaining.max(ticks),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::Settle(ticks));
+                p.settling = true;
+            },
+        }
+    }
+
+    /// Stop settling immediately (a restored session that must not re-scramble).
+    pub fn halt(&mut self) {
+        match self {
+            Physics::Inline(p) => p.ticks_remaining = 0,
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::Halt);
+                p.settling = false;
+            },
+        }
+    }
+
+    /// Tell the backend whether a drag is in progress (keep ticking so the
+    /// pinned node's neighbors react through the springs).
+    pub fn set_dragging(&mut self, dragging: bool) {
+        match self {
+            Physics::Inline(p) => p.dragging = dragging,
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::SetDragging(dragging));
+            },
+        }
+    }
+
+    /// Whether the layout is still moving (settle in progress or a node dragged).
+    pub fn is_settling(&self) -> bool {
+        match self {
+            Physics::Inline(p) => p.ticks_remaining > 0 || p.dragging,
+            Physics::Actor(p) => p.settling,
+        }
+    }
+
+    /// Advance one frame, folding the latest positions into `view`, and return
+    /// whether the layout is still settling.
+    ///
+    /// - Inline: step the simulation (while settling or dragging) and snapshot it.
+    /// - Actor: drain the update channel, applying the most recent snapshot
+    ///   (older queued ones are superseded — only the freshest layout matters).
+    pub fn advance_frame(&mut self, view: &mut LayoutView) -> bool {
+        match self {
+            Physics::Inline(p) => {
+                if p.ticks_remaining > 0 || p.dragging {
+                    p.sim.tick(TICK_DT);
+                    if p.ticks_remaining > 0 {
+                        p.ticks_remaining -= 1;
+                    }
+                }
+                p.generation = p.generation.wrapping_add(1);
+                view.apply_snapshot(&p.sim.snapshot(p.generation));
+                p.ticks_remaining > 0 || p.dragging
+            },
+            Physics::Actor(p) => {
+                let mut latest = None;
+                loop {
+                    match p.updates.try_recv() {
+                        Ok(update) => latest = Some(update),
+                        Err(_) => break,
+                    }
+                }
+                if let Some(update) = latest {
+                    view.apply_snapshot(&update.snapshot);
+                    p.settling = update.settling;
+                }
+                p.settling
+            },
+        }
+    }
+}
+
+/// The actor thread body: own the simulation, apply commands, and tick at ~60Hz
+/// while there is work, emitting a snapshot per step. Parks on `recv` when idle
+/// (no busy-spin), and ends when the command channel closes (the handle drops).
+fn run(
+    mut sim: Simulation,
+    initial_settle: u32,
+    initial_dragging: bool,
+    commands: Receiver<PhysicsCommand>,
+    out: Emitter<PhysicsUpdate>,
+) {
+    let mut ticks_remaining = initial_settle;
+    let mut dragging = initial_dragging;
+    let mut generation: u64 = 0;
+    // Pace the active settle at the simulation timestep so it does not run the
+    // whole budget in microseconds and burn a core.
+    let pacing = Duration::from_secs_f32(TICK_DT);
+
+    loop {
+        // Idle: block for the next command so the thread parks. A closed channel
+        // (the host dropped the handle) ends the actor.
+        if ticks_remaining == 0 && !dragging {
+            match commands.recv() {
+                Ok(cmd) => apply(&mut sim, cmd, &mut ticks_remaining, &mut dragging),
+                Err(_) => return,
+            }
+        }
+        // Drain any further pending commands without blocking. A disconnect means
+        // the host is gone: stop accepting commands, but still run out whatever
+        // settle is already queued before exiting (so a drop right after a
+        // `Settle` does not throw away the layout work).
+        let mut disconnected = false;
+        loop {
+            match commands.try_recv() {
+                Ok(cmd) => apply(&mut sim, cmd, &mut ticks_remaining, &mut dragging),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => {
+                    disconnected = true;
+                    break;
+                },
+            }
+        }
+        // Step while there is work; emit the new layout and pace the next step.
+        if ticks_remaining > 0 || dragging {
+            sim.tick(TICK_DT);
+            if ticks_remaining > 0 {
+                ticks_remaining -= 1;
+            }
+            generation = generation.wrapping_add(1);
+            let settling = ticks_remaining > 0 || dragging;
+            out.emit(PhysicsUpdate { snapshot: sim.snapshot(generation), settling });
+            std::thread::sleep(pacing);
+        }
+        // Host gone and the settle budget spent: wind down.
+        if disconnected && ticks_remaining == 0 {
+            return;
+        }
+    }
+}
+
+/// Fold one command into the actor's simulation + settle/drag state.
+fn apply(
+    sim: &mut Simulation,
+    cmd: PhysicsCommand,
+    ticks_remaining: &mut u32,
+    dragging: &mut bool,
+) {
+    match cmd {
+        PhysicsCommand::SyncNodes(nodes) => sim.sync_nodes(nodes),
+        PhysicsCommand::SyncEdges(edges) => sim.sync_edges(edges),
+        PhysicsCommand::Seed(positions) => sim.seed_positions(positions),
+        PhysicsCommand::Pin(node, position) => sim.pin(node, position),
+        PhysicsCommand::Unpin(node) => sim.unpin(node),
+        PhysicsCommand::Settle(n) => *ticks_remaining = (*ticks_remaining).max(n),
+        PhysicsCommand::Halt => *ticks_remaining = 0,
+        PhysicsCommand::SetDragging(d) => *dragging = d,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use euclid::default::Point2D;
+    use kernel::graph::Graph;
+
+    use super::*;
+
+    /// The actor processes a sync + settle and emits layout snapshots, then ends
+    /// cleanly when the handle drops. (The physics math itself is gyre's concern;
+    /// this is a protocol smoke test of the run loop.)
+    #[test]
+    fn actor_syncs_settles_and_emits_snapshots() {
+        let mut graph = Graph::new();
+        let a = graph.add_node_with_id(uuid::Uuid::from_u128(1), "mere://a".into(), Default::default());
+        let b = graph.add_node_with_id(uuid::Uuid::from_u128(2), "mere://b".into(), Default::default());
+
+        let mut sim = Simulation::new();
+        sim.add_force(gyre::NodeExclusion::default());
+        let wake: Wake = Arc::new(|| {});
+        let (handle, updates) = spawn(wake, move |commands, out| run(sim, 0, false, commands, out));
+
+        handle.command(PhysicsCommand::SyncNodes(vec![
+            (a, Point2D::new(0.0, 0.0)),
+            (b, Point2D::new(1.0, 0.0)),
+        ]));
+        handle.command(PhysicsCommand::SyncEdges(vec![(a, b)]));
+        handle.command(PhysicsCommand::Settle(4));
+        // Dropping the handle closes the command channel; the actor finishes its
+        // settle, then ends. `iter` collects every emitted update to completion.
+        drop(handle);
+
+        let emitted: Vec<PhysicsUpdate> = updates.iter().collect();
+        assert!(!emitted.is_empty(), "the actor emitted at least one layout snapshot");
+        let last = emitted.last().unwrap();
+        assert_eq!(last.snapshot.positions.len(), 2, "both bodies are in the snapshot");
+    }
+}

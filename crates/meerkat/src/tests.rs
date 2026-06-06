@@ -30,12 +30,12 @@ fn toolbar_renders_from_reused_state() {
     assert_eq!(count_tag(&dom, root, "div"), 4, "chrome + toolbar + sync-chip + suggestions");
 }
 
-/// A back-button click steps the real history: after navigating away from
-/// the seed location, Back returns to it, updates the omnibar to the
-/// restored URL, and flips the `can_go_*` flags (forward now available,
-/// back spent). Proves the host-owns-mutations contract on live navigation.
+/// A back-button click records a one-shot history step for the host to apply to
+/// the **focused node's own** history (per-node navigation, the node-lineage
+/// model). The chrome no longer owns a linear history and does not self-navigate;
+/// `content_location` is unchanged until the host drains the step via the orrery.
 #[test]
-fn back_click_navigates_history() {
+fn back_click_records_a_history_step() {
     let mut runner = runner("mere://welcome");
     // Navigate to a typed bare host (normalized to https://).
     runner.update(|c| {
@@ -43,8 +43,7 @@ fn back_click_navigates_history() {
         submit_omnibar(c);
     });
     assert_eq!(runner.state().content_location(), "https://example.com");
-    assert!(runner.state().toolbar.can_go_back);
-    assert!(!runner.state().toolbar.can_go_forward);
+    assert!(runner.state().history_step.is_none());
 
     let root = runner.root();
     let back = {
@@ -54,10 +53,9 @@ fn back_click_navigates_history() {
     };
     runner.dispatch_click(back, PointerClick::at((0.0, 0.0)));
 
-    assert_eq!(runner.state().content_location(), "mere://welcome");
-    assert_eq!(runner.state().omnibar.text(), "mere://welcome");
-    assert!(!runner.state().toolbar.can_go_back);
-    assert!(runner.state().toolbar.can_go_forward);
+    // The chrome recorded the intent; it did not self-navigate.
+    assert_eq!(runner.state().history_step, Some(HistoryStep::Back));
+    assert_eq!(runner.state().content_location(), "https://example.com");
 }
 
 /// Submitting the omnibar syncs the live buffer into the reused
@@ -74,6 +72,20 @@ fn submit_syncs_omnibar_into_toolbar_state() {
     assert_eq!(runner.state().toolbar.editable.location, "https://example.test");
     assert!(runner.state().toolbar.editable.location_submitted);
     assert_eq!(runner.state().content_location(), "https://example.test");
+}
+
+/// Plain omnibar submit does not raise the open-as-new-node intent — only
+/// Ctrl/Cmd-Enter does (the host's key handler sets it). Guards that in-place
+/// navigation stays the default path for a bare Enter.
+#[test]
+fn plain_submit_does_not_open_a_new_node() {
+    let mut runner = runner("mere://welcome");
+    runner.update(|c| {
+        c.omnibar = TextInput::new("example.com");
+        submit_omnibar(c);
+    });
+    assert_eq!(runner.state().content_location(), "https://example.com");
+    assert!(!runner.state().open_as_new_node, "plain Enter navigates in place, not a new node");
 }
 
 /// An empty submission is a no-op: it neither grows the history nor raises
@@ -198,7 +210,9 @@ fn palette_filters_and_runs_command() {
 
     // No explicit highlight → run_palette_selection runs the first match (Back).
     runner.update(Chrome::run_palette_selection);
-    assert_eq!(runner.state().content_location(), "mere://welcome");
+    // Command::Back records a per-node history step for the host (the chrome does
+    // not self-navigate), and running closes the palette.
+    assert_eq!(runner.state().history_step, Some(HistoryStep::Back));
     assert!(!runner.state().palette_open, "running closes the palette");
 }
 

@@ -59,17 +59,27 @@ impl App {
     /// submit, suggestion / palette).
     pub(super) fn sync_orrery(&mut self) {
         let loc = self.runner.state().content_location().to_string();
+        // Ctrl/Cmd-Enter: open the address as a *new node* linked from the focused
+        // one. Handled before the change guard below, since duplicates are welcome
+        // (the node-identity model) — opening the current page as a new node is a
+        // valid branch, not a no-op.
+        if self.runner.state().open_as_new_node {
+            self.runner.update(|c| c.open_as_new_node = false);
+            let origin = self.nav_target_member();
+            self.orrery.open_member_as_new_node(origin, &loc);
+            self.ensure_content(&loc);
+            self.content_location = loc;
+            self.save_session();
+            self.request_redraw();
+            return;
+        }
         if loc == self.content_location {
             return;
         }
-        let target = if self.workbench.is_tiled() {
-            self.focused_tile
-        } else {
-            self.orrery.focused_member()
-        };
-        match target {
+        match self.nav_target_member() {
             Some(member) => {
                 self.orrery.navigate_member(member, &loc);
+                self.scroll.remove(&member); // a new page starts at the top
             },
             None => {
                 self.orrery.visit(&loc);
@@ -78,6 +88,69 @@ impl App {
         self.ensure_content(&loc);
         self.content_location = loc;
         self.save_session();
+        self.request_redraw();
+    }
+
+    /// The node per-node navigation acts on: the focused tile in Tree, the single
+    /// selected node in Cartography. `None` when nothing is focused.
+    fn nav_target_member(&self) -> Option<GraphMemberId> {
+        if self.workbench.is_tiled() {
+            self.focused_tile
+        } else {
+            self.orrery.focused_member()
+        }
+    }
+
+    /// Apply a queued back/forward step to the **focused node's own** history:
+    /// move its cursor (no new node, no fork), mirror the revealed page into the
+    /// chrome (content target + omnibar) so the following `sync_orrery` sees no
+    /// change and does not record a fresh visit, and refetch it. Drained each input
+    /// pass, before `sync_orrery`.
+    pub(super) fn drain_history_step(&mut self) {
+        let Some(step) = self.runner.state().history_step else {
+            return;
+        };
+        self.runner.update(|c| c.history_step = None);
+        let Some(member) = self.nav_target_member() else {
+            return;
+        };
+        let url = match step {
+            meerkat::HistoryStep::Back => self.orrery.member_history_back(member),
+            meerkat::HistoryStep::Forward => self.orrery.member_history_forward(member),
+        };
+        let Some(url) = url else {
+            return;
+        };
+        self.scroll.remove(&member); // the revealed page starts at the top
+        self.content_location = url.clone();
+        self.ensure_content(&url);
+        self.runner.update(|c| {
+            c.content_location = url.clone();
+            c.show_location(&url);
+        });
+        self.save_session();
+        self.request_redraw();
+    }
+
+    /// Reflect the focused node's history onto the toolbar's back/forward
+    /// enabled-state, so the buttons track whichever node is focused. Cheap; a
+    /// no-op when unchanged. Called each render.
+    pub(super) fn sync_nav_buttons(&mut self) {
+        let (can_back, can_forward) = match self.nav_target_member() {
+            Some(m) => (self.orrery.member_can_back(m), self.orrery.member_can_forward(m)),
+            None => (false, false),
+        };
+        let (cur_back, cur_forward) = {
+            let c = self.runner.state();
+            (c.toolbar.can_go_back, c.toolbar.can_go_forward)
+        };
+        if cur_back == can_back && cur_forward == can_forward {
+            return;
+        }
+        self.runner.update(move |c| {
+            c.toolbar.can_go_back = can_back;
+            c.toolbar.can_go_forward = can_forward;
+        });
         self.request_redraw();
     }
 

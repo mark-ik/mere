@@ -334,3 +334,54 @@ fn all_six_post_helpers_round_trip_through_store() {
     let session_history = engine.channel_history(&cabal_id, "session");
     assert_eq!(session_history.len(), 4);
 }
+
+#[test]
+fn subscribe_emits_locally_authored_posts() {
+    let engine = engine_with_seed([1; 32]);
+    let cabal_id = engine.open_cabal([42; 32]).unwrap();
+    let mut rx = engine.subscribe(&cabal_id).unwrap();
+
+    let id = engine.post_text(&cabal_id, "session", "hello", 1).unwrap();
+
+    let got = rx.try_recv().expect("subscriber receives the authored post");
+    assert_eq!(hash_post(&got), id);
+    assert!(rx.try_recv().is_err(), "nothing else is pending");
+}
+
+#[test]
+fn subscribe_only_delivers_posts_authored_after_it_subscribes() {
+    let engine = engine_with_seed([2; 32]);
+    let cabal_id = engine.open_cabal([7; 32]).unwrap();
+    // Authored before anyone subscribes — the backlog is not replayed.
+    engine.post_text(&cabal_id, "session", "before", 1).unwrap();
+
+    let mut rx = engine.subscribe(&cabal_id).unwrap();
+    let after = engine.post_text(&cabal_id, "session", "after", 2).unwrap();
+
+    let got = rx.try_recv().expect("the post-subscribe post arrives");
+    assert_eq!(hash_post(&got), after);
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn subscribe_emits_an_ingested_post_once_across_duplicate_ingest() {
+    // Alice authors; Bob ingests the same post twice (as gossip + LogSync would
+    // both deliver it). Bob's subscriber sees it once, gated on first insert.
+    let alice = engine_with_seed([10; 32]);
+    let cabal_key = [0xcd; 32];
+    let alice_cabal = alice.open_cabal(cabal_key).unwrap();
+    let id = alice.post_text(&alice_cabal, "session", "hi bob", 1).unwrap();
+    let post = alice.get_post(&alice_cabal, &id).unwrap();
+
+    let bob = engine_with_seed([11; 32]);
+    let bob_cabal = bob.open_cabal(cabal_key).unwrap();
+    assert_eq!(bob_cabal, alice_cabal, "same key → same cabal id");
+    let mut rx = bob.subscribe(&bob_cabal).unwrap();
+
+    bob.ingest_post(&bob_cabal, post.clone()).unwrap();
+    bob.ingest_post(&bob_cabal, post).unwrap(); // duplicate: no-op insert
+
+    let got = rx.try_recv().expect("ingested post is emitted");
+    assert_eq!(hash_post(&got), id);
+    assert!(rx.try_recv().is_err(), "the duplicate ingest does not re-emit");
+}

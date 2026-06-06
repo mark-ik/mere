@@ -12,29 +12,13 @@
 //! TLS handshake with trust-on-first-use peer verification, and message
 //! send/receive — with no dependency on the rest of the comms stack.
 
-use std::collections::HashMap;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
-use std::net::{IpAddr, TcpStream, ToSocketAddrs};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::path::PathBuf;
 
-use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair};
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::crypto::{WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
-use rustls::{
-    ClientConfig, ClientConnection, DigitallySignedStruct, Error, SignatureScheme, StreamOwned,
-};
+use rustls::pki_types::CertificateDer;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
-const IO_TIMEOUT: Duration = Duration::from_secs(10);
-const MISFIN_DEFAULT_PORT: u16 = 1958;
-const MISFIN_MAX_REDIRECTS: usize = 5;
 const MISFIN_USER_ID_OID: [u64; 7] = [0, 9, 2342, 19200300, 100, 1, 1];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,52 +49,12 @@ pub struct MisfinGemmail {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MisfinRequest {
-    pub recipient: MisfinAddress,
-    pub message: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MisfinResponse {
-    pub status: u16,
-    pub meta: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MisfinSendOutcome {
-    pub final_recipient: MisfinAddress,
-    pub status: u16,
-    pub meta: String,
-    pub recipient_fingerprint: Option<String>,
-    pub permanent_redirect: Option<MisfinAddress>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MisfinIdentityStatus {
     pub address: String,
     pub path: Option<PathBuf>,
     pub exists: bool,
     pub blurb: Option<String>,
     pub certificate_fingerprint: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MisfinTrustStatus {
-    pub authority: String,
-    pub path: Option<PathBuf>,
-    pub fingerprint_sha256: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-struct MisfinKnownHostRecord {
-    authority: String,
-    fingerprint_sha256: String,
-}
-
-#[derive(Debug, Clone)]
-struct MisfinKnownHostsStore {
-    path: Option<PathBuf>,
-    records: Arc<RwLock<HashMap<String, MisfinKnownHostRecord>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -125,13 +69,6 @@ struct PersistedMisfinIdentity {
 struct MisfinClientIdentity {
     certificate_chain: Vec<CertificateDer<'static>>,
     private_key_der: Vec<u8>,
-}
-
-#[derive(Debug)]
-struct MisfinTofuVerifier {
-    authority: String,
-    known_hosts: MisfinKnownHostsStore,
-    supported_algs: WebPkiSupportedAlgorithms,
 }
 
 impl MisfinAddress {
@@ -167,182 +104,6 @@ impl MisfinAddress {
     }
 }
 
-impl MisfinRequest {
-    pub fn encode(&self) -> Result<String, String> {
-        if self.message.contains(['\r', '\n']) {
-            return Err(
-                "Misfin request messages must fit on a single wire line; multiline gemmail belongs in stored/forwarded message bodies, not the transaction request."
-                    .to_string(),
-            );
-        }
-
-        let request = format!(
-            "misfin://{} {}\r\n",
-            self.recipient.as_addr_spec(),
-            self.message
-        );
-        if request.len() > 2048 {
-            return Err("Misfin request exceeded the 2048-byte wire limit.".to_string());
-        }
-        Ok(request)
-    }
-}
-
-impl MisfinKnownHostsStore {
-    fn load_default() -> Self {
-        let path = misfin_known_hosts_path();
-        let records = path
-            .as_ref()
-            .and_then(|path| load_known_hosts_from_path(path).ok())
-            .unwrap_or_default();
-        Self {
-            path,
-            records: Arc::new(RwLock::new(records)),
-        }
-    }
-
-    #[cfg(any(test, feature = "test-support"))]
-    fn new_for_tests(path: PathBuf) -> Self {
-        Self {
-            path: Some(path),
-            records: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-
-    fn remember_or_verify(
-        &self,
-        authority: &str,
-        certificate: &CertificateDer<'_>,
-    ) -> Result<(), String> {
-        let fingerprint = sha256_hex(certificate.as_ref());
-        let mut records = self
-            .records
-            .write()
-            .expect("misfin known-hosts lock poisoned");
-
-        match records.get(authority) {
-            Some(existing) if existing.fingerprint_sha256 == fingerprint => Ok(()),
-            Some(existing) => Err(format!(
-                "Misfin certificate changed for {authority}. Stored fingerprint {stored}, received {received}.",
-                stored = existing.fingerprint_sha256,
-                received = fingerprint,
-            )),
-            None => {
-                records.insert(
-                    authority.to_string(),
-                    MisfinKnownHostRecord {
-                        authority: authority.to_string(),
-                        fingerprint_sha256: fingerprint,
-                    },
-                );
-                drop(records);
-                self.persist();
-                Ok(())
-            }
-        }
-    }
-
-    fn persist(&self) {
-        let Some(path) = self.path.as_ref() else {
-            return;
-        };
-        if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let mut records = self
-            .records
-            .read()
-            .expect("misfin known-hosts lock poisoned")
-            .values()
-            .cloned()
-            .collect::<Vec<_>>();
-        records.sort_by(|left, right| left.authority.cmp(&right.authority));
-        let Ok(content) = serde_json::to_string_pretty(&records) else {
-            return;
-        };
-        let _ = fs::write(path, content);
-    }
-}
-
-impl MisfinTofuVerifier {
-    fn new(authority: String, known_hosts: MisfinKnownHostsStore) -> Self {
-        let supported_algs =
-            rustls::crypto::aws_lc_rs::default_provider().signature_verification_algorithms;
-        Self {
-            authority,
-            known_hosts,
-            supported_algs,
-        }
-    }
-}
-
-impl ServerCertVerifier for MisfinTofuVerifier {
-    fn verify_server_cert(
-        &self,
-        end_entity: &CertificateDer<'_>,
-        _intermediates: &[CertificateDer<'_>],
-        _server_name: &ServerName<'_>,
-        _ocsp_response: &[u8],
-        _now: UnixTime,
-    ) -> Result<ServerCertVerified, Error> {
-        self.known_hosts
-            .remember_or_verify(&self.authority, end_entity)
-            .map_err(Error::General)?;
-        Ok(ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls12_signature(message, cert, dss, &self.supported_algs)
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, Error> {
-        verify_tls13_signature(message, cert, dss, &self.supported_algs)
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.supported_algs.supported_schemes()
-    }
-}
-
-pub fn send_message(
-    url: &url::Url,
-    sender: &MisfinIdentitySpec,
-    message: &str,
-) -> Result<MisfinSendOutcome, String> {
-    let known_hosts = MisfinKnownHostsStore::load_default();
-    let identity_root = misfin_identity_root();
-    send_message_with_paths(
-        url,
-        sender,
-        message,
-        &known_hosts,
-        identity_root.as_deref(),
-        0,
-    )
-}
-
-#[cfg(any(test, feature = "test-support"))]
-pub fn send_message_for_tests(
-    url: &url::Url,
-    sender: &MisfinIdentitySpec,
-    message: &str,
-    known_hosts_path: &Path,
-    identity_root: &Path,
-) -> Result<MisfinSendOutcome, String> {
-    let known_hosts = MisfinKnownHostsStore::new_for_tests(known_hosts_path.to_path_buf());
-    send_message_with_paths(url, sender, message, &known_hosts, Some(identity_root), 0)
-}
-
 pub fn identity_status(spec: &MisfinIdentitySpec) -> Result<MisfinIdentityStatus, String> {
     identity_status_with_root(spec, misfin_identity_root().as_deref())
 }
@@ -359,34 +120,12 @@ pub fn forget_identity(spec: &MisfinIdentitySpec) -> Result<bool, String> {
     forget_identity_with_root(spec, misfin_identity_root().as_deref())
 }
 
-pub fn trust_status(url: &url::Url) -> Result<MisfinTrustStatus, String> {
-    trust_status_with_path(url, misfin_known_hosts_path().as_deref())
-}
-
-pub fn forget_known_host(url: &url::Url) -> Result<bool, String> {
-    forget_known_host_with_path(url, misfin_known_hosts_path().as_deref())
-}
-
 pub fn url_string_for_address(address: &MisfinAddress, explicit_port: Option<u16>) -> String {
     if let Some(port) = explicit_port {
         format!("misfin://{}@{}:{port}", address.mailbox, address.host)
     } else {
         format!("misfin://{}@{}", address.mailbox, address.host)
     }
-}
-
-pub fn parse_misfin_response(line: &str) -> Result<MisfinResponse, String> {
-    let trimmed = line.trim_end_matches(['\r', '\n']);
-    if trimmed.len() < 2 {
-        return Err(
-            "Misfin response was shorter than the required two-digit status code.".to_string(),
-        );
-    }
-    let status = trimmed[..2]
-        .parse::<u16>()
-        .map_err(|error| format!("Invalid Misfin status code '{}': {error}", &trimmed[..2]))?;
-    let meta = trimmed[2..].trim_start().to_string();
-    Ok(MisfinResponse { status, meta })
 }
 
 pub fn parse_gemmail(text: &str) -> MisfinGemmail {
@@ -438,12 +177,143 @@ pub fn parse_gemmail(text: &str) -> MisfinGemmail {
 
 mod transport;
 mod helpers;
+#[cfg(feature = "server")]
+mod mailbox;
+#[cfg(feature = "server")]
+mod server;
 #[cfg(test)]
 mod tests;
 
-use helpers::{sha256_hex, load_known_hosts_from_path, misfin_identity_root,
-    misfin_known_hosts_path, parse_sender_line, parse_recipients_line,
-    parse_timestamp_line, split_once_whitespace};
-use transport::{send_message_with_paths, identity_status_with_root, ensure_identity_with_root,
-    rotate_identity_with_root, forget_identity_with_root, trust_status_with_path,
-    forget_known_host_with_path};
+use helpers::{misfin_identity_root, parse_sender_line, parse_recipients_line,
+    parse_timestamp_line};
+use transport::{identity_status_with_root, ensure_identity_with_root,
+    rotate_identity_with_root, forget_identity_with_root};
+
+#[cfg(feature = "server")]
+pub use mailbox::{MailboxStore, ReceivedMessage, SenderSeen};
+#[cfg(feature = "server")]
+pub use server::{
+    BoundMisfinServer, MisfinResponse, MisfinServer, MisfinServerConfig, ServedMailbox,
+    MISFIN_PORT,
+};
+
+/// An error from the misfin receive server (the `server` feature): a mailbox
+/// store failure, a TLS / server-config failure, or a socket failure.
+#[cfg(feature = "server")]
+#[derive(Debug)]
+pub enum MisfinServerError {
+    /// A mailbox-store failure (redb or message (de)serialization).
+    Storage(String),
+    /// A TLS or server-configuration failure (bad cert/key, provider).
+    Config(String),
+    /// A socket / IO failure (bind, accept).
+    Io(String),
+}
+
+#[cfg(feature = "server")]
+impl std::fmt::Display for MisfinServerError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Storage(message) => write!(formatter, "misfin mailbox storage error: {message}"),
+            Self::Config(message) => write!(formatter, "misfin server config error: {message}"),
+            Self::Io(message) => write!(formatter, "misfin server IO error: {message}"),
+        }
+    }
+}
+
+#[cfg(feature = "server")]
+impl std::error::Error for MisfinServerError {}
+
+/// DER material for a Misfin client identity: the certificate (leaf, DER) and the
+/// private key (PKCS#8 DER). This is the shape a client-cert TLS sender consumes:
+/// e.g. for `errand::misfin_send`, wrap `certificate_der` in a `CertificateDer`
+/// and `private_key_pkcs8_der` in `PrivateKeyDer::Pkcs8`.
+pub struct MisfinIdentityMaterial {
+    /// The leaf client certificate, DER-encoded.
+    pub certificate_der: Vec<u8>,
+    /// The private key, PKCS#8 DER-encoded.
+    pub private_key_pkcs8_der: Vec<u8>,
+}
+
+/// Deterministically derive a Misfin client identity from a 32-byte **Ed25519**
+/// seed.
+///
+/// The reproducible counterpart of [`ensure_identity`]: rather than generate a
+/// random ECDSA certificate and persist it, this derives the entire identity from
+/// `seed` + `spec`. Ed25519 signs deterministically, and the cert uses a fixed
+/// serial + validity, so the same seed + address always reproduce the same
+/// certificate and SHA-256 fingerprint. The seed is the caller's — typically an
+/// identity vault's `derive_keypair(identity_salt(&address))?.to_seed()` — so the
+/// Misfin identity is reproducible from the vault, with no certificate to back up.
+///
+/// The Misfin spec mandates no key algorithm (any valid self-signed x509), and
+/// real servers accept Ed25519 client certs, so this stays interoperable.
+pub fn deterministic_identity(
+    seed: &[u8; 32],
+    spec: &MisfinIdentitySpec,
+) -> Result<MisfinIdentityMaterial, String> {
+    let identity = transport::deterministic_identity(seed, spec)?;
+    let certificate_der = identity
+        .certificate_chain
+        .first()
+        .map(|cert| cert.as_ref().to_vec())
+        .ok_or_else(|| "Misfin identity produced no certificate".to_string())?;
+    Ok(MisfinIdentityMaterial {
+        certificate_der,
+        private_key_pkcs8_der: identity.private_key_der,
+    })
+}
+
+/// The recommended identity-vault derivation salt for a Misfin `address`:
+/// domain-separated and **per-address**, so `derive_keypair(identity_salt(addr))`
+/// yields a stable key for that address and **distinct (unlinkable)** keys across
+/// addresses. Feed the result to `derive_keypair`, then `to_seed()` into
+/// [`deterministic_identity`].
+pub fn identity_salt(address: &MisfinAddress) -> Vec<u8> {
+    [
+        b"mere/misfin/identity/v1/".as_slice(),
+        address.as_addr_spec().as_bytes(),
+    ]
+    .concat()
+}
+
+#[cfg(test)]
+mod deterministic_identity_tests {
+    use super::*;
+
+    fn spec(addr: &str) -> MisfinIdentitySpec {
+        MisfinIdentitySpec {
+            address: MisfinAddress::parse(addr).unwrap(),
+            blurb: Some("Test".to_string()),
+        }
+    }
+
+    #[test]
+    fn same_seed_reproduces_a_byte_identical_identity() {
+        let seed = [7u8; 32];
+        let a = deterministic_identity(&seed, &spec("alice@example.test")).unwrap();
+        let b = deterministic_identity(&seed, &spec("alice@example.test")).unwrap();
+        // Ed25519 deterministic signatures + fixed serial/validity => a byte-stable
+        // cert, hence a stable SHA-256 fingerprint (the Misfin identity).
+        assert_eq!(a.certificate_der, b.certificate_der, "cert is reproducible");
+        assert_eq!(a.private_key_pkcs8_der, b.private_key_pkcs8_der);
+        assert!(!a.certificate_der.is_empty());
+    }
+
+    #[test]
+    fn a_different_seed_yields_a_different_identity() {
+        let s = spec("alice@example.test");
+        let a = deterministic_identity(&[7u8; 32], &s).unwrap();
+        let c = deterministic_identity(&[8u8; 32], &s).unwrap();
+        assert_ne!(a.certificate_der, c.certificate_der);
+    }
+
+    #[test]
+    fn the_identity_salt_is_per_address() {
+        let alice = MisfinAddress::parse("alice@example.test").unwrap();
+        let bob = MisfinAddress::parse("bob@example.test").unwrap();
+        assert_ne!(identity_salt(&alice), identity_salt(&bob), "addresses derive distinct keys");
+        let alice_again = MisfinAddress::parse("alice@example.test").unwrap();
+        assert_eq!(identity_salt(&alice), identity_salt(&alice_again), "stable per address");
+    }
+}

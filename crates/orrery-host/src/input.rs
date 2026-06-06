@@ -35,11 +35,20 @@ impl Orrery {
             redraw = true;
         }
         if let Some(mut d) = self.drag {
+            let was_moved = d.moved;
             if !d.moved && (new.0 - d.press.0).hypot(new.1 - d.press.1) > CLICK_SLOP {
                 d.moved = true;
             }
             if d.moved {
-                self.sim.pin(d.node, self.screen_to_world(new));
+                // On the click→drag transition, tell the backend to keep ticking
+                // so the pinned node's neighbors react through the springs.
+                if !was_moved {
+                    self.physics.set_dragging(true);
+                }
+                let world = self.screen_to_world(new);
+                self.physics.pin(d.node, world);
+                // Track the cursor in the view immediately (the actor lags a frame).
+                self.view.set_position(d.node, world);
                 redraw = true;
             }
             self.drag = Some(d);
@@ -77,7 +86,7 @@ impl Orrery {
             },
             PointerButton::Left => {
                 let world = self.screen_to_world(self.cursor);
-                if let Some(node) = self.sim.hit_test(world) {
+                if let Some(node) = self.view.hit_test(world) {
                     self.drag = Some(Drag { node, press: self.cursor, moved: false });
                 } else {
                     self.marquee = Some(self.cursor);
@@ -102,8 +111,9 @@ impl Orrery {
             PointerButton::Left => {
                 if let Some(d) = self.drag.take() {
                     if d.moved {
-                        self.sim.unpin(d.node);
-                        self.ticks_remaining = self.ticks_remaining.max(SETTLE_TICKS / 3);
+                        self.physics.unpin(d.node);
+                        self.physics.set_dragging(false);
+                        self.physics.settle(SETTLE_TICKS / 3);
                     } else {
                         self.select_only(d.node);
                     }
@@ -116,7 +126,7 @@ impl Orrery {
                             self.screen_to_world(origin),
                             self.screen_to_world(self.cursor),
                         ]);
-                        let sel = self.sim.rect_select(region);
+                        let sel = self.view.rect_select(region);
                         self.selected = sel.nodes.into_iter().collect();
                         self.selected_edges = sel.edges.into_iter().collect();
                     } else {
@@ -124,7 +134,7 @@ impl Orrery {
                         let tol = EDGE_PICK_TOL / self.camera.zoom.max(f32::EPSILON);
                         self.selected.clear();
                         self.selected_edges.clear();
-                        if let Some(edge) = self.sim.edge_hit_test(world, tol) {
+                        if let Some(edge) = self.view.edge_hit_test(world, tol) {
                             self.selected_edges.insert(edge);
                         }
                     }
@@ -139,8 +149,12 @@ impl Orrery {
 
     /// Re-seed the central spiral and replay the settle (the `Space` gesture).
     pub fn reseed(&mut self) -> bool {
-        seed_cluster(&mut self.sim, &self.graph);
-        self.ticks_remaining = SETTLE_TICKS;
+        let seeds = seed_cluster(&self.graph);
+        for &(key, pos) in &seeds {
+            self.view.set_position(key, pos);
+        }
+        self.physics.seed(seeds);
+        self.physics.settle(SETTLE_TICKS);
         true
     }
 
@@ -154,22 +168,52 @@ impl Orrery {
             self.select_only(key);
             return key;
         }
-        // Place the new node just off the one we came from (the current
-        // selection), so the trail spreads outward; the first node lands at the
-        // origin and the settle takes over.
+        // A fresh URL mints a node off the current selection, so the browse trail
+        // spreads outward; the first node lands at the origin and settles.
         let from = self.selected.iter().copied().next();
-        let anchor = from.and_then(|k| self.sim.position_of(k)).unwrap_or(Point2D::new(0.0, 0.0));
+        self.mint_node(from, url)
+    }
+
+    /// Open `url` as a **brand-new node** (a new browsing surface) linked back to
+    /// `origin` (the source node, by member id) with a navigated-from
+    /// [`Semantic::Hyperlink`](kernel::graph::EdgeAssertion) edge. Unlike in-place
+    /// navigation this always mints a node (no URL dedup — duplicates are welcome
+    /// in the node-identity model); unlike [`visit`](Self::visit) the origin is
+    /// explicit (the focused tile in Tree, the selection in Cartography). An
+    /// `origin` of `None` or an unknown member mints an unlinked node — a graphlet
+    /// candidate. Returns the new node's member id. This backs the "open in new
+    /// node/tile" gesture (Ctrl/Cmd-Enter, middle-click, context menu) — P2 of the
+    /// node-navigation-lineage plan.
+    pub fn open_member_as_new_node(&mut self, origin: Option<uuid::Uuid>, url: &str) -> uuid::Uuid {
+        let origin_key = origin.and_then(|m| self.graph.get_node_by_id(m)).map(|(k, _)| k);
+        let key = self.mint_node(origin_key, url);
+        self.graph.get_node(key).map(|n| n.id).expect("a freshly minted node has an id")
+    }
+
+    /// Mint a brand-new node at `url`, seeded just off `origin`, linked back to it
+    /// with a navigated-from edge when `origin` is present, and with its own
+    /// within-node history seeded so its back/forward work from birth. Selects it
+    /// and restarts the settle. Shared by [`visit`](Self::visit)'s create branch
+    /// and [`open_member_as_new_node`](Self::open_member_as_new_node).
+    fn mint_node(&mut self, origin: Option<NodeKey>, url: &str) -> NodeKey {
+        let anchor = origin
+            .and_then(|k| self.view.position_of(k))
+            .unwrap_or(Point2D::new(0.0, 0.0));
         let seed = Point2D::new(anchor.x + 12.0, anchor.y + 12.0);
         let key = self.graph.add_node(url.to_string(), PortablePoint::new(seed.x, seed.y));
-        if let Some(from) = from {
-            let _ = self.graph.assert_relation(from, key, hyperlink());
+        // The new surface opens on `url`: seed its own history with that first
+        // visit (the node is born with one page, not an empty history).
+        self.graph.navigate_node(key, url);
+        if let Some(origin) = origin {
+            let _ = self.graph.assert_relation(origin, key, hyperlink());
         }
         // Re-sync derived state (bodies, edges, node pool), then seed the new node
         // near the anchor and re-settle.
         self.reconcile_derived();
-        self.sim.seed_positions([(key, seed)]);
+        self.view.set_position(key, seed);
+        self.physics.seed(vec![(key, seed)]);
         self.select_only(key);
-        self.ticks_remaining = SETTLE_TICKS;
+        self.physics.settle(SETTLE_TICKS);
         key
     }
 }

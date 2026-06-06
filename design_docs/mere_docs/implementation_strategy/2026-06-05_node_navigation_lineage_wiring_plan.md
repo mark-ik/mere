@@ -64,6 +64,8 @@ Not three buckets onto three families — the 6 `EdgeFamily` variants ordered by
 
 - **Done when:** edges render by tier (Semantic strongest → Traversal faintest), visually distinct in cartography (orrery and swatches).
 
+**Implementation (2026-06-06):** harvest `register-theme/edge_style.rs` (`EdgeStyleToken`, non-color signatures, endpoint markers) — but **map forward to the live kernel's six families** (incl. `Provenance`); the donor has five, don't copy the enum. First insertion: `platen/platen/src/canvas_scene.rs` (~`family_color`), which already keeps `RelationKind`/tags. **Wrinkle:** `platen::orrery` (`orrery.rs`) collapses all relations between a node pair into one drawn line — so family-accurate styling needs either preserving `RelationKind` into the projection or accepting "one representative style per pair" for now. Start in `canvas_scene` (RelationKind preserved); fix the orrery collapse when layered relation edges matter visually. (See the [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) harvest notes.)
+
 ### Phase 4 — across-node MRU (previous/next) + gloss + lineage swatch
 
 - The MRU is a **projection over the Traversal layer** (`EdgeMetrics.last_navigated_at` / a node-activation log), not net-new substrate (corrects the earlier "no substrate"). previous/next step the MRU.

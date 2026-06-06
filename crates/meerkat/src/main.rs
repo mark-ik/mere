@@ -197,6 +197,14 @@ struct App {
     /// from its cached texture instead of re-rasterized every frame (the cost that
     /// scaled with tile count). Evicted when a tile closes.
     tile_textures: HashMap<GraphMemberId, CachedTile>,
+    /// Per-member content scroll offset (px from the document top). A card
+    /// composites a window of its full-height texture at this offset; a wheel over
+    /// the card adjusts it (clamped to the content height). Absent = scrolled to top.
+    scroll: HashMap<GraphMemberId, f32>,
+    /// Each composited card/tile's on-screen content rect this frame
+    /// (member, [x0, y0, x1, y1]) — rebuilt every frame, used to route a wheel over
+    /// a card to its scroll rather than to the orrery.
+    content_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// An in-progress divider drag: the left-slot index, the press x, and the slot
     /// weights snapshot at press. Cursor moves reweight the two neighbouring slots.
     divider_drag: Option<(usize, f32, Vec<f32>)>,
@@ -314,6 +322,16 @@ impl App {
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
             orrery.select_by_url(url);
         }
+        // Always-offload physics (P6): move the orrery's gyre simulation onto its
+        // own armillary actor thread, so a heavy settle never blocks compositing or
+        // input. It wakes the loop through the same winit proxy as the other
+        // actors; the host folds each layout snapshot into the orrery's read model
+        // on the next frame.
+        let physics_proxy = proxy.clone();
+        let physics_wake: armillary::Wake = Arc::new(move || {
+            let _ = physics_proxy.send_event(());
+        });
+        orrery.offload_physics(physics_wake);
         // The fetch actor wakes the loop through the winit proxy; armillary takes
         // the wake as a host-neutral callback.
         let fetch_proxy = proxy.clone();
@@ -364,6 +382,8 @@ impl App {
             tab_drag: None,
             tile_rects: Vec::new(),
             tile_textures: HashMap::new(),
+            scroll: HashMap::new(),
+            content_rects: Vec::new(),
             divider_drag: None,
             width: 1024,
             height: 600,

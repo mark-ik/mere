@@ -153,6 +153,7 @@ impl App {
             self.drain_pending_connect();
             self.drain_pending_command();
             self.drain_pending_context();
+            self.drain_history_step();
             self.sync_settings();
             self.sync_orrery();
             if palette_was_open && !self.runner.state().palette_open {
@@ -300,9 +301,17 @@ impl App {
         let suggestions_open = !self.runner.state().suggest.is_empty();
         match key {
             WinitKey::Named(WinitNamedKey::Enter) if self.runner.focus().is_some() => {
-                self.runner.update(submit_omnibar);
+                // Ctrl/Cmd-Enter opens the typed address as a *new* node (a new
+                // browsing surface linked from the focused one); plain Enter
+                // navigates the focused node in place.
+                let as_new_node = self.modifiers.ctrl || self.modifiers.meta;
+                self.runner.update(move |c| {
+                    submit_omnibar(c);
+                    c.open_as_new_node = as_new_node;
+                });
                 tracing::info!(
                     location = %self.runner.state().toolbar.editable.location,
+                    as_new_node,
                     "omnibar submit"
                 );
                 self.sync_orrery();
@@ -425,6 +434,7 @@ impl App {
                 self.runner.update(Chrome::run_palette_selection);
                 self.drain_pending_connect();
                 self.drain_pending_command();
+                self.drain_history_step();
                 self.sync_orrery();
                 self.focus_after_palette_close();
                 self.request_redraw();

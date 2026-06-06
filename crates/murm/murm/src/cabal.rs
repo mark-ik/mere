@@ -220,6 +220,19 @@ impl CabalHandle {
             .channel_history(self.cabal_id.as_bytes(), channel)
     }
 
+    /// Subscribe to posts as they land in this cabal.
+    ///
+    /// The receiver yields each post stored *after* it subscribes — authored
+    /// locally (here or via a [`SyncedCabal`](crate::SyncedCabal)), gossiped by a
+    /// peer, or caught up via LogSync — once each. It does not replay the
+    /// backlog; load it with [`history`](Self::history) first, then drive the live
+    /// view from this stream (dedup by [`PostId`] is cheap, posts being
+    /// content-addressed). On a `Lagged` error the consumer should re-read
+    /// `history` to reconcile.
+    pub fn subscribe(&self) -> Result<tokio::sync::broadcast::Receiver<Post>, MurmError> {
+        Ok(self.engine.subscribe(self.cabal_id.as_bytes())?)
+    }
+
     /// Inject a post arrived from a peer (e.g. via transport sync).
     ///
     /// Verifies the signature, computes the post id, and stores it.

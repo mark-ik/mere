@@ -49,7 +49,7 @@ fn visit_adds_a_linked_node_and_selects_it() {
         "selection moves to the newly visited node",
     );
     assert!(orrery.graph.relations().count() >= 1, "an edge links the browse trail");
-    assert_eq!(orrery.sim.body_count(), 2, "the simulation grew a body for the new node");
+    assert_eq!(orrery.view.len(), 2, "the layout grew a node for the new browse target");
 }
 
 #[test]
@@ -66,12 +66,50 @@ fn ingest_graph_merges_nodes_and_grows_the_sim() {
     assert!(changed, "a mutating closure reports a change");
     assert_eq!(orrery.graph.nodes().count(), before + 2, "both ingested nodes joined");
     assert!(orrery.graph.get_node_by_url("mere://x").is_some());
-    assert_eq!(orrery.sim.body_count(), before + 2, "the sim grew a body per node");
+    assert_eq!(orrery.view.len(), before + 2, "the layout grew a node per ingested node");
     // The origin-minted nodes are seeded apart, so the settle runs clean (no
     // coincident-point blow-up / NaN).
     let _ = orrery.frame(800, 600);
     // A closure that reports no change is a no-op.
     assert!(!orrery.ingest_graph(|_| false), "no-op mutation reports no change");
+}
+
+#[test]
+fn open_as_new_node_mints_distinct_node_with_navigated_from_edge() {
+    let mut orrery = Orrery::new();
+    let a = orrery.visit("https://example.com");
+    let a_id = orrery.graph().get_node(a).unwrap().id;
+    let before_nodes = orrery.graph().nodes().count();
+    let before_edges = orrery.graph().relations().count();
+
+    // Opening the *same* URL as a new node mints a distinct surface (no dedup)
+    // plus a navigated-from edge from the origin.
+    let new_id = orrery.open_member_as_new_node(Some(a_id), "https://example.com");
+    assert_ne!(new_id, a_id, "a new browsing surface, not the deduped origin");
+    assert_eq!(orrery.graph().nodes().count(), before_nodes + 1, "a node was minted");
+    assert_eq!(
+        orrery.graph().relations().count(),
+        before_edges + 1,
+        "a navigated-from edge links it back to the origin",
+    );
+    assert_eq!(orrery.focused_member(), Some(new_id), "the new node is focused");
+    // The new node opens on its URL — its own within-node history is seeded.
+    let (new_key, _) = orrery.graph().get_node_by_id(new_id).unwrap();
+    assert_eq!(
+        orrery.graph().get_node(new_key).unwrap().navigation_memory.current_url().as_deref(),
+        Some("https://example.com"),
+        "the minted node carries its opening page as its first visit",
+    );
+
+    // No origin → an unlinked node (a graphlet candidate), no extra edge.
+    let edges_now = orrery.graph().relations().count();
+    let orphan = orrery.open_member_as_new_node(None, "https://orphan.example");
+    assert_ne!(orphan, new_id);
+    assert_eq!(
+        orrery.graph().relations().count(),
+        edges_now,
+        "an origin-less open mints no navigated-from edge",
+    );
 }
 
 #[test]
@@ -104,10 +142,10 @@ fn with_graph_restores_nodes_and_positions() {
     graph.add_node("https://two.example".to_string(), PortablePoint::new(-30.0, 80.0));
     let orrery = Orrery::with_graph(graph);
     assert_eq!(orrery.graph().nodes().count(), 2, "the restored graph keeps its nodes");
-    assert_eq!(orrery.sim.body_count(), 2, "a body per restored node");
-    assert_eq!(orrery.ticks_remaining, 0, "a restored session does not auto-resettle");
+    assert_eq!(orrery.view.len(), 2, "a layout node per restored graph node");
+    assert!(!orrery.is_settling(), "a restored session does not auto-resettle");
     let key = orrery.graph().get_node_by_url("https://one.example").unwrap().0;
-    let pos = orrery.sim.position_of(key).expect("a body position");
+    let pos = orrery.view.position_of(key).expect("a restored node position");
     assert!(
         (pos.x - 100.0).abs() < 1.0 && (pos.y - 50.0).abs() < 1.0,
         "the saved position is preserved (no spiral re-seed), got {pos:?}",
@@ -148,7 +186,7 @@ fn remove_focused_drops_the_node_and_reports_its_id() {
     assert_eq!(orrery.graph().nodes().count(), before - 1, "the graph shrinks by one");
     assert!(orrery.graph().get_node_by_url("https://b.example").is_none(), "the node is gone");
     assert_eq!(orrery.focused_url(), None, "the selection clears");
-    assert_eq!(orrery.sim.body_count(), before - 1, "the physics body is reconciled away");
+    assert_eq!(orrery.view.len(), before - 1, "the removed node is reconciled out of the layout");
     // Nothing focused → a second remove is a no-op.
     assert!(orrery.remove_focused().is_none(), "no focus → no removal");
 }

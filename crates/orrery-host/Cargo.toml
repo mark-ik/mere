@@ -30,6 +30,12 @@ platen.workspace = true
 kernel.workspace = true
 gyre.workspace = true
 
+# The actor harness behind the always-offload physics backend (P6): the gyre
+# Simulation runs on an armillary actor thread, emitting position snapshots the
+# host folds into its LayoutView. The in-thread backend (tests + the future
+# no-threads wasm profile) needs none of this.
+armillary.workspace = true
+
 # Compose the underlay (+ the node-children document) into one Scene, and
 # present it. Path deps on the sibling netrender checkout, like meerkat's.
 paint_list_render = { path = "../../../netrender/paint_list_render" }

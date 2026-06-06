@@ -260,3 +260,35 @@ pattern, not building one.
   Done-when: the L14 restarts as the same peer with its log intact and reconnects
   without re-authoring. Small; stays in `sync.rs`, under the ceiling. S5.3 (real
   moot surface) after.
+- **2026-06-05 — S5.2 landed: persistent identity + on-disk tessera store
+  (`sync.rs` only).** Identity is now a 32-byte seed file at
+  `<data>/mere/node_identity.seed`, minted on first launch and reused after (a
+  stable iroh node id across restarts) via
+  `InMemoryProvider::from_seed(load_or_create_seed(..))`; a missing / wrong-size /
+  unwritable seed falls back to ephemeral for that launch and warns, never fatal.
+  The tessera log moved on disk to
+  `TesseraStore::open(<data>/mere/moots/<moot>.redb)` (one redb file per moot), and
+  the starter `commit -> fulfil -> govern` log is authored only when the store is
+  empty (first launch), so a restart reuses the persisted log instead of
+  re-authoring. Fully contained to `sync.rs` (new helpers `data_dir` /
+  `load_or_create_seed` / `hex32`; the `spawn_sync` signature is unchanged, so
+  `main.rs` / `lib.rs` were untouched, honoring the collision-wariness ask while
+  S3.2c / lib edits are in flight). No new dependency: the seed is minted from a
+  throwaway `InMemoryProvider::random()`'s `to_seed()`, and `dirs` was already a
+  dep. **Verified:** `cargo check -p meerkat` clean (no new warnings in meerkat
+  src); meerkat bin tests 26/26 pass, including two new sync tests
+  (`hex32_is_64_lowercase_hex`, `the_node_seed_is_stable_across_calls`). Loopback
+  convergence was proven live earlier this session (the chip moved to
+  `tessera: 3 ops`). **Still Mark's to run:** the cross-restart + cross-machine
+  demo on the L14 (restart as the same peer, log intact, reconnect without
+  re-authoring), which also exercises the Fedora GUI build + LAN path. *Note (not
+  S5.2):* the meerkat *lib* tests `back_click_navigates_history` and
+  `palette_filters_and_runs_command` fail against the uncommitted `lib.rs` edits
+  (toolbar `can_go_back`; a palette run landing on `mere://welcome` not
+  `https://example.com`); bin-only change, unrelated to `sync.rs`, flagged for the
+  in-flight lib work. S5.3 (real moot surface) after.
+
+The minimal seed file is a known interim: a plaintext secret on disk. The
+passphrase-encrypted persona vault (`<data_root>/personas/<id>/vault/`) is the
+follow-on that supersedes it (the `identity` crate already has the vault +
+passphrase backend).

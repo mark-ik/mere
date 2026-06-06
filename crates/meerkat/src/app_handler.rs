@@ -145,6 +145,13 @@ impl ApplicationHandler for App {
         if card_changed || graph_changed {
             self.request_redraw();
         }
+        // The physics actor shares this wake: a fresh layout snapshot is waiting to
+        // be folded in. In Cartography, kick a redraw — `frame()` drains the
+        // snapshot and reports whether to keep going (the settle then self-sustains
+        // through `needs_redraw`). The tiled view hides the orrery, so skip it.
+        if !self.workbench.is_tiled() {
+            self.request_redraw();
+        }
     }
 
     fn window_event(
@@ -184,19 +191,31 @@ impl ApplicationHandler for App {
                 self.orrery.set_ctrl(self.modifiers.ctrl);
             },
             WindowEvent::MouseWheel { delta, .. } => {
-                // Wheel over the content band drives the orrery (pan, or zoom under
-                // Ctrl). LineDelta is scaled to device px the way the orrery
-                // expects; PixelDelta passes through. Ignored in the tiled view (the
-                // orrery is hidden; tiles don't scroll yet).
-                let th = self.toolbar_height() as f32;
-                if self.cursor.1 >= th && !self.workbench.is_tiled() {
-                    let (dx, dy) = match delta {
-                        MouseScrollDelta::LineDelta(x, y) => {
-                            (x * WHEEL_PAN_SCALE, y * WHEEL_PAN_SCALE)
-                        },
-                        MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
-                    };
-                    if self.orrery.wheel(dx, dy) {
+                // LineDelta is scaled to device px the way the orrery expects;
+                // PixelDelta passes through.
+                let (dx, dy) = match delta {
+                    MouseScrollDelta::LineDelta(x, y) => (x * WHEEL_PAN_SCALE, y * WHEEL_PAN_SCALE),
+                    MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
+                };
+                // A wheel over a content card scrolls that card (a GPU UV-window
+                // shift over its tall texture). Elsewhere in Cartography it drives
+                // the orrery (pan, or Ctrl-zoom). The tiled view has no orrery, so
+                // only card scrolling applies there.
+                let (cx, cy) = self.cursor;
+                let over_card = self
+                    .content_rects
+                    .iter()
+                    .find(|(_, r)| cx >= r[0] && cx < r[2] && cy >= r[1] && cy < r[3])
+                    .map(|(member, r)| (*member, r[3] - r[1]));
+                if let Some((member, visible_h)) = over_card {
+                    let max = (self.constellation.content_height(member) as f32 - visible_h).max(0.0);
+                    let offset = self.scroll.entry(member).or_insert(0.0);
+                    // Wheel up (dy > 0) scrolls toward the top; down toward the bottom.
+                    *offset = (*offset - dy).clamp(0.0, max);
+                    self.request_redraw();
+                } else {
+                    let th = self.toolbar_height() as f32;
+                    if cy >= th && !self.workbench.is_tiled() && self.orrery.wheel(dx, dy) {
                         self.request_redraw();
                     }
                 }

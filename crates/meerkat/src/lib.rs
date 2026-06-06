@@ -121,6 +121,29 @@ pub struct Chrome {
     /// A context-menu action a row captured, for the host to run over the menu's
     /// member set.
     pub pending_context: Option<ContextAction>,
+    /// The URL the content root currently shows. The host drives it: an omnibar
+    /// submit sets the typed target (then `sync_orrery` navigates the focused node
+    /// to it); a back/forward step sets the revealed page. Decoupled from
+    /// [`History`] (now only the omnibar suggestions log) so per-node back/forward
+    /// never re-navigates through here.
+    pub content_location: String,
+    /// A one-shot back/forward step the host applies to the **focused node's** own
+    /// history (not a chrome-global linear history). The buttons / palette record
+    /// it; the host drains it via `orrery.member_history_*` and clears it.
+    pub history_step: Option<HistoryStep>,
+    /// A one-shot "open the submitted address as a **new node**" intent — set by
+    /// Ctrl/Cmd-Enter in the omnibar (the `OpenAddressAsNewNode` gesture). When
+    /// set, the host's `sync_orrery` mints a new browsing surface linked from the
+    /// focused node (navigated-from edge) instead of navigating in place, then
+    /// clears it. P2 of the node-navigation-lineage plan.
+    pub open_as_new_node: bool,
+}
+
+/// A within-node history step the host applies to the focused node.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HistoryStep {
+    Back,
+    Forward,
 }
 
 /// User-tunable settings the chrome surfaces. Small for now (the active-tab cap);
@@ -185,7 +208,10 @@ impl Chrome {
         Self {
             toolbar: ToolbarState::with_initial_location(location.clone()),
             omnibar: TextInput::new(location.clone()),
-            history: History::new(location),
+            history: History::new(location.clone()),
+            content_location: location,
+            history_step: None,
+            open_as_new_node: false,
             suggest: Vec::new(),
             suggest_active: None,
             palette_open: false,
@@ -201,10 +227,12 @@ impl Chrome {
         }
     }
 
-    /// The URL the content root should display — the current history entry. The
-    /// content-root slice loads this; the chrome shell never renders it itself.
+    /// The URL the content root should display. The host's `sync_orrery` reads
+    /// this and navigates the focused node to it; the chrome never renders it. Set
+    /// by `submit_omnibar` / `navigate_suggestion` (fresh nav) and by the host on
+    /// a back/forward step. Independent of [`History`] (the suggestions log).
     pub fn content_location(&self) -> &str {
-        self.history.current()
+        &self.content_location
     }
 
     /// Display `url` as the current location (toolbar text + omnibar) without
@@ -253,6 +281,7 @@ impl Chrome {
     /// its URL, push history, and mirror into the toolbar + omnibar.
     pub fn navigate_suggestion(&mut self, i: usize) {
         if let Some(url) = self.suggest.get(i).and_then(suggest::resolve_match) {
+            self.content_location = url.clone();
             self.history.visit(url);
             sync_chrome_from_history(self, true);
         }
@@ -321,18 +350,15 @@ impl Chrome {
     /// Apply a command to the chrome state.
     fn run_command(&mut self, cmd: Command) {
         match cmd {
-            Command::Back => {
-                if self.history.back().is_some() {
-                    sync_chrome_from_history(self, false);
-                }
-            },
-            Command::Forward => {
-                if self.history.forward().is_some() {
-                    sync_chrome_from_history(self, false);
-                }
-            },
+            // Back / forward step the focused node's own history, not a
+            // chrome-global one — record the intent; the host drains it via the
+            // orrery (the chrome cannot reach it).
+            Command::Back => self.history_step = Some(HistoryStep::Back),
+            Command::Forward => self.history_step = Some(HistoryStep::Forward),
             Command::Home => {
-                self.history.visit("mere://welcome".to_string());
+                let url = "mere://welcome".to_string();
+                self.content_location = url.clone();
+                self.history.visit(url);
                 sync_chrome_from_history(self, true);
             },
             Command::ConnectPeer => {
@@ -365,6 +391,13 @@ impl Chrome {
     /// palette run / row click and dispatches it to the matching shell method.
     pub fn take_pending_command(&mut self) -> Option<Command> {
         self.pending_command.take()
+    }
+
+    /// Take a pending back/forward step, if one is queued. The host applies it to
+    /// the focused node's history and mirrors the revealed page back via
+    /// [`Chrome::show_location`] + [`Chrome::content_location`].
+    pub fn take_history_step(&mut self) -> Option<HistoryStep> {
+        self.history_step.take()
     }
 
     /// Open the settings overlay (closing the palette + suggestions dropdown).

@@ -2,101 +2,13 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-#![allow(unused_imports)]
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpStream, ToSocketAddrs};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Duration;
+use std::path::Path;
 
 use rcgen::{CertificateParams, DistinguishedName, DnType, KeyPair};
-use rustls::pki_types::{CertificateDer, ServerName};
-use rustls::{ClientConfig, ClientConnection, StreamOwned};
+use rustls::pki_types::CertificateDer;
 
 use super::*;
 use super::helpers::*;
-
-pub(super) fn send_message_with_paths(
-    url: &url::Url,
-    sender: &MisfinIdentitySpec,
-    message: &str,
-    known_hosts: &MisfinKnownHostsStore,
-    identity_root: Option<&Path>,
-    redirect_depth: usize,
-) -> Result<MisfinSendOutcome, String> {
-    if redirect_depth >= MISFIN_MAX_REDIRECTS {
-        return Err("Misfin redirect limit exceeded.".to_string());
-    }
-
-    let recipient = MisfinAddress::from_url(url)?;
-    let port = url.port().unwrap_or(MISFIN_DEFAULT_PORT);
-    let authority = format!("{}:{port}", recipient.host);
-    let request = MisfinRequest {
-        recipient: recipient.clone(),
-        message: message.to_string(),
-    }
-    .encode()?;
-    let identity = load_or_create_identity(sender, identity_root)?;
-
-    let stream = connect(&recipient.host, port)?;
-    let verifier = Arc::new(MisfinTofuVerifier::new(authority, known_hosts.clone()));
-    let client_config =
-        ClientConfig::builder_with_provider(rustls::crypto::aws_lc_rs::default_provider().into())
-            .with_protocol_versions(rustls::DEFAULT_VERSIONS)
-            .expect("rustls default protocol versions should be valid for Misfin client")
-            .dangerous()
-            .with_custom_certificate_verifier(verifier)
-            .with_client_auth_cert(
-                identity.certificate_chain.clone(),
-                PrivateKeyDer::try_from(identity.private_key_der.clone())
-                    .map_err(|error| format!("Misfin private key decode failed: {error}"))?,
-            )
-            .map_err(|error| format!("Misfin client certificate setup failed: {error}"))?;
-    let server_name = server_name_for_host(&recipient.host)?;
-    let connection = ClientConnection::new(Arc::new(client_config), server_name)
-        .map_err(|error| format!("Misfin TLS client setup failed: {error}"))?;
-    let mut tls_stream = StreamOwned::new(connection, stream);
-
-    tls_stream
-        .write_all(request.as_bytes())
-        .map_err(|error| format!("Misfin request write failed: {error}"))?;
-    tls_stream
-        .flush()
-        .map_err(|error| format!("Misfin request flush failed: {error}"))?;
-
-    if tls_stream.conn.peer_certificates().is_none() {
-        return Err("Misfin TLS handshake completed without a peer certificate.".to_string());
-    }
-
-    let mut reader = BufReader::new(tls_stream);
-    let response = read_misfin_response(&mut reader)?;
-
-    if matches!(response.status, 30 | 31) {
-        let redirected_address = MisfinAddress::parse(&response.meta)?;
-        let redirected_url = redirected_url(url, &redirected_address)?;
-        let mut outcome = send_message_with_paths(
-            &redirected_url,
-            sender,
-            message,
-            known_hosts,
-            identity_root,
-            redirect_depth + 1,
-        )?;
-        if response.status == 31 {
-            outcome.permanent_redirect = Some(redirected_address);
-        }
-        return Ok(outcome);
-    }
-
-    Ok(MisfinSendOutcome {
-        final_recipient: recipient,
-        status: response.status,
-        recipient_fingerprint: (response.status == 20)
-            .then(|| normalize_fingerprint(&response.meta)),
-        meta: response.meta,
-        permanent_redirect: None,
-    })
-}
 
 pub(super) fn load_or_create_identity(
     spec: &MisfinIdentitySpec,
@@ -241,54 +153,6 @@ pub(super) fn forget_identity_with_root(
     Ok(true)
 }
 
-pub(super) fn trust_status_with_path(
-    url: &url::Url,
-    known_hosts_path: Option<&Path>,
-) -> Result<MisfinTrustStatus, String> {
-    let authority = authority_for_url(url)?;
-    let path = known_hosts_path.map(Path::to_path_buf);
-    let fingerprint_sha256 = if let Some(path) = known_hosts_path {
-        load_known_hosts_from_path(path)
-            .map_err(|error| {
-                format!(
-                    "Failed to read Misfin known hosts '{}': {error}",
-                    path.display()
-                )
-            })?
-            .get(&authority)
-            .map(|record| record.fingerprint_sha256.clone())
-    } else {
-        None
-    };
-
-    Ok(MisfinTrustStatus {
-        authority,
-        path,
-        fingerprint_sha256,
-    })
-}
-
-pub(super) fn forget_known_host_with_path(
-    url: &url::Url,
-    known_hosts_path: Option<&Path>,
-) -> Result<bool, String> {
-    let Some(path) = known_hosts_path else {
-        return Ok(false);
-    };
-    let authority = authority_for_url(url)?;
-    let mut records = load_known_hosts_from_path(path).map_err(|error| {
-        format!(
-            "Failed to read Misfin known hosts '{}': {error}",
-            path.display()
-        )
-    })?;
-    let removed = records.remove(&authority).is_some();
-    if removed {
-        persist_known_hosts_to_path(path, records.values().cloned().collect())?;
-    }
-    Ok(removed)
-}
-
 pub(super) fn generate_identity(spec: &MisfinIdentitySpec) -> Result<MisfinClientIdentity, String> {
     let key_pair =
         KeyPair::generate().map_err(|error| format!("Misfin key generation failed: {error}"))?;
@@ -319,93 +183,62 @@ pub(super) fn generate_identity(spec: &MisfinIdentitySpec) -> Result<MisfinClien
     })
 }
 
-fn connect(host: &str, port: u16) -> Result<TcpStream, String> {
-    let mut last_error = None;
+/// Deterministically mint a Misfin client identity from a 32-byte Ed25519 `seed`.
+///
+/// Unlike [`generate_identity`] (a random ECDSA P-256 key that must be persisted),
+/// this derives the whole identity from `seed` + `spec`: an Ed25519 key from the
+/// seed, then a self-signed cert with a **fixed serial** over the same fixed
+/// validity + DN. Ed25519 signs deterministically (RFC 8032), so the same seed +
+/// address reproduce a byte-identical certificate and SHA-256 fingerprint.
+pub(super) fn deterministic_identity(
+    seed: &[u8; 32],
+    spec: &MisfinIdentitySpec,
+) -> Result<MisfinClientIdentity, String> {
+    // Import the Ed25519 key from its PKCS#8 wrapper; rcgen infers Ed25519 from
+    // the embedded algorithm OID.
+    let key_pair = KeyPair::try_from(ed25519_pkcs8_der(seed).as_slice())
+        .map_err(|error| format!("Misfin Ed25519 key import failed: {error}"))?;
 
-    for address in resolve_socket_addrs(host, port)? {
-        match TcpStream::connect_timeout(&address, CONNECT_TIMEOUT) {
-            Ok(stream) => {
-                stream
-                    .set_read_timeout(Some(IO_TIMEOUT))
-                    .map_err(|error| format!("Failed to configure Misfin read timeout: {error}"))?;
-                stream
-                    .set_write_timeout(Some(IO_TIMEOUT))
-                    .map_err(|error| {
-                        format!("Failed to configure Misfin write timeout: {error}")
-                    })?;
-                return Ok(stream);
-            }
-            Err(error) => last_error = Some(error),
-        }
-    }
+    let mut params = CertificateParams::new(vec![spec.address.host.clone()])
+        .map_err(|error| format!("Misfin certificate params failed: {error}"))?;
+    let mut distinguished_name = DistinguishedName::new();
+    distinguished_name.push(
+        DnType::CustomDnType(MISFIN_USER_ID_OID.to_vec()),
+        spec.address.mailbox.clone(),
+    );
+    distinguished_name.push(
+        DnType::CommonName,
+        spec.blurb
+            .clone()
+            .unwrap_or_else(|| spec.address.as_addr_spec()),
+    );
+    params.distinguished_name = distinguished_name;
+    params.not_before = rcgen::date_time_ymd(2024, 1, 1);
+    params.not_after = rcgen::date_time_ymd(2099, 12, 31);
+    // Fix the serial: rcgen randomises it by default, which would churn the
+    // fingerprint. The key + DN already differ per identity, so a constant is fine.
+    params.serial_number = Some(rcgen::SerialNumber::from(1u64));
 
-    let error = last_error
-        .map(|error| error.to_string())
-        .unwrap_or_else(|| "no socket addresses resolved".to_string());
-    Err(format!("Connection to {host}:{port} failed: {error}"))
+    let cert = params
+        .self_signed(&key_pair)
+        .map_err(|error| format!("Misfin identity certificate generation failed: {error}"))?;
+
+    Ok(MisfinClientIdentity {
+        certificate_chain: vec![CertificateDer::from(cert.der().to_vec())],
+        private_key_der: key_pair.serialize_der(),
+    })
 }
 
-fn resolve_socket_addrs(host: &str, port: u16) -> Result<Vec<std::net::SocketAddr>, String> {
-    let addresses = (host, port)
-        .to_socket_addrs()
-        .map_err(|error| format!("Failed to resolve {host}:{port}: {error}"))?
-        .collect::<Vec<_>>();
-
-    if addresses.is_empty() {
-        return Err(format!("No socket address resolved for {host}:{port}."));
-    }
-
-    Ok(addresses)
-}
-
-fn server_name_for_host(host: &str) -> Result<ServerName<'static>, String> {
-    if let Ok(address) = host.parse::<IpAddr>() {
-        return Ok(ServerName::IpAddress(address.into()));
-    }
-
-    ServerName::try_from(host.to_string())
-        .map_err(|error| format!("Invalid Misfin host '{host}': {error}"))
-}
-
-fn read_misfin_response<R: std::io::Read>(
-    reader: &mut BufReader<R>,
-) -> Result<MisfinResponse, String> {
-    let mut line = String::new();
-    match reader.read_line(&mut line) {
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof && !line.is_empty() => {}
-        Err(error) => return Err(format!("Misfin response read failed: {error}")),
-    }
-
-    if line.is_empty() {
-        return Err("Misfin response was empty.".to_string());
-    }
-
-    parse_misfin_response(&line)
-}
-
-fn redirected_url(current_url: &url::Url, address: &MisfinAddress) -> Result<url::Url, String> {
-    let mut redirected =
-        url::Url::parse(&url_string_for_address(address, None)).map_err(|error| {
-            format!(
-                "Invalid redirected Misfin address '{}': {error}",
-                address.as_addr_spec()
-            )
-        })?;
-    if let Some(port) = current_url.port() {
-        redirected
-            .set_port(Some(port))
-            .map_err(|_| format!("Failed to preserve explicit Misfin port {port} on redirect."))?;
-    }
-    Ok(redirected)
-}
-
-fn authority_for_url(url: &url::Url) -> Result<String, String> {
-    let recipient = MisfinAddress::from_url(url)?;
-    Ok(format!(
-        "{}:{}",
-        recipient.host,
-        url.port().unwrap_or(MISFIN_DEFAULT_PORT)
-    ))
+/// The PKCS#8 v1 (RFC 8410) DER encoding of an Ed25519 private key from its
+/// 32-byte `seed`: a fixed 16-byte prefix followed by the seed.
+fn ed25519_pkcs8_der(seed: &[u8; 32]) -> Vec<u8> {
+    const PREFIX: [u8; 16] = [
+        0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04,
+        0x20,
+    ];
+    let mut der = Vec::with_capacity(PREFIX.len() + seed.len());
+    der.extend_from_slice(&PREFIX);
+    der.extend_from_slice(seed);
+    der
 }
 

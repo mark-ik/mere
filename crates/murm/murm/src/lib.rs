@@ -34,9 +34,11 @@
 //!
 //! ## Status
 //!
-//! Pre-1.0. Phase 2A foundation: `Murm` struct + `Cabal`/`CabalId`/`CabalKey`
-//! types + dependency wiring. Phase 2B will fill in the Cable concrete
-//! protocol and the `Cabal::send`/`subscribe`/`history` API.
+//! Pre-1.0. Phase 2B: the Cable concrete protocol is in place, and a cabal has a
+//! real **send** ([`CabalHandle::send_text`] and siblings), **history**
+//! ([`CabalHandle::history`]), and live **subscribe** ([`CabalHandle::subscribe`])
+//! API. With a [`P2pandaTransport`], [`SyncedCabal`] adds the two sync lanes
+//! (live gossip + LogSync catch-up) on top of the same surface.
 
 #![doc(html_root_url = "https://docs.rs/murm/0.0.1")]
 #![warn(missing_docs)]
@@ -85,9 +87,11 @@ use murmuring::CableEngine;
 ///
 /// ## Status
 ///
-/// Phase 2A skeleton. Methods that return `Cabal` currently produce a
-/// placeholder; the real `open_cabal` / `host_coop` / `join_coop` flows
-/// land in Phase 2B once Cable is implemented.
+/// Phase 2B. [`open_cabal`](Murm::open_cabal) returns a working
+/// [`CabalHandle`] (send / history / subscribe); over a [`P2pandaTransport`],
+/// [`subscribe_cabal`](Murm::subscribe_cabal) returns a [`SyncedCabal`] that
+/// also runs the gossip + LogSync lanes. The host-led co-op session flows
+/// (`host_coop` / `join_coop`) are still ahead.
 pub struct Murm<T: Transport> {
     identity: Arc<dyn IdentityProvider>,
     transport: T,
@@ -317,6 +321,41 @@ mod tests {
         // Bob's history now contains alice's post; signatures verify
         // (ingest_post checks that).
         assert_eq!(bob_cabal.history("session").len(), 1);
+    }
+
+    #[test]
+    fn cabal_subscribe_emits_authored_and_ingested_posts() {
+        // Two peers on the same cabal. Bob subscribes, then sees both a post he
+        // authors locally and a post he ingests from alice — each once.
+        let alice_provider: Arc<dyn IdentityProvider> =
+            Arc::new(identity::InMemoryProvider::from_seed([60; 32]));
+        let alice_id = PeerID::from_public_key(alice_provider.master_public_key());
+        let alice = Murm::new(alice_provider, StubTransport::new(alice_id));
+
+        let bob_provider: Arc<dyn IdentityProvider> =
+            Arc::new(identity::InMemoryProvider::from_seed([61; 32]));
+        let bob_id = PeerID::from_public_key(bob_provider.master_public_key());
+        let bob = Murm::new(bob_provider, StubTransport::new(bob_id));
+
+        let key = CabalKey::new([0xcd; 32]);
+        let alice_cabal = alice.open_cabal(&key).unwrap();
+        let bob_cabal = bob.open_cabal(&key).unwrap();
+
+        let mut bob_rx = bob_cabal.subscribe().unwrap();
+
+        // Bob authors locally → his subscriber sees it.
+        let local_id = bob_cabal.send_text_at("session", "bob local", 1).unwrap();
+        let got_local = bob_rx.try_recv().expect("local authored post emitted");
+        assert_eq!(hash_post(&got_local), local_id);
+
+        // Alice authors; bob ingests the post object → subscriber sees it.
+        let remote_id = alice_cabal.send_text_at("session", "from alice", 2).unwrap();
+        let post = alice_cabal.get_post(&remote_id).unwrap();
+        bob_cabal.ingest_post(post).unwrap();
+        let got_remote = bob_rx.try_recv().expect("ingested post emitted");
+        assert_eq!(hash_post(&got_remote), remote_id);
+
+        assert!(bob_rx.try_recv().is_err(), "nothing else is pending");
     }
 
     #[test]

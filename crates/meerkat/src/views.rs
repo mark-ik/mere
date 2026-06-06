@@ -11,7 +11,7 @@ use xilem_serval::{
     ServalElement, TextField, TextInput,
 };
 
-use super::{Chrome, ContextMenu};
+use super::{Chrome, ContextMenu, HistoryStep};
 use super::command::Command;
 use super::nav;
 use super::suggest;
@@ -23,20 +23,17 @@ pub type ChromeView = Box<dyn AnyView<Chrome, (), ServalCtx, ServalElement>>;
 /// Logic alias for the runner: chrome state → chrome view tree.
 pub type ChromeLogic = fn(&Chrome) -> ChromeView;
 
-/// Navigate back one history entry, mirroring the new current location into the
-/// toolbar and omnibar. A no-op (no chrome change) when already at the oldest
-/// entry, so a disabled Back button click does nothing.
+/// Record a back step for the host to apply to the **focused node's** own history
+/// (the chrome can't reach the orrery). The host drains it via `member_history_back`
+/// and mirrors the revealed page back into the toolbar/omnibar; the button's
+/// enabled-state (host-set from the node) gates an at-the-root click to a no-op.
 fn go_back(c: &mut Chrome, _: PointerClick) {
-    if c.history.back().is_some() {
-        sync_chrome_from_history(c, false);
-    }
+    c.history_step = Some(HistoryStep::Back);
 }
 
-/// Navigate forward one history entry. Mirror of [`go_back`].
+/// Record a forward step. Mirror of [`go_back`].
 fn go_forward(c: &mut Chrome, _: PointerClick) {
-    if c.history.forward().is_some() {
-        sync_chrome_from_history(c, false);
-    }
+    c.history_step = Some(HistoryStep::Forward);
 }
 
 /// Mirror the current history entry into the reused chrome state: the toolbar
@@ -53,8 +50,8 @@ pub(super) fn sync_chrome_from_history(c: &mut Chrome, submitted: bool) {
     c.toolbar.editable.location = url.clone();
     c.toolbar.editable.location_dirty = false;
     c.toolbar.editable.location_submitted = submitted;
-    c.toolbar.can_go_back = c.history.can_back();
-    c.toolbar.can_go_forward = c.history.can_forward();
+    // `can_go_*` is host-driven from the focused node's history (see
+    // `App::sync_nav_buttons`), not the chrome's suggestions log.
     c.omnibar = TextInput::new(url);
     c.close_suggestions();
 }
@@ -245,6 +242,7 @@ pub fn submit_omnibar(c: &mut Chrome) {
         return;
     }
     let url = nav::classify(c.omnibar.text()).resolve();
+    c.content_location = url.clone();
     c.history.visit(url);
     sync_chrome_from_history(c, true);
 }

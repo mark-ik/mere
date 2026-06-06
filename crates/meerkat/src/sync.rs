@@ -6,7 +6,7 @@
 //!
 //! The tessera counterpart of [`fetch`](crate::fetch): the same async-host seam,
 //! a different payload. A [`SyncHost`] owns a tokio runtime, stands up one
-//! `P2pandaTransport` (a random per-launch identity) and joins a tessera moot's
+//! `P2pandaTransport` (a persistent seed-file identity) and joins a tessera moot's
 //! `SyncedMoot` LogSync session on it, then polls the lane's real `SyncStatus`
 //! and pushes each change over an `mpsc` channel + an `EventLoopProxy<()>` wake
 //! (delivery model 2, shared with the fetcher). The host drains it in
@@ -20,10 +20,13 @@
 //! logged at startup to hand out; [`connect`](SyncHost::connect) dials another's),
 //! and the host authors a small starter tessera log on launch so a connecting
 //! peer has something to sync.
-//! Still S5.x-shaped: identity is ephemeral (S5.2 swaps in the vault), the store
-//! is in-memory (S5.2 moves it under the session dir), the moot is a fixed demo
-//! id (real moot selection is S5.3).
+//! S5.2: identity is a persistent seed file under the data dir (a stable node id
+//! across restarts; the passphrase-encrypted persona vault is the follow-on), and
+//! the tessera store is on disk (`<data>/mere/moots/<moot>.redb`), so a peer's log
+//! survives restart. Still S5.x-shaped: the moot is a fixed demo id (real moot
+//! selection is S5.3).
 
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
@@ -69,7 +72,7 @@ pub enum SyncCommand {
 
 /// Spawn the sync subsystem as an [`armillary`] I/O actor. Its `run` closure builds
 /// the tokio runtime *on the actor thread* (so armillary stays runtime-free), binds
-/// one `P2pandaTransport` (random per-launch identity), joins the tessera moot's
+/// one `P2pandaTransport` (persistent seed-file identity), joins the tessera moot's
 /// `SyncedMoot` (seeded with a starter log), and:
 ///
 /// - a background poll task emits a [`SyncUpdate`] (via the actor's `Emitter`, which
@@ -89,10 +92,13 @@ pub fn spawn_sync(
             .build()
             .expect("build the sync runtime");
 
-        // Bind the transport + join the moot once at startup (both async). A random
-        // identity makes each launched instance a distinct peer.
+        // Bind the transport + join the moot once at startup (both async). A
+        // persistent seed-file identity (created on first launch, reused after)
+        // makes this install a stable, distinct peer across restarts (S5.2).
+        let dir = data_dir();
         let setup: Result<(P2pandaTransport, SyncedMoot), String> = runtime.block_on(async {
-            let provider = InMemoryProvider::random();
+            let provider =
+                InMemoryProvider::from_seed(load_or_create_seed(&dir.join("node_identity.seed")));
             let keypair = provider.master_keypair().clone();
             let transport = P2pandaTransport::builder(&keypair)
                 .gossip()
@@ -102,11 +108,18 @@ pub fn spawn_sync(
             let (endpoint, gossip) = transport
                 .sync_parts()
                 .ok_or_else(|| "transport has no gossip overlay".to_string())?;
-            let store = TesseraStore::in_memory().map_err(|e| format!("tessera store: {e}"))?;
-            // Seed a small tessera log (commit -> fulfil -> govern) so a peer that
-            // connects has something to catch up — otherwise both stores are empty
-            // and convergence is invisible.
-            author_starter_log(&provider, moot_id, &store);
+            // The tessera log lives on disk, one redb file per moot under the
+            // session dir, so it survives restart (S5.2).
+            let moots = dir.join("moots");
+            let _ = std::fs::create_dir_all(&moots);
+            let store = TesseraStore::open(moots.join(format!("{}.redb", hex32(&moot_id))))
+                .map_err(|e| format!("tessera store: {e}"))?;
+            // Seed a small tessera log (commit -> fulfil -> govern) on first launch
+            // only (an empty store), so a connecting peer has something to catch up;
+            // on restart the persisted log is already present.
+            if store.is_empty().unwrap_or(true) {
+                author_starter_log(&provider, moot_id, &store);
+            }
             let moot = SyncedMoot::join(endpoint, gossip, store, moot_id)
                 .await
                 .map_err(|e| format!("join moot: {e}"))?;
@@ -203,6 +216,51 @@ fn author_starter_log(provider: &InMemoryProvider, moot_id: [u8; 32], store: &Te
     }
 }
 
+/// The meerkat session data dir (`<data_dir>/mere`). Mirrors `main.rs`'s
+/// `session_dir` so this S5.2 persistence change stays contained to the sync
+/// module (no `spawn_sync` signature change); a later refactor can thread one
+/// shared session dir through both if desired.
+fn data_dir() -> PathBuf {
+    dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("mere")
+}
+
+/// Load the 32-byte node-identity seed from `path`, or mint + persist a fresh one
+/// on first launch (so this peer keeps the same node id across restarts, S5.2).
+/// A read / parse / write failure falls back to an ephemeral seed for this launch
+/// and warns — identity is never fatal to the shell.
+///
+/// **The file holds a secret seed in plaintext** — the S5.2 minimal form; the
+/// passphrase-encrypted persona vault (`<data_root>/personas/<id>/vault/`) is the
+/// follow-on that supersedes it.
+fn load_or_create_seed(path: &Path) -> [u8; 32] {
+    if let Ok(bytes) = std::fs::read(path) {
+        if let Ok(seed) = <[u8; 32]>::try_from(bytes.as_slice()) {
+            return seed;
+        }
+        tracing::warn!(?path, "node identity seed file is the wrong size; regenerating");
+    }
+    // A throwaway random keypair yields a fresh 32-byte seed without pulling an rng
+    // dependency into this bin; `to_seed` exposes exactly those bytes.
+    let seed = InMemoryProvider::random().master_keypair().to_seed();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Err(err) = std::fs::write(path, seed) {
+        tracing::warn!(%err, ?path, "could not persist node identity seed; it is ephemeral this launch");
+    }
+    seed
+}
+
+/// Lowercase hex of a 32-byte id, for a per-moot store filename.
+fn hex32(bytes: &[u8; 32]) -> String {
+    use std::fmt::Write as _;
+    let mut s = String::with_capacity(64);
+    for b in bytes {
+        let _ = write!(s, "{b:02x}");
+    }
+    s
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -227,5 +285,24 @@ mod tests {
     #[test]
     fn a_freshly_joined_lane_reads_idle() {
         assert_eq!(to_indicator(&SyncStatus::default(), "tessera").summary(), "tessera: idle");
+    }
+
+    #[test]
+    fn hex32_is_64_lowercase_hex() {
+        // DEMO_MOOT is [0x7e; 32], so its hex is "7e" repeated 32 times.
+        assert_eq!(hex32(&DEMO_MOOT), "7e".repeat(32));
+    }
+
+    #[test]
+    fn the_node_seed_is_stable_across_calls() {
+        // A unique path under the temp dir; non-concurrent test runs keep it ours.
+        let dir = std::env::temp_dir().join(format!("meerkat-seed-{}", std::process::id()));
+        let path = dir.join("node_identity.seed");
+        let _ = std::fs::remove_file(&path);
+        let first = load_or_create_seed(&path);
+        let second = load_or_create_seed(&path);
+        assert_eq!(first, second, "the persisted seed is reused on the next call");
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&dir);
     }
 }

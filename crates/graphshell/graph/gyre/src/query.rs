@@ -18,17 +18,8 @@
 use euclid::default::{Box2D, Point2D};
 use kernel::graph::NodeKey;
 
-use crate::Simulation;
-
-/// Result of [`Simulation::rect_select`]: the nodes and edges a marquee covers.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RectSelection {
-    /// Nodes whose center lies inside the region.
-    pub nodes: Vec<NodeKey>,
-    /// Edges whose segment intersects the region (either endpoint inside, or the
-    /// segment crosses the rect).
-    pub edges: Vec<(NodeKey, NodeKey)>,
-}
+use crate::view::{point_segment_distance, segment_intersects_box};
+use crate::{RectSelection, Simulation};
 
 impl Simulation {
     /// The live geometry of every edge: each `(a, b)` pair with both endpoints'
@@ -79,58 +70,6 @@ impl Simulation {
             .collect();
         RectSelection { nodes, edges }
     }
-}
-
-/// Shortest distance from `p` to the segment `a`–`b`. Degenerate (zero-length)
-/// segments fall back to the point distance.
-fn point_segment_distance(p: Point2D<f32>, a: Point2D<f32>, b: Point2D<f32>) -> f32 {
-    let ab = b - a;
-    let len2 = ab.square_length();
-    if len2 <= f32::EPSILON {
-        return (p - a).length();
-    }
-    let t = ((p - a).dot(ab) / len2).clamp(0.0, 1.0);
-    let proj = a + ab * t;
-    (p - proj).length()
-}
-
-/// Whether the segment `a`–`b` intersects (or lies inside) the axis-aligned box
-/// `r`. Liang–Barsky parametric clip: the segment touches the rect iff the
-/// clipped parameter interval `[u1, u2]` is non-empty.
-fn segment_intersects_box(a: Point2D<f32>, b: Point2D<f32>, r: Box2D<f32>) -> bool {
-    let dx = b.x - a.x;
-    let dy = b.y - a.y;
-    // Boundary "p" (direction) and "q" (distance to edge) per Liang–Barsky.
-    let p = [-dx, dx, -dy, dy];
-    let q = [a.x - r.min.x, r.max.x - a.x, a.y - r.min.y, r.max.y - a.y];
-    let mut u1 = 0.0_f32;
-    let mut u2 = 1.0_f32;
-    for i in 0..4 {
-        if p[i].abs() < f32::EPSILON {
-            // Parallel to this boundary: wholly outside if it starts outside.
-            if q[i] < 0.0 {
-                return false;
-            }
-        } else {
-            let t = q[i] / p[i];
-            if p[i] < 0.0 {
-                if t > u2 {
-                    return false;
-                }
-                if t > u1 {
-                    u1 = t;
-                }
-            } else {
-                if t < u1 {
-                    return false;
-                }
-                if t < u2 {
-                    u2 = t;
-                }
-            }
-        }
-    }
-    u1 <= u2
 }
 
 #[cfg(test)]

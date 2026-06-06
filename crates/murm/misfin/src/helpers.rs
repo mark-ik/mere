@@ -2,10 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use sha2::{Digest, Sha256};
-use serde::{Deserialize, Serialize};
 
 use super::*;
 
@@ -61,19 +59,6 @@ pub(super) fn identity_path_for_spec(spec: &MisfinIdentitySpec, identity_root: &
 }
 
 #[cfg(not(any(test, feature = "test-support")))]
-pub(super) fn misfin_known_hosts_path() -> Option<PathBuf> {
-    let mut path = dirs::config_dir()?;
-    path.push("graphshell");
-    path.push("misfin_known_hosts.json");
-    Some(path)
-}
-
-#[cfg(any(test, feature = "test-support"))]
-pub(super) fn misfin_known_hosts_path() -> Option<PathBuf> {
-    None
-}
-
-#[cfg(not(any(test, feature = "test-support")))]
 pub(super) fn misfin_identity_root() -> Option<PathBuf> {
     let mut path = dirs::config_dir()?;
     path.push("graphshell");
@@ -84,65 +69,6 @@ pub(super) fn misfin_identity_root() -> Option<PathBuf> {
 #[cfg(any(test, feature = "test-support"))]
 pub(super) fn misfin_identity_root() -> Option<PathBuf> {
     None
-}
-
-pub(super) fn load_known_hosts_from_path(
-    path: &Path,
-) -> Result<HashMap<String, MisfinKnownHostRecord>, std::io::Error> {
-    if !path.exists() {
-        return Ok(HashMap::new());
-    }
-
-    let content = fs::read_to_string(path)?;
-    match serde_json::from_str::<Vec<MisfinKnownHostRecord>>(&content) {
-        Ok(records) => Ok(records
-            .into_iter()
-            .map(|record| (record.authority.clone(), record))
-            .collect()),
-        Err(error) => {
-            log::warn!("misfin known-hosts load failed: {error}; resetting known-hosts store");
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            fs::write(path, "[]")?;
-            Ok(HashMap::new())
-        }
-    }
-}
-
-pub(super) fn persist_known_hosts_to_path(
-    path: &Path,
-    mut records: Vec<MisfinKnownHostRecord>,
-) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| {
-            format!(
-                "Failed to create Misfin known-hosts parent '{}': {error}",
-                parent.display()
-            )
-        })?;
-    }
-    records.sort_by(|left, right| left.authority.cmp(&right.authority));
-    let content = serde_json::to_string_pretty(&records).map_err(|error| {
-        format!(
-            "Failed to serialize Misfin known hosts '{}': {error}",
-            path.display()
-        )
-    })?;
-    fs::write(path, content).map_err(|error| {
-        format!(
-            "Failed to persist Misfin known hosts '{}': {error}",
-            path.display()
-        )
-    })
-}
-
-pub(super) fn normalize_fingerprint(input: &str) -> String {
-    input
-        .chars()
-        .filter(|character| character.is_ascii_hexdigit())
-        .collect::<String>()
-        .to_ascii_lowercase()
 }
 
 pub(super) fn sanitize_filename(input: &str) -> String {
