@@ -87,18 +87,27 @@ impl App {
                     } else if button == MouseButton::Right {
                         self.open_context_menu_at(x, y);
                     } else if let Some(b) = orrery_button {
-                        if self.orrery.pointer_down(b, x, y - th) {
+                        // A press over the focused card belongs to the card (its
+                        // double-click promote / scroll / buttons), not the orrery
+                        // beneath it — so clicking the card doesn't pan or deselect.
+                        if !self.point_over_card(x, y)
+                            && self.orrery.pointer_down(b, x, y - th)
+                        {
                             self.request_redraw();
                         }
                     }
                 }
             },
             ElementState::Released => {
-                // Releases always reach the orrery: it acts only if it owns an
-                // in-progress pan / drag / marquee, so a chrome-band release is a
-                // harmless no-op. A click-release selects the node under the cursor.
+                // A release over the focused card belongs to the card, not the
+                // orrery — releasing on the card must not deselect the node (that
+                // would break the card's double-click promote). Elsewhere the release
+                // reaches the orrery, which acts only if it owns an in-progress pan /
+                // drag / marquee; a click-release selects the node under the cursor.
+                let over_card =
+                    !self.workbench.is_tiled() && self.point_over_card(x, y);
                 if let Some(b) = orrery_button {
-                    if self.orrery.pointer_up(b, x, y - th) {
+                    if !over_card && self.orrery.pointer_up(b, x, y - th) {
                         self.request_redraw();
                     }
                 }
@@ -131,8 +140,11 @@ impl App {
                         }
                     }
                 }
-                // A double-click on a node (in Cartography) opens the tiled workbench
-                // from it: the first release selected it, so the working set is ready.
+                // Double-click routing (Cartography): on the focused card it toggles
+                // the live preview (snapshot -> live actor, or back); on a node it
+                // opens that node + its active neighbors in the tiled workbench (the
+                // contextual-staging gesture). The first release showed the snapshot
+                // / selected the node.
                 if button == MouseButton::Left && !self.workbench.is_tiled() {
                     let now = Instant::now();
                     let double = self.last_left_release.is_some_and(|(t, (lx, ly))| {
@@ -140,13 +152,26 @@ impl App {
                             && (x - lx).hypot(y - ly) < 6.0
                     });
                     self.last_left_release = Some((now, (x, y)));
-                    if double && !self.orrery.selected_members().is_empty() {
+                    if double {
                         self.last_left_release = None; // don't chain a triple-click
-                        self.toggle_workbench();
+                        if over_card {
+                            self.toggle_live_preview();
+                        } else if !self.orrery.selected_members().is_empty() {
+                            self.toggle_workbench();
+                        }
                     }
                 }
             },
         }
+    }
+
+    /// Whether window point `(x, y)` is over a composited content card (its rect
+    /// from the last frame). Clicks / scroll over the card route to the card, not
+    /// the orrery beneath it.
+    fn point_over_card(&self, x: f32, y: f32) -> bool {
+        self.content_rects
+            .iter()
+            .any(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
     }
 
     /// Hit-test the chrome root at `(x, y)` and dispatch the click (buttons +

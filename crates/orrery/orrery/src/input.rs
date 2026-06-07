@@ -21,6 +21,12 @@ impl Orrery {
         self.ctrl = ctrl;
     }
 
+    /// Update whether Shift is held. A node click with Shift down toggles that
+    /// node in the selection (multi-select) rather than replacing it.
+    pub fn set_shift(&mut self, shift: bool) {
+        self.shift = shift;
+    }
+
     /// The pointer moved to screen px `(x, y)`: pans on a middle-drag, pins the
     /// grabbed node on a left-drag past the slop, grows an active marquee.
     pub fn cursor_moved(&mut self, x: f32, y: f32) -> bool {
@@ -114,6 +120,12 @@ impl Orrery {
                         self.physics.unpin(d.node);
                         self.physics.set_dragging(false);
                         self.physics.settle(SETTLE_TICKS / 3);
+                    } else if self.shift {
+                        // Shift-click toggles the node in the selection (multi-select).
+                        if !self.selected.remove(&d.node) {
+                            self.selected.insert(d.node);
+                        }
+                        self.selected_edges.clear();
                     } else {
                         self.select_only(d.node);
                     }
@@ -129,7 +141,10 @@ impl Orrery {
                         let sel = self.view.rect_select(region);
                         self.selected = sel.nodes.into_iter().collect();
                         self.selected_edges = sel.edges.into_iter().collect();
-                    } else {
+                    } else if !self.shift {
+                        // A bare empty click clears the selection (and may pick an
+                        // edge under the cursor). With Shift held it is a no-op, so a
+                        // multi-select in progress is preserved.
                         let world = self.screen_to_world(self.cursor);
                         let tol = EDGE_PICK_TOL / self.camera.zoom.max(f32::EPSILON);
                         self.selected.clear();

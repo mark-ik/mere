@@ -317,6 +317,7 @@ impl App {
     /// both, because the node itself is gone.
     pub(super) fn delete_focused_node(&mut self) {
         if let Some(member) = self.orrery.remove_focused() {
+            self.live_previews.remove(&member);
             self.constellation.reap(member);
             self.save_session();
             self.request_redraw();
@@ -347,8 +348,28 @@ impl App {
             // switching a stack's tab is instant (the actor already has its scene).
             self.workbench.open_members()
         } else {
-            self.focused_member().into_iter().collect()
+            // Cartography: a node is active only when it has a live preview card.
+            // Focusing alone shows the static "last visit" snapshot (no actor), so
+            // the preview no longer activates the node. (Card system P2/P3.)
+            self.live_previews.iter().copied().collect()
         }
+    }
+
+    /// Double-click on the focused node toggles its **live preview**: promote the
+    /// static "last visit" snapshot card to a live actor card, or demote it back.
+    /// The live set drives [`needed_members`](Self::needed_members) in Cartography,
+    /// so promoting spawns the actor next frame and demoting reaps it (its last
+    /// scene is kept as the node's snapshot). (Card system P2/P3.)
+    pub(super) fn toggle_live_preview(&mut self) {
+        let Some(member) = self.focused_member() else {
+            return;
+        };
+        if self.live_previews.remove(&member) {
+            self.constellation.reap(member); // demote: actor down, scene -> snapshot
+        } else {
+            self.live_previews.insert(member);
+        }
+        self.request_redraw();
     }
 
     /// The per-node activation state for the orrery's node coloring. A node with

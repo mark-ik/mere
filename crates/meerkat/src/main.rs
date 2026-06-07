@@ -213,6 +213,11 @@ struct App {
     /// The tile in focus in the tiled view (the last activated / opened member), so
     /// the omnibar can show its URL. `None` outside the tiled view or with no tiles.
     focused_tile: Option<GraphMemberId>,
+    /// Nodes promoted to a *live* preview card (double-clicked up from their "last
+    /// visit" snapshot). Drives `needed_members` in Cartography, so a node is active
+    /// only when it has a live preview (or a tile) — focusing alone shows the static
+    /// snapshot with no actor. (Card system P2/P3.)
+    live_previews: std::collections::HashSet<GraphMemberId>,
     /// The location last pushed into the omnibar by focus-follow, so it only updates
     /// when the focused tile / node actually changes (not every frame).
     shown_location: Option<String>,
@@ -419,6 +424,7 @@ impl App {
             clipboard: arboard::Clipboard::new().ok(),
             cursor: (0.0, 0.0),
             last_left_release: None,
+            live_previews: std::collections::HashSet::new(),
             focused_tile: None,
             shown_location: None,
             tab_drag: None,

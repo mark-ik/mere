@@ -144,6 +144,9 @@ pub struct Orrery {
     marquee: Option<(f32, f32)>,
     /// Whether Ctrl is held (gates wheel-zoom vs wheel-pan).
     ctrl: bool,
+    /// Whether Shift is held (a node click adds to / toggles the selection rather
+    /// than replacing it — multi-select).
+    shift: bool,
     /// The current viewport (px), updated by [`frame`](Orrery::frame) /
     /// [`resize`](Orrery::resize); used by `world_viewport` (cull) + `recenter`.
     view_w: u32,
@@ -227,6 +230,7 @@ impl Orrery {
             node_states: HashMap::new(),
             marquee: None,
             ctrl: false,
+            shift: false,
             view_w: 1024,
             view_h: 600,
         }

@@ -215,6 +215,7 @@ impl ApplicationHandler for App {
             WindowEvent::ModifiersChanged(mods) => {
                 self.modifiers = modifiers_from_winit(mods.state());
                 self.orrery.set_ctrl(self.modifiers.ctrl);
+                self.orrery.set_shift(self.modifiers.shift);
             },
             WindowEvent::MouseWheel { delta, .. } => {
                 // LineDelta is scaled to device px the way the orrery expects;

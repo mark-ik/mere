@@ -193,13 +193,23 @@ impl App {
         } else if let (Some(member), Some(url)) =
             (self.focused_member(), self.orrery.focused_url().map(str::to_string))
         {
+            // The focused node's card. A live preview (double-clicked up) drives its
+            // actor; otherwise we composite the retained "last visit" snapshot with
+            // no actor. A node with neither (never visited this session) shows no
+            // card yet. (Card system P2/P3.)
             if let Some((x0, y0, x1, y1, cw, ch)) =
                 super::card::card_rect(w, toolbar_h, h)
             {
-                self.ensure_content(&url);
-                let state = self.content.get(&url).cloned();
-                self.constellation.drive(member, &url, state, cw, ch);
-                cards.push((member, [x0, y0, x1, y1], (cw, ch)));
+                if self.live_previews.contains(&member) {
+                    self.ensure_content(&url);
+                    let state = self.content.get(&url).cloned();
+                    self.constellation.drive(member, &url, state, cw, ch);
+                    cards.push((member, [x0, y0, x1, y1], (cw, ch)));
+                } else if self.constellation.has_content(member) {
+                    // Snapshot card: no drive (no actor), composited from the
+                    // retained scene in the rasterize pass below.
+                    cards.push((member, [x0, y0, x1, y1], (cw, ch)));
+                }
             }
             self.tile_rects.clear(); // no drag targets outside the tiled view
         } else {
@@ -240,14 +250,20 @@ impl App {
         const MAX_CARD_TEX_H: u32 = 8192;
         let mut composite: Vec<([f32; 4], GraphMemberId)> = Vec::with_capacity(cards.len());
         for (member, dest, (cw, ch)) in &cards {
+            // A live tile/preview bumps scene_version each scene; a static snapshot
+            // has version 0, so its texture rasterizes once and then stays cached.
             let version = self.constellation.scene_version(*member);
-            let tex_h = self.constellation.content_height(*member).max(*ch).min(MAX_CARD_TEX_H);
+            let tex_h = self
+                .constellation
+                .content_height_or_snapshot(*member)
+                .max(*ch)
+                .min(MAX_CARD_TEX_H);
             let fresh = self
                 .tile_textures
                 .get(member)
                 .is_some_and(|c| c.version == version && c.size == (*cw, tex_h));
             if !fresh {
-                if let Some(scene) = self.constellation.scene(*member) {
+                if let Some(scene) = self.constellation.scene_or_snapshot(*member) {
                     let (tex, view) = host.rasterize(scene, *cw, tex_h, ColorLoad::Clear(CARD_BG));
                     self.tile_textures.insert(
                         *member,
