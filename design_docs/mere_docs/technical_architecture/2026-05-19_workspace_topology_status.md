@@ -264,11 +264,14 @@ Outcome:
   `gyre`/`aether`/`cartography` in the orrery cluster.
 - **`gyre::barnes_hut`** (harvested): the O(n log n) Barnes-Hut quadtree +
   `repulsion_forces` primitive, lifted from `graph-layout` into the live physics
-  crate where big-graph repulsion belongs. **Open decision:** wiring it as a live
-  `gyre::Force` — a *global* charge-repulsion that would supplement (or, at
-  scale, replace) `NodeExclusion`'s *local* overlap separation — is a tuning
-  step, not yet done. The primitive is ready + unit-tested; the Force role is
-  Mark's call.
+  crate, plus a `BarnesHutRepulsion` `gyre::Force` — a *global* charge-repulsion,
+  the O(n log n) counterpart to `NodeExclusion`'s spatial-index charge. Per Mark
+  (2026-06-07), both roles stay available and host-toggleable: compose it
+  *alongside* `NodeExclusion` (local separation + global spread) or *instead of*
+  it at scale, and expose `strength` / `theta` / `min_distance` as config. The
+  Force is implemented + unit-tested (separates bodies over a tick); what remains
+  is the host-side toggle/scale-switch + config surfacing and live calibration of
+  `strength` against `NodeExclusion` (its falloff is FR-style `1/d`, not `1/d²`).
 - **Dropped:** `force_directed` (gyre supersedes), the `extras` force-modifier
   passes (overlap gyre + aether fields), `physics_config`, and `canvas-ir`
   entirely (a scene IR parallel to the live netrender path). `platen`'s dead

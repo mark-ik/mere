@@ -21,6 +21,9 @@
 //! and which role Barnes-Hut plays in the orrery is a tuning decision.
 
 use euclid::default::{Point2D, Vector2D};
+use rapier2d::prelude::*;
+
+use crate::{Force, ForceContext};
 
 /// Barnes–Hut approximation tuning.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -65,6 +68,63 @@ pub fn repulsion_forces(
         .iter()
         .map(|p| tree.compute_repulsion(*p, k, epsilon, c_repulse, config.theta))
         .collect()
+}
+
+/// Global Barnes–Hut charge repulsion as a composable [`Force`].
+///
+/// The O(n log n) counterpart to [`crate::NodeExclusion`]'s spatial-index
+/// pairwise charge: every body repels every other, with distant bodies
+/// approximated by their cell center-of-mass. The host chooses the role by
+/// which forces it registers — compose it *alongside* `NodeExclusion` (local
+/// overlap separation + global spread) or *instead of* it at scale (where the
+/// quadtree's complexity wins). Both modes are intended to be host-toggleable
+/// and tunable; that surfacing is a host concern, this is the building block.
+///
+/// Charge falloff is the force-directed `strength * mass / distance` form (not
+/// `NodeExclusion`'s inverse-square); `strength` will want re-calibrating
+/// against `NodeExclusion` when this is wired into the live tick.
+#[derive(Clone, Copy, Debug)]
+pub struct BarnesHutRepulsion {
+    /// Repulsion strength (force per unit mass at unit distance).
+    pub strength: f32,
+    /// Distance floor, so coincident bodies do not produce infinite force.
+    pub min_distance: f32,
+    /// Quadtree approximation tuning (θ accuracy/speed, min cell size).
+    pub config: BarnesHutConfig,
+}
+
+impl Default for BarnesHutRepulsion {
+    fn default() -> Self {
+        Self {
+            strength: 2_400.0,
+            min_distance: 8.0,
+            config: BarnesHutConfig::default(),
+        }
+    }
+}
+
+impl Force for BarnesHutRepulsion {
+    fn apply(&self, ctx: &mut ForceContext<'_>, _dt: f32) {
+        // Snapshot bodies in a stable (handle, position) order, then build the
+        // tree over the positions and apply each body's approximated repulsion.
+        let mut handles: Vec<RigidBodyHandle> = Vec::with_capacity(ctx.bodies_by_node.len());
+        let mut positions: Vec<Point2D<f32>> = Vec::with_capacity(ctx.bodies_by_node.len());
+        for &handle in ctx.bodies_by_node.values() {
+            if let Some(body) = ctx.bodies.get(handle) {
+                let t = body.translation();
+                handles.push(handle);
+                positions.push(Point2D::new(t.x, t.y));
+            }
+        }
+        // k = 1.0 folds the ideal-edge-length term out, leaving
+        // `strength * mass / distance` per (pseudo-)body.
+        let forces = repulsion_forces(&positions, self.config, 1.0, self.strength, self.min_distance);
+        for (handle, f) in handles.iter().zip(forces) {
+            if let Some(body) = ctx.bodies.get_mut(*handle) {
+                body.add_force(vector![f.x, f.y], true);
+            }
+        }
+    }
 }
 
 // ── Quadtree ───────────────────────────────────────────────────────────────
@@ -326,5 +386,38 @@ mod tests {
         let near_f = repulsion_forces(&near, cfg, 30.0, 1.0, 0.01);
         let far_f = repulsion_forces(&far, cfg, 30.0, 1.0, 0.01);
         assert!(near_f[0].length() > far_f[0].length());
+    }
+
+    #[test]
+    fn repulsion_force_separates_bodies_over_a_tick() {
+        use crate::Simulation;
+        use kernel::graph::Graph;
+
+        let mut g = Graph::new();
+        g.add_node_with_id(
+            uuid::Uuid::from_u128(1),
+            "mere://a".to_string(),
+            Point2D::new(0.0, 0.0),
+        );
+        g.add_node_with_id(
+            uuid::Uuid::from_u128(2),
+            "mere://b".to_string(),
+            Point2D::new(20.0, 0.0),
+        );
+        let keys: Vec<_> = g.nodes().map(|(k, _)| k).collect();
+
+        let mut sim = Simulation::new();
+        sim.sync_with_graph(&g);
+        sim.add_force(BarnesHutRepulsion::default());
+
+        let dist0 = (sim.position_of(keys[0]).unwrap() - sim.position_of(keys[1]).unwrap()).length();
+        for _ in 0..60 {
+            sim.tick(1.0 / 60.0);
+        }
+        let dist1 = (sim.position_of(keys[0]).unwrap() - sim.position_of(keys[1]).unwrap()).length();
+        assert!(
+            dist1 > dist0,
+            "barnes-hut repulsion should push bodies apart: {dist0} -> {dist1}"
+        );
     }
 }

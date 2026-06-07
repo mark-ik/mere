@@ -55,7 +55,7 @@ pub use forces::{Boundary, EdgeSpring, NodeExclusion};
 /// [`Force`] is a tuning step (it would supplement [`NodeExclusion`]'s local
 /// separation with global spreading).
 pub mod barnes_hut;
-pub use barnes_hut::{BarnesHutConfig, repulsion_forces};
+pub use barnes_hut::{BarnesHutConfig, BarnesHutRepulsion, repulsion_forces};
 
 /// The aether→gyre seam: a kernel [`kernel::graph::Coupling`] compiled to a
 /// [`Force`] (the general, scriptable path the built-in forces specialize).
