@@ -20,7 +20,7 @@ kernel.workspace = true
 # finite-difference gradients) to drive rapier bodies. One-way dep — aether is
 # the portable field source, gyre the integrator. (aether default features only;
 # no rhai/burn pulled into the simulator.)
-aether = { path = "../aether" }
+aether.workspace = true
 euclid = "0.22"
 tracing = "0.1"
 

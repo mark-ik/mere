@@ -71,9 +71,9 @@ serval-winit-host = { path = "../serval-winit-host" }
 # The orrery content-root: the graph's spatial presentation (graph + gyre physics
 # + camera + abs-pos node pool), as a window-agnostic `Orrery` exposing
 # `frame(w, h) -> (Scene, needs_redraw)` + semantic input. meerkat hosts it as the
-# content-root below the chrome band; the orrery-host bin is the same `Orrery` on
+# content-root below the chrome band; the `orrery` bin is the same `Orrery` on
 # its own window. (Modular integration plan, S1.)
-orrery = { path = "../orrery-host" }
+orrery.workspace = true
 
 # The content-card pipeline: a focused node's media as a document. inker supplies
 # the portable EngineDocument model; document-canvas lays it out (parley) and,

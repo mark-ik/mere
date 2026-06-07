@@ -14,7 +14,7 @@ serde = { version = "1.0", features = ["derive"] }
 # Field, Coupling/CouplingResponse/NodeSelector). aether is the runtime algebra over
 # them: it evaluates the definitions and derives forces. One-way dep, kernel never
 # pulls aether back.
-kernel = { path = "../graph-kernel" }
+kernel.workspace = true
 # For minting registry-local FieldIds (from_u128, WASM-safe) and serde of the
 # UUID-backed kernel FieldId embedded in FieldRegistry.
 uuid = { version = "1", default-features = false, features = ["serde"] }

@@ -4,32 +4,32 @@ members = [
     "crates/meerkat",
     "crates/armillary",
     "crates/serval-winit-host",
-    "crates/orrery-host",
+    "crates/orrery/orrery",
     "crates/persona/identity",
-    "crates/graphshell/graph/aether",
-    "crates/graphshell/graph/gyre",
-    "crates/graphshell/graph/cartography",
-    "crates/graphshell/graph/canvas-ir",
-    "crates/graphshell/graph/graph-kernel",
-    "crates/graphshell/graph/graph-layout",
-    "crates/graphshell/graph/linked-data",
-    "crates/graphshell/graph/node-lineage",
-    "crates/graphshell/graph/orrery",
-    "crates/graphshell/shell/domain/chrome",
-    "crates/graphshell/shell/domain/comms",
-    "crates/graphshell/shell/domain/frame",
-    "crates/graphshell/shell/session-runtime",
-    "crates/graphshell/shell/state",
-    "crates/graphshell/shell/system/registry/register-diagnostics",
-    "crates/graphshell/shell/system/registry/register-input",
-    "crates/graphshell/shell/system/registry/register-knowledge",
-    "crates/graphshell/shell/system/registry/register-layout",
-    "crates/graphshell/shell/system/registry/register-lens",
-    "crates/graphshell/shell/system/registry/register-mod-loader",
-    "crates/graphshell/shell/system/registry/register-protocol",
-    "crates/graphshell/shell/system/registry/register-theme",
-    "crates/graphshell/shell/system/registry/register-viewer",
-    "crates/graphshell/shell/ux-events",
+    "crates/orrery/aether",
+    "crates/orrery/gyre",
+    "crates/orrery/cartography",
+    "crates/graph/canvas-ir",
+    "crates/graph/graph-kernel",
+    "crates/graph/graph-layout",
+    "crates/graph/linked-data",
+    "crates/graph/node-lineage",
+    "crates/orrery/mere-orrery",
+    "crates/shell/chrome",
+    "crates/shell/comms",
+    "crates/shell/frame",
+    "crates/system/session-runtime",
+    "crates/system/shell-state",
+    "crates/system/registry/register-diagnostics",
+    "crates/system/registry/register-input",
+    "crates/system/registry/register-knowledge",
+    "crates/system/registry/register-layout",
+    "crates/system/registry/register-lens",
+    "crates/system/registry/register-mod-loader",
+    "crates/system/registry/register-protocol",
+    "crates/system/registry/register-theme",
+    "crates/system/registry/register-viewer",
+    "crates/system/ux-events",
     "crates/inker",
     "crates/inker/document-canvas",
     "crates/inker/engines/nematic",
@@ -78,29 +78,30 @@ repository = "https://github.com/mark-ik/mere"
 # so only the root Cargo.toml knows where each crate lives. Package names
 # below are the *current* names — rename passes (drop mere-* prefix etc.)
 # update both this list and consumer references in one shot.
-aether = { path = "crates/graphshell/graph/aether" }
-gyre = { path = "crates/graphshell/graph/gyre" }
-cartography = { path = "crates/graphshell/graph/cartography" }
-canvas-ir = { path = "crates/graphshell/graph/canvas-ir" }
-graph-layout = { path = "crates/graphshell/graph/graph-layout" }
-node-lineage = { path = "crates/graphshell/graph/node-lineage" }
-linked-data = { path = "crates/graphshell/graph/linked-data" }
-kernel = { path = "crates/graphshell/graph/graph-kernel" }
-# The orrery a11y/uxtree projection (domain layer). `mere-orrery` so the bare
-# `orrery` name belongs to the host content-root crate (was `orrery-host`).
-mere-orrery = { path = "crates/graphshell/graph/orrery" }
+aether = { path = "crates/orrery/aether" }
+gyre = { path = "crates/orrery/gyre" }
+cartography = { path = "crates/orrery/cartography" }
+canvas-ir = { path = "crates/graph/canvas-ir" }
+graph-layout = { path = "crates/graph/graph-layout" }
+node-lineage = { path = "crates/graph/node-lineage" }
+linked-data = { path = "crates/graph/linked-data" }
+kernel = { path = "crates/graph/graph-kernel" }
+# The orrery host content-root (was `orrery-host`); takes the bare `orrery` name.
+orrery = { path = "crates/orrery/orrery" }
+# The orrery a11y/uxtree projection (domain layer) — `mere-orrery`.
+mere-orrery = { path = "crates/orrery/mere-orrery" }
 
 # The actor-kernel runtime (host-neutral): the !Send host-kernel boundary + the
 # Send actor harness the constellation is built on.
 armillary = { path = "crates/armillary" }
 
-shell-state = { path = "crates/graphshell/shell/state" }
-frame = { path = "crates/graphshell/shell/domain/frame" }
-chrome = { path = "crates/graphshell/shell/domain/chrome" }
-comms = { path = "crates/graphshell/shell/domain/comms" }
-session-runtime = { path = "crates/graphshell/shell/session-runtime" }
-ux-events = { path = "crates/graphshell/shell/ux-events" }
-register-diagnostics = { path = "crates/graphshell/shell/system/registry/register-diagnostics" }
+shell-state = { path = "crates/system/shell-state" }
+frame = { path = "crates/shell/frame" }
+chrome = { path = "crates/shell/chrome" }
+comms = { path = "crates/shell/comms" }
+session-runtime = { path = "crates/system/session-runtime" }
+ux-events = { path = "crates/system/ux-events" }
+register-diagnostics = { path = "crates/system/registry/register-diagnostics" }
 
 inker = { path = "crates/inker" }
 document-canvas = { path = "crates/inker/document-canvas" }

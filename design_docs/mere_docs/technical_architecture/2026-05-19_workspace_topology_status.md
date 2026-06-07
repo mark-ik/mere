@@ -1,7 +1,7 @@
 # Workspace Topology Status — 2026-05-19
 
 **Date**: 2026-05-19
-**Status**: Snapshot after the B1–B7 supercrate naming pass + vestigial cleanup.
+**Status**: Snapshot after the B1–B7 supercrate naming pass + vestigial cleanup. **Latest:** §7 (2026-06-07) records the `graphshell/` supercrate dissolution into the `graph` / `orrery` / `shell` / `system` clusters; §§1–5 predate the serval-as-host flip and are stale (see §7's staleness flag).
 **Companion to**: [`../research/2026-05-15_browser_taxonomy_translation_brief.md`](../research/2026-05-15_browser_taxonomy_translation_brief.md) (taxonomy-translation framing), [`../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md) (adoption sequence).
 
 Earlier doc-level snapshots (e.g. the topology table in `DOC_README.md`) predate this pass and still cite a `crates/workbench/` umbrella that the rename dissolved. This file is the current source of truth for the workspace shape; the index has been updated to point here.
@@ -176,4 +176,68 @@ The follow-up commit (today) covered the type-level fallout: `MereHostApp` → `
 - Renderer-registry contract: [`../research/2026-05-15_renderer_registry_contract_brief.md`](../research/2026-05-15_renderer_registry_contract_brief.md)
 - Spatial chrome IR: [`../research/2026-05-15_spatial_chrome_ir_brief.md`](../research/2026-05-15_spatial_chrome_ir_brief.md)
 - Adoption sequencing: [`../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md)
-- Per-supercrate READMEs: each `crates/<supercrate>/README.md` describes its sub-tree.
+- Current cluster layout: §7 below (the former `graphshell/` README's role); the
+  root `Cargo.toml` is the authoritative member list.
+
+## 7. Update — 2026-06-07: `graphshell/` supercrate dissolved
+
+The `graphshell/` supercrate directory (§1) is gone. Its README is deleted. The
+graph + shell crates it held now live in four functional clusters directly under
+`crates/`, designed with Mark to drop the `graphshell` umbrella and the residual
+`mere-*` leaf prefixes, and to put presentation-of-the-graph crates next to the
+graph framework they serve:
+
+```text
+crates/
+├── graph/        # The graph's underlying structure (data + IR)
+│   ├── graph-kernel/      — `kernel`: Graph + geometry + identity + shared nav memory
+│   ├── node-lineage/      — owner-scoped navigation lineage (the shared GraphMemory)
+│   ├── linked-data/       — RDF/linked-data ingest + export
+│   ├── canvas-ir/         — canvas scene IR (was graph-canvas)
+│   └── graph-layout/      — LayoutStrategy adapters (grid, force-directed, …)
+│
+├── orrery/       # Presentation + manipulation of the graph (the field-canvas)
+│   ├── orrery/            — `orrery` (was orrery-host): the serval-on-winit content-root
+│   │                         host; `frame(w,h) -> (Scene, redraw)` + the always-offload
+│   │                         physics backend. meerkat hosts the same `Orrery` lib.
+│   ├── gyre/              — rapier-backed body/field simulation + the rapier-free LayoutView
+│   ├── aether/            — field algebra (the force source gyre integrates)
+│   ├── cartography/       — ProjectionRequest / ViewIntent / Projection
+│   └── mere-orrery/       — the orrery a11y/uxtree projection (domain layer)
+│
+├── shell/        # Chrome view-models (the bands around the content-roots)
+│   ├── chrome/           — toolbar / omnibar / palette / authorities view-models
+│   ├── frame/            — FrameLayout + PaneContent
+│   └── comms/            — the comms pane view-model
+│
+└── system/       # Runtime + registries (host-neutral plumbing)
+    ├── session-runtime/  — session graph / manifest / view-intent stores
+    ├── shell-state/      — re-exports chrome modules + ux probes
+    ├── ux-events/        — UX event vocabulary
+    └── registry/         — the register-* capability registries (see root Cargo.toml
+                             for the authoritative member list)
+```
+
+The split principle (Mark): **graph/** is the underlying structure; **orrery/**
+is its presentation and manipulation — so `gyre` and `aether` belong with
+`orrery`, not with `graph`, the way inker/forme/platen/verso are workbench-
+associated. **system/** is the host-neutral runtime + registries, promoted out of
+the old `shell/system` nesting. **shell/** keeps only the chrome view-models.
+
+Because every consumer takes its workspace-internal deps via `dep.workspace = true`,
+the moves were mostly a root-`Cargo.toml` path rewrite (members + the
+`[workspace.dependencies]` paths) plus a handful of per-crate relative-path-dep
+fixes where a crate crossed clusters (aether→kernel, meerkat→orrery). Verified
+green: full `cargo build` + tests at the same counts as before the move (kernel
+241, node-lineage 24, gyre 7, orrery 20, platen 45, workbench 4, meerkat 44+26).
+
+### Staleness flag (deferred)
+
+§§1–5 above predate **both** the serval-as-host flip **and** this dissolution.
+They still describe `crates/mere/host` + `host-substrate` as the binary — the host
+is now **`meerkat`** (serval-as-host; see the [serval host flip plan](../implementation_strategy/2026-06-01_serval_host_flip_plan.md)),
+and several crates named there (`spatial-substrate`, `host-ports`, `control-plane`,
+`register-renderer`, `verso/scrying-renderer`, `crates/mere/host-substrate`) have
+since moved, merged, or been cut. The cluster tree in this §7 is the current
+structural truth for the former `graphshell/` crates; a full §1–5 refresh against
+the post-flip workspace is a separate pass, not done here.
