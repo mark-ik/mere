@@ -336,6 +336,42 @@ impl App {
                 ExternalTexturePlacement::new(*dest).with_uv(uv),
             );
         }
+        // Live cards carry a close (X) button at their top-right corner. Rasterize
+        // the shared button texture once, composite it on each live card, and
+        // record its rect so a press there reaps the live preview. (Card system.)
+        self.close_button_rects.clear();
+        if composite.iter().any(|(_, m)| self.live_previews.contains(m)) {
+            let btn = super::card::CLOSE_BTN;
+            let inset = super::card::CLOSE_BTN_INSET;
+            let size = btn.round().max(1.0) as u32;
+            if self.close_button_tex.as_ref().map(|c| c.size) != Some((size, size)) {
+                let scene = super::card::close_button_scene(size);
+                let (tex, view) =
+                    host.rasterize(&scene, size, size, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                self.close_button_tex =
+                    Some(super::CachedTile { version: 0, size: (size, size), tex, view });
+            }
+            if let Some(cached) = &self.close_button_tex {
+                for (dest, member) in &composite {
+                    if !self.live_previews.contains(member) {
+                        continue;
+                    }
+                    let bx1 = dest[2] - inset;
+                    let bx0 = bx1 - btn;
+                    let by0 = dest[1] + inset;
+                    let by1 = by0 + btn;
+                    host.renderer().compose_external_texture(
+                        &cached.view,
+                        &target_view,
+                        format,
+                        w,
+                        h,
+                        ExternalTexturePlacement::new([bx0, by0, bx1, by1]),
+                    );
+                    self.close_button_rects.push((*member, [bx0, by0, bx1, by1]));
+                }
+            }
+        }
         host.renderer().compose_external_texture(
             &chrome_view,
             &target_view,

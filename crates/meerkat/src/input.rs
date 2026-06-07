@@ -73,6 +73,16 @@ impl App {
                         self.runner.update(Chrome::close_suggestions);
                         self.request_redraw();
                     }
+                    // A press on a live card's close (X) button reaps that preview
+                    // (its last scene is kept as the node's snapshot).
+                    if button == MouseButton::Left {
+                        if let Some(member) = self.close_button_at(x, y) {
+                            self.live_previews.remove(&member);
+                            self.constellation.reap(member);
+                            self.request_redraw();
+                            return;
+                        }
+                    }
                     if self.workbench.is_tiled() {
                         // Tree mode: the content band is the workbench root. A left
                         // press on a divider starts a resize; otherwise it routes to
@@ -172,6 +182,15 @@ impl App {
         self.content_rects
             .iter()
             .any(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
+    }
+
+    /// The live card whose close (X) button contains window point `(x, y)`, if
+    /// any — its composited rect from the last frame.
+    fn close_button_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
+        self.close_button_rects
+            .iter()
+            .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
+            .map(|(m, _)| *m)
     }
 
     /// Hit-test the chrome root at `(x, y)` and dispatch the click (buttons +

@@ -319,6 +319,29 @@ pub fn anchored_card_rect(
     ))
 }
 
+/// Edge length (px) of a live card's close (X) button.
+pub const CLOSE_BTN: f32 = 22.0;
+/// Inset (px) of the close button from the card's top-right corner.
+pub const CLOSE_BTN_INSET: f32 = 6.0;
+
+/// A standalone `size`x`size` close (X) button scene: a translucent dark backing
+/// with a light "x" stroked across it. The host rasterizes this once and
+/// composites it at a live card's top-right corner; a click in that rect reaps
+/// the live preview. (Card system: in-card X close.)
+pub fn close_button_scene(size: u32) -> Scene {
+    let s = size as f32;
+    let mut scene = Scene::new(size, size);
+    // Translucent dark backing (premultiplied RGBA: black premultiplies to 0).
+    scene.push_rect(0.0, 0.0, s, s, [0.0, 0.0, 0.0, 0.55]);
+    // The "x": two diagonals inset from the edges.
+    let pad = s * 0.3;
+    let mut path = netrender::ScenePath::new();
+    path.move_to(pad, pad).line_to(s - pad, s - pad);
+    path.move_to(s - pad, pad).line_to(pad, s - pad);
+    scene.push_shape_stroked(path, [0.92, 0.93, 0.97, 1.0], (s * 0.09).max(1.6));
+    scene
+}
+
 fn heading(level: u8, text: &str) -> DocumentBlock {
     DocumentBlock::Heading { level, spans: vec![InlineSpan::Text(text.to_string())] }
 }

@@ -242,6 +242,12 @@ struct App {
     /// (member, [x0, y0, x1, y1]) — rebuilt every frame, used to route a wheel over
     /// a card to its scroll rather than to the orrery.
     content_rects: Vec<(GraphMemberId, [f32; 4])>,
+    /// Cached rasterized close (X) button texture, shared across live cards; built
+    /// once and composited at each live card's top-right corner. (Card system.)
+    close_button_tex: Option<CachedTile>,
+    /// Each live card's close-button rect this frame (member, [x0, y0, x1, y1]); a
+    /// press inside reaps that live preview. Rebuilt every frame.
+    close_button_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// An in-progress divider drag: the left-slot index, the press x, and the slot
     /// weights snapshot at press. Cursor moves reweight the two neighbouring slots.
     divider_drag: Option<(usize, f32, Vec<f32>)>,
@@ -432,6 +438,8 @@ impl App {
             tile_textures: HashMap::new(),
             scroll: HashMap::new(),
             content_rects: Vec::new(),
+            close_button_tex: None,
+            close_button_rects: Vec::new(),
             divider_drag: None,
             width: 1024,
             height: 600,
