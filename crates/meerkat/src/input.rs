@@ -63,22 +63,33 @@ impl App {
                     if button == MouseButton::Left {
                         self.chrome_click(x, y);
                     }
-                } else if self.workbench.is_tiled() {
-                    // Tree mode: the content band is the workbench root. A left press
-                    // on a divider starts a resize; otherwise it routes to the root
-                    // (tab switch / close / pin). The orrery is hidden.
-                    if button == MouseButton::Left {
-                        if let Some(i) = self.divider_at(x, y) {
-                            self.divider_drag = Some((i, x, self.workbench.weights()));
-                        } else {
-                            self.workbench_click(x, y);
-                        }
-                    }
-                } else if button == MouseButton::Right {
-                    self.open_context_menu_at(x, y);
-                } else if let Some(b) = orrery_button {
-                    if self.orrery.pointer_down(b, x, y - th) {
+                } else {
+                    // A press in the content band (canvas or workbench) is "clicking
+                    // away" from the omnibar: blur the chrome caret and close the
+                    // suggestion dropdown, so focus actually leaves the omnibar
+                    // instead of the caret + dropdown lingering over the content.
+                    if self.runner.focus().is_some() || !self.runner.state().suggest.is_empty() {
+                        self.runner.set_focus(None);
+                        self.runner.update(Chrome::close_suggestions);
                         self.request_redraw();
+                    }
+                    if self.workbench.is_tiled() {
+                        // Tree mode: the content band is the workbench root. A left
+                        // press on a divider starts a resize; otherwise it routes to
+                        // the root (tab switch / close / pin). The orrery is hidden.
+                        if button == MouseButton::Left {
+                            if let Some(i) = self.divider_at(x, y) {
+                                self.divider_drag = Some((i, x, self.workbench.weights()));
+                            } else {
+                                self.workbench_click(x, y);
+                            }
+                        }
+                    } else if button == MouseButton::Right {
+                        self.open_context_menu_at(x, y);
+                    } else if let Some(b) = orrery_button {
+                        if self.orrery.pointer_down(b, x, y - th) {
+                            self.request_redraw();
+                        }
                     }
                 }
             },
@@ -332,8 +343,14 @@ impl App {
             },
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
+                    // Only repopulate suggestions when the omnibar actually holds the
+                    // caret — otherwise every keystroke (canvas shortcuts included)
+                    // would pop the dropdown open from the current omnibar text.
+                    let editing_omnibar = self.runner.focus().is_some();
                     self.runner.dispatch_key(key_event);
-                    self.runner.update(Chrome::refresh_suggestions);
+                    if editing_omnibar {
+                        self.runner.update(Chrome::refresh_suggestions);
+                    }
                     self.request_redraw();
                 }
             },
