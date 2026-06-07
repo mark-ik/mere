@@ -16,7 +16,7 @@ use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId};
 
-use super::{fetch, sync, App};
+use super::{comms_host, fetch, sync, App};
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -137,6 +137,32 @@ impl ApplicationHandler for App {
         }
         if let Some(indicator) = latest_sync {
             self.runner.update(|c| c.sync = indicator.clone());
+            self.request_redraw();
+        }
+        // Comms (P6c): the comms actor delivers conversation lists + threads here;
+        // fold each into the docked pane (the host owns the chrome mutation).
+        let mut comms_changed = false;
+        while let Ok(update) = self.inbox.comms.try_recv() {
+            match update {
+                comms_host::CommsUpdate::Inbox(inbox) => {
+                    self.runner.update(|c| c.comms.set_inbox(inbox.clone()));
+                    comms_changed = true;
+                },
+                comms_host::CommsUpdate::Thread(id, messages) => {
+                    self.runner.update(|c| {
+                        if c.comms.selected() == Some(&id) {
+                            c.comms.set_thread(messages.clone());
+                        }
+                    });
+                    comms_changed = true;
+                },
+                comms_host::CommsUpdate::Sent(_id) => {
+                    self.runner.update(|c| c.clear_comms_draft());
+                    comms_changed = true;
+                },
+            }
+        }
+        if comms_changed {
             self.request_redraw();
         }
         if graph_changed {

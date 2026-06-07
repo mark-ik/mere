@@ -152,6 +152,7 @@ impl App {
             self.runner.dispatch_click(node, PointerClick::at((x, y)));
             self.drain_pending_connect();
             self.drain_pending_command();
+            self.drain_comms_intent();
             self.drain_pending_context();
             self.drain_history_step();
             self.sync_settings();
@@ -434,6 +435,7 @@ impl App {
                 self.runner.update(Chrome::run_palette_selection);
                 self.drain_pending_connect();
                 self.drain_pending_command();
+                self.drain_comms_intent();
                 self.drain_history_step();
                 self.sync_orrery();
                 self.focus_after_palette_close();

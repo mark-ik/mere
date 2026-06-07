@@ -48,6 +48,7 @@ use session_runtime::{session_graph_store, settings_store, view_intent_store};
 use xilem_serval::{Modifiers, ServalAppRunner};
 
 mod card;
+mod comms_host;
 mod constellation;
 mod content;
 mod fetch;
@@ -180,6 +181,11 @@ struct App {
     /// transport + tessera lane on its own tokio runtime; status arrives on
     /// `inbox.sync`, and the "connect to peer" verb is a `SyncCommand` sent here.
     sync_handle: armillary::ActorHandle<sync::SyncCommand>,
+    /// The comms actor's command handle (P6c). The actor owns the live `Comms`
+    /// (misfin + murm adapters) on its own tokio runtime; conversation lists +
+    /// threads arrive on `inbox.comms`, and load / send verbs are `CommsCommand`s
+    /// sent here.
+    comms_handle: armillary::ActorHandle<comms_host::CommsCommand>,
     /// Per-URL fetched content state, keyed by the node's URL (URL identity).
     content: HashMap<String, fetch::ContentState>,
     /// The session's data directory (`<data_dir>/mere`): holds `graph.json` and
@@ -281,6 +287,7 @@ struct CachedTile {
 struct KernelInbox {
     fetch: Receiver<fetch::FetchUpdate>,
     sync: Receiver<sync::SyncUpdate>,
+    comms: Receiver<comms_host::CommsUpdate>,
 }
 
 impl App {
@@ -384,6 +391,14 @@ impl App {
             let _ = sync_proxy.send_event(());
         });
         let (sync_handle, sync_rx) = sync::spawn_sync(sync_wake, sync::DEMO_MOOT);
+        // The comms actor: owns the live `Comms` (misfin + murm adapters over local
+        // stores under the session dir) on its own tokio runtime, waking the loop
+        // through the same winit proxy. Setup failure disables comms, not the shell.
+        let comms_proxy = proxy.clone();
+        let comms_wake: armillary::Wake = Arc::new(move || {
+            let _ = comms_proxy.send_event(());
+        });
+        let (comms_handle, comms_rx) = comms_host::spawn_comms(comms_wake, session_dir.clone());
         Self {
             dom,
             runner,
@@ -393,6 +408,7 @@ impl App {
             fetch_handle,
             constellation,
             sync_handle,
+            comms_handle,
             content: HashMap::new(),
             session_dir,
             store,
@@ -422,7 +438,7 @@ impl App {
             ),
             context_set: Vec::new(),
             saved_tab_cap: saved_settings.tab_cap,
-            inbox: KernelInbox { fetch: fetch_rx, sync: sync_rx },
+            inbox: KernelInbox { fetch: fetch_rx, sync: sync_rx, comms: comms_rx },
             _kernel: armillary::KernelThread::new(),
         }
     }

@@ -39,9 +39,14 @@ chrome = { workspace = true }
 
 # The comms domain (P5): the host-neutral conversation / message / identity model
 # + pane view-model. meerkat renders `comms::CommsPane` the way it renders
-# `chrome`'s view-models. The bare core (no backend adapters) is enough for the
-# docked pane shell; the live misfin / murm adapter features wire in later.
-comms = { workspace = true }
+# `chrome`'s view-models, and (P6c) drives a live `Comms` through the comms actor —
+# so both backend adapters are on.
+comms = { workspace = true, features = ["misfin-adapter", "murm-adapter"] }
+# The comms actor stands up the backends the adapters wrap: a real on-disk misfin
+# mailbox (the `server` feature's `MailboxStore`) and a local murm cabal (`Murm` +
+# `open_cabal`, over a stub transport — no networking in this first cut).
+misfin = { workspace = true, features = ["server"] }
+murm = { workspace = true }
 
 # ─── On-screen bin: the serval render + present stack (pelt-live-shaped) ──────
 # Reuse pelt-live's lib for the cascade -> layout -> paint -> netrender::Scene
@@ -116,7 +121,7 @@ netfetcher = { path = "../../../netfetcher" }
 # actor routes http(s) -> netfetcher and smolweb schemes -> errand.
 errand = { git = "https://github.com/mark-ik/errand.git" }
 url = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util"] }
 
 # ─── P2P sync (S5.0 foundation) ──────────────────────────────────────────────
 # The host stands up one p2panda transport and joins a tessera moot's LogSync

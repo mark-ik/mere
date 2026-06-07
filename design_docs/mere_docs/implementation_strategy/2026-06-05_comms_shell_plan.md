@@ -361,13 +361,34 @@ make it a live shell (compose, send, read, conversation list) with murm cabals
     failures line, a conversation list whose rows select, a thread view with
     in/out message bubbles, and a lensed compose field + Send); CSS in `CHROME_SHEET`
     for a right-edge docked panel. Send echoes the draft into the thread (placeholder).
-  + **Blocked: meerkat compile-verification.** The working tree has **pre-existing,
-    unrelated WIP** in `graph-kernel` — a mid-flight `NodeNavigationMemory` →
-    `SharedNavigationMemory` restructure (per-node memory → a shared snapshot with
-    owners; `graph/history.rs` renamed + restructured the type, but `node.rs` / `mod.rs`
-    / `query.rs` / `snapshot` / `node_props` / `import_records` still import the old
-    name, and the rkyv archived shape changed). `kernel` fails to compile, which
-    blocks the whole meerkat build *before* the comms code is reached. The P6b code
-    touches no kernel; it could not be compiled to confirm. Next step: finish (or
-    stash) the kernel refactor, then compile-verify P6b and run meerkat to tune the
-    pane geometry + interaction; then wire live backends. Worked inline/foreground.
+  + **Compile-verified (after a kernel-WIP unblock).** The build was first blocked
+    by **pre-existing, unrelated WIP** in `graph-kernel` (a mid-flight
+    `NodeNavigationMemory` → `SharedNavigationMemory` restructure that left the
+    kernel's other modules importing the old name); once that was resolved, **meerkat
+    builds and its 26 tests pass** with the comms pane wired. A small cleanup of
+    stale unused imports in `meerkat/src/lib.rs` (left from an earlier view-logic
+    move to `views.rs`) came along. Still to do: **run** meerkat and toggle the pane
+    (command palette → "Comms (conversations)") to tune the geometry + interaction
+    visually, then wire the live adapters (a running misfin server's store, the
+    user's synced cabals, the persona identity) through the event-loop seam — the
+    same background-work → channel → proxy-wake → `user_event` drain the fetch / sync
+    lanes use. Worked inline/foreground.
+  + **P6c — live wiring (local-backend first cut), built + run-verified.** The pane
+    is now driven by a real `comms::Comms`, not placeholders. A new `comms_host`
+    armillary I/O actor (`meerkat/src/comms_host.rs`, sibling to `sync`/`fetch`)
+    owns a tokio runtime + a `Comms` with both adapters over **real-but-local**
+    stores: the misfin adapter over an on-disk `MailboxStore`
+    (`<data>/mere/comms/mailbox.redb`, seeded once with a welcome gemmail), and the
+    murm adapter over a local `CableEngine` cabal (a stub transport — no networking
+    yet — seeded with a welcome post). `CommsCommand` (Refresh / Open / Send) in,
+    `CommsUpdate` (Inbox / Thread / Sent) out over the wake; the host drains them in
+    `user_event` into the pane. The chrome records a `CommsIntent` (Refresh on open,
+    Open on select, Send on compose) that `drain_comms_intent` routes to the actor —
+    the same "domain records intent, host drains it" pattern as `pending_command`.
+    The bin module is `comms_host` (not `comms`) to avoid clashing with the `comms`
+    crate name. **Run-verified:** clean boot, backends stood up with zero comms
+    warnings, the pane shows real store data; murm compose authors a real post,
+    misfin send is a logged no-op (read-only until errand+vault). Remaining live
+    pieces (own phases): the misfin **server** socket (receive real mail), networked
+    murm cabals (a real join path), and the misfin **send** path (errand + the P2
+    vault identity). Worked inline/foreground.

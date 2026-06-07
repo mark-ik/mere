@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use forme::GraphMemberId;
 use meerkat::command::Command;
-use meerkat::{Chrome, ContextAction, ContextItem};
+use meerkat::{Chrome, CommsIntent, ContextAction, ContextItem};
 use orrery_host::NodeState;
 use platen_view::WorkbenchAction;
 use session_runtime::{
@@ -18,7 +18,7 @@ use session_runtime::{
     ViewIntent,
 };
 
-use super::{fetch, sync, App, DEFAULT_FRAME, DEFAULT_PANE};
+use super::{comms_host, fetch, sync, App, DEFAULT_FRAME, DEFAULT_PANE};
 
 impl App {
     /// The URL of whatever is in focus: in the tiled view the focused tile's node,
@@ -479,6 +479,28 @@ impl App {
             | Command::ConnectPeer
             | Command::OpenSettings
             | Command::ToggleComms => {},
+        }
+    }
+
+    /// Run the chrome's pending comms request (P6c): take the recorded
+    /// [`CommsIntent`] and route it to the comms actor as a `CommsCommand`. The
+    /// chrome can't reach the actor, so it records the intent and the host drains
+    /// it here (mirrors [`drain_pending_command`](Self::drain_pending_command)).
+    pub(super) fn drain_comms_intent(&mut self) {
+        let Some(intent) = self.runner.state().comms_intent.clone() else {
+            return;
+        };
+        self.runner.update(|c| c.comms_intent = None);
+        match intent {
+            CommsIntent::Refresh => {
+                self.comms_handle.command(comms_host::CommsCommand::Refresh);
+            },
+            CommsIntent::Open(id) => {
+                self.comms_handle.command(comms_host::CommsCommand::Open(id));
+            },
+            CommsIntent::Send(draft) => {
+                self.comms_handle.command(comms_host::CommsCommand::Send(draft));
+            },
         }
     }
 

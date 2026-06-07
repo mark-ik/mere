@@ -37,21 +37,11 @@
 //! history entry — [`Chrome::content_location`] — is what the **content-root**
 //! slice (next) will load into a separate document authority.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
-use comms::{
-    CommsPane, Conversation, ConversationId, Direction, Identity, Inbox, Message, MessageBody,
-    MessageId, ProtocolKind,
-};
-use serval_scripted_dom::ScriptedDom;
-use xilem_serval::{
-    el, lens, on_click, text_field_typed, AnyView, PointerClick, ServalAppRunner, ServalCtx,
-    ServalElement, TextField, TextInput,
-};
+use comms::{CommsPane, ConversationId, Draft};
+use xilem_serval::TextInput;
 
 pub mod command;
 pub mod ingest;
@@ -150,6 +140,22 @@ pub struct Chrome {
     /// host-owns-the-buffer split as the omnibar. Synced into `comms.draft` on
     /// send.
     pub comms_draft: TextInput,
+    /// A pending comms request the host must run against the live `Comms` (the
+    /// chrome can't reach the comms actor). Recorded here; the host drains it and
+    /// issues the matching `CommsCommand`. Mirrors `pending_command`.
+    pub comms_intent: Option<CommsIntent>,
+}
+
+/// A comms action the host runs against the live `Comms` on the chrome's behalf:
+/// reload the list, open a conversation's thread, or send a draft.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CommsIntent {
+    /// Reload the merged conversation list.
+    Refresh,
+    /// Load the messages for a conversation.
+    Open(ConversationId),
+    /// Send a draft.
+    Send(Draft),
 }
 
 /// A within-node history step the host applies to the focused node.
@@ -237,12 +243,9 @@ impl Chrome {
             settings_open: false,
             context_menu: None,
             pending_context: None,
-            comms: {
-                let mut pane = CommsPane::new();
-                pane.set_inbox(placeholder_inbox());
-                pane
-            },
+            comms: CommsPane::new(),
             comms_draft: TextInput::new(""),
+            comms_intent: None,
         }
     }
 
@@ -468,9 +471,13 @@ impl Chrome {
         self.pending_context.take()
     }
 
-    /// Toggle the docked comms pane open/closed.
+    /// Toggle the docked comms pane open/closed. Opening records a `Refresh` so
+    /// the host loads the latest conversation list.
     pub fn toggle_comms(&mut self) {
         self.comms.toggle();
+        if self.comms.is_open() {
+            self.comms_intent = Some(CommsIntent::Refresh);
+        }
     }
 
     /// Close the comms pane.
@@ -478,35 +485,35 @@ impl Chrome {
         self.comms.close();
     }
 
-    /// Open conversation `id` in the comms pane: select it, load its thread
-    /// (placeholder for now), and arm a fresh compose buffer. The live adapters
-    /// will load the real thread through the event loop later.
+    /// Open conversation `id`: select it (clearing the prior thread) and record an
+    /// `Open` so the host loads its messages from the live `Comms`.
     pub fn select_conversation(&mut self, id: ConversationId) {
         self.comms.select(id.clone());
-        self.comms.set_thread(placeholder_thread(&id));
         self.comms_draft = TextInput::new("");
+        self.comms_intent = Some(CommsIntent::Open(id));
     }
 
-    /// Send the composed reply. Placeholder: echoes the draft into the open thread
-    /// as an outgoing message and clears the buffer. The live path routes the
-    /// draft to `Comms::send` through the event loop.
+    /// Record a send of the composed reply: sync the editing buffer into the draft
+    /// and, if it is ready, hand it to the host (which routes it to `Comms::send`
+    /// and reloads the thread). A no-op for an empty draft or no selection.
     pub fn send_comms(&mut self) {
-        let body = self.comms_draft.text().trim().to_string();
-        if body.is_empty() {
-            return;
+        self.comms.set_draft_body(self.comms_draft.text().trim());
+        if self.comms.can_send() {
+            self.comms_intent = Some(CommsIntent::Send(self.comms.draft.clone()));
         }
-        if let Some(id) = self.comms.selected().cloned() {
-            self.comms.thread.push(Message {
-                id: MessageId(format!("local-{}", self.comms.thread.len())),
-                author: Identity::new(id.protocol, "me"),
-                body: MessageBody::PlainText(body),
-                subject: None,
-                timestamp_ms: None,
-                direction: Direction::Outgoing,
-            });
-            self.comms.clear_draft();
-            self.comms_draft = TextInput::new("");
-        }
+    }
+
+    /// Take the pending comms request, if any. The host drains it after input and
+    /// issues the matching command to the comms actor.
+    pub fn take_comms_intent(&mut self) -> Option<CommsIntent> {
+        self.comms_intent.take()
+    }
+
+    /// Clear the compose buffer + draft after a successful send (the host calls
+    /// this when the actor reports `Sent`).
+    pub fn clear_comms_draft(&mut self) {
+        self.comms.clear_draft();
+        self.comms_draft = TextInput::new("");
     }
 
     /// The text field that currently owns editing / the caret: the comms compose
@@ -524,52 +531,6 @@ impl Chrome {
     }
 }
 
-/// Placeholder conversation list for the comms pane shell, until the live misfin /
-/// murm adapters fill it through the event loop. One murm cabal, one misfin
-/// correspondent.
-fn placeholder_inbox() -> Inbox {
-    Inbox {
-        conversations: vec![
-            Conversation {
-                id: ConversationId::new(ProtocolKind::Murm, "cabal-demo"),
-                title: "Project cabal".to_string(),
-                participants: Vec::new(),
-                last_activity_ms: Some(5_000),
-                unread: 2,
-            },
-            Conversation {
-                id: ConversationId::new(ProtocolKind::Misfin, "ana@example.test"),
-                title: "ana@example.test".to_string(),
-                participants: Vec::new(),
-                last_activity_ms: Some(3_000),
-                unread: 1,
-            },
-        ],
-        failures: Vec::new(),
-    }
-}
-
-/// A placeholder thread for `id`, so selecting a conversation shows something.
-fn placeholder_thread(id: &ConversationId) -> Vec<Message> {
-    vec![
-        Message {
-            id: MessageId("d1".to_string()),
-            author: Identity::new(id.protocol, "peer"),
-            body: MessageBody::PlainText("Hey — this is a placeholder conversation.".to_string()),
-            subject: None,
-            timestamp_ms: Some(1_000),
-            direction: Direction::Incoming,
-        },
-        Message {
-            id: MessageId("d2".to_string()),
-            author: Identity::new(id.protocol, "me"),
-            body: MessageBody::PlainText("Yep. Live misfin + murm backends wire in next.".to_string()),
-            subject: None,
-            timestamp_ms: Some(2_000),
-            direction: Direction::Outgoing,
-        },
-    ]
-}
 
 mod views;
 pub use views::{ChromeView, ChromeLogic, chrome_view, submit_omnibar, runner};
