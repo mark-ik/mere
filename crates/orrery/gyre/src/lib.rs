@@ -87,10 +87,11 @@ pub const NODE_BODY_RADIUS: f32 = 18.0;
 /// large mass a default density would give an 18px ball.
 pub const NODE_BODY_DENSITY: f32 = 0.001;
 
-/// Linear damping applied to every node body. High enough to make
-/// the simulation settle without continuous input — without forces
-/// the bodies decay to rest in a few hundred ms.
-const DEFAULT_LINEAR_DAMPING: f32 = 4.0;
+/// Linear damping applied to every node body. Tuned for a slippery,
+/// inertial feel: a released node coasts a moment before settling, rather
+/// than stopping dead. Low enough to glide, high enough that the layout
+/// still comes to rest without continuous input.
+const DEFAULT_LINEAR_DAMPING: f32 = 2.5;
 
 /// Angular damping. Bodies don't visibly rotate in the orrery
 /// renderer (circles are isotropic), but rapier still tracks angular

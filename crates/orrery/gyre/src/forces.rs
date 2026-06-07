@@ -50,8 +50,12 @@ pub struct NodeExclusion {
 impl Default for NodeExclusion {
     fn default() -> Self {
         Self {
-            strength: 24_000.0,
-            cutoff: 600.0,
+            // The charge has to stay relevant out at the spread distances, or
+            // the (distance-proportional) Boundary pull collapses the graph back
+            // to a clump. Tuned with Boundary ~0.08 to settle unconnected nodes
+            // ~140 px apart at Mere's 1-unit ~= 1-px world scale.
+            strength: 220_000.0,
+            cutoff: 1_000.0,
             min_distance: 8.0,
         }
     }
@@ -125,8 +129,8 @@ pub struct EdgeSpring {
 impl Default for EdgeSpring {
     fn default() -> Self {
         Self {
-            stiffness: 12.0,
-            rest_length: 140.0,
+            stiffness: 10.0,
+            rest_length: 170.0,
         }
     }
 }
@@ -176,7 +180,10 @@ pub struct Boundary {
 
 impl Default for Boundary {
     fn default() -> Self {
-        Self { strength: 1.5 }
+        // Gentle: just enough to keep disconnected components on-screen. Strong
+        // centering (the old 1.5) grows with distance and overpowers the
+        // inverse-square charge, collapsing the whole graph back to a clump.
+        Self { strength: 0.08 }
     }
 }
 
