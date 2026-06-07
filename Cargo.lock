@@ -391,6 +391,19 @@ name = "armillary"
 version = "0.0.1"
 
 [[package]]
+name = "arrangements"
+version = "0.0.1"
+dependencies = [
+ "cartography",
+ "euclid",
+ "kernel",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1678,17 +1691,6 @@ dependencies = [
  "tokenizers 0.22.2",
  "yoke 0.8.2",
  "zip 7.2.0",
-]
-
-[[package]]
-name = "canvas-ir"
-version = "0.0.1"
-dependencies = [
- "aether",
- "euclid",
- "kernel",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -4598,20 +4600,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdf242682df893b86f33a73828fb09ca4b2d3bb6cc95249707fc684d27484b91"
 dependencies = [
  "bitflags 2.11.1",
-]
-
-[[package]]
-name = "graph-layout"
-version = "0.0.1"
-dependencies = [
- "canvas-ir",
- "cartography",
- "euclid",
- "kernel",
- "serde",
- "serde_json",
- "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -8702,11 +8690,10 @@ name = "platen"
 version = "0.0.1"
 dependencies = [
  "aether",
- "canvas-ir",
+ "arrangements",
  "cartography",
  "document-canvas",
  "forme",
- "graph-layout",
  "inker",
  "kernel",
  "paint_list_api",

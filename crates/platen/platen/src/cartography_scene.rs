@@ -142,8 +142,8 @@ pub fn step_with<S: StreamingLayoutStrategy>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use graph_layout::adapters::{
-        ForceDirectedAdapter, ForceDirectedAdapterState, PhyllotaxisAdapter,
+    use arrangements::adapters::{
+        PhyllotaxisAdapter, SemanticEdgeWeightAdapter, SemanticEdgeWeightAdapterState,
     };
     use kernel::geometry::PortablePoint;
     use uuid::Uuid;
@@ -183,20 +183,23 @@ mod tests {
     }
 
     #[test]
-    fn step_with_force_directed_advances_state_across_calls() {
+    fn step_with_streaming_strategy_advances_state_across_calls() {
         let (graph, _) = triangle_graph();
         let signals = IntelligenceSignals::default();
         let options = CartographySceneOptions::canvas_pixels(800, 600);
-        let adapter = ForceDirectedAdapter;
-        let mut state = ForceDirectedAdapterState::default();
+        let adapter = SemanticEdgeWeightAdapter::default();
+        let mut state = SemanticEdgeWeightAdapterState::default();
 
         let p1 = step_with(&graph, &signals, &options, &adapter, &mut state, 1.0 / 60.0);
         assert_eq!(p1.nodes.len(), 3);
+        // The streaming adapter seeds its persistent position store from
+        // graph truth on the first step.
         assert!(state.initialized);
+        assert_eq!(state.positions.len(), 3);
 
-        // Second call advances FR convergence state.
-        let _ = step_with(&graph, &signals, &options, &adapter, &mut state, 1.0 / 60.0);
-        assert!(state.fd.step_count >= 1);
+        // Second call keeps iterating the same persistent state.
+        let p2 = step_with(&graph, &signals, &options, &adapter, &mut state, 1.0 / 60.0);
+        assert_eq!(p2.nodes.len(), 3);
     }
 
     #[test]

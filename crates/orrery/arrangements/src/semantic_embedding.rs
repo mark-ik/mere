@@ -28,8 +28,8 @@ use serde::{Deserialize, Serialize};
 
 use super::curves::Falloff;
 use super::{Layout, LayoutExtras};
-use canvas_ir::camera::CanvasViewport;
-use canvas_ir::scene::CanvasSceneInput;
+use crate::camera::CanvasViewport;
+use crate::scene::CanvasSceneInput;
 
 // ── SemanticEmbedding (precomputed) ──────────────────────────────────────────
 
@@ -407,8 +407,7 @@ where
 mod tests {
     use super::*;
     use euclid::default::{Rect, Size2D};
-    use canvas_ir::projection::ProjectionMode;
-    use canvas_ir::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use crate::scene::{CanvasEdge, CanvasNode};
 
     fn viewport() -> CanvasViewport {
         CanvasViewport {
@@ -419,7 +418,6 @@ mod tests {
 
     fn scene(nodes: Vec<(u32, f32, f32)>, edges: Vec<(u32, u32)>) -> CanvasSceneInput<u32> {
         CanvasSceneInput {
-            view_id: ViewId(0),
             nodes: nodes
                 .into_iter()
                 .map(|(id, x, y)| CanvasNode {
@@ -433,10 +431,6 @@ mod tests {
                 .into_iter()
                 .map(|(s, t)| CanvasEdge::untagged(s, t))
                 .collect(),
-            scene_objects: Vec::new(),
-            overlays: Vec::new(),
-            scene_mode: SceneMode::Browse,
-            projection: ProjectionMode::default(),
         }
     }
 

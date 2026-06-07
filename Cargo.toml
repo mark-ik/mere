@@ -9,9 +9,8 @@ members = [
     "crates/orrery/aether",
     "crates/orrery/gyre",
     "crates/orrery/cartography",
-    "crates/graph/canvas-ir",
+    "crates/orrery/arrangements",
     "crates/graph/graph-kernel",
-    "crates/graph/graph-layout",
     "crates/graph/linked-data",
     "crates/graph/node-lineage",
     "crates/orrery/mere-orrery",
@@ -81,8 +80,10 @@ repository = "https://github.com/mark-ik/mere"
 aether = { path = "crates/orrery/aether" }
 gyre = { path = "crates/orrery/gyre" }
 cartography = { path = "crates/orrery/cartography" }
-canvas-ir = { path = "crates/graph/canvas-ir" }
-graph-layout = { path = "crates/graph/graph-layout" }
+# Deterministic graph arrangements (penrose / l-system / phyllotaxis /
+# kanban-timeline / radial-grid / semantic), recaptured from the retired
+# graph-layout; gyre owns live force physics.
+arrangements = { path = "crates/orrery/arrangements" }
 node-lineage = { path = "crates/graph/node-lineage" }
 linked-data = { path = "crates/graph/linked-data" }
 kernel = { path = "crates/graph/graph-kernel" }

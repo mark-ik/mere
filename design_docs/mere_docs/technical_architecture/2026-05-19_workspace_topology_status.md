@@ -1,7 +1,7 @@
 # Workspace Topology Status — 2026-05-19
 
 **Date**: 2026-05-19
-**Status**: Snapshot after the B1–B7 supercrate naming pass + vestigial cleanup. **Latest:** §7 (2026-06-07) records the `graphshell/` supercrate dissolution into the `graph` / `orrery` / `shell` / `system` clusters; §§1–5 predate the serval-as-host flip and are stale (see §7's staleness flag).
+**Status**: Snapshot after the B1–B7 supercrate naming pass + vestigial cleanup. **Latest:** §7 (2026-06-07) records the `graphshell/` supercrate dissolution into the `graph` / `orrery` / `shell` / `system` clusters; §8 (2026-06-07) records the `canvas-ir` + `graph-layout` review → `orrery/arrangements` + `gyre::barnes_hut`. §§1–5 predate the serval-as-host flip and are stale (see §7's staleness flag).
 **Companion to**: [`../research/2026-05-15_browser_taxonomy_translation_brief.md`](../research/2026-05-15_browser_taxonomy_translation_brief.md) (taxonomy-translation framing), [`../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md) (adoption sequence).
 
 Earlier doc-level snapshots (e.g. the topology table in `DOC_README.md`) predate this pass and still cite a `crates/workbench/` umbrella that the rename dissolved. This file is the current source of truth for the workspace shape; the index has been updated to point here.
@@ -189,20 +189,21 @@ graph framework they serve:
 
 ```text
 crates/
-├── graph/        # The graph's underlying structure (data + IR)
+├── graph/        # The graph's underlying structure (data)
 │   ├── graph-kernel/      — `kernel`: Graph + geometry + identity + shared nav memory
 │   ├── node-lineage/      — owner-scoped navigation lineage (the shared GraphMemory)
-│   ├── linked-data/       — RDF/linked-data ingest + export
-│   ├── canvas-ir/         — canvas scene IR (was graph-canvas)
-│   └── graph-layout/      — LayoutStrategy adapters (grid, force-directed, …)
+│   └── linked-data/       — RDF/linked-data ingest + export
 │
 ├── orrery/       # Presentation + manipulation of the graph (the field-canvas)
 │   ├── orrery/            — `orrery` (was orrery-host): the serval-on-winit content-root
 │   │                         host; `frame(w,h) -> (Scene, redraw)` + the always-offload
 │   │                         physics backend. meerkat hosts the same `Orrery` lib.
-│   ├── gyre/              — rapier-backed body/field simulation + the rapier-free LayoutView
+│   ├── gyre/              — rapier-backed body/field simulation + rapier-free LayoutView
+│   │                         + barnes_hut (harvested O(n log n) repulsion primitive)
 │   ├── aether/            — field algebra (the force source gyre integrates)
-│   ├── cartography/       — ProjectionRequest / ViewIntent / Projection
+│   ├── cartography/       — ProjectionRequest / ViewIntent / Projection + LayoutStrategy
+│   ├── arrangements/      — deterministic layouts (penrose / l-system / phyllotaxis /
+│   │                         kanban-timeline / radial-grid / semantic) + LayoutStrategy adapters
 │   └── mere-orrery/       — the orrery a11y/uxtree projection (domain layer)
 │
 ├── shell/        # Chrome view-models (the bands around the content-roots)
@@ -241,3 +242,39 @@ and several crates named there (`spatial-substrate`, `host-ports`, `control-plan
 since moved, merged, or been cut. The cluster tree in this §7 is the current
 structural truth for the former `graphshell/` crates; a full §1–5 refresh against
 the post-flip workspace is a separate pass, not done here.
+
+## 8. Update — 2026-06-07: `canvas-ir` + `graph-layout` reviewed, recaptured, deleted
+
+A liveness review found `canvas-ir` and `graph-layout` were both **dormant** —
+compiled into the workspace but never reached by the running app. The live
+graph-positioning path is `gyre` (rapier physics) → `cartography::Projection` →
+`platen::{scene_paint, orrery}` → netrender; `canvas-ir`'s scene IR and
+`graph-layout`'s `LayoutStrategy` adapters were bypassed (graph-layout was a
+`platen` dependency used only in `#[cfg(test)]`).
+
+Outcome:
+
+- **`crates/orrery/arrangements`** (new): the keep-worthy deterministic layouts
+  recaptured from `graph-layout` — penrose (P2/P3 aperiodic tilings), l-system
+  (Hilbert/Koch/Dragon), static (grid / phyllotaxis / radial), axial (kanban /
+  timeline), semantic embedding + edge-weight, the `curves` helpers, and the
+  layout registry. Implements `cartography::LayoutStrategy` (adapters), carries
+  its own light `scene`/`camera` snapshot types (the canvas-ir dependency is
+  gone). The configurable ArrangementRelation design space, parked next to
+  `gyre`/`aether`/`cartography` in the orrery cluster.
+- **`gyre::barnes_hut`** (harvested): the O(n log n) Barnes-Hut quadtree +
+  `repulsion_forces` primitive, lifted from `graph-layout` into the live physics
+  crate where big-graph repulsion belongs. **Open decision:** wiring it as a live
+  `gyre::Force` — a *global* charge-repulsion that would supplement (or, at
+  scale, replace) `NodeExclusion`'s *local* overlap separation — is a tuning
+  step, not yet done. The primitive is ready + unit-tested; the Force role is
+  Mark's call.
+- **Dropped:** `force_directed` (gyre supersedes), the `extras` force-modifier
+  passes (overlap gyre + aether fields), `physics_config`, and `canvas-ir`
+  entirely (a scene IR parallel to the live netrender path). `platen`'s dead
+  `canvas_scene` module went with `canvas-ir`; `cartography_scene` (the
+  strategy-dispatch seam) stays, its test repointed to `arrangements`.
+
+Verified green: arrangements 99, gyre 28 (+4 Barnes-Hut), platen 40, meerkat
+44+26, full `cargo check --workspace` clean. Net: ~6k LOC of gyre-redundant /
+dead layout code removed; the distinctive arrangements preserved + recaptured.

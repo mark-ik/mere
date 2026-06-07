@@ -49,6 +49,14 @@ use rapier2d::prelude::*;
 pub mod forces;
 pub use forces::{Boundary, EdgeSpring, NodeExclusion};
 
+/// Barnes–Hut quadtree for O(n log n) approximate n-body repulsion — harvested
+/// from the retired `graph-layout`, for big-graph charge repulsion. The
+/// [`barnes_hut::repulsion_forces`] primitive is ready; wiring it as a live
+/// [`Force`] is a tuning step (it would supplement [`NodeExclusion`]'s local
+/// separation with global spreading).
+pub mod barnes_hut;
+pub use barnes_hut::{BarnesHutConfig, repulsion_forces};
+
 /// The aether→gyre seam: a kernel [`kernel::graph::Coupling`] compiled to a
 /// [`Force`] (the general, scriptable path the built-in forces specialize).
 pub mod coupling_force;

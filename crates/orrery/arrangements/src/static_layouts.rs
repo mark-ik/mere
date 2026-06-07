@@ -23,8 +23,8 @@ use euclid::default::{Point2D, Vector2D};
 use serde::{Deserialize, Serialize};
 
 use super::{Layout, LayoutExtras};
-use canvas_ir::camera::CanvasViewport;
-use canvas_ir::scene::CanvasSceneInput;
+use crate::camera::CanvasViewport;
+use crate::scene::CanvasSceneInput;
 
 /// Shared state for static positional layouts. Carries a damping factor so
 /// callers get full-instant placement (`damping = 1.0`) or eased motion

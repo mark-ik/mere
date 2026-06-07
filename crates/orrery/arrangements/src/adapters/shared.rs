@@ -23,8 +23,8 @@ use std::collections::HashMap;
 
 use crate::LayoutExtras;
 use euclid::default::{Point2D, Rect, Size2D};
-use canvas_ir::camera::CanvasViewport;
-use canvas_ir::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
+use crate::camera::CanvasViewport;
+use crate::scene::{CanvasEdge, CanvasNode, CanvasSceneInput};
 use kernel::graph::{NodeKey, RelationKind};
 
 use cartography::projection::{PositionedEdge, Projection};
@@ -68,15 +68,7 @@ pub fn build_scene_input(
         })
         .collect();
 
-    CanvasSceneInput {
-        view_id: ViewId(0),
-        nodes,
-        edges,
-        scene_objects: Vec::new(),
-        overlays: Vec::new(),
-        scene_mode: canvas_ir::scene::SceneMode::default(),
-        projection: canvas_ir::projection::ProjectionMode::default(),
-    }
+    CanvasSceneInput { nodes, edges }
 }
 
 /// Edge weight per [`RelationKind`]. v0 returns 1.0 for every
@@ -133,7 +125,7 @@ pub fn build_layout_extras(request: &ProjectionRequest<'_>) -> LayoutExtras<Node
         for (key, value) in values {
             extras
                 .axis_value_by_node
-                .insert(*key, axis_value_to_canvas_ir(value));
+                .insert(*key, axis_value_to_local(value));
         }
     }
 
@@ -144,7 +136,7 @@ pub fn build_layout_extras(request: &ProjectionRequest<'_>) -> LayoutExtras<Node
 /// [`crate::AxisValue`]. Structurally identical;
 /// cartography keeps its own enum so the contract stays decoupled
 /// from graph-canvas's internals.
-fn axis_value_to_canvas_ir(value: &cartography::request::AxisValue) -> crate::AxisValue {
+fn axis_value_to_local(value: &cartography::request::AxisValue) -> crate::AxisValue {
     match value {
         cartography::request::AxisValue::Numeric(n) => crate::AxisValue::Numeric(*n),
         cartography::request::AxisValue::Categorical(tag) => {
@@ -266,20 +258,12 @@ where
         .map(|view| CanvasEdge::untagged(view.from, view.to))
         .collect();
 
-    let scene = CanvasSceneInput {
-        view_id: ViewId(0),
-        nodes,
-        edges,
-        scene_objects: Vec::new(),
-        overlays: Vec::new(),
-        scene_mode: canvas_ir::scene::SceneMode::default(),
-        projection: canvas_ir::projection::ProjectionMode::default(),
-    };
+    let scene = CanvasSceneInput { nodes, edges };
     let mut state = crate::StaticLayoutState {
         damping: 1.0,
         step_count: 0,
     };
-    let viewport = canvas_ir::camera::CanvasViewport::default();
+    let viewport = crate::camera::CanvasViewport::default();
     // Build the full LayoutExtras bridge so axial strategies (Timeline,
     // Kanban) can read `axis_value_by_node` and embedding-aware ones
     // see their inputs. Static strategies that don't consume extras

@@ -8,8 +8,8 @@ use std::hash::Hash;
 use euclid::default::{Point2D, Vector2D};
 use serde::{Deserialize, Serialize};
 
-use canvas_ir::camera::CanvasViewport;
-use canvas_ir::scene::CanvasSceneInput;
+use crate::camera::CanvasViewport;
+use crate::scene::CanvasSceneInput;
 
 use crate::{Layout, LayoutExtras};
 use super::{StaticLayoutState, emit};

@@ -19,8 +19,6 @@ cartography.workspace = true
 # fields to resolve a coupling's intensity at each node. One-way dep, mirroring
 # gyre's; aether stays renderer-free.
 aether.workspace = true
-canvas-ir.workspace = true
-graph-layout.workspace = true
 document-canvas.workspace = true
 inker.workspace = true
 kernel.workspace = true
@@ -39,3 +37,6 @@ verso-core.workspace = true
 
 [dev-dependencies]
 serde_json = "1"
+# Concrete layout strategies, used only to exercise the cartography
+# dispatch (project_with / step_with) in cartography_scene's tests.
+arrangements.workspace = true

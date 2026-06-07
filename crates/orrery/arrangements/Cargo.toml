@@ -1,0 +1,28 @@
+[package]
+name = "arrangements"
+version = "0.0.1"
+authors = ["@mark-ik"]
+license = "MPL-2.0"
+edition = "2024"
+publish = false
+rust-version = "1.92.0"
+description = "Deterministic graph arrangements for Mere — the Layout<N> trait plus aperiodic (penrose), fractal (l-system), spiral (phyllotaxis), axial (kanban/timeline), radial, grid, and semantic-embedding layouts, with cartography LayoutStrategy adapters. The configurable ArrangementRelation design space; gyre owns the live force physics."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Cartography contracts — adapters implement `LayoutStrategy` /
+# `StreamingLayoutStrategy` against the Layout<N> impls here. The scene
+# snapshot the layouts read is this crate's own light `scene`/`camera`
+# types (no canvas-ir dependency — the renderer path is netrender).
+cartography.workspace = true
+kernel.workspace = true
+
+euclid = { version = "0.22", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+
+[dev-dependencies]
+uuid = { workspace = true }

@@ -2,32 +2,32 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! # graph-layout
+//! # arrangements
 //!
-//! Graph layout algorithms that operate on `CanvasSceneInput` snapshots
-//! and return per-node position deltas for the host to apply.
+//! Deterministic graph arrangements — the configurable
+//! ArrangementRelation design space. Each layout reads a light
+//! [`scene::CanvasSceneInput`] snapshot and returns per-node position
+//! deltas for the caller to apply.
 //!
-//! Extracted from `canvas_ir::layout` per the [cartography layer
-//! brief](../../../../design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
-//! §9 step 4 — the sibling-crate move. `graph-canvas` is now the
-//! renderer; this crate is the layout subsystem. `graph-canvas` still
-//! defines the `CanvasViewport` / `CanvasSceneInput` primitive shapes
-//! the layout impls operate on; this crate depends on `graph-canvas`
-//! one-way for those primitives.
+//! The catalog is the *non-physics* half of graph layout: aperiodic
+//! tilings ([`penrose`]), fractal paths ([`l_system`]), spirals and
+//! grids ([`static_layouts`]), axial boards/timelines ([`axial`]), and
+//! semantic projections ([`semantic_embedding`]). Live force physics
+//! lives in `gyre` (rapier-backed); the Barnes-Hut approximation it uses
+//! for large graphs was harvested out of this crate's old
+//! `force_directed`/`barnes_hut` modules.
 //!
-//! The `Layout<N>` trait is delta-returning (not mutating): each
-//! `step()` reads the current scene, advances internal state by `dt`,
-//! and returns a map of node id to displacement. The host writes
-//! those deltas back to its own position store (petgraph in
-//! graphshell proper; other carriers for future hosts).
+//! The [`Layout<N>`](Layout) trait is delta-returning (not mutating):
+//! each `step()` reads the current scene, advances internal state by
+//! `dt`, and returns a map of node id to displacement. The caller writes
+//! those deltas back to its own position store.
 //!
-//! This shape is framework-agnostic, allocation-visible, and
-//! WASM-clean — no `std::time`, no egui, no petgraph.
+//! This shape is framework-agnostic, allocation-visible, and WASM-clean —
+//! no `std::time`, no egui, no petgraph.
 //!
 //! Cartography adapters wrapping each `Layout<N>` impl with the
-//! `LayoutStrategy` / `StreamingLayoutStrategy` contracts live in
-//! [`adapters`]. They retired cartography's prior `graph-canvas-
-//! adapters` feature gate; consumers depend on `graph-layout`
+//! [`cartography::LayoutStrategy`] / [`cartography::StreamingLayoutStrategy`]
+//! contracts live in [`adapters`]; consumers depend on `arrangements`
 //! directly to opt in.
 
 use std::collections::{HashMap, HashSet};
@@ -36,23 +36,16 @@ use std::hash::Hash;
 use euclid::default::Vector2D;
 use serde::{Deserialize, Serialize};
 
-use canvas_ir::camera::CanvasViewport;
-use canvas_ir::scene::CanvasSceneInput;
+use crate::camera::CanvasViewport;
+use crate::scene::CanvasSceneInput;
 
-pub mod barnes_hut;
+pub mod camera;
+pub mod scene;
+
 pub mod curves;
-pub mod extras;
-pub mod force_directed;
-pub mod static_layouts;
-
-pub use barnes_hut::{BarnesHut, BarnesHutConfig};
 pub use curves::{DegreeWeighting, Falloff, ProximityFalloff, SimilarityCurve};
-pub use extras::{
-    DegreeRepulsion, DegreeRepulsionConfig, DomainClustering, DomainClusteringConfig,
-    FrameAffinity, FrameAffinityConfig, FrameRegion, HubPull, HubPullConfig, SemanticClustering,
-    SemanticClusteringConfig, StatelessPassState, TargetPolicy,
-};
-pub use force_directed::{ForceDirected, ForceDirectedState};
+
+pub mod static_layouts;
 pub use static_layouts::{
     Grid, GridColumns, GridConfig, GridTraversal, Phyllotaxis, PhyllotaxisConfig,
     PhyllotaxisRadiusCurve, Radial, RadialAngularPolicy, RadialConfig, RadialUnreachablePolicy,
@@ -85,11 +78,6 @@ pub use registry::{
 
 pub mod adapters;
 
-pub mod physics_config;
-pub use physics_config::{
-    GraphPhysicsTuning, apply_graph_physics_tuning, default_graph_physics_state,
-};
-
 /// A host-provided axis coordinate for layouts that project onto one or
 /// two explicit axes (Timeline, Kanban, future axial variants).
 #[derive(Debug, Clone, PartialEq)]
@@ -102,9 +90,17 @@ pub enum AxisValue {
     Categorical(String),
 }
 
+/// Shared persistent state for stateless layout passes — the analytic
+/// layouts and semantic embedding only need a step counter (they recompute
+/// targets from scratch each call rather than accumulating displacement).
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct StatelessPassState {
+    pub step_count: u64,
+}
+
 /// Out-of-band inputs that a layout step may consume.
 ///
-/// Computed by the host ahead of time; passed by reference to every step.
+/// Computed by the caller ahead of time; passed by reference to every step.
 /// Extending this struct does not churn the `Layout` trait surface.
 #[derive(Debug, Default, Clone)]
 pub struct LayoutExtras<N>
@@ -116,21 +112,15 @@ where
     /// a delta themselves.
     pub pinned: HashSet<N>,
 
-    /// Registrable-domain grouping per node. Used by `DomainClustering` to
-    /// pull same-domain members toward a shared centroid. Nodes absent from
-    /// the map are treated as unclustered.
+    /// Registrable-domain grouping per node. Nodes absent from the map are
+    /// treated as unclustered. Read by domain-aware assignment strategies.
     pub domain_by_node: HashMap<N, String>,
 
     /// Precomputed pairwise semantic similarity in `[0.0, 1.0]`. Keys are
     /// unordered pairs — store both `(a, b)` and `(b, a)` if callers want
     /// asymmetric lookups, or keep one order and have the reader normalize.
-    /// Used by `SemanticClustering` and `SemanticEdgeWeight`.
+    /// Used by `SemanticEdgeWeight`.
     pub semantic_similarity: HashMap<(N, N), f32>,
-
-    /// Frame-affinity regions derived from the host's arrangement relations.
-    /// Each region is an anchor with a set of member nodes and a centroid;
-    /// members are pulled toward the centroid. Used by `FrameAffinity`.
-    pub frame_regions: Vec<FrameRegion<N>>,
 
     /// Host-provided 2D coordinates per node (from UMAP / t-SNE / PCA /
     /// any ML pipeline). Coordinate space is arbitrary; layouts scale
@@ -145,17 +135,14 @@ where
     /// Nodes the user is actively dragging this frame. Distinct from
     /// `pinned` (persistent user intent that a node not move) — `dragging`
     /// is transient ("user has their finger on this one right now").
-    /// Persistent-world physics adapters use this to drive the body
-    /// kinematically for the duration of the drag while preserving
-    /// momentum when the drag concludes. Layouts that don't care about
-    /// drag state ignore this slot.
+    /// Layouts that don't care about drag state ignore this slot.
     pub dragging: HashSet<N>,
 }
 
 /// A graph layout that advances node positions one step at a time.
 ///
 /// The layout does not own or mutate the scene; it reads it. Positions are
-/// applied by the host via the returned delta map. Nodes absent from the
+/// applied by the caller via the returned delta map. Nodes absent from the
 /// returned map keep their current positions.
 pub trait Layout<N>
 where

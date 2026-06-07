@@ -9,8 +9,8 @@ use std::marker::PhantomData;
 
 use euclid::default::Vector2D;
 
-use canvas_ir::camera::CanvasViewport;
-use canvas_ir::scene::CanvasSceneInput;
+use crate::camera::CanvasViewport;
+use crate::scene::CanvasSceneInput;
 
 use crate::{Layout, LayoutExtras};
 use super::LayoutCapability;

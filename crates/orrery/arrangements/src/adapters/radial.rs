@@ -25,7 +25,7 @@ use crate::{
     Layout, Radial, RadialAngularPolicy, RadialConfig, RadialUnreachablePolicy, StaticLayoutState,
 };
 use euclid::default::Point2D;
-use canvas_ir::scene::{CanvasEdge, CanvasNode, CanvasSceneInput, ViewId};
+use crate::scene::{CanvasEdge, CanvasNode, CanvasSceneInput};
 use kernel::graph::NodeKey;
 
 use super::shared::{bounds_of, build_positioned_edges};
@@ -111,15 +111,7 @@ impl LayoutStrategy for RadialAdapter {
             .map(|view| CanvasEdge::untagged(view.from, view.to))
             .collect();
 
-        let scene = CanvasSceneInput {
-            view_id: ViewId(0),
-            nodes,
-            edges,
-            scene_objects: Vec::new(),
-            overlays: Vec::new(),
-            scene_mode: canvas_ir::scene::SceneMode::default(),
-            projection: canvas_ir::projection::ProjectionMode::default(),
-        };
+        let scene = CanvasSceneInput { nodes, edges };
 
         let mut radial = Radial::new(RadialConfig {
             focus: Some(focus),
@@ -133,7 +125,7 @@ impl LayoutStrategy for RadialAdapter {
             damping: 1.0,
             step_count: 0,
         };
-        let viewport = canvas_ir::camera::CanvasViewport::default();
+        let viewport = crate::camera::CanvasViewport::default();
         let extras = crate::LayoutExtras::<NodeKey>::default();
         let deltas = radial.step(&scene, &mut state, 0.0, &viewport, &extras);
 

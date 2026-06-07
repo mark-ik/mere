@@ -19,18 +19,11 @@
 //!
 //! See [2026-04-19_layouts_as_pluggable_mods_plan.md](../../../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/graph/2026-04-19_layouts_as_pluggable_mods_plan.md).
 
-use std::any::Any;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::marker::PhantomData;
 use std::sync::Arc;
 
-use euclid::default::Vector2D;
 use serde::{Deserialize, Serialize};
-
-use super::{Layout, LayoutExtras};
-use canvas_ir::camera::CanvasViewport;
-use canvas_ir::scene::CanvasSceneInput;
 
 /// URN-style layout identifier. Format: `<namespace>:<family>[:<variant>]`.
 /// Examples: `graph_layout:force_directed`, `graph_layout:penrose`,
@@ -228,14 +221,6 @@ pub fn register_builtins<N>(registry: &mut LayoutRegistry<N>)
 where
     N: Clone + Eq + Hash + Send + Ord + 'static,
 {
-    // Force-based iterative layouts.
-    let _ = registry.register(Arc::new(BuiltinProvider::<super::ForceDirected, N>::new(
-        force_directed_capability,
-    )));
-    let _ = registry.register(Arc::new(BuiltinProvider::<super::BarnesHut, N>::new(
-        barnes_hut_capability,
-    )));
-
     // Projection (similarity-driven iterative).
     let _ = registry.register(Arc::new(
         BuiltinProvider::<super::SemanticEdgeWeight, N>::new(semantic_edge_weight_capability),
@@ -266,61 +251,10 @@ where
     let _ = registry.register(Arc::new(
         BuiltinProvider::<super::SemanticEmbedding, N>::new(semantic_embedding_capability),
     ));
-
-    // Extras / composition passes.
-    let _ = registry.register(Arc::new(BuiltinProvider::<super::DegreeRepulsion, N>::new(
-        degree_repulsion_capability,
-    )));
-    let _ = registry.register(Arc::new(
-        BuiltinProvider::<super::DomainClustering<N>, N>::new(domain_clustering_capability),
-    ));
-    let _ = registry.register(Arc::new(
-        BuiltinProvider::<super::SemanticClustering, N>::new(semantic_clustering_capability),
-    ));
-    let _ = registry.register(Arc::new(BuiltinProvider::<super::HubPull, N>::new(
-        hub_pull_capability,
-    )));
-    let _ = registry.register(Arc::new(BuiltinProvider::<super::FrameAffinity, N>::new(
-        frame_affinity_capability,
-    )));
 }
 
 fn tags(slice: &[&str]) -> Vec<String> {
     slice.iter().map(|s| s.to_string()).collect()
-}
-
-fn force_directed_capability() -> LayoutCapability {
-    LayoutCapability {
-        id: "graph_layout:force_directed".into(),
-        display_name: "Force Directed".into(),
-        description: Some(
-            "Fruchterman–Reingold with center gravity. Classic organic layout.".into(),
-        ),
-        category: LayoutCategory::Force,
-        is_deterministic: true,
-        is_topology_sensitive: true,
-        supports_3d: false,
-        recommended_max_node_count: Some(500),
-        provenance: LayoutProvenance::Builtin,
-        capability_tags: tags(&["force", "physics", "organic", "iterative"]),
-    }
-}
-
-fn barnes_hut_capability() -> LayoutCapability {
-    LayoutCapability {
-        id: "graph_layout:force_directed_barnes_hut".into(),
-        display_name: "Force Directed (Barnes-Hut)".into(),
-        description: Some(
-            "O(n log n) quadtree-accelerated force-directed layout. Use at scale.".into(),
-        ),
-        category: LayoutCategory::Force,
-        is_deterministic: true,
-        is_topology_sensitive: true,
-        supports_3d: false,
-        recommended_max_node_count: Some(5_000),
-        provenance: LayoutProvenance::Builtin,
-        capability_tags: tags(&["force", "physics", "organic", "iterative", "scale"]),
-    }
 }
 
 fn semantic_edge_weight_capability() -> LayoutCapability {
@@ -468,88 +402,6 @@ fn semantic_embedding_capability() -> LayoutCapability {
         recommended_max_node_count: None,
         provenance: LayoutProvenance::Builtin,
         capability_tags: tags(&["semantic", "precomputed", "positional", "ml"]),
-    }
-}
-
-fn degree_repulsion_capability() -> LayoutCapability {
-    LayoutCapability {
-        id: "graph_layout:extras:degree_repulsion".into(),
-        display_name: "Degree Repulsion".into(),
-        description: Some(
-            "Post-physics pass: high-degree nodes push their neighbors apart.".into(),
-        ),
-        category: LayoutCategory::Extras,
-        is_deterministic: true,
-        is_topology_sensitive: true,
-        supports_3d: false,
-        recommended_max_node_count: Some(500),
-        provenance: LayoutProvenance::Builtin,
-        capability_tags: tags(&["extras", "force", "composable"]),
-    }
-}
-
-fn domain_clustering_capability() -> LayoutCapability {
-    LayoutCapability {
-        id: "graph_layout:extras:domain_clustering".into(),
-        display_name: "Domain Clustering".into(),
-        description: Some(
-            "Post-physics pass: same-domain nodes pulled toward a shared target.".into(),
-        ),
-        category: LayoutCategory::Extras,
-        is_deterministic: true,
-        is_topology_sensitive: false,
-        supports_3d: false,
-        recommended_max_node_count: Some(500),
-        provenance: LayoutProvenance::Builtin,
-        capability_tags: tags(&["extras", "clustering", "composable"]),
-    }
-}
-
-fn semantic_clustering_capability() -> LayoutCapability {
-    LayoutCapability {
-        id: "graph_layout:extras:semantic_clustering".into(),
-        display_name: "Semantic Clustering".into(),
-        description: Some("Post-physics pass: semantically similar nodes pulled together.".into()),
-        category: LayoutCategory::Extras,
-        is_deterministic: true,
-        is_topology_sensitive: false,
-        supports_3d: false,
-        recommended_max_node_count: Some(500),
-        provenance: LayoutProvenance::Builtin,
-        capability_tags: tags(&["extras", "semantic", "composable"]),
-    }
-}
-
-fn hub_pull_capability() -> LayoutCapability {
-    LayoutCapability {
-        id: "graph_layout:extras:hub_pull".into(),
-        display_name: "Hub Pull".into(),
-        description: Some("Post-physics pass: low-degree leaves pulled toward nearby hubs.".into()),
-        category: LayoutCategory::Extras,
-        is_deterministic: true,
-        is_topology_sensitive: true,
-        supports_3d: false,
-        recommended_max_node_count: Some(500),
-        provenance: LayoutProvenance::Builtin,
-        capability_tags: tags(&["extras", "force", "composable"]),
-    }
-}
-
-fn frame_affinity_capability() -> LayoutCapability {
-    LayoutCapability {
-        id: "graph_layout:extras:frame_affinity".into(),
-        display_name: "Frame Affinity".into(),
-        description: Some(
-            "Post-physics pass: frame members pulled toward a per-frame target (centroid / medoid / anchor)."
-                .into(),
-        ),
-        category: LayoutCategory::Extras,
-        is_deterministic: true,
-        is_topology_sensitive: false,
-        supports_3d: false,
-        recommended_max_node_count: Some(500),
-        provenance: LayoutProvenance::Builtin,
-        capability_tags: tags(&["extras", "grouping", "composable"]),
     }
 }
 

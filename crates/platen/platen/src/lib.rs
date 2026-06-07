@@ -49,16 +49,11 @@
 
 #![doc(html_root_url = "https://docs.rs/platen/0.0.1")]
 
-/// Graph-canvas scene-input derivation. Translates a reducer-owned graph
-/// view into the input shape `graph-canvas` expects.
-pub mod canvas_scene;
-
-/// Cartography projection-request derivation. Sibling of
-/// [`canvas_scene`] that goes through cartography's strategy contract
-/// instead of building a `CanvasSceneInput` directly. Hosts use this
-/// when they want per-pane layout-strategy choice (force-directed,
-/// radial, phyllotaxis, cluster-collapsed, etc.) rather than
-/// hard-coded force-directed.
+/// Cartography projection-request derivation: builds a
+/// [`cartography::request::ProjectionRequest`] and dispatches it through a
+/// chosen [`cartography::LayoutStrategy`]. The integration seam for
+/// per-pane layout-strategy choice (the `arrangements` catalog: radial,
+/// phyllotaxis, penrose, kanban, etc.) once a picker wires it up.
 pub mod cartography_scene;
 
 /// Render a cartography `Projection` into a `paint_list_api` paint list — the
@@ -92,9 +87,6 @@ pub mod workbench;
 /// lattice) are added when a surface needs one.
 pub mod tree_projection;
 
-pub use canvas_scene::{
-    CanvasSceneOptions, HiddenRelationKey, build_canvas_scene_input, graph_view_id_to_canvas,
-};
 pub use cartography_scene::{
     CartographySceneOptions, build_projection_request, project_with, step_with,
 };

@@ -1,7 +1,6 @@
 use super::*;
 use euclid::default::{Rect, Size2D};
-use canvas_ir::projection::ProjectionMode;
-use canvas_ir::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+use crate::scene::{CanvasEdge, CanvasNode};
 
 fn viewport() -> CanvasViewport {
     CanvasViewport {
@@ -12,7 +11,6 @@ fn viewport() -> CanvasViewport {
 
 fn scene(nodes: Vec<(u32, f32, f32)>, edges: Vec<(u32, u32)>) -> CanvasSceneInput<u32> {
     CanvasSceneInput {
-        view_id: ViewId(0),
         nodes: nodes
             .into_iter()
             .map(|(id, x, y)| CanvasNode {
@@ -26,10 +24,6 @@ fn scene(nodes: Vec<(u32, f32, f32)>, edges: Vec<(u32, u32)>) -> CanvasSceneInpu
             .into_iter()
             .map(|(s, t)| CanvasEdge::untagged(s, t))
             .collect(),
-        scene_objects: Vec::new(),
-        overlays: Vec::new(),
-        scene_mode: SceneMode::Browse,
-        projection: ProjectionMode::default(),
     }
 }
 

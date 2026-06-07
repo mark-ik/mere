@@ -30,8 +30,8 @@ use euclid::default::{Point2D, Vector2D};
 use serde::{Deserialize, Serialize};
 
 use super::{Layout, LayoutExtras, StaticLayoutState};
-use canvas_ir::camera::CanvasViewport;
-use canvas_ir::scene::CanvasSceneInput;
+use crate::camera::CanvasViewport;
+use crate::scene::CanvasSceneInput;
 
 const PHI: f32 = 1.618_034;
 const INV_PHI: f32 = 0.618_034;
@@ -426,8 +426,7 @@ const _: f32 = PHI;
 mod tests {
     use super::*;
     use euclid::default::{Rect, Size2D};
-    use canvas_ir::projection::ProjectionMode;
-    use canvas_ir::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use crate::scene::{CanvasEdge, CanvasNode};
 
     fn viewport() -> CanvasViewport {
         CanvasViewport {
@@ -438,7 +437,6 @@ mod tests {
 
     fn scene(n: u32) -> CanvasSceneInput<u32> {
         CanvasSceneInput {
-            view_id: ViewId(0),
             nodes: (0..n)
                 .map(|id| CanvasNode {
                     id,
@@ -451,10 +449,6 @@ mod tests {
                 })
                 .collect(),
             edges: Vec::<CanvasEdge<u32>>::new(),
-            scene_objects: Vec::new(),
-            overlays: Vec::new(),
-            scene_mode: SceneMode::Browse,
-            projection: ProjectionMode::default(),
         }
     }
 

@@ -21,8 +21,8 @@ use euclid::default::{Point2D, Vector2D};
 use serde::{Deserialize, Serialize};
 
 use super::{AxisValue, Layout, LayoutExtras, StaticLayoutState};
-use canvas_ir::camera::CanvasViewport;
-use canvas_ir::scene::CanvasSceneInput;
+use crate::camera::CanvasViewport;
+use crate::scene::CanvasSceneInput;
 
 // ── Timeline ──────────────────────────────────────────────────────────────────
 
@@ -306,8 +306,7 @@ where
 mod tests {
     use super::*;
     use euclid::default::{Rect, Size2D};
-    use canvas_ir::projection::ProjectionMode;
-    use canvas_ir::scene::{CanvasEdge, CanvasNode, SceneMode, ViewId};
+    use crate::scene::{CanvasEdge, CanvasNode};
 
     fn viewport() -> CanvasViewport {
         CanvasViewport {
@@ -318,7 +317,6 @@ mod tests {
 
     fn scene(nodes: Vec<(u32, f32, f32)>) -> CanvasSceneInput<u32> {
         CanvasSceneInput {
-            view_id: ViewId(0),
             nodes: nodes
                 .into_iter()
                 .map(|(id, x, y)| CanvasNode {
@@ -329,10 +327,6 @@ mod tests {
                 })
                 .collect(),
             edges: Vec::<CanvasEdge<u32>>::new(),
-            scene_objects: Vec::new(),
-            overlays: Vec::new(),
-            scene_mode: SceneMode::Browse,
-            projection: ProjectionMode::default(),
         }
     }
 
