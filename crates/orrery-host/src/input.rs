@@ -200,7 +200,16 @@ impl Orrery {
             .and_then(|k| self.view.position_of(k))
             .unwrap_or(Point2D::new(0.0, 0.0));
         let seed = Point2D::new(anchor.x + 12.0, anchor.y + 12.0);
-        let key = self.graph.add_node(url.to_string(), PortablePoint::new(seed.x, seed.y));
+        // `Graph::add_node` is native-only (it self-generates the UUID); on wasm the
+        // host supplies it via `add_node_with_id`. mint_node opens a fresh surface, so
+        // a new random id is the right one here (node_namespace_id is for convergent
+        // linked-data ingest, not user-minted nodes). new_v4 works on wasm via the
+        // unified uuid `js` backend.
+        let key = self.graph.add_node_with_id(
+            uuid::Uuid::new_v4(),
+            url.to_string(),
+            PortablePoint::new(seed.x, seed.y),
+        );
         // Anchor the new node's history under the origin's current visit (the
         // navigated-from point) BEFORE its first visit, so that first visit
         // attaches there in the shared lineage tree (the (b) cross-node anchor).

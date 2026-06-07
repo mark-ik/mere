@@ -21,10 +21,6 @@ name = "orrery-host"
 path = "src/main.rs"
 
 [dependencies]
-# Shared present stack (SurfaceHost: boot / resize / rasterize / acquire) + the
-# winit->serval key & modifier mapping, shared with meerkat.
-serval-winit-host = { path = "../serval-winit-host" }
-
 # The host-neutral orrery scene producer + camera/style, and its graph + physics.
 platen.workspace = true
 kernel.workspace = true
@@ -50,14 +46,19 @@ serval-scripted-dom = { path = "../../../serval/components/serval-scripted-dom" 
 serval-layout = { path = "../../../serval/components/serval-layout" }
 layout_dom_api = { package = "layout-dom-api", path = "../../../serval/components/shared/layout-dom" }
 
-# Windowing + present (pins align with serval's: wgpu 29 / winit 0.30).
-winit = { workspace = true }
-wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = "1"
 # Constructing seed positions for the gyre simulation (its position type).
 euclid = "0.22"
+
+# The native present stack: the Orrery lib is window-agnostic (frame -> Scene), so
+# the winit window + wgpu present + the shared SurfaceHost are bin-only and gated
+# off wasm. The wasm present path (canvas + WebGPU) is a later step. (P2, 2026-06-06.)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+serval-winit-host = { path = "../serval-winit-host" }
+winit = { workspace = true }
+wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 
 [lints]
 workspace = true
