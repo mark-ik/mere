@@ -77,6 +77,10 @@ impl App {
                     self.workbench.open_tile(new_member);
                 }
                 self.focused_tile = Some(new_member);
+            } else {
+                // Cartography: opening a node is deliberate — show it as a live
+                // card straight away (passive focus shows only the snapshot).
+                self.live_previews.insert(new_member);
             }
             self.ensure_content(&loc);
             self.content_location = loc;
@@ -95,6 +99,13 @@ impl App {
             None => {
                 self.orrery.visit(&loc);
             },
+        }
+        // Navigating is deliberate: show the target as a live card in Cartography
+        // (passive focus shows only the snapshot).
+        if !self.workbench.is_tiled() {
+            if let Some(member) = self.focused_member() {
+                self.live_previews.insert(member);
+            }
         }
         self.ensure_content(&loc);
         self.content_location = loc;

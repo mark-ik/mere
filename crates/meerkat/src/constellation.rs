@@ -93,10 +93,12 @@ pub struct Constellation {
     /// `last_touched`, so eviction picks the genuinely-stalest tab.
     touch_clock: u64,
     /// The retained "last visit" snapshot per node: when an activation is reaped
-    /// or evicted, its final scene + content height are kept here so the host can
-    /// composite a static preview card without a live actor. (Card system P2.)
+    /// or evicted, its final `(scene, content_height, width)` is kept here so the
+    /// host can composite a static preview card without a live actor. The width is
+    /// the px the scene was laid out at, so the host rasterizes at that width and
+    /// scales the texture down into a small thumbnail dest. (Card system P2.)
     /// In-memory for now; durable cross-session snapshots are a later step.
-    snapshots: HashMap<GraphMemberId, (Scene, u32)>,
+    snapshots: HashMap<GraphMemberId, (Scene, u32, u32)>,
 }
 
 /// What a [`Constellation::drain`] surfaced for the host to act on. Scenes are
@@ -273,7 +275,9 @@ impl Constellation {
     fn stash_snapshot(&mut self, member: GraphMemberId) {
         if let Some(activation) = self.active.remove(&member) {
             if let Some(scene) = activation.scene {
-                self.snapshots.insert(member, (scene, activation.content_height));
+                let width = activation.shown.map(|(_, _, w, _)| w).unwrap_or(0);
+                self.snapshots
+                    .insert(member, (scene, activation.content_height, width));
             }
         }
     }
@@ -281,7 +285,14 @@ impl Constellation {
     /// The retained "last visit" snapshot scene for `member`, if it has ever been
     /// activated this session. Composited as a static preview card, no actor.
     pub fn snapshot(&self, member: GraphMemberId) -> Option<&Scene> {
-        self.snapshots.get(&member).map(|(scene, _)| scene)
+        self.snapshots.get(&member).map(|(scene, _, _)| scene)
+    }
+
+    /// The snapshot's native `(width, content_height)` in px — the size its scene
+    /// was laid out at. The host rasterizes at this and scales the texture into a
+    /// small thumbnail dest. `None` if there is no snapshot.
+    pub fn snapshot_size(&self, member: GraphMemberId) -> Option<(u32, u32)> {
+        self.snapshots.get(&member).map(|(_, h, w)| (*w, *h))
     }
 
     /// The scene to composite for `member`: the live activation's if active, else
@@ -297,13 +308,8 @@ impl Constellation {
         if live > 0 {
             live
         } else {
-            self.snapshots.get(&member).map_or(0, |(_, h)| *h)
+            self.snapshots.get(&member).map_or(0, |(_, h, _)| *h)
         }
-    }
-
-    /// Whether `member` has anything to show — a live scene or a snapshot.
-    pub fn has_content(&self, member: GraphMemberId) -> bool {
-        self.scene(member).is_some() || self.snapshots.contains_key(&member)
     }
 
     /// Whether `member` is flagged to keep working in the background.

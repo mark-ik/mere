@@ -277,6 +277,48 @@ pub fn card_rect(w: u32, toolbar_h: u32, h: u32) -> Option<(f32, f32, f32, f32, 
     Some((x0, y0, x1, y1, cw.round().max(1.0) as u32, ch.round().max(1.0) as u32))
 }
 
+/// A floating card of desired pixel size `cw`x`ch`, anchored **next to** the node
+/// at window point `(nx, ny)`. Placed just right of the node, flipped to the left
+/// when it would overflow; vertically centered on the node and clamped to the
+/// content band. Returns window-space corners + the (clamped) size, or `None`
+/// when the band is too small. The card follows the node because the caller
+/// recomputes it each frame from the live node position. (Card system: anchored.)
+pub fn anchored_card_rect(
+    nx: f32,
+    ny: f32,
+    cw: u32,
+    ch: u32,
+    w: u32,
+    toolbar_h: u32,
+    h: u32,
+) -> Option<(f32, f32, f32, f32, u32, u32)> {
+    let margin = 8.0;
+    let top = toolbar_h as f32 + margin;
+    let avail_w = w as f32 - 2.0 * margin;
+    let avail_h = h as f32 - top - margin;
+    if avail_w < 120.0 || avail_h < 80.0 {
+        return None;
+    }
+    let cwf = (cw as f32).min(avail_w);
+    let chf = (ch as f32).min(avail_h);
+    // Clearance from the node center so the card doesn't sit on the node.
+    let gap = 28.0;
+    let mut x0 = nx + gap;
+    if x0 + cwf > w as f32 - margin {
+        x0 = nx - gap - cwf; // flip to the left of the node
+    }
+    let x0 = x0.clamp(margin, (w as f32 - margin - cwf).max(margin));
+    let y0 = (ny - chf * 0.5).clamp(top, (h as f32 - margin - chf).max(top));
+    Some((
+        x0,
+        y0,
+        x0 + cwf,
+        y0 + chf,
+        cwf.round().max(1.0) as u32,
+        chf.round().max(1.0) as u32,
+    ))
+}
+
 fn heading(level: u8, text: &str) -> DocumentBlock {
     DocumentBlock::Heading { level, spans: vec![InlineSpan::Text(text.to_string())] }
 }

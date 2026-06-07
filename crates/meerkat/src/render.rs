@@ -193,22 +193,43 @@ impl App {
         } else if let (Some(member), Some(url)) =
             (self.focused_member(), self.orrery.focused_url().map(str::to_string))
         {
-            // The focused node's card. A live preview (double-clicked up) drives its
-            // actor; otherwise we composite the retained "last visit" snapshot with
-            // no actor. A node with neither (never visited this session) shows no
-            // card yet. (Card system P2/P3.)
-            if let Some((x0, y0, x1, y1, cw, ch)) =
-                super::card::card_rect(w, toolbar_h, h)
-            {
-                if self.live_previews.contains(&member) {
+            // Float the card next to the focused node (fall back to the fixed
+            // top-right rect when the node's screen pos is unknown). A live preview
+            // is a medium card the actor renders into; a snapshot is a shorter
+            // peek at the retained scene, no actor. A node with neither (never
+            // visited this session) shows no card yet. (Card system P2/P3.)
+            let node = self
+                .orrery
+                .focused_node_screen()
+                .map(|(nx, ny)| (nx, ny + toolbar_h as f32));
+            if self.live_previews.contains(&member) {
+                const LIVE_W: u32 = 300;
+                const LIVE_H: u32 = 400;
+                let rect = node
+                    .and_then(|(nx, ny)| {
+                        super::card::anchored_card_rect(nx, ny, LIVE_W, LIVE_H, w, toolbar_h, h)
+                    })
+                    .or_else(|| super::card::card_rect(w, toolbar_h, h));
+                if let Some((x0, y0, x1, y1, cw, ch)) = rect {
                     self.ensure_content(&url);
                     let state = self.content.get(&url).cloned();
                     self.constellation.drive(member, &url, state, cw, ch);
                     cards.push((member, [x0, y0, x1, y1], (cw, ch)));
-                } else if self.constellation.has_content(member) {
-                    // Snapshot card: no drive (no actor), composited from the
-                    // retained scene in the rasterize pass below.
-                    cards.push((member, [x0, y0, x1, y1], (cw, ch)));
+                }
+            } else if let Some((sw, sh)) = self.constellation.snapshot_size(member) {
+                // Snapshot peek: a small fixed-size card regardless of the width the
+                // scene was captured at. Rasterize at the snapshot's native size and
+                // let the composite uniform-scale it down into a scrollable thumbnail
+                // (so a node last shown as a full-width tile isn't a full-width card).
+                const SNAP_W: u32 = 200;
+                const SNAP_H: u32 = 260;
+                let rect = node
+                    .and_then(|(nx, ny)| {
+                        super::card::anchored_card_rect(nx, ny, SNAP_W, SNAP_H, w, toolbar_h, h)
+                    })
+                    .or_else(|| super::card::card_rect(w, toolbar_h, h));
+                if let Some((x0, y0, x1, y1, _, _)) = rect {
+                    cards.push((member, [x0, y0, x1, y1], (sw.max(1), sh.max(1))));
                 }
             }
             self.tile_rects.clear(); // no drag targets outside the tiled view
@@ -295,8 +316,14 @@ impl App {
             let Some(cached) = self.tile_textures.get(member) else { continue };
             // Scroll is a vertical UV window over the tall cached texture — a GPU
             // sample shift, no re-raster. Clamp the offset to the scrollable range.
+            let tex_w = cached.size.0 as f32;
             let tex_h = cached.size.1 as f32;
-            let visible_h = (dest[3] - dest[1]).max(1.0);
+            let dest_w = (dest[2] - dest[0]).max(1.0);
+            let dest_h = (dest[3] - dest[1]).max(1.0);
+            // Height of the texture slice shown, sized so the vertical scale equals
+            // the horizontal one (tex_w -> dest_w): a uniform downscale for snapshot
+            // thumbnails, and a no-op (= dest_h) for 1:1 live cards / tiles.
+            let visible_h = dest_h * tex_w / dest_w;
             let max_scroll = (tex_h - visible_h).max(0.0);
             let scroll = self.scroll.get(member).copied().unwrap_or(0.0).clamp(0.0, max_scroll);
             let uv = [0.0, scroll / tex_h, 1.0, (scroll + visible_h) / tex_h];

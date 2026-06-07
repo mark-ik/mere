@@ -450,6 +450,22 @@ impl Orrery {
         self.graph.get_node(key).map(|n| n.url())
     }
 
+    /// The focused node's center in **content-band** screen px (its world
+    /// position through the camera, `screen = world * zoom + offset`), if exactly
+    /// one node is selected. The host anchors the floating card next to this; add
+    /// the toolbar height for window coords. `None` when zero or many are
+    /// selected, or the node has no position yet. (Card system: anchored card.)
+    pub fn focused_node_screen(&self) -> Option<(f32, f32)> {
+        if self.selected.len() != 1 {
+            return None;
+        }
+        let key = *self.selected.iter().next()?;
+        let world = self.view.position_of(key)?;
+        let (ox, oy) = self.camera.offset;
+        let z = self.camera.zoom;
+        Some((world.x * z + ox, world.y * z + oy))
+    }
+
     /// The member id (node UUID) of the single focused node, if exactly one is
     /// selected. The host targets per-node navigation (omnibar, back/forward) at
     /// it in Cartography; in Tree the host uses the focused tile's member.
