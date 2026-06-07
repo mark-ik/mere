@@ -44,6 +44,9 @@ impl SurfaceHost {
     /// at `(width, height)`. Returns a diagnostic string on any boot / surface
     /// failure (the caller decides whether to exit the event loop). Prefers an
     /// sRGB surface format, falling back to the first advertised format.
+    /// Native blocking boot via netrender's synchronous wgpu boot. On wasm the
+    /// WebGPU device request is async, so use [`boot_async`](Self::boot_async).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn boot(
         window: Arc<Window>,
         width: u32,
@@ -51,6 +54,33 @@ impl SurfaceHost {
         options: NetrenderOptions,
     ) -> Result<Self, String> {
         let handles = netrender::boot().map_err(|e| format!("netrender wgpu boot failed: {e}"))?;
+        Self::from_handles(handles, window, width, height, options)
+    }
+
+    /// Async boot: awaits netrender's `boot_async`. This is the only boot path on
+    /// wasm (WebGPU device acquisition is asynchronous); it works on every target,
+    /// so a native caller can `block_on` it instead of [`boot`](Self::boot).
+    pub async fn boot_async(
+        window: Arc<Window>,
+        width: u32,
+        height: u32,
+        options: NetrenderOptions,
+    ) -> Result<Self, String> {
+        let handles = netrender::boot_async()
+            .await
+            .map_err(|e| format!("netrender wgpu boot failed: {e}"))?;
+        Self::from_handles(handles, window, width, height, options)
+    }
+
+    /// Build + configure the surface and create the renderer from already-booted
+    /// wgpu handles. Shared by [`boot`](Self::boot) and [`boot_async`](Self::boot_async).
+    fn from_handles(
+        handles: netrender::WgpuHandles,
+        window: Arc<Window>,
+        width: u32,
+        height: u32,
+        options: NetrenderOptions,
+    ) -> Result<Self, String> {
         let surface = handles
             .instance
             .create_surface(window)
