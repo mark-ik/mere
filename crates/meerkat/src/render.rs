@@ -136,6 +136,9 @@ impl App {
         // node's activation at composite time. Driving an activation re-renders it
         // off the UI thread only when its document or size changed.
         let mut cards: Vec<(GraphMemberId, [f32; 4], (u32, u32))> = Vec::new();
+        // The "unvisited" placeholder card (focused node, no snapshot yet): it has
+        // no constellation scene, so it composites on its own path below.
+        let mut unvisited_card: Option<(GraphMemberId, [f32; 4])> = None;
         if self.workbench.is_tiled() {
             // Read each content placeholder's laid-out rect + member out of the
             // workbench DOM (taffy laid it out above), then drive that tile's actor
@@ -231,6 +234,18 @@ impl App {
                 if let Some((x0, y0, x1, y1, _, _)) = rect {
                     cards.push((member, [x0, y0, x1, y1], (sw.max(1), sh.max(1))));
                 }
+            } else {
+                // Never visited this session: a small dashed "Double-click to load"
+                // placeholder, anchored like the other cards. Double-clicking it
+                // promotes to a live preview (same as a snapshot). Composited on its
+                // own path below (no constellation scene).
+                const UNVIS_W: u32 = 200;
+                const UNVIS_H: u32 = 120;
+                unvisited_card = node
+                    .and_then(|(nx, ny)| {
+                        super::card::anchored_card_rect(nx, ny, UNVIS_W, UNVIS_H, w, toolbar_h, h)
+                    })
+                    .map(|(x0, y0, x1, y1, _, _)| (member, [x0, y0, x1, y1]));
             }
             self.tile_rects.clear(); // no drag targets outside the tiled view
         } else {
@@ -238,8 +253,13 @@ impl App {
         }
 
         // Record each card's on-screen content rect so a wheel over it scrolls the
-        // card (resolved in the wheel handler) rather than panning the orrery.
+        // card (resolved in the wheel handler) rather than panning the orrery. The
+        // unvisited placeholder counts as a card too, so a double-click over it
+        // promotes (and a click on it doesn't deselect the node).
         self.content_rects = cards.iter().map(|(member, dest, _)| (*member, *dest)).collect();
+        if let Some((member, rect)) = unvisited_card {
+            self.content_rects.push((member, rect));
+        }
 
         // The omnibar follows focus: point it at the focused tile / node when that
         // changed (next frame, like the chrome strips were — the scene above is
@@ -370,6 +390,28 @@ impl App {
                     );
                     self.close_button_rects.push((*member, [bx0, by0, bx1, by1]));
                 }
+            }
+        }
+        // The unvisited placeholder card: rasterize its (static) scene once per
+        // size and composite it at the anchored rect.
+        if let Some((_, rect)) = unvisited_card {
+            let uw = (rect[2] - rect[0]).round().max(1.0) as u32;
+            let uh = (rect[3] - rect[1]).round().max(1.0) as u32;
+            if self.unvisited_tex.as_ref().map(|c| c.size) != Some((uw, uh)) {
+                let scene = super::card::unvisited_card_scene(uw, uh);
+                let (tex, view) = host.rasterize(&scene, uw, uh, ColorLoad::Clear(CARD_BG));
+                self.unvisited_tex =
+                    Some(super::CachedTile { version: 0, size: (uw, uh), tex, view });
+            }
+            if let Some(cached) = &self.unvisited_tex {
+                host.renderer().compose_external_texture(
+                    &cached.view,
+                    &target_view,
+                    format,
+                    w,
+                    h,
+                    ExternalTexturePlacement::new(rect),
+                );
             }
         }
         host.renderer().compose_external_texture(

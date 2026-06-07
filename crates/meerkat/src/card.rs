@@ -342,6 +342,31 @@ pub fn close_button_scene(size: u32) -> Scene {
     scene
 }
 
+/// The placeholder card for a focused node that has no snapshot yet (never
+/// visited this session): a dashed outline framing a "Double-click to load"
+/// hint. Double-clicking it promotes the node to a live preview, same as a
+/// snapshot. Static, so the host rasterizes it once and caches it.
+/// (Card system #3.)
+pub fn unvisited_card_scene(w: u32, h: u32) -> Scene {
+    let doc = document("mere://unvisited", vec![paragraph("Double-click to load")]);
+    let mut laid = layout_document(&doc, Viewport::new(w as f32, h as f32), &StyleConfig::default());
+    // Frame the whole card (not just the text extent) so the dashed border fits.
+    laid.packet.viewport = Viewport::new(w as f32, h as f32);
+    let mut scene = scene_from_packet(&laid.packet, &laid.fonts, &card_vocabulary());
+    scene.push_stroke_decorated(
+        2.0,
+        2.0,
+        w as f32 - 2.0,
+        h as f32 - 2.0,
+        [0.58, 0.61, 0.69, 0.75],
+        1.5,
+        netrender::SceneStrokeCap::default(),
+        netrender::SceneStrokeJoin::default(),
+        vec![6.0, 4.0],
+    );
+    scene
+}
+
 fn heading(level: u8, text: &str) -> DocumentBlock {
     DocumentBlock::Heading { level, spans: vec![InlineSpan::Text(text.to_string())] }
 }

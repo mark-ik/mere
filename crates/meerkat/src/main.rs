@@ -245,6 +245,9 @@ struct App {
     /// Cached rasterized close (X) button texture, shared across live cards; built
     /// once and composited at each live card's top-right corner. (Card system.)
     close_button_tex: Option<CachedTile>,
+    /// Cached rasterized "unvisited" placeholder card (dashed outline + "Double-
+    /// click to load"), shown when a focused node has no snapshot yet. (Card #3.)
+    unvisited_tex: Option<CachedTile>,
     /// Each live card's close-button rect this frame (member, [x0, y0, x1, y1]); a
     /// press inside reaps that live preview. Rebuilt every frame.
     close_button_rects: Vec<(GraphMemberId, [f32; 4])>,
@@ -439,6 +442,7 @@ impl App {
             scroll: HashMap::new(),
             content_rects: Vec::new(),
             close_button_tex: None,
+            unvisited_tex: None,
             close_button_rects: Vec::new(),
             divider_drag: None,
             width: 1024,
