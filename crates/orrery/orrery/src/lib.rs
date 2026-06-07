@@ -390,6 +390,20 @@ impl Orrery {
         Some(id)
     }
 
+    /// Clear the node + edge selection (focus) without removing anything from
+    /// the graph. The host calls this to drop focus — e.g. closing the last
+    /// workbench tile returns to the graph with nothing focused, so the node
+    /// deactivates instead of its Cartography preview re-activating it.
+    /// (Card-system plan, Phase 1.)
+    pub fn clear_selection(&mut self) {
+        if self.selected.is_empty() && self.selected_edges.is_empty() {
+            return;
+        }
+        self.selected.clear();
+        self.selected_edges.clear();
+        self.reconcile_derived();
+    }
+
     /// Hide the currently-selected edges: move them into the hidden set (as
     /// undirected pairs) so the edge pass skips them, and clear the selection.
     /// Returns how many were hidden. The relations and their physics springs

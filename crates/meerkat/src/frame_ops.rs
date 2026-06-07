@@ -417,7 +417,18 @@ impl App {
             WorkbenchAction::Close(member) => {
                 self.workbench.close_tile(member);
                 self.constellation.reap(member);
-                if self.focused_tile == Some(member) {
+                if self.workbench.open_members().is_empty() {
+                    // Closing the last tile returns to the graph with nothing
+                    // focused, so the node deactivates rather than stranding an
+                    // empty workbench (where the Cartography preview would just
+                    // re-activate it). (Card-system plan, Phase 1.)
+                    if self.workbench.is_tiled() {
+                        self.workbench.toggle_mode();
+                    }
+                    self.workbench.clear_tiles();
+                    self.focused_tile = None;
+                    self.orrery.clear_selection();
+                } else if self.focused_tile == Some(member) {
                     self.focused_tile = self.workbench.open_members().first().copied();
                 }
             },
