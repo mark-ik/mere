@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use forme::GraphMemberId;
 use meerkat::command::Command;
 use meerkat::{Chrome, CommsIntent, ContextAction, ContextItem};
-use orrery_host::NodeState;
+use orrery::NodeState;
 use platen_view::WorkbenchAction;
 use session_runtime::{
     content_store, session_graph_store, settings_store, view_intent_store, PersistedSettings,

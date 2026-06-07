@@ -1,5 +1,5 @@
 [package]
-name = "orrery-host"
+name = "orrery"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,11 +13,11 @@ description = "Serval-on-winit host for the orrery (the graph field-canvas), bui
 # semantic input methods. The bin below is a thin winit shell over it; meerkat hosts
 # the same `Orrery` as its content-root (S1 of the modular integration plan).
 [lib]
-name = "orrery_host"
+name = "orrery"
 path = "src/lib.rs"
 
 [[bin]]
-name = "orrery-host"
+name = "orrery"
 path = "src/main.rs"
 
 [dependencies]

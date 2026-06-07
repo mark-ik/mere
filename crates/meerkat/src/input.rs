@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use forme::GraphMemberId;
 use layout_dom_api::LayoutDom;
 use meerkat::{submit_omnibar, Chrome};
-use orrery_host::PointerButton;
+use orrery::PointerButton;
 use pelt_live::hit_test_node;
 use platen_view::{WorkbenchAction, WORKBENCH_SHEET};
 use serval_layout::ScrollOffsets;

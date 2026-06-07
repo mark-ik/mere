@@ -73,7 +73,7 @@ serval-winit-host = { path = "../serval-winit-host" }
 # `frame(w, h) -> (Scene, needs_redraw)` + semantic input. meerkat hosts it as the
 # content-root below the chrome band; the orrery-host bin is the same `Orrery` on
 # its own window. (Modular integration plan, S1.)
-orrery-host = { path = "../orrery-host" }
+orrery = { path = "../orrery-host" }
 
 # The content-card pipeline: a focused node's media as a document. inker supplies
 # the portable EngineDocument model; document-canvas lays it out (parley) and,

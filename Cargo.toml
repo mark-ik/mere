@@ -86,7 +86,9 @@ graph-layout = { path = "crates/graphshell/graph/graph-layout" }
 node-lineage = { path = "crates/graphshell/graph/node-lineage" }
 linked-data = { path = "crates/graphshell/graph/linked-data" }
 kernel = { path = "crates/graphshell/graph/graph-kernel" }
-orrery = { path = "crates/graphshell/graph/orrery" }
+# The orrery a11y/uxtree projection (domain layer). `mere-orrery` so the bare
+# `orrery` name belongs to the host content-root crate (was `orrery-host`).
+mere-orrery = { path = "crates/graphshell/graph/orrery" }
 
 # The actor-kernel runtime (host-neutral): the !Send host-kernel boundary + the
 # Send actor harness the constellation is built on.

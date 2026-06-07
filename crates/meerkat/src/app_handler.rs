@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use netrender::NetrenderOptions;
-use orrery_host::WHEEL_PAN_SCALE;
+use orrery::WHEEL_PAN_SCALE;
 use serval_winit_host::{modifiers_from_winit, SurfaceHost};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;

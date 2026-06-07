@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::{ColorLoad, NetrenderOptions};
-use orrery_host::{Orrery, PointerButton, WHEEL_PAN_SCALE};
+use orrery::{Orrery, PointerButton, WHEEL_PAN_SCALE};
 use serval_winit_host::SurfaceHost;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;

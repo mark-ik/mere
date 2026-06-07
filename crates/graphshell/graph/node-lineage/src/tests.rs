@@ -117,6 +117,36 @@ fn spawned_owner_origin_attaches_under_creator_current_visit() {
 }
 
 #[test]
+fn deleting_a_spawned_owner_leaves_a_serializable_snapshot() {
+    // Regression (2026-06-06): deleting an owner that was spawned under a creator's
+    // current visit left a dangling forward-child binding on the creator's visit,
+    // which `to_snapshot` then panicked indexing.
+    let mut memory = Memory::new();
+    let a_entry = memory.resolve_or_create_entry(
+        ("a".to_string(), None),
+        entry("a", "A"),
+        1,
+        EntryPrivacy::LocalOnly,
+    );
+    let c_entry = memory.resolve_or_create_entry(
+        ("c".to_string(), None),
+        entry("c", "C"),
+        2,
+        EntryPrivacy::LocalOnly,
+    );
+    let a = memory.ensure_owner(owner("a"), None);
+    memory.visit_entry(a, a_entry, ctx("a"), TransitionKind::UrlTyped, 10).unwrap();
+    // Spawn a child under a's current visit, give it a visit, then delete it.
+    let child = memory.ensure_owner(owner("c"), Some(a));
+    memory.visit_entry(child, c_entry, ctx("c"), TransitionKind::TabSpawn, 20).unwrap();
+    memory.delete_owner(child).unwrap();
+    // The creator survives and the snapshot round-trips without panicking.
+    let restored = Memory::from_snapshot(memory.to_snapshot());
+    assert!(restored.owner_id_by_identity(&owner("c")).is_none(), "spawned owner gone");
+    assert!(restored.owner_id_by_identity(&owner("a")).is_some(), "creator survives");
+}
+
+#[test]
 fn forward_child_is_owner_scoped_on_shared_visit() {
     let mut memory = Memory::new();
 

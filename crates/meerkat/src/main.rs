@@ -38,7 +38,7 @@ use eidetic_fjall::FjallStore;
 use forme::GraphMemberId;
 use layout_dom_api::LayoutDom;
 use meerkat::{chrome_view, Chrome, ChromeLogic, ChromeView};
-use orrery_host::{CameraView, Orrery};
+use orrery::{CameraView, Orrery};
 use pelt_live::fragments_from_scripted_dom;
 use platen::Workbench;
 use platen_view::{workbench_view, WorkbenchLogic, WorkbenchScene, WorkbenchTreeView};

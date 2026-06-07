@@ -227,10 +227,12 @@ where
         self.owner_index.remove(&owner.identity);
 
         let owned_visits: Vec<_> = owner.owned_visits.into_iter().collect();
-        for visit_id in &owned_visits {
-            if let Some(visit) = self.visits.get_mut(*visit_id) {
-                visit.bindings.remove(&owner_id);
-            }
+        // Drop this owner's bindings from *every* visit, not only its owned ones:
+        // a spawned owner also leaves a forward-child binding on the creator's
+        // visit it attached under (not in `owned_visits`). Leaving that dangling
+        // makes `to_snapshot` panic indexing the removed owner. (GC fix 2026-06-06.)
+        for visit in self.visits.values_mut() {
+            visit.bindings.remove(&owner_id);
         }
 
         let mut roots = HashSet::new();
