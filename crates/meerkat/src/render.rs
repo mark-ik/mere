@@ -86,6 +86,10 @@ impl App {
         // Cartography; the orrery is hidden in the tiled view.)
         let states = self.node_states();
         self.orrery.set_node_states(states);
+        // Shape each node by its content type (square document / rounded menu /
+        // circle feed), the same per-node-hint path as the color states.
+        let shapes = self.node_shapes();
+        self.orrery.set_node_shapes(shapes);
 
         // The content root. In Cartography the orrery composites its own scene over
         // the band (kept in sync, centered once). In the tiled workbench the orrery
@@ -400,8 +404,12 @@ impl App {
         // Live cards carry a close (X) button at their top-right corner. Rasterize
         // the shared button texture once, composite it on each live card, and
         // record its rect so a press there reaps the live preview. (Card system.)
+        // Cartography only — a tile in the tiled view has its own tab close, and a
+        // live-preview member that is also tiled must not paint a dead X over it.
         self.close_button_rects.clear();
-        if composite.iter().any(|(_, m)| self.live_previews.contains(m)) {
+        if !self.workbench.is_tiled()
+            && composite.iter().any(|(_, m)| self.live_previews.contains(m))
+        {
             let btn = super::card::CLOSE_BTN;
             let inset = super::card::CLOSE_BTN_INSET;
             let size = btn.round().max(1.0) as u32;

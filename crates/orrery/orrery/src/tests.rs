@@ -231,6 +231,26 @@ fn set_node_states_resolves_uuids_to_keys() {
 }
 
 #[test]
+fn set_node_shapes_resolves_uuids_to_keys() {
+    let mut orrery = Orrery::new();
+    orrery.visit("https://a.example");
+    let (key, id) = {
+        let (k, n) = orrery.graph().get_node_by_url("https://a.example").unwrap();
+        (k, n.id)
+    };
+    let mut shapes = HashMap::new();
+    shapes.insert(id, NodeShape::Circle);
+    orrery.set_node_shapes(shapes);
+    assert_eq!(orrery.node_shapes.get(&key), Some(&NodeShape::Circle), "uuid resolves to its key");
+
+    // An unknown node id is filtered out (no panic, no stale entry).
+    let mut other = HashMap::new();
+    other.insert(uuid::Uuid::from_u128(0xdead_beef), NodeShape::Rounded);
+    orrery.set_node_shapes(other);
+    assert!(orrery.node_shapes.is_empty(), "an unknown node id is dropped");
+}
+
+#[test]
 fn connected_members_reaches_the_whole_trail() {
     let mut orrery = Orrery::new();
     let a = orrery.visit("https://a.example");

@@ -33,3 +33,24 @@ pub enum NodeState {
     /// (loading), or errored — blue. The "kinda idle" nodes.
     Idle,
 }
+
+/// A node's content-type silhouette, so the orrery can shape its on-screen nodes
+/// by what kind of content they hold. The host resolves each node's content type
+/// (inker's content-type → engine routing) and pushes these via
+/// [`Orrery::set_node_shapes`], the same way it pushes [`NodeState`] colors. A
+/// node absent from the map draws as [`Square`](NodeShape::Square), the neutral
+/// default; square reads as a document, the others distinguish renderable
+/// families at a glance. (The shape vocabulary is a first cut — a theme / lens
+/// concern eventually, not a fixed set.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum NodeShape {
+    /// A document (HTML / markdown / gemtext / plain text / …) — a sharp square.
+    /// Also the default for an unknown / not-yet-fetched node.
+    #[default]
+    Square,
+    /// An interactive small-web menu / directory (gopher / nex / guppy / …) — a
+    /// rounded square.
+    Rounded,
+    /// A feed (RSS / Atom / JSON feed) — a circle (a "stream").
+    Circle,
+}

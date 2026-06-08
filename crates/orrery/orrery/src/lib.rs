@@ -43,7 +43,7 @@ mod build;
 use build::{build_pool_dom, build_simulation, dark_scene_style, dedup_edges, sample_graph};
 
 mod types;
-pub use types::{CameraView, NodeState, PointerButton};
+pub use types::{CameraView, NodeShape, NodeState, PointerButton};
 
 mod input;
 mod frame;
@@ -139,6 +139,9 @@ pub struct Orrery {
     /// Per-node activation state the host pushes for node coloring (open / closed
     /// / idle). Resolved to `NodeKey` on set; a node absent here colors as `Idle`.
     node_states: HashMap<NodeKey, NodeState>,
+    /// Per-node content silhouette the host pushes for node shaping. Resolved to
+    /// `NodeKey` on set; a node absent here draws as `Square` (the default).
+    node_shapes: HashMap<NodeKey, NodeShape>,
     /// `Some(press_origin)` (screen px) while a left-drag marquee on empty space
     /// is in progress.
     marquee: Option<(f32, f32)>,
@@ -228,6 +231,7 @@ impl Orrery {
             selected_edges: HashSet::new(),
             hidden_edges: HashSet::new(),
             node_states: HashMap::new(),
+            node_shapes: HashMap::new(),
             marquee: None,
             ctrl: false,
             shift: false,
@@ -436,6 +440,17 @@ impl Orrery {
         self.node_states = states
             .into_iter()
             .filter_map(|(id, state)| self.graph.get_node_by_id(id).map(|(key, _)| (key, state)))
+            .collect();
+    }
+
+    /// Set the per-node content silhouettes the orrery shapes its on-screen nodes
+    /// by, keyed by node UUID; the orrery resolves each to its `NodeKey`. The host
+    /// recomputes + pushes this from each node's content type as content is
+    /// fetched; a node absent from `shapes` draws as [`NodeShape::Square`].
+    pub fn set_node_shapes(&mut self, shapes: HashMap<uuid::Uuid, NodeShape>) {
+        self.node_shapes = shapes
+            .into_iter()
+            .filter_map(|(id, shape)| self.graph.get_node_by_id(id).map(|(key, _)| (key, shape)))
             .collect();
     }
 

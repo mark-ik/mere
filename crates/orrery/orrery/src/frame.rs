@@ -21,7 +21,7 @@ use super::build::{
     background_cmds, marquee_rect_cmds, selected_edge_overlay, set_class, set_style, surface_bg,
     NODE_SHEET,
 };
-use super::{NodeState, Orrery, NODE_HALF, PAN_DECAY};
+use super::{NodeShape, NodeState, Orrery, NODE_HALF, PAN_DECAY};
 
 impl Orrery {
     /// Advance one frame at viewport `(w, h)` and return the composited content
@@ -124,7 +124,7 @@ impl Orrery {
             );
             // Selection wins (orange); otherwise color by activation state —
             // green open, red closed, blue idle (the default for an unset node).
-            let class = if self.selected.contains(&key) {
+            let state_class = if self.selected.contains(&key) {
                 "gnode-selected"
             } else {
                 match self.node_states.get(&key) {
@@ -133,7 +133,14 @@ impl Orrery {
                     _ => "gnode-idle",
                 }
             };
-            set_class(&mut self.node_dom, gnode, class);
+            // Shape rides as a second class (border-radius only) so it merges with
+            // the color class; square is the default (no shape class).
+            let shape_class = match self.node_shapes.get(&key) {
+                Some(NodeShape::Rounded) => " gnode-rounded",
+                Some(NodeShape::Circle) => " gnode-circle",
+                _ => "",
+            };
+            set_class(&mut self.node_dom, gnode, &format!("{state_class}{shape_class}"));
         }
         let mut muts = Vec::new();
         self.node_dom.drain_mutations(&mut muts);

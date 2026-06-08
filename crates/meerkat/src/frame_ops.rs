@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use forme::GraphMemberId;
 use meerkat::command::Command;
 use meerkat::{Chrome, CommsIntent, ContextAction, ContextItem};
-use orrery::NodeState;
+use orrery::{NodeShape, NodeState};
 use platen_view::WorkbenchAction;
 use session_runtime::{
     content_store, session_graph_store, settings_store, view_intent_store, PersistedSettings,
@@ -407,6 +407,24 @@ impl App {
             .collect()
     }
 
+    /// The per-node content silhouette for the orrery's node shaping, computed
+    /// from each node's fetched content type (the same content map `node_states`
+    /// reads). Only this-session-fetched nodes get an entry; unknown / unfetched
+    /// nodes fall back to [`NodeShape::Square`] (the orrery's default), so a node
+    /// takes its content shape as soon as it loads.
+    pub(super) fn node_shapes(&self) -> HashMap<GraphMemberId, NodeShape> {
+        self.orrery
+            .graph()
+            .nodes()
+            .filter_map(|(_key, node)| match self.content.get(node.url()) {
+                Some(fetch::ContentState::Ready(fetched)) => {
+                    Some((node.id, content_shape(fetched.content_type.as_deref())))
+                },
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The focused node's graph member, if a node is focused (resolved URL → node
     /// UUID via the kernel node id).
     pub(super) fn focused_member(&self) -> Option<GraphMemberId> {
@@ -567,5 +585,21 @@ impl App {
         if let Err(err) = settings_store::save_settings(&self.session_dir, &settings) {
             tracing::warn!(%err, "failed to persist settings");
         }
+    }
+}
+
+/// Map a fetched content type to its orrery [`NodeShape`] (a first-cut vocabulary;
+/// a theme / lens concern eventually). Feeds read as a circle, small-web menus /
+/// directories as a rounded square, and documents (HTML / markdown / gemtext /
+/// plain text / …) plus anything unrecognized as the default square.
+fn content_shape(content_type: Option<&str>) -> NodeShape {
+    let Some(ct) = content_type else { return NodeShape::Square };
+    let base = ct.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+    match base.as_str() {
+        "application/rss+xml" | "application/atom+xml" | "application/feed+json" => NodeShape::Circle,
+        "application/gopher-menu" | "application/x-nex" | "application/x-guppy" | "text/x-finger" => {
+            NodeShape::Rounded
+        },
+        _ => NodeShape::Square,
     }
 }

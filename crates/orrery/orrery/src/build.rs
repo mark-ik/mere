@@ -44,6 +44,11 @@ pub(crate) const NODE_SHEET: &[&str] = &[
         background-color: rgb(166, 72, 72); color: rgb(250, 240, 240); font-size: 15px; }",
     ".gnode-idle { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
+    // Content-type silhouettes, layered on the state/color class as a second class
+    // (border-radius only, so they merge with whichever color class is set). Square
+    // is the default (no class); rounded = small-web menu, circle = feed.
+    ".gnode-rounded { border-radius: 9px; }",
+    ".gnode-circle { border-radius: 50%; }",
 ];
 
 /// A small sample graph: a ring of nodes around the origin with ring edges plus a
