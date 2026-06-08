@@ -7,16 +7,16 @@ use std::rc::Rc;
 
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
-    el, lens, on_click, text_field_typed, AnyView, PointerClick, ServalAppRunner, ServalCtx,
-    ServalElement, TextField, TextInput,
+    AnyView, PointerClick, ServalAppRunner, ServalCtx, ServalElement, TextField, TextInput, el,
+    lens, on_click, text_field_typed,
 };
 
 use comms::{Direction, ProtocolKind};
 
-use super::{Chrome, ContextMenu, HistoryStep};
 use super::command::Command;
 use super::nav;
 use super::suggest;
+use super::{Chrome, ContextMenu, HistoryStep};
 
 /// The erased view type meerkat's logic produces, so the toolbar's concrete
 /// `El<…>` tuple need not be spelled (it grows as the chrome does).
@@ -70,7 +70,11 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // Reflect the reused nav-capability flags onto the buttons: a spent
     // direction carries a `disabled` class (the host sheet greys it; the
     // handler is already a no-op at the history's edge).
-    let back_class = if c.toolbar.can_go_back { "nav" } else { "nav disabled" };
+    let back_class = if c.toolbar.can_go_back {
+        "nav"
+    } else {
+        "nav disabled"
+    };
     let forward_class = if c.toolbar.can_go_forward {
         "nav"
     } else {
@@ -160,10 +164,12 @@ fn context_menu_view(menu: &ContextMenu) -> ChromeView {
             Box::new(row) as ChromeView
         })
         .collect();
-    let panel = el::<_, Chrome, ()>("div", rows).attr("class", "context-menu").attr(
-        "style",
-        format!("position: absolute; left: {}px; top: {}px;", menu.x, menu.y),
-    );
+    let panel = el::<_, Chrome, ()>("div", rows)
+        .attr("class", "context-menu")
+        .attr(
+            "style",
+            format!("position: absolute; left: {}px; top: {}px;", menu.x, menu.y),
+        );
     Box::new(panel)
 }
 
@@ -253,9 +259,8 @@ fn comms_pane(c: &Chrome) -> ChromeView {
 
     // Surfaced backend failures (never hidden) — empty for the placeholder phase.
     for failure in &c.comms.failures {
-        let line =
-            el::<_, Chrome, ()>("div", format!("{:?}: {}", failure.protocol, failure.error))
-                .attr("class", "comms-failure");
+        let line = el::<_, Chrome, ()>("div", format!("{:?}: {}", failure.protocol, failure.error))
+            .attr("class", "comms-failure");
         children.push(Box::new(line));
     }
 
@@ -289,6 +294,18 @@ fn comms_pane(c: &Chrome) -> ChromeView {
             children.push(Box::new(
                 el::<_, Chrome, ()>("div", text).attr("class", class),
             ));
+
+            // A received cabal invite (a ticket in the body) gets a Join button.
+            if message.direction == Direction::Incoming {
+                if let Some(ticket) = cabal_ticket_in(message.body.text()) {
+                    let join = on_click(
+                        el::<_, Chrome, ()>("button", "Join this cabal")
+                            .attr("class", "comms-new-btn"),
+                        move |c: &mut Chrome, _: PointerClick| c.connect_cabal(ticket.clone()),
+                    );
+                    children.push(Box::new(join));
+                }
+            }
         }
 
         // Compose: a text field lensed onto `comms_draft` + a Send button.
@@ -363,6 +380,14 @@ fn comms_pane(c: &Chrome) -> ChromeView {
     Box::new(el::<_, Chrome, ()>("div", children).attr("class", "comms-pane"))
 }
 
+/// Extract a cabal join ticket (an iroh endpoint token) from a message body, if
+/// one is present — the body of a "Share cabal invite" message.
+fn cabal_ticket_in(body: &str) -> Option<String> {
+    body.split_whitespace()
+        .find(|token| token.starts_with("endpoint") && token.len() > 32)
+        .map(str::to_string)
+}
+
 /// The compose-new form: a protocol toggle (Misfin / Cable), a recipient field
 /// (misfin only — Cable targets the cabal), a body field + Send, and Cancel.
 fn new_message_form(form: &comms::NewMessageForm) -> ChromeView {
@@ -379,7 +404,13 @@ fn new_message_form(form: &comms::NewMessageForm) -> ChromeView {
     ));
 
     // Protocol toggle: the active option carries a distinct class.
-    let proto_class = |active: bool| if active { "comms-proto-active" } else { "comms-proto" };
+    let proto_class = |active: bool| {
+        if active {
+            "comms-proto-active"
+        } else {
+            "comms-proto"
+        }
+    };
     let misfin_btn = on_click(
         el::<_, Chrome, ()>("button", "Misfin")
             .attr("class", proto_class(form.protocol == ProtocolKind::Misfin)),
@@ -453,6 +484,9 @@ pub fn submit_omnibar(c: &mut Chrome) {
 /// runner so callers (and tests) can inspect the DOM, dispatch input, and rebuild.
 pub fn runner(initial_location: &str) -> ServalAppRunner<Chrome, ChromeLogic, ChromeView> {
     let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
-    ServalAppRunner::new(dom, chrome_view as ChromeLogic, Chrome::new(initial_location))
+    ServalAppRunner::new(
+        dom,
+        chrome_view as ChromeLogic,
+        Chrome::new(initial_location),
+    )
 }
-

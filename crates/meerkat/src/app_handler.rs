@@ -9,14 +9,15 @@ use std::sync::Arc;
 
 use netrender::NetrenderOptions;
 use orrery::WHEEL_PAN_SCALE;
-use serval_winit_host::{modifiers_from_winit, SurfaceHost};
+use serval_winit_host::{SurfaceHost, modifiers_from_winit};
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{CursorIcon, Window, WindowId};
 
-use super::{comms_host, fetch, sync, titlebar, App};
+use super::observability::Severity;
+use super::{App, comms_host, fetch, sync, titlebar};
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -42,15 +43,18 @@ impl ApplicationHandler for App {
 
         // The shared serval-on-winit present stack: wgpu + netrender boot, surface
         // configured at the window size.
-        let options =
-            NetrenderOptions { tile_cache_size: Some(64), enable_vello: true, ..Default::default() };
+        let options = NetrenderOptions {
+            tile_cache_size: Some(64),
+            enable_vello: true,
+            ..Default::default()
+        };
         match SurfaceHost::boot(window.clone(), self.width, self.height, options) {
             Ok(host) => self.host = Some(host),
             Err(err) => {
                 eprintln!("[meerkat] {err}");
                 event_loop.exit();
                 return;
-            },
+            }
         }
         window.request_redraw();
         self.window = Some(window);
@@ -66,6 +70,7 @@ impl ApplicationHandler for App {
     /// Drain completed fetches (delivery model 2): a worker woke us via the proxy;
     /// fold each outcome into the content cache and re-render the card.
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+        self.drain_portable_diagnostics();
         // The kernel inbox dispatch: the one documented place that applies what the
         // actors tell the kernel. Each typed stream is drained and folded into
         // canonical state here on the kernel thread; the actors never touch it.
@@ -85,22 +90,42 @@ impl ApplicationHandler for App {
                                 fetched.content_type.clone(),
                                 fetched.body.as_bytes(),
                             );
+                            self.observability.record_actor(
+                                "fetch",
+                                "succeeded",
+                                Some(outcome.url.clone()),
+                            );
                             fetch::ContentState::Ready(fetched)
-                        },
-                        Err(reason) => fetch::ContentState::Failed(reason),
+                        }
+                        Err(reason) => {
+                            let detail = format!("{}: {reason}", outcome.url);
+                            self.observability.record_actor(
+                                "fetch",
+                                "failed",
+                                Some(detail.clone()),
+                            );
+                            self.observability.record_diagnostic(
+                                "meerkat.actor.fetch.failed",
+                                Severity::Warn,
+                                detail,
+                            );
+                            fetch::ContentState::Failed(reason)
+                        }
                     };
                     self.content.insert(outcome.url, state);
                     card_changed = true;
-                },
+                }
                 // A subresource (page CSS / media): persist it (its content-type is
                 // unknown here) so the page's assets survive restart, then broadcast
                 // the bytes to every active node's actor — the fetch stream is keyed
                 // by URL, not by which node wanted it; each actor dedups via its own
                 // resource store and only the one that wanted it re-renders.
                 fetch::FetchUpdate::Subresource(sub) => {
+                    self.observability
+                        .record_actor("fetch", "subresource", Some(sub.url.clone()));
                     self.save_cached(&sub.url, None, &sub.bytes);
                     self.constellation.broadcast_resource(&sub.url, &sub.bytes);
-                },
+                }
             }
         }
         // Drain every active node's actor in one pass: scenes land in the pool, the
@@ -110,7 +135,20 @@ impl ApplicationHandler for App {
         if !drained.respawned.is_empty() {
             // A content tile's actor died (panic, isolated to its thread) and the
             // pool respawned it; redraw so the next frame re-Shows it (self-healing).
-            tracing::warn!(count = drained.respawned.len(), "respawned crashed content tile(s)");
+            tracing::warn!(
+                count = drained.respawned.len(),
+                "respawned crashed content tile(s)"
+            );
+            self.observability.record_actor(
+                "content",
+                "respawned",
+                Some(format!("count={}", drained.respawned.len())),
+            );
+            self.observability.record_diagnostic(
+                "meerkat.actor.content.respawned",
+                Severity::Warn,
+                format!("count={}", drained.respawned.len()),
+            );
             card_changed = true;
         }
         for (member, urls) in drained.wanted {
@@ -120,7 +158,8 @@ impl ApplicationHandler for App {
                 if let Some(stored) = self.load_cached(&url) {
                     self.constellation.send_resource(member, url, stored.body);
                 } else {
-                    self.fetch_handle.command(fetch::FetchCommand::Subresource(url));
+                    self.fetch_handle
+                        .command(fetch::FetchCommand::Subresource(url));
                 }
             }
         }
@@ -138,6 +177,14 @@ impl ApplicationHandler for App {
         // Fold the latest into the chrome chip (the host owns the mutation).
         let mut latest_sync = None;
         while let Ok(update) = self.inbox.sync.try_recv() {
+            self.observability.record_actor(
+                "sync",
+                "status",
+                Some(format!(
+                    "syncing={};ops={}",
+                    update.status.syncing, update.status.ops_received
+                )),
+            );
             latest_sync = Some(sync::to_indicator(&update.status, sync::LANE_LABEL));
         }
         if let Some(indicator) = latest_sync {
@@ -150,30 +197,80 @@ impl ApplicationHandler for App {
         while let Ok(update) = self.inbox.comms.try_recv() {
             match update {
                 comms_host::CommsUpdate::Inbox(inbox) => {
+                    self.observability.record_actor(
+                        "comms",
+                        "inbox",
+                        Some(format!("conversations={}", inbox.conversations.len())),
+                    );
+                    self.observability.record_actor(
+                        "comms",
+                        "succeeded",
+                        Some("inbox".to_string()),
+                    );
                     self.runner.update(|c| c.comms.set_inbox(inbox.clone()));
                     comms_changed = true;
-                },
+                }
                 comms_host::CommsUpdate::Thread(id, messages) => {
+                    self.observability.record_actor(
+                        "comms",
+                        "thread",
+                        Some(format!("{} messages={}", id.key, messages.len())),
+                    );
+                    self.observability.record_actor(
+                        "comms",
+                        "succeeded",
+                        Some("thread".to_string()),
+                    );
                     self.runner.update(|c| {
                         if c.comms.selected() == Some(&id) {
                             c.comms.set_thread(messages.clone());
                         }
                     });
                     comms_changed = true;
-                },
+                }
                 comms_host::CommsUpdate::Sent(_id) => {
+                    self.observability.record_actor("comms", "sent", None);
+                    self.observability
+                        .record_actor("comms", "succeeded", Some("sent".to_string()));
                     self.runner.update(|c| c.clear_comms_draft());
                     comms_changed = true;
-                },
+                }
                 comms_host::CommsUpdate::SendOutcome(line) => {
-                    self.runner.update(|c| c.comms.set_send_status(line.clone()));
-                    comms_changed = true;
-                },
-                comms_host::CommsUpdate::Identity { misfin_address, cabal_ticket } => {
+                    self.observability
+                        .record_actor("comms", "send_outcome", Some(line.clone()));
+                    self.observability.record_actor(
+                        "comms",
+                        "succeeded",
+                        Some("send_outcome".to_string()),
+                    );
                     self.runner
-                        .update(|c| c.comms.set_identity(misfin_address.clone(), cabal_ticket.clone()));
+                        .update(|c| c.comms.set_send_status(line.clone()));
                     comms_changed = true;
-                },
+                }
+                comms_host::CommsUpdate::Identity {
+                    misfin_address,
+                    cabal_ticket,
+                } => {
+                    self.observability.record_actor(
+                        "comms",
+                        "identity",
+                        Some(format!(
+                            "misfin={};cabal={}",
+                            misfin_address,
+                            cabal_ticket.is_some()
+                        )),
+                    );
+                    self.observability.record_actor(
+                        "comms",
+                        "succeeded",
+                        Some("identity".to_string()),
+                    );
+                    self.runner.update(|c| {
+                        c.comms
+                            .set_identity(misfin_address.clone(), cabal_ticket.clone())
+                    });
+                    comms_changed = true;
+                }
             }
         }
         if comms_changed {
@@ -189,6 +286,7 @@ impl ApplicationHandler for App {
         // be folded in. The orrery is always shown now, so kick a redraw — `frame()`
         // drains the snapshot and reports whether to keep going (the settle then
         // self-sustains through `needs_redraw`).
+        self.drain_portable_diagnostics();
         self.request_redraw();
     }
 
@@ -205,7 +303,7 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => {
                 self.save_session();
                 event_loop.exit();
-            },
+            }
             WindowEvent::Resized(size) => self.resize(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x as f32, position.y as f32);
@@ -245,12 +343,12 @@ impl ApplicationHandler for App {
                 } else if self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th) {
                     self.request_redraw();
                 }
-            },
+            }
             WindowEvent::ModifiersChanged(mods) => {
                 self.modifiers = modifiers_from_winit(mods.state());
                 self.orrery.set_ctrl(self.modifiers.ctrl);
                 self.orrery.set_shift(self.modifiers.shift);
-            },
+            }
             WindowEvent::MouseWheel { delta, .. } => {
                 // LineDelta is scaled to device px the way the orrery expects;
                 // PixelDelta passes through.
@@ -269,21 +367,22 @@ impl ApplicationHandler for App {
                     .find(|(_, r)| cx >= r[0] && cx < r[2] && cy >= r[1] && cy < r[3])
                     .map(|(member, r)| (*member, r[3] - r[1]));
                 if let Some((member, visible_h)) = over_card {
-                    let max = (self.constellation.content_height(member) as f32 - visible_h).max(0.0);
+                    let max =
+                        (self.constellation.content_height(member) as f32 - visible_h).max(0.0);
                     let offset = self.scroll.entry(member).or_insert(0.0);
                     // Wheel up (dy > 0) scrolls toward the top; down toward the bottom.
                     *offset = (*offset - dy).clamp(0.0, max);
                     self.request_redraw();
                 } else {
                     let th = self.toolbar_height() as f32;
-                    let in_workbench = self.workbench_leaf_rect().is_some_and(|wr| {
-                        cx >= wr[0] && cx < wr[2] && cy >= wr[1] && cy < wr[3]
-                    });
+                    let in_workbench = self
+                        .workbench_leaf_rect()
+                        .is_some_and(|wr| cx >= wr[0] && cx < wr[2] && cy >= wr[1] && cy < wr[3]);
                     if cy >= th && !in_workbench && self.orrery.wheel(dx, dy) {
                         self.request_redraw();
                     }
                 }
-            },
+            }
             WindowEvent::MouseInput { state, button, .. } => {
                 self.on_mouse_input(state, button);
                 // The custom close control sets `pending_exit` (input has no
@@ -293,14 +392,14 @@ impl ApplicationHandler for App {
                     self.save_session();
                     event_loop.exit();
                 }
-            },
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed {
                     self.on_key_pressed(&event.logical_key);
                 }
-            },
+            }
             WindowEvent::RedrawRequested => self.render(),
-            _ => {},
+            _ => {}
         }
     }
 }
@@ -314,7 +413,9 @@ impl App {
     /// surface.
     fn apply_resize(&self) {
         let Some(drag) = self.resize_drag else { return };
-        let Some(window) = self.window.as_ref() else { return };
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
         use winit::window::ResizeDirection as D;
         let outer = window
             .outer_position()
@@ -334,18 +435,29 @@ impl App {
         let mut right = start_right;
         let mut bottom = start_bottom;
         match drag.dir {
-            D::West | D::NorthWest | D::SouthWest => left = (start_left + dx).min(start_right - min_w),
-            D::East | D::NorthEast | D::SouthEast => right = (start_right + dx).max(start_left + min_w),
-            _ => {},
+            D::West | D::NorthWest | D::SouthWest => {
+                left = (start_left + dx).min(start_right - min_w)
+            }
+            D::East | D::NorthEast | D::SouthEast => {
+                right = (start_right + dx).max(start_left + min_w)
+            }
+            _ => {}
         }
         match drag.dir {
-            D::North | D::NorthWest | D::NorthEast => top = (start_top + dy).min(start_bottom - min_h),
-            D::South | D::SouthWest | D::SouthEast => bottom = (start_bottom + dy).max(start_top + min_h),
-            _ => {},
+            D::North | D::NorthWest | D::NorthEast => {
+                top = (start_top + dy).min(start_bottom - min_h)
+            }
+            D::South | D::SouthWest | D::SouthEast => {
+                bottom = (start_bottom + dy).max(start_top + min_h)
+            }
+            _ => {}
         }
         let new_w = (right - left).round().max(min_w) as u32;
         let new_h = (bottom - top).round().max(min_h) as u32;
-        window.set_outer_position(PhysicalPosition::new(left.round() as i32, top.round() as i32));
+        window.set_outer_position(PhysicalPosition::new(
+            left.round() as i32,
+            top.round() as i32,
+        ));
         let _ = window.request_inner_size(PhysicalSize::new(new_w, new_h));
     }
 
@@ -367,6 +479,12 @@ impl App {
             if let Some(window) = self.window.as_ref() {
                 window.set_cursor(icon);
             }
+        }
+    }
+
+    pub(super) fn drain_portable_diagnostics(&mut self) {
+        while let Ok(event) = self.diagnostics_rx.try_recv() {
+            self.observability.record_portable_event(event);
         }
     }
 }

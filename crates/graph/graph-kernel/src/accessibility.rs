@@ -71,6 +71,16 @@ pub enum SurfaceId {
     CanvasPane,
     /// The canvas base layer (empty Frame fallback).
     BaseLayer,
+    /// The graph roster pane: node manifest/list for the current graph.
+    RosterPane,
+    /// The gloss pane: outline, swatch, and graphlet navigation surface.
+    GlossPane,
+    /// The apparatus pane: system diagnostics, settings, probes, and a11y status.
+    ApparatusPane,
+    /// The comms pane: mail/cabal conversations.
+    CommsPane,
+    /// The tiled workbench pane.
+    WorkbenchPane,
 }
 
 /// A surface's accessibility metadata. Carries the AccessKit role
@@ -232,6 +242,36 @@ pub fn descriptor_for(surface: SurfaceId) -> AccessibilityDescriptor {
             ),
             keyboard_shortcut: None,
         },
+        SurfaceId::RosterPane => AccessibilityDescriptor {
+            role: Role::List,
+            label: "Roster pane",
+            description: Some("List of graph nodes with their current content state."),
+            keyboard_shortcut: Some("Ctrl+R"),
+        },
+        SurfaceId::GlossPane => AccessibilityDescriptor {
+            role: Role::Navigation,
+            label: "Gloss pane",
+            description: Some("Navigator surface for outlines, swatches, and graphlets."),
+            keyboard_shortcut: Some("Ctrl+G"),
+        },
+        SurfaceId::ApparatusPane => AccessibilityDescriptor {
+            role: Role::Complementary,
+            label: "Apparatus pane",
+            description: Some("System diagnostics, probes, accessibility status, and settings."),
+            keyboard_shortcut: Some("Ctrl+,"),
+        },
+        SurfaceId::CommsPane => AccessibilityDescriptor {
+            role: Role::Complementary,
+            label: "Comms pane",
+            description: Some("Mail and cabal conversation surface."),
+            keyboard_shortcut: None,
+        },
+        SurfaceId::WorkbenchPane => AccessibilityDescriptor {
+            role: Role::TabPanel,
+            label: "Workbench pane",
+            description: Some("Tiled live node workbench."),
+            keyboard_shortcut: Some("Ctrl+T"),
+        },
     }
 }
 
@@ -262,6 +302,11 @@ mod tests {
             SurfaceId::TilePane,
             SurfaceId::CanvasPane,
             SurfaceId::BaseLayer,
+            SurfaceId::RosterPane,
+            SurfaceId::GlossPane,
+            SurfaceId::ApparatusPane,
+            SurfaceId::CommsPane,
+            SurfaceId::WorkbenchPane,
         ] {
             let d = descriptor_for(surface);
             assert!(

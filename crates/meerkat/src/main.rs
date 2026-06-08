@@ -30,25 +30,27 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::mpsc::Receiver;
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver};
 use std::time::Instant;
 
 use eidetic_fjall::FjallStore;
-use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
 use forme::GraphMemberId;
+use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
 use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
-use meerkat::{chrome_view, Chrome, ChromeLogic, ChromeView};
+use meerkat::{Chrome, ChromeLogic, ChromeView, chrome_view};
 use orrery::{CameraView, Orrery};
 use pelt_live::fragments_from_scripted_dom;
 use platen::Workbench;
-use platen_view::{workbench_view, WorkbenchLogic, WorkbenchScene, WorkbenchTreeView};
+use platen_view::{WorkbenchLogic, WorkbenchScene, WorkbenchTreeView, workbench_view};
+use register_diagnostics::{DiagnosticEvent, install_global_sender};
 use register_theme::chrome::{ChromeTheme, Color32};
 use register_theme::theme::ThemeRegistry;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::SurfaceHost;
 use session_runtime::{session_graph_store, settings_store, view_intent_store};
+use tracing_subscriber::prelude::*;
 use winit::window::{CursorIcon, ResizeDirection};
 use xilem_serval::{Modifiers, ServalAppRunner};
 
@@ -60,17 +62,20 @@ mod fetch;
 mod resources;
 mod sync;
 
-mod apparatus;
 mod app_handler;
+mod apparatus;
 mod frame_ops;
 mod frame_view;
 mod gloss;
 mod input;
+mod observability;
 mod render;
 mod roster;
 mod titlebar;
+mod tracing_layer;
 
 use constellation::Constellation;
+use observability::HostObservability;
 
 /// Build the chrome root's author CSS from a resolved [`ChromeTheme`] (theming
 /// pass). The toolbar is a flex row (back / forward buttons + a growing omnibar)
@@ -99,130 +104,201 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         ),
         format!(
             "button {{ font-size: 22px; color: {}; background-color: {}; padding: 8px 14px; margin: 4px; }}",
-            rgb(c.control_text), rgb(c.control_bg)
+            rgb(c.control_text),
+            rgb(c.control_bg)
         ),
-        format!(".disabled {{ color: {}; background-color: {}; }}", rgb(c.disabled_text), rgb(c.disabled_bg)),
+        format!(
+            ".disabled {{ color: {}; background-color: {}; }}",
+            rgb(c.disabled_text),
+            rgb(c.disabled_bg)
+        ),
         format!(
             "input {{ font-size: 22px; color: {}; background-color: {}; padding: 8px; margin: 4px; flex-grow: 1; }}",
-            rgb(c.field_text), rgb(c.field_bg)
+            rgb(c.field_text),
+            rgb(c.field_bg)
         ),
         // The p2p sync chip: small + muted, no flex-grow, so the omnibar pushes it
         // to the toolbar's right edge.
         format!(
             ".sync-chip {{ font-size: 14px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px; }}",
-            rgb(c.muted_text), rgb(c.menu_bg)
+            rgb(c.muted_text),
+            rgb(c.menu_bg)
         ),
-        format!(".suggestions {{ background-color: {}; padding-bottom: 6px; }}", rgb(c.panel_bg)),
+        format!(
+            ".suggestions {{ background-color: {}; padding-bottom: 6px; }}",
+            rgb(c.panel_bg)
+        ),
         format!(
             ".suggestion {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 16px; }}",
-            rgb(c.body_text), rgb(c.panel_bg)
+            rgb(c.body_text),
+            rgb(c.panel_bg)
         ),
         format!(
             ".suggestion-active {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 16px; }}",
-            rgb(c.strong_text), rgb(c.active_bg)
+            rgb(c.strong_text),
+            rgb(c.active_bg)
         ),
         // Command palette: a centered panel floated over the page (flex centering;
         // serval maps justify-content through stylo_taffy).
-        ".palette-overlay { display: flex; justify-content: center; padding-top: 56px; }".to_string(),
-        format!(".palette {{ width: 540px; background-color: {}; padding: 10px; }}", rgb(c.surface_bg)),
+        ".palette-overlay { display: flex; justify-content: center; padding-top: 56px; }"
+            .to_string(),
+        format!(
+            ".palette {{ width: 540px; background-color: {}; padding: 10px; }}",
+            rgb(c.surface_bg)
+        ),
         format!(".cmd-list {{ background-color: {}; }}", rgb(c.surface_bg)),
         format!(
             ".cmd-row {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 12px; }}",
-            rgb(c.body_text), rgb(c.surface_bg)
+            rgb(c.body_text),
+            rgb(c.surface_bg)
         ),
         format!(
             ".cmd-row-active {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 12px; }}",
-            rgb(c.strong_text), rgb(c.active_bg)
+            rgb(c.strong_text),
+            rgb(c.active_bg)
         ),
         // Settings overlay: a centered panel (like the palette) with rows of controls.
-        ".settings-overlay { display: flex; justify-content: center; padding-top: 56px; }".to_string(),
-        format!(".settings {{ width: 380px; background-color: {}; padding: 14px; }}", rgb(c.surface_bg)),
-        format!(".set-title {{ display: flex; background-color: {}; padding: 4px 4px 12px 4px; }}", rgb(c.surface_bg)),
+        ".settings-overlay { display: flex; justify-content: center; padding-top: 56px; }"
+            .to_string(),
+        format!(
+            ".settings {{ width: 380px; background-color: {}; padding: 14px; }}",
+            rgb(c.surface_bg)
+        ),
+        format!(
+            ".set-title {{ display: flex; background-color: {}; padding: 4px 4px 12px 4px; }}",
+            rgb(c.surface_bg)
+        ),
         format!(
             ".set-title-text {{ font-size: 20px; color: {}; background-color: {}; flex-grow: 1; padding: 4px 8px; }}",
-            rgb(c.strong_text), rgb(c.surface_bg)
+            rgb(c.strong_text),
+            rgb(c.surface_bg)
         ),
-        format!(".set-row {{ display: flex; background-color: {}; padding: 6px 8px; }}", rgb(c.surface_bg)),
+        format!(
+            ".set-row {{ display: flex; background-color: {}; padding: 6px 8px; }}",
+            rgb(c.surface_bg)
+        ),
         format!(
             ".set-value {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 14px; flex-grow: 1; }}",
-            rgb(c.body_text), rgb(c.surface_bg)
+            rgb(c.body_text),
+            rgb(c.surface_bg)
         ),
         format!(
             ".set-btn {{ font-size: 20px; color: {}; background-color: {}; padding: 6px 16px; margin: 0 4px; }}",
-            rgb(c.control_text), rgb(c.control_bg)
+            rgb(c.control_text),
+            rgb(c.control_bg)
         ),
         // Right-click context menu: a small panel of action rows floated at the cursor.
-        format!(".context-menu {{ background-color: {}; padding: 4px; }}", rgb(c.menu_bg)),
+        format!(
+            ".context-menu {{ background-color: {}; padding: 4px; }}",
+            rgb(c.menu_bg)
+        ),
         format!(
             ".context-item {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 18px; }}",
-            rgb(c.body_text), rgb(c.menu_bg)
+            rgb(c.body_text),
+            rgb(c.menu_bg)
         ),
         // Comms pane: an absolutely-positioned panel whose geometry the host sets
         // inline each frame from the Comms frame leaf's rect (so it splits beside
         // the orrery like the other panes, rather than floating docked).
-        format!(".comms-pane {{ position: absolute; background-color: {}; padding: 10px; }}", rgb(c.panel_bg)),
-        format!(".comms-title {{ display: flex; background-color: {}; padding: 4px 4px 10px 4px; }}", rgb(c.panel_bg)),
+        format!(
+            ".comms-pane {{ position: absolute; background-color: {}; padding: 10px; }}",
+            rgb(c.panel_bg)
+        ),
+        format!(
+            ".comms-title {{ display: flex; background-color: {}; padding: 4px 4px 10px 4px; }}",
+            rgb(c.panel_bg)
+        ),
         format!(
             ".comms-title-text {{ font-size: 20px; color: {}; background-color: {}; flex-grow: 1; padding: 4px 8px; }}",
-            rgb(c.strong_text), rgb(c.panel_bg)
+            rgb(c.strong_text),
+            rgb(c.panel_bg)
         ),
         format!(
             ".comms-btn {{ font-size: 18px; color: {}; background-color: {}; padding: 4px 12px; }}",
-            rgb(c.control_text), rgb(c.control_bg)
+            rgb(c.control_text),
+            rgb(c.control_bg)
         ),
         format!(
             ".comms-failure {{ font-size: 14px; color: {}; background-color: {}; padding: 6px 10px; margin-bottom: 6px; }}",
-            rgb(c.error_text), rgb(c.error_bg)
+            rgb(c.error_text),
+            rgb(c.error_bg)
         ),
         format!(
             ".comms-row {{ font-size: 17px; color: {}; background-color: {}; padding: 10px 12px; margin: 3px 0; }}",
-            rgb(c.body_text), rgb(c.surface_bg)
+            rgb(c.body_text),
+            rgb(c.surface_bg)
         ),
         format!(
             ".comms-empty {{ font-size: 15px; color: {}; background-color: {}; padding: 10px 12px; }}",
-            rgb(c.muted_text), rgb(c.panel_bg)
+            rgb(c.muted_text),
+            rgb(c.panel_bg)
         ),
         format!(
             ".comms-back {{ font-size: 15px; color: {}; background-color: {}; padding: 6px 12px; margin-bottom: 6px; }}",
-            rgb(c.body_text), rgb(c.control_bg)
+            rgb(c.body_text),
+            rgb(c.control_bg)
         ),
-        format!(".comms-thread-title {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 4px; }}", rgb(c.strong_text), rgb(c.panel_bg)),
+        format!(
+            ".comms-thread-title {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 4px; }}",
+            rgb(c.strong_text),
+            rgb(c.panel_bg)
+        ),
         format!(
             ".comms-msg-in {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px 24px 4px 0; }}",
-            rgb(c.body_text), rgb(c.menu_bg)
+            rgb(c.body_text),
+            rgb(c.menu_bg)
         ),
         format!(
             ".comms-msg-out {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px 0 4px 24px; }}",
-            rgb(c.strong_text), rgb(c.active_bg)
+            rgb(c.strong_text),
+            rgb(c.active_bg)
         ),
-        format!(".comms-compose {{ display: flex; background-color: {}; padding-top: 8px; }}", rgb(c.panel_bg)),
+        format!(
+            ".comms-compose {{ display: flex; background-color: {}; padding-top: 8px; }}",
+            rgb(c.panel_bg)
+        ),
         format!(
             ".comms-send {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 16px; margin: 4px; }}",
-            rgb(c.control_text), rgb(c.active_bg)
+            rgb(c.control_text),
+            rgb(c.active_bg)
         ),
         format!(
             ".comms-status {{ font-size: 14px; color: {}; background-color: {}; padding: 6px 12px; }}",
-            rgb(c.muted_text), rgb(c.panel_bg)
+            rgb(c.muted_text),
+            rgb(c.panel_bg)
         ),
         format!(
             ".comms-new-btn {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px 0; }}",
-            rgb(c.control_text), rgb(c.active_bg)
+            rgb(c.control_text),
+            rgb(c.active_bg)
         ),
         format!(".comms-new {{ background-color: {}; }}", rgb(c.panel_bg)),
-        format!(".comms-proto-row {{ display: flex; background-color: {}; padding: 4px 0; }}", rgb(c.panel_bg)),
+        format!(
+            ".comms-proto-row {{ display: flex; background-color: {}; padding: 4px 0; }}",
+            rgb(c.panel_bg)
+        ),
         format!(
             ".comms-proto {{ font-size: 15px; color: {}; background-color: {}; padding: 6px 14px; margin: 0 6px 0 0; }}",
-            rgb(c.body_text), rgb(c.control_bg)
+            rgb(c.body_text),
+            rgb(c.control_bg)
         ),
         format!(
             ".comms-proto-active {{ font-size: 15px; color: {}; background-color: {}; padding: 6px 14px; margin: 0 6px 0 0; }}",
-            rgb(c.strong_text), rgb(c.active_bg)
+            rgb(c.strong_text),
+            rgb(c.active_bg)
         ),
-        format!(".comms-new-to {{ background-color: {}; padding-top: 2px; }}", rgb(c.panel_bg)),
-        format!(".comms-new-body {{ display: flex; background-color: {}; padding-top: 2px; }}", rgb(c.panel_bg)),
+        format!(
+            ".comms-new-to {{ background-color: {}; padding-top: 2px; }}",
+            rgb(c.panel_bg)
+        ),
+        format!(
+            ".comms-new-body {{ display: flex; background-color: {}; padding-top: 2px; }}",
+            rgb(c.panel_bg)
+        ),
         format!(
             ".comms-field-label {{ font-size: 13px; color: {}; background-color: {}; padding: 8px 4px 2px 4px; }}",
-            rgb(c.muted_text), rgb(c.panel_bg)
+            rgb(c.muted_text),
+            rgb(c.panel_bg)
         ),
     ]
 }
@@ -232,7 +308,12 @@ const FALLBACK_TOOLBAR_H: u32 = 64;
 
 /// Background of the floating content card — a panel a step above the orrery
 /// backdrop, so the card reads as a raised surface over the dark orrery band.
-const CARD_BG: wgpu::Color = wgpu::Color { r: 0.110, g: 0.122, b: 0.145, a: 1.0 };
+const CARD_BG: wgpu::Color = wgpu::Color {
+    r: 0.110,
+    g: 0.122,
+    b: 0.145,
+    a: 1.0,
+};
 
 /// Single-pane view-intent identity for the default session (one frame, one
 /// pane). Per-frame / per-pane ids arrive with the tiled workbench (S4) and
@@ -377,6 +458,8 @@ struct App {
     theme: ThemeRegistry,
     /// The active theme's id (e.g. `theme:dark`), persisted in settings.
     active_theme_id: String,
+    /// Bounded observation cache backing the Apparatus diagnostics pane.
+    observability: HostObservability,
     /// Each apparatus theme-button's on-screen rect this frame (theme id,
     /// `[x0, y0, x1, y1]`); a press inside switches to that theme. (Apparatus.)
     apparatus_button_rects: Vec<(String, [f32; 4])>,
@@ -445,6 +528,8 @@ struct App {
     /// The kernel inbox: the typed receivers the I/O actors deliver on, behind the
     /// one winit wake. `user_event` is the single documented place that reads them.
     inbox: KernelInbox,
+    /// Portable diagnostics emitted through `register_diagnostics::emit`.
+    diagnostics_rx: Receiver<DiagnosticEvent>,
     /// Marks this struct as the kernel-thread context: `!Send` by construction
     /// (armillary's typed boundary), so kernel authority cannot be moved onto an
     /// actor thread — the attempt is a compile error, not a review catch.
@@ -493,19 +578,26 @@ struct KernelInbox {
 }
 
 impl App {
-    fn new(proxy: winit::event_loop::EventLoopProxy<()>) -> Self {
+    fn new(
+        proxy: winit::event_loop::EventLoopProxy<()>,
+        diagnostics_rx: Receiver<DiagnosticEvent>,
+    ) -> Self {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         // The workbench root's own document, separate from the chrome root (the
         // separate-roots discipline). Empty until the tiled view syncs it.
         let workbench_dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         // The session lives under the per-user data dir; restore the graph + the
         // camera (view-intent) + the settings on launch, else seed fresh.
-        let session_dir = dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("mere");
+        let session_dir = dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("mere");
         let _ = std::fs::create_dir_all(&session_dir);
         // Restore persisted settings (the active-tab cap) so the chrome + actor pool
         // open at the user's saved value rather than the default.
-        let saved_settings =
-            settings_store::load_settings(&session_dir).ok().flatten().unwrap_or_default();
+        let saved_settings = settings_store::load_settings(&session_dir)
+            .ok()
+            .flatten()
+            .unwrap_or_default();
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = saved_settings.tab_cap;
         let runner = ServalAppRunner::new(dom.clone(), chrome_view as ChromeLogic, chrome);
@@ -517,19 +609,19 @@ impl App {
             Err(err) => {
                 tracing::warn!(%err, "content cache unavailable; running without it");
                 None
-            },
+            }
         };
         let graph_file = session_dir.join(session_graph_store::GRAPH_FILE);
         let restored = match session_graph_store::load(&graph_file) {
             Ok(Some(graph)) => {
                 tracing::info!(path = ?graph_file, "restored the session graph");
                 Some(graph)
-            },
+            }
             Ok(None) => None,
             Err(err) => {
                 tracing::warn!(%err, path = ?graph_file, "session graph load failed; starting fresh");
                 None
-            },
+            }
         };
         let mut orrery = match restored {
             Some(graph) => Orrery::with_graph(graph),
@@ -541,7 +633,7 @@ impl App {
                     orrery.visit(&content_location);
                 }
                 orrery
-            },
+            }
         };
         // Restore the view-intent (camera + focused node) so the spatial view and
         // the open card persist across restarts. A restored camera suppresses the
@@ -644,13 +736,20 @@ impl App {
             // Keep the restored layout only if it carries the graph (Orrery) pane;
             // a pre-coexistence layout (graph pane saved as Workbench) is stale, so
             // fall back to the default single Orrery pane. (Workbench-as-pane.)
-            if restored.iter_leaves().any(|(_, c, _)| matches!(c, PaneContent::Orrery)) {
-                next_pane_id =
-                    restored.iter_leaves().map(|(id, _, _)| id.0).max().unwrap_or(0) + 1;
+            if restored
+                .iter_leaves()
+                .any(|(_, c, _)| matches!(c, PaneContent::Orrery))
+            {
+                next_pane_id = restored
+                    .iter_leaves()
+                    .map(|(id, _, _)| id.0)
+                    .max()
+                    .unwrap_or(0)
+                    + 1;
                 frame_layout = restored;
             }
         }
-        Self {
+        let mut app = Self {
             dom,
             runner,
             orrery,
@@ -688,6 +787,7 @@ impl App {
             chrome_theme,
             theme,
             active_theme_id,
+            observability: HostObservability::new(),
             apparatus_button_rects: Vec::new(),
             gloss_node_rects: Vec::new(),
             titlebar_press: None,
@@ -713,9 +813,21 @@ impl App {
             ),
             context_set: Vec::new(),
             saved_tab_cap: saved_settings.tab_cap,
-            inbox: KernelInbox { fetch: fetch_rx, sync: sync_rx, comms: comms_rx },
+            inbox: KernelInbox {
+                fetch: fetch_rx,
+                sync: sync_rx,
+                comms: comms_rx,
+            },
+            diagnostics_rx,
             _kernel: armillary::KernelThread::new(),
-        }
+        };
+        let pane_count = app.frame_layout.iter_leaves().count();
+        app.observability
+            .record_startup(&app.active_theme_id, pane_count);
+        app.refresh_a11y_summary();
+        app.observability
+            .record_probe("a11y_bridge", "degraded", "OS AccessKit bridge not wired");
+        app
     }
 
     /// Request a redraw if a window exists.
@@ -755,7 +867,8 @@ fn first_with_class(dom: &ScriptedDom, id: NodeId, class: &str) -> Option<NodeId
     if has_class(dom, id, class) {
         return Some(id);
     }
-    dom.dom_children(id).find_map(|c| first_with_class(dom, c, class))
+    dom.dom_children(id)
+        .find_map(|c| first_with_class(dom, c, class))
 }
 
 /// Every element carrying CSS class `class` in pre-order under `id`. Used to find
@@ -796,13 +909,21 @@ fn orrery_palette(tokens: &register_theme::theme::ThemeTokenSet) -> ([f32; 4], [
     let [er, eg, eb, _] = tokens.graph_node_chrome.default_stroke.to_array();
     // A higher alpha than the old translucent edges, so the stroke reads on a
     // light backdrop instead of washing out.
-    let edge = [er as f32 / 255.0, eg as f32 / 255.0, eb as f32 / 255.0, 0.85];
+    let edge = [
+        er as f32 / 255.0,
+        eg as f32 / 255.0,
+        eb as f32 / 255.0,
+        0.85,
+    ];
     (backdrop, edge)
 }
 
 /// The first element with local tag `local` in pre-order under `id`.
 fn first_tag(dom: &ScriptedDom, id: NodeId, local: &str) -> Option<NodeId> {
-    if dom.element_name(id).is_some_and(|q| q.local.as_ref() == local) {
+    if dom
+        .element_name(id)
+        .is_some_and(|q| q.local.as_ref() == local)
+    {
         return Some(id);
     }
     dom.dom_children(id).find_map(|c| first_tag(dom, c, local))
@@ -822,7 +943,14 @@ fn has_class(dom: &ScriptedDom, id: NodeId, class: &str) -> bool {
 fn camera_to_snapshot(camera: CameraView) -> session_runtime::CameraSnapshot {
     let zoom = camera.zoom as f64;
     session_runtime::CameraSnapshot {
-        coefficients: [zoom, 0.0, 0.0, zoom, camera.offset.0 as f64, camera.offset.1 as f64],
+        coefficients: [
+            zoom,
+            0.0,
+            0.0,
+            zoom,
+            camera.offset.0 as f64,
+            camera.offset.1 as f64,
+        ],
     }
 }
 
@@ -831,7 +959,10 @@ fn camera_to_snapshot(camera: CameraView) -> session_runtime::CameraSnapshot {
 /// ignored, as the orrery never sets them).
 fn snapshot_to_camera(snapshot: &session_runtime::CameraSnapshot) -> CameraView {
     let c = snapshot.coefficients;
-    CameraView { offset: (c[4] as f32, c[5] as f32), zoom: c[0] as f32 }
+    CameraView {
+        offset: (c[4] as f32, c[5] as f32),
+        zoom: c[0] as f32,
+    }
 }
 
 /// A durably-cached entry as a [`fetch::Fetched`], decoding the stored body as
@@ -845,16 +976,19 @@ fn fetched_from(stored: session_runtime::content_store::StoredContent) -> fetch:
 }
 
 fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("meerkat=info")),
-        )
+    let (diagnostics_tx, diagnostics_rx) = mpsc::channel();
+    install_global_sender(diagnostics_tx.clone());
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("meerkat=info"));
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_layer::ApparatusTracingLayer::new(diagnostics_tx))
         .init();
     tracing::info!("meerkat-shell starting");
 
     let event_loop = winit::event_loop::EventLoop::new().expect("failed to create event loop");
     let proxy = event_loop.create_proxy();
-    let mut app = App::new(proxy);
+    let mut app = App::new(proxy, diagnostics_rx);
     event_loop.run_app(&mut app).expect("event loop error");
 }

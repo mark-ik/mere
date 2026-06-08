@@ -8,6 +8,7 @@
 
 use std::collections::HashMap;
 
+use accesskit::{Node, NodeId as AccessNodeId, Rect, Role};
 use forme::GraphMemberId;
 use frame::{GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
 use meerkat::command::Command;
@@ -15,13 +16,15 @@ use meerkat::{Chrome, CommsIntent, ContextAction, ContextItem};
 use orrery::{NodeShape, NodeState};
 use platen_view::WorkbenchAction;
 use session_runtime::{
-    content_store, session_graph_store, settings_store, view_intent_store, PersistedSettings,
-    ViewIntent,
+    PersistedSettings, ViewIntent, content_store, session_graph_store, settings_store,
+    view_intent_store,
 };
+use uxtree::{UxTree, node_id_for_path};
 
+use super::observability::{A11ySnapshot, ObservabilitySnapshot};
 use super::{
-    apparatus, comms_host, fetch, frame_view, roster, sync, App, DEFAULT_FRAME, DEFAULT_PANE,
-    FALLBACK_TOOLBAR_H, GRAPH_PANE,
+    App, DEFAULT_FRAME, DEFAULT_PANE, FALLBACK_TOOLBAR_H, GRAPH_PANE, apparatus, comms_host, fetch,
+    frame_view, roster, sync,
 };
 
 impl App {
@@ -30,7 +33,10 @@ impl App {
     pub(super) fn current_focus_url(&self) -> Option<String> {
         if self.workbench_active() {
             let member = self.focused_tile?;
-            self.orrery.graph().get_node_by_id(member).map(|(_, node)| node.url().to_string())
+            self.orrery
+                .graph()
+                .get_node_by_id(member)
+                .map(|(_, node)| node.url().to_string())
         } else {
             self.orrery.focused_url().map(str::to_string)
         }
@@ -99,10 +105,10 @@ impl App {
             Some(member) => {
                 self.orrery.navigate_member(member, &loc);
                 self.scroll.remove(&member); // a new page starts at the top
-            },
+            }
             None => {
                 self.orrery.visit(&loc);
-            },
+            }
         }
         // Navigating is deliberate: with the orrery active, show the target as a
         // live card (passive focus shows only the snapshot). With the workbench
@@ -164,7 +170,10 @@ impl App {
     /// no-op when unchanged. Called each render.
     pub(super) fn sync_nav_buttons(&mut self) {
         let (can_back, can_forward) = match self.nav_target_member() {
-            Some(m) => (self.orrery.member_can_back(m), self.orrery.member_can_forward(m)),
+            Some(m) => (
+                self.orrery.member_can_back(m),
+                self.orrery.member_can_forward(m),
+            ),
             None => (false, false),
         };
         let (cur_back, cur_forward) = {
@@ -203,9 +212,10 @@ impl App {
             tracing::warn!(%err, dir = ?self.session_dir, "failed to persist the view intent");
         }
         // The content frame's pane layout (which panes are open + split ratios).
-        if let Err(err) =
-            session_runtime::frame_layout_store::save_frame_layout(&self.session_dir, &self.frame_layout)
-        {
+        if let Err(err) = session_runtime::frame_layout_store::save_frame_layout(
+            &self.session_dir,
+            &self.frame_layout,
+        ) {
             tracing::warn!(%err, dir = ?self.session_dir, "failed to persist the frame layout");
         }
     }
@@ -219,12 +229,18 @@ impl App {
             return;
         }
         if let Some(stored) = self.load_cached(url) {
-            self.content
-                .insert(url.to_string(), fetch::ContentState::Ready(super::fetched_from(stored)));
+            self.content.insert(
+                url.to_string(),
+                fetch::ContentState::Ready(super::fetched_from(stored)),
+            );
             return;
         }
-        self.content.insert(url.to_string(), fetch::ContentState::Loading);
-        self.fetch_handle.command(fetch::FetchCommand::Page(url.to_string()));
+        self.content
+            .insert(url.to_string(), fetch::ContentState::Loading);
+        self.observability
+            .record_actor("fetch", "started", Some(url.to_string()));
+        self.fetch_handle
+            .command(fetch::FetchCommand::Page(url.to_string()));
     }
 
     /// Toggle between the orrery (Cartography) and the tiled workbench (Tree).
@@ -300,7 +316,8 @@ impl App {
             ]
         };
         self.context_set = set;
-        self.runner.update(move |c| c.open_context_menu(x, y, items));
+        self.runner
+            .update(move |c| c.open_context_menu(x, y, items));
         self.request_redraw();
     }
 
@@ -332,10 +349,10 @@ impl App {
         match action {
             ContextAction::OpenSplits => {
                 self.workbench.open_split(&set);
-            },
+            }
             ContextAction::Stack => {
                 self.workbench.open_stack(&set);
-            },
+            }
         }
         self.request_redraw();
     }
@@ -419,7 +436,7 @@ impl App {
                         } else {
                             NodeState::Closed
                         }
-                    },
+                    }
                     _ => NodeState::Idle,
                 };
                 (node.id, state)
@@ -439,7 +456,7 @@ impl App {
             .filter_map(|(_key, node)| match self.content.get(node.url()) {
                 Some(fetch::ContentState::Ready(fetched)) => {
                     Some((node.id, content_shape(fetched.content_type.as_deref())))
-                },
+                }
                 _ => None,
             })
             .collect()
@@ -449,14 +466,19 @@ impl App {
     /// UUID via the kernel node id).
     pub(super) fn focused_member(&self) -> Option<GraphMemberId> {
         let url = self.orrery.focused_url()?;
-        self.orrery.graph().get_node_by_url(url).map(|(_, node)| node.id)
+        self.orrery
+            .graph()
+            .get_node_by_url(url)
+            .map(|(_, node)| node.id)
     }
 
     /// Load durably-cached content for `url` (page or subresource), or `None`.
     /// The fjall store's futures are ready, so `block_on` does not stall the UI.
     pub(super) fn load_cached(&mut self, url: &str) -> Option<content_store::StoredContent> {
         let store = self.store.as_mut()?;
-        pollster::block_on(content_store::load_content(store, url)).ok().flatten()
+        pollster::block_on(content_store::load_content(store, url))
+            .ok()
+            .flatten()
     }
 
     /// Persist `body` (+ its content-type) for `url` to the durable content cache,
@@ -465,7 +487,10 @@ impl App {
         let Some(store) = self.store.as_mut() else {
             return;
         };
-        let stored = content_store::StoredContent { content_type, body: body.to_vec() };
+        let stored = content_store::StoredContent {
+            content_type,
+            body: body.to_vec(),
+        };
         if let Err(err) = pollster::block_on(content_store::save_content(store, url, &stored)) {
             tracing::warn!(%err, url, "failed to cache content");
         }
@@ -483,7 +508,7 @@ impl App {
             WorkbenchAction::Activate(member) => {
                 self.workbench.activate(member);
                 self.focused_tile = Some(member);
-            },
+            }
             WorkbenchAction::Close(member) => {
                 self.workbench.close_tile(member);
                 self.constellation.reap(member);
@@ -495,11 +520,11 @@ impl App {
                 } else if self.focused_tile == Some(member) {
                     self.focused_tile = self.workbench.open_members().first().copied();
                 }
-            },
+            }
             WorkbenchAction::TogglePin(member) => {
                 let pinned = self.constellation.is_background(member);
                 self.constellation.set_background(member, !pinned);
-            },
+            }
         }
         self.request_redraw();
     }
@@ -540,12 +565,12 @@ impl App {
                 if self.orrery.hide_selected_edges() > 0 {
                     self.request_redraw();
                 }
-            },
+            }
             Command::ShowAllEdges => {
                 if self.orrery.show_all_edges() > 0 {
                     self.request_redraw();
                 }
-            },
+            }
             // History / connect / settings / comms verbs run in the chrome; never
             // queued here as host intents.
             Command::Back
@@ -553,7 +578,7 @@ impl App {
             | Command::Home
             | Command::ConnectPeer
             | Command::OpenSettings
-            | Command::ToggleComms => {},
+            | Command::ToggleComms => {}
         }
     }
 
@@ -566,16 +591,24 @@ impl App {
             return;
         };
         self.runner.update(|c| c.comms_intent = None);
+        self.observability
+            .record_actor("comms", "started", Some(format!("{intent:?}")));
         match intent {
             CommsIntent::Refresh => {
                 self.comms_handle.command(comms_host::CommsCommand::Refresh);
-            },
+            }
             CommsIntent::Open(id) => {
-                self.comms_handle.command(comms_host::CommsCommand::Open(id));
-            },
+                self.comms_handle
+                    .command(comms_host::CommsCommand::Open(id));
+            }
             CommsIntent::Send(draft) => {
-                self.comms_handle.command(comms_host::CommsCommand::Send(draft));
-            },
+                self.comms_handle
+                    .command(comms_host::CommsCommand::Send(draft));
+            }
+            CommsIntent::ConnectCabal(ticket) => {
+                self.comms_handle
+                    .command(comms_host::CommsCommand::ConnectCabal(ticket));
+            }
         }
     }
 
@@ -660,11 +693,19 @@ impl App {
                 content: PaneContent::Workbench,
                 graph_id: GraphId::default(),
             };
-            let anchor = frame_view::pane_path(&self.frame_layout, super::GRAPH_PANE).unwrap_or_default();
-            if self.frame_layout.summon_leaf(&anchor, InsertSide::Right, leaf) {
+            let anchor =
+                frame_view::pane_path(&self.frame_layout, super::GRAPH_PANE).unwrap_or_default();
+            if self
+                .frame_layout
+                .summon_leaf(&anchor, InsertSide::Right, leaf)
+            {
                 self.frame_layout.set_split_ratio(&anchor, 0.6);
             }
             self.maximized_pane = None;
+            self.observability
+                .record_pane_toggle(&PaneContent::Workbench, true);
+            self.observability
+                .record_frame_layout_changed("workbench opened");
         }
         self.active_content = super::ContentPane::Workbench;
     }
@@ -684,6 +725,10 @@ impl App {
         self.focused_tile = None;
         self.active_content = super::ContentPane::Orrery;
         self.maximized_pane = None;
+        self.observability
+            .record_pane_toggle(&PaneContent::Workbench, false);
+        self.observability
+            .record_frame_layout_changed("workbench closed");
     }
 
     /// The comms pane's screen rect, if the comms pane is open. (Comms pane.)
@@ -710,20 +755,31 @@ impl App {
                     content: PaneContent::Comms,
                     graph_id: GraphId::default(),
                 };
-                let anchor =
-                    frame_view::pane_path(&self.frame_layout, super::GRAPH_PANE).unwrap_or_default();
-                if self.frame_layout.summon_leaf(&anchor, InsertSide::Right, leaf) {
+                let anchor = frame_view::pane_path(&self.frame_layout, super::GRAPH_PANE)
+                    .unwrap_or_default();
+                if self
+                    .frame_layout
+                    .summon_leaf(&anchor, InsertSide::Right, leaf)
+                {
                     self.frame_layout.set_split_ratio(&anchor, 0.66);
                 }
                 self.maximized_pane = None;
-            },
+                self.observability
+                    .record_pane_toggle(&PaneContent::Comms, true);
+                self.observability
+                    .record_frame_layout_changed("comms opened");
+            }
             (false, Some(id)) => {
                 if let Some(path) = frame_view::pane_path(&self.frame_layout, id) {
                     self.frame_layout.close_leaf(&path);
                 }
                 self.maximized_pane = None;
-            },
-            _ => {},
+                self.observability
+                    .record_pane_toggle(&PaneContent::Comms, false);
+                self.observability
+                    .record_frame_layout_changed("comms closed");
+            }
+            _ => {}
         }
     }
 
@@ -773,6 +829,8 @@ impl App {
     /// second pane nest rather than fail against a non-leaf root. A layout change
     /// clears any maximize. (Frame tree, F1.)
     pub(super) fn toggle_pane(&mut self, content: PaneContent) {
+        let recorded_content = content.clone();
+        let mut opened = false;
         if let Some(id) = self.pane_of_content(&content) {
             if let Some(path) = frame_view::pane_path(&self.frame_layout, id) {
                 self.frame_layout.close_leaf(&path);
@@ -780,14 +838,28 @@ impl App {
         } else {
             let id = PaneId(self.next_pane_id);
             self.next_pane_id += 1;
-            let leaf = PaneNode::Leaf { pane_id: id, content, graph_id: GraphId::default() };
-            let anchor =
-                frame_view::pane_path(&self.frame_layout, GRAPH_PANE).unwrap_or_default();
-            if self.frame_layout.summon_leaf(&anchor, InsertSide::Right, leaf) {
+            let leaf = PaneNode::Leaf {
+                pane_id: id,
+                content,
+                graph_id: GraphId::default(),
+            };
+            let anchor = frame_view::pane_path(&self.frame_layout, GRAPH_PANE).unwrap_or_default();
+            if self
+                .frame_layout
+                .summon_leaf(&anchor, InsertSide::Right, leaf)
+            {
                 self.frame_layout.set_split_ratio(&anchor, 0.7);
             }
+            opened = true;
         }
         self.maximized_pane = None;
+        self.observability
+            .record_pane_toggle(&recorded_content, opened);
+        self.observability.record_frame_layout_changed(format!(
+            "{} {}",
+            recorded_content.tag(),
+            if opened { "opened" } else { "closed" }
+        ));
         self.request_redraw();
     }
 
@@ -806,6 +878,8 @@ impl App {
         self.window_controls_tex = None;
         self.divider_tex = None;
         self.persist_settings();
+        self.observability
+            .record_theme_activated(&self.active_theme_id);
         self.request_redraw();
     }
 
@@ -831,27 +905,89 @@ impl App {
         use register_theme::theme::{
             THEME_ID_DARK, THEME_ID_DEFAULT, THEME_ID_HIGH_CONTRAST, THEME_ID_LIGHT,
         };
-        [THEME_ID_DEFAULT, THEME_ID_LIGHT, THEME_ID_DARK, THEME_ID_HIGH_CONTRAST]
-            .iter()
-            .map(|id| {
-                let res = self.theme.resolve_theme(Some(id));
-                apparatus::ThemeOption {
-                    active: res.resolved_id == self.active_theme_id,
-                    id: res.resolved_id,
-                    name: res.tokens.display_name,
-                }
-            })
-            .collect()
+        [
+            THEME_ID_DEFAULT,
+            THEME_ID_LIGHT,
+            THEME_ID_DARK,
+            THEME_ID_HIGH_CONTRAST,
+        ]
+        .iter()
+        .map(|id| {
+            let res = self.theme.resolve_theme(Some(id));
+            apparatus::ThemeOption {
+                active: res.resolved_id == self.active_theme_id,
+                id: res.resolved_id,
+                name: res.tokens.display_name,
+            }
+        })
+        .collect()
     }
 
-    /// Read-only diagnostics for the apparatus System section.
-    pub(super) fn apparatus_diagnostics(&self) -> Vec<(String, String)> {
+    /// Read-only system rows for the apparatus Overview section.
+    pub(super) fn apparatus_system_rows(&self) -> Vec<(String, String)> {
         vec![
-            ("Nodes".to_string(), self.orrery.graph().nodes().count().to_string()),
-            ("Active actors".to_string(), self.constellation.active_count().to_string()),
+            (
+                "Nodes".to_string(),
+                self.orrery.graph().nodes().count().to_string(),
+            ),
+            (
+                "Active actors".to_string(),
+                self.constellation.active_count().to_string(),
+            ),
             ("Tab cap".to_string(), self.saved_tab_cap.to_string()),
             ("Theme".to_string(), self.active_theme_id.clone()),
+            ("Uptime".to_string(), self.observability.snapshot().uptime),
         ]
+    }
+
+    /// Refresh and snapshot the host observability cache for Apparatus.
+    pub(super) fn apparatus_observability(&mut self) -> ObservabilitySnapshot {
+        self.refresh_a11y_summary();
+        self.observability.snapshot()
+    }
+
+    /// Coarse internal a11y health until the AccessKit bridge lands: every visible
+    /// pane is projected into a uxtree snapshot, but the OS bridge is still
+    /// degraded by definition.
+    pub(super) fn refresh_a11y_summary(&mut self) {
+        let leaves = self.laid_leaves();
+        let surfaces = leaves.len() + 2; // host window + chrome root + content leaves
+        let mut chrome = Node::new(Role::Application);
+        chrome.set_label("Chrome");
+        chrome.set_bounds(Rect::new(
+            0.0,
+            0.0,
+            self.width as f64,
+            self.toolbar_h as f64,
+        ));
+        let chrome_root = node_id_for_path("meerkat/chrome");
+        let chrome_tree = UxTree {
+            root: chrome_root,
+            nodes: vec![(chrome_root, chrome)],
+        };
+        let frame_tree = frame::project_frame(&self.frame_layout);
+        let frame_root = frame_tree.root;
+        let mut host = Node::new(Role::Window);
+        host.set_label("Meerkat");
+        host.set_bounds(Rect::new(0.0, 0.0, self.width as f64, self.height as f64));
+        let tree = uxtree::stitch("meerkat/window", host, vec![chrome_tree, frame_tree]);
+        let focus = if self.runner.focus().is_some() {
+            chrome_root
+        } else {
+            frame_root
+        };
+        let audit = audit_a11y_tree(&tree, focus);
+        self.observability.set_a11y_snapshot(A11ySnapshot {
+            surfaces,
+            degraded: surfaces, // OS AccessKit bridge is not wired yet.
+            nodes: tree.nodes.len(),
+            missing_labels: audit.missing_labels,
+            missing_bounds: audit.missing_bounds,
+            duplicate_ids: audit.duplicate_ids,
+            root: format_access_node(tree.root),
+            focus: format_access_node(focus),
+            audit: audit.findings,
+        });
     }
 
     /// Toggle maximize of the pane under the cursor (full-screen and back). With a
@@ -889,10 +1025,10 @@ impl App {
         let ratio = match axis {
             SplitAxis::Horizontal => {
                 (cx - parent[0]) / (parent[2] - parent[0] - frame_view::DIVIDER).max(1.0)
-            },
+            }
             SplitAxis::Vertical => {
                 (cy - parent[1]) / (parent[3] - parent[1] - frame_view::DIVIDER).max(1.0)
-            },
+            }
         };
         // `set_split_ratio` clamps to a sane minimum so a pane can't collapse.
         self.frame_layout.set_split_ratio(&path, ratio);
@@ -936,13 +1072,80 @@ impl App {
 /// directories as a rounded square, and documents (HTML / markdown / gemtext /
 /// plain text / …) plus anything unrecognized as the default square.
 fn content_shape(content_type: Option<&str>) -> NodeShape {
-    let Some(ct) = content_type else { return NodeShape::Square };
-    let base = ct.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+    let Some(ct) = content_type else {
+        return NodeShape::Square;
+    };
+    let base = ct
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
     match base.as_str() {
-        "application/rss+xml" | "application/atom+xml" | "application/feed+json" => NodeShape::Circle,
-        "application/gopher-menu" | "application/x-nex" | "application/x-guppy" | "text/x-finger" => {
-            NodeShape::Rounded
-        },
+        "application/rss+xml" | "application/atom+xml" | "application/feed+json" => {
+            NodeShape::Circle
+        }
+        "application/gopher-menu"
+        | "application/x-nex"
+        | "application/x-guppy"
+        | "text/x-finger" => NodeShape::Rounded,
         _ => NodeShape::Square,
     }
+}
+
+struct A11yAudit {
+    missing_labels: usize,
+    missing_bounds: usize,
+    duplicate_ids: usize,
+    findings: Vec<String>,
+}
+
+fn audit_a11y_tree(tree: &UxTree, focus: AccessNodeId) -> A11yAudit {
+    let mut seen = std::collections::HashSet::new();
+    let mut focus_found = false;
+    let mut missing_labels = 0usize;
+    let mut missing_bounds = 0usize;
+    let mut duplicate_ids = 0usize;
+    let mut findings = Vec::new();
+    for (id, node) in &tree.nodes {
+        if !seen.insert(*id) {
+            duplicate_ids += 1;
+            findings.push(format!("duplicate id {}", format_access_node(*id)));
+        }
+        if *id == focus {
+            focus_found = true;
+        }
+        let has_name = node.label().is_some_and(|label| !label.trim().is_empty())
+            || node
+                .description()
+                .is_some_and(|description| !description.trim().is_empty());
+        if !has_name {
+            missing_labels += 1;
+        }
+        if node.bounds().is_none() {
+            missing_bounds += 1;
+        }
+    }
+    if !focus_found {
+        findings.push(format!(
+            "focused node {} is not in the current tree",
+            format_access_node(focus)
+        ));
+    }
+    if missing_labels > 0 {
+        findings.push(format!("{missing_labels} nodes lack labels/descriptions"));
+    }
+    if missing_bounds > 0 {
+        findings.push(format!("{missing_bounds} nodes lack bounds"));
+    }
+    A11yAudit {
+        missing_labels,
+        missing_bounds,
+        duplicate_ids,
+        findings,
+    }
+}
+
+fn format_access_node(id: AccessNodeId) -> String {
+    format!("node:{}", id.0)
 }

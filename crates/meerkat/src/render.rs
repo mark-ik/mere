@@ -7,10 +7,10 @@
 
 use forme::GraphMemberId;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
-use netrender::external_texture::ExternalTexturePlacement;
 use netrender::ColorLoad;
-use pelt_live::{fragments_from_scripted_dom, scene_from_scripted_dom, TextCursor};
-use platen_view::{WorkbenchScene, WORKBENCH_SHEET};
+use netrender::external_texture::ExternalTexturePlacement;
+use pelt_live::{TextCursor, fragments_from_scripted_dom, scene_from_scripted_dom};
+use platen_view::{WORKBENCH_SHEET, WorkbenchScene};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
 
@@ -21,8 +21,8 @@ use super::resources::{ResourceLoader, ResourceStore};
 use frame::PaneContent;
 
 use super::{
-    all_with_class, first_with_class, frame_view, measure_class_bottom, member_attr, App, CARD_BG,
-    FALLBACK_TOOLBAR_H,
+    App, CARD_BG, FALLBACK_TOOLBAR_H, all_with_class, first_with_class, frame_view,
+    measure_class_bottom, member_attr,
 };
 
 impl App {
@@ -33,9 +33,14 @@ impl App {
     pub(super) fn toolbar_height(&mut self) -> u32 {
         if self.toolbar_h == 0 {
             let sheet = self.chrome_sheet_refs();
-            let measured =
-                measure_class_bottom(&self.dom.borrow(), &sheet, self.width, self.height, "toolbar")
-                    .unwrap_or(FALLBACK_TOOLBAR_H);
+            let measured = measure_class_bottom(
+                &self.dom.borrow(),
+                &sheet,
+                self.width,
+                self.height,
+                "toolbar",
+            )
+            .unwrap_or(FALLBACK_TOOLBAR_H);
             self.toolbar_h = measured;
         }
         self.toolbar_h
@@ -101,13 +106,22 @@ impl App {
         let cursor = self.runner.focus().map(|node| {
             let field = self.caret_field(node);
             let byte_of = |i: usize| {
-                field.text().char_indices().nth(i).map(|(b, _)| b).unwrap_or(field.text().len())
+                field
+                    .text()
+                    .char_indices()
+                    .nth(i)
+                    .map(|(b, _)| b)
+                    .unwrap_or(field.text().len())
             };
             let selection = field.has_selection().then(|| {
                 let (s, e) = field.selection();
                 (byte_of(s), byte_of(e))
             });
-            TextCursor { node, caret: field.caret_byte_in_render(), selection }
+            TextCursor {
+                node,
+                caret: field.caret_byte_in_render(),
+                selection,
+            }
         });
         let scroll = ScrollOffsets::<NodeId>::default();
         // Position the chrome's comms overlay into its frame leaf (it's chrome-
@@ -200,8 +214,12 @@ impl App {
         // composites on its own path below. `(member, url, dest rect, scene)` —
         // the scene is `Some` only when it must be (re)rasterized this frame; once
         // its texture is cached by url, later frames carry `None`.
-        let mut snapshot_card: Option<(GraphMemberId, String, [f32; 4], Option<(netrender::Scene, u32)>)> =
-            None;
+        let mut snapshot_card: Option<(
+            GraphMemberId,
+            String,
+            [f32; 4],
+            Option<(netrender::Scene, u32)>,
+        )> = None;
         let mut live_card: Option<(GraphMemberId, [f32; 4])> = None;
         if let Some(wr) = workbench_rect {
             // Read each content placeholder's laid-out rect + member out of the
@@ -243,8 +261,11 @@ impl App {
             let mut slot_rects = Vec::with_capacity(placements.len());
             for (member, content, slot) in placements {
                 slot_rects.push((member, slot));
-                let Some(url) =
-                    self.orrery.graph().get_node_by_id(member).map(|(_, n)| n.url().to_string())
+                let Some(url) = self
+                    .orrery
+                    .graph()
+                    .get_node_by_id(member)
+                    .map(|(_, n)| n.url().to_string())
                 else {
                     continue;
                 };
@@ -260,9 +281,10 @@ impl App {
             self.tile_rects.clear(); // no tile drag targets when the pane is closed
         }
         // The orrery's focused-node card (always, alongside any workbench pane).
-        if let (Some(member), Some(url)) =
-            (self.focused_member(), self.orrery.focused_url().map(str::to_string))
-        {
+        if let (Some(member), Some(url)) = (
+            self.focused_member(),
+            self.orrery.focused_url().map(str::to_string),
+        ) {
             // Float the card next to the focused node (fall back to the fixed
             // top-right rect when the node's screen pos is unknown). A live preview
             // is a medium card the actor renders into; a snapshot is a shorter
@@ -348,7 +370,10 @@ impl App {
         // card (resolved in the wheel handler) rather than panning the orrery. The
         // unvisited placeholder counts as a card too, so a double-click over it
         // promotes (and a click on it doesn't deselect the node).
-        self.content_rects = cards.iter().map(|(member, dest, _)| (*member, *dest)).collect();
+        self.content_rects = cards
+            .iter()
+            .map(|(member, dest, _)| (*member, *dest))
+            .collect();
         if let Some((member, rect)) = unvisited_card {
             self.content_rects.push((member, rect));
         }
@@ -362,22 +387,42 @@ impl App {
         self.sync_location();
         // Back/forward enabled-state tracks the focused node's own history.
         self.sync_nav_buttons();
+        self.drain_portable_diagnostics();
+
+        let apparatus_data = if self.apparatus_leaf_rect().is_some() {
+            Some((self.apparatus_system_rows(), self.apparatus_observability()))
+        } else {
+            None
+        };
 
         let host = self.host.as_ref().unwrap();
-        let (_chrome_tex, chrome_view) =
-            host.rasterize(&chrome_scene, w, h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+        let (_chrome_tex, chrome_view) = host.rasterize(
+            &chrome_scene,
+            w,
+            h,
+            ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+        );
         // The orrery paints its own opaque backdrop, but clear to the same dark
         // tone so a resize frame cannot flash white before the backdrop lands.
-        let backdrop = wgpu::Color { r: 0.067, g: 0.078, b: 0.100, a: 1.0 };
-        let (_orrery_tex, orrery_view) =
-            host.rasterize(&orrery_scene, orrery_w, orrery_h, ColorLoad::Clear(backdrop));
+        let backdrop = wgpu::Color {
+            r: 0.067,
+            g: 0.078,
+            b: 0.100,
+            a: 1.0,
+        };
+        let (_orrery_tex, orrery_view) = host.rasterize(
+            &orrery_scene,
+            orrery_w,
+            orrery_h,
+            ColorLoad::Clear(backdrop),
+        );
         // Rasterize the workbench pane scene too, when its pane is open. The tex is
         // bound to `_workbench_tex` so it outlives the composite below.
         let (_workbench_tex, workbench_view) = match workbench_scene.as_ref() {
             Some((scene, ww, wh)) => {
                 let (tex, view) = host.rasterize(scene, *ww, *wh, ColorLoad::Clear(backdrop));
                 (Some(tex), Some(view))
-            },
+            }
             None => (None, None),
         };
         // Rasterize each tile's scene to an offscreen texture only when its version
@@ -385,7 +430,8 @@ impl App {
         // is not re-rasterized every frame (the cost that scaled with tile count).
         // The cache (self.tile_textures) keeps the textures alive across frames; evict
         // closed tiles first so theirs free. `composite` is what to draw, in order.
-        self.tile_textures.retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
+        self.tile_textures
+            .retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
         // Rasterize each card at its FULL content height (clamped to the cap), so
         // scrolling is a GPU UV-window shift over the cached tall texture rather
         // than a re-layout per tick (the gpui-flavored path).
@@ -409,7 +455,12 @@ impl App {
                     let (tex, view) = host.rasterize(scene, *cw, tex_h, ColorLoad::Clear(CARD_BG));
                     self.tile_textures.insert(
                         *member,
-                        super::CachedTile { version, size: (*cw, tex_h), tex, view },
+                        super::CachedTile {
+                            version,
+                            size: (*cw, tex_h),
+                            tex,
+                            view,
+                        },
                     );
                 }
             }
@@ -419,7 +470,9 @@ impl App {
         }
 
         let Some(frame) = host.acquire() else { return };
-        let target_view = frame.texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let target_view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
         let format = host.format();
         // Content fills [toolbar_h, h] (dest_rect is [x0, y0, x1, y1] corners;
         // viewport is the full surface). Then each content card floats over it, and
@@ -444,7 +497,9 @@ impl App {
             );
         }
         for (dest, member) in &composite {
-            let Some(cached) = self.tile_textures.get(member) else { continue };
+            let Some(cached) = self.tile_textures.get(member) else {
+                continue;
+            };
             // Scroll is a vertical UV window over the tall cached texture — a GPU
             // sample shift, no re-raster. Clamp the offset to the scrollable range.
             let tex_w = cached.size.0 as f32;
@@ -456,7 +511,12 @@ impl App {
             // thumbnails, and a no-op (= dest_h) for 1:1 live cards / tiles.
             let visible_h = dest_h * tex_w / dest_w;
             let max_scroll = (tex_h - visible_h).max(0.0);
-            let scroll = self.scroll.get(member).copied().unwrap_or(0.0).clamp(0.0, max_scroll);
+            let scroll = self
+                .scroll
+                .get(member)
+                .copied()
+                .unwrap_or(0.0)
+                .clamp(0.0, max_scroll);
             let uv = [0.0, scroll / tex_h, 1.0, (scroll + visible_h) / tex_h];
             host.renderer().compose_external_texture(
                 &cached.view,
@@ -480,10 +540,18 @@ impl App {
             let size = btn.round().max(1.0) as u32;
             if self.close_button_tex.as_ref().map(|c| c.size) != Some((size, size)) {
                 let scene = super::card::close_button_scene(size);
-                let (tex, view) =
-                    host.rasterize(&scene, size, size, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
-                self.close_button_tex =
-                    Some(super::CachedTile { version: 0, size: (size, size), tex, view });
+                let (tex, view) = host.rasterize(
+                    &scene,
+                    size,
+                    size,
+                    ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+                );
+                self.close_button_tex = Some(super::CachedTile {
+                    version: 0,
+                    size: (size, size),
+                    tex,
+                    view,
+                });
             }
             if let Some(cached) = &self.close_button_tex {
                 let bx1 = dest[2] - inset;
@@ -508,8 +576,15 @@ impl App {
             if let Some((scene, content_h)) = built {
                 let tex_h = content_h.max(1).min(MAX_CARD_TEX_H);
                 let (tex, view) = host.rasterize(&scene, 300, tex_h, ColorLoad::Clear(CARD_BG));
-                self.snapshot_textures
-                    .insert(url.clone(), super::CachedTile { version: 0, size: (300, tex_h), tex, view });
+                self.snapshot_textures.insert(
+                    url.clone(),
+                    super::CachedTile {
+                        version: 0,
+                        size: (300, tex_h),
+                        tex,
+                        view,
+                    },
+                );
             }
             if let Some(cached) = self.snapshot_textures.get(&url) {
                 let tex_w = cached.size.0 as f32;
@@ -518,7 +593,12 @@ impl App {
                 let dest_h = (rect[3] - rect[1]).max(1.0);
                 let visible_h = dest_h * tex_w / dest_w;
                 let max_scroll = (tex_h - visible_h).max(0.0);
-                let scroll = self.scroll.get(&member).copied().unwrap_or(0.0).clamp(0.0, max_scroll);
+                let scroll = self
+                    .scroll
+                    .get(&member)
+                    .copied()
+                    .unwrap_or(0.0)
+                    .clamp(0.0, max_scroll);
                 let uv = [0.0, scroll / tex_h, 1.0, (scroll + visible_h) / tex_h];
                 host.renderer().compose_external_texture(
                     &cached.view,
@@ -538,8 +618,12 @@ impl App {
             if self.unvisited_tex.as_ref().map(|c| c.size) != Some((uw, uh)) {
                 let scene = super::card::unvisited_card_scene(uw, uh);
                 let (tex, view) = host.rasterize(&scene, uw, uh, ColorLoad::Clear(CARD_BG));
-                self.unvisited_tex =
-                    Some(super::CachedTile { version: 0, size: (uw, uh), tex, view });
+                self.unvisited_tex = Some(super::CachedTile {
+                    version: 0,
+                    size: (uw, uh),
+                    tex,
+                    view,
+                });
             }
             if let Some(cached) = &self.unvisited_tex {
                 host.renderer().compose_external_texture(
@@ -560,7 +644,12 @@ impl App {
                 scene.push_rect(0.0, 0.0, 1.0, 1.0, [0.04, 0.05, 0.07, 1.0]);
                 let (tex, view) =
                     host.rasterize(&scene, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
-                self.divider_tex = Some(super::CachedTile { version: 0, size: (1, 1), tex, view });
+                self.divider_tex = Some(super::CachedTile {
+                    version: 0,
+                    size: (1, 1),
+                    tex,
+                    view,
+                });
             }
             if let Some(cached) = &self.divider_tex {
                 for d in &dividers {
@@ -624,8 +713,10 @@ impl App {
             let aw = (arect[2] - arect[0]).round().max(1.0) as u32;
             let ah = (arect[3] - arect[1]).round().max(1.0) as u32;
             let themes = self.theme_options();
-            let diags = self.apparatus_diagnostics();
-            let dom = super::apparatus::build_apparatus_dom(&themes, &diags);
+            let (system_rows, observability) = apparatus_data
+                .as_ref()
+                .expect("apparatus data was prepared when the pane was open");
+            let dom = super::apparatus::build_apparatus_dom(&themes, &system_rows, &observability);
             let sheet_strings = super::apparatus::apparatus_sheet(&self.chrome_theme);
             let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
             let app_scroll = ScrollOffsets::<NodeId>::default();
@@ -651,9 +742,10 @@ impl App {
             let mut buttons = all_with_class(&dom, root, "app-btn");
             buttons.extend(all_with_class(&dom, root, "app-btn-active"));
             for node in buttons {
-                if let (Some(id), Some(l)) =
-                    (super::string_attr(&dom, node, "data-theme"), frags.rect_of(node))
-                {
+                if let (Some(id), Some(l)) = (
+                    super::string_attr(&dom, node, "data-theme"),
+                    frags.rect_of(node),
+                ) {
                     let x0 = arect[0] + l.location.x;
                     let y0 = arect[1] + l.location.y;
                     self.apparatus_button_rects
@@ -689,7 +781,12 @@ impl App {
             for (id, r) in local {
                 self.gloss_node_rects.push((
                     id,
-                    [grect[0] + r[0], grect[1] + r[1], grect[0] + r[2], grect[1] + r[3]],
+                    [
+                        grect[0] + r[0],
+                        grect[1] + r[1],
+                        grect[0] + r[2],
+                        grect[1] + r[3],
+                    ],
                 ));
             }
         }
@@ -708,10 +805,18 @@ impl App {
         let strip_w = super::titlebar::CONTROLS_W.round().max(1.0) as u32;
         if self.window_controls_tex.as_ref().map(|c| c.size) != Some((strip_w, band_h)) {
             let scene = super::titlebar::controls_scene(band_h, &self.chrome_theme);
-            let (tex, view) =
-                host.rasterize(&scene, strip_w, band_h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
-            self.window_controls_tex =
-                Some(super::CachedTile { version: 0, size: (strip_w, band_h), tex, view });
+            let (tex, view) = host.rasterize(
+                &scene,
+                strip_w,
+                band_h,
+                ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+            );
+            self.window_controls_tex = Some(super::CachedTile {
+                version: 0,
+                size: (strip_w, band_h),
+                tex,
+                view,
+            });
         }
         if let Some(cached) = &self.window_controls_tex {
             let x0 = w as f32 - super::titlebar::CONTROLS_W;

@@ -149,6 +149,16 @@ moothold = { workspace = true }
 # the chrome theme-switches alongside the graph chrome. The registry also seeds
 # the graph-node + edge tokens; meerkat consumes the chrome half for now.
 register-theme = { workspace = true }
+# Portable UX event/probe taxonomy. meerkat records pane/theme events into its
+# host-local Apparatus observability cache through this seam.
+ux-events = { workspace = true }
+# Diagnostics channel registry and portable emit scaffold. meerkat uses the
+# descriptor/invariant layer to classify Apparatus records.
+register-diagnostics = { workspace = true }
+# Internal a11y/automation tree projection and AccessKit-shaped audit. The OS
+# bridge stays separate; this is only the host-local snapshot Apparatus reads.
+uxtree = { workspace = true }
+accesskit = { workspace = true }
 
 # Content engines for the card (S2.2b-ii): nematic's document engines (markdown /
 # gemtext / plain text / feeds / …) turn fetched bytes into an EngineDocument,

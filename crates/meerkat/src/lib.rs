@@ -160,6 +160,8 @@ pub enum CommsIntent {
     Open(ConversationId),
     /// Send a draft.
     Send(Draft),
+    /// Connect the cabal from a received join ticket.
+    ConnectCabal(String),
 }
 
 /// A within-node history step the host applies to the focused node.
@@ -204,7 +206,10 @@ pub struct ContextItem {
 impl ContextItem {
     /// A row pairing `label` with the `action` it captures when clicked.
     pub fn new(label: impl Into<String>, action: ContextAction) -> Self {
-        Self { label: label.into(), action }
+        Self {
+            label: label.into(),
+            action,
+        }
     }
 }
 
@@ -388,12 +393,12 @@ impl Chrome {
                 self.content_location = url.clone();
                 self.history.visit(url);
                 sync_chrome_from_history(self, true);
-            },
+            }
             Command::ConnectPeer => {
                 // Record the intent; the host executes it (the chrome cannot reach
                 // the sync actor). The ticket is whatever is in the address bar.
                 self.pending_connect = Some(self.omnibar.text().trim().to_string());
-            },
+            }
             // A chrome-level action: open the settings overlay right here (no host
             // intent needed, like toggling the palette).
             Command::OpenSettings => self.open_settings(),
@@ -407,7 +412,7 @@ impl Chrome {
                 // Host actions over the orrery / workbench / actor pool: record the
                 // intent; the host drains it and runs the matching method.
                 self.pending_command = Some(cmd);
-            },
+            }
         }
     }
 
@@ -555,7 +560,7 @@ impl Chrome {
         let conversation = match protocol {
             ProtocolKind::Misfin if !to.is_empty() => {
                 Some(ConversationId::new(ProtocolKind::Misfin, to))
-            },
+            }
             ProtocolKind::Misfin => return,
             ProtocolKind::Murm => self
                 .comms
@@ -575,6 +580,12 @@ impl Chrome {
         // Keep the form open so its send-status line shows the outcome, and a
         // failed send keeps the typed address + body to fix. The user closes it
         // with Cancel.
+    }
+
+    /// Record a request to connect the cabal from a received join `ticket` (a
+    /// "Join this cabal" on an invite message). The host routes it to the actor.
+    pub fn connect_cabal(&mut self, ticket: String) {
+        self.comms_intent = Some(CommsIntent::ConnectCabal(ticket));
     }
 
     /// Take the pending comms request, if any. The host drains it after input and
@@ -605,9 +616,8 @@ impl Chrome {
     }
 }
 
-
 mod views;
-pub use views::{ChromeView, ChromeLogic, chrome_view, submit_omnibar, runner};
 use views::sync_chrome_from_history;
+pub use views::{ChromeLogic, ChromeView, chrome_view, runner, submit_omnibar};
 #[cfg(test)]
 mod tests;

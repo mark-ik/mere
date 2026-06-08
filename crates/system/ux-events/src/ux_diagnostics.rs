@@ -111,6 +111,11 @@ fn surface_open_channel(surface: SurfaceId) -> &'static str {
         SurfaceId::TilePane => "ux.tile_pane.opened",
         SurfaceId::CanvasPane => "ux.canvas_pane.opened",
         SurfaceId::BaseLayer => "ux.base_layer.opened",
+        SurfaceId::RosterPane => "ux.roster_pane.opened",
+        SurfaceId::GlossPane => "ux.gloss_pane.opened",
+        SurfaceId::ApparatusPane => "ux.apparatus_pane.opened",
+        SurfaceId::CommsPane => "ux.comms_pane.opened",
+        SurfaceId::WorkbenchPane => "ux.workbench_pane.opened",
     }
 }
 
@@ -129,6 +134,11 @@ fn surface_dismiss_channel(surface: SurfaceId) -> &'static str {
         SurfaceId::TilePane => "ux.tile_pane.dismissed",
         SurfaceId::CanvasPane => "ux.canvas_pane.dismissed",
         SurfaceId::BaseLayer => "ux.base_layer.dismissed",
+        SurfaceId::RosterPane => "ux.roster_pane.dismissed",
+        SurfaceId::GlossPane => "ux.gloss_pane.dismissed",
+        SurfaceId::ApparatusPane => "ux.apparatus_pane.dismissed",
+        SurfaceId::CommsPane => "ux.comms_pane.dismissed",
+        SurfaceId::WorkbenchPane => "ux.workbench_pane.dismissed",
     }
 }
 
@@ -161,6 +171,11 @@ pub fn all_channel_ids() -> &'static [&'static str] {
         "ux.tile_pane.opened",
         "ux.canvas_pane.opened",
         "ux.base_layer.opened",
+        "ux.roster_pane.opened",
+        "ux.gloss_pane.opened",
+        "ux.apparatus_pane.opened",
+        "ux.comms_pane.opened",
+        "ux.workbench_pane.opened",
         // SurfaceDismissed
         "ux.omnibar.dismissed",
         "ux.command_palette.dismissed",
@@ -175,6 +190,11 @@ pub fn all_channel_ids() -> &'static [&'static str] {
         "ux.tile_pane.dismissed",
         "ux.canvas_pane.dismissed",
         "ux.base_layer.dismissed",
+        "ux.roster_pane.dismissed",
+        "ux.gloss_pane.dismissed",
+        "ux.apparatus_pane.dismissed",
+        "ux.comms_pane.dismissed",
+        "ux.workbench_pane.dismissed",
         // Action / OpenNode
         "ux.action.dispatched",
         "ux.open_node.dispatched",
@@ -362,11 +382,12 @@ mod tests {
         let ids = all_channel_ids();
         // Every SurfaceId variant has both an opened and dismissed
         // channel (2 each), plus action.dispatched and
-        // open_node.dispatched. 13 surfaces × 2 + 2 = 28.
-        assert_eq!(ids.len(), 28);
+        // open_node.dispatched. 18 surfaces x 2 + 2 = 38.
+        assert_eq!(ids.len(), 38);
         assert!(ids.contains(&"ux.command_palette.opened"));
         assert!(ids.contains(&"ux.command_palette.dismissed"));
         assert!(ids.contains(&"ux.node_create.opened"));
+        assert!(ids.contains(&"ux.apparatus_pane.opened"));
         assert!(ids.contains(&"ux.action.dispatched"));
         assert!(ids.contains(&"ux.open_node.dispatched"));
     }

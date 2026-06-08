@@ -29,7 +29,7 @@ use std::sync::Arc;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
-use armillary::{spawn, ActorHandle, Emitter, Wake};
+use armillary::{ActorHandle, Emitter, Wake, spawn};
 use comms::misfin_adapter::MisfinAdapter;
 use comms::murm_adapter::MurmAdapter;
 use comms::{
@@ -38,13 +38,14 @@ use comms::{
 use errand::ClientIdentity;
 use identity::{Ed25519Keypair, IdentityProvider, InMemoryProvider};
 use misfin::{
-    certificate_fingerprint, deterministic_identity, identity_salt, MailboxStore, MisfinAddress,
-    MisfinIdentitySpec, MisfinSender, MisfinServer, MisfinServerConfig, ServedMailbox, MISFIN_PORT,
+    MISFIN_PORT, MailboxStore, MisfinAddress, MisfinIdentitySpec, MisfinSender, MisfinServer,
+    MisfinServerConfig, ServedMailbox, certificate_fingerprint, deterministic_identity,
+    identity_salt,
 };
 use murm::{CabalKey, Murm, Post};
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use tokio::sync::broadcast;
-use transport::P2pandaTransport;
+use transport::{P2pandaTransport, sync_overlay_topic};
 
 /// The demo cabal's key — both installs share it, so two peers are on the same
 /// cabal automatically (a real join path replaces the fixed key later). Its public
@@ -72,7 +73,7 @@ fn local_misfin_address() -> String {
         None => {
             tracing::warn!("comms: no LAN IP found; misfin receive address is not reachable");
             "me@mere.local".to_string()
-        },
+        }
     }
 }
 
@@ -93,6 +94,9 @@ pub enum CommsCommand {
     Open(ConversationId),
     /// Send a draft, then reload its thread + the list.
     Send(Draft),
+    /// Connect the cabal to a peer from its join ticket (bootstrap the overlay so
+    /// the two converge).
+    ConnectCabal(String),
 }
 
 /// A result the comms actor delivers back to the UI loop.
@@ -128,10 +132,11 @@ struct CommsBackends {
     comms: Arc<Comms>,
     /// `None` when the send identity could not be derived (misfin send disabled).
     misfin_sender: Option<MisfinSendIdentity>,
-    /// Keeps the murm transport + cabal engine alive (and available to a future
-    /// connect step). `None` when the networked cabal couldn't be set up.
-    #[allow(dead_code)]
+    /// Keeps the murm transport + cabal engine alive, and drives `ConnectCabal`.
+    /// `None` when the networked cabal couldn't be set up.
     murm: Option<Murm<P2pandaTransport>>,
+    /// The cabal's public id, for tagging the overlay topics on connect.
+    cabal_id: Option<[u8; 32]>,
 }
 
 /// Spawn the comms subsystem as an [`armillary`] I/O actor. The run closure builds
@@ -149,18 +154,25 @@ pub fn spawn_comms(wake: Wake, dir: PathBuf) -> (ActorHandle<CommsCommand>, Rece
             .build()
             .expect("build the comms runtime");
 
-        let CommsSetup { backends, cabal_live, misfin_address, cabal_ticket } =
-            match runtime.block_on(build_comms(&dir)) {
-                Ok(setup) => setup,
-                Err(err) => {
-                    tracing::warn!(%err, "comms disabled: backend setup failed");
-                    return;
-                },
-            };
+        let CommsSetup {
+            backends,
+            cabal_live,
+            misfin_address,
+            cabal_ticket,
+        } = match runtime.block_on(build_comms(&dir)) {
+            Ok(setup) => setup,
+            Err(err) => {
+                tracing::warn!(%err, "comms disabled: backend setup failed");
+                return;
+            }
+        };
 
         // Surface this install's connect info: the misfin receive address + the
         // cabal join ticket to share with a peer.
-        out.emit(CommsUpdate::Identity { misfin_address, cabal_ticket });
+        out.emit(CommsUpdate::Identity {
+            misfin_address,
+            cabal_ticket,
+        });
 
         // The live cabal lane: a post landing (a peer's over gossip / LogSync, or
         // our own) refreshes the open thread + the list, so the pane updates without
@@ -176,7 +188,7 @@ pub fn spawn_comms(wake: Wake, dir: PathBuf) -> (ActorHandle<CommsCommand>, Rece
                                 drain_out.emit(CommsUpdate::Thread(conversation.clone(), messages));
                             }
                             drain_out.emit(CommsUpdate::Inbox(drain_comms.inbox().await));
-                        },
+                        }
                         Err(broadcast::error::RecvError::Lagged(_)) => continue,
                         Err(broadcast::error::RecvError::Closed) => break,
                     }
@@ -192,7 +204,7 @@ pub fn spawn_comms(wake: Wake, dir: PathBuf) -> (ActorHandle<CommsCommand>, Rece
             match command {
                 CommsCommand::Refresh => {
                     out.emit(CommsUpdate::Inbox(runtime.block_on(comms.inbox())));
-                },
+                }
                 CommsCommand::Open(id) => match runtime.block_on(comms.messages(&id)) {
                     Ok(messages) => out.emit(CommsUpdate::Thread(id, messages)),
                     Err(err) => tracing::warn!(%err, "comms: loading a thread failed"),
@@ -211,10 +223,10 @@ pub fn spawn_comms(wake: Wake, dir: PathBuf) -> (ActorHandle<CommsCommand>, Rece
                                 if delivered {
                                     out.emit(CommsUpdate::Sent(target));
                                 }
-                            },
+                            }
                             Err(err) => {
                                 out.emit(CommsUpdate::SendOutcome(format!("Send failed: {err}")));
-                            },
+                            }
                         }
                     } else {
                         // murm: route through the adapter, then reload the thread
@@ -226,14 +238,47 @@ pub fn spawn_comms(wake: Wake, dir: PathBuf) -> (ActorHandle<CommsCommand>, Rece
                                 }
                                 out.emit(CommsUpdate::Sent(target));
                                 out.emit(CommsUpdate::Inbox(runtime.block_on(comms.inbox())));
-                            },
+                            }
                             Err(err) => tracing::warn!(%err, "comms: send failed"),
                         }
                     }
-                },
+                }
+                CommsCommand::ConnectCabal(ticket) => {
+                    let outcome = connect_cabal(&runtime, &backends, &ticket);
+                    out.emit(CommsUpdate::SendOutcome(outcome));
+                }
             }
         }
     })
+}
+
+/// Connect the cabal to a peer from its join `ticket`: register the peer's address
+/// and tag the cabal's gossip + LogSync overlay topics, so the two converge.
+/// Returns a one-line status for the pane.
+fn connect_cabal(
+    runtime: &tokio::runtime::Runtime,
+    backends: &CommsBackends,
+    ticket: &str,
+) -> String {
+    let (Some(murm), Some(cabal_id)) = (backends.murm.as_ref(), backends.cabal_id) else {
+        return "Cabal is not networked".to_string();
+    };
+    let result = runtime.block_on(async {
+        let peer = murm
+            .transport()
+            .add_peer_ticket(ticket)
+            .await
+            .map_err(|e| format!("add peer: {e}"))?;
+        murm.transport()
+            .set_topics(peer, &[cabal_id, sync_overlay_topic(cabal_id)])
+            .await
+            .map_err(|e| format!("set topics: {e}"))?;
+        Ok::<(), String>(())
+    });
+    match result {
+        Ok(()) => "Joining cabal — syncing with the peer…".to_string(),
+        Err(err) => format!("Cabal connect failed: {err}"),
+    }
 }
 
 /// Build the live [`Comms`] over backends under `dir`, the misfin send identity,
@@ -257,7 +302,7 @@ async fn build_comms(dir: &Path) -> Result<CommsSetup, String> {
         Err(err) => {
             tracing::warn!(%err, "misfin identity unavailable; misfin send/receive disabled");
             None
-        },
+        }
     };
 
     // Stand up the in-app misfin receive server (host-anchored at `misfin_address`,
@@ -277,19 +322,24 @@ async fn build_comms(dir: &Path) -> Result<CommsSetup, String> {
     // murm: a networked cabal over a real p2panda transport. Bind failure disables
     // the cabal (misfin still works); otherwise the cabal works locally and syncs
     // once a peer connects.
-    let (murm, cabal_live, cabal_ticket) = match build_cabal(&provider, seed).await {
-        Ok((murm, adapter, rx, conversation, ticket)) => {
+    let (murm, cabal_id, cabal_live, cabal_ticket) = match build_cabal(&provider, seed).await {
+        Ok((murm, adapter, rx, conversation, ticket, cabal_id)) => {
             comms = comms.with_adapter(adapter);
-            (Some(murm), Some((rx, conversation)), ticket)
-        },
+            (Some(murm), Some(cabal_id), Some((rx, conversation)), ticket)
+        }
         Err(err) => {
             tracing::warn!(%err, "comms: murm cabal unavailable; misfin only");
-            (None, None, None)
-        },
+            (None, None, None, None)
+        }
     };
 
     Ok(CommsSetup {
-        backends: CommsBackends { comms: Arc::new(comms), misfin_sender, murm },
+        backends: CommsBackends {
+            comms: Arc::new(comms),
+            misfin_sender,
+            murm,
+            cabal_id,
+        },
         cabal_live,
         misfin_address,
         cabal_ticket,
@@ -316,15 +366,18 @@ async fn start_misfin_server(sender: &MisfinSendIdentity, address: &str, store: 
         Err(err) => {
             tracing::warn!(%err, "comms: misfin server setup failed");
             return;
-        },
+        }
     };
-    match server.bind(SocketAddr::from(([0, 0, 0, 0], MISFIN_PORT))).await {
+    match server
+        .bind(SocketAddr::from(([0, 0, 0, 0], MISFIN_PORT)))
+        .await
+    {
         Ok(bound) => {
             tracing::info!(%address, "comms: misfin receive server up");
             tokio::spawn(async move {
                 let _ = bound.serve(std::future::pending::<()>()).await;
             });
-        },
+        }
         Err(err) => tracing::warn!(%err, "comms: misfin server bind failed; receive disabled"),
     }
 }
@@ -344,6 +397,7 @@ async fn build_cabal(
         broadcast::Receiver<Post>,
         ConversationId,
         Option<String>,
+        [u8; 32],
     ),
     String,
 > {
@@ -363,16 +417,20 @@ async fn build_cabal(
         .await
         .map_err(|e| format!("subscribe cabal: {e}"))?;
     if synced.history("session").is_empty() {
-        let _ = synced.send_text("session", "Welcome to the Project cabal.").await;
+        let _ = synced
+            .send_text("session", "Welcome to the Project cabal.")
+            .await;
     }
-    let rx = synced.subscribe().map_err(|e| format!("cabal subscribe: {e}"))?;
-    let conversation =
-        ConversationId::new(ProtocolKind::Murm, hex(synced.handle().id().as_bytes()));
+    let rx = synced
+        .subscribe()
+        .map_err(|e| format!("cabal subscribe: {e}"))?;
+    let cabal_id = *synced.handle().id().as_bytes();
+    let conversation = ConversationId::new(ProtocolKind::Murm, hex(&cabal_id));
     let adapter: Box<dyn ProtocolAdapter> = Box::new(
         MurmAdapter::new(Identity::new(ProtocolKind::Murm, "me"))
             .with_cabal("Project cabal", Box::new(synced)),
     );
-    Ok((murm, adapter, rx, conversation, ticket))
+    Ok((murm, adapter, rx, conversation, ticket, cabal_id))
 }
 
 /// Load the per-install comms persona seed from `path`, or mint + persist one on
@@ -411,9 +469,15 @@ fn build_misfin_sender(
     address: &str,
 ) -> Result<MisfinSendIdentity, String> {
     let address = MisfinAddress::parse(address)?;
-    let spec = MisfinIdentitySpec { address: address.clone(), blurb: Some("Mere".to_string()) };
+    let spec = MisfinIdentitySpec {
+        address: address.clone(),
+        blurb: Some("Mere".to_string()),
+    };
     let salt = identity_salt(&address);
-    let seed = provider.derive_keypair(&salt).map_err(|e| e.to_string())?.to_seed();
+    let seed = provider
+        .derive_keypair(&salt)
+        .map_err(|e| e.to_string())?
+        .to_seed();
     let material = deterministic_identity(&seed, &spec)?;
     Ok(MisfinSendIdentity {
         cert_der: material.certificate_der,
@@ -430,7 +494,10 @@ fn send_misfin(
     draft: &Draft,
 ) -> Result<(bool, String), String> {
     let sender = sender.ok_or("misfin sending is not configured")?;
-    let target = draft.conversation.as_ref().ok_or("no target conversation")?;
+    let target = draft
+        .conversation
+        .as_ref()
+        .ok_or("no target conversation")?;
     let url = errand::Url::parse(&format!("misfin://{}", target.key)).map_err(|e| e.to_string())?;
     let identity = ClientIdentity {
         cert_chain: vec![CertificateDer::from(sender.cert_der.clone())],
@@ -465,7 +532,11 @@ fn send_misfin(
 /// Seed one demo gemmail into an empty mailbox, so the misfin conversation shows
 /// something before a real server delivers mail.
 fn seed_mailbox_if_empty(store: &MailboxStore, my_address: &str) {
-    if store.list(my_address).map(|m| !m.is_empty()).unwrap_or(true) {
+    if store
+        .list(my_address)
+        .map(|m| !m.is_empty())
+        .unwrap_or(true)
+    {
         return;
     }
     let Ok(me) = MisfinAddress::parse(my_address) else {
@@ -474,7 +545,10 @@ fn seed_mailbox_if_empty(store: &MailboxStore, my_address: &str) {
     let Ok(ana) = MisfinAddress::parse("ana@example.test") else {
         return;
     };
-    let sender = MisfinSender { address: ana, blurb: Some("Ana".to_string()) };
+    let sender = MisfinSender {
+        address: ana,
+        blurb: Some("Ana".to_string()),
+    };
     let body = "< ana@example.test Ana\n# Welcome\n\nA local demo message in your misfin mailbox.";
     let _ = store.store(&me, "fp-ana-demo", Some(&sender), body, 1_700_000_000);
 }

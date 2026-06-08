@@ -6491,6 +6491,7 @@ checksum = "ae960838283323069879657ca3de837e9f7bbb4c7bf6ea7f1b290d5e9476d2e0"
 name = "meerkat"
 version = "0.0.1"
 dependencies = [
+ "accesskit",
  "arboard",
  "armillary",
  "chrome",
@@ -6517,6 +6518,7 @@ dependencies = [
  "platen",
  "platen-view",
  "pollster",
+ "register-diagnostics",
  "register-theme",
  "rustls-pki-types",
  "serval-layout",
@@ -6530,6 +6532,8 @@ dependencies = [
  "transport",
  "url",
  "uuid",
+ "ux-events",
+ "uxtree",
  "wgpu",
  "winit",
  "xilem-serval",

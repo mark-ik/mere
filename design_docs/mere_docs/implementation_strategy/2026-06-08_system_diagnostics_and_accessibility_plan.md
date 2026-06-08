@@ -281,3 +281,35 @@ accessibility states.
 - 2026-06-08: Plan written. Grounded in the live `meerkat`, `ux-events`,
   `register-diagnostics`, `uxtree`, `frame`, `chrome`, `register-input`, and
   Graphshell harvest docs. No code yet.
+- 2026-06-08: **D1/D2 seed landed.** Added `meerkat::observability` as a bounded
+  host-local observation cache, expanded the shared `SurfaceId` vocabulary for
+  Roster / Gloss / Apparatus / Comms / Workbench panes, and wired pane
+  open/close events through `ux-events` into diagnostic records. Apparatus now
+  renders Overview, UX Events, Actors, Accessibility, Diagnostics, and Probes
+  sections from the snapshot. Actor events are recorded from the kernel inbox
+  drain for fetch, sync, content respawns, and comms updates. A coarse a11y
+  summary records visible surfaces and explicitly marks the OS AccessKit bridge
+  degraded until the real bridge lands. Full `register-diagnostics` descriptor
+  registry, tracing layer, and probe execution remain D3/D4 follow-ons.
+- 2026-06-08: **D3 landed + D4 seed.** `HostObservability` now owns a local
+  `DiagnosticsRegistry`, registers the first `meerkat.*` and pane UX channel
+  descriptors, and runs every diagnostic through registry sampling/orphan
+  tracking/invariant observation before it enters the Apparatus ring. Startup,
+  fetch, and comms use the `started -> succeeded | failed` convention, with
+  completion invariants registered for startup/fetch/comms. Apparatus now shows a
+  Registry section (registered count, orphan channels, invariant violations) and
+  a Tracing section. `meerkat` installs the portable
+  `register_diagnostics::emit` sender and drains `DiagnosticEvent`s into the same
+  cache, so extracted registries can feed Apparatus without depending on meerkat.
+  Remaining D4 work is a real `tracing` subscriber layer over host spans.
+- 2026-06-08: **D4 landed + D5 internal seed.** `meerkat` now installs a
+  `tracing-subscriber` layer that mirrors selected `meerkat`, `frame`, and
+  `uxtree` spans/events into the same portable diagnostics receiver used by
+  `register_diagnostics::emit`, so Apparatus can show recent host trace activity
+  without tailing terminal logs. The a11y refresh now builds an internal
+  AccessKit-shaped `uxtree` snapshot by stitching a host window root, a chrome
+  root, and the live `frame::project_frame` subtree. Apparatus reports tree root,
+  focus node, node count, missing label/description count, missing bounds count,
+  duplicate ids, and audit findings. The OS bridge remains explicitly degraded;
+  the next D5/D6 work is attaching real bounds/content subtrees and then pushing
+  `TreeUpdate`s through an AccessKit platform adapter.
