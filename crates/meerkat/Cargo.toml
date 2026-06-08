@@ -100,6 +100,12 @@ armillary = { workspace = true }
 # tiles, drives the projection, and resolves each tile's member UUID to a node
 # URL against the session graph. The orrery is that same arrangement's
 # Cartography projection; the tiled mode is its Tree projection.
+# The frame tree: the window-level pane arranger (FrameLayout = split tree of
+# resizable panes). meerkat hosts the graph pane plus summoned sibling panes
+# (roster now; gloss / inspector / apparatus later) as frame leaves, computing
+# each leaf's rect from the split ratios (the frame crate is geometry-free).
+frame = { workspace = true }
+
 forme = { workspace = true }
 platen = { workspace = true }
 # The serval view layer for the tiled workbench (taffy retarget, Phase 2): emits

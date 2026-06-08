@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 
 use forme::GraphMemberId;
+use frame::{GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
 use meerkat::command::Command;
 use meerkat::{Chrome, CommsIntent, ContextAction, ContextItem};
 use orrery::{NodeShape, NodeState};
@@ -18,7 +19,10 @@ use session_runtime::{
     ViewIntent,
 };
 
-use super::{comms_host, fetch, sync, App, DEFAULT_FRAME, DEFAULT_PANE};
+use super::{
+    comms_host, fetch, frame_view, roster, sync, App, DEFAULT_FRAME, DEFAULT_PANE,
+    FALLBACK_TOOLBAR_H,
+};
 
 impl App {
     /// The URL of whatever is in focus: in the tiled view the focused tile's node,
@@ -585,6 +589,154 @@ impl App {
         if let Err(err) = settings_store::save_settings(&self.session_dir, &settings) {
             tracing::warn!(%err, "failed to persist settings");
         }
+    }
+
+    // ── Frame tree (F1) ──────────────────────────────────────────────────────
+
+    /// The content band (below the toolbar) in window coords.
+    pub(super) fn content_band(&self) -> [f32; 4] {
+        let th = self.toolbar_h.max(FALLBACK_TOOLBAR_H) as f32;
+        [0.0, th, self.width as f32, self.height as f32]
+    }
+
+    /// The laid-out content panes (leaf rects) for the current frame layout.
+    pub(super) fn laid_leaves(&self) -> Vec<frame_view::LaidLeaf> {
+        frame_view::leaf_rects(&self.frame_layout, self.content_band(), self.maximized_pane)
+    }
+
+    /// The graph pane's screen rect (orrery / tiled workbench); the whole band when
+    /// no graph leaf is laid out (e.g. another pane is maximized).
+    pub(super) fn graph_leaf_rect(&self) -> [f32; 4] {
+        let band = self.content_band();
+        self.laid_leaves()
+            .into_iter()
+            .find(|l| matches!(l.content, PaneContent::Workbench))
+            .map(|l| l.rect)
+            .unwrap_or(band)
+    }
+
+    /// The roster pane's screen rect, if the roster is open.
+    pub(super) fn roster_leaf_rect(&self) -> Option<[f32; 4]> {
+        self.laid_leaves()
+            .into_iter()
+            .find(|l| matches!(l.content, PaneContent::Roster))
+            .map(|l| l.rect)
+    }
+
+    /// The pane (leaf) under window point `(x, y)`, if any.
+    pub(super) fn pane_at(&self, x: f32, y: f32) -> Option<PaneId> {
+        self.laid_leaves()
+            .into_iter()
+            .find(|l| x >= l.rect[0] && x < l.rect[2] && y >= l.rect[1] && y < l.rect[3])
+            .map(|l| l.pane_id)
+    }
+
+    /// The roster pane's id, if open.
+    fn roster_pane(&self) -> Option<PaneId> {
+        self.frame_layout
+            .iter_leaves()
+            .find(|(_, content, _)| matches!(content, PaneContent::Roster))
+            .map(|(id, _, _)| id)
+    }
+
+    /// Toggle the roster pane: close it if open, else summon it as a right split
+    /// beside the graph pane (the graph keeps the larger share). A layout change
+    /// clears any maximize. (Frame tree, F1.)
+    pub(super) fn toggle_roster(&mut self) {
+        if let Some(id) = self.roster_pane() {
+            if let Some(path) = frame_view::pane_path(&self.frame_layout, id) {
+                self.frame_layout.close_leaf(&path);
+            }
+        } else {
+            let id = PaneId(self.next_pane_id);
+            self.next_pane_id += 1;
+            let leaf = PaneNode::Leaf {
+                pane_id: id,
+                content: PaneContent::Roster,
+                graph_id: GraphId::default(),
+            };
+            if self.frame_layout.summon_leaf(&[], InsertSide::Right, leaf) {
+                self.frame_layout.set_split_ratio(&[], 0.66);
+            }
+        }
+        self.maximized_pane = None;
+        self.request_redraw();
+    }
+
+    /// Toggle maximize of the pane under the cursor (full-screen and back). With a
+    /// single pane this is a no-op visually. (Frame tree, F1.)
+    pub(super) fn toggle_maximize(&mut self) {
+        if self.maximized_pane.is_some() {
+            self.maximized_pane = None;
+        } else if let Some(pane) = self.pane_at(self.cursor.0, self.cursor.1) {
+            self.maximized_pane = Some(pane);
+        }
+        self.request_redraw();
+    }
+
+    /// The frame divider gutter under window point `(x, y)`, as its split path +
+    /// the split's (parent) rect + axis — for starting a divider drag.
+    pub(super) fn frame_divider_at(
+        &self,
+        x: f32,
+        y: f32,
+    ) -> Option<(Vec<SplitChoice>, [f32; 4], SplitAxis)> {
+        let band = self.content_band();
+        frame_view::divider_rects(&self.frame_layout, band, self.maximized_pane)
+            .into_iter()
+            .find(|d| x >= d.rect[0] && x < d.rect[2] && y >= d.rect[1] && y < d.rect[3])
+            .map(|d| (d.path, d.parent, d.axis))
+    }
+
+    /// Drive an in-progress frame-divider drag from the current cursor: map the
+    /// pointer's position within the split's parent rect to a new ratio.
+    pub(super) fn drag_frame_divider(&mut self) {
+        let Some((path, parent, axis)) = self.frame_divider_drag.clone() else {
+            return;
+        };
+        let (cx, cy) = self.cursor;
+        let ratio = match axis {
+            SplitAxis::Horizontal => {
+                (cx - parent[0]) / (parent[2] - parent[0] - frame_view::DIVIDER).max(1.0)
+            },
+            SplitAxis::Vertical => {
+                (cy - parent[1]) / (parent[3] - parent[1] - frame_view::DIVIDER).max(1.0)
+            },
+        };
+        // `set_split_ratio` clamps to a sane minimum so a pane can't collapse.
+        self.frame_layout.set_split_ratio(&path, ratio);
+        self.request_redraw();
+    }
+
+    /// The node whose roster row contains window point `(x, y)`, if any.
+    pub(super) fn roster_row_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
+        self.roster_row_rects
+            .iter()
+            .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
+            .map(|(member, _)| *member)
+    }
+
+    /// The roster rows: every graph node as a row (url as title, content type as
+    /// subtitle, focused node marked selected). (Frame tree, F1 roster.)
+    pub(super) fn roster_rows(&self) -> Vec<roster::RosterRow> {
+        let focused = self.orrery.focused_url();
+        self.orrery
+            .graph()
+            .nodes()
+            .map(|(_key, node)| {
+                let url = node.url();
+                let content_type = match self.content.get(url) {
+                    Some(fetch::ContentState::Ready(fetched)) => fetched.content_type.clone(),
+                    _ => None,
+                };
+                roster::RosterRow {
+                    member: node.id,
+                    title: url.to_string(),
+                    subtitle: content_type.unwrap_or_else(|| "—".to_string()),
+                    selected: focused == Some(url),
+                }
+            })
+            .collect()
     }
 }
 

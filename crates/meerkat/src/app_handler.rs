@@ -227,7 +227,9 @@ impl ApplicationHandler for App {
                 // only — in the tiled view the orrery is hidden, so a stray drag
                 // must not animate it and force every tile to re-rasterize).
                 let th = self.toolbar_height() as f32;
-                if self.divider_drag.is_some() {
+                if self.frame_divider_drag.is_some() {
+                    self.drag_frame_divider();
+                } else if self.divider_drag.is_some() {
                     self.drag_divider();
                 } else if !self.workbench.is_tiled()
                     && self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th)

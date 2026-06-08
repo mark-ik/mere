@@ -108,6 +108,33 @@ impl App {
                         self.runner.update(Chrome::close_suggestions);
                         self.request_redraw();
                     }
+                    // A press on a frame divider starts a pane-resize drag. (F1.)
+                    if button == MouseButton::Left {
+                        if let Some((path, parent, axis)) = self.frame_divider_at(x, y) {
+                            self.frame_divider_drag = Some((path, parent, axis));
+                            return;
+                        }
+                    }
+                    // The roster pane consumes the press: a left click focuses the
+                    // clicked node's row (shared selection with the orrery). (F1.)
+                    if let Some(rrect) = self.roster_leaf_rect() {
+                        if x >= rrect[0] && x < rrect[2] && y >= rrect[1] && y < rrect[3] {
+                            if button == MouseButton::Left {
+                                if let Some(member) = self.roster_row_at(x, y) {
+                                    if let Some(url) = self
+                                        .orrery
+                                        .graph()
+                                        .get_node_by_id(member)
+                                        .map(|(_, n)| n.url().to_string())
+                                    {
+                                        self.orrery.select_by_url(&url);
+                                        self.request_redraw();
+                                    }
+                                }
+                            }
+                            return;
+                        }
+                    }
                     // A press on a live card's close (X) button reaps that preview
                     // (its last scene is kept as the node's snapshot).
                     if button == MouseButton::Left {
@@ -171,9 +198,10 @@ impl App {
                         self.request_redraw();
                     }
                 }
-                // A divider resize ends on release.
+                // A divider resize ends on release (tile-tree slot + frame pane).
                 if button == MouseButton::Left {
                     self.divider_drag = None;
+                    self.frame_divider_drag = None;
                 }
                 // Resolve a tab drag (tiled view): if the press moved past the slop
                 // and released over a tile, drop by zone — the outer quarter on
@@ -412,6 +440,21 @@ impl App {
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("b"))
         {
             self.toggle_focus_background();
+            return;
+        }
+        // Ctrl+R summons / closes the roster pane (the graph's node list) as a
+        // split beside the graph pane; Ctrl+M maximizes the pane under the cursor
+        // to full-screen and back. (Frame tree, F1.)
+        if self.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("r"))
+        {
+            self.toggle_roster();
+            return;
+        }
+        if self.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("m"))
+        {
+            self.toggle_maximize();
             return;
         }
         if self.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::Backspace)) {

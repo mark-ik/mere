@@ -261,16 +261,18 @@ fn html_scene(body: &str, loader: &impl ImageLoader, w: u32, h: u32) -> (Scene, 
 /// [`CARD_MARGIN`]). Returns `(x0, y0, x1, y1, w, h)` — window-space corners for
 /// the composite plus the pixel size to rasterize at — or `None` when the band
 /// is too small to host a readable card.
-pub fn card_rect(w: u32, toolbar_h: u32, h: u32) -> Option<(f32, f32, f32, f32, u32, u32)> {
-    let top = toolbar_h as f32 + CARD_MARGIN;
-    let avail_w = w as f32 - 2.0 * CARD_MARGIN;
-    let avail_h = h as f32 - top - CARD_MARGIN;
+pub fn card_rect(band: [f32; 4]) -> Option<(f32, f32, f32, f32, u32, u32)> {
+    let [bx0, by0, bx1, by1] = band;
+    let bw = bx1 - bx0;
+    let top = by0 + CARD_MARGIN;
+    let avail_w = bw - 2.0 * CARD_MARGIN;
+    let avail_h = by1 - top - CARD_MARGIN;
     if avail_w < 160.0 || avail_h < 100.0 {
         return None;
     }
-    let cw = (w as f32 * 0.42).clamp(280.0, 460.0).min(avail_w);
+    let cw = (bw * 0.42).clamp(280.0, 460.0).min(avail_w);
     let ch = avail_h.min(560.0);
-    let x1 = w as f32 - CARD_MARGIN;
+    let x1 = bx1 - CARD_MARGIN;
     let x0 = x1 - cw;
     let y0 = top;
     let y1 = y0 + ch;
@@ -288,14 +290,13 @@ pub fn anchored_card_rect(
     ny: f32,
     cw: u32,
     ch: u32,
-    w: u32,
-    toolbar_h: u32,
-    h: u32,
+    band: [f32; 4],
 ) -> Option<(f32, f32, f32, f32, u32, u32)> {
+    let [bx0, by0, bx1, by1] = band;
     let margin = 8.0;
-    let top = toolbar_h as f32 + margin;
-    let avail_w = w as f32 - 2.0 * margin;
-    let avail_h = h as f32 - top - margin;
+    let top = by0 + margin;
+    let avail_w = (bx1 - bx0) - 2.0 * margin;
+    let avail_h = by1 - top - margin;
     if avail_w < 120.0 || avail_h < 80.0 {
         return None;
     }
@@ -304,11 +305,11 @@ pub fn anchored_card_rect(
     // Clearance from the node center so the card doesn't sit on the node.
     let gap = 28.0;
     let mut x0 = nx + gap;
-    if x0 + cwf > w as f32 - margin {
+    if x0 + cwf > bx1 - margin {
         x0 = nx - gap - cwf; // flip to the left of the node
     }
-    let x0 = x0.clamp(margin, (w as f32 - margin - cwf).max(margin));
-    let y0 = (ny - chf * 0.5).clamp(top, (h as f32 - margin - chf).max(top));
+    let x0 = x0.clamp(bx0 + margin, (bx1 - margin - cwf).max(bx0 + margin));
+    let y0 = (ny - chf * 0.5).clamp(top, (by1 - margin - chf).max(top));
     Some((
         x0,
         y0,
@@ -446,12 +447,13 @@ mod tests {
 
     #[test]
     fn card_rect_fits_the_content_band_and_vanishes_when_tiny() {
-        let (x0, y0, x1, y1, cw, ch) = card_rect(1024, 64, 600).expect("a card fits a normal window");
+        let (x0, y0, x1, y1, cw, ch) =
+            card_rect([0.0, 64.0, 1024.0, 600.0]).expect("a card fits a normal window");
         assert!(x1 > x0 && y1 > y0, "non-empty rect");
         assert!(x1 <= 1024.0 && y1 <= 600.0, "within the window");
         assert!(y0 >= 64.0, "below the toolbar band");
         assert!(cw >= 1 && ch >= 1);
-        assert!(card_rect(120, 64, 120).is_none(), "no card when the band is too small");
+        assert!(card_rect([0.0, 64.0, 120.0, 120.0]).is_none(), "no card when the band is too small");
     }
 
     #[test]

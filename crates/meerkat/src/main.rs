@@ -35,6 +35,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use eidetic_fjall::FjallStore;
+use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
 use forme::GraphMemberId;
 use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
@@ -61,8 +62,10 @@ mod sync;
 
 mod app_handler;
 mod frame_ops;
+mod frame_view;
 mod input;
 mod render;
+mod roster;
 mod titlebar;
 
 use constellation::Constellation;
@@ -213,6 +216,11 @@ const CARD_BG: wgpu::Color = wgpu::Color { r: 0.110, g: 0.122, b: 0.145, a: 1.0 
 const DEFAULT_FRAME: &str = "00000000-0000-0000-0000-0000000f1a3e";
 const DEFAULT_PANE: u64 = 0;
 
+/// The frame tree's graph pane — the leaf hosting the orrery / tiled workbench
+/// (its projection toggle stays inside the pane). Summoned sibling panes (roster,
+/// …) get fresh ids from `next_pane_id`. (Frame tree, F1.)
+const GRAPH_PANE: PaneId = PaneId(0);
+
 /// The meerkat shell application: the shared chrome DOM, the runner that diffs
 /// the chrome view tree into it, the orrery content-root, the window + GPU, and
 /// input bookkeeping.
@@ -341,9 +349,29 @@ struct App {
     /// Cached rasterized window-control strip (min / max / close), composited over
     /// the chrome at the toolbar's top-right. Re-rasterized on a band-size change.
     window_controls_tex: Option<CachedTile>,
+    /// A small solid texture filling the frame-divider gutters between split panes
+    /// (so the gutters read as a dark seam, not stale pixels). (Frame tree, F1.)
+    divider_tex: Option<CachedTile>,
     /// An in-progress manual window resize from a window edge / corner (custom
     /// titlebar). `None` outside a resize drag. (Custom titlebar.)
     resize_drag: Option<ResizeDrag>,
+    /// The frame tree for the content region: a split tree of resizable panes.
+    /// The graph pane ([`GRAPH_PANE`]) hosts the orrery / tiled workbench; summoned
+    /// panes (roster, …) split beside it. (Frame tree, F1.)
+    frame_layout: FrameLayout,
+    /// The leaf maximized to the whole content band, if any (the maximize toggle).
+    maximized_pane: Option<PaneId>,
+    /// Next pane id to mint when summoning a sibling pane.
+    next_pane_id: u64,
+    /// An in-progress frame-divider drag: the split path, the split's (parent)
+    /// rect, and its axis. Cursor moves map the pointer's position within the
+    /// parent rect to a new ratio via `set_split_ratio`. Distinct from
+    /// `divider_drag` (the workbench tile tree's slot dividers). (Frame tree, F1.)
+    frame_divider_drag: Option<(Vec<SplitChoice>, [f32; 4], SplitAxis)>,
+    /// Each roster row's on-screen rect this frame (node id, `[x0, y0, x1, y1]`),
+    /// rebuilt every frame the roster pane is open; a press inside focuses that
+    /// node. (Frame tree, F1 roster.)
+    roster_row_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// The cursor icon currently set on the window — tracked so a hover over a
     /// resize edge only calls `set_cursor` on a change, not every move. (Custom
     /// titlebar.)
@@ -537,6 +565,17 @@ impl App {
         let theme = ThemeRegistry::default();
         let chrome_theme = theme.active_theme().tokens.chrome;
         let chrome_sheet = chrome_sheet(&chrome_theme);
+        // The content region opens as a single graph pane (orrery / tiled
+        // workbench); summoning the roster splits it. (Frame tree, F1.)
+        let frame_layout = FrameLayout {
+            id: FrameId::new("content"),
+            label: "content".to_string(),
+            root: PaneNode::Leaf {
+                pane_id: GRAPH_PANE,
+                content: PaneContent::Workbench,
+                graph_id: GraphId::default(),
+            },
+        };
         Self {
             dom,
             runner,
@@ -576,8 +615,14 @@ impl App {
             titlebar_press: None,
             pending_exit: false,
             window_controls_tex: None,
+            divider_tex: None,
             resize_drag: None,
             cursor_icon: CursorIcon::Default,
+            frame_layout,
+            maximized_pane: None,
+            next_pane_id: 1,
+            frame_divider_drag: None,
+            roster_row_rects: Vec::new(),
             width: 1024,
             height: 600,
             workbench: Workbench::new(),

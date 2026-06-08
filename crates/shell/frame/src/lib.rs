@@ -141,6 +141,10 @@ pub enum PaneContent {
     Workbench,
     Orrery,
     Gloss,
+    /// The graph's manifest — every primitive (nodes / facets, edges, fields),
+    /// examinable. The data-view counterpart to the orrery's space-view (see the
+    /// graph-roster + frame-taxonomy design doc).
+    Roster,
     Apparatus,
     System,
     /// **Pinned tile** — a single specific tile rendered without a
@@ -161,6 +165,7 @@ impl PaneContent {
             PaneContent::Workbench => "workbench",
             PaneContent::Orrery => "orrery",
             PaneContent::Gloss => "gloss",
+            PaneContent::Roster => "roster",
             PaneContent::Apparatus => "apparatus",
             PaneContent::System => "system",
             PaneContent::Tile(_) => "tile",

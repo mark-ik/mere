@@ -18,8 +18,10 @@ use std::cell::RefCell;
 
 use super::fetch::{ContentState, Fetched};
 use super::resources::{ResourceLoader, ResourceStore};
+use frame::PaneContent;
+
 use super::{
-    all_with_class, first_with_class, measure_class_bottom, member_attr, App, CARD_BG,
+    all_with_class, first_with_class, frame_view, measure_class_bottom, member_attr, App, CARD_BG,
     FALLBACK_TOOLBAR_H,
 };
 
@@ -60,7 +62,25 @@ impl App {
         }
         let (w, h) = (self.width.max(1), self.height.max(1));
         let toolbar_h = self.toolbar_height().min(h);
-        let content_h = h.saturating_sub(toolbar_h).max(1);
+
+        // Frame tree: the content band (below the toolbar) split into pane rects.
+        // The graph pane (orrery / tiled workbench) renders into its leaf; summoned
+        // panes render into theirs. With a single leaf, `graph_rect` is the whole
+        // band, so this is a no-op until a pane is summoned. (Frame tree, F1.)
+        let band = [0.0, toolbar_h as f32, w as f32, h as f32];
+        let leaves = frame_view::leaf_rects(&self.frame_layout, band, self.maximized_pane);
+        let graph_rect = leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Workbench))
+            .map(|l| l.rect)
+            .unwrap_or(band);
+        let roster_rect = leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Roster))
+            .map(|l| l.rect);
+        let dividers = frame_view::divider_rects(&self.frame_layout, band, self.maximized_pane);
+        let graph_w = (graph_rect[2] - graph_rect[0]).round().max(1.0) as u32;
+        let graph_h = (graph_rect[3] - graph_rect[1]).round().max(1.0) as u32;
 
         // Chrome scene over the full window. Paint the caret / selection of the
         // focused field — the palette query when open, else the omnibar (byte
@@ -106,7 +126,7 @@ impl App {
             let mut scene = WorkbenchScene::from_workbench(
                 &self.workbench,
                 self.orrery.graph(),
-                (w as f32, content_h as f32),
+                (graph_w as f32, graph_h as f32),
                 |m| self.constellation.is_background(m),
                 |m| self.constellation.is_recovering(m),
             );
@@ -120,19 +140,19 @@ impl App {
             let wb = scene_from_scripted_dom(
                 &self.workbench_dom.borrow(),
                 WORKBENCH_SHEET,
-                w,
-                content_h,
+                graph_w,
+                graph_h,
                 None,
                 &scroll,
             );
             (wb, false)
         } else {
-            self.orrery.resize(w, content_h);
+            self.orrery.resize(graph_w, graph_h);
             if !self.centered {
                 self.orrery.recenter();
                 self.centered = true;
             }
-            self.orrery.frame(w, content_h)
+            self.orrery.frame(graph_w, graph_h)
         };
 
         // Reconcile the active-node pool to what this frame shows — the open tiles
@@ -170,9 +190,11 @@ impl App {
             // rect is the whole column (strip + content), used as the drag target so
             // dragging along the strip still resolves + highlights its slot.
             let placements: Vec<(GraphMemberId, [f32; 4], [f32; 4])> = {
-                let th = toolbar_h as f32;
+                // The workbench renders into the graph leaf, so offset its
+                // leaf-local layout by the leaf's origin for window coords.
+                let (ox, oy) = (graph_rect[0], graph_rect[1]);
                 let dom = self.workbench_dom.borrow();
-                let frags = fragments_from_scripted_dom(&dom, WORKBENCH_SHEET, w, content_h);
+                let frags = fragments_from_scripted_dom(&dom, WORKBENCH_SHEET, graph_w, graph_h);
                 let root = dom.document();
                 let (wx, wy) = first_with_class(&dom, root, "workbench")
                     .and_then(|n| frags.rect_of(n))
@@ -185,11 +207,11 @@ impl App {
                         let content = first_with_class(&dom, slot, "wb-content")?;
                         let member = member_attr(&dom, content)?;
                         let cl = frags.rect_of(content)?;
-                        let cx = wx + sl.location.x + cl.location.x;
-                        let cy = th + wy + sl.location.y + cl.location.y;
+                        let cx = ox + wx + sl.location.x + cl.location.x;
+                        let cy = oy + wy + sl.location.y + cl.location.y;
                         let content_rect = [cx, cy, cx + cl.size.width, cy + cl.size.height];
-                        let sx = wx + sl.location.x;
-                        let sy = th + wy + sl.location.y;
+                        let sx = ox + wx + sl.location.x;
+                        let sy = oy + wy + sl.location.y;
                         let slot_rect = [sx, sy, sx + sl.size.width, sy + sl.size.height];
                         Some((member, content_rect, slot_rect))
                     })
@@ -219,18 +241,21 @@ impl App {
             // is a medium card the actor renders into; a snapshot is a shorter
             // peek at the retained scene, no actor. A node with neither (never
             // visited this session) shows no card yet. (Card system P2/P3.)
+            // The orrery reports the node in its own (leaf-local) viewport; offset
+            // by the graph leaf's origin for window coords, and anchor the card
+            // within the graph leaf rect (so it stays in the graph pane when split).
             let node = self
                 .orrery
                 .focused_node_screen()
-                .map(|(nx, ny)| (nx, ny + toolbar_h as f32));
+                .map(|(nx, ny)| (graph_rect[0] + nx, graph_rect[1] + ny));
             if self.live_previews.contains(&member) {
                 const LIVE_W: u32 = 300;
                 const LIVE_H: u32 = 400;
                 let rect = node
                     .and_then(|(nx, ny)| {
-                        super::card::anchored_card_rect(nx, ny, LIVE_W, LIVE_H, w, toolbar_h, h)
+                        super::card::anchored_card_rect(nx, ny, LIVE_W, LIVE_H, graph_rect)
                     })
-                    .or_else(|| super::card::card_rect(w, toolbar_h, h));
+                    .or_else(|| super::card::card_rect(graph_rect));
                 if let Some((x0, y0, x1, y1, cw, ch)) = rect {
                     self.ensure_content(&url);
                     let state = self.content.get(&url).cloned();
@@ -245,9 +270,9 @@ impl App {
                 const SNAP_H: u32 = 260;
                 let rect = node
                     .and_then(|(nx, ny)| {
-                        super::card::anchored_card_rect(nx, ny, SNAP_W, SNAP_H, w, toolbar_h, h)
+                        super::card::anchored_card_rect(nx, ny, SNAP_W, SNAP_H, graph_rect)
                     })
-                    .or_else(|| super::card::card_rect(w, toolbar_h, h));
+                    .or_else(|| super::card::card_rect(graph_rect));
                 if let Some((x0, y0, x1, y1, _, _)) = rect {
                     // Render the snapshot scene from cache / synthesis once per url;
                     // `None` means its texture is already cached (composited below).
@@ -285,7 +310,7 @@ impl App {
                 const UNVIS_H: u32 = 120;
                 unvisited_card = node
                     .and_then(|(nx, ny)| {
-                        super::card::anchored_card_rect(nx, ny, UNVIS_W, UNVIS_H, w, toolbar_h, h)
+                        super::card::anchored_card_rect(nx, ny, UNVIS_W, UNVIS_H, graph_rect)
                     })
                     .map(|(x0, y0, x1, y1, _, _)| (member, [x0, y0, x1, y1]));
             }
@@ -320,8 +345,8 @@ impl App {
         // tone so a resize frame cannot flash white before the backdrop lands.
         let (_content_tex, content_view) = host.rasterize(
             &content_scene,
-            w,
-            content_h,
+            graph_w,
+            graph_h,
             ColorLoad::Clear(wgpu::Color { r: 0.067, g: 0.078, b: 0.100, a: 1.0 }),
         );
         // Rasterize each tile's scene to an offscreen texture only when its version
@@ -375,7 +400,7 @@ impl App {
             format,
             w,
             h,
-            ExternalTexturePlacement::new([0.0, toolbar_h as f32, w as f32, h as f32]),
+            ExternalTexturePlacement::new(graph_rect),
         );
         for (dest, member) in &composite {
             let Some(cached) = self.tile_textures.get(member) else { continue };
@@ -490,6 +515,71 @@ impl App {
                     h,
                     ExternalTexturePlacement::new(rect),
                 );
+            }
+        }
+        // Frame dividers: fill each split gutter with a dark seam (so the gutter is
+        // not stale pixels and reads as a divider). (Frame tree, F1.)
+        if !dividers.is_empty() {
+            if self.divider_tex.as_ref().map(|c| c.size) != Some((1, 1)) {
+                let mut scene = netrender::Scene::new(1, 1);
+                scene.push_rect(0.0, 0.0, 1.0, 1.0, [0.04, 0.05, 0.07, 1.0]);
+                let (tex, view) =
+                    host.rasterize(&scene, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                self.divider_tex = Some(super::CachedTile { version: 0, size: (1, 1), tex, view });
+            }
+            if let Some(cached) = &self.divider_tex {
+                for d in &dividers {
+                    host.renderer().compose_external_texture(
+                        &cached.view,
+                        &target_view,
+                        format,
+                        w,
+                        h,
+                        ExternalTexturePlacement::new(d.rect),
+                    );
+                }
+            }
+        }
+        // The roster pane: render the node list into its leaf, composite it, and
+        // record each row's window rect for click-to-focus. (Frame tree, F1 roster.)
+        self.roster_row_rects.clear();
+        if let Some(rrect) = roster_rect {
+            let rw = (rrect[2] - rrect[0]).round().max(1.0) as u32;
+            let rh = (rrect[3] - rrect[1]).round().max(1.0) as u32;
+            let rows = self.roster_rows();
+            let dom = super::roster::build_roster_dom(&rows);
+            let sheet_strings = super::roster::roster_sheet(&self.chrome_theme);
+            let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
+            let roster_scroll = ScrollOffsets::<NodeId>::default();
+            let scene = scene_from_scripted_dom(&dom, &sheet, rw, rh, None, &roster_scroll);
+            let pb = self.chrome_theme.panel_bg.to_array();
+            let clear = wgpu::Color {
+                r: pb[0] as f64 / 255.0,
+                g: pb[1] as f64 / 255.0,
+                b: pb[2] as f64 / 255.0,
+                a: 1.0,
+            };
+            let (_t, view) = host.rasterize(&scene, rw, rh, ColorLoad::Clear(clear));
+            host.renderer().compose_external_texture(
+                &view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new(rrect),
+            );
+            // Row rects for hit-testing (window coords = roster origin + leaf-local).
+            let frags = fragments_from_scripted_dom(&dom, &sheet, rw, rh);
+            let root = dom.document();
+            let mut row_nodes = all_with_class(&dom, root, "roster-row");
+            row_nodes.extend(all_with_class(&dom, root, "roster-row-selected"));
+            for node in row_nodes {
+                if let (Some(member), Some(l)) = (member_attr(&dom, node), frags.rect_of(node)) {
+                    let x0 = rrect[0] + l.location.x;
+                    let y0 = rrect[1] + l.location.y;
+                    self.roster_row_rects
+                        .push((member, [x0, y0, x0 + l.size.width, y0 + l.size.height]));
+                }
             }
         }
         host.renderer().compose_external_texture(
