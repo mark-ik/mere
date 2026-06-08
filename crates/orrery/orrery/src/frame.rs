@@ -18,8 +18,7 @@ use serval_layout::{Applied, IncrementalLayout, ScrollOffsets};
 use serval_scripted_dom::NodeId as DomNodeId;
 
 use super::build::{
-    background_cmds, marquee_rect_cmds, selected_edge_overlay, set_class, set_style, surface_bg,
-    NODE_SHEET,
+    background_cmds, marquee_rect_cmds, selected_edge_overlay, set_class, set_style, NODE_SHEET,
 };
 use super::{NodeShape, NodeState, Orrery, NODE_HALF, PAN_DECAY};
 
@@ -157,7 +156,7 @@ impl Orrery {
         // The orrery's own opaque backdrop is the bottom layer (so the surface is
         // dark without depending on the host clear color); then the underlay edges
         // + demoted rects, then the on-screen node DOM, then any marquee on top.
-        let bg_cmds = background_cmds(w, h, surface_bg());
+        let bg_cmds = background_cmds(w, h, self.backdrop);
         let mut layers = vec![
             CompositeLayer::commands_only(&bg_cmds),
             CompositeLayer::commands_only(underlay.commands()),

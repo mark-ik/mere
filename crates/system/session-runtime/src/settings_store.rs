@@ -30,19 +30,23 @@ fn default_tab_cap() -> usize {
     12
 }
 
-/// Persistable user settings. v0 carries the active-tab cap only; future
-/// preferences join as their controls land, each with a serde default so old
-/// files keep parsing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Persistable user settings. v0 carried the active-tab cap; `theme_id` joined
+/// with the runtime theme switcher. Future preferences join as their controls
+/// land, each with a serde default so old files keep parsing.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PersistedSettings {
     /// The most warm tabs the actor pool keeps before LRU eviction.
     #[serde(default = "default_tab_cap")]
     pub tab_cap: usize,
+    /// The active theme id (e.g. `theme:dark`); `None` falls back to the
+    /// registry's default theme.
+    #[serde(default)]
+    pub theme_id: Option<String>,
 }
 
 impl Default for PersistedSettings {
     fn default() -> Self {
-        Self { tab_cap: default_tab_cap() }
+        Self { tab_cap: default_tab_cap(), theme_id: None }
     }
 }
 
@@ -105,7 +109,7 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let dir = temp_session_dir("round-trip");
-        let original = PersistedSettings { tab_cap: 7 };
+        let original = PersistedSettings { tab_cap: 7, theme_id: None };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir).unwrap().expect("settings file should be present");
         assert_eq!(restored, original);
@@ -131,8 +135,8 @@ mod tests {
     #[test]
     fn save_overwrites_atomically_with_no_tmp_left() {
         let dir = temp_session_dir("overwrite");
-        save_settings(&dir, &PersistedSettings { tab_cap: 3 }).unwrap();
-        save_settings(&dir, &PersistedSettings { tab_cap: 24 }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None }).unwrap();
         let restored = load_settings(&dir).unwrap().unwrap();
         assert_eq!(restored.tab_cap, 24);
         let tmp = settings_path(&dir).with_extension("json.tmp");

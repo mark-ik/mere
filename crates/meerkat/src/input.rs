@@ -20,6 +20,8 @@ use winit::event::{ElementState, MouseButton};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use xilem_serval::PointerClick;
 
+use frame::PaneContent;
+
 use super::titlebar::{self, WindowControl};
 use super::{first_tag, first_with_class, has_class, measure_class_bottom, App, FALLBACK_TOOLBAR_H};
 
@@ -130,6 +132,18 @@ impl App {
                                         self.orrery.select_by_url(&url);
                                         self.request_redraw();
                                     }
+                                }
+                            }
+                            return;
+                        }
+                    }
+                    // The apparatus pane consumes the press: a left click on a
+                    // theme button switches the theme. (Apparatus.)
+                    if let Some(arect) = self.apparatus_leaf_rect() {
+                        if x >= arect[0] && x < arect[2] && y >= arect[1] && y < arect[3] {
+                            if button == MouseButton::Left {
+                                if let Some(theme_id) = self.apparatus_button_at(x, y) {
+                                    self.set_theme(&theme_id);
                                 }
                             }
                             return;
@@ -442,13 +456,18 @@ impl App {
             self.toggle_focus_background();
             return;
         }
-        // Ctrl+R summons / closes the roster pane (the graph's node list) as a
-        // split beside the graph pane; Ctrl+M maximizes the pane under the cursor
-        // to full-screen and back. (Frame tree, F1.)
+        // Ctrl+R summons / closes the roster pane (the graph's node list); Ctrl+,
+        // the apparatus pane (settings + system); both split beside the graph pane.
+        // Ctrl+M maximizes the pane under the cursor to full-screen and back.
+        // (Frame tree, F1 / apparatus.)
         if self.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("r"))
         {
-            self.toggle_roster();
+            self.toggle_pane(PaneContent::Roster);
+            return;
+        }
+        if self.modifiers.ctrl && matches!(key, WinitKey::Character(s) if s.as_str() == ",") {
+            self.toggle_pane(PaneContent::Apparatus);
             return;
         }
         if self.modifiers.ctrl

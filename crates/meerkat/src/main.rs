@@ -60,6 +60,7 @@ mod fetch;
 mod resources;
 mod sync;
 
+mod apparatus;
 mod app_handler;
 mod frame_ops;
 mod frame_view;
@@ -337,6 +338,14 @@ struct App {
     /// The active theme's chrome tokens — kept beside the baked `chrome_sheet` for
     /// the host-drawn surfaces the CSS can't reach (the window-control glyphs).
     chrome_theme: ChromeTheme,
+    /// The theme registry, kept so the apparatus pane can switch themes at
+    /// runtime (re-resolve → rebuild the chrome sheet + tokens). (Theme switcher.)
+    theme: ThemeRegistry,
+    /// The active theme's id (e.g. `theme:dark`), persisted in settings.
+    active_theme_id: String,
+    /// Each apparatus theme-button's on-screen rect this frame (theme id,
+    /// `[x0, y0, x1, y1]`); a press inside switches to that theme. (Apparatus.)
+    apparatus_button_rects: Vec<(String, [f32; 4])>,
     /// An in-progress titlebar press (window point) on the borderless window: set
     /// on a left press in the toolbar bar's draggable area, cleared into a window
     /// drag once the pointer moves past the slop, else resolved as a click on
@@ -562,9 +571,20 @@ impl App {
         // Resolve the active theme's chrome tokens once and bake the chrome CSS
         // from them (theming pass). A runtime theme switch (settings / apparatus)
         // rebuilds this from the registry; today it opens on the default theme.
-        let theme = ThemeRegistry::default();
-        let chrome_theme = theme.active_theme().tokens.chrome;
+        let mut theme = ThemeRegistry::default();
+        // Honor the saved theme (falls back to the registry default), and keep the
+        // registry so the apparatus pane can switch at runtime. (Theme switcher.)
+        let active_theme_id = saved_settings
+            .theme_id
+            .clone()
+            .unwrap_or_else(|| theme.active_theme().resolved_id);
+        let resolution = theme.set_active_theme(&active_theme_id);
+        let active_theme_id = resolution.resolved_id;
+        let chrome_theme = resolution.tokens.chrome;
         let chrome_sheet = chrome_sheet(&chrome_theme);
+        // Theme the orrery's backdrop + edges from the same resolved theme. (A2.)
+        let (orrery_backdrop, orrery_edge) = orrery_palette(&resolution.tokens);
+        orrery.set_palette(orrery_backdrop, orrery_edge);
         // The content region opens as a single graph pane (orrery / tiled
         // workbench); summoning the roster splits it. (Frame tree, F1.)
         let mut frame_layout = FrameLayout {
@@ -621,6 +641,9 @@ impl App {
             divider_drag: None,
             chrome_sheet,
             chrome_theme,
+            theme,
+            active_theme_id,
+            apparatus_button_rects: Vec::new(),
             titlebar_press: None,
             pending_exit: false,
             window_controls_tex: None,
@@ -707,6 +730,27 @@ fn member_attr(dom: &ScriptedDom, id: NodeId) -> Option<GraphMemberId> {
     dom.attributes(id)
         .find(|a| a.name.local.as_ref() == "data-member")
         .and_then(|a| a.value.parse::<GraphMemberId>().ok())
+}
+
+/// The value of element `id`'s attribute `name`, if present — host-composited
+/// panes read their `data-*` hit-test keys (e.g. `data-theme`) this way.
+fn string_attr(dom: &ScriptedDom, id: NodeId, name: &str) -> Option<String> {
+    dom.attributes(id)
+        .find(|a| a.name.local.as_ref() == name)
+        .map(|a| a.value.to_string())
+}
+
+/// The orrery's themed palette — `(backdrop, edge)` as straight `[r, g, b, a]`
+/// (0..1) — from a resolved theme: the backdrop is the theme background, the edge
+/// a translucent default stroke that contrasts with it per theme. (Theming A2.)
+fn orrery_palette(tokens: &register_theme::theme::ThemeTokenSet) -> ([f32; 4], [f32; 4]) {
+    let (br, bg, bb) = tokens.theme_data.background_rgb;
+    let backdrop = [br as f32 / 255.0, bg as f32 / 255.0, bb as f32 / 255.0, 1.0];
+    let [er, eg, eb, _] = tokens.graph_node_chrome.default_stroke.to_array();
+    // A higher alpha than the old translucent edges, so the stroke reads on a
+    // light backdrop instead of washing out.
+    let edge = [er as f32 / 255.0, eg as f32 / 255.0, eb as f32 / 255.0, 0.85];
+    (backdrop, edge)
 }
 
 /// The first element with local tag `local` in pre-order under `id`.

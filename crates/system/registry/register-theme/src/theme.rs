@@ -387,7 +387,9 @@ fn light_theme_tokens() -> ThemeTokenSet {
         theme_id: THEME_ID_LIGHT.to_string(),
         display_name: "Light".to_string(),
         theme_data: ThemeData {
-            background_rgb: (244, 246, 249),
+            // A soft paper, a touch below pure white so the graph canvas isn't
+            // glaring and gray edges read against it.
+            background_rgb: (226, 230, 236),
             accent_rgb: (54, 120, 212),
             font_scale: 1.0,
             stroke_width: 1.0,
@@ -449,7 +451,9 @@ fn dark_theme_tokens() -> ThemeTokenSet {
         theme_id: THEME_ID_DARK.to_string(),
         display_name: "Dark".to_string(),
         theme_data: ThemeData {
-            background_rgb: (14, 14, 18),
+            // Pulled toward black so Dark reads as dark, not gray — distinct from
+            // the Default slate and a step above High Contrast's pure black.
+            background_rgb: (8, 9, 13),
             accent_rgb: (110, 170, 255),
             font_scale: 1.0,
             stroke_width: 1.0,
@@ -491,7 +495,7 @@ fn dark_theme_tokens() -> ThemeTokenSet {
             clip_ring: Color32::from_rgb(156, 198, 255),
             default_stroke: Color32::from_rgb(104, 116, 132),
         },
-        chrome: ChromeTheme::mere_dark(),
+        chrome: ChromeTheme::mere_darker(),
         status_success: Color32::from_rgb(110, 216, 146),
         status_warning: Color32::from_rgb(232, 188, 84),
         status_error: Color32::from_rgb(220, 102, 102),

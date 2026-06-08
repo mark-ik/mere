@@ -84,6 +84,31 @@ impl ChromeTheme {
         }
     }
 
+    /// A deeper dark chrome for the Dark theme — surfaces pulled toward black so
+    /// Dark reads as *dark*, distinct from the Default theme's grayer slate (which
+    /// keeps [`mere_dark`](Self::mere_dark)) and a step above High Contrast's pure
+    /// black.
+    pub fn mere_darker() -> Self {
+        Self {
+            toolbar_bg: Color32::from_rgb(16, 18, 23),
+            control_bg: Color32::from_rgb(30, 34, 42),
+            control_text: Color32::from_rgb(222, 226, 234),
+            field_bg: Color32::from_rgb(22, 25, 31),
+            field_text: Color32::from_rgb(232, 234, 240),
+            panel_bg: Color32::from_rgb(15, 17, 22),
+            surface_bg: Color32::from_rgb(22, 25, 31),
+            body_text: Color32::from_rgb(202, 207, 217),
+            strong_text: Color32::from_rgb(234, 238, 246),
+            muted_text: Color32::from_rgb(140, 146, 158),
+            active_bg: Color32::from_rgb(40, 52, 76),
+            disabled_text: Color32::from_rgb(96, 102, 114),
+            disabled_bg: Color32::from_rgb(22, 25, 31),
+            menu_bg: Color32::from_rgb(26, 29, 36),
+            error_text: Color32::from_rgb(240, 184, 184),
+            error_bg: Color32::from_rgb(46, 28, 28),
+        }
+    }
+
     /// A light chrome — paper-toned surfaces with dark text, paired with the light
     /// theme's light graph backdrop.
     pub fn mere_light() -> Self {

@@ -582,6 +582,50 @@ impl App {
                 }
             }
         }
+        // The apparatus pane: theme buttons + system diagnostics, rendered into
+        // its leaf with button hit-rects recorded for theme switching. (A1.)
+        self.apparatus_button_rects.clear();
+        if let Some(arect) = self.apparatus_leaf_rect() {
+            let aw = (arect[2] - arect[0]).round().max(1.0) as u32;
+            let ah = (arect[3] - arect[1]).round().max(1.0) as u32;
+            let themes = self.theme_options();
+            let diags = self.apparatus_diagnostics();
+            let dom = super::apparatus::build_apparatus_dom(&themes, &diags);
+            let sheet_strings = super::apparatus::apparatus_sheet(&self.chrome_theme);
+            let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
+            let app_scroll = ScrollOffsets::<NodeId>::default();
+            let scene = scene_from_scripted_dom(&dom, &sheet, aw, ah, None, &app_scroll);
+            let pb = self.chrome_theme.panel_bg.to_array();
+            let clear = wgpu::Color {
+                r: pb[0] as f64 / 255.0,
+                g: pb[1] as f64 / 255.0,
+                b: pb[2] as f64 / 255.0,
+                a: 1.0,
+            };
+            let (_t, view) = host.rasterize(&scene, aw, ah, ColorLoad::Clear(clear));
+            host.renderer().compose_external_texture(
+                &view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new(arect),
+            );
+            let frags = fragments_from_scripted_dom(&dom, &sheet, aw, ah);
+            let root = dom.document();
+            let mut buttons = all_with_class(&dom, root, "app-btn");
+            buttons.extend(all_with_class(&dom, root, "app-btn-active"));
+            for node in buttons {
+                if let (Some(id), Some(l)) =
+                    (super::string_attr(&dom, node, "data-theme"), frags.rect_of(node))
+                {
+                    let x0 = arect[0] + l.location.x;
+                    let y0 = arect[1] + l.location.y;
+                    self.apparatus_button_rects
+                        .push((id, [x0, y0, x0 + l.size.width, y0 + l.size.height]));
+                }
+            }
+        }
         host.renderer().compose_external_texture(
             &chrome_view,
             &target_view,

@@ -20,8 +20,8 @@ use session_runtime::{
 };
 
 use super::{
-    comms_host, fetch, frame_view, roster, sync, App, DEFAULT_FRAME, DEFAULT_PANE,
-    FALLBACK_TOOLBAR_H,
+    apparatus, comms_host, fetch, frame_view, roster, sync, App, DEFAULT_FRAME, DEFAULT_PANE,
+    FALLBACK_TOOLBAR_H, GRAPH_PANE,
 };
 
 impl App {
@@ -591,7 +591,10 @@ impl App {
     /// Write the current settings to the session's `settings.json` sidecar. A
     /// failure is logged, not fatal (the shell runs without persistence).
     pub(super) fn persist_settings(&self) {
-        let settings = PersistedSettings { tab_cap: self.saved_tab_cap };
+        let settings = PersistedSettings {
+            tab_cap: self.saved_tab_cap,
+            theme_id: Some(self.active_theme_id.clone()),
+        };
         if let Err(err) = settings_store::save_settings(&self.session_dir, &settings) {
             tracing::warn!(%err, "failed to persist settings");
         }
@@ -637,36 +640,99 @@ impl App {
             .map(|l| l.pane_id)
     }
 
-    /// The roster pane's id, if open.
-    fn roster_pane(&self) -> Option<PaneId> {
+    /// The id of the open leaf whose content equals `content`, if any.
+    fn pane_of_content(&self, content: &PaneContent) -> Option<PaneId> {
         self.frame_layout
             .iter_leaves()
-            .find(|(_, content, _)| matches!(content, PaneContent::Roster))
+            .find(|(_, c, _)| **c == *content)
             .map(|(id, _, _)| id)
     }
 
-    /// Toggle the roster pane: close it if open, else summon it as a right split
-    /// beside the graph pane (the graph keeps the larger share). A layout change
+    /// Toggle a sibling pane (roster / apparatus / …): close it if its content is
+    /// open, else summon it as a right split beside the graph pane (the graph keeps
+    /// the larger share). Anchoring at the graph leaf — not the root — lets a
+    /// second pane nest rather than fail against a non-leaf root. A layout change
     /// clears any maximize. (Frame tree, F1.)
-    pub(super) fn toggle_roster(&mut self) {
-        if let Some(id) = self.roster_pane() {
+    pub(super) fn toggle_pane(&mut self, content: PaneContent) {
+        if let Some(id) = self.pane_of_content(&content) {
             if let Some(path) = frame_view::pane_path(&self.frame_layout, id) {
                 self.frame_layout.close_leaf(&path);
             }
         } else {
             let id = PaneId(self.next_pane_id);
             self.next_pane_id += 1;
-            let leaf = PaneNode::Leaf {
-                pane_id: id,
-                content: PaneContent::Roster,
-                graph_id: GraphId::default(),
-            };
-            if self.frame_layout.summon_leaf(&[], InsertSide::Right, leaf) {
-                self.frame_layout.set_split_ratio(&[], 0.66);
+            let leaf = PaneNode::Leaf { pane_id: id, content, graph_id: GraphId::default() };
+            let anchor =
+                frame_view::pane_path(&self.frame_layout, GRAPH_PANE).unwrap_or_default();
+            if self.frame_layout.summon_leaf(&anchor, InsertSide::Right, leaf) {
+                self.frame_layout.set_split_ratio(&anchor, 0.7);
             }
         }
         self.maximized_pane = None;
         self.request_redraw();
+    }
+
+    /// Switch the active theme: re-resolve from the registry, rebuild the chrome
+    /// CSS + tokens, drop the host-drawn caches so they re-rasterize with the new
+    /// palette, persist the choice, and redraw. (Theme switcher; the orrery's own
+    /// palette is themed in A2.)
+    pub(super) fn set_theme(&mut self, theme_id: &str) {
+        let resolution = self.theme.set_active_theme(theme_id);
+        self.active_theme_id = resolution.resolved_id;
+        self.chrome_theme = resolution.tokens.chrome;
+        self.chrome_sheet = crate::chrome_sheet(&self.chrome_theme);
+        // Re-theme the orrery's backdrop + edges to match. (A2.)
+        let (backdrop, edge) = crate::orrery_palette(&resolution.tokens);
+        self.orrery.set_palette(backdrop, edge);
+        self.window_controls_tex = None;
+        self.divider_tex = None;
+        self.persist_settings();
+        self.request_redraw();
+    }
+
+    /// The apparatus pane's screen rect, if open.
+    pub(super) fn apparatus_leaf_rect(&self) -> Option<[f32; 4]> {
+        self.laid_leaves()
+            .into_iter()
+            .find(|l| matches!(l.content, PaneContent::Apparatus))
+            .map(|l| l.rect)
+    }
+
+    /// The theme id whose apparatus button contains window point `(x, y)`, if any.
+    pub(super) fn apparatus_button_at(&self, x: f32, y: f32) -> Option<String> {
+        self.apparatus_button_rects
+            .iter()
+            .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
+            .map(|(id, _)| id.clone())
+    }
+
+    /// The registered themes as apparatus options (id + display name + active),
+    /// from the known theme ids. (The registry doesn't list themes yet.)
+    pub(super) fn theme_options(&self) -> Vec<apparatus::ThemeOption> {
+        use register_theme::theme::{
+            THEME_ID_DARK, THEME_ID_DEFAULT, THEME_ID_HIGH_CONTRAST, THEME_ID_LIGHT,
+        };
+        [THEME_ID_DEFAULT, THEME_ID_LIGHT, THEME_ID_DARK, THEME_ID_HIGH_CONTRAST]
+            .iter()
+            .map(|id| {
+                let res = self.theme.resolve_theme(Some(id));
+                apparatus::ThemeOption {
+                    active: res.resolved_id == self.active_theme_id,
+                    id: res.resolved_id,
+                    name: res.tokens.display_name,
+                }
+            })
+            .collect()
+    }
+
+    /// Read-only diagnostics for the apparatus System section.
+    pub(super) fn apparatus_diagnostics(&self) -> Vec<(String, String)> {
+        vec![
+            ("Nodes".to_string(), self.orrery.graph().nodes().count().to_string()),
+            ("Active actors".to_string(), self.constellation.active_count().to_string()),
+            ("Tab cap".to_string(), self.saved_tab_cap.to_string()),
+            ("Theme".to_string(), self.active_theme_id.clone()),
+        ]
     }
 
     /// Toggle maximize of the pane under the cursor (full-screen and back). With a

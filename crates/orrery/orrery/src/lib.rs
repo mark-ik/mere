@@ -40,7 +40,8 @@ use serval_layout::IncrementalLayout;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 
 mod build;
-use build::{build_pool_dom, build_simulation, dark_scene_style, dedup_edges, sample_graph};
+use build::{build_pool_dom, build_simulation, dark_scene_style, dedup_edges, sample_graph, surface_bg};
+use paint_list_api::ColorF;
 
 mod types;
 pub use types::{CameraView, NodeShape, NodeState, PointerButton};
@@ -116,6 +117,9 @@ pub struct Orrery {
     pool_h: u32,
     camera: Camera,
     style: ScenePaintStyle,
+    /// The content-surface backdrop color (themed; the host pushes it via
+    /// [`set_palette`](Self::set_palette)). Defaults to the dark slate.
+    backdrop: ColorF,
     /// Producer generation, bumped each rendered frame (positions / camera move).
     generation: u64,
     /// Last cursor position in screen px (zoom anchor + drag origin).
@@ -222,6 +226,7 @@ impl Orrery {
             pool_h: 0,
             camera: Camera::default(),
             style: dark_scene_style(),
+            backdrop: surface_bg(),
             generation: 0,
             cursor: (0.0, 0.0),
             pan_velocity: (0.0, 0.0),
@@ -441,6 +446,15 @@ impl Orrery {
             .into_iter()
             .filter_map(|(id, state)| self.graph.get_node_by_id(id).map(|(key, _)| (key, state)))
             .collect();
+    }
+
+    /// Theme the orrery's surfaces: the content-surface `backdrop` and the `edge`
+    /// stroke color, as straight `[r, g, b, a]` (0..1). The host pushes these from
+    /// the active theme so the graph re-themes with the chrome. Node *state* colors
+    /// (open / closed / idle / selected) stay semantic and are not rethemed here.
+    pub fn set_palette(&mut self, backdrop: [f32; 4], edge: [f32; 4]) {
+        self.backdrop = ColorF::new(backdrop[0], backdrop[1], backdrop[2], backdrop[3]);
+        self.style.edge_color = ColorF::new(edge[0], edge[1], edge[2], edge[3]);
     }
 
     /// Set the per-node content silhouettes the orrery shapes its on-screen nodes
