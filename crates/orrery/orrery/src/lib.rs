@@ -510,6 +510,16 @@ impl Orrery {
         }
     }
 
+    /// Whether `member` has ever been visited — it has a current entry in the
+    /// shared navigation memory. The host shows a "last visit" snapshot for a
+    /// visited node and the "unvisited" placeholder otherwise. (Card system #4.)
+    pub fn member_visited(&self, member: uuid::Uuid) -> bool {
+        match self.graph.get_node_by_id(member) {
+            Some((key, _)) => self.graph.node_current_url(key).is_some(),
+            None => false,
+        }
+    }
+
     /// Whether `member`'s history can step forward (toolbar enablement).
     pub fn member_can_forward(&self, member: uuid::Uuid) -> bool {
         match self.graph.get_node_by_id(member) {

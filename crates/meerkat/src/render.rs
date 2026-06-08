@@ -14,6 +14,10 @@ use platen_view::{WorkbenchScene, WORKBENCH_SHEET};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
 
+use std::cell::RefCell;
+
+use super::fetch::{ContentState, Fetched};
+use super::resources::{ResourceLoader, ResourceStore};
 use super::{
     all_with_class, first_with_class, measure_class_bottom, member_attr, App, CARD_BG,
     CHROME_SHEET, FALLBACK_TOOLBAR_H,
@@ -139,6 +143,13 @@ impl App {
         // The "unvisited" placeholder card (focused node, no snapshot yet): it has
         // no constellation scene, so it composites on its own path below.
         let mut unvisited_card: Option<(GraphMemberId, [f32; 4])> = None;
+        // The "last visit" snapshot card (focused, visited, not live): rendered
+        // host-side from the durable cache / synthesis (Card #4), so it also
+        // composites on its own path below. `(member, url, dest rect, scene)` —
+        // the scene is `Some` only when it must be (re)rasterized this frame; once
+        // its texture is cached by url, later frames carry `None`.
+        let mut snapshot_card: Option<(GraphMemberId, String, [f32; 4], Option<(netrender::Scene, u32)>)> =
+            None;
         if self.workbench.is_tiled() {
             // Read each content placeholder's laid-out rect + member out of the
             // workbench DOM (taffy laid it out above), then drive that tile's actor
@@ -219,11 +230,10 @@ impl App {
                     self.constellation.drive(member, &url, state, cw, ch);
                     cards.push((member, [x0, y0, x1, y1], (cw, ch)));
                 }
-            } else if let Some((sw, sh)) = self.constellation.snapshot_size(member) {
-                // Snapshot peek: a small fixed-size card regardless of the width the
-                // scene was captured at. Rasterize at the snapshot's native size and
-                // let the composite uniform-scale it down into a scrollable thumbnail
-                // (so a node last shown as a full-width tile isn't a full-width card).
+            } else if self.orrery.member_visited(member) {
+                // "Last visit" snapshot: a small fixed-size card, rendered host-side
+                // from the durable cache / synthesis below (no actor), so it survives
+                // a restart. Composited uniform-scaled into a scrollable thumbnail.
                 const SNAP_W: u32 = 200;
                 const SNAP_H: u32 = 260;
                 let rect = node
@@ -232,7 +242,32 @@ impl App {
                     })
                     .or_else(|| super::card::card_rect(w, toolbar_h, h));
                 if let Some((x0, y0, x1, y1, _, _)) = rect {
-                    cards.push((member, [x0, y0, x1, y1], (sw.max(1), sh.max(1))));
+                    // Render the snapshot scene from cache / synthesis once per url;
+                    // `None` means its texture is already cached (composited below).
+                    let built = if self.snapshot_textures.contains_key(&url) {
+                        None
+                    } else {
+                        const RENDER_W: u32 = 300;
+                        const RENDER_H: u32 = 600;
+                        let state = self.load_cached(&url).map(|c| {
+                            ContentState::Ready(Fetched {
+                                content_type: c.content_type,
+                                body: String::from_utf8_lossy(&c.body).into_owned(),
+                            })
+                        });
+                        let store = RefCell::new(ResourceStore::default());
+                        let wanted = RefCell::new(Vec::new());
+                        let loader = ResourceLoader::new(&store, &url, &wanted);
+                        Some(super::card::render_content_scene(
+                            &url,
+                            state.as_ref(),
+                            &self.engine_registry,
+                            &loader,
+                            RENDER_W,
+                            RENDER_H,
+                        ))
+                    };
+                    snapshot_card = Some((member, url, [x0, y0, x1, y1], built));
                 }
             } else {
                 // Never visited this session: a small dashed "Double-click to load"
@@ -259,6 +294,9 @@ impl App {
         self.content_rects = cards.iter().map(|(member, dest, _)| (*member, *dest)).collect();
         if let Some((member, rect)) = unvisited_card {
             self.content_rects.push((member, rect));
+        }
+        if let Some((member, _, rect, _)) = &snapshot_card {
+            self.content_rects.push((*member, *rect));
         }
 
         // The omnibar follows focus: point it at the focused tile / node when that
@@ -296,7 +334,7 @@ impl App {
             let version = self.constellation.scene_version(*member);
             let tex_h = self
                 .constellation
-                .content_height_or_snapshot(*member)
+                .content_height(*member)
                 .max(*ch)
                 .min(MAX_CARD_TEX_H);
             let fresh = self
@@ -304,7 +342,7 @@ impl App {
                 .get(member)
                 .is_some_and(|c| c.version == version && c.size == (*cw, tex_h));
             if !fresh {
-                if let Some(scene) = self.constellation.scene_or_snapshot(*member) {
+                if let Some(scene) = self.constellation.scene(*member) {
                     let (tex, view) = host.rasterize(scene, *cw, tex_h, ColorLoad::Clear(CARD_BG));
                     self.tile_textures.insert(
                         *member,
@@ -390,6 +428,35 @@ impl App {
                     );
                     self.close_button_rects.push((*member, [bx0, by0, bx1, by1]));
                 }
+            }
+        }
+        // The "last visit" snapshot card: rasterize the host-rendered scene once
+        // per url (cached), then composite uniform-scaled into the small dest with
+        // the same vertical-scroll UV window as the other cards.
+        if let Some((member, url, rect, built)) = snapshot_card {
+            if let Some((scene, content_h)) = built {
+                let tex_h = content_h.max(1).min(MAX_CARD_TEX_H);
+                let (tex, view) = host.rasterize(&scene, 300, tex_h, ColorLoad::Clear(CARD_BG));
+                self.snapshot_textures
+                    .insert(url.clone(), super::CachedTile { version: 0, size: (300, tex_h), tex, view });
+            }
+            if let Some(cached) = self.snapshot_textures.get(&url) {
+                let tex_w = cached.size.0 as f32;
+                let tex_h = cached.size.1 as f32;
+                let dest_w = (rect[2] - rect[0]).max(1.0);
+                let dest_h = (rect[3] - rect[1]).max(1.0);
+                let visible_h = dest_h * tex_w / dest_w;
+                let max_scroll = (tex_h - visible_h).max(0.0);
+                let scroll = self.scroll.get(&member).copied().unwrap_or(0.0).clamp(0.0, max_scroll);
+                let uv = [0.0, scroll / tex_h, 1.0, (scroll + visible_h) / tex_h];
+                host.renderer().compose_external_texture(
+                    &cached.view,
+                    &target_view,
+                    format,
+                    w,
+                    h,
+                    ExternalTexturePlacement::new(rect).with_uv(uv),
+                );
             }
         }
         // The unvisited placeholder card: rasterize its (static) scene once per

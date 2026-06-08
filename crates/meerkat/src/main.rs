@@ -36,6 +36,7 @@ use std::time::Instant;
 
 use eidetic_fjall::FjallStore;
 use forme::GraphMemberId;
+use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
 use meerkat::{chrome_view, Chrome, ChromeLogic, ChromeView};
 use orrery::{CameraView, Orrery};
@@ -248,6 +249,14 @@ struct App {
     /// Cached rasterized "unvisited" placeholder card (dashed outline + "Double-
     /// click to load"), shown when a focused node has no snapshot yet. (Card #3.)
     unvisited_tex: Option<CachedTile>,
+    /// The nematic engine registry, for rendering "last visit" snapshot cards
+    /// host-side from the durable content cache (no actor) — the same registry the
+    /// content actor builds, kept here for the snapshot path. (Card #4.)
+    engine_registry: EngineRegistry,
+    /// Cached rasterized snapshot textures, keyed by URL (the snapshot is the
+    /// node's last-visit content rendered from cache / synthesis). Re-rendered on
+    /// a size change; persists the "last visit" look across the session. (Card #4.)
+    snapshot_textures: HashMap<String, CachedTile>,
     /// Each live card's close-button rect this frame (member, [x0, y0, x1, y1]); a
     /// press inside reaps that live preview. Rebuilt every frame.
     close_button_rects: Vec<(GraphMemberId, [f32; 4])>,
@@ -413,6 +422,12 @@ impl App {
             let _ = comms_proxy.send_event(());
         });
         let (comms_handle, comms_rx) = comms_host::spawn_comms(comms_wake, session_dir.clone());
+        // The host's own nematic engine registry, for rendering snapshot cards
+        // from the durable cache without a live actor (Card #4).
+        let mut engine_registry = EngineRegistry::new();
+        for engine in nematic::engines() {
+            engine_registry.register(engine);
+        }
         Self {
             dom,
             runner,
@@ -443,6 +458,8 @@ impl App {
             content_rects: Vec::new(),
             close_button_tex: None,
             unvisited_tex: None,
+            engine_registry,
+            snapshot_textures: HashMap::new(),
             close_button_rects: Vec::new(),
             divider_drag: None,
             width: 1024,

@@ -92,13 +92,6 @@ pub struct Constellation {
     /// Monotonic clock, bumped on each spawn / drive and stamped into a tab's
     /// `last_touched`, so eviction picks the genuinely-stalest tab.
     touch_clock: u64,
-    /// The retained "last visit" snapshot per node: when an activation is reaped
-    /// or evicted, its final `(scene, content_height, width)` is kept here so the
-    /// host can composite a static preview card without a live actor. The width is
-    /// the px the scene was laid out at, so the host rasterizes at that width and
-    /// scales the texture down into a small thumbnail dest. (Card system P2.)
-    /// In-memory for now; durable cross-session snapshots are a later step.
-    snapshots: HashMap<GraphMemberId, (Scene, u32, u32)>,
 }
 
 /// What a [`Constellation::drain`] surfaced for the host to act on. Scenes are
@@ -128,7 +121,6 @@ impl Constellation {
             pool: Pool::new(),
             cap: DEFAULT_TAB_CAP,
             touch_clock: 0,
-            snapshots: HashMap::new(),
         }
     }
 
@@ -190,9 +182,7 @@ impl Constellation {
                 .map(|(member, _)| *member);
             match victim {
                 Some(member) => {
-                    // Keep its last scene as the node's snapshot, then drop the
-                    // activation → channel closes → thread ends.
-                    self.stash_snapshot(member);
+                    self.active.remove(&member); // drop → channel closes → thread ends
                 },
                 None => break, // every remaining tab is needed or background
             }
@@ -263,53 +253,12 @@ impl Constellation {
         self.active.get(&member).is_some_and(|a| a.respawns > 0 && a.scene.is_none())
     }
 
-    /// Deactivate `member` now — its actor winds down on drop, and its last scene
-    /// is retained as the node's "last visit" snapshot. For when a tile / live
-    /// preview is closed, or the node is gone (deleted).
+    /// Deactivate `member` now — its actor winds down on drop. For when a tile /
+    /// live preview is closed, or the node is gone (deleted). The node's "last
+    /// visit" snapshot is re-derived host-side from the durable cache, so nothing
+    /// needs retaining here.
     pub fn reap(&mut self, member: GraphMemberId) {
-        self.stash_snapshot(member);
-    }
-
-    /// Remove `member`'s activation, keeping its final scene as the node's
-    /// snapshot (shared by [`reap`](Self::reap) and cap eviction).
-    fn stash_snapshot(&mut self, member: GraphMemberId) {
-        if let Some(activation) = self.active.remove(&member) {
-            if let Some(scene) = activation.scene {
-                let width = activation.shown.map(|(_, _, w, _)| w).unwrap_or(0);
-                self.snapshots
-                    .insert(member, (scene, activation.content_height, width));
-            }
-        }
-    }
-
-    /// The retained "last visit" snapshot scene for `member`, if it has ever been
-    /// activated this session. Composited as a static preview card, no actor.
-    pub fn snapshot(&self, member: GraphMemberId) -> Option<&Scene> {
-        self.snapshots.get(&member).map(|(scene, _, _)| scene)
-    }
-
-    /// The snapshot's native `(width, content_height)` in px — the size its scene
-    /// was laid out at. The host rasterizes at this and scales the texture into a
-    /// small thumbnail dest. `None` if there is no snapshot.
-    pub fn snapshot_size(&self, member: GraphMemberId) -> Option<(u32, u32)> {
-        self.snapshots.get(&member).map(|(_, h, w)| (*w, *h))
-    }
-
-    /// The scene to composite for `member`: the live activation's if active, else
-    /// the retained snapshot. `None` if the node is neither active nor visited.
-    pub fn scene_or_snapshot(&self, member: GraphMemberId) -> Option<&Scene> {
-        self.scene(member).or_else(|| self.snapshot(member))
-    }
-
-    /// The content height to rasterize for `member`: the live one if active, else
-    /// the snapshot's. `0` if neither.
-    pub fn content_height_or_snapshot(&self, member: GraphMemberId) -> u32 {
-        let live = self.content_height(member);
-        if live > 0 {
-            live
-        } else {
-            self.snapshots.get(&member).map_or(0, |(_, h, _)| *h)
-        }
+        self.active.remove(&member);
     }
 
     /// Whether `member` is flagged to keep working in the background.
