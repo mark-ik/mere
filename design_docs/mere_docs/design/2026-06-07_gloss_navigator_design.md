@@ -147,6 +147,22 @@ The cards are the current arc; gloss is the next, and #5 staging feeds it.
 
 ---
 
+## 7a. Implementation progress
+
+- **2026-06-08 — G1/G2 seed landed (the graph-scope swatch).** Gloss is a
+  frame-tree pane (`PaneContent::Gloss`, Ctrl+G), a sibling to the roster +
+  apparatus. It renders a **whole-graph minimap swatch**: the orrery's live node
+  positions + edges (`Orrery::minimap_geometry`) fit into the pane, focused node
+  highlighted, themed from the chrome tokens; clicking a minimap node focuses it
+  (shared selection). The swatch is host-drawn from graph geometry, not a second
+  orrery (the Navigator stays one surface). It splits / resizes / maximizes /
+  persists like the other panes.
+- **Deferred (G3–G5 + the matrix):** the scope × form-factor toggles (active-doc
+  outline, whole ↔ graphlet, outline ↔ swatch), graphlet scoping (filters / tag
+  hubs / chronological), the MRU / recent-groupings list, and content commentary.
+  The minimap is currently host-drawn; the design's cartography-projection backend
+  (`MinimapDescriptor` / `FormFactor::Minimap`) is the eventual swap.
+
 ## 8. Open questions
 
 - **Where latent graphlets live** — gloss-owned graphlet store vs `forme`

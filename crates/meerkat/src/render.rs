@@ -626,6 +626,38 @@ impl App {
                 }
             }
         }
+        // The gloss pane: a whole-graph minimap swatch, with node hit-rects for
+        // click-to-focus. (Gloss; the Navigator's graph-scope swatch cell.)
+        self.gloss_node_rects.clear();
+        if let Some(grect) = self.gloss_leaf_rect() {
+            let gw = (grect[2] - grect[0]).round().max(1.0) as u32;
+            let gh = (grect[3] - grect[1]).round().max(1.0) as u32;
+            let (nodes, edges) = self.orrery.minimap_geometry();
+            let (scene, local) =
+                super::gloss::minimap_scene(&nodes, &edges, gw, gh, &self.chrome_theme);
+            let pb = self.chrome_theme.panel_bg.to_array();
+            let clear = wgpu::Color {
+                r: pb[0] as f64 / 255.0,
+                g: pb[1] as f64 / 255.0,
+                b: pb[2] as f64 / 255.0,
+                a: 1.0,
+            };
+            let (_t, view) = host.rasterize(&scene, gw, gh, ColorLoad::Clear(clear));
+            host.renderer().compose_external_texture(
+                &view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new(grect),
+            );
+            for (id, r) in local {
+                self.gloss_node_rects.push((
+                    id,
+                    [grect[0] + r[0], grect[1] + r[1], grect[0] + r[2], grect[1] + r[3]],
+                ));
+            }
+        }
         host.renderer().compose_external_texture(
             &chrome_view,
             &target_view,

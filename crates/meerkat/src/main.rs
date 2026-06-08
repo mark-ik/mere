@@ -64,6 +64,7 @@ mod apparatus;
 mod app_handler;
 mod frame_ops;
 mod frame_view;
+mod gloss;
 mod input;
 mod render;
 mod roster;
@@ -346,6 +347,9 @@ struct App {
     /// Each apparatus theme-button's on-screen rect this frame (theme id,
     /// `[x0, y0, x1, y1]`); a press inside switches to that theme. (Apparatus.)
     apparatus_button_rects: Vec<(String, [f32; 4])>,
+    /// Each gloss minimap node's on-screen rect this frame (node id,
+    /// `[x0, y0, x1, y1]`); a press inside focuses that node. (Gloss swatch.)
+    gloss_node_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// An in-progress titlebar press (window point) on the borderless window: set
     /// on a left press in the toolbar bar's draggable area, cleared into a window
     /// drag once the pointer moves past the slop, else resolved as a click on
@@ -644,6 +648,7 @@ impl App {
             theme,
             active_theme_id,
             apparatus_button_rects: Vec::new(),
+            gloss_node_rects: Vec::new(),
             titlebar_press: None,
             pending_exit: false,
             window_controls_tex: None,

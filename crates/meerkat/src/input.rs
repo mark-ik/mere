@@ -149,6 +149,26 @@ impl App {
                             return;
                         }
                     }
+                    // The gloss pane consumes the press: a left click on a minimap
+                    // node focuses it (shared selection with the orrery). (Gloss.)
+                    if let Some(grect) = self.gloss_leaf_rect() {
+                        if x >= grect[0] && x < grect[2] && y >= grect[1] && y < grect[3] {
+                            if button == MouseButton::Left {
+                                if let Some(member) = self.gloss_node_at(x, y) {
+                                    if let Some(url) = self
+                                        .orrery
+                                        .graph()
+                                        .get_node_by_id(member)
+                                        .map(|(_, n)| n.url().to_string())
+                                    {
+                                        self.orrery.select_by_url(&url);
+                                        self.request_redraw();
+                                    }
+                                }
+                            }
+                            return;
+                        }
+                    }
                     // A press on a live card's close (X) button reaps that preview
                     // (its last scene is kept as the node's snapshot).
                     if button == MouseButton::Left {
@@ -468,6 +488,12 @@ impl App {
         }
         if self.modifiers.ctrl && matches!(key, WinitKey::Character(s) if s.as_str() == ",") {
             self.toggle_pane(PaneContent::Apparatus);
+            return;
+        }
+        if self.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("g"))
+        {
+            self.toggle_pane(PaneContent::Gloss);
             return;
         }
         if self.modifiers.ctrl

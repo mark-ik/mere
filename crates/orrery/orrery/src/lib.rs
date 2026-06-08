@@ -448,6 +448,35 @@ impl Orrery {
             .collect();
     }
 
+    /// Graph geometry for a minimap swatch (gloss): each node's `(uuid, world
+    /// position, selected)` and each visible edge as a world-space `(from, to)`
+    /// segment. World coordinates — the consumer fits them into its own rect. The
+    /// gloss pane draws its own swatch from this rather than rendering a second
+    /// orrery (the Navigator is one surface, never a second instance).
+    #[allow(clippy::type_complexity)]
+    pub fn minimap_geometry(
+        &self,
+    ) -> (Vec<(uuid::Uuid, (f32, f32), bool)>, Vec<((f32, f32), (f32, f32))>) {
+        let nodes = self
+            .view
+            .positions()
+            .filter_map(|(key, p)| {
+                self.graph
+                    .get_node(key)
+                    .map(|node| (node.id, (p.x, p.y), self.selected.contains(&key)))
+            })
+            .collect();
+        let edges = self
+            .view
+            .edge_segments()
+            .filter_map(|(a, b, pa, pb)| {
+                let pair = if a <= b { (a, b) } else { (b, a) };
+                (!self.hidden_edges.contains(&pair)).then_some(((pa.x, pa.y), (pb.x, pb.y)))
+            })
+            .collect();
+        (nodes, edges)
+    }
+
     /// Theme the orrery's surfaces: the content-surface `backdrop` and the `edge`
     /// stroke color, as straight `[r, g, b, a]` (0..1). The host pushes these from
     /// the active theme so the graph re-themes with the chrome. Node *state* colors

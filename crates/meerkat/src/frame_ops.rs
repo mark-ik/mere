@@ -632,6 +632,22 @@ impl App {
             .map(|l| l.rect)
     }
 
+    /// The gloss pane's screen rect, if open.
+    pub(super) fn gloss_leaf_rect(&self) -> Option<[f32; 4]> {
+        self.laid_leaves()
+            .into_iter()
+            .find(|l| matches!(l.content, PaneContent::Gloss))
+            .map(|l| l.rect)
+    }
+
+    /// The node whose gloss minimap square contains window point `(x, y)`, if any.
+    pub(super) fn gloss_node_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
+        self.gloss_node_rects
+            .iter()
+            .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
+            .map(|(member, _)| *member)
+    }
+
     /// The pane (leaf) under window point `(x, y)`, if any.
     pub(super) fn pane_at(&self, x: f32, y: f32) -> Option<PaneId> {
         self.laid_leaves()
