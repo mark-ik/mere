@@ -201,6 +201,12 @@ impl App {
         ) {
             tracing::warn!(%err, dir = ?self.session_dir, "failed to persist the view intent");
         }
+        // The content frame's pane layout (which panes are open + split ratios).
+        if let Err(err) =
+            session_runtime::frame_layout_store::save_frame_layout(&self.session_dir, &self.frame_layout)
+        {
+            tracing::warn!(%err, dir = ?self.session_dir, "failed to persist the frame layout");
+        }
     }
 
     /// Make the focused node's content available. A network address already in

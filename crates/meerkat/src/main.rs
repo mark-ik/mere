@@ -567,7 +567,7 @@ impl App {
         let chrome_sheet = chrome_sheet(&chrome_theme);
         // The content region opens as a single graph pane (orrery / tiled
         // workbench); summoning the roster splits it. (Frame tree, F1.)
-        let frame_layout = FrameLayout {
+        let mut frame_layout = FrameLayout {
             id: FrameId::new("content"),
             label: "content".to_string(),
             root: PaneNode::Leaf {
@@ -576,6 +576,15 @@ impl App {
                 graph_id: GraphId::default(),
             },
         };
+        // Restore the saved pane layout (which panes were open + their split
+        // ratios); advance the pane-id counter past the restored max. (F1.5.)
+        let mut next_pane_id = 1u64;
+        if let Ok(Some(restored)) =
+            session_runtime::frame_layout_store::load_frame_layout(&session_dir)
+        {
+            next_pane_id = restored.iter_leaves().map(|(id, _, _)| id.0).max().unwrap_or(0) + 1;
+            frame_layout = restored;
+        }
         Self {
             dom,
             runner,
@@ -620,7 +629,7 @@ impl App {
             cursor_icon: CursorIcon::Default,
             frame_layout,
             maximized_pane: None,
-            next_pane_id: 1,
+            next_pane_id,
             frame_divider_drag: None,
             roster_row_rects: Vec::new(),
             width: 1024,

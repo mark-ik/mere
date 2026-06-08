@@ -137,6 +137,13 @@ to a new window (later). The orrery↔tiled projection toggle is **out of scope*
   close roster (right split, graph keeps ~0.66), drag the frame divider to resize,
   Ctrl+M maximize the pane under the cursor, click a roster row to focus its node
   (shared selection). All tests green (frame_view 3, meerkat 31+44). Uncommitted.
-- Deferred to **F1.5**: layout persistence (resets to a single graph pane on
-  restart). Backlog: roster scroll (overflow clips on big graphs); R-phase roster
-  (edges / fields / drill-through).
+- 2026-06-08: **F1 committed** (`4b20ed2`).
+- 2026-06-08: **F1.5 persistence landed.** `session-runtime::frame_layout_store`
+  (save / load `frame.json` beside `graph.json`, atomic write, native-only) with
+  round-trip tests; meerkat restores the layout on launch (advancing the pane-id
+  counter past the restored max) and saves it in `save_session` (on exit + graph
+  change). The maximized state stays transient (un-maximized on restart). All
+  green (session-runtime 67). **F1 complete.**
+- Backlog: roster scroll (overflow clips on big graphs); R-phase roster (edges /
+  fields / drill-through); a shellbar to summon panes (F2, replacing the Ctrl+R
+  keybind); tear-out to a new window.

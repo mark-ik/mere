@@ -46,6 +46,10 @@
 // not re-fetch.
 pub mod content_store;
 pub mod engine_profile_store;
+// Filesystem persistence of the content frame's pane layout (frame.json);
+// native-only so the crate stays wasm-clean.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod frame_layout_store;
 pub mod manifest;
 pub mod manifest_store;
 // Filesystem persistence of the session graph (graph.json); native-only so the
