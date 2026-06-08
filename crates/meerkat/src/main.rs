@@ -43,9 +43,12 @@ use orrery::{CameraView, Orrery};
 use pelt_live::fragments_from_scripted_dom;
 use platen::Workbench;
 use platen_view::{workbench_view, WorkbenchLogic, WorkbenchScene, WorkbenchTreeView};
+use register_theme::chrome::{ChromeTheme, Color32};
+use register_theme::theme::ThemeRegistry;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::SurfaceHost;
 use session_runtime::{session_graph_store, settings_store, view_intent_store};
+use winit::window::{CursorIcon, ResizeDirection};
 use xilem_serval::{Modifiers, ServalAppRunner};
 
 mod card;
@@ -60,86 +63,142 @@ mod app_handler;
 mod frame_ops;
 mod input;
 mod render;
+mod titlebar;
 
 use constellation::Constellation;
 
-/// Author CSS for the **chrome** root. The toolbar is a flex row (back / forward
-/// buttons + a growing omnibar); serval lays it out via taffy's flexbox. The
-/// `.chrome` container has no background — the host composites it over the
-/// content root, so only the toolbar and the (opaque) suggestions dropdown paint
-/// over the page; everything else stays transparent.
-// Dark-mode palette, coherent with the orrery's `surface_bg` (~rgb(17,20,26)):
-// the toolbar band sits a step above it, fields/buttons a step above that, text
-// near-white, accents blue-tinted. A light variant + a runtime toggle are the
-// follow-up; this sheet is the chrome half of that seam.
-const CHROME_SHEET: &[&str] = &[
-    "div, button, input { display: block; }",
-    ".toolbar { display: flex; background-color: rgb(28, 31, 38); padding: 8px; }",
-    "button { font-size: 22px; color: rgb(222, 226, 234); \
-        background-color: rgb(44, 48, 58); padding: 8px 14px; margin: 4px; }",
-    ".disabled { color: rgb(108, 114, 126); background-color: rgb(34, 37, 45); }",
-    "input { font-size: 22px; color: rgb(232, 234, 240); \
-        background-color: rgb(36, 39, 48); padding: 8px; margin: 4px; flex-grow: 1; }",
-    // The p2p sync chip: small + muted, no flex-grow, so the omnibar pushes it to
-    // the toolbar's right edge.
-    ".sync-chip { font-size: 14px; color: rgb(150, 156, 168); \
-        background-color: rgb(38, 42, 52); padding: 8px 12px; margin: 4px; }",
-    ".suggestions { background-color: rgb(30, 33, 41); padding-bottom: 6px; }",
-    ".suggestion { font-size: 18px; color: rgb(206, 210, 220); \
-        background-color: rgb(30, 33, 41); padding: 8px 16px; }",
-    ".suggestion-active { font-size: 18px; color: rgb(234, 238, 246); \
-        background-color: rgb(48, 58, 82); padding: 8px 16px; }",
-    // Command palette: a centered panel floated over the page (flex centering;
-    // serval maps justify-content through stylo_taffy).
-    ".palette-overlay { display: flex; justify-content: center; padding-top: 56px; }",
-    ".palette { width: 540px; background-color: rgb(34, 37, 46); padding: 10px; }",
-    ".cmd-list { background-color: rgb(34, 37, 46); }",
-    ".cmd-row { font-size: 18px; color: rgb(206, 210, 220); \
-        background-color: rgb(34, 37, 46); padding: 8px 12px; }",
-    ".cmd-row-active { font-size: 18px; color: rgb(234, 238, 246); \
-        background-color: rgb(46, 56, 80); padding: 8px 12px; }",
-    // Settings overlay: a centered panel (like the palette) with rows of controls.
-    ".settings-overlay { display: flex; justify-content: center; padding-top: 56px; }",
-    ".settings { width: 380px; background-color: rgb(34, 37, 46); padding: 14px; }",
-    ".set-title { display: flex; background-color: rgb(34, 37, 46); padding: 4px 4px 12px 4px; }",
-    ".set-title-text { font-size: 20px; color: rgb(234, 238, 246); \
-        background-color: rgb(34, 37, 46); flex-grow: 1; padding: 4px 8px; }",
-    ".set-row { display: flex; background-color: rgb(34, 37, 46); padding: 6px 8px; }",
-    ".set-value { font-size: 18px; color: rgb(206, 210, 220); \
-        background-color: rgb(34, 37, 46); padding: 8px 14px; flex-grow: 1; }",
-    ".set-btn { font-size: 20px; color: rgb(222, 226, 234); \
-        background-color: rgb(48, 52, 62); padding: 6px 16px; margin: 0 4px; }",
-    // Right-click context menu: a small panel of action rows floated at the cursor.
-    ".context-menu { background-color: rgb(38, 42, 52); padding: 4px; }",
-    ".context-item { font-size: 16px; color: rgb(216, 220, 230); \
-        background-color: rgb(38, 42, 52); padding: 8px 18px; }",
-    // Comms pane (P6): a right-edge docked panel over the content. (Geometry is a
-    // first cut — top offset + right dock get tuned on the first run.)
-    ".comms-pane { position: absolute; top: 64px; right: 0; width: 360px; \
-        background-color: rgb(30, 33, 41); padding: 10px; }",
-    ".comms-title { display: flex; background-color: rgb(30, 33, 41); padding: 4px 4px 10px 4px; }",
-    ".comms-title-text { font-size: 20px; color: rgb(234, 238, 246); \
-        background-color: rgb(30, 33, 41); flex-grow: 1; padding: 4px 8px; }",
-    ".comms-btn { font-size: 18px; color: rgb(222, 226, 234); \
-        background-color: rgb(48, 52, 62); padding: 4px 12px; }",
-    ".comms-failure { font-size: 14px; color: rgb(240, 184, 184); \
-        background-color: rgb(50, 32, 32); padding: 6px 10px; margin-bottom: 6px; }",
-    ".comms-row { font-size: 17px; color: rgb(210, 214, 224); \
-        background-color: rgb(34, 37, 46); padding: 10px 12px; margin: 3px 0; }",
-    ".comms-empty { font-size: 15px; color: rgb(150, 156, 168); \
-        background-color: rgb(30, 33, 41); padding: 10px 12px; }",
-    ".comms-back { font-size: 15px; color: rgb(206, 210, 220); \
-        background-color: rgb(40, 44, 54); padding: 6px 12px; margin-bottom: 6px; }",
-    ".comms-thread-title { font-size: 18px; color: rgb(234, 238, 246); \
-        background-color: rgb(30, 33, 41); padding: 8px 4px; }",
-    ".comms-msg-in { font-size: 16px; color: rgb(214, 218, 228); \
-        background-color: rgb(38, 42, 52); padding: 8px 12px; margin: 4px 24px 4px 0; }",
-    ".comms-msg-out { font-size: 16px; color: rgb(220, 230, 240); \
-        background-color: rgb(40, 52, 74); padding: 8px 12px; margin: 4px 0 4px 24px; }",
-    ".comms-compose { display: flex; background-color: rgb(30, 33, 41); padding-top: 8px; }",
-    ".comms-send { font-size: 16px; color: rgb(222, 226, 234); \
-        background-color: rgb(48, 58, 82); padding: 8px 16px; margin: 4px; }",
-];
+/// Build the chrome root's author CSS from a resolved [`ChromeTheme`] (theming
+/// pass). The toolbar is a flex row (back / forward buttons + a growing omnibar)
+/// that serval lays out via taffy's flexbox; the `.chrome` container itself has
+/// no background, so the host composites it over the content root and only the
+/// toolbar + the (opaque) dropdowns paint over the page. The toolbar band sits a
+/// step above the graph backdrop, fields/buttons a step above that, dropdowns +
+/// floated panels their own tiers; all colors come from the active theme so the
+/// chrome theme-switches alongside the graph. Surfaces, not classes, are the
+/// unit: the toolbar, palette, settings, and comms pane reuse the same dozen
+/// tokens, so a theme reads as one coherent shell.
+fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
+    let rgb = |color: Color32| {
+        let [r, g, b, _] = color.to_array();
+        format!("rgb({r}, {g}, {b})")
+    };
+    vec![
+        "div, button, input { display: block; }".to_string(),
+        // The toolbar reserves right padding the width of the window-control strip
+        // (the borderless titlebar's min / max / close), so the omnibar + sync chip
+        // stop short of it and the host composites the controls into that gap.
+        format!(
+            ".toolbar {{ display: flex; background-color: {}; padding: 8px {}px 8px 8px; }}",
+            rgb(c.toolbar_bg),
+            titlebar::CONTROLS_W as u32
+        ),
+        format!(
+            "button {{ font-size: 22px; color: {}; background-color: {}; padding: 8px 14px; margin: 4px; }}",
+            rgb(c.control_text), rgb(c.control_bg)
+        ),
+        format!(".disabled {{ color: {}; background-color: {}; }}", rgb(c.disabled_text), rgb(c.disabled_bg)),
+        format!(
+            "input {{ font-size: 22px; color: {}; background-color: {}; padding: 8px; margin: 4px; flex-grow: 1; }}",
+            rgb(c.field_text), rgb(c.field_bg)
+        ),
+        // The p2p sync chip: small + muted, no flex-grow, so the omnibar pushes it
+        // to the toolbar's right edge.
+        format!(
+            ".sync-chip {{ font-size: 14px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px; }}",
+            rgb(c.muted_text), rgb(c.menu_bg)
+        ),
+        format!(".suggestions {{ background-color: {}; padding-bottom: 6px; }}", rgb(c.panel_bg)),
+        format!(
+            ".suggestion {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 16px; }}",
+            rgb(c.body_text), rgb(c.panel_bg)
+        ),
+        format!(
+            ".suggestion-active {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 16px; }}",
+            rgb(c.strong_text), rgb(c.active_bg)
+        ),
+        // Command palette: a centered panel floated over the page (flex centering;
+        // serval maps justify-content through stylo_taffy).
+        ".palette-overlay { display: flex; justify-content: center; padding-top: 56px; }".to_string(),
+        format!(".palette {{ width: 540px; background-color: {}; padding: 10px; }}", rgb(c.surface_bg)),
+        format!(".cmd-list {{ background-color: {}; }}", rgb(c.surface_bg)),
+        format!(
+            ".cmd-row {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 12px; }}",
+            rgb(c.body_text), rgb(c.surface_bg)
+        ),
+        format!(
+            ".cmd-row-active {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 12px; }}",
+            rgb(c.strong_text), rgb(c.active_bg)
+        ),
+        // Settings overlay: a centered panel (like the palette) with rows of controls.
+        ".settings-overlay { display: flex; justify-content: center; padding-top: 56px; }".to_string(),
+        format!(".settings {{ width: 380px; background-color: {}; padding: 14px; }}", rgb(c.surface_bg)),
+        format!(".set-title {{ display: flex; background-color: {}; padding: 4px 4px 12px 4px; }}", rgb(c.surface_bg)),
+        format!(
+            ".set-title-text {{ font-size: 20px; color: {}; background-color: {}; flex-grow: 1; padding: 4px 8px; }}",
+            rgb(c.strong_text), rgb(c.surface_bg)
+        ),
+        format!(".set-row {{ display: flex; background-color: {}; padding: 6px 8px; }}", rgb(c.surface_bg)),
+        format!(
+            ".set-value {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 14px; flex-grow: 1; }}",
+            rgb(c.body_text), rgb(c.surface_bg)
+        ),
+        format!(
+            ".set-btn {{ font-size: 20px; color: {}; background-color: {}; padding: 6px 16px; margin: 0 4px; }}",
+            rgb(c.control_text), rgb(c.control_bg)
+        ),
+        // Right-click context menu: a small panel of action rows floated at the cursor.
+        format!(".context-menu {{ background-color: {}; padding: 4px; }}", rgb(c.menu_bg)),
+        format!(
+            ".context-item {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 18px; }}",
+            rgb(c.body_text), rgb(c.menu_bg)
+        ),
+        // Comms pane (P6): a right-edge docked panel over the content. (Geometry is
+        // a first cut — top offset + right dock get tuned on the first run.)
+        format!(
+            ".comms-pane {{ position: absolute; top: 64px; right: 0; width: 360px; background-color: {}; padding: 10px; }}",
+            rgb(c.panel_bg)
+        ),
+        format!(".comms-title {{ display: flex; background-color: {}; padding: 4px 4px 10px 4px; }}", rgb(c.panel_bg)),
+        format!(
+            ".comms-title-text {{ font-size: 20px; color: {}; background-color: {}; flex-grow: 1; padding: 4px 8px; }}",
+            rgb(c.strong_text), rgb(c.panel_bg)
+        ),
+        format!(
+            ".comms-btn {{ font-size: 18px; color: {}; background-color: {}; padding: 4px 12px; }}",
+            rgb(c.control_text), rgb(c.control_bg)
+        ),
+        format!(
+            ".comms-failure {{ font-size: 14px; color: {}; background-color: {}; padding: 6px 10px; margin-bottom: 6px; }}",
+            rgb(c.error_text), rgb(c.error_bg)
+        ),
+        format!(
+            ".comms-row {{ font-size: 17px; color: {}; background-color: {}; padding: 10px 12px; margin: 3px 0; }}",
+            rgb(c.body_text), rgb(c.surface_bg)
+        ),
+        format!(
+            ".comms-empty {{ font-size: 15px; color: {}; background-color: {}; padding: 10px 12px; }}",
+            rgb(c.muted_text), rgb(c.panel_bg)
+        ),
+        format!(
+            ".comms-back {{ font-size: 15px; color: {}; background-color: {}; padding: 6px 12px; margin-bottom: 6px; }}",
+            rgb(c.body_text), rgb(c.control_bg)
+        ),
+        format!(".comms-thread-title {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 4px; }}", rgb(c.strong_text), rgb(c.panel_bg)),
+        format!(
+            ".comms-msg-in {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px 24px 4px 0; }}",
+            rgb(c.body_text), rgb(c.menu_bg)
+        ),
+        format!(
+            ".comms-msg-out {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px 0 4px 24px; }}",
+            rgb(c.strong_text), rgb(c.active_bg)
+        ),
+        format!(".comms-compose {{ display: flex; background-color: {}; padding-top: 8px; }}", rgb(c.panel_bg)),
+        format!(
+            ".comms-send {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 16px; margin: 4px; }}",
+            rgb(c.control_text), rgb(c.active_bg)
+        ),
+    ]
+}
 
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
 const FALLBACK_TOOLBAR_H: u32 = 64;
@@ -263,6 +322,32 @@ struct App {
     /// An in-progress divider drag: the left-slot index, the press x, and the slot
     /// weights snapshot at press. Cursor moves reweight the two neighbouring slots.
     divider_drag: Option<(usize, f32, Vec<f32>)>,
+    /// The active theme's chrome CSS (built from a resolved [`ChromeTheme`] at
+    /// startup). The render / measure / hit-test paths read it instead of a const,
+    /// so a theme switch rebuilds it and the whole shell re-themes. (Theming pass.)
+    chrome_sheet: Vec<String>,
+    /// The active theme's chrome tokens — kept beside the baked `chrome_sheet` for
+    /// the host-drawn surfaces the CSS can't reach (the window-control glyphs).
+    chrome_theme: ChromeTheme,
+    /// An in-progress titlebar press (window point) on the borderless window: set
+    /// on a left press in the toolbar bar's draggable area, cleared into a window
+    /// drag once the pointer moves past the slop, else resolved as a click on
+    /// release. (Custom titlebar.)
+    titlebar_press: Option<(f32, f32)>,
+    /// Set by the custom close control; the event handler exits the loop (saving
+    /// the session) after the press is processed, since input has no event-loop
+    /// handle. (Custom titlebar.)
+    pending_exit: bool,
+    /// Cached rasterized window-control strip (min / max / close), composited over
+    /// the chrome at the toolbar's top-right. Re-rasterized on a band-size change.
+    window_controls_tex: Option<CachedTile>,
+    /// An in-progress manual window resize from a window edge / corner (custom
+    /// titlebar). `None` outside a resize drag. (Custom titlebar.)
+    resize_drag: Option<ResizeDrag>,
+    /// The cursor icon currently set on the window — tracked so a hover over a
+    /// resize edge only calls `set_cursor` on a change, not every move. (Custom
+    /// titlebar.)
+    cursor_icon: CursorIcon,
     width: u32,
     height: u32,
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
@@ -299,6 +384,24 @@ struct CachedTile {
     #[allow(dead_code)] // owns the texture the `view` references; kept alive here
     tex: wgpu::Texture,
     view: wgpu::TextureView,
+}
+
+/// An in-progress manual window resize (custom titlebar). winit's
+/// `drag_resize_window` is inert on frameless Windows — the non-client area is
+/// removed via `WM_NCCALCSIZE`, so the OS has no edge frame to grab — so the host
+/// resizes the window itself: it anchors the opposite edge(s) to the press-time
+/// rect and tracks the cursor in screen space (the press-time screen cursor is the
+/// origin, so there is no first-move jump). On Wayland `set_outer_position` is a
+/// no-op, so left/top edges there can't move the origin; right/bottom still size.
+#[derive(Clone, Copy)]
+struct ResizeDrag {
+    dir: ResizeDirection,
+    /// Window outer top-left (physical px) at press.
+    start_outer: (i32, i32),
+    /// Window inner size (physical px) at press.
+    start_size: (u32, u32),
+    /// Cursor position in screen space (physical px) at press.
+    start_cursor_screen: (f32, f32),
 }
 
 /// The host kernel's inbox: the typed receivers each I/O actor delivers updates on,
@@ -428,6 +531,12 @@ impl App {
         for engine in nematic::engines() {
             engine_registry.register(engine);
         }
+        // Resolve the active theme's chrome tokens once and bake the chrome CSS
+        // from them (theming pass). A runtime theme switch (settings / apparatus)
+        // rebuilds this from the registry; today it opens on the default theme.
+        let theme = ThemeRegistry::default();
+        let chrome_theme = theme.active_theme().tokens.chrome;
+        let chrome_sheet = chrome_sheet(&chrome_theme);
         Self {
             dom,
             runner,
@@ -462,6 +571,13 @@ impl App {
             snapshot_textures: HashMap::new(),
             close_button_rects: Vec::new(),
             divider_drag: None,
+            chrome_sheet,
+            chrome_theme,
+            titlebar_press: None,
+            pending_exit: false,
+            window_controls_tex: None,
+            resize_drag: None,
+            cursor_icon: CursorIcon::Default,
             width: 1024,
             height: 600,
             workbench: Workbench::new(),
@@ -484,14 +600,26 @@ impl App {
             window.request_redraw();
         }
     }
+
+    /// The active theme's chrome CSS as `&[&str]`, the shape the serval layout /
+    /// paint / hit-test entry points take. Borrows the baked `chrome_sheet`.
+    fn chrome_sheet_refs(&self) -> Vec<&str> {
+        self.chrome_sheet.iter().map(String::as_str).collect()
+    }
 }
 
 /// Lay out the chrome root and return the border-box bottom (px, rounded up) of
 /// the first element carrying CSS class `class` — `"toolbar"` for the content
 /// split, `"chrome"` for the click-region gate (toolbar + open dropdown).
 /// `None` if no such element is laid out.
-fn measure_class_bottom(dom: &ScriptedDom, w: u32, h: u32, class: &str) -> Option<u32> {
-    let frags = fragments_from_scripted_dom(dom, CHROME_SHEET, w, h);
+fn measure_class_bottom(
+    dom: &ScriptedDom,
+    sheet: &[&str],
+    w: u32,
+    h: u32,
+    class: &str,
+) -> Option<u32> {
+    let frags = fragments_from_scripted_dom(dom, sheet, w, h);
     first_with_class(dom, dom.document(), class)
         .and_then(|node| frags.rect_of(node))
         .map(|layout| (layout.location.y + layout.size.height).ceil() as u32)

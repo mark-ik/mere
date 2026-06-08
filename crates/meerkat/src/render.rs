@@ -20,7 +20,7 @@ use super::fetch::{ContentState, Fetched};
 use super::resources::{ResourceLoader, ResourceStore};
 use super::{
     all_with_class, first_with_class, measure_class_bottom, member_attr, App, CARD_BG,
-    CHROME_SHEET, FALLBACK_TOOLBAR_H,
+    FALLBACK_TOOLBAR_H,
 };
 
 impl App {
@@ -30,9 +30,11 @@ impl App {
     /// content root directly below the toolbar.
     pub(super) fn toolbar_height(&mut self) -> u32 {
         if self.toolbar_h == 0 {
-            self.toolbar_h =
-                measure_class_bottom(&self.dom.borrow(), self.width, self.height, "toolbar")
+            let sheet = self.chrome_sheet_refs();
+            let measured =
+                measure_class_bottom(&self.dom.borrow(), &sheet, self.width, self.height, "toolbar")
                     .unwrap_or(FALLBACK_TOOLBAR_H);
+            self.toolbar_h = measured;
         }
         self.toolbar_h
     }
@@ -75,8 +77,9 @@ impl App {
             TextCursor { node, caret: field.caret_byte_in_render(), selection }
         });
         let scroll = ScrollOffsets::<NodeId>::default();
+        let chrome_sheet = self.chrome_sheet_refs();
         let chrome_scene =
-            scene_from_scripted_dom(&self.dom.borrow(), CHROME_SHEET, w, h, cursor, &scroll);
+            scene_from_scripted_dom(&self.dom.borrow(), &chrome_sheet, w, h, cursor, &scroll);
 
         // Color the orrery's nodes by activation state (green open / red closed /
         // blue new) so the graph shows at a glance what's live. (Visible in
@@ -489,6 +492,29 @@ impl App {
             h,
             ExternalTexturePlacement::new([0.0, 0.0, w as f32, h as f32]),
         );
+        // Window controls (borderless titlebar): the min / max / close strip drawn
+        // over the chrome at the toolbar's top-right. Cached by band size; the input
+        // path hit-tests the same geometry, so nothing is recorded here.
+        let band_h = toolbar_h.max(1);
+        let strip_w = super::titlebar::CONTROLS_W.round().max(1.0) as u32;
+        if self.window_controls_tex.as_ref().map(|c| c.size) != Some((strip_w, band_h)) {
+            let scene = super::titlebar::controls_scene(band_h, &self.chrome_theme);
+            let (tex, view) =
+                host.rasterize(&scene, strip_w, band_h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+            self.window_controls_tex =
+                Some(super::CachedTile { version: 0, size: (strip_w, band_h), tex, view });
+        }
+        if let Some(cached) = &self.window_controls_tex {
+            let x0 = w as f32 - super::titlebar::CONTROLS_W;
+            host.renderer().compose_external_texture(
+                &cached.view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new([x0, 0.0, w as f32, band_h as f32]),
+            );
+        }
         frame.present();
 
         // Keep animating while the orrery is settling / gliding / dragging.

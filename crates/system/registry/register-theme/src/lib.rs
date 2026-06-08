@@ -31,5 +31,6 @@
 //! The cfg branch was therefore dead code and was dropped during the move;
 //! this crate always uses `graphshell_core::color::Color32`.
 
+pub mod chrome;
 pub mod edge_style;
 pub mod theme;

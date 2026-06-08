@@ -134,6 +134,12 @@ identity = { workspace = true }
 transport = { workspace = true }
 moothold = { workspace = true }
 
+# Shell-chrome theme tokens (theming pass): the toolbar / omnibar / palette /
+# pane palette comes from a resolved `ChromeTheme` rather than hardcoded CSS, so
+# the chrome theme-switches alongside the graph chrome. The registry also seeds
+# the graph-node + edge tokens; meerkat consumes the chrome half for now.
+register-theme = { workspace = true }
+
 # Content engines for the card (S2.2b-ii): nematic's document engines (markdown /
 # gemtext / plain text / feeds / …) turn fetched bytes into an EngineDocument,
 # routed by content-type. HTML rides the serval lane instead (set_inner_html →

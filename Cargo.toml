@@ -103,6 +103,7 @@ comms = { path = "crates/shell/comms" }
 session-runtime = { path = "crates/system/session-runtime" }
 ux-events = { path = "crates/system/ux-events" }
 register-diagnostics = { path = "crates/system/registry/register-diagnostics" }
+register-theme = { path = "crates/system/registry/register-theme" }
 
 inker = { path = "crates/inker" }
 document-canvas = { path = "crates/inker/document-canvas" }

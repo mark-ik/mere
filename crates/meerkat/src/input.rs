@@ -20,7 +20,8 @@ use winit::event::{ElementState, MouseButton};
 use winit::keyboard::{Key as WinitKey, NamedKey as WinitNamedKey};
 use xilem_serval::PointerClick;
 
-use super::{first_tag, first_with_class, has_class, measure_class_bottom, App, CHROME_SHEET, FALLBACK_TOOLBAR_H};
+use super::titlebar::{self, WindowControl};
+use super::{first_tag, first_with_class, has_class, measure_class_bottom, App, FALLBACK_TOOLBAR_H};
 
 impl App {
     /// Route a mouse button press/release by region. A left press in the chrome
@@ -38,6 +39,31 @@ impl App {
         let th = self.toolbar_height() as f32;
         match state {
             ElementState::Pressed => {
+                // Borderless window: a left press on a window control acts on it; a
+                // press near a window edge starts an OS resize drag. Both take
+                // priority over the chrome / content (and any open menu).
+                if button == MouseButton::Left {
+                    if let Some(ctl) = titlebar::control_at(x, y, self.width, th as u32) {
+                        self.window_control(ctl);
+                        return;
+                    }
+                    if let Some(dir) = titlebar::resize_dir_at(x, y, self.width, self.height) {
+                        // Manual resize: winit's drag_resize_window is inert on a
+                        // frameless Windows window, so snapshot the rect + screen
+                        // cursor and resize the window ourselves on each move.
+                        if let Some(window) = self.window.as_ref() {
+                            let outer = window.outer_position().map(|p| (p.x, p.y)).unwrap_or((0, 0));
+                            let size = window.inner_size();
+                            self.resize_drag = Some(super::ResizeDrag {
+                                dir,
+                                start_outer: outer,
+                                start_size: (size.width, size.height),
+                                start_cursor_screen: (outer.0 as f32 + x, outer.1 as f32 + y),
+                            });
+                        }
+                        return;
+                    }
+                }
                 // A context menu swallows the next press: a left click on one of its
                 // rows runs that action (the chrome closes the menu); a click
                 // anywhere else just dismisses it.
@@ -54,12 +80,21 @@ impl App {
                 // dropdown (its `.chrome` border-box). A left press there dispatches
                 // the chrome; below it (the content band) a right press opens the
                 // context menu, anything else drives the orrery.
+                let sheet = self.chrome_sheet_refs();
                 let chrome_h = {
                     let dom = self.dom.borrow();
-                    measure_class_bottom(&dom, self.width, self.height, "chrome")
+                    measure_class_bottom(&dom, &sheet, self.width, self.height, "chrome")
                         .unwrap_or(self.toolbar_h.max(FALLBACK_TOOLBAR_H))
                 };
-                if y < chrome_h as f32 {
+                if y < th {
+                    // The toolbar bar doubles as the titlebar: defer a left press to
+                    // release so a press-and-drag moves the window (resolved in
+                    // CursorMoved) while a press-and-release still clicks the button
+                    // / focuses the omnibar (resolved on release).
+                    if button == MouseButton::Left {
+                        self.titlebar_press = Some((x, y));
+                    }
+                } else if y < chrome_h as f32 {
                     if button == MouseButton::Left {
                         self.chrome_click(x, y);
                     }
@@ -109,6 +144,21 @@ impl App {
                 }
             },
             ElementState::Released => {
+                // Resolve a pending titlebar press that never became a window drag:
+                // it was a click on the toolbar bar (a button / the omnibar). Run it
+                // now, and skip the orrery / double-click paths — the press never
+                // reached them. (Custom titlebar.)
+                if button == MouseButton::Left {
+                    if let Some((px, py)) = self.titlebar_press.take() {
+                        self.chrome_click(px, py);
+                        return;
+                    }
+                    // A manual window resize ends on release; skip the orrery /
+                    // double-click paths (the press never reached them).
+                    if self.resize_drag.take().is_some() {
+                        return;
+                    }
+                }
                 // A release over the focused card belongs to the card, not the
                 // orrery — releasing on the card must not deselect the node (that
                 // would break the card's double-click promote). Elsewhere the release
@@ -184,6 +234,26 @@ impl App {
             .any(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
     }
 
+    /// Apply a window-control press (borderless titlebar). Minimize / maximize act
+    /// on the window directly; close defers to the event handler via `pending_exit`
+    /// (input has no event-loop handle), which saves the session and exits.
+    fn window_control(&mut self, ctl: WindowControl) {
+        match ctl {
+            WindowControl::Minimize => {
+                if let Some(window) = self.window.as_ref() {
+                    window.set_minimized(true);
+                }
+            },
+            WindowControl::Maximize => {
+                if let Some(window) = self.window.as_ref() {
+                    let maximized = window.is_maximized();
+                    window.set_maximized(!maximized);
+                }
+            },
+            WindowControl::Close => self.pending_exit = true,
+        }
+    }
+
     /// The live card whose close (X) button contains window point `(x, y)`, if
     /// any — its composited rect from the last frame.
     fn close_button_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
@@ -198,9 +268,10 @@ impl App {
     /// restores focus so the caret doesn't dangle on the removed field.
     pub(super) fn chrome_click(&mut self, x: f32, y: f32) {
         let offsets = ScrollOffsets::<NodeId>::default();
+        let sheet = self.chrome_sheet_refs();
         let hit = {
             let dom = self.dom.borrow();
-            hit_test_node(&dom, CHROME_SHEET, self.width, self.height, x, y, &offsets)
+            hit_test_node(&dom, &sheet, self.width, self.height, x, y, &offsets)
         };
         if let Some(node) = hit {
             let palette_was_open = self.runner.state().palette_open;

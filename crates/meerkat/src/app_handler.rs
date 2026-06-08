@@ -11,20 +11,25 @@ use netrender::NetrenderOptions;
 use orrery::WHEEL_PAN_SCALE;
 use serval_winit_host::{modifiers_from_winit, SurfaceHost};
 use winit::application::ApplicationHandler;
-use winit::dpi::PhysicalSize;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
-use winit::window::{Window, WindowId};
+use winit::window::{CursorIcon, Window, WindowId};
 
-use super::{comms_host, fetch, sync, App};
+use super::{comms_host, fetch, sync, titlebar, App};
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
             return;
         }
+        // Borderless: the OS title bar (and its accent border) is off; the chrome's
+        // toolbar band is the titlebar, with host-drawn window controls + edge
+        // resize (see `titlebar` + `input`). A min size keeps the bar usable.
         let attributes = Window::default_attributes()
             .with_title("Meerkat — Mere chrome on serval")
+            .with_decorations(false)
+            .with_min_inner_size(PhysicalSize::new(480u32, 320u32))
             .with_inner_size(PhysicalSize::new(self.width, self.height));
         let window = Arc::new(
             event_loop
@@ -197,6 +202,27 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => self.resize(size.width, size.height),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x as f32, position.y as f32);
+                // A manual window resize in progress: drive it from the move and
+                // route nowhere else. (Custom titlebar.)
+                if self.resize_drag.is_some() {
+                    self.apply_resize();
+                    return;
+                }
+                // A pending titlebar press that moves past the slop becomes a window
+                // drag (the OS takes over from here); below the slop it stays a
+                // pending click and the move routes nowhere. (Custom titlebar.)
+                if let Some((px, py)) = self.titlebar_press {
+                    if (self.cursor.0 - px).hypot(self.cursor.1 - py) > 4.0 {
+                        if let Some(window) = self.window.as_ref() {
+                            let _ = window.drag_window();
+                        }
+                        self.titlebar_press = None;
+                    }
+                    return;
+                }
+                // Hint the resize edges: the borderless window has no OS frame, so
+                // the host sets the resize arrows on hover. (Custom titlebar.)
+                self.update_hover_cursor();
                 // Forward to the orrery in content-band coordinates (Cartography
                 // only — in the tiled view the orrery is hidden, so a stray drag
                 // must not animate it and force every tile to re-rasterize).
@@ -247,7 +273,16 @@ impl ApplicationHandler for App {
                     }
                 }
             },
-            WindowEvent::MouseInput { state, button, .. } => self.on_mouse_input(state, button),
+            WindowEvent::MouseInput { state, button, .. } => {
+                self.on_mouse_input(state, button);
+                // The custom close control sets `pending_exit` (input has no
+                // event-loop handle); honor it here, saving the session as the OS
+                // CloseRequested path does.
+                if self.pending_exit {
+                    self.save_session();
+                    event_loop.exit();
+                }
+            },
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed {
                     self.on_key_pressed(&event.logical_key);
@@ -255,6 +290,72 @@ impl ApplicationHandler for App {
             },
             WindowEvent::RedrawRequested => self.render(),
             _ => {},
+        }
+    }
+}
+
+impl App {
+    /// Drive a manual window resize from the current cursor (custom titlebar). The
+    /// opposite edge(s) of the press-time rect stay anchored; the dragged edge(s)
+    /// follow the cursor by its screen-space delta from the press, clamped to the
+    /// minimum size. Left/top edges move the window origin (`set_outer_position`),
+    /// right/bottom only grow it. The follow-up `Resized` event reconfigures the
+    /// surface.
+    fn apply_resize(&self) {
+        let Some(drag) = self.resize_drag else { return };
+        let Some(window) = self.window.as_ref() else { return };
+        use winit::window::ResizeDirection as D;
+        let outer = window
+            .outer_position()
+            .map(|p| (p.x as f32, p.y as f32))
+            .unwrap_or((drag.start_outer.0 as f32, drag.start_outer.1 as f32));
+        let screen_x = outer.0 + self.cursor.0;
+        let screen_y = outer.1 + self.cursor.1;
+        let dx = screen_x - drag.start_cursor_screen.0;
+        let dy = screen_y - drag.start_cursor_screen.1;
+        let start_left = drag.start_outer.0 as f32;
+        let start_top = drag.start_outer.1 as f32;
+        let start_right = start_left + drag.start_size.0 as f32;
+        let start_bottom = start_top + drag.start_size.1 as f32;
+        let (min_w, min_h) = (480.0_f32, 320.0_f32);
+        let mut left = start_left;
+        let mut top = start_top;
+        let mut right = start_right;
+        let mut bottom = start_bottom;
+        match drag.dir {
+            D::West | D::NorthWest | D::SouthWest => left = (start_left + dx).min(start_right - min_w),
+            D::East | D::NorthEast | D::SouthEast => right = (start_right + dx).max(start_left + min_w),
+            _ => {},
+        }
+        match drag.dir {
+            D::North | D::NorthWest | D::NorthEast => top = (start_top + dy).min(start_bottom - min_h),
+            D::South | D::SouthWest | D::SouthEast => bottom = (start_bottom + dy).max(start_top + min_h),
+            _ => {},
+        }
+        let new_w = (right - left).round().max(min_w) as u32;
+        let new_h = (bottom - top).round().max(min_h) as u32;
+        window.set_outer_position(PhysicalPosition::new(left.round() as i32, top.round() as i32));
+        let _ = window.request_inner_size(PhysicalSize::new(new_w, new_h));
+    }
+
+    /// Update the cursor for a hover over the window's resize edges (custom
+    /// titlebar). Edges show the matching resize arrows; the window controls and
+    /// the interior keep the default arrow. Only re-sets the cursor on a change.
+    fn update_hover_cursor(&mut self) {
+        let (x, y) = self.cursor;
+        let band_h = self.toolbar_height();
+        let icon = if titlebar::control_at(x, y, self.width, band_h).is_some() {
+            CursorIcon::Default
+        } else if let Some(dir) = titlebar::resize_dir_at(x, y, self.width, self.height) {
+            titlebar::resize_cursor(dir)
+        } else {
+            CursorIcon::Default
+        };
+        if icon != self.cursor_icon {
+            self.cursor_icon = icon;
+            if let Some(window) = self.window.as_ref() {
+                window.set_cursor(icon);
+            }
         }
     }
 }

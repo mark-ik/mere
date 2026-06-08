@@ -20,6 +20,7 @@ use std::collections::HashMap;
 
 pub use kernel::color::Color32;
 
+use crate::chrome::ChromeTheme;
 use crate::edge_style::{
     EdgeAccessibilityMode, ThemeAccessibilitySupport, ThemeContract, ThemeEdgeTokens,
     validate_theme_edge_tokens,
@@ -99,6 +100,8 @@ pub struct ThemeTokenSet {
     pub graph_node_focus_ring: Color32,
     pub graph_node_hover_ring: Color32,
     pub graph_node_chrome: GraphNodeChromeTheme,
+    /// Tokens for the host's shell chrome (toolbar / omnibar / palette / panes).
+    pub chrome: ChromeTheme,
     pub status_success: Color32,
     pub status_warning: Color32,
     pub status_error: Color32,
@@ -364,6 +367,7 @@ fn default_theme_tokens() -> ThemeTokenSet {
             clip_ring: Color32::from_rgb(170, 210, 255),
             default_stroke: Color32::from_gray(90),
         },
+        chrome: ChromeTheme::mere_dark(),
         status_success: Color32::from_rgb(90, 200, 120),
         status_warning: Color32::from_rgb(210, 175, 70),
         status_error: Color32::from_rgb(180, 60, 60),
@@ -425,6 +429,7 @@ fn light_theme_tokens() -> ThemeTokenSet {
             clip_ring: Color32::from_rgb(92, 146, 214),
             default_stroke: Color32::from_rgb(132, 144, 158),
         },
+        chrome: ChromeTheme::mere_light(),
         status_success: Color32::from_rgb(46, 140, 86),
         status_warning: Color32::from_rgb(160, 120, 32),
         status_error: Color32::from_rgb(170, 62, 62),
@@ -486,6 +491,7 @@ fn dark_theme_tokens() -> ThemeTokenSet {
             clip_ring: Color32::from_rgb(156, 198, 255),
             default_stroke: Color32::from_rgb(104, 116, 132),
         },
+        chrome: ChromeTheme::mere_dark(),
         status_success: Color32::from_rgb(110, 216, 146),
         status_warning: Color32::from_rgb(232, 188, 84),
         status_error: Color32::from_rgb(220, 102, 102),
@@ -555,6 +561,7 @@ fn high_contrast_theme_tokens() -> ThemeTokenSet {
             clip_ring: Color32::from_rgb(255, 255, 255),
             default_stroke: Color32::from_rgb(255, 255, 255),
         },
+        chrome: ChromeTheme::high_contrast(),
         status_success: Color32::from_rgb(0, 255, 170),
         status_warning: Color32::from_rgb(255, 230, 0),
         status_error: Color32::from_rgb(255, 64, 64),
