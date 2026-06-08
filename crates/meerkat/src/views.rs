@@ -11,7 +11,7 @@ use xilem_serval::{
     ServalElement, TextField, TextInput,
 };
 
-use comms::Direction;
+use comms::{Direction, ProtocolKind};
 
 use super::{Chrome, ContextMenu, HistoryStep};
 use super::command::Command;
@@ -302,8 +302,44 @@ fn comms_pane(c: &Chrome) -> ChromeView {
         children.push(Box::new(
             el::<_, Chrome, ()>("div", (field, send)).attr("class", "comms-compose"),
         ));
+
+        // The last send's outcome (a misfin status, or a failure reason), shown
+        // under the compose box — the feedback for sends with no in-thread echo.
+        if let Some(status) = &c.comms.send_status {
+            children.push(Box::new(
+                el::<_, Chrome, ()>("div", status.clone()).attr("class", "comms-status"),
+            ));
+        }
+    } else if let Some(form) = c.comms.new_message.as_ref() {
+        children.push(new_message_form(form));
+        // The send outcome (delivered / a misfin status / a failure reason), shown
+        // under the still-open form so a new-message send isn't silent.
+        if let Some(status) = &c.comms.send_status {
+            children.push(Box::new(
+                el::<_, Chrome, ()>("div", status.clone()).attr("class", "comms-status"),
+            ));
+        }
     } else {
-        // The conversation list: one row per conversation (unread count appended).
+        // The conversation list, led by the compose / invite actions + connect info.
+        let new_btn = on_click(
+            el::<_, Chrome, ()>("button", "+ New message").attr("class", "comms-new-btn"),
+            |c: &mut Chrome, _: PointerClick| c.open_new_message(),
+        );
+        children.push(Box::new(new_btn));
+        if c.comms.cabal_ticket.is_some() {
+            // Mails the cabal join ticket to a peer (pre-fills a misfin message).
+            let share = on_click(
+                el::<_, Chrome, ()>("button", "Share cabal invite").attr("class", "comms-new-btn"),
+                |c: &mut Chrome, _: PointerClick| c.share_cabal_invite(),
+            );
+            children.push(Box::new(share));
+        }
+        if let Some(address) = &c.comms.misfin_address {
+            children.push(Box::new(
+                el::<_, Chrome, ()>("div", format!("Your address: {address}"))
+                    .attr("class", "comms-field-label"),
+            ));
+        }
         for conversation in &c.comms.inbox {
             let id = conversation.id.clone();
             let label = if conversation.unread > 0 {
@@ -325,6 +361,72 @@ fn comms_pane(c: &Chrome) -> ChromeView {
     }
 
     Box::new(el::<_, Chrome, ()>("div", children).attr("class", "comms-pane"))
+}
+
+/// The compose-new form: a protocol toggle (Misfin / Cable), a recipient field
+/// (misfin only — Cable targets the cabal), a body field + Send, and Cancel.
+fn new_message_form(form: &comms::NewMessageForm) -> ChromeView {
+    let mut rows: Vec<ChromeView> = Vec::new();
+
+    // Title + cancel.
+    let title = el::<_, Chrome, ()>("div", "New message").attr("class", "comms-thread-title");
+    let cancel = on_click(
+        el::<_, Chrome, ()>("button", "Cancel").attr("class", "comms-btn"),
+        |c: &mut Chrome, _: PointerClick| c.close_new_message(),
+    );
+    rows.push(Box::new(
+        el::<_, Chrome, ()>("div", (title, cancel)).attr("class", "comms-title"),
+    ));
+
+    // Protocol toggle: the active option carries a distinct class.
+    let proto_class = |active: bool| if active { "comms-proto-active" } else { "comms-proto" };
+    let misfin_btn = on_click(
+        el::<_, Chrome, ()>("button", "Misfin")
+            .attr("class", proto_class(form.protocol == ProtocolKind::Misfin)),
+        |c: &mut Chrome, _: PointerClick| c.set_new_message_protocol(ProtocolKind::Misfin),
+    );
+    let cable_btn = on_click(
+        el::<_, Chrome, ()>("button", "Cable")
+            .attr("class", proto_class(form.protocol == ProtocolKind::Murm)),
+        |c: &mut Chrome, _: PointerClick| c.set_new_message_protocol(ProtocolKind::Murm),
+    );
+    rows.push(Box::new(
+        el::<_, Chrome, ()>("div", (misfin_btn, cable_btn)).attr("class", "comms-proto-row"),
+    ));
+
+    // Recipient: misfin needs a server address; Cable targets the cabal. A small
+    // subheading labels each field (serval's input has no placeholder ghost text).
+    if form.protocol == ProtocolKind::Misfin {
+        rows.push(Box::new(
+            el::<_, Chrome, ()>("div", "To — a misfin address (mailbox@server)")
+                .attr("class", "comms-field-label"),
+        ));
+        let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
+        let to_lens: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.comms_new_to;
+        rows.push(Box::new(
+            el::<_, Chrome, ()>("div", lens(make, to_lens)).attr("class", "comms-new-to"),
+        ));
+    } else {
+        rows.push(Box::new(
+            el::<_, Chrome, ()>("div", "To — the Project cabal").attr("class", "comms-field-label"),
+        ));
+    }
+
+    // Body + Send.
+    rows.push(Box::new(
+        el::<_, Chrome, ()>("div", "Message").attr("class", "comms-field-label"),
+    ));
+    let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
+    let body_lens: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.comms_new_body;
+    let send = on_click(
+        el::<_, Chrome, ()>("button", "Send").attr("class", "comms-send"),
+        |c: &mut Chrome, _: PointerClick| c.send_new_message(),
+    );
+    rows.push(Box::new(
+        el::<_, Chrome, ()>("div", (lens(make, body_lens), send)).attr("class", "comms-new-body"),
+    ));
+
+    Box::new(el::<_, Chrome, ()>("div", rows).attr("class", "comms-new"))
 }
 
 /// Navigate on submit (Enter). If a suggestion row is highlighted, navigate it;

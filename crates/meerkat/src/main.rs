@@ -157,12 +157,10 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             ".context-item {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 18px; }}",
             rgb(c.body_text), rgb(c.menu_bg)
         ),
-        // Comms pane (P6): a right-edge docked panel over the content. (Geometry is
-        // a first cut — top offset + right dock get tuned on the first run.)
-        format!(
-            ".comms-pane {{ position: absolute; top: 64px; right: 0; width: 360px; background-color: {}; padding: 10px; }}",
-            rgb(c.panel_bg)
-        ),
+        // Comms pane: an absolutely-positioned panel whose geometry the host sets
+        // inline each frame from the Comms frame leaf's rect (so it splits beside
+        // the orrery like the other panes, rather than floating docked).
+        format!(".comms-pane {{ position: absolute; background-color: {}; padding: 10px; }}", rgb(c.panel_bg)),
         format!(".comms-title {{ display: flex; background-color: {}; padding: 4px 4px 10px 4px; }}", rgb(c.panel_bg)),
         format!(
             ".comms-title-text {{ font-size: 20px; color: {}; background-color: {}; flex-grow: 1; padding: 4px 8px; }}",
@@ -201,6 +199,30 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         format!(
             ".comms-send {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 16px; margin: 4px; }}",
             rgb(c.control_text), rgb(c.active_bg)
+        ),
+        format!(
+            ".comms-status {{ font-size: 14px; color: {}; background-color: {}; padding: 6px 12px; }}",
+            rgb(c.muted_text), rgb(c.panel_bg)
+        ),
+        format!(
+            ".comms-new-btn {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px 0; }}",
+            rgb(c.control_text), rgb(c.active_bg)
+        ),
+        format!(".comms-new {{ background-color: {}; }}", rgb(c.panel_bg)),
+        format!(".comms-proto-row {{ display: flex; background-color: {}; padding: 4px 0; }}", rgb(c.panel_bg)),
+        format!(
+            ".comms-proto {{ font-size: 15px; color: {}; background-color: {}; padding: 6px 14px; margin: 0 6px 0 0; }}",
+            rgb(c.body_text), rgb(c.control_bg)
+        ),
+        format!(
+            ".comms-proto-active {{ font-size: 15px; color: {}; background-color: {}; padding: 6px 14px; margin: 0 6px 0 0; }}",
+            rgb(c.strong_text), rgb(c.active_bg)
+        ),
+        format!(".comms-new-to {{ background-color: {}; padding-top: 2px; }}", rgb(c.panel_bg)),
+        format!(".comms-new-body {{ display: flex; background-color: {}; padding-top: 2px; }}", rgb(c.panel_bg)),
+        format!(
+            ".comms-field-label {{ font-size: 13px; color: {}; background-color: {}; padding: 8px 4px 2px 4px; }}",
+            rgb(c.muted_text), rgb(c.panel_bg)
         ),
     ]
 }

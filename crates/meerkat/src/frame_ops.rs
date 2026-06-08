@@ -686,6 +686,47 @@ impl App {
         self.maximized_pane = None;
     }
 
+    /// The comms pane's screen rect, if the comms pane is open. (Comms pane.)
+    pub(super) fn comms_leaf_rect(&self) -> Option<[f32; 4]> {
+        self.laid_leaves()
+            .into_iter()
+            .find(|l| matches!(l.content, PaneContent::Comms))
+            .map(|l| l.rect)
+    }
+
+    /// Keep a Comms frame leaf in sync with the chrome's comms-open state. The comms
+    /// pane is chrome-rendered (its compose field + click handlers live in the
+    /// chrome), so it stays there; this only reserves / drops a frame leaf so the
+    /// other panes make room, and the render positions the chrome overlay into it.
+    /// (Comms pane.)
+    pub(super) fn sync_comms_pane(&mut self) {
+        let open = self.runner.state().comms.is_open();
+        match (open, self.pane_of_content(&PaneContent::Comms)) {
+            (true, None) => {
+                let id = PaneId(self.next_pane_id);
+                self.next_pane_id += 1;
+                let leaf = PaneNode::Leaf {
+                    pane_id: id,
+                    content: PaneContent::Comms,
+                    graph_id: GraphId::default(),
+                };
+                let anchor =
+                    frame_view::pane_path(&self.frame_layout, super::GRAPH_PANE).unwrap_or_default();
+                if self.frame_layout.summon_leaf(&anchor, InsertSide::Right, leaf) {
+                    self.frame_layout.set_split_ratio(&anchor, 0.66);
+                }
+                self.maximized_pane = None;
+            },
+            (false, Some(id)) => {
+                if let Some(path) = frame_view::pane_path(&self.frame_layout, id) {
+                    self.frame_layout.close_leaf(&path);
+                }
+                self.maximized_pane = None;
+            },
+            _ => {},
+        }
+    }
+
     /// The roster pane's screen rect, if the roster is open.
     pub(super) fn roster_leaf_rect(&self) -> Option<[f32; 4]> {
         self.laid_leaves()

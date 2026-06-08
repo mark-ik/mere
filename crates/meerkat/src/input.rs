@@ -169,6 +169,17 @@ impl App {
                             return;
                         }
                     }
+                    // The comms pane is chrome-rendered into its leaf, so route a
+                    // press there to the chrome — its hit-test fires the comms close
+                    // X, conversation rows, and compose-field focus. (Comms pane.)
+                    if let Some(cr) = self.comms_leaf_rect() {
+                        if x >= cr[0] && x < cr[2] && y >= cr[1] && y < cr[3] {
+                            if button == MouseButton::Left {
+                                self.chrome_click(x, y);
+                            }
+                            return;
+                        }
+                    }
                     // A press on a live card's close (X) button reaps that preview
                     // (its last scene is kept as the node's snapshot).
                     if button == MouseButton::Left {
@@ -367,17 +378,22 @@ impl App {
     /// dispatch the click — a tab switch, a close, or a pin toggle. The action is
     /// captured in the workbench scene and drained immediately onto the model.
     pub(super) fn workbench_click(&mut self, x: f32, y: f32) {
-        let th = self.toolbar_height() as f32;
-        let content_h = self.height.saturating_sub(self.toolbar_height()).max(1);
+        // The workbench DOM is laid out at the workbench leaf size + composited at
+        // its origin, so hit-test in leaf-local coordinates. (Workbench-as-pane.)
+        let Some(wr) = self.workbench_leaf_rect() else { return };
+        let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
+        let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
+        let (lx, ly) = (x - wr[0], y - wr[1]);
         let offsets = ScrollOffsets::<NodeId>::default();
         let hit = {
             let dom = self.workbench_dom.borrow();
-            hit_test_node(&dom, WORKBENCH_SHEET, self.width, content_h, x, y - th, &offsets)
+            hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets)
         };
         if let Some(node) = hit {
-            self.workbench_runner.dispatch_click(node, PointerClick::at((x, y - th)));
+            self.workbench_runner.dispatch_click(node, PointerClick::at((lx, ly)));
             // A tab activated → remember it as a drag candidate (resolved on
             // release: a move when dragged onto another slot, else a plain click).
+            // The press is kept in window coords (tile_rects are window-space).
             if let Some(WorkbenchAction::Activate(member)) = self.workbench_runner.state().pending {
                 self.tab_drag = Some((member, (x, y)));
             }
@@ -397,13 +413,14 @@ impl App {
 
     /// If `(x, y)` is over a divider (the gutter between two slots), its left-slot
     /// index — the start of a resize drag.
-    pub(super) fn divider_at(&mut self, x: f32, y: f32) -> Option<usize> {
-        let th = self.toolbar_height() as f32;
-        let content_h = self.height.saturating_sub(self.toolbar_height()).max(1);
+    pub(super) fn divider_at(&self, x: f32, y: f32) -> Option<usize> {
+        let wr = self.workbench_leaf_rect()?;
+        let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
+        let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
+        let (lx, ly) = (x - wr[0], y - wr[1]);
         let offsets = ScrollOffsets::<NodeId>::default();
         let dom = self.workbench_dom.borrow();
-        let node =
-            hit_test_node(&dom, WORKBENCH_SHEET, self.width, content_h, x, y - th, &offsets)?;
+        let node = hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets)?;
         if !has_class(&dom, node, "wb-divider") {
             return None;
         }
@@ -421,7 +438,11 @@ impl App {
         if i + 1 >= snapshot.len() {
             return;
         }
-        let band_w = self.width.max(1) as f32;
+        // The slots span the workbench leaf, so reweight against the leaf width.
+        let band_w = self
+            .workbench_leaf_rect()
+            .map(|wr| (wr[2] - wr[0]).max(1.0))
+            .unwrap_or(self.width.max(1) as f32);
         let sum: f32 = snapshot.iter().sum();
         let dw = (self.cursor.0 - press_x) / band_w * sum;
         let mut weights = snapshot;
@@ -442,10 +463,12 @@ impl App {
         self.tile_at(cx, cy).map(|(m, _)| m)
     }
 
-    /// Handle a pressed key. Ctrl+K toggles the command palette; while the
-    /// palette is open all keys route to it. Otherwise Enter submits the omnibar,
-    /// Arrow Up/Down and Escape drive the suggestions dropdown, and every other
-    /// key edits the omnibar and regenerates suggestions.
+    /// Handle a pressed key. First the global chords (Ctrl+P palette, Ctrl+K comms,
+    /// Ctrl+T workbench, …) and clipboard shortcuts; then the key routes to whichever
+    /// field owns the caret — the palette query ([`on_palette_key`](Self::on_palette_key)),
+    /// the comms compose box ([`on_comms_key`](Self::on_comms_key)), or the omnibar
+    /// ([`on_omnibar_key`](Self::on_omnibar_key)) — each handler scoped to its own
+    /// field. A key with no focused field is ignored.
     pub(super) fn on_key_pressed(&mut self, key: &WinitKey) {
         // An open context menu eats Escape to dismiss (other keys fall through).
         if self.runner.state().context_menu.is_some()
@@ -463,10 +486,19 @@ impl App {
             }
             return;
         }
+        // Command palette: Ctrl+P. Ctrl+K toggles the comms pane (freed up for it).
+        if self.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("p"))
+        {
+            self.toggle_palette();
+            return;
+        }
         if self.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("k"))
         {
-            self.toggle_palette();
+            self.runner.update(Chrome::toggle_comms);
+            self.drain_comms_intent();
+            self.request_redraw();
             return;
         }
         // Ctrl+T toggles the tiled workbench (Tree projection) and the orrery
@@ -524,12 +556,28 @@ impl App {
             self.on_palette_key(key);
             return;
         }
+        // Route the key to whichever field owns the caret. Each focusable field has
+        // its own handler, invoked only while it holds focus — so no field's logic
+        // (the omnibar's suggestion refresh, its Enter-submits) leaks onto another.
+        // A key with no focused field is ignored: the chrome owns the keyboard; the
+        // orrery / workbench are pointer-driven.
+        if self.comms_input_focused() {
+            self.on_comms_key(key);
+        } else if self.omnibar_focused() {
+            self.on_omnibar_key(key);
+        }
+    }
+
+    /// Route a key to the focused omnibar: Enter submits (Ctrl/Cmd-Enter opens the
+    /// address as a *new* node, a browsing surface linked from the focused one),
+    /// Arrow Up/Down + Escape drive the suggestions dropdown, anything else edits
+    /// the address and regenerates suggestions. Called only while the omnibar holds
+    /// the caret, so it refreshes unconditionally — the source of the old "any
+    /// focused field is the omnibar" bug, now scoped to the omnibar's own handler.
+    fn on_omnibar_key(&mut self, key: &WinitKey) {
         let suggestions_open = !self.runner.state().suggest.is_empty();
         match key {
-            WinitKey::Named(WinitNamedKey::Enter) if self.runner.focus().is_some() => {
-                // Ctrl/Cmd-Enter opens the typed address as a *new* node (a new
-                // browsing surface linked from the focused one); plain Enter
-                // navigates the focused node in place.
+            WinitKey::Named(WinitNamedKey::Enter) => {
                 let as_new_node = self.modifiers.ctrl || self.modifiers.meta;
                 self.runner.update(move |c| {
                     submit_omnibar(c);
@@ -557,14 +605,8 @@ impl App {
             },
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
-                    // Only repopulate suggestions when the omnibar actually holds the
-                    // caret — otherwise every keystroke (canvas shortcuts included)
-                    // would pop the dropdown open from the current omnibar text.
-                    let editing_omnibar = self.runner.focus().is_some();
                     self.runner.dispatch_key(key_event);
-                    if editing_omnibar {
-                        self.runner.update(Chrome::refresh_suggestions);
-                    }
+                    self.runner.update(Chrome::refresh_suggestions);
                     self.request_redraw();
                 }
             },
@@ -583,7 +625,10 @@ impl App {
             return false;
         };
         let palette = self.runner.state().palette_open;
-        if !palette && self.runner.focus().is_none() {
+        // The clipboard shortcuts act on the palette query or the omnibar; when
+        // another field (the comms compose box) holds the caret, let the key fall
+        // through to that field's handler rather than editing the omnibar.
+        if !palette && !self.omnibar_focused() {
             return false;
         }
         match s.as_str() {
@@ -692,6 +737,76 @@ impl App {
                     self.request_redraw();
                 }
             },
+        }
+    }
+
+    /// Route a key to the focused comms compose field: Enter sends the draft,
+    /// Escape blurs back to the omnibar, anything else edits the field — never
+    /// touching the omnibar suggestions (the dropdown stays closed while chatting).
+    pub(super) fn on_comms_key(&mut self, key: &WinitKey) {
+        let composing_new = self.runner.state().comms.new_message_open();
+        match key {
+            WinitKey::Named(WinitNamedKey::Enter) => {
+                // Enter sends: the compose-new form when it's open, else the reply.
+                if composing_new {
+                    self.runner.update(Chrome::send_new_message);
+                } else {
+                    self.runner.update(Chrome::send_comms);
+                }
+                self.drain_comms_intent();
+                self.request_redraw();
+            },
+            WinitKey::Named(WinitNamedKey::Escape) => {
+                // Escape closes the compose-new form, else blurs to the omnibar.
+                if composing_new {
+                    self.runner.update(Chrome::close_new_message);
+                }
+                self.focus_after_palette_close();
+                self.request_redraw();
+            },
+            other => {
+                if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
+                    self.runner.dispatch_key(key_event);
+                    self.request_redraw();
+                }
+            },
+        }
+    }
+
+    /// Whether any comms-pane `<input>` (the reply compose box, or the compose-new
+    /// recipient / body) currently holds the keyboard caret.
+    fn comms_input_focused(&self) -> bool {
+        let focus = self.runner.focus();
+        focus.is_some()
+            && [
+                self.input_under_class("comms-compose"),
+                self.input_under_class("comms-new-to"),
+                self.input_under_class("comms-new-body"),
+            ]
+            .contains(&focus)
+    }
+
+    /// Whether the omnibar `<input>` currently holds the keyboard caret.
+    fn omnibar_focused(&self) -> bool {
+        let focus = self.runner.focus();
+        focus.is_some() && focus == self.input_under_class("toolbar")
+    }
+
+    /// The text field whose caret the host paints, by the focused DOM `node`: a
+    /// comms compose / new-message field, the palette query, else the omnibar.
+    pub(super) fn caret_field(&self, node: NodeId) -> &xilem_serval::TextInput {
+        let focus = Some(node);
+        let c = self.runner.state();
+        if focus == self.input_under_class("comms-new-to") {
+            &c.comms_new_to
+        } else if focus == self.input_under_class("comms-new-body") {
+            &c.comms_new_body
+        } else if focus == self.input_under_class("comms-compose") {
+            &c.comms_draft
+        } else if c.palette_open {
+            &c.palette_input
+        } else {
+            &c.omnibar
         }
     }
 

@@ -235,6 +235,13 @@ pub struct MisfinIdentityMaterial {
     pub private_key_pkcs8_der: Vec<u8>,
 }
 
+/// The SHA-256 hex fingerprint of a certificate's DER bytes — a misfin identity
+/// (the value the server returns as the status-20 META, and a `ServedMailbox`
+/// fingerprint).
+pub fn certificate_fingerprint(certificate_der: &[u8]) -> String {
+    helpers::sha256_hex(certificate_der)
+}
+
 /// Deterministically derive a Misfin client identity from a 32-byte **Ed25519**
 /// seed.
 ///

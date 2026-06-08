@@ -165,6 +165,15 @@ impl ApplicationHandler for App {
                     self.runner.update(|c| c.clear_comms_draft());
                     comms_changed = true;
                 },
+                comms_host::CommsUpdate::SendOutcome(line) => {
+                    self.runner.update(|c| c.comms.set_send_status(line.clone()));
+                    comms_changed = true;
+                },
+                comms_host::CommsUpdate::Identity { misfin_address, cabal_ticket } => {
+                    self.runner
+                        .update(|c| c.comms.set_identity(misfin_address.clone(), cabal_ticket.clone()));
+                    comms_changed = true;
+                },
             }
         }
         if comms_changed {

@@ -6,7 +6,7 @@
 //! from `main.rs` to keep files under the workspace 600-LOC ceiling.
 
 use forme::GraphMemberId;
-use layout_dom_api::LayoutDom;
+use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::external_texture::ExternalTexturePlacement;
 use netrender::ColorLoad;
 use pelt_live::{fragments_from_scripted_dom, scene_from_scripted_dom, TextCursor};
@@ -63,6 +63,10 @@ impl App {
         let (w, h) = (self.width.max(1), self.height.max(1));
         let toolbar_h = self.toolbar_height().min(h);
 
+        // Reserve / drop the Comms frame leaf to match the chrome's comms-open state
+        // before laying the panes out, so the other panes make room for it. (Comms.)
+        self.sync_comms_pane();
+
         // Frame tree: the content band (below the toolbar) split into pane rects.
         // The orrery (always) renders into its leaf; the workbench + summoned panes
         // render into theirs. With a single leaf, `orrery_rect` is the whole band.
@@ -83,6 +87,10 @@ impl App {
             .iter()
             .find(|l| matches!(l.content, PaneContent::Roster))
             .map(|l| l.rect);
+        let comms_rect = leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Comms))
+            .map(|l| l.rect);
         let dividers = frame_view::divider_rects(&self.frame_layout, band, self.maximized_pane);
         let orrery_w = (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32;
         let orrery_h = (orrery_rect[3] - orrery_rect[1]).round().max(1.0) as u32;
@@ -91,7 +99,7 @@ impl App {
         // focused field — the palette query when open, else the omnibar (byte
         // offsets from the field's char model).
         let cursor = self.runner.focus().map(|node| {
-            let field = self.runner.state().active_field();
+            let field = self.caret_field(node);
             let byte_of = |i: usize| {
                 field.text().char_indices().nth(i).map(|(b, _)| b).unwrap_or(field.text().len())
             };
@@ -102,6 +110,24 @@ impl App {
             TextCursor { node, caret: field.caret_byte_in_render(), selection }
         });
         let scroll = ScrollOffsets::<NodeId>::default();
+        // Position the chrome's comms overlay into its frame leaf (it's chrome-
+        // rendered but laid out by the frame tree): set the geometry inline so it
+        // fills the reserved Comms leaf rect. (Comms pane.)
+        if let Some(cr) = comms_rect {
+            let mut dom = self.dom.borrow_mut();
+            let root = dom.document();
+            if let Some(node) = first_with_class(&dom, root, "comms-pane") {
+                let style = format!(
+                    "position: absolute; left: {}px; top: {}px; width: {}px; height: {}px;",
+                    cr[0],
+                    cr[1],
+                    (cr[2] - cr[0]).max(0.0),
+                    (cr[3] - cr[1]).max(0.0),
+                );
+                let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
+                dom.set_attribute(node, attr, &style);
+            }
+        }
         let chrome_sheet = self.chrome_sheet_refs();
         let chrome_scene =
             scene_from_scripted_dom(&self.dom.borrow(), &chrome_sheet, w, h, cursor, &scroll);

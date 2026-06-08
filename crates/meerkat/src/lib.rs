@@ -40,7 +40,7 @@
 use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
-use comms::{CommsPane, ConversationId, Draft};
+use comms::{CommsPane, ConversationId, Draft, ProtocolKind};
 use xilem_serval::TextInput;
 
 pub mod command;
@@ -144,6 +144,10 @@ pub struct Chrome {
     /// chrome can't reach the comms actor). Recorded here; the host drains it and
     /// issues the matching `CommsCommand`. Mirrors `pending_command`.
     pub comms_intent: Option<CommsIntent>,
+    /// The compose-new form's recipient editing buffer (misfin `mailbox@host`).
+    pub comms_new_to: TextInput,
+    /// The compose-new form's body editing buffer.
+    pub comms_new_body: TextInput,
 }
 
 /// A comms action the host runs against the live `Comms` on the chrome's behalf:
@@ -246,6 +250,8 @@ impl Chrome {
             comms: CommsPane::new(),
             comms_draft: TextInput::new(""),
             comms_intent: None,
+            comms_new_to: TextInput::new(""),
+            comms_new_body: TextInput::new(""),
         }
     }
 
@@ -501,6 +507,74 @@ impl Chrome {
         if self.comms.can_send() {
             self.comms_intent = Some(CommsIntent::Send(self.comms.draft.clone()));
         }
+    }
+
+    /// Open the compose-new form (drops any open conversation), with fresh
+    /// recipient + body buffers.
+    pub fn open_new_message(&mut self) {
+        self.comms.open_new_message();
+        self.comms_new_to = TextInput::new("");
+        self.comms_new_body = TextInput::new("");
+    }
+
+    /// Close the compose-new form without sending.
+    pub fn close_new_message(&mut self) {
+        self.comms.close_new_message();
+    }
+
+    /// "Share cabal invite": open a new misfin message pre-filled with the cabal
+    /// join ticket as its body, so the user just adds a recipient and sends. A
+    /// no-op until the cabal (and its ticket) is up.
+    pub fn share_cabal_invite(&mut self) {
+        let Some(ticket) = self.comms.cabal_ticket.clone() else {
+            return;
+        };
+        self.open_new_message();
+        self.comms_new_body = TextInput::new(ticket);
+    }
+
+    /// Set the compose-new form's protocol (the Misfin / Cable toggle).
+    pub fn set_new_message_protocol(&mut self, protocol: ProtocolKind) {
+        self.comms.set_new_protocol(protocol);
+    }
+
+    /// Send the compose-new form: build a [`Draft`] from the chosen protocol +
+    /// recipient + body and hand it to the host. Misfin targets the typed
+    /// `mailbox@host`; Cable targets the (first) murm cabal in the inbox. A no-op
+    /// for an empty body, an empty misfin address, or no cable to target.
+    pub fn send_new_message(&mut self) {
+        let Some(form) = self.comms.new_message.as_ref() else {
+            return;
+        };
+        let protocol = form.protocol;
+        let to = self.comms_new_to.text().trim().to_string();
+        let body = self.comms_new_body.text().trim().to_string();
+        if body.is_empty() {
+            return;
+        }
+        let conversation = match protocol {
+            ProtocolKind::Misfin if !to.is_empty() => {
+                Some(ConversationId::new(ProtocolKind::Misfin, to))
+            },
+            ProtocolKind::Misfin => return,
+            ProtocolKind::Murm => self
+                .comms
+                .inbox
+                .iter()
+                .find(|c| c.id.protocol == ProtocolKind::Murm)
+                .map(|c| c.id.clone()),
+        };
+        let Some(conversation) = conversation else {
+            return;
+        };
+        self.comms_intent = Some(CommsIntent::Send(Draft {
+            conversation: Some(conversation),
+            body,
+            subject: None,
+        }));
+        // Keep the form open so its send-status line shows the outcome, and a
+        // failed send keeps the typed address + body to fix. The user closes it
+        // with Cancel.
     }
 
     /// Take the pending comms request, if any. The host drains it after input and

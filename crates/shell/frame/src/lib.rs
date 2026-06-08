@@ -145,6 +145,8 @@ pub enum PaneContent {
     /// examinable. The data-view counterpart to the orrery's space-view (see the
     /// graph-roster + frame-taxonomy design doc).
     Roster,
+    /// Misfin / murm messaging (the `comms` domain).
+    Comms,
     Apparatus,
     System,
     /// **Pinned tile** — a single specific tile rendered without a
@@ -166,6 +168,7 @@ impl PaneContent {
             PaneContent::Orrery => "orrery",
             PaneContent::Gloss => "gloss",
             PaneContent::Roster => "roster",
+            PaneContent::Comms => "comms",
             PaneContent::Apparatus => "apparatus",
             PaneContent::System => "system",
             PaneContent::Tile(_) => "tile",

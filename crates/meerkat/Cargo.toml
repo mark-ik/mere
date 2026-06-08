@@ -126,8 +126,12 @@ netfetcher = { path = "../../../netfetcher" }
 # fetches errand from GitHub — no `../../../errand` layout to replicate. The fetch
 # actor routes http(s) -> netfetcher and smolweb schemes -> errand.
 errand = { git = "https://github.com/mark-ik/errand.git" }
+# Construct `errand::ClientIdentity` (CertificateDer / PrivateKeyDer) from the
+# misfin cert's DER bytes for the misfin send path. Same crate rustls re-exports
+# as `rustls::pki_types`, so it unifies with errand's rustls 0.23.
+rustls-pki-types = "1"
 url = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "io-util", "sync"] }
 
 # ─── P2P sync (S5.0 foundation) ──────────────────────────────────────────────
 # The host stands up one p2panda transport and joins a tessera moot's LogSync
