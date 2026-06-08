@@ -28,7 +28,7 @@ impl App {
     /// The URL of whatever is in focus: in the tiled view the focused tile's node,
     /// in the orrery the focused node. `None` when nothing is focused.
     pub(super) fn current_focus_url(&self) -> Option<String> {
-        if self.workbench.is_tiled() {
+        if self.workbench_active() {
             let member = self.focused_tile?;
             self.orrery.graph().get_node_by_id(member).map(|(_, node)| node.url().to_string())
         } else {
@@ -71,11 +71,11 @@ impl App {
             self.runner.update(|c| c.open_as_new_node = false);
             let origin = self.nav_target_member();
             let new_member = self.orrery.open_member_as_new_node(origin, &loc);
-            // In Tree, tile the new node: stack it into the focused tile's slot as
-            // the active tab (or a fresh slot when nothing is focused), and focus
-            // it so the next navigation targets it. In Cartography the orrery has
-            // already selected it, so it shows as the focused-node card.
-            if self.workbench.is_tiled() {
+            // With the workbench active, tile the new node: stack it into the
+            // focused tile's slot as the active tab (or a fresh slot when nothing is
+            // focused), and focus it so the next navigation targets it. Otherwise
+            // the orrery has selected it, so it shows as the focused-node card.
+            if self.workbench_active() {
                 let stacked = origin.is_some_and(|o| self.workbench.open_in_slot_of(new_member, o));
                 if !stacked {
                     self.workbench.open_tile(new_member);
@@ -104,9 +104,10 @@ impl App {
                 self.orrery.visit(&loc);
             },
         }
-        // Navigating is deliberate: show the target as a live card in Cartography
-        // (passive focus shows only the snapshot).
-        if !self.workbench.is_tiled() {
+        // Navigating is deliberate: with the orrery active, show the target as a
+        // live card (passive focus shows only the snapshot). With the workbench
+        // active the node already tiled, so no card.
+        if !self.workbench_active() {
             if let Some(member) = self.focused_member() {
                 self.live_previews.insert(member);
             }
@@ -120,7 +121,7 @@ impl App {
     /// The node per-node navigation acts on: the focused tile in Tree, the single
     /// selected node in Cartography. `None` when nothing is focused.
     fn nav_target_member(&self) -> Option<GraphMemberId> {
-        if self.workbench.is_tiled() {
+        if self.workbench_active() {
             self.focused_tile
         } else {
             self.orrery.focused_member()
@@ -235,9 +236,15 @@ impl App {
     pub(super) fn toggle_workbench(&mut self) {
         // Clear the omnibar suggestions dropdown so it doesn't hang over the tiles.
         self.runner.update(Chrome::close_suggestions);
-        self.workbench.toggle_mode();
+        if self.workbench_open() {
+            self.close_workbench();
+            self.request_redraw();
+            return;
+        }
+        // Summon the workbench pane beside the orrery, then tile the selection.
+        self.open_workbench();
         self.workbench.clear_tiles();
-        if self.workbench.is_tiled() {
+        {
             for member in self.selection_working_set() {
                 self.workbench.open_tile(member);
             }
@@ -316,11 +323,12 @@ impl App {
         if set.is_empty() {
             return;
         }
-        // These open tiles, so surface the tiled view (closing the suggestions
+        // These open tiles, so summon the workbench pane (closing the suggestions
         // dropdown on the way in, like Ctrl+T does).
-        if self.workbench.ensure_tiled() {
+        if !self.workbench_open() {
             self.runner.update(Chrome::close_suggestions);
         }
+        self.open_workbench();
         match action {
             ContextAction::OpenSplits => {
                 self.workbench.open_split(&set);
@@ -364,16 +372,18 @@ impl App {
     /// tiles, in Cartography just the focused node (if any). The constellation
     /// reconciles its actor pool to this.
     pub(super) fn needed_members(&self) -> Vec<GraphMemberId> {
-        if self.workbench.is_tiled() {
-            // Every tab across every slot stays warm, not just the visible ones, so
-            // switching a stack's tab is instant (the actor already has its scene).
-            self.workbench.open_members()
-        } else {
-            // Cartography: a node is active only when it has a live preview card.
-            // Focusing alone shows the static "last visit" snapshot (no actor), so
-            // the preview no longer activates the node. (Card system P2/P3.)
-            self.live_previews.iter().copied().collect()
+        // The orrery and the workbench coexist, so the active set is the union: the
+        // orrery's live-preview cards plus (when the workbench pane is open) every
+        // open tile across every slot. A node showing in both counts once.
+        let mut needed: Vec<GraphMemberId> = self.live_previews.iter().copied().collect();
+        if self.workbench_open() {
+            for member in self.workbench.open_members() {
+                if !needed.contains(&member) {
+                    needed.push(member);
+                }
+            }
         }
+        needed
     }
 
     /// Double-click on the focused node toggles its **live preview**: promote the
@@ -478,16 +488,10 @@ impl App {
                 self.workbench.close_tile(member);
                 self.constellation.reap(member);
                 if self.workbench.open_members().is_empty() {
-                    // Closing the last tile returns to the graph with nothing
-                    // focused, so the node deactivates rather than stranding an
-                    // empty workbench (where the Cartography preview would just
-                    // re-activate it). (Card-system plan, Phase 1.)
-                    if self.workbench.is_tiled() {
-                        self.workbench.toggle_mode();
-                    }
-                    self.workbench.clear_tiles();
-                    self.focused_tile = None;
-                    self.orrery.clear_selection();
+                    // Closing the last tile closes the workbench pane entirely (back
+                    // to just the orrery), rather than leaving an empty pane.
+                    // (Workbench-as-pane.)
+                    self.close_workbench();
                 } else if self.focused_tile == Some(member) {
                     self.focused_tile = self.workbench.open_members().first().copied();
                 }
@@ -613,15 +617,73 @@ impl App {
         frame_view::leaf_rects(&self.frame_layout, self.content_band(), self.maximized_pane)
     }
 
-    /// The graph pane's screen rect (orrery / tiled workbench); the whole band when
-    /// no graph leaf is laid out (e.g. another pane is maximized).
-    pub(super) fn graph_leaf_rect(&self) -> [f32; 4] {
+    /// The orrery (graph) pane's screen rect; the whole band when no orrery leaf is
+    /// laid out (e.g. another pane is maximized). The orrery is always present.
+    pub(super) fn orrery_leaf_rect(&self) -> [f32; 4] {
         let band = self.content_band();
+        self.laid_leaves()
+            .into_iter()
+            .find(|l| matches!(l.content, PaneContent::Orrery))
+            .map(|l| l.rect)
+            .unwrap_or(band)
+    }
+
+    /// The tiled-workbench pane's screen rect, if the workbench pane is open.
+    pub(super) fn workbench_leaf_rect(&self) -> Option<[f32; 4]> {
         self.laid_leaves()
             .into_iter()
             .find(|l| matches!(l.content, PaneContent::Workbench))
             .map(|l| l.rect)
-            .unwrap_or(band)
+    }
+
+    /// Whether the tiled-workbench pane is open (a Workbench leaf exists).
+    pub(super) fn workbench_open(&self) -> bool {
+        self.pane_of_content(&PaneContent::Workbench).is_some()
+    }
+
+    /// Whether the workbench is the active content pane (open + last-interacted) —
+    /// so navigation (omnibar / Ctrl+Enter / Back-Forward) targets its focused tile
+    /// rather than the orrery's selected node. (Workbench-as-pane.)
+    pub(super) fn workbench_active(&self) -> bool {
+        self.active_content == super::ContentPane::Workbench && self.workbench_open()
+    }
+
+    /// Summon the workbench pane beside the orrery (Tree projection) and make it the
+    /// active content pane. Idempotent — only summons when not already open.
+    pub(super) fn open_workbench(&mut self) {
+        if !self.workbench_open() {
+            self.workbench.ensure_tiled();
+            let id = PaneId(self.next_pane_id);
+            self.next_pane_id += 1;
+            let leaf = PaneNode::Leaf {
+                pane_id: id,
+                content: PaneContent::Workbench,
+                graph_id: GraphId::default(),
+            };
+            let anchor = frame_view::pane_path(&self.frame_layout, super::GRAPH_PANE).unwrap_or_default();
+            if self.frame_layout.summon_leaf(&anchor, InsertSide::Right, leaf) {
+                self.frame_layout.set_split_ratio(&anchor, 0.6);
+            }
+            self.maximized_pane = None;
+        }
+        self.active_content = super::ContentPane::Workbench;
+    }
+
+    /// Close the workbench pane: reap its tiles' actors, clear the tiles, drop the
+    /// pane leaf, and hand focus back to the orrery.
+    pub(super) fn close_workbench(&mut self) {
+        for member in self.workbench.open_members() {
+            self.constellation.reap(member);
+        }
+        self.workbench.clear_tiles();
+        if let Some(id) = self.pane_of_content(&PaneContent::Workbench) {
+            if let Some(path) = frame_view::pane_path(&self.frame_layout, id) {
+                self.frame_layout.close_leaf(&path);
+            }
+        }
+        self.focused_tile = None;
+        self.active_content = super::ContentPane::Orrery;
+        self.maximized_pane = None;
     }
 
     /// The roster pane's screen rect, if the roster is open.

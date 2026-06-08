@@ -80,6 +80,20 @@ full-screen.
 roster, …) and a shellbar to summon / arrange them. Tear-out (multi-window) is
 later still.
 
+**W — workbench-as-pane (2026-06-08, Mark).** Every pane has its own summon
+toggle (Ctrl+R roster, Ctrl+G gloss, Ctrl+, apparatus, **Ctrl+T workbench**), and
+**Ctrl+M switches the pane under the cursor between maximized and split** (so
+summon-then-Ctrl+M is "open maximized vs split"). This flips the orrery↔tiled
+*toggle* into **coexistence**: the orrery is always its own pane; the tiled
+workbench becomes a summonable sibling. Ctrl+T summons/closes it; double-clicking
+a node summons it + opens that node's neighbourhood as tiles there (orrery stays
+visible); closing the last tile closes the pane. Internally: the graph pane leaf
+becomes `PaneContent::Orrery` (always the orrery), `PaneContent::Workbench` is the
+summonable Tree-projected pane, `is_tiled()` checks become "workbench pane open"
+and the orrery-active guards become "always" (orrery always shown);
+`needed_members` is the union of the orrery's live previews and the workbench's
+open tiles.
+
 ---
 
 ## Scope boundary for this pass
@@ -147,3 +161,14 @@ to a new window (later). The orrery↔tiled projection toggle is **out of scope*
 - Backlog: roster scroll (overflow clips on big graphs); R-phase roster (edges /
   fields / drill-through); a shellbar to summon panes (F2, replacing the Ctrl+R
   keybind); tear-out to a new window.
+- 2026-06-08: **W (workbench-as-pane) landed.** The graph pane is now
+  `PaneContent::Orrery` (always rendered into its leaf); the tiled workbench is a
+  summonable `PaneContent::Workbench` sibling (Ctrl+T, or double-click a node →
+  summon + tile its neighbourhood). They coexist: render draws the orrery always
+  and the workbench (when open) into separate leaves; `needed_members` unions the
+  live previews with the open tiles; nav/focus key off an `active_content`
+  (last-clicked)
+  pane; input routes by leaf and sets the active pane; close-last-tile closes the
+  pane; the orrery's card + close-X stay in the orrery leaf. Ctrl+M (max↔split)
+  and the roster/apparatus/gloss panes are unchanged. A migration guard drops
+  pre-coexistence saved layouts (graph pane saved as Workbench).

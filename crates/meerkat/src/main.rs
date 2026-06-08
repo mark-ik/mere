@@ -218,10 +218,21 @@ const CARD_BG: wgpu::Color = wgpu::Color { r: 0.110, g: 0.122, b: 0.145, a: 1.0 
 const DEFAULT_FRAME: &str = "00000000-0000-0000-0000-0000000f1a3e";
 const DEFAULT_PANE: u64 = 0;
 
-/// The frame tree's graph pane — the leaf hosting the orrery / tiled workbench
-/// (its projection toggle stays inside the pane). Summoned sibling panes (roster,
-/// …) get fresh ids from `next_pane_id`. (Frame tree, F1.)
+/// The frame tree's graph pane — the always-present leaf hosting the orrery. The
+/// tiled workbench is a separate summonable pane that coexists beside it (no
+/// longer a projection toggle inside one leaf). Summoned sibling panes (roster,
+/// workbench, …) get fresh ids from `next_pane_id`. (Frame tree, F1 / W.)
 const GRAPH_PANE: PaneId = PaneId(0);
+
+/// Which content pane navigation acts on — the **last-interacted** one. The
+/// orrery and the tiled workbench coexist as panes; this disambiguates the single
+/// nav target (omnibar / Ctrl+Enter / Back-Forward) between them. (Workbench-as-
+/// pane: focus follows the last-clicked content pane.)
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ContentPane {
+    Orrery,
+    Workbench,
+}
 
 /// The meerkat shell application: the shared chrome DOM, the runner that diffs
 /// the chrome view tree into it, the orrery content-root, the window + GPU, and
@@ -374,6 +385,8 @@ struct App {
     frame_layout: FrameLayout,
     /// The leaf maximized to the whole content band, if any (the maximize toggle).
     maximized_pane: Option<PaneId>,
+    /// Which content pane navigation acts on (the last-interacted one). (W.)
+    active_content: ContentPane,
     /// Next pane id to mint when summoning a sibling pane.
     next_pane_id: u64,
     /// An in-progress frame-divider drag: the split path, the split's (parent)
@@ -596,7 +609,7 @@ impl App {
             label: "content".to_string(),
             root: PaneNode::Leaf {
                 pane_id: GRAPH_PANE,
-                content: PaneContent::Workbench,
+                content: PaneContent::Orrery,
                 graph_id: GraphId::default(),
             },
         };
@@ -606,8 +619,14 @@ impl App {
         if let Ok(Some(restored)) =
             session_runtime::frame_layout_store::load_frame_layout(&session_dir)
         {
-            next_pane_id = restored.iter_leaves().map(|(id, _, _)| id.0).max().unwrap_or(0) + 1;
-            frame_layout = restored;
+            // Keep the restored layout only if it carries the graph (Orrery) pane;
+            // a pre-coexistence layout (graph pane saved as Workbench) is stale, so
+            // fall back to the default single Orrery pane. (Workbench-as-pane.)
+            if restored.iter_leaves().any(|(_, c, _)| matches!(c, PaneContent::Orrery)) {
+                next_pane_id =
+                    restored.iter_leaves().map(|(id, _, _)| id.0).max().unwrap_or(0) + 1;
+                frame_layout = restored;
+            }
         }
         Self {
             dom,
@@ -657,6 +676,7 @@ impl App {
             cursor_icon: CursorIcon::Default,
             frame_layout,
             maximized_pane: None,
+            active_content: ContentPane::Orrery,
             next_pane_id,
             frame_divider_drag: None,
             roster_row_rects: Vec::new(),

@@ -179,10 +179,16 @@ impl App {
                             return;
                         }
                     }
-                    if self.workbench.is_tiled() {
-                        // Tree mode: the content band is the workbench root. A left
-                        // press on a divider starts a resize; otherwise it routes to
-                        // the root (tab switch / close / pin). The orrery is hidden.
+                    // Route by content pane (the orrery + the workbench coexist).
+                    // A press in either makes it the active (nav-target) pane.
+                    let in_workbench = self
+                        .workbench_leaf_rect()
+                        .is_some_and(|wr| x >= wr[0] && x < wr[2] && y >= wr[1] && y < wr[3]);
+                    if in_workbench {
+                        // The workbench root: a left press on a slot divider starts a
+                        // resize; otherwise it routes to the root (tab switch / close
+                        // / pin).
+                        self.active_content = super::ContentPane::Workbench;
                         if button == MouseButton::Left {
                             if let Some(i) = self.divider_at(x, y) {
                                 self.divider_drag = Some((i, x, self.workbench.weights()));
@@ -190,16 +196,19 @@ impl App {
                                 self.workbench_click(x, y);
                             }
                         }
-                    } else if button == MouseButton::Right {
-                        self.open_context_menu_at(x, y);
-                    } else if let Some(b) = orrery_button {
-                        // A press over the focused card belongs to the card (its
-                        // double-click promote / scroll / buttons), not the orrery
-                        // beneath it — so clicking the card doesn't pan or deselect.
-                        if !self.point_over_card(x, y)
-                            && self.orrery.pointer_down(b, x, y - th)
-                        {
-                            self.request_redraw();
+                    } else {
+                        // The orrery pane: right-click opens the context menu; a left
+                        // / middle press pans / selects / drags (unless it's over the
+                        // orrery's card, which owns its own clicks).
+                        self.active_content = super::ContentPane::Orrery;
+                        if button == MouseButton::Right {
+                            self.open_context_menu_at(x, y);
+                        } else if let Some(b) = orrery_button {
+                            if !self.point_over_card(x, y)
+                                && self.orrery.pointer_down(b, x, y - th)
+                            {
+                                self.request_redraw();
+                            }
                         }
                     }
                 }
@@ -225,8 +234,7 @@ impl App {
                 // would break the card's double-click promote). Elsewhere the release
                 // reaches the orrery, which acts only if it owns an in-progress pan /
                 // drag / marquee; a click-release selects the node under the cursor.
-                let over_card =
-                    !self.workbench.is_tiled() && self.point_over_card(x, y);
+                let over_card = self.point_over_card(x, y);
                 if let Some(b) = orrery_button {
                     if !over_card && self.orrery.pointer_up(b, x, y - th) {
                         self.request_redraw();
@@ -262,12 +270,15 @@ impl App {
                         }
                     }
                 }
-                // Double-click routing (Cartography): on the focused card it toggles
+                // Double-click routing (orrery pane): on the focused card it toggles
                 // the live preview (snapshot -> live actor, or back); on a node it
-                // opens that node + its active neighbors in the tiled workbench (the
-                // contextual-staging gesture). The first release showed the snapshot
-                // / selected the node.
-                if button == MouseButton::Left && !self.workbench.is_tiled() {
+                // summons the workbench pane with that node + its active neighbors
+                // (the contextual-staging gesture). Skip when the release is in the
+                // workbench pane (tiles handle their own double-clicks).
+                let released_in_workbench = self
+                    .workbench_leaf_rect()
+                    .is_some_and(|wr| x >= wr[0] && x < wr[2] && y >= wr[1] && y < wr[3]);
+                if button == MouseButton::Left && !released_in_workbench {
                     let now = Instant::now();
                     let double = self.last_left_release.is_some_and(|(t, (lx, ly))| {
                         now.duration_since(t) < Duration::from_millis(400)

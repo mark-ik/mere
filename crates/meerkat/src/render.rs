@@ -64,23 +64,28 @@ impl App {
         let toolbar_h = self.toolbar_height().min(h);
 
         // Frame tree: the content band (below the toolbar) split into pane rects.
-        // The graph pane (orrery / tiled workbench) renders into its leaf; summoned
-        // panes render into theirs. With a single leaf, `graph_rect` is the whole
-        // band, so this is a no-op until a pane is summoned. (Frame tree, F1.)
+        // The orrery (always) renders into its leaf; the workbench + summoned panes
+        // render into theirs. With a single leaf, `orrery_rect` is the whole band.
         let band = [0.0, toolbar_h as f32, w as f32, h as f32];
         let leaves = frame_view::leaf_rects(&self.frame_layout, band, self.maximized_pane);
-        let graph_rect = leaves
+        // The orrery is the always-present graph pane; the tiled workbench is its
+        // summonable sibling. Each renders into its own leaf. (Workbench-as-pane.)
+        let orrery_rect = leaves
             .iter()
-            .find(|l| matches!(l.content, PaneContent::Workbench))
+            .find(|l| matches!(l.content, PaneContent::Orrery))
             .map(|l| l.rect)
             .unwrap_or(band);
+        let workbench_rect = leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Workbench))
+            .map(|l| l.rect);
         let roster_rect = leaves
             .iter()
             .find(|l| matches!(l.content, PaneContent::Roster))
             .map(|l| l.rect);
         let dividers = frame_view::divider_rects(&self.frame_layout, band, self.maximized_pane);
-        let graph_w = (graph_rect[2] - graph_rect[0]).round().max(1.0) as u32;
-        let graph_h = (graph_rect[3] - graph_rect[1]).round().max(1.0) as u32;
+        let orrery_w = (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32;
+        let orrery_h = (orrery_rect[3] - orrery_rect[1]).round().max(1.0) as u32;
 
         // Chrome scene over the full window. Paint the caret / selection of the
         // focused field — the palette query when open, else the omnibar (byte
@@ -111,28 +116,29 @@ impl App {
         let shapes = self.node_shapes();
         self.orrery.set_node_shapes(shapes);
 
-        // The content root. In Cartography the orrery composites its own scene over
-        // the band (kept in sync, centered once). In the tiled workbench the orrery
-        // is hidden behind the tiles, so skip its physics + paint entirely and back
-        // the band with an empty dark-cleared scene — the tiles composite over it,
-        // the splitter gutters show the dark. Skipping it also stops the orrery's
-        // settle / glide redraw loop, which would otherwise re-rasterize every tile
-        // each frame behind the cover.
-        let (content_scene, orrery_redraw) = if self.workbench.is_tiled() {
-            // Tree: the workbench root (a serval flex-DOM document) is the band. Sync
-            // it from the model + graph + pin state, then rasterize it — taffy lays
-            // the tiles out (no morphorm). The orrery is hidden, so its physics +
-            // paint are skipped.
+        // The orrery always composites its own scene into its leaf (kept in sync,
+        // centered once). The tiled workbench, when its pane is open, composites a
+        // separate scene into its own leaf — the two coexist now, no longer toggled.
+        self.orrery.resize(orrery_w, orrery_h);
+        if !self.centered {
+            self.orrery.recenter();
+            self.centered = true;
+        }
+        let (orrery_scene, orrery_redraw) = self.orrery.frame(orrery_w, orrery_h);
+        // The workbench root (a serval flex-DOM document) for the Workbench pane;
+        // taffy lays the tiles out. `(scene, w, h)` so the composite can rasterize
+        // it at the pane size. `None` when the workbench pane isn't open.
+        let mut workbench_scene: Option<(netrender::Scene, u32, u32)> = None;
+        if let Some(wr) = workbench_rect {
+            let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
+            let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
             let mut scene = WorkbenchScene::from_workbench(
                 &self.workbench,
                 self.orrery.graph(),
-                (graph_w as f32, graph_h as f32),
+                (ww as f32, wh as f32),
                 |m| self.constellation.is_background(m),
                 |m| self.constellation.is_recovering(m),
             );
-            // Highlight the slot under the pointer while a tab is being dragged
-            // (uses last frame's tile rects; the slots don't move, so the lag is
-            // imperceptible).
             scene.drag_target = self.drag_target_member();
             if self.workbench_runner.state() != &scene {
                 self.workbench_runner.update(move |s| *s = scene);
@@ -140,20 +146,13 @@ impl App {
             let wb = scene_from_scripted_dom(
                 &self.workbench_dom.borrow(),
                 WORKBENCH_SHEET,
-                graph_w,
-                graph_h,
+                ww,
+                wh,
                 None,
                 &scroll,
             );
-            (wb, false)
-        } else {
-            self.orrery.resize(graph_w, graph_h);
-            if !self.centered {
-                self.orrery.recenter();
-                self.centered = true;
-            }
-            self.orrery.frame(graph_w, graph_h)
-        };
+            workbench_scene = Some((wb, ww, wh));
+        }
 
         // Reconcile the active-node pool to what this frame shows — the open tiles
         // (Tree) or the focused node (Cartography). Needed-but-dormant nodes spawn
@@ -177,24 +176,22 @@ impl App {
         // its texture is cached by url, later frames carry `None`.
         let mut snapshot_card: Option<(GraphMemberId, String, [f32; 4], Option<(netrender::Scene, u32)>)> =
             None;
-        if self.workbench.is_tiled() {
+        let mut live_card: Option<(GraphMemberId, [f32; 4])> = None;
+        if let Some(wr) = workbench_rect {
             // Read each content placeholder's laid-out rect + member out of the
             // workbench DOM (taffy laid it out above), then drive that tile's actor
-            // and queue it to composite at that rect (window coords add `toolbar_h`).
-            // taffy layouts are *parent-relative*, so sum the workbench > slot >
-            // content chain for an absolute rect — otherwise every slot's content
-            // reports the same slot-local origin and the tiles stack on each other.
-            // The collect releases the DOM borrow before we mutate self.
-            // (member, content rect, full slot rect) in window coords. The content
-            // rect is where the tile's texture composites (below the strip); the slot
-            // rect is the whole column (strip + content), used as the drag target so
-            // dragging along the strip still resolves + highlights its slot.
+            // and queue it to composite at that rect. taffy layouts are
+            // *parent-relative*, so sum the workbench > slot > content chain for an
+            // absolute rect — otherwise every slot's content reports the same
+            // slot-local origin and the tiles stack on each other. The collect
+            // releases the DOM borrow before we mutate self. (member, content rect,
+            // full slot rect) in window coords, offset by the workbench leaf origin.
+            let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
+            let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
             let placements: Vec<(GraphMemberId, [f32; 4], [f32; 4])> = {
-                // The workbench renders into the graph leaf, so offset its
-                // leaf-local layout by the leaf's origin for window coords.
-                let (ox, oy) = (graph_rect[0], graph_rect[1]);
+                let (ox, oy) = (wr[0], wr[1]);
                 let dom = self.workbench_dom.borrow();
-                let frags = fragments_from_scripted_dom(&dom, WORKBENCH_SHEET, graph_w, graph_h);
+                let frags = fragments_from_scripted_dom(&dom, WORKBENCH_SHEET, ww, wh);
                 let root = dom.document();
                 let (wx, wy) = first_with_class(&dom, root, "workbench")
                     .and_then(|n| frags.rect_of(n))
@@ -233,7 +230,11 @@ impl App {
                 cards.push((member, content, (cw, ch)));
             }
             self.tile_rects = slot_rects;
-        } else if let (Some(member), Some(url)) =
+        } else {
+            self.tile_rects.clear(); // no tile drag targets when the pane is closed
+        }
+        // The orrery's focused-node card (always, alongside any workbench pane).
+        if let (Some(member), Some(url)) =
             (self.focused_member(), self.orrery.focused_url().map(str::to_string))
         {
             // Float the card next to the focused node (fall back to the fixed
@@ -242,25 +243,26 @@ impl App {
             // peek at the retained scene, no actor. A node with neither (never
             // visited this session) shows no card yet. (Card system P2/P3.)
             // The orrery reports the node in its own (leaf-local) viewport; offset
-            // by the graph leaf's origin for window coords, and anchor the card
-            // within the graph leaf rect (so it stays in the graph pane when split).
+            // by the orrery leaf's origin for window coords, and anchor the card
+            // within the orrery leaf rect (so it stays in the orrery pane when split).
             let node = self
                 .orrery
                 .focused_node_screen()
-                .map(|(nx, ny)| (graph_rect[0] + nx, graph_rect[1] + ny));
+                .map(|(nx, ny)| (orrery_rect[0] + nx, orrery_rect[1] + ny));
             if self.live_previews.contains(&member) {
                 const LIVE_W: u32 = 300;
                 const LIVE_H: u32 = 400;
                 let rect = node
                     .and_then(|(nx, ny)| {
-                        super::card::anchored_card_rect(nx, ny, LIVE_W, LIVE_H, graph_rect)
+                        super::card::anchored_card_rect(nx, ny, LIVE_W, LIVE_H, orrery_rect)
                     })
-                    .or_else(|| super::card::card_rect(graph_rect));
+                    .or_else(|| super::card::card_rect(orrery_rect));
                 if let Some((x0, y0, x1, y1, cw, ch)) = rect {
                     self.ensure_content(&url);
                     let state = self.content.get(&url).cloned();
                     self.constellation.drive(member, &url, state, cw, ch);
                     cards.push((member, [x0, y0, x1, y1], (cw, ch)));
+                    live_card = Some((member, [x0, y0, x1, y1]));
                 }
             } else if self.orrery.member_visited(member) {
                 // "Last visit" snapshot: a small fixed-size card, rendered host-side
@@ -270,9 +272,9 @@ impl App {
                 const SNAP_H: u32 = 260;
                 let rect = node
                     .and_then(|(nx, ny)| {
-                        super::card::anchored_card_rect(nx, ny, SNAP_W, SNAP_H, graph_rect)
+                        super::card::anchored_card_rect(nx, ny, SNAP_W, SNAP_H, orrery_rect)
                     })
-                    .or_else(|| super::card::card_rect(graph_rect));
+                    .or_else(|| super::card::card_rect(orrery_rect));
                 if let Some((x0, y0, x1, y1, _, _)) = rect {
                     // Render the snapshot scene from cache / synthesis once per url;
                     // `None` means its texture is already cached (composited below).
@@ -310,13 +312,10 @@ impl App {
                 const UNVIS_H: u32 = 120;
                 unvisited_card = node
                     .and_then(|(nx, ny)| {
-                        super::card::anchored_card_rect(nx, ny, UNVIS_W, UNVIS_H, graph_rect)
+                        super::card::anchored_card_rect(nx, ny, UNVIS_W, UNVIS_H, orrery_rect)
                     })
                     .map(|(x0, y0, x1, y1, _, _)| (member, [x0, y0, x1, y1]));
             }
-            self.tile_rects.clear(); // no drag targets outside the tiled view
-        } else {
-            self.tile_rects.clear();
         }
 
         // Record each card's on-screen content rect so a wheel over it scrolls the
@@ -343,12 +342,18 @@ impl App {
             host.rasterize(&chrome_scene, w, h, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
         // The orrery paints its own opaque backdrop, but clear to the same dark
         // tone so a resize frame cannot flash white before the backdrop lands.
-        let (_content_tex, content_view) = host.rasterize(
-            &content_scene,
-            graph_w,
-            graph_h,
-            ColorLoad::Clear(wgpu::Color { r: 0.067, g: 0.078, b: 0.100, a: 1.0 }),
-        );
+        let backdrop = wgpu::Color { r: 0.067, g: 0.078, b: 0.100, a: 1.0 };
+        let (_orrery_tex, orrery_view) =
+            host.rasterize(&orrery_scene, orrery_w, orrery_h, ColorLoad::Clear(backdrop));
+        // Rasterize the workbench pane scene too, when its pane is open. The tex is
+        // bound to `_workbench_tex` so it outlives the composite below.
+        let (_workbench_tex, workbench_view) = match workbench_scene.as_ref() {
+            Some((scene, ww, wh)) => {
+                let (tex, view) = host.rasterize(scene, *ww, *wh, ColorLoad::Clear(backdrop));
+                (Some(tex), Some(view))
+            },
+            None => (None, None),
+        };
         // Rasterize each tile's scene to an offscreen texture only when its version
         // or size changed; reuse the cached texture otherwise, so an unchanged tile
         // is not re-rasterized every frame (the cost that scaled with tile count).
@@ -395,13 +400,23 @@ impl App {
         // the transparent-cleared chrome composites over the whole window — toolbar
         // + dropdown on top, the rest letting the content through.
         host.renderer().compose_external_texture(
-            &content_view,
+            &orrery_view,
             &target_view,
             format,
             w,
             h,
-            ExternalTexturePlacement::new(graph_rect),
+            ExternalTexturePlacement::new(orrery_rect),
         );
+        if let (Some(wb_view), Some(wr)) = (&workbench_view, workbench_rect) {
+            host.renderer().compose_external_texture(
+                wb_view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new(wr),
+            );
+        }
         for (dest, member) in &composite {
             let Some(cached) = self.tile_textures.get(member) else { continue };
             // Scroll is a vertical UV window over the tall cached texture — a GPU
@@ -429,12 +444,11 @@ impl App {
         // Live cards carry a close (X) button at their top-right corner. Rasterize
         // the shared button texture once, composite it on each live card, and
         // record its rect so a press there reaps the live preview. (Card system.)
-        // Cartography only — a tile in the tiled view has its own tab close, and a
-        // live-preview member that is also tiled must not paint a dead X over it.
+        // The X sits on the orrery's live-preview card only (`live_card`); tiles in
+        // the workbench pane have their own tab close, so the button never lands on
+        // a tile even when the same node is both previewed and tiled.
         self.close_button_rects.clear();
-        if !self.workbench.is_tiled()
-            && composite.iter().any(|(_, m)| self.live_previews.contains(m))
-        {
+        if let Some((member, dest)) = live_card {
             let btn = super::card::CLOSE_BTN;
             let inset = super::card::CLOSE_BTN_INSET;
             let size = btn.round().max(1.0) as u32;
@@ -446,24 +460,19 @@ impl App {
                     Some(super::CachedTile { version: 0, size: (size, size), tex, view });
             }
             if let Some(cached) = &self.close_button_tex {
-                for (dest, member) in &composite {
-                    if !self.live_previews.contains(member) {
-                        continue;
-                    }
-                    let bx1 = dest[2] - inset;
-                    let bx0 = bx1 - btn;
-                    let by0 = dest[1] + inset;
-                    let by1 = by0 + btn;
-                    host.renderer().compose_external_texture(
-                        &cached.view,
-                        &target_view,
-                        format,
-                        w,
-                        h,
-                        ExternalTexturePlacement::new([bx0, by0, bx1, by1]),
-                    );
-                    self.close_button_rects.push((*member, [bx0, by0, bx1, by1]));
-                }
+                let bx1 = dest[2] - inset;
+                let bx0 = bx1 - btn;
+                let by0 = dest[1] + inset;
+                let by1 = by0 + btn;
+                host.renderer().compose_external_texture(
+                    &cached.view,
+                    &target_view,
+                    format,
+                    w,
+                    h,
+                    ExternalTexturePlacement::new([bx0, by0, bx1, by1]),
+                );
+                self.close_button_rects.push((member, [bx0, by0, bx1, by1]));
             }
         }
         // The "last visit" snapshot card: rasterize the host-rendered scene once

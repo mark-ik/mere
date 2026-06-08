@@ -177,12 +177,10 @@ impl ApplicationHandler for App {
             self.request_redraw();
         }
         // The physics actor shares this wake: a fresh layout snapshot is waiting to
-        // be folded in. In Cartography, kick a redraw — `frame()` drains the
-        // snapshot and reports whether to keep going (the settle then self-sustains
-        // through `needs_redraw`). The tiled view hides the orrery, so skip it.
-        if !self.workbench.is_tiled() {
-            self.request_redraw();
-        }
+        // be folded in. The orrery is always shown now, so kick a redraw — `frame()`
+        // drains the snapshot and reports whether to keep going (the settle then
+        // self-sustains through `needs_redraw`).
+        self.request_redraw();
     }
 
     fn window_event(
@@ -223,20 +221,19 @@ impl ApplicationHandler for App {
                 // Hint the resize edges: the borderless window has no OS frame, so
                 // the host sets the resize arrows on hover. (Custom titlebar.)
                 self.update_hover_cursor();
-                // Forward to the orrery in content-band coordinates (Cartography
-                // only — in the tiled view the orrery is hidden, so a stray drag
-                // must not animate it and force every tile to re-rasterize).
+                // Forward to the orrery in content-band coordinates. The orrery is
+                // always present (its leaf sits at the band's top-left), so it owns
+                // moves it has an in-progress pan / drag for; an active tab drag in
+                // the workbench pane takes priority so its drop highlight tracks.
                 let th = self.toolbar_height() as f32;
                 if self.frame_divider_drag.is_some() {
                     self.drag_frame_divider();
                 } else if self.divider_drag.is_some() {
                     self.drag_divider();
-                } else if !self.workbench.is_tiled()
-                    && self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th)
-                {
-                    self.request_redraw();
-                } else if self.workbench.is_tiled() && self.tab_drag.is_some() {
+                } else if self.tab_drag.is_some() {
                     // Follow the drag: the drop-target highlight tracks the pointer.
+                    self.request_redraw();
+                } else if self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th) {
                     self.request_redraw();
                 }
             },
@@ -253,9 +250,9 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::PixelDelta(p) => (p.x as f32, p.y as f32),
                 };
                 // A wheel over a content card scrolls that card (a GPU UV-window
-                // shift over its tall texture). Elsewhere in Cartography it drives
-                // the orrery (pan, or Ctrl-zoom). The tiled view has no orrery, so
-                // only card scrolling applies there.
+                // shift over its tall texture). Over the orrery pane it drives the
+                // orrery (pan, or Ctrl-zoom); over the workbench pane (off a tile) it
+                // does nothing.
                 let (cx, cy) = self.cursor;
                 let over_card = self
                     .content_rects
@@ -270,7 +267,10 @@ impl ApplicationHandler for App {
                     self.request_redraw();
                 } else {
                     let th = self.toolbar_height() as f32;
-                    if cy >= th && !self.workbench.is_tiled() && self.orrery.wheel(dx, dy) {
+                    let in_workbench = self.workbench_leaf_rect().is_some_and(|wr| {
+                        cx >= wr[0] && cx < wr[2] && cy >= wr[1] && cy < wr[3]
+                    });
+                    if cy >= th && !in_workbench && self.orrery.wheel(dx, dy) {
                         self.request_redraw();
                     }
                 }
