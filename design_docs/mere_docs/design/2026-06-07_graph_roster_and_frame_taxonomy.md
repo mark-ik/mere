@@ -1,4 +1,9 @@
-# Graph Roster (primitives inspector) + the surface / frame taxonomy
+# Graph Roster (the graph's manifest) + the surface / frame taxonomy
+
+> Naming note (2026-06-07): "roster" is the **graph manifest** (this doc). The
+> **content inspector** (page devtools: metadata, links, source, trackers,
+> scripts, cookies) is a *separate* surface — see §3. Earlier drafts used
+> "inspector" for the roster; that conflation is corrected here.
 
 **Date**: 2026-06-07
 **Status**: Design, from a Mark + Claude session. No code yet.
@@ -58,14 +63,49 @@ shapes by — one source, two surfaces.
 
 ## 3. The surface / frame taxonomy
 
-Four surfaces, distinct roles over the same graph:
+The surfaces, distinct roles (Mark split roster vs inspector 2026-06-07):
 
 - **orrery** — the graph in **space** (spatial, visual; nodes/edges/fields drawn
   under one camera).
 - **gloss / Navigator** — **navigate / summarize**: swatches, graphlets,
   minimap, outline (see the gloss doc).
-- **roster / inspector** — the graph's **data**: every primitive, examinable.
-- **apparatus** — the **system** (host internals), not the graph.
+- **workbench** — **tile** content: the tile tree (tabs / slots of node content).
+- **roster** — the graph's **manifest**: every primitive (nodes/facets,
+  edges/relations, fields), examinable. *This doc.* Graph-scoped.
+- **inspector** — the active **content's diagnostics**: a page's metadata +
+  structure, its links (with actions like "spawn all / selected links as
+  nodes"), page source, trackers / scripts / cookies. Devtools-like and
+  **content-scoped** — distinct from the roster (graph-scoped). Its own design,
+  TBD.
+- **apparatus** — the **system**: host diagnostics + settings.
+- **comms** — misfin / murm messaging (existing crate).
+
+Roster answers "what is in the graph"; inspector answers "what is this page made
+of (and let me act on it)"; gloss answers "how do I see/navigate the graph";
+apparatus answers "how is the system doing." Four different questions, four
+panes, all frame-tree leaves.
+
+**Surfaces not yet placed (completeness check, 2026-06-07).** Beyond the panes
+above, these exist or are implied and need a home:
+
+- **shellbar** — the control surface that *summons / toggles / arranges* panes
+  (the frame tree's chrome). The memory's "summonable from shellbar." Pairs with
+  the frame-tree arc (it is the frame tree's UI). Without it there is no way to
+  open gloss / roster / inspector / apparatus.
+- **sync status + "sync now"** — real peers / items / last-synced feedback backed
+  by a genuine RBSR round, not a placebo spinner (a standing Mark requirement).
+  Today only a `tessera: idle` chip. Lives in comms, apparatus, or its own strip.
+- **search / find** — graph search + find-in-page (intel `embed::canvas_search`
+  exists). The omnibar covers navigation; a search affordance/surface is separate.
+- **session / graph switcher** — "window = graph-shaped session"; switching
+  between graphs/sessions (pane UX brief's session-switcher row). Pairs with the
+  shellbar + multi-window.
+- **settings** — folded into **apparatus** (Mark), not its own pane.
+- **import / export** — linked-data ingest/export (the `import` crate); surfaced
+  as actions (the inspector's "spawn links as nodes" is a graph-building action
+  of the same family) rather than a pane.
+- **persona / identity** — persona is first-class; a switcher likely lives on the
+  shellbar or in apparatus, not its own pane.
 
 And two different trees, often conflated:
 
