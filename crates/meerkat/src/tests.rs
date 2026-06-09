@@ -181,8 +181,8 @@ fn palette_open_renders_rows() {
     assert_eq!(count_class(&dom, root, "palette"), 1, "the panel");
     assert_eq!(
         count_class(&dom, root, "cmd-row"),
-        13,
-        "chrome verbs + Tile / Delete / Background / Hide edge / Show edges / Settings / Comms / Inspector / Steward",
+        16,
+        "chrome verbs + Tile / Delete / Background / Hide edge / Show edges / Settings / Comms / Inspector / Steward / operation hooks",
     );
 }
 

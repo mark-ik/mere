@@ -626,6 +626,16 @@ const INITIAL_CHANNELS: &[(&str, Severity, &str)] = &[
         "Content actor respawned",
     ),
     (
+        "meerkat.actor.content.stopped",
+        Severity::Info,
+        "Content operation stopped",
+    ),
+    (
+        "meerkat.actor.content.pinned",
+        Severity::Info,
+        "Content operation pinned",
+    ),
+    (
         "meerkat.actor.content.failed",
         Severity::Warn,
         "Content actor failed",

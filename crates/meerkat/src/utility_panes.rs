@@ -74,10 +74,10 @@ pub fn pane_title(content: &PaneContent) -> &'static str {
 pub fn pane_status(content: &PaneContent) -> &'static str {
     match content {
         PaneContent::Inspector => {
-            "D8 seed: selected-object provenance, trust, parse diagnostics, document structure, cache state, and lineage land here."
+            "Selected-object identity, provenance, trust, parse state, document structure, cache state, and lineage."
         }
         PaneContent::Steward => {
-            "D8 seed: live async operations, retries, background work, and user controls land here."
+            "Live async operations with retry, stop, and background pin hooks routed through host commands."
         }
         _ => "No utility pane data.",
     }

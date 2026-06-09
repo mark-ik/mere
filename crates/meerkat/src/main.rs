@@ -72,6 +72,7 @@ mod frame_ops;
 mod frame_view;
 mod gloss;
 mod input;
+mod inspector;
 mod observability;
 mod render;
 mod roster;

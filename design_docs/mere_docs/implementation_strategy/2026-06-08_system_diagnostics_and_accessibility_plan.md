@@ -389,3 +389,14 @@ accessibility states.
   Remaining D8 work is moving real content provenance/trust/parse/document
   structure into Inspector and real async operation retry/cancel/pin controls
   into Steward while keeping Apparatus as the at-rest aggregate trace/config pane.
+- 2026-06-09: **D8 Inspector content + Steward operation pass landed.**
+  Inspector now reads the focused graph node identity, durable import
+  provenance, classifications, pinned/compat/viewer metadata, fetch state,
+  content type/body size, parser lane, trust/provenance, parse diagnostics,
+  outgoing links, and document-structure counts. Nematic-routed content is
+  inspected through `EngineDocument`; HTML reports a Serval lane structure
+  summary until Serval exposes a full document semantic tree. Steward now lists
+  live content operations from the constellation and exposes host-routed retry,
+  stop, and background-pin hooks through command-palette verbs and typed agent
+  actions. Remaining D8 work is making those hooks clickable in the Steward pane
+  UI itself and adding richer per-operation history/error affordances.

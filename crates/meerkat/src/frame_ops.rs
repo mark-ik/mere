@@ -385,6 +385,84 @@ impl App {
         }
     }
 
+    /// Retry the focused node's page fetch. Unlike `ensure_content`, this bypasses
+    /// the durable cache so Steward can ask the live fetch actor to try again.
+    pub(super) fn retry_focused_content(&mut self) {
+        let Some(url) = self.current_focus_url() else {
+            self.observability.record_diagnostic(
+                "meerkat.agent.intent_dropped",
+                super::observability::Severity::Warn,
+                "retry focused content: no focused node",
+            );
+            return;
+        };
+        if !fetch::is_fetchable(&url) {
+            self.observability.record_diagnostic(
+                "meerkat.agent.intent_dropped",
+                super::observability::Severity::Warn,
+                format!("retry focused content: not fetchable: {url}"),
+            );
+            return;
+        }
+        self.content
+            .insert(url.clone(), fetch::ContentState::Loading);
+        self.observability
+            .record_actor("fetch", "started", Some(url.clone()));
+        self.fetch_handle.command(fetch::FetchCommand::Page(url));
+        self.request_redraw();
+    }
+
+    /// Stop the focused live operation. In Cartography this demotes a live
+    /// preview; in Tree it closes the focused tile because a visible tile is, by
+    /// definition, still a needed operation and would otherwise respawn.
+    pub(super) fn stop_focused_operation(&mut self) {
+        let Some(member) = self.focused_member() else {
+            self.observability.record_diagnostic(
+                "meerkat.agent.intent_dropped",
+                super::observability::Severity::Warn,
+                "stop focused operation: no focused node",
+            );
+            return;
+        };
+        if self.workbench_active() {
+            self.workbench.close_tile(member);
+            if self.workbench.open_members().is_empty() {
+                self.close_workbench();
+            } else if self.focused_tile == Some(member) {
+                self.focused_tile = self.workbench.open_members().first().copied();
+            }
+        }
+        self.live_previews.remove(&member);
+        self.constellation.reap(member);
+        self.observability
+            .record_actor("content", "stopped", Some(member.to_string()));
+        self.request_redraw();
+    }
+
+    /// Keep the focused operation alive in the background. If the node is dormant,
+    /// promote it to a live preview first so the actor exists to pin.
+    pub(super) fn pin_focused_operation(&mut self) {
+        let Some(member) = self.focused_member() else {
+            self.observability.record_diagnostic(
+                "meerkat.agent.intent_dropped",
+                super::observability::Severity::Warn,
+                "pin focused operation: no focused node",
+            );
+            return;
+        };
+        if let Some(url) = self.current_focus_url() {
+            self.ensure_content(&url);
+        }
+        self.live_previews.insert(member);
+        let needed = self.needed_members();
+        self.constellation.reconcile(&needed);
+        if self.constellation.set_background(member, true) {
+            self.observability
+                .record_actor("content", "pinned", Some(member.to_string()));
+        }
+        self.request_redraw();
+    }
+
     /// The set of graph members that should be active this frame: in Tree the open
     /// tiles, in Cartography just the focused node (if any). The constellation
     /// reconciles its actor pool to this.
@@ -572,6 +650,9 @@ impl App {
             }
             Command::ToggleInspector => self.toggle_pane(PaneContent::Inspector),
             Command::ToggleSteward => self.toggle_pane(PaneContent::Steward),
+            Command::RetryFocusedContent => self.retry_focused_content(),
+            Command::StopFocusedOperation => self.stop_focused_operation(),
+            Command::PinFocusedOperation => self.pin_focused_operation(),
             // History / connect / settings / comms verbs run in the chrome; never
             // queued here as host intents.
             Command::Back
@@ -1315,54 +1396,92 @@ impl App {
 
     pub(super) fn utility_pane_rows(&self, content: &PaneContent) -> Vec<(String, String)> {
         match content {
-            PaneContent::Inspector => vec![
-                (
-                    "Focused node".to_string(),
-                    self.orrery
-                        .focused_url()
-                        .map(str::to_string)
-                        .unwrap_or_else(|| "none".to_string()),
-                ),
-                (
-                    "Known nodes".to_string(),
-                    self.orrery.graph().nodes().count().to_string(),
-                ),
-                (
-                    "Content state".to_string(),
-                    match fetch::ContentState::tag(
-                        self.orrery
-                            .focused_url()
-                            .and_then(|url| self.content.get(url)),
-                    ) {
-                        1 => "loading",
-                        2 => "ready",
-                        3 => "failed",
-                        _ => "none",
-                    }
-                    .to_string(),
-                ),
-            ],
-            PaneContent::Steward => vec![
-                (
-                    "Active actors".to_string(),
-                    self.constellation.active_count().to_string(),
-                ),
-                ("Sync".to_string(), {
-                    let indicator = &self.runner.state().sync;
-                    if indicator.active {
-                        format!(
-                            "{} syncing={} ops={}",
-                            indicator.label, indicator.syncing, indicator.ops
-                        )
-                    } else {
-                        "off".to_string()
-                    }
-                }),
-                ("Tab cap".to_string(), self.saved_tab_cap.to_string()),
-            ],
+            PaneContent::Inspector => {
+                let focused = self.focused_member();
+                let node = focused
+                    .and_then(|member| self.orrery.graph().get_node_by_id(member))
+                    .map(|(_, node)| node);
+                let state = node.and_then(|node| self.content.get(node.url()));
+                super::inspector::inspector_rows(node, state)
+            }
+            PaneContent::Steward => self.steward_rows(),
             _ => Vec::new(),
         }
     }
+
+    fn steward_rows(&self) -> Vec<(String, String)> {
+        let operations = self.constellation.active_operations();
+        let mut rows = vec![
+            (
+                "Active operations".to_string(),
+                operations.len().to_string(),
+            ),
+            ("Tab cap".to_string(), self.saved_tab_cap.to_string()),
+            (
+                "Loading fetches".to_string(),
+                self.fetch_state_count(1).to_string(),
+            ),
+            (
+                "Failed fetches".to_string(),
+                self.fetch_state_count(3).to_string(),
+            ),
+            ("Sync".to_string(), self.sync_summary()),
+            (
+                "Actions".to_string(),
+                "retry.focused / stop.focused / pin.focused".to_string(),
+            ),
+        ];
+        let focused = self.focused_member();
+        rows.push((
+            "Focused operation".to_string(),
+            match focused {
+                Some(member) if self.constellation.is_active(member) => format!(
+                    "active background={} recovering={}",
+                    self.constellation.is_background(member),
+                    self.constellation.is_recovering(member)
+                ),
+                Some(_) => "dormant".to_string(),
+                None => "none".to_string(),
+            },
+        ));
+        for operation in operations.into_iter().take(6) {
+            rows.push((
+                format!("Operation {}", short_member(operation.member)),
+                format!(
+                    "{} background={} recovering={} scene={} height={}",
+                    operation.url.as_deref().unwrap_or("not shown yet"),
+                    operation.background,
+                    operation.recovering,
+                    operation.scene_version,
+                    operation.content_height
+                ),
+            ));
+        }
+        rows
+    }
+
+    fn fetch_state_count(&self, tag: u8) -> usize {
+        self.content
+            .values()
+            .filter(|state| fetch::ContentState::tag(Some(*state)) == tag)
+            .count()
+    }
+
+    fn sync_summary(&self) -> String {
+        let indicator = &self.runner.state().sync;
+        if indicator.active {
+            format!(
+                "{} syncing={} ops={}",
+                indicator.label, indicator.syncing, indicator.ops
+            )
+        } else {
+            "off".to_string()
+        }
+    }
+}
+
+fn short_member(member: GraphMemberId) -> String {
+    member.to_string().chars().take(8).collect()
 }
 
 /// Map a fetched content type to its orrery [`NodeShape`] (a first-cut vocabulary;

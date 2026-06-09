@@ -49,11 +49,17 @@ pub enum Command {
     ToggleInspector,
     /// Toggle the live-operations steward pane (host action).
     ToggleSteward,
+    /// Retry the focused node's page fetch / render operation (host action).
+    RetryFocusedContent,
+    /// Stop the focused node's live operation by reaping its actor (host action).
+    StopFocusedOperation,
+    /// Pin the focused operation as background work (host action).
+    PinFocusedOperation,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 13] = [
+    pub const ALL: [Command; 16] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -67,6 +73,9 @@ impl Command {
         Command::ToggleComms,
         Command::ToggleInspector,
         Command::ToggleSteward,
+        Command::RetryFocusedContent,
+        Command::StopFocusedOperation,
+        Command::PinFocusedOperation,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -82,6 +91,9 @@ impl Command {
                 | Command::ShowAllEdges
                 | Command::ToggleInspector
                 | Command::ToggleSteward
+                | Command::RetryFocusedContent
+                | Command::StopFocusedOperation
+                | Command::PinFocusedOperation
         )
     }
 
@@ -101,6 +113,9 @@ impl Command {
             Command::ToggleComms => "Comms (conversations)",
             Command::ToggleInspector => "Inspector (selected object)",
             Command::ToggleSteward => "Steward (live operations)",
+            Command::RetryFocusedContent => "Retry focused content",
+            Command::StopFocusedOperation => "Stop focused operation",
+            Command::PinFocusedOperation => "Pin focused operation",
         }
     }
 }
@@ -140,6 +155,9 @@ mod tests {
         assert_eq!(filter("delete"), vec![Command::DeleteNode]);
         assert!(Command::DeleteNode.is_host_action());
         assert!(Command::BackgroundNode.is_host_action());
+        assert!(Command::RetryFocusedContent.is_host_action());
+        assert!(Command::StopFocusedOperation.is_host_action());
+        assert!(Command::PinFocusedOperation.is_host_action());
         assert!(
             !Command::Back.is_host_action(),
             "history verbs are not host actions"

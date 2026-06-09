@@ -32,6 +32,17 @@ use netrender::Scene;
 use crate::content::{spawn_content, ContentCommand, ContentUpdate};
 use crate::fetch::ContentState;
 
+/// Public host-facing summary of one live content operation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActiveOperation {
+    pub member: GraphMemberId,
+    pub url: Option<String>,
+    pub background: bool,
+    pub recovering: bool,
+    pub scene_version: u64,
+    pub content_height: u32,
+}
+
 /// A node brought to life: its content actor plus the per-activation
 /// bookkeeping. Kept **warm** once spawned — an open tab persists after you
 /// navigate away — and reaped only on explicit close ([`Constellation::reap`]) or
@@ -137,6 +148,25 @@ impl Constellation {
     /// How many nodes are active.
     pub fn active_count(&self) -> usize {
         self.active.len()
+    }
+
+    /// Snapshot live operations for Steward/Apparatus-style inspection without
+    /// exposing the actor handles or receivers.
+    pub fn active_operations(&self) -> Vec<ActiveOperation> {
+        let mut operations: Vec<_> = self
+            .active
+            .iter()
+            .map(|(member, activation)| ActiveOperation {
+                member: *member,
+                url: activation.shown.as_ref().map(|(url, ..)| url.clone()),
+                background: activation.background,
+                recovering: activation.respawns > 0 && activation.scene.is_none(),
+                scene_version: activation.scene_version,
+                content_height: activation.content_height,
+            })
+            .collect();
+        operations.sort_by_key(|operation| operation.member);
+        operations
     }
 
     /// Reconcile the pool to the needed set: spawn an actor for any

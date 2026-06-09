@@ -410,7 +410,10 @@ impl Chrome {
             | Command::HideSelectedEdge
             | Command::ShowAllEdges
             | Command::ToggleInspector
-            | Command::ToggleSteward => {
+            | Command::ToggleSteward
+            | Command::RetryFocusedContent
+            | Command::StopFocusedOperation
+            | Command::PinFocusedOperation => {
                 // Host actions over the frame, orrery, workbench, or actor pool:
                 // record the intent; the host drains it and runs the matching
                 // method.

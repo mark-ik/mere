@@ -82,6 +82,9 @@ pub(crate) enum AgentAction {
         ratio_delta: i32,
     },
     RequestContentPreview,
+    RetryFocusedContent,
+    StopFocusedOperation,
+    PinFocusedOperation,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -116,6 +119,9 @@ impl App {
                 ratio_delta,
             } => self.agent_drag_divider(surface, ratio_delta),
             AgentAction::RequestContentPreview => self.agent_request_content_preview(),
+            AgentAction::RetryFocusedContent => self.agent_retry_focused_content(),
+            AgentAction::StopFocusedOperation => self.agent_stop_focused_operation(),
+            AgentAction::PinFocusedOperation => self.agent_pin_focused_operation(),
         };
         if applied {
             self.observability.record_diagnostic(
@@ -206,6 +212,9 @@ impl App {
             action("theme.set", "Set theme"),
             action("node.select_by_url", "Select node by URL"),
             action("content.preview.request", "Request content preview"),
+            action("content.retry.focused", "Retry focused content"),
+            action("operation.stop.focused", "Stop focused operation"),
+            action("operation.pin.focused", "Pin focused operation"),
         ];
         actions.extend(
             Command::ALL
@@ -305,6 +314,40 @@ impl App {
         }
         self.toggle_live_preview();
         (true, action_id, "focused node preview toggled".to_string())
+    }
+
+    fn agent_retry_focused_content(&mut self) -> (bool, String, String) {
+        let action_id = "content.retry.focused".to_string();
+        let Some(url) = self.current_focus_url() else {
+            return (false, action_id, "no focused node".to_string());
+        };
+        if !super::fetch::is_fetchable(&url) {
+            return (false, action_id, format!("not fetchable: {url}"));
+        }
+        self.retry_focused_content();
+        (
+            true,
+            action_id,
+            "focused content retry requested".to_string(),
+        )
+    }
+
+    fn agent_stop_focused_operation(&mut self) -> (bool, String, String) {
+        let action_id = "operation.stop.focused".to_string();
+        if self.focused_member().is_none() {
+            return (false, action_id, "no focused node".to_string());
+        }
+        self.stop_focused_operation();
+        (true, action_id, "focused operation stopped".to_string())
+    }
+
+    fn agent_pin_focused_operation(&mut self) -> (bool, String, String) {
+        let action_id = "operation.pin.focused".to_string();
+        if self.focused_member().is_none() {
+            return (false, action_id, "no focused node".to_string());
+        }
+        self.pin_focused_operation();
+        (true, action_id, "focused operation pinned".to_string())
     }
 }
 
@@ -477,6 +520,37 @@ mod tests {
                 .enabled_actions
                 .iter()
                 .any(|action| action.id == "pane.open.steward")
+        );
+        assert!(
+            step.observation
+                .enabled_actions
+                .iter()
+                .any(|action| action.id == "operation.pin.focused")
+        );
+    }
+
+    #[test]
+    fn agent_can_pin_stop_and_report_blocked_retry_for_focused_operation() {
+        let mut app = test_app();
+        let step = app.apply_agent_action(AgentAction::RetryFocusedContent);
+        assert!(
+            !step.result.applied,
+            "mere://welcome is not fetchable, so retry is blocked"
+        );
+
+        let step = app.apply_agent_action(AgentAction::PinFocusedOperation);
+        assert!(step.result.applied);
+        let focused = app.focused_member().expect("welcome is focused");
+        assert!(
+            app.constellation.is_background(focused),
+            "pin marks the focused operation as background"
+        );
+
+        let step = app.apply_agent_action(AgentAction::StopFocusedOperation);
+        assert!(step.result.applied);
+        assert!(
+            !app.constellation.is_active(focused),
+            "stop reaps the focused operation"
         );
     }
 
