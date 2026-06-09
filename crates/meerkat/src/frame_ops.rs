@@ -1004,7 +1004,8 @@ impl App {
         }
     }
 
-    pub(super) fn update_a11y_window_focus(&mut self, _focused: bool) {
+    pub(super) fn update_a11y_window_focus(&mut self, focused: bool) {
+        self.a11y_bridge.update_window_focus(focused);
         self.refresh_a11y_summary();
     }
 

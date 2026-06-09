@@ -199,6 +199,12 @@ tracing-subscriber = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 accesskit_windows = { workspace = true }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+accesskit_macos = { workspace = true }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+accesskit_unix = { workspace = true }
+
 [dev-dependencies]
 # Workbench-composition tests mint graph-member ids (kernel node UUIDs) and
 # build small session graphs to resolve tiles against.

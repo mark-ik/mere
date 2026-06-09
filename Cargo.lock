@@ -6492,6 +6492,8 @@ name = "meerkat"
 version = "0.0.1"
 dependencies = [
  "accesskit",
+ "accesskit_macos",
+ "accesskit_unix",
  "accesskit_windows",
  "apparatus",
  "arboard",

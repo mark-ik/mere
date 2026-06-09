@@ -57,9 +57,14 @@ through typed observations and actions rather than raw pixel puppetry.
 - The diagnostics channel catalog is too broad to expose wholesale. Wire a small
   live subset first, then let orphan-channel reporting tell us what deserves a
   descriptor.
-- Apparatus should not swallow Inspector, Gloss, Steward, or Settings. It owns
-  system health and debug trace. Content identity/provenance belongs to Inspector;
-  async job management belongs to Steward; graph commentary belongs to Gloss.
+- Apparatus should not swallow Inspector, Gloss, Steward, or Settings. **Axis
+  refined 2026-06-09** (see [Alembic memory + engrams](../technical_architecture/2026-06-09_alembic_memory_and_engrams.md)
+  §8): Apparatus is the *at-rest* plane (system diagnostics, the recorded trace read
+  after the fact, health snapshot, invariant violations, plus system/subsystem
+  config), Steward is the *live* plane (the process/daemon monitor: running actors
+  and async jobs you can act on). So live actor lifecycle belongs to Steward;
+  Apparatus keeps the recorded actor faults + health snapshot + config. Content
+  identity/provenance belongs to Inspector; graph commentary belongs to Gloss.
 
 ---
 
@@ -97,7 +102,8 @@ Sources:
 Sinks:
 
 1. Apparatus pane sections: Overview, Events, Tracing, Probes, Accessibility,
-   Actors, Agent.
+   Agent. (Live **Actors** lifecycle moved to the Steward pane per the 2026-06-09
+   axis refinement; Apparatus keeps recorded actor faults, not the live monitor.)
 2. Headless tests and smoke probes.
 3. OS AccessKit adapter once internal tree quality is stable.
 4. Hermes/Burn agent harness API.
@@ -153,8 +159,9 @@ and explicit enough that new channels do not appear ad hoc.
 - Add `meerkat/src/observability.rs` with bounded rings and summary counters.
 - Feed current apparatus diagnostics from that store instead of hand-building a
   four-row snapshot.
-- Expand Apparatus into sections: Overview, Events, Actors, Probes,
-  Accessibility, Agent.
+- Expand Apparatus into sections: Overview, Events, Probes, Accessibility, Agent.
+  (The live **Actors** view belongs to Steward per the 2026-06-09 refinement;
+  Apparatus shows recorded actor faults, not the live monitor.)
 
 Done when the current theme/apparatus pane shows live recent events and actor
 state without changing app authority boundaries.
@@ -364,3 +371,12 @@ accessibility states.
   `Click`/`Focus` actions record `meerkat.agent.action_applied`; unsupported or
   stale target ids record `meerkat.agent.intent_dropped`. Remaining D6 work is
   platform bridges beyond Windows and real manual screen-reader verification.
+- 2026-06-09: **D6 non-Windows bridge scaffolding and verification checklist
+  landed.** Meerkat now depends on the workspace `accesskit_macos` and
+  `accesskit_unix` adapters and installs the macOS AppKit subclass adapter or
+  Unix AT-SPI adapter behind the same host-local snapshot/action queue used on
+  Windows. Focus updates are forwarded through the platform bridge where the
+  adapter exposes that hook. The manual screen-reader pass is captured in
+  [2026-06-09_accesskit_screen_reader_verification.md](2026-06-09_accesskit_screen_reader_verification.md):
+  Narrator, VoiceOver, and Orca still need real local runs before D6 can be
+  called screen-reader verified.
