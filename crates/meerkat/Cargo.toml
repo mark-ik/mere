@@ -74,6 +74,8 @@ serval-winit-host = { path = "../serval-winit-host" }
 # content-root below the chrome band; the `orrery` bin is the same `Orrery` on
 # its own window. (Modular integration plan, S1.)
 orrery.workspace = true
+# Domain a11y projection for the graph/orrery content root.
+mere-orrery.workspace = true
 
 # The content-card pipeline: a focused node's media as a document. inker supplies
 # the portable EngineDocument model; document-canvas lays it out (parley) and,
@@ -108,6 +110,9 @@ frame = { workspace = true }
 
 forme = { workspace = true }
 platen = { workspace = true }
+# Domain a11y projections for panes hosted by the frame tree.
+apparatus-domain = { package = "apparatus", path = "../platen/domain/apparatus" }
+workbench-domain = { package = "workbench", path = "../platen/domain/workbench" }
 # The serval view layer for the tiled workbench (taffy retarget, Phase 2): emits
 # the Workbench as flex DOM that serval lays out. meerkat owns a second runner over
 # it (the workbench root), composites its band in Tree mode, reads each tile's

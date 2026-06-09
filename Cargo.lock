@@ -6492,6 +6492,7 @@ name = "meerkat"
 version = "0.0.1"
 dependencies = [
  "accesskit",
+ "apparatus",
  "arboard",
  "armillary",
  "chrome",
@@ -6507,6 +6508,7 @@ dependencies = [
  "kernel",
  "layout-dom-api",
  "linked-data",
+ "mere-orrery",
  "misfin",
  "moothold",
  "murm",
@@ -6536,6 +6538,7 @@ dependencies = [
  "uxtree",
  "wgpu",
  "winit",
+ "workbench",
  "xilem-serval",
 ]
 

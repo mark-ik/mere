@@ -313,3 +313,24 @@ accessibility states.
   duplicate ids, and audit findings. The OS bridge remains explicitly degraded;
   the next D5/D6 work is attaching real bounds/content subtrees and then pushing
   `TreeUpdate`s through an AccessKit platform adapter.
+- 2026-06-08: **D5 bounds/content slice landed.** The internal a11y snapshot now
+  uses `frame::project_frame_with` to attach available domain subtrees under
+  frame leaves: `mere-orrery` for the graph pane, `workbench` for the tiled
+  workbench, the apparatus skeleton for Apparatus/System panes, and stable
+  generic roots for Roster/Gloss/Comms/Tile/Custom panes. Meerkat stamps the
+  host-computed frame root, pane leaf, and pane-content-root bounds into the
+  AccessKit-shaped tree after projection, preserving the frame crate's
+  geometry-free ownership. Focus now resolves to the active frame leaf when
+  chrome does not own focus. Unit tests cover frame leaf stable ids, host bounds
+  attachment, and a11y audit focus/bounds failures. Remaining D5 work is richer
+  descendant bounds and pane-specific subtrees for Roster/Comms/Gloss content.
+- 2026-06-08: **D5 pane subtree slice landed.** Roster, Gloss, and Comms now
+  project pane-specific internal `UxTree` subtrees instead of generic content
+  roots. Roster exposes member rows as list items and reuses row hit-test bounds
+  when the host has rendered them; Gloss exposes graph nodes as link-like items
+  with URL values and focused-node state; Comms exposes conversation list items,
+  selected thread messages, and the draft text input. This gives Apparatus and
+  harness code a real semantic surface to inspect before any OS AccessKit bridge
+  is enabled. Remaining D5/D6 work is making descendant bounds stable across the
+  first render for every pane type, then emitting platform `TreeUpdate`s through
+  an AccessKit adapter.

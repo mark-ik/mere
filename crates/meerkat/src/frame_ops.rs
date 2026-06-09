@@ -965,7 +965,19 @@ impl App {
             root: chrome_root,
             nodes: vec![(chrome_root, chrome)],
         };
-        let frame_tree = frame::project_frame(&self.frame_layout);
+        let leaf_bounds: HashMap<PaneId, [f32; 4]> = leaves
+            .iter()
+            .map(|leaf| (leaf.pane_id, leaf.rect))
+            .collect();
+        let mut frame_tree = frame::project_frame_with(&self.frame_layout, |content, pane_id| {
+            Some(self.a11y_content_tree(content, pane_id))
+        });
+        attach_frame_bounds(
+            &mut frame_tree,
+            &self.frame_layout,
+            &leaf_bounds,
+            self.content_band(),
+        );
         let frame_root = frame_tree.root;
         let mut host = Node::new(Role::Window);
         host.set_label("Meerkat");
@@ -974,7 +986,7 @@ impl App {
         let focus = if self.runner.focus().is_some() {
             chrome_root
         } else {
-            frame_root
+            self.active_frame_focus_node().unwrap_or(frame_root)
         };
         let audit = audit_a11y_tree(&tree, focus);
         self.observability.set_a11y_snapshot(A11ySnapshot {
@@ -988,6 +1000,153 @@ impl App {
             focus: format_access_node(focus),
             audit: audit.findings,
         });
+    }
+
+    fn a11y_content_tree(&self, content: &PaneContent, pane_id: PaneId) -> UxTree {
+        match content {
+            PaneContent::Orrery => mere_orrery::project_graph(self.orrery.graph()),
+            PaneContent::Workbench => workbench_domain::project_workbench(&self.workbench),
+            PaneContent::Apparatus | PaneContent::System => apparatus_domain::project_skeleton(),
+            PaneContent::Roster => self.roster_a11y_tree(pane_id),
+            PaneContent::Gloss => self.gloss_a11y_tree(pane_id),
+            PaneContent::Comms => self.comms_a11y_tree(pane_id),
+            PaneContent::Tile(_) | PaneContent::Custom(_) => {
+                generic_pane_content_tree(&self.frame_layout, pane_id, content)
+            }
+        }
+    }
+
+    fn roster_a11y_tree(&self, pane_id: PaneId) -> UxTree {
+        let root_path = pane_content_root_path(&self.frame_layout, pane_id, "roster");
+        let root = node_id_for_path(&root_path);
+        let row_bounds: HashMap<GraphMemberId, [f32; 4]> =
+            self.roster_row_rects.iter().copied().collect();
+        let mut nodes = Vec::new();
+        let mut children = Vec::new();
+        for row in self.roster_rows() {
+            let id = node_id_for_path(&format!("{root_path}/row/{}", row.member));
+            let mut node = Node::new(Role::ListItem);
+            node.set_label(row.title);
+            node.set_description(if row.selected {
+                format!("selected; {}", row.subtitle)
+            } else {
+                row.subtitle
+            });
+            if let Some(bounds) = row_bounds.get(&row.member) {
+                node.set_bounds(rect(*bounds));
+            }
+            nodes.push((id, node));
+            children.push(id);
+        }
+        let mut root_node = Node::new(Role::List);
+        root_node.set_label("Roster");
+        root_node.set_children(children);
+        nodes.push((root, root_node));
+        UxTree { root, nodes }
+    }
+
+    fn gloss_a11y_tree(&self, pane_id: PaneId) -> UxTree {
+        let root_path = pane_content_root_path(&self.frame_layout, pane_id, "gloss");
+        let root = node_id_for_path(&root_path);
+        let node_bounds: HashMap<GraphMemberId, [f32; 4]> =
+            self.gloss_node_rects.iter().copied().collect();
+        let focused = self.orrery.focused_member();
+        let mut nodes = Vec::new();
+        let mut children = Vec::new();
+        for (_key, graph_node) in self.orrery.graph().nodes() {
+            let id = node_id_for_path(&format!("{root_path}/node/{}", graph_node.id));
+            let mut node = Node::new(Role::Link);
+            let label = if graph_node.title.is_empty() {
+                graph_node.primary_address().as_url_str().to_string()
+            } else {
+                graph_node.title.clone()
+            };
+            node.set_label(label);
+            node.set_value(graph_node.primary_address().as_url_str().to_string());
+            if focused == Some(graph_node.id) {
+                node.set_description("focused");
+            }
+            if let Some(bounds) = node_bounds.get(&graph_node.id) {
+                node.set_bounds(rect(*bounds));
+            }
+            nodes.push((id, node));
+            children.push(id);
+        }
+        let mut root_node = Node::new(Role::Group);
+        root_node.set_label("Gloss");
+        root_node.set_children(children);
+        nodes.push((root, root_node));
+        UxTree { root, nodes }
+    }
+
+    fn comms_a11y_tree(&self, pane_id: PaneId) -> UxTree {
+        let root_path = pane_content_root_path(&self.frame_layout, pane_id, "comms");
+        let root = node_id_for_path(&root_path);
+        let comms = &self.runner.state().comms;
+        let mut nodes = Vec::new();
+        let mut children = Vec::new();
+
+        let inbox_root = node_id_for_path(&format!("{root_path}/inbox"));
+        let mut inbox_children = Vec::new();
+        for conversation in &comms.inbox {
+            let id = node_id_for_path(&format!(
+                "{root_path}/inbox/{:?}/{}",
+                conversation.id.protocol, conversation.id.key
+            ));
+            let mut node = Node::new(Role::ListItem);
+            node.set_label(conversation.title.clone());
+            node.set_description(format!(
+                "{:?}; unread={}",
+                conversation.id.protocol, conversation.unread
+            ));
+            nodes.push((id, node));
+            inbox_children.push(id);
+        }
+        let mut inbox = Node::new(Role::List);
+        inbox.set_label("Conversations");
+        inbox.set_children(inbox_children);
+        nodes.push((inbox_root, inbox));
+        children.push(inbox_root);
+
+        let thread_root = node_id_for_path(&format!("{root_path}/thread"));
+        let mut thread_children = Vec::new();
+        for message in &comms.thread {
+            let id = node_id_for_path(&format!("{root_path}/thread/{}", message.id.0));
+            let mut node = Node::new(Role::Paragraph);
+            node.set_label(message.author.label().to_string());
+            node.set_value(message.body.text().to_string());
+            node.set_description(format!("{:?}", message.direction));
+            nodes.push((id, node));
+            thread_children.push(id);
+        }
+        let mut thread = Node::new(Role::Group);
+        thread.set_label("Thread");
+        thread.set_children(thread_children);
+        nodes.push((thread_root, thread));
+        children.push(thread_root);
+
+        let draft_root = node_id_for_path(&format!("{root_path}/draft"));
+        let mut draft = Node::new(Role::TextInput);
+        draft.set_label("Draft");
+        draft.set_value(self.runner.state().comms_draft.text().to_string());
+        nodes.push((draft_root, draft));
+        children.push(draft_root);
+
+        let mut root_node = Node::new(Role::Group);
+        root_node.set_label("Comms");
+        root_node.set_children(children);
+        nodes.push((root, root_node));
+        UxTree { root, nodes }
+    }
+
+    fn active_frame_focus_node(&self) -> Option<AccessNodeId> {
+        let content = if self.workbench_active() {
+            PaneContent::Workbench
+        } else {
+            PaneContent::Orrery
+        };
+        self.pane_of_content(&content)
+            .and_then(|pane_id| frame_leaf_id(&self.frame_layout, pane_id))
     }
 
     /// Toggle maximize of the pane under the cursor (full-screen and back). With a
@@ -1148,4 +1307,190 @@ fn audit_a11y_tree(tree: &UxTree, focus: AccessNodeId) -> A11yAudit {
 
 fn format_access_node(id: AccessNodeId) -> String {
     format!("node:{}", id.0)
+}
+
+fn attach_frame_bounds(
+    tree: &mut UxTree,
+    layout: &frame::FrameLayout,
+    leaf_bounds: &HashMap<PaneId, [f32; 4]>,
+    content_band: [f32; 4],
+) {
+    if let Some(root) = node_mut(tree, tree.root) {
+        root.set_bounds(rect(content_band));
+    }
+    for (pane_id, bounds) in leaf_bounds {
+        let Some(leaf_id) = frame_leaf_id(layout, *pane_id) else {
+            continue;
+        };
+        let content_root =
+            node_mut(tree, leaf_id).and_then(|node| node.children().first().copied());
+        if let Some(node) = node_mut(tree, leaf_id) {
+            node.set_bounds(rect(*bounds));
+        }
+        if let Some(content_root) = content_root {
+            if let Some(node) = node_mut(tree, content_root) {
+                node.set_bounds(rect(*bounds));
+            }
+        }
+    }
+}
+
+fn frame_leaf_id(layout: &frame::FrameLayout, pane_id: PaneId) -> Option<AccessNodeId> {
+    frame_leaf_id_at(
+        &layout.root,
+        pane_id,
+        &format!("frame/{}", layout.id.as_str()),
+    )
+}
+
+fn frame_leaf_id_at(node: &PaneNode, pane_id: PaneId, path: &str) -> Option<AccessNodeId> {
+    match node {
+        PaneNode::Leaf { pane_id: id, .. } if *id == pane_id => {
+            Some(node_id_for_path(&format!("{path}/pane/{}", pane_id.0)))
+        }
+        PaneNode::Leaf { .. } => None,
+        PaneNode::Split { first, second, .. } => {
+            let split_path = format!("{path}/split");
+            frame_leaf_id_at(first, pane_id, &format!("{split_path}/first"))
+                .or_else(|| frame_leaf_id_at(second, pane_id, &format!("{split_path}/second")))
+        }
+    }
+}
+
+fn generic_pane_content_tree(
+    layout: &frame::FrameLayout,
+    pane_id: PaneId,
+    content: &PaneContent,
+) -> UxTree {
+    let root_path = pane_content_root_path(layout, pane_id, content.tag());
+    let root = node_id_for_path(&root_path);
+    let mut node = Node::new(Role::Group);
+    node.set_label(content.tag().to_string());
+    UxTree {
+        root,
+        nodes: vec![(root, node)],
+    }
+}
+
+fn pane_content_root_path(layout: &frame::FrameLayout, pane_id: PaneId, tag: &str) -> String {
+    format!(
+        "meerkat/frame/{}/pane/{}/content/{tag}",
+        layout.id.as_str(),
+        pane_id.0
+    )
+}
+
+fn node_mut(tree: &mut UxTree, id: AccessNodeId) -> Option<&mut Node> {
+    tree.nodes
+        .iter_mut()
+        .find(|(node_id, _)| *node_id == id)
+        .map(|(_, node)| node)
+}
+
+fn rect(bounds: [f32; 4]) -> Rect {
+    Rect::new(
+        bounds[0] as f64,
+        bounds[1] as f64,
+        bounds[2] as f64,
+        bounds[3] as f64,
+    )
+}
+
+#[cfg(test)]
+mod a11y_tests {
+    use super::*;
+
+    fn layout_with_two_panes() -> frame::FrameLayout {
+        frame::FrameLayout {
+            id: frame::FrameId::new("content"),
+            label: "content".to_string(),
+            root: PaneNode::Split {
+                axis: SplitAxis::Horizontal,
+                ratio: 0.5,
+                first: Box::new(PaneNode::Leaf {
+                    pane_id: PaneId(0),
+                    content: PaneContent::Orrery,
+                    graph_id: GraphId::default(),
+                }),
+                second: Box::new(PaneNode::Leaf {
+                    pane_id: PaneId(1),
+                    content: PaneContent::Roster,
+                    graph_id: GraphId::default(),
+                }),
+            },
+        }
+    }
+
+    #[test]
+    fn frame_leaf_ids_match_frame_projection_paths() {
+        let layout = layout_with_two_panes();
+        let tree = frame::project_frame(&layout);
+        assert!(
+            tree.nodes
+                .iter()
+                .any(|(id, _)| Some(*id) == frame_leaf_id(&layout, PaneId(0)))
+        );
+        assert!(
+            tree.nodes
+                .iter()
+                .any(|(id, _)| Some(*id) == frame_leaf_id(&layout, PaneId(1)))
+        );
+    }
+
+    #[test]
+    fn host_attaches_bounds_to_frame_leaves_and_content_roots() {
+        let layout = layout_with_two_panes();
+        let mut tree = frame::project_frame_with(&layout, |content, pane_id| {
+            Some(generic_pane_content_tree(&layout, pane_id, content))
+        });
+        let bounds = HashMap::from([
+            (PaneId(0), [0.0, 40.0, 400.0, 600.0]),
+            (PaneId(1), [400.0, 40.0, 800.0, 600.0]),
+        ]);
+        attach_frame_bounds(&mut tree, &layout, &bounds, [0.0, 40.0, 800.0, 600.0]);
+
+        for pane_id in [PaneId(0), PaneId(1)] {
+            let leaf_id = frame_leaf_id(&layout, pane_id).expect("leaf id");
+            let leaf = tree
+                .nodes
+                .iter()
+                .find(|(id, _)| *id == leaf_id)
+                .unwrap()
+                .1
+                .clone();
+            assert!(leaf.bounds().is_some(), "leaf {pane_id:?} has bounds");
+            let content_root = leaf.children().first().copied().expect("content root");
+            let content = tree
+                .nodes
+                .iter()
+                .find(|(id, _)| *id == content_root)
+                .unwrap()
+                .1
+                .clone();
+            assert!(content.bounds().is_some(), "content root has bounds");
+        }
+    }
+
+    #[test]
+    fn a11y_audit_reports_focus_membership_and_bound_gaps() {
+        let layout = layout_with_two_panes();
+        let mut tree = frame::project_frame(&layout);
+        let bounds = HashMap::from([(PaneId(0), [0.0, 40.0, 400.0, 600.0])]);
+        attach_frame_bounds(&mut tree, &layout, &bounds, [0.0, 40.0, 800.0, 600.0]);
+
+        let audit = audit_a11y_tree(&tree, frame_leaf_id(&layout, PaneId(0)).expect("leaf id"));
+        assert_eq!(audit.duplicate_ids, 0);
+        assert!(
+            audit.missing_bounds > 0,
+            "unbounded split/second pane is reported"
+        );
+
+        let missing_focus = audit_a11y_tree(&tree, node_id_for_path("missing-focus"));
+        assert!(
+            missing_focus
+                .findings
+                .iter()
+                .any(|finding| finding.contains("focused node"))
+        );
+    }
 }
