@@ -34,6 +34,7 @@ use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
 use std::time::Instant;
 
+use accesskit::NodeId as AccessNodeId;
 use eidetic_fjall::FjallStore;
 use forme::GraphMemberId;
 use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
@@ -340,6 +341,11 @@ enum ContentPane {
     Workbench,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum A11yHostAction {
+    SelectNodeByUrl(String),
+}
+
 /// The meerkat shell application: the shared chrome DOM, the runner that diffs
 /// the chrome view tree into it, the orrery content-root, the window + GPU, and
 /// input bookkeeping.
@@ -466,6 +472,10 @@ struct App {
     /// Platform AccessKit bridge fed by the same host-local uxtree snapshot as
     /// Apparatus. Unsupported platforms keep this as an explicit degraded bridge.
     a11y_bridge: a11y_bridge::AccessKitBridge,
+    /// Host-owned routes for actionable AccessKit nodes in the current snapshot.
+    /// The bridge only queues raw AccessKit requests; the kernel thread resolves
+    /// ids through this table and applies semantic host actions.
+    a11y_action_routes: HashMap<AccessNodeId, A11yHostAction>,
     /// Each apparatus theme-button's on-screen rect this frame (theme id,
     /// `[x0, y0, x1, y1]`); a press inside switches to that theme. (Apparatus.)
     apparatus_button_rects: Vec<(String, [f32; 4])>,
@@ -760,6 +770,7 @@ impl App {
                 frame_layout = restored;
             }
         }
+        let a11y_proxy = proxy.clone();
         let mut app = Self {
             dom,
             runner,
@@ -799,7 +810,10 @@ impl App {
             theme,
             active_theme_id,
             observability: HostObservability::new(),
-            a11y_bridge: a11y_bridge::AccessKitBridge::new(),
+            a11y_bridge: a11y_bridge::AccessKitBridge::new(move || {
+                let _ = a11y_proxy.send_event(());
+            }),
+            a11y_action_routes: HashMap::new(),
             apparatus_button_rects: Vec::new(),
             gloss_node_rects: Vec::new(),
             titlebar_press: None,

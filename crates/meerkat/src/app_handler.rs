@@ -87,6 +87,7 @@ impl ApplicationHandler for App {
     /// fold each outcome into the content cache and re-render the card.
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
         self.drain_portable_diagnostics();
+        self.drain_a11y_actions();
         // The kernel inbox dispatch: the one documented place that applies what the
         // actors tell the kernel. Each typed stream is drained and folded into
         // canonical state here on the kernel thread; the actors never touch it.

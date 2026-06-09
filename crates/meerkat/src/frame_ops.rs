@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use accesskit::{Node, NodeId as AccessNodeId, Rect, Role, TreeUpdate};
+use accesskit::{Action, Node, NodeId as AccessNodeId, Rect, Role, TreeUpdate};
 use forme::GraphMemberId;
 use frame::{GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
 use meerkat::command::Command;
@@ -23,8 +23,8 @@ use uxtree::{UxTree, node_id_for_path};
 
 use super::observability::{A11ySnapshot, ObservabilitySnapshot};
 use super::{
-    App, DEFAULT_FRAME, DEFAULT_PANE, FALLBACK_TOOLBAR_H, GRAPH_PANE, apparatus, comms_host, fetch,
-    frame_view, roster, sync,
+    A11yHostAction, App, DEFAULT_FRAME, DEFAULT_PANE, FALLBACK_TOOLBAR_H, GRAPH_PANE, apparatus,
+    comms_host, fetch, frame_view, roster, sync,
 };
 
 impl App {
@@ -950,7 +950,58 @@ impl App {
     pub(super) fn refresh_a11y_summary(&mut self) {
         let projection = self.build_a11y_projection();
         self.a11y_bridge.update(projection.tree_update());
+        self.a11y_action_routes = projection.action_routes;
         self.observability.set_a11y_snapshot(projection.snapshot);
+    }
+
+    pub(super) fn drain_a11y_actions(&mut self) {
+        for request in self.a11y_bridge.drain_actions() {
+            self.apply_a11y_request(request);
+        }
+    }
+
+    pub(super) fn apply_a11y_request(&mut self, request: super::a11y_bridge::A11yActionRequest) {
+        let action_id = format!("{:?}", request.action).to_ascii_lowercase();
+        match self.a11y_action_routes.get(&request.target_node).cloned() {
+            Some(A11yHostAction::SelectNodeByUrl(url))
+                if matches!(request.action, Action::Click | Action::Focus) =>
+            {
+                if self.orrery.select_by_url(&url) {
+                    self.active_content = super::ContentPane::Orrery;
+                    self.sync_location();
+                    self.observability.record_diagnostic(
+                        "meerkat.agent.action_applied",
+                        super::observability::Severity::Info,
+                        format!("accesskit.{action_id}: select {url}"),
+                    );
+                    self.refresh_a11y_summary();
+                    self.request_redraw();
+                } else {
+                    self.observability.record_diagnostic(
+                        "meerkat.agent.intent_dropped",
+                        super::observability::Severity::Warn,
+                        format!("accesskit.{action_id}: missing node {url}"),
+                    );
+                }
+            }
+            Some(_) => {
+                self.observability.record_diagnostic(
+                    "meerkat.agent.intent_dropped",
+                    super::observability::Severity::Warn,
+                    format!("accesskit.{action_id}: unsupported action for routed node"),
+                );
+            }
+            None => {
+                self.observability.record_diagnostic(
+                    "meerkat.agent.intent_dropped",
+                    super::observability::Severity::Warn,
+                    format!(
+                        "accesskit.{action_id}: no route for target {:?}",
+                        request.target_node
+                    ),
+                );
+            }
+        }
     }
 
     pub(super) fn update_a11y_window_focus(&mut self, _focused: bool) {
@@ -973,12 +1024,13 @@ impl App {
             root: chrome_root,
             nodes: vec![(chrome_root, chrome)],
         };
+        let mut action_routes = HashMap::new();
         let leaf_bounds: HashMap<PaneId, [f32; 4]> = leaves
             .iter()
             .map(|leaf| (leaf.pane_id, leaf.rect))
             .collect();
         let mut frame_tree = frame::project_frame_with(&self.frame_layout, |content, pane_id| {
-            Some(self.a11y_content_tree(content, pane_id))
+            Some(self.a11y_content_tree(content, pane_id, &mut action_routes))
         });
         attach_frame_bounds(
             &mut frame_tree,
@@ -990,7 +1042,8 @@ impl App {
         let mut host = Node::new(Role::Window);
         host.set_label("Meerkat");
         host.set_bounds(Rect::new(0.0, 0.0, self.width as f64, self.height as f64));
-        let tree = uxtree::stitch("meerkat/window", host, vec![chrome_tree, frame_tree]);
+        let mut tree = uxtree::stitch("meerkat/window", host, vec![chrome_tree, frame_tree]);
+        attach_link_actions(&mut tree, &mut action_routes);
         let focus = if self.runner.focus().is_some() {
             chrome_root
         } else {
@@ -1016,15 +1069,21 @@ impl App {
             tree,
             focus,
             snapshot,
+            action_routes,
         }
     }
 
-    fn a11y_content_tree(&self, content: &PaneContent, pane_id: PaneId) -> UxTree {
+    fn a11y_content_tree(
+        &self,
+        content: &PaneContent,
+        pane_id: PaneId,
+        action_routes: &mut HashMap<AccessNodeId, A11yHostAction>,
+    ) -> UxTree {
         match content {
             PaneContent::Orrery => mere_orrery::project_graph(self.orrery.graph()),
             PaneContent::Workbench => workbench_domain::project_workbench(&self.workbench),
             PaneContent::Apparatus | PaneContent::System => apparatus_domain::project_skeleton(),
-            PaneContent::Roster => self.roster_a11y_tree(pane_id),
+            PaneContent::Roster => self.roster_a11y_tree(pane_id, action_routes),
             PaneContent::Gloss => self.gloss_a11y_tree(pane_id),
             PaneContent::Comms => self.comms_a11y_tree(pane_id),
             PaneContent::Tile(_) | PaneContent::Custom(_) => {
@@ -1033,7 +1092,11 @@ impl App {
         }
     }
 
-    fn roster_a11y_tree(&self, pane_id: PaneId) -> UxTree {
+    fn roster_a11y_tree(
+        &self,
+        pane_id: PaneId,
+        action_routes: &mut HashMap<AccessNodeId, A11yHostAction>,
+    ) -> UxTree {
         let root_path = pane_content_root_path(&self.frame_layout, pane_id, "roster");
         let root = node_id_for_path(&root_path);
         let row_bounds: HashMap<GraphMemberId, [f32; 4]> =
@@ -1043,6 +1106,9 @@ impl App {
         for row in self.roster_rows() {
             let id = node_id_for_path(&format!("{root_path}/row/{}", row.member));
             let mut node = Node::new(Role::ListItem);
+            node.add_action(Action::Click);
+            node.add_action(Action::Focus);
+            action_routes.insert(id, A11yHostAction::SelectNodeByUrl(row.title.clone()));
             node.set_label(row.title);
             node.set_description(if row.selected {
                 format!("selected; {}", row.subtitle)
@@ -1280,6 +1346,7 @@ pub(super) struct A11yProjection {
     tree: UxTree,
     focus: AccessNodeId,
     snapshot: A11ySnapshot,
+    action_routes: HashMap<AccessNodeId, A11yHostAction>,
 }
 
 impl A11yProjection {
@@ -1331,6 +1398,23 @@ fn audit_a11y_tree(tree: &UxTree, focus: AccessNodeId) -> A11yAudit {
         missing_bounds,
         duplicate_ids,
         findings,
+    }
+}
+
+fn attach_link_actions(
+    tree: &mut UxTree,
+    action_routes: &mut HashMap<AccessNodeId, A11yHostAction>,
+) {
+    for (id, node) in &mut tree.nodes {
+        if node.role() != Role::Link {
+            continue;
+        }
+        let Some(url) = node.value().map(str::to_string) else {
+            continue;
+        };
+        node.add_action(Action::Click);
+        node.add_action(Action::Focus);
+        action_routes.insert(*id, A11yHostAction::SelectNodeByUrl(url));
     }
 }
 

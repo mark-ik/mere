@@ -356,3 +356,11 @@ accessibility states.
   blocked selections without coordinate scripting. Remaining D7 work is a stable
   external transport for Hermes/Burn, richer semantic divider targets, and a
   narrower public schema once the action vocabulary settles.
+- 2026-06-09: **D6 AccessKit action routing landed.** The Windows bridge now
+  queues `ActionRequest`s and wakes the winit loop instead of dropping them.
+  Meerkat drains those requests on the kernel thread, resolves target node ids
+  through a host-owned action route table generated with the a11y tree, and maps
+  graph/gloss links plus roster rows to semantic node selection. Routed
+  `Click`/`Focus` actions record `meerkat.agent.action_applied`; unsupported or
+  stale target ids record `meerkat.agent.intent_dropped`. Remaining D6 work is
+  platform bridges beyond Windows and real manual screen-reader verification.

@@ -350,6 +350,7 @@ fn action(id: impl Into<String>, label: impl Into<String>) -> AgentActionDescrip
 #[cfg(test)]
 mod tests {
     use super::*;
+    use accesskit::Action;
     use register_theme::theme::{THEME_ID_DARK, THEME_ID_LIGHT};
     use std::sync::OnceLock;
     use winit::event_loop::EventLoopProxy;
@@ -473,5 +474,37 @@ mod tests {
 
         let step = app.apply_agent_action(AgentAction::SetTheme(THEME_ID_DARK.to_string()));
         assert_eq!(step.observation.active_theme_id, THEME_ID_DARK);
+    }
+
+    #[test]
+    fn accesskit_actions_route_to_semantic_node_selection() {
+        let mut app = test_app();
+        app.orrery.visit("https://example.test");
+        app.orrery.select_by_url("mere://welcome");
+        app.refresh_a11y_summary();
+        let target = app
+            .a11y_action_routes
+            .iter()
+            .find_map(|(id, action)| match action {
+                crate::A11yHostAction::SelectNodeByUrl(url) if url == "https://example.test" => {
+                    Some(*id)
+                }
+                _ => None,
+            })
+            .expect("example node has an AccessKit route");
+
+        app.apply_a11y_request(crate::a11y_bridge::A11yActionRequest {
+            action: Action::Focus,
+            target_node: target,
+        });
+
+        assert_eq!(app.orrery.focused_url(), Some("https://example.test"));
+        let observation = app.agent_observation();
+        assert!(
+            observation
+                .diagnostics
+                .iter()
+                .any(|record| record.channel == "meerkat.agent.action_applied")
+        );
     }
 }
