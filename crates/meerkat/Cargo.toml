@@ -164,6 +164,7 @@ register-diagnostics = { workspace = true }
 # bridge stays separate; this is only the host-local snapshot Apparatus reads.
 uxtree = { workspace = true }
 accesskit = { workspace = true }
+raw-window-handle = { workspace = true }
 
 # Content engines for the card (S2.2b-ii): nematic's document engines (markdown /
 # gemtext / plain text / feeds / …) turn fetched bytes into an EngineDocument,
@@ -191,6 +192,9 @@ wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 arboard = "3"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+accesskit_windows = { workspace = true }
 
 [dev-dependencies]
 # Workbench-composition tests mint graph-member ids (kernel node UUIDs) and

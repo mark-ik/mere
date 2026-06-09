@@ -6492,6 +6492,7 @@ name = "meerkat"
 version = "0.0.1"
 dependencies = [
  "accesskit",
+ "accesskit_windows",
  "apparatus",
  "arboard",
  "armillary",
@@ -6520,6 +6521,7 @@ dependencies = [
  "platen",
  "platen-view",
  "pollster",
+ "raw-window-handle",
  "register-diagnostics",
  "register-theme",
  "rustls-pki-types",

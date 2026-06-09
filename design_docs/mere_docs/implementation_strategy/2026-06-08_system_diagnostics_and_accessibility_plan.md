@@ -334,3 +334,12 @@ accessibility states.
   is enabled. Remaining D5/D6 work is making descendant bounds stable across the
   first render for every pane type, then emitting platform `TreeUpdate`s through
   an AccessKit adapter.
+- 2026-06-09: **D6 Windows AccessKit bridge landed.** Meerkat now factors the
+  internal a11y projection into a reusable `TreeUpdate` path and installs a
+  Windows `accesskit_windows::SubclassingAdapter` before the winit window is
+  shown. The same stitched `uxtree` snapshot feeds Apparatus and the OS bridge;
+  render, resize, and focus changes refresh the tree and push updates when the
+  adapter is active. Non-Windows platforms remain explicitly degraded for this
+  slice rather than silently pretending to have an OS bridge. Remaining D6 work
+  is richer action handling, platform bridges beyond Windows, and visual/manual
+  screen-reader verification.

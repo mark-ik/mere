@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use accesskit::{Node, NodeId as AccessNodeId, Rect, Role};
+use accesskit::{Node, NodeId as AccessNodeId, Rect, Role, TreeUpdate};
 use forme::GraphMemberId;
 use frame::{GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
 use meerkat::command::Command;
@@ -946,10 +946,18 @@ impl App {
         self.observability.snapshot()
     }
 
-    /// Coarse internal a11y health until the AccessKit bridge lands: every visible
-    /// pane is projected into a uxtree snapshot, but the OS bridge is still
-    /// degraded by definition.
+    /// Refresh the shared a11y projection used by Apparatus and the OS bridge.
     pub(super) fn refresh_a11y_summary(&mut self) {
+        let projection = self.build_a11y_projection();
+        self.a11y_bridge.update(projection.tree_update());
+        self.observability.set_a11y_snapshot(projection.snapshot);
+    }
+
+    pub(super) fn update_a11y_window_focus(&mut self, _focused: bool) {
+        self.refresh_a11y_summary();
+    }
+
+    pub(super) fn build_a11y_projection(&self) -> A11yProjection {
         let leaves = self.laid_leaves();
         let surfaces = leaves.len() + 2; // host window + chrome root + content leaves
         let mut chrome = Node::new(Role::Application);
@@ -989,9 +997,13 @@ impl App {
             self.active_frame_focus_node().unwrap_or(frame_root)
         };
         let audit = audit_a11y_tree(&tree, focus);
-        self.observability.set_a11y_snapshot(A11ySnapshot {
+        let degraded = match self.a11y_bridge.status() {
+            super::a11y_bridge::BridgeStatus::Installed => 0,
+            super::a11y_bridge::BridgeStatus::Unavailable => surfaces,
+        };
+        let snapshot = A11ySnapshot {
             surfaces,
-            degraded: surfaces, // OS AccessKit bridge is not wired yet.
+            degraded,
             nodes: tree.nodes.len(),
             missing_labels: audit.missing_labels,
             missing_bounds: audit.missing_bounds,
@@ -999,7 +1011,12 @@ impl App {
             root: format_access_node(tree.root),
             focus: format_access_node(focus),
             audit: audit.findings,
-        });
+        };
+        A11yProjection {
+            tree,
+            focus,
+            snapshot,
+        }
     }
 
     fn a11y_content_tree(&self, content: &PaneContent, pane_id: PaneId) -> UxTree {
@@ -1257,6 +1274,18 @@ struct A11yAudit {
     missing_bounds: usize,
     duplicate_ids: usize,
     findings: Vec<String>,
+}
+
+pub(super) struct A11yProjection {
+    tree: UxTree,
+    focus: AccessNodeId,
+    snapshot: A11ySnapshot,
+}
+
+impl A11yProjection {
+    pub(super) fn tree_update(&self) -> TreeUpdate {
+        self.tree.to_tree_update(Some(self.focus))
+    }
 }
 
 fn audit_a11y_tree(tree: &UxTree, focus: AccessNodeId) -> A11yAudit {

@@ -53,6 +53,7 @@ impl App {
         if let Some(host) = self.host.as_mut() {
             host.resize(self.width, self.height);
         }
+        self.refresh_a11y_summary();
         self.request_redraw();
     }
 
@@ -830,6 +831,7 @@ impl App {
             );
         }
         frame.present();
+        self.refresh_a11y_summary();
 
         // Keep animating while the orrery is settling / gliding / dragging.
         if orrery_redraw {

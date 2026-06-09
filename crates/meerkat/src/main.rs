@@ -64,6 +64,7 @@ mod sync;
 
 mod app_handler;
 mod apparatus;
+mod a11y_bridge;
 mod frame_ops;
 mod frame_view;
 mod gloss;
@@ -460,6 +461,9 @@ struct App {
     active_theme_id: String,
     /// Bounded observation cache backing the Apparatus diagnostics pane.
     observability: HostObservability,
+    /// Platform AccessKit bridge fed by the same host-local uxtree snapshot as
+    /// Apparatus. Unsupported platforms keep this as an explicit degraded bridge.
+    a11y_bridge: a11y_bridge::AccessKitBridge,
     /// Each apparatus theme-button's on-screen rect this frame (theme id,
     /// `[x0, y0, x1, y1]`); a press inside switches to that theme. (Apparatus.)
     apparatus_button_rects: Vec<(String, [f32; 4])>,
@@ -788,6 +792,7 @@ impl App {
             theme,
             active_theme_id,
             observability: HostObservability::new(),
+            a11y_bridge: a11y_bridge::AccessKitBridge::new(),
             apparatus_button_rects: Vec::new(),
             gloss_node_rects: Vec::new(),
             titlebar_press: None,
@@ -825,8 +830,6 @@ impl App {
         app.observability
             .record_startup(&app.active_theme_id, pane_count);
         app.refresh_a11y_summary();
-        app.observability
-            .record_probe("a11y_bridge", "degraded", "OS AccessKit bridge not wired");
         app
     }
 

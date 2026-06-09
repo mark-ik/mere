@@ -30,6 +30,7 @@ impl ApplicationHandler for App {
         let attributes = Window::default_attributes()
             .with_title("Meerkat — Mere chrome on serval")
             .with_decorations(false)
+            .with_visible(false)
             .with_min_inner_size(PhysicalSize::new(480u32, 320u32))
             .with_inner_size(PhysicalSize::new(self.width, self.height));
         let window = Arc::new(
@@ -56,6 +57,21 @@ impl ApplicationHandler for App {
                 return;
             }
         }
+        let initial_a11y = self.build_a11y_projection().tree_update();
+        match self.a11y_bridge.install(&window, initial_a11y) {
+            Ok(()) => self.observability.record_probe(
+                "a11y_bridge",
+                "installed",
+                "OS AccessKit bridge installed",
+            ),
+            Err(err) => self.observability.record_probe(
+                "a11y_bridge",
+                "degraded",
+                format!("OS AccessKit bridge unavailable: {err}"),
+            ),
+        }
+        self.refresh_a11y_summary();
+        window.set_visible(true);
         window.request_redraw();
         self.window = Some(window);
 
@@ -305,6 +321,7 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => self.resize(size.width, size.height),
+            WindowEvent::Focused(focused) => self.update_a11y_window_focus(focused),
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x as f32, position.y as f32);
                 // A manual window resize in progress: drive it from the move and
