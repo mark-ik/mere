@@ -343,3 +343,16 @@ accessibility states.
   slice rather than silently pretending to have an OS bridge. Remaining D6 work
   is richer action handling, platform bridges beyond Windows, and visual/manual
   screen-reader verification.
+- 2026-06-09: **D7 typed agent harness landed.** Meerkat now has a feature-gated
+  in-process `agent_harness` module with typed `AgentObservation`,
+  `AgentAction`, and one-step `AgentStep` results. The harness reads visible
+  frame surfaces, active theme, focused node, enabled action descriptors,
+  diagnostics/probes, and the same a11y snapshot Apparatus sees, then routes
+  actions through existing host methods for opening panes, switching themes,
+  invoking commands, selecting nodes by URL, and requesting focused-node
+  previews. Blocked actions emit `meerkat.agent.intent_dropped`; applied actions
+  emit `meerkat.agent.action_applied`. The first tests cover opening Apparatus,
+  switching themes, summoning Roster/Comms, selecting nodes, and reporting
+  blocked selections without coordinate scripting. Remaining D7 work is a stable
+  external transport for Hermes/Burn, richer semantic divider targets, and a
+  narrower public schema once the action vocabulary settles.

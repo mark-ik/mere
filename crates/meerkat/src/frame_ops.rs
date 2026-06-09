@@ -816,7 +816,7 @@ impl App {
     }
 
     /// The id of the open leaf whose content equals `content`, if any.
-    fn pane_of_content(&self, content: &PaneContent) -> Option<PaneId> {
+    pub(super) fn pane_of_content(&self, content: &PaneContent) -> Option<PaneId> {
         self.frame_layout
             .iter_leaves()
             .find(|(_, c, _)| **c == *content)

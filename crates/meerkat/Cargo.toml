@@ -8,6 +8,9 @@ publish = false
 rust-version = "1.92.0"
 description = "Mere's serval-as-host shell (the eventual replacement for the Xilem + Masonry mere-app host): chrome — toolbar / omnibar / command palette / frametree — built as xilem_serval views over the reused graphshell chrome domain, presented by serval. Holds the separate-roots discipline (chrome-root vs content-roots) from commit one."
 
+[features]
+agent-harness = []
+
 [lib]
 name = "meerkat"
 path = "src/lib.rs"

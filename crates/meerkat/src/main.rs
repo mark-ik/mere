@@ -62,9 +62,11 @@ mod fetch;
 mod resources;
 mod sync;
 
+mod a11y_bridge;
+#[cfg(any(test, feature = "agent-harness"))]
+mod agent_harness;
 mod app_handler;
 mod apparatus;
-mod a11y_bridge;
 mod frame_ops;
 mod frame_view;
 mod gloss;
@@ -586,15 +588,20 @@ impl App {
         proxy: winit::event_loop::EventLoopProxy<()>,
         diagnostics_rx: Receiver<DiagnosticEvent>,
     ) -> Self {
+        Self::new_with_session_dir(proxy, diagnostics_rx, default_session_dir())
+    }
+
+    fn new_with_session_dir(
+        proxy: winit::event_loop::EventLoopProxy<()>,
+        diagnostics_rx: Receiver<DiagnosticEvent>,
+        session_dir: PathBuf,
+    ) -> Self {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         // The workbench root's own document, separate from the chrome root (the
         // separate-roots discipline). Empty until the tiled view syncs it.
         let workbench_dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         // The session lives under the per-user data dir; restore the graph + the
         // camera (view-intent) + the settings on launch, else seed fresh.
-        let session_dir = dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("mere");
         let _ = std::fs::create_dir_all(&session_dir);
         // Restore persisted settings (the active-tab cap) so the chrome + actor pool
         // open at the user's saved value rather than the default.
@@ -845,6 +852,12 @@ impl App {
     fn chrome_sheet_refs(&self) -> Vec<&str> {
         self.chrome_sheet.iter().map(String::as_str).collect()
     }
+}
+
+fn default_session_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("mere")
 }
 
 /// Lay out the chrome root and return the border-box bottom (px, rounded up) of
