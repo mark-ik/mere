@@ -521,6 +521,9 @@ struct App {
     /// rebuilt every frame the roster pane is open; a press inside focuses that
     /// node. (Frame tree, F1 roster.)
     roster_row_rects: Vec<(GraphMemberId, [f32; 4])>,
+    /// Roster pane scroll offset in device px. Clamped during roster render
+    /// because the scroll extent depends on pane size and graph size.
+    roster_scroll: f32,
     /// The cursor icon currently set on the window — tracked so a hover over a
     /// resize edge only calls `set_cursor` on a change, not every move. (Custom
     /// titlebar.)
@@ -830,6 +833,7 @@ impl App {
             next_pane_id,
             frame_divider_drag: None,
             roster_row_rects: Vec::new(),
+            roster_scroll: 0.0,
             width: 1024,
             height: 600,
             workbench: Workbench::new(),

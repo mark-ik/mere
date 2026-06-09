@@ -62,7 +62,11 @@ mod tests {
     #[test]
     fn idle_when_joined_with_no_activity() {
         // The honest state of a lone peer: joined, but nothing to sync with yet.
-        let i = SyncIndicator { label: "tessera".into(), active: true, ..Default::default() };
+        let i = SyncIndicator {
+            label: "tessera".into(),
+            active: true,
+            ..Default::default()
+        };
         assert_eq!(i.summary(), "tessera: idle");
     }
 

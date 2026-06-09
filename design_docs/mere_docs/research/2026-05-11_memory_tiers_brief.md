@@ -1,7 +1,7 @@
 # Memory tiers — short-term vs. long-term — design brief
 
 **Date**: 2026-05-11
-**Status**: Design brief — establishes the partition story Mere's persistence layer needs once branches, forks, view-intent state, and diff machinery start producing data that may or may not deserve durable storage.
+**Status**: Design brief — establishes the partition story Mere's persistence layer needs once branches, forks, view-intent state, and diff machinery start producing data that may or may not deserve durable storage. **Refined 2026-06-09** by [`../technical_architecture/2026-06-09_alembic_memory_and_engrams.md`](../technical_architecture/2026-06-09_alembic_memory_and_engrams.md) §2: the two tiers become three levels (short-term / long-term / engram). That doc promotes this brief's *medium-term* footnote (§3.3) to a real **long-term** level (durable but not necessarily addressable) and makes the **engram** a distinct distillation on top, rather than equating long-term with engram. The consolidation gesture (§4) is that distillation.
 **Scope**: Names the two tiers (short-term, long-term), describes what lives where, defines the consolidation gesture that promotes short-term state to long-term, and clarifies how this layers on top of eidetic's existing immutable-engram model. Does **not** specify the short-term substrate's implementation in detail; that lands in its own follow-up plan when consumers exist.
 
 **Related**:

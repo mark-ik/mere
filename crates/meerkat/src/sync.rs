@@ -30,13 +30,13 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
-use armillary::{spawn, ActorHandle, Emitter, Wake};
+use armillary::{ActorHandle, Emitter, Wake, spawn};
 use identity::{IdentityProvider, InMemoryProvider};
 use moothold::tessera::{
-    to_operation, ChainRoot, CommitmentId, Scope, SyncStatus, SyncedMoot, TesseraEvent,
-    TesseraStore,
+    ChainRoot, CommitmentId, Scope, SyncStatus, SyncedMoot, TesseraEvent, TesseraStore,
+    to_operation,
 };
-use transport::{sync_overlay_topic, P2pandaTransport};
+use transport::{P2pandaTransport, sync_overlay_topic};
 
 use meerkat::SyncIndicator;
 
@@ -143,7 +143,9 @@ pub fn spawn_sync(
                     loop {
                         let status = moot.sync_status();
                         if last.as_ref() != Some(&status) {
-                            poll_out.emit(SyncUpdate { status: status.clone() });
+                            poll_out.emit(SyncUpdate {
+                                status: status.clone(),
+                            });
                             last = Some(status);
                         }
                         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -183,7 +185,7 @@ pub fn spawn_sync(
                         Ok(()) => tracing::info!("p2p: connecting to peer (ticket bootstrap)"),
                         Err(err) => tracing::warn!(%err, "connect to peer failed"),
                     }
-                },
+                }
             }
         }
     })
@@ -206,7 +208,11 @@ fn author_starter_log(provider: &InMemoryProvider, moot_id: [u8; 32], store: &Te
         duration_ms: None,
         at_ms: 1_000,
     };
-    let e1 = TesseraEvent::CommitmentFulfilled { by, commitment: cid, at_ms: 1_050 };
+    let e1 = TesseraEvent::CommitmentFulfilled {
+        by,
+        commitment: cid,
+        at_ms: 1_050,
+    };
     let e2 = TesseraEvent::GovernanceParticipation { by, at_ms: 1_100 };
     let op0 = to_operation(&kp, moot_id, &e0, 0, None);
     let op1 = to_operation(&kp, moot_id, &e1, 1, Some(*op0.hash.as_bytes()));
@@ -221,7 +227,9 @@ fn author_starter_log(provider: &InMemoryProvider, moot_id: [u8; 32], store: &Te
 /// module (no `spawn_sync` signature change); a later refactor can thread one
 /// shared session dir through both if desired.
 fn data_dir() -> PathBuf {
-    dirs::data_dir().unwrap_or_else(|| PathBuf::from(".")).join("mere")
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("mere")
 }
 
 /// Load the 32-byte node-identity seed from `path`, or mint + persist a fresh one
@@ -237,7 +245,10 @@ fn load_or_create_seed(path: &Path) -> [u8; 32] {
         if let Ok(seed) = <[u8; 32]>::try_from(bytes.as_slice()) {
             return seed;
         }
-        tracing::warn!(?path, "node identity seed file is the wrong size; regenerating");
+        tracing::warn!(
+            ?path,
+            "node identity seed file is the wrong size; regenerating"
+        );
     }
     // A throwaway random keypair yields a fresh 32-byte seed without pulling an rng
     // dependency into this bin; `to_seed` exposes exactly those bytes.
@@ -284,7 +295,10 @@ mod tests {
 
     #[test]
     fn a_freshly_joined_lane_reads_idle() {
-        assert_eq!(to_indicator(&SyncStatus::default(), "tessera").summary(), "tessera: idle");
+        assert_eq!(
+            to_indicator(&SyncStatus::default(), "tessera").summary(),
+            "tessera: idle"
+        );
     }
 
     #[test]
@@ -301,7 +315,10 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         let first = load_or_create_seed(&path);
         let second = load_or_create_seed(&path);
-        assert_eq!(first, second, "the persisted seed is reused on the next call");
+        assert_eq!(
+            first, second,
+            "the persisted seed is reused on the next call"
+        );
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_dir(&dir);
     }

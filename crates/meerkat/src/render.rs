@@ -675,8 +675,24 @@ impl App {
             let dom = super::roster::build_roster_dom(&rows);
             let sheet_strings = super::roster::roster_sheet(&self.chrome_theme);
             let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
-            let roster_scroll = ScrollOffsets::<NodeId>::default();
-            let scene = scene_from_scripted_dom(&dom, &sheet, rw, rh, None, &roster_scroll);
+            let root = dom.document();
+            let frags = fragments_from_scripted_dom(&dom, &sheet, rw, rh);
+            let mut roster_scrolls = ScrollOffsets::<NodeId>::default();
+            let roster_scroll = first_with_class(&dom, root, "roster")
+                .and_then(|node| {
+                    let layout = frags.rect_of(node)?;
+                    let inner_h = layout.size.height
+                        - layout.padding.top
+                        - layout.padding.bottom
+                        - layout.border.top
+                        - layout.border.bottom;
+                    let max_scroll = (layout.content_size.height - inner_h).max(0.0);
+                    self.roster_scroll = self.roster_scroll.clamp(0.0, max_scroll);
+                    roster_scrolls.insert(node, (0.0, self.roster_scroll));
+                    Some(self.roster_scroll)
+                })
+                .unwrap_or(0.0);
+            let scene = scene_from_scripted_dom(&dom, &sheet, rw, rh, None, &roster_scrolls);
             let pb = self.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
@@ -694,16 +710,25 @@ impl App {
                 ExternalTexturePlacement::new(rrect),
             );
             // Row rects for hit-testing (window coords = roster origin + leaf-local).
-            let frags = fragments_from_scripted_dom(&dom, &sheet, rw, rh);
-            let root = dom.document();
             let mut row_nodes = all_with_class(&dom, root, "roster-row");
             row_nodes.extend(all_with_class(&dom, root, "roster-row-selected"));
             for node in row_nodes {
                 if let (Some(member), Some(l)) = (member_attr(&dom, node), frags.rect_of(node)) {
                     let x0 = rrect[0] + l.location.x;
-                    let y0 = rrect[1] + l.location.y;
-                    self.roster_row_rects
-                        .push((member, [x0, y0, x0 + l.size.width, y0 + l.size.height]));
+                    let y0 = rrect[1] + l.location.y - roster_scroll;
+                    let x1 = x0 + l.size.width;
+                    let y1 = y0 + l.size.height;
+                    if x1 > rrect[0] && x0 < rrect[2] && y1 > rrect[1] && y0 < rrect[3] {
+                        self.roster_row_rects.push((
+                            member,
+                            [
+                                x0.max(rrect[0]),
+                                y0.max(rrect[1]),
+                                x1.min(rrect[2]),
+                                y1.min(rrect[3]),
+                            ],
+                        ));
+                    }
                 }
             }
         }

@@ -32,7 +32,10 @@ pub fn roster_sheet(c: &ChromeTheme) -> Vec<String> {
     };
     vec![
         "div { display: block; }".to_string(),
-        format!(".roster {{ background-color: {}; padding: 6px; }}", rgb(c.panel_bg)),
+        format!(
+            ".roster {{ overflow: scroll; height: 100%; background-color: {}; padding: 6px; }}",
+            rgb(c.panel_bg)
+        ),
         format!(
             ".roster-row {{ background-color: {}; padding: 8px 10px; margin: 2px 0; }}",
             rgb(c.surface_bg)
@@ -41,9 +44,18 @@ pub fn roster_sheet(c: &ChromeTheme) -> Vec<String> {
             ".roster-row-selected {{ background-color: {}; padding: 8px 10px; margin: 2px 0; }}",
             rgb(c.active_bg)
         ),
-        format!(".roster-title {{ font-size: 16px; color: {}; }}", rgb(c.strong_text)),
-        format!(".roster-sub {{ font-size: 13px; color: {}; }}", rgb(c.muted_text)),
-        format!(".roster-empty {{ font-size: 14px; color: {}; padding: 12px; }}", rgb(c.muted_text)),
+        format!(
+            ".roster-title {{ font-size: 16px; color: {}; }}",
+            rgb(c.strong_text)
+        ),
+        format!(
+            ".roster-sub {{ font-size: 13px; color: {}; }}",
+            rgb(c.muted_text)
+        ),
+        format!(
+            ".roster-empty {{ font-size: 14px; color: {}; padding: 12px; }}",
+            rgb(c.muted_text)
+        ),
     ]
 }
 
@@ -68,7 +80,11 @@ pub fn build_roster_dom(rows: &[RosterRow]) -> ScriptedDom {
 
     for row in rows {
         let entry = dom.create_element(qual("div"));
-        let class = if row.selected { "roster-row-selected" } else { "roster-row" };
+        let class = if row.selected {
+            "roster-row-selected"
+        } else {
+            "roster-row"
+        };
         dom.set_attribute(entry, qual("class"), class);
         dom.set_attribute(entry, qual("data-member"), &row.member.to_string());
 
@@ -92,4 +108,62 @@ pub fn build_roster_dom(rows: &[RosterRow]) -> ScriptedDom {
 /// A `QualName` in the null namespace (the shape `ScriptedDom` builders take).
 fn qual(local: &str) -> QualName {
     QualName::new(None, Namespace::from(""), LocalName::from(local))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use layout_dom_api::LayoutDom;
+    use pelt_live::fragments_from_scripted_dom;
+
+    #[test]
+    fn roster_sheet_marks_root_as_scroll_container() {
+        let css = roster_sheet(&ChromeTheme::default()).join("\n");
+
+        assert!(css.contains(".roster"));
+        assert!(css.contains("overflow: scroll"));
+        assert!(css.contains("height: 100%"));
+    }
+
+    #[test]
+    fn roster_layout_overflows_small_pane() {
+        let rows: Vec<RosterRow> = (0..12)
+            .map(|i| RosterRow {
+                member: GraphMemberId::from_u128(i + 1),
+                title: format!("node-{i}"),
+                subtitle: "text/html".to_string(),
+                selected: i == 0,
+            })
+            .collect();
+        let dom = build_roster_dom(&rows);
+        let sheet_strings = roster_sheet(&ChromeTheme::default());
+        let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
+        let frags = fragments_from_scripted_dom(&dom, &sheet, 220, 120);
+        let root = first_by_class(&dom, dom.document(), "roster").expect("roster root");
+        let layout = frags.rect_of(root).expect("roster layout");
+        let inner_h = layout.size.height
+            - layout.padding.top
+            - layout.padding.bottom
+            - layout.border.top
+            - layout.border.bottom;
+
+        assert!(
+            layout.content_size.height > inner_h,
+            "roster rows should overflow the visible pane"
+        );
+    }
+
+    fn first_by_class(
+        dom: &ScriptedDom,
+        id: serval_scripted_dom::NodeId,
+        class: &str,
+    ) -> Option<serval_scripted_dom::NodeId> {
+        if dom.attributes(id).any(|attr| {
+            attr.name.local.as_ref() == "class" && attr.value.split_whitespace().any(|c| c == class)
+        }) {
+            return Some(id);
+        }
+        dom.dom_children(id)
+            .find_map(|child| first_by_class(dom, child, class))
+    }
 }

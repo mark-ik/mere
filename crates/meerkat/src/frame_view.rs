@@ -36,10 +36,18 @@ pub struct LaidDivider {
 /// Lay every leaf out within `band` (`[x0, y0, x1, y1]`). When `maximized` names a
 /// leaf present in the layout, that leaf fills the whole band and the rest are
 /// omitted (the maximize override).
-pub fn leaf_rects(layout: &FrameLayout, band: [f32; 4], maximized: Option<PaneId>) -> Vec<LaidLeaf> {
+pub fn leaf_rects(
+    layout: &FrameLayout,
+    band: [f32; 4],
+    maximized: Option<PaneId>,
+) -> Vec<LaidLeaf> {
     if let Some(pid) = maximized {
         if let Some((content, _path)) = find_leaf(&layout.root, pid, &mut Vec::new()) {
-            return vec![LaidLeaf { pane_id: pid, content, rect: band }];
+            return vec![LaidLeaf {
+                pane_id: pid,
+                content,
+                rect: band,
+            }];
         }
     }
     let mut out = Vec::new();
@@ -64,14 +72,23 @@ pub fn divider_rects(
 
 fn walk_leaves(node: &PaneNode, rect: [f32; 4], out: &mut Vec<LaidLeaf>) {
     match node {
-        PaneNode::Leaf { pane_id, content, .. } => {
-            out.push(LaidLeaf { pane_id: *pane_id, content: content.clone(), rect })
-        },
-        PaneNode::Split { axis, ratio, first, second } => {
+        PaneNode::Leaf {
+            pane_id, content, ..
+        } => out.push(LaidLeaf {
+            pane_id: *pane_id,
+            content: content.clone(),
+            rect,
+        }),
+        PaneNode::Split {
+            axis,
+            ratio,
+            first,
+            second,
+        } => {
             let (r1, r2) = split_rect(rect, *axis, *ratio);
             walk_leaves(first, r1, out);
             walk_leaves(second, r2, out);
-        },
+        }
     }
 }
 
@@ -81,7 +98,13 @@ fn walk_dividers(
     path: &mut Vec<SplitChoice>,
     out: &mut Vec<LaidDivider>,
 ) {
-    if let PaneNode::Split { axis, ratio, first, second } = node {
+    if let PaneNode::Split {
+        axis,
+        ratio,
+        first,
+        second,
+    } = node
+    {
         out.push(LaidDivider {
             path: path.clone(),
             rect: gutter_rect(rect, *axis, *ratio),
@@ -107,12 +130,12 @@ fn split_rect(rect: [f32; 4], axis: SplitAxis, ratio: f32) -> ([f32; 4], [f32; 4
             let usable = (x1 - x0 - DIVIDER).max(0.0);
             let cut = x0 + usable * ratio;
             ([x0, y0, cut, y1], [cut + DIVIDER, y0, x1, y1])
-        },
+        }
         SplitAxis::Vertical => {
             let usable = (y1 - y0 - DIVIDER).max(0.0);
             let cut = y0 + usable * ratio;
             ([x0, y0, x1, cut], [x0, cut + DIVIDER, x1, y1])
-        },
+        }
     }
 }
 
@@ -124,12 +147,12 @@ fn gutter_rect(rect: [f32; 4], axis: SplitAxis, ratio: f32) -> [f32; 4] {
             let usable = (x1 - x0 - DIVIDER).max(0.0);
             let cut = x0 + usable * ratio;
             [cut, y0, cut + DIVIDER, y1]
-        },
+        }
         SplitAxis::Vertical => {
             let usable = (y1 - y0 - DIVIDER).max(0.0);
             let cut = y0 + usable * ratio;
             [x0, cut, x1, cut + DIVIDER]
-        },
+        }
     }
 }
 
@@ -145,7 +168,9 @@ fn find_leaf(
     path: &mut Vec<SplitChoice>,
 ) -> Option<(PaneContent, Vec<SplitChoice>)> {
     match node {
-        PaneNode::Leaf { pane_id, content, .. } if *pane_id == pid => Some((content.clone(), path.clone())),
+        PaneNode::Leaf {
+            pane_id, content, ..
+        } if *pane_id == pid => Some((content.clone(), path.clone())),
         PaneNode::Leaf { .. } => None,
         PaneNode::Split { first, second, .. } => {
             path.push(SplitChoice::First);
@@ -159,7 +184,7 @@ fn find_leaf(
             }
             path.pop();
             None
-        },
+        }
     }
 }
 
@@ -170,11 +195,19 @@ mod tests {
     use super::*;
 
     fn leaf(id: u64, content: PaneContent) -> PaneNode {
-        PaneNode::Leaf { pane_id: PaneId(id), content, graph_id: GraphId::default() }
+        PaneNode::Leaf {
+            pane_id: PaneId(id),
+            content,
+            graph_id: GraphId::default(),
+        }
     }
 
     fn layout(root: PaneNode) -> FrameLayout {
-        FrameLayout { id: FrameId::new("t"), label: "t".into(), root }
+        FrameLayout {
+            id: FrameId::new("t"),
+            label: "t".into(),
+            root,
+        }
     }
 
     #[test]
@@ -217,6 +250,9 @@ mod tests {
         assert_eq!(leaves[0].pane_id, PaneId(1));
         assert_eq!(leaves[0].rect, [0.0, 0.0, 806.0, 600.0]);
         // An unknown maximized id falls back to the normal layout.
-        assert_eq!(leaf_rects(&l, [0.0, 0.0, 806.0, 600.0], Some(PaneId(9))).len(), 2);
+        assert_eq!(
+            leaf_rects(&l, [0.0, 0.0, 806.0, 600.0], Some(PaneId(9))).len(),
+            2
+        );
     }
 }

@@ -31,15 +31,23 @@ pub enum WindowControl {
     Close,
 }
 
-const CONTROLS: [WindowControl; 3] =
-    [WindowControl::Minimize, WindowControl::Maximize, WindowControl::Close];
+const CONTROLS: [WindowControl; 3] = [
+    WindowControl::Minimize,
+    WindowControl::Maximize,
+    WindowControl::Close,
+];
 
 /// A chrome [`Color32`] token as a premultiplied `[f32; 4]` for the scene
 /// primitives (the glyphs are opaque, so this is a straight normalize).
 fn rgba(c: Color32) -> [f32; 4] {
     let [r, g, b, a] = c.to_array();
     let af = a as f32 / 255.0;
-    [r as f32 / 255.0 * af, g as f32 / 255.0 * af, b as f32 / 255.0 * af, af]
+    [
+        r as f32 / 255.0 * af,
+        g as f32 / 255.0 * af,
+        b as f32 / 255.0 * af,
+        af,
+    ]
 }
 
 /// The window-space rect `[x0, y0, x1, y1]` of control `idx` (0 = minimize …
@@ -142,19 +150,34 @@ mod tests {
         let close = control_rect(2, w, band);
         assert_eq!(close[2], w as f32);
         // A point in the close cell hits close; one left of the strip misses.
-        assert_eq!(control_at(w as f32 - 10.0, 20.0, w, band), Some(WindowControl::Close));
+        assert_eq!(
+            control_at(w as f32 - 10.0, 20.0, w, band),
+            Some(WindowControl::Close)
+        );
         assert_eq!(control_at(w as f32 - CONTROLS_W - 5.0, 20.0, w, band), None);
         // Below the band there are no controls.
-        assert_eq!(control_at(w as f32 - 10.0, band as f32 + 5.0, w, band), None);
+        assert_eq!(
+            control_at(w as f32 - 10.0, band as f32 + 5.0, w, band),
+            None
+        );
     }
 
     #[test]
     fn resize_edges_and_corners() {
         let (w, h) = (800u32, 600u32);
-        assert_eq!(resize_dir_at(0.0, 0.0, w, h), Some(ResizeDirection::NorthWest));
-        assert_eq!(resize_dir_at(w as f32, h as f32, w, h), Some(ResizeDirection::SouthEast));
+        assert_eq!(
+            resize_dir_at(0.0, 0.0, w, h),
+            Some(ResizeDirection::NorthWest)
+        );
+        assert_eq!(
+            resize_dir_at(w as f32, h as f32, w, h),
+            Some(ResizeDirection::SouthEast)
+        );
         assert_eq!(resize_dir_at(0.0, 300.0, w, h), Some(ResizeDirection::West));
-        assert_eq!(resize_dir_at(400.0, h as f32, w, h), Some(ResizeDirection::South));
+        assert_eq!(
+            resize_dir_at(400.0, h as f32, w, h),
+            Some(ResizeDirection::South)
+        );
         assert_eq!(resize_dir_at(400.0, 300.0, w, h), None);
     }
 }

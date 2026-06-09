@@ -20,13 +20,19 @@
 
 use kernel::graph::Graph;
 use linked_data::{
-    apply_contribution, from_html_with_contexts, from_jsonld_with_contexts, ContextCache,
-    GraphContribution,
+    ContextCache, GraphContribution, apply_contribution, from_html_with_contexts,
+    from_jsonld_with_contexts,
 };
 
 /// The bare media type, lowercased and without parameters (`; charset=…`).
 fn media_type(content_type: Option<&str>) -> Option<String> {
-    content_type.map(|ct| ct.split(';').next().unwrap_or(ct).trim().to_ascii_lowercase())
+    content_type.map(|ct| {
+        ct.split(';')
+            .next()
+            .unwrap_or(ct)
+            .trim()
+            .to_ascii_lowercase()
+    })
 }
 
 /// Produce the graph contributions a fetched document carries, without touching
@@ -36,9 +42,11 @@ fn media_type(content_type: Option<&str>) -> Option<String> {
 /// full pack; a non-linked-data document yields `[]`.
 pub fn harvest_contributions(content_type: Option<&str>, body: &str) -> Vec<GraphContribution> {
     match media_type(content_type).as_deref() {
-        Some("application/ld+json") => from_jsonld_with_contexts(body.as_bytes(), ContextCache::full())
-            .map(|contribution| vec![contribution])
-            .unwrap_or_default(),
+        Some("application/ld+json") => {
+            from_jsonld_with_contexts(body.as_bytes(), ContextCache::full())
+                .map(|contribution| vec![contribution])
+                .unwrap_or_default()
+        }
         // A page can carry several JSON-LD blocks.
         Some("text/html") => from_html_with_contexts(body, ContextCache::full()),
         _ => Vec::new(),
@@ -80,7 +88,11 @@ mod tests {
         // The pure producer: contributions out, no graph touched.
         let body = r#"{"@context":{"name":"https://schema.org/name"},"@id":"mere://p","name":"P"}"#;
         let contributions = harvest_contributions(Some("application/ld+json"), body);
-        assert_eq!(contributions.len(), 1, "one JSON-LD document, one contribution");
+        assert_eq!(
+            contributions.len(),
+            1,
+            "one JSON-LD document, one contribution"
+        );
         assert!(contributions[0].nodes.iter().any(|n| n.id == "mere://p"));
         assert!(
             harvest_contributions(Some("text/markdown"), "# hi").is_empty(),
@@ -103,7 +115,11 @@ mod tests {
     fn resolves_a_remote_schema_org_context_offline() {
         let mut graph = Graph::new();
         let body = r#"{"@context":"https://schema.org/","@id":"https://x.test/","name":"X"}"#;
-        assert!(harvest(&mut graph, Some("application/ld+json; charset=utf-8"), body));
+        assert!(harvest(
+            &mut graph,
+            Some("application/ld+json; charset=utf-8"),
+            body
+        ));
         assert!(graph.get_node_by_url("https://x.test/").is_some());
     }
 

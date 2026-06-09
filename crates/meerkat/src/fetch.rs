@@ -26,7 +26,7 @@
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
-use armillary::{spawn, ActorHandle, Emitter, Wake};
+use armillary::{ActorHandle, Emitter, Wake, spawn};
 use tokio::runtime::Builder;
 
 /// The most redirects a smolweb fetch will follow before giving up.
@@ -91,7 +91,7 @@ pub fn is_fetchable(url: &str) -> bool {
     match scheme_of(url) {
         Some(scheme) => {
             scheme == "http" || scheme == "https" || errand::Scheme::parse(scheme).is_some()
-        },
+        }
         None => false,
     }
 }
@@ -140,7 +140,7 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
                         let result = fetch_page(&url).await;
                         out.emit(FetchUpdate::Page(FetchOutcome { url, result }));
                     });
-                },
+                }
                 FetchCommand::Subresource(url) => {
                     let out = out.clone();
                     runtime.spawn(async move {
@@ -151,7 +151,7 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
                             out.emit(FetchUpdate::Subresource(SubresourceOutcome { url, bytes }));
                         }
                     });
-                },
+                }
             }
         }
     })
@@ -174,7 +174,7 @@ async fn fetch_page(url: &str) -> Result<Fetched, String> {
                 Err(error) => tracing::warn!(%url, %error, "smolweb failed"),
             }
             result
-        },
+        }
         None => do_fetch(url).await,
     }
 }
@@ -193,13 +193,16 @@ async fn smolweb_fetch(url: &str) -> Result<Fetched, String> {
             errand::Status::Success => {
                 let content_type = smolweb_content_type(&current, &response);
                 let body = String::from_utf8_lossy(&response.body).into_owned();
-                return Ok(Fetched { content_type: Some(content_type), body });
-            },
+                return Ok(Fetched {
+                    content_type: Some(content_type),
+                    body,
+                });
+            }
             errand::Status::Redirect => {
                 current = current
                     .join(&response.meta)
                     .map_err(|e| format!("bad redirect target: {e}"))?;
-            },
+            }
             errand::Status::Input => return Err(format!("input required: {}", response.meta)),
             errand::Status::CertRequired => return Err("client certificate required".to_string()),
             errand::Status::Failure => {
@@ -208,7 +211,7 @@ async fn smolweb_fetch(url: &str) -> Result<Fetched, String> {
                 } else {
                     response.meta
                 });
-            },
+            }
         }
     }
     Err("too many redirects".to_string())
@@ -247,7 +250,10 @@ async fn do_fetch(url: &str) -> Result<Fetched, String> {
         .iter()
         .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
         .map(|(_, v)| v.clone());
-    let bytes = response.bytes().await.map_err(|e| format!("read error: {e}"))?;
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("read error: {e}"))?;
     let body = String::from_utf8_lossy(&bytes).into_owned();
     Ok(Fetched { content_type, body })
 }
@@ -296,16 +302,28 @@ mod tests {
         }
 
         let finger = url::Url::parse("finger://example.org/alice").unwrap();
-        assert_eq!(smolweb_content_type(&finger, &resp_for(&finger, "text/plain")), "text/x-finger");
+        assert_eq!(
+            smolweb_content_type(&finger, &resp_for(&finger, "text/plain")),
+            "text/x-finger"
+        );
 
         let nex = url::Url::parse("nex://nightfall.city/").unwrap();
-        assert_eq!(smolweb_content_type(&nex, &resp_for(&nex, "")), "application/x-nex");
+        assert_eq!(
+            smolweb_content_type(&nex, &resp_for(&nex, "")),
+            "application/x-nex"
+        );
 
         let guppy = url::Url::parse("guppy://mozz.us/").unwrap();
-        assert_eq!(smolweb_content_type(&guppy, &resp_for(&guppy, "text/gemini")), "application/x-guppy");
+        assert_eq!(
+            smolweb_content_type(&guppy, &resp_for(&guppy, "text/gemini")),
+            "application/x-guppy"
+        );
 
         let titan = url::Url::parse("titan://capsule.example/page").unwrap();
-        assert_eq!(smolweb_content_type(&titan, &resp_for(&titan, "text/gemini")), "application/x-titan");
+        assert_eq!(
+            smolweb_content_type(&titan, &resp_for(&titan, "text/gemini")),
+            "application/x-titan"
+        );
 
         let gem = url::Url::parse("gemini://capsule.example/").unwrap();
         let gem_resp = errand::Response {
@@ -320,7 +338,10 @@ mod tests {
 
     #[test]
     fn state_tag_distinguishes_transitions() {
-        let ready = ContentState::Ready(Fetched { content_type: None, body: String::new() });
+        let ready = ContentState::Ready(Fetched {
+            content_type: None,
+            body: String::new(),
+        });
         assert_eq!(ContentState::tag(None), 0);
         assert_eq!(ContentState::tag(Some(&ContentState::Loading)), 1);
         assert_ne!(

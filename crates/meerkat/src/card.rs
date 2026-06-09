@@ -14,14 +14,16 @@
 //! response content-type; the layout + scene + composite path here stays.
 
 use document_canvas::netrender_backend::scene_from_packet;
-use document_canvas::{layout_document, ColorVocabulary, StyleConfig, Viewport};
+use document_canvas::{ColorVocabulary, StyleConfig, Viewport, layout_document};
 use inker::{
     DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput,
     EngineRegistry, InlineSpan,
 };
 use netrender::Scene;
 use pelt_live::scene_from_layout_dom;
-use serval_layout::{inline_stylesheets, linked_stylesheets_with_loader, ImageLoader, ScrollOffsets};
+use serval_layout::{
+    ImageLoader, ScrollOffsets, inline_stylesheets, linked_stylesheets_with_loader,
+};
 use serval_static_dom::StaticDocument;
 
 use crate::fetch::{ContentState, Fetched};
@@ -66,9 +68,15 @@ pub fn content_document(url: &str, state: Option<&ContentState>) -> EngineDocume
             Some(ContentState::Loading) => vec![heading(1, url), paragraph("Fetching…")],
             Some(ContentState::Ready(fetched)) => ready_blocks(url, fetched),
             Some(ContentState::Failed(reason)) => {
-                vec![heading(1, url), paragraph(&format!("Could not load: {reason}"))]
-            },
-            None => vec![heading(1, url), paragraph("This node has no fetched media yet.")],
+                vec![
+                    heading(1, url),
+                    paragraph(&format!("Could not load: {reason}")),
+                ]
+            }
+            None => vec![
+                heading(1, url),
+                paragraph("This node has no fetched media yet."),
+            ],
         }
     };
     document(url, blocks)
@@ -132,7 +140,11 @@ fn document(url: &str, blocks: Vec<DocumentBlock>) -> EngineDocument {
 /// texture and scroll a window of it on the GPU. The caller composites the scene
 /// at the card rect with an opaque card background.
 pub fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> (Scene, u32) {
-    let mut laid = layout_document(doc, Viewport::new(w as f32, h as f32), &StyleConfig::default());
+    let mut laid = layout_document(
+        doc,
+        Viewport::new(w as f32, h as f32),
+        &StyleConfig::default(),
+    );
     let content_height = laid.packet.content_bounds.size.height.ceil().max(1.0);
     // Expand the paint-list viewport to the full content height before lowering, so
     // the rasterizer renders the *whole* document into the tall texture. The paint
@@ -187,7 +199,11 @@ pub fn render_content_scene(
 /// Dispatch Ready content to the nematic engine matching its content-type, if any,
 /// producing an [`EngineDocument`]. `None` when no engine matches (the caller then
 /// falls back to the plain rendering).
-fn routed_document(url: &str, fetched: &Fetched, registry: &EngineRegistry) -> Option<EngineDocument> {
+fn routed_document(
+    url: &str,
+    fetched: &Fetched,
+    registry: &EngineRegistry,
+) -> Option<EngineDocument> {
     let id = engine_id_for(fetched.content_type.as_deref())?;
     let engine = registry.engine(id)?;
     let mut input = EngineInput::new(url, fetched.body.clone());
@@ -213,7 +229,7 @@ fn engine_id_for(content_type: Option<&str>) -> Option<&'static str> {
         "message/x-misfin" => nematic::ENGINE_MISFIN,
         "application/rss+xml" | "application/atom+xml" | "application/feed+json" => {
             nematic::ENGINE_FEED
-        },
+        }
         _ => return None,
     })
 }
@@ -228,7 +244,12 @@ fn is_html(content_type: Option<&str>) -> bool {
 /// The lowercased base media type, dropping parameters
 /// (`text/HTML; charset=utf-8` → `text/html`).
 fn base_type(content_type: &str) -> String {
-    content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase()
+    content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase()
 }
 
 /// Parse `body` as a full HTML document and render it through the shared content
@@ -276,7 +297,14 @@ pub fn card_rect(band: [f32; 4]) -> Option<(f32, f32, f32, f32, u32, u32)> {
     let x0 = x1 - cw;
     let y0 = top;
     let y1 = y0 + ch;
-    Some((x0, y0, x1, y1, cw.round().max(1.0) as u32, ch.round().max(1.0) as u32))
+    Some((
+        x0,
+        y0,
+        x1,
+        y1,
+        cw.round().max(1.0) as u32,
+        ch.round().max(1.0) as u32,
+    ))
 }
 
 /// A floating card of desired pixel size `cw`x`ch`, anchored **next to** the node
@@ -350,7 +378,11 @@ pub fn close_button_scene(size: u32) -> Scene {
 /// (Card system #3.)
 pub fn unvisited_card_scene(w: u32, h: u32) -> Scene {
     let doc = document("mere://unvisited", vec![paragraph("Double-click to load")]);
-    let mut laid = layout_document(&doc, Viewport::new(w as f32, h as f32), &StyleConfig::default());
+    let mut laid = layout_document(
+        &doc,
+        Viewport::new(w as f32, h as f32),
+        &StyleConfig::default(),
+    );
     // Frame the whole card (not just the text extent) so the dashed border fits.
     laid.packet.viewport = Viewport::new(w as f32, h as f32);
     let mut scene = scene_from_packet(&laid.packet, &laid.fonts, &card_vocabulary());
@@ -369,11 +401,16 @@ pub fn unvisited_card_scene(w: u32, h: u32) -> Scene {
 }
 
 fn heading(level: u8, text: &str) -> DocumentBlock {
-    DocumentBlock::Heading { level, spans: vec![InlineSpan::Text(text.to_string())] }
+    DocumentBlock::Heading {
+        level,
+        spans: vec![InlineSpan::Text(text.to_string())],
+    }
 }
 
 fn paragraph(text: &str) -> DocumentBlock {
-    DocumentBlock::Paragraph { spans: vec![InlineSpan::Text(text.to_string())] }
+    DocumentBlock::Paragraph {
+        spans: vec![InlineSpan::Text(text.to_string())],
+    }
 }
 
 #[cfg(test)]
@@ -399,7 +436,7 @@ mod tests {
                         InlineSpan::Text(t) => Some(t.as_str()),
                         _ => None,
                     }))
-                },
+                }
                 _ => None,
             })
             .flatten()
@@ -411,14 +448,22 @@ mod tests {
     fn welcome_document_leads_with_a_heading() {
         let doc = content_document("mere://welcome", None);
         assert_eq!(doc.address, "mere://welcome");
-        assert!(matches!(doc.blocks.first(), Some(DocumentBlock::Heading { level: 1, .. })));
+        assert!(matches!(
+            doc.blocks.first(),
+            Some(DocumentBlock::Heading { level: 1, .. })
+        ));
     }
 
     #[test]
     fn fetch_states_render_distinctly() {
         let url = "https://example.com";
-        assert!(heads_with(&content_document(url, Some(&ContentState::Loading)), url));
-        assert!(body_text(&content_document(url, Some(&ContentState::Loading))).contains("Fetching"));
+        assert!(heads_with(
+            &content_document(url, Some(&ContentState::Loading)),
+            url
+        ));
+        assert!(
+            body_text(&content_document(url, Some(&ContentState::Loading))).contains("Fetching")
+        );
 
         let ready = ContentState::Ready(Fetched {
             content_type: Some("text/plain".into()),
@@ -427,7 +472,10 @@ mod tests {
         let doc = content_document(url, Some(&ready));
         let text = body_text(&doc);
         assert!(text.contains("First paragraph."), "fetched body renders");
-        assert!(text.contains("Second paragraph."), "blank lines split paragraphs");
+        assert!(
+            text.contains("Second paragraph."),
+            "blank lines split paragraphs"
+        );
 
         let failed = ContentState::Failed("HTTP 404".into());
         assert!(body_text(&content_document(url, Some(&failed))).contains("404"));
@@ -442,7 +490,10 @@ mod tests {
             .iter()
             .filter(|op| matches!(op, netrender::SceneOp::GlyphRun(_)))
             .count();
-        assert!(glyph_runs >= 1, "the welcome card lowers its text to glyph runs");
+        assert!(
+            glyph_runs >= 1,
+            "the welcome card lowers its text to glyph runs"
+        );
     }
 
     #[test]
@@ -453,19 +504,47 @@ mod tests {
         assert!(x1 <= 1024.0 && y1 <= 600.0, "within the window");
         assert!(y0 >= 64.0, "below the toolbar band");
         assert!(cw >= 1 && ch >= 1);
-        assert!(card_rect([0.0, 64.0, 120.0, 120.0]).is_none(), "no card when the band is too small");
+        assert!(
+            card_rect([0.0, 64.0, 120.0, 120.0]).is_none(),
+            "no card when the band is too small"
+        );
     }
 
     #[test]
     fn engine_id_for_maps_known_types() {
-        assert_eq!(engine_id_for(Some("text/markdown")), Some(nematic::ENGINE_MARKDOWN));
-        assert_eq!(engine_id_for(Some("text/plain; charset=utf-8")), Some(nematic::ENGINE_TEXT));
-        assert_eq!(engine_id_for(Some("text/gemini")), Some(nematic::ENGINE_GEMTEXT));
-        assert_eq!(engine_id_for(Some("application/x-nex")), Some(nematic::ENGINE_NEX));
-        assert_eq!(engine_id_for(Some("application/x-guppy")), Some(nematic::ENGINE_GUPPY));
-        assert_eq!(engine_id_for(Some("application/x-titan")), Some(nematic::ENGINE_TITAN));
-        assert_eq!(engine_id_for(Some("message/x-misfin")), Some(nematic::ENGINE_MISFIN));
-        assert_eq!(engine_id_for(Some("text/html")), None, "HTML uses the serval lane");
+        assert_eq!(
+            engine_id_for(Some("text/markdown")),
+            Some(nematic::ENGINE_MARKDOWN)
+        );
+        assert_eq!(
+            engine_id_for(Some("text/plain; charset=utf-8")),
+            Some(nematic::ENGINE_TEXT)
+        );
+        assert_eq!(
+            engine_id_for(Some("text/gemini")),
+            Some(nematic::ENGINE_GEMTEXT)
+        );
+        assert_eq!(
+            engine_id_for(Some("application/x-nex")),
+            Some(nematic::ENGINE_NEX)
+        );
+        assert_eq!(
+            engine_id_for(Some("application/x-guppy")),
+            Some(nematic::ENGINE_GUPPY)
+        );
+        assert_eq!(
+            engine_id_for(Some("application/x-titan")),
+            Some(nematic::ENGINE_TITAN)
+        );
+        assert_eq!(
+            engine_id_for(Some("message/x-misfin")),
+            Some(nematic::ENGINE_MISFIN)
+        );
+        assert_eq!(
+            engine_id_for(Some("text/html")),
+            None,
+            "HTML uses the serval lane"
+        );
         assert_eq!(engine_id_for(None), None);
     }
 
@@ -478,7 +557,11 @@ mod tests {
     }
 
     fn glyph_runs(scene: &netrender::Scene) -> usize {
-        scene.ops.iter().filter(|op| matches!(op, netrender::SceneOp::GlyphRun(_))).count()
+        scene
+            .ops
+            .iter()
+            .filter(|op| matches!(op, netrender::SceneOp::GlyphRun(_)))
+            .count()
     }
 
     #[test]
@@ -491,8 +574,18 @@ mod tests {
             content_type: Some("text/markdown".into()),
             body: "# Heading\n\nA paragraph.".into(),
         });
-        let (scene, _) = render_content_scene("https://example.com", Some(&ready), &registry, &NoImageLoader, 420, 360);
-        assert!(glyph_runs(&scene) >= 1, "markdown renders text via the nematic document lane");
+        let (scene, _) = render_content_scene(
+            "https://example.com",
+            Some(&ready),
+            &registry,
+            &NoImageLoader,
+            420,
+            360,
+        );
+        assert!(
+            glyph_runs(&scene) >= 1,
+            "markdown renders text via the nematic document lane"
+        );
     }
 
     #[test]
@@ -503,8 +596,18 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<h1>Hello</h1><p>World</p>".into(),
         });
-        let (scene, _) = render_content_scene("https://example.com", Some(&ready), &registry, &NoImageLoader, 420, 360);
-        assert!(glyph_runs(&scene) >= 1, "HTML renders text via the serval lane");
+        let (scene, _) = render_content_scene(
+            "https://example.com",
+            Some(&ready),
+            &registry,
+            &NoImageLoader,
+            420,
+            360,
+        );
+        assert!(
+            glyph_runs(&scene) >= 1,
+            "HTML renders text via the serval lane"
+        );
     }
 
     #[test]
@@ -517,16 +620,37 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<style>p { display: none; }</style><p>Hidden by the page.</p>".into(),
         });
-        let (scene, _) = render_content_scene("https://example.com", Some(&hidden), &registry, &NoImageLoader, 420, 360);
-        assert_eq!(glyph_runs(&scene), 0, "a page `display:none` style suppresses the paragraph");
+        let (scene, _) = render_content_scene(
+            "https://example.com",
+            Some(&hidden),
+            &registry,
+            &NoImageLoader,
+            420,
+            360,
+        );
+        assert_eq!(
+            glyph_runs(&scene),
+            0,
+            "a page `display:none` style suppresses the paragraph"
+        );
 
         // Without the hiding style the same paragraph renders.
         let shown = ContentState::Ready(Fetched {
             content_type: Some("text/html".into()),
             body: "<p>Visible.</p>".into(),
         });
-        let (scene, _) = render_content_scene("https://example.com", Some(&shown), &registry, &NoImageLoader, 420, 360);
-        assert!(glyph_runs(&scene) >= 1, "without a hiding style the paragraph renders");
+        let (scene, _) = render_content_scene(
+            "https://example.com",
+            Some(&shown),
+            &registry,
+            &NoImageLoader,
+            420,
+            360,
+        );
+        assert!(
+            glyph_runs(&scene) >= 1,
+            "without a hiding style the paragraph renders"
+        );
     }
 
     #[test]
@@ -540,9 +664,10 @@ mod tests {
         // already cached. The link must be seen despite living in `<head>` (full
         // document parse) and apply through the loader seam.
         let store = RefCell::new(ResourceStore::default());
-        store
-            .borrow_mut()
-            .insert("https://example.com/hide.css".into(), b"p { display: none; }".to_vec());
+        store.borrow_mut().insert(
+            "https://example.com/hide.css".into(),
+            b"p { display: none; }".to_vec(),
+        );
         let wanted = RefCell::new(Vec::new());
         let loader = ResourceLoader::new(&store, "https://example.com/page.html", &wanted);
 
@@ -552,8 +677,14 @@ mod tests {
                    <body><p>Hidden by the linked sheet.</p></body>"
                 .into(),
         });
-        let (scene, _) =
-            render_content_scene("https://example.com/page.html", Some(&ready), &registry, &loader, 420, 360);
+        let (scene, _) = render_content_scene(
+            "https://example.com/page.html",
+            Some(&ready),
+            &registry,
+            &loader,
+            420,
+            360,
+        );
         assert_eq!(
             glyph_runs(&scene),
             0,

@@ -122,6 +122,39 @@ tile tree. All panes (including the roster and gloss) live in the frame tree.
 
 ---
 
+### 3.1 Inspecting: node vs tile (the bridge, 2026-06-09)
+
+**Current state (2026-06-09):** the shipped Inspector (`meerkat/src/inspector.rs`)
+is a single focused-node pane blending the active node's facets and its content
+diagnostics, following selection; Steward and Roster ship as their own panes. The
+node-vs-tile split and bridge below are the **target**, not yet built (no
+inspect-node / inspect-tile context menus or parameterized leaves yet).
+
+A node and its tile are two projections of one node (orrery = graph primitive,
+workbench = addressed content), so inspecting is contextual:
+
+- **`inspect node`** (orrery context menu) roots the **roster** on that node (its
+  facets), split beside the orrery. Facets is the roster at node scope, not a
+  separate pane.
+- **`inspect tile`** (workbench context menu) opens the **inspector** (content
+  devtools), split beside the workbench.
+
+The two are **bridged by node id**, so you cross between a node's data face and its
+content face without losing your place:
+
+- From the roster rooted on a node: "inspect content" opens the inspector on that
+  node (and tiles it).
+- From the inspector: "show facets" / "reveal in orrery" roots the roster, or
+  focuses the orrery, on that node.
+
+Mechanically this is the first **parameterized** frame leaf: the target carries a
+node id (and, for the inspector, that its scope is content), and it summons
+**beside its source leaf** rather than at a fixed anchor. The context menus
+themselves (a node menu in the orrery, a tile menu in the workbench) are net-new
+shared infrastructure; `inspect node` / `inspect tile` are their first entries.
+
+---
+
 ## 4. Prerequisite: wire the frame tree into meerkat
 
 **meerkat does not use `frame::FrameLayout` today.** The content band is a hard

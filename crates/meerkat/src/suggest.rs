@@ -48,7 +48,9 @@ pub fn suggestions(query: &str, history: &History) -> Vec<OmnibarMatch> {
     // Direct navigation, when the text resolves to a URL (not a search).
     if let NavTarget::Url(url) = nav::classify(q) {
         if seen.insert(url.clone()) {
-            out.push(OmnibarMatch::NodeUrl(HistoricalNodeMatch::without_label(url)));
+            out.push(OmnibarMatch::NodeUrl(HistoricalNodeMatch::without_label(
+                url,
+            )));
         }
     }
     // History matches, most-recent first.

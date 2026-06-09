@@ -23,7 +23,12 @@ const NODE: f32 = 7.0;
 /// A chrome token at `alpha` as a premultiplied `[r, g, b, a]`.
 fn rgba(c: Color32, alpha: f32) -> [f32; 4] {
     let [r, g, b, _] = c.to_array();
-    [r as f32 / 255.0 * alpha, g as f32 / 255.0 * alpha, b as f32 / 255.0 * alpha, alpha]
+    [
+        r as f32 / 255.0 * alpha,
+        g as f32 / 255.0 * alpha,
+        b as f32 / 255.0 * alpha,
+        alpha,
+    ]
 }
 
 /// Build the minimap swatch: fit the node positions into the `w` x `h` pane
@@ -77,7 +82,11 @@ pub fn minimap_scene(
         // The focused node draws a touch larger + brighter so it stands out.
         let size = if *selected { NODE + 3.0 } else { NODE };
         let half = size * 0.5;
-        let color = if *selected { selected_color } else { node_color };
+        let color = if *selected {
+            selected_color
+        } else {
+            node_color
+        };
         // push_rect takes corners (x0, y0, x1, y1), not (x, y, w, h).
         scene.push_rect(cx - half, cy - half, cx + half, cy + half, color);
         rects.push((*id, [cx - half, cy - half, cx + half, cy + half]));

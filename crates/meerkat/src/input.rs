@@ -9,10 +9,10 @@ use std::time::{Duration, Instant};
 
 use forme::GraphMemberId;
 use layout_dom_api::LayoutDom;
-use meerkat::{submit_omnibar, Chrome};
+use meerkat::{Chrome, submit_omnibar};
 use orrery::PointerButton;
 use pelt_live::hit_test_node;
-use platen_view::{WorkbenchAction, WORKBENCH_SHEET};
+use platen_view::{WORKBENCH_SHEET, WorkbenchAction};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
 use serval_winit_host::key_event_from_winit;
@@ -23,7 +23,9 @@ use xilem_serval::PointerClick;
 use frame::PaneContent;
 
 use super::titlebar::{self, WindowControl};
-use super::{first_tag, first_with_class, has_class, measure_class_bottom, App, FALLBACK_TOOLBAR_H};
+use super::{
+    App, FALLBACK_TOOLBAR_H, first_tag, first_with_class, has_class, measure_class_bottom,
+};
 
 impl App {
     /// Route a mouse button press/release by region. A left press in the chrome
@@ -54,7 +56,10 @@ impl App {
                         // frameless Windows window, so snapshot the rect + screen
                         // cursor and resize the window ourselves on each move.
                         if let Some(window) = self.window.as_ref() {
-                            let outer = window.outer_position().map(|p| (p.x, p.y)).unwrap_or((0, 0));
+                            let outer = window
+                                .outer_position()
+                                .map(|p| (p.x, p.y))
+                                .unwrap_or((0, 0));
                             let size = window.inner_size();
                             self.resize_drag = Some(super::ResizeDrag {
                                 dir,
@@ -215,15 +220,14 @@ impl App {
                         if button == MouseButton::Right {
                             self.open_context_menu_at(x, y);
                         } else if let Some(b) = orrery_button {
-                            if !self.point_over_card(x, y)
-                                && self.orrery.pointer_down(b, x, y - th)
+                            if !self.point_over_card(x, y) && self.orrery.pointer_down(b, x, y - th)
                             {
                                 self.request_redraw();
                             }
                         }
                     }
                 }
-            },
+            }
             ElementState::Released => {
                 // Resolve a pending titlebar press that never became a window drag:
                 // it was a click on the toolbar bar (a button / the omnibar). Run it
@@ -305,7 +309,7 @@ impl App {
                         }
                     }
                 }
-            },
+            }
         }
     }
 
@@ -327,13 +331,13 @@ impl App {
                 if let Some(window) = self.window.as_ref() {
                     window.set_minimized(true);
                 }
-            },
+            }
             WindowControl::Maximize => {
                 if let Some(window) = self.window.as_ref() {
                     let maximized = window.is_maximized();
                     window.set_maximized(!maximized);
                 }
-            },
+            }
             WindowControl::Close => self.pending_exit = true,
         }
     }
@@ -380,7 +384,9 @@ impl App {
     pub(super) fn workbench_click(&mut self, x: f32, y: f32) {
         // The workbench DOM is laid out at the workbench leaf size + composited at
         // its origin, so hit-test in leaf-local coordinates. (Workbench-as-pane.)
-        let Some(wr) = self.workbench_leaf_rect() else { return };
+        let Some(wr) = self.workbench_leaf_rect() else {
+            return;
+        };
         let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
         let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
         let (lx, ly) = (x - wr[0], y - wr[1]);
@@ -390,7 +396,8 @@ impl App {
             hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets)
         };
         if let Some(node) = hit {
-            self.workbench_runner.dispatch_click(node, PointerClick::at((lx, ly)));
+            self.workbench_runner
+                .dispatch_click(node, PointerClick::at((lx, ly)));
             // A tab activated → remember it as a drag candidate (resolved on
             // release: a move when dragged onto another slot, else a plain click).
             // The press is kept in window coords (tile_rects are window-space).
@@ -590,26 +597,26 @@ impl App {
                 );
                 self.sync_orrery();
                 self.request_redraw();
-            },
+            }
             WinitKey::Named(WinitNamedKey::ArrowDown) if suggestions_open => {
                 self.runner.update(|c| c.step_suggestion(1));
                 self.request_redraw();
-            },
+            }
             WinitKey::Named(WinitNamedKey::ArrowUp) if suggestions_open => {
                 self.runner.update(|c| c.step_suggestion(-1));
                 self.request_redraw();
-            },
+            }
             WinitKey::Named(WinitNamedKey::Escape) if suggestions_open => {
                 self.runner.update(Chrome::close_suggestions);
                 self.request_redraw();
-            },
+            }
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
                     self.runner.dispatch_key(key_event);
                     self.runner.update(Chrome::refresh_suggestions);
                     self.request_redraw();
                 }
-            },
+            }
         }
     }
 
@@ -644,7 +651,12 @@ impl App {
     fn clipboard_copy(&mut self, palette: bool) {
         let text = {
             let c = self.runner.state();
-            if palette { c.palette_input.selected_text() } else { c.omnibar.selected_text() }.to_string()
+            if palette {
+                c.palette_input.selected_text()
+            } else {
+                c.omnibar.selected_text()
+            }
+            .to_string()
         };
         if text.is_empty() {
             return;
@@ -658,7 +670,11 @@ impl App {
     fn clipboard_cut(&mut self, palette: bool) {
         let has = {
             let c = self.runner.state();
-            if palette { c.palette_input.has_selection() } else { c.omnibar.has_selection() }
+            if palette {
+                c.palette_input.has_selection()
+            } else {
+                c.omnibar.has_selection()
+            }
         };
         if !has {
             return;
@@ -716,27 +732,27 @@ impl App {
                 self.sync_orrery();
                 self.focus_after_palette_close();
                 self.request_redraw();
-            },
+            }
             WinitKey::Named(WinitNamedKey::Escape) => {
                 self.runner.update(Chrome::close_palette);
                 self.focus_after_palette_close();
                 self.request_redraw();
-            },
+            }
             WinitKey::Named(WinitNamedKey::ArrowDown) => {
                 self.runner.update(|c| c.step_palette(1));
                 self.request_redraw();
-            },
+            }
             WinitKey::Named(WinitNamedKey::ArrowUp) => {
                 self.runner.update(|c| c.step_palette(-1));
                 self.request_redraw();
-            },
+            }
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
                     self.runner.dispatch_key(key_event);
                     self.runner.update(Chrome::sync_palette_query);
                     self.request_redraw();
                 }
-            },
+            }
         }
     }
 
@@ -755,7 +771,7 @@ impl App {
                 }
                 self.drain_comms_intent();
                 self.request_redraw();
-            },
+            }
             WinitKey::Named(WinitNamedKey::Escape) => {
                 // Escape closes the compose-new form, else blurs to the omnibar.
                 if composing_new {
@@ -763,13 +779,13 @@ impl App {
                 }
                 self.focus_after_palette_close();
                 self.request_redraw();
-            },
+            }
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
                     self.runner.dispatch_key(key_event);
                     self.request_redraw();
                 }
-            },
+            }
         }
     }
 

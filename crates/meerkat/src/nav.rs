@@ -184,7 +184,10 @@ mod tests {
             classify("mere://welcome"),
             NavTarget::Url("mere://welcome".into())
         );
-        assert_eq!(classify("about:blank"), NavTarget::Url("about:blank".into()));
+        assert_eq!(
+            classify("about:blank"),
+            NavTarget::Url("about:blank".into())
+        );
     }
 
     #[test]
@@ -205,7 +208,10 @@ mod tests {
 
     #[test]
     fn classify_treats_free_text_as_search() {
-        assert_eq!(classify("hello world"), NavTarget::Search("hello world".into()));
+        assert_eq!(
+            classify("hello world"),
+            NavTarget::Search("hello world".into())
+        );
         assert_eq!(classify("rustlang"), NavTarget::Search("rustlang".into()));
         // Whitespace anywhere disqualifies the host heuristic.
         assert_eq!(

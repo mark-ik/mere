@@ -57,12 +57,20 @@ impl<'a> ResourceLoader<'a> {
         base: &'a str,
         wanted: &'a RefCell<Vec<String>>,
     ) -> Self {
-        Self { store, base, wanted }
+        Self {
+            store,
+            base,
+            wanted,
+        }
     }
 
     /// Resolve `url` (possibly relative) against the page `base`.
     fn resolve(&self, url: &str) -> Option<String> {
-        url::Url::parse(self.base).ok()?.join(url).ok().map(|u| u.to_string())
+        url::Url::parse(self.base)
+            .ok()?
+            .join(url)
+            .ok()
+            .map(|u| u.to_string())
     }
 }
 
@@ -98,18 +106,30 @@ mod tests {
     #[test]
     fn hit_returns_cached_bytes_and_records_nothing() {
         let store = RefCell::new(ResourceStore::default());
-        store.borrow_mut().insert("https://example.com/a.css".into(), b"x{}".to_vec());
+        store
+            .borrow_mut()
+            .insert("https://example.com/a.css".into(), b"x{}".to_vec());
         let wanted = RefCell::new(Vec::new());
         let loader = ResourceLoader::new(&store, "https://example.com/", &wanted);
 
-        assert_eq!(loader.load("a.css"), Some(b"x{}".to_vec()), "a cached resource loads");
+        assert_eq!(
+            loader.load("a.css"),
+            Some(b"x{}".to_vec()),
+            "a cached resource loads"
+        );
         assert!(wanted.borrow().is_empty(), "a hit records nothing to fetch");
     }
 
     #[test]
     fn request_dedups() {
         let mut store = ResourceStore::default();
-        assert!(store.request("https://x/a".into()), "first request is newly spawned");
-        assert!(!store.request("https://x/a".into()), "a duplicate is suppressed");
+        assert!(
+            store.request("https://x/a".into()),
+            "first request is newly spawned"
+        );
+        assert!(
+            !store.request("https://x/a".into()),
+            "a duplicate is suppressed"
+        );
     }
 }

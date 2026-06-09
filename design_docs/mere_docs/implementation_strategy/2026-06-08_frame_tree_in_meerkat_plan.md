@@ -172,3 +172,8 @@ to a new window (later). The orrery↔tiled projection toggle is **out of scope*
   pane; the orrery's card + close-X stay in the orrery leaf. Ctrl+M (max↔split)
   and the roster/apparatus/gloss panes are unchanged. A migration guard drops
   pre-coexistence saved layouts (graph pane saved as Workbench).
+- 2026-06-09: **Roster scroll backlog item landed.** The roster root is now a
+  Serval overflow scroller; wheel input over the roster leaf updates a host-owned
+  pane scroll offset, render clamps it to the live roster content extent, and row
+  hit rects are translated/clipped to the scrolled viewport so click-to-focus
+  stays aligned on large graphs.

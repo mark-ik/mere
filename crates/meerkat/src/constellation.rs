@@ -29,7 +29,7 @@ use forme::GraphMemberId;
 use linked_data::GraphContribution;
 use netrender::Scene;
 
-use crate::content::{spawn_content, ContentCommand, ContentUpdate};
+use crate::content::{ContentCommand, ContentUpdate, spawn_content};
 use crate::fetch::ContentState;
 
 /// Public host-facing summary of one live content operation.
@@ -213,7 +213,7 @@ impl Constellation {
             match victim {
                 Some(member) => {
                     self.active.remove(&member); // drop → channel closes → thread ends
-                },
+                }
                 None => break, // every remaining tab is needed or background
             }
         }
@@ -223,7 +223,14 @@ impl Constellation {
     /// fetch-state change) is a `Show` (new nav generation; blank the scene until
     /// it re-renders), a same-document size change a `Resize`. No-op if the node
     /// is not active or nothing changed.
-    pub fn drive(&mut self, member: GraphMemberId, url: &str, state: Option<ContentState>, cw: u32, ch: u32) {
+    pub fn drive(
+        &mut self,
+        member: GraphMemberId,
+        url: &str,
+        state: Option<ContentState>,
+        cw: u32,
+        ch: u32,
+    ) {
         let tag = ContentState::tag(state.as_ref());
         self.touch_clock += 1;
         let touch = self.touch_clock;
@@ -235,7 +242,10 @@ impl Constellation {
         if activation.shown.as_ref() == Some(&key) {
             return;
         }
-        let same_doc = activation.shown.as_ref().is_some_and(|(u, t, ..)| u == url && *t == tag);
+        let same_doc = activation
+            .shown
+            .as_ref()
+            .is_some_and(|(u, t, ..)| u == url && *t == tag);
         if same_doc {
             activation.gens.viewport.bump();
             activation.handle.command(ContentCommand::Resize {
@@ -280,7 +290,9 @@ impl Constellation {
     /// that crashed before ever rendering would otherwise be blank). A tab that
     /// crashed *after* rendering keeps its last scene and reads as not-recovering.
     pub fn is_recovering(&self, member: GraphMemberId) -> bool {
-        self.active.get(&member).is_some_and(|a| a.respawns > 0 && a.scene.is_none())
+        self.active
+            .get(&member)
+            .is_some_and(|a| a.respawns > 0 && a.scene.is_none())
     }
 
     /// Deactivate `member` now — its actor winds down on drop. For when a tile /
@@ -303,7 +315,7 @@ impl Constellation {
             Some(activation) => {
                 activation.background = background;
                 true
-            },
+            }
             None => false,
         }
     }
@@ -312,7 +324,9 @@ impl Constellation {
     /// to the node that wanted it).
     pub fn send_resource(&self, member: GraphMemberId, url: String, bytes: Vec<u8>) {
         if let Some(activation) = self.active.get(&member) {
-            activation.handle.command(ContentCommand::Resource { url, bytes });
+            activation
+                .handle
+                .command(ContentCommand::Resource { url, bytes });
         }
     }
 
@@ -352,16 +366,24 @@ impl Constellation {
                         Err(TryRecvError::Disconnected) => {
                             dead.push(member);
                             break;
-                        },
+                        }
                     }
                 },
                 None => continue,
             }
             for update in updates {
                 match update {
-                    ContentUpdate::Scene { nav, viewport_gen, scene, content_height } => {
+                    ContentUpdate::Scene {
+                        nav,
+                        viewport_gen,
+                        scene,
+                        content_height,
+                    } => {
                         if let Some(activation) = self.active.get_mut(&member) {
-                            let stamp = Generations { nav, viewport: viewport_gen };
+                            let stamp = Generations {
+                                nav,
+                                viewport: viewport_gen,
+                            };
                             if activation.gens.accepts(stamp) {
                                 activation.scene = Some(scene);
                                 activation.content_height = content_height;
@@ -370,16 +392,16 @@ impl Constellation {
                                 out.any_scene = true;
                             }
                         }
-                    },
+                    }
                     ContentUpdate::Wanted { nav, urls } => {
                         let current = self.active.get(&member).is_some_and(|a| a.gens.nav == nav);
                         if current {
                             out.wanted.push((member, urls));
                         }
-                    },
+                    }
                     ContentUpdate::Contribution { contributions } => {
                         out.contributions.extend(contributions);
-                    },
+                    }
                 }
             }
         }
@@ -433,7 +455,10 @@ mod tests {
         c.reconcile(&[m(1), m(2)]);
         assert_eq!(c.active_count(), 2, "two needed nodes spawned");
         c.reconcile(&[m(2)]); // m(1) is no longer needed...
-        assert!(c.is_active(m(1)), "...but stays a warm tab — no reap on blur");
+        assert!(
+            c.is_active(m(1)),
+            "...but stays a warm tab — no reap on blur"
+        );
         assert_eq!(c.active_count(), 2);
     }
 
@@ -445,7 +470,10 @@ mod tests {
         c.reconcile(&[m(2)]); // touch 2 — m(1) is now the stalest
         c.reconcile(&[m(3)]); // touch 3, over the cap of 2 → evict the stalest evictable
         assert_eq!(c.active_count(), 2, "the cap holds");
-        assert!(!c.is_active(m(1)), "the least-recently-touched, non-needed tab is evicted");
+        assert!(
+            !c.is_active(m(1)),
+            "the least-recently-touched, non-needed tab is evicted"
+        );
         assert!(c.is_active(m(2)) && c.is_active(m(3)));
     }
 
@@ -454,11 +482,17 @@ mod tests {
         let mut c = Constellation::new(noop_wake());
         c.set_cap(1);
         c.reconcile(&[m(1)]);
-        assert!(c.set_background(m(1), true), "flagging an active node succeeds");
+        assert!(
+            c.set_background(m(1), true),
+            "flagging an active node succeeds"
+        );
         c.reconcile(&[m(2)]); // over the cap of 1, but m(1) is background → not evictable
         assert!(c.is_active(m(1)), "a background tab survives cap pressure");
         assert!(c.is_active(m(2)), "the needed node is still spawned");
-        assert!(!c.set_background(m(3), true), "flagging a dormant node reports false");
+        assert!(
+            !c.set_background(m(3), true),
+            "flagging a dormant node reports false"
+        );
     }
 
     #[test]
@@ -469,12 +503,18 @@ mod tests {
         assert!(c.active.get(&m(1)).unwrap().shown.is_some());
         // A respawn replaces the actor and clears `shown` so the next drive re-Shows.
         assert!(c.respawn(m(1)));
-        assert!(c.active.get(&m(1)).unwrap().shown.is_none(), "shown cleared for replay");
+        assert!(
+            c.active.get(&m(1)).unwrap().shown.is_none(),
+            "shown cleared for replay"
+        );
         assert_eq!(c.active.get(&m(1)).unwrap().respawns, 1);
         // The cap stops a storm: MAX_RESPAWNS respawns, then give up.
         assert!(c.respawn(m(1))); // 2
         assert!(c.respawn(m(1))); // 3
-        assert!(!c.respawn(m(1)), "past MAX_RESPAWNS the pool leaves the tab on its last scene");
+        assert!(
+            !c.respawn(m(1)),
+            "past MAX_RESPAWNS the pool leaves the tab on its last scene"
+        );
         // A respawn on a node that is not active is a no-op.
         assert!(!c.respawn(m(99)));
     }

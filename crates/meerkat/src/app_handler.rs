@@ -379,6 +379,17 @@ impl ApplicationHandler for App {
                 // orrery (pan, or Ctrl-zoom); over the workbench pane (off a tile) it
                 // does nothing.
                 let (cx, cy) = self.cursor;
+                if self
+                    .roster_leaf_rect()
+                    .is_some_and(|r| cx >= r[0] && cx < r[2] && cy >= r[1] && cy < r[3])
+                {
+                    // Render clamps to the current roster content extent; keeping
+                    // the wheel route here prevents a roster scroll from panning
+                    // the orrery underneath.
+                    self.roster_scroll = (self.roster_scroll - dy).max(0.0);
+                    self.request_redraw();
+                    return;
+                }
                 let over_card = self
                     .content_rects
                     .iter()
