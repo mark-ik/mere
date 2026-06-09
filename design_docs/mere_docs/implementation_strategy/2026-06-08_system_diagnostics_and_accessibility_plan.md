@@ -380,3 +380,12 @@ accessibility states.
   [2026-06-09_accesskit_screen_reader_verification.md](2026-06-09_accesskit_screen_reader_verification.md):
   Narrator, VoiceOver, and Orca still need real local runs before D6 can be
   called screen-reader verified.
+- 2026-06-09: **D8 pane split seed landed.** `frame::PaneContent` now has
+  first-class `Inspector` and `Steward` variants, with matching UX surface ids,
+  diagnostics channels, AccessKit descriptors, command-palette verbs, agent
+  actions, a11y projection labels, and simple rendered placeholder panes.
+  Inspector currently summarizes the focused node, node count, and content
+  state; Steward summarizes active actors, sync chip state, and tab cap.
+  Remaining D8 work is moving real content provenance/trust/parse/document
+  structure into Inspector and real async operation retry/cancel/pin controls
+  into Steward while keeping Apparatus as the at-rest aggregate trace/config pane.

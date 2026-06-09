@@ -45,11 +45,15 @@ pub enum Command {
     /// Toggle the docked comms pane (conversations: misfin mail + murm cabals). A
     /// chrome-level action, like opening settings.
     ToggleComms,
+    /// Toggle the selected-object inspector pane (host action).
+    ToggleInspector,
+    /// Toggle the live-operations steward pane (host action).
+    ToggleSteward,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 11] = [
+    pub const ALL: [Command; 13] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -61,6 +65,8 @@ impl Command {
         Command::ShowAllEdges,
         Command::OpenSettings,
         Command::ToggleComms,
+        Command::ToggleInspector,
+        Command::ToggleSteward,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -74,6 +80,8 @@ impl Command {
                 | Command::BackgroundNode
                 | Command::HideSelectedEdge
                 | Command::ShowAllEdges
+                | Command::ToggleInspector
+                | Command::ToggleSteward
         )
     }
 
@@ -91,6 +99,8 @@ impl Command {
             Command::ShowAllEdges => "Show all edges",
             Command::OpenSettings => "Settings",
             Command::ToggleComms => "Comms (conversations)",
+            Command::ToggleInspector => "Inspector (selected object)",
+            Command::ToggleSteward => "Steward (live operations)",
         }
     }
 }
@@ -130,7 +140,10 @@ mod tests {
         assert_eq!(filter("delete"), vec![Command::DeleteNode]);
         assert!(Command::DeleteNode.is_host_action());
         assert!(Command::BackgroundNode.is_host_action());
-        assert!(!Command::Back.is_host_action(), "history verbs are not host actions");
+        assert!(
+            !Command::Back.is_host_action(),
+            "history verbs are not host actions"
+        );
     }
 
     #[test]

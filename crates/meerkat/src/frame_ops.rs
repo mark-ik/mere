@@ -549,9 +549,8 @@ impl App {
         self.request_redraw();
     }
 
-    /// Execute a pending host action the palette queued (toggle workbench / delete
-    /// node / background a node): take it from the chrome and dispatch to the
-    /// matching shell method.
+    /// Execute a pending host action the palette queued: take it from the chrome
+    /// and dispatch to the matching shell method.
     pub(super) fn drain_pending_command(&mut self) {
         let Some(cmd) = self.runner.state().pending_command else {
             return;
@@ -571,6 +570,8 @@ impl App {
                     self.request_redraw();
                 }
             }
+            Command::ToggleInspector => self.toggle_pane(PaneContent::Inspector),
+            Command::ToggleSteward => self.toggle_pane(PaneContent::Steward),
             // History / connect / settings / comms verbs run in the chrome; never
             // queued here as host intents.
             Command::Back
@@ -1087,7 +1088,10 @@ impl App {
             PaneContent::Roster => self.roster_a11y_tree(pane_id, action_routes),
             PaneContent::Gloss => self.gloss_a11y_tree(pane_id),
             PaneContent::Comms => self.comms_a11y_tree(pane_id),
-            PaneContent::Tile(_) | PaneContent::Custom(_) => {
+            PaneContent::Inspector
+            | PaneContent::Steward
+            | PaneContent::Tile(_)
+            | PaneContent::Custom(_) => {
                 generic_pane_content_tree(&self.frame_layout, pane_id, content)
             }
         }
@@ -1307,6 +1311,57 @@ impl App {
                 }
             })
             .collect()
+    }
+
+    pub(super) fn utility_pane_rows(&self, content: &PaneContent) -> Vec<(String, String)> {
+        match content {
+            PaneContent::Inspector => vec![
+                (
+                    "Focused node".to_string(),
+                    self.orrery
+                        .focused_url()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| "none".to_string()),
+                ),
+                (
+                    "Known nodes".to_string(),
+                    self.orrery.graph().nodes().count().to_string(),
+                ),
+                (
+                    "Content state".to_string(),
+                    match fetch::ContentState::tag(
+                        self.orrery
+                            .focused_url()
+                            .and_then(|url| self.content.get(url)),
+                    ) {
+                        1 => "loading",
+                        2 => "ready",
+                        3 => "failed",
+                        _ => "none",
+                    }
+                    .to_string(),
+                ),
+            ],
+            PaneContent::Steward => vec![
+                (
+                    "Active actors".to_string(),
+                    self.constellation.active_count().to_string(),
+                ),
+                ("Sync".to_string(), {
+                    let indicator = &self.runner.state().sync;
+                    if indicator.active {
+                        format!(
+                            "{} syncing={} ops={}",
+                            indicator.label, indicator.syncing, indicator.ops
+                        )
+                    } else {
+                        "off".to_string()
+                    }
+                }),
+                ("Tab cap".to_string(), self.saved_tab_cap.to_string()),
+            ],
+            _ => Vec::new(),
+        }
     }
 }
 

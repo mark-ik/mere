@@ -73,6 +73,11 @@ pub enum SurfaceId {
     BaseLayer,
     /// The graph roster pane: node manifest/list for the current graph.
     RosterPane,
+    /// The inspector pane: selected object provenance, trust, parse diagnostics,
+    /// document structure, local cache state, and lineage.
+    InspectorPane,
+    /// The steward pane: live async operations and actionable actor/job state.
+    StewardPane,
     /// The gloss pane: outline, swatch, and graphlet navigation surface.
     GlossPane,
     /// The apparatus pane: system diagnostics, settings, probes, and a11y status.
@@ -248,6 +253,22 @@ pub fn descriptor_for(surface: SurfaceId) -> AccessibilityDescriptor {
             description: Some("List of graph nodes with their current content state."),
             keyboard_shortcut: Some("Ctrl+R"),
         },
+        SurfaceId::InspectorPane => AccessibilityDescriptor {
+            role: Role::Complementary,
+            label: "Inspector pane",
+            description: Some(
+                "Selected object details: provenance, trust, parse diagnostics, document structure, cache state, and lineage.",
+            ),
+            keyboard_shortcut: None,
+        },
+        SurfaceId::StewardPane => AccessibilityDescriptor {
+            role: Role::Complementary,
+            label: "Steward pane",
+            description: Some(
+                "Live async operations and actionable actor state: fetches, sync, retries, background work, and jobs.",
+            ),
+            keyboard_shortcut: None,
+        },
         SurfaceId::GlossPane => AccessibilityDescriptor {
             role: Role::Navigation,
             label: "Gloss pane",
@@ -303,6 +324,8 @@ mod tests {
             SurfaceId::CanvasPane,
             SurfaceId::BaseLayer,
             SurfaceId::RosterPane,
+            SurfaceId::InspectorPane,
+            SurfaceId::StewardPane,
             SurfaceId::GlossPane,
             SurfaceId::ApparatusPane,
             SurfaceId::CommsPane,

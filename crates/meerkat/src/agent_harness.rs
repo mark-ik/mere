@@ -89,6 +89,8 @@ pub(crate) enum AgentPane {
     Orrery,
     Workbench,
     Roster,
+    Inspector,
+    Steward,
     Gloss,
     Comms,
     Apparatus,
@@ -197,6 +199,8 @@ impl App {
         let mut actions = vec![
             action("pane.open.apparatus", "Open Apparatus"),
             action("pane.open.roster", "Open Roster"),
+            action("pane.open.inspector", "Open Inspector"),
+            action("pane.open.steward", "Open Steward"),
             action("pane.open.gloss", "Open Gloss"),
             action("pane.open.comms", "Open Comms"),
             action("theme.set", "Set theme"),
@@ -310,6 +314,8 @@ impl AgentPane {
             AgentPane::Orrery => "orrery",
             AgentPane::Workbench => "workbench",
             AgentPane::Roster => "roster",
+            AgentPane::Inspector => "inspector",
+            AgentPane::Steward => "steward",
             AgentPane::Gloss => "gloss",
             AgentPane::Comms => "comms",
             AgentPane::Apparatus => "apparatus",
@@ -321,6 +327,8 @@ impl AgentPane {
             AgentPane::Orrery => None,
             AgentPane::Workbench => Some(PaneContent::Workbench),
             AgentPane::Roster => Some(PaneContent::Roster),
+            AgentPane::Inspector => Some(PaneContent::Inspector),
+            AgentPane::Steward => Some(PaneContent::Steward),
             AgentPane::Gloss => Some(PaneContent::Gloss),
             AgentPane::Comms => Some(PaneContent::Comms),
             AgentPane::Apparatus => Some(PaneContent::Apparatus),
@@ -332,6 +340,8 @@ impl AgentPane {
             PaneContent::Orrery => Self::Orrery,
             PaneContent::Workbench => Self::Workbench,
             PaneContent::Roster => Self::Roster,
+            PaneContent::Inspector => Self::Inspector,
+            PaneContent::Steward => Self::Steward,
             PaneContent::Gloss => Self::Gloss,
             PaneContent::Comms => Self::Comms,
             PaneContent::Apparatus | PaneContent::System => Self::Apparatus,
@@ -433,6 +443,40 @@ mod tests {
                 .surfaces
                 .iter()
                 .any(|s| s.pane == AgentPane::Roster)
+        );
+    }
+
+    #[test]
+    fn agent_can_open_inspector_and_steward_as_d8_panes() {
+        let mut app = test_app();
+        let step = app.apply_agent_action(AgentAction::OpenPane(AgentPane::Inspector));
+        assert!(step.result.applied);
+        assert!(
+            step.observation
+                .surfaces
+                .iter()
+                .any(|s| s.pane == AgentPane::Inspector)
+        );
+
+        let step = app.apply_agent_action(AgentAction::OpenPane(AgentPane::Steward));
+        assert!(step.result.applied);
+        assert!(
+            step.observation
+                .surfaces
+                .iter()
+                .any(|s| s.pane == AgentPane::Steward)
+        );
+        assert!(
+            step.observation
+                .enabled_actions
+                .iter()
+                .any(|action| action.id == "pane.open.inspector")
+        );
+        assert!(
+            step.observation
+                .enabled_actions
+                .iter()
+                .any(|action| action.id == "pane.open.steward")
         );
     }
 

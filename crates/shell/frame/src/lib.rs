@@ -145,6 +145,12 @@ pub enum PaneContent {
     /// examinable. The data-view counterpart to the orrery's space-view (see the
     /// graph-roster + frame-taxonomy design doc).
     Roster,
+    /// Selected object details: provenance, trust, parse diagnostics, document
+    /// structure, cache state, and lineage for the active graph object.
+    Inspector,
+    /// Live async operations: fetch/sync/content actors, retries, background work,
+    /// and user-facing controls over running jobs.
+    Steward,
     /// Misfin / murm messaging (the `comms` domain).
     Comms,
     Apparatus,
@@ -168,6 +174,8 @@ impl PaneContent {
             PaneContent::Orrery => "orrery",
             PaneContent::Gloss => "gloss",
             PaneContent::Roster => "roster",
+            PaneContent::Inspector => "inspector",
+            PaneContent::Steward => "steward",
             PaneContent::Comms => "comms",
             PaneContent::Apparatus => "apparatus",
             PaneContent::System => "system",

@@ -754,6 +754,37 @@ impl App {
                 }
             }
         }
+        for leaf in self
+            .laid_leaves()
+            .into_iter()
+            .filter(|leaf| matches!(leaf.content, PaneContent::Inspector | PaneContent::Steward))
+        {
+            let rect = leaf.rect;
+            let pw = (rect[2] - rect[0]).round().max(1.0) as u32;
+            let ph = (rect[3] - rect[1]).round().max(1.0) as u32;
+            let rows = self.utility_pane_rows(&leaf.content);
+            let dom = super::utility_panes::build_utility_pane_dom(&leaf.content, &rows);
+            let sheet_strings = super::utility_panes::utility_pane_sheet(&self.chrome_theme);
+            let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
+            let pane_scroll = ScrollOffsets::<NodeId>::default();
+            let scene = scene_from_scripted_dom(&dom, &sheet, pw, ph, None, &pane_scroll);
+            let pb = self.chrome_theme.panel_bg.to_array();
+            let clear = wgpu::Color {
+                r: pb[0] as f64 / 255.0,
+                g: pb[1] as f64 / 255.0,
+                b: pb[2] as f64 / 255.0,
+                a: 1.0,
+            };
+            let (_t, view) = host.rasterize(&scene, pw, ph, ColorLoad::Clear(clear));
+            host.renderer().compose_external_texture(
+                &view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new(rect),
+            );
+        }
         // The gloss pane: a whole-graph minimap swatch, with node hit-rects for
         // click-to-focus. (Gloss; the Navigator's graph-scope swatch cell.)
         self.gloss_node_rects.clear();

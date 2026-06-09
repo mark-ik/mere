@@ -77,6 +77,7 @@ mod render;
 mod roster;
 mod titlebar;
 mod tracing_layer;
+mod utility_panes;
 
 use constellation::Constellation;
 use observability::HostObservability;

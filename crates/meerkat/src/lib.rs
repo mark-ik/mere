@@ -408,9 +408,12 @@ impl Chrome {
             | Command::DeleteNode
             | Command::BackgroundNode
             | Command::HideSelectedEdge
-            | Command::ShowAllEdges => {
-                // Host actions over the orrery / workbench / actor pool: record the
-                // intent; the host drains it and runs the matching method.
+            | Command::ShowAllEdges
+            | Command::ToggleInspector
+            | Command::ToggleSteward => {
+                // Host actions over the frame, orrery, workbench, or actor pool:
+                // record the intent; the host drains it and runs the matching
+                // method.
                 self.pending_command = Some(cmd);
             }
         }
