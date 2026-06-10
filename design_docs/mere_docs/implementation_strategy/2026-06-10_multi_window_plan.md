@@ -250,6 +250,23 @@ app_handler), converting `&mut self` methods to `(view, shared)` functions;
 not to forget: `agent_harness` and `save_session` read fields that move
 (`frame_layout` → view), so their signatures shift in (c).
 
+**Step (a) is done (2026-06-10, commits `1afe35d` + `6397b26`).** All
+per-window state lives in `WindowView` behind `App.view`, minted by
+`WindowView::new`; methods still hang off `App`. The focused reshape session
+resumes at **(b)** and runs (b)→(e). Remaining churn is ~285 shared-field
+access sites (measured), dominated by `orrery` 58, `observability` 49,
+`constellation` 33 — note `orrery` *stays on `Shell`* (the MW6 IOU), so its
+58 sites become `self.orrery` → `self.shared`-less `Shell`-level access, not a
+subsystem path; only the `SharedState`-bound fields take the deeper
+`self.shared.<subsystem>.<field>` path. Decision still open for that session
+(deferred deliberately, not yet chosen): **flat `SharedState` first then
+subdivide** vs **subdivide into subsystems in one pass** — the subsystem map
+above (`content` / `session` / `presentation` / `comms` / `sync` / `inbox` +
+`observability`) is the target either way; flat-first just stages the path
+churn. The substring traps that shaped (a) no longer bite here — the shared
+fields (`orrery`, `constellation`, `manifests`, ...) have no method/sibling
+collisions — so (b) is closer to a clean bulk pass than the carve was.
+
 Done when the single window is driven through the registry (events resolved by id,
 mutations applied as commands), with the shared/​per-window seam enforced by the types
 — and the `window`/`host` unwrap scatter is gone (both non-Option inside `WindowView`).
