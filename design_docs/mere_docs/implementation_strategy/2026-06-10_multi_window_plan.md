@@ -66,42 +66,65 @@ window views:
 
 ```
 struct Shell {
-    shared: SharedState,                      // graph(s), actors, caches, manifests, theme, inbox
+    shared: SharedState,                      // grouped subsystems (below)
     windows: HashMap<WindowId, WindowView>,   // one per OS window
     primary: WindowId,                        // the window that owns the orrery (until MW6)
 }
 
 struct WindowView {
-    window: Arc<Window>,
-    host: SurfaceHost,
+    surface: WindowSurface,                   // per-window surface + config (shares one device)
     runner: ServalAppRunner<...>, dom: ...,   // this window's chrome (toolbar/omnibar)
     frame_layout: FrameLayout,
-    kind: WindowKind,                         // Primary (orrery + workbench) | Leaf (workbench-only)
+    kind: WindowKind,                         // payload enum (below)
     // per-window view + render caches: cursor, modifiers, drags, *_rects, *_textures,
     // width/height, toolbar_h, cursor_icon, maximized_pane, active_content, renaming,
     // switcher caches, shellbar_edge
 }
+
+enum WindowKind { Primary(OrreryView), Leaf, Forked(OrreryView) }  // payload = who owns a camera
 ```
 
-`SharedState` owns the actor handles + `inbox`; `user_event` drains the inbox once and
-fans results to the affected window(s) (a fetch outcome → redraw every window showing
-that node). Chrome is **per-window** (each window has its own toolbar / omnibar /
-shellbar). The orrery (graph + physics + camera) stays on the primary window until
-MW6; leaf windows render shared tiles with no orrery.
+**Event handlers emit commands; the `Shell` applies them.** `window_event` borrows
+exactly one `WindowView` + the `SharedState` subsystem it needs and returns a
+`Vec<ShellCommand>` (`SpawnLeaf { payload, donor }`, `ReleaseTile`, `RouteRedraw`,
+`PromoteLeafToBranch`, …); the `Shell` then applies them with full `&mut self`. This is
+the same record-intent-then-drain pattern the host already runs everywhere
+(`drain_pending_command` / `drain_pending_context` / `drain_comms_intent`), so it is
+in-idiom — and it sidesteps every multi-window aliasing question (tear-out is a
+two-window op: donor releases a binding, recipient acquires it; you cannot casually
+take two `&mut` from one `HashMap`). It also gives a window-system-free test seam for
+tear-out logic, and makes MW5's toast escalation just another command. Decide this
+before **MW2** (the method-signature split), not after — MW1's field carve commits to
+no signatures, so nothing is foreclosed yet.
 
-The one deferred decision: **how the shared graph is held.** Two options, decided at
-MW6, not before:
+**`SharedState` is subdivided, not a second god-struct.** Group it into subsystems so
+window code takes the narrow borrow it needs: `content` (constellation + store +
+fetch), `identity` (manifests + sessions), `presentation` (theme + engine_registry),
+`comms`, `inbox`. `user_event` drains the inbox once and **multicasts** results to the
+affected windows from day one — chrome-relevant shared state (sync status, inbox
+badges) flows from `SharedState` through the fan-out, since per-window `ScriptedDom`
+means per-window chrome *state* (a v0 broadcast-redraw would otherwise become quietly
+load-bearing).
+
+**Chrome is per-window, which is leverage, not just cost.** Each `WindowKind` is a
+different DOM *template*: a leaf window gets a slim chrome (no shellbar, no switcher)
+with no layout code, the MW5 toast is a DOM overlay, the drag ghost is a positioned DOM
+element. Serval's DOM layout makes these variations free.
+
+The one deferred decision: **how the shared graph is held** — and it is deferred behind
+a trait, not left open. Leaf rendering depends on a read-only `NodeView` seam (resolve
+`member → url` + node metadata; content comes from the shared constellation). Both
+options implement `NodeView`, so the choice does not leak into leaf code:
 
 - **A — graph registry (the brief's model).** Extract `Graph` + physics out of
   `Orrery` into `SharedState` as a `GraphId`-keyed registry; `Orrery` becomes a view
-  (camera + input + render) over a registry graph. Cleanest; unlocks far-B + a second
-  orrery window. Larger refactor.
-- **B — Shell-mediated access.** Keep the graph in the primary orrery; the `Shell`
-  lends a read view (and mediates mutations) to leaf windows. Lighter, but does not
-  scale to branch / fork / a second live orrery.
+  over a registry graph. Cleanest; unlocks far-B + a second orrery window. Larger
+  refactor. Implements `NodeView`.
+- **B — primary-orrery access.** The primary orrery's graph implements `NodeView`
+  directly; leaf windows render against it. Lighter; carries MW3–MW4.
 
-Lean **A** as the destination; allow **B**'s lightness through MW4 (leaf) since a leaf
-only needs a node's URL + the shared constellation.
+Lean **A** as the destination; **B** carries through MW4 behind the same `NodeView`
+trait, so MW6 swaps the impl without chasing ad-hoc accessors.
 
 ---
 
@@ -117,35 +140,60 @@ only needs a node's URL + the shared constellation.
 Done when meerkat runs exactly as today with the per-window state living in a
 `WindowView` the methods take explicitly.
 
-### MW2 — the window registry
+### MW2 — the window registry + the command seam
 
 - Rename/reshape `App` into `Shell { shared, windows: HashMap<WindowId, WindowView>,
   primary }`; `ApplicationHandler` routes each `window_event` to `windows[&id]` and
-  `user_event` fans inbox results to the affected windows. Still one window created.
+  `user_event` multicasts inbox results to the affected windows.
+- Establish the command seam now (before the method signatures harden): per-window
+  handlers borrow one `WindowView` + the needed `SharedState` subsystem and return
+  `Vec<ShellCommand>`; the `Shell` applies them with full `&mut self`. Subdivide
+  `SharedState` into its subsystems.
 
-Done when the single window is driven through the registry (events resolved by id),
-with the shared/​per-window seam enforced by the types.
+Done when the single window is driven through the registry (events resolved by id,
+mutations applied as commands), with the shared/​per-window seam enforced by the types.
 
-### MW3 — a second window, shared state
+### MW3 — a second window, shared state (one device, N surfaces)
 
+- **Split `SurfaceHost`** (in `serval-winit-host`) into a shared `RenderCore` (the one
+  wgpu device + netrender `Renderer`) and a per-window `WindowSurface` (surface +
+  config). Today `SurfaceHost::boot` mints its own device per call, so two windows
+  would be two devices and the shared constellation texture could not be sampled into a
+  second swapchain. One device + N surfaces lets a leaf **blit the donor's node
+  texture** into its own backbuffer — the cheapest possible multi-window, and the
+  payoff of this whole architecture.
 - A "new window" command (Cmd/Ctrl+Shift+N) opens a second OS window over the same
   `SharedState`, with its own `WindowView` (own chrome, frame_layout, size). v0: the
   second window is **workbench-only** (`WindowKind::Leaf`), rendering shared nodes'
-  tiles through the shared `constellation`. Both windows redraw on a shared-node
-  content change.
+  tiles through the shared `constellation` behind the `NodeView` seam.
+- Present must not block across windows: keep acquire non-blocking (skip-on-outdated is
+  already there) so a slow window does not stall another's input on the shared loop.
 
-Done when two windows coexist, the second shows a shared node's live tile, and
-closing it leaves the graph + the first window intact.
+Done when two windows coexist on one device, the second shows a shared node's live
+tile (texture shared, not re-rendered), and closing it leaves the graph + the first
+window intact.
 
 ### MW4 — leaf tear-out gesture
 
-- Drag a workbench tab (or a pane header) past the slop → spawn a leaf window holding
-  that tile, carrying the donor's `GraphId`; the donor releases its binding of the
+- Drag a workbench tab (or a pane header) past the slop. The drag **ghost is rendered
+  as chrome inside the donor surface** (a positioned DOM element); the leaf window is
+  spawned **on release (drop)**, not mid-drag. This is the only portable shape: a
+  live window-follows-cursor would need a mid-gesture pointer-grab transfer Wayland
+  forbids, and winit's `drag_window` is a window-*move* request, not this. The spawn is
+  a `SpawnLeaf` command carrying `TileDragPayload` / `PaneDragPayload`.
+- The leaf window carries the donor's `GraphId`; the donor releases its binding of the
   tile. Within-tile navigation in the leaf updates the shared node (edits propagate to
-  the donor). Uses `TileDragPayload` / `PaneDragPayload`.
+  the donor) via the `NodeView` seam.
+- **Re-docking** (dragging a leaf back into a window) is **out of scope for MW4** — it
+  is the same cross-window-drop-detection problem, which on Wayland routes through the
+  OS data-device protocol (no global cursor position to hit-test against). Scoped to a
+  later phase so the gesture model is not invalidated by deciding it late.
 
-Done when dragging a tile out opens a leaf window of it, edits propagate both ways,
-and closing the leaf does not delete the node (brief §4.1).
+Done when dragging a tile out drops a leaf window of it on release, edits propagate
+both ways, and closing the leaf does not delete the node (brief §4.1). The closed-leaf
+rule is deliberate: the node stays graph-reachable but tile-less, rather than
+returning the tile to the donor (the command seam makes either trivial; this is the
+chosen one).
 
 ### MW5 — branch + fork + the escalation toast
 
@@ -175,21 +223,21 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
 
 ## Open questions
 
-1. **Shared-graph holding (A vs B).** Lean A (registry) as the destination; B's
-   lightness is allowed through MW4 since leaf needs only a URL + the shared
-   constellation. Forced at MW6.
-2. **Chrome per window.** Each window gets its own chrome runner (own toolbar / omnibar
-   / shellbar). Confirm the chrome view-model is cheap to instantiate N times (it is a
-   `ServalAppRunner` over a fresh `ScriptedDom`).
-3. **Switcher per window.** The shellbar session switcher is per-window. Do leaf
-   windows (workbench-only) show a switcher at all, or just the donor's? Lean: leaf
-   windows hide the switcher (they are a single torn tile, not a session surface).
-4. **a11y bridge per window.** Each window needs its own AccessKit adapter +
-   projection. Confirm `AccessKitBridge` supports N instances; the projection is
-   already a pure function of state.
-5. **Inbox fan-out.** One `user_event` drains the shared inbox; results route to the
-   windows showing the affected node. v0 may broadcast a redraw to all windows and
-   refine later.
+1. **Shared-graph holding (A vs B).** *Resolved into the architecture:* both impls sit
+   behind the `NodeView` seam, so A (registry) is the destination and B (primary-orrery)
+   carries MW3–MW4 with no leakage. MW6 swaps the impl. Not a fork any more.
+2. **Switcher per window.** *Leaning resolved:* per-`WindowKind` chrome is a different
+   DOM template, so a leaf window simply uses a slim template (no shellbar / switcher).
+   A leaf is a single torn tile, not a session surface.
+3. **a11y bridge per window.** Each window needs its own AccessKit adapter + projection.
+   Confirm `AccessKitBridge` supports N instances; the projection is already a pure
+   function of state.
+4. **Re-docking a leaf.** Out of scope through MW5; it is the same cross-window-drop
+   problem (Wayland routes it through the OS data-device protocol). Decide its phase
+   before locking the gesture model so it is not invalidated late.
+5. **Frame pacing on the shared loop.** N surfaces present serially on one thread. Keep
+   acquire non-blocking; revisit only if two windows on different-refresh monitors
+   actually contend (Fifo + frame-latency 2 should absorb the common case).
 
 ---
 
@@ -214,3 +262,22 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   44 lib + 63 bin green). `WindowView` grows cluster by cluster next: paint-texture
   caches → interaction / drag state → frame + layout → window / surface → chrome
   runners, until `App` splits into `Shell { shared, windows }` at MW2.
+- 2026-06-10: **Architecture revised after an external review** (verified against the
+  code, not taken on faith). Adopted: (1) a **command seam** — per-window handlers emit
+  `Vec<ShellCommand>` the `Shell` applies with full `&mut self`, matching the host's
+  existing drain-intent pattern; settles every two-window-aliasing question before MW2
+  hardens signatures. (2) A **`NodeView` trait** for leaf rendering, turning the A/B
+  graph-holding fork into an impl detail behind a stable seam. (3) **`SharedState`
+  subdivided** into subsystems (content / identity / presentation / comms / inbox);
+  inbox **multicasts** so shared chrome state (sync / inbox badges) flows through
+  fan-out, not a load-bearing broadcast-redraw. (4) **One wgpu device, N surfaces** —
+  *verified*: `SurfaceHost::boot` mints a device per call today, so MW3 must split it
+  (in `serval-winit-host`) into a shared `RenderCore` + per-window `WindowSurface`,
+  which is what lets a leaf blit the donor's node texture rather than re-render it. (5)
+  Tear-out is **spawn-on-drop** with an in-donor drag ghost (live window-follows-cursor
+  needs a mid-gesture pointer-grab transfer Wayland forbids; winit `drag_window` is a
+  move request); **re-docking** scoped out. (6) `WindowKind` is a payload enum
+  (`Primary(OrreryView)` / `Leaf` / `Forked(OrreryView)`) so camera ownership is typed.
+  Per-`WindowKind` chrome = a different DOM template (slim leaf chrome answers the
+  switcher-per-window question). Tempered the reviewer's vsync-stall claim to a
+  non-blocking-acquire note. No staging change.
