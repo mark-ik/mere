@@ -491,12 +491,12 @@ impl Presentation {
     }
 }
 
-struct App {
+struct Shell {
     /// Session + app state shared across every window. (Multi-window MW2.)
     shared: SharedState,
     /// The content root: the [`Orrery`] — the graph's spatial presentation,
     /// rendered into the band below the chrome and driven by content-band input.
-    /// Stays on `App` (the MW6 IOU: a leaf window holds no orrery; the primary's
+    /// Stays on `Shell` (the MW6 IOU: a leaf window holds no orrery; the primary's
     /// camera moves into `WindowKind::Primary` only when MW6 splits it).
     orrery: Orrery,
     /// All live windows, keyed by OS `WindowId` — the registry. Every per-window
@@ -512,11 +512,11 @@ struct App {
     pending_view: Option<window_view::WindowView>,
     /// System clipboard for the omnibar / palette Ctrl(Cmd)+C/X/V. `None` if the
     /// platform clipboard could not be opened (the shortcuts then no-op). System-
-    /// global, so it stays on `App`, not in `SharedState`.
+    /// global, so it stays on `Shell`, not in `SharedState`.
     clipboard: Option<arboard::Clipboard>,
     /// Platform AccessKit bridge fed by the same host-local uxtree snapshot as
     /// Apparatus. Unsupported platforms keep this as an explicit degraded bridge.
-    /// Per-window by construction (installs against one window); stays on `App`
+    /// Per-window by construction (installs against one window); stays on `Shell`
     /// pending the per-window move MW3 forces.
     a11y_bridge: a11y_bridge::AccessKitBridge,
     /// Host-owned routes for actionable AccessKit nodes in the current snapshot.
@@ -530,14 +530,14 @@ struct App {
 }
 
 /// The borrow bundle for handling **one window's** events. The bulk of the
-/// event-handling logic hangs off `impl WindowCtx` rather than `impl App`, so a
+/// event-handling logic hangs off `impl WindowCtx` rather than `impl Shell`, so a
 /// handler operates on exactly one window's [`WindowView`] plus the shared state
 /// and the shell singletons the active window legitimately drives (the orrery,
 /// the clipboard, the a11y bridge). The registry picks *which* window by building
 /// the ctx over `windows[&id]`; that construction is the seam — a ctx method
 /// cannot reach another window or the window map, so cross-window work (spawn /
 /// close / move-tile) goes through `ShellCommand` instead. Bodies are unchanged
-/// from when these were `&mut self` on `App`: `self.view` / `self.shared` /
+/// from when these were `&mut self` on `Shell`: `self.view` / `self.shared` /
 /// `self.orrery` resolve to these fields. (Multi-window MW2 (c).)
 struct WindowCtx<'a> {
     view: &'a mut window_view::WindowView,
@@ -591,7 +591,7 @@ struct KernelInbox {
     diagnostics: Receiver<DiagnosticEvent>,
 }
 
-impl App {
+impl Shell {
     fn new(
         proxy: winit::event_loop::EventLoopProxy<()>,
         diagnostics_rx: Receiver<DiagnosticEvent>,
@@ -1231,6 +1231,6 @@ fn main() {
 
     let event_loop = winit::event_loop::EventLoop::new().expect("failed to create event loop");
     let proxy = event_loop.create_proxy();
-    let mut app = App::new(proxy, diagnostics_rx);
+    let mut app = Shell::new(proxy, diagnostics_rx);
     event_loop.run_app(&mut app).expect("event loop error");
 }

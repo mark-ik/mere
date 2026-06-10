@@ -55,7 +55,7 @@ pub(super) fn sync_chrome_from_history(c: &mut Chrome, submitted: bool) {
     c.toolbar.editable.location_dirty = false;
     c.toolbar.editable.location_submitted = submitted;
     // `can_go_*` is host-driven from the focused node's history (see
-    // `App::sync_nav_buttons`), not the chrome's suggestions log.
+    // `Shell::sync_nav_buttons`), not the chrome's suggestions log.
     c.omnibar = TextInput::new(url);
     c.close_suggestions();
 }

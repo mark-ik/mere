@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 //! Navigation, content, session, and chrome-drain operations for
-//! [`App`](super::App). Factored from `main.rs` to keep files under the
+//! [`Shell`](super::Shell). Factored from `main.rs` to keep files under the
 //! workspace 600-LOC ceiling.
 
 use std::collections::HashMap;

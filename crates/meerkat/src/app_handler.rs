@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! `ApplicationHandler` impl for [`App`](super::App). Factored from
+//! `ApplicationHandler` impl for [`Shell`](super::Shell). Factored from
 //! `main.rs` to keep files under the workspace 600-LOC ceiling.
 
 use std::sync::Arc;
@@ -17,7 +17,7 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use super::observability::Severity;
-use super::{App, comms_host, fetch, scrying_host, sync, titlebar};
+use super::{Shell, comms_host, fetch, scrying_host, sync, titlebar};
 
 /// The platform virtual-key code for a winit key event, for forwarding into a
 /// scrying tile's WebView. Named keys map to their Win32 VKs; character keys use
@@ -51,7 +51,7 @@ fn scrying_vk(event: &winit::event::KeyEvent) -> u32 {
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler for Shell {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // winit calls `resumed` on every resume; the primary is created once. After
         // that the view lives in the registry, so this no-ops. (MW2 (d).)
@@ -244,6 +244,14 @@ impl ApplicationHandler for App {
         }
         // P2P sync status (S5.0): the same wake also carries lane-status changes.
         // Fold the latest into the chrome chip (the host owns the mutation).
+        //
+        // MW2 (d2) deferred to MW3: the sync-chip + comms writes below target the
+        // primary's chrome (`wc.view.runner`). At N>1 they fan out to every window
+        // whose template carries that chrome — a two-phase restructure (drain +
+        // collect here, then replay per `self.windows.values_mut()` after the ctx
+        // borrow ends). Done when the second window exists to test it against, so the
+        // fan-out isn't an untested loop over one element through the actor-drain
+        // hot path. (Multi-window plan MW3.)
         let mut latest_sync = None;
         while let Ok(update) = wc.shared.inbox.sync.try_recv() {
             wc.shared.observability.record_actor(

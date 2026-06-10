@@ -149,10 +149,10 @@ pub struct Chrome {
     pub comms_new_to: TextInput,
     /// The compose-new form's body editing buffer.
     pub comms_new_body: TextInput,
-    /// Which panes are currently open — mirrored from App's frame_layout each
+    /// Which panes are currently open — mirrored from Shell's frame_layout each
     /// frame so the shellbar buttons show the correct active state.
     pub shellbar_panes: ShellbarPaneStates,
-    /// Which window edge the shellbar is docked to — mirrored from App so the
+    /// Which window edge the shellbar is docked to — mirrored from Shell so the
     /// view builds the right flex direction.
     pub shellbar_edge: ShellbarEdge,
 }

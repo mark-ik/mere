@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Mouse, keyboard, and palette input handlers for [`App`](super::App). Factored
+//! Mouse, keyboard, and palette input handlers for [`Shell`](super::Shell). Factored
 //! from `main.rs` to keep files under the workspace 600-LOC ceiling.
 
 use std::time::{Duration, Instant};

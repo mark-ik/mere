@@ -14,7 +14,7 @@ use frame::PaneContent;
 use meerkat::command::Command;
 
 use super::observability::{A11ySnapshot, ObservabilitySnapshot, Severity};
-use super::{App, ContentPane};
+use super::{Shell, ContentPane};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AgentObservation {
@@ -99,7 +99,7 @@ pub(crate) enum AgentPane {
     Apparatus,
 }
 
-impl App {
+impl Shell {
     pub(crate) fn agent_observation(&mut self) -> AgentObservation {
         self.ctx().refresh_a11y_summary();
         let snapshot = self.ctx().apparatus_observability();
@@ -417,9 +417,9 @@ mod tests {
     use std::sync::OnceLock;
     use winit::event_loop::EventLoopProxy;
 
-    fn test_app() -> App {
+    fn test_app() -> Shell {
         let (_tx, rx) = std::sync::mpsc::channel();
-        App::new_with_session_dir(test_proxy(), rx, temp_session_dir())
+        Shell::new_with_session_dir(test_proxy(), rx, temp_session_dir())
     }
 
     fn test_proxy() -> EventLoopProxy<()> {
@@ -513,12 +513,12 @@ mod tests {
         let first_graph = app.ctx().active_graph_id();
         // Open a second pane: the window now holds an orrery + a roster.
         app.ctx().toggle_pane(frame::PaneContent::Roster);
-        let has_roster = |app: &App| {
+        let has_roster = |app: &Shell| {
             app.view().frame_layout
                 .iter_leaves()
                 .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
         };
-        let orrery_graph = |app: &App| {
+        let orrery_graph = |app: &Shell| {
             app.view().frame_layout
                 .iter_leaves()
                 .find(|(_, c, _)| matches!(c, frame::PaneContent::Orrery))
@@ -554,7 +554,7 @@ mod tests {
     fn rename_sets_then_clears_the_session_display_name() {
         let mut app = test_app();
         let id = app.shared.session.active_session_id;
-        let name_of = |app: &App, id| {
+        let name_of = |app: &Shell, id| {
             app.shared.session.manifests
                 .get(id)
                 .and_then(|m| m.display_name.clone())

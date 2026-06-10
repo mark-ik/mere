@@ -32,7 +32,7 @@ use xilem_serval::{Modifiers, ServalAppRunner};
 
 use super::{CachedTile, ContentPane, ResizeDrag};
 
-/// State owned by a single window's view. Methods on `App` reach it through
+/// State owned by a single window's view. Methods on `Shell` reach it through
 /// `self.view`; when the window registry lands (MW2) the render / input paths
 /// take `&mut WindowView` for the target window explicitly.
 ///

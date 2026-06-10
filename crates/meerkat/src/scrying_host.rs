@@ -469,7 +469,7 @@ mod windows_pool {
         let config =
             PlatformWebSurfaceConfig::new(dpi::PhysicalSize::new(width, height), profile);
         // Safety: `hwnd` is the live meerkat top-level window, which outlives
-        // the pool (the pool is dropped with `App` before the window closes).
+        // the pool (the pool is dropped with `Shell` before the window closes).
         #[allow(unsafe_code)]
         unsafe { PlatformWebSurfaceProducer::new(hwnd, config) }
             .map_err(|err| format!("WebView2 spawn: {err}"))
