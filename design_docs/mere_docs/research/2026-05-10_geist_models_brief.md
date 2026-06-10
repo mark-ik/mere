@@ -95,7 +95,7 @@ Geist models compose three orthogonal operations. The user/moot picks any combin
 
 Index the corpus's engrams; at inference time, retrieve relevant context and prepend to the prompt. **No model training.** Works with any base model, including closed-API models.
 
-- **Index:** vector embeddings over engram payloads. Tier-1 embeddings (already shipped in `intelligence-embeddings`) cover this directly.
+- **Index:** vector embeddings over engram payloads. Tier-1 embeddings (already shipped in `intel/embed`) cover this directly.
 - **Retrieval:** k-nearest-neighbor over the embedding index, scoped to the appropriate corpus (orrery, moot, etc.).
 - **Inference:** retrieved context is prompt-prepended; model answers grounded in retrieved engrams.
 - **Cost:** index storage (MB-to-GB range depending on corpus size); inference is base-model cost.

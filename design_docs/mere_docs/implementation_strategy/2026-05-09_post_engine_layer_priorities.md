@@ -2,6 +2,8 @@
 
 **Date**: 2026-05-09
 **Status**: Active forward-looking plan
+
+> **Crate-name note (2026-06-09 audit):** the §1 18-crate list and §2 host references are a 2026-05-09 **gpui-era** snapshot. The host is now `meerkat` (serval-as-host), not gpui: `mere-host`→`meerkat`, `mere-kernel`→`graph/graph-kernel`, `mere-host-contract`→`system/...`, `intelligence-embeddings`→`intel/embed`, `mere-transport`→`murm/transport`, `verso-tile`→`verso`. Dated status notes below are historical record.
 **Scope**: What's still open after the Graphshell→Mere migration finished and the engine layer (inker + nematic + polyglot knot + uxtree projection) landed. Replaces the 2026-05-06 Graphshell migration plan, which is archived under [`../../archive_docs/2026-05-09_engine_layer_complete/`](../../archive_docs/2026-05-09_engine_layer_complete/) along with its companion donor inventory.
 
 **Related**:

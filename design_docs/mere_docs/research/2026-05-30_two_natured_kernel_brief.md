@@ -30,7 +30,7 @@ engine already inside it) bears on the answer.
 - [cartography-aether seam](../technical_architecture/2026-05-29_cartography_aether_layout_seam.md)
   — the rapier substrate (`gyre`, the crate formerly named `aether`) as a
   kernel-tier physics layer that speaks kernel types only.
-- Code: [`graph-kernel/.../edge_taxonomy.rs`](../../../crates/graphshell/graph/graph-kernel/src/graph/edge_taxonomy.rs)
+- Code: [`graph-kernel/.../edge_taxonomy.rs`](../../../crates/graph/graph-kernel/src/graph/edge_taxonomy.rs)
   — the closed enums plus hand-rolled mirror tables that prompted the question.
 
 ---

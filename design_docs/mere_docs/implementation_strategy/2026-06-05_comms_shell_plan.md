@@ -1,7 +1,7 @@
 # Comms Shell Plan
 
 **Date**: 2026-06-05
-**Status**: Draft (for review). The realization of Mere's **comms surface** in
+**Status**: Largely implemented (the `shell/comms` domain crate and the meerkat pane exist; see Progress). The realization of Mere's **comms surface** in
 meerkat: a docked peripheral pane that surfaces unified communications (misfin
 mail + murm cabals, with room for mooting protocols), rendered through the same
 domain → host pattern as the chrome. It closes the [modular integration
@@ -51,8 +51,8 @@ and lights up each protocol as its backend matures.
 1. **The architecture mirrors chrome, in five layers.** Transport (errand send +
    misfin server) → identity (persona vault) → **comms domain** (new, host-neutral)
    → host pane (meerkat, docked) → rendering (nematic). `chrome` lives at
-   `crates/graphshell/shell/domain/chrome`, so the comms domain is its sibling
-   `crates/graphshell/shell/domain/comms` (relocates with the domain layer if §7
+   `crates/shell/chrome`, so the comms domain is its sibling
+   `crates/shell/comms` (relocates with the domain layer if §7
    cleanup moves it).
 2. **Backend readiness is partial — this drove the decisions.**
    - *misfin* (`crates/murm/misfin`) is **send + identity only**: `send_message`,
@@ -101,7 +101,7 @@ the inbox, P5 depends on the adapters, P6 is the visible payoff.
 - **P4 — murm Phase 2B (pulled forward).** Fill `Cabal::send` / `subscribe` /
   `history` over the Cable protocol on the existing `SyncedCabal` substrate.
   *Done:* a cabal has a real send / history / live-subscribe API for the shell.
-- **P5 — the comms domain crate.** `crates/graphshell/shell/domain/comms`: a
+- **P5 — the comms domain crate.** `crates/shell/comms`: a
   host-neutral `Conversation` / `Message` / `Identity` model + compose state + a
   `ProtocolAdapter` trait, with a **misfin adapter** (mailbox → conversations,
   gemmail → messages, identity) and a **murm adapter** (cabals → conversations,
@@ -168,7 +168,7 @@ make it a live shell (compose, send, read, conversation list) with murm cabals
   identity only, no receive; murm = foundation, send/history is Phase 2B; mooting =
   stub; errand = async client fetch with `tls` + `titan_upload`; nematic
   `MisfinEngine` renders bodies, envelope is the host's job; chrome domain at
-  `crates/graphshell/shell/domain/chrome`). Resolved four decisions with Mark
+  `crates/shell/chrome`). Resolved four decisions with Mark
   (general comms shell; misfin send into errand; receive = a misfin server with an
   external-server option; docked frame pane; pull murm 2B forward). Sliced the work
   P1 (errand send) → P2 (vault identity) → P3 (misfin server) → P4 (murm 2B) → P5
@@ -304,8 +304,8 @@ make it a live shell (compose, send, read, conversation list) with murm cabals
     Deferred (later phases, not blocking the shell): the host-led co-op session flows
     (`host_coop`/`join_coop`). Worked inline/foreground.
 - **2026-06-06 — P5 (the comms domain crate) built + green.** New crate
-  `comms` at `crates/graphshell/shell/domain/chrome`'s sibling
-  `crates/graphshell/shell/domain/comms` (registered in workspace members +
+  `comms` at `crates/shell/chrome`'s sibling
+  `crates/shell/comms` (registered in workspace members +
   `[workspace.dependencies]`; `misfin` added to the deps table). Built as chrome's
   twin: a **WASM-clean core** (the model + the seam, no tokio/egui/platform I/O,
   headless-tested) with the heavy backends behind features.

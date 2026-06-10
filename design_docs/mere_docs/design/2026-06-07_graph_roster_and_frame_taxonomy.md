@@ -6,7 +6,8 @@
 > "inspector" for the roster; that conflation is corrected here.
 
 **Date**: 2026-06-07
-**Status**: Design, from a Mark + Claude session. No code yet.
+**Status**: Design, from a Mark + Claude session. Frame-tree substrate and a seed
+roster pane now exist; the R-phase roster details here remain target design.
 **Related**: [gloss = Navigator](2026-06-07_gloss_navigator_design.md) (sibling surface), [card system + staging](../implementation_strategy/2026-06-07_card_system_and_staging_plan.md), `frame` crate (`FrameLayout`), `platen` (tile tree), `cartography`, `aether` (fields).
 
 ---
@@ -155,31 +156,64 @@ shared infrastructure; `inspect node` / `inspect tile` are their first entries.
 
 ---
 
-## 4. Prerequisite: wire the frame tree into meerkat
+## 4. Shellbar (2026-06-09)
 
-**meerkat does not use `frame::FrameLayout` today.** The content band is a hard
-**orrery-XOR-workbench toggle**, and the "splits" are tile-tree splits inside
-the one workbench pane. So the multi-pane vision (a roster pane beside the
-orrery, gloss as a pane, tear-out) has no substrate yet.
+**Design decision: docked chrome strip, outside the frame tree.**
 
-The **frame-tree pane system is the foundational arc** that unlocks gloss, the
-roster, side-by-side-with-orrery, and tear-out. `FrameLayout` exists as a crate
-(savable, projects to a uxtree); the work is wiring it into meerkat as the
-window-level pane arranger, with the orrery / workbench / gloss / roster as
-leaves. This likely comes *before* (or as the enabling first phase of) the gloss
-and roster builds, not after.
+The shellbar is the persistent strip of pane-toggle buttons at one edge of the
+window. It is **not a frame-tree leaf** — the frame tree owns content panes
+(roster, orrery, workbench, …); the shellbar is the chrome that *operates* the
+frame tree from the outside.
+
+**Spatial placement.** The shellbar docks to one of four window edges: Left
+(default), Right, Top, or Bottom. The content band (the region the frame tree
+fills) is computed as the window minus the toolbar band (top) minus the shellbar
+strip. Moving the shellbar means changing the edge preference — no
+`reparent_leaf`, no frame tree mutation.
+
+**Why not a frame leaf.** A leaf can be closed, split against, and have
+siblings. The shellbar can do none of these. Any "never-close, never-split"
+invariant enforced in the frame tree is steady-state complexity for the life of
+the codebase. Outside is simpler.
+
+**Move gesture.** Right-click the shellbar → "Move to left / right / top /
+bottom." Sets the edge preference and recomputes the band. Drag-to-edge is a
+later enhancement.
+
+**Contents (F2.1).** Five toggle buttons: Workbench, Roster, Gloss, Apparatus,
+Comms. Each is illuminated when its pane is open. The orrery is always-on (no
+toggle). The existing keybinds (Ctrl+R, Ctrl+T, …) remain; the shellbar is the
+mouse-accessible equivalent.
+
+**Persistence.** `shellbar_edge` lives in `PersistedSettings` (sibling to
+`theme_id`) under `settings.json`.
 
 ---
 
-## 5. Phasing (proposed)
+## 6. Prerequisite: wire the frame tree into meerkat
 
-1. **F1 — frame tree in meerkat.** Wire `FrameLayout` as the content-region pane
-   arranger: orrery + workbench as leaves, h/v splits with adjustable margins.
-   Replaces the orrery-XOR-workbench toggle. (Tear-out to a new window is a
-   later sub-phase; the memory's multi-window/synced-panels work.)
-2. **F2 — panes as leaves.** gloss and roster become frame-tree leaves you can
-   split beside the orrery and rearrange.
+**Complete as of 2026-06-08.** `meerkat` now uses `frame::FrameLayout` for the
+window-level content-region pane arranger. The orrery is its own frame leaf, the
+tiled workbench is a summonable sibling pane, and roster / gloss / apparatus /
+inspector / steward can be summoned as frame leaves. Tile splits remain internal
+to the workbench pane.
+
+The **frame-tree pane system** remains the substrate that unlocks richer gloss,
+roster, side-by-side-with-orrery, and future tear-out. `FrameLayout` stays the
+window-level pane tree; `platen` stays the workbench's internal tile tree.
+
+---
+
+## 7. Phasing (proposed)
+
+1. **F1 — frame tree in meerkat.** Done. `FrameLayout` arranges the orrery,
+   workbench, roster, gloss, apparatus, inspector, steward, and comms as
+   window-level pane leaves. Tear-out remains later.
+2. **F2 — pane summon/arrange UI.** A shellbar should replace keybind-only pane
+   toggles and expose arranging/maximizing affordances.
 3. **R1 — roster node list + facets** (node-rooted detail: metadata + lineage).
+   This is where node facets move as Inspector narrows to addressed-content
+   diagnostics.
 4. **R2 — edges + fields** in the node detail; drill-through; systemic edge/field
    enumeration.
 5. **R3 — sort/filter by content type**; **content-type node shapes** in the
@@ -188,7 +222,7 @@ and roster builds, not after.
 
 ---
 
-## 6. Open questions
+## 8. Open questions
 
 - **Tear-out / multi-window** timing — `FrameLayout` supports reparenting; the
   synced-multi-window work (shared `Entity<T>`) is a known later arc.

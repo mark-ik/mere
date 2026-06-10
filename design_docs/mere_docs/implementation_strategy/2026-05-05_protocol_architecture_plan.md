@@ -9,6 +9,8 @@
 
 **Drives**: The Mere Phase 2C → Phase 3 work program, plus per-protocol mod specs that branch from this plan.
 
+> **Crate-name + substrate note (2026-06-09 audit):** crate names below predate the 2026-05-19 supercrate naming pass and the `graphshell` dissolution: `mere-identity`→`persona/identity`, `mere-transport`→`murm/transport`, `mere-kernel`→`graph/graph-kernel`, `mere-host-runtime`→`system/session-runtime`. The bilateral substrate has since pivoted Cable→p2panda (the `mere-transport` iroh path retired, BLAKE2b→BLAKE3), so the Cable wire-format and iroh-transport sections are partially superseded by the [p2panda spike](2026-06-01_p2panda_substrate_spike_plan.md). Dated "shipped"/progress receipts below are left as historical record.
+
 **Related**:
 
 - [`../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md`](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md) — Murm's authority + boundaries (this plan extends Murm with sibling-protocol layers and identity-vault elaboration)

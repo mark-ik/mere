@@ -1,12 +1,17 @@
 # Serval-as-Host Flip Plan
 
 **Date**: 2026-06-01
-**Status**: Gate open on the interactive items. **P0 (perf spike) run 2026-06-01:
+**Status**: Serval-side perf and interactive gates clear in the current checkout.
+**P0 (perf spike) run 2026-06-01:
 the relayout worry is retired (transform motion is paint-tier → `RepaintOnly`, not
 reflow). The three serval prerequisites it surfaced for the orrery's continuous
 motion (incremental inline-`style` invalidation, repeated-`apply()` restyle, and
 transform→paint-position) are all RESOLVED in serval-layout (verified single-threaded
-and parallel; see Phase 0). The orrery flip (P1) is unblocked on the serval side.**
+and parallel; see Phase 0). The orrery flip (P1) is unblocked on the layout/perf
+side. The earlier `xilem_serval` host-backend blocker list is now closed in the
+current tree: pointer-drag (`pointerdown`/`move`/`up` + capture), slider,
+Tab/Shift+Tab focus traversal, and clip-aware scroll hit-testing are implemented
+and test-covered.**
 Execution plan for flipping Mere's host from Xilem + Masonry (architecture 1) to
 serval-as-host (architecture 3). Cross-repo: sequences mere-side work against serval capabilities.
 **Decision owner**: the [serval-as-host evaluation](../technical_architecture/2026-05-29_serval_as_host_evaluation.md)
@@ -18,30 +23,35 @@ serval [`xilem_serval` plan](../../../../serval/docs/2026-05-27_serval_as_host_x
 
 ---
 
-## Gate status (verified 2026-06-01)
+## Gate status (updated 2026-06-10)
 
-The flip gate (evaluation brief §8) is **open on the two interactive items,
-pending the orrery perf spike**:
+The flip gate (evaluation brief §8) is **open on the serval-side prerequisites**:
 
 - **IME — done.** All three tiers plus the underline-styled preedit landed in
   `xilem-serval` (serval `c7a78a5` "IME functionally complete", `944c070` T2
   preedit, `42d9d04` T1 commit + T3 candidate placement). This was the long pole.
-- **Form-control breadth — done.** The pointer-drag foundation (`on_pointer` +
-  capture, `939dc7d`) and the `slider` on it (`e2886d8`, wired `52de93f`) landed.
-  Slider was the last open control; pointer-drag also unlocks scrollbar-thumb
-  drag, resize handles, and drag-tab-out.
-- **Perf spike — pending (Phase 0).** §8's check that transform-only node motion
-  lands on serval's `RepaintOnly` path, not `full_relayout`, at orrery scale is
-  not yet measured. serval has the mechanism (fine-grained restyle / `RepaintOnly`,
-  `2026-05-25_fine_grained_restyle_plan.md`) but no orrery-scale result. It can
-  send the orrery flip back, so it leads.
+- **Form-control breadth — done.** Stages 0 through 7
+  are done: mutation API, runner, faithful event dispatch, component composition,
+  keyboard/focus, capture phase, overlays + inline style, erased views, scrolling,
+  z-index Tier 1, and the shipped controls (button, checkbox/toggle, single-line
+  text field with glyph-positioned caret + selection + clipboard, select, radio,
+  textarea, slider). The pointer-drag foundation (`pointerdown`/`move`/`up` +
+  capture) is present and test-covered; it also gives the reusable primitive for
+  scrollbar-thumb drag, resize handles, and drag-tab-out.
+- **Chrome-critical follow-ups — done.** `Tab`/`Shift+Tab` focus traversal is
+  implemented in the runner, and `ServalLaneView` hit-testing is clip- and
+  scroll-aware for interactive scrolled content.
+- **Perf spike — done (Phase 0).** §8's check that transform-only node motion
+  lands on serval's `RepaintOnly` path, not `full_relayout`, at orrery scale has
+  been run; the relayout worry is retired, and the continuous-transform
+  prerequisites A+B+C are resolved.
 
 ## Findings (grounded 2026-06-01)
 
 - serval and the mere Xilem fork share **vello 0.9 / wgpu 29**, so there is no
   renderer-stack reconciliation.
-- `xilem-serval` is at Stage 7 (scrolling, z-index, overlays, a11y, select / radio
-  / textarea, IME, slider), validated on screen.
+- `xilem-serval` is strong through Stage 7 (scrolling, z-index, overlays, a11y,
+  select / radio / textarea / slider, IME), validated on screen.
 - The **host-agnostic core is unaffected** (brief §5): kernel, forme, inker
   contracts, mere-domain, eidetic, gyre, and the whole field system (aether eval,
   gyre forces, the platen visual pass). The orrery **scene-paint underlay producer
@@ -180,12 +190,14 @@ Xilem + Masonry host is removed.
 
 ## Progress
 
-- **2026-06-01** — Plan created. Gate verified open on IME + form-control breadth
-  against the serval git log; the §8 perf spike (Phase 0) is pending (mechanism
-  present, orrery-scale measurement not run). The orrery scene-paint underlay
-  producer already landed host-neutral (`platen::orrery`, `1110a26`) and is Phase-1
-  layer 1. No flip code written yet; this is the coordination artifact, and
-  execution is cross-cutting across mere + serval.
+- **2026-06-01** — Plan created. At the time, the gate was read as open on IME +
+  form-control breadth against the serval git log, with the §8 perf spike
+  (Phase 0) pending (mechanism present, orrery-scale measurement not run). Later
+  status corrections below supersede that early read: P0 is done, and the
+  previous host-backend blocker list is now closed. The orrery scene-paint
+  underlay producer already landed host-neutral (`platen::orrery`, `1110a26`) and
+  is Phase-1 layer 1. No flip code written yet; this is the coordination artifact,
+  and execution is cross-cutting across mere + serval.
 
 - **2026-06-01** — **P0 run (serval `6bf33947f`).** Orchestrated a read-only recon
   workflow (6 agents) mapping serval's incremental-layout, then implemented the
@@ -225,3 +237,11 @@ Xilem + Masonry host is removed.
   400-frame sustained-motion test crossing Stylo's rule-tree GC interval. The orrery
   per-frame inline-transform path now runs on the efficient incremental restyle.
   Remaining follow-up: stylesheet hot-reload (rebuild + full re-match that frame).
+
+- **2026-06-10** — **Gate status corrected against live code.** `xilem_serval`
+  remains a strong host-backend candidate: Stages 0-7 are done, controls include
+  button, checkbox/toggle, text field with real caret/selection/clipboard,
+  select, radio, textarea, slider, and IME is complete. The previous named
+  blocker, pointer-drag (`pointerdown`/`move`/`up` + capture), is present and
+  test-covered; so are `Tab`/`Shift+Tab` focus traversal and clip-aware
+  hit-testing for interactive scrolled content.

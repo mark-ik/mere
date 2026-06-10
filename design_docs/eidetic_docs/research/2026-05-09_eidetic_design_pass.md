@@ -1,6 +1,8 @@
 # Eidetic Design Pass — Research Report (2026-05-09)
 
 **Status**: Research synthesis with recommendations
+
+> **Crate-name note (2026-06-09 audit):** the four-layer stack this pass proposes is largely **built**; the remaining Phases 7-9 live in the [eidetic deferred-phases plan](../implementation_strategy/2026-06-09_eidetic_deferred_phases_plan.md). `intelligence-embeddings`→`intel/embed`; donor `graphshell/...` paths point at the GitHub-archived donor (local clone deleted 2026-05-27). Dated receipts below are historical record.
 **Purpose**: Eidetic shipped 2026-05-06 as a 186-line blob-store contract. It needs to grow into Mere's actual private-memory layer — the substrate this research has been describing for months under various names (mnem, STM/LTM, EngramMemory, browsing memory). This pass proposes how, grounded in the inherited graphshell-era research and the immediate concrete pulls (eidetic-backed model storage, vector-index persistence, browsing-memory accumulation).
 **Audience**: Architecture / planning. Implementation plans should descend from this report.
 

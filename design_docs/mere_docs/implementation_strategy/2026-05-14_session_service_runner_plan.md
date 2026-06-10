@@ -7,7 +7,7 @@
 **Related**:
 
 - [`../research/2026-05-11_browser_multiplexer_framing.md`](../research/2026-05-11_browser_multiplexer_framing.md) §5.7 — the framing brief.
-- [`crates/mere-host-runtime/src/manifest.rs`](../../../crates/mere-host-runtime/src/manifest.rs) — `WorkerKind` enum (currently `None`-only); `GraphSessionManifest.active_workers: Vec<WorkerKind>` is already in place.
+- [`crates/system/session-runtime/src/manifest.rs`](../../../crates/system/session-runtime/src/manifest.rs) — `WorkerKind` enum (currently `None`-only); `GraphSessionManifest.active_workers: Vec<WorkerKind>` is already in place.
 - [`../research/2026-05-11_browser_multiplexer_framing.md`](../research/2026-05-11_browser_multiplexer_framing.md) §5.9 — single-process logical daemon framing. v0 runs in-process; v1+ may relocate to a separate service. The trait is designed so the relocation doesn't rewrite session semantics.
 
 ---
@@ -20,11 +20,11 @@
 2. Reports each worker's current state (`WorkerStatus`).
 3. Lets the host start, stop, and enumerate workers per session.
 
-The trait is portable (lives in `mere-host-runtime`, wasm-clean) so a future split into a separate runner service crate doesn't have to re-export everything.
+The trait is portable (lives in `system/session-runtime`, wasm-clean) so a future split into a separate runner service crate doesn't have to re-export everything.
 
 **v0a done when (this turn):**
 
-- `session_service_runner` module in `mere-host-runtime` exposes `SessionServiceRunner` trait + `WorkerHandle` + `WorkerStatus` + `WorkerState` + extended `WorkerKind` variants.
+- `session_service_runner` module in `system/session-runtime` exposes `SessionServiceRunner` trait + `WorkerHandle` + `WorkerStatus` + `WorkerState` + extended `WorkerKind` variants.
 - `NullRunner` no-op implementation lets `HostRoot` thread a runner reference through even before any real worker exists.
 - An `InMemoryRunner` test double records start/stop calls — basis for v0b real-worker tests too.
 - Trait tests cover start → stop → list lifecycle.

@@ -2,6 +2,8 @@
 
 **Date**: 2026-05-11
 **Status**: Decision brief
+
+> **Crate-name note (2026-06-09 audit):** `mere-host`→`meerkat`, `mere-kernel`→`graph/graph-kernel`. The engine taxonomy (scrying is a library, not a peer engine) holds; the host references below are gpui-era names.
 **Scope**: Pins the engine taxonomy after a working-tree-clean conversation
 about whether serval should host nematic / scrying internally, or whether
 all three sit as peers under mere. Refines the engine-profile boundary

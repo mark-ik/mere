@@ -63,8 +63,10 @@ through typed observations and actions rather than raw pixel puppetry.
   after the fact, health snapshot, invariant violations, plus system/subsystem
   config), Steward is the *live* plane (the process/daemon monitor: running actors
   and async jobs you can act on). So live actor lifecycle belongs to Steward;
-  Apparatus keeps the recorded actor faults + health snapshot + config. Content
-  identity/provenance belongs to Inspector; graph commentary belongs to Gloss.
+  Apparatus keeps the recorded actor faults + health snapshot + config. The
+  node's graph facets/provenance/lineage belong to Roster at node scope; addressed
+  content identity/provenance/parse state belongs to Inspector; graph commentary
+  belongs to Gloss.
 
 ---
 
@@ -399,4 +401,6 @@ accessibility states.
   live content operations from the constellation and exposes host-routed retry,
   stop, and background-pin hooks through command-palette verbs and typed agent
   actions. Remaining D8 work is making those hooks clickable in the Steward pane
-  UI itself and adding richer per-operation history/error affordances.
+  UI itself, adding richer per-operation history/error affordances, and migrating
+  node facets / lineage out of the focused-node Inspector into the Roster's
+  node-scoped facet view.

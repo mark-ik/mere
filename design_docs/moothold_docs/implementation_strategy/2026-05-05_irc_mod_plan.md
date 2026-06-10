@@ -61,7 +61,7 @@ Add to crates.io? Reserve when the crate name is needed for `cargo publish`; not
 IRC slot lands as a `Direct` variant with `kind = "irc"`:
 
 > *Illustrative — signature-only, not implementation-ready. The
-> declarative shape lives in [`mere-identity::vault::IdentitySlot`](https://docs.rs/mere-identity/0.0.1/mere_identity/vault/enum.IdentitySlot.html).*
+> declarative shape lives in `persona/identity`'s `vault::IdentitySlot` (formerly `mere-identity`; a path-dep now, not on docs.rs).*
 
 ```rust
 // Constructed by mere-mod-irc; stored opaquely by the vault.
@@ -186,7 +186,7 @@ Production-side IRC traffic (TCP to the IRC server) does **not** ride iroh — i
 
 ### Phase 3.0 — Mod scaffold + Pattern A
 
-- `mere-mod-irc` crate scaffolded, depends on `irc`, `mere-identity`, `mere-transport`, `mooting`.
+- `mere-mod-irc` crate scaffolded, depends on `irc`, `persona/identity`, `murm/transport`, `mooting`.
 - `IrcClient` + lifecycle (connect, SASL, JOIN, stream, send).
 - Vault slot integration (read on open, write on save).
 - Tests: connect to a local ircd test fixture; round-trip a PRIVMSG.

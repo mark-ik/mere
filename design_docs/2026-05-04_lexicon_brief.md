@@ -2,9 +2,9 @@
 
 **Status**: Active / authoritative for terms covered
 **Date**: 2026-05-04
-**Scope**: Establishes the post-rename naming scheme and in-product vocabulary for the Mere project. Authoritative for terms it covers; supersedes the prior [2026-05-03 lexicon brief](../../graphshell/design_docs/2026-05-03_lexicon_brief.md) (which had Strophos+Orrery as the product) and complements [`TERMINOLOGY.md`](TERMINOLOGY.md) until that file is fully populated. Terms not addressed here defer to inherited [`graphshell/design_docs/TERMINOLOGY.md`](../../graphshell/design_docs/TERMINOLOGY.md).
+**Scope**: Establishes the post-rename naming scheme and in-product vocabulary for the Mere project. Authoritative for terms it covers; supersedes the prior [2026-05-03 lexicon brief](../../graphshell/design_docs/2026-05-03_lexicon_brief.md) (which had Strophos+Orrery as the product) and complements [`TERMINOLOGY.md`](TERMINOLOGY.md) until that file is fully populated. Terms not addressed here are covered by the donor harvest indexes; the donor `graphshell` repo is GitHub-archived (read-only) and its local clone was deleted 2026-05-27, so `../../graphshell/design_docs/` paths no longer resolve.
 
-**Execution status**: 10-crate workspace scaffolded at `c:\Users\mark_\Code\repos\mere\` 2026-05-04. Crates.io publication in progress (rate-limited; some crates published, some pending). The existing `c:\Users\mark_\Code\repos\graphshell\` directory remains intact and untouched.
+**Execution status (updated 2026-06-09)**: the workspace has since reorganized from the flat 2026-05-04 scaffolding into supercrate subtrees under `crates/`, with **meerkat** as the host on the serval-as-host path; see the topology table in [`DOC_README.md`](DOC_README.md) for the current layout. The donor `graphshell` repo was GitHub-archived and its local clone deleted 2026-05-27.
 
 ---
 
@@ -14,11 +14,11 @@
 |------|----------------|-------|
 | **Mere** | Product / app — the browser itself | Triple-meaning positioning: *merely* (humble — "merely a browser!"), *mere* (a small lake — still-water surface where things accrue and reflect), slant-rhyme with *mirror*. Disambiguates from Māori weapon by intentional framing. Replaces *Graphshell-as-product-name* and *Verse-as-network-layer*. |
 | **Strophos** | Parent brand / company-name layer | Greek στρόφος, "twist/turn." Sits next to Verso (Latin "turned") etymologically. Strophalos (Hekate's Wheel) available as evocative long-form. |
-| **Verso** | Brand-level concept name for the rendering-surface layer | Crate is `verso-tile` (bare `verso` is taken by a literate-programming tool). |
+| **Verso** | Brand-level concept name for the rendering-surface layer | Crate family is `verso` (`verso-core`, `tile-state`). |
 
 ## 2. The printing-press metaphor
 
-The architectural through-line. Engines (Wry, Serval, Nematic) produce content. The **inker** pairs each engine to its content. The **platen** composes the layout (graph-aware). The **verso-tile** receives the impression (places it into GraphTree tile slots). The user sees the printed result via `mere`-on-`graphshell`. **Eidetic** keeps the impressions over time. **Murm** carries bilateral comms; **moothold** carries federation across moots; **coalition** (t4) carries coalition across mootholds.
+The architectural through-line. Engines (Wry, Serval, Nematic) produce content. The **inker** pairs each engine to its content. The **platen** composes the layout (graph-aware). The **verso** layer receives the impression (places it into tile slots). The user sees the printed result via **meerkat** (the host), chrome and content both rendered by serval on the serval-as-host path. **Eidetic** keeps the impressions over time. **Murm** carries bilateral comms; **moothold** carries federation across moots; **coalition** (t4) carries coalition across mootholds.
 
 ```
                           ┌─────────────┐
@@ -46,13 +46,13 @@ The architectural through-line. Engines (Wry, Serval, Nematic) produce content. 
 
 ## 3. Workspace crates
 
-All scaffolded at `c:\Users\mark_\Code\repos\mere\crates\`. Reserved on crates.io as `0.0.1`.
+All scaffolded at `c:\Users\mark_\Code\repos\mere\crates\`. Reserved on crates.io as `0.0.1`. **(2026-05-04 snapshot; the workspace has since reorganized into supercrate subtrees with `meerkat` as host. See the [`DOC_README.md`](DOC_README.md) topology table for the current layout.)**
 
 | Crate | Role |
 |-------|------|
 | **`mere`** | Product crate — entrypoint composing everything else |
-| **`graphshell`** | Portable shell layer + host GUI manager (iced / gpui / html-css / other) |
-| **`verso-tile`** | Tile-rendering-surface management (Verso brand) |
+| **`graphshell`** | Demoted: the chrome / shell-domain concept, now the `shell` crate family. The host is `meerkat`. |
+| **`verso`** | Tile-rendering-surface management (`verso-core`, `tile-state`) |
 | **`inker`** | Engine controller — selects/orchestrates engines |
 | **`platen`** | Graph-aware composition surface (the press to verso's page) |
 | **`nematic`** | Smolweb engine — Gemini, Gopher, HTML, Markdown, RSS/Atom |
@@ -126,16 +126,16 @@ The product name went through several commits during the 2026-05-03 / 2026-05-04
 
 Other rejected candidates (with reason): Carta (Carta, Inc. wall), Camino (Mozilla Camino® + camino crate), Tela (Schlumberger + tela.com), Waystone (Waystone Group financial), Almagest (Almagest Space Corp.), Holon (Holon Solutions/Platform), Duende (Duende Software/IdentityServer), Synoche (user reported conflict), Snicket (Snicket Labs Feb 2026 rebrand same metaphor), Holloway (Holloway.com publishing platform), Postern (dead Android proxifier ghost), Foundry (Foundry VTT + Foundry FX), Caster (`caster` crate taken), Motif (X11 Motif® + motif.io VC + crate), Syzygy (WPP-owned digital agency), Lemni (Sequoia-backed AI-agent), and others (see [`project_naming_state.md`](C:\Users\mark_\.claude\projects\c--Users-mark--Code\memory\project_naming_state.md) for the full list).
 
-## 7. Pending mechanical work
+## 7. Pending mechanical work (updated 2026-06-09)
 
-This brief is design-state. The following remain pending explicit triggers from Mark before any of them happen:
+Most of the original list has executed:
 
-1. **`cargo publish`** for the second half of the workspace (rate-limit-paced; user is executing manually).
-2. **Migrate inherited `graphshell/design_docs/` content** into per-area subdirectories here (`mere_docs/`, `murm_docs/`, etc.) — incremental, as docs become relevant to active work.
-3. **Cable migration plan execution** — see [`murm_docs/implementation_strategy/2026-05-04_cable_migration_from_verso_plan.md`](murm_docs/implementation_strategy/2026-05-04_cable_migration_from_verso_plan.md). Code-level migration of Cable application logic from Verso to Murm.
-4. **Existing `graphshell/` repo content migration** into Mere workspace — separate larger task. The repo at `c:\Users\mark_\Code\repos\graphshell\` remains intact in the meantime.
-5. **CLAUDE.md global instructions** ([`~/.claude/CLAUDE.md`](~/.claude/CLAUDE.md)) reference Graphshell as the project; needs update once user wants the global config to track the rename.
-6. **Sub-component renames** still gated on existing milestone ordering: `servo-wgpu/` → `serval/` and webrender-wgpu fork → `netrender/` after iced host migration M5a + webrender SPIR-V backend + servo-wgpuification land.
+1. **`cargo publish`** — names reserved; ongoing as needed.
+2. **Donor `graphshell/design_docs/` harvest** — done; the donor repo was GitHub-archived and its local clone deleted 2026-05-27, its 633 docs swept into the [full harvest](mere_docs/research/2026-05-27_graphshell_docs_full_harvest.md) and [concept brief](mere_docs/research/2026-05-17_graphshell_harvest_brief.md) indexes.
+3. **Cable migration** — superseded: the bilateral substrate pivoted to p2panda (Cable wire deleted; `P2pandaTransport` live).
+4. **Donor `graphshell/` repo code salvage** — done (engines, `import`, the `register-*` cluster, `murm` misfin/webfinger pulled); repo archived.
+5. **CLAUDE.md global instructions** still reference Graphshell; update when Mark wants the global config to track the rename.
+6. **`servo-wgpu` → `serval` and `webrender-wgpu` → `netrender` renames** — done (`repos/serval`, `repos/netrender`).
 
 ## 8. References
 

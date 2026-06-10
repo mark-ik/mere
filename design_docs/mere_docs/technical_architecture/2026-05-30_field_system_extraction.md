@@ -146,7 +146,7 @@ slice (§8 step 0).
 |---|---|
 | `fields/*`, `scene_region` | **the field system** (§2–§3): definitions → kernel `Field`/`Coupling` primitives; AST + Rhai + Burn → the `aether` crate. `scene_region`'s four effects become built-in field shapes. |
 | `scene_physics`, `scene_composition`, `hit_test` | **`gyre`** (physics + the QueryPipeline; today's `aether` rapier crate, renamed). |
-| `projection` | **cartography** / **graph-layout** (positions, already there). |
+| `projection` | **cartography** / **arrangements** (positions, already there). |
 | `derive`, `packet`, `scene`, `backend` | the graph→draw pipeline collapses into **cartography** (positions) → **platen::scene_paint** (PaintList). |
 | `camera`, `navigation` | **understory** view2d steal-the-shape + a small portable canvas-feel config (the `NavigationPolicy` knobs). |
 | `node_style` | **register-theme** (the look layer). |

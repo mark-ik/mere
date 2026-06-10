@@ -53,7 +53,7 @@ the bottom realization substrate.
 | Layer | Crates | Role |
 | --- | --- | --- |
 | Truth / data | `kernel` (graph + Field/Coupling), `eidetic`, `persona/identity`, `murm`/`moot`, `intel/embed`, `import`, `node-lineage` | graph + durable memory + identity + comms |
-| Graph substrate | `aether` (fields), `gyre` (physics), `cartography` (projection), `graph-layout`, `platen::scene_paint`/`orrery` | the graph realized as spatial geometry + paint |
+| Graph substrate | `aether` (fields), `gyre` (physics), `cartography` (projection), `arrangements`, `platen::scene_paint`/`orrery` | the graph realized as spatial geometry + paint |
 | Engines | `inker` (controller), `nematic` (smolweb), `serval` (fullweb), `scrying-engine` (system WebView), `document-canvas` | node media → render output |
 | Composition | `forme` (arrangement authority), `platen` (projection compiler), `verso` (surface lifecycle), `frame` (tiled-mode pane tree) | arranging projections of the graph |
 | Shell domain | `chrome`, `shell-state`, `session-runtime`, `ux-events`, `register-viewer` | host-neutral view-models + routing |

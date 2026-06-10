@@ -2,6 +2,8 @@
 
 **Date**: 2026-05-07
 **Status**: Proposal (architectural pivot under review)
+
+> **Crate-name + substrate note (2026-06-09 audit):** `mere-identity`→`persona/identity`, `mere-transport`→`murm/transport`. The substrate pivoted Cable→p2panda (`IrohTransport` retired, BLAKE2b→BLAKE3 unified) per the [p2panda spike](2026-06-01_p2panda_substrate_spike_plan.md); the embedded resolution notes already record much of this. Dated receipts below are historical record.
 **Scope**: Replaces specific wire-format, sync-layer, schema-locality, privacy-transport, and persona-design decisions in the 2026-05-05 protocol architecture plan. The bulk of that plan (iroh layering, identity vault, self-host-with-fallback, protocol-mod pattern) remains load-bearing.
 **Related**:
 

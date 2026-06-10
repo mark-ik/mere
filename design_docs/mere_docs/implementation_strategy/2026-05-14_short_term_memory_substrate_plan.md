@@ -108,11 +108,11 @@ Sweep doesn't run automatically without opt-in; v0a stores the policy + provides
 **v0a (this turn):**
 
 - Plan doc captures decisions per consumer.
-- **No code lands.** Branch state needs `graph-tree` integration that hasn't materialised in the host yet (branch operations are still tear-out-conceptual, not implemented). Premature primitives would just be three files in `mere-host-runtime` with no consumers.
+- **No code lands.** Branch state needs `graph-tree` integration that hasn't materialised in the host yet (branch operations are still tear-out-conceptual, not implemented). Premature primitives would just be three files in `system/session-runtime` with no consumers.
 
 **v0b (when branch operations land):**
 
-- `branch_store` module in `mere-host-runtime` (mirroring `session_graph_store` / `view_intent_store`): `save_branch_state`, `load_branch_state`, `branch_state_exists`, plus a list/walk helper for sweep.
+- `branch_store` module in `system/session-runtime` (mirroring `session_graph_store` / `view_intent_store`): `save_branch_state`, `load_branch_state`, `branch_state_exists`, plus a list/walk helper for sweep.
 - `BranchState` Serde shape with schema_version + the v0 fields above.
 - Host wiring: branch-create stamps a new sidecar; branch-mutate updates it; consolidate-branch produces an engram + deletes the sidecar; sweep-on-exit removes stale ones.
 

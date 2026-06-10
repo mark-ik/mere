@@ -6,6 +6,8 @@
 
 **Source repo**: [`../../../../graphshell/design_docs/`](../../../../graphshell/design_docs/) (donor; per project memory `project_graphshell_donor_not_authority`, treat as grab-bag, never as prescriptive).
 
+> **Update note (2026-06-09 audit):** the donor source repo is now GitHub-archived (read-only; local clone deleted 2026-05-27), so the `../../../../graphshell/design_docs/` path no longer resolves. The "Xilem-host lane" framing is stale (the host is now `meerkat` on serval-as-host), and the spatial-chrome adoption plan this brief cites was archived under `archive_docs/2026-06-09_pivot_superseded/` (the register-renderer/Masonry pivot). This remains the canonical donor concept-index per DOC_POLICY.
+
 ---
 
 ## Framing

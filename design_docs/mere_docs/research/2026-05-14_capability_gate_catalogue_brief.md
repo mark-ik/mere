@@ -9,7 +9,7 @@
 - [`2026-05-11_browser_multiplexer_framing.md`](2026-05-11_browser_multiplexer_framing.md) §7 — security principle; §8 — `permission.denied` event shape; §5.8 — action bus that gates attach to.
 - [`../implementation_strategy/2026-05-11_typed_action_bus_plan.md`](../implementation_strategy/2026-05-11_typed_action_bus_plan.md) — the bus design these gates plug into. The `PermissionGate` trait now lives in `graphshell-control-plane` (`PermitEverythingGate`, `RefuseEverythingGate`); this brief specifies the *real* policy gate that replaces them.
 - [`2026-05-14_persona_model_brief.md`](2026-05-14_persona_model_brief.md) — defines persona-scoped overrides; this brief picks them up.
-- [`crates/graphshell/shell/session-runtime/src/manifest.rs`](../../../crates/graphshell/shell/session-runtime/src/manifest.rs) — `SessionPolicy.overrides: Vec<SessionPolicyOverride>` is the placeholder this brief fills.
+- [`crates/system/session-runtime/src/manifest.rs`](../../../crates/system/session-runtime/src/manifest.rs) — `SessionPolicy.overrides: Vec<SessionPolicyOverride>` is the placeholder this brief fills.
 
 ---
 

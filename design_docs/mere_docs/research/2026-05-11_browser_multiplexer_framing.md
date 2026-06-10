@@ -2,6 +2,8 @@
 
 **Date**: 2026-05-11
 **Status**: Framing probe (post-Phase 2 Part 1; rev 2 after external critique)
+
+> **Crate-name note (2026-06-09 audit):** the builder-facing multiplexer framing holds, but the implementation references are a gpui/`mere-host` snapshot: `mere-host`→`meerkat`, `mere-frame`→`shell/frame`, `graph-layout`→`orrery/arrangements`. Several §5 capabilities (sessions, panes, tear-out, frame layout) have since shipped; the typed-action-bus and SessionServiceRunner items did not (their plans are archived/superseded). Dated references below are historical record.
 **Scope**: Names what Mere has become as it's been built — a **browser multiplexer**, structurally analogous to a terminal multiplexer (tmux, GNU Screen) but with graph-typed sessions instead of byte-stream sessions. Maps current capabilities to the multiplexer vocabulary, identifies what's missing for the model to be fully realised, and shows where cartography slots in as the display contract.
 
 **Related**:

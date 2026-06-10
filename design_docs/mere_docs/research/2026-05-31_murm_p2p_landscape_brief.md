@@ -2,6 +2,8 @@
 
 **Date**: 2026-05-31
 **Status**: Research brief / orientation survey. Grounds the p2p design corpus against the live code and against the current (May 2026) external p2p landscape. No code change proposed; this frames state, contradictions, and adopt-vs-build calls.
+
+> **Update note (2026-06-09 audit):** the central "nothing has executed the pivot" finding is now **OBE** — the p2panda substrate spike + logsync executed it (2026-06-01/02): Cable wire deleted, `IrohTransport`→`P2pandaTransport`, BLAKE2b→BLAKE3 unified, mDNS discovery wired. So contradictions (A) Cable drop-vs-keep and (B) BLAKE2b-vs-BLAKE3 are resolved in code, and (D) the host is `meerkat` (serval-as-host), not Xilem. The §1 "built reality" table and §5 contradiction list below predate that and read as a dated snapshot; the external-landscape survey (verdicts on iroh / p2panda / Willow / etc.) still stands.
 **Scope**: The whole p2p program centred on *murm* (bilateral comms) and reaching across `transport` (iroh), `moothold`/`mooting` (federation), the event-DAG substrate, and the identity vault. Treats iroh as the foundational piece and asks where the rest of the stack should come from.
 **Related**:
 

@@ -7,7 +7,7 @@
 **Related**:
 
 - [`../research/2026-05-11_browser_multiplexer_framing.md`](../research/2026-05-11_browser_multiplexer_framing.md) §5.4 — the framing brief that defines the tiered scoping.
-- [`crates/mere-host-runtime/src/manifest.rs`](../../../crates/mere-host-runtime/src/manifest.rs) — `EngineProfileBinding` enum (PersonaScoped / SessionScoped / GraphScoped), `PersonaId`, `GraphSessionManifest::engine_profile` are already in place.
+- [`crates/system/session-runtime/src/manifest.rs`](../../../crates/system/session-runtime/src/manifest.rs) — `EngineProfileBinding` enum (PersonaScoped / SessionScoped / GraphScoped), `PersonaId`, `GraphSessionManifest::engine_profile` are already in place.
 - [`crates/inker/src/engine.rs`](../../../crates/inker/src/engine.rs) — `Engine::engine_id() -> &str` is the stable engine identifier that names the UDF directory.
 
 ---
@@ -18,7 +18,7 @@
 
 **v0a done when (this turn):**
 
-- `engine_profile_store` module in `mere-host-runtime` exposes `engine_profile_path` — a pure function returning the UDF directory for the given inputs.
+- `engine_profile_store` module in `system/session-runtime` exposes `engine_profile_path` — a pure function returning the UDF directory for the given inputs.
 - File layout matches the brief: persona-scoped under `<data_root>/personas/`; session/graph-scoped under `<data_root>/sessions/<session_id>/`.
 - Invalid combinations (e.g. `SessionScoped` without a `session_id`) return `None` rather than silently fabricating a path.
 - Round-trip tests cover all three scopes + missing-id rejection + path-component sanity.
@@ -113,7 +113,7 @@ Each engine that runs in Mere has different UDF semantics; the wiring is engine-
 - **Servo via netrender**: opt-in profile dir on Servo's `Opts`. Open question: Servo profile is heavier (per-process), so SessionScoped Servo may need a separate process boundary.
 - **nematic** (smolweb document engine): no UDF — purely stateless renderer.
 
-The v0b sequencing: scrying first (it's the active engine with the biggest leak surface), then Wry, then Servo when netrender lands in mere-host, then anything else.
+The v0b sequencing: scrying first (it's the active engine with the biggest leak surface), then Wry, then Servo when netrender lands in meerkat, then anything else.
 
 ## 6. Manifest hooks
 

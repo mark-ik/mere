@@ -24,11 +24,13 @@ for Mere**, adopted as a *deliberate, gated flip*, not an immediate migration an
 not a maybe. The current Xilem + Masonry setup stays the working host until the
 flip gate clears.
 
-The gate is narrow and already most-closed: serval's interactive completeness
-reaching Masonry's current bar. As of the serval git log that means **IME plus
-form-control breadth plus a decision on the orrery element**, not a from-scratch
-engine build (form controls, keyboard, focus, capture-phase dispatch, and
-caret-aware text editing already landed in `xilem-serval`).
+The gate is narrow and now clear on the serval-side prerequisites: **IME is
+complete**, the orrery perf spike is clear, and the previously active
+host-backend blockers are implemented (`pointerdown`/`move`/`up` + capture,
+slider, Tab/Shift+Tab focus traversal, and clip-aware scrolled hit-testing).
+This is not a from-scratch engine build: form controls, keyboard, focus,
+capture-phase dispatch, and caret-aware text editing already landed in
+`xilem-serval`.
 
 The one near-term instruction that follows immediately: **stop deepening
 Masonry-specific investment.** Treat the Masonry host as scaffolding and keep
@@ -104,10 +106,11 @@ Two seams the rest of Mere depends on are confirmed present:
 
 **Cons, stated honestly.**
 
-1. **IME.** The one interactive gap not yet in the `xilem-serval` commits, and the
-   same gap deferred on the scrying side. Mere needs text entry across chrome.
-   Long-run this still favors (3): serval needs IME for content regardless, so it
-   is paid once instead of twice. Near-term, Masonry has it and serval does not.
+1. **The last named host-backend blockers are closed, but still young.** IME,
+   pointer-drag, slider, Tab traversal, and clip-aware scrolled hit-testing now
+   exist and have focused tests. The risk has shifted from "missing primitive" to
+   hardening under real Mere chrome: full CSS painting order / nested stacking
+   contexts, richer focus semantics, and product-specific drag policies.
 2. **The graph canvas is not a document.** Mere's defining surface is a free-form,
    physics-driven, infinite scene. Under (3) it is a custom-painted element the
    engine hosts. So the "everything is a document" story has its biggest exception
@@ -238,11 +241,16 @@ cost is moderate because the Morphorm seam is days old.
 ## 8. The flip gate and the perf spike
 
 The flip from architecture 1 to 3 is gated on serval reaching Masonry's
-interactive bar. Concretely:
+interactive bar. As of the 2026-06-10 live-code check:
 
-- **IME** across chrome text entry (the long pole).
-- **Form-control breadth** beyond the demo text field.
-- **The orrery element decision** (section 6), plus its one perf spike below.
+- **IME** across chrome text entry is complete.
+- **Form-control breadth** is complete enough for the gate: pointer-drag and
+  slider/range are implemented; pointer-drag is also the reusable primitive for
+  scrollbar-thumb drag, resize handles, and drag-tab-out.
+- **Focus traversal** (`Tab`/`Shift+Tab`) and **clip-aware hit-testing** for
+  interactive scrolled content are implemented and test-covered.
+- **The orrery perf spike** below is complete; the orrery element work still
+  owns the Mere-side integration decision from section 6.
 
 **The perf spike (gates the orrery flip specifically):** confirm that
 transform-only node motion lands on serval's `RepaintOnly` path, not

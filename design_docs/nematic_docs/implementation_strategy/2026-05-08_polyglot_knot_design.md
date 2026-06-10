@@ -1,7 +1,7 @@
 # Polyglot Knot Design — Protocol-Faithful Clip Composition
 
 **Date**: 2026-05-08
-**Status**: Implemented 2026-05-08 / 2026-05-09. Doc retained as the design rationale + format spec; consult [`../../../crates/nematic/src/knot/expand.rs`](../../../crates/nematic/src/knot/expand.rs) and [`../../../crates/inker/src/document/render.rs`](../../../crates/inker/src/document/render.rs) for the live behavior, [`../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md`](../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md) §2.4 for follow-ups.
+**Status**: Implemented 2026-05-08 / 2026-05-09. Doc retained as the design rationale + format spec; consult [`../../../crates/inker/engines/nematic/src/knot/expand.rs`](../../../crates/inker/engines/nematic/src/knot/expand.rs) and [`../../../crates/inker/src/document/render.rs`](../../../crates/inker/src/document/render.rs) for the live behavior, [`../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md`](../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md) §2.4 for follow-ups.
 **Scope**: Extend the [`nematic.knot`](https://crates.io/crates/nematic) note format from "frontmatter + markdown body" to a polyglot composition where every other `nematic.*` protocol's blocks can embed inside a knot, fenced-code-block-style, and round-trip back to the source protocol's native syntax.
 
 **Related**:

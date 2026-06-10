@@ -1,6 +1,8 @@
 # Local Intelligence Integration — Research Report (2026-05-08)
 
 **Status**: Research synthesis
+
+> **Crate-name note (2026-06-09 audit):** `intelligence-embeddings`→`intel/embed` (the §13 / 2026-05-18 notes already track this); the `graph-canvas` field-algebra work now lives in `orrery/aether`; donor `graphshell/...` paths point at the GitHub-archived donor. Dated "shipped"/status receipts below are historical record.
 **Purpose**: Translate the inherited Graphshell-era intelligence research into a Mere-aligned plan. Cover what models can mean for Mere given the field-algebra landing, the eidetic crate, and Mere's browser/PWA target shape; identify which prior conclusions still hold, which need updating, and the most pragmatic first-cut work.
 **Audience**: Architecture / planning. Implementation plans should descend from this report.
 

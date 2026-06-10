@@ -2,6 +2,8 @@
 
 **Date**: 2026-05-10
 **Status**: Proposal (under design)
+
+> **Crate-name note (2026-06-09 audit):** the proposed `mere-namespace` crate never landed as named; the cluster-cap direction is now explored in `crates/probes/willow-cluster-cap`. `graph-layout`→`orrery/arrangements`. The design direction below stands.
 **Scope**: Defines the §14 direction surfaced in [`2026-05-07_event_dag_substrate_brief.md`](2026-05-07_event_dag_substrate_brief.md): namespaces in mere derived from the graph's natural community structure rather than admin-imposed paths. Implications for capability scoping (substrate-brief §8.8), sync (substrate-brief §5 Willow / iroh-docs), and the `mere-namespace` crate sketched in the substrate brief.
 **Related**:
 

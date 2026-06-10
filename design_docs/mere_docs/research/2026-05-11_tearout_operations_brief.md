@@ -4,6 +4,8 @@
 **Status**: Design brief — supersedes the earlier "sticky-note fork-model decision brief" (same date), which framed this as three competing options. The resolution is that those weren't options to pick between — they were three coexisting operations the user picks at gesture time.
 
 **Naming note (2026-05-17)**: This brief was written when the workbench arrangement authority crate was called `forme`. It has since been renamed to `forme` (per the [lineage / forme rename plan](../implementation_strategy/2026-05-17_lineage_forme_rename_plan.md)). The body below still says "forme" — read those as "forme" until a follow-up edits the prose. Function/type identifiers like `GraphletRef`, `GraphletBinding::Forked`, `GraphTree<NodeKey>` stay valid (only the crate name changed).
+
+> **Crate-name note (2026-06-09 audit):** host-file references below (`crates/mere-host/src/tearout.rs`, `host_helpers.rs`, `host_navigation.rs`) are gpui-era; `mere-host`→`meerkat` and `mere-kernel`→`graph/graph-kernel`. The leaf/branch/fork model holds; the file homes moved with the host pivot.
 **Scope**: Defines the three tear-out operations Mere supports (**leaf**, **branch**, **fork**), their identity semantics in terms of `SessionId` / `GraphId` / `GraphletId`, the gesture model that selects between them (modifier-keyed drags + a toast for ambiguous gestures), and the substrate primitives they rest on (forme graphlets, eidetic engrams, short-term memory). Resolves §11.3 of the [browser multiplexer framing brief](2026-05-11_browser_multiplexer_framing.md).
 
 **Related**:

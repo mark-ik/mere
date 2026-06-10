@@ -109,13 +109,13 @@ constraints. Tiles are what *some* nodes realize into, via Verso.
 
 | Layer | Crate(s) | Owns | Shape |
 |---|---|---|---|
-| Truth | `kernel`, `cartography`, `graph-layout`, `session-runtime` | graph, relations, provenance, session/manifest/view-intent, spatial-projection math | graph |
+| Truth | `kernel`, `cartography`, `arrangements`, `session-runtime` | graph, relations, provenance, session/manifest/view-intent, spatial-projection math | graph |
 | **Arrangement** | `forme` | what a workbench *is*: members, groups, tiles-intents, focus paths, comparisons, portals | **graph-capable** |
 | **Projection** | `platen` | compile an arrangement → a presentation plan for a host mode | tree / cartography / … |
 | **Surface** | `verso` | composable tile/surface realization + lifecycle; the tile system Mere mounts into workbenches | — |
 | **Engine** | `inker` (+ `nematic`/`scrying`/Serval) | which engine backs a tile's content; route by pin/type/scheme/override | — |
 | **Frame chrome** | `frame` (FrameTree) | OS-window pane splits, pane placement, pane kinds, persistence | **tree** (deliberately) |
-| **Platform** | `mere-app` (Host) | Xilem app: realize the plan as a view tree; window, input, frame loop, GPU | — |
+| **Platform** | `meerkat` (Host) | Xilem app: realize the plan as a view tree; window, input, frame loop, GPU | — |
 
 **FrameTree stays a tree on purpose.** Window/GPU split-hosting has hard
 rectangular/realization constraints that semantic arrangement does not. Don't
@@ -208,7 +208,7 @@ Graph-capability costs what a tree gives for free:
 
 ## 12. Build order
 
-On the `mere-app` Xilem skeleton (FrameTree = split views already landed):
+On the `meerkat` Xilem skeleton (FrameTree = split views already landed):
 
 1. **forme v1**: advance topology from tree-only to the small arrangement graph
    (§8); keep graphlet/reconciliation/pressure parked. Tree projection first.
@@ -216,7 +216,7 @@ On the `mere-app` Xilem skeleton (FrameTree = split views already landed):
    Grow `TileManager` into the tile-realization layer Verso owns.
 3. **Workbench pane** renders the tree-projected plan (nested split/tab views).
 4. **platen Cartography projection** + the **`GraphCanvas`** widget for the
-   orrery pane (ports the orrery/graph-node painting from `mere-host`).
+   orrery pane (ports the orrery/graph-node painting from `meerkat`).
 5. **Verso surface** contract + first **engine tile** (`scrying.web`) via inker.
 6. Retire the substrate-as-host crates from the product path once parity lands.
 
@@ -264,9 +264,9 @@ The forks are settled (three review passes). The build follows these.
    real engine.
 
 6. **Crate topology + graphlet fate** — `kernel` · `frame` · `forme` · `platen`
-   · `verso` · `inker` · `cartography`/`graph-layout` · `session-runtime` are the
+   · `verso` · `inker` · `cartography`/`arrangements` · `session-runtime` are the
    real authorities (crates). Re-home `kernel` + `cartography` out from under the
-   `graphshell` supercrate (kernel-under-chrome is upside down); `graph-layout`
+   `graphshell` supercrate (kernel-under-chrome is upside down); `arrangements`
    moves with cartography. `graph-canvas` survives **narrowed** to a portable
    scene/packet/geometry/hit IR + pure derivation, consumed by the Xilem
    `GraphCanvas` widget (the widget owns interaction + paint; interaction
@@ -288,12 +288,12 @@ The forks are settled (three review passes). The build follows these.
 pure mutation **and** the native on-disk store (`forme::store`, gated by the
 `store` feature so portable consumers stay `std::fs`-free). The *host* supplies
 persistence policy — which session directory, and *when* to save (the clean
-`mere-app` host enables `forme/store`, picks `<cwd>/mere-sessions/default`, and
+`meerkat` host enables `forme/store`, picks `<cwd>/mere-sessions/default`, and
 re-saves the workbench forme on every edit).
 
 > **Moved 2026-05-22.** The store originally landed in `session-runtime`
 > (mirroring `session_graph_store`). It was relocated into `forme` so the clean
-> `mere-app` host can persist formes without depending on `session-runtime` —
+> `meerkat` host can persist formes without depending on `session-runtime` —
 > which drags in the substrate control-plane crates (`identity`,
 > `control-plane`, `tile-state`) the re-scaffold is retiring. Projection
 > geometry + pane view-intent stores stay in `session-runtime` for now; they

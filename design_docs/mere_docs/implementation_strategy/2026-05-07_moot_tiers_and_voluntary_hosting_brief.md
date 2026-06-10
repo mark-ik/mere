@@ -448,8 +448,8 @@ to a follow-up pass; not done in this brief):
 - **`design_docs/moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md`**
   — Pattern A reframed as "thin client routing"; Pattern B reframed as
   "outbound bridge."
-- **Crate READMEs** — `crates/mere/mere`, `crates/moot/moothold`,
-  `crates/moot/mooting`, `crates/mere/mere-identity`, `crates/mere/mere-transport`,
+- **Crate READMEs** — `crates/meerkat`, `crates/moot/moothold`,
+  `crates/moot/mooting`, `crates/persona/identity`, `crates/murm/transport`,
   `crates/murm/murm`, `crates/murm/murmuring` — touch up *coalition* and
   *moothold* references and the moot-as-graph-view framing.
 - **Memory** (`project_naming_state.md`, `memory/MEMORY.md` index) —

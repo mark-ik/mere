@@ -9,7 +9,7 @@
 - [`2026-05-11_browser_multiplexer_framing.md`](2026-05-11_browser_multiplexer_framing.md) §11.2 — the gap this brief fills.
 - [`../implementation_strategy/2026-05-14_engine_profile_boundary_plan.md`](../implementation_strategy/2026-05-14_engine_profile_boundary_plan.md) — relies on `PersonaId` to root UDF paths under `<data_root>/personas/<persona_id>/`.
 - [`crates/persona/identity/src/lib.rs`](../../../crates/persona/identity/src/lib.rs) — `PersonaId(pub Uuid)` now lives at the persona boundary.
-- [`crates/graphshell/shell/session-runtime/src/manifest.rs`](../../../crates/graphshell/shell/session-runtime/src/manifest.rs) — `GraphSessionManifest.persona_id` references that `PersonaId`. v0 always uses `PersonaId::default_persona()`; this brief governs what the not-default world looks like.
+- [`crates/system/session-runtime/src/manifest.rs`](../../../crates/system/session-runtime/src/manifest.rs) — `GraphSessionManifest.persona_id` references that `PersonaId`. v0 always uses `PersonaId::default_persona()`; this brief governs what the not-default world looks like.
 
 ---
 
@@ -73,9 +73,9 @@ owning domain and a storage substrate:
 |---|---|---|
 | Persona manifest, vault metadata, persona settings | `persona` | `<data_root>/personas/<persona_id>/` |
 | Engine profile bytes / UDFs | Engine profile boundary, under persona policy | `<data_root>/personas/<persona_id>/engine-profiles/<engine_id>/` by default; session/graph override only by explicit policy |
-| Session manifest and session policy | `graphshell/shell` session runtime | `<data_root>/sessions/<session_id>/manifest.json` |
-| Graph truth | `graphshell/graph/graph-kernel` | Session graph store; eidetic may be the byte substrate, but the graph schema belongs to the graph kernel |
-| View intent / pane-local state | `graphshell/shell` + workbench owner for the pane kind | `<session_dir>/views/<frame_id>/<pane_id>.json` |
+| Session manifest and session policy | `shell` session runtime | `<data_root>/sessions/<session_id>/manifest.json` |
+| Graph truth | `graph/graph-kernel` | Session graph store; eidetic may be the byte substrate, but the graph schema belongs to the graph kernel |
+| View intent / pane-local state | `shell` + workbench owner for the pane kind | `<session_dir>/views/<frame_id>/<pane_id>.json` |
 | Tile lifecycle state | `workbench/verso` | Session/workbench store keyed by tile identity |
 | Long-lived artifacts, engrams, model blobs, vector indexes, import payloads | `eidetic` substrate plus the producing domain | content-addressed eidetic manifests / typed payloads |
 | Disposable caches and thumbnails | Producing subsystem | Cache directory; recomputable, never authoritative |

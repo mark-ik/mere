@@ -56,7 +56,10 @@ The test: if a surface's authority is "whatever the mode says," it is the mode's
 
 After **Comms** (in flight), the first three:
 1. **Steward** — makes async Mere legible (reads the armillary actor constellation: content/fetch/sync actors + pool; per the [real-sync-feedback rule](../../) it must show genuine status, never a placebo).
-2. **Inspector** — graph-first UX needs "what is this thing?" always available (and it's where the node-lineage work surfaces: within-node history + the lineage forest).
+2. **Inspector + Roster bridge** — graph-first UX needs both faces of "what is
+   this thing?": the **Roster** owns the node's graph facets / lineage / fields,
+   while **Inspector** owns the addressed content's metadata, structure, source,
+   links, and cache/parse diagnostics.
 3. **Gloss** — the Verse/Mere thesis.
 
 **Apparatus** can be built early but hidden behind a debug flag — it will save constant time as the actor/runtime work deepens. Its cleanest first live feed is `ux-events`, not the raw 253-channel `register-diagnostics` catalog.
@@ -66,7 +69,7 @@ After **Comms** (in flight), the first three:
 - **register-theme → harvest now** for edge styling (P3 of the [nav-lineage plan](../implementation_strategy/2026-06-05_node_navigation_lineage_wiring_plan.md)). `edge_style.rs` (`EdgeStyleToken`, non-color signatures, endpoint markers, validation) is directly useful. **Correction:** the live kernel has **six** families (incl. `Provenance`); the donor has five — map forward, don't copy the enum. First insertion: `platen/platen/src/canvas_scene.rs` (~`family_color`), which already keeps `RelationKind`/tags.
 - **register-diagnostics → Apparatus** (not bulk adoption): the `emit` scaffold is serviceable; prune the old-host channel set around current `meerkat`/`armillary`/`inker`/`platen` terms. `ux-events` is the cleaner first feed.
 - **register-input → latent** (real binding/remap/conflict machinery): adopt when **Settings** grows shortcut editing, not before.
-- **register-lens → latent but valuable**: translate the named physics profiles into `gyre` / `graph-layout` settings; do not recreate a lens registry as an authority (gyre owns runtime force integration).
+- **register-lens → latent but valuable**: translate the named physics profiles into `gyre` / `arrangements` settings; do not recreate a lens registry as an authority (gyre owns runtime force integration).
 - **register-mod-loader → reference only**: good future vocabulary (manifests, dependency order, rollback, quarantine), but no extension system exists yet — importing now would be fake architecture.
 - **register-viewer → reconcile then delete**: `inker::routing` stays canonical; harvest only magic-byte fallback + capability/conformance metadata, not its selector.
 - **register-renderer-types → cut**: a manifest pointing at a missing `src/lib.rs`, encoding the killed renderer-registry/host-port model; no live owner.

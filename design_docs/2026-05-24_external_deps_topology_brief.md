@@ -12,8 +12,10 @@ map in [`mere_docs/technical_architecture/2026-05-19_workspace_topology_status.m
 Two sibling directories under `Code/`:
 
 - **`Code/crates/`** — vendored upstream libraries Mark does **not** maintain
-  (tracks upstream, carries minimal fork patches). Current set: `xilem`,
-  `imaging`, `nova`, `glass-gpui`, `blitz`, `weave`, `boa`.
+  (tracks upstream, carries minimal fork patches). Current set: `xilem`
+  (plus `xilem-graft-seam`, `xilem-pr-masonry-defaults`,
+  `xilem-pr-with-default-properties`), `imaging`, `nova`, `glass-gpui`, `blitz`,
+  `weave`, `boa`.
   - **`boa`** (added 2026-05-25; shallow @ `v0.21.1`, `serval` branch) — fork of the
     Boa JS engine. Carries an icu-family pin widen (`~2.0` → `^2.1`) so its
     `icu_normalizer` unifies with serval's parley/nova-forced icu 2.2.x; serval
@@ -22,7 +24,7 @@ Two sibling directories under `Code/`:
     to fork — the icu fix was free along the way). See
     [`serval/docs/2026-05-20_serval_script_engine_plan.md`](../../serval/docs/2026-05-20_serval_script_engine_plan.md).
 - **`Code/repos/`** — Mark's own projects: `mere`, `serval`, `netrender`,
-  `netfetcher`, `strophe`, `woodshed`, `wgpu-graft`, `wgpu-scry`,
+  `netfetcher`, `errand`, `strophe`, `woodshed`, `wgpu-graft`, `wgpu-scry`,
   `wgpu-weld`. (**`graphshell`** was here until 2026-05-27, when it was
   GitHub-archived and the local clone deleted — see the [donor-repo code
   salvage map](mere_docs/research/2026-05-27_donor_graphshell_repo_salvage_map.md)
@@ -63,7 +65,7 @@ A repo-wide path sweep flags these as broken; they are **expected**:
   archive-bound: its root `Cargo.toml` no longer built as-is, and its
   `graph-memory` / `graph-cartography` / `graphshell-core` / `graphshell-runtime`
   members had been donor-superseded (roles absorbed by mere's `node-lineage`,
-  `cartography`, `mere-kernel`, `mere-host-runtime`). Its remaining salvage was
+  `orrery/cartography`, `graph/graph-kernel`, `system/session-runtime`). Its remaining salvage was
   pulled into mere (engines, `crates/import`, the `register-*` cluster, `murm`
   misfin/webfinger) and its 633 design docs were harvested before archiving.
   No longer in `repos/`; the path sweep no longer applies to it.

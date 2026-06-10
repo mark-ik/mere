@@ -3,7 +3,7 @@
 **Date**: 2026-06-09
 **Status**: Architecture decision (design seed). Defines Mere's memory system: the
 **Alembic** pane (short-term / long-term memory + distillation), the **Athanor**
-distillation daemon, and the model that an **engram is a composable graph object**.
+distillation daemon, and graph engrams as one composable engram schema.
 
 **Related**:
 
@@ -18,12 +18,19 @@ distillation daemon, and the model that an **engram is a composable graph object
 
 ## 1. The one idea
 
-An **engram is a graph object**. Its payload is a graph snapshot, so clicking into
-an engram opens a graph you can explore, and engrams **compose**: union two
-sessions' graphs into one engram while retaining the per-member context that says
-which session each member came from. The live orrery and a stored engram are the
-same `Graph` type at two temperatures: the orrery is the mutable working graph, an
-engram is a frozen, content-addressed snapshot of one.
+An **engram** is Eidetic's immutable envelope for a schema-typed payload:
+`schema`, `content_hash`, privacy, provenance, trust, time bounds, envelope
+version, and payload bytes. **Eidetic** is the store/protocol layer that persists,
+verifies, indexes, and eventually federates engrams; the engram is the object
+inside that layer.
+
+A **graph engram** is one kind of engram: its schema declares that its payload is
+a graph snapshot. Clicking into a graph engram opens a graph you can explore, and
+graph engrams **compose**: union two sessions' graph snapshots into one graph
+engram while retaining the per-member context that says which session each member
+came from. The live orrery and a stored graph engram are the same `Graph` type at
+two temperatures: the orrery is the mutable working graph, a graph engram is a
+frozen, content-addressed snapshot of one.
 
 Around that sit two surfaces:
 
@@ -78,27 +85,45 @@ observable and user-overridable.
 
 ---
 
-## 3. Engrams as composable graph objects
+## 3. Graph engrams as composable graph objects
 
 The kernel already supplies the spine, so this is mostly wiring rather than new
 types.
 
 **Payload = `GraphSnapshot`.** The kernel serializes a whole `Graph` to a
 `GraphSnapshot` via rkyv ([`graph/snapshot/mod.rs`](../../../crates/graph/graph-kernel/src/graph/snapshot/mod.rs):
-`to_snapshot` / `from_snapshot`), which is what session-runtime already persists. A
-graph engram is that snapshot wrapped in the eidetic envelope: `schema =
-mere.graph-snapshot`, `payload = rkyv(GraphSnapshot)`, plus `content_hash` /
-`privacy` / `provenance` / `bounds`.
+`to_snapshot` / `from_snapshot`), which is what session-runtime already persists.
+A graph engram is:
 
-**Per-member context is already a node field.** A [`Node`](../../../crates/graph/graph-kernel/src/graph/node.rs)
+```text
+Engram {
+  schema: mere.graph-snapshot/v1,
+  payload: rkyv(GraphSnapshot),
+  content_hash,
+  privacy,
+  provenance,
+  trust,
+  bounds,
+  envelope_version,
+}
+```
+
+The low-level primitive remains `Engram::new`; the first production path should be
+a typed helper (`save_graph_engram(...)`) that snapshots/redacts the graph,
+serializes it, and writes it through Eidetic with the graph-snapshot schema.
+
+**Per-member context has a storage home, not a full merge policy.** A [`Node`](../../../crates/graph/graph-kernel/src/graph/node.rs)
 carries `import_provenance: Vec<NodeImportProvenance>`, plus `tags`,
 `classifications`, open `properties`, and `addresses` (Primary + aliases), all
 snapshot-durable. Because `import_provenance` is a **`Vec`**, one merged node can
-hold several provenance records, so "retain the unique context of each member" when
-composing two sessions is a `Vec` append, not a schema change.
+hold several provenance records, so the storage shape can retain multiple source
+contexts without a schema change. That does **not** define merge by itself:
+composition still needs an explicit reconciliation policy over UUIDs, primary
+addresses, aliases, content hashes, import records, tags, classifications, and
+edge payloads.
 
-**Freeze / thaw duality with the orrery.** "Save as engram" freezes a live `Graph`
-(`to_snapshot` + hash + envelope). "Open as session" thaws an engram
+**Freeze / thaw duality with the orrery.** "Save as graph engram" freezes a live `Graph`
+(`to_snapshot` + redaction policy + hash + engram envelope). "Open as session" thaws an engram
 (`from_snapshot` into a new live graph / window). Browsing an engram is read-only,
 so immutability holds; editing forks a thaw. Clicking into an engram reuses the
 **orrery** (the graph's spatial surface) at engram scope rather than a second
@@ -106,8 +131,8 @@ viewer.
 
 **Content-addressed DAG with leaf payloads.** Not everything is a graph: model
 weights, a raw content snapshot, a geist's adapter bytes are leaf payloads. These
-are not peers of the graph-snapshot schema; they are engrams that **nodes inside a
-graph engram point at** by content hash. Graph engrams reference leaf engrams and
+are not graph-snapshot payloads; they are engrams with their own schemas that
+**nodes inside a graph engram point at** by content hash. Graph engrams reference leaf engrams and
 other graph engrams, forming a content-addressed DAG.
 
 **Nesting is the federation receive model.** A node can reference a graph engram,
@@ -158,8 +183,8 @@ expression of the immutable-engram model.
 
 ## 6. The engram schema catalog
 
-Engrams are `payload + format(schema) + envelope`, and the schema set is open by
-design (eidetic ships `schema_def`, a meta-schema, and JSON-Schema / JSON-LD /
+An engram is `envelope metadata + schema-typed payload`, and the schema set is open by
+design (Eidetic ships `schema_def`, a meta-schema, and JSON-Schema / JSON-LD /
 MereNative validators). **Graph-snapshot and geist are only the first two
 schemas.** Many more want this substrate:
 
@@ -190,7 +215,7 @@ engram, set its privacy.
 
 ## 7. Athanor, the distillation daemon
 
-An [armillary](../../../crates/system/armillary) actor (the same off-UI-thread
+An [armillary](../../../crates/armillary) actor (the same off-UI-thread
 shape as fetch / sync): long-lived, low-priority, continuous. It performs memory
 consolidation in the background:
 
@@ -202,6 +227,9 @@ consolidation in the background:
   live.
 - **Consolidation** — dedup by `content_hash`, relate version chains, maintain the
   indices.
+- **Proposal emission** — emit distillation candidates, GC proposals, facet
+  candidates, and engram manifests for the host / memory authority to apply.
+  Athanor does not directly mutate graph truth.
 
 Two properties matter:
 
@@ -211,7 +239,8 @@ Two properties matter:
 - **It embodies eidetic R0 shared-projection.** R0 says derived views ("recent",
   caches, indices) are projections over the one engram store, never a second
   authority. Athanor is what maintains those projections, and it stays inside R0 by
-  only adding engrams and evicting them, never editing.
+  proposing/adding engrams and evicting eligible short-term material, never editing
+  existing engrams or directly mutating live graph truth.
 
 The configurable distillation knobs (e.g. dedupe-by-content-address vs
 preserve-duplicates, §4) are Athanor's, set in Apparatus (config).
@@ -296,6 +325,10 @@ and Timeline share the log; their surfaces differ.
    stream the Timeline composes.
 6. **Timeline surface** (§9) — orrery scrubber vs its own pane, and how far back
    replay stays cheap before a checkpoint is mandatory.
+7. **Graph engram redaction policy** (§3) — whether a graph engram includes node
+   thumbnails, favicons, session scroll, form drafts, raw metadata, and other
+   potentially private `GraphSnapshot` fields, or whether `save_graph_engram`
+   strips them by default and requires explicit inclusion.
 
 ---
 
@@ -306,3 +339,10 @@ and Timeline share the log; their surfaces differ.
   eidetic (`Engram`, R0, `ModelManifest`), and the existing memory-tiers and geist
   briefs. Drove the Apparatus/Steward axis correction in the pane architecture and
   diagnostics plan. No code yet.
+- 2026-06-09: Terminology tightened: an engram is Eidetic's immutable envelope for
+  a schema-typed payload; a graph engram is one engram schema whose payload is
+  `GraphSnapshot`, not the definition of all engrams. Added the typed
+  `save_graph_engram(...)` boundary, clarified that `import_provenance: Vec` is
+  storage support rather than the merge algorithm, made Athanor a proposal emitter
+  rather than a graph-truth mutator, and recorded redaction policy as an open
+  implementation decision.

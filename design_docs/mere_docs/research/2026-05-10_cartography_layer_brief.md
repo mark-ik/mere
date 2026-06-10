@@ -2,6 +2,8 @@
 
 **Date**: 2026-05-10
 **Status**: Design probe (pre-implementation)
+
+> **Crate-name note (2026-06-09 audit):** `cartography` shipped and now lives at `crates/orrery/cartography`. `graph-canvas` has since **dissolved** into the `orrery/*` family; `graph-layout`→`orrery/arrangements`; `mere-kernel`/`mere_kernel`→`graph/graph-kernel`. The strategy catalogue and v0 "landed" receipts below are historical record.
 **Scope**: Proposes a new `cartography` crate as the **non-destructive projection layer** between graph truth + intelligence signals on the input side, and canvas swatches on the output side. Owns contracts (strategy traits, overlay shapes, minimap descriptors); does not own strategies themselves — those live in a sibling layout crate (proposed name: `graph-layout`, sitting beside `graph-canvas`).
 
 **Related**:

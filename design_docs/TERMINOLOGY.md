@@ -2,7 +2,7 @@
 
 Canonical terminology for the Mere workspace. This file is the long-term authoritative reference for project vocabulary; until it's fully populated, [`2026-05-04_lexicon_brief.md`](2026-05-04_lexicon_brief.md) is the working source of truth.
 
-For terms not addressed here, defer to the inherited [`graphshell/design_docs/TERMINOLOGY.md`](../../graphshell/design_docs/TERMINOLOGY.md).
+For terms not addressed here, see the donor harvest indexes ([full harvest](mere_docs/research/2026-05-27_graphshell_docs_full_harvest.md), [concept brief](mere_docs/research/2026-05-17_graphshell_harvest_brief.md)). The donor `graphshell` repo is GitHub-archived (read-only) and its local clone was deleted 2026-05-27, so the old `../../graphshell/design_docs/` path no longer resolves.
 
 ## Top-level
 
@@ -14,8 +14,8 @@ For terms not addressed here, defer to the inherited [`graphshell/design_docs/TE
 - **Engines** — content producers. Three flavors: **Wry** (system webview, third-party), **Serval** (servo-wgpu fork), **Nematic** (portable smolweb engine for Gemini/Gopher/HTML/Markdown/RSS-Atom).
 - **Inker** — engine controller. Selects which engine renders which content; manages engine lifecycle; routes URIs to engines.
 - **Platen** — graph-aware composition surface. Knows graph semantics; presses node-data into renderable form for the verso-tile layer to receive.
-- **Verso-tile** — rendering-surface manager. Receives engine output (via inker) and places it into GraphTree tile slots. *Verso* is the brand-level concept (the page that catches the impression); *verso-tile* is the crate.
-- **Graphshell** — portable shell layer + host GUI manager. Owns the workbench, tile tree, Navigator surface, and integration to whichever GUI framework hosts the app (iced / gpui / html-css / other).
+- **Verso** — rendering-surface manager. Receives engine output (via inker) and places it into tile slots. *Verso* is the brand-level concept (the page that catches the impression); the crate family is `verso` (`verso-core`, `tile-state`).
+- **Graphshell** — the chrome / shell-domain concept, now the `shell` crate family (`chrome`, `comms`, `frame`); no longer a product or a standalone host. The application host is **meerkat** (`crates/meerkat`) on the serval-as-host path, where chrome and content are both rendered by serval via `xilem_serval`.
 - **Eidetic** — private local memory crate (formerly *Mnem*). Persistence layer for graph snapshots, traversal logs, settings, browsing memory. Distinct from any moot's flora. Name evokes eidetic memory ("remembered with high fidelity"). The substrate engrams are distilled from.
 
 ## Engine layer (inker / nematic / document model)

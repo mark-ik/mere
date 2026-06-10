@@ -2,7 +2,7 @@
 
 **Date**: 2026-05-29
 **Status**: Architecture decision + landed substrate primitives. Resolves how the
-projection layer (cartography + graph-layout) relates to the physics substrate
+projection layer (cartography + arrangements) relates to the physics substrate
 (gyre), now that gyre has a working force-directed layout. Companion to the
 [between-tiles layout seam](2026-05-26_between_tiles_layout_seam.md) (the same
 seam-doc shape, one layer over).
@@ -15,9 +15,9 @@ seam-doc shape, one layer over).
 
 ## The question
 
-R1 says "wire cartography + graph-layout for real layout (replaces the seeded
+R1 says "wire cartography + arrangements for real layout (replaces the seeded
 ring)." With gyre now doing force-directed physics, that raises a sharp
-question: gyre *is* a force-directed layout, and so is graph-layout. Are they
+question: gyre *is* a force-directed layout, and so is arrangements. Are they
 redundant, and is gyre a cartography strategy?
 
 ## The three layers (verified against the crates)
@@ -29,11 +29,11 @@ redundant, and is gyre a cartography strategy?
   `&self`-stateless. Both emit one `Projection` (`projection.rs`: a
   `Vec<PositionedNode { node, position, radius }>` plus edges, overlays,
   minimap, bounds).
-- **graph-layout** owns the *strategies*, as adapters onto cartography's traits:
+- **arrangements** owns the *strategies*, as adapters onto cartography's traits:
   analytic (`Radial`, `Penrose`, `Grid`, `Kanban`, `LSystem`, `Phyllotaxis`,
   `SemanticEmbedding`) and streaming (`ForceDirected`, `BarnesHut`,
   `SemanticEdgeWeight`). Its streaming state (`ForceDirectedState`) is a pure,
-  `Serialize`-able value. graph-layout depends on cartography.
+  `Serialize`-able value. arrangements depends on cartography.
 - **gyre** owns the *physics*: a stateful rapier world (bodies, colliders,
   the `QueryPipeline`, drag-pinning), with the `NodeExclusion` / `EdgeSpring` /
   `Boundary` fields.
@@ -52,7 +52,7 @@ gyre *simulates* one (a stateful actor with collision and interaction).
 
 There are two force-directed layouts, and they serve different regimes:
 
-- **graph-layout `ForceDirected` / `BarnesHut`** — pure, deterministic,
+- **arrangements `ForceDirected` / `BarnesHut`** — pure, deterministic,
   serializable state, O(n log n) via Barnes-Hut, no hard collision. The right
   tool for headless / batch / deterministic layout: switcher thumbnails,
   minimaps, snapshot-and-freeze, large graphs, any non-interactive view. It
@@ -63,7 +63,7 @@ There are two force-directed layouts, and they serve different regimes:
   for the *live interactive orrery*.
 
 The canvas picks by regime: interactive orrery uses gyre; everything headless
-uses graph-layout. The force *model* (repulsion + spring + centering) is shared
+uses arrangements. The force *model* (repulsion + spring + centering) is shared
 conceptually; the *integration* differs (pure n-body vs rapier-with-collision).
 
 ## The bridge: the `Projection` type, with a clean dependency direction
@@ -128,9 +128,9 @@ where the orrery becomes a serval custom element fed by this same seed/read pair
 
 ## What this settles
 
-- gyre is the interactive-physics layout; graph-layout is the pure/headless
+- gyre is the interactive-physics layout; arrangements is the pure/headless
   layout; cartography is the contract both feed into. No redundancy, no second
   spatial index (the R1b spike already settled that), and no upward dependency.
-- R1's "wire cartography + graph-layout (replaces the seeded ring)" is now a
+- R1's "wire cartography + arrangements (replaces the seeded ring)" is now a
   well-defined, small host task (seed gyre from a strategy `Projection`), with
   the substrate side already in place.
