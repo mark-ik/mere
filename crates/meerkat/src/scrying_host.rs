@@ -25,8 +25,6 @@
 //! directly rather than going through the engine registry (recorded in the
 //! plan's Findings).
 
-use std::collections::HashSet;
-
 use forme::GraphMemberId;
 
 /// A mouse button, host-neutral (mapped to scrying's vocabulary inside the
@@ -57,12 +55,13 @@ pub struct KeyMods {
     pub meta: bool,
 }
 
-/// Session-local compatibility pins + (on Windows) the live producer pool.
-/// The pin is host state for X1; the durable per-node `compat_mode` field in
-/// graph truth takes over in X3.
+/// One window's live compatibility-view producer pool: the HWND-parented
+/// WebViews that serve this window's compat tiles. The *pins* (which members are
+/// in compat) are shared session state on `SharedState.content.compat_pins`; this
+/// pool is per-`WindowView`, because each producer is bound to one window's HWND.
+/// (Scrying X1; the per-window/shared split is MW2 (b2).)
 #[derive(Default)]
 pub struct ScryingHost {
-    compat: HashSet<GraphMemberId>,
     #[cfg(target_os = "windows")]
     pool: windows_pool::Pool,
 }
@@ -73,24 +72,7 @@ impl ScryingHost {
         Self::default()
     }
 
-    /// Whether `member` is pinned to the compatibility view.
-    pub fn is_compat(&self, member: GraphMemberId) -> bool {
-        self.compat.contains(&member)
-    }
-
-    /// Toggle `member`'s compatibility pin; returns the new state. Unpinning
-    /// reaps the tile's WebView.
-    pub fn toggle_compat(&mut self, member: GraphMemberId) -> bool {
-        if self.compat.remove(&member) {
-            self.reap(member);
-            false
-        } else {
-            self.compat.insert(member);
-            true
-        }
-    }
-
-    /// Drop `member`'s WebView (if any). The pin is untouched.
+    /// Drop `member`'s WebView (if any). The shared pin is untouched.
     pub fn reap(&mut self, member: GraphMemberId) {
         #[cfg(target_os = "windows")]
         self.pool.reap(member);
@@ -98,10 +80,9 @@ impl ScryingHost {
         let _ = member;
     }
 
-    /// Drop every WebView and pin (multi-graph switch, mirrors
-    /// `Constellation::clear`).
+    /// Drop every WebView in this window's pool (multi-graph switch, mirrors
+    /// `Constellation::clear`). The shared pins are cleared by the caller.
     pub fn clear(&mut self) {
-        self.compat.clear();
         #[cfg(target_os = "windows")]
         self.pool.clear();
     }

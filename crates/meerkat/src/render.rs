@@ -365,7 +365,7 @@ impl App {
                     })
                     .or_else(|| super::card::card_rect(orrery_rect));
                 if let Some((x0, y0, x1, y1, cw, ch)) = rect {
-                    if self.view.scrying.is_compat(member) {
+                    if self.shared.content.compat_pins.contains(&member) {
                         // Compatibility view: the system WebView renders this
                         // node; drive the UI-thread scrying pool (spawn /
                         // resize / navigate + non-blocking frame import)

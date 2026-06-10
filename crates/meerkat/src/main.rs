@@ -27,7 +27,7 @@
 //! so the omnibar drives the graph rather than a synthesized page.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -426,6 +426,12 @@ struct Content {
     /// The nematic engine registry, for rendering "last visit" snapshot cards
     /// host-side from the durable content cache (no actor). (Card #4.)
     engine_registry: EngineRegistry,
+    /// Members pinned to the compatibility view (scrying). Session state, shared
+    /// across windows: the pin is the *intent*; each window's per-`WindowView`
+    /// producer pool spawns the HWND-bound WebView that serves it. A torn-out
+    /// compat tile (MW4) carries the pin, the recipient spawns a fresh WebView.
+    /// (The durable per-node `compat_mode` graph field takes over in scrying X3.)
+    compat_pins: HashSet<GraphMemberId>,
 }
 
 /// The `session` subsystem: the session registry plus the active session's
@@ -766,6 +772,7 @@ impl App {
                     store,
                     fetch_handle,
                     engine_registry,
+                    compat_pins: HashSet::new(),
                 },
                 session: Session {
                     manifests,

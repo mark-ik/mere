@@ -468,6 +468,7 @@ impl App {
         // Reset the prior session's runtime caches.
         self.shared.content.constellation.clear();
         self.view.scrying.clear();
+        self.shared.content.compat_pins.clear();
         self.view.scrying_input_focus = None;
         self.view.scrying_rect = None;
         self.shared.content.pages.clear();
@@ -703,7 +704,15 @@ impl App {
         let Some(member) = self.focused_member() else {
             return;
         };
-        let on = self.view.scrying.toggle_compat(member);
+        // The pin is shared session state; the WebView that serves it is this
+        // window's per-view pool. Toggle the shared pin, reap the local tile.
+        let on = if self.shared.content.compat_pins.remove(&member) {
+            self.view.scrying.reap(member);
+            false
+        } else {
+            self.shared.content.compat_pins.insert(member);
+            true
+        };
         if on {
             self.view.live_previews.insert(member);
             self.shared.content.constellation.reap(member);
