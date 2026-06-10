@@ -101,8 +101,8 @@ pub(crate) enum AgentPane {
 
 impl App {
     pub(crate) fn agent_observation(&mut self) -> AgentObservation {
-        self.refresh_a11y_summary();
-        let snapshot = self.apparatus_observability();
+        self.ctx().refresh_a11y_summary();
+        let snapshot = self.ctx().apparatus_observability();
         self.agent_observation_from_snapshot(snapshot)
     }
 
@@ -146,7 +146,7 @@ impl App {
         }
     }
 
-    fn agent_observation_from_snapshot(&self, snapshot: ObservabilitySnapshot) -> AgentObservation {
+    fn agent_observation_from_snapshot(&mut self, snapshot: ObservabilitySnapshot) -> AgentObservation {
         AgentObservation {
             active_theme_id: self.shared.presentation.active_theme_id.clone(),
             focused_node: self.orrery.focused_url().map(str::to_string),
@@ -178,27 +178,29 @@ impl App {
         }
     }
 
-    fn agent_surfaces(&self) -> Vec<AgentSurface> {
-        self.laid_leaves()
+    fn agent_surfaces(&mut self) -> Vec<AgentSurface> {
+        // Precompute the per-window reads through the ctx before the loop, so the
+        // closure borrows neither `self` nor a live ctx. (MW2 (c).)
+        let leaves = self.ctx().laid_leaves();
+        let active = self.view.active_content;
+        let wb_open = self.ctx().workbench_open();
+        leaves
             .into_iter()
             .map(|leaf| {
                 let pane = AgentPane::from_pane_content(&leaf.content);
+                let focused = match (active, pane) {
+                    (ContentPane::Orrery, AgentPane::Orrery) => true,
+                    (ContentPane::Workbench, AgentPane::Workbench) => wb_open,
+                    _ => false,
+                };
                 AgentSurface {
                     id: format!("pane:{}", leaf.pane_id.0),
                     pane,
                     label: leaf.content.tag().to_string(),
-                    focused: self.agent_surface_focused(pane),
+                    focused,
                 }
             })
             .collect()
-    }
-
-    fn agent_surface_focused(&self, pane: AgentPane) -> bool {
-        match (self.view.active_content, pane) {
-            (ContentPane::Orrery, AgentPane::Orrery) => true,
-            (ContentPane::Workbench, AgentPane::Workbench) => self.workbench_open(),
-            _ => false,
-        }
     }
 
     fn agent_enabled_actions(&self) -> Vec<AgentActionDescriptor> {
@@ -227,14 +229,14 @@ impl App {
     fn agent_open_pane(&mut self, pane: AgentPane) -> (bool, String, String) {
         let action_id = format!("pane.open.{}", pane.id());
         if pane == AgentPane::Workbench {
-            self.open_workbench();
+            self.ctx().open_workbench();
             return (true, action_id, "workbench open".to_string());
         }
         let Some(content) = pane.toggleable_content() else {
             return (false, action_id, "pane is not summonable".to_string());
         };
-        if self.pane_of_content(&content).is_none() {
-            self.toggle_pane(content);
+        if self.ctx().pane_of_content(&content).is_none() {
+            self.ctx().toggle_pane(content);
         }
         (true, action_id, format!("{} open", pane.id()))
     }
@@ -242,13 +244,13 @@ impl App {
     fn agent_toggle_pane(&mut self, pane: AgentPane) -> (bool, String, String) {
         let action_id = format!("pane.toggle.{}", pane.id());
         if pane == AgentPane::Workbench {
-            self.toggle_workbench();
+            self.ctx().toggle_workbench();
             return (true, action_id, "workbench toggled".to_string());
         }
         let Some(content) = pane.toggleable_content() else {
             return (false, action_id, "pane is not toggleable".to_string());
         };
-        self.toggle_pane(content);
+        self.ctx().toggle_pane(content);
         (true, action_id, format!("{} toggled", pane.id()))
     }
 
@@ -257,10 +259,10 @@ impl App {
         self.view.runner.update(move |chrome| {
             chrome.run_command_and_close(cmd);
         });
-        self.drain_pending_command();
-        self.drain_pending_connect();
-        self.sync_comms_pane();
-        self.sync_settings();
+        self.ctx().drain_pending_command();
+        self.ctx().drain_pending_connect();
+        self.ctx().sync_comms_pane();
+        self.ctx().sync_settings();
         (true, action_id, cmd.label().to_string())
     }
 
@@ -270,14 +272,14 @@ impl App {
             return (false, action_id, format!("node not found: {url}"));
         }
         self.view.active_content = ContentPane::Orrery;
-        self.sync_location();
-        self.refresh_a11y_summary();
+        self.ctx().sync_location();
+        self.ctx().refresh_a11y_summary();
         (true, action_id, url.to_string())
     }
 
     fn agent_set_theme(&mut self, theme_id: &str) -> (bool, String, String) {
         let action_id = "theme.set".to_string();
-        self.set_theme(theme_id);
+        self.ctx().set_theme(theme_id);
         (true, action_id, self.shared.presentation.active_theme_id.clone())
     }
 
@@ -285,7 +287,7 @@ impl App {
         let action_id = "focus.activate".to_string();
         if self.view.runner.state().palette_open {
             self.view.runner.update(meerkat::Chrome::run_palette_selection);
-            self.drain_pending_command();
+            self.ctx().drain_pending_command();
             return (true, action_id, "palette selection activated".to_string());
         }
         (
@@ -309,22 +311,22 @@ impl App {
 
     fn agent_request_content_preview(&mut self) -> (bool, String, String) {
         let action_id = "content.preview.request".to_string();
-        if self.focused_member().is_none() {
+        if self.ctx().focused_member().is_none() {
             return (false, action_id, "no focused node".to_string());
         }
-        self.toggle_live_preview();
+        self.ctx().toggle_live_preview();
         (true, action_id, "focused node preview toggled".to_string())
     }
 
     fn agent_retry_focused_content(&mut self) -> (bool, String, String) {
         let action_id = "content.retry.focused".to_string();
-        let Some(url) = self.current_focus_url() else {
+        let Some(url) = self.ctx().current_focus_url() else {
             return (false, action_id, "no focused node".to_string());
         };
         if !super::fetch::is_fetchable(&url) {
             return (false, action_id, format!("not fetchable: {url}"));
         }
-        self.retry_focused_content();
+        self.ctx().retry_focused_content();
         (
             true,
             action_id,
@@ -334,19 +336,19 @@ impl App {
 
     fn agent_stop_focused_operation(&mut self) -> (bool, String, String) {
         let action_id = "operation.stop.focused".to_string();
-        if self.focused_member().is_none() {
+        if self.ctx().focused_member().is_none() {
             return (false, action_id, "no focused node".to_string());
         }
-        self.stop_focused_operation();
+        self.ctx().stop_focused_operation();
         (true, action_id, "focused operation stopped".to_string())
     }
 
     fn agent_pin_focused_operation(&mut self) -> (bool, String, String) {
         let action_id = "operation.pin.focused".to_string();
-        if self.focused_member().is_none() {
+        if self.ctx().focused_member().is_none() {
             return (false, action_id, "no focused node".to_string());
         }
-        self.pin_focused_operation();
+        self.ctx().pin_focused_operation();
         (true, action_id, "focused operation pinned".to_string())
     }
 }
@@ -448,7 +450,7 @@ mod tests {
         let mut app = test_app();
         let first = app.shared.session.active_session_id;
         assert_eq!(app.shared.session.manifests.len(), 1);
-        let second = app.create_session();
+        let second = app.ctx().create_session();
         assert_ne!(second, first, "a fresh session id is minted");
         assert_eq!(app.shared.session.active_session_id, second, "the new session is active");
         assert_eq!(app.shared.session.manifests.len(), 2);
@@ -470,11 +472,11 @@ mod tests {
         let first_count = app.orrery.graph().nodes().count();
         assert!(first_count >= 2, "welcome + the added node");
 
-        let second = app.create_session();
+        let second = app.ctx().create_session();
         // The fresh session is its own (smaller) graph, not the first's.
         assert!(app.orrery.graph().nodes().count() < first_count);
 
-        app.switch_session(first);
+        app.ctx().switch_session(first);
         assert_eq!(app.shared.session.active_session_id, first);
         assert_eq!(
             app.orrery.graph().nodes().count(),
@@ -482,7 +484,7 @@ mod tests {
             "the first session's graph was restored intact"
         );
 
-        app.switch_session(second);
+        app.ctx().switch_session(second);
         assert_eq!(app.shared.session.active_session_id, second);
     }
 
@@ -490,10 +492,10 @@ mod tests {
     fn cycle_session_wraps_through_the_open_sessions() {
         let mut app = test_app();
         let a = app.shared.session.active_session_id;
-        let b = app.create_session(); // active = b, two sessions
-        app.cycle_session(true);
+        let b = app.ctx().create_session(); // active = b, two sessions
+        app.ctx().cycle_session(true);
         assert_eq!(app.shared.session.active_session_id, a, "wrapped forward to the other session");
-        app.cycle_session(true);
+        app.ctx().cycle_session(true);
         assert_eq!(app.shared.session.active_session_id, b, "wrapped forward back to the first");
     }
 
@@ -501,9 +503,9 @@ mod tests {
     fn switching_keeps_the_window_panes_and_resources_graph_bound_leaves() {
         let mut app = test_app();
         let first = app.shared.session.active_session_id;
-        let first_graph = app.active_graph_id();
+        let first_graph = app.ctx().active_graph_id();
         // Open a second pane: the window now holds an orrery + a roster.
-        app.toggle_pane(frame::PaneContent::Roster);
+        app.ctx().toggle_pane(frame::PaneContent::Roster);
         let has_roster = |app: &App| {
             app.view.frame_layout
                 .iter_leaves()
@@ -522,8 +524,8 @@ mod tests {
         // Switch to a fresh session: the pane arrangement persists (the frame is
         // window-scoped) and the graph-bound orrery leaf re-sources to the new graph.
         // (Model B, MG5.)
-        app.create_session();
-        let second_graph = app.active_graph_id();
+        app.ctx().create_session();
+        let second_graph = app.ctx().active_graph_id();
         assert_ne!(second_graph, first_graph, "the new session has its own graph");
         assert!(
             has_roster(&app),
@@ -536,7 +538,7 @@ mod tests {
         );
 
         // Back to the first: the layout still holds; the orrery follows it again.
-        app.switch_session(first);
+        app.ctx().switch_session(first);
         assert!(has_roster(&app), "the pane layout persists across switches");
         assert_eq!(orrery_graph(&app), first_graph);
     }
@@ -552,31 +554,31 @@ mod tests {
         };
 
         // Rename starts from the current (derived) label, so clear it before typing.
-        app.start_rename(id);
+        app.ctx().start_rename(id);
         assert!(app.view.renaming.is_some());
         for _ in 0..16 {
-            app.rename_backspace(); // clear the seeded label (backspace-on-empty is a no-op)
+            app.ctx().rename_backspace(); // clear the seeded label (backspace-on-empty is a no-op)
         }
-        app.rename_push("W");
-        app.rename_push("ork");
-        app.rename_backspace(); // "Work" -> "Wor"
-        app.commit_rename();
+        app.ctx().rename_push("W");
+        app.ctx().rename_push("ork");
+        app.ctx().rename_backspace(); // "Work" -> "Wor"
+        app.ctx().commit_rename();
         assert!(app.view.renaming.is_none());
         assert_eq!(name_of(&app, id).as_deref(), Some("Wor"));
         assert_eq!(app.shared.session.session_labels.get(&id).map(String::as_str), Some("Wor"));
 
         // Emptying the buffer clears the display name (the label reverts to derived).
-        app.start_rename(id);
+        app.ctx().start_rename(id);
         for _ in 0..16 {
-            app.rename_backspace();
+            app.ctx().rename_backspace();
         }
-        app.commit_rename();
+        app.ctx().commit_rename();
         assert!(name_of(&app, id).is_none(), "an empty rename clears the name");
 
         // Escape (cancel) leaves the name untouched.
-        app.start_rename(id);
-        app.rename_push("X");
-        app.cancel_rename();
+        app.ctx().start_rename(id);
+        app.ctx().rename_push("X");
+        app.ctx().cancel_rename();
         assert!(app.view.renaming.is_none());
         assert!(name_of(&app, id).is_none(), "cancel did not persist the edit");
     }
@@ -678,7 +680,7 @@ mod tests {
 
         let step = app.apply_agent_action(AgentAction::PinFocusedOperation);
         assert!(step.result.applied);
-        let focused = app.focused_member().expect("welcome is focused");
+        let focused = app.ctx().focused_member().expect("welcome is focused");
         assert!(
             app.shared.content.constellation.is_background(focused),
             "pin marks the focused operation as background"
@@ -737,7 +739,7 @@ mod tests {
         let mut app = test_app();
         app.orrery.visit("https://example.test");
         app.orrery.select_by_url("mere://welcome");
-        app.refresh_a11y_summary();
+        app.ctx().refresh_a11y_summary();
         let target = app
             .a11y_action_routes
             .iter()
@@ -749,7 +751,7 @@ mod tests {
             })
             .expect("example node has an AccessKit route");
 
-        app.apply_a11y_request(crate::a11y_bridge::A11yActionRequest {
+        app.ctx().apply_a11y_request(crate::a11y_bridge::A11yActionRequest {
             action: Action::Focus,
             target_node: target,
         });

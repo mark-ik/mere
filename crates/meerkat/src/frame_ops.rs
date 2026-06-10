@@ -31,11 +31,11 @@ use super::switcher::{SWITCHER_THUMB_H, SWITCHER_THUMB_W};
 
 use super::observability::{A11ySnapshot, ObservabilitySnapshot};
 use super::{
-    A11yHostAction, App, DEFAULT_FRAME, DEFAULT_PANE, FALLBACK_TOOLBAR_H, GRAPH_PANE, apparatus,
-    comms_host, fetch, frame_view, roster, sync,
+    A11yHostAction, DEFAULT_FRAME, DEFAULT_PANE, FALLBACK_TOOLBAR_H, GRAPH_PANE, WindowCtx,
+    apparatus, comms_host, fetch, frame_view, roster, sync,
 };
 
-impl App {
+impl WindowCtx<'_> {
     /// The URL of whatever is in focus: in the tiled view the focused tile's node,
     /// in the orrery the focused node. `None` when nothing is focused.
     pub(super) fn current_focus_url(&self) -> Option<String> {
@@ -1410,7 +1410,7 @@ impl App {
     pub(super) fn refresh_a11y_summary(&mut self) {
         let projection = self.build_a11y_projection();
         self.a11y_bridge.update(projection.tree_update());
-        self.a11y_action_routes = projection.action_routes;
+        *self.a11y_action_routes = projection.action_routes;
         self.shared.observability.set_a11y_snapshot(projection.snapshot);
     }
 

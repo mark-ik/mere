@@ -53,7 +53,8 @@ fn scrying_vk(event: &winit::event::KeyEvent) -> u32 {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.view.window.is_some() {
+        let mut wc = self.ctx();
+        if wc.view.window.is_some() {
             return;
         }
         // Borderless: the OS title bar (and its accent border) is off; the chrome's
@@ -64,15 +65,15 @@ impl ApplicationHandler for App {
             .with_decorations(false)
             .with_visible(false)
             .with_min_inner_size(PhysicalSize::new(480u32, 320u32))
-            .with_inner_size(PhysicalSize::new(self.view.width, self.view.height));
+            .with_inner_size(PhysicalSize::new(wc.view.width, wc.view.height));
         let window = Arc::new(
             event_loop
                 .create_window(attributes)
                 .expect("failed to create meerkat window"),
         );
         let size = window.inner_size();
-        self.view.width = size.width.max(1);
-        self.view.height = size.height.max(1);
+        wc.view.width = size.width.max(1);
+        wc.view.height = size.height.max(1);
 
         // The shared serval-on-winit present stack: wgpu + netrender boot, surface
         // configured at the window size.
@@ -81,52 +82,53 @@ impl ApplicationHandler for App {
             enable_vello: true,
             ..Default::default()
         };
-        match SurfaceHost::boot(window.clone(), self.view.width, self.view.height, options) {
-            Ok(host) => self.view.host = Some(host),
+        match SurfaceHost::boot(window.clone(), wc.view.width, wc.view.height, options) {
+            Ok(host) => wc.view.host = Some(host),
             Err(err) => {
                 eprintln!("[meerkat] {err}");
                 event_loop.exit();
                 return;
             }
         }
-        let initial_a11y = self.build_a11y_projection().tree_update();
-        match self.a11y_bridge.install(&window, initial_a11y) {
-            Ok(()) => self.shared.observability.record_probe(
+        let initial_a11y = wc.build_a11y_projection().tree_update();
+        match wc.a11y_bridge.install(&window, initial_a11y) {
+            Ok(()) => wc.shared.observability.record_probe(
                 "a11y_bridge",
                 "installed",
                 "OS AccessKit bridge installed",
             ),
-            Err(err) => self.shared.observability.record_probe(
+            Err(err) => wc.shared.observability.record_probe(
                 "a11y_bridge",
                 "degraded",
                 format!("OS AccessKit bridge unavailable: {err}"),
             ),
         }
-        self.refresh_a11y_summary();
+        wc.refresh_a11y_summary();
         window.set_visible(true);
         window.request_redraw();
-        self.view.window = Some(window);
+        wc.view.window = Some(window);
 
         // Show the restored focused node's content from the durable cache (so a
         // reload re-opens its card without a navigation). A fresh `mere://welcome`
         // focus is not fetchable, so this is a no-op there.
-        if let Some(url) = self.orrery.focused_url().map(str::to_string) {
-            self.ensure_content(&url);
+        if let Some(url) = wc.orrery.focused_url().map(str::to_string) {
+            wc.ensure_content(&url);
         }
     }
 
     /// Drain completed fetches (delivery model 2): a worker woke us via the proxy;
     /// fold each outcome into the content cache and re-render the card.
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
-        self.drain_portable_diagnostics();
-        self.drain_a11y_actions();
+        let mut wc = self.ctx();
+        wc.drain_portable_diagnostics();
+        wc.drain_a11y_actions();
         // The kernel inbox dispatch: the one documented place that applies what the
         // actors tell the kernel. Each typed stream is drained and folded into
         // canonical state here on the kernel thread; the actors never touch it.
         let mut card_changed = false;
         let mut graph_changed = false;
         // One `FetchUpdate` stream carries both page documents and subresources.
-        while let Ok(update) = self.shared.inbox.fetch.try_recv() {
+        while let Ok(update) = wc.shared.inbox.fetch.try_recv() {
             match update {
                 fetch::FetchUpdate::Page(outcome) => {
                     let state = match outcome.result {
@@ -134,12 +136,12 @@ impl ApplicationHandler for App {
                             // Persist so a reload shows this page without
                             // re-fetching. Linked-data harvest now happens in the
                             // content actor (on `Show`), which ships a `Contribution`.
-                            self.save_cached(
+                            wc.save_cached(
                                 &outcome.url,
                                 fetched.content_type.clone(),
                                 fetched.body.as_bytes(),
                             );
-                            self.shared.observability.record_actor(
+                            wc.shared.observability.record_actor(
                                 "fetch",
                                 "succeeded",
                                 Some(outcome.url.clone()),
@@ -148,12 +150,12 @@ impl ApplicationHandler for App {
                         }
                         Err(reason) => {
                             let detail = format!("{}: {reason}", outcome.url);
-                            self.shared.observability.record_actor(
+                            wc.shared.observability.record_actor(
                                 "fetch",
                                 "failed",
                                 Some(detail.clone()),
                             );
-                            self.shared.observability.record_diagnostic(
+                            wc.shared.observability.record_diagnostic(
                                 "meerkat.actor.fetch.failed",
                                 Severity::Warn,
                                 detail,
@@ -161,7 +163,7 @@ impl ApplicationHandler for App {
                             fetch::ContentState::Failed(reason)
                         }
                     };
-                    self.shared.content.pages.insert(outcome.url, state);
+                    wc.shared.content.pages.insert(outcome.url, state);
                     card_changed = true;
                 }
                 // A subresource (page CSS / media): persist it (its content-type is
@@ -170,16 +172,16 @@ impl ApplicationHandler for App {
                 // by URL, not by which node wanted it; each actor dedups via its own
                 // resource store and only the one that wanted it re-renders.
                 fetch::FetchUpdate::Subresource(sub) => {
-                    self.shared.observability
+                    wc.shared.observability
                         .record_actor("fetch", "subresource", Some(sub.url.clone()));
-                    self.save_cached(&sub.url, None, &sub.bytes);
-                    self.shared.content.constellation.broadcast_resource(&sub.url, &sub.bytes);
+                    wc.save_cached(&sub.url, None, &sub.bytes);
+                    wc.shared.content.constellation.broadcast_resource(&sub.url, &sub.bytes);
                 }
             }
         }
         // Drain every active node's actor in one pass: scenes land in the pool, the
         // wanted subresources + harvested contributions come back for the host.
-        let drained = self.shared.content.constellation.drain();
+        let drained = wc.shared.content.constellation.drain();
         card_changed |= drained.any_scene;
         if !drained.respawned.is_empty() {
             // A content tile's actor died (panic, isolated to its thread) and the
@@ -188,12 +190,12 @@ impl ApplicationHandler for App {
                 count = drained.respawned.len(),
                 "respawned crashed content tile(s)"
             );
-            self.shared.observability.record_actor(
+            wc.shared.observability.record_actor(
                 "content",
                 "respawned",
                 Some(format!("count={}", drained.respawned.len())),
             );
-            self.shared.observability.record_diagnostic(
+            wc.shared.observability.record_diagnostic(
                 "meerkat.actor.content.respawned",
                 Severity::Warn,
                 format!("count={}", drained.respawned.len()),
@@ -204,16 +206,16 @@ impl ApplicationHandler for App {
             // The actor deduped these; a durable-cache hit feeds that node directly,
             // a miss spawns a network fetch whose bytes broadcast back on arrival.
             for url in urls {
-                if let Some(stored) = self.load_cached(&url) {
-                    self.shared.content.constellation.send_resource(member, url, stored.body);
+                if let Some(stored) = wc.load_cached(&url) {
+                    wc.shared.content.constellation.send_resource(member, url, stored.body);
                 } else {
-                    self.shared.content.fetch_handle
+                    wc.shared.content.fetch_handle
                         .command(fetch::FetchCommand::Subresource(url));
                 }
             }
         }
         if !drained.contributions.is_empty() {
-            graph_changed |= self.orrery.ingest_graph(|g| {
+            graph_changed |= wc.orrery.ingest_graph(|g| {
                 let mut changed = false;
                 for contribution in &drained.contributions {
                     let outcome = linked_data::apply_contribution(g, contribution);
@@ -225,8 +227,8 @@ impl ApplicationHandler for App {
         // P2P sync status (S5.0): the same wake also carries lane-status changes.
         // Fold the latest into the chrome chip (the host owns the mutation).
         let mut latest_sync = None;
-        while let Ok(update) = self.shared.inbox.sync.try_recv() {
-            self.shared.observability.record_actor(
+        while let Ok(update) = wc.shared.inbox.sync.try_recv() {
+            wc.shared.observability.record_actor(
                 "sync",
                 "status",
                 Some(format!(
@@ -237,40 +239,40 @@ impl ApplicationHandler for App {
             latest_sync = Some(sync::to_indicator(&update.status, sync::LANE_LABEL));
         }
         if let Some(indicator) = latest_sync {
-            self.view.runner.update(|c| c.sync = indicator.clone());
-            self.view.request_redraw();
+            wc.view.runner.update(|c| c.sync = indicator.clone());
+            wc.view.request_redraw();
         }
         // Comms (P6c): the comms actor delivers conversation lists + threads here;
         // fold each into the docked pane (the host owns the chrome mutation).
         let mut comms_changed = false;
-        while let Ok(update) = self.shared.inbox.comms.try_recv() {
+        while let Ok(update) = wc.shared.inbox.comms.try_recv() {
             match update {
                 comms_host::CommsUpdate::Inbox(inbox) => {
-                    self.shared.observability.record_actor(
+                    wc.shared.observability.record_actor(
                         "comms",
                         "inbox",
                         Some(format!("conversations={}", inbox.conversations.len())),
                     );
-                    self.shared.observability.record_actor(
+                    wc.shared.observability.record_actor(
                         "comms",
                         "succeeded",
                         Some("inbox".to_string()),
                     );
-                    self.view.runner.update(|c| c.comms.set_inbox(inbox.clone()));
+                    wc.view.runner.update(|c| c.comms.set_inbox(inbox.clone()));
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::Thread(id, messages) => {
-                    self.shared.observability.record_actor(
+                    wc.shared.observability.record_actor(
                         "comms",
                         "thread",
                         Some(format!("{} messages={}", id.key, messages.len())),
                     );
-                    self.shared.observability.record_actor(
+                    wc.shared.observability.record_actor(
                         "comms",
                         "succeeded",
                         Some("thread".to_string()),
                     );
-                    self.view.runner.update(|c| {
+                    wc.view.runner.update(|c| {
                         if c.comms.selected() == Some(&id) {
                             c.comms.set_thread(messages.clone());
                         }
@@ -278,21 +280,21 @@ impl ApplicationHandler for App {
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::Sent(_id) => {
-                    self.shared.observability.record_actor("comms", "sent", None);
-                    self.shared.observability
+                    wc.shared.observability.record_actor("comms", "sent", None);
+                    wc.shared.observability
                         .record_actor("comms", "succeeded", Some("sent".to_string()));
-                    self.view.runner.update(|c| c.clear_comms_draft());
+                    wc.view.runner.update(|c| c.clear_comms_draft());
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::SendOutcome(line) => {
-                    self.shared.observability
+                    wc.shared.observability
                         .record_actor("comms", "send_outcome", Some(line.clone()));
-                    self.shared.observability.record_actor(
+                    wc.shared.observability.record_actor(
                         "comms",
                         "succeeded",
                         Some("send_outcome".to_string()),
                     );
-                    self.view.runner
+                    wc.view.runner
                         .update(|c| c.comms.set_send_status(line.clone()));
                     comms_changed = true;
                 }
@@ -300,7 +302,7 @@ impl ApplicationHandler for App {
                     misfin_address,
                     cabal_ticket,
                 } => {
-                    self.shared.observability.record_actor(
+                    wc.shared.observability.record_actor(
                         "comms",
                         "identity",
                         Some(format!(
@@ -309,12 +311,12 @@ impl ApplicationHandler for App {
                             cabal_ticket.is_some()
                         )),
                     );
-                    self.shared.observability.record_actor(
+                    wc.shared.observability.record_actor(
                         "comms",
                         "succeeded",
                         Some("identity".to_string()),
                     );
-                    self.view.runner.update(|c| {
+                    wc.view.runner.update(|c| {
                         c.comms
                             .set_identity(misfin_address.clone(), cabal_ticket.clone())
                     });
@@ -323,20 +325,20 @@ impl ApplicationHandler for App {
             }
         }
         if comms_changed {
-            self.view.request_redraw();
+            wc.view.request_redraw();
         }
         if graph_changed {
-            self.save_session();
+            wc.save_session();
         }
         if card_changed || graph_changed {
-            self.view.request_redraw();
+            wc.view.request_redraw();
         }
         // The physics actor shares this wake: a fresh layout snapshot is waiting to
         // be folded in. The orrery is always shown now, so kick a redraw — `frame()`
         // drains the snapshot and reports whether to keep going (the settle then
         // self-sustains through `needs_redraw`).
-        self.drain_portable_diagnostics();
-        self.view.request_redraw();
+        wc.drain_portable_diagnostics();
+        wc.view.request_redraw();
     }
 
     fn window_event(
@@ -345,78 +347,79 @@ impl ApplicationHandler for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        if self.view.window.as_ref().map(|w| w.id()) != Some(window_id) {
+        let mut wc = self.ctx();
+        if wc.view.window.as_ref().map(|w| w.id()) != Some(window_id) {
             return;
         }
         match event {
             WindowEvent::CloseRequested => {
-                self.save_session();
+                wc.save_session();
                 event_loop.exit();
             }
-            WindowEvent::Resized(size) => self.resize(size.width, size.height),
-            WindowEvent::Focused(focused) => self.update_a11y_window_focus(focused),
+            WindowEvent::Resized(size) => wc.resize(size.width, size.height),
+            WindowEvent::Focused(focused) => wc.update_a11y_window_focus(focused),
             WindowEvent::CursorMoved { position, .. } => {
-                self.view.cursor = (position.x as f32, position.y as f32);
+                wc.view.cursor = (position.x as f32, position.y as f32);
                 // A manual window resize in progress: drive it from the move and
                 // route nowhere else. (Custom titlebar.)
-                if self.view.resize_drag.is_some() {
-                    self.apply_resize();
+                if wc.view.resize_drag.is_some() {
+                    wc.apply_resize();
                     return;
                 }
                 // A pending titlebar press that moves past the slop becomes a window
                 // drag (the OS takes over from here); below the slop it stays a
                 // pending click and the move routes nowhere. (Custom titlebar.)
-                if let Some((px, py)) = self.view.titlebar_press {
-                    if (self.view.cursor.0 - px).hypot(self.view.cursor.1 - py) > 4.0 {
-                        if let Some(window) = self.view.window.as_ref() {
+                if let Some((px, py)) = wc.view.titlebar_press {
+                    if (wc.view.cursor.0 - px).hypot(wc.view.cursor.1 - py) > 4.0 {
+                        if let Some(window) = wc.view.window.as_ref() {
                             let _ = window.drag_window();
                         }
-                        self.view.titlebar_press = None;
+                        wc.view.titlebar_press = None;
                     }
                     return;
                 }
                 // Hint the resize edges: the borderless window has no OS frame, so
                 // the host sets the resize arrows on hover. (Custom titlebar.)
-                self.update_hover_cursor();
+                wc.update_hover_cursor();
                 // Forward to the orrery in content-band coordinates. The orrery is
                 // always present (its leaf sits at the band's top-left), so it owns
                 // moves it has an in-progress pan / drag for; an active tab drag in
                 // the workbench pane takes priority so its drop highlight tracks.
-                let th = self.toolbar_height() as f32;
-                if self.view.frame_divider_drag.is_some() {
-                    self.drag_frame_divider();
-                } else if self.view.divider_drag.is_some() {
-                    self.drag_divider();
-                } else if self.view.tab_drag.is_some() {
+                let th = wc.toolbar_height() as f32;
+                if wc.view.frame_divider_drag.is_some() {
+                    wc.drag_frame_divider();
+                } else if wc.view.divider_drag.is_some() {
+                    wc.drag_divider();
+                } else if wc.view.tab_drag.is_some() {
                     // Follow the drag: the drop-target highlight tracks the pointer.
-                    self.view.request_redraw();
-                } else if let Some((member, lx, ly)) = self.scrying_at(self.view.cursor.0, self.view.cursor.1)
+                    wc.view.request_redraw();
+                } else if let Some((member, lx, ly)) = wc.scrying_at(wc.view.cursor.0, wc.view.cursor.1)
                 {
                     // Hover / drag over the compatibility-view tile feeds the WebView;
                     // the orrery is not panned underneath. (Scrying X2.)
-                    self.view
+                    wc.view
                         .scrying
                         .forward_mouse(member, lx, ly, scrying_host::MousePress::Move);
-                    self.view.request_redraw();
-                } else if self.orrery.cursor_moved(self.view.cursor.0, self.view.cursor.1 - th) {
-                    self.view.request_redraw();
+                    wc.view.request_redraw();
+                } else if wc.orrery.cursor_moved(wc.view.cursor.0, wc.view.cursor.1 - th) {
+                    wc.view.request_redraw();
                 }
             }
             WindowEvent::ModifiersChanged(mods) => {
-                self.view.modifiers = modifiers_from_winit(mods.state());
-                self.orrery.set_ctrl(self.view.modifiers.ctrl);
-                self.orrery.set_shift(self.view.modifiers.shift);
+                wc.view.modifiers = modifiers_from_winit(mods.state());
+                wc.orrery.set_ctrl(wc.view.modifiers.ctrl);
+                wc.orrery.set_shift(wc.view.modifiers.shift);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 // A wheel over the compatibility-view tile scrolls the WebView (Win32
                 // convention: 120 units per notch); it does not pan the orrery. (X2.)
-                if let Some((member, lx, ly)) = self.scrying_at(self.view.cursor.0, self.view.cursor.1) {
+                if let Some((member, lx, ly)) = wc.scrying_at(wc.view.cursor.0, wc.view.cursor.1) {
                     let delta_y = match delta {
                         MouseScrollDelta::LineDelta(_, y) => (y * 120.0) as i32,
                         MouseScrollDelta::PixelDelta(p) => p.y as i32,
                     };
-                    self.view.scrying.forward_wheel(member, lx, ly, delta_y);
-                    self.view.request_redraw();
+                    wc.view.scrying.forward_wheel(member, lx, ly, delta_y);
+                    wc.view.request_redraw();
                     return;
                 }
                 // LineDelta is scaled to device px the way the orrery expects;
@@ -429,19 +432,19 @@ impl ApplicationHandler for App {
                 // shift over its tall texture). Over the orrery pane it drives the
                 // orrery (pan, or Ctrl-zoom); over the workbench pane (off a tile) it
                 // does nothing.
-                let (cx, cy) = self.view.cursor;
-                if self
+                let (cx, cy) = wc.view.cursor;
+                if wc
                     .roster_leaf_rect()
                     .is_some_and(|r| cx >= r[0] && cx < r[2] && cy >= r[1] && cy < r[3])
                 {
                     // Render clamps to the current roster content extent; keeping
                     // the wheel route here prevents a roster scroll from panning
                     // the orrery underneath.
-                    self.view.roster_scroll = (self.view.roster_scroll - dy).max(0.0);
-                    self.view.request_redraw();
+                    wc.view.roster_scroll = (wc.view.roster_scroll - dy).max(0.0);
+                    wc.view.request_redraw();
                     return;
                 }
-                let over_card = self
+                let over_card = wc
                     .view
                     .content_rects
                     .iter()
@@ -449,28 +452,28 @@ impl ApplicationHandler for App {
                     .map(|(member, r)| (*member, r[3] - r[1]));
                 if let Some((member, visible_h)) = over_card {
                     let max =
-                        (self.shared.content.constellation.content_height(member) as f32 - visible_h).max(0.0);
-                    let offset = self.view.scroll.entry(member).or_insert(0.0);
+                        (wc.shared.content.constellation.content_height(member) as f32 - visible_h).max(0.0);
+                    let offset = wc.view.scroll.entry(member).or_insert(0.0);
                     // Wheel up (dy > 0) scrolls toward the top; down toward the bottom.
                     *offset = (*offset - dy).clamp(0.0, max);
-                    self.view.request_redraw();
+                    wc.view.request_redraw();
                 } else {
-                    let th = self.toolbar_height() as f32;
-                    let in_workbench = self
+                    let th = wc.toolbar_height() as f32;
+                    let in_workbench = wc
                         .workbench_leaf_rect()
                         .is_some_and(|wr| cx >= wr[0] && cx < wr[2] && cy >= wr[1] && cy < wr[3]);
-                    if cy >= th && !in_workbench && self.orrery.wheel(dx, dy) {
-                        self.view.request_redraw();
+                    if cy >= th && !in_workbench && wc.orrery.wheel(dx, dy) {
+                        wc.view.request_redraw();
                     }
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
-                self.on_mouse_input(state, button);
+                wc.on_mouse_input(state, button);
                 // The custom close control sets `pending_exit` (input has no
                 // event-loop handle); honor it here, saving the session as the OS
                 // CloseRequested path does.
-                if self.view.pending_exit {
-                    self.save_session();
+                if wc.view.pending_exit {
+                    wc.save_session();
                     event_loop.exit();
                 }
             }
@@ -478,39 +481,39 @@ impl ApplicationHandler for App {
                 let pressed = event.state == ElementState::Pressed;
                 // While a compatibility-view tile holds the keyboard, route keys into
                 // its WebView; Escape releases focus back to the chrome. (Scrying X2.)
-                if let Some(member) = self.view.scrying_input_focus {
+                if let Some(member) = wc.view.scrying_input_focus {
                     use winit::keyboard::{Key, NamedKey};
                     if pressed && matches!(event.logical_key, Key::Named(NamedKey::Escape)) {
-                        self.view.scrying_input_focus = None;
+                        wc.view.scrying_input_focus = None;
                         return;
                     }
                     let mods = scrying_host::KeyMods {
-                        shift: self.view.modifiers.shift,
-                        ctrl: self.view.modifiers.ctrl,
-                        alt: self.view.modifiers.alt,
-                        meta: self.view.modifiers.meta,
+                        shift: wc.view.modifiers.shift,
+                        ctrl: wc.view.modifiers.ctrl,
+                        alt: wc.view.modifiers.alt,
+                        meta: wc.view.modifiers.meta,
                     };
-                    self.view.scrying.forward_key(
+                    wc.view.scrying.forward_key(
                         member,
                         scrying_vk(&event),
                         event.text.as_ref().map(|s| s.as_str()),
                         pressed,
                         mods,
                     );
-                    self.view.request_redraw();
+                    wc.view.request_redraw();
                     return;
                 }
                 if pressed {
-                    self.on_key_pressed(&event.logical_key);
+                    wc.on_key_pressed(&event.logical_key);
                 }
             }
-            WindowEvent::RedrawRequested => self.render(),
+            WindowEvent::RedrawRequested => wc.render(),
             _ => {}
         }
     }
 }
 
-impl App {
+impl super::WindowCtx<'_> {
     /// Drive a manual window resize from the current cursor (custom titlebar). The
     /// opposite edge(s) of the press-time rect stay anchored; the dragged edge(s)
     /// follow the cursor by its screen-space delta from the press, clamped to the

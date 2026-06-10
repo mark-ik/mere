@@ -24,7 +24,7 @@ use frame::PaneContent;
 
 use super::titlebar::{self, WindowControl};
 use super::{
-    App, FALLBACK_TOOLBAR_H, first_tag, first_with_class, has_class, measure_class_bottom,
+    FALLBACK_TOOLBAR_H, WindowCtx, first_tag, first_with_class, has_class, measure_class_bottom,
     scrying_host,
 };
 
@@ -38,7 +38,7 @@ fn scrying_btn(button: MouseButton) -> Option<scrying_host::MouseBtn> {
     }
 }
 
-impl App {
+impl WindowCtx<'_> {
     /// Route a mouse button press/release by region. A left press in the chrome
     /// band (toolbar + any open dropdown) hit-tests + dispatches the chrome; any
     /// other press in the content band, and every release, goes to the orrery in

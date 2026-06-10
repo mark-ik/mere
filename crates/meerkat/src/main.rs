@@ -521,6 +521,25 @@ struct App {
     _kernel: armillary::KernelThread,
 }
 
+/// The borrow bundle for handling **one window's** events. The bulk of the
+/// event-handling logic hangs off `impl WindowCtx` rather than `impl App`, so a
+/// handler operates on exactly one window's [`WindowView`] plus the shared state
+/// and the shell singletons the active window legitimately drives (the orrery,
+/// the clipboard, the a11y bridge). The registry picks *which* window by building
+/// the ctx over `windows[&id]`; that construction is the seam — a ctx method
+/// cannot reach another window or the window map, so cross-window work (spawn /
+/// close / move-tile) goes through `ShellCommand` instead. Bodies are unchanged
+/// from when these were `&mut self` on `App`: `self.view` / `self.shared` /
+/// `self.orrery` resolve to these fields. (Multi-window MW2 (c).)
+struct WindowCtx<'a> {
+    view: &'a mut window_view::WindowView,
+    shared: &'a mut SharedState,
+    orrery: &'a mut Orrery,
+    clipboard: &'a mut Option<arboard::Clipboard>,
+    a11y_bridge: &'a mut a11y_bridge::AccessKitBridge,
+    a11y_action_routes: &'a mut HashMap<AccessNodeId, A11yHostAction>,
+}
+
 /// A tile's cached rasterized texture: the scene version + size it was rasterized
 /// at, plus the GPU texture and its view. Reused across frames while the version +
 /// size hold, so an idle tile is not re-rasterized.
@@ -824,11 +843,25 @@ impl App {
         app.shared
             .observability
             .record_startup(&app.shared.presentation.active_theme_id, pane_count);
-        app.refresh_session_thumbnails();
-        app.refresh_a11y_summary();
+        app.ctx().refresh_session_thumbnails();
+        app.ctx().refresh_a11y_summary();
         app
     }
 
+    /// Borrow this app's state as a single-window handling context — the receiver
+    /// the bulk of the event-handling logic now hangs off. At N=1 the window is
+    /// `self.view`; when the registry lands (MW2 (d)) this takes a `WindowId` and
+    /// bundles `self.windows[&id]` instead. (MW2 (c).)
+    fn ctx(&mut self) -> WindowCtx<'_> {
+        WindowCtx {
+            view: &mut self.view,
+            shared: &mut self.shared,
+            orrery: &mut self.orrery,
+            clipboard: &mut self.clipboard,
+            a11y_bridge: &mut self.a11y_bridge,
+            a11y_action_routes: &mut self.a11y_action_routes,
+        }
+    }
 }
 
 /// The shared per-user data root (`<data_dir>/mere`). Settings, the content

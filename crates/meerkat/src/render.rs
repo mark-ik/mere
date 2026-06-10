@@ -22,12 +22,12 @@ use frame::{PaneContent, SessionId};
 use session_runtime::SwitcherThumbnail;
 
 use super::{
-    App, CARD_BG, FALLBACK_TOOLBAR_H, all_with_class, first_with_class, frame_view, shellbar,
+    CARD_BG, FALLBACK_TOOLBAR_H, WindowCtx, all_with_class, first_with_class, frame_view, shellbar,
     measure_class_bottom, member_attr,
 };
 use meerkat::ShellbarPaneStates;
 
-impl App {
+impl WindowCtx<'_> {
     /// The toolbar-band height (px), measuring + caching it on first use. The
     /// toolbar is a single flex row, so its border-box height is independent of
     /// the available width/height; measuring once suffices. Used to place the
