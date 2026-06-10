@@ -124,13 +124,13 @@ impl App {
             AgentAction::PinFocusedOperation => self.agent_pin_focused_operation(),
         };
         if applied {
-            self.observability.record_diagnostic(
+            self.shared.observability.record_diagnostic(
                 "meerkat.agent.action_applied",
                 Severity::Info,
                 format!("{action_id}: {detail}"),
             );
         } else {
-            self.observability.record_diagnostic(
+            self.shared.observability.record_diagnostic(
                 "meerkat.agent.intent_dropped",
                 Severity::Warn,
                 format!("{action_id}: {detail}"),
@@ -148,7 +148,7 @@ impl App {
 
     fn agent_observation_from_snapshot(&self, snapshot: ObservabilitySnapshot) -> AgentObservation {
         AgentObservation {
-            active_theme_id: self.active_theme_id.clone(),
+            active_theme_id: self.shared.presentation.active_theme_id.clone(),
             focused_node: self.orrery.focused_url().map(str::to_string),
             active_content: match self.view.active_content {
                 ContentPane::Orrery => AgentPane::Orrery,
@@ -278,7 +278,7 @@ impl App {
     fn agent_set_theme(&mut self, theme_id: &str) -> (bool, String, String) {
         let action_id = "theme.set".to_string();
         self.set_theme(theme_id);
-        (true, action_id, self.active_theme_id.clone())
+        (true, action_id, self.shared.presentation.active_theme_id.clone())
     }
 
     fn agent_activate_focused_action(&mut self) -> (bool, String, String) {
@@ -446,14 +446,13 @@ mod tests {
     #[test]
     fn create_session_mints_and_activates_a_new_session() {
         let mut app = test_app();
-        let first = app.active_session_id;
-        assert_eq!(app.manifests.len(), 1);
+        let first = app.shared.session.active_session_id;
+        assert_eq!(app.shared.session.manifests.len(), 1);
         let second = app.create_session();
         assert_ne!(second, first, "a fresh session id is minted");
-        assert_eq!(app.active_session_id, second, "the new session is active");
-        assert_eq!(app.manifests.len(), 2);
-        let dir = app
-            .mere_root
+        assert_eq!(app.shared.session.active_session_id, second, "the new session is active");
+        assert_eq!(app.shared.session.manifests.len(), 2);
+        let dir = app.shared.session.mere_root
             .join("sessions")
             .join(second.as_uuid().to_string());
         assert!(
@@ -465,7 +464,7 @@ mod tests {
     #[test]
     fn switch_session_restores_each_sessions_own_graph() {
         let mut app = test_app();
-        let first = app.active_session_id;
+        let first = app.shared.session.active_session_id;
         // Grow the first session's graph, then create + switch to a fresh second.
         app.orrery.visit("mere://added-to-first");
         let first_count = app.orrery.graph().nodes().count();
@@ -476,7 +475,7 @@ mod tests {
         assert!(app.orrery.graph().nodes().count() < first_count);
 
         app.switch_session(first);
-        assert_eq!(app.active_session_id, first);
+        assert_eq!(app.shared.session.active_session_id, first);
         assert_eq!(
             app.orrery.graph().nodes().count(),
             first_count,
@@ -484,24 +483,24 @@ mod tests {
         );
 
         app.switch_session(second);
-        assert_eq!(app.active_session_id, second);
+        assert_eq!(app.shared.session.active_session_id, second);
     }
 
     #[test]
     fn cycle_session_wraps_through_the_open_sessions() {
         let mut app = test_app();
-        let a = app.active_session_id;
+        let a = app.shared.session.active_session_id;
         let b = app.create_session(); // active = b, two sessions
         app.cycle_session(true);
-        assert_eq!(app.active_session_id, a, "wrapped forward to the other session");
+        assert_eq!(app.shared.session.active_session_id, a, "wrapped forward to the other session");
         app.cycle_session(true);
-        assert_eq!(app.active_session_id, b, "wrapped forward back to the first");
+        assert_eq!(app.shared.session.active_session_id, b, "wrapped forward back to the first");
     }
 
     #[test]
     fn switching_keeps_the_window_panes_and_resources_graph_bound_leaves() {
         let mut app = test_app();
-        let first = app.active_session_id;
+        let first = app.shared.session.active_session_id;
         let first_graph = app.active_graph_id();
         // Open a second pane: the window now holds an orrery + a roster.
         app.toggle_pane(frame::PaneContent::Roster);
@@ -545,9 +544,9 @@ mod tests {
     #[test]
     fn rename_sets_then_clears_the_session_display_name() {
         let mut app = test_app();
-        let id = app.active_session_id;
+        let id = app.shared.session.active_session_id;
         let name_of = |app: &App, id| {
-            app.manifests
+            app.shared.session.manifests
                 .get(id)
                 .and_then(|m| m.display_name.clone())
         };
@@ -564,7 +563,7 @@ mod tests {
         app.commit_rename();
         assert!(app.view.renaming.is_none());
         assert_eq!(name_of(&app, id).as_deref(), Some("Wor"));
-        assert_eq!(app.session_labels.get(&id).map(String::as_str), Some("Wor"));
+        assert_eq!(app.shared.session.session_labels.get(&id).map(String::as_str), Some("Wor"));
 
         // Emptying the buffer clears the display name (the label reverts to derived).
         app.start_rename(id);
@@ -681,14 +680,14 @@ mod tests {
         assert!(step.result.applied);
         let focused = app.focused_member().expect("welcome is focused");
         assert!(
-            app.constellation.is_background(focused),
+            app.shared.content.constellation.is_background(focused),
             "pin marks the focused operation as background"
         );
 
         let step = app.apply_agent_action(AgentAction::StopFocusedOperation);
         assert!(step.result.applied);
         assert!(
-            !app.constellation.is_active(focused),
+            !app.shared.content.constellation.is_active(focused),
             "stop reaps the focused operation"
         );
     }

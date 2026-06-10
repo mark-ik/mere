@@ -377,96 +377,128 @@ enum A11yHostAction {
 /// The meerkat shell application: the shared chrome DOM, the runner that diffs
 /// the chrome view tree into it, the orrery content-root, the window + GPU, and
 /// input bookkeeping.
-struct App {
-    /// The content root: the [`Orrery`] — the graph's spatial presentation,
-    /// rendered into the band below the chrome and driven by content-band input.
-    orrery: Orrery,
-    /// The fetch actor's command handle (the kernel commands it over this; its
-    /// outcomes arrive on `inbox.fetch`).
-    fetch_handle: armillary::ActorHandle<fetch::FetchCommand>,
+/// Session + app state shared across every window. A second window is a second
+/// [`WindowView`](window_view::WindowView) over this same `SharedState`. Subdivided
+/// into subsystems so a per-window handler can take a narrow borrow of just the
+/// subsystem it touches — the seam the `ShellCommand` path leans on. Multi-member
+/// groups nest (`content` / `session` / `presentation` / `inbox`); single-member
+/// ones stay flat (`comms_handle` / `sync_handle` / `observability`). (Multi-window
+/// MW2.)
+struct SharedState {
+    /// Active-node pool + the fetched-page cache that feeds it.
+    content: Content,
+    /// The session registry + the active session's identity / paths / switcher caches.
+    session: Session,
+    /// Theming + the persisted chrome settings every window's chrome renders from.
+    presentation: Presentation,
+    /// The comms actor's command handle (P6c). The actor owns the live `Comms`
+    /// (misfin + murm adapters) on its own tokio runtime; conversation lists +
+    /// threads arrive on `inbox.comms`, and load / send verbs are `CommsCommand`s.
+    comms_handle: armillary::ActorHandle<comms_host::CommsCommand>,
+    /// The p2p sync actor's command handle (S5.0 / S5.1). The actor owns the
+    /// transport + tessera lane on its own tokio runtime; status arrives on
+    /// `inbox.sync`, and the "connect to peer" verb is a `SyncCommand`.
+    sync_handle: armillary::ActorHandle<sync::SyncCommand>,
+    /// The kernel inbox: the typed receivers the I/O actors deliver on, behind the
+    /// one winit wake. `user_event` is the single documented place that reads them.
+    inbox: KernelInbox,
+    /// Bounded observation cache backing the Apparatus diagnostics pane.
+    observability: HostObservability,
+}
+
+/// The `content` subsystem: the active-node pool and the page-content cache that
+/// backs it. Shared across windows — one activation lifecycle, one cache.
+struct Content {
     /// The constellation: the pool of active nodes (their content actors). The
     /// focused card (Cartography) and the workbench tiles (Tree) both draw their
     /// scenes from here — one activation lifecycle, not two. Reconciled to the
     /// needed set each frame; backgrounded nodes outlive the view.
     constellation: Constellation,
-    /// The p2p sync actor's command handle (S5.0 / S5.1). The actor owns the
-    /// transport + tessera lane on its own tokio runtime; status arrives on
-    /// `inbox.sync`, and the "connect to peer" verb is a `SyncCommand` sent here.
-    sync_handle: armillary::ActorHandle<sync::SyncCommand>,
-    /// The comms actor's command handle (P6c). The actor owns the live `Comms`
-    /// (misfin + murm adapters) on its own tokio runtime; conversation lists +
-    /// threads arrive on `inbox.comms`, and load / send verbs are `CommsCommand`s
-    /// sent here.
-    comms_handle: armillary::ActorHandle<comms_host::CommsCommand>,
     /// Per-URL fetched content state, keyed by the node's URL (URL identity).
-    content: HashMap<String, fetch::ContentState>,
+    pages: HashMap<String, fetch::ContentState>,
+    /// Durable content cache (S3.2c) under the session dir, persisting fetched
+    /// pages + subresources by URL. `None` if the store could not be opened
+    /// (caching disabled; the shell still runs).
+    store: Option<FjallStore>,
+    /// The fetch actor's command handle (the kernel commands it over this; its
+    /// outcomes arrive on `inbox.fetch`).
+    fetch_handle: armillary::ActorHandle<fetch::FetchCommand>,
+    /// The nematic engine registry, for rendering "last visit" snapshot cards
+    /// host-side from the durable content cache (no actor). (Card #4.)
+    engine_registry: EngineRegistry,
+}
+
+/// The `session` subsystem: the session registry plus the active session's
+/// identity, on-disk paths, and switcher caches.
+struct Session {
+    /// The on-disk session registry, loaded from `<mere_root>/sessions/`. (MG1.)
+    manifests: ManifestStore,
+    /// The session whose graph + frame + views are loaded right now; its dir is
+    /// `session_dir`. (Multi-graph MG1.)
+    active_session_id: SessionId,
     /// The active session's per-session data dir (`<mere_root>/sessions/<id>/`):
     /// holds `graph.json`, `frame.json`, and the `views/` sidecars. (Multi-graph.)
     session_dir: PathBuf,
     /// The shared per-user data root (`<data_dir>/mere`): settings, the content
     /// cache, and comms live here, above the per-session dirs. (Multi-graph MG1.)
     mere_root: PathBuf,
-    /// The on-disk session registry, loaded from `<mere_root>/sessions/`. (MG1.)
-    manifests: ManifestStore,
-    /// The session whose graph + frame + views are loaded into the orrery /
-    /// frame_layout right now; its dir is `session_dir`. (Multi-graph MG1.)
-    active_session_id: SessionId,
     /// Cached switcher thumbnails per session (the F2.3 shellbar switcher rows);
-    /// rebuilt on session/graph change, the active one from the live orrery.
-    /// (Multi-graph MG4.)
+    /// rebuilt on session/graph change, the active one from the live orrery. (MG4.)
     session_thumbnails: HashMap<SessionId, SwitcherThumbnail>,
     /// Cached switcher label per session (display name, else derived from the
     /// graph), refreshed in lockstep with `session_thumbnails`. (Host text path.)
     session_labels: HashMap<SessionId, String>,
-    /// Per-window view state (the part of the shell that belongs to one OS window):
-    /// the per-frame hit-rect caches first, growing as the multi-window carve
-    /// proceeds. (Multi-window plan MW1.)
-    view: window_view::WindowView,
     /// Host text shaping for host-drawn labels (the switcher tile names). Holds the
     /// parley contexts so they aren't rebuilt per frame. (Host text path.)
     host_text: text::HostText,
-    /// Durable content cache (S3.2c) under the session dir, persisting fetched
-    /// pages + subresources by URL. `None` if the store could not be opened
-    /// (caching disabled; the shell still runs).
-    store: Option<FjallStore>,
-    /// System clipboard for the omnibar / palette Ctrl(Cmd)+C/X/V. `None` if the
-    /// platform clipboard could not be opened (the shortcuts then no-op).
-    clipboard: Option<arboard::Clipboard>,
-    /// The nematic engine registry, for rendering "last visit" snapshot cards
-    /// host-side from the durable content cache (no actor) — the same registry the
-    /// content actor builds, kept here for the snapshot path. (Card #4.)
-    engine_registry: EngineRegistry,
+}
+
+/// The `presentation` subsystem: the resolved theme + the persisted chrome
+/// settings every window's chrome renders from.
+struct Presentation {
+    /// The theme registry, kept so the apparatus pane can switch themes at runtime
+    /// (re-resolve → rebuild the chrome sheet + tokens). (Theme switcher.)
+    theme: ThemeRegistry,
+    /// The active theme's chrome tokens — kept beside the baked `chrome_sheet` for
+    /// the host-drawn surfaces the CSS can't reach (the window-control glyphs).
+    chrome_theme: ChromeTheme,
     /// The active theme's chrome CSS (built from a resolved [`ChromeTheme`] at
     /// startup). The render / measure / hit-test paths read it instead of a const,
     /// so a theme switch rebuilds it and the whole shell re-themes. (Theming pass.)
     chrome_sheet: Vec<String>,
-    /// The active theme's chrome tokens — kept beside the baked `chrome_sheet` for
-    /// the host-drawn surfaces the CSS can't reach (the window-control glyphs).
-    chrome_theme: ChromeTheme,
-    /// The theme registry, kept so the apparatus pane can switch themes at
-    /// runtime (re-resolve → rebuild the chrome sheet + tokens). (Theme switcher.)
-    theme: ThemeRegistry,
     /// The active theme's id (e.g. `theme:dark`), persisted in settings.
     active_theme_id: String,
-    /// Bounded observation cache backing the Apparatus diagnostics pane.
-    observability: HostObservability,
-    /// Platform AccessKit bridge fed by the same host-local uxtree snapshot as
-    /// Apparatus. Unsupported platforms keep this as an explicit degraded bridge.
-    a11y_bridge: a11y_bridge::AccessKitBridge,
-    /// Host-owned routes for actionable AccessKit nodes in the current snapshot.
-    /// The bridge only queues raw AccessKit requests; the kernel thread resolves
-    /// ids through this table and applies semantic host actions.
-    a11y_action_routes: HashMap<AccessNodeId, A11yHostAction>,
     /// The active-tab cap last written to the settings sidecar. Guards the persist
     /// path so an unchanged value isn't re-written on every chrome click.
     saved_tab_cap: usize,
     /// Which window edge the shellbar is docked to. Persisted in settings.json.
     shellbar_edge: session_runtime::ShellbarEdge,
-    /// The kernel inbox: the typed receivers the I/O actors deliver on, behind the
-    /// one winit wake. `user_event` is the single documented place that reads them.
-    inbox: KernelInbox,
-    /// Portable diagnostics emitted through `register_diagnostics::emit`.
-    diagnostics_rx: Receiver<DiagnosticEvent>,
+}
+
+struct App {
+    /// Session + app state shared across every window. (Multi-window MW2.)
+    shared: SharedState,
+    /// The content root: the [`Orrery`] — the graph's spatial presentation,
+    /// rendered into the band below the chrome and driven by content-band input.
+    /// Stays on `App` (the MW6 IOU: a leaf window holds no orrery; the primary's
+    /// camera moves into `WindowKind::Primary` only when MW6 splits it).
+    orrery: Orrery,
+    /// Per-window view state (the part of the shell that belongs to one OS window).
+    /// (Multi-window MW1; becomes `windows: HashMap<WindowId, WindowView>` at MW2 (d).)
+    view: window_view::WindowView,
+    /// System clipboard for the omnibar / palette Ctrl(Cmd)+C/X/V. `None` if the
+    /// platform clipboard could not be opened (the shortcuts then no-op). System-
+    /// global, so it stays on `App`, not in `SharedState`.
+    clipboard: Option<arboard::Clipboard>,
+    /// Platform AccessKit bridge fed by the same host-local uxtree snapshot as
+    /// Apparatus. Unsupported platforms keep this as an explicit degraded bridge.
+    /// Per-window by construction (installs against one window); stays on `App`
+    /// pending the per-window move MW3 forces.
+    a11y_bridge: a11y_bridge::AccessKitBridge,
+    /// Host-owned routes for actionable AccessKit nodes in the current snapshot.
+    /// The bridge only queues raw AccessKit requests; the kernel thread resolves
+    /// ids through this table and applies semantic host actions.
+    a11y_action_routes: HashMap<AccessNodeId, A11yHostAction>,
     /// Marks this struct as the kernel-thread context: `!Send` by construction
     /// (armillary's typed boundary), so kernel authority cannot be moved onto an
     /// actor thread — the attempt is a compile error, not a review catch.
@@ -512,6 +544,8 @@ struct KernelInbox {
     fetch: Receiver<fetch::FetchUpdate>,
     sync: Receiver<sync::SyncUpdate>,
     comms: Receiver<comms_host::CommsUpdate>,
+    /// Portable diagnostics emitted through `register_diagnostics::emit`.
+    diagnostics: Receiver<DiagnosticEvent>,
 }
 
 impl App {
@@ -725,45 +759,54 @@ impl App {
         view.frame_layout = frame_layout;
         view.next_pane_id = next_pane_id;
         let mut app = Self {
+            shared: SharedState {
+                content: Content {
+                    constellation,
+                    pages: HashMap::new(),
+                    store,
+                    fetch_handle,
+                    engine_registry,
+                },
+                session: Session {
+                    manifests,
+                    active_session_id,
+                    session_dir,
+                    mere_root,
+                    session_thumbnails: HashMap::new(),
+                    session_labels: HashMap::new(),
+                    host_text: text::HostText::new(),
+                },
+                presentation: Presentation {
+                    theme,
+                    chrome_theme,
+                    chrome_sheet,
+                    active_theme_id,
+                    saved_tab_cap: saved_settings.tab_cap,
+                    shellbar_edge: saved_settings.shellbar_edge,
+                },
+                comms_handle,
+                sync_handle,
+                inbox: KernelInbox {
+                    fetch: fetch_rx,
+                    sync: sync_rx,
+                    comms: comms_rx,
+                    diagnostics: diagnostics_rx,
+                },
+                observability: HostObservability::new(),
+            },
             orrery,
-            fetch_handle,
-            constellation,
-            sync_handle,
-            comms_handle,
-            content: HashMap::new(),
-            session_dir,
-            mere_root,
-            manifests,
-            active_session_id,
-            session_thumbnails: HashMap::new(),
-            session_labels: HashMap::new(),
             view,
-            host_text: text::HostText::new(),
-            store,
             clipboard: arboard::Clipboard::new().ok(),
-            engine_registry,
-            chrome_sheet,
-            chrome_theme,
-            theme,
-            active_theme_id,
-            observability: HostObservability::new(),
             a11y_bridge: a11y_bridge::AccessKitBridge::new(move || {
                 let _ = a11y_proxy.send_event(());
             }),
             a11y_action_routes: HashMap::new(),
-            saved_tab_cap: saved_settings.tab_cap,
-            shellbar_edge: saved_settings.shellbar_edge,
-            inbox: KernelInbox {
-                fetch: fetch_rx,
-                sync: sync_rx,
-                comms: comms_rx,
-            },
-            diagnostics_rx,
             _kernel: armillary::KernelThread::new(),
         };
         let pane_count = app.view.frame_layout.iter_leaves().count();
-        app.observability
-            .record_startup(&app.active_theme_id, pane_count);
+        app.shared
+            .observability
+            .record_startup(&app.shared.presentation.active_theme_id, pane_count);
         app.refresh_session_thumbnails();
         app.refresh_a11y_summary();
         app
@@ -779,7 +822,7 @@ impl App {
     /// The active theme's chrome CSS as `&[&str]`, the shape the serval layout /
     /// paint / hit-test entry points take. Borrows the baked `chrome_sheet`.
     fn chrome_sheet_refs(&self) -> Vec<&str> {
-        self.chrome_sheet.iter().map(String::as_str).collect()
+        self.shared.presentation.chrome_sheet.iter().map(String::as_str).collect()
     }
 }
 

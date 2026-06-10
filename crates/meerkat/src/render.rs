@@ -84,7 +84,7 @@ impl App {
             apparatus: self.pane_of_content(&PaneContent::Apparatus).is_some(),
             comms: self.pane_of_content(&PaneContent::Comms).is_some(),
         };
-        let sb_edge = self.shellbar_edge;
+        let sb_edge = self.shared.presentation.shellbar_edge;
         if self.view.runner.state().shellbar_panes != sb_panes
             || self.view.runner.state().shellbar_edge != sb_edge
         {
@@ -98,7 +98,7 @@ impl App {
         // The shellbar strip is carved out of the band first; the frame tree fills
         // the remainder. (Shellbar F2.1.)
         let band = shellbar::band_after_shellbar(
-            self.shellbar_edge,
+            self.shared.presentation.shellbar_edge,
             w as f32,
             h as f32,
             toolbar_h as f32,
@@ -155,8 +155,8 @@ impl App {
         // follows the edge so buttons stack vertically (Left/Right) or
         // horizontally (Top/Bottom). (Shellbar F2.1.)
         {
-            let sr = shellbar::shellbar_rect(self.shellbar_edge, w as f32, h as f32, toolbar_h as f32);
-            let flex_dir = match self.shellbar_edge {
+            let sr = shellbar::shellbar_rect(self.shared.presentation.shellbar_edge, w as f32, h as f32, toolbar_h as f32);
+            let flex_dir = match self.shared.presentation.shellbar_edge {
                 session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right => {
                     "column"
                 }
@@ -231,8 +231,8 @@ impl App {
                 &self.view.workbench,
                 self.orrery.graph(),
                 (ww as f32, wh as f32),
-                |m| self.constellation.is_background(m),
-                |m| self.constellation.is_recovering(m),
+                |m| self.shared.content.constellation.is_background(m),
+                |m| self.shared.content.constellation.is_recovering(m),
             );
             scene.drag_target = self.drag_target_member();
             if self.view.workbench_runner.state() != &scene {
@@ -253,7 +253,7 @@ impl App {
         // (Tree) or the focused node (Cartography). Needed-but-dormant nodes spawn
         // an actor; active nodes no longer shown are reaped, unless backgrounded.
         let needed = self.needed_members();
-        self.constellation.reconcile(&needed);
+        self.shared.content.constellation.reconcile(&needed);
 
         // Content cards floating over the band: one per laid-out tile in Tree, the
         // focused-node card at `card_rect` in Cartography. Each entry is
@@ -331,8 +331,8 @@ impl App {
                 self.ensure_content(&url);
                 let cw = (content[2] - content[0]).round().max(1.0) as u32;
                 let ch = (content[3] - content[1]).round().max(1.0) as u32;
-                let state = self.content.get(&url).cloned();
-                self.constellation.drive(member, &url, state, cw, ch);
+                let state = self.shared.content.pages.get(&url).cloned();
+                self.shared.content.constellation.drive(member, &url, state, cw, ch);
                 cards.push((member, content, (cw, ch)));
             }
             self.view.tile_rects = slot_rects;
@@ -376,7 +376,7 @@ impl App {
                             let window = window.clone();
                             let device = host.device().clone();
                             let queue = host.queue().clone();
-                            let session_dir = self.session_dir.clone();
+                            let session_dir = self.shared.session.session_dir.clone();
                             self.view.scrying.drive(
                                 member,
                                 &url,
@@ -395,8 +395,8 @@ impl App {
                         self.request_redraw();
                     } else {
                         self.ensure_content(&url);
-                        let state = self.content.get(&url).cloned();
-                        self.constellation.drive(member, &url, state, cw, ch);
+                        let state = self.shared.content.pages.get(&url).cloned();
+                        self.shared.content.constellation.drive(member, &url, state, cw, ch);
                         cards.push((member, [x0, y0, x1, y1], (cw, ch)));
                         live_card = Some((member, [x0, y0, x1, y1]));
                     }
@@ -432,7 +432,7 @@ impl App {
                         Some(super::card::render_content_scene(
                             &url,
                             state.as_ref(),
-                            &self.engine_registry,
+                            &self.shared.content.engine_registry,
                             &loader,
                             RENDER_W,
                             RENDER_H,
@@ -532,9 +532,8 @@ impl App {
         for (member, dest, (cw, ch)) in &cards {
             // A live tile/preview bumps scene_version each scene; a static snapshot
             // has version 0, so its texture rasterizes once and then stays cached.
-            let version = self.constellation.scene_version(*member);
-            let tex_h = self
-                .constellation
+            let version = self.shared.content.constellation.scene_version(*member);
+            let tex_h = self.shared.content.constellation
                 .content_height(*member)
                 .max(*ch)
                 .min(MAX_CARD_TEX_H);
@@ -544,7 +543,7 @@ impl App {
                 .get(member)
                 .is_some_and(|c| c.version == version && c.size == (*cw, tex_h));
             if !fresh {
-                if let Some(scene) = self.constellation.scene(*member) {
+                if let Some(scene) = self.shared.content.constellation.scene(*member) {
                     let (tex, view) = host.rasterize(scene, *cw, tex_h, ColorLoad::Clear(CARD_BG));
                     self.view.tile_textures.insert(
                         *member,
@@ -783,7 +782,7 @@ impl App {
             let rh = (rrect[3] - rrect[1]).round().max(1.0) as u32;
             let rows = self.roster_rows();
             let dom = super::roster::build_roster_dom(&rows);
-            let sheet_strings = super::roster::roster_sheet(&self.chrome_theme);
+            let sheet_strings = super::roster::roster_sheet(&self.shared.presentation.chrome_theme);
             let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
             let root = dom.document();
             let frags = fragments_from_scripted_dom(&dom, &sheet, rw, rh);
@@ -803,7 +802,7 @@ impl App {
                 })
                 .unwrap_or(0.0);
             let scene = scene_from_scripted_dom(&dom, &sheet, rw, rh, None, &roster_scrolls);
-            let pb = self.chrome_theme.panel_bg.to_array();
+            let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
                 g: pb[1] as f64 / 255.0,
@@ -853,11 +852,11 @@ impl App {
                 .as_ref()
                 .expect("apparatus data was prepared when the pane was open");
             let dom = super::apparatus::build_apparatus_dom(&themes, &system_rows, &observability);
-            let sheet_strings = super::apparatus::apparatus_sheet(&self.chrome_theme);
+            let sheet_strings = super::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
             let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
             let app_scroll = ScrollOffsets::<NodeId>::default();
             let scene = scene_from_scripted_dom(&dom, &sheet, aw, ah, None, &app_scroll);
-            let pb = self.chrome_theme.panel_bg.to_array();
+            let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
                 g: pb[1] as f64 / 255.0,
@@ -899,11 +898,11 @@ impl App {
             let ph = (rect[3] - rect[1]).round().max(1.0) as u32;
             let rows = self.utility_pane_rows(&leaf.content);
             let dom = super::utility_panes::build_utility_pane_dom(&leaf.content, &rows);
-            let sheet_strings = super::utility_panes::utility_pane_sheet(&self.chrome_theme);
+            let sheet_strings = super::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
             let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
             let pane_scroll = ScrollOffsets::<NodeId>::default();
             let scene = scene_from_scripted_dom(&dom, &sheet, pw, ph, None, &pane_scroll);
-            let pb = self.chrome_theme.panel_bg.to_array();
+            let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
                 g: pb[1] as f64 / 255.0,
@@ -928,8 +927,8 @@ impl App {
             let gh = (grect[3] - grect[1]).round().max(1.0) as u32;
             let (nodes, edges) = self.orrery.minimap_geometry();
             let (scene, local) =
-                super::gloss::minimap_scene(&nodes, &edges, gw, gh, &self.chrome_theme);
-            let pb = self.chrome_theme.panel_bg.to_array();
+                super::gloss::minimap_scene(&nodes, &edges, gw, gh, &self.shared.presentation.chrome_theme);
+            let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
                 g: pb[1] as f64 / 255.0,
@@ -971,7 +970,7 @@ impl App {
         let band_h = toolbar_h.max(1);
         let strip_w = super::titlebar::CONTROLS_W.round().max(1.0) as u32;
         if self.view.window_controls_tex.as_ref().map(|c| c.size) != Some((strip_w, band_h)) {
-            let scene = super::titlebar::controls_scene(band_h, &self.chrome_theme);
+            let scene = super::titlebar::controls_scene(band_h, &self.shared.presentation.chrome_theme);
             let (tex, view) = host.rasterize(
                 &scene,
                 strip_w,
@@ -1005,21 +1004,21 @@ impl App {
         self.view.session_close_rects.clear();
         self.view.session_add_rect = None;
         if matches!(
-            self.shellbar_edge,
+            self.shared.presentation.shellbar_edge,
             session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right
-        ) && !self.session_thumbnails.is_empty()
+        ) && !self.shared.session.session_thumbnails.is_empty()
         {
             let strip =
-                shellbar::shellbar_rect(self.shellbar_edge, w as f32, h as f32, toolbar_h as f32);
+                shellbar::shellbar_rect(self.shared.presentation.shellbar_edge, w as f32, h as f32, toolbar_h as f32);
             // Order tiles by session id, matching `cycle_session`'s row order.
-            let mut ids: Vec<SessionId> = self.session_thumbnails.keys().copied().collect();
+            let mut ids: Vec<SessionId> = self.shared.session.session_thumbnails.keys().copied().collect();
             ids.sort_by_key(|id| *id.as_uuid());
             let entries: Vec<(SessionId, &SwitcherThumbnail, &str, bool)> = ids
                 .iter()
                 .filter_map(|id| {
-                    let thumb = self.session_thumbnails.get(id)?;
-                    let label = self.session_labels.get(id).map(String::as_str).unwrap_or("");
-                    Some((*id, thumb, label, *id == self.active_session_id))
+                    let thumb = self.shared.session.session_thumbnails.get(id)?;
+                    let label = self.shared.session.session_labels.get(id).map(String::as_str).unwrap_or("");
+                    Some((*id, thumb, label, *id == self.shared.session.active_session_id))
                 })
                 .collect();
             let region_w = (strip[2] - strip[0]).round().max(1.0) as u32;
@@ -1032,9 +1031,9 @@ impl App {
                 &entries,
                 region_w,
                 region_h,
-                &self.chrome_theme,
+                &self.shared.presentation.chrome_theme,
                 renaming,
-                &mut self.host_text,
+                &mut self.shared.session.host_text,
             );
             let (_t, view) = host.rasterize(
                 &scene,

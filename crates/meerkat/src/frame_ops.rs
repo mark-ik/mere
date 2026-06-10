@@ -202,7 +202,7 @@ impl App {
     /// Best-effort: a write failure is logged, not fatal. Called after each
     /// navigation and on window close.
     pub(super) fn save_session(&mut self) {
-        let graph_file = self.session_dir.join(session_graph_store::GRAPH_FILE);
+        let graph_file = self.shared.session.session_dir.join(session_graph_store::GRAPH_FILE);
         if let Err(err) = session_graph_store::save(&graph_file, self.orrery.graph()) {
             tracing::warn!(%err, path = ?graph_file, "failed to persist the session graph");
         }
@@ -212,26 +212,26 @@ impl App {
             ..Default::default()
         };
         if let Err(err) = view_intent_store::save_view_intent(
-            &self.session_dir,
+            &self.shared.session.session_dir,
             DEFAULT_FRAME,
             DEFAULT_PANE,
             &intent,
         ) {
-            tracing::warn!(%err, dir = ?self.session_dir, "failed to persist the view intent");
+            tracing::warn!(%err, dir = ?self.shared.session.session_dir, "failed to persist the view intent");
         }
         // The content frame's pane layout (which panes are open + split ratios) is
         // **window-scoped** (Model B, MG5): it persists at the shared root and stays
         // put across session switches, so a graph swap re-sources the panes without
         // rearranging them.
-        if let Err(err) = frame_layout_store::save_frame_layout(&self.mere_root, &self.view.frame_layout)
+        if let Err(err) = frame_layout_store::save_frame_layout(&self.shared.session.mere_root, &self.view.frame_layout)
         {
-            tracing::warn!(%err, dir = ?self.mere_root, "failed to persist the frame layout");
+            tracing::warn!(%err, dir = ?self.shared.session.mere_root, "failed to persist the frame layout");
         }
         // Record the save in the active session's manifest (advances `updated_at`,
         // the switcher's recency key) and flush the registry. (Multi-graph MG1.)
-        let active = self.active_session_id;
-        self.manifests.update(active, |_| {});
-        if let Err(err) = self.manifests.flush_dirty() {
+        let active = self.shared.session.active_session_id;
+        self.shared.session.manifests.update(active, |_| {});
+        if let Err(err) = self.shared.session.manifests.flush_dirty() {
             tracing::warn!(%err, "failed to flush the session registry");
         }
         // Keep the active session's switcher thumbnail live as its graph grows
@@ -242,7 +242,7 @@ impl App {
             ..SwitcherThumbnailOptions::default()
         };
         let thumb = build_switcher_thumbnail(self.orrery.graph(), opts);
-        self.session_thumbnails.insert(self.active_session_id, thumb);
+        self.shared.session.session_thumbnails.insert(self.shared.session.active_session_id, thumb);
     }
 
     /// Mint a fresh, empty session and make it active (persisting the current one
@@ -251,15 +251,14 @@ impl App {
     pub(super) fn create_session(&mut self) -> SessionId {
         self.save_session();
         let session_id = SessionId::new();
-        let session_dir = self
-            .mere_root
+        let session_dir = self.shared.session.mere_root
             .join("sessions")
             .join(session_id.as_uuid().to_string());
         let _ = std::fs::create_dir_all(&session_dir);
         let mut manifest = GraphSessionManifest::new(session_id, GraphId::new());
         manifest.storage_path = Some(session_dir.clone());
-        self.manifests.insert(manifest);
-        let _ = self.manifests.flush_dirty();
+        self.shared.session.manifests.insert(manifest);
+        let _ = self.shared.session.manifests.flush_dirty();
         self.load_active_session(session_id, session_dir, true);
         session_id
     }
@@ -268,12 +267,11 @@ impl App {
     /// the target's graph + camera + frame. A no-op if `target` is already active
     /// or unknown to the registry. (Multi-graph MG2 — the Model-A switch.)
     pub(super) fn switch_session(&mut self, target: SessionId) {
-        if target == self.active_session_id || self.manifests.get(target).is_none() {
+        if target == self.shared.session.active_session_id || self.shared.session.manifests.get(target).is_none() {
             return;
         }
         self.save_session();
-        let session_dir = self
-            .mere_root
+        let session_dir = self.shared.session.mere_root
             .join("sessions")
             .join(target.as_uuid().to_string());
         let _ = std::fs::create_dir_all(&session_dir);
@@ -284,12 +282,12 @@ impl App {
     /// The interim keyboard affordance (Ctrl+PageDown / Ctrl+PageUp) until the
     /// F2.3 shellbar switcher lands. No-op with fewer than two sessions. (MG2.)
     pub(super) fn cycle_session(&mut self, forward: bool) {
-        let mut ids: Vec<SessionId> = self.manifests.iter().map(|(id, _)| id).collect();
+        let mut ids: Vec<SessionId> = self.shared.session.manifests.iter().map(|(id, _)| id).collect();
         if ids.len() < 2 {
             return;
         }
         ids.sort_by_key(|id| *id.as_uuid());
-        let Some(pos) = ids.iter().position(|id| *id == self.active_session_id) else {
+        let Some(pos) = ids.iter().position(|id| *id == self.shared.session.active_session_id) else {
             return;
         };
         let next = if forward {
@@ -304,12 +302,11 @@ impl App {
     /// the active session, switches to the most-recently-updated survivor first.
     /// The on-disk dir moves to `.trash/` (recoverable). (Multi-graph MG3.)
     pub(super) fn close_session(&mut self, target: SessionId) {
-        if self.manifests.len() <= 1 || self.manifests.get(target).is_none() {
+        if self.shared.session.manifests.len() <= 1 || self.shared.session.manifests.get(target).is_none() {
             return;
         }
-        if target == self.active_session_id {
-            let survivor = self
-                .manifests
+        if target == self.shared.session.active_session_id {
+            let survivor = self.shared.session.manifests
                 .iter()
                 .filter(|(id, _)| *id != target)
                 .max_by_key(|(_, m)| m.updated_at)
@@ -318,7 +315,7 @@ impl App {
                 self.switch_session(next);
             }
         }
-        if let Err(err) = self.manifests.move_to_trash(target) {
+        if let Err(err) = self.shared.session.manifests.move_to_trash(target) {
             tracing::warn!(%err, "failed to trash the closed session");
         }
         self.view.renaming = None;
@@ -329,10 +326,10 @@ impl App {
     /// Begin renaming `id`: seed the switcher edit buffer from its current label, so
     /// editing starts from the shown name (display or derived). (Host text path.)
     pub(super) fn start_rename(&mut self, id: SessionId) {
-        if self.manifests.get(id).is_none() {
+        if self.shared.session.manifests.get(id).is_none() {
             return;
         }
-        let seed = self.session_labels.get(&id).cloned().unwrap_or_default();
+        let seed = self.shared.session.session_labels.get(&id).cloned().unwrap_or_default();
         self.view.renaming = Some((id, seed));
         self.request_redraw();
     }
@@ -346,8 +343,8 @@ impl App {
         };
         let trimmed = name.trim().to_string();
         let display = (!trimmed.is_empty()).then_some(trimmed);
-        self.manifests.update(id, |m| m.display_name = display);
-        if let Err(err) = self.manifests.flush_dirty() {
+        self.shared.session.manifests.update(id, |m| m.display_name = display);
+        if let Err(err) = self.shared.session.manifests.flush_dirty() {
             tracing::warn!(%err, "failed to flush the renamed session manifest");
         }
         self.refresh_session_thumbnails();
@@ -390,24 +387,22 @@ impl App {
             height: SWITCHER_THUMB_H,
             ..SwitcherThumbnailOptions::default()
         };
-        let ids: Vec<SessionId> = self.manifests.iter().map(|(id, _)| id).collect();
+        let ids: Vec<SessionId> = self.shared.session.manifests.iter().map(|(id, _)| id).collect();
         let live: std::collections::HashSet<SessionId> = ids.iter().copied().collect();
-        self.session_thumbnails.retain(|id, _| live.contains(id));
-        self.session_labels.retain(|id, _| live.contains(id));
+        self.shared.session.session_thumbnails.retain(|id, _| live.contains(id));
+        self.shared.session.session_labels.retain(|id, _| live.contains(id));
         for id in ids {
             // A user-set display name wins; otherwise derive a short label.
-            let display_name = self
-                .manifests
+            let display_name = self.shared.session.manifests
                 .get(id)
                 .and_then(|m| m.display_name.clone())
                 .filter(|n| !n.trim().is_empty());
-            let (thumb, label) = if id == self.active_session_id {
+            let (thumb, label) = if id == self.shared.session.active_session_id {
                 let g = self.orrery.graph();
                 let label = display_name.unwrap_or_else(|| derive_session_label(g));
                 (build_switcher_thumbnail(g, opts), label)
             } else {
-                let dir = self
-                    .mere_root
+                let dir = self.shared.session.mere_root
                     .join("sessions")
                     .join(id.as_uuid().to_string());
                 let graph = session_graph_store::load(&dir.join(session_graph_store::GRAPH_FILE))
@@ -417,8 +412,8 @@ impl App {
                 let label = display_name.unwrap_or_else(|| derive_session_label(&graph));
                 (build_switcher_thumbnail(&graph, opts), label)
             };
-            self.session_thumbnails.insert(id, thumb);
-            self.session_labels.insert(id, label);
+            self.shared.session.session_thumbnails.insert(id, thumb);
+            self.shared.session.session_labels.insert(id, label);
         }
     }
 
@@ -465,18 +460,17 @@ impl App {
         // orrery, so the actual content follows from `set_graph` above; this keeps the
         // persisted leaf `graph_id` tags consistent (and is what far-B will resolve
         // per leaf). `next_pane_id` is window-scoped too, so it is not reset.
-        let target_graph = self
-            .manifests
+        let target_graph = self.shared.session.manifests
             .get(id)
             .map(|m| m.root_graph_id)
             .unwrap_or_default();
         self.view.frame_layout.retag_graph_bound(target_graph);
         // Reset the prior session's runtime caches.
-        self.constellation.clear();
+        self.shared.content.constellation.clear();
         self.view.scrying.clear();
         self.view.scrying_input_focus = None;
         self.view.scrying_rect = None;
-        self.content.clear();
+        self.shared.content.pages.clear();
         self.view.live_previews.clear();
         self.view.tile_textures.clear();
         self.view.snapshot_textures.clear();
@@ -488,8 +482,8 @@ impl App {
         self.view.maximized_pane = None;
         self.view.active_content = super::ContentPane::Orrery;
         // Swap identity; the omnibar nav target follows the new orrery focus.
-        self.session_dir = session_dir;
-        self.active_session_id = id;
+        self.shared.session.session_dir = session_dir;
+        self.shared.session.active_session_id = id;
         self.view.content_location = self
             .orrery
             .focused_url()
@@ -504,21 +498,21 @@ impl App {
     /// shown without re-fetching (so a reload need not hit the network), and a
     /// miss marks it `Loading` and spawns a fetch.
     pub(super) fn ensure_content(&mut self, url: &str) {
-        if !fetch::is_fetchable(url) || self.content.contains_key(url) {
+        if !fetch::is_fetchable(url) || self.shared.content.pages.contains_key(url) {
             return;
         }
         if let Some(stored) = self.load_cached(url) {
-            self.content.insert(
+            self.shared.content.pages.insert(
                 url.to_string(),
                 fetch::ContentState::Ready(super::fetched_from(stored)),
             );
             return;
         }
-        self.content
+        self.shared.content.pages
             .insert(url.to_string(), fetch::ContentState::Loading);
-        self.observability
+        self.shared.observability
             .record_actor("fetch", "started", Some(url.to_string()));
-        self.fetch_handle
+        self.shared.content.fetch_handle
             .command(fetch::FetchCommand::Page(url.to_string()));
     }
 
@@ -571,7 +565,7 @@ impl App {
                 .orrery
                 .connected_members(focus)
                 .into_iter()
-                .filter(|m| *m == focus || self.constellation.is_active(*m))
+                .filter(|m| *m == focus || self.shared.content.constellation.is_active(*m))
                 .collect(),
             None => Vec::new(),
         }
@@ -610,7 +604,7 @@ impl App {
     /// Open the shellbar move menu at `(x, y)` — four entries, one per edge,
     /// with the current edge marked. (Shellbar F2.2.)
     pub(super) fn open_shellbar_menu_at(&mut self, x: f32, y: f32) {
-        let current = self.shellbar_edge;
+        let current = self.shared.presentation.shellbar_edge;
         let items: Vec<ContextItem> = [
             (ShellbarEdge::Left, "Move shellbar to left"),
             (ShellbarEdge::Right, "Move shellbar to right"),
@@ -642,7 +636,7 @@ impl App {
         // Shellbar move: redock the strip to the chosen edge and persist. No
         // member set involved — return before the orrery-tile logic below.
         if let ContextAction::ShellbarMove(edge) = action {
-            self.shellbar_edge = edge;
+            self.shared.presentation.shellbar_edge = edge;
             self.view.centered = false; // orrery band changed; recenter once
             self.view.toolbar_h = 0;   // re-measure (band height may change if Top/Bottom)
             self.persist_settings();
@@ -678,7 +672,7 @@ impl App {
     pub(super) fn delete_focused_node(&mut self) {
         if let Some(member) = self.orrery.remove_focused() {
             self.view.live_previews.remove(&member);
-            self.constellation.reap(member);
+            self.shared.content.constellation.reap(member);
             self.save_session();
             self.request_redraw();
         }
@@ -692,8 +686,8 @@ impl App {
         let Some(member) = self.focused_member() else {
             return;
         };
-        let next = !self.constellation.is_background(member);
-        if self.constellation.set_background(member, next) {
+        let next = !self.shared.content.constellation.is_background(member);
+        if self.shared.content.constellation.set_background(member, next) {
             tracing::info!(%member, background = next, "toggled node background");
             self.request_redraw();
         }
@@ -712,7 +706,7 @@ impl App {
         let on = self.view.scrying.toggle_compat(member);
         if on {
             self.view.live_previews.insert(member);
-            self.constellation.reap(member);
+            self.shared.content.constellation.reap(member);
         } else if self.view.scrying_input_focus == Some(member) {
             self.view.scrying_input_focus = None; // unpinned the tile that held the keyboard
         }
@@ -724,7 +718,7 @@ impl App {
     /// the durable cache so Steward can ask the live fetch actor to try again.
     pub(super) fn retry_focused_content(&mut self) {
         let Some(url) = self.current_focus_url() else {
-            self.observability.record_diagnostic(
+            self.shared.observability.record_diagnostic(
                 "meerkat.agent.intent_dropped",
                 super::observability::Severity::Warn,
                 "retry focused content: no focused node",
@@ -732,18 +726,18 @@ impl App {
             return;
         };
         if !fetch::is_fetchable(&url) {
-            self.observability.record_diagnostic(
+            self.shared.observability.record_diagnostic(
                 "meerkat.agent.intent_dropped",
                 super::observability::Severity::Warn,
                 format!("retry focused content: not fetchable: {url}"),
             );
             return;
         }
-        self.content
+        self.shared.content.pages
             .insert(url.clone(), fetch::ContentState::Loading);
-        self.observability
+        self.shared.observability
             .record_actor("fetch", "started", Some(url.clone()));
-        self.fetch_handle.command(fetch::FetchCommand::Page(url));
+        self.shared.content.fetch_handle.command(fetch::FetchCommand::Page(url));
         self.request_redraw();
     }
 
@@ -752,7 +746,7 @@ impl App {
     /// definition, still a needed operation and would otherwise respawn.
     pub(super) fn stop_focused_operation(&mut self) {
         let Some(member) = self.focused_member() else {
-            self.observability.record_diagnostic(
+            self.shared.observability.record_diagnostic(
                 "meerkat.agent.intent_dropped",
                 super::observability::Severity::Warn,
                 "stop focused operation: no focused node",
@@ -768,8 +762,8 @@ impl App {
             }
         }
         self.view.live_previews.remove(&member);
-        self.constellation.reap(member);
-        self.observability
+        self.shared.content.constellation.reap(member);
+        self.shared.observability
             .record_actor("content", "stopped", Some(member.to_string()));
         self.request_redraw();
     }
@@ -778,7 +772,7 @@ impl App {
     /// promote it to a live preview first so the actor exists to pin.
     pub(super) fn pin_focused_operation(&mut self) {
         let Some(member) = self.focused_member() else {
-            self.observability.record_diagnostic(
+            self.shared.observability.record_diagnostic(
                 "meerkat.agent.intent_dropped",
                 super::observability::Severity::Warn,
                 "pin focused operation: no focused node",
@@ -790,9 +784,9 @@ impl App {
         }
         self.view.live_previews.insert(member);
         let needed = self.needed_members();
-        self.constellation.reconcile(&needed);
-        if self.constellation.set_background(member, true) {
-            self.observability
+        self.shared.content.constellation.reconcile(&needed);
+        if self.shared.content.constellation.set_background(member, true) {
+            self.shared.observability
                 .record_actor("content", "pinned", Some(member.to_string()));
         }
         self.request_redraw();
@@ -826,7 +820,7 @@ impl App {
             return;
         };
         if self.view.live_previews.remove(&member) {
-            self.constellation.reap(member); // demote: actor down, scene -> snapshot
+            self.shared.content.constellation.reap(member); // demote: actor down, scene -> snapshot
         } else {
             self.view.live_previews.insert(member);
         }
@@ -842,9 +836,9 @@ impl App {
             .graph()
             .nodes()
             .map(|(_key, node)| {
-                let state = match self.content.get(node.url()) {
+                let state = match self.shared.content.pages.get(node.url()) {
                     Some(fetch::ContentState::Ready(_)) => {
-                        if self.constellation.is_active(node.id) {
+                        if self.shared.content.constellation.is_active(node.id) {
                             NodeState::Open
                         } else {
                             NodeState::Closed
@@ -866,7 +860,7 @@ impl App {
         self.orrery
             .graph()
             .nodes()
-            .filter_map(|(_key, node)| match self.content.get(node.url()) {
+            .filter_map(|(_key, node)| match self.shared.content.pages.get(node.url()) {
                 Some(fetch::ContentState::Ready(fetched)) => {
                     Some((node.id, content_shape(fetched.content_type.as_deref())))
                 }
@@ -888,7 +882,7 @@ impl App {
     /// Load durably-cached content for `url` (page or subresource), or `None`.
     /// The fjall store's futures are ready, so `block_on` does not stall the UI.
     pub(super) fn load_cached(&mut self, url: &str) -> Option<content_store::StoredContent> {
-        let store = self.store.as_mut()?;
+        let store = self.shared.content.store.as_mut()?;
         pollster::block_on(content_store::load_content(store, url))
             .ok()
             .flatten()
@@ -897,7 +891,7 @@ impl App {
     /// Persist `body` (+ its content-type) for `url` to the durable content cache,
     /// so a reload need not re-fetch it. Best-effort; a write failure is logged.
     pub(super) fn save_cached(&mut self, url: &str, content_type: Option<String>, body: &[u8]) {
-        let Some(store) = self.store.as_mut() else {
+        let Some(store) = self.shared.content.store.as_mut() else {
             return;
         };
         let stored = content_store::StoredContent {
@@ -924,7 +918,7 @@ impl App {
             }
             WorkbenchAction::Close(member) => {
                 self.view.workbench.close_tile(member);
-                self.constellation.reap(member);
+                self.shared.content.constellation.reap(member);
                 if self.view.workbench.open_members().is_empty() {
                     // Closing the last tile closes the workbench pane entirely (back
                     // to just the orrery), rather than leaving an empty pane.
@@ -935,8 +929,8 @@ impl App {
                 }
             }
             WorkbenchAction::TogglePin(member) => {
-                let pinned = self.constellation.is_background(member);
-                self.constellation.set_background(member, !pinned);
+                let pinned = self.shared.content.constellation.is_background(member);
+                self.shared.content.constellation.set_background(member, !pinned);
             }
         }
         self.request_redraw();
@@ -958,7 +952,7 @@ impl App {
         }
         // Route the verb to the sync actor; it runs the dial on its runtime and logs
         // the outcome (the actor boundary, so no synchronous result here).
-        self.sync_handle.command(sync::SyncCommand::Connect(ticket));
+        self.shared.sync_handle.command(sync::SyncCommand::Connect(ticket));
         self.request_redraw();
     }
 
@@ -1012,22 +1006,22 @@ impl App {
             return;
         };
         self.view.runner.update(|c| c.comms_intent = None);
-        self.observability
+        self.shared.observability
             .record_actor("comms", "started", Some(format!("{intent:?}")));
         match intent {
             CommsIntent::Refresh => {
-                self.comms_handle.command(comms_host::CommsCommand::Refresh);
+                self.shared.comms_handle.command(comms_host::CommsCommand::Refresh);
             }
             CommsIntent::Open(id) => {
-                self.comms_handle
+                self.shared.comms_handle
                     .command(comms_host::CommsCommand::Open(id));
             }
             CommsIntent::Send(draft) => {
-                self.comms_handle
+                self.shared.comms_handle
                     .command(comms_host::CommsCommand::Send(draft));
             }
             CommsIntent::ConnectCabal(ticket) => {
-                self.comms_handle
+                self.shared.comms_handle
                     .command(comms_host::CommsCommand::ConnectCabal(ticket));
             }
         }
@@ -1039,9 +1033,9 @@ impl App {
     /// unrelated chrome click doesn't re-write the file).
     pub(super) fn sync_settings(&mut self) {
         let cap = self.view.runner.state().settings.tab_cap;
-        self.constellation.set_cap(cap);
-        if cap != self.saved_tab_cap {
-            self.saved_tab_cap = cap;
+        self.shared.content.constellation.set_cap(cap);
+        if cap != self.shared.presentation.saved_tab_cap {
+            self.shared.presentation.saved_tab_cap = cap;
             self.persist_settings();
         }
     }
@@ -1050,11 +1044,11 @@ impl App {
     /// failure is logged, not fatal (the shell runs without persistence).
     pub(super) fn persist_settings(&self) {
         let settings = PersistedSettings {
-            tab_cap: self.saved_tab_cap,
-            theme_id: Some(self.active_theme_id.clone()),
-            shellbar_edge: self.shellbar_edge,
+            tab_cap: self.shared.presentation.saved_tab_cap,
+            theme_id: Some(self.shared.presentation.active_theme_id.clone()),
+            shellbar_edge: self.shared.presentation.shellbar_edge,
         };
-        if let Err(err) = settings_store::save_settings(&self.mere_root, &settings) {
+        if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");
         }
     }
@@ -1064,8 +1058,8 @@ impl App {
     /// The active session's root graph id (the `GraphId` graph-bound leaves carry).
     /// Falls back to a fresh id if the active manifest is somehow missing. (MG5.)
     pub(super) fn active_graph_id(&self) -> GraphId {
-        self.manifests
-            .get(self.active_session_id)
+        self.shared.session.manifests
+            .get(self.shared.session.active_session_id)
             .map(|m| m.root_graph_id)
             .unwrap_or_default()
     }
@@ -1147,9 +1141,9 @@ impl App {
                 self.view.frame_layout.set_split_ratio(&anchor, 0.6);
             }
             self.view.maximized_pane = None;
-            self.observability
+            self.shared.observability
                 .record_pane_toggle(&PaneContent::Workbench, true);
-            self.observability
+            self.shared.observability
                 .record_frame_layout_changed("workbench opened");
         }
         self.view.active_content = super::ContentPane::Workbench;
@@ -1159,7 +1153,7 @@ impl App {
     /// pane leaf, and hand focus back to the orrery.
     pub(super) fn close_workbench(&mut self) {
         for member in self.view.workbench.open_members() {
-            self.constellation.reap(member);
+            self.shared.content.constellation.reap(member);
         }
         self.view.workbench.clear_tiles();
         if let Some(id) = self.pane_of_content(&PaneContent::Workbench) {
@@ -1170,9 +1164,9 @@ impl App {
         self.view.focused_tile = None;
         self.view.active_content = super::ContentPane::Orrery;
         self.view.maximized_pane = None;
-        self.observability
+        self.shared.observability
             .record_pane_toggle(&PaneContent::Workbench, false);
-        self.observability
+        self.shared.observability
             .record_frame_layout_changed("workbench closed");
     }
 
@@ -1211,9 +1205,9 @@ impl App {
                     self.view.frame_layout.set_split_ratio(&anchor, 0.66);
                 }
                 self.view.maximized_pane = None;
-                self.observability
+                self.shared.observability
                     .record_pane_toggle(&PaneContent::Comms, true);
-                self.observability
+                self.shared.observability
                     .record_frame_layout_changed("comms opened");
             }
             (false, Some(id)) => {
@@ -1221,9 +1215,9 @@ impl App {
                     self.view.frame_layout.close_leaf(&path);
                 }
                 self.view.maximized_pane = None;
-                self.observability
+                self.shared.observability
                     .record_pane_toggle(&PaneContent::Comms, false);
-                self.observability
+                self.shared.observability
                     .record_frame_layout_changed("comms closed");
             }
             _ => {}
@@ -1310,9 +1304,9 @@ impl App {
             opened = true;
         }
         self.view.maximized_pane = None;
-        self.observability
+        self.shared.observability
             .record_pane_toggle(&recorded_content, opened);
-        self.observability.record_frame_layout_changed(format!(
+        self.shared.observability.record_frame_layout_changed(format!(
             "{} {}",
             recorded_content.tag(),
             if opened { "opened" } else { "closed" }
@@ -1325,18 +1319,18 @@ impl App {
     /// palette, persist the choice, and redraw. (Theme switcher; the orrery's own
     /// palette is themed in A2.)
     pub(super) fn set_theme(&mut self, theme_id: &str) {
-        let resolution = self.theme.set_active_theme(theme_id);
-        self.active_theme_id = resolution.resolved_id;
-        self.chrome_theme = resolution.tokens.chrome;
-        self.chrome_sheet = crate::chrome_sheet(&self.chrome_theme);
+        let resolution = self.shared.presentation.theme.set_active_theme(theme_id);
+        self.shared.presentation.active_theme_id = resolution.resolved_id;
+        self.shared.presentation.chrome_theme = resolution.tokens.chrome;
+        self.shared.presentation.chrome_sheet = crate::chrome_sheet(&self.shared.presentation.chrome_theme);
         // Re-theme the orrery's backdrop + edges to match. (A2.)
         let (backdrop, edge) = crate::orrery_palette(&resolution.tokens);
         self.orrery.set_palette(backdrop, edge);
         self.view.window_controls_tex = None;
         self.view.divider_tex = None;
         self.persist_settings();
-        self.observability
-            .record_theme_activated(&self.active_theme_id);
+        self.shared.observability
+            .record_theme_activated(&self.shared.presentation.active_theme_id);
         self.request_redraw();
     }
 
@@ -1370,9 +1364,9 @@ impl App {
         ]
         .iter()
         .map(|id| {
-            let res = self.theme.resolve_theme(Some(id));
+            let res = self.shared.presentation.theme.resolve_theme(Some(id));
             apparatus::ThemeOption {
-                active: res.resolved_id == self.active_theme_id,
+                active: res.resolved_id == self.shared.presentation.active_theme_id,
                 id: res.resolved_id,
                 name: res.tokens.display_name,
             }
@@ -1389,18 +1383,18 @@ impl App {
             ),
             (
                 "Active actors".to_string(),
-                self.constellation.active_count().to_string(),
+                self.shared.content.constellation.active_count().to_string(),
             ),
-            ("Tab cap".to_string(), self.saved_tab_cap.to_string()),
-            ("Theme".to_string(), self.active_theme_id.clone()),
-            ("Uptime".to_string(), self.observability.snapshot().uptime),
+            ("Tab cap".to_string(), self.shared.presentation.saved_tab_cap.to_string()),
+            ("Theme".to_string(), self.shared.presentation.active_theme_id.clone()),
+            ("Uptime".to_string(), self.shared.observability.snapshot().uptime),
         ]
     }
 
     /// Refresh and snapshot the host observability cache for Apparatus.
     pub(super) fn apparatus_observability(&mut self) -> ObservabilitySnapshot {
         self.refresh_a11y_summary();
-        self.observability.snapshot()
+        self.shared.observability.snapshot()
     }
 
     /// Refresh the shared a11y projection used by Apparatus and the OS bridge.
@@ -1408,7 +1402,7 @@ impl App {
         let projection = self.build_a11y_projection();
         self.a11y_bridge.update(projection.tree_update());
         self.a11y_action_routes = projection.action_routes;
-        self.observability.set_a11y_snapshot(projection.snapshot);
+        self.shared.observability.set_a11y_snapshot(projection.snapshot);
     }
 
     pub(super) fn drain_a11y_actions(&mut self) {
@@ -1426,7 +1420,7 @@ impl App {
                 if self.orrery.select_by_url(&url) {
                     self.view.active_content = super::ContentPane::Orrery;
                     self.sync_location();
-                    self.observability.record_diagnostic(
+                    self.shared.observability.record_diagnostic(
                         "meerkat.agent.action_applied",
                         super::observability::Severity::Info,
                         format!("accesskit.{action_id}: select {url}"),
@@ -1434,7 +1428,7 @@ impl App {
                     self.refresh_a11y_summary();
                     self.request_redraw();
                 } else {
-                    self.observability.record_diagnostic(
+                    self.shared.observability.record_diagnostic(
                         "meerkat.agent.intent_dropped",
                         super::observability::Severity::Warn,
                         format!("accesskit.{action_id}: missing node {url}"),
@@ -1442,14 +1436,14 @@ impl App {
                 }
             }
             Some(_) => {
-                self.observability.record_diagnostic(
+                self.shared.observability.record_diagnostic(
                     "meerkat.agent.intent_dropped",
                     super::observability::Severity::Warn,
                     format!("accesskit.{action_id}: unsupported action for routed node"),
                 );
             }
             None => {
-                self.observability.record_diagnostic(
+                self.shared.observability.record_diagnostic(
                     "meerkat.agent.intent_dropped",
                     super::observability::Severity::Warn,
                     format!(
@@ -1765,7 +1759,7 @@ impl App {
                 } else {
                     url.clone()
                 };
-                let content_type = match self.content.get(&url) {
+                let content_type = match self.shared.content.pages.get(&url) {
                     Some(fetch::ContentState::Ready(fetched)) => fetched.content_type.clone(),
                     _ => node.mime_hint.clone(),
                 };
@@ -1844,7 +1838,7 @@ impl App {
                 let node = focused
                     .and_then(|member| self.orrery.graph().get_node_by_id(member))
                     .map(|(_, node)| node);
-                let state = node.and_then(|node| self.content.get(node.url()));
+                let state = node.and_then(|node| self.shared.content.pages.get(node.url()));
                 super::inspector::inspector_rows(node, state)
             }
             PaneContent::Steward => self.steward_rows(),
@@ -1853,13 +1847,13 @@ impl App {
     }
 
     fn steward_rows(&self) -> Vec<(String, String)> {
-        let operations = self.constellation.active_operations();
+        let operations = self.shared.content.constellation.active_operations();
         let mut rows = vec![
             (
                 "Active operations".to_string(),
                 operations.len().to_string(),
             ),
-            ("Tab cap".to_string(), self.saved_tab_cap.to_string()),
+            ("Tab cap".to_string(), self.shared.presentation.saved_tab_cap.to_string()),
             (
                 "Loading fetches".to_string(),
                 self.fetch_state_count(1).to_string(),
@@ -1878,10 +1872,10 @@ impl App {
         rows.push((
             "Focused operation".to_string(),
             match focused {
-                Some(member) if self.constellation.is_active(member) => format!(
+                Some(member) if self.shared.content.constellation.is_active(member) => format!(
                     "active background={} recovering={}",
-                    self.constellation.is_background(member),
-                    self.constellation.is_recovering(member)
+                    self.shared.content.constellation.is_background(member),
+                    self.shared.content.constellation.is_recovering(member)
                 ),
                 Some(_) => "dormant".to_string(),
                 None => "none".to_string(),
@@ -1904,7 +1898,7 @@ impl App {
     }
 
     fn fetch_state_count(&self, tag: u8) -> usize {
-        self.content
+        self.shared.content.pages
             .values()
             .filter(|state| fetch::ContentState::tag(Some(*state)) == tag)
             .count()

@@ -91,12 +91,12 @@ impl ApplicationHandler for App {
         }
         let initial_a11y = self.build_a11y_projection().tree_update();
         match self.a11y_bridge.install(&window, initial_a11y) {
-            Ok(()) => self.observability.record_probe(
+            Ok(()) => self.shared.observability.record_probe(
                 "a11y_bridge",
                 "installed",
                 "OS AccessKit bridge installed",
             ),
-            Err(err) => self.observability.record_probe(
+            Err(err) => self.shared.observability.record_probe(
                 "a11y_bridge",
                 "degraded",
                 format!("OS AccessKit bridge unavailable: {err}"),
@@ -126,7 +126,7 @@ impl ApplicationHandler for App {
         let mut card_changed = false;
         let mut graph_changed = false;
         // One `FetchUpdate` stream carries both page documents and subresources.
-        while let Ok(update) = self.inbox.fetch.try_recv() {
+        while let Ok(update) = self.shared.inbox.fetch.try_recv() {
             match update {
                 fetch::FetchUpdate::Page(outcome) => {
                     let state = match outcome.result {
@@ -139,7 +139,7 @@ impl ApplicationHandler for App {
                                 fetched.content_type.clone(),
                                 fetched.body.as_bytes(),
                             );
-                            self.observability.record_actor(
+                            self.shared.observability.record_actor(
                                 "fetch",
                                 "succeeded",
                                 Some(outcome.url.clone()),
@@ -148,12 +148,12 @@ impl ApplicationHandler for App {
                         }
                         Err(reason) => {
                             let detail = format!("{}: {reason}", outcome.url);
-                            self.observability.record_actor(
+                            self.shared.observability.record_actor(
                                 "fetch",
                                 "failed",
                                 Some(detail.clone()),
                             );
-                            self.observability.record_diagnostic(
+                            self.shared.observability.record_diagnostic(
                                 "meerkat.actor.fetch.failed",
                                 Severity::Warn,
                                 detail,
@@ -161,7 +161,7 @@ impl ApplicationHandler for App {
                             fetch::ContentState::Failed(reason)
                         }
                     };
-                    self.content.insert(outcome.url, state);
+                    self.shared.content.pages.insert(outcome.url, state);
                     card_changed = true;
                 }
                 // A subresource (page CSS / media): persist it (its content-type is
@@ -170,16 +170,16 @@ impl ApplicationHandler for App {
                 // by URL, not by which node wanted it; each actor dedups via its own
                 // resource store and only the one that wanted it re-renders.
                 fetch::FetchUpdate::Subresource(sub) => {
-                    self.observability
+                    self.shared.observability
                         .record_actor("fetch", "subresource", Some(sub.url.clone()));
                     self.save_cached(&sub.url, None, &sub.bytes);
-                    self.constellation.broadcast_resource(&sub.url, &sub.bytes);
+                    self.shared.content.constellation.broadcast_resource(&sub.url, &sub.bytes);
                 }
             }
         }
         // Drain every active node's actor in one pass: scenes land in the pool, the
         // wanted subresources + harvested contributions come back for the host.
-        let drained = self.constellation.drain();
+        let drained = self.shared.content.constellation.drain();
         card_changed |= drained.any_scene;
         if !drained.respawned.is_empty() {
             // A content tile's actor died (panic, isolated to its thread) and the
@@ -188,12 +188,12 @@ impl ApplicationHandler for App {
                 count = drained.respawned.len(),
                 "respawned crashed content tile(s)"
             );
-            self.observability.record_actor(
+            self.shared.observability.record_actor(
                 "content",
                 "respawned",
                 Some(format!("count={}", drained.respawned.len())),
             );
-            self.observability.record_diagnostic(
+            self.shared.observability.record_diagnostic(
                 "meerkat.actor.content.respawned",
                 Severity::Warn,
                 format!("count={}", drained.respawned.len()),
@@ -205,9 +205,9 @@ impl ApplicationHandler for App {
             // a miss spawns a network fetch whose bytes broadcast back on arrival.
             for url in urls {
                 if let Some(stored) = self.load_cached(&url) {
-                    self.constellation.send_resource(member, url, stored.body);
+                    self.shared.content.constellation.send_resource(member, url, stored.body);
                 } else {
-                    self.fetch_handle
+                    self.shared.content.fetch_handle
                         .command(fetch::FetchCommand::Subresource(url));
                 }
             }
@@ -225,8 +225,8 @@ impl ApplicationHandler for App {
         // P2P sync status (S5.0): the same wake also carries lane-status changes.
         // Fold the latest into the chrome chip (the host owns the mutation).
         let mut latest_sync = None;
-        while let Ok(update) = self.inbox.sync.try_recv() {
-            self.observability.record_actor(
+        while let Ok(update) = self.shared.inbox.sync.try_recv() {
+            self.shared.observability.record_actor(
                 "sync",
                 "status",
                 Some(format!(
@@ -243,15 +243,15 @@ impl ApplicationHandler for App {
         // Comms (P6c): the comms actor delivers conversation lists + threads here;
         // fold each into the docked pane (the host owns the chrome mutation).
         let mut comms_changed = false;
-        while let Ok(update) = self.inbox.comms.try_recv() {
+        while let Ok(update) = self.shared.inbox.comms.try_recv() {
             match update {
                 comms_host::CommsUpdate::Inbox(inbox) => {
-                    self.observability.record_actor(
+                    self.shared.observability.record_actor(
                         "comms",
                         "inbox",
                         Some(format!("conversations={}", inbox.conversations.len())),
                     );
-                    self.observability.record_actor(
+                    self.shared.observability.record_actor(
                         "comms",
                         "succeeded",
                         Some("inbox".to_string()),
@@ -260,12 +260,12 @@ impl ApplicationHandler for App {
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::Thread(id, messages) => {
-                    self.observability.record_actor(
+                    self.shared.observability.record_actor(
                         "comms",
                         "thread",
                         Some(format!("{} messages={}", id.key, messages.len())),
                     );
-                    self.observability.record_actor(
+                    self.shared.observability.record_actor(
                         "comms",
                         "succeeded",
                         Some("thread".to_string()),
@@ -278,16 +278,16 @@ impl ApplicationHandler for App {
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::Sent(_id) => {
-                    self.observability.record_actor("comms", "sent", None);
-                    self.observability
+                    self.shared.observability.record_actor("comms", "sent", None);
+                    self.shared.observability
                         .record_actor("comms", "succeeded", Some("sent".to_string()));
                     self.view.runner.update(|c| c.clear_comms_draft());
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::SendOutcome(line) => {
-                    self.observability
+                    self.shared.observability
                         .record_actor("comms", "send_outcome", Some(line.clone()));
-                    self.observability.record_actor(
+                    self.shared.observability.record_actor(
                         "comms",
                         "succeeded",
                         Some("send_outcome".to_string()),
@@ -300,7 +300,7 @@ impl ApplicationHandler for App {
                     misfin_address,
                     cabal_ticket,
                 } => {
-                    self.observability.record_actor(
+                    self.shared.observability.record_actor(
                         "comms",
                         "identity",
                         Some(format!(
@@ -309,7 +309,7 @@ impl ApplicationHandler for App {
                             cabal_ticket.is_some()
                         )),
                     );
-                    self.observability.record_actor(
+                    self.shared.observability.record_actor(
                         "comms",
                         "succeeded",
                         Some("identity".to_string()),
@@ -449,7 +449,7 @@ impl ApplicationHandler for App {
                     .map(|(member, r)| (*member, r[3] - r[1]));
                 if let Some((member, visible_h)) = over_card {
                     let max =
-                        (self.constellation.content_height(member) as f32 - visible_h).max(0.0);
+                        (self.shared.content.constellation.content_height(member) as f32 - visible_h).max(0.0);
                     let offset = self.view.scroll.entry(member).or_insert(0.0);
                     // Wheel up (dy > 0) scrolls toward the top; down toward the bottom.
                     *offset = (*offset - dy).clamp(0.0, max);
@@ -589,8 +589,8 @@ impl App {
     }
 
     pub(super) fn drain_portable_diagnostics(&mut self) {
-        while let Ok(event) = self.diagnostics_rx.try_recv() {
-            self.observability.record_portable_event(event);
+        while let Ok(event) = self.shared.inbox.diagnostics.try_recv() {
+            self.shared.observability.record_portable_event(event);
         }
     }
 }

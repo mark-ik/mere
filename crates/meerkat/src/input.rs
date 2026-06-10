@@ -216,14 +216,14 @@ impl App {
                     if button == MouseButton::Left {
                         if let Some(member) = self.close_button_at(x, y) {
                             self.view.live_previews.remove(&member);
-                            self.constellation.reap(member);
+                            self.shared.content.constellation.reap(member);
                             self.request_redraw();
                             return;
                         }
                     }
                     // The shellbar strip: right-click opens the move menu. (Shellbar F2.2.)
                     let sb = super::shellbar::shellbar_rect(
-                        self.shellbar_edge,
+                        self.shared.presentation.shellbar_edge,
                         self.view.width as f32,
                         self.view.height as f32,
                         th,
@@ -593,7 +593,7 @@ impl App {
         // F2 renames the active session (the switcher's keyboard rename affordance;
         // right-clicking a tile renames that one). (Host text path.)
         if matches!(key, WinitKey::Named(WinitNamedKey::F2)) {
-            self.start_rename(self.active_session_id);
+            self.start_rename(self.shared.session.active_session_id);
             return;
         }
         // While the settings overlay is open, Escape closes it and other keys are
