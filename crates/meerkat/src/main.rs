@@ -481,6 +481,16 @@ struct Presentation {
     shellbar_edge: session_runtime::ShellbarEdge,
 }
 
+impl Presentation {
+    /// The active theme's chrome CSS as `&[&str]`, the shape the serval layout /
+    /// paint / hit-test entry points take. Borrows the baked `chrome_sheet`. A read
+    /// of shared presentation state, so it lives on the subsystem that owns it; every
+    /// window's chrome renders from the same sheet. (MW2 (c).)
+    fn chrome_sheet_refs(&self) -> Vec<&str> {
+        self.chrome_sheet.iter().map(String::as_str).collect()
+    }
+}
+
 struct App {
     /// Session + app state shared across every window. (Multi-window MW2.)
     shared: SharedState,
@@ -819,11 +829,6 @@ impl App {
         app
     }
 
-    /// The active theme's chrome CSS as `&[&str]`, the shape the serval layout /
-    /// paint / hit-test entry points take. Borrows the baked `chrome_sheet`.
-    fn chrome_sheet_refs(&self) -> Vec<&str> {
-        self.shared.presentation.chrome_sheet.iter().map(String::as_str).collect()
-    }
 }
 
 /// The shared per-user data root (`<data_dir>/mere`). Settings, the content

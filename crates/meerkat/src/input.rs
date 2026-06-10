@@ -113,7 +113,7 @@ impl App {
                 // dropdown (its `.chrome` border-box). A left press there dispatches
                 // the chrome; below it (the content band) a right press opens the
                 // context menu, anything else drives the orrery.
-                let sheet = self.chrome_sheet_refs();
+                let sheet = self.shared.presentation.chrome_sheet_refs();
                 let chrome_h = {
                     let dom = self.view.dom.borrow();
                     measure_class_bottom(&dom, &sheet, self.view.width, self.view.height, "chrome")
@@ -444,7 +444,7 @@ impl App {
     /// restores focus so the caret doesn't dangle on the removed field.
     pub(super) fn chrome_click(&mut self, x: f32, y: f32) {
         let offsets = ScrollOffsets::<NodeId>::default();
-        let sheet = self.chrome_sheet_refs();
+        let sheet = self.shared.presentation.chrome_sheet_refs();
         let hit = {
             let dom = self.view.dom.borrow();
             hit_test_node(&dom, &sheet, self.view.width, self.view.height, x, y, &offsets)

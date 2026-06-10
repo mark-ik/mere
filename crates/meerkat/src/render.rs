@@ -34,7 +34,7 @@ impl App {
     /// content root directly below the toolbar.
     pub(super) fn toolbar_height(&mut self) -> u32 {
         if self.view.toolbar_h == 0 {
-            let sheet = self.chrome_sheet_refs();
+            let sheet = self.shared.presentation.chrome_sheet_refs();
             let measured = measure_class_bottom(
                 &self.view.dom.borrow(),
                 &sheet,
@@ -197,7 +197,7 @@ impl App {
                 dom.set_attribute(node, attr, &style);
             }
         }
-        let chrome_sheet = self.chrome_sheet_refs();
+        let chrome_sheet = self.shared.presentation.chrome_sheet_refs();
         let chrome_scene =
             scene_from_scripted_dom(&self.view.dom.borrow(), &chrome_sheet, w, h, cursor, &scroll);
 
