@@ -254,7 +254,7 @@ impl App {
 
     fn agent_invoke_command(&mut self, cmd: Command) -> (bool, String, String) {
         let action_id = format!("command.{cmd:?}").to_ascii_lowercase();
-        self.runner.update(move |chrome| {
+        self.view.runner.update(move |chrome| {
             chrome.run_command_and_close(cmd);
         });
         self.drain_pending_command();
@@ -283,8 +283,8 @@ impl App {
 
     fn agent_activate_focused_action(&mut self) -> (bool, String, String) {
         let action_id = "focus.activate".to_string();
-        if self.runner.state().palette_open {
-            self.runner.update(meerkat::Chrome::run_palette_selection);
+        if self.view.runner.state().palette_open {
+            self.view.runner.update(meerkat::Chrome::run_palette_selection);
             self.drain_pending_command();
             return (true, action_id, "palette selection activated".to_string());
         }

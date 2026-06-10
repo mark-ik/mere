@@ -14,20 +14,49 @@
 //! pure view state (geometry of *this* window's surface this frame), so they
 //! move here first. (Multi-window plan MW1.)
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
+use std::sync::Arc;
 use std::time::Instant;
 
 use forme::GraphMemberId;
 use frame::{FrameLayout, PaneId, SessionId, SplitAxis, SplitChoice};
+use meerkat::{Chrome, ChromeLogic, ChromeView};
+use platen::Workbench;
+use platen_view::{WorkbenchLogic, WorkbenchScene, WorkbenchTreeView};
+use serval_scripted_dom::ScriptedDom;
+use serval_winit_host::SurfaceHost;
 use winit::window::CursorIcon;
+use xilem_serval::{Modifiers, ServalAppRunner};
 
 use super::{CachedTile, ContentPane, ResizeDrag};
 
 /// State owned by a single window's view. Methods on `App` reach it through
 /// `self.view`; when the window registry lands (MW2) the render / input paths
 /// take `&mut WindowView` for the target window explicitly.
-#[derive(Default)]
+///
+/// Constructed via [`WindowView::new`] — the chrome + workbench runners it owns
+/// are `!Default` (a serval document authority can't be conjured), so the
+/// derive-`Default` era ends here and a second window is minted by handing
+/// [`WindowView::new`] a fresh pair of runners over the shared session. (MW2.)
 pub(crate) struct WindowView {
+    // ── Chrome authority: this window's two serval document roots and the runners
+    //    that drive them — the toolbar / omnibar / dropdowns (chrome) and the tiled
+    //    workbench. Separate roots by discipline; both per-window. (MW2.) ──────────
+    /// The chrome DOM the runner mutates and the render path reads.
+    pub(crate) dom: Rc<RefCell<ScriptedDom>>,
+    /// The chrome runner: this window's toolbar / omnibar / dropdown authority.
+    pub(crate) runner: ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
+    /// The tiled-workbench composition (S4): the open tiles + the projection mode
+    /// (Cartography = the orrery, Tree = the tiled view).
+    pub(crate) workbench: Workbench,
+    /// The workbench root: a second serval document authority (separate from the
+    /// chrome root) that renders the tile tree as flex DOM via `platen_view`.
+    pub(crate) workbench_dom: Rc<RefCell<ScriptedDom>>,
+    /// The workbench runner driving `workbench_dom` from `workbench`.
+    pub(crate) workbench_runner: ServalAppRunner<WorkbenchScene, WorkbenchLogic, WorkbenchTreeView>,
+
     /// Each switcher row's on-screen rect this frame: a click switches to it.
     pub(crate) session_row_rects: Vec<(SessionId, [f32; 4])>,
     /// Each switcher row's close (×) hit rect this frame: a click trashes it.
@@ -121,6 +150,26 @@ pub(crate) struct WindowView {
     /// Which content pane navigation acts on (the last-interacted one).
     pub(crate) active_content: ContentPane,
 
+    // ── Window + surface + size + input: the OS window itself, its present stack,
+    //    its surface dimensions, and the pointer / modifier state of its focus.
+    //    All per-window by definition — a second window is a second of each. (MW2.) ─
+    /// This view's OS window. `None` until the window is created on resume.
+    pub(crate) window: Option<Arc<winit::window::Window>>,
+    /// The serval-on-winit present stack for this window's surface, built once the
+    /// window exists. (MW3 splits the shared device out of this; for now per-window.)
+    pub(crate) host: Option<SurfaceHost>,
+    /// Cached measured height (px) of this window's chrome band; `0` until measured.
+    pub(crate) toolbar_h: u32,
+    /// This window's surface width (physical px).
+    pub(crate) width: u32,
+    /// This window's surface height (physical px).
+    pub(crate) height: u32,
+    /// Last cursor position in this window (physical px; window space == content space).
+    pub(crate) cursor: (f32, f32),
+    /// Keyboard modifiers tracked for this window's focus, folded into each dispatched
+    /// `KeyEvent`.
+    pub(crate) modifiers: Modifiers,
+
     // ── Compatibility view (scrying): per-window, because each WebView is bound to
     //    this window's HWND. (Scrying X1/X2.) ──────────────────────────────────────
     /// The scrying pool: system-WebView tiles on the UI thread, beside the
@@ -131,4 +180,73 @@ pub(crate) struct WindowView {
     pub(crate) scrying_rect: Option<(GraphMemberId, [f32; 4])>,
     /// The scrying tile that currently owns the keyboard (clicked into).
     pub(crate) scrying_input_focus: Option<GraphMemberId>,
+}
+
+impl WindowView {
+    /// Mint a window's view over a fresh pair of serval runners. Everything else
+    /// starts at its rest value (empty caches, no in-progress gesture, the default
+    /// 1024×600 surface); the caller overrides the view-session bits it restored
+    /// (`centered`, `content_location`, `frame_layout`, `next_pane_id`). A second
+    /// window is a second `new(...)` over the same shared session. (MW2.)
+    pub(crate) fn new(
+        dom: Rc<RefCell<ScriptedDom>>,
+        runner: ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
+        workbench: Workbench,
+        workbench_dom: Rc<RefCell<ScriptedDom>>,
+        workbench_runner: ServalAppRunner<WorkbenchScene, WorkbenchLogic, WorkbenchTreeView>,
+    ) -> Self {
+        Self {
+            dom,
+            runner,
+            workbench,
+            workbench_dom,
+            workbench_runner,
+            session_row_rects: Default::default(),
+            session_close_rects: Default::default(),
+            session_add_rect: Default::default(),
+            roster_row_rects: Default::default(),
+            apparatus_button_rects: Default::default(),
+            gloss_node_rects: Default::default(),
+            tile_rects: Default::default(),
+            content_rects: Default::default(),
+            close_button_rects: Default::default(),
+            tile_textures: Default::default(),
+            close_button_tex: Default::default(),
+            unvisited_tex: Default::default(),
+            snapshot_textures: Default::default(),
+            window_controls_tex: Default::default(),
+            divider_tex: Default::default(),
+            scroll: Default::default(),
+            roster_scroll: Default::default(),
+            last_left_release: Default::default(),
+            tab_drag: Default::default(),
+            divider_drag: Default::default(),
+            frame_divider_drag: Default::default(),
+            resize_drag: Default::default(),
+            titlebar_press: Default::default(),
+            cursor_icon: Default::default(),
+            pending_exit: Default::default(),
+            context_set: Default::default(),
+            renaming: Default::default(),
+            centered: Default::default(),
+            content_location: Default::default(),
+            shown_location: Default::default(),
+            focused_tile: Default::default(),
+            live_previews: Default::default(),
+            frame_layout: Default::default(),
+            next_pane_id: Default::default(),
+            maximized_pane: Default::default(),
+            active_content: Default::default(),
+            window: Default::default(),
+            host: Default::default(),
+            toolbar_h: Default::default(),
+            width: 1024,
+            height: 600,
+            cursor: Default::default(),
+            modifiers: Default::default(),
+            scrying: Default::default(),
+            scrying_rect: Default::default(),
+            scrying_input_focus: Default::default(),
+        }
+    }
 }

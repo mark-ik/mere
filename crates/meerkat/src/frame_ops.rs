@@ -59,8 +59,8 @@ impl App {
             return;
         }
         self.view.shown_location = url.clone();
-        if let (Some(url), None) = (url, self.runner.focus()) {
-            self.runner.update(move |c| c.show_location(&url));
+        if let (Some(url), None) = (url, self.view.runner.focus()) {
+            self.view.runner.update(move |c| c.show_location(&url));
             self.request_redraw();
         }
     }
@@ -76,13 +76,13 @@ impl App {
     /// first-context case. Called after any input that can navigate (omnibar
     /// submit, suggestion / palette).
     pub(super) fn sync_orrery(&mut self) {
-        let loc = self.runner.state().content_location().to_string();
+        let loc = self.view.runner.state().content_location().to_string();
         // Ctrl/Cmd-Enter: open the address as a *new node* linked from the focused
         // one. Handled before the change guard below, since duplicates are welcome
         // (the node-identity model) — opening the current page as a new node is a
         // valid branch, not a no-op.
-        if self.runner.state().open_as_new_node {
-            self.runner.update(|c| c.open_as_new_node = false);
+        if self.view.runner.state().open_as_new_node {
+            self.view.runner.update(|c| c.open_as_new_node = false);
             let origin = self.nav_target_member();
             let new_member = self.orrery.open_member_as_new_node(origin, &loc);
             // With the workbench active, tile the new node: stack it into the
@@ -90,9 +90,9 @@ impl App {
             // focused), and focus it so the next navigation targets it. Otherwise
             // the orrery has selected it, so it shows as the focused-node card.
             if self.workbench_active() {
-                let stacked = origin.is_some_and(|o| self.workbench.open_in_slot_of(new_member, o));
+                let stacked = origin.is_some_and(|o| self.view.workbench.open_in_slot_of(new_member, o));
                 if !stacked {
-                    self.workbench.open_tile(new_member);
+                    self.view.workbench.open_tile(new_member);
                 }
                 self.view.focused_tile = Some(new_member);
             } else {
@@ -148,10 +148,10 @@ impl App {
     /// change and does not record a fresh visit, and refetch it. Drained each input
     /// pass, before `sync_orrery`.
     pub(super) fn drain_history_step(&mut self) {
-        let Some(step) = self.runner.state().history_step else {
+        let Some(step) = self.view.runner.state().history_step else {
             return;
         };
-        self.runner.update(|c| c.history_step = None);
+        self.view.runner.update(|c| c.history_step = None);
         let Some(member) = self.nav_target_member() else {
             return;
         };
@@ -165,7 +165,7 @@ impl App {
         self.view.scroll.remove(&member); // the revealed page starts at the top
         self.view.content_location = url.clone();
         self.ensure_content(&url);
-        self.runner.update(|c| {
+        self.view.runner.update(|c| {
             c.content_location = url.clone();
             c.show_location(&url);
         });
@@ -185,13 +185,13 @@ impl App {
             None => (false, false),
         };
         let (cur_back, cur_forward) = {
-            let c = self.runner.state();
+            let c = self.view.runner.state();
             (c.toolbar.can_go_back, c.toolbar.can_go_forward)
         };
         if cur_back == can_back && cur_forward == can_forward {
             return;
         }
-        self.runner.update(move |c| {
+        self.view.runner.update(move |c| {
             c.toolbar.can_go_back = can_back;
             c.toolbar.can_go_forward = can_forward;
         });
@@ -484,7 +484,7 @@ impl App {
         self.view.focused_tile = None;
         self.view.shown_location = None;
         self.view.renaming = None;
-        self.workbench = platen::Workbench::new();
+        self.view.workbench = platen::Workbench::new();
         self.view.maximized_pane = None;
         self.view.active_content = super::ContentPane::Orrery;
         // Swap identity; the omnibar nav target follows the new orrery focus.
@@ -530,7 +530,7 @@ impl App {
     /// (background-flagged nodes excepted).
     pub(super) fn toggle_workbench(&mut self) {
         // Clear the omnibar suggestions dropdown so it doesn't hang over the tiles.
-        self.runner.update(Chrome::close_suggestions);
+        self.view.runner.update(Chrome::close_suggestions);
         if self.workbench_open() {
             self.close_workbench();
             self.request_redraw();
@@ -538,10 +538,10 @@ impl App {
         }
         // Summon the workbench pane beside the orrery, then tile the selection.
         self.open_workbench();
-        self.workbench.clear_tiles();
+        self.view.workbench.clear_tiles();
         {
             for member in self.selection_working_set() {
-                self.workbench.open_tile(member);
+                self.view.workbench.open_tile(member);
             }
             // Focus the node the open was seeded from (the primary selection), so the
             // omnibar shows its URL; fall back to the first opened tile.
@@ -550,7 +550,7 @@ impl App {
                 .selected_members()
                 .first()
                 .copied()
-                .or_else(|| self.workbench.open_members().first().copied());
+                .or_else(|| self.view.workbench.open_members().first().copied());
         }
         self.request_redraw();
     }
@@ -595,7 +595,7 @@ impl App {
             ]
         };
         self.view.context_set = set;
-        self.runner
+        self.view.runner
             .update(move |c| c.open_context_menu(x, y, items));
         self.request_redraw();
     }
@@ -603,7 +603,7 @@ impl App {
     /// Dismiss the context menu (an outside click / Escape), dropping its set.
     pub(super) fn close_context_menu(&mut self) {
         self.view.context_set.clear();
-        self.runner.update(Chrome::close_context_menu);
+        self.view.runner.update(Chrome::close_context_menu);
         self.request_redraw();
     }
 
@@ -627,7 +627,7 @@ impl App {
             ContextItem::new(label, ContextAction::ShellbarMove(edge))
         })
         .collect();
-        self.runner.update(move |c| c.open_context_menu(x, y, items));
+        self.view.runner.update(move |c| c.open_context_menu(x, y, items));
         self.request_redraw();
     }
 
@@ -635,16 +635,16 @@ impl App {
     /// member set as splits or as one stack, switching into the tiled (Tree)
     /// projection first if needed.
     pub(super) fn drain_pending_context(&mut self) {
-        let Some(action) = self.runner.state().pending_context else {
+        let Some(action) = self.view.runner.state().pending_context else {
             return;
         };
-        self.runner.update(|c| c.pending_context = None);
+        self.view.runner.update(|c| c.pending_context = None);
         // Shellbar move: redock the strip to the chosen edge and persist. No
         // member set involved — return before the orrery-tile logic below.
         if let ContextAction::ShellbarMove(edge) = action {
             self.shellbar_edge = edge;
             self.view.centered = false; // orrery band changed; recenter once
-            self.toolbar_h = 0;   // re-measure (band height may change if Top/Bottom)
+            self.view.toolbar_h = 0;   // re-measure (band height may change if Top/Bottom)
             self.persist_settings();
             self.request_redraw();
             return;
@@ -656,15 +656,15 @@ impl App {
         // These open tiles, so summon the workbench pane (closing the suggestions
         // dropdown on the way in, like Ctrl+T does).
         if !self.workbench_open() {
-            self.runner.update(Chrome::close_suggestions);
+            self.view.runner.update(Chrome::close_suggestions);
         }
         self.open_workbench();
         match action {
             ContextAction::OpenSplits => {
-                self.workbench.open_split(&set);
+                self.view.workbench.open_split(&set);
             }
             ContextAction::Stack => {
-                self.workbench.open_stack(&set);
+                self.view.workbench.open_stack(&set);
             }
             ContextAction::ShellbarMove(_) => unreachable!("handled above"),
         }
@@ -760,11 +760,11 @@ impl App {
             return;
         };
         if self.workbench_active() {
-            self.workbench.close_tile(member);
-            if self.workbench.open_members().is_empty() {
+            self.view.workbench.close_tile(member);
+            if self.view.workbench.open_members().is_empty() {
                 self.close_workbench();
             } else if self.view.focused_tile == Some(member) {
-                self.view.focused_tile = self.workbench.open_members().first().copied();
+                self.view.focused_tile = self.view.workbench.open_members().first().copied();
             }
         }
         self.view.live_previews.remove(&member);
@@ -807,7 +807,7 @@ impl App {
         // open tile across every slot. A node showing in both counts once.
         let mut needed: Vec<GraphMemberId> = self.view.live_previews.iter().copied().collect();
         if self.workbench_open() {
-            for member in self.workbench.open_members() {
+            for member in self.view.workbench.open_members() {
                 if !needed.contains(&member) {
                     needed.push(member);
                 }
@@ -913,25 +913,25 @@ impl App {
     /// visible tab, close a tab (reaping its actor), or toggle its pin (the
     /// background-keep flag, which also exempts it from cap eviction).
     pub(super) fn drain_workbench_action(&mut self) {
-        let Some(action) = self.workbench_runner.state().pending else {
+        let Some(action) = self.view.workbench_runner.state().pending else {
             return;
         };
-        self.workbench_runner.update(|s| s.pending = None);
+        self.view.workbench_runner.update(|s| s.pending = None);
         match action {
             WorkbenchAction::Activate(member) => {
-                self.workbench.activate(member);
+                self.view.workbench.activate(member);
                 self.view.focused_tile = Some(member);
             }
             WorkbenchAction::Close(member) => {
-                self.workbench.close_tile(member);
+                self.view.workbench.close_tile(member);
                 self.constellation.reap(member);
-                if self.workbench.open_members().is_empty() {
+                if self.view.workbench.open_members().is_empty() {
                     // Closing the last tile closes the workbench pane entirely (back
                     // to just the orrery), rather than leaving an empty pane.
                     // (Workbench-as-pane.)
                     self.close_workbench();
                 } else if self.view.focused_tile == Some(member) {
-                    self.view.focused_tile = self.workbench.open_members().first().copied();
+                    self.view.focused_tile = self.view.workbench.open_members().first().copied();
                 }
             }
             WorkbenchAction::TogglePin(member) => {
@@ -946,10 +946,10 @@ impl App {
     /// the ticket the verb captured from the address bar and drive the sync actor.
     /// The chrome records the intent; this is the host executing it.
     pub(super) fn drain_pending_connect(&mut self) {
-        let Some(ticket) = self.runner.state().pending_connect.clone() else {
+        let Some(ticket) = self.view.runner.state().pending_connect.clone() else {
             return;
         };
-        self.runner.update(|c| {
+        self.view.runner.update(|c| {
             c.pending_connect = None;
         });
         if ticket.is_empty() {
@@ -965,10 +965,10 @@ impl App {
     /// Execute a pending host action the palette queued: take it from the chrome
     /// and dispatch to the matching shell method.
     pub(super) fn drain_pending_command(&mut self) {
-        let Some(cmd) = self.runner.state().pending_command else {
+        let Some(cmd) = self.view.runner.state().pending_command else {
             return;
         };
-        self.runner.update(|c| c.pending_command = None);
+        self.view.runner.update(|c| c.pending_command = None);
         match cmd {
             Command::ToggleWorkbench => self.toggle_workbench(),
             Command::DeleteNode => self.delete_focused_node(),
@@ -1008,10 +1008,10 @@ impl App {
     /// chrome can't reach the actor, so it records the intent and the host drains
     /// it here (mirrors [`drain_pending_command`](Self::drain_pending_command)).
     pub(super) fn drain_comms_intent(&mut self) {
-        let Some(intent) = self.runner.state().comms_intent.clone() else {
+        let Some(intent) = self.view.runner.state().comms_intent.clone() else {
             return;
         };
-        self.runner.update(|c| c.comms_intent = None);
+        self.view.runner.update(|c| c.comms_intent = None);
         self.observability
             .record_actor("comms", "started", Some(format!("{intent:?}")));
         match intent {
@@ -1038,7 +1038,7 @@ impl App {
     /// Persists to the settings sidecar when the value actually changed (so an
     /// unrelated chrome click doesn't re-write the file).
     pub(super) fn sync_settings(&mut self) {
-        let cap = self.runner.state().settings.tab_cap;
+        let cap = self.view.runner.state().settings.tab_cap;
         self.constellation.set_cap(cap);
         if cap != self.saved_tab_cap {
             self.saved_tab_cap = cap;
@@ -1084,8 +1084,8 @@ impl App {
 
     /// The content band (below the toolbar) in window coords.
     pub(super) fn content_band(&self) -> [f32; 4] {
-        let th = self.toolbar_h.max(FALLBACK_TOOLBAR_H) as f32;
-        [0.0, th, self.width as f32, self.height as f32]
+        let th = self.view.toolbar_h.max(FALLBACK_TOOLBAR_H) as f32;
+        [0.0, th, self.view.width as f32, self.view.height as f32]
     }
 
     /// The laid-out content panes (leaf rects) for the current frame layout.
@@ -1128,7 +1128,7 @@ impl App {
     /// active content pane. Idempotent — only summons when not already open.
     pub(super) fn open_workbench(&mut self) {
         if !self.workbench_open() {
-            self.workbench.ensure_tiled();
+            self.view.workbench.ensure_tiled();
             let id = PaneId(self.view.next_pane_id);
             self.view.next_pane_id += 1;
             let graph_id = self.leaf_graph_id(&PaneContent::Workbench);
@@ -1158,10 +1158,10 @@ impl App {
     /// Close the workbench pane: reap its tiles' actors, clear the tiles, drop the
     /// pane leaf, and hand focus back to the orrery.
     pub(super) fn close_workbench(&mut self) {
-        for member in self.workbench.open_members() {
+        for member in self.view.workbench.open_members() {
             self.constellation.reap(member);
         }
-        self.workbench.clear_tiles();
+        self.view.workbench.clear_tiles();
         if let Some(id) = self.pane_of_content(&PaneContent::Workbench) {
             if let Some(path) = frame_view::pane_path(&self.view.frame_layout, id) {
                 self.view.frame_layout.close_leaf(&path);
@@ -1190,7 +1190,7 @@ impl App {
     /// other panes make room, and the render positions the chrome overlay into it.
     /// (Comms pane.)
     pub(super) fn sync_comms_pane(&mut self) {
-        let open = self.runner.state().comms.is_open();
+        let open = self.view.runner.state().comms.is_open();
         match (open, self.pane_of_content(&PaneContent::Comms)) {
             (true, None) => {
                 let id = PaneId(self.view.next_pane_id);
@@ -1474,8 +1474,8 @@ impl App {
         chrome.set_bounds(Rect::new(
             0.0,
             0.0,
-            self.width as f64,
-            self.toolbar_h as f64,
+            self.view.width as f64,
+            self.view.toolbar_h as f64,
         ));
         let chrome_root = node_id_for_path("meerkat/chrome");
         let chrome_tree = UxTree {
@@ -1499,10 +1499,10 @@ impl App {
         let frame_root = frame_tree.root;
         let mut host = Node::new(Role::Window);
         host.set_label("Meerkat");
-        host.set_bounds(Rect::new(0.0, 0.0, self.width as f64, self.height as f64));
+        host.set_bounds(Rect::new(0.0, 0.0, self.view.width as f64, self.view.height as f64));
         let mut tree = uxtree::stitch("meerkat/window", host, vec![chrome_tree, frame_tree]);
         attach_link_actions(&mut tree, &mut action_routes);
-        let focus = if self.runner.focus().is_some() {
+        let focus = if self.view.runner.focus().is_some() {
             chrome_root
         } else {
             self.active_frame_focus_node().unwrap_or(frame_root)
@@ -1539,7 +1539,7 @@ impl App {
     ) -> UxTree {
         match content {
             PaneContent::Orrery => mere_orrery::project_graph(self.orrery.graph()),
-            PaneContent::Workbench => workbench_domain::project_workbench(&self.workbench),
+            PaneContent::Workbench => workbench_domain::project_workbench(&self.view.workbench),
             PaneContent::Apparatus | PaneContent::System => apparatus_domain::project_skeleton(),
             PaneContent::Roster => self.roster_a11y_tree(pane_id, action_routes),
             PaneContent::Gloss => self.gloss_a11y_tree(pane_id),
@@ -1627,7 +1627,7 @@ impl App {
     fn comms_a11y_tree(&self, pane_id: PaneId) -> UxTree {
         let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "comms");
         let root = node_id_for_path(&root_path);
-        let comms = &self.runner.state().comms;
+        let comms = &self.view.runner.state().comms;
         let mut nodes = Vec::new();
         let mut children = Vec::new();
 
@@ -1673,7 +1673,7 @@ impl App {
         let draft_root = node_id_for_path(&format!("{root_path}/draft"));
         let mut draft = Node::new(Role::TextInput);
         draft.set_label("Draft");
-        draft.set_value(self.runner.state().comms_draft.text().to_string());
+        draft.set_value(self.view.runner.state().comms_draft.text().to_string());
         nodes.push((draft_root, draft));
         children.push(draft_root);
 
@@ -1699,7 +1699,7 @@ impl App {
     pub(super) fn toggle_maximize(&mut self) {
         if self.view.maximized_pane.is_some() {
             self.view.maximized_pane = None;
-        } else if let Some(pane) = self.pane_at(self.cursor.0, self.cursor.1) {
+        } else if let Some(pane) = self.pane_at(self.view.cursor.0, self.view.cursor.1) {
             self.view.maximized_pane = Some(pane);
         }
         self.request_redraw();
@@ -1725,7 +1725,7 @@ impl App {
         let Some((path, parent, axis)) = self.view.frame_divider_drag.clone() else {
             return;
         };
-        let (cx, cy) = self.cursor;
+        let (cx, cy) = self.view.cursor;
         let ratio = match axis {
             SplitAxis::Horizontal => {
                 (cx - parent[0]) / (parent[2] - parent[0] - frame_view::DIVIDER).max(1.0)
@@ -1911,7 +1911,7 @@ impl App {
     }
 
     fn sync_summary(&self) -> String {
-        let indicator = &self.runner.state().sync;
+        let indicator = &self.view.runner.state().sync;
         if indicator.active {
             format!(
                 "{} syncing={} ops={}",

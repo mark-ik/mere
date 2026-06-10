@@ -50,7 +50,7 @@ impl App {
             MouseButton::Right => Some(PointerButton::Right),
             _ => None,
         };
-        let (x, y) = self.cursor;
+        let (x, y) = self.view.cursor;
         let th = self.toolbar_height() as f32;
         match state {
             ElementState::Pressed => {
@@ -58,15 +58,15 @@ impl App {
                 // press near a window edge starts an OS resize drag. Both take
                 // priority over the chrome / content (and any open menu).
                 if button == MouseButton::Left {
-                    if let Some(ctl) = titlebar::control_at(x, y, self.width, th as u32) {
+                    if let Some(ctl) = titlebar::control_at(x, y, self.view.width, th as u32) {
                         self.window_control(ctl);
                         return;
                     }
-                    if let Some(dir) = titlebar::resize_dir_at(x, y, self.width, self.height) {
+                    if let Some(dir) = titlebar::resize_dir_at(x, y, self.view.width, self.view.height) {
                         // Manual resize: winit's drag_resize_window is inert on a
                         // frameless Windows window, so snapshot the rect + screen
                         // cursor and resize the window ourselves on each move.
-                        if let Some(window) = self.window.as_ref() {
+                        if let Some(window) = self.view.window.as_ref() {
                             let outer = window
                                 .outer_position()
                                 .map(|p| (p.x, p.y))
@@ -85,11 +85,11 @@ impl App {
                 // A context menu swallows the next press: a left click on one of its
                 // rows runs that action (the chrome closes the menu); a click
                 // anywhere else just dismisses it.
-                if self.runner.state().context_menu.is_some() {
+                if self.view.runner.state().context_menu.is_some() {
                     if button == MouseButton::Left {
                         self.chrome_click(x, y);
                     }
-                    if self.runner.state().context_menu.is_some() {
+                    if self.view.runner.state().context_menu.is_some() {
                         self.close_context_menu();
                     }
                     return;
@@ -115,9 +115,9 @@ impl App {
                 // context menu, anything else drives the orrery.
                 let sheet = self.chrome_sheet_refs();
                 let chrome_h = {
-                    let dom = self.dom.borrow();
-                    measure_class_bottom(&dom, &sheet, self.width, self.height, "chrome")
-                        .unwrap_or(self.toolbar_h.max(FALLBACK_TOOLBAR_H))
+                    let dom = self.view.dom.borrow();
+                    measure_class_bottom(&dom, &sheet, self.view.width, self.view.height, "chrome")
+                        .unwrap_or(self.view.toolbar_h.max(FALLBACK_TOOLBAR_H))
                 };
                 if y < th {
                     // The toolbar bar doubles as the titlebar: defer a left press to
@@ -136,9 +136,9 @@ impl App {
                     // away" from the omnibar: blur the chrome caret and close the
                     // suggestion dropdown, so focus actually leaves the omnibar
                     // instead of the caret + dropdown lingering over the content.
-                    if self.runner.focus().is_some() || !self.runner.state().suggest.is_empty() {
-                        self.runner.set_focus(None);
-                        self.runner.update(Chrome::close_suggestions);
+                    if self.view.runner.focus().is_some() || !self.view.runner.state().suggest.is_empty() {
+                        self.view.runner.set_focus(None);
+                        self.view.runner.update(Chrome::close_suggestions);
                         self.request_redraw();
                     }
                     // A press on a frame divider starts a pane-resize drag. (F1.)
@@ -224,8 +224,8 @@ impl App {
                     // The shellbar strip: right-click opens the move menu. (Shellbar F2.2.)
                     let sb = super::shellbar::shellbar_rect(
                         self.shellbar_edge,
-                        self.width as f32,
-                        self.height as f32,
+                        self.view.width as f32,
+                        self.view.height as f32,
                         th,
                     );
                     if x >= sb[0] && x < sb[2] && y >= sb[1] && y < sb[3] {
@@ -284,7 +284,7 @@ impl App {
                         self.view.active_content = super::ContentPane::Workbench;
                         if button == MouseButton::Left {
                             if let Some(i) = self.divider_at(x, y) {
-                                self.view.divider_drag = Some((i, x, self.workbench.weights()));
+                                self.view.divider_drag = Some((i, x, self.view.workbench.weights()));
                             } else {
                                 self.workbench_click(x, y);
                             }
@@ -359,11 +359,11 @@ impl App {
                             if let Some((target, [x0, _, x1, _])) = self.tile_at(x, y) {
                                 let edge = (x1 - x0).max(1.0) * 0.25;
                                 let moved = if x < x0 + edge {
-                                    self.workbench.split_beside(member, target, false)
+                                    self.view.workbench.split_beside(member, target, false)
                                 } else if x > x1 - edge {
-                                    self.workbench.split_beside(member, target, true)
+                                    self.view.workbench.split_beside(member, target, true)
                                 } else {
-                                    self.workbench.move_to_slot_of(member, target)
+                                    self.view.workbench.move_to_slot_of(member, target)
                                 };
                                 if moved {
                                     self.view.focused_tile = Some(member);
@@ -416,12 +416,12 @@ impl App {
     fn window_control(&mut self, ctl: WindowControl) {
         match ctl {
             WindowControl::Minimize => {
-                if let Some(window) = self.window.as_ref() {
+                if let Some(window) = self.view.window.as_ref() {
                     window.set_minimized(true);
                 }
             }
             WindowControl::Maximize => {
-                if let Some(window) = self.window.as_ref() {
+                if let Some(window) = self.view.window.as_ref() {
                     let maximized = window.is_maximized();
                     window.set_maximized(!maximized);
                 }
@@ -446,12 +446,12 @@ impl App {
         let offsets = ScrollOffsets::<NodeId>::default();
         let sheet = self.chrome_sheet_refs();
         let hit = {
-            let dom = self.dom.borrow();
-            hit_test_node(&dom, &sheet, self.width, self.height, x, y, &offsets)
+            let dom = self.view.dom.borrow();
+            hit_test_node(&dom, &sheet, self.view.width, self.view.height, x, y, &offsets)
         };
         if let Some(node) = hit {
-            let palette_was_open = self.runner.state().palette_open;
-            self.runner.dispatch_click(node, PointerClick::at((x, y)));
+            let palette_was_open = self.view.runner.state().palette_open;
+            self.view.runner.dispatch_click(node, PointerClick::at((x, y)));
             self.drain_pending_connect();
             self.drain_pending_command();
             self.drain_comms_intent();
@@ -459,7 +459,7 @@ impl App {
             self.drain_history_step();
             self.sync_settings();
             self.sync_orrery();
-            if palette_was_open && !self.runner.state().palette_open {
+            if palette_was_open && !self.view.runner.state().palette_open {
                 self.focus_after_palette_close();
             }
             self.request_redraw();
@@ -480,16 +480,16 @@ impl App {
         let (lx, ly) = (x - wr[0], y - wr[1]);
         let offsets = ScrollOffsets::<NodeId>::default();
         let hit = {
-            let dom = self.workbench_dom.borrow();
+            let dom = self.view.workbench_dom.borrow();
             hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets)
         };
         if let Some(node) = hit {
-            self.workbench_runner
+            self.view.workbench_runner
                 .dispatch_click(node, PointerClick::at((lx, ly)));
             // A tab activated → remember it as a drag candidate (resolved on
             // release: a move when dragged onto another slot, else a plain click).
             // The press is kept in window coords (tile_rects are window-space).
-            if let Some(WorkbenchAction::Activate(member)) = self.workbench_runner.state().pending {
+            if let Some(WorkbenchAction::Activate(member)) = self.view.workbench_runner.state().pending {
                 self.view.tab_drag = Some((member, (x, y)));
             }
             self.drain_workbench_action();
@@ -514,7 +514,7 @@ impl App {
         let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
         let (lx, ly) = (x - wr[0], y - wr[1]);
         let offsets = ScrollOffsets::<NodeId>::default();
-        let dom = self.workbench_dom.borrow();
+        let dom = self.view.workbench_dom.borrow();
         let node = hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets)?;
         if !has_class(&dom, node, "wb-divider") {
             return None;
@@ -537,13 +537,13 @@ impl App {
         let band_w = self
             .workbench_leaf_rect()
             .map(|wr| (wr[2] - wr[0]).max(1.0))
-            .unwrap_or(self.width.max(1) as f32);
+            .unwrap_or(self.view.width.max(1) as f32);
         let sum: f32 = snapshot.iter().sum();
-        let dw = (self.cursor.0 - press_x) / band_w * sum;
+        let dw = (self.view.cursor.0 - press_x) / band_w * sum;
         let mut weights = snapshot;
         weights[i] = (weights[i] + dw).max(0.05);
         weights[i + 1] = (weights[i + 1] - dw).max(0.05);
-        self.workbench.set_weights(&weights);
+        self.view.workbench.set_weights(&weights);
         self.request_redraw();
     }
 
@@ -551,7 +551,7 @@ impl App {
     /// under the pointer — the highlighted drop target. `None` otherwise.
     pub(super) fn drag_target_member(&self) -> Option<GraphMemberId> {
         let (_, (px, py)) = self.view.tab_drag?;
-        let (cx, cy) = self.cursor;
+        let (cx, cy) = self.view.cursor;
         if (cx - px).hypot(cy - py) <= 6.0 {
             return None; // not dragging yet (still a click)
         }
@@ -573,8 +573,8 @@ impl App {
                 WinitKey::Named(WinitNamedKey::Escape) => self.cancel_rename(),
                 WinitKey::Named(WinitNamedKey::Backspace) => self.rename_backspace(),
                 WinitKey::Character(s)
-                    if !self.modifiers.ctrl
-                        && !self.modifiers.meta
+                    if !self.view.modifiers.ctrl
+                        && !self.view.modifiers.meta
                         && !s.chars().any(char::is_control) =>
                 {
                     self.rename_push(s.as_str());
@@ -584,7 +584,7 @@ impl App {
             return;
         }
         // An open context menu eats Escape to dismiss (other keys fall through).
-        if self.runner.state().context_menu.is_some()
+        if self.view.runner.state().context_menu.is_some()
             && matches!(key, WinitKey::Named(WinitNamedKey::Escape))
         {
             self.close_context_menu();
@@ -598,31 +598,31 @@ impl App {
         }
         // While the settings overlay is open, Escape closes it and other keys are
         // swallowed (clicks on its controls go through the chrome path).
-        if self.runner.state().settings_open {
+        if self.view.runner.state().settings_open {
             if matches!(key, WinitKey::Named(WinitNamedKey::Escape)) {
-                self.runner.update(Chrome::close_settings);
+                self.view.runner.update(Chrome::close_settings);
                 self.request_redraw();
             }
             return;
         }
         // Command palette: Ctrl+P. Ctrl+K toggles the comms pane (freed up for it).
-        if self.modifiers.ctrl
+        if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("p"))
         {
             self.toggle_palette();
             return;
         }
-        if self.modifiers.ctrl
+        if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("k"))
         {
-            self.runner.update(Chrome::toggle_comms);
+            self.view.runner.update(Chrome::toggle_comms);
             self.drain_comms_intent();
             self.request_redraw();
             return;
         }
         // Ctrl+T toggles the tiled workbench (Tree projection) and the orrery
         // (Cartography projection) of the same graph.
-        if self.modifiers.ctrl
+        if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("t"))
         {
             self.toggle_workbench();
@@ -632,7 +632,7 @@ impl App {
         // actor outlives the view); Ctrl+Backspace deletes the focused node from
         // the graph. Both are modifier-gated so they don't collide with omnibar
         // editing, and intercepted here before the keystroke reaches the field.
-        if self.modifiers.ctrl
+        if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("b"))
         {
             self.toggle_focus_background();
@@ -642,23 +642,23 @@ impl App {
         // the apparatus pane (settings + system); both split beside the graph pane.
         // Ctrl+M maximizes the pane under the cursor to full-screen and back.
         // (Frame tree, F1 / apparatus.)
-        if self.modifiers.ctrl
+        if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("r"))
         {
             self.toggle_pane(PaneContent::Roster);
             return;
         }
-        if self.modifiers.ctrl && matches!(key, WinitKey::Character(s) if s.as_str() == ",") {
+        if self.view.modifiers.ctrl && matches!(key, WinitKey::Character(s) if s.as_str() == ",") {
             self.toggle_pane(PaneContent::Apparatus);
             return;
         }
-        if self.modifiers.ctrl
+        if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("g"))
         {
             self.toggle_pane(PaneContent::Gloss);
             return;
         }
-        if self.modifiers.ctrl
+        if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("m"))
         {
             self.toggle_maximize();
@@ -667,28 +667,28 @@ impl App {
         // Ctrl+N mints a new graph session and switches to it; Ctrl+PageDown /
         // Ctrl+PageUp cycle through the open sessions (the interim keyboard switch
         // until the F2.3 shellbar switcher). (Multi-graph MG2 / MG3.)
-        if self.modifiers.ctrl
+        if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("n"))
         {
             self.create_session();
             return;
         }
-        if self.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::PageDown)) {
+        if self.view.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::PageDown)) {
             self.cycle_session(true);
             return;
         }
-        if self.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::PageUp)) {
+        if self.view.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::PageUp)) {
             self.cycle_session(false);
             return;
         }
-        if self.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::Backspace)) {
+        if self.view.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::Backspace)) {
             self.delete_focused_node();
             return;
         }
         if self.handle_clipboard_shortcut(key) {
             return;
         }
-        if self.runner.state().palette_open {
+        if self.view.runner.state().palette_open {
             self.on_palette_key(key);
             return;
         }
@@ -711,16 +711,16 @@ impl App {
     /// the caret, so it refreshes unconditionally — the source of the old "any
     /// focused field is the omnibar" bug, now scoped to the omnibar's own handler.
     fn on_omnibar_key(&mut self, key: &WinitKey) {
-        let suggestions_open = !self.runner.state().suggest.is_empty();
+        let suggestions_open = !self.view.runner.state().suggest.is_empty();
         match key {
             WinitKey::Named(WinitNamedKey::Enter) => {
-                let as_new_node = self.modifiers.ctrl || self.modifiers.meta;
-                self.runner.update(move |c| {
+                let as_new_node = self.view.modifiers.ctrl || self.view.modifiers.meta;
+                self.view.runner.update(move |c| {
                     submit_omnibar(c);
                     c.open_as_new_node = as_new_node;
                 });
                 tracing::info!(
-                    location = %self.runner.state().toolbar.editable.location,
+                    location = %self.view.runner.state().toolbar.editable.location,
                     as_new_node,
                     "omnibar submit"
                 );
@@ -728,21 +728,21 @@ impl App {
                 self.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowDown) if suggestions_open => {
-                self.runner.update(|c| c.step_suggestion(1));
+                self.view.runner.update(|c| c.step_suggestion(1));
                 self.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowUp) if suggestions_open => {
-                self.runner.update(|c| c.step_suggestion(-1));
+                self.view.runner.update(|c| c.step_suggestion(-1));
                 self.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::Escape) if suggestions_open => {
-                self.runner.update(Chrome::close_suggestions);
+                self.view.runner.update(Chrome::close_suggestions);
                 self.request_redraw();
             }
             other => {
-                if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
-                    self.runner.dispatch_key(key_event);
-                    self.runner.update(Chrome::refresh_suggestions);
+                if let Some(key_event) = key_event_from_winit(other, self.view.modifiers) {
+                    self.view.runner.dispatch_key(key_event);
+                    self.view.runner.update(Chrome::refresh_suggestions);
                     self.request_redraw();
                 }
             }
@@ -754,13 +754,13 @@ impl App {
     /// Returns `true` if it consumed the key, so the shortcut never also lands as a
     /// typed character. No-op without the modifier, an editor, or a clipboard.
     fn handle_clipboard_shortcut(&mut self, key: &WinitKey) -> bool {
-        if !(self.modifiers.ctrl || self.modifiers.meta) {
+        if !(self.view.modifiers.ctrl || self.view.modifiers.meta) {
             return false;
         }
         let WinitKey::Character(s) = key else {
             return false;
         };
-        let palette = self.runner.state().palette_open;
+        let palette = self.view.runner.state().palette_open;
         // The clipboard shortcuts act on the palette query or the omnibar; when
         // another field (the comms compose box) holds the caret, let the key fall
         // through to that field's handler rather than editing the omnibar.
@@ -779,7 +779,7 @@ impl App {
     /// Copy the active editor's selection to the system clipboard.
     fn clipboard_copy(&mut self, palette: bool) {
         let text = {
-            let c = self.runner.state();
+            let c = self.view.runner.state();
             if palette {
                 c.palette_input.selected_text()
             } else {
@@ -798,7 +798,7 @@ impl App {
     /// Cut: copy the selection, then delete it. No-op without a selection.
     fn clipboard_cut(&mut self, palette: bool) {
         let has = {
-            let c = self.runner.state();
+            let c = self.view.runner.state();
             if palette {
                 c.palette_input.has_selection()
             } else {
@@ -809,7 +809,7 @@ impl App {
             return;
         }
         self.clipboard_copy(palette);
-        self.runner.update(|c| {
+        self.view.runner.update(|c| {
             if palette {
                 c.palette_input.backspace();
             } else {
@@ -827,7 +827,7 @@ impl App {
         if text.is_empty() {
             return;
         }
-        self.runner.update(|c| {
+        self.view.runner.update(|c| {
             if palette {
                 c.palette_input.insert_str(&text);
             } else {
@@ -841,9 +841,9 @@ impl App {
     /// typed keystroke does (palette query sync, or omnibar suggestions), then redraw.
     fn after_field_edit(&mut self, palette: bool) {
         if palette {
-            self.runner.update(Chrome::sync_palette_query);
+            self.view.runner.update(Chrome::sync_palette_query);
         } else {
-            self.runner.update(Chrome::refresh_suggestions);
+            self.view.runner.update(Chrome::refresh_suggestions);
         }
         self.request_redraw();
     }
@@ -853,7 +853,7 @@ impl App {
     pub(super) fn on_palette_key(&mut self, key: &WinitKey) {
         match key {
             WinitKey::Named(WinitNamedKey::Enter) => {
-                self.runner.update(Chrome::run_palette_selection);
+                self.view.runner.update(Chrome::run_palette_selection);
                 self.drain_pending_connect();
                 self.drain_pending_command();
                 self.drain_comms_intent();
@@ -863,22 +863,22 @@ impl App {
                 self.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::Escape) => {
-                self.runner.update(Chrome::close_palette);
+                self.view.runner.update(Chrome::close_palette);
                 self.focus_after_palette_close();
                 self.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowDown) => {
-                self.runner.update(|c| c.step_palette(1));
+                self.view.runner.update(|c| c.step_palette(1));
                 self.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowUp) => {
-                self.runner.update(|c| c.step_palette(-1));
+                self.view.runner.update(|c| c.step_palette(-1));
                 self.request_redraw();
             }
             other => {
-                if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
-                    self.runner.dispatch_key(key_event);
-                    self.runner.update(Chrome::sync_palette_query);
+                if let Some(key_event) = key_event_from_winit(other, self.view.modifiers) {
+                    self.view.runner.dispatch_key(key_event);
+                    self.view.runner.update(Chrome::sync_palette_query);
                     self.request_redraw();
                 }
             }
@@ -889,14 +889,14 @@ impl App {
     /// Escape blurs back to the omnibar, anything else edits the field — never
     /// touching the omnibar suggestions (the dropdown stays closed while chatting).
     pub(super) fn on_comms_key(&mut self, key: &WinitKey) {
-        let composing_new = self.runner.state().comms.new_message_open();
+        let composing_new = self.view.runner.state().comms.new_message_open();
         match key {
             WinitKey::Named(WinitNamedKey::Enter) => {
                 // Enter sends: the compose-new form when it's open, else the reply.
                 if composing_new {
-                    self.runner.update(Chrome::send_new_message);
+                    self.view.runner.update(Chrome::send_new_message);
                 } else {
-                    self.runner.update(Chrome::send_comms);
+                    self.view.runner.update(Chrome::send_comms);
                 }
                 self.drain_comms_intent();
                 self.request_redraw();
@@ -904,14 +904,14 @@ impl App {
             WinitKey::Named(WinitNamedKey::Escape) => {
                 // Escape closes the compose-new form, else blurs to the omnibar.
                 if composing_new {
-                    self.runner.update(Chrome::close_new_message);
+                    self.view.runner.update(Chrome::close_new_message);
                 }
                 self.focus_after_palette_close();
                 self.request_redraw();
             }
             other => {
-                if let Some(key_event) = key_event_from_winit(other, self.modifiers) {
-                    self.runner.dispatch_key(key_event);
+                if let Some(key_event) = key_event_from_winit(other, self.view.modifiers) {
+                    self.view.runner.dispatch_key(key_event);
                     self.request_redraw();
                 }
             }
@@ -921,7 +921,7 @@ impl App {
     /// Whether any comms-pane `<input>` (the reply compose box, or the compose-new
     /// recipient / body) currently holds the keyboard caret.
     fn comms_input_focused(&self) -> bool {
-        let focus = self.runner.focus();
+        let focus = self.view.runner.focus();
         focus.is_some()
             && [
                 self.input_under_class("comms-compose"),
@@ -933,7 +933,7 @@ impl App {
 
     /// Whether the omnibar `<input>` currently holds the keyboard caret.
     fn omnibar_focused(&self) -> bool {
-        let focus = self.runner.focus();
+        let focus = self.view.runner.focus();
         focus.is_some() && focus == self.input_under_class("toolbar")
     }
 
@@ -941,7 +941,7 @@ impl App {
     /// comms compose / new-message field, the palette query, else the omnibar.
     pub(super) fn caret_field(&self, node: NodeId) -> &xilem_serval::TextInput {
         let focus = Some(node);
-        let c = self.runner.state();
+        let c = self.view.runner.state();
         if focus == self.input_under_class("comms-new-to") {
             &c.comms_new_to
         } else if focus == self.input_under_class("comms-new-body") {
@@ -958,10 +958,10 @@ impl App {
     /// Toggle the palette and move focus to match: into the palette query when
     /// it opens, back to the omnibar when it closes.
     pub(super) fn toggle_palette(&mut self) {
-        self.runner.update(Chrome::toggle_palette);
-        if self.runner.state().palette_open {
+        self.view.runner.update(Chrome::toggle_palette);
+        if self.view.runner.state().palette_open {
             if let Some(node) = self.input_under_class("palette") {
-                self.runner.set_focus(Some(node));
+                self.view.runner.set_focus(Some(node));
             }
         } else {
             self.focus_after_palette_close();
@@ -973,13 +973,13 @@ impl App {
     /// continues there).
     pub(super) fn focus_after_palette_close(&mut self) {
         let omnibar = self.input_under_class("toolbar");
-        self.runner.set_focus(omnibar);
+        self.view.runner.set_focus(omnibar);
     }
 
     /// The first `<input>` under the first element carrying CSS class `class`
     /// (the omnibar under `.toolbar`, the query field under `.palette`).
     pub(super) fn input_under_class(&self, class: &str) -> Option<NodeId> {
-        let dom = self.dom.borrow();
+        let dom = self.view.dom.borrow();
         let container = first_with_class(&dom, dom.document(), class)?;
         first_tag(&dom, container, "input")
     }

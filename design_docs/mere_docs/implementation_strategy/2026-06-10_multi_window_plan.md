@@ -423,3 +423,26 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   `toolbar_h`, size) move in **MW2** with the `App`→`Shell` reshape, the `ShellCommand`
   seam, and the method-receiver shift to `(&mut WindowView, &mut SharedState)`. 36
   bin-file access sites updated; behavior-preserving (44 lib + 63 bin green).
+- 2026-06-10: **MW2 carve complete — every per-window field now lives in `WindowView`.**
+  Four clusters moved off `App` into `App.view` across this and the prior session: the
+  **frame** cluster (`frame_layout`, `next_pane_id`, `maximized_pane`, `active_content`;
+  unblocked by a hand-written `Default for FrameLayout` + a `Default` `ContentPane`), the
+  **scrying** cluster (`scrying`/`ScryingHost`, `scrying_rect`, `scrying_input_focus`,
+  per-window because each WebView is HWND-bound, folding in the X1/X2 work), the
+  **window/size/input** cluster (`window`, `host`, `toolbar_h`, `width`, `height`,
+  `cursor`, `modifiers`), and the **chrome-runner** cluster (`dom`, `runner`, `workbench`,
+  `workbench_dom`, `workbench_runner`). The runners are `!Default` (a serval document
+  authority can't be conjured), so this **ends the derive-`Default` era**: `WindowView`
+  now has an explicit [`WindowView::new(dom, runner, workbench, workbench_dom,
+  workbench_runner)`](../../../crates/meerkat/src/window_view.rs) over a fresh runner pair,
+  which is exactly how a second window will be minted over the same shared session.
+  Collision-aware edits throughout: `self.host`/`self.host_text`,
+  `self.toolbar_h`/`self.toolbar_height()`, `self.window`/`self.window_control()`, and
+  `self.workbench`/`self.workbench_open()` all share a literal prefix, so those went
+  per-site or by trailing-char form, never bulk. ~140 access sites updated; behavior-
+  preserving (44 lib + 63 bin green). **`App` is now cleanly bisected:** `view:
+  WindowView` is all per-window state; the remaining ~25 fields (orrery, the actor
+  handles, constellation, the session registry + switcher caches, theming, observability,
+  a11y, settings, inbox) are the shared set headed for `SharedState`. The reshape
+  (group `SharedState`, then `Shell { shared, windows: HashMap<WindowId, WindowView>,
+  primary }` + route by `WindowId` + the `ShellCommand` seam) is the only MW2 work left.

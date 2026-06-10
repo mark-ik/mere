@@ -53,7 +53,7 @@ fn scrying_vk(event: &winit::event::KeyEvent) -> u32 {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_some() {
+        if self.view.window.is_some() {
             return;
         }
         // Borderless: the OS title bar (and its accent border) is off; the chrome's
@@ -64,15 +64,15 @@ impl ApplicationHandler for App {
             .with_decorations(false)
             .with_visible(false)
             .with_min_inner_size(PhysicalSize::new(480u32, 320u32))
-            .with_inner_size(PhysicalSize::new(self.width, self.height));
+            .with_inner_size(PhysicalSize::new(self.view.width, self.view.height));
         let window = Arc::new(
             event_loop
                 .create_window(attributes)
                 .expect("failed to create meerkat window"),
         );
         let size = window.inner_size();
-        self.width = size.width.max(1);
-        self.height = size.height.max(1);
+        self.view.width = size.width.max(1);
+        self.view.height = size.height.max(1);
 
         // The shared serval-on-winit present stack: wgpu + netrender boot, surface
         // configured at the window size.
@@ -81,8 +81,8 @@ impl ApplicationHandler for App {
             enable_vello: true,
             ..Default::default()
         };
-        match SurfaceHost::boot(window.clone(), self.width, self.height, options) {
-            Ok(host) => self.host = Some(host),
+        match SurfaceHost::boot(window.clone(), self.view.width, self.view.height, options) {
+            Ok(host) => self.view.host = Some(host),
             Err(err) => {
                 eprintln!("[meerkat] {err}");
                 event_loop.exit();
@@ -105,7 +105,7 @@ impl ApplicationHandler for App {
         self.refresh_a11y_summary();
         window.set_visible(true);
         window.request_redraw();
-        self.window = Some(window);
+        self.view.window = Some(window);
 
         // Show the restored focused node's content from the durable cache (so a
         // reload re-opens its card without a navigation). A fresh `mere://welcome`
@@ -237,7 +237,7 @@ impl ApplicationHandler for App {
             latest_sync = Some(sync::to_indicator(&update.status, sync::LANE_LABEL));
         }
         if let Some(indicator) = latest_sync {
-            self.runner.update(|c| c.sync = indicator.clone());
+            self.view.runner.update(|c| c.sync = indicator.clone());
             self.request_redraw();
         }
         // Comms (P6c): the comms actor delivers conversation lists + threads here;
@@ -256,7 +256,7 @@ impl ApplicationHandler for App {
                         "succeeded",
                         Some("inbox".to_string()),
                     );
-                    self.runner.update(|c| c.comms.set_inbox(inbox.clone()));
+                    self.view.runner.update(|c| c.comms.set_inbox(inbox.clone()));
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::Thread(id, messages) => {
@@ -270,7 +270,7 @@ impl ApplicationHandler for App {
                         "succeeded",
                         Some("thread".to_string()),
                     );
-                    self.runner.update(|c| {
+                    self.view.runner.update(|c| {
                         if c.comms.selected() == Some(&id) {
                             c.comms.set_thread(messages.clone());
                         }
@@ -281,7 +281,7 @@ impl ApplicationHandler for App {
                     self.observability.record_actor("comms", "sent", None);
                     self.observability
                         .record_actor("comms", "succeeded", Some("sent".to_string()));
-                    self.runner.update(|c| c.clear_comms_draft());
+                    self.view.runner.update(|c| c.clear_comms_draft());
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::SendOutcome(line) => {
@@ -292,7 +292,7 @@ impl ApplicationHandler for App {
                         "succeeded",
                         Some("send_outcome".to_string()),
                     );
-                    self.runner
+                    self.view.runner
                         .update(|c| c.comms.set_send_status(line.clone()));
                     comms_changed = true;
                 }
@@ -314,7 +314,7 @@ impl ApplicationHandler for App {
                         "succeeded",
                         Some("identity".to_string()),
                     );
-                    self.runner.update(|c| {
+                    self.view.runner.update(|c| {
                         c.comms
                             .set_identity(misfin_address.clone(), cabal_ticket.clone())
                     });
@@ -345,7 +345,7 @@ impl ApplicationHandler for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        if self.window.as_ref().map(|w| w.id()) != Some(window_id) {
+        if self.view.window.as_ref().map(|w| w.id()) != Some(window_id) {
             return;
         }
         match event {
@@ -356,7 +356,7 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => self.resize(size.width, size.height),
             WindowEvent::Focused(focused) => self.update_a11y_window_focus(focused),
             WindowEvent::CursorMoved { position, .. } => {
-                self.cursor = (position.x as f32, position.y as f32);
+                self.view.cursor = (position.x as f32, position.y as f32);
                 // A manual window resize in progress: drive it from the move and
                 // route nowhere else. (Custom titlebar.)
                 if self.view.resize_drag.is_some() {
@@ -367,8 +367,8 @@ impl ApplicationHandler for App {
                 // drag (the OS takes over from here); below the slop it stays a
                 // pending click and the move routes nowhere. (Custom titlebar.)
                 if let Some((px, py)) = self.view.titlebar_press {
-                    if (self.cursor.0 - px).hypot(self.cursor.1 - py) > 4.0 {
-                        if let Some(window) = self.window.as_ref() {
+                    if (self.view.cursor.0 - px).hypot(self.view.cursor.1 - py) > 4.0 {
+                        if let Some(window) = self.view.window.as_ref() {
                             let _ = window.drag_window();
                         }
                         self.view.titlebar_press = None;
@@ -390,7 +390,7 @@ impl ApplicationHandler for App {
                 } else if self.view.tab_drag.is_some() {
                     // Follow the drag: the drop-target highlight tracks the pointer.
                     self.request_redraw();
-                } else if let Some((member, lx, ly)) = self.scrying_at(self.cursor.0, self.cursor.1)
+                } else if let Some((member, lx, ly)) = self.scrying_at(self.view.cursor.0, self.view.cursor.1)
                 {
                     // Hover / drag over the compatibility-view tile feeds the WebView;
                     // the orrery is not panned underneath. (Scrying X2.)
@@ -398,19 +398,19 @@ impl ApplicationHandler for App {
                         .scrying
                         .forward_mouse(member, lx, ly, scrying_host::MousePress::Move);
                     self.request_redraw();
-                } else if self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th) {
+                } else if self.orrery.cursor_moved(self.view.cursor.0, self.view.cursor.1 - th) {
                     self.request_redraw();
                 }
             }
             WindowEvent::ModifiersChanged(mods) => {
-                self.modifiers = modifiers_from_winit(mods.state());
-                self.orrery.set_ctrl(self.modifiers.ctrl);
-                self.orrery.set_shift(self.modifiers.shift);
+                self.view.modifiers = modifiers_from_winit(mods.state());
+                self.orrery.set_ctrl(self.view.modifiers.ctrl);
+                self.orrery.set_shift(self.view.modifiers.shift);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 // A wheel over the compatibility-view tile scrolls the WebView (Win32
                 // convention: 120 units per notch); it does not pan the orrery. (X2.)
-                if let Some((member, lx, ly)) = self.scrying_at(self.cursor.0, self.cursor.1) {
+                if let Some((member, lx, ly)) = self.scrying_at(self.view.cursor.0, self.view.cursor.1) {
                     let delta_y = match delta {
                         MouseScrollDelta::LineDelta(_, y) => (y * 120.0) as i32,
                         MouseScrollDelta::PixelDelta(p) => p.y as i32,
@@ -429,7 +429,7 @@ impl ApplicationHandler for App {
                 // shift over its tall texture). Over the orrery pane it drives the
                 // orrery (pan, or Ctrl-zoom); over the workbench pane (off a tile) it
                 // does nothing.
-                let (cx, cy) = self.cursor;
+                let (cx, cy) = self.view.cursor;
                 if self
                     .roster_leaf_rect()
                     .is_some_and(|r| cx >= r[0] && cx < r[2] && cy >= r[1] && cy < r[3])
@@ -485,10 +485,10 @@ impl ApplicationHandler for App {
                         return;
                     }
                     let mods = scrying_host::KeyMods {
-                        shift: self.modifiers.shift,
-                        ctrl: self.modifiers.ctrl,
-                        alt: self.modifiers.alt,
-                        meta: self.modifiers.meta,
+                        shift: self.view.modifiers.shift,
+                        ctrl: self.view.modifiers.ctrl,
+                        alt: self.view.modifiers.alt,
+                        meta: self.view.modifiers.meta,
                     };
                     self.view.scrying.forward_key(
                         member,
@@ -519,7 +519,7 @@ impl App {
     /// surface.
     fn apply_resize(&self) {
         let Some(drag) = self.view.resize_drag else { return };
-        let Some(window) = self.window.as_ref() else {
+        let Some(window) = self.view.window.as_ref() else {
             return;
         };
         use winit::window::ResizeDirection as D;
@@ -527,8 +527,8 @@ impl App {
             .outer_position()
             .map(|p| (p.x as f32, p.y as f32))
             .unwrap_or((drag.start_outer.0 as f32, drag.start_outer.1 as f32));
-        let screen_x = outer.0 + self.cursor.0;
-        let screen_y = outer.1 + self.cursor.1;
+        let screen_x = outer.0 + self.view.cursor.0;
+        let screen_y = outer.1 + self.view.cursor.1;
         let dx = screen_x - drag.start_cursor_screen.0;
         let dy = screen_y - drag.start_cursor_screen.1;
         let start_left = drag.start_outer.0 as f32;
@@ -571,18 +571,18 @@ impl App {
     /// titlebar). Edges show the matching resize arrows; the window controls and
     /// the interior keep the default arrow. Only re-sets the cursor on a change.
     fn update_hover_cursor(&mut self) {
-        let (x, y) = self.cursor;
+        let (x, y) = self.view.cursor;
         let band_h = self.toolbar_height();
-        let icon = if titlebar::control_at(x, y, self.width, band_h).is_some() {
+        let icon = if titlebar::control_at(x, y, self.view.width, band_h).is_some() {
             CursorIcon::Default
-        } else if let Some(dir) = titlebar::resize_dir_at(x, y, self.width, self.height) {
+        } else if let Some(dir) = titlebar::resize_dir_at(x, y, self.view.width, self.view.height) {
             titlebar::resize_cursor(dir)
         } else {
             CursorIcon::Default
         };
         if icon != self.view.cursor_icon {
             self.view.cursor_icon = icon;
-            if let Some(window) = self.window.as_ref() {
+            if let Some(window) = self.view.window.as_ref() {
                 window.set_cursor(icon);
             }
         }

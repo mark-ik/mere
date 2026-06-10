@@ -33,27 +33,27 @@ impl App {
     /// the available width/height; measuring once suffices. Used to place the
     /// content root directly below the toolbar.
     pub(super) fn toolbar_height(&mut self) -> u32 {
-        if self.toolbar_h == 0 {
+        if self.view.toolbar_h == 0 {
             let sheet = self.chrome_sheet_refs();
             let measured = measure_class_bottom(
-                &self.dom.borrow(),
+                &self.view.dom.borrow(),
                 &sheet,
-                self.width,
-                self.height,
+                self.view.width,
+                self.view.height,
                 "toolbar",
             )
             .unwrap_or(FALLBACK_TOOLBAR_H);
-            self.toolbar_h = measured;
+            self.view.toolbar_h = measured;
         }
-        self.toolbar_h
+        self.view.toolbar_h
     }
 
     /// Reconfigure the surface for `(width, height)` and request a redraw.
     pub(super) fn resize(&mut self, width: u32, height: u32) {
-        self.width = width.max(1);
-        self.height = height.max(1);
-        if let Some(host) = self.host.as_mut() {
-            host.resize(self.width, self.height);
+        self.view.width = width.max(1);
+        self.view.height = height.max(1);
+        if let Some(host) = self.view.host.as_mut() {
+            host.resize(self.view.width, self.view.height);
         }
         self.refresh_a11y_summary();
         self.request_redraw();
@@ -65,10 +65,10 @@ impl App {
     /// dropdown float above the content while the rest lets the orrery show
     /// through. Composite order is content first, then chrome on top.
     pub(super) fn render(&mut self) {
-        if self.host.is_none() {
+        if self.view.host.is_none() {
             return;
         }
-        let (w, h) = (self.width.max(1), self.height.max(1));
+        let (w, h) = (self.view.width.max(1), self.view.height.max(1));
         let toolbar_h = self.toolbar_height().min(h);
 
         // Reserve / drop the Comms frame leaf to match the chrome's comms-open state
@@ -85,10 +85,10 @@ impl App {
             comms: self.pane_of_content(&PaneContent::Comms).is_some(),
         };
         let sb_edge = self.shellbar_edge;
-        if self.runner.state().shellbar_panes != sb_panes
-            || self.runner.state().shellbar_edge != sb_edge
+        if self.view.runner.state().shellbar_panes != sb_panes
+            || self.view.runner.state().shellbar_edge != sb_edge
         {
-            self.runner.update(move |c| {
+            self.view.runner.update(move |c| {
                 c.shellbar_panes = sb_panes;
                 c.shellbar_edge = sb_edge;
             });
@@ -130,7 +130,7 @@ impl App {
         // Chrome scene over the full window. Paint the caret / selection of the
         // focused field — the palette query when open, else the omnibar (byte
         // offsets from the field's char model).
-        let cursor = self.runner.focus().map(|node| {
+        let cursor = self.view.runner.focus().map(|node| {
             let field = self.caret_field(node);
             let byte_of = |i: usize| {
                 field
@@ -164,7 +164,7 @@ impl App {
                     "row"
                 }
             };
-            let mut dom = self.dom.borrow_mut();
+            let mut dom = self.view.dom.borrow_mut();
             let root = dom.document();
             if let Some(node) = first_with_class(&dom, root, "shellbar") {
                 let style = format!(
@@ -183,7 +183,7 @@ impl App {
         // rendered but laid out by the frame tree): set the geometry inline so it
         // fills the reserved Comms leaf rect. (Comms pane.)
         if let Some(cr) = comms_rect {
-            let mut dom = self.dom.borrow_mut();
+            let mut dom = self.view.dom.borrow_mut();
             let root = dom.document();
             if let Some(node) = first_with_class(&dom, root, "comms-pane") {
                 let style = format!(
@@ -199,7 +199,7 @@ impl App {
         }
         let chrome_sheet = self.chrome_sheet_refs();
         let chrome_scene =
-            scene_from_scripted_dom(&self.dom.borrow(), &chrome_sheet, w, h, cursor, &scroll);
+            scene_from_scripted_dom(&self.view.dom.borrow(), &chrome_sheet, w, h, cursor, &scroll);
 
         // Color the orrery's nodes by activation state (green open / red closed /
         // blue new) so the graph shows at a glance what's live. (Visible in
@@ -228,18 +228,18 @@ impl App {
             let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
             let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
             let mut scene = WorkbenchScene::from_workbench(
-                &self.workbench,
+                &self.view.workbench,
                 self.orrery.graph(),
                 (ww as f32, wh as f32),
                 |m| self.constellation.is_background(m),
                 |m| self.constellation.is_recovering(m),
             );
             scene.drag_target = self.drag_target_member();
-            if self.workbench_runner.state() != &scene {
-                self.workbench_runner.update(move |s| *s = scene);
+            if self.view.workbench_runner.state() != &scene {
+                self.view.workbench_runner.update(move |s| *s = scene);
             }
             let wb = scene_from_scripted_dom(
-                &self.workbench_dom.borrow(),
+                &self.view.workbench_dom.borrow(),
                 WORKBENCH_SHEET,
                 ww,
                 wh,
@@ -293,7 +293,7 @@ impl App {
             let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
             let placements: Vec<(GraphMemberId, [f32; 4], [f32; 4])> = {
                 let (ox, oy) = (wr[0], wr[1]);
-                let dom = self.workbench_dom.borrow();
+                let dom = self.view.workbench_dom.borrow();
                 let frags = fragments_from_scripted_dom(&dom, WORKBENCH_SHEET, ww, wh);
                 let root = dom.document();
                 let (wx, wy) = first_with_class(&dom, root, "workbench")
@@ -371,7 +371,7 @@ impl App {
                         // resize / navigate + non-blocking frame import)
                         // instead of a content actor.
                         if let (Some(window), Some(host)) =
-                            (self.window.as_ref(), self.host.as_ref())
+                            (self.view.window.as_ref(), self.view.host.as_ref())
                         {
                             let window = window.clone();
                             let device = host.device().clone();
@@ -487,7 +487,7 @@ impl App {
             None
         };
 
-        let host = self.host.as_ref().unwrap();
+        let host = self.view.host.as_ref().unwrap();
         let (_chrome_tex, chrome_view) = host.rasterize(
             &chrome_scene,
             w,
@@ -1087,7 +1087,7 @@ impl App {
     /// before this point rather than discarding it.
     fn discard_dom_mutations(&self) {
         let mut sink = Vec::new();
-        self.dom.borrow_mut().drain_mutations(&mut sink);
-        self.workbench_dom.borrow_mut().drain_mutations(&mut sink);
+        self.view.dom.borrow_mut().drain_mutations(&mut sink);
+        self.view.workbench_dom.borrow_mut().drain_mutations(&mut sink);
     }
 }

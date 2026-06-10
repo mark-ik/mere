@@ -41,23 +41,22 @@ use frame::{
 };
 use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
-use meerkat::{Chrome, ChromeLogic, ChromeView, chrome_view};
+use meerkat::{Chrome, ChromeLogic, chrome_view};
 use orrery::{CameraView, Orrery};
 use pelt_live::fragments_from_scripted_dom;
 use platen::Workbench;
-use platen_view::{WorkbenchLogic, WorkbenchScene, WorkbenchTreeView, workbench_view};
+use platen_view::{WorkbenchLogic, WorkbenchScene, workbench_view};
 use register_diagnostics::{DiagnosticEvent, install_global_sender};
 use register_theme::chrome::{ChromeTheme, Color32};
 use register_theme::theme::ThemeRegistry;
 use serval_scripted_dom::{NodeId, ScriptedDom};
-use serval_winit_host::SurfaceHost;
 use session_runtime::{
     ManifestStore, SwitcherThumbnail, frame_layout_store, manifest::GraphSessionManifest,
     session_graph_store, settings_store, view_intent_store,
 };
 use tracing_subscriber::prelude::*;
 use winit::window::ResizeDirection;
-use xilem_serval::{Modifiers, ServalAppRunner};
+use xilem_serval::ServalAppRunner;
 
 mod card;
 mod comms_host;
@@ -379,9 +378,6 @@ enum A11yHostAction {
 /// the chrome view tree into it, the orrery content-root, the window + GPU, and
 /// input bookkeeping.
 struct App {
-    /// The chrome DOM the runner mutates and the render path reads.
-    dom: Rc<RefCell<ScriptedDom>>,
-    runner: ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
     /// The content root: the [`Orrery`] — the graph's spatial presentation,
     /// rendered into the band below the chrome and driven by content-band input.
     orrery: Orrery,
@@ -433,18 +429,9 @@ struct App {
     /// pages + subresources by URL. `None` if the store could not be opened
     /// (caching disabled; the shell still runs).
     store: Option<FjallStore>,
-    /// Cached measured height (px) of the chrome band; `0` until first measured.
-    toolbar_h: u32,
-    window: Option<Arc<winit::window::Window>>,
-    /// The shared serval-on-winit present stack, built once a window exists.
-    host: Option<SurfaceHost>,
-    /// Tracked keyboard modifiers, folded into each dispatched `KeyEvent`.
-    modifiers: Modifiers,
     /// System clipboard for the omnibar / palette Ctrl(Cmd)+C/X/V. `None` if the
     /// platform clipboard could not be opened (the shortcuts then no-op).
     clipboard: Option<arboard::Clipboard>,
-    /// Last cursor position in physical pixels (window space == content space).
-    cursor: (f32, f32),
     /// The nematic engine registry, for rendering "last visit" snapshot cards
     /// host-side from the durable content cache (no actor) — the same registry the
     /// content actor builds, kept here for the snapshot path. (Card #4.)
@@ -470,18 +457,6 @@ struct App {
     /// The bridge only queues raw AccessKit requests; the kernel thread resolves
     /// ids through this table and applies semantic host actions.
     a11y_action_routes: HashMap<AccessNodeId, A11yHostAction>,
-    width: u32,
-    height: u32,
-    /// The tiled-workbench composition (S4): the open tiles + the projection mode
-    /// (Cartography = the orrery, Tree = the tiled view).
-    workbench: Workbench,
-    /// The workbench root: a second serval document authority (separate from the
-    /// chrome root) that renders the tile tree as flex DOM via [`platen_view`].
-    /// In Tree mode the host syncs it from `workbench`, rasterizes it as the content
-    /// band, reads each tile's content rect back, and composites that tile's actor
-    /// texture there. taffy lays it out — the morphorm path is gone.
-    workbench_dom: Rc<RefCell<ScriptedDom>>,
-    workbench_runner: ServalAppRunner<WorkbenchScene, WorkbenchLogic, WorkbenchTreeView>,
     /// The active-tab cap last written to the settings sidecar. Guards the persist
     /// path so an unchanged value isn't re-written on every chrome click.
     saved_tab_cap: usize,
@@ -731,14 +706,25 @@ impl App {
             }
         }
         let a11y_proxy = proxy.clone();
-        let mut view = window_view::WindowView::default();
+        // This window's workbench runner (the tiled-view document authority),
+        // built beside its chrome runner; both move into the per-window view.
+        let workbench_runner = ServalAppRunner::new(
+            workbench_dom.clone(),
+            workbench_view as WorkbenchLogic,
+            WorkbenchScene::default(),
+        );
+        let mut view = window_view::WindowView::new(
+            dom,
+            runner,
+            Workbench::new(),
+            workbench_dom,
+            workbench_runner,
+        );
         view.centered = restored_camera.is_some();
         view.content_location = content_location;
         view.frame_layout = frame_layout;
         view.next_pane_id = next_pane_id;
         let mut app = Self {
-            dom,
-            runner,
             orrery,
             fetch_handle,
             constellation,
@@ -754,12 +740,7 @@ impl App {
             view,
             host_text: text::HostText::new(),
             store,
-            toolbar_h: 0,
-            window: None,
-            host: None,
-            modifiers: Modifiers::default(),
             clipboard: arboard::Clipboard::new().ok(),
-            cursor: (0.0, 0.0),
             engine_registry,
             chrome_sheet,
             chrome_theme,
@@ -770,15 +751,6 @@ impl App {
                 let _ = a11y_proxy.send_event(());
             }),
             a11y_action_routes: HashMap::new(),
-            width: 1024,
-            height: 600,
-            workbench: Workbench::new(),
-            workbench_dom: workbench_dom.clone(),
-            workbench_runner: ServalAppRunner::new(
-                workbench_dom,
-                workbench_view as WorkbenchLogic,
-                WorkbenchScene::default(),
-            ),
             saved_tab_cap: saved_settings.tab_cap,
             shellbar_edge: saved_settings.shellbar_edge,
             inbox: KernelInbox {
@@ -799,7 +771,7 @@ impl App {
 
     /// Request a redraw if a window exists.
     fn request_redraw(&self) {
-        if let Some(window) = self.window.as_ref() {
+        if let Some(window) = self.view.window.as_ref() {
             window.request_redraw();
         }
     }
