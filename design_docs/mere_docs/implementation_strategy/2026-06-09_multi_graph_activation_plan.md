@@ -6,7 +6,7 @@ multi-graph with a window-scoped pane layout (near-Model-B): the shellbar
 switcher creates / switches / closes / **renames** graphs (labelled tiles), and
 switching keeps the panes while re-sourcing the graph-bound ones. MG6 (far-B
 leaf coexistence, multi-window tear-out, persona chip) remains.
-**Related**: [shellbar plan F2.3](2026-06-09_shellbar_plan.md), [graph session manifest plan](2026-05-11_graph_session_manifest_plan.md), [switcher thumbnails plan](2026-05-14_switcher_thumbnails_plan.md), [multi-window plan](2026-06-04_multi_window_plan.md), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) (panes are per-window), [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md). Code: `crates/system/session-runtime/`, `crates/meerkat/`, `crates/shell/frame/`.
+**Related**: [shellbar plan F2.3](2026-06-09_shellbar_plan.md), [graph session manifest plan](2026-05-11_graph_session_manifest_plan.md), [switcher thumbnails plan](2026-05-14_switcher_thumbnails_plan.md), [multi-window plan](2026-06-10_multi_window_plan.md), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) (panes are per-window), [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md). Code: `crates/system/session-runtime/`, `crates/meerkat/`, `crates/shell/frame/`.
 
 Give one window many graphs, switchable from the shellbar. The destination is
 **Model B** (the window holds the panes, the graph is the content that flows
