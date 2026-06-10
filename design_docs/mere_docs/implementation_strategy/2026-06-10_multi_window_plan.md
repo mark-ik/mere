@@ -518,3 +518,25 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   a11y, settings, inbox) are the shared set headed for `SharedState`. The reshape
   (group `SharedState`, then `Shell { shared, windows: HashMap<WindowId, WindowView>,
   primary }` + route by `WindowId` + the `ShellCommand` seam) is the only MW2 work left.
+- 2026-06-10: **MW2 (b) done — `SharedState` grouped + `ScryingHost` split** (commits
+  `979176f` + `a989988`). (b1): the ~25 shared fields lifted off `App` into a
+  `SharedState` subdivided into subsystems — `content` { constellation, pages, store,
+  fetch_handle, engine_registry }, `session` { manifests, active_session_id, session_dir,
+  mere_root, switcher caches, host_text }, `presentation` { theme, chrome_theme,
+  chrome_sheet, active_theme_id, saved_tab_cap, shellbar_edge }, and flat `comms_handle` /
+  `sync_handle` / `observability` + `inbox` (now carrying the diagnostics receiver). `App`
+  keeps `orrery` (the MW6 IOU), the per-window `view`, `clipboard` (system-global), the
+  a11y bridge + routes (per-window, deferred), and the kernel marker. Subdivide-in-one-pass
+  as decided (no flat-first); ~192 `self.X` + the `app.X` test sites rewritten compiler-
+  chased via word-boundary regex (the only collisions were the already-moved
+  `content_location` and the foreign `ResourceStore::store`, both dodged by `\b` / file
+  scope). (b2): `ScryingHost` split — the compat *pins* (a `HashSet`) became session state
+  at `shared.content.compat_pins`; the HWND-parented producer *pool* stays per-window on
+  `WindowView.scrying`. Only 3 sites touched compat (`is_compat` read, `clear`,
+  `toggle_compat`); `toggle_focus_compat` now toggles the shared pin then reaps the local
+  tile inline (genuinely cross-cutting). Both steps behavior-preserving (44 lib + 63 bin
+  green). **Remaining: (c) the receiver shift** — convert `&mut self` methods to
+  `(view, shared)` functions bottom-up so the registry can target a specific window;
+  then (d) `windows` HashMap + `WindowId` routing + `App`→`Shell`, (e) the `ShellCommand`
+  seam. (c) is the bulk of the remaining work and its midpoint is the reshape's most
+  delicate moment (half-converted methods, no bridge allowed), so it wants a focused run.
