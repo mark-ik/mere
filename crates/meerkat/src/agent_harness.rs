@@ -499,6 +499,50 @@ mod tests {
     }
 
     #[test]
+    fn switching_keeps_the_window_panes_and_resources_graph_bound_leaves() {
+        let mut app = test_app();
+        let first = app.active_session_id;
+        let first_graph = app.active_graph_id();
+        // Open a second pane: the window now holds an orrery + a roster.
+        app.toggle_pane(frame::PaneContent::Roster);
+        let has_roster = |app: &App| {
+            app.frame_layout
+                .iter_leaves()
+                .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
+        };
+        let orrery_graph = |app: &App| {
+            app.frame_layout
+                .iter_leaves()
+                .find(|(_, c, _)| matches!(c, frame::PaneContent::Orrery))
+                .map(|(_, _, g)| g)
+                .expect("the orrery pane is always present")
+        };
+        assert!(has_roster(&app), "roster pane opened");
+        assert_eq!(orrery_graph(&app), first_graph, "orrery bound to the first graph");
+
+        // Switch to a fresh session: the pane arrangement persists (the frame is
+        // window-scoped) and the graph-bound orrery leaf re-sources to the new graph.
+        // (Model B, MG5.)
+        app.create_session();
+        let second_graph = app.active_graph_id();
+        assert_ne!(second_graph, first_graph, "the new session has its own graph");
+        assert!(
+            has_roster(&app),
+            "the roster pane survived the switch (frame is window-scoped, not swapped)"
+        );
+        assert_eq!(
+            orrery_graph(&app),
+            second_graph,
+            "the orrery leaf re-sourced to the new active graph"
+        );
+
+        // Back to the first: the layout still holds; the orrery follows it again.
+        app.switch_session(first);
+        assert!(has_roster(&app), "the pane layout persists across switches");
+        assert_eq!(orrery_graph(&app), first_graph);
+    }
+
+    #[test]
     fn observation_exposes_surfaces_actions_and_a11y() {
         let mut app = test_app();
         let observation = app.agent_observation();

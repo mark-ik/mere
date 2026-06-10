@@ -69,6 +69,12 @@ impl GraphId {
         Self(uuid)
     }
 
+    /// The nil (all-zero) id — the "unbound" marker a window-chrome leaf carries
+    /// (it follows no graph), distinct from any real graph's id. (Multi-graph MG5.)
+    pub fn nil() -> Self {
+        Self(uuid::Uuid::nil())
+    }
+
     pub fn as_uuid(&self) -> &uuid::Uuid {
         &self.0
     }
@@ -181,6 +187,32 @@ impl PaneContent {
             PaneContent::System => "system",
             PaneContent::Tile(_) => "tile",
             PaneContent::Custom(s) => s.as_str(),
+        }
+    }
+
+    /// Whether this pane renders the window's **active graph** (and so re-sources
+    /// when the active graph changes), versus window-chrome that is graph-independent.
+    ///
+    /// Graph-bound panes show the graph or its objects — the orrery's space-view,
+    /// the roster's data-view, the gloss minimap, a node Inspector, the workbench's
+    /// node tiles. Window-chrome panes are about the *window / system*, not any one
+    /// graph: the Steward's running jobs, Comms messaging, the Apparatus / System
+    /// diagnostics. On a multi-graph switch the host re-points graph-bound leaves to
+    /// the new active graph (see [`FrameLayout::retag_graph_bound`]) and leaves
+    /// window-chrome untouched. (Multi-graph MG5; the model-B re-sourcing policy.)
+    pub fn follows_active_graph(&self) -> bool {
+        match self {
+            PaneContent::Orrery
+            | PaneContent::Workbench
+            | PaneContent::Gloss
+            | PaneContent::Roster
+            | PaneContent::Inspector
+            | PaneContent::Tile(_) => true,
+            PaneContent::Steward
+            | PaneContent::Comms
+            | PaneContent::Apparatus
+            | PaneContent::System
+            | PaneContent::Custom(_) => false,
         }
     }
 }

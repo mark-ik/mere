@@ -224,6 +224,33 @@ impl FrameLayout {
         true
     }
 
+    /// Re-point every **graph-bound** leaf (per
+    /// [`PaneContent::follows_active_graph`]) at `graph`, leaving
+    /// window-chrome leaves' `graph_id` untouched. This is the
+    /// multi-graph "re-source the graph-bound panes" operation: the
+    /// host calls it on a session switch so the orrery / roster /
+    /// gloss / inspector / workbench panes follow the new active
+    /// graph while the Steward / Comms / Apparatus panes stay put.
+    /// (Multi-graph MG5; the model-B switch.)
+    pub fn retag_graph_bound(&mut self, graph: GraphId) {
+        fn walk(node: &mut PaneNode, graph: GraphId) {
+            match node {
+                PaneNode::Leaf {
+                    content, graph_id, ..
+                } => {
+                    if content.follows_active_graph() {
+                        *graph_id = graph;
+                    }
+                }
+                PaneNode::Split { first, second, .. } => {
+                    walk(first, graph);
+                    walk(second, graph);
+                }
+            }
+        }
+        walk(&mut self.root, graph);
+    }
+
     /// Iterate every leaf in the layout in depth-first order
     /// (first-child before second-child). Yields `(pane_id, content,
     /// graph_id)` triples. Used by the host to assemble per-pane

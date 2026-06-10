@@ -210,3 +210,53 @@ fn reparent_leaf_refuses_when_target_is_not_a_leaf() {
     let workbench_path = vec![SplitChoice::First];
     assert!(!layout.reparent_leaf(&workbench_path, &[], InsertSide::Right));
 }
+
+#[test]
+fn graph_bound_panes_are_classified_apart_from_window_chrome() {
+    // Graph-bound: the graph + its objects re-source on a session switch.
+    for c in [
+        PaneContent::Orrery,
+        PaneContent::Workbench,
+        PaneContent::Gloss,
+        PaneContent::Roster,
+        PaneContent::Inspector,
+        PaneContent::Tile(LeafNodeRef(0)),
+    ] {
+        assert!(c.follows_active_graph(), "{} should follow the graph", c.tag());
+    }
+    // Window-chrome: about the window / system, not any one graph.
+    for c in [
+        PaneContent::Steward,
+        PaneContent::Comms,
+        PaneContent::Apparatus,
+        PaneContent::System,
+        PaneContent::Custom("x".into()),
+    ] {
+        assert!(
+            !c.follows_active_graph(),
+            "{} should be graph-independent",
+            c.tag()
+        );
+    }
+}
+
+#[test]
+fn retag_graph_bound_repoints_only_graph_bound_leaves() {
+    // Fixture: workbench (pane 1) + orrery (pane 2) are graph-bound;
+    // apparatus (pane 3) is window-chrome.
+    let mut layout = fixture_three_pane_frame();
+    let old = GraphId::from_uuid(uuid::Uuid::from_u128(0xc01));
+    let new = GraphId::from_uuid(uuid::Uuid::from_u128(0xbeef));
+    layout.retag_graph_bound(new);
+
+    let by_pane = |id: u64| {
+        layout
+            .iter_leaves()
+            .find(|(p, _, _)| p.0 == id)
+            .map(|(_, _, g)| g)
+            .unwrap()
+    };
+    assert_eq!(by_pane(1), new, "workbench (graph-bound) follows the new graph");
+    assert_eq!(by_pane(2), new, "orrery (graph-bound) follows the new graph");
+    assert_eq!(by_pane(3), old, "apparatus (window-chrome) stays put");
+}

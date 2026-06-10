@@ -1,8 +1,11 @@
 # Multi-Graph Activation Plan
 
 **Date**: 2026-06-09
-**Status**: Planning. The substrate (session manifests, per-session storage,
-switcher thumbnails) is built; this plan wires meerkat to use it.
+**Status**: In progress. MG1–MG5 done — meerkat runs multi-graph with a
+window-scoped pane layout (near-Model-B): the shellbar switcher creates /
+switches / closes graphs, and switching keeps the panes while re-sourcing the
+graph-bound ones. MG6 (far-B leaf coexistence, multi-window tear-out, persona
+chip) remains; rename is deferred on the host text path.
 **Related**: [shellbar plan F2.3](2026-06-09_shellbar_plan.md), [graph session manifest plan](2026-05-11_graph_session_manifest_plan.md), [switcher thumbnails plan](2026-05-14_switcher_thumbnails_plan.md), [multi-window plan](2026-06-04_multi_window_plan.md), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) (panes are per-window), [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md). Code: `crates/system/session-runtime/`, `crates/meerkat/`, `crates/shell/frame/`.
 
 Give one window many graphs, switchable from the shellbar. The destination is
@@ -92,13 +95,15 @@ Done when create / close / rename work end to end and survive restart, with the 
 
 Done when the shellbar lists sessions with live thumbnails and drives create / switch / close without keybinds.
 
-### MG5 — transition to Model B (the goal)
+### MG5 — transition to Model B (the goal) — **done (near-B)**
 
 - Lift `frame_layout` to window scope; stop swapping it on switch.
 - Give leaves a real `graph_id`; mark graph-bound leaf kinds (orrery, roster, gloss, Inspector-node-face) as following the active graph, and window-chrome kinds (Apparatus, Steward, Comms) as graph-independent.
 - `switch_session` becomes "set active graph + re-source the graph-bound leaves"; window-chrome leaves persist untouched.
 
 Done when switching graphs keeps the window's pane arrangement and re-sources only the graph-bound panes, with no full content-band swap.
+
+Near-B is reached: all graph-bound leaves follow one active graph (they read the live orrery, so the re-source is automatic; the leaf `graph_id` tags are kept consistent via `retag_graph_bound` for far-B to resolve per-leaf). Far-B (leaves of *different* `graph_id` coexisting) is MG6.
 
 ### MG6 — later
 
@@ -160,3 +165,19 @@ Done when switching graphs keeps the window's pane arrangement and re-sources on
   so naming waits on that or a text-entry affordance. 2 switcher tests
   (row+add-but-no-close for one session / close-box-per-session + downward stacking);
   meerkat suite green (44 lib + 60 bin).
+- 2026-06-10: **MG5 done (near-Model-B reached).** The content `frame_layout` is now
+  **window-scoped**: it persists at the shared `mere/` root (not per-session) and
+  stays put across switches, so a graph swap re-sources the panes instead of
+  rearranging them. `frame` gained `PaneContent::follows_active_graph()` (the
+  graph-bound vs window-chrome policy: orrery / workbench / gloss / roster / inspector
+  / tile follow the graph; steward / comms / apparatus / system are window-chrome) and
+  `FrameLayout::retag_graph_bound(graph)` (re-points only the graph-bound leaves),
+  plus `GraphId::nil()` for the window-chrome "unbound" tag. meerkat: `save_session`
+  writes the frame to `mere_root`; startup loads it from there (one-time carry-up of a
+  pre-MG5 per-session frame); `load_active_session` keeps `self.frame_layout` and
+  `retag_graph_bound`s it to the target session's `root_graph_id`; leaves are minted
+  with the active graph id (graph-bound) or nil (chrome) instead of a random
+  per-leaf id; the MG1 migration leaves the flat `frame.json` at the root. Tests:
+  `frame` +2 (classification / retag-only-graph-bound), meerkat +1 (switch keeps the
+  roster pane + re-sources the orrery leaf), migration test updated (frame stays at
+  root). Whole workspace check clean; meerkat suite green (44 lib + 61 bin), frame 12.

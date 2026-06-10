@@ -219,12 +219,13 @@ impl App {
         ) {
             tracing::warn!(%err, dir = ?self.session_dir, "failed to persist the view intent");
         }
-        // The content frame's pane layout (which panes are open + split ratios).
-        if let Err(err) = session_runtime::frame_layout_store::save_frame_layout(
-            &self.session_dir,
-            &self.frame_layout,
-        ) {
-            tracing::warn!(%err, dir = ?self.session_dir, "failed to persist the frame layout");
+        // The content frame's pane layout (which panes are open + split ratios) is
+        // **window-scoped** (Model B, MG5): it persists at the shared root and stays
+        // put across session switches, so a graph swap re-sources the panes without
+        // rearranging them.
+        if let Err(err) = frame_layout_store::save_frame_layout(&self.mere_root, &self.frame_layout)
+        {
+            tracing::warn!(%err, dir = ?self.mere_root, "failed to persist the frame layout");
         }
         // Record the save in the active session's manifest (advances `updated_at`,
         // the switcher's recency key) and flush the registry. (Multi-graph MG1.)
@@ -392,22 +393,19 @@ impl App {
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
             self.orrery.select_by_url(url);
         }
-        // Restore the saved pane layout (Model A: the frame is session-scoped); fall
-        // back to a single orrery pane if absent or pre-coexistence.
-        let restored_frame = frame_layout_store::load_frame_layout(&session_dir)
-            .ok()
-            .flatten()
-            .filter(|f| f.iter_leaves().any(|(_, c, _)| matches!(c, PaneContent::Orrery)));
-        match restored_frame {
-            Some(frame) => {
-                self.next_pane_id = frame.iter_leaves().map(|(p, _, _)| p.0).max().unwrap_or(0) + 1;
-                self.frame_layout = frame;
-            }
-            None => {
-                self.frame_layout = super::default_content_frame();
-                self.next_pane_id = 1;
-            }
-        }
+        // The frame is **window-scoped** (Model B, MG5): keep the current pane
+        // arrangement and re-point its graph-bound leaves (orrery / roster / gloss /
+        // inspector / workbench) at the target session's graph — window-chrome leaves
+        // (Steward / Comms / Apparatus) stay put. The graph-bound panes read the live
+        // orrery, so the actual content follows from `set_graph` above; this keeps the
+        // persisted leaf `graph_id` tags consistent (and is what far-B will resolve
+        // per leaf). `next_pane_id` is window-scoped too, so it is not reset.
+        let target_graph = self
+            .manifests
+            .get(id)
+            .map(|m| m.root_graph_id)
+            .unwrap_or_default();
+        self.frame_layout.retag_graph_bound(target_graph);
         // Reset the prior session's runtime caches.
         self.constellation.clear();
         self.content.clear();
@@ -972,6 +970,27 @@ impl App {
 
     // ── Frame tree (F1) ──────────────────────────────────────────────────────
 
+    /// The active session's root graph id (the `GraphId` graph-bound leaves carry).
+    /// Falls back to a fresh id if the active manifest is somehow missing. (MG5.)
+    pub(super) fn active_graph_id(&self) -> GraphId {
+        self.manifests
+            .get(self.active_session_id)
+            .map(|m| m.root_graph_id)
+            .unwrap_or_default()
+    }
+
+    /// The `graph_id` a freshly-summoned leaf of `content` should carry: the active
+    /// graph for graph-bound panes, a nil (unbound) id for window-chrome. Keeps the
+    /// "graph-bound leaves in this window share the active graph" invariant instead of
+    /// the old random-per-leaf `GraphId::default()`. (MG5.)
+    fn leaf_graph_id(&self, content: &PaneContent) -> GraphId {
+        if content.follows_active_graph() {
+            self.active_graph_id()
+        } else {
+            GraphId::nil()
+        }
+    }
+
     /// The content band (below the toolbar) in window coords.
     pub(super) fn content_band(&self) -> [f32; 4] {
         let th = self.toolbar_h.max(FALLBACK_TOOLBAR_H) as f32;
@@ -1021,10 +1040,11 @@ impl App {
             self.workbench.ensure_tiled();
             let id = PaneId(self.next_pane_id);
             self.next_pane_id += 1;
+            let graph_id = self.leaf_graph_id(&PaneContent::Workbench);
             let leaf = PaneNode::Leaf {
                 pane_id: id,
                 content: PaneContent::Workbench,
-                graph_id: GraphId::default(),
+                graph_id,
             };
             let anchor =
                 frame_view::pane_path(&self.frame_layout, super::GRAPH_PANE).unwrap_or_default();
@@ -1083,10 +1103,11 @@ impl App {
             (true, None) => {
                 let id = PaneId(self.next_pane_id);
                 self.next_pane_id += 1;
+                let graph_id = self.leaf_graph_id(&PaneContent::Comms);
                 let leaf = PaneNode::Leaf {
                     pane_id: id,
                     content: PaneContent::Comms,
-                    graph_id: GraphId::default(),
+                    graph_id,
                 };
                 let anchor = frame_view::pane_path(&self.frame_layout, super::GRAPH_PANE)
                     .unwrap_or_default();
@@ -1171,10 +1192,11 @@ impl App {
         } else {
             let id = PaneId(self.next_pane_id);
             self.next_pane_id += 1;
+            let graph_id = self.leaf_graph_id(&content);
             let leaf = PaneNode::Leaf {
                 pane_id: id,
                 content,
-                graph_id: GraphId::default(),
+                graph_id,
             };
             let anchor = frame_view::pane_path(&self.frame_layout, GRAPH_PANE).unwrap_or_default();
             if self

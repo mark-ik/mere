@@ -796,13 +796,24 @@ impl App {
         orrery.set_palette(orrery_backdrop, orrery_edge);
         // The content region opens as a single graph pane (orrery / tiled
         // workbench); summoning the roster splits it. (Frame tree, F1.)
-        let mut frame_layout = default_content_frame();
-        // Restore the saved pane layout (which panes were open + their split
-        // ratios); advance the pane-id counter past the restored max. (F1.5.)
+        let active_graph = manifests
+            .get(active_session_id)
+            .map(|m| m.root_graph_id)
+            .unwrap_or_default();
+        let mut frame_layout = default_content_frame(active_graph);
+        // The frame is **window-scoped** (Model B, MG5): load it from the shared root,
+        // not the session. A pre-MG5 install saved it per-session, so carry the active
+        // session's layout up once if the shared one is absent.
         let mut next_pane_id = 1u64;
-        if let Ok(Some(restored)) =
-            session_runtime::frame_layout_store::load_frame_layout(&session_dir)
-        {
+        let restored_frame = frame_layout_store::load_frame_layout(&mere_root)
+            .ok()
+            .flatten()
+            .or_else(|| {
+                frame_layout_store::load_frame_layout(&session_dir)
+                    .ok()
+                    .flatten()
+            });
+        if let Some(mut restored) = restored_frame {
             // Keep the restored layout only if it carries the graph (Orrery) pane;
             // a pre-coexistence layout (graph pane saved as Workbench) is stale, so
             // fall back to the default single Orrery pane. (Workbench-as-pane.)
@@ -816,6 +827,9 @@ impl App {
                     .max()
                     .unwrap_or(0)
                     + 1;
+                // Reattach graph-bound leaves to the active graph (a persisted layout's
+                // leaf `graph_id`s, or pre-`graph_id` nil ones, may not match). (MG5.)
+                restored.retag_graph_bound(active_graph);
                 frame_layout = restored;
             }
         }
@@ -936,16 +950,17 @@ fn default_mere_root() -> PathBuf {
         .join("mere")
 }
 
-/// The default content frame: a single orrery pane filling the band. Used at
-/// first launch and when a session has no saved layout. (Frame tree F1 / MG2.)
-fn default_content_frame() -> FrameLayout {
+/// The default content frame: a single orrery pane filling the band, bound to the
+/// active `graph_id`. Used at first launch and when no window layout is saved.
+/// (Frame tree F1 / MG2; graph-bound leaf per MG5.)
+fn default_content_frame(graph_id: GraphId) -> FrameLayout {
     FrameLayout {
         id: FrameId::new("content"),
         label: "content".to_string(),
         root: PaneNode::Leaf {
             pane_id: GRAPH_PANE,
             content: PaneContent::Orrery,
-            graph_id: GraphId::default(),
+            graph_id,
         },
     }
 }
@@ -963,8 +978,9 @@ fn bootstrap_sessions(mere_root: &Path) -> (ManifestStore, SessionId) {
     manifests.set_root(&sessions_root);
 
     // One-time migration: a flat `<mere_root>/graph.json` with no sessions/ is a
-    // pre-MG1 single-session install. Mint a session and move its graph + frame +
-    // views into `sessions/<id>/`. Content cache, settings, comms stay at the root.
+    // pre-MG1 single-session install. Mint a session and move its graph + views into
+    // `sessions/<id>/`. The frame layout stays at the root (it is window-scoped per
+    // MG5), and the content cache, settings, comms stay at the root too.
     let flat_graph = mere_root.join(session_graph_store::GRAPH_FILE);
     if manifests.is_empty() && flat_graph.exists() {
         let session_id = SessionId::new();
@@ -974,10 +990,6 @@ fn bootstrap_sessions(mere_root: &Path) -> (ManifestStore, SessionId) {
             &flat_graph,
             session_dir.join(session_graph_store::GRAPH_FILE),
         );
-        let flat_frame = mere_root.join(frame_layout_store::FRAME_FILE);
-        if flat_frame.exists() {
-            let _ = std::fs::rename(&flat_frame, session_dir.join(frame_layout_store::FRAME_FILE));
-        }
         let flat_views = mere_root.join(view_intent_store::VIEW_INTENT_DIR);
         if flat_views.is_dir() {
             let _ = std::fs::rename(
@@ -1060,9 +1072,9 @@ mod multi_graph_tests {
         let (store, active) = bootstrap_sessions(&root);
         assert_eq!(store.len(), 1);
         let session_dir = root.join("sessions").join(active.as_uuid().to_string());
-        // The flat artefacts moved into the session dir, and the bytes survived.
+        // The session-scoped artefacts (graph + views) moved into the session dir,
+        // and the bytes survived.
         assert!(session_dir.join(session_graph_store::GRAPH_FILE).exists());
-        assert!(session_dir.join(frame_layout_store::FRAME_FILE).exists());
         assert!(
             session_dir
                 .join(view_intent_store::VIEW_INTENT_DIR)
@@ -1072,6 +1084,16 @@ mod multi_graph_tests {
         assert!(
             !root.join(session_graph_store::GRAPH_FILE).exists(),
             "the flat graph was moved, not copied"
+        );
+        // The frame layout is window-scoped (MG5): it stays at the root, not the
+        // session dir.
+        assert!(
+            root.join(frame_layout_store::FRAME_FILE).exists(),
+            "the window-scoped frame stays at the root"
+        );
+        assert!(
+            !session_dir.join(frame_layout_store::FRAME_FILE).exists(),
+            "the frame is not pulled into the session"
         );
         let moved =
             std::fs::read_to_string(session_dir.join(session_graph_store::GRAPH_FILE)).unwrap();
