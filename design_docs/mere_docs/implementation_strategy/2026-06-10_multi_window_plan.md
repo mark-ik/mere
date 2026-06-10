@@ -150,6 +150,22 @@ Done when meerkat runs exactly as today with the per-window state living in a
   `Vec<ShellCommand>`; the `Shell` applies them with full `&mut self`. Subdivide
   `SharedState` into its subsystems.
 
+**Reshape entry point (found while finishing MW1):** the remaining per-window fields
+do *not* yield to the mechanical bulk-move that carried MW1's 32 fields, so MW2 starts
+with the structural reshape itself:
+
+- Replace `WindowView`'s `#[derive(Default)]` with a real `WindowView::new(...)`: the
+  surface (`window`, `host`), the chrome (`dom`, `runner`, `workbench` + its dom /
+  runner), the frame (`frame_layout`, `next_pane_id`, `maximized_pane`,
+  `active_content`), and the input bits (`cursor`, `modifiers`, `toolbar_h`, `width`,
+  `height`) are not `Default`-able / are computed at construction, so they thread
+  through the constructor rather than slotting into a derive.
+- These also can't be bulk-rewritten (`self.host` is a substring of `self.host_text`;
+  `self.toolbar_h` of `self.toolbar_height()`), so the access-site rewrite is the
+  careful per-site pass that the `App`→`Shell` split does anyway.
+- Order: `WindowView::new` + move structural fields → group the rest into `SharedState`
+  → `Shell { shared, windows, primary }` + route by `WindowId` → `ShellCommand` seam.
+
 Done when the single window is driven through the registry (events resolved by id,
 mutations applied as commands), with the shared/​per-window seam enforced by the types.
 
