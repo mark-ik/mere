@@ -444,6 +444,61 @@ mod tests {
     }
 
     #[test]
+    fn create_session_mints_and_activates_a_new_session() {
+        let mut app = test_app();
+        let first = app.active_session_id;
+        assert_eq!(app.manifests.len(), 1);
+        let second = app.create_session();
+        assert_ne!(second, first, "a fresh session id is minted");
+        assert_eq!(app.active_session_id, second, "the new session is active");
+        assert_eq!(app.manifests.len(), 2);
+        let dir = app
+            .mere_root
+            .join("sessions")
+            .join(second.as_uuid().to_string());
+        assert!(
+            dir.join(session_runtime::MANIFEST_FILE).exists(),
+            "the new session's manifest is on disk"
+        );
+    }
+
+    #[test]
+    fn switch_session_restores_each_sessions_own_graph() {
+        let mut app = test_app();
+        let first = app.active_session_id;
+        // Grow the first session's graph, then create + switch to a fresh second.
+        app.orrery.visit("mere://added-to-first");
+        let first_count = app.orrery.graph().nodes().count();
+        assert!(first_count >= 2, "welcome + the added node");
+
+        let second = app.create_session();
+        // The fresh session is its own (smaller) graph, not the first's.
+        assert!(app.orrery.graph().nodes().count() < first_count);
+
+        app.switch_session(first);
+        assert_eq!(app.active_session_id, first);
+        assert_eq!(
+            app.orrery.graph().nodes().count(),
+            first_count,
+            "the first session's graph was restored intact"
+        );
+
+        app.switch_session(second);
+        assert_eq!(app.active_session_id, second);
+    }
+
+    #[test]
+    fn cycle_session_wraps_through_the_open_sessions() {
+        let mut app = test_app();
+        let a = app.active_session_id;
+        let b = app.create_session(); // active = b, two sessions
+        app.cycle_session(true);
+        assert_eq!(app.active_session_id, a, "wrapped forward to the other session");
+        app.cycle_session(true);
+        assert_eq!(app.active_session_id, b, "wrapped forward back to the first");
+    }
+
+    #[test]
     fn observation_exposes_surfaces_actions_and_a11y() {
         let mut app = test_app();
         let observation = app.agent_observation();

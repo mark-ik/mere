@@ -18,7 +18,8 @@ use std::cell::RefCell;
 
 use super::fetch::{ContentState, Fetched};
 use super::resources::{ResourceLoader, ResourceStore};
-use frame::PaneContent;
+use frame::{PaneContent, SessionId};
+use session_runtime::SwitcherThumbnail;
 
 use super::{
     App, CARD_BG, FALLBACK_TOOLBAR_H, all_with_class, first_with_class, frame_view, shellbar,
@@ -938,6 +939,69 @@ impl App {
                 h,
                 ExternalTexturePlacement::new([x0, 0.0, w as f32, band_h as f32]),
             );
+        }
+        // The F2.3 shellbar session switcher: a bottom-anchored strip of per-graph
+        // thumbnail tiles drawn over the shellbar chrome. Left/Right edges only for
+        // now — the Top/Bottom strips are too thin for the vertical tile stack.
+        // Mirrors the gloss host-draw + hit-rect pattern, so clicks route through the
+        // same shellbar region the input path already knows. (Multi-graph MG4.)
+        self.session_row_rects.clear();
+        self.session_close_rects.clear();
+        self.session_add_rect = None;
+        if matches!(
+            self.shellbar_edge,
+            session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right
+        ) && !self.session_thumbnails.is_empty()
+        {
+            let strip =
+                shellbar::shellbar_rect(self.shellbar_edge, w as f32, h as f32, toolbar_h as f32);
+            // Order tiles by session id, matching `cycle_session`'s row order.
+            let mut ids: Vec<SessionId> = self.session_thumbnails.keys().copied().collect();
+            ids.sort_by_key(|id| *id.as_uuid());
+            let entries: Vec<(SessionId, &SwitcherThumbnail, bool)> = ids
+                .iter()
+                .filter_map(|id| {
+                    self.session_thumbnails
+                        .get(id)
+                        .map(|t| (*id, t, *id == self.active_session_id))
+                })
+                .collect();
+            let region_w = (strip[2] - strip[0]).round().max(1.0) as u32;
+            let region_h_f = super::switcher::switcher_height(entries.len()).min(strip[3] - strip[1]);
+            let region_h = region_h_f.round().max(1.0) as u32;
+            let origin_x = strip[0];
+            let origin_y = strip[3] - region_h_f; // anchored at the strip's bottom
+            let (scene, hits) =
+                super::switcher::switcher_scene(&entries, region_w, region_h, &self.chrome_theme);
+            let (_t, view) = host.rasterize(
+                &scene,
+                region_w,
+                region_h,
+                ColorLoad::Clear(wgpu::Color::TRANSPARENT),
+            );
+            host.renderer().compose_external_texture(
+                &view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new([origin_x, origin_y, strip[2], strip[3]]),
+            );
+            let offset = |r: [f32; 4]| {
+                [
+                    origin_x + r[0],
+                    origin_y + r[1],
+                    origin_x + r[2],
+                    origin_y + r[3],
+                ]
+            };
+            for (id, r) in hits.rows {
+                self.session_row_rects.push((id, offset(r)));
+            }
+            for (id, r) in hits.closes {
+                self.session_close_rects.push((id, offset(r)));
+            }
+            self.session_add_rect = hits.add.map(offset);
         }
         frame.present();
         self.refresh_a11y_summary();

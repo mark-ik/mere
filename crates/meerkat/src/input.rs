@@ -203,6 +203,30 @@ impl App {
                         th,
                     );
                     if x >= sb[0] && x < sb[2] && y >= sb[1] && y < sb[3] {
+                        // The session switcher tiles (F2.3): a left press closes,
+                        // switches, or mints a graph. Closes win over rows (the × sits
+                        // inside its tile). (Multi-graph MG4.)
+                        if button == MouseButton::Left {
+                            let hit = |r: &[f32; 4]| x >= r[0] && x < r[2] && y >= r[1] && y < r[3];
+                            if let Some((id, _)) =
+                                self.session_close_rects.iter().find(|(_, r)| hit(r))
+                            {
+                                let id = *id;
+                                self.close_session(id);
+                                return;
+                            }
+                            if self.session_add_rect.as_ref().is_some_and(hit) {
+                                self.create_session();
+                                return;
+                            }
+                            if let Some((id, _)) =
+                                self.session_row_rects.iter().find(|(_, r)| hit(r))
+                            {
+                                let id = *id;
+                                self.switch_session(id);
+                                return;
+                            }
+                        }
                         if button == MouseButton::Right {
                             self.open_shellbar_menu_at(x, y);
                         }
@@ -563,6 +587,23 @@ impl App {
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("m"))
         {
             self.toggle_maximize();
+            return;
+        }
+        // Ctrl+N mints a new graph session and switches to it; Ctrl+PageDown /
+        // Ctrl+PageUp cycle through the open sessions (the interim keyboard switch
+        // until the F2.3 shellbar switcher). (Multi-graph MG2 / MG3.)
+        if self.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("n"))
+        {
+            self.create_session();
+            return;
+        }
+        if self.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::PageDown)) {
+            self.cycle_session(true);
+            return;
+        }
+        if self.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::PageUp)) {
+            self.cycle_session(false);
             return;
         }
         if self.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::Backspace)) {

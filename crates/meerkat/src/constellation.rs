@@ -303,6 +303,14 @@ impl Constellation {
         self.active.remove(&member);
     }
 
+    /// Reap **every** active node, returning the pool to empty. The host calls
+    /// this on a multi-graph switch so the prior session's content actors stop
+    /// and don't bleed into the new graph. (Multi-graph MG2.)
+    pub fn clear(&mut self) {
+        self.active.clear();
+        self.pool = Pool::new();
+    }
+
     /// Whether `member` is flagged to keep working in the background.
     pub fn is_background(&self, member: GraphMemberId) -> bool {
         self.active.get(&member).is_some_and(|a| a.background)

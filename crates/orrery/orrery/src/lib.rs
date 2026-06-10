@@ -205,6 +205,41 @@ impl Orrery {
         orrery
     }
 
+    /// Re-point this orrery at a different session `graph` **in place**, keeping the
+    /// (possibly offloaded) physics actor and the node-children pool alive. The
+    /// graph is replaced wholesale, every derived view is reconciled to it
+    /// (departed nodes drop, the spring topology and node pool rebuild), per-graph
+    /// interaction state (selection, hidden edges, drags, pushed node states/shapes)
+    /// is cleared, and each node is restored to its committed position and halted
+    /// so the switched-to session looks as it was left rather than re-scrambling.
+    /// This is the Model-A graph swap the multi-graph switch drives. (Multi-graph MG2.)
+    pub fn set_graph(&mut self, graph: Graph) {
+        self.graph = graph;
+        self.selected.clear();
+        self.selected_edges.clear();
+        self.hidden_edges.clear();
+        self.node_states.clear();
+        self.node_shapes.clear();
+        self.drag = None;
+        self.marquee = None;
+        self.middle_drag = None;
+        self.reconcile_derived();
+        let positions: Vec<(NodeKey, Point2D<f32>)> = self
+            .graph
+            .nodes()
+            .map(|(key, node)| {
+                let p = node.projected_position();
+                (key, Point2D::new(p.x, p.y))
+            })
+            .collect();
+        for &(key, pos) in &positions {
+            self.view.set_position(key, pos);
+        }
+        self.physics.seed(positions);
+        self.physics.halt();
+        self.generation += 1;
+    }
+
     /// Build an orrery over `graph`: its [`build_simulation`], the node-children
     /// pool, and a default camera. Shared by [`new`](Orrery::new) (empty),
     /// [`with_sample_graph`](Orrery::with_sample_graph), and

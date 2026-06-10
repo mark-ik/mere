@@ -10,19 +10,24 @@ use std::collections::HashMap;
 
 use accesskit::{Action, Node, NodeId as AccessNodeId, Rect, Role, TreeUpdate};
 use forme::GraphMemberId;
-use frame::{GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
+use frame::{
+    GraphId, InsertSide, PaneContent, PaneId, PaneNode, SessionId, SplitAxis, SplitChoice,
+};
 use kernel::graph::{
-    ContainmentSubKind, ProvenanceSubKind, RelationKind, SemanticSubKind,
+    ContainmentSubKind, Graph, ProvenanceSubKind, RelationKind, SemanticSubKind,
 };
 use meerkat::command::Command;
 use meerkat::{Chrome, CommsIntent, ContextAction, ContextItem};
 use orrery::{NodeShape, NodeState};
 use platen_view::WorkbenchAction;
 use session_runtime::{
-    PersistedSettings, ShellbarEdge, ViewIntent, content_store, session_graph_store, settings_store,
-    view_intent_store,
+    PersistedSettings, ShellbarEdge, SwitcherThumbnailOptions, ViewIntent, build_switcher_thumbnail,
+    content_store, frame_layout_store, manifest::GraphSessionManifest, session_graph_store,
+    settings_store, view_intent_store,
 };
 use uxtree::{UxTree, node_id_for_path};
+
+use super::switcher::{SWITCHER_THUMB_H, SWITCHER_THUMB_W};
 
 use super::observability::{A11ySnapshot, ObservabilitySnapshot};
 use super::{
@@ -196,7 +201,7 @@ impl App {
     /// Persist the session (graph + camera view-intent) under the session dir.
     /// Best-effort: a write failure is logged, not fatal. Called after each
     /// navigation and on window close.
-    pub(super) fn save_session(&self) {
+    pub(super) fn save_session(&mut self) {
         let graph_file = self.session_dir.join(session_graph_store::GRAPH_FILE);
         if let Err(err) = session_graph_store::save(&graph_file, self.orrery.graph()) {
             tracing::warn!(%err, path = ?graph_file, "failed to persist the session graph");
@@ -221,6 +226,210 @@ impl App {
         ) {
             tracing::warn!(%err, dir = ?self.session_dir, "failed to persist the frame layout");
         }
+        // Record the save in the active session's manifest (advances `updated_at`,
+        // the switcher's recency key) and flush the registry. (Multi-graph MG1.)
+        let active = self.active_session_id;
+        self.manifests.update(active, |_| {});
+        if let Err(err) = self.manifests.flush_dirty() {
+            tracing::warn!(%err, "failed to flush the session registry");
+        }
+        // Keep the active session's switcher thumbnail live as its graph grows
+        // (cheap; no disk read, unlike the full refresh on a session change).
+        let opts = SwitcherThumbnailOptions {
+            width: SWITCHER_THUMB_W,
+            height: SWITCHER_THUMB_H,
+            ..SwitcherThumbnailOptions::default()
+        };
+        let thumb = build_switcher_thumbnail(self.orrery.graph(), opts);
+        self.session_thumbnails.insert(self.active_session_id, thumb);
+    }
+
+    /// Mint a fresh, empty session and make it active (persisting the current one
+    /// first). The new session opens on the welcome node. Returns its id.
+    /// (Multi-graph MG3 — the create half; Cmd-N binds to it.)
+    pub(super) fn create_session(&mut self) -> SessionId {
+        self.save_session();
+        let session_id = SessionId::new();
+        let session_dir = self
+            .mere_root
+            .join("sessions")
+            .join(session_id.as_uuid().to_string());
+        let _ = std::fs::create_dir_all(&session_dir);
+        let mut manifest = GraphSessionManifest::new(session_id, GraphId::new());
+        manifest.storage_path = Some(session_dir.clone());
+        self.manifests.insert(manifest);
+        let _ = self.manifests.flush_dirty();
+        self.load_active_session(session_id, session_dir, true);
+        session_id
+    }
+
+    /// Switch the active session to `target`: persist the current one, then load
+    /// the target's graph + camera + frame. A no-op if `target` is already active
+    /// or unknown to the registry. (Multi-graph MG2 — the Model-A switch.)
+    pub(super) fn switch_session(&mut self, target: SessionId) {
+        if target == self.active_session_id || self.manifests.get(target).is_none() {
+            return;
+        }
+        self.save_session();
+        let session_dir = self
+            .mere_root
+            .join("sessions")
+            .join(target.as_uuid().to_string());
+        let _ = std::fs::create_dir_all(&session_dir);
+        self.load_active_session(target, session_dir, false);
+    }
+
+    /// Switch to the next (`forward`) or previous session in id order, wrapping.
+    /// The interim keyboard affordance (Ctrl+PageDown / Ctrl+PageUp) until the
+    /// F2.3 shellbar switcher lands. No-op with fewer than two sessions. (MG2.)
+    pub(super) fn cycle_session(&mut self, forward: bool) {
+        let mut ids: Vec<SessionId> = self.manifests.iter().map(|(id, _)| id).collect();
+        if ids.len() < 2 {
+            return;
+        }
+        ids.sort_by_key(|id| *id.as_uuid());
+        let Some(pos) = ids.iter().position(|id| *id == self.active_session_id) else {
+            return;
+        };
+        let next = if forward {
+            (pos + 1) % ids.len()
+        } else {
+            (pos + ids.len() - 1) % ids.len()
+        };
+        self.switch_session(ids[next]);
+    }
+
+    /// Close (trash) the `target` session. Refuses to close the last one. If it was
+    /// the active session, switches to the most-recently-updated survivor first.
+    /// The on-disk dir moves to `.trash/` (recoverable). (Multi-graph MG3.)
+    pub(super) fn close_session(&mut self, target: SessionId) {
+        if self.manifests.len() <= 1 || self.manifests.get(target).is_none() {
+            return;
+        }
+        if target == self.active_session_id {
+            let survivor = self
+                .manifests
+                .iter()
+                .filter(|(id, _)| *id != target)
+                .max_by_key(|(_, m)| m.updated_at)
+                .map(|(id, _)| id);
+            if let Some(next) = survivor {
+                self.switch_session(next);
+            }
+        }
+        if let Err(err) = self.manifests.move_to_trash(target) {
+            tracing::warn!(%err, "failed to trash the closed session");
+        }
+        self.refresh_session_thumbnails();
+        self.request_redraw();
+    }
+
+    /// Rebuild the per-session switcher thumbnails: the active session from the
+    /// **live** orrery graph, each inactive session from its cold `graph.json`.
+    /// Drops entries for closed sessions. Called on every session or graph change
+    /// (cheap small-graph walks; no per-frame disk reads). (Multi-graph MG4.)
+    pub(super) fn refresh_session_thumbnails(&mut self) {
+        let opts = SwitcherThumbnailOptions {
+            width: SWITCHER_THUMB_W,
+            height: SWITCHER_THUMB_H,
+            ..SwitcherThumbnailOptions::default()
+        };
+        let ids: Vec<SessionId> = self.manifests.iter().map(|(id, _)| id).collect();
+        let live: std::collections::HashSet<SessionId> = ids.iter().copied().collect();
+        self.session_thumbnails.retain(|id, _| live.contains(id));
+        for id in ids {
+            let thumb = if id == self.active_session_id {
+                build_switcher_thumbnail(self.orrery.graph(), opts)
+            } else {
+                let dir = self
+                    .mere_root
+                    .join("sessions")
+                    .join(id.as_uuid().to_string());
+                let graph =
+                    session_graph_store::load(&dir.join(session_graph_store::GRAPH_FILE))
+                        .ok()
+                        .flatten()
+                        .unwrap_or_else(Graph::new);
+                build_switcher_thumbnail(&graph, opts)
+            };
+            self.session_thumbnails.insert(id, thumb);
+        }
+    }
+
+    /// Make `id` (whose dir is `session_dir`) the active session: load its graph +
+    /// camera + frame, re-point the orrery in place, and clear the prior session's
+    /// runtime caches so its content actors and cards do not bleed through. `fresh`
+    /// marks a just-minted empty session (no graph on disk yet). This is the
+    /// Model-A whole-content-band swap. (Multi-graph MG2.)
+    fn load_active_session(&mut self, id: SessionId, session_dir: std::path::PathBuf, fresh: bool) {
+        // The target graph (empty for a fresh session, or a missing/corrupt file).
+        let graph = if fresh {
+            Graph::new()
+        } else {
+            session_graph_store::load(&session_dir.join(session_graph_store::GRAPH_FILE))
+                .ok()
+                .flatten()
+                .unwrap_or_else(Graph::new)
+        };
+        let empty = graph.nodes().count() == 0;
+        self.orrery.set_graph(graph);
+        // An empty session opens on the welcome node, like first launch.
+        if empty {
+            self.orrery.visit("mere://welcome");
+        }
+        // Restore the camera + focus from the target's view-intent (Model A).
+        let restored_view =
+            view_intent_store::load_view_intent(&session_dir, DEFAULT_FRAME, DEFAULT_PANE)
+                .ok()
+                .flatten();
+        match restored_view.as_ref().and_then(|v| v.camera.as_ref()) {
+            Some(snapshot) => {
+                self.orrery.set_camera(super::snapshot_to_camera(snapshot));
+                self.centered = true;
+            }
+            None => self.centered = false,
+        }
+        if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
+            self.orrery.select_by_url(url);
+        }
+        // Restore the saved pane layout (Model A: the frame is session-scoped); fall
+        // back to a single orrery pane if absent or pre-coexistence.
+        let restored_frame = frame_layout_store::load_frame_layout(&session_dir)
+            .ok()
+            .flatten()
+            .filter(|f| f.iter_leaves().any(|(_, c, _)| matches!(c, PaneContent::Orrery)));
+        match restored_frame {
+            Some(frame) => {
+                self.next_pane_id = frame.iter_leaves().map(|(p, _, _)| p.0).max().unwrap_or(0) + 1;
+                self.frame_layout = frame;
+            }
+            None => {
+                self.frame_layout = super::default_content_frame();
+                self.next_pane_id = 1;
+            }
+        }
+        // Reset the prior session's runtime caches.
+        self.constellation.clear();
+        self.content.clear();
+        self.live_previews.clear();
+        self.tile_textures.clear();
+        self.snapshot_textures.clear();
+        self.scroll.clear();
+        self.focused_tile = None;
+        self.shown_location = None;
+        self.workbench = platen::Workbench::new();
+        self.maximized_pane = None;
+        self.active_content = super::ContentPane::Orrery;
+        // Swap identity; the omnibar nav target follows the new orrery focus.
+        self.session_dir = session_dir;
+        self.active_session_id = id;
+        self.content_location = self
+            .orrery
+            .focused_url()
+            .unwrap_or("mere://welcome")
+            .to_string();
+        self.refresh_session_thumbnails();
+        self.request_redraw();
     }
 
     /// Make the focused node's content available. A network address already in
@@ -756,7 +965,7 @@ impl App {
             theme_id: Some(self.active_theme_id.clone()),
             shellbar_edge: self.shellbar_edge,
         };
-        if let Err(err) = settings_store::save_settings(&self.session_dir, &settings) {
+        if let Err(err) = settings_store::save_settings(&self.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");
         }
     }

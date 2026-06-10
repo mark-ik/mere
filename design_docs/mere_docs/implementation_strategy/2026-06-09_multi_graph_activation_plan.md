@@ -86,7 +86,8 @@ Done when create / close / rename work end to end and survive restart, with the 
 
 ### MG4 — the F2.3 shellbar switcher
 
-- Bottom-anchored strip in the shellbar: one row per session (display name + `build_switcher_thumbnail`), active marker, "+" to create, click to switch, right-click to rename / close.
+- Bottom-anchored strip in the shellbar: one tile per session (`build_switcher_thumbnail` swatch — **textless**, since there is no host text-into-scene path yet), active marker, "+" to create, click to switch, "×" to close. Left/Right edges only for now (the Top/Bottom strip is too thin for the vertical stack).
+- Rename is **deferred** with the display name — it needs a host text affordance (a text-into-scene path or an inline editor); until then sessions are identified by their thumbnail.
 - Closes F2.3's graph-switcher half; persona chip remains a reserved slot.
 
 Done when the shellbar lists sessions with live thumbnails and drives create / switch / close without keybinds.
@@ -123,4 +124,39 @@ Done when switching graphs keeps the window's pane arrangement and re-sources on
   (`ManifestStore` / `GraphSessionManifest` complete and unconsumed; `switcher_thumbnail`
   built; `tearout` present) and current single-session meerkat (`GraphId::default()`
   everywhere). Model B set as the goal, Model A as the checkpoint reached at MG2.
-  No code yet.
+- 2026-06-09: **MG1 done.** meerkat now splits storage into a **shared** root
+  (`<data_dir>/mere/`: settings, content cache, comms) and **per-session** dirs
+  (`<data_dir>/mere/sessions/<id>/`: graph.json, frame.json, views/). `App` holds
+  a `ManifestStore` + `active_session_id`; `bootstrap_sessions()` scans `sessions/`,
+  one-time-migrates a pre-MG1 flat `graph.json` (+ frame + views) into a minted
+  session, or seeds one default session on a fresh install, opening the
+  most-recently-updated as active. `save_session` advances the active manifest's
+  `updated_at` and flushes the registry. 3 tests (seed / migrate / reuse); full
+  meerkat suite green (44 lib + 55 bin).
+- 2026-06-10: **MG2 done (Model A reached).** Added `Orrery::set_graph` (a wholesale
+  in-place graph swap that reconciles the derived views + reseeds the *existing*
+  physics actor, mirroring `ingest_graph`, so no actor churn) and
+  `Constellation::clear`. meerkat gained `create_session` / `switch_session` /
+  `load_active_session` / `cycle_session`: switching persists the current session,
+  loads the target's graph + camera + frame, re-points the orrery in place, and
+  clears the prior session's runtime caches (content actors, cards, tiles,
+  workbench). Interim keybinds (until the F2.3 switcher): **Ctrl+N** new graph,
+  **Ctrl+PageDown/Up** cycle sessions. 3 tests (create / switch-restores-each-graph /
+  cycle); meerkat suite green (44 lib + 58 bin). Remaining of MG3: close + rename.
+- 2026-06-10: **MG3 done (close), MG4 done (switcher).** `close_session` trashes a
+  session (refusing the last, switching to the most-recently-updated survivor first,
+  `move_to_trash` for recovery). The **F2.3 shellbar switcher** (`switcher.rs`) is a
+  host-drawn strip of per-graph thumbnail tiles anchored at the bottom of the
+  Left/Right shellbar (Top/Bottom strips are too thin for the vertical stack, so the
+  switcher is suppressed there): each tile draws its `build_switcher_thumbnail` swatch,
+  the active tile is highlighted, a "×" trashes (omitted on the last session), and a
+  trailing "+" mints a graph. `render.rs` rasterizes the scene + composites it over the
+  shellbar chrome (the gloss minimap pattern) and offsets the local hit-rects into
+  `session_{row,close,add}_rect`; `input.rs` routes a left press in the shellbar region
+  through close → add → row. Thumbnails refresh on every session/graph change
+  (`refresh_session_thumbnails`: active from the live orrery, inactive from cold
+  `graph.json`) plus a cheap active-only update on each `save_session`. **Rename is
+  deferred** — there is no host text-into-scene path yet (the switcher is textless),
+  so naming waits on that or a text-entry affordance. 2 switcher tests
+  (row+add-but-no-close for one session / close-box-per-session + downward stacking);
+  meerkat suite green (44 lib + 60 bin).

@@ -28,7 +28,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
@@ -37,7 +37,9 @@ use std::time::Instant;
 use accesskit::NodeId as AccessNodeId;
 use eidetic_fjall::FjallStore;
 use forme::GraphMemberId;
-use frame::{FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
+use frame::{
+    FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SessionId, SplitAxis, SplitChoice,
+};
 use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
 use meerkat::{Chrome, ChromeLogic, ChromeView, chrome_view};
@@ -50,7 +52,10 @@ use register_theme::chrome::{ChromeTheme, Color32};
 use register_theme::theme::ThemeRegistry;
 use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_winit_host::SurfaceHost;
-use session_runtime::{session_graph_store, settings_store, view_intent_store};
+use session_runtime::{
+    ManifestStore, SwitcherThumbnail, frame_layout_store, manifest::GraphSessionManifest,
+    session_graph_store, settings_store, view_intent_store,
+};
 use tracing_subscriber::prelude::*;
 use winit::window::{CursorIcon, ResizeDirection};
 use xilem_serval::{Modifiers, ServalAppRunner};
@@ -77,6 +82,7 @@ mod observability;
 mod render;
 mod roster;
 mod shellbar;
+mod switcher;
 mod titlebar;
 mod tracing_layer;
 mod utility_panes;
@@ -401,9 +407,27 @@ struct App {
     comms_handle: armillary::ActorHandle<comms_host::CommsCommand>,
     /// Per-URL fetched content state, keyed by the node's URL (URL identity).
     content: HashMap<String, fetch::ContentState>,
-    /// The session's data directory (`<data_dir>/mere`): holds `graph.json` and
-    /// the `views/` view-intent sidecars.
+    /// The active session's per-session data dir (`<mere_root>/sessions/<id>/`):
+    /// holds `graph.json`, `frame.json`, and the `views/` sidecars. (Multi-graph.)
     session_dir: PathBuf,
+    /// The shared per-user data root (`<data_dir>/mere`): settings, the content
+    /// cache, and comms live here, above the per-session dirs. (Multi-graph MG1.)
+    mere_root: PathBuf,
+    /// The on-disk session registry, loaded from `<mere_root>/sessions/`. (MG1.)
+    manifests: ManifestStore,
+    /// The session whose graph + frame + views are loaded into the orrery /
+    /// frame_layout right now; its dir is `session_dir`. (Multi-graph MG1.)
+    active_session_id: SessionId,
+    /// Cached switcher thumbnails per session (the F2.3 shellbar switcher rows);
+    /// rebuilt on session/graph change, the active one from the live orrery.
+    /// (Multi-graph MG4.)
+    session_thumbnails: HashMap<SessionId, SwitcherThumbnail>,
+    /// Each switcher row's on-screen rect this frame: a click switches to it.
+    session_row_rects: Vec<(SessionId, [f32; 4])>,
+    /// Each row's close (×) hit rect this frame: a click trashes that session.
+    session_close_rects: Vec<(SessionId, [f32; 4])>,
+    /// The "+" new-graph tile rect this frame, if the switcher is shown.
+    session_add_rect: Option<[f32; 4]>,
     /// Durable content cache (S3.2c) under the session dir, persisting fetched
     /// pages + subresources by URL. `None` if the store could not be opened
     /// (caching disabled; the shell still runs).
@@ -623,24 +647,32 @@ impl App {
         proxy: winit::event_loop::EventLoopProxy<()>,
         diagnostics_rx: Receiver<DiagnosticEvent>,
     ) -> Self {
-        Self::new_with_session_dir(proxy, diagnostics_rx, default_session_dir())
+        Self::new_with_session_dir(proxy, diagnostics_rx, default_mere_root())
     }
 
     fn new_with_session_dir(
         proxy: winit::event_loop::EventLoopProxy<()>,
         diagnostics_rx: Receiver<DiagnosticEvent>,
-        session_dir: PathBuf,
+        mere_root: PathBuf,
     ) -> Self {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         // The workbench root's own document, separate from the chrome root (the
         // separate-roots discipline). Empty until the tiled view syncs it.
         let workbench_dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
-        // The session lives under the per-user data dir; restore the graph + the
-        // camera (view-intent) + the settings on launch, else seed fresh.
+        // Shared per-user root (`<data_dir>/mere`): settings, the content cache, and
+        // comms live here; per-session graph/frame/views live under sessions/<id>/.
+        let _ = std::fs::create_dir_all(&mere_root);
+        // Bring up the session registry: scan sessions/, migrate a pre-MG1 flat
+        // graph in, or seed one default session. The active session's dir is where
+        // the graph + frame + views load from. (Multi-graph MG1.)
+        let (manifests, active_session_id) = bootstrap_sessions(&mere_root);
+        let session_dir = mere_root
+            .join("sessions")
+            .join(active_session_id.as_uuid().to_string());
         let _ = std::fs::create_dir_all(&session_dir);
-        // Restore persisted settings (the active-tab cap) so the chrome + actor pool
-        // open at the user's saved value rather than the default.
-        let saved_settings = settings_store::load_settings(&session_dir)
+        // Restore persisted settings (active-tab cap, theme, shellbar edge) from the
+        // shared root so they apply across sessions, not per-graph.
+        let saved_settings = settings_store::load_settings(&mere_root)
             .ok()
             .flatten()
             .unwrap_or_default();
@@ -648,9 +680,9 @@ impl App {
         chrome.settings.tab_cap = saved_settings.tab_cap;
         let runner = ServalAppRunner::new(dom.clone(), chrome_view as ChromeLogic, chrome);
         let content_location = runner.state().content_location().to_string();
-        // Durable content cache (S3.2c) in a fjall keyspace under the session dir;
-        // `None` simply disables caching (the shell runs without it).
-        let store = match FjallStore::open(session_dir.join("content")) {
+        // Durable content cache (S3.2c), shared (persona-scoped) under the mere root
+        // so sessions don't re-fetch each other's pages; `None` disables caching.
+        let store = match FjallStore::open(mere_root.join("content")) {
             Ok(store) => Some(store),
             Err(err) => {
                 tracing::warn!(%err, "content cache unavailable; running without it");
@@ -738,7 +770,7 @@ impl App {
         let comms_wake: armillary::Wake = Arc::new(move || {
             let _ = comms_proxy.send_event(());
         });
-        let (comms_handle, comms_rx) = comms_host::spawn_comms(comms_wake, session_dir.clone());
+        let (comms_handle, comms_rx) = comms_host::spawn_comms(comms_wake, mere_root.clone());
         // The host's own nematic engine registry, for rendering snapshot cards
         // from the durable cache without a live actor (Card #4).
         let mut engine_registry = EngineRegistry::new();
@@ -764,15 +796,7 @@ impl App {
         orrery.set_palette(orrery_backdrop, orrery_edge);
         // The content region opens as a single graph pane (orrery / tiled
         // workbench); summoning the roster splits it. (Frame tree, F1.)
-        let mut frame_layout = FrameLayout {
-            id: FrameId::new("content"),
-            label: "content".to_string(),
-            root: PaneNode::Leaf {
-                pane_id: GRAPH_PANE,
-                content: PaneContent::Orrery,
-                graph_id: GraphId::default(),
-            },
-        };
+        let mut frame_layout = default_content_frame();
         // Restore the saved pane layout (which panes were open + their split
         // ratios); advance the pane-id counter past the restored max. (F1.5.)
         let mut next_pane_id = 1u64;
@@ -808,6 +832,13 @@ impl App {
             comms_handle,
             content: HashMap::new(),
             session_dir,
+            mere_root,
+            manifests,
+            active_session_id,
+            session_thumbnails: HashMap::new(),
+            session_row_rects: Vec::new(),
+            session_close_rects: Vec::new(),
+            session_add_rect: None,
             store,
             toolbar_h: 0,
             window: None,
@@ -877,6 +908,7 @@ impl App {
         let pane_count = app.frame_layout.iter_leaves().count();
         app.observability
             .record_startup(&app.active_theme_id, pane_count);
+        app.refresh_session_thumbnails();
         app.refresh_a11y_summary();
         app
     }
@@ -895,10 +927,167 @@ impl App {
     }
 }
 
-fn default_session_dir() -> PathBuf {
+/// The shared per-user data root (`<data_dir>/mere`). Settings, the content
+/// cache, and comms live directly here; per-session graph/frame/views live under
+/// `<mere_root>/sessions/<session_id>/`. (Multi-graph MG1.)
+fn default_mere_root() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("mere")
+}
+
+/// The default content frame: a single orrery pane filling the band. Used at
+/// first launch and when a session has no saved layout. (Frame tree F1 / MG2.)
+fn default_content_frame() -> FrameLayout {
+    FrameLayout {
+        id: FrameId::new("content"),
+        label: "content".to_string(),
+        root: PaneNode::Leaf {
+            pane_id: GRAPH_PANE,
+            content: PaneContent::Orrery,
+            graph_id: GraphId::default(),
+        },
+    }
+}
+
+/// Bring up the session registry under `<mere_root>/sessions/`: scan existing
+/// session manifests, migrate a pre-MG1 flat graph in if one is found, or seed
+/// one default session on a fresh install. Returns the registry plus the session
+/// to open as active (the most-recently-updated). (Multi-graph MG1.)
+fn bootstrap_sessions(mere_root: &Path) -> (ManifestStore, SessionId) {
+    let sessions_root = mere_root.join("sessions");
+    let mut manifests = ManifestStore::new();
+    if let Err(err) = manifests.load_from_disk(&sessions_root) {
+        tracing::warn!(%err, dir = ?sessions_root, "scanning sessions/ failed; starting fresh");
+    }
+    manifests.set_root(&sessions_root);
+
+    // One-time migration: a flat `<mere_root>/graph.json` with no sessions/ is a
+    // pre-MG1 single-session install. Mint a session and move its graph + frame +
+    // views into `sessions/<id>/`. Content cache, settings, comms stay at the root.
+    let flat_graph = mere_root.join(session_graph_store::GRAPH_FILE);
+    if manifests.is_empty() && flat_graph.exists() {
+        let session_id = SessionId::new();
+        let session_dir = sessions_root.join(session_id.as_uuid().to_string());
+        let _ = std::fs::create_dir_all(&session_dir);
+        let _ = std::fs::rename(
+            &flat_graph,
+            session_dir.join(session_graph_store::GRAPH_FILE),
+        );
+        let flat_frame = mere_root.join(frame_layout_store::FRAME_FILE);
+        if flat_frame.exists() {
+            let _ = std::fs::rename(&flat_frame, session_dir.join(frame_layout_store::FRAME_FILE));
+        }
+        let flat_views = mere_root.join(view_intent_store::VIEW_INTENT_DIR);
+        if flat_views.is_dir() {
+            let _ = std::fs::rename(
+                &flat_views,
+                session_dir.join(view_intent_store::VIEW_INTENT_DIR),
+            );
+        }
+        let mut manifest = GraphSessionManifest::new(session_id, GraphId::new());
+        manifest.storage_path = Some(session_dir);
+        manifests.insert(manifest);
+        let _ = manifests.flush_dirty();
+        tracing::info!(?session_id, "migrated the flat session into sessions/");
+        return (manifests, session_id);
+    }
+
+    // Fresh install (or an empty sessions/): seed one default session.
+    if manifests.is_empty() {
+        let session_id = SessionId::new();
+        let session_dir = sessions_root.join(session_id.as_uuid().to_string());
+        let _ = std::fs::create_dir_all(&session_dir);
+        let mut manifest = GraphSessionManifest::new(session_id, GraphId::new());
+        manifest.storage_path = Some(session_dir);
+        manifests.insert(manifest);
+        let _ = manifests.flush_dirty();
+        return (manifests, session_id);
+    }
+
+    // Existing sessions: open the most-recently-updated one.
+    let active = manifests
+        .iter()
+        .max_by_key(|(_, m)| m.updated_at)
+        .map(|(id, _)| id)
+        .expect("manifests is non-empty here");
+    (manifests, active)
+}
+
+#[cfg(test)]
+mod multi_graph_tests {
+    use super::*;
+
+    fn temp_root(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "mere-mg-{label}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn seeds_one_session_on_a_fresh_root() {
+        let root = temp_root("seed");
+        let (store, active) = bootstrap_sessions(&root);
+        assert_eq!(store.len(), 1);
+        assert!(store.get(active).is_some());
+        let manifest = root
+            .join("sessions")
+            .join(active.as_uuid().to_string())
+            .join(session_runtime::MANIFEST_FILE);
+        assert!(manifest.exists(), "seeded session manifest written to disk");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn migrates_a_flat_graph_into_a_session() {
+        let root = temp_root("migrate");
+        // A pre-MG1 flat layout: graph.json + frame.json + views/ at the root.
+        std::fs::write(
+            root.join(session_graph_store::GRAPH_FILE),
+            br#"{"flat":true}"#,
+        )
+        .unwrap();
+        std::fs::write(root.join(frame_layout_store::FRAME_FILE), b"{}").unwrap();
+        let flat_views = root.join(view_intent_store::VIEW_INTENT_DIR);
+        std::fs::create_dir_all(&flat_views).unwrap();
+        std::fs::write(flat_views.join("pane.json"), b"{}").unwrap();
+
+        let (store, active) = bootstrap_sessions(&root);
+        assert_eq!(store.len(), 1);
+        let session_dir = root.join("sessions").join(active.as_uuid().to_string());
+        // The flat artefacts moved into the session dir, and the bytes survived.
+        assert!(session_dir.join(session_graph_store::GRAPH_FILE).exists());
+        assert!(session_dir.join(frame_layout_store::FRAME_FILE).exists());
+        assert!(
+            session_dir
+                .join(view_intent_store::VIEW_INTENT_DIR)
+                .join("pane.json")
+                .exists()
+        );
+        assert!(
+            !root.join(session_graph_store::GRAPH_FILE).exists(),
+            "the flat graph was moved, not copied"
+        );
+        let moved =
+            std::fs::read_to_string(session_dir.join(session_graph_store::GRAPH_FILE)).unwrap();
+        assert!(moved.contains("flat"), "no graph lost in the migration");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn reuses_an_existing_session_instead_of_seeding() {
+        let root = temp_root("reuse");
+        let (_first, first) = bootstrap_sessions(&root);
+        let (store, active) = bootstrap_sessions(&root);
+        assert_eq!(store.len(), 1, "no duplicate session seeded");
+        assert_eq!(active, first, "the existing session is reopened as active");
+        std::fs::remove_dir_all(&root).ok();
+    }
 }
 
 /// Lay out the chrome root and return the border-box bottom (px, rounded up) of
