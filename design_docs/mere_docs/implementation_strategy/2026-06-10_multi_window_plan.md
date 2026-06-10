@@ -574,3 +574,24 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   can't hit `ServalAppRunner`/`ApplicationHandler`), and (e) the `ShellCommand` seam.
   **Carried forward (documented in the struct comments):** `a11y_bridge` + routes →
   `WindowView` at MW3; `orrery` → `WindowKind::Primary` at MW6.
+- 2026-06-10: **MW2 structural reshape complete — (d3) done, (d2) + (e) consciously
+  rolled into MW3.** (d3): `App`→`Shell` rename landed (global `\bApp\b`→`Shell`, 30
+  sites; `Shell` was free, no `Shellbar*` collision). The god-struct is now `Shell
+  { shared, windows, primary, pending_view, orrery, clipboard, a11y_*, _kernel }`.
+  **(d2) the `user_event` chrome-write fan-out and (e) the `ShellCommand` seam are
+  deferred to MW3, by decision, not omission** — and the reasoning is the same for
+  both: every bit of their *real* payload is N>1-coupled. (d2)'s sync-chip + comms
+  writes correctly target the primary at N=1; the fan-out is a two-phase restructure
+  of the actor-drain hot path that wants a second window to test against (in-code
+  marker placed). (e)'s `ShellCommand` exists to let a handler do what a single-view
+  `WindowCtx` can't — `SpawnWindow`/`CloseWindow` (mutate `windows` while a view is
+  borrowed) and theme/session **fan-out** across windows — but `Spawn`/`Close` have no
+  trigger until MW3/MW4, the fan-out is d2's problem again, and `Exit` already works at
+  the trait level while `SetTheme`/`SwitchSession`/`drain_pending_command` work as
+  `WindowCtx` methods at N=1. A scaffold built now would be an `apply()` never called
+  with a real cross-window command and dead enum variants — placebo. So MW3 grows the
+  seam where it's first exercised (the "new window" verb + a second window's chrome).
+  **What MW2 *did* deliver and is green:** SharedState subsystems, the per-window/shared
+  type-seam via `WindowCtx`, and the `WindowId` registry routing events by id — the
+  structural reshape that unblocks MW3. The `WindowKind` payload enum, the spawn path,
+  the `ShellCommand` queue, and (d2) all land together in MW3, where they're real.
