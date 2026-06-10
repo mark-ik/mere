@@ -327,19 +327,19 @@ impl ApplicationHandler for App {
                 self.cursor = (position.x as f32, position.y as f32);
                 // A manual window resize in progress: drive it from the move and
                 // route nowhere else. (Custom titlebar.)
-                if self.resize_drag.is_some() {
+                if self.view.resize_drag.is_some() {
                     self.apply_resize();
                     return;
                 }
                 // A pending titlebar press that moves past the slop becomes a window
                 // drag (the OS takes over from here); below the slop it stays a
                 // pending click and the move routes nowhere. (Custom titlebar.)
-                if let Some((px, py)) = self.titlebar_press {
+                if let Some((px, py)) = self.view.titlebar_press {
                     if (self.cursor.0 - px).hypot(self.cursor.1 - py) > 4.0 {
                         if let Some(window) = self.window.as_ref() {
                             let _ = window.drag_window();
                         }
-                        self.titlebar_press = None;
+                        self.view.titlebar_press = None;
                     }
                     return;
                 }
@@ -351,11 +351,11 @@ impl ApplicationHandler for App {
                 // moves it has an in-progress pan / drag for; an active tab drag in
                 // the workbench pane takes priority so its drop highlight tracks.
                 let th = self.toolbar_height() as f32;
-                if self.frame_divider_drag.is_some() {
+                if self.view.frame_divider_drag.is_some() {
                     self.drag_frame_divider();
-                } else if self.divider_drag.is_some() {
+                } else if self.view.divider_drag.is_some() {
                     self.drag_divider();
-                } else if self.tab_drag.is_some() {
+                } else if self.view.tab_drag.is_some() {
                     // Follow the drag: the drop-target highlight tracks the pointer.
                     self.request_redraw();
                 } else if self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th) {
@@ -386,7 +386,7 @@ impl ApplicationHandler for App {
                     // Render clamps to the current roster content extent; keeping
                     // the wheel route here prevents a roster scroll from panning
                     // the orrery underneath.
-                    self.roster_scroll = (self.roster_scroll - dy).max(0.0);
+                    self.view.roster_scroll = (self.view.roster_scroll - dy).max(0.0);
                     self.request_redraw();
                     return;
                 }
@@ -399,7 +399,7 @@ impl ApplicationHandler for App {
                 if let Some((member, visible_h)) = over_card {
                     let max =
                         (self.constellation.content_height(member) as f32 - visible_h).max(0.0);
-                    let offset = self.scroll.entry(member).or_insert(0.0);
+                    let offset = self.view.scroll.entry(member).or_insert(0.0);
                     // Wheel up (dy > 0) scrolls toward the top; down toward the bottom.
                     *offset = (*offset - dy).clamp(0.0, max);
                     self.request_redraw();
@@ -418,7 +418,7 @@ impl ApplicationHandler for App {
                 // The custom close control sets `pending_exit` (input has no
                 // event-loop handle); honor it here, saving the session as the OS
                 // CloseRequested path does.
-                if self.pending_exit {
+                if self.view.pending_exit {
                     self.save_session();
                     event_loop.exit();
                 }
@@ -442,7 +442,7 @@ impl App {
     /// right/bottom only grow it. The follow-up `Resized` event reconfigures the
     /// surface.
     fn apply_resize(&self) {
-        let Some(drag) = self.resize_drag else { return };
+        let Some(drag) = self.view.resize_drag else { return };
         let Some(window) = self.window.as_ref() else {
             return;
         };
@@ -504,8 +504,8 @@ impl App {
         } else {
             CursorIcon::Default
         };
-        if icon != self.cursor_icon {
-            self.cursor_icon = icon;
+        if icon != self.view.cursor_icon {
+            self.view.cursor_icon = icon;
             if let Some(window) = self.window.as_ref() {
                 window.set_cursor(icon);
             }

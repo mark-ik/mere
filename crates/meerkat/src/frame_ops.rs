@@ -112,7 +112,7 @@ impl App {
         match self.nav_target_member() {
             Some(member) => {
                 self.orrery.navigate_member(member, &loc);
-                self.scroll.remove(&member); // a new page starts at the top
+                self.view.scroll.remove(&member); // a new page starts at the top
             }
             None => {
                 self.orrery.visit(&loc);
@@ -162,7 +162,7 @@ impl App {
         let Some(url) = url else {
             return;
         };
-        self.scroll.remove(&member); // the revealed page starts at the top
+        self.view.scroll.remove(&member); // the revealed page starts at the top
         self.content_location = url.clone();
         self.ensure_content(&url);
         self.runner.update(|c| {
@@ -321,7 +321,7 @@ impl App {
         if let Err(err) = self.manifests.move_to_trash(target) {
             tracing::warn!(%err, "failed to trash the closed session");
         }
-        self.renaming = None;
+        self.view.renaming = None;
         self.refresh_session_thumbnails();
         self.request_redraw();
     }
@@ -333,7 +333,7 @@ impl App {
             return;
         }
         let seed = self.session_labels.get(&id).cloned().unwrap_or_default();
-        self.renaming = Some((id, seed));
+        self.view.renaming = Some((id, seed));
         self.request_redraw();
     }
 
@@ -341,7 +341,7 @@ impl App {
     /// name; an empty one clears it (the label reverts to the derived one). Persists
     /// the manifest and refreshes the labels. (Host text path.)
     pub(super) fn commit_rename(&mut self) {
-        let Some((id, name)) = self.renaming.take() else {
+        let Some((id, name)) = self.view.renaming.take() else {
             return;
         };
         let trimmed = name.trim().to_string();
@@ -357,14 +357,14 @@ impl App {
     /// Drop the in-progress rename without saving (Escape, or an interaction that
     /// moves on). A no-op when not renaming. (Host text path.)
     pub(super) fn cancel_rename(&mut self) {
-        if self.renaming.take().is_some() {
+        if self.view.renaming.take().is_some() {
             self.request_redraw();
         }
     }
 
     /// Append typed `ch` to the rename buffer. No-op when not renaming. (Host text.)
     pub(super) fn rename_push(&mut self, ch: &str) {
-        if let Some((_, buf)) = self.renaming.as_mut() {
+        if let Some((_, buf)) = self.view.renaming.as_mut() {
             buf.push_str(ch);
             self.request_redraw();
         }
@@ -372,7 +372,7 @@ impl App {
 
     /// Delete the last char of the rename buffer (Backspace). (Host text path.)
     pub(super) fn rename_backspace(&mut self) {
-        if let Some((_, buf)) = self.renaming.as_mut() {
+        if let Some((_, buf)) = self.view.renaming.as_mut() {
             buf.pop();
             self.request_redraw();
         }
@@ -475,12 +475,12 @@ impl App {
         self.constellation.clear();
         self.content.clear();
         self.live_previews.clear();
-        self.tile_textures.clear();
-        self.snapshot_textures.clear();
-        self.scroll.clear();
+        self.view.tile_textures.clear();
+        self.view.snapshot_textures.clear();
+        self.view.scroll.clear();
         self.focused_tile = None;
         self.shown_location = None;
-        self.renaming = None;
+        self.view.renaming = None;
         self.workbench = platen::Workbench::new();
         self.maximized_pane = None;
         self.active_content = super::ContentPane::Orrery;
@@ -591,7 +591,7 @@ impl App {
                 ContextItem::new("Open in a stack", ContextAction::Stack),
             ]
         };
-        self.context_set = set;
+        self.view.context_set = set;
         self.runner
             .update(move |c| c.open_context_menu(x, y, items));
         self.request_redraw();
@@ -599,7 +599,7 @@ impl App {
 
     /// Dismiss the context menu (an outside click / Escape), dropping its set.
     pub(super) fn close_context_menu(&mut self) {
-        self.context_set.clear();
+        self.view.context_set.clear();
         self.runner.update(Chrome::close_context_menu);
         self.request_redraw();
     }
@@ -646,7 +646,7 @@ impl App {
             self.request_redraw();
             return;
         }
-        let set = std::mem::take(&mut self.context_set);
+        let set = std::mem::take(&mut self.view.context_set);
         if set.is_empty() {
             return;
         }
@@ -1296,8 +1296,8 @@ impl App {
         // Re-theme the orrery's backdrop + edges to match. (A2.)
         let (backdrop, edge) = crate::orrery_palette(&resolution.tokens);
         self.orrery.set_palette(backdrop, edge);
-        self.window_controls_tex = None;
-        self.divider_tex = None;
+        self.view.window_controls_tex = None;
+        self.view.divider_tex = None;
         self.persist_settings();
         self.observability
             .record_theme_activated(&self.active_theme_id);
@@ -1686,7 +1686,7 @@ impl App {
     /// Drive an in-progress frame-divider drag from the current cursor: map the
     /// pointer's position within the split's parent rect to a new ratio.
     pub(super) fn drag_frame_divider(&mut self) {
-        let Some((path, parent, axis)) = self.frame_divider_drag.clone() else {
+        let Some((path, parent, axis)) = self.view.frame_divider_drag.clone() else {
             return;
         };
         let (cx, cy) = self.cursor;

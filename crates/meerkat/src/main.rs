@@ -32,13 +32,12 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver};
-use std::time::Instant;
 
 use accesskit::NodeId as AccessNodeId;
 use eidetic_fjall::FjallStore;
 use forme::GraphMemberId;
 use frame::{
-    FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SessionId, SplitAxis, SplitChoice,
+    FrameId, FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SessionId,
 };
 use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
@@ -57,7 +56,7 @@ use session_runtime::{
     session_graph_store, settings_store, view_intent_store,
 };
 use tracing_subscriber::prelude::*;
-use winit::window::{CursorIcon, ResizeDirection};
+use winit::window::ResizeDirection;
 use xilem_serval::{Modifiers, ServalAppRunner};
 
 mod card;
@@ -434,11 +433,6 @@ struct App {
     /// Host text shaping for host-drawn labels (the switcher tile names). Holds the
     /// parley contexts so they aren't rebuilt per frame. (Host text path.)
     host_text: text::HostText,
-    /// In-progress session rename: the target session + its edit buffer. `Some`
-    /// while the switcher label is being typed (F2 or right-click a tile); the
-    /// keyboard is fully captured until Enter commits or Escape cancels. (Host
-    /// text path.)
-    renaming: Option<(SessionId, String)>,
     /// Durable content cache (S3.2c) under the session dir, persisting fetched
     /// pages + subresources by URL. `None` if the store could not be opened
     /// (caching disabled; the shell still runs).
@@ -455,9 +449,6 @@ struct App {
     clipboard: Option<arboard::Clipboard>,
     /// Last cursor position in physical pixels (window space == content space).
     cursor: (f32, f32),
-    /// The last left-button release (time + window pos), for double-click detection.
-    /// A double-click on an orrery node opens the tiled workbench from it.
-    last_left_release: Option<(Instant, (f32, f32))>,
     /// The tile in focus in the tiled view (the last activated / opened member), so
     /// the omnibar can show its URL. `None` outside the tiled view or with no tiles.
     focused_tile: Option<GraphMemberId>,
@@ -469,36 +460,10 @@ struct App {
     /// The location last pushed into the omnibar by focus-follow, so it only updates
     /// when the focused tile / node actually changes (not every frame).
     shown_location: Option<String>,
-    /// An in-progress tab drag in the tiled view: the pressed tab's member + the
-    /// press position. Resolved on release — a move when dragged past the slop, else
-    /// it was a plain click (the tab already activated on press).
-    tab_drag: Option<(GraphMemberId, (f32, f32))>,
-    /// Cached rasterized texture per tile, keyed by member. Re-rasterized only when
-    /// the tile's scene version or size changes, so an unchanged tile is composited
-    /// from its cached texture instead of re-rasterized every frame (the cost that
-    /// scaled with tile count). Evicted when a tile closes.
-    tile_textures: HashMap<GraphMemberId, CachedTile>,
-    /// Per-member content scroll offset (px from the document top). A card
-    /// composites a window of its full-height texture at this offset; a wheel over
-    /// the card adjusts it (clamped to the content height). Absent = scrolled to top.
-    scroll: HashMap<GraphMemberId, f32>,
-    /// Cached rasterized close (X) button texture, shared across live cards; built
-    /// once and composited at each live card's top-right corner. (Card system.)
-    close_button_tex: Option<CachedTile>,
-    /// Cached rasterized "unvisited" placeholder card (dashed outline + "Double-
-    /// click to load"), shown when a focused node has no snapshot yet. (Card #3.)
-    unvisited_tex: Option<CachedTile>,
     /// The nematic engine registry, for rendering "last visit" snapshot cards
     /// host-side from the durable content cache (no actor) — the same registry the
     /// content actor builds, kept here for the snapshot path. (Card #4.)
     engine_registry: EngineRegistry,
-    /// Cached rasterized snapshot textures, keyed by URL (the snapshot is the
-    /// node's last-visit content rendered from cache / synthesis). Re-rendered on
-    /// a size change; persists the "last visit" look across the session. (Card #4.)
-    snapshot_textures: HashMap<String, CachedTile>,
-    /// An in-progress divider drag: the left-slot index, the press x, and the slot
-    /// weights snapshot at press. Cursor moves reweight the two neighbouring slots.
-    divider_drag: Option<(usize, f32, Vec<f32>)>,
     /// The active theme's chrome CSS (built from a resolved [`ChromeTheme`] at
     /// startup). The render / measure / hit-test paths read it instead of a const,
     /// so a theme switch rebuilds it and the whole shell re-themes. (Theming pass.)
@@ -520,24 +485,6 @@ struct App {
     /// The bridge only queues raw AccessKit requests; the kernel thread resolves
     /// ids through this table and applies semantic host actions.
     a11y_action_routes: HashMap<AccessNodeId, A11yHostAction>,
-    /// An in-progress titlebar press (window point) on the borderless window: set
-    /// on a left press in the toolbar bar's draggable area, cleared into a window
-    /// drag once the pointer moves past the slop, else resolved as a click on
-    /// release. (Custom titlebar.)
-    titlebar_press: Option<(f32, f32)>,
-    /// Set by the custom close control; the event handler exits the loop (saving
-    /// the session) after the press is processed, since input has no event-loop
-    /// handle. (Custom titlebar.)
-    pending_exit: bool,
-    /// Cached rasterized window-control strip (min / max / close), composited over
-    /// the chrome at the toolbar's top-right. Re-rasterized on a band-size change.
-    window_controls_tex: Option<CachedTile>,
-    /// A small solid texture filling the frame-divider gutters between split panes
-    /// (so the gutters read as a dark seam, not stale pixels). (Frame tree, F1.)
-    divider_tex: Option<CachedTile>,
-    /// An in-progress manual window resize from a window edge / corner (custom
-    /// titlebar). `None` outside a resize drag. (Custom titlebar.)
-    resize_drag: Option<ResizeDrag>,
     /// The frame tree for the content region: a split tree of resizable panes.
     /// The graph pane ([`GRAPH_PANE`]) hosts the orrery / tiled workbench; summoned
     /// panes (roster, …) split beside it. (Frame tree, F1.)
@@ -548,18 +495,6 @@ struct App {
     active_content: ContentPane,
     /// Next pane id to mint when summoning a sibling pane.
     next_pane_id: u64,
-    /// An in-progress frame-divider drag: the split path, the split's (parent)
-    /// rect, and its axis. Cursor moves map the pointer's position within the
-    /// parent rect to a new ratio via `set_split_ratio`. Distinct from
-    /// `divider_drag` (the workbench tile tree's slot dividers). (Frame tree, F1.)
-    frame_divider_drag: Option<(Vec<SplitChoice>, [f32; 4], SplitAxis)>,
-    /// Roster pane scroll offset in device px. Clamped during roster render
-    /// because the scroll extent depends on pane size and graph size.
-    roster_scroll: f32,
-    /// The cursor icon currently set on the window — tracked so a hover over a
-    /// resize edge only calls `set_cursor` on a change, not every move. (Custom
-    /// titlebar.)
-    cursor_icon: CursorIcon,
     width: u32,
     height: u32,
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
@@ -572,9 +507,6 @@ struct App {
     /// texture there. taffy lays it out — the morphorm path is gone.
     workbench_dom: Rc<RefCell<ScriptedDom>>,
     workbench_runner: ServalAppRunner<WorkbenchScene, WorkbenchLogic, WorkbenchTreeView>,
-    /// The members the open right-click context menu acts on (the selection's
-    /// working set, captured when the menu opened). Empty when no menu is open.
-    context_set: Vec<GraphMemberId>,
     /// The active-tab cap last written to the settings sidecar. Guards the persist
     /// path so an unchanged value isn't re-written on every chrome click.
     saved_tab_cap: usize,
@@ -594,12 +526,12 @@ struct App {
 /// A tile's cached rasterized texture: the scene version + size it was rasterized
 /// at, plus the GPU texture and its view. Reused across frames while the version +
 /// size hold, so an idle tile is not re-rasterized.
-struct CachedTile {
-    version: u64,
-    size: (u32, u32),
+pub(crate) struct CachedTile {
+    pub(crate) version: u64,
+    pub(crate) size: (u32, u32),
     #[allow(dead_code)] // owns the texture the `view` references; kept alive here
-    tex: wgpu::Texture,
-    view: wgpu::TextureView,
+    pub(crate) tex: wgpu::Texture,
+    pub(crate) view: wgpu::TextureView,
 }
 
 /// An in-progress manual window resize (custom titlebar). winit's
@@ -610,7 +542,7 @@ struct CachedTile {
 /// origin, so there is no first-move jump). On Wayland `set_outer_position` is a
 /// no-op, so left/top edges there can't move the origin; right/bottom still size.
 #[derive(Clone, Copy)]
-struct ResizeDrag {
+pub(crate) struct ResizeDrag {
     dir: ResizeDirection,
     /// Window outer top-left (physical px) at press.
     start_outer: (i32, i32),
@@ -843,7 +775,6 @@ impl App {
             session_labels: HashMap::new(),
             view: window_view::WindowView::default(),
             host_text: text::HostText::new(),
-            renaming: None,
             store,
             toolbar_h: 0,
             window: None,
@@ -851,18 +782,10 @@ impl App {
             modifiers: Modifiers::default(),
             clipboard: arboard::Clipboard::new().ok(),
             cursor: (0.0, 0.0),
-            last_left_release: None,
             live_previews: std::collections::HashSet::new(),
             focused_tile: None,
             shown_location: None,
-            tab_drag: None,
-            tile_textures: HashMap::new(),
-            scroll: HashMap::new(),
-            close_button_tex: None,
-            unvisited_tex: None,
             engine_registry,
-            snapshot_textures: HashMap::new(),
-            divider_drag: None,
             chrome_sheet,
             chrome_theme,
             theme,
@@ -872,18 +795,10 @@ impl App {
                 let _ = a11y_proxy.send_event(());
             }),
             a11y_action_routes: HashMap::new(),
-            titlebar_press: None,
-            pending_exit: false,
-            window_controls_tex: None,
-            divider_tex: None,
-            resize_drag: None,
-            cursor_icon: CursorIcon::Default,
             frame_layout,
             maximized_pane: None,
             active_content: ContentPane::Orrery,
             next_pane_id,
-            frame_divider_drag: None,
-            roster_scroll: 0.0,
             width: 1024,
             height: 600,
             workbench: Workbench::new(),
@@ -893,7 +808,6 @@ impl App {
                 workbench_view as WorkbenchLogic,
                 WorkbenchScene::default(),
             ),
-            context_set: Vec::new(),
             saved_tab_cap: saved_settings.tab_cap,
             shellbar_edge: saved_settings.shellbar_edge,
             inbox: KernelInbox {

@@ -14,8 +14,14 @@
 //! pure view state (geometry of *this* window's surface this frame), so they
 //! move here first. (Multi-window plan MW1.)
 
+use std::collections::HashMap;
+use std::time::Instant;
+
 use forme::GraphMemberId;
-use frame::SessionId;
+use frame::{SessionId, SplitAxis, SplitChoice};
+use winit::window::CursorIcon;
+
+use super::{CachedTile, ResizeDrag};
 
 /// State owned by a single window's view. Methods on `App` reach it through
 /// `self.view`; when the window registry lands (MW2) the render / input paths
@@ -43,4 +49,48 @@ pub(crate) struct WindowView {
     /// Each live card's close-button rect this frame (member): a press reaps that
     /// live preview.
     pub(crate) close_button_rects: Vec<(GraphMemberId, [f32; 4])>,
+
+    // ── Paint caches: GPU textures rasterized for this window's surface, reused
+    //    across frames while their version + size hold. ────────────────────────
+    /// Cached rasterized texture per tile, keyed by member; evicted on close.
+    pub(crate) tile_textures: HashMap<GraphMemberId, CachedTile>,
+    /// Cached rasterized close (×) button texture, shared across live cards.
+    pub(crate) close_button_tex: Option<CachedTile>,
+    /// Cached rasterized "unvisited" placeholder card.
+    pub(crate) unvisited_tex: Option<CachedTile>,
+    /// Cached rasterized snapshot textures, keyed by URL (the node's last-visit look).
+    pub(crate) snapshot_textures: HashMap<String, CachedTile>,
+    /// Cached rasterized window-control strip (min / max / close).
+    pub(crate) window_controls_tex: Option<CachedTile>,
+    /// A small solid texture filling the frame-divider gutters between split panes.
+    pub(crate) divider_tex: Option<CachedTile>,
+
+    // ── Interaction state: in-progress gestures + scroll + transient view bits
+    //    that belong to this window's pointer / keyboard, not the shared session. ─
+    /// Per-member content scroll offset (px from the document top). Absent = top.
+    pub(crate) scroll: HashMap<GraphMemberId, f32>,
+    /// Roster pane scroll offset (device px), clamped at render.
+    pub(crate) roster_scroll: f32,
+    /// The last left-button release (time + window pos), for double-click detection.
+    pub(crate) last_left_release: Option<(Instant, (f32, f32))>,
+    /// An in-progress workbench tab drag: the pressed tab's member + press position.
+    pub(crate) tab_drag: Option<(GraphMemberId, (f32, f32))>,
+    /// An in-progress workbench slot-divider drag: left-slot index, press x, weights.
+    pub(crate) divider_drag: Option<(usize, f32, Vec<f32>)>,
+    /// An in-progress frame-divider drag: split path, parent rect, axis.
+    pub(crate) frame_divider_drag: Option<(Vec<SplitChoice>, [f32; 4], SplitAxis)>,
+    /// An in-progress manual window resize from an edge / corner (custom titlebar).
+    pub(crate) resize_drag: Option<ResizeDrag>,
+    /// An in-progress titlebar press (window point) before it becomes a window drag.
+    pub(crate) titlebar_press: Option<(f32, f32)>,
+    /// The cursor icon currently set on the window (tracked to set only on change).
+    pub(crate) cursor_icon: CursorIcon,
+    /// Set by the custom close control; the event handler exits the loop after the
+    /// press is processed (input has no event-loop handle).
+    pub(crate) pending_exit: bool,
+    /// The members the open right-click context menu acts on (its working set).
+    pub(crate) context_set: Vec<GraphMemberId>,
+    /// In-progress session rename: the target session + its edit buffer. `Some` while
+    /// the switcher label is being typed (F2 / right-click a tile).
+    pub(crate) renaming: Option<(SessionId, String)>,
 }

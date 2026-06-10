@@ -61,7 +61,7 @@ impl App {
                                 .map(|p| (p.x, p.y))
                                 .unwrap_or((0, 0));
                             let size = window.inner_size();
-                            self.resize_drag = Some(super::ResizeDrag {
+                            self.view.resize_drag = Some(super::ResizeDrag {
                                 dir,
                                 start_outer: outer,
                                 start_size: (size.width, size.height),
@@ -99,7 +99,7 @@ impl App {
                     // CursorMoved) while a press-and-release still clicks the button
                     // / focuses the omnibar (resolved on release).
                     if button == MouseButton::Left {
-                        self.titlebar_press = Some((x, y));
+                        self.view.titlebar_press = Some((x, y));
                     }
                 } else if y < chrome_h as f32 {
                     if button == MouseButton::Left {
@@ -118,7 +118,7 @@ impl App {
                     // A press on a frame divider starts a pane-resize drag. (F1.)
                     if button == MouseButton::Left {
                         if let Some((path, parent, axis)) = self.frame_divider_at(x, y) {
-                            self.frame_divider_drag = Some((path, parent, axis));
+                            self.view.frame_divider_drag = Some((path, parent, axis));
                             return;
                         }
                     }
@@ -243,7 +243,7 @@ impl App {
                     }
                     // A press outside the shellbar while renaming commits the edit
                     // (clicking away accepts the new name). (Host text path.)
-                    if self.renaming.is_some() {
+                    if self.view.renaming.is_some() {
                         self.commit_rename();
                     }
                     // Route by content pane (the orrery + the workbench coexist).
@@ -258,7 +258,7 @@ impl App {
                         self.active_content = super::ContentPane::Workbench;
                         if button == MouseButton::Left {
                             if let Some(i) = self.divider_at(x, y) {
-                                self.divider_drag = Some((i, x, self.workbench.weights()));
+                                self.view.divider_drag = Some((i, x, self.workbench.weights()));
                             } else {
                                 self.workbench_click(x, y);
                             }
@@ -285,13 +285,13 @@ impl App {
                 // now, and skip the orrery / double-click paths — the press never
                 // reached them. (Custom titlebar.)
                 if button == MouseButton::Left {
-                    if let Some((px, py)) = self.titlebar_press.take() {
+                    if let Some((px, py)) = self.view.titlebar_press.take() {
                         self.chrome_click(px, py);
                         return;
                     }
                     // A manual window resize ends on release; skip the orrery /
                     // double-click paths (the press never reached them).
-                    if self.resize_drag.take().is_some() {
+                    if self.view.resize_drag.take().is_some() {
                         return;
                     }
                 }
@@ -308,8 +308,8 @@ impl App {
                 }
                 // A divider resize ends on release (tile-tree slot + frame pane).
                 if button == MouseButton::Left {
-                    self.divider_drag = None;
-                    self.frame_divider_drag = None;
+                    self.view.divider_drag = None;
+                    self.view.frame_divider_drag = None;
                 }
                 // Resolve a tab drag (tiled view): if the press moved past the slop
                 // and released over a tile, drop by zone — the outer quarter on
@@ -317,7 +317,7 @@ impl App {
                 // moves / stacks it into that slot (reorder within, move across). A
                 // release in place was a plain click (the tab activated on press).
                 if button == MouseButton::Left {
-                    if let Some((member, (px, py))) = self.tab_drag.take() {
+                    if let Some((member, (px, py))) = self.view.tab_drag.take() {
                         if (x - px).hypot(y - py) > 6.0 {
                             if let Some((target, [x0, _, x1, _])) = self.tile_at(x, y) {
                                 let edge = (x1 - x0).max(1.0) * 0.25;
@@ -346,13 +346,13 @@ impl App {
                     .is_some_and(|wr| x >= wr[0] && x < wr[2] && y >= wr[1] && y < wr[3]);
                 if button == MouseButton::Left && !released_in_workbench {
                     let now = Instant::now();
-                    let double = self.last_left_release.is_some_and(|(t, (lx, ly))| {
+                    let double = self.view.last_left_release.is_some_and(|(t, (lx, ly))| {
                         now.duration_since(t) < Duration::from_millis(400)
                             && (x - lx).hypot(y - ly) < 6.0
                     });
-                    self.last_left_release = Some((now, (x, y)));
+                    self.view.last_left_release = Some((now, (x, y)));
                     if double {
-                        self.last_left_release = None; // don't chain a triple-click
+                        self.view.last_left_release = None; // don't chain a triple-click
                         if over_card {
                             self.toggle_live_preview();
                         } else if !self.orrery.selected_members().is_empty() {
@@ -389,7 +389,7 @@ impl App {
                     window.set_maximized(!maximized);
                 }
             }
-            WindowControl::Close => self.pending_exit = true,
+            WindowControl::Close => self.view.pending_exit = true,
         }
     }
 
@@ -453,7 +453,7 @@ impl App {
             // release: a move when dragged onto another slot, else a plain click).
             // The press is kept in window coords (tile_rects are window-space).
             if let Some(WorkbenchAction::Activate(member)) = self.workbench_runner.state().pending {
-                self.tab_drag = Some((member, (x, y)));
+                self.view.tab_drag = Some((member, (x, y)));
             }
             self.drain_workbench_action();
             self.request_redraw();
@@ -490,7 +490,7 @@ impl App {
     /// Resize on a divider drag: shift width between the two slots the divider sits
     /// between, by the cursor's offset from the press as a fraction of the band.
     pub(super) fn drag_divider(&mut self) {
-        let Some((i, press_x, snapshot)) = self.divider_drag.clone() else {
+        let Some((i, press_x, snapshot)) = self.view.divider_drag.clone() else {
             return;
         };
         if i + 1 >= snapshot.len() {
@@ -513,7 +513,7 @@ impl App {
     /// While a tab is being dragged (moved past the slop), the member of the tile
     /// under the pointer — the highlighted drop target. `None` otherwise.
     pub(super) fn drag_target_member(&self) -> Option<GraphMemberId> {
-        let (_, (px, py)) = self.tab_drag?;
+        let (_, (px, py)) = self.view.tab_drag?;
         let (cx, cy) = self.cursor;
         if (cx - px).hypot(cy - py) <= 6.0 {
             return None; // not dragging yet (still a click)
@@ -530,7 +530,7 @@ impl App {
     pub(super) fn on_key_pressed(&mut self, key: &WinitKey) {
         // Renaming a session captures the keyboard: type into the switcher label,
         // Enter commits, Escape cancels, Backspace deletes. (Host text path.)
-        if self.renaming.is_some() {
+        if self.view.renaming.is_some() {
             match key {
                 WinitKey::Named(WinitNamedKey::Enter) => self.commit_rename(),
                 WinitKey::Named(WinitNamedKey::Escape) => self.cancel_rename(),

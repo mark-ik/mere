@@ -554,7 +554,7 @@ mod tests {
 
         // Rename starts from the current (derived) label, so clear it before typing.
         app.start_rename(id);
-        assert!(app.renaming.is_some());
+        assert!(app.view.renaming.is_some());
         for _ in 0..16 {
             app.rename_backspace(); // clear the seeded label (backspace-on-empty is a no-op)
         }
@@ -562,7 +562,7 @@ mod tests {
         app.rename_push("ork");
         app.rename_backspace(); // "Work" -> "Wor"
         app.commit_rename();
-        assert!(app.renaming.is_none());
+        assert!(app.view.renaming.is_none());
         assert_eq!(name_of(&app, id).as_deref(), Some("Wor"));
         assert_eq!(app.session_labels.get(&id).map(String::as_str), Some("Wor"));
 
@@ -578,7 +578,7 @@ mod tests {
         app.start_rename(id);
         app.rename_push("X");
         app.cancel_rename();
-        assert!(app.renaming.is_none());
+        assert!(app.view.renaming.is_none());
         assert!(name_of(&app, id).is_none(), "cancel did not persist the edit");
     }
 

@@ -381,7 +381,7 @@ impl App {
                 if let Some((x0, y0, x1, y1, _, _)) = rect {
                     // Render the snapshot scene from cache / synthesis once per url;
                     // `None` means its texture is already cached (composited below).
-                    let built = if self.snapshot_textures.contains_key(&url) {
+                    let built = if self.view.snapshot_textures.contains_key(&url) {
                         None
                     } else {
                         const RENDER_W: u32 = 300;
@@ -483,9 +483,9 @@ impl App {
         // Rasterize each tile's scene to an offscreen texture only when its version
         // or size changed; reuse the cached texture otherwise, so an unchanged tile
         // is not re-rasterized every frame (the cost that scaled with tile count).
-        // The cache (self.tile_textures) keeps the textures alive across frames; evict
+        // The cache (self.view.tile_textures) keeps the textures alive across frames; evict
         // closed tiles first so theirs free. `composite` is what to draw, in order.
-        self.tile_textures
+        self.view.tile_textures
             .retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
         // Rasterize each card at its FULL content height (clamped to the cap), so
         // scrolling is a GPU UV-window shift over the cached tall texture rather
@@ -502,13 +502,14 @@ impl App {
                 .max(*ch)
                 .min(MAX_CARD_TEX_H);
             let fresh = self
+                .view
                 .tile_textures
                 .get(member)
                 .is_some_and(|c| c.version == version && c.size == (*cw, tex_h));
             if !fresh {
                 if let Some(scene) = self.constellation.scene(*member) {
                     let (tex, view) = host.rasterize(scene, *cw, tex_h, ColorLoad::Clear(CARD_BG));
-                    self.tile_textures.insert(
+                    self.view.tile_textures.insert(
                         *member,
                         super::CachedTile {
                             version,
@@ -519,7 +520,7 @@ impl App {
                     );
                 }
             }
-            if self.tile_textures.contains_key(member) {
+            if self.view.tile_textures.contains_key(member) {
                 composite.push((*dest, *member));
             }
         }
@@ -552,7 +553,7 @@ impl App {
             );
         }
         for (dest, member) in &composite {
-            let Some(cached) = self.tile_textures.get(member) else {
+            let Some(cached) = self.view.tile_textures.get(member) else {
                 continue;
             };
             // Scroll is a vertical UV window over the tall cached texture — a GPU
@@ -567,6 +568,7 @@ impl App {
             let visible_h = dest_h * tex_w / dest_w;
             let max_scroll = (tex_h - visible_h).max(0.0);
             let scroll = self
+                .view
                 .scroll
                 .get(member)
                 .copied()
@@ -593,7 +595,7 @@ impl App {
             let btn = super::card::CLOSE_BTN;
             let inset = super::card::CLOSE_BTN_INSET;
             let size = btn.round().max(1.0) as u32;
-            if self.close_button_tex.as_ref().map(|c| c.size) != Some((size, size)) {
+            if self.view.close_button_tex.as_ref().map(|c| c.size) != Some((size, size)) {
                 let scene = super::card::close_button_scene(size);
                 let (tex, view) = host.rasterize(
                     &scene,
@@ -601,14 +603,14 @@ impl App {
                     size,
                     ColorLoad::Clear(wgpu::Color::TRANSPARENT),
                 );
-                self.close_button_tex = Some(super::CachedTile {
+                self.view.close_button_tex = Some(super::CachedTile {
                     version: 0,
                     size: (size, size),
                     tex,
                     view,
                 });
             }
-            if let Some(cached) = &self.close_button_tex {
+            if let Some(cached) = &self.view.close_button_tex {
                 let bx1 = dest[2] - inset;
                 let bx0 = bx1 - btn;
                 let by0 = dest[1] + inset;
@@ -631,7 +633,7 @@ impl App {
             if let Some((scene, content_h)) = built {
                 let tex_h = content_h.max(1).min(MAX_CARD_TEX_H);
                 let (tex, view) = host.rasterize(&scene, 300, tex_h, ColorLoad::Clear(CARD_BG));
-                self.snapshot_textures.insert(
+                self.view.snapshot_textures.insert(
                     url.clone(),
                     super::CachedTile {
                         version: 0,
@@ -641,7 +643,7 @@ impl App {
                     },
                 );
             }
-            if let Some(cached) = self.snapshot_textures.get(&url) {
+            if let Some(cached) = self.view.snapshot_textures.get(&url) {
                 let tex_w = cached.size.0 as f32;
                 let tex_h = cached.size.1 as f32;
                 let dest_w = (rect[2] - rect[0]).max(1.0);
@@ -649,6 +651,7 @@ impl App {
                 let visible_h = dest_h * tex_w / dest_w;
                 let max_scroll = (tex_h - visible_h).max(0.0);
                 let scroll = self
+                    .view
                     .scroll
                     .get(&member)
                     .copied()
@@ -670,17 +673,17 @@ impl App {
         if let Some((_, rect)) = unvisited_card {
             let uw = (rect[2] - rect[0]).round().max(1.0) as u32;
             let uh = (rect[3] - rect[1]).round().max(1.0) as u32;
-            if self.unvisited_tex.as_ref().map(|c| c.size) != Some((uw, uh)) {
+            if self.view.unvisited_tex.as_ref().map(|c| c.size) != Some((uw, uh)) {
                 let scene = super::card::unvisited_card_scene(uw, uh);
                 let (tex, view) = host.rasterize(&scene, uw, uh, ColorLoad::Clear(CARD_BG));
-                self.unvisited_tex = Some(super::CachedTile {
+                self.view.unvisited_tex = Some(super::CachedTile {
                     version: 0,
                     size: (uw, uh),
                     tex,
                     view,
                 });
             }
-            if let Some(cached) = &self.unvisited_tex {
+            if let Some(cached) = &self.view.unvisited_tex {
                 host.renderer().compose_external_texture(
                     &cached.view,
                     &target_view,
@@ -694,19 +697,19 @@ impl App {
         // Frame dividers: fill each split gutter with a dark seam (so the gutter is
         // not stale pixels and reads as a divider). (Frame tree, F1.)
         if !dividers.is_empty() {
-            if self.divider_tex.as_ref().map(|c| c.size) != Some((1, 1)) {
+            if self.view.divider_tex.as_ref().map(|c| c.size) != Some((1, 1)) {
                 let mut scene = netrender::Scene::new(1, 1);
                 scene.push_rect(0.0, 0.0, 1.0, 1.0, [0.04, 0.05, 0.07, 1.0]);
                 let (tex, view) =
                     host.rasterize(&scene, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
-                self.divider_tex = Some(super::CachedTile {
+                self.view.divider_tex = Some(super::CachedTile {
                     version: 0,
                     size: (1, 1),
                     tex,
                     view,
                 });
             }
-            if let Some(cached) = &self.divider_tex {
+            if let Some(cached) = &self.view.divider_tex {
                 for d in &dividers {
                     host.renderer().compose_external_texture(
                         &cached.view,
@@ -741,9 +744,9 @@ impl App {
                         - layout.border.top
                         - layout.border.bottom;
                     let max_scroll = (layout.content_size.height - inner_h).max(0.0);
-                    self.roster_scroll = self.roster_scroll.clamp(0.0, max_scroll);
-                    roster_scrolls.insert(node, (0.0, self.roster_scroll));
-                    Some(self.roster_scroll)
+                    self.view.roster_scroll = self.view.roster_scroll.clamp(0.0, max_scroll);
+                    roster_scrolls.insert(node, (0.0, self.view.roster_scroll));
+                    Some(self.view.roster_scroll)
                 })
                 .unwrap_or(0.0);
             let scene = scene_from_scripted_dom(&dom, &sheet, rw, rh, None, &roster_scrolls);
@@ -914,7 +917,7 @@ impl App {
         // path hit-tests the same geometry, so nothing is recorded here.
         let band_h = toolbar_h.max(1);
         let strip_w = super::titlebar::CONTROLS_W.round().max(1.0) as u32;
-        if self.window_controls_tex.as_ref().map(|c| c.size) != Some((strip_w, band_h)) {
+        if self.view.window_controls_tex.as_ref().map(|c| c.size) != Some((strip_w, band_h)) {
             let scene = super::titlebar::controls_scene(band_h, &self.chrome_theme);
             let (tex, view) = host.rasterize(
                 &scene,
@@ -922,14 +925,14 @@ impl App {
                 band_h,
                 ColorLoad::Clear(wgpu::Color::TRANSPARENT),
             );
-            self.window_controls_tex = Some(super::CachedTile {
+            self.view.window_controls_tex = Some(super::CachedTile {
                 version: 0,
                 size: (strip_w, band_h),
                 tex,
                 view,
             });
         }
-        if let Some(cached) = &self.window_controls_tex {
+        if let Some(cached) = &self.view.window_controls_tex {
             let x0 = w as f32 - super::titlebar::CONTROLS_W;
             host.renderer().compose_external_texture(
                 &cached.view,
@@ -971,7 +974,7 @@ impl App {
             let region_h = region_h_f.round().max(1.0) as u32;
             let origin_x = strip[0];
             let origin_y = strip[3] - region_h_f; // anchored at the strip's bottom
-            let renaming = self.renaming.as_ref().map(|(id, buf)| (*id, buf.as_str()));
+            let renaming = self.view.renaming.as_ref().map(|(id, buf)| (*id, buf.as_str()));
             let (scene, hits) = super::switcher::switcher_scene(
                 &entries,
                 region_w,
