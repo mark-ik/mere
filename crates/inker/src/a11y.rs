@@ -9,8 +9,8 @@
 //! [docs harvest](../../../../design_docs/mere_docs/research/2026-05-27_graphshell_docs_full_harvest.md)
 //! §1 and the [adoption roadmap](../../../../design_docs/mere_docs/implementation_strategy/2026-05-27_adoption_roadmap.md)
 //! R0). This is the **contract** (the rule), not the full a11y implementation;
-//! the host's AccessKit bridge (verso/platen → uxtree) consumes it when the a11y
-//! slice lands.
+//! the host's AccessKit bridge (platen domains → uxtree) consumes it when the
+//! a11y slice lands.
 //!
 //! ## The three invariants
 //!

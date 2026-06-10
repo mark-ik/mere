@@ -124,6 +124,11 @@ impl SurfaceHost {
         &self.renderer.wgpu_device.core.device
     }
 
+    /// The wgpu queue backing the renderer (e.g. for external-texture import).
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.renderer.wgpu_device.core.queue
+    }
+
     /// Reconfigure the surface for a new size (clamped to ≥ 1).
     pub fn resize(&mut self, width: u32, height: u32) {
         self.surface_config.width = width.max(1);

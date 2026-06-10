@@ -13,7 +13,6 @@ frame.workspace = true
 kernel.workspace = true
 forme.workspace = true
 identity.workspace = true
-tile-state.workspace = true
 # The blob Store trait the content cache persists through (wasm-clean; the host
 # supplies the concrete fjall / OPFS backend).
 eidetic.workspace = true

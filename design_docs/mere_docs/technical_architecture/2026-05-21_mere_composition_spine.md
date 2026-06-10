@@ -1,7 +1,35 @@
 # Mere Composition Spine — graph-capable forme, projections, surfaces
 
 **Date**: 2026-05-21
-**Status**: Canonical. The product-architecture spine. Refines (does not
+**Status**: Canonical for the arrangement ontology (§2-§8, §10-§15). The
+host/realization rows (§1, §7, §9, §12) are pre-flip; read them through the
+2026-06-10 correction banner below.
+
+> **2026-06-10 post-flip correction.** The serval-as-host flip has executed
+> (see the archived
+> [flip plan](../../archive_docs/2026-06-10_completed_plans/2026-06-01_serval_host_flip_plan.md));
+> the host rows below predate it. Where this doc says "Xilem app" /
+> "Masonry" / "the `GraphCanvas` Masonry widget", the running stack is:
+> **meerkat**, a serval-as-host shell whose chrome is authored as
+> `xilem_serval` views (a `xilem_core` backend diffing into serval's
+> ScriptedDom), laid out by serval (stylo + taffy), painted through netrender.
+> Morphorm is gone from the workspace: between-tiles geometry is flex DOM
+> emitted by `platen-view` and laid out by serval. The orrery shipped as a
+> **host-side composition** (scene-paint underlay + physics-positioned DOM
+> under one camera transform), not a Masonry widget and not a serval custom
+> element. **Verso's chartered realization role has no code counterpart
+> today**: verso-core survives as a thin ID/surface-types layer, platen
+> carries an unused verso-core dep, and the realization work landed in
+> constellation actors + platen-view + meerkat's compositing; §14.3's
+> "TileManager survives as Verso runtime" never happened. Verso's disposition
+> was decided and executed 2026-06-10: the crates are deleted (topology §9)
+> and the name is designated for the compatibility-view / engine-flip charter
+> ([verso_docs charter](../../verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md)).
+> The model→plan layers
+> (forme, platen) and the arrangement ontology are unaffected. A full
+> §1/§7/§9/§12 refresh is still owed (topology doc, staleness flag).
+
+Refines (does not
 replace) [`2026-05-21_app_architecture_rescaffold.md`](2026-05-21_app_architecture_rescaffold.md)
 — that doc fixed the *framework* question (chrome = idiomatic Xilem, retire
 substrate-as-host, no action bus); this doc fixes the *arrangement ontology* it
@@ -115,7 +143,7 @@ constraints. Tiles are what *some* nodes realize into, via Verso.
 | **Surface** | `verso` | composable tile/surface realization + lifecycle; the tile system Mere mounts into workbenches | — |
 | **Engine** | `inker` (+ `nematic`/`scrying`/Serval) | which engine backs a tile's content; route by pin/type/scheme/override | — |
 | **Frame chrome** | `frame` (FrameTree) | OS-window pane splits, pane placement, pane kinds, persistence | **tree** (deliberately) |
-| **Platform** | `meerkat` (Host) | Xilem app: realize the plan as a view tree; window, input, frame loop, GPU | — |
+| **Platform** | `meerkat` (Host) | Xilem app: realize the plan as a view tree; window, input, frame loop, GPU *(pre-flip row; see the 2026-06-10 banner)* | — |
 
 **FrameTree stays a tree on purpose.** Window/GPU split-hosting has hard
 rectangular/realization constraints that semantic arrangement does not. Don't
@@ -168,7 +196,8 @@ So forme/platen produce the *plan*; Xilem *renders* it. "Chrome = idiomatic
 Xilem" (the re-scaffold doc) still holds — forme/platen are the model→plan layer
 *above* the view functions, not a replacement for them.
 
-**Host-architecture note (2026-05-29).** The "Host (Xilem)" row above describes
+**Host-architecture note (2026-05-29; 2026-06-10: executed — see the banner).**
+The "Host (Xilem)" row above describes
 architecture 1 (Xilem authoring, Masonry within-tile content). Serval-as-host
 (architecture 3) is the evaluated destination: serval renders both between-tiles
 and within-tile through one engine, chrome authored via `xilem_serval` and painted
@@ -207,6 +236,9 @@ Graph-capability costs what a tree gives for free:
 - **FrameTree** is affirmed as tree-shaped; **forme** is not.
 
 ## 12. Build order
+
+*(Pre-flip sequencing; largely executed in serval-as-host form — see the
+2026-06-10 banner. Step 5's verso surface contract never got a consumer.)*
 
 On the `meerkat` Xilem skeleton (FrameTree = split views already landed):
 
@@ -253,6 +285,9 @@ The forks are settled (three review passes). The build follows these.
    surface lifecycle, cached tile state, within-tile history; **`TileManager`
    survives as Verso runtime keyed by a forme-assigned tile / surface id — no
    longer `NodeKey`** (NodeKey breaks on mirrors / multiple intents per member).
+   *(2026-06-10: the verso half of this resolution has no code counterpart;
+   realization landed in constellation actors + platen-view + meerkat
+   compositing. Retire-or-revive verso is an open decision — see the banner.)*
 
 4. **Position** — see §9's three scopes: geometry-free forme; semantic geometry
    (not pixels) in projection state keyed `(FormeRef, ProjectionKind)`, shared

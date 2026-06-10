@@ -25,7 +25,18 @@ use frame::PaneContent;
 use super::titlebar::{self, WindowControl};
 use super::{
     App, FALLBACK_TOOLBAR_H, first_tag, first_with_class, has_class, measure_class_bottom,
+    scrying_host,
 };
+
+/// Map a winit mouse button to the scrying host's button vocabulary. (Scrying X2.)
+fn scrying_btn(button: MouseButton) -> Option<scrying_host::MouseBtn> {
+    match button {
+        MouseButton::Left => Some(scrying_host::MouseBtn::Left),
+        MouseButton::Right => Some(scrying_host::MouseBtn::Right),
+        MouseButton::Middle => Some(scrying_host::MouseBtn::Middle),
+        _ => None,
+    }
+}
 
 impl App {
     /// Route a mouse button press/release by region. A left press in the chrome
@@ -83,6 +94,21 @@ impl App {
                     }
                     return;
                 }
+                // A press on the focused compatibility-view tile forwards into its
+                // WebView and hands it the keyboard; a press anywhere else releases
+                // that keyboard focus. (Scrying X2.)
+                if let Some((member, lx, ly)) = self.scrying_at(x, y) {
+                    if let Some(btn) = scrying_btn(button) {
+                        self.view
+                            .scrying
+                            .forward_mouse(member, lx, ly, scrying_host::MousePress::Down(btn));
+                        self.view.scrying.focus_tile(member);
+                        self.view.scrying_input_focus = Some(member);
+                        self.request_redraw();
+                    }
+                    return;
+                }
+                self.view.scrying_input_focus = None;
                 // The chrome's interactive area is the toolbar plus any open
                 // dropdown (its `.chrome` border-box). A left press there dispatches
                 // the chrome; below it (the content band) a right press opens the
@@ -255,7 +281,7 @@ impl App {
                         // The workbench root: a left press on a slot divider starts a
                         // resize; otherwise it routes to the root (tab switch / close
                         // / pin).
-                        self.active_content = super::ContentPane::Workbench;
+                        self.view.active_content = super::ContentPane::Workbench;
                         if button == MouseButton::Left {
                             if let Some(i) = self.divider_at(x, y) {
                                 self.view.divider_drag = Some((i, x, self.workbench.weights()));
@@ -267,7 +293,7 @@ impl App {
                         // The orrery pane: right-click opens the context menu; a left
                         // / middle press pans / selects / drags (unless it's over the
                         // orrery's card, which owns its own clicks).
-                        self.active_content = super::ContentPane::Orrery;
+                        self.view.active_content = super::ContentPane::Orrery;
                         if button == MouseButton::Right {
                             self.open_context_menu_at(x, y);
                         } else if let Some(b) = orrery_button {
@@ -280,6 +306,17 @@ impl App {
                 }
             }
             ElementState::Released => {
+                // A release over the focused compatibility-view tile forwards into
+                // its WebView (button-up to complete a click). (Scrying X2.)
+                if let Some((member, lx, ly)) = self.scrying_at(x, y) {
+                    if let Some(btn) = scrying_btn(button) {
+                        self.view
+                            .scrying
+                            .forward_mouse(member, lx, ly, scrying_host::MousePress::Up(btn));
+                        self.request_redraw();
+                    }
+                    return;
+                }
                 // Resolve a pending titlebar press that never became a window drag:
                 // it was a click on the toolbar bar (a button / the omnibar). Run it
                 // now, and skip the orrery / double-click paths — the press never

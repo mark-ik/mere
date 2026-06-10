@@ -8,7 +8,7 @@
 //! browser. Eidetic owns the vocabulary for owner-scoped local blobs, caches,
 //! and accumulated browsing memory — the lane that "keeps the impressions
 //! over time" in Mere's printing-press metaphor (engines → inker → platen →
-//! verso-core → eidetic).
+//! eidetic).
 //!
 //! Eidetic defines typed [`Request`] / [`Response`] enums, an async [`Store`]
 //! trait that storage backends implement (fjall, redb, OPFS, …), and a

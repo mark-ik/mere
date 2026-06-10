@@ -22,4 +22,3 @@ uxtree.workspace = true
 [dev-dependencies]
 kernel.workspace = true
 uuid = "1"
-verso-core.workspace = true

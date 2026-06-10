@@ -103,7 +103,7 @@ impl App {
             h as f32,
             toolbar_h as f32,
         );
-        let leaves = frame_view::leaf_rects(&self.frame_layout, band, self.maximized_pane);
+        let leaves = frame_view::leaf_rects(&self.view.frame_layout, band, self.view.maximized_pane);
         // The orrery is the always-present graph pane; the tiled workbench is its
         // summonable sibling. Each renders into its own leaf. (Workbench-as-pane.)
         let orrery_rect = leaves
@@ -123,7 +123,7 @@ impl App {
             .iter()
             .find(|l| matches!(l.content, PaneContent::Comms))
             .map(|l| l.rect);
-        let dividers = frame_view::divider_rects(&self.frame_layout, band, self.maximized_pane);
+        let dividers = frame_view::divider_rects(&self.view.frame_layout, band, self.view.maximized_pane);
         let orrery_w = (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32;
         let orrery_h = (orrery_rect[3] - orrery_rect[1]).round().max(1.0) as u32;
 
@@ -276,6 +276,10 @@ impl App {
             Option<(netrender::Scene, u32)>,
         )> = None;
         let mut live_card: Option<(GraphMemberId, [f32; 4])> = None;
+        // The focused card when its node is pinned to the compatibility view:
+        // the system WebView's imported texture composites at this rect instead
+        // of a constellation scene. (Scrying tile plan, X1.)
+        let mut scrying_card: Option<(GraphMemberId, [f32; 4])> = None;
         if let Some(wr) = workbench_rect {
             // Read each content placeholder's laid-out rect + member out of the
             // workbench DOM (taffy laid it out above), then drive that tile's actor
@@ -361,11 +365,41 @@ impl App {
                     })
                     .or_else(|| super::card::card_rect(orrery_rect));
                 if let Some((x0, y0, x1, y1, cw, ch)) = rect {
-                    self.ensure_content(&url);
-                    let state = self.content.get(&url).cloned();
-                    self.constellation.drive(member, &url, state, cw, ch);
-                    cards.push((member, [x0, y0, x1, y1], (cw, ch)));
-                    live_card = Some((member, [x0, y0, x1, y1]));
+                    if self.view.scrying.is_compat(member) {
+                        // Compatibility view: the system WebView renders this
+                        // node; drive the UI-thread scrying pool (spawn /
+                        // resize / navigate + non-blocking frame import)
+                        // instead of a content actor.
+                        if let (Some(window), Some(host)) =
+                            (self.window.as_ref(), self.host.as_ref())
+                        {
+                            let window = window.clone();
+                            let device = host.device().clone();
+                            let queue = host.queue().clone();
+                            let session_dir = self.session_dir.clone();
+                            self.view.scrying.drive(
+                                member,
+                                &url,
+                                cw,
+                                ch,
+                                &window,
+                                &device,
+                                &queue,
+                                &session_dir,
+                            );
+                        }
+                        scrying_card = Some((member, [x0, y0, x1, y1]));
+                        live_card = Some((member, [x0, y0, x1, y1]));
+                        // The WebView paints on its own schedule; keep frames
+                        // coming while the card is visible.
+                        self.request_redraw();
+                    } else {
+                        self.ensure_content(&url);
+                        let state = self.content.get(&url).cloned();
+                        self.constellation.drive(member, &url, state, cw, ch);
+                        cards.push((member, [x0, y0, x1, y1], (cw, ch)));
+                        live_card = Some((member, [x0, y0, x1, y1]));
+                    }
                 }
             } else if self.orrery.member_visited(member) {
                 // "Last visit" snapshot: a small fixed-size card, rendered host-side
@@ -434,6 +468,9 @@ impl App {
         }
         if let Some((member, _, rect, _)) = &snapshot_card {
             self.view.content_rects.push((*member, *rect));
+        }
+        if let Some((member, rect)) = scrying_card {
+            self.view.content_rects.push((member, rect));
         }
 
         // The omnibar follows focus: point it at the focused tile / node when that
@@ -583,6 +620,22 @@ impl App {
                 h,
                 ExternalTexturePlacement::new(*dest).with_uv(uv),
             );
+        }
+        // The compatibility-view card: the imported WebView texture at the card
+        // rect. No UV window — the WebView scrolls itself. The rect is recorded so
+        // the input path can forward mouse / wheel / keys into the WebView. (X2.)
+        self.view.scrying_rect = scrying_card;
+        if let Some((member, dest)) = scrying_card {
+            if let Some(view) = self.view.scrying.texture_view(member) {
+                host.renderer().compose_external_texture(
+                    view,
+                    &target_view,
+                    format,
+                    w,
+                    h,
+                    ExternalTexturePlacement::new(dest),
+                );
+            }
         }
         // Live cards carry a close (X) button at their top-right corner. Rasterize
         // the shared button texture once, composite it on each live card, and
@@ -1015,10 +1068,26 @@ impl App {
         }
         frame.present();
         self.refresh_a11y_summary();
+        self.discard_dom_mutations();
 
         // Keep animating while the orrery is settling / gliding / dragging.
         if orrery_redraw {
             self.request_redraw();
         }
+    }
+
+    /// Drop the chrome + workbench DOM mutation streams accumulated this frame.
+    /// Both DOMs are persistent — the chrome and workbench runners diff their view
+    /// trees into them through shared `Rc`s — and each `set_attribute` / insert /
+    /// remove records a `DomMutation`. meerkat renders by full reflow
+    /// (`scene_from_scripted_dom` reads the whole tree and never consumes the
+    /// stream), so without a drain the two logs grow one record per mutation for
+    /// the life of the session. Draining and dropping them each frame bounds that
+    /// growth. If incremental relayout is ever wired here, consume the stream
+    /// before this point rather than discarding it.
+    fn discard_dom_mutations(&self) {
+        let mut sink = Vec::new();
+        self.dom.borrow_mut().drain_mutations(&mut sink);
+        self.workbench_dom.borrow_mut().drain_mutations(&mut sink);
     }
 }

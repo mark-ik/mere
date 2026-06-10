@@ -106,8 +106,8 @@ linked-data = { workspace = true }
 armillary = { workspace = true }
 
 # Tiled-workbench composition (S4): forme owns the geometry-free arrangement
-# (a graph of tile / member intents); platen projects it into a WorkbenchPlan
-# and lays each slot out as a concrete rect (morphorm). meerkat holds the open
+# (a graph of tile / member intents); platen projects it into a WorkbenchPlan;
+# platen-view emits it as flex DOM that serval lays out. meerkat holds the open
 # tiles, drives the projection, and resolves each tile's member UUID to a node
 # URL against the session graph. The orrery is that same arrangement's
 # Cartography projection; the tiled mode is its Tree projection.
@@ -204,6 +204,12 @@ tracing-subscriber = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 accesskit_windows = { workspace = true }
+# The compatibility-view tile (scrying tile plan X1): the WebView2 composition
+# producer + the native-frame wgpu importer. A standalone sibling repo consumed
+# one-way, like netrender; the host builds the producer (it owns the HWND,
+# device, and profile dir the engine seam says the engine can't fabricate).
+scrying = { path = "../../../wgpu-scry/scrying" }
+dpi = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 accesskit_macos = { workspace = true }

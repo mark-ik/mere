@@ -80,6 +80,7 @@ mod inspector;
 mod observability;
 mod render;
 mod roster;
+mod scrying_host;
 mod shellbar;
 mod switcher;
 mod text;
@@ -362,8 +363,9 @@ const GRAPH_PANE: PaneId = PaneId(0);
 /// orrery and the tiled workbench coexist as panes; this disambiguates the single
 /// nav target (omnibar / Ctrl+Enter / Back-Forward) between them. (Workbench-as-
 /// pane: focus follows the last-clicked content pane.)
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ContentPane {
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum ContentPane {
+    #[default]
     Orrery,
     Workbench,
 }
@@ -468,16 +470,6 @@ struct App {
     /// The bridge only queues raw AccessKit requests; the kernel thread resolves
     /// ids through this table and applies semantic host actions.
     a11y_action_routes: HashMap<AccessNodeId, A11yHostAction>,
-    /// The frame tree for the content region: a split tree of resizable panes.
-    /// The graph pane ([`GRAPH_PANE`]) hosts the orrery / tiled workbench; summoned
-    /// panes (roster, …) split beside it. (Frame tree, F1.)
-    frame_layout: FrameLayout,
-    /// The leaf maximized to the whole content band, if any (the maximize toggle).
-    maximized_pane: Option<PaneId>,
-    /// Which content pane navigation acts on (the last-interacted one). (W.)
-    active_content: ContentPane,
-    /// Next pane id to mint when summoning a sibling pane.
-    next_pane_id: u64,
     width: u32,
     height: u32,
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
@@ -742,6 +734,8 @@ impl App {
         let mut view = window_view::WindowView::default();
         view.centered = restored_camera.is_some();
         view.content_location = content_location;
+        view.frame_layout = frame_layout;
+        view.next_pane_id = next_pane_id;
         let mut app = Self {
             dom,
             runner,
@@ -776,10 +770,6 @@ impl App {
                 let _ = a11y_proxy.send_event(());
             }),
             a11y_action_routes: HashMap::new(),
-            frame_layout,
-            maximized_pane: None,
-            active_content: ContentPane::Orrery,
-            next_pane_id,
             width: 1024,
             height: 600,
             workbench: Workbench::new(),
@@ -799,7 +789,7 @@ impl App {
             diagnostics_rx,
             _kernel: armillary::KernelThread::new(),
         };
-        let pane_count = app.frame_layout.iter_leaves().count();
+        let pane_count = app.view.frame_layout.iter_leaves().count();
         app.observability
             .record_startup(&app.active_theme_id, pane_count);
         app.refresh_session_thumbnails();

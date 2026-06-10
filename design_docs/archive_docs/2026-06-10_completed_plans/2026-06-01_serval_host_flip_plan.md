@@ -1,7 +1,10 @@
 # Serval-as-Host Flip Plan
 
 **Date**: 2026-06-01
-**Status**: Serval-side perf and interactive gates clear in the current checkout.
+**Status**: Closed 2026-06-10. P0-P3 and P5's core done-condition shipped
+(receipts landed in sibling plans, not here; see the closure entry at the end
+of Progress). P4 (external content re-home) is re-homed to the modular
+integration plan, S6. Archived per DOC_POLICY §8.
 **P0 (perf spike) run 2026-06-01:
 the relayout worry is retired (transform motion is paint-tier → `RepaintOnly`, not
 reflow). The three serval prerequisites it surfaced for the orrery's continuous
@@ -245,3 +248,42 @@ Xilem + Masonry host is removed.
   blocker, pointer-drag (`pointerdown`/`move`/`up` + capture), is present and
   test-covered; so are `Tab`/`Shift+Tab` focus traversal and clip-aware
   hit-testing for interactive scrolled content.
+
+- **2026-06-10** — **Closure.** The flip is executed in code, but this plan's
+  Progress never recorded it: the receipts landed in the integration plan
+  (S1-S4), the platen taffy retarget plan, and the orrery-element phase-1 plan.
+  Anyone reading this plan alone concluded no flip code existed. Final state:
+  - **P0 done** (entries above).
+  - **P1 shipped as a host-side composition**, not the "serval custom-layout
+    element" Phase 1 describes. Recon found serval has no custom-element /
+    custom-paint hook; meerkat composites the orrery scene and DOM panes
+    itself (orrery-element plan, archived 2026-06-09). The element framing
+    here was never corrected; treat the archived plan as the receipt.
+  - **P2 shipped 2026-06-04**, via the new `platen-view` crate rather than
+    "platen becomes an `xilem_serval` consumer" as Phase 2 sketches:
+    platen-core stays serval-free and the coupling lives in the view crate
+    (taffy retarget plan, Architecture). Morphorm is out of the workspace.
+  - **P3 shipped**: toolbar / omnibar / palette / frametree / panes run as
+    `xilem_serval` views over the reused `chrome` domain, on the
+    pelt-live-shaped present stack; separate-roots held. The meerkat-side
+    wiring gaps the library credentials above do not cover (no `winit::Ime`
+    arm, so no CJK input in the omnibar; the cancellation seam unconsumed)
+    are tracked in the
+    [host cheap-path plan](../../mere_docs/implementation_strategy/2026-06-10_host_cheap_path_plan.md), C6.
+  - **P4 NOT built** — external web/scrying content re-home. `scrying-engine`
+    has zero consumers and no WebView path exists in meerkat; the netrender
+    destination (`compose_external_texture`) is real and exercised by
+    meerkat's own actor textures. Live home:
+    [integration plan](../../mere_docs/implementation_strategy/2026-06-02_modular_integration_plan.md) S6.
+    One correction to Phase 4's text: `content_generation` is not "the
+    frame-arrival hint" — compositor-pass lowering defaults it to `None` and
+    frame arrival is implicit at composite time (`paint_list_api`
+    items.rs:326-340).
+  - **P5 core done-condition met**: `crates/mere/app` (the Xilem + Masonry
+    host) was deleted 2026-06-04 (`0066070`); no `crates/xilem` path-deps
+    remain anywhere in mere. Remaining tail (orrery bin physical retirement,
+    doc reconciliation) lives in integration plan §7.
+  - The perf story this plan's standing constraints deferred (the chrome
+    renders through the stateless per-frame pipeline) is spun out into the
+    [host cheap-path plan](../../mere_docs/implementation_strategy/2026-06-10_host_cheap_path_plan.md).
+  Plan archived to `archive_docs/2026-06-10_completed_plans/`.

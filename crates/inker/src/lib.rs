@@ -7,10 +7,10 @@
 //!
 //! In the printing-press metaphor that organizes Mere's architecture, the
 //! Inker pairs each engine to its content and applies the engine's "ink" to
-//! the [`platen`](https://crates.io/crates/platen) for the
-//! [`verso-core`](https://crates.io/crates/verso-core) layer to receive.
-//! Routing URI schemes to engines, lifecycle management, and engine-output
-//! piping all live here.
+//! the [`platen`](https://crates.io/crates/platen) press. Routing URI schemes
+//! to engines, lifecycle management, and engine-output piping all live here.
+//! (*Verso* names the engine-flip / compatibility-view seam — see
+//! `design_docs/verso_docs/` — not a pipeline stage below platen.)
 //!
 //! ## Status
 //!

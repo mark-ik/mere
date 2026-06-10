@@ -166,8 +166,93 @@ with the structural reshape itself:
 - Order: `WindowView::new` + move structural fields → group the rest into `SharedState`
   → `Shell { shared, windows, primary }` + route by `WindowId` → `ShellCommand` seam.
 
+**MW2 scope (2026-06-10, grounded against the post-X1 code):**
+
+*Field destinations.* The ~30 fields still on `App` split three ways:
+
+- **→ `WindowView` (this phase's move, with measured access sites):**
+  `runner` + `dom` (89 + 7 — the bulk is mechanical `self.runner.update(...)` →
+  `view.runner.update(...)`), `workbench` + `workbench_dom` + `workbench_runner`
+  (26 + 4 + 6), `frame_layout` (27) + `next_pane_id` (6) + `maximized_pane` (13) +
+  `active_content` (10), `cursor` (27) + `modifiers` (24) + `toolbar_h` (7) +
+  `width` (18) + `height` (14), `window` (11) + `host` (5), and — resolving open
+  question 3 here — `a11y_bridge` + `a11y_action_routes` (5 + routes): the
+  bridge installs against one window, so it is per-window by construction.
+  Roughly 360 sites total, versus MW1's ~140; the known substring traps
+  (`host`/`host_text`, `toolbar_h`/`toolbar_height()`, `cursor`/`cursor_icon`)
+  rule out bulk rewrite for exactly the fields with the most sites.
+- **→ `SharedState` subsystems:** `content` { constellation, store,
+  content map, fetch_handle, engine_registry }, `session` { manifests,
+  active_session_id, session_dir, mere_root, session_thumbnails,
+  session_labels, host_text }, `presentation` { theme, chrome_theme,
+  chrome_sheet, active_theme_id, saved_tab_cap, shellbar_edge — the *setting*
+  is shared; which windows render a shellbar is the `WindowKind` template's
+  call }, `comms` { comms_handle }, `sync` { sync_handle }, `inbox`
+  { KernelInbox, diagnostics_rx }, plus `observability`.
+- **→ stays on `Shell`:** `orrery` (58 sites; the MW6 IOU). Moving it into
+  `WindowKind::Primary`'s payload now would rewrite all 58 into
+  primary-window lookups for zero pre-MW3 benefit — MW2 seats the
+  `WindowKind` *marker* and MW6 moves the payload. Also `clipboard`
+  (system-global, 2 sites) and `_kernel`.
+
+*The Option dividend.* `window` and `host` are `Option` only because
+`resumed()` arrives after construction. In the registry a `WindowView` is
+constructed *inside* `resumed` (window create → `SurfaceHost` boot → a11y
+install → insert into `windows`), so both become non-Option fields and the
+`self.host.as_ref().unwrap()` scatter dies with the move.
+
+*X1 changed one thing under this plan.* `App` now carries
+`scrying: ScryingHost` (compatibility-view WebViews). Its producers are
+**HWND-parented**, so the pool cannot be naively shared: the compat *pins*
+are session state (→ `SharedState.content`) and the producer pool is
+per-window (→ `WindowView`); the type already separates the two internally.
+Consequence for MW4: a torn-out compat tile spawns a fresh WebView parented
+to the new window — consistent with spawn-on-drop, no WebView migration.
+
+*Event-loop rewiring (the three real seams in `app_handler.rs`):*
+
+1. `resumed` — today early-returns if the window exists; becomes "create the
+   primary if `windows.is_empty()`" and otherwise a no-op (winit calls it on
+   every resume).
+2. `window_event` — today early-returns on id mismatch (the registry's
+   degenerate form); becomes `windows.get_mut(&id)` dispatch.
+   `CloseRequested` forks by kind: primary saves + exits (today's behavior),
+   a non-primary window just drops its view (MW3's consumer).
+3. `user_event` — the multicast inventory, measured: fetch pages /
+   subresources / contributions mutate **shared** state (then redraw the
+   windows showing the affected members); the **sync indicator** and every
+   **comms update** write *chrome state* via `runner.update`, which becomes a
+   write per window whose template carries that chrome (sync chip: all;
+   comms pane: the windows with it open). MW2 wraps these writes in the
+   fan-out loop while N=1 so MW3 inherits a real seam, per the
+   no-load-bearing-broadcast-redraw note above.
+
+*The command-seam v0 boundary* (tempering "mutations applied as commands" so
+MW2 does not balloon): pure view mutations (drags, scroll, cursor icon,
+hover) stay direct on `(&mut WindowView, &mut SharedState-subsystem)` narrow
+borrows — they never alias two windows. `ShellCommand` v0 covers what needs
+full `&mut Shell` or a second window: `Exit { save }`, `SwitchSession(id)`
+(clears constellation + scrying, reloads orrery + frame), `SetTheme(id)`
+(rebuilds every window's sheet), `SpawnWindow(kind)` / `CloseWindow(id)`
+(seated now, consumed by MW3/MW4), and the existing `drain_pending_command`
+dispatch re-homed as command application. Handler shape:
+`fn on_*(view: &mut WindowView, shared: &mut ..., ...) -> Vec<ShellCommand>`,
+applied by `Shell::apply` after the borrow ends.
+
+*Step order, each step compiling + 44/63 tests green (the MW1 discipline):*
+(a) `WindowView::new` + the structural move, window/host first (kills the
+Options), then chrome runners, frame cluster, input bits — methods stay on
+`App`; (b) group `SharedState` subsystems (pure field moves); (c) the
+receiver shift, one module at a time (render → input → frame_ops →
+app_handler), converting `&mut self` methods to `(view, shared)` functions;
+(d) rename `App` → `Shell`, add `windows: HashMap<WindowId, WindowView>` +
+`primary`, route by id; (e) `ShellCommand` + drains through it. Touch-point
+not to forget: `agent_harness` and `save_session` read fields that move
+(`frame_layout` → view), so their signatures shift in (c).
+
 Done when the single window is driven through the registry (events resolved by id,
-mutations applied as commands), with the shared/​per-window seam enforced by the types.
+mutations applied as commands), with the shared/​per-window seam enforced by the types
+— and the `window`/`host` unwrap scatter is gone (both non-Option inside `WindowView`).
 
 ### MW3 — a second window, shared state (one device, N surfaces)
 
@@ -310,6 +395,22 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   (`focused_tile`, `live_previews`, `content_location`, `shown_location`,
   `active_content`, `maximized_pane`, `next_pane_id`, switcher caches, `host_text`)
   are the last MW1 cluster.
+- 2026-06-10: **MW2 scoped against the post-X1 code** (the scope block under the
+  MW2 phase). Headlines: ~360 access sites move (vs MW1's ~140), dominated by
+  `runner` (89, mostly mechanical) and `orrery` (58 — which is the argument for
+  keeping `orrery` on `Shell` as the explicit MW6 IOU rather than seating it in
+  `WindowKind::Primary`'s payload now). `window`/`host` become **non-Option**
+  inside `WindowView` (constructed in `resumed`), killing the unwrap scatter.
+  New fact the plan predated: X1's `ScryingHost` splits across the seam —
+  compat pins are shared, the HWND-parented producer pool is per-window, and a
+  torn-out compat tile spawns a fresh WebView in the recipient (no migration).
+  `a11y_bridge` + action routes resolve per-window (open question 3). The
+  command seam is bounded for v0: view mutations stay direct narrow borrows;
+  commands cover Exit / SwitchSession / SetTheme / Spawn-CloseWindow + the
+  re-homed `drain_pending_command` dispatch. `user_event`'s multicast inventory
+  is measured: sync-chip + comms writes are the per-window chrome-state writes
+  to wrap in the fan-out loop while N=1. Step order (a)-(e) in the scope block,
+  each step green under the MW1 discipline.
 - 2026-06-10: **MW1 clean-carve complete — view-session cluster moved (32 fields
   total).** `WindowView` now also holds `centered`, `content_location`,
   `shown_location`, `focused_tile`, `live_previews` (what this window looks at within

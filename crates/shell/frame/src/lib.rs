@@ -267,6 +267,24 @@ pub struct FrameLayout {
     pub root: PaneNode,
 }
 
+impl Default for FrameLayout {
+    /// A single Orrery pane bound to the nil (unbound) graph — a placeholder the
+    /// host overwrites with the real content frame at startup. It exists so
+    /// per-window state can hold a `FrameLayout` by value (the host carve uses
+    /// `Default` + assignment). (Multi-window plan.)
+    fn default() -> Self {
+        FrameLayout {
+            id: FrameId::new("content"),
+            label: "content".to_string(),
+            root: PaneNode::Leaf {
+                pane_id: PaneId(0),
+                content: PaneContent::Orrery,
+                graph_id: GraphId::nil(),
+            },
+        }
+    }
+}
+
 /// Where to insert a new leaf relative to an existing leaf at a
 /// `SplitPath`. Used by [`FrameLayout::summon_leaf`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

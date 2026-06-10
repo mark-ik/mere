@@ -28,7 +28,8 @@ receipts. The banner gives the current mapping.
 - [session_service_runner_plan](mere_docs/implementation_strategy/2026-05-14_session_service_runner_plan.md) — sessions declare background workers behind a `SessionServiceRunner` capability; v0a landed.
 - [short_term_memory_substrate_plan](mere_docs/implementation_strategy/2026-05-14_short_term_memory_substrate_plan.md) — substrate-per-short-term-consumer (JSON sidecars vs in-memory); branch/fork state.
 - [net_media_plan](mere_docs/implementation_strategy/2026-05-26_net_media_plan.md) — the media organ (sibling to netfetcher/netrender): WebRTC + AV1 decode, three-tier asm-free decode policy.
-- [serval_host_flip_plan](mere_docs/implementation_strategy/2026-06-01_serval_host_flip_plan.md) — execution plan for the serval-as-host flip (P0 perf spike → P5 cutover); IME + interactive gate clear (2026-06-10).
+- [host_cheap_path_plan](mere_docs/implementation_strategy/2026-06-10_host_cheap_path_plan.md) — move meerkat's DOM panes off the stateless per-frame pipeline onto IncrementalLayout sessions + a laid-out-document query seam; stop the mutation-log leak; C6 wiring parity (IME, on_wheel, pointer cancellation, memoize). *(The serval_host_flip_plan was closed + archived 2026-06-10.)*
+- [scrying_tile_plan](mere_docs/implementation_strategy/2026-06-10_scrying_tile_plan.md) — land external web content (flip P4 / integration S6): a `ScryingHost` on the UI thread spawns system-WebView producers via the existing scrying-engine factory seam, imports their GPU frames, composites via `compose_external_texture`; X1 Windows-first.
 - [modular_integration_plan](mere_docs/implementation_strategy/2026-06-02_modular_integration_plan.md) — the unifying integration sequence + the graph-rooted projection model (graph is the root; orrery/workbench/gloss are projections). *(Draft; active.)*
 - [actor_constellation_plan](mere_docs/implementation_strategy/2026-06-03_actor_constellation_plan.md) — single-threaded kernel + I/O/content/compute actors (Servo's constellation done in-process; scenes travel as messages).
 - [host_p2p_wiring_plan](mere_docs/implementation_strategy/2026-06-03_host_p2p_wiring_plan.md) — wire the p2p substrate into the meerkat loop via the fetcher's async seam; S5.0–S5.2 shipped, S5.3 → comms shell.
@@ -46,7 +47,7 @@ receipts. The banner gives the current mapping.
 ## mere_docs/technical_architecture/
 
 - [workspace_topology_status](mere_docs/technical_architecture/2026-05-19_workspace_topology_status.md) — supercrate-naming snapshot; §1–5 are pre-flip receipts, §7 (graphshell dissolution) + §8 (canvas-ir/graph-layout review) are current.
-- [mere_composition_spine](mere_docs/technical_architecture/2026-05-21_mere_composition_spine.md) — **the spine**: truth → arrangement (forme) → projection (platen) → surface (verso) → engine (inker), with the three persistence scopes.
+- [mere_composition_spine](mere_docs/technical_architecture/2026-05-21_mere_composition_spine.md) — **the spine**: truth → arrangement (forme) → projection (platen) → surface (verso) → engine (inker), with the three persistence scopes. *(Host/realization rows pre-flip; 2026-06-10 correction banner. Verso's disposition: see the verso_docs charter.)*
 - [statements_over_schema_stance](mere_docs/technical_architecture/2026-05-22_statements_over_schema_stance.md) — the stance on statement/triple-shaped data over rigid schemas.
 - [cartography_aether_layout_seam](mere_docs/technical_architecture/2026-05-29_cartography_aether_layout_seam.md) — how cartography + arrangements (projection) relate to gyre (physics); gyre is not a cartography strategy; the `Projection` bridge.
 - [field_system_extraction](mere_docs/technical_architecture/2026-05-30_field_system_extraction.md) — the field system as a kernel primitive, and the decomposition of graph-canvas into the `orrery/*` family.
@@ -88,6 +89,7 @@ names as receipts).
 - **moothold_docs/** — [irc_mod_plan](moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md) (IRC as the first T1 protocol mod). *(tessera_plan archived 2026-06-09.)*
 - **murm_docs/** — [MURM_AS_BILATERAL](murm_docs/technical_architecture/MURM_AS_BILATERAL.md) (murm's bilateral-comms role + boundaries; banner: substrate pivoted to p2panda).
 - **nematic_docs/** — [polyglot_knot_design](nematic_docs/implementation_strategy/2026-05-08_polyglot_knot_design.md) (protocol-faithful clip composition; knot bodies as polyglot CommonMark + fenced protocol blocks; implemented).
+- **verso_docs/** — [compatibility_view_charter](verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md) (verso reborn: the engine-flip / compatibility-view seam — portable view-state carriers, one-hop invariant, minted at the first serval→scrying flip; current verso-core/tile-state contents still retire).
 
 ## archive_docs/ — superseded checkpoints (DOC_POLICY §4)
 
@@ -95,6 +97,7 @@ names as receipts).
 - [`2026-06-04_resource_coordination_merge/`](archive_docs/2026-06-04_resource_coordination_merge/) — the 2026-06-03 resource-banking + compute-mesh briefs (merged into the resource-coordination brief).
 - [`2026-06-09_completed_plans/`](archive_docs/2026-06-09_completed_plans/) — 21 docs: 17 shipped plans swept on completion (DOC_POLICY §8) plus 4 executed decision-records/roadmaps from the held set (serval_as_host_evaluation, adoption_roadmap, p2panda_substrate_spike_plan, tessera_plan). See its README. Two plans had a live tail spun out first: eidetic Phases 7-9 and workbench staging.
 - [`2026-06-09_pivot_superseded/`](archive_docs/2026-06-09_pivot_superseded/) — 21 docs obsoleted by the meerkat/serval-as-host, p2panda, and graph-canvas-dissolution pivots (incl. the superseded Xilem-host rescaffold); see its README.
+- [`2026-06-10_completed_plans/`](archive_docs/2026-06-10_completed_plans/) — the serval-as-host flip plan, closed with a final-state entry (P0-P3 + P5-core shipped; P4 re-homed to integration plan S6; perf story spun out into the host cheap-path plan).
 
 ## Current workspace topology
 
@@ -112,7 +115,7 @@ in the 2026-05-19 B1–B7 naming pass; the directory path disambiguates.
 | `inker` | `crates/inker/` | engines: `document-canvas`, `engines` (`nematic` for smolweb, scrying for system WebViews) + the registry |
 | `forme` | `crates/forme/` | per-graph-view workbench arrangement authority + `uxtree` |
 | `platen` | `crates/platen/` | composition surface: `platen`, `domain` panels (apparatus, gloss, workbench), `view` |
-| `verso` | `crates/verso/` | tile surface lifecycle: `verso-core`, `tile-state` |
+| *(verso)* | *(retired 2026-06-10)* | crates deleted (`SurfaceTargetId` inlined into inker); the name is the engine-flip seam — see verso_docs charter |
 | `eidetic` | `crates/eidetic/` | durable memory: `eidetic-core` + fjall / https / iroh fetchers |
 | `intel` | `crates/intel/` | local intelligence: `embed` owns embeddings + vector index + semantic search |
 | `murm` | `crates/murm/` | bilateral comms + transport: `murm`, `murmuring`, `transport` (p2panda), `misfin`, `webfinger` |
@@ -134,7 +137,7 @@ Full per-sub-crate snapshot (with load-bearing vs aspirational status) at
 
 - **Printing-press metaphor** organizes the data flow in two threads:
   - *Per-node content production*: engines (Serval, Nematic, scrying) → **inker** (selects/orchestrates the engine + routing) → per-node engine output.
-  - *Per-graph-view workbench arrangement*: graph truth (`graph/graph-kernel`) → **forme** (locks graph members + edges into the arrangement the view will print) → **platen** (presses the forme into surface/pane output) → **verso** (receptor of surface/tile lifecycle, communicating rearrangement back up to forme, and forme back to graph truth).
+  - *Per-graph-view workbench arrangement*: graph truth (`graph/graph-kernel`) → **forme** (locks graph members + edges into the arrangement the view will print) → **platen** (presses the forme into surface/pane output; `platen-view` realizes it as serval flex DOM, composited by the host). **Verso** is not a pipeline stage: it names the engine-flip / compatibility-view seam (see the verso_docs charter).
   - **eidetic** keeps impressions over time (private local memory; content-addressed engrams); **node-lineage** records per-owner navigation lineage.
 - **In-product vocabulary** (tiers *orrery* t1 → *moot* t2 → *moothold* t3 → *coalition* t4): *orrery* (a user's root graph view), *moot* (a themed federatable graph-view community), *moothold* (a holding of moots), *coalition* (a sovereign cluster of mootholds), *suzerainty* (outer-tier ↔ inner-member relation), *engram* (portable durable schematicized memory unit), *flora* (a moot's accumulated engrams), *kith / kin* (contact tiers), *volvelle* (radial moot form factor), *astroid* (graphlet hub-collapse), *tessera* (trust/contribution token), *eidetic* (private local memory).
 - **Avoid retired terms**: *Verse*, *Murmuration*, *Gist*, *Flock*, *Graphshell-as-product-name* (now a crate concept only) — see the lexicon brief §5.

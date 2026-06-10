@@ -439,7 +439,8 @@ impl Chrome {
             | Command::ToggleSteward
             | Command::RetryFocusedContent
             | Command::StopFocusedOperation
-            | Command::PinFocusedOperation => {
+            | Command::PinFocusedOperation
+            | Command::ToggleCompatView => {
                 // Host actions over the frame, orrery, workbench, or actor pool:
                 // record the intent; the host drains it and runs the matching
                 // method.

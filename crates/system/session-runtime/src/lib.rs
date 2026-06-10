@@ -12,15 +12,13 @@
 //! > Graph truth is never browser profile state.**
 //!
 //! This crate is the **session** half of that picture — durable
-//! session manifests, session graph/view sidecars, service-runner
-//! state, and compatibility re-exports for adjacent shell/workbench
-//! surfaces. Everything here compiles wasm32-clean: no gpui, no
+//! session manifests, session graph/view sidecars, and service-runner
+//! state. Everything here compiles wasm32-clean: no gpui, no
 //! iced, no winit, no wgpu.
 //!
 //! Ownership split:
 //!
 //! - `graphshell/shell/system/control-plane` owns the action bus.
-//! - `workbench/verso/tile-state` owns tile and surface-tile state.
 //! - this crate owns session manifests, session lifecycle storage,
 //!   graph/view sidecars, and session worker declarations.
 //!
@@ -31,7 +29,6 @@
 //!   (HostPaintPort, HostInputPort, HostSurfacePort, HostAccessibility
 //!   Port, …) + frame-projection inputs.
 //! - `graphshell-control-plane` owns the action-bus vocabulary.
-//! - `tile-state` owns workbench tile state and surface-producer state.
 //! - `host` and future host adapters consume these portable surfaces
 //!   without owning their schemas.
 //!
@@ -83,7 +80,4 @@ pub use switcher_thumbnail::{
 };
 pub use settings_store::{PersistedSettings, SETTINGS_FILENAME, ShellbarEdge};
 pub use tearout::{PaneDragPayload, TileDragPayload};
-pub use tile_state::{
-    HistoryEntry, NavigateMode, SurfaceTileState, SurfaceTileStep, TileManager, TileState,
-};
 pub use view_intent_store::{CameraSnapshot, HiddenRelationRecord, VIEW_INTENT_DIR, ViewIntent};

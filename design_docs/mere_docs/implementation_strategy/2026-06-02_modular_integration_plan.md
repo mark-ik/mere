@@ -87,7 +87,10 @@ only an empty `register-renderer-types` stub survives). The seam is:
   root.** Binary splits are BSP-complete and correct *for the tiled mode*; n-way
   grouping is tabs/stacks at the tile-group layer (`platen::PlanSlot::Tabs`,
   `forme::Arrangement::stacked`), not splits. The orrery is not a `FrameLayout`
-  leaf; it is the content-root's spatial surface.
+  leaf; it is the content-root's spatial surface. *(2026-06-10: superseded by
+  the shipped multi-graph work — `frame` now has a `PaneContent::Orrery` leaf
+  variant and `follows_active_graph()` treats the orrery as a graph-bound pane
+  leaf (MG5). The window-root half of the rule stands.)*
 - **One bin; dev isolation by launch flag + headless lib tests** — `meerkat
   --graph <…> --mode orrery|workbench`, `--engine <…>`, etc. No per-domain app-host
   bin (the standalone `orrery-host` bin folds in and retires). Each lane stays a
@@ -106,7 +109,8 @@ against the tree.
   history via xilem-serval over reused `chrome`; two-root composition. Content-root
   is now the `Orrery` (S1, `8786484`); fetch + a live engine behind it is the S2 gap.
 - `serval-winit-host` — shared wgpu+netrender present stack (boot, rasterize,
-  acquire, input mapping). Used by both serval bins. (Two copies exist; mere's is live.)
+  acquire, input mapping). Used by both serval bins. *(2026-06-10: only mere's
+  copy exists now; no `SurfaceHost` remains anywhere in the serval repo.)*
 - `orrery-host` — the full interactive orrery (platen underlay + live gyre + abs-pos
   DOM node children under one camera + pan/zoom/inertia/drag/pick/marquee/edge-pick +
   pre-materialized pool), now factored into a reusable window-agnostic `Orrery` lib
@@ -183,6 +187,9 @@ host-wired), `intel/embed` (Tier-2 embeddings, persists through eidetic),
    scene, scripting}`) extracted into the new `canvas-ir` crate; `graph-layout` + `platen`
    re-pointed; stale deps dropped from `cartography`/`document-canvas`/`embed`; behavioral
    modules deleted (zero live consumers); workspace rewired. Builds + tests green.
+   *(2026-06-10: superseded — `canvas-ir` and `graph-layout` were themselves
+   deleted 2026-06-07; keep-worthy layouts recaptured into
+   `crates/orrery/arrangements`. See topology §8.)*
 9. **register-\* latent + dual routing** — `register-viewer` (mime→viewer) duplicates
    `inker::routing` (engine-id); reconcile.
 10. **Pervasive doc staleness** — README lists cut crates; many docs predate the
@@ -272,6 +279,9 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
   tiles on meerkat via `ExternalTexturePlacement` (discard the dead Masonry fork
   edits; the scrying-engine crate is host-neutral). *Done*: a web/scrying tile
   composites through serval.
+  **Detailed elaboration: [scrying tile plan](2026-06-10_scrying_tile_plan.md)**
+  (UI-thread `ScryingHost` beside the constellation; X1 Windows-first →
+  X2 input/nav → X3 lifecycle + per-node pin → X4 macOS/Linux).
 - **S7 — Cutover + cleanup (flip P5 + R4).** Retire `crates/mere/app` and the
   xilem/masonry fork deps once meerkat reaches parity; then §7 cleanup.
 - **Later (own milestones):** federation proper (moot machinery), intel workers via
@@ -319,7 +329,10 @@ Schedule these so they stop polluting the topology and misleading readers:
   `platen::canvas_scene`; dropped stale graph-canvas deps from
   `cartography`/`document-canvas`/`embed`; deleted the behavioral modules; rewired the
   workspace. Targeted tests green (canvas-ir 57, graph-layout 14, platen 130,
-  cartography 44); meerkat builds.
+  cartography 44); meerkat builds. *(2026-06-10: this was an intermediate
+  state — `canvas-ir` + `graph-layout` were deleted 2026-06-07 and the
+  keep-worthy layouts recaptured into `crates/orrery/arrangements`; topology
+  §8 is the receipt.)*
 - **Relocate `kernel` + `cartography` + `graph-layout` out of `crates/graphshell/`**
   (R4, pure move) — kernel-under-shell is upside down.
 - **Sync `crates/graphshell/README.md`** to drop the cut `host-ports/` /

@@ -18,10 +18,10 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use forme::GraphMemberId;
-use frame::{SessionId, SplitAxis, SplitChoice};
+use frame::{FrameLayout, PaneId, SessionId, SplitAxis, SplitChoice};
 use winit::window::CursorIcon;
 
-use super::{CachedTile, ResizeDrag};
+use super::{CachedTile, ContentPane, ResizeDrag};
 
 /// State owned by a single window's view. Methods on `App` reach it through
 /// `self.view`; when the window registry lands (MW2) the render / input paths
@@ -110,4 +110,25 @@ pub(crate) struct WindowView {
     /// Nodes promoted to a *live* preview card in this window (double-clicked up from
     /// their snapshot). Drives `needed_members` in Cartography.
     pub(crate) live_previews: HashSet<GraphMemberId>,
+
+    // ── Frame: this window's pane arrangement + its companions. ──────────────────
+    /// The content region's split tree of resizable panes (window-scoped, MG5).
+    pub(crate) frame_layout: FrameLayout,
+    /// Next pane id to mint when summoning a sibling pane in this window.
+    pub(crate) next_pane_id: u64,
+    /// The leaf maximized to the whole content band, if any (the maximize toggle).
+    pub(crate) maximized_pane: Option<PaneId>,
+    /// Which content pane navigation acts on (the last-interacted one).
+    pub(crate) active_content: ContentPane,
+
+    // ── Compatibility view (scrying): per-window, because each WebView is bound to
+    //    this window's HWND. (Scrying X1/X2.) ──────────────────────────────────────
+    /// The scrying pool: system-WebView tiles on the UI thread, beside the
+    /// constellation.
+    pub(crate) scrying: super::scrying_host::ScryingHost,
+    /// The focused scrying tile's (member, window rect) this frame, set by render;
+    /// the input path hit-tests it to forward mouse / wheel into the WebView.
+    pub(crate) scrying_rect: Option<(GraphMemberId, [f32; 4])>,
+    /// The scrying tile that currently owns the keyboard (clicked into).
+    pub(crate) scrying_input_focus: Option<GraphMemberId>,
 }

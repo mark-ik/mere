@@ -223,7 +223,7 @@ impl App {
         // **window-scoped** (Model B, MG5): it persists at the shared root and stays
         // put across session switches, so a graph swap re-sources the panes without
         // rearranging them.
-        if let Err(err) = frame_layout_store::save_frame_layout(&self.mere_root, &self.frame_layout)
+        if let Err(err) = frame_layout_store::save_frame_layout(&self.mere_root, &self.view.frame_layout)
         {
             tracing::warn!(%err, dir = ?self.mere_root, "failed to persist the frame layout");
         }
@@ -470,9 +470,12 @@ impl App {
             .get(id)
             .map(|m| m.root_graph_id)
             .unwrap_or_default();
-        self.frame_layout.retag_graph_bound(target_graph);
+        self.view.frame_layout.retag_graph_bound(target_graph);
         // Reset the prior session's runtime caches.
         self.constellation.clear();
+        self.view.scrying.clear();
+        self.view.scrying_input_focus = None;
+        self.view.scrying_rect = None;
         self.content.clear();
         self.view.live_previews.clear();
         self.view.tile_textures.clear();
@@ -482,8 +485,8 @@ impl App {
         self.view.shown_location = None;
         self.view.renaming = None;
         self.workbench = platen::Workbench::new();
-        self.maximized_pane = None;
-        self.active_content = super::ContentPane::Orrery;
+        self.view.maximized_pane = None;
+        self.view.active_content = super::ContentPane::Orrery;
         // Swap identity; the omnibar nav target follows the new orrery focus.
         self.session_dir = session_dir;
         self.active_session_id = id;
@@ -694,6 +697,27 @@ impl App {
             tracing::info!(%member, background = next, "toggled node background");
             self.request_redraw();
         }
+    }
+
+    /// Toggle the focused node's compatibility view: render it through the
+    /// system WebView (the scrying pool) instead of a content actor. Pinning
+    /// also opens the live card so the WebView is visible immediately; the
+    /// node's actor (if any) is reaped since the WebView replaces it.
+    /// (Scrying tile plan, X1; session-local pin — the durable `compat_mode`
+    /// node field takes over in X3.)
+    pub(super) fn toggle_focus_compat(&mut self) {
+        let Some(member) = self.focused_member() else {
+            return;
+        };
+        let on = self.view.scrying.toggle_compat(member);
+        if on {
+            self.view.live_previews.insert(member);
+            self.constellation.reap(member);
+        } else if self.view.scrying_input_focus == Some(member) {
+            self.view.scrying_input_focus = None; // unpinned the tile that held the keyboard
+        }
+        tracing::info!(%member, compat = on, "toggled compatibility view");
+        self.request_redraw();
     }
 
     /// Retry the focused node's page fetch. Unlike `ensure_content`, this bypasses
@@ -967,6 +991,7 @@ impl App {
             Command::RetryFocusedContent => self.retry_focused_content(),
             Command::StopFocusedOperation => self.stop_focused_operation(),
             Command::PinFocusedOperation => self.pin_focused_operation(),
+            Command::ToggleCompatView => self.toggle_focus_compat(),
             // History / connect / settings / comms verbs run in the chrome; never
             // queued here as host intents.
             Command::Back
@@ -1065,7 +1090,7 @@ impl App {
 
     /// The laid-out content panes (leaf rects) for the current frame layout.
     pub(super) fn laid_leaves(&self) -> Vec<frame_view::LaidLeaf> {
-        frame_view::leaf_rects(&self.frame_layout, self.content_band(), self.maximized_pane)
+        frame_view::leaf_rects(&self.view.frame_layout, self.content_band(), self.view.maximized_pane)
     }
 
     /// The orrery (graph) pane's screen rect; the whole band when no orrery leaf is
@@ -1096,7 +1121,7 @@ impl App {
     /// so navigation (omnibar / Ctrl+Enter / Back-Forward) targets its focused tile
     /// rather than the orrery's selected node. (Workbench-as-pane.)
     pub(super) fn workbench_active(&self) -> bool {
-        self.active_content == super::ContentPane::Workbench && self.workbench_open()
+        self.view.active_content == super::ContentPane::Workbench && self.workbench_open()
     }
 
     /// Summon the workbench pane beside the orrery (Tree projection) and make it the
@@ -1104,8 +1129,8 @@ impl App {
     pub(super) fn open_workbench(&mut self) {
         if !self.workbench_open() {
             self.workbench.ensure_tiled();
-            let id = PaneId(self.next_pane_id);
-            self.next_pane_id += 1;
+            let id = PaneId(self.view.next_pane_id);
+            self.view.next_pane_id += 1;
             let graph_id = self.leaf_graph_id(&PaneContent::Workbench);
             let leaf = PaneNode::Leaf {
                 pane_id: id,
@@ -1113,20 +1138,21 @@ impl App {
                 graph_id,
             };
             let anchor =
-                frame_view::pane_path(&self.frame_layout, super::GRAPH_PANE).unwrap_or_default();
+                frame_view::pane_path(&self.view.frame_layout, super::GRAPH_PANE).unwrap_or_default();
             if self
+                .view
                 .frame_layout
                 .summon_leaf(&anchor, InsertSide::Right, leaf)
             {
-                self.frame_layout.set_split_ratio(&anchor, 0.6);
+                self.view.frame_layout.set_split_ratio(&anchor, 0.6);
             }
-            self.maximized_pane = None;
+            self.view.maximized_pane = None;
             self.observability
                 .record_pane_toggle(&PaneContent::Workbench, true);
             self.observability
                 .record_frame_layout_changed("workbench opened");
         }
-        self.active_content = super::ContentPane::Workbench;
+        self.view.active_content = super::ContentPane::Workbench;
     }
 
     /// Close the workbench pane: reap its tiles' actors, clear the tiles, drop the
@@ -1137,13 +1163,13 @@ impl App {
         }
         self.workbench.clear_tiles();
         if let Some(id) = self.pane_of_content(&PaneContent::Workbench) {
-            if let Some(path) = frame_view::pane_path(&self.frame_layout, id) {
-                self.frame_layout.close_leaf(&path);
+            if let Some(path) = frame_view::pane_path(&self.view.frame_layout, id) {
+                self.view.frame_layout.close_leaf(&path);
             }
         }
         self.view.focused_tile = None;
-        self.active_content = super::ContentPane::Orrery;
-        self.maximized_pane = None;
+        self.view.active_content = super::ContentPane::Orrery;
+        self.view.maximized_pane = None;
         self.observability
             .record_pane_toggle(&PaneContent::Workbench, false);
         self.observability
@@ -1167,33 +1193,34 @@ impl App {
         let open = self.runner.state().comms.is_open();
         match (open, self.pane_of_content(&PaneContent::Comms)) {
             (true, None) => {
-                let id = PaneId(self.next_pane_id);
-                self.next_pane_id += 1;
+                let id = PaneId(self.view.next_pane_id);
+                self.view.next_pane_id += 1;
                 let graph_id = self.leaf_graph_id(&PaneContent::Comms);
                 let leaf = PaneNode::Leaf {
                     pane_id: id,
                     content: PaneContent::Comms,
                     graph_id,
                 };
-                let anchor = frame_view::pane_path(&self.frame_layout, super::GRAPH_PANE)
+                let anchor = frame_view::pane_path(&self.view.frame_layout, super::GRAPH_PANE)
                     .unwrap_or_default();
                 if self
+                    .view
                     .frame_layout
                     .summon_leaf(&anchor, InsertSide::Right, leaf)
                 {
-                    self.frame_layout.set_split_ratio(&anchor, 0.66);
+                    self.view.frame_layout.set_split_ratio(&anchor, 0.66);
                 }
-                self.maximized_pane = None;
+                self.view.maximized_pane = None;
                 self.observability
                     .record_pane_toggle(&PaneContent::Comms, true);
                 self.observability
                     .record_frame_layout_changed("comms opened");
             }
             (false, Some(id)) => {
-                if let Some(path) = frame_view::pane_path(&self.frame_layout, id) {
-                    self.frame_layout.close_leaf(&path);
+                if let Some(path) = frame_view::pane_path(&self.view.frame_layout, id) {
+                    self.view.frame_layout.close_leaf(&path);
                 }
-                self.maximized_pane = None;
+                self.view.maximized_pane = None;
                 self.observability
                     .record_pane_toggle(&PaneContent::Comms, false);
                 self.observability
@@ -1219,6 +1246,14 @@ impl App {
             .map(|l| l.rect)
     }
 
+    /// If window point `(x, y)` falls on the focused scrying tile, the member +
+    /// **tile-local** `(x, y)` to forward into its WebView. (Scrying X2.)
+    pub(super) fn scrying_at(&self, x: f32, y: f32) -> Option<(GraphMemberId, i32, i32)> {
+        let (member, r) = self.view.scrying_rect?;
+        (x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
+            .then(|| (member, (x - r[0]) as i32, (y - r[1]) as i32))
+    }
+
     /// The node whose gloss minimap square contains window point `(x, y)`, if any.
     pub(super) fn gloss_node_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
         self.view.gloss_node_rects
@@ -1237,7 +1272,7 @@ impl App {
 
     /// The id of the open leaf whose content equals `content`, if any.
     pub(super) fn pane_of_content(&self, content: &PaneContent) -> Option<PaneId> {
-        self.frame_layout
+        self.view.frame_layout
             .iter_leaves()
             .find(|(_, c, _)| **c == *content)
             .map(|(id, _, _)| id)
@@ -1252,28 +1287,29 @@ impl App {
         let recorded_content = content.clone();
         let mut opened = false;
         if let Some(id) = self.pane_of_content(&content) {
-            if let Some(path) = frame_view::pane_path(&self.frame_layout, id) {
-                self.frame_layout.close_leaf(&path);
+            if let Some(path) = frame_view::pane_path(&self.view.frame_layout, id) {
+                self.view.frame_layout.close_leaf(&path);
             }
         } else {
-            let id = PaneId(self.next_pane_id);
-            self.next_pane_id += 1;
+            let id = PaneId(self.view.next_pane_id);
+            self.view.next_pane_id += 1;
             let graph_id = self.leaf_graph_id(&content);
             let leaf = PaneNode::Leaf {
                 pane_id: id,
                 content,
                 graph_id,
             };
-            let anchor = frame_view::pane_path(&self.frame_layout, GRAPH_PANE).unwrap_or_default();
+            let anchor = frame_view::pane_path(&self.view.frame_layout, GRAPH_PANE).unwrap_or_default();
             if self
+                .view
                 .frame_layout
                 .summon_leaf(&anchor, InsertSide::Right, leaf)
             {
-                self.frame_layout.set_split_ratio(&anchor, 0.7);
+                self.view.frame_layout.set_split_ratio(&anchor, 0.7);
             }
             opened = true;
         }
-        self.maximized_pane = None;
+        self.view.maximized_pane = None;
         self.observability
             .record_pane_toggle(&recorded_content, opened);
         self.observability.record_frame_layout_changed(format!(
@@ -1388,7 +1424,7 @@ impl App {
                 if matches!(request.action, Action::Click | Action::Focus) =>
             {
                 if self.orrery.select_by_url(&url) {
-                    self.active_content = super::ContentPane::Orrery;
+                    self.view.active_content = super::ContentPane::Orrery;
                     self.sync_location();
                     self.observability.record_diagnostic(
                         "meerkat.agent.action_applied",
@@ -1451,12 +1487,12 @@ impl App {
             .iter()
             .map(|leaf| (leaf.pane_id, leaf.rect))
             .collect();
-        let mut frame_tree = frame::project_frame_with(&self.frame_layout, |content, pane_id| {
+        let mut frame_tree = frame::project_frame_with(&self.view.frame_layout, |content, pane_id| {
             Some(self.a11y_content_tree(content, pane_id, &mut action_routes))
         });
         attach_frame_bounds(
             &mut frame_tree,
-            &self.frame_layout,
+            &self.view.frame_layout,
             &leaf_bounds,
             self.content_band(),
         );
@@ -1512,7 +1548,7 @@ impl App {
             | PaneContent::Steward
             | PaneContent::Tile(_)
             | PaneContent::Custom(_) => {
-                generic_pane_content_tree(&self.frame_layout, pane_id, content)
+                generic_pane_content_tree(&self.view.frame_layout, pane_id, content)
             }
         }
     }
@@ -1522,7 +1558,7 @@ impl App {
         pane_id: PaneId,
         action_routes: &mut HashMap<AccessNodeId, A11yHostAction>,
     ) -> UxTree {
-        let root_path = pane_content_root_path(&self.frame_layout, pane_id, "roster");
+        let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "roster");
         let root = node_id_for_path(&root_path);
         let row_bounds: HashMap<GraphMemberId, [f32; 4]> =
             self.view.roster_row_rects.iter().copied().collect();
@@ -1555,7 +1591,7 @@ impl App {
     }
 
     fn gloss_a11y_tree(&self, pane_id: PaneId) -> UxTree {
-        let root_path = pane_content_root_path(&self.frame_layout, pane_id, "gloss");
+        let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "gloss");
         let root = node_id_for_path(&root_path);
         let node_bounds: HashMap<GraphMemberId, [f32; 4]> =
             self.view.gloss_node_rects.iter().copied().collect();
@@ -1589,7 +1625,7 @@ impl App {
     }
 
     fn comms_a11y_tree(&self, pane_id: PaneId) -> UxTree {
-        let root_path = pane_content_root_path(&self.frame_layout, pane_id, "comms");
+        let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "comms");
         let root = node_id_for_path(&root_path);
         let comms = &self.runner.state().comms;
         let mut nodes = Vec::new();
@@ -1655,16 +1691,16 @@ impl App {
             PaneContent::Orrery
         };
         self.pane_of_content(&content)
-            .and_then(|pane_id| frame_leaf_id(&self.frame_layout, pane_id))
+            .and_then(|pane_id| frame_leaf_id(&self.view.frame_layout, pane_id))
     }
 
     /// Toggle maximize of the pane under the cursor (full-screen and back). With a
     /// single pane this is a no-op visually. (Frame tree, F1.)
     pub(super) fn toggle_maximize(&mut self) {
-        if self.maximized_pane.is_some() {
-            self.maximized_pane = None;
+        if self.view.maximized_pane.is_some() {
+            self.view.maximized_pane = None;
         } else if let Some(pane) = self.pane_at(self.cursor.0, self.cursor.1) {
-            self.maximized_pane = Some(pane);
+            self.view.maximized_pane = Some(pane);
         }
         self.request_redraw();
     }
@@ -1677,7 +1713,7 @@ impl App {
         y: f32,
     ) -> Option<(Vec<SplitChoice>, [f32; 4], SplitAxis)> {
         let band = self.content_band();
-        frame_view::divider_rects(&self.frame_layout, band, self.maximized_pane)
+        frame_view::divider_rects(&self.view.frame_layout, band, self.view.maximized_pane)
             .into_iter()
             .find(|d| x >= d.rect[0] && x < d.rect[2] && y >= d.rect[1] && y < d.rect[3])
             .map(|d| (d.path, d.parent, d.axis))
@@ -1699,7 +1735,7 @@ impl App {
             }
         };
         // `set_split_ratio` clamps to a sane minimum so a pane can't collapse.
-        self.frame_layout.set_split_ratio(&path, ratio);
+        self.view.frame_layout.set_split_ratio(&path, ratio);
         self.request_redraw();
     }
 

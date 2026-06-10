@@ -17,7 +17,39 @@ use winit::event_loop::ActiveEventLoop;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use super::observability::Severity;
-use super::{App, comms_host, fetch, sync, titlebar};
+use super::{App, comms_host, fetch, scrying_host, sync, titlebar};
+
+/// The platform virtual-key code for a winit key event, for forwarding into a
+/// scrying tile's WebView. Named keys map to their Win32 VKs; character keys use
+/// the uppercased char (matching Win32 VK_A..VK_Z / VK_0..VK_9). (Scrying X2.)
+fn scrying_vk(event: &winit::event::KeyEvent) -> u32 {
+    use winit::keyboard::{Key, NamedKey};
+    match &event.logical_key {
+        Key::Named(n) => match n {
+            NamedKey::Enter => 0x0D,
+            NamedKey::Tab => 0x09,
+            NamedKey::Backspace => 0x08,
+            NamedKey::Escape => 0x1B,
+            NamedKey::Space => 0x20,
+            NamedKey::Delete => 0x2E,
+            NamedKey::ArrowLeft => 0x25,
+            NamedKey::ArrowUp => 0x26,
+            NamedKey::ArrowRight => 0x27,
+            NamedKey::ArrowDown => 0x28,
+            NamedKey::Home => 0x24,
+            NamedKey::End => 0x23,
+            NamedKey::PageUp => 0x21,
+            NamedKey::PageDown => 0x22,
+            _ => 0,
+        },
+        Key::Character(s) => s
+            .chars()
+            .next()
+            .map(|c| c.to_ascii_uppercase() as u32)
+            .unwrap_or(0),
+        _ => 0,
+    }
+}
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -358,6 +390,14 @@ impl ApplicationHandler for App {
                 } else if self.view.tab_drag.is_some() {
                     // Follow the drag: the drop-target highlight tracks the pointer.
                     self.request_redraw();
+                } else if let Some((member, lx, ly)) = self.scrying_at(self.cursor.0, self.cursor.1)
+                {
+                    // Hover / drag over the compatibility-view tile feeds the WebView;
+                    // the orrery is not panned underneath. (Scrying X2.)
+                    self.view
+                        .scrying
+                        .forward_mouse(member, lx, ly, scrying_host::MousePress::Move);
+                    self.request_redraw();
                 } else if self.orrery.cursor_moved(self.cursor.0, self.cursor.1 - th) {
                     self.request_redraw();
                 }
@@ -368,6 +408,17 @@ impl ApplicationHandler for App {
                 self.orrery.set_shift(self.modifiers.shift);
             }
             WindowEvent::MouseWheel { delta, .. } => {
+                // A wheel over the compatibility-view tile scrolls the WebView (Win32
+                // convention: 120 units per notch); it does not pan the orrery. (X2.)
+                if let Some((member, lx, ly)) = self.scrying_at(self.cursor.0, self.cursor.1) {
+                    let delta_y = match delta {
+                        MouseScrollDelta::LineDelta(_, y) => (y * 120.0) as i32,
+                        MouseScrollDelta::PixelDelta(p) => p.y as i32,
+                    };
+                    self.view.scrying.forward_wheel(member, lx, ly, delta_y);
+                    self.request_redraw();
+                    return;
+                }
                 // LineDelta is scaled to device px the way the orrery expects;
                 // PixelDelta passes through.
                 let (dx, dy) = match delta {
@@ -424,7 +475,32 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if event.state == ElementState::Pressed {
+                let pressed = event.state == ElementState::Pressed;
+                // While a compatibility-view tile holds the keyboard, route keys into
+                // its WebView; Escape releases focus back to the chrome. (Scrying X2.)
+                if let Some(member) = self.view.scrying_input_focus {
+                    use winit::keyboard::{Key, NamedKey};
+                    if pressed && matches!(event.logical_key, Key::Named(NamedKey::Escape)) {
+                        self.view.scrying_input_focus = None;
+                        return;
+                    }
+                    let mods = scrying_host::KeyMods {
+                        shift: self.modifiers.shift,
+                        ctrl: self.modifiers.ctrl,
+                        alt: self.modifiers.alt,
+                        meta: self.modifiers.meta,
+                    };
+                    self.view.scrying.forward_key(
+                        member,
+                        scrying_vk(&event),
+                        event.text.as_ref().map(|s| s.as_str()),
+                        pressed,
+                        mods,
+                    );
+                    self.request_redraw();
+                    return;
+                }
+                if pressed {
                     self.on_key_pressed(&event.logical_key);
                 }
             }

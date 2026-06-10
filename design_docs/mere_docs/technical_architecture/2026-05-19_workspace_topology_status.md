@@ -281,3 +281,28 @@ Outcome:
 Verified green: arrangements 99, gyre 28 (+4 Barnes-Hut), platen 40, meerkat
 44+26, full `cargo check --workspace` clean. Net: ~6k LOC of gyre-redundant /
 dead layout code removed; the distinctive arrangements preserved + recaptured.
+
+## 9. Update — 2026-06-10: `verso` supercrate retired
+
+The 2026-06-10 stack audit confirmed verso's chartered realization role had
+been decomposed and absorbed (constellation actors own lifecycle, platen-view
+owns between-tiles geometry, node-lineage owns within-tile history, eidetic
+owns cached content), leaving `verso-core` a 2k-LOC intent reservation with
+one external export and `tile-state` with zero consumers beyond a
+session-runtime re-export nothing downstream used. Outcome:
+
+- **`crates/verso/` deleted** (`verso-core` + `tile-state`; git-revivable).
+- **`SurfaceTargetId` inlined into `inker::routing`** (its sole external
+  export; every use site already imported it via inker paths, so no caller
+  changed).
+- **Dead deps dropped**: platen + workbench (`verso-core`), session-runtime
+  (`tile-state` + its unconsumed re-export). Stale layer claims removed from
+  the platen README/lib docs, forme, uxtree, eidetic-core, and inker docs.
+- **The name survives with a designated charter**: verso = the engine-flip /
+  compatibility-view seam, minted at the first serval→scrying flip — see
+  [`verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md`](../../verso_docs/technical_architecture/2026-06-10_compatibility_view_charter.md).
+  The `verso-tile` crates.io reservation is unaffected.
+
+Verified green: lib tests for inker, nematic (157), scrying-engine (11),
+session-runtime (67); `cargo check` clean for the five touched crates and
+meerkat (full cross-repo graph).

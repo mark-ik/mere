@@ -3,7 +3,8 @@
 //! Workbench composition surface for the
 //! [`mere`](https://crates.io/crates/mere) browser — arranges canvas
 //! "swatches" into frames and panes, presenting the composed arrangement
-//! for [`verso-core`](https://crates.io/crates/verso-core) to render.
+//! for the host to render (`platen-view` emits it as flex DOM that serval
+//! lays out).
 //!
 //! In the printing-press metaphor: the platen is the press that pushes the
 //! inked forme onto the verso to produce the impression. Here it is the
@@ -35,8 +36,8 @@
 //! - **Within-canvas layout** — a canvas crate's job (graph-canvas knows
 //!   where each node goes; document-canvas will know where each paragraph
 //!   goes). Platen sees canvases as opaque renderable units.
-//! - **Rendering** — that's verso-core's surface lifecycle plus the host's
-//!   netrender / gpui integration.
+//! - **Rendering** — that's the host's job: `platen-view` flex DOM through
+//!   serval's layout, presented by netrender.
 //! - **A11y projection** — that's mere-domain (`mere-orrery`,
 //!   `frame`, `gloss`, `apparatus`) → uxtree.
 //!
@@ -78,7 +79,8 @@ pub mod document_scene;
 /// The tiled-workbench model: slots of tab-stacks over a forme [`forme::Arrangement`],
 /// the active tab per stack, and the projection mode. platen's canonical tiling state
 /// (it replaces the legacy `FrameState` / `PaneBinding` frame model), projected to
-/// side-by-side placed slots via [`tree_projection`] + [`layout`].
+/// side-by-side placed slots via [`tree_projection`] (concrete rects come from
+/// `platen-view`'s flex DOM under serval).
 pub mod workbench;
 
 /// Tree projection — compiles a forme [`forme::Arrangement`] into a

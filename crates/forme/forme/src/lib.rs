@@ -12,7 +12,8 @@
 //!
 //! Boundary: **graph truth** (kernel `Graph`) → **forme** (arrangement
 //! authority) → **platen** (projects an arrangement into a presentation plan)
-//! → **verso** (realizes tiles/surfaces).
+//! → the host realizes it (`platen-view` flex DOM under serval + actor
+//! textures composited by netrender).
 //!
 //! ## v1 canonical core (this is the live path)
 //!

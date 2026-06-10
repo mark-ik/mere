@@ -6,7 +6,23 @@
 
 use kernel::graph::{GraphViewId, NodeKey};
 use serde::{Deserialize, Serialize};
-pub use verso_core::SurfaceTargetId;
+
+/// Opaque engine-output target key (`node:<idx>` / `view:<uuid>` /
+/// `route:...`), minted by [`surface_target_for`]. Inlined from the retired
+/// `verso-core` (its sole external export; verso is reborn as the flip seam,
+/// see `design_docs/verso_docs/` charter 2026-06-10).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SurfaceTargetId(pub String);
+
+impl SurfaceTargetId {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 pub const ENGINE_SERVAL_WEB: &str = "serval.web";
 /// Mere-managed system-WebView tile driven by the in-house `scrying`

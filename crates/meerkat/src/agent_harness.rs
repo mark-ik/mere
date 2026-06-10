@@ -150,7 +150,7 @@ impl App {
         AgentObservation {
             active_theme_id: self.active_theme_id.clone(),
             focused_node: self.orrery.focused_url().map(str::to_string),
-            active_content: match self.active_content {
+            active_content: match self.view.active_content {
                 ContentPane::Orrery => AgentPane::Orrery,
                 ContentPane::Workbench => AgentPane::Workbench,
             },
@@ -194,7 +194,7 @@ impl App {
     }
 
     fn agent_surface_focused(&self, pane: AgentPane) -> bool {
-        match (self.active_content, pane) {
+        match (self.view.active_content, pane) {
             (ContentPane::Orrery, AgentPane::Orrery) => true,
             (ContentPane::Workbench, AgentPane::Workbench) => self.workbench_open(),
             _ => false,
@@ -269,7 +269,7 @@ impl App {
         if !self.orrery.select_by_url(url) {
             return (false, action_id, format!("node not found: {url}"));
         }
-        self.active_content = ContentPane::Orrery;
+        self.view.active_content = ContentPane::Orrery;
         self.sync_location();
         self.refresh_a11y_summary();
         (true, action_id, url.to_string())
@@ -506,12 +506,12 @@ mod tests {
         // Open a second pane: the window now holds an orrery + a roster.
         app.toggle_pane(frame::PaneContent::Roster);
         let has_roster = |app: &App| {
-            app.frame_layout
+            app.view.frame_layout
                 .iter_leaves()
                 .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
         };
         let orrery_graph = |app: &App| {
-            app.frame_layout
+            app.view.frame_layout
                 .iter_leaves()
                 .find(|(_, c, _)| matches!(c, frame::PaneContent::Orrery))
                 .map(|(_, _, g)| g)

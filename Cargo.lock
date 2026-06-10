@@ -5481,7 +5481,6 @@ dependencies = [
  "kernel",
  "serde",
  "tracing",
- "verso-core",
 ]
 
 [[package]]
@@ -6502,6 +6501,7 @@ dependencies = [
  "comms",
  "dirs",
  "document-canvas",
+ "dpi",
  "eidetic-fjall",
  "errand",
  "forme",
@@ -6529,6 +6529,7 @@ dependencies = [
  "register-diagnostics",
  "register-theme",
  "rustls-pki-types",
+ "scrying",
  "serval-layout",
  "serval-scripted-dom",
  "serval-static-dom",
@@ -8726,7 +8727,6 @@ dependencies = [
  "serde_json",
  "tracing",
  "uuid",
- "verso-core",
 ]
 
 [[package]]
@@ -11103,7 +11103,6 @@ dependencies = [
  "pollster",
  "serde",
  "serde_json",
- "tile-state",
  "uuid",
 ]
 
@@ -12253,16 +12252,6 @@ checksum = "0359b4327f954e0567e69fb191cf1436617748813819c94b8cd4a431422d053a"
 dependencies = [
  "libc",
  "tikv-jemalloc-sys",
-]
-
-[[package]]
-name = "tile-state"
-version = "0.0.1"
-dependencies = [
- "inker",
- "kernel",
- "uuid",
- "verso-core",
 ]
 
 [[package]]
@@ -13445,15 +13434,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "verso-core"
-version = "0.0.1"
-dependencies = [
- "kernel",
- "serde",
- "uuid",
-]
 
 [[package]]
 name = "void"
@@ -14706,7 +14686,6 @@ dependencies = [
  "tracing",
  "uuid",
  "uxtree",
- "verso-core",
 ]
 
 [[package]]
@@ -14818,6 +14797,7 @@ dependencies = [
 [[package]]
 name = "xilem_core"
 version = "0.4.0"
+source = "git+https://github.com/mark-ik/xilem.git?branch=mere-wgpu-29-vello-0-9#f8014ddaaf83fa95af66a1a6a19ddb4695c60a38"
 dependencies = [
  "anymore",
  "hashbrown 0.17.0",

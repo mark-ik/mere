@@ -61,11 +61,14 @@ pub enum Command {
     StopFocusedOperation,
     /// Pin the focused operation as background work (host action).
     PinFocusedOperation,
+    /// Toggle the focused node's compatibility view — render it through the
+    /// system WebView (scrying) instead of the built-in engines (host action).
+    ToggleCompatView,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 19] = [
+    pub const ALL: [Command; 20] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -85,6 +88,7 @@ impl Command {
         Command::RetryFocusedContent,
         Command::StopFocusedOperation,
         Command::PinFocusedOperation,
+        Command::ToggleCompatView,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -106,6 +110,7 @@ impl Command {
                 | Command::RetryFocusedContent
                 | Command::StopFocusedOperation
                 | Command::PinFocusedOperation
+                | Command::ToggleCompatView
         )
     }
 
@@ -131,6 +136,7 @@ impl Command {
             Command::RetryFocusedContent => "Retry focused content",
             Command::StopFocusedOperation => "Stop focused operation",
             Command::PinFocusedOperation => "Pin focused operation",
+            Command::ToggleCompatView => "Compatibility view (system WebView, focused node)",
         }
     }
 }

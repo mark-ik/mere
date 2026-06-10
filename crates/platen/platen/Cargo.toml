@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Graph-aware composition surface for the Mere browser — node layout, the press to verso's page."
+description = "Graph-aware composition surface for the Mere browser — compiles arrangements into presentation plans; the press in the printing metaphor."
 documentation = "https://docs.rs/platen"
 readme = "README.md"
 keywords = ["layout", "composition", "graph", "workbench", "browser"]
@@ -33,7 +33,6 @@ forme.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 tracing = "0.1"
 uuid = { version = "1", features = ["serde"] }
-verso-core.workspace = true
 
 [dev-dependencies]
 serde_json = "1"
