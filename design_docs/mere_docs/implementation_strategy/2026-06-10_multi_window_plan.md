@@ -258,14 +258,69 @@ access sites (measured), dominated by `orrery` 58, `observability` 49,
 `constellation` 33 — note `orrery` *stays on `Shell`* (the MW6 IOU), so its
 58 sites become `self.orrery` → `self.shared`-less `Shell`-level access, not a
 subsystem path; only the `SharedState`-bound fields take the deeper
-`self.shared.<subsystem>.<field>` path. Decision still open for that session
-(deferred deliberately, not yet chosen): **flat `SharedState` first then
-subdivide** vs **subdivide into subsystems in one pass** — the subsystem map
-above (`content` / `session` / `presentation` / `comms` / `sync` / `inbox` +
-`observability`) is the target either way; flat-first just stages the path
-churn. The substring traps that shaped (a) no longer bite here — the shared
-fields (`orrery`, `constellation`, `manifests`, ...) have no method/sibling
-collisions — so (b) is closer to a clean bulk pass than the carve was.
+`self.shared.<subsystem>.<field>` path. Decision made (2026-06-10, Mark): **subdivide
+into subsystems in one pass, do not stage flat-first.** Flat-first rewrites
+every shared site twice (`self.manifests` → `self.shared.manifests` →
+`self.shared.session.manifests`) and buys nothing: staging only pays when the
+grouping is uncertain, and the subsystem map (`content` / `session` /
+`presentation` / `comms` / `sync` / `inbox` + `observability`) is already
+decided. The compiler drives the whole pass: move one field to its final path,
+chase the errors, `cargo check`, next field. A field landed in the wrong
+subsystem costs one cheap follow-up rename, not a redesign. `orrery` (58) and
+`_kernel` stay `Shell`-level fields (not under `shared`); `observability` (49)
+sits directly at `shared.observability`, not nested deeper. The substring traps
+that shaped (a) do not bite here — the shared fields (`orrery`,
+`constellation`, `manifests`, ...) have no method/sibling collisions — so (b)
+is closer to a clean compiler-chased pass than the carve was.
+
+*Reshape session brief (decided 2026-06-10, Mark — the tactical layer over the
+(b)→(e) order above):*
+
+- **(b) Split `ScryingHost` as part of this step, not later.** The compat *pins*
+  (`compat: HashSet<GraphMemberId>`) are session state and move to
+  `shared.content`; the HWND-parented producer *pool* is per-window and stays in
+  `WindowView`. The type already separates the two internally, so this is pulling
+  one field up — and doing it now means MW3 does not inherit a wrong-sided pool.
+- **(c) Convert bottom-up in call-graph order.** The trap of the receiver shift:
+  a converted free function cannot call an unconverted `&mut self` method.
+  Convert the leaves first, per module. Two leaves to do immediately because
+  nearly everything calls them: `request_redraw` (becomes a `WindowView` method
+  now that the window handle lives there) and `toolbar_height` (becomes
+  `fn(view, shared)` — it reads the view's `dom` + size and the shared chrome
+  sheet, caches into `view.toolbar_h`).
+- **(c) Start signatures with the whole `&mut SharedState`, not per-subsystem
+  borrows.** The subsystems exist so narrow borrows are *available*; enumerating
+  them in every signature re-churns the signature each time a function needs one
+  more. Take `(view: &mut WindowView, shared: &mut SharedState)` everywhere and
+  narrow only where the borrow checker actually forces it. The seam holds either
+  way.
+- **(c) Watch the disjoint-borrow pattern in `render`.** Pre-MW1, render leaned
+  on disjoint field paths through `self` (immutable `self.host` beside mutable
+  `self.view.tile_textures`). With `host` now inside `WindowView`, that
+  disjointness survives *only* while both stay direct field paths (`view.host`
+  vs `view.tile_textures`). The moment a helper method on `&mut WindowView` is
+  called while `view.host` is borrowed, it breaks. Keep render's host-borrow +
+  cache-mutation as field paths, not methods.
+- **(d) Build the registry before the rename; do not skip the fan-out.**
+  Introduce `windows: HashMap<WindowId, WindowView>` + `primary` and route
+  `window_event` by id while the struct is still `App`; rename to `Shell` as the
+  final mechanical commit so each diff stays reviewable. Wrap the `user_event`
+  chrome-state writes (the sync chip and all five comms arms) in the
+  for-each-window loop even though N=1 — the seam is wanted from day one so MW3
+  does not discover a load-bearing single-window assumption.
+- **(e) Hold the v0 command boundary.** `ShellCommand` covers `Exit`,
+  `SwitchSession`, `SetTheme`, `Spawn`/`CloseWindow`, and the re-homed
+  `drain_pending_command` dispatch. Resist converting drags / scroll / cursor
+  into commands, and resist drive-by render-internals work — the cheap-path plan
+  owns that and lands after this reshape on purpose.
+- **The one rule for the whole pass:** the most dangerous moment is (c)'s
+  midpoint, where half the methods are converted and half are not, and the
+  temptation is a temporary accessor layer to bridge them. Do not — it hides the
+  seam and has to be unwound. The bottom-up order exists so the bridge is never
+  needed.
+- **Known signature shifts to expect** (not surprises): `save_session` reads
+  `frame_layout` (now in the view) and `agent_harness` reads several moved
+  fields, so both shift in (c).
 
 Done when the single window is driven through the registry (events resolved by id,
 mutations applied as commands), with the shared/​per-window seam enforced by the types
