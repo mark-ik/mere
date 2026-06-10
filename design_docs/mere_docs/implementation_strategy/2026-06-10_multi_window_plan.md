@@ -540,3 +540,37 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   then (d) `windows` HashMap + `WindowId` routing + `App`→`Shell`, (e) the `ShellCommand`
   seam. (c) is the bulk of the remaining work and its midpoint is the reshape's most
   delicate moment (half-converted methods, no bridge allowed), so it wants a focused run.
+- 2026-06-10: **MW2 (c) done — receiver shift via a `WindowCtx` borrow-bundle, not free
+  functions.** Decision (with Mark, after weighing free-fns vs a context bundle): the
+  bulk event-handling logic moves from `impl App` to `impl WindowCtx<'a>`, a borrow
+  bundle `{ view, shared, orrery, clipboard, a11y_bridge, a11y_action_routes }`. Rationale:
+  the granular per-function type-seam free-fns would give is mostly *illusory here* —
+  almost every heavy handler touches view+shared+orrery together, the shell is
+  single-threaded by construction (`!Send` kernel), cross-window ops go through
+  `ShellCommand` regardless, and orrery folds into the view at MW6 — so the bundle's
+  near-zero body churn + preserved cross-module `self.foo()` win. Bodies are unchanged
+  (`self.view`/`self.shared`/`self.orrery` resolve to ctx fields), so it is a receiver
+  rename, not a logic rewrite. The winit trait impl, `App::new`, and the agent harness
+  stay on `App` and route through `let mut wc = self.ctx()` (two-phase borrows handle
+  `wc.m(wc.view.x)`). Genuinely narrow leaves went to their natural owner first
+  (`request_redraw` on `WindowView`, `chrome_sheet_refs` on `Presentation`). One pitfall
+  hit and fixed: the codebase uses local `cx`/`cy` for cursor coords, so the ctx var is
+  `wc`, not `cx`. Behavior-preserving (44 lib + 63 bin green).
+- 2026-06-10: **MW2 (d1) done — the window registry routes by `WindowId`.** `App.view`
+  becomes `windows: HashMap<WindowId, WindowView>` + `primary: Option<WindowId>`. winit
+  splits construction (`new`) from window creation (`resumed`), so the primary view is
+  built in `new()` and stashed in `pending_view`; `resumed` creates the OS window, fills
+  the view, inserts under `window.id()`, sets `primary`, then drives the initial a11y
+  install + switcher/a11y refresh + restored content through the ctx. `window_event`
+  resolves the event's id via `window_ctx(id)` (the lookup *is* the routing; unknown ids
+  dropped). `ctx()` falls back to `pending_view` before `resumed` so the headless agent
+  harness still works; a read-only `view()` accessor covers `&App` read paths; a
+  `primary.is_none()` guard in `user_event` rides out pre-resume actor wakes (the typed
+  channels buffer). Behavior-preserving at N=1 (44 lib + 63 bin green). **Registry shape
+  chosen (with Mark): uniform map + `pending_view` staging**, not a primary-field +
+  secondaries-map, to avoid the asymmetry/soup. **Remaining to close MW2:** (d2) the
+  `user_event` chrome-write fan-out (a `for` over windows; no-op at N=1, MW3 seam),
+  (d3) the `App`→`Shell` rename (cosmetic; a safe global `\bApp\b` sweep — verified it
+  can't hit `ServalAppRunner`/`ApplicationHandler`), and (e) the `ShellCommand` seam.
+  **Carried forward (documented in the struct comments):** `a11y_bridge` + routes →
+  `WindowView` at MW3; `orrery` → `WindowKind::Primary` at MW6.
