@@ -331,9 +331,9 @@ impl App {
                 self.constellation.drive(member, &url, state, cw, ch);
                 cards.push((member, content, (cw, ch)));
             }
-            self.tile_rects = slot_rects;
+            self.view.tile_rects = slot_rects;
         } else {
-            self.tile_rects.clear(); // no tile drag targets when the pane is closed
+            self.view.tile_rects.clear(); // no tile drag targets when the pane is closed
         }
         // The orrery's focused-node card (always, alongside any workbench pane).
         if let (Some(member), Some(url)) = (
@@ -425,15 +425,15 @@ impl App {
         // card (resolved in the wheel handler) rather than panning the orrery. The
         // unvisited placeholder counts as a card too, so a double-click over it
         // promotes (and a click on it doesn't deselect the node).
-        self.content_rects = cards
+        self.view.content_rects = cards
             .iter()
             .map(|(member, dest, _)| (*member, *dest))
             .collect();
         if let Some((member, rect)) = unvisited_card {
-            self.content_rects.push((member, rect));
+            self.view.content_rects.push((member, rect));
         }
         if let Some((member, _, rect, _)) = &snapshot_card {
-            self.content_rects.push((*member, *rect));
+            self.view.content_rects.push((*member, *rect));
         }
 
         // The omnibar follows focus: point it at the focused tile / node when that
@@ -588,7 +588,7 @@ impl App {
         // The X sits on the orrery's live-preview card only (`live_card`); tiles in
         // the workbench pane have their own tab close, so the button never lands on
         // a tile even when the same node is both previewed and tiled.
-        self.close_button_rects.clear();
+        self.view.close_button_rects.clear();
         if let Some((member, dest)) = live_card {
             let btn = super::card::CLOSE_BTN;
             let inset = super::card::CLOSE_BTN_INSET;
@@ -621,7 +621,7 @@ impl App {
                     h,
                     ExternalTexturePlacement::new([bx0, by0, bx1, by1]),
                 );
-                self.close_button_rects.push((member, [bx0, by0, bx1, by1]));
+                self.view.close_button_rects.push((member, [bx0, by0, bx1, by1]));
             }
         }
         // The "last visit" snapshot card: rasterize the host-rendered scene once
@@ -721,7 +721,7 @@ impl App {
         }
         // The roster pane: render the node list into its leaf, composite it, and
         // record each row's window rect for click-to-focus. (Frame tree, F1 roster.)
-        self.roster_row_rects.clear();
+        self.view.roster_row_rects.clear();
         if let Some(rrect) = roster_rect {
             let rw = (rrect[2] - rrect[0]).round().max(1.0) as u32;
             let rh = (rrect[3] - rrect[1]).round().max(1.0) as u32;
@@ -773,7 +773,7 @@ impl App {
                     let x1 = x0 + l.size.width;
                     let y1 = y0 + l.size.height;
                     if x1 > rrect[0] && x0 < rrect[2] && y1 > rrect[1] && y0 < rrect[3] {
-                        self.roster_row_rects.push((
+                        self.view.roster_row_rects.push((
                             member,
                             [
                                 x0.max(rrect[0]),
@@ -788,7 +788,7 @@ impl App {
         }
         // The apparatus pane: theme buttons + system diagnostics, rendered into
         // its leaf with button hit-rects recorded for theme switching. (A1.)
-        self.apparatus_button_rects.clear();
+        self.view.apparatus_button_rects.clear();
         if let Some(arect) = self.apparatus_leaf_rect() {
             let aw = (arect[2] - arect[0]).round().max(1.0) as u32;
             let ah = (arect[3] - arect[1]).round().max(1.0) as u32;
@@ -828,7 +828,7 @@ impl App {
                 ) {
                     let x0 = arect[0] + l.location.x;
                     let y0 = arect[1] + l.location.y;
-                    self.apparatus_button_rects
+                    self.view.apparatus_button_rects
                         .push((id, [x0, y0, x0 + l.size.width, y0 + l.size.height]));
                 }
             }
@@ -866,7 +866,7 @@ impl App {
         }
         // The gloss pane: a whole-graph minimap swatch, with node hit-rects for
         // click-to-focus. (Gloss; the Navigator's graph-scope swatch cell.)
-        self.gloss_node_rects.clear();
+        self.view.gloss_node_rects.clear();
         if let Some(grect) = self.gloss_leaf_rect() {
             let gw = (grect[2] - grect[0]).round().max(1.0) as u32;
             let gh = (grect[3] - grect[1]).round().max(1.0) as u32;
@@ -890,7 +890,7 @@ impl App {
                 ExternalTexturePlacement::new(grect),
             );
             for (id, r) in local {
-                self.gloss_node_rects.push((
+                self.view.gloss_node_rects.push((
                     id,
                     [
                         grect[0] + r[0],
@@ -945,9 +945,9 @@ impl App {
         // now — the Top/Bottom strips are too thin for the vertical tile stack.
         // Mirrors the gloss host-draw + hit-rect pattern, so clicks route through the
         // same shellbar region the input path already knows. (Multi-graph MG4.)
-        self.session_row_rects.clear();
-        self.session_close_rects.clear();
-        self.session_add_rect = None;
+        self.view.session_row_rects.clear();
+        self.view.session_close_rects.clear();
+        self.view.session_add_rect = None;
         if matches!(
             self.shellbar_edge,
             session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right
@@ -1003,12 +1003,12 @@ impl App {
                 ]
             };
             for (id, r) in hits.rows {
-                self.session_row_rects.push((id, offset(r)));
+                self.view.session_row_rects.push((id, offset(r)));
             }
             for (id, r) in hits.closes {
-                self.session_close_rects.push((id, offset(r)));
+                self.view.session_close_rects.push((id, offset(r)));
             }
-            self.session_add_rect = hits.add.map(offset);
+            self.view.session_add_rect = hits.add.map(offset);
         }
         frame.present();
         self.refresh_a11y_summary();

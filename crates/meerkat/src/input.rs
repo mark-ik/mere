@@ -209,18 +209,18 @@ impl App {
                         // inside its tile). (Multi-graph MG4.)
                         if button == MouseButton::Left {
                             if let Some((id, _)) =
-                                self.session_close_rects.iter().find(|(_, r)| hit(r))
+                                self.view.session_close_rects.iter().find(|(_, r)| hit(r))
                             {
                                 let id = *id;
                                 self.close_session(id);
                                 return;
                             }
-                            if self.session_add_rect.as_ref().is_some_and(hit) {
+                            if self.view.session_add_rect.as_ref().is_some_and(hit) {
                                 self.create_session();
                                 return;
                             }
                             if let Some((id, _)) =
-                                self.session_row_rects.iter().find(|(_, r)| hit(r))
+                                self.view.session_row_rects.iter().find(|(_, r)| hit(r))
                             {
                                 let id = *id;
                                 self.switch_session(id);
@@ -231,7 +231,7 @@ impl App {
                         // strip it opens the shellbar move menu. (Host text path.)
                         if button == MouseButton::Right {
                             if let Some((id, _)) =
-                                self.session_row_rects.iter().find(|(_, r)| hit(r))
+                                self.view.session_row_rects.iter().find(|(_, r)| hit(r))
                             {
                                 let id = *id;
                                 self.start_rename(id);
@@ -368,7 +368,7 @@ impl App {
     /// from the last frame). Clicks / scroll over the card route to the card, not
     /// the orrery beneath it.
     fn point_over_card(&self, x: f32, y: f32) -> bool {
-        self.content_rects
+        self.view.content_rects
             .iter()
             .any(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
     }
@@ -396,7 +396,7 @@ impl App {
     /// The live card whose close (X) button contains window point `(x, y)`, if
     /// any — its composited rect from the last frame.
     fn close_button_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
-        self.close_button_rects
+        self.view.close_button_rects
             .iter()
             .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
             .map(|(m, _)| *m)
@@ -463,7 +463,7 @@ impl App {
     /// The tile (member + window rect) under `(x, y)` — the drag drop target, from
     /// this frame's laid-out tile rects.
     pub(super) fn tile_at(&self, x: f32, y: f32) -> Option<(GraphMemberId, [f32; 4])> {
-        self.tile_rects
+        self.view.tile_rects
             .iter()
             .find(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
             .copied()

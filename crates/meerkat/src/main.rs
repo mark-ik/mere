@@ -86,6 +86,7 @@ mod switcher;
 mod text;
 mod titlebar;
 mod tracing_layer;
+mod window_view;
 mod utility_panes;
 
 use constellation::Constellation;
@@ -426,12 +427,10 @@ struct App {
     /// Cached switcher label per session (display name, else derived from the
     /// graph), refreshed in lockstep with `session_thumbnails`. (Host text path.)
     session_labels: HashMap<SessionId, String>,
-    /// Each switcher row's on-screen rect this frame: a click switches to it.
-    session_row_rects: Vec<(SessionId, [f32; 4])>,
-    /// Each row's close (×) hit rect this frame: a click trashes that session.
-    session_close_rects: Vec<(SessionId, [f32; 4])>,
-    /// The "+" new-graph tile rect this frame, if the switcher is shown.
-    session_add_rect: Option<[f32; 4]>,
+    /// Per-window view state (the part of the shell that belongs to one OS window):
+    /// the per-frame hit-rect caches first, growing as the multi-window carve
+    /// proceeds. (Multi-window plan MW1.)
+    view: window_view::WindowView,
     /// Host text shaping for host-drawn labels (the switcher tile names). Holds the
     /// parley contexts so they aren't rebuilt per frame. (Host text path.)
     host_text: text::HostText,
@@ -474,10 +473,6 @@ struct App {
     /// press position. Resolved on release — a move when dragged past the slop, else
     /// it was a plain click (the tab already activated on press).
     tab_drag: Option<(GraphMemberId, (f32, f32))>,
-    /// Each open tile's content rect in window coords (member, [x0, y0, x1, y1]),
-    /// recomputed each tiled frame. The drag uses it to resolve the drop target
-    /// under the pointer + which zone (center = move/stack, edge = split).
-    tile_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Cached rasterized texture per tile, keyed by member. Re-rasterized only when
     /// the tile's scene version or size changes, so an unchanged tile is composited
     /// from its cached texture instead of re-rasterized every frame (the cost that
@@ -487,10 +482,6 @@ struct App {
     /// composites a window of its full-height texture at this offset; a wheel over
     /// the card adjusts it (clamped to the content height). Absent = scrolled to top.
     scroll: HashMap<GraphMemberId, f32>,
-    /// Each composited card/tile's on-screen content rect this frame
-    /// (member, [x0, y0, x1, y1]) — rebuilt every frame, used to route a wheel over
-    /// a card to its scroll rather than to the orrery.
-    content_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Cached rasterized close (X) button texture, shared across live cards; built
     /// once and composited at each live card's top-right corner. (Card system.)
     close_button_tex: Option<CachedTile>,
@@ -505,9 +496,6 @@ struct App {
     /// node's last-visit content rendered from cache / synthesis). Re-rendered on
     /// a size change; persists the "last visit" look across the session. (Card #4.)
     snapshot_textures: HashMap<String, CachedTile>,
-    /// Each live card's close-button rect this frame (member, [x0, y0, x1, y1]); a
-    /// press inside reaps that live preview. Rebuilt every frame.
-    close_button_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// An in-progress divider drag: the left-slot index, the press x, and the slot
     /// weights snapshot at press. Cursor moves reweight the two neighbouring slots.
     divider_drag: Option<(usize, f32, Vec<f32>)>,
@@ -532,12 +520,6 @@ struct App {
     /// The bridge only queues raw AccessKit requests; the kernel thread resolves
     /// ids through this table and applies semantic host actions.
     a11y_action_routes: HashMap<AccessNodeId, A11yHostAction>,
-    /// Each apparatus theme-button's on-screen rect this frame (theme id,
-    /// `[x0, y0, x1, y1]`); a press inside switches to that theme. (Apparatus.)
-    apparatus_button_rects: Vec<(String, [f32; 4])>,
-    /// Each gloss minimap node's on-screen rect this frame (node id,
-    /// `[x0, y0, x1, y1]`); a press inside focuses that node. (Gloss swatch.)
-    gloss_node_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// An in-progress titlebar press (window point) on the borderless window: set
     /// on a left press in the toolbar bar's draggable area, cleared into a window
     /// drag once the pointer moves past the slop, else resolved as a click on
@@ -571,10 +553,6 @@ struct App {
     /// parent rect to a new ratio via `set_split_ratio`. Distinct from
     /// `divider_drag` (the workbench tile tree's slot dividers). (Frame tree, F1.)
     frame_divider_drag: Option<(Vec<SplitChoice>, [f32; 4], SplitAxis)>,
-    /// Each roster row's on-screen rect this frame (node id, `[x0, y0, x1, y1]`),
-    /// rebuilt every frame the roster pane is open; a press inside focuses that
-    /// node. (Frame tree, F1 roster.)
-    roster_row_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Roster pane scroll offset in device px. Clamped during roster render
     /// because the scroll extent depends on pane size and graph size.
     roster_scroll: f32,
@@ -863,9 +841,7 @@ impl App {
             active_session_id,
             session_thumbnails: HashMap::new(),
             session_labels: HashMap::new(),
-            session_row_rects: Vec::new(),
-            session_close_rects: Vec::new(),
-            session_add_rect: None,
+            view: window_view::WindowView::default(),
             host_text: text::HostText::new(),
             renaming: None,
             store,
@@ -880,15 +856,12 @@ impl App {
             focused_tile: None,
             shown_location: None,
             tab_drag: None,
-            tile_rects: Vec::new(),
             tile_textures: HashMap::new(),
             scroll: HashMap::new(),
-            content_rects: Vec::new(),
             close_button_tex: None,
             unvisited_tex: None,
             engine_registry,
             snapshot_textures: HashMap::new(),
-            close_button_rects: Vec::new(),
             divider_drag: None,
             chrome_sheet,
             chrome_theme,
@@ -899,8 +872,6 @@ impl App {
                 let _ = a11y_proxy.send_event(());
             }),
             a11y_action_routes: HashMap::new(),
-            apparatus_button_rects: Vec::new(),
-            gloss_node_rects: Vec::new(),
             titlebar_press: None,
             pending_exit: false,
             window_controls_tex: None,
@@ -912,7 +883,6 @@ impl App {
             active_content: ContentPane::Orrery,
             next_pane_id,
             frame_divider_drag: None,
-            roster_row_rects: Vec::new(),
             roster_scroll: 0.0,
             width: 1024,
             height: 600,

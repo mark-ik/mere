@@ -204,3 +204,13 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   deferred to MW6. Staged MW1 (carve `WindowView`) → MW2 (window registry) → MW3
   (second shared window) → MW4 (leaf tear-out) → MW5 (branch/fork/toast) → MW6 (orrery
   split, meets far-B). Supersedes the never-written `2026-06-04_multi_window_plan.md`.
+- 2026-06-10: **MW1 begun — first cluster carved.** New
+  [window_view.rs](../../../crates/meerkat/src/window_view.rs) holds `WindowView`; the
+  9 per-frame **hit-rect caches** (switcher rows / close / add, roster rows, apparatus
+  buttons, gloss nodes, tile rects, content rects, close-button rects) moved off the
+  `App` god-struct into `App.view`. These are pure view geometry (rebuilt each render,
+  read by input to route a press), so they carve cleanly first. 32 access sites
+  updated across render / input / frame_ops / app_handler; behavior-preserving (meerkat
+  44 lib + 63 bin green). `WindowView` grows cluster by cluster next: paint-texture
+  caches → interaction / drag state → frame + layout → window / surface → chrome
+  runners, until `App` splits into `Shell { shared, windows }` at MW2.

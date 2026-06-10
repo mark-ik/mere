@@ -1221,7 +1221,7 @@ impl App {
 
     /// The node whose gloss minimap square contains window point `(x, y)`, if any.
     pub(super) fn gloss_node_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
-        self.gloss_node_rects
+        self.view.gloss_node_rects
             .iter()
             .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
             .map(|(member, _)| *member)
@@ -1314,7 +1314,7 @@ impl App {
 
     /// The theme id whose apparatus button contains window point `(x, y)`, if any.
     pub(super) fn apparatus_button_at(&self, x: f32, y: f32) -> Option<String> {
-        self.apparatus_button_rects
+        self.view.apparatus_button_rects
             .iter()
             .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
             .map(|(id, _)| id.clone())
@@ -1525,7 +1525,7 @@ impl App {
         let root_path = pane_content_root_path(&self.frame_layout, pane_id, "roster");
         let root = node_id_for_path(&root_path);
         let row_bounds: HashMap<GraphMemberId, [f32; 4]> =
-            self.roster_row_rects.iter().copied().collect();
+            self.view.roster_row_rects.iter().copied().collect();
         let mut nodes = Vec::new();
         let mut children = Vec::new();
         for row in self.roster_rows() {
@@ -1558,7 +1558,7 @@ impl App {
         let root_path = pane_content_root_path(&self.frame_layout, pane_id, "gloss");
         let root = node_id_for_path(&root_path);
         let node_bounds: HashMap<GraphMemberId, [f32; 4]> =
-            self.gloss_node_rects.iter().copied().collect();
+            self.view.gloss_node_rects.iter().copied().collect();
         let focused = self.orrery.focused_member();
         let mut nodes = Vec::new();
         let mut children = Vec::new();
@@ -1705,7 +1705,7 @@ impl App {
 
     /// The node whose roster row contains window point `(x, y)`, if any.
     pub(super) fn roster_row_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
-        self.roster_row_rects
+        self.view.roster_row_rects
             .iter()
             .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
             .map(|(member, _)| *member)

@@ -391,6 +391,7 @@ impl ApplicationHandler for App {
                     return;
                 }
                 let over_card = self
+                    .view
                     .content_rects
                     .iter()
                     .find(|(_, r)| cx >= r[0] && cx < r[2] && cy >= r[1] && cy < r[3])
