@@ -736,3 +736,38 @@ what is most likely to break, the mitigation, and a pointer.
   armillary still tokio-free. So **P0-P2 + P4** and **P1** are all done; only P3 and
   P6 (the two big features) remain. Whole workspace builds; armillary 7, meerkat
   43+23 green.
+- **2026-06-10. Scripting map collapsed to Rust + JS; Rune and Rhai dropped.** The
+  four-language placement (Rust+arena / JS content / Rune orchestration / Rhai
+  declarative+policy) was re-examined against present-day facts and the serval binding
+  code, and it does not hold. Decision: **two scripting substrates, Rust and JS** (Nova
+  native, Boa wasm/oracle). Grounding, in order of weight:
+  - **The binding seam is DOM-neutral, verified in code**
+    (`components/script-engine-api/lib.rs` in serval). `ScriptEngine` names no DOM
+    types; `HostData` is `Rc<dyn Any>`; the reflector primitive is an opaque `u64`
+    handle (`ReflectorData`) with engine-side identity caching, not a node type. So an
+    orchestration actor binds its host surface (model / tool / agent calls) to Nova or
+    Boa by reusing the neutral seam, with no DOM baggage. This was the one fact that
+    could have justified Rune (cheap Rust interop a JS binding can't match). It does not.
+  - **Orchestration is async glue, which is JS's home turf.** Rune's headline edge was
+    first-class async; JS has promises and `await` natively, and serval already pumps
+    Nova/Boa microtasks. The everywhere-ships-wasm32 property that first picked Rhai is
+    equally true of Boa (interpreter, no JIT), so the browser/PWA target is unaffected.
+  - **Untrusted coordination policy leaves scripting entirely.** It becomes a
+    non-Turing-complete declarative format evaluated by Rust, which removes the
+    adversarial-VM problem (the role JS and Rhai are both weakest at) and earns the
+    mesh's re-run-to-a-hash determinism host-side. With that, Rhai keeps no role only it
+    can fill.
+  - **The single residual was the async host-promise bridge, now built.** The seam could
+    drain the microtask queue (`pump_microtasks`) but could not create a host-controlled
+    promise and settle it when a Rust future completes. Added `new_host_promise` (on both
+    `ScriptEngine` and `CallCx`) plus `settle_host_promise` (resolve or reject by opaque
+    `PromiseToken`), implemented on both backends (Nova `PromiseCapability`, Boa
+    `JsPromise::new_pending`). A JS `await` of a host promise resumes on settle + pump,
+    resolve and reject paths, double-settle safe; cross-backend tests green
+    (`host_promise_bridges_js_await` on Nova and Boa). The primitive is **dual-use with
+    content-tier `fetch`** (host-future to JS-promise), so it rides infrastructure the
+    content lane needs regardless, not Rune-justifying net work. Code in serval
+    `components/script-engine-{api,nova,boa}`.
+  - **Reopen trigger:** a Rune 1.0 with a sandbox warranty would reopen only the
+    untrusted-policy question, and only if that policy is kept as a script rather than
+    data. Supersedes the 2026-06-04 Rune-placement entry above.
