@@ -53,10 +53,14 @@ fn scrying_vk(event: &winit::event::KeyEvent) -> u32 {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let mut wc = self.ctx();
-        if wc.view.window.is_some() {
+        // winit calls `resumed` on every resume; the primary is created once. After
+        // that the view lives in the registry, so this no-ops. (MW2 (d).)
+        if self.primary.is_some() {
             return;
         }
+        let Some(mut view) = self.pending_view.take() else {
+            return;
+        };
         // Borderless: the OS title bar (and its accent border) is off; the chrome's
         // toolbar band is the titlebar, with host-drawn window controls + edge
         // resize (see `titlebar` + `input`). A min size keeps the bar usable.
@@ -65,15 +69,15 @@ impl ApplicationHandler for App {
             .with_decorations(false)
             .with_visible(false)
             .with_min_inner_size(PhysicalSize::new(480u32, 320u32))
-            .with_inner_size(PhysicalSize::new(wc.view.width, wc.view.height));
+            .with_inner_size(PhysicalSize::new(view.width, view.height));
         let window = Arc::new(
             event_loop
                 .create_window(attributes)
                 .expect("failed to create meerkat window"),
         );
         let size = window.inner_size();
-        wc.view.width = size.width.max(1);
-        wc.view.height = size.height.max(1);
+        view.width = size.width.max(1);
+        view.height = size.height.max(1);
 
         // The shared serval-on-winit present stack: wgpu + netrender boot, surface
         // configured at the window size.
@@ -82,14 +86,25 @@ impl ApplicationHandler for App {
             enable_vello: true,
             ..Default::default()
         };
-        match SurfaceHost::boot(window.clone(), wc.view.width, wc.view.height, options) {
-            Ok(host) => wc.view.host = Some(host),
+        match SurfaceHost::boot(window.clone(), view.width, view.height, options) {
+            Ok(host) => view.host = Some(host),
             Err(err) => {
                 eprintln!("[meerkat] {err}");
+                self.pending_view = Some(view); // boot failed; keep the view to retry
                 event_loop.exit();
                 return;
             }
         }
+        window.set_visible(true);
+        window.request_redraw();
+        view.window = Some(Arc::clone(&window));
+
+        // Key the primary into the registry, then drive everything else through the
+        // ctx (a11y install + the initial switcher / a11y refresh + restored content).
+        let id = window.id();
+        self.windows.insert(id, view);
+        self.primary = Some(id);
+        let mut wc = self.ctx();
         let initial_a11y = wc.build_a11y_projection().tree_update();
         match wc.a11y_bridge.install(&window, initial_a11y) {
             Ok(()) => wc.shared.observability.record_probe(
@@ -104,9 +119,7 @@ impl ApplicationHandler for App {
             ),
         }
         wc.refresh_a11y_summary();
-        window.set_visible(true);
-        window.request_redraw();
-        wc.view.window = Some(window);
+        wc.refresh_session_thumbnails();
 
         // Show the restored focused node's content from the durable cache (so a
         // reload re-opens its card without a navigation). A fresh `mere://welcome`
@@ -119,6 +132,11 @@ impl ApplicationHandler for App {
     /// Drain completed fetches (delivery model 2): a worker woke us via the proxy;
     /// fold each outcome into the content cache and re-render the card.
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: ()) {
+        // An actor may wake us before the primary window exists; the typed channels
+        // buffer, so we drain on the next wake after `resumed`. (MW2 (d).)
+        if self.primary.is_none() {
+            return;
+        }
         let mut wc = self.ctx();
         wc.drain_portable_diagnostics();
         wc.drain_a11y_actions();
@@ -347,10 +365,11 @@ impl ApplicationHandler for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let mut wc = self.ctx();
-        if wc.view.window.as_ref().map(|w| w.id()) != Some(window_id) {
+        // Route by id: resolve the event's window to its view in the registry. An
+        // unknown id (a just-closed window) is dropped. (MW2 (d).)
+        let Some(mut wc) = self.window_ctx(window_id) else {
             return;
-        }
+        };
         match event {
             WindowEvent::CloseRequested => {
                 wc.save_session();

@@ -55,7 +55,7 @@ use session_runtime::{
     session_graph_store, settings_store, view_intent_store,
 };
 use tracing_subscriber::prelude::*;
-use winit::window::ResizeDirection;
+use winit::window::{ResizeDirection, WindowId};
 use xilem_serval::ServalAppRunner;
 
 mod card;
@@ -499,9 +499,17 @@ struct App {
     /// Stays on `App` (the MW6 IOU: a leaf window holds no orrery; the primary's
     /// camera moves into `WindowKind::Primary` only when MW6 splits it).
     orrery: Orrery,
-    /// Per-window view state (the part of the shell that belongs to one OS window).
-    /// (Multi-window MW1; becomes `windows: HashMap<WindowId, WindowView>` at MW2 (d).)
-    view: window_view::WindowView,
+    /// All live windows, keyed by OS `WindowId` — the registry. Every per-window
+    /// handler is dispatched by resolving the event's id to its view here. At N=1
+    /// it holds just the primary; tear-out (MW3+) inserts more. (Multi-window MW2 (d).)
+    windows: HashMap<WindowId, window_view::WindowView>,
+    /// Which window is primary (owns the orrery + save-on-close). `None` until the
+    /// first window is created in `resumed`. (MW2 (d).)
+    primary: Option<WindowId>,
+    /// The primary view, built in `new()` and consumed by `resumed` once the OS
+    /// window (and thus its `WindowId`) exists. winit splits construction from window
+    /// creation, so the view outlives its registry key for exactly one step. (MW2 (d).)
+    pending_view: Option<window_view::WindowView>,
     /// System clipboard for the omnibar / palette Ctrl(Cmd)+C/X/V. `None` if the
     /// platform clipboard could not be opened (the shortcuts then no-op). System-
     /// global, so it stays on `App`, not in `SharedState`.
@@ -831,7 +839,9 @@ impl App {
                 observability: HostObservability::new(),
             },
             orrery,
-            view,
+            windows: HashMap::new(),
+            primary: None,
+            pending_view: Some(view),
             clipboard: arboard::Clipboard::new().ok(),
             a11y_bridge: a11y_bridge::AccessKitBridge::new(move || {
                 let _ = a11y_proxy.send_event(());
@@ -839,28 +849,69 @@ impl App {
             a11y_action_routes: HashMap::new(),
             _kernel: armillary::KernelThread::new(),
         };
-        let pane_count = app.view.frame_layout.iter_leaves().count();
+        let pane_count = app
+            .pending_view
+            .as_ref()
+            .expect("pending primary view")
+            .frame_layout
+            .iter_leaves()
+            .count();
         app.shared
             .observability
             .record_startup(&app.shared.presentation.active_theme_id, pane_count);
-        app.ctx().refresh_session_thumbnails();
-        app.ctx().refresh_a11y_summary();
+        // The initial switcher-thumbnail + a11y refresh run in `resumed`, once the
+        // primary view is keyed into the registry (a ctx needs a window id). (MW2 (d).)
         app
     }
 
-    /// Borrow this app's state as a single-window handling context — the receiver
-    /// the bulk of the event-handling logic now hangs off. At N=1 the window is
-    /// `self.view`; when the registry lands (MW2 (d)) this takes a `WindowId` and
-    /// bundles `self.windows[&id]` instead. (MW2 (c).)
+    /// Borrow the **primary** window as a handling context. Before `resumed` keys the
+    /// primary in, it falls back to the `pending_view` — so the headless test harness
+    /// (which never resumes) and the `new()`-time bootstrap both still resolve a view.
+    /// (MW2 (d).)
     fn ctx(&mut self) -> WindowCtx<'_> {
+        let view = match self.primary {
+            Some(id) => self
+                .windows
+                .get_mut(&id)
+                .expect("primary window missing from registry"),
+            None => self
+                .pending_view
+                .as_mut()
+                .expect("a primary or pending view"),
+        };
         WindowCtx {
-            view: &mut self.view,
+            view,
             shared: &mut self.shared,
             orrery: &mut self.orrery,
             clipboard: &mut self.clipboard,
             a11y_bridge: &mut self.a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
         }
+    }
+
+    /// Read-only borrow of the primary window's view (registry entry, else the
+    /// pending bootstrap view). For read paths that don't need the full ctx. (d).)
+    fn view(&self) -> &window_view::WindowView {
+        match self.primary {
+            Some(id) => &self.windows[&id],
+            None => self.pending_view.as_ref().expect("a primary or pending view"),
+        }
+    }
+
+    /// Borrow window `id` as a handling context: its view from the registry plus the
+    /// shared state and shell singletons the active window drives. `None` if no such
+    /// window. The construction is the per-window seam — a ctx reaches exactly one
+    /// view, never the registry or its siblings. (MW2 (d).)
+    fn window_ctx(&mut self, id: WindowId) -> Option<WindowCtx<'_>> {
+        let view = self.windows.get_mut(&id)?;
+        Some(WindowCtx {
+            view,
+            shared: &mut self.shared,
+            orrery: &mut self.orrery,
+            clipboard: &mut self.clipboard,
+            a11y_bridge: &mut self.a11y_bridge,
+            a11y_action_routes: &mut self.a11y_action_routes,
+        })
     }
 }
 

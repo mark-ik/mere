@@ -147,15 +147,22 @@ impl App {
     }
 
     fn agent_observation_from_snapshot(&mut self, snapshot: ObservabilitySnapshot) -> AgentObservation {
+        // Compute each self-derived value into a local first: the struct literal would
+        // otherwise hold several borrows of `self` (ctx, orrery, agent_surfaces) at once.
+        let active_theme_id = self.shared.presentation.active_theme_id.clone();
+        let focused_node = self.orrery.focused_url().map(str::to_string);
+        let active_content = match self.ctx().view.active_content {
+            ContentPane::Orrery => AgentPane::Orrery,
+            ContentPane::Workbench => AgentPane::Workbench,
+        };
+        let surfaces = self.agent_surfaces();
+        let enabled_actions = self.agent_enabled_actions();
         AgentObservation {
-            active_theme_id: self.shared.presentation.active_theme_id.clone(),
-            focused_node: self.orrery.focused_url().map(str::to_string),
-            active_content: match self.view.active_content {
-                ContentPane::Orrery => AgentPane::Orrery,
-                ContentPane::Workbench => AgentPane::Workbench,
-            },
-            surfaces: self.agent_surfaces(),
-            enabled_actions: self.agent_enabled_actions(),
+            active_theme_id,
+            focused_node,
+            active_content,
+            surfaces,
+            enabled_actions,
             diagnostics: snapshot
                 .diagnostics
                 .into_iter()
@@ -182,7 +189,7 @@ impl App {
         // Precompute the per-window reads through the ctx before the loop, so the
         // closure borrows neither `self` nor a live ctx. (MW2 (c).)
         let leaves = self.ctx().laid_leaves();
-        let active = self.view.active_content;
+        let active = self.ctx().view.active_content;
         let wb_open = self.ctx().workbench_open();
         leaves
             .into_iter()
@@ -256,7 +263,7 @@ impl App {
 
     fn agent_invoke_command(&mut self, cmd: Command) -> (bool, String, String) {
         let action_id = format!("command.{cmd:?}").to_ascii_lowercase();
-        self.view.runner.update(move |chrome| {
+        self.ctx().view.runner.update(move |chrome| {
             chrome.run_command_and_close(cmd);
         });
         self.ctx().drain_pending_command();
@@ -271,7 +278,7 @@ impl App {
         if !self.orrery.select_by_url(url) {
             return (false, action_id, format!("node not found: {url}"));
         }
-        self.view.active_content = ContentPane::Orrery;
+        self.ctx().view.active_content = ContentPane::Orrery;
         self.ctx().sync_location();
         self.ctx().refresh_a11y_summary();
         (true, action_id, url.to_string())
@@ -285,8 +292,8 @@ impl App {
 
     fn agent_activate_focused_action(&mut self) -> (bool, String, String) {
         let action_id = "focus.activate".to_string();
-        if self.view.runner.state().palette_open {
-            self.view.runner.update(meerkat::Chrome::run_palette_selection);
+        if self.ctx().view.runner.state().palette_open {
+            self.ctx().view.runner.update(meerkat::Chrome::run_palette_selection);
             self.ctx().drain_pending_command();
             return (true, action_id, "palette selection activated".to_string());
         }
@@ -507,12 +514,12 @@ mod tests {
         // Open a second pane: the window now holds an orrery + a roster.
         app.ctx().toggle_pane(frame::PaneContent::Roster);
         let has_roster = |app: &App| {
-            app.view.frame_layout
+            app.view().frame_layout
                 .iter_leaves()
                 .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
         };
         let orrery_graph = |app: &App| {
-            app.view.frame_layout
+            app.view().frame_layout
                 .iter_leaves()
                 .find(|(_, c, _)| matches!(c, frame::PaneContent::Orrery))
                 .map(|(_, _, g)| g)
@@ -555,7 +562,7 @@ mod tests {
 
         // Rename starts from the current (derived) label, so clear it before typing.
         app.ctx().start_rename(id);
-        assert!(app.view.renaming.is_some());
+        assert!(app.ctx().view.renaming.is_some());
         for _ in 0..16 {
             app.ctx().rename_backspace(); // clear the seeded label (backspace-on-empty is a no-op)
         }
@@ -563,7 +570,7 @@ mod tests {
         app.ctx().rename_push("ork");
         app.ctx().rename_backspace(); // "Work" -> "Wor"
         app.ctx().commit_rename();
-        assert!(app.view.renaming.is_none());
+        assert!(app.ctx().view.renaming.is_none());
         assert_eq!(name_of(&app, id).as_deref(), Some("Wor"));
         assert_eq!(app.shared.session.session_labels.get(&id).map(String::as_str), Some("Wor"));
 
@@ -579,7 +586,7 @@ mod tests {
         app.ctx().start_rename(id);
         app.ctx().rename_push("X");
         app.ctx().cancel_rename();
-        assert!(app.view.renaming.is_none());
+        assert!(app.ctx().view.renaming.is_none());
         assert!(name_of(&app, id).is_none(), "cancel did not persist the edit");
     }
 
