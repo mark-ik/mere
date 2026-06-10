@@ -958,12 +958,12 @@ impl App {
             // Order tiles by session id, matching `cycle_session`'s row order.
             let mut ids: Vec<SessionId> = self.session_thumbnails.keys().copied().collect();
             ids.sort_by_key(|id| *id.as_uuid());
-            let entries: Vec<(SessionId, &SwitcherThumbnail, bool)> = ids
+            let entries: Vec<(SessionId, &SwitcherThumbnail, &str, bool)> = ids
                 .iter()
                 .filter_map(|id| {
-                    self.session_thumbnails
-                        .get(id)
-                        .map(|t| (*id, t, *id == self.active_session_id))
+                    let thumb = self.session_thumbnails.get(id)?;
+                    let label = self.session_labels.get(id).map(String::as_str).unwrap_or("");
+                    Some((*id, thumb, label, *id == self.active_session_id))
                 })
                 .collect();
             let region_w = (strip[2] - strip[0]).round().max(1.0) as u32;
@@ -971,8 +971,15 @@ impl App {
             let region_h = region_h_f.round().max(1.0) as u32;
             let origin_x = strip[0];
             let origin_y = strip[3] - region_h_f; // anchored at the strip's bottom
-            let (scene, hits) =
-                super::switcher::switcher_scene(&entries, region_w, region_h, &self.chrome_theme);
+            let renaming = self.renaming.as_ref().map(|(id, buf)| (*id, buf.as_str()));
+            let (scene, hits) = super::switcher::switcher_scene(
+                &entries,
+                region_w,
+                region_h,
+                &self.chrome_theme,
+                renaming,
+                &mut self.host_text,
+            );
             let (_t, view) = host.rasterize(
                 &scene,
                 region_w,

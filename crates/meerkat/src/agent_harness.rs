@@ -543,6 +543,46 @@ mod tests {
     }
 
     #[test]
+    fn rename_sets_then_clears_the_session_display_name() {
+        let mut app = test_app();
+        let id = app.active_session_id;
+        let name_of = |app: &App, id| {
+            app.manifests
+                .get(id)
+                .and_then(|m| m.display_name.clone())
+        };
+
+        // Rename starts from the current (derived) label, so clear it before typing.
+        app.start_rename(id);
+        assert!(app.renaming.is_some());
+        for _ in 0..16 {
+            app.rename_backspace(); // clear the seeded label (backspace-on-empty is a no-op)
+        }
+        app.rename_push("W");
+        app.rename_push("ork");
+        app.rename_backspace(); // "Work" -> "Wor"
+        app.commit_rename();
+        assert!(app.renaming.is_none());
+        assert_eq!(name_of(&app, id).as_deref(), Some("Wor"));
+        assert_eq!(app.session_labels.get(&id).map(String::as_str), Some("Wor"));
+
+        // Emptying the buffer clears the display name (the label reverts to derived).
+        app.start_rename(id);
+        for _ in 0..16 {
+            app.rename_backspace();
+        }
+        app.commit_rename();
+        assert!(name_of(&app, id).is_none(), "an empty rename clears the name");
+
+        // Escape (cancel) leaves the name untouched.
+        app.start_rename(id);
+        app.rename_push("X");
+        app.cancel_rename();
+        assert!(app.renaming.is_none());
+        assert!(name_of(&app, id).is_none(), "cancel did not persist the edit");
+    }
+
+    #[test]
     fn observation_exposes_surfaces_actions_and_a11y() {
         let mut app = test_app();
         let observation = app.agent_observation();

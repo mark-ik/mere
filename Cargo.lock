@@ -6518,7 +6518,9 @@ dependencies = [
  "nematic",
  "netfetcher",
  "netrender",
+ "netrender_text",
  "orrery",
+ "parley",
  "pelt-live",
  "platen",
  "platen-view",
@@ -7132,6 +7134,14 @@ dependencies = [
  "log",
  "pollster",
  "wgpu",
+]
+
+[[package]]
+name = "netrender_text"
+version = "0.0.1"
+dependencies = [
+ "netrender",
+ "parley",
 ]
 
 [[package]]

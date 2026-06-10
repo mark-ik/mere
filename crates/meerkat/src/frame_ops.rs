@@ -321,14 +321,69 @@ impl App {
         if let Err(err) = self.manifests.move_to_trash(target) {
             tracing::warn!(%err, "failed to trash the closed session");
         }
+        self.renaming = None;
         self.refresh_session_thumbnails();
         self.request_redraw();
     }
 
-    /// Rebuild the per-session switcher thumbnails: the active session from the
-    /// **live** orrery graph, each inactive session from its cold `graph.json`.
-    /// Drops entries for closed sessions. Called on every session or graph change
-    /// (cheap small-graph walks; no per-frame disk reads). (Multi-graph MG4.)
+    /// Begin renaming `id`: seed the switcher edit buffer from its current label, so
+    /// editing starts from the shown name (display or derived). (Host text path.)
+    pub(super) fn start_rename(&mut self, id: SessionId) {
+        if self.manifests.get(id).is_none() {
+            return;
+        }
+        let seed = self.session_labels.get(&id).cloned().unwrap_or_default();
+        self.renaming = Some((id, seed));
+        self.request_redraw();
+    }
+
+    /// Commit the in-progress rename: a non-empty name sets the session's display
+    /// name; an empty one clears it (the label reverts to the derived one). Persists
+    /// the manifest and refreshes the labels. (Host text path.)
+    pub(super) fn commit_rename(&mut self) {
+        let Some((id, name)) = self.renaming.take() else {
+            return;
+        };
+        let trimmed = name.trim().to_string();
+        let display = (!trimmed.is_empty()).then_some(trimmed);
+        self.manifests.update(id, |m| m.display_name = display);
+        if let Err(err) = self.manifests.flush_dirty() {
+            tracing::warn!(%err, "failed to flush the renamed session manifest");
+        }
+        self.refresh_session_thumbnails();
+        self.request_redraw();
+    }
+
+    /// Drop the in-progress rename without saving (Escape, or an interaction that
+    /// moves on). A no-op when not renaming. (Host text path.)
+    pub(super) fn cancel_rename(&mut self) {
+        if self.renaming.take().is_some() {
+            self.request_redraw();
+        }
+    }
+
+    /// Append typed `ch` to the rename buffer. No-op when not renaming. (Host text.)
+    pub(super) fn rename_push(&mut self, ch: &str) {
+        if let Some((_, buf)) = self.renaming.as_mut() {
+            buf.push_str(ch);
+            self.request_redraw();
+        }
+    }
+
+    /// Delete the last char of the rename buffer (Backspace). (Host text path.)
+    pub(super) fn rename_backspace(&mut self) {
+        if let Some((_, buf)) = self.renaming.as_mut() {
+            buf.pop();
+            self.request_redraw();
+        }
+    }
+
+    /// Rebuild the per-session switcher thumbnails **and labels**: the active
+    /// session from the **live** orrery graph, each inactive session from its cold
+    /// `graph.json`. The label is the user's display name, else one derived from the
+    /// graph. Drops entries for closed sessions. Called on every session or graph
+    /// change (cheap small-graph walks; no per-frame disk reads). (Multi-graph MG4 /
+    /// host text path.)
     pub(super) fn refresh_session_thumbnails(&mut self) {
         let opts = SwitcherThumbnailOptions {
             width: SWITCHER_THUMB_W,
@@ -338,22 +393,32 @@ impl App {
         let ids: Vec<SessionId> = self.manifests.iter().map(|(id, _)| id).collect();
         let live: std::collections::HashSet<SessionId> = ids.iter().copied().collect();
         self.session_thumbnails.retain(|id, _| live.contains(id));
+        self.session_labels.retain(|id, _| live.contains(id));
         for id in ids {
-            let thumb = if id == self.active_session_id {
-                build_switcher_thumbnail(self.orrery.graph(), opts)
+            // A user-set display name wins; otherwise derive a short label.
+            let display_name = self
+                .manifests
+                .get(id)
+                .and_then(|m| m.display_name.clone())
+                .filter(|n| !n.trim().is_empty());
+            let (thumb, label) = if id == self.active_session_id {
+                let g = self.orrery.graph();
+                let label = display_name.unwrap_or_else(|| derive_session_label(g));
+                (build_switcher_thumbnail(g, opts), label)
             } else {
                 let dir = self
                     .mere_root
                     .join("sessions")
                     .join(id.as_uuid().to_string());
-                let graph =
-                    session_graph_store::load(&dir.join(session_graph_store::GRAPH_FILE))
-                        .ok()
-                        .flatten()
-                        .unwrap_or_else(Graph::new);
-                build_switcher_thumbnail(&graph, opts)
+                let graph = session_graph_store::load(&dir.join(session_graph_store::GRAPH_FILE))
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(Graph::new);
+                let label = display_name.unwrap_or_else(|| derive_session_label(&graph));
+                (build_switcher_thumbnail(&graph, opts), label)
             };
             self.session_thumbnails.insert(id, thumb);
+            self.session_labels.insert(id, label);
         }
     }
 
@@ -415,6 +480,7 @@ impl App {
         self.scroll.clear();
         self.focused_tile = None;
         self.shown_location = None;
+        self.renaming = None;
         self.workbench = platen::Workbench::new();
         self.maximized_pane = None;
         self.active_content = super::ContentPane::Orrery;
@@ -1823,6 +1889,25 @@ impl App {
 
 fn short_member(member: GraphMemberId) -> String {
     member.to_string().chars().take(8).collect()
+}
+
+/// A short switcher label for a session with no user-set display name: the first
+/// non-intro node's cached host (else its title), or "New" for an empty /
+/// welcome-only graph. (Host text path.)
+fn derive_session_label(graph: &Graph) -> String {
+    graph
+        .nodes()
+        .map(|(_, node)| node)
+        .find(|node| node.url() != "mere://welcome")
+        .and_then(|node| {
+            node.cached_host
+                .clone()
+                .filter(|h| !h.trim().is_empty())
+                .or_else(|| Some(node.title.clone()))
+        })
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "New".to_string())
 }
 
 /// Map a fetched content type to its orrery [`NodeShape`] (a first-cut vocabulary;

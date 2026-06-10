@@ -203,11 +203,11 @@ impl App {
                         th,
                     );
                     if x >= sb[0] && x < sb[2] && y >= sb[1] && y < sb[3] {
+                        let hit = |r: &[f32; 4]| x >= r[0] && x < r[2] && y >= r[1] && y < r[3];
                         // The session switcher tiles (F2.3): a left press closes,
                         // switches, or mints a graph. Closes win over rows (the × sits
                         // inside its tile). (Multi-graph MG4.)
                         if button == MouseButton::Left {
-                            let hit = |r: &[f32; 4]| x >= r[0] && x < r[2] && y >= r[1] && y < r[3];
                             if let Some((id, _)) =
                                 self.session_close_rects.iter().find(|(_, r)| hit(r))
                             {
@@ -227,10 +227,24 @@ impl App {
                                 return;
                             }
                         }
+                        // A right press on a tile renames that session; elsewhere in the
+                        // strip it opens the shellbar move menu. (Host text path.)
                         if button == MouseButton::Right {
-                            self.open_shellbar_menu_at(x, y);
+                            if let Some((id, _)) =
+                                self.session_row_rects.iter().find(|(_, r)| hit(r))
+                            {
+                                let id = *id;
+                                self.start_rename(id);
+                            } else {
+                                self.open_shellbar_menu_at(x, y);
+                            }
                         }
                         return;
+                    }
+                    // A press outside the shellbar while renaming commits the edit
+                    // (clicking away accepts the new name). (Host text path.)
+                    if self.renaming.is_some() {
+                        self.commit_rename();
                     }
                     // Route by content pane (the orrery + the workbench coexist).
                     // A press in either makes it the active (nav-target) pane.
@@ -514,11 +528,35 @@ impl App {
     /// ([`on_omnibar_key`](Self::on_omnibar_key)) — each handler scoped to its own
     /// field. A key with no focused field is ignored.
     pub(super) fn on_key_pressed(&mut self, key: &WinitKey) {
+        // Renaming a session captures the keyboard: type into the switcher label,
+        // Enter commits, Escape cancels, Backspace deletes. (Host text path.)
+        if self.renaming.is_some() {
+            match key {
+                WinitKey::Named(WinitNamedKey::Enter) => self.commit_rename(),
+                WinitKey::Named(WinitNamedKey::Escape) => self.cancel_rename(),
+                WinitKey::Named(WinitNamedKey::Backspace) => self.rename_backspace(),
+                WinitKey::Character(s)
+                    if !self.modifiers.ctrl
+                        && !self.modifiers.meta
+                        && !s.chars().any(char::is_control) =>
+                {
+                    self.rename_push(s.as_str());
+                }
+                _ => {}
+            }
+            return;
+        }
         // An open context menu eats Escape to dismiss (other keys fall through).
         if self.runner.state().context_menu.is_some()
             && matches!(key, WinitKey::Named(WinitNamedKey::Escape))
         {
             self.close_context_menu();
+            return;
+        }
+        // F2 renames the active session (the switcher's keyboard rename affordance;
+        // right-clicking a tile renames that one). (Host text path.)
+        if matches!(key, WinitKey::Named(WinitNamedKey::F2)) {
+            self.start_rename(self.active_session_id);
             return;
         }
         // While the settings overlay is open, Escape closes it and other keys are

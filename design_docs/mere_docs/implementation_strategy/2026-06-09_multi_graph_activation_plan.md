@@ -1,11 +1,11 @@
 # Multi-Graph Activation Plan
 
 **Date**: 2026-06-09
-**Status**: In progress. MG1–MG5 done — meerkat runs multi-graph with a
-window-scoped pane layout (near-Model-B): the shellbar switcher creates /
-switches / closes graphs, and switching keeps the panes while re-sourcing the
-graph-bound ones. MG6 (far-B leaf coexistence, multi-window tear-out, persona
-chip) remains; rename is deferred on the host text path.
+**Status**: In progress. MG1–MG5 done plus the host text path — meerkat runs
+multi-graph with a window-scoped pane layout (near-Model-B): the shellbar
+switcher creates / switches / closes / **renames** graphs (labelled tiles), and
+switching keeps the panes while re-sourcing the graph-bound ones. MG6 (far-B
+leaf coexistence, multi-window tear-out, persona chip) remains.
 **Related**: [shellbar plan F2.3](2026-06-09_shellbar_plan.md), [graph session manifest plan](2026-05-11_graph_session_manifest_plan.md), [switcher thumbnails plan](2026-05-14_switcher_thumbnails_plan.md), [multi-window plan](2026-06-04_multi_window_plan.md), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) (panes are per-window), [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md). Code: `crates/system/session-runtime/`, `crates/meerkat/`, `crates/shell/frame/`.
 
 Give one window many graphs, switchable from the shellbar. The destination is
@@ -89,8 +89,8 @@ Done when create / close / rename work end to end and survive restart, with the 
 
 ### MG4 — the F2.3 shellbar switcher
 
-- Bottom-anchored strip in the shellbar: one tile per session (`build_switcher_thumbnail` swatch — **textless**, since there is no host text-into-scene path yet), active marker, "+" to create, click to switch, "×" to close. Left/Right edges only for now (the Top/Bottom strip is too thin for the vertical stack).
-- Rename is **deferred** with the display name — it needs a host text affordance (a text-into-scene path or an inline editor); until then sessions are identified by their thumbnail.
+- Bottom-anchored strip in the shellbar: one tile per session (`build_switcher_thumbnail` swatch under a short label), active marker, "+" to create, click to switch, "×" to close. Left/Right edges only for now (the Top/Bottom strip is too thin for the vertical stack).
+- Rename: a host text-into-scene path (`text::HostText`, parley → `netrender_text`) labels the tiles (display name, else derived from the graph) and powers an inline rename (F2 / right-click a tile → type → Enter). **Done** (host text path).
 - Closes F2.3's graph-switcher half; persona chip remains a reserved slot.
 
 Done when the shellbar lists sessions with live thumbnails and drives create / switch / close without keybinds.
@@ -181,3 +181,18 @@ Near-B is reached: all graph-bound leaves follow one active graph (they read the
   `frame` +2 (classification / retag-only-graph-bound), meerkat +1 (switch keeps the
   roster pane + re-sources the orrery leaf), migration test updated (frame stays at
   root). Whole workspace check clean; meerkat suite green (44 lib + 61 bin), frame 12.
+- 2026-06-10: **Host text path done (MG4 textless deferral + rename closed).** A new
+  `text::HostText` (parley `FontContext`/`LayoutContext<[f32;4]>` held once) shapes a
+  line and pushes it into a host-drawn `netrender::Scene` via `netrender_text` — the
+  same parley 0.10 stack document-canvas uses, without its document packet pipeline.
+  Deps added: `parley`, `netrender_text`. The **switcher tiles are now labelled**
+  (swatch over a name row, truncated-to-fit on the 40px strip): the display name,
+  else one derived from the graph (`derive_session_label`: first non-welcome node's
+  host/title, else "New"). Labels cache in `session_labels` in lockstep with the
+  thumbnails. **Inline rename** works: F2 renames the active session, right-clicking a
+  tile renames that one; typing edits a buffer the switcher draws with a caret (tail-
+  fitted), Enter commits (sets `manifest.display_name`, empty clears it), Escape
+  cancels, click-away commits. Tests: switcher +1 (`fit_label`), meerkat +1 (rename
+  set/clear/cancel). meerkat suite green (44 lib + 63 bin); workspace check clean.
+  Follow-ups: IME / paste in the rename buffer; caching the switcher scene to avoid
+  per-frame reshaping; wider labels (hover tooltip) given the 40px constraint.

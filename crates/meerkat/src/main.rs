@@ -83,6 +83,7 @@ mod render;
 mod roster;
 mod shellbar;
 mod switcher;
+mod text;
 mod titlebar;
 mod tracing_layer;
 mod utility_panes;
@@ -422,12 +423,23 @@ struct App {
     /// rebuilt on session/graph change, the active one from the live orrery.
     /// (Multi-graph MG4.)
     session_thumbnails: HashMap<SessionId, SwitcherThumbnail>,
+    /// Cached switcher label per session (display name, else derived from the
+    /// graph), refreshed in lockstep with `session_thumbnails`. (Host text path.)
+    session_labels: HashMap<SessionId, String>,
     /// Each switcher row's on-screen rect this frame: a click switches to it.
     session_row_rects: Vec<(SessionId, [f32; 4])>,
     /// Each row's close (×) hit rect this frame: a click trashes that session.
     session_close_rects: Vec<(SessionId, [f32; 4])>,
     /// The "+" new-graph tile rect this frame, if the switcher is shown.
     session_add_rect: Option<[f32; 4]>,
+    /// Host text shaping for host-drawn labels (the switcher tile names). Holds the
+    /// parley contexts so they aren't rebuilt per frame. (Host text path.)
+    host_text: text::HostText,
+    /// In-progress session rename: the target session + its edit buffer. `Some`
+    /// while the switcher label is being typed (F2 or right-click a tile); the
+    /// keyboard is fully captured until Enter commits or Escape cancels. (Host
+    /// text path.)
+    renaming: Option<(SessionId, String)>,
     /// Durable content cache (S3.2c) under the session dir, persisting fetched
     /// pages + subresources by URL. `None` if the store could not be opened
     /// (caching disabled; the shell still runs).
@@ -850,9 +862,12 @@ impl App {
             manifests,
             active_session_id,
             session_thumbnails: HashMap::new(),
+            session_labels: HashMap::new(),
             session_row_rects: Vec::new(),
             session_close_rects: Vec::new(),
             session_add_rect: None,
+            host_text: text::HostText::new(),
+            renaming: None,
             store,
             toolbar_h: 0,
             window: None,
