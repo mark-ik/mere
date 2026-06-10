@@ -281,3 +281,16 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   Per-`WindowKind` chrome = a different DOM template (slim leaf chrome answers the
   switcher-per-window question). Tempered the reviewer's vsync-stall claim to a
   non-blocking-acquire note. No staging change.
+- 2026-06-10: **MW1 continued — texture + interaction clusters carved (27 fields
+  total).** `WindowView` now holds the 9 hit-rect caches, the 6 paint-texture caches,
+  and the 12 interaction fields (scroll / drags / cursor_icon / pending_exit /
+  context_set / renaming). `CachedTile` + `ResizeDrag` made `pub(crate)`. ~72 access
+  sites updated; behavior-preserving (44 lib + 63 bin green). **Deliberate MW1/MW2
+  boundary:** the surface / chrome / input-device fields (`window`, `host`, `runner` +
+  `dom`, `workbench*`, `frame_layout`, `cursor`, `modifiers`, `toolbar_h`, size) move
+  *with* MW2's registry, because that is where the method signatures shift to
+  `(&mut WindowView, &mut SharedState)` + the `ShellCommand` seam — moving them now
+  would only churn them twice. The remaining clean view-session fields
+  (`focused_tile`, `live_previews`, `content_location`, `shown_location`,
+  `active_content`, `maximized_pane`, `next_pane_id`, switcher caches, `host_text`)
+  are the last MW1 cluster.
