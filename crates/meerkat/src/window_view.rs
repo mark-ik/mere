@@ -249,4 +249,13 @@ impl WindowView {
             scrying_input_focus: Default::default(),
         }
     }
+
+    /// Request a redraw of this window, if it exists. A per-window operation: each
+    /// window drives its own surface, so the registry's event handlers call this on
+    /// the target view directly. (MW2 (c).)
+    pub(crate) fn request_redraw(&self) {
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
+        }
+    }
 }

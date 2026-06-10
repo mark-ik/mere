@@ -61,7 +61,7 @@ impl App {
         self.view.shown_location = url.clone();
         if let (Some(url), None) = (url, self.view.runner.focus()) {
             self.view.runner.update(move |c| c.show_location(&url));
-            self.request_redraw();
+            self.view.request_redraw();
         }
     }
 
@@ -103,7 +103,7 @@ impl App {
             self.ensure_content(&loc);
             self.view.content_location = loc;
             self.save_session();
-            self.request_redraw();
+            self.view.request_redraw();
             return;
         }
         if loc == self.view.content_location {
@@ -129,7 +129,7 @@ impl App {
         self.ensure_content(&loc);
         self.view.content_location = loc;
         self.save_session();
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// The node per-node navigation acts on: the focused tile in Tree, the single
@@ -170,7 +170,7 @@ impl App {
             c.show_location(&url);
         });
         self.save_session();
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Reflect the focused node's history onto the toolbar's back/forward
@@ -195,7 +195,7 @@ impl App {
             c.toolbar.can_go_back = can_back;
             c.toolbar.can_go_forward = can_forward;
         });
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Persist the session (graph + camera view-intent) under the session dir.
@@ -320,7 +320,7 @@ impl App {
         }
         self.view.renaming = None;
         self.refresh_session_thumbnails();
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Begin renaming `id`: seed the switcher edit buffer from its current label, so
@@ -331,7 +331,7 @@ impl App {
         }
         let seed = self.shared.session.session_labels.get(&id).cloned().unwrap_or_default();
         self.view.renaming = Some((id, seed));
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Commit the in-progress rename: a non-empty name sets the session's display
@@ -348,14 +348,14 @@ impl App {
             tracing::warn!(%err, "failed to flush the renamed session manifest");
         }
         self.refresh_session_thumbnails();
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Drop the in-progress rename without saving (Escape, or an interaction that
     /// moves on). A no-op when not renaming. (Host text path.)
     pub(super) fn cancel_rename(&mut self) {
         if self.view.renaming.take().is_some() {
-            self.request_redraw();
+            self.view.request_redraw();
         }
     }
 
@@ -363,7 +363,7 @@ impl App {
     pub(super) fn rename_push(&mut self, ch: &str) {
         if let Some((_, buf)) = self.view.renaming.as_mut() {
             buf.push_str(ch);
-            self.request_redraw();
+            self.view.request_redraw();
         }
     }
 
@@ -371,7 +371,7 @@ impl App {
     pub(super) fn rename_backspace(&mut self) {
         if let Some((_, buf)) = self.view.renaming.as_mut() {
             buf.pop();
-            self.request_redraw();
+            self.view.request_redraw();
         }
     }
 
@@ -491,7 +491,7 @@ impl App {
             .unwrap_or("mere://welcome")
             .to_string();
         self.refresh_session_thumbnails();
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Make the focused node's content available. A network address already in
@@ -528,7 +528,7 @@ impl App {
         self.view.runner.update(Chrome::close_suggestions);
         if self.workbench_open() {
             self.close_workbench();
-            self.request_redraw();
+            self.view.request_redraw();
             return;
         }
         // Summon the workbench pane beside the orrery, then tile the selection.
@@ -547,7 +547,7 @@ impl App {
                 .copied()
                 .or_else(|| self.view.workbench.open_members().first().copied());
         }
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// The members a selection-driven open acts on. A multi-selection is its own
@@ -592,14 +592,14 @@ impl App {
         self.view.context_set = set;
         self.view.runner
             .update(move |c| c.open_context_menu(x, y, items));
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Dismiss the context menu (an outside click / Escape), dropping its set.
     pub(super) fn close_context_menu(&mut self) {
         self.view.context_set.clear();
         self.view.runner.update(Chrome::close_context_menu);
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Open the shellbar move menu at `(x, y)` — four entries, one per edge,
@@ -623,7 +623,7 @@ impl App {
         })
         .collect();
         self.view.runner.update(move |c| c.open_context_menu(x, y, items));
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Run a pending context-menu action the chrome captured: open the menu's
@@ -641,7 +641,7 @@ impl App {
             self.view.centered = false; // orrery band changed; recenter once
             self.view.toolbar_h = 0;   // re-measure (band height may change if Top/Bottom)
             self.persist_settings();
-            self.request_redraw();
+            self.view.request_redraw();
             return;
         }
         let set = std::mem::take(&mut self.view.context_set);
@@ -663,7 +663,7 @@ impl App {
             }
             ContextAction::ShellbarMove(_) => unreachable!("handled above"),
         }
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Delete the focused node from the graph and reap its activation (the actor
@@ -675,7 +675,7 @@ impl App {
             self.view.live_previews.remove(&member);
             self.shared.content.constellation.reap(member);
             self.save_session();
-            self.request_redraw();
+            self.view.request_redraw();
         }
     }
 
@@ -690,7 +690,7 @@ impl App {
         let next = !self.shared.content.constellation.is_background(member);
         if self.shared.content.constellation.set_background(member, next) {
             tracing::info!(%member, background = next, "toggled node background");
-            self.request_redraw();
+            self.view.request_redraw();
         }
     }
 
@@ -720,7 +720,7 @@ impl App {
             self.view.scrying_input_focus = None; // unpinned the tile that held the keyboard
         }
         tracing::info!(%member, compat = on, "toggled compatibility view");
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Retry the focused node's page fetch. Unlike `ensure_content`, this bypasses
@@ -747,7 +747,7 @@ impl App {
         self.shared.observability
             .record_actor("fetch", "started", Some(url.clone()));
         self.shared.content.fetch_handle.command(fetch::FetchCommand::Page(url));
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Stop the focused live operation. In Cartography this demotes a live
@@ -774,7 +774,7 @@ impl App {
         self.shared.content.constellation.reap(member);
         self.shared.observability
             .record_actor("content", "stopped", Some(member.to_string()));
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Keep the focused operation alive in the background. If the node is dormant,
@@ -798,7 +798,7 @@ impl App {
             self.shared.observability
                 .record_actor("content", "pinned", Some(member.to_string()));
         }
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// The set of graph members that should be active this frame: in Tree the open
@@ -833,7 +833,7 @@ impl App {
         } else {
             self.view.live_previews.insert(member);
         }
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// The per-node activation state for the orrery's node coloring. A node with
@@ -942,7 +942,7 @@ impl App {
                 self.shared.content.constellation.set_background(member, !pinned);
             }
         }
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Execute a pending "connect to peer" request the chrome queued (S5.1): take
@@ -962,7 +962,7 @@ impl App {
         // Route the verb to the sync actor; it runs the dial on its runtime and logs
         // the outcome (the actor boundary, so no synchronous result here).
         self.shared.sync_handle.command(sync::SyncCommand::Connect(ticket));
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Execute a pending host action the palette queued: take it from the chrome
@@ -978,12 +978,12 @@ impl App {
             Command::BackgroundNode => self.toggle_focus_background(),
             Command::HideSelectedEdge => {
                 if self.orrery.hide_selected_edges() > 0 {
-                    self.request_redraw();
+                    self.view.request_redraw();
                 }
             }
             Command::ShowAllEdges => {
                 if self.orrery.show_all_edges() > 0 {
-                    self.request_redraw();
+                    self.view.request_redraw();
                 }
             }
             Command::ToggleRoster => self.toggle_pane(PaneContent::Roster),
@@ -1320,7 +1320,7 @@ impl App {
             recorded_content.tag(),
             if opened { "opened" } else { "closed" }
         ));
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Switch the active theme: re-resolve from the registry, rebuild the chrome
@@ -1340,7 +1340,7 @@ impl App {
         self.persist_settings();
         self.shared.observability
             .record_theme_activated(&self.shared.presentation.active_theme_id);
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// The apparatus pane's screen rect, if open.
@@ -1435,7 +1435,7 @@ impl App {
                         format!("accesskit.{action_id}: select {url}"),
                     );
                     self.refresh_a11y_summary();
-                    self.request_redraw();
+                    self.view.request_redraw();
                 } else {
                     self.shared.observability.record_diagnostic(
                         "meerkat.agent.intent_dropped",
@@ -1705,7 +1705,7 @@ impl App {
         } else if let Some(pane) = self.pane_at(self.view.cursor.0, self.view.cursor.1) {
             self.view.maximized_pane = Some(pane);
         }
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// The frame divider gutter under window point `(x, y)`, as its split path +
@@ -1739,7 +1739,7 @@ impl App {
         };
         // `set_split_ratio` clamps to a sane minimum so a pane can't collapse.
         self.view.frame_layout.set_split_ratio(&path, ratio);
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// The node whose roster row contains window point `(x, y)`, if any.

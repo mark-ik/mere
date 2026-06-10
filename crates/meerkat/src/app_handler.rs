@@ -238,7 +238,7 @@ impl ApplicationHandler for App {
         }
         if let Some(indicator) = latest_sync {
             self.view.runner.update(|c| c.sync = indicator.clone());
-            self.request_redraw();
+            self.view.request_redraw();
         }
         // Comms (P6c): the comms actor delivers conversation lists + threads here;
         // fold each into the docked pane (the host owns the chrome mutation).
@@ -323,20 +323,20 @@ impl ApplicationHandler for App {
             }
         }
         if comms_changed {
-            self.request_redraw();
+            self.view.request_redraw();
         }
         if graph_changed {
             self.save_session();
         }
         if card_changed || graph_changed {
-            self.request_redraw();
+            self.view.request_redraw();
         }
         // The physics actor shares this wake: a fresh layout snapshot is waiting to
         // be folded in. The orrery is always shown now, so kick a redraw — `frame()`
         // drains the snapshot and reports whether to keep going (the settle then
         // self-sustains through `needs_redraw`).
         self.drain_portable_diagnostics();
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     fn window_event(
@@ -389,7 +389,7 @@ impl ApplicationHandler for App {
                     self.drag_divider();
                 } else if self.view.tab_drag.is_some() {
                     // Follow the drag: the drop-target highlight tracks the pointer.
-                    self.request_redraw();
+                    self.view.request_redraw();
                 } else if let Some((member, lx, ly)) = self.scrying_at(self.view.cursor.0, self.view.cursor.1)
                 {
                     // Hover / drag over the compatibility-view tile feeds the WebView;
@@ -397,9 +397,9 @@ impl ApplicationHandler for App {
                     self.view
                         .scrying
                         .forward_mouse(member, lx, ly, scrying_host::MousePress::Move);
-                    self.request_redraw();
+                    self.view.request_redraw();
                 } else if self.orrery.cursor_moved(self.view.cursor.0, self.view.cursor.1 - th) {
-                    self.request_redraw();
+                    self.view.request_redraw();
                 }
             }
             WindowEvent::ModifiersChanged(mods) => {
@@ -416,7 +416,7 @@ impl ApplicationHandler for App {
                         MouseScrollDelta::PixelDelta(p) => p.y as i32,
                     };
                     self.view.scrying.forward_wheel(member, lx, ly, delta_y);
-                    self.request_redraw();
+                    self.view.request_redraw();
                     return;
                 }
                 // LineDelta is scaled to device px the way the orrery expects;
@@ -438,7 +438,7 @@ impl ApplicationHandler for App {
                     // the wheel route here prevents a roster scroll from panning
                     // the orrery underneath.
                     self.view.roster_scroll = (self.view.roster_scroll - dy).max(0.0);
-                    self.request_redraw();
+                    self.view.request_redraw();
                     return;
                 }
                 let over_card = self
@@ -453,14 +453,14 @@ impl ApplicationHandler for App {
                     let offset = self.view.scroll.entry(member).or_insert(0.0);
                     // Wheel up (dy > 0) scrolls toward the top; down toward the bottom.
                     *offset = (*offset - dy).clamp(0.0, max);
-                    self.request_redraw();
+                    self.view.request_redraw();
                 } else {
                     let th = self.toolbar_height() as f32;
                     let in_workbench = self
                         .workbench_leaf_rect()
                         .is_some_and(|wr| cx >= wr[0] && cx < wr[2] && cy >= wr[1] && cy < wr[3]);
                     if cy >= th && !in_workbench && self.orrery.wheel(dx, dy) {
-                        self.request_redraw();
+                        self.view.request_redraw();
                     }
                 }
             }
@@ -497,7 +497,7 @@ impl ApplicationHandler for App {
                         pressed,
                         mods,
                     );
-                    self.request_redraw();
+                    self.view.request_redraw();
                     return;
                 }
                 if pressed {

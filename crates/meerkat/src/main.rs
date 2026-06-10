@@ -819,13 +819,6 @@ impl App {
         app
     }
 
-    /// Request a redraw if a window exists.
-    fn request_redraw(&self) {
-        if let Some(window) = self.view.window.as_ref() {
-            window.request_redraw();
-        }
-    }
-
     /// The active theme's chrome CSS as `&[&str]`, the shape the serval layout /
     /// paint / hit-test entry points take. Borrows the baked `chrome_sheet`.
     fn chrome_sheet_refs(&self) -> Vec<&str> {

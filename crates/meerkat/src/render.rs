@@ -56,7 +56,7 @@ impl App {
             host.resize(self.view.width, self.view.height);
         }
         self.refresh_a11y_summary();
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Render the two authorities and present them. The orrery content root fills
@@ -392,7 +392,7 @@ impl App {
                         live_card = Some((member, [x0, y0, x1, y1]));
                         // The WebView paints on its own schedule; keep frames
                         // coming while the card is visible.
-                        self.request_redraw();
+                        self.view.request_redraw();
                     } else {
                         self.ensure_content(&url);
                         let state = self.shared.content.pages.get(&url).cloned();
@@ -1071,7 +1071,7 @@ impl App {
 
         // Keep animating while the orrery is settling / gliding / dragging.
         if orrery_redraw {
-            self.request_redraw();
+            self.view.request_redraw();
         }
     }
 

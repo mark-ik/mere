@@ -104,7 +104,7 @@ impl App {
                             .forward_mouse(member, lx, ly, scrying_host::MousePress::Down(btn));
                         self.view.scrying.focus_tile(member);
                         self.view.scrying_input_focus = Some(member);
-                        self.request_redraw();
+                        self.view.request_redraw();
                     }
                     return;
                 }
@@ -139,7 +139,7 @@ impl App {
                     if self.view.runner.focus().is_some() || !self.view.runner.state().suggest.is_empty() {
                         self.view.runner.set_focus(None);
                         self.view.runner.update(Chrome::close_suggestions);
-                        self.request_redraw();
+                        self.view.request_redraw();
                     }
                     // A press on a frame divider starts a pane-resize drag. (F1.)
                     if button == MouseButton::Left {
@@ -161,7 +161,7 @@ impl App {
                                         .map(|(_, n)| n.url().to_string())
                                     {
                                         self.orrery.select_by_url(&url);
-                                        self.request_redraw();
+                                        self.view.request_redraw();
                                     }
                                 }
                             }
@@ -193,7 +193,7 @@ impl App {
                                         .map(|(_, n)| n.url().to_string())
                                     {
                                         self.orrery.select_by_url(&url);
-                                        self.request_redraw();
+                                        self.view.request_redraw();
                                     }
                                 }
                             }
@@ -217,7 +217,7 @@ impl App {
                         if let Some(member) = self.close_button_at(x, y) {
                             self.view.live_previews.remove(&member);
                             self.shared.content.constellation.reap(member);
-                            self.request_redraw();
+                            self.view.request_redraw();
                             return;
                         }
                     }
@@ -299,7 +299,7 @@ impl App {
                         } else if let Some(b) = orrery_button {
                             if !self.point_over_card(x, y) && self.orrery.pointer_down(b, x, y - th)
                             {
-                                self.request_redraw();
+                                self.view.request_redraw();
                             }
                         }
                     }
@@ -313,7 +313,7 @@ impl App {
                         self.view
                             .scrying
                             .forward_mouse(member, lx, ly, scrying_host::MousePress::Up(btn));
-                        self.request_redraw();
+                        self.view.request_redraw();
                     }
                     return;
                 }
@@ -340,7 +340,7 @@ impl App {
                 let over_card = self.point_over_card(x, y);
                 if let Some(b) = orrery_button {
                     if !over_card && self.orrery.pointer_up(b, x, y - th) {
-                        self.request_redraw();
+                        self.view.request_redraw();
                     }
                 }
                 // A divider resize ends on release (tile-tree slot + frame pane).
@@ -367,7 +367,7 @@ impl App {
                                 };
                                 if moved {
                                     self.view.focused_tile = Some(member);
-                                    self.request_redraw();
+                                    self.view.request_redraw();
                                 }
                             }
                         }
@@ -462,7 +462,7 @@ impl App {
             if palette_was_open && !self.view.runner.state().palette_open {
                 self.focus_after_palette_close();
             }
-            self.request_redraw();
+            self.view.request_redraw();
         }
     }
 
@@ -493,7 +493,7 @@ impl App {
                 self.view.tab_drag = Some((member, (x, y)));
             }
             self.drain_workbench_action();
-            self.request_redraw();
+            self.view.request_redraw();
         }
     }
 
@@ -544,7 +544,7 @@ impl App {
         weights[i] = (weights[i] + dw).max(0.05);
         weights[i + 1] = (weights[i + 1] - dw).max(0.05);
         self.view.workbench.set_weights(&weights);
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// While a tab is being dragged (moved past the slop), the member of the tile
@@ -601,7 +601,7 @@ impl App {
         if self.view.runner.state().settings_open {
             if matches!(key, WinitKey::Named(WinitNamedKey::Escape)) {
                 self.view.runner.update(Chrome::close_settings);
-                self.request_redraw();
+                self.view.request_redraw();
             }
             return;
         }
@@ -617,7 +617,7 @@ impl App {
         {
             self.view.runner.update(Chrome::toggle_comms);
             self.drain_comms_intent();
-            self.request_redraw();
+            self.view.request_redraw();
             return;
         }
         // Ctrl+T toggles the tiled workbench (Tree projection) and the orrery
@@ -725,25 +725,25 @@ impl App {
                     "omnibar submit"
                 );
                 self.sync_orrery();
-                self.request_redraw();
+                self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowDown) if suggestions_open => {
                 self.view.runner.update(|c| c.step_suggestion(1));
-                self.request_redraw();
+                self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowUp) if suggestions_open => {
                 self.view.runner.update(|c| c.step_suggestion(-1));
-                self.request_redraw();
+                self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::Escape) if suggestions_open => {
                 self.view.runner.update(Chrome::close_suggestions);
-                self.request_redraw();
+                self.view.request_redraw();
             }
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.view.modifiers) {
                     self.view.runner.dispatch_key(key_event);
                     self.view.runner.update(Chrome::refresh_suggestions);
-                    self.request_redraw();
+                    self.view.request_redraw();
                 }
             }
         }
@@ -845,7 +845,7 @@ impl App {
         } else {
             self.view.runner.update(Chrome::refresh_suggestions);
         }
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Route a key to the open command palette: Enter runs the selection, Arrow
@@ -860,26 +860,26 @@ impl App {
                 self.drain_history_step();
                 self.sync_orrery();
                 self.focus_after_palette_close();
-                self.request_redraw();
+                self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::Escape) => {
                 self.view.runner.update(Chrome::close_palette);
                 self.focus_after_palette_close();
-                self.request_redraw();
+                self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowDown) => {
                 self.view.runner.update(|c| c.step_palette(1));
-                self.request_redraw();
+                self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowUp) => {
                 self.view.runner.update(|c| c.step_palette(-1));
-                self.request_redraw();
+                self.view.request_redraw();
             }
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.view.modifiers) {
                     self.view.runner.dispatch_key(key_event);
                     self.view.runner.update(Chrome::sync_palette_query);
-                    self.request_redraw();
+                    self.view.request_redraw();
                 }
             }
         }
@@ -899,7 +899,7 @@ impl App {
                     self.view.runner.update(Chrome::send_comms);
                 }
                 self.drain_comms_intent();
-                self.request_redraw();
+                self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::Escape) => {
                 // Escape closes the compose-new form, else blurs to the omnibar.
@@ -907,12 +907,12 @@ impl App {
                     self.view.runner.update(Chrome::close_new_message);
                 }
                 self.focus_after_palette_close();
-                self.request_redraw();
+                self.view.request_redraw();
             }
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.view.modifiers) {
                     self.view.runner.dispatch_key(key_event);
-                    self.request_redraw();
+                    self.view.request_redraw();
                 }
             }
         }
@@ -966,7 +966,7 @@ impl App {
         } else {
             self.focus_after_palette_close();
         }
-        self.request_redraw();
+        self.view.request_redraw();
     }
 
     /// Restore focus to the omnibar after the palette closes (so keyboard use
