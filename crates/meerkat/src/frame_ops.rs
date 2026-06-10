@@ -11,12 +11,15 @@ use std::collections::HashMap;
 use accesskit::{Action, Node, NodeId as AccessNodeId, Rect, Role, TreeUpdate};
 use forme::GraphMemberId;
 use frame::{GraphId, InsertSide, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
+use kernel::graph::{
+    ContainmentSubKind, ProvenanceSubKind, RelationKind, SemanticSubKind,
+};
 use meerkat::command::Command;
 use meerkat::{Chrome, CommsIntent, ContextAction, ContextItem};
 use orrery::{NodeShape, NodeState};
 use platen_view::WorkbenchAction;
 use session_runtime::{
-    PersistedSettings, ViewIntent, content_store, session_graph_store, settings_store,
+    PersistedSettings, ShellbarEdge, ViewIntent, content_store, session_graph_store, settings_store,
     view_intent_store,
 };
 use uxtree::{UxTree, node_id_for_path};
@@ -328,6 +331,30 @@ impl App {
         self.request_redraw();
     }
 
+    /// Open the shellbar move menu at `(x, y)` — four entries, one per edge,
+    /// with the current edge marked. (Shellbar F2.2.)
+    pub(super) fn open_shellbar_menu_at(&mut self, x: f32, y: f32) {
+        let current = self.shellbar_edge;
+        let items: Vec<ContextItem> = [
+            (ShellbarEdge::Left, "Move shellbar to left"),
+            (ShellbarEdge::Right, "Move shellbar to right"),
+            (ShellbarEdge::Top, "Move shellbar to top"),
+            (ShellbarEdge::Bottom, "Move shellbar to bottom"),
+        ]
+        .iter()
+        .map(|&(edge, label)| {
+            let label = if edge == current {
+                format!("{label} \u{2713}") // ✓ marks current position
+            } else {
+                label.to_string()
+            };
+            ContextItem::new(label, ContextAction::ShellbarMove(edge))
+        })
+        .collect();
+        self.runner.update(move |c| c.open_context_menu(x, y, items));
+        self.request_redraw();
+    }
+
     /// Run a pending context-menu action the chrome captured: open the menu's
     /// member set as splits or as one stack, switching into the tiled (Tree)
     /// projection first if needed.
@@ -336,6 +363,16 @@ impl App {
             return;
         };
         self.runner.update(|c| c.pending_context = None);
+        // Shellbar move: redock the strip to the chosen edge and persist. No
+        // member set involved — return before the orrery-tile logic below.
+        if let ContextAction::ShellbarMove(edge) = action {
+            self.shellbar_edge = edge;
+            self.centered = false; // orrery band changed; recenter once
+            self.toolbar_h = 0;   // re-measure (band height may change if Top/Bottom)
+            self.persist_settings();
+            self.request_redraw();
+            return;
+        }
         let set = std::mem::take(&mut self.context_set);
         if set.is_empty() {
             return;
@@ -353,6 +390,7 @@ impl App {
             ContextAction::Stack => {
                 self.workbench.open_stack(&set);
             }
+            ContextAction::ShellbarMove(_) => unreachable!("handled above"),
         }
         self.request_redraw();
     }
@@ -648,6 +686,9 @@ impl App {
                     self.request_redraw();
                 }
             }
+            Command::ToggleRoster => self.toggle_pane(PaneContent::Roster),
+            Command::ToggleGloss => self.toggle_pane(PaneContent::Gloss),
+            Command::ToggleApparatus => self.toggle_pane(PaneContent::Apparatus),
             Command::ToggleInspector => self.toggle_pane(PaneContent::Inspector),
             Command::ToggleSteward => self.toggle_pane(PaneContent::Steward),
             Command::RetryFocusedContent => self.retry_focused_content(),
@@ -713,6 +754,7 @@ impl App {
         let settings = PersistedSettings {
             tab_cap: self.saved_tab_cap,
             theme_id: Some(self.active_theme_id.clone()),
+            shellbar_edge: self.shellbar_edge,
         };
         if let Err(err) = settings_store::save_settings(&self.session_dir, &settings) {
             tracing::warn!(%err, "failed to persist settings");
@@ -1196,11 +1238,12 @@ impl App {
             node.add_action(Action::Focus);
             action_routes.insert(id, A11yHostAction::SelectNodeByUrl(row.title.clone()));
             node.set_label(row.title);
-            node.set_description(if row.selected {
-                format!("selected; {}", row.subtitle)
+            let desc = if row.selected {
+                format!("selected; {}", row.url)
             } else {
-                row.subtitle
-            });
+                row.url
+            };
+            node.set_description(desc);
             if let Some(bounds) = row_bounds.get(&row.member) {
                 node.set_bounds(rect(*bounds));
             }
@@ -1374,24 +1417,91 @@ impl App {
     /// The roster rows: every graph node as a row (url as title, content type as
     /// subtitle, focused node marked selected). (Frame tree, F1 roster.)
     pub(super) fn roster_rows(&self) -> Vec<roster::RosterRow> {
-        let focused = self.orrery.focused_url();
-        self.orrery
+        let focused_url = self.orrery.focused_url();
+        let graph = self.orrery.graph();
+        let mut rows: Vec<roster::RosterRow> = self
+            .orrery
             .graph()
             .nodes()
             .map(|(_key, node)| {
-                let url = node.url();
-                let content_type = match self.content.get(url) {
+                let url = node.url().to_string();
+                let title = if !node.title.is_empty() {
+                    node.title.clone()
+                } else if let Some(host) = &node.cached_host {
+                    host.clone()
+                } else {
+                    url.clone()
+                };
+                let content_type = match self.content.get(&url) {
                     Some(fetch::ContentState::Ready(fetched)) => fetched.content_type.clone(),
-                    _ => None,
+                    _ => node.mime_hint.clone(),
+                };
+                let mut tags: Vec<String> = node.tags.iter().cloned().collect();
+                tags.sort();
+                let selected = focused_url == Some(node.url());
+                // Edge detail only for the focused row (avoids O(n) per row).
+                let edges = if selected {
+                    let node_key = graph.get_node_by_id(node.id).map(|(k, _)| k);
+                    if let Some(key) = node_key {
+                        graph
+                            .relations()
+                            .filter(|r| r.from == key || r.to == key)
+                            .filter_map(|r| {
+                                let (direction, other_key) = if r.from == key {
+                                    (roster::EdgeDir::Out, r.to)
+                                } else {
+                                    (roster::EdgeDir::In, r.from)
+                                };
+                                let other = graph.get_node(other_key)?;
+                                let other_title = if !other.title.is_empty() {
+                                    other.title.clone()
+                                } else {
+                                    other.cached_host.clone().unwrap_or_else(|| other.url().to_string())
+                                };
+                                Some(roster::EdgeRow {
+                                    direction,
+                                    kind_label: relation_kind_label(r.kind).to_string(),
+                                    other_title,
+                                    other_url: other.url().to_string(),
+                                    other_member: other.id,
+                                })
+                            })
+                            .collect()
+                    } else {
+                        Vec::new()
+                    }
+                } else {
+                    Vec::new()
                 };
                 roster::RosterRow {
                     member: node.id,
-                    title: url.to_string(),
-                    subtitle: content_type.unwrap_or_else(|| "—".to_string()),
-                    selected: focused == Some(url),
+                    title,
+                    url,
+                    content_type,
+                    tags,
+                    edges,
+                    selected,
+                    section_header: None,
                 }
             })
-            .collect()
+            .collect();
+        // Sort by (content-type bucket, title) so nodes group by kind.
+        rows.sort_by(|a, b| {
+            let ba = content_bucket(a.content_type.as_deref());
+            let bb = content_bucket(b.content_type.as_deref());
+            ba.0.cmp(&bb.0)
+                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+        });
+        // Stamp section headers on the first row of each new bucket.
+        let mut current: Option<u8> = None;
+        for row in &mut rows {
+            let (ord, label) = content_bucket(row.content_type.as_deref());
+            if current != Some(ord) {
+                current = Some(ord);
+                row.section_header = Some(label.to_string());
+            }
+        }
+        rows
     }
 
     pub(super) fn utility_pane_rows(&self, content: &PaneContent) -> Vec<(String, String)> {
@@ -1510,6 +1620,17 @@ fn content_shape(content_type: Option<&str>) -> NodeShape {
     }
 }
 
+fn content_bucket(content_type: Option<&str>) -> (u8, &'static str) {
+    match content_type {
+        None => (3, "Unknown"),
+        Some(ct) => match content_shape(Some(ct)) {
+            NodeShape::Circle => (1, "Feeds"),
+            NodeShape::Rounded => (2, "Menus"),
+            NodeShape::Square => (0, "Documents"),
+        },
+    }
+}
+
 struct A11yAudit {
     missing_labels: usize,
     missing_bounds: usize,
@@ -1527,6 +1648,49 @@ pub(super) struct A11yProjection {
 impl A11yProjection {
     pub(super) fn tree_update(&self) -> TreeUpdate {
         self.tree.to_tree_update(Some(self.focus))
+    }
+}
+
+fn relation_kind_label(kind: RelationKind) -> &'static str {
+    use ContainmentSubKind::*;
+    use ProvenanceSubKind::*;
+    use SemanticSubKind::*;
+    match kind {
+        RelationKind::Traversal => "Traversal",
+        RelationKind::Semantic(Hyperlink) => "Hyperlink",
+        RelationKind::Semantic(UserGrouped) => "Grouped",
+        RelationKind::Semantic(AgentDerived) => "Agent",
+        RelationKind::Semantic(Cites) => "Cites",
+        RelationKind::Semantic(Quotes) => "Quotes",
+        RelationKind::Semantic(Summarizes) => "Summarizes",
+        RelationKind::Semantic(Elaborates) => "Elaborates",
+        RelationKind::Semantic(ExampleOf) => "Example",
+        RelationKind::Semantic(Supports) => "Supports",
+        RelationKind::Semantic(Contradicts) => "Contradicts",
+        RelationKind::Semantic(Questions) => "Questions",
+        RelationKind::Semantic(SameEntityAs) => "Same As",
+        RelationKind::Semantic(DuplicateOf) => "Duplicate",
+        RelationKind::Semantic(CanonicalMirrorOf) => "Mirror",
+        RelationKind::Semantic(DependsOn) => "Depends",
+        RelationKind::Semantic(Blocks) => "Blocks",
+        RelationKind::Semantic(NextStep) => "Next",
+        RelationKind::Containment(UrlPath) => "Path",
+        RelationKind::Containment(Domain) => "Domain",
+        RelationKind::Containment(FileSystem) => "Filesystem",
+        RelationKind::Containment(UserFolder) => "Folder",
+        RelationKind::Containment(ClipSource) => "Clip",
+        RelationKind::Containment(NotebookSection) => "Section",
+        RelationKind::Containment(CollectionMember) => "Collection",
+        RelationKind::Arrangement(_) => "Arrangement",
+        RelationKind::Imported(_) => "Imported",
+        RelationKind::Provenance(ClippedFrom) => "Clipped",
+        RelationKind::Provenance(ExcerptedFrom) => "Excerpt",
+        RelationKind::Provenance(SummarizedFrom) => "Summary",
+        RelationKind::Provenance(TranslatedFrom) => "Translation",
+        RelationKind::Provenance(RewrittenFrom) => "Rewritten",
+        RelationKind::Provenance(GeneratedFrom) => "Generated",
+        RelationKind::Provenance(ExtractedFrom) => "Extracted",
+        RelationKind::Provenance(ImportedFromSource) => "Imported",
     }
 }
 

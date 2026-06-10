@@ -30,6 +30,17 @@ fn default_tab_cap() -> usize {
     12
 }
 
+/// Which window edge the shellbar strip is docked to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ShellbarEdge {
+    #[default]
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
 /// Persistable user settings. v0 carried the active-tab cap; `theme_id` joined
 /// with the runtime theme switcher. Future preferences join as their controls
 /// land, each with a serde default so old files keep parsing.
@@ -42,11 +53,14 @@ pub struct PersistedSettings {
     /// registry's default theme.
     #[serde(default)]
     pub theme_id: Option<String>,
+    /// Which window edge the shellbar is docked to. Defaults to Left.
+    #[serde(default)]
+    pub shellbar_edge: ShellbarEdge,
 }
 
 impl Default for PersistedSettings {
     fn default() -> Self {
-        Self { tab_cap: default_tab_cap(), theme_id: None }
+        Self { tab_cap: default_tab_cap(), theme_id: None, shellbar_edge: ShellbarEdge::default() }
     }
 }
 
@@ -109,7 +123,7 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let dir = temp_session_dir("round-trip");
-        let original = PersistedSettings { tab_cap: 7, theme_id: None };
+        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir).unwrap().expect("settings file should be present");
         assert_eq!(restored, original);
@@ -135,8 +149,8 @@ mod tests {
     #[test]
     fn save_overwrites_atomically_with_no_tmp_left() {
         let dir = temp_session_dir("overwrite");
-        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None }).unwrap();
-        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right }).unwrap();
         let restored = load_settings(&dir).unwrap().unwrap();
         assert_eq!(restored.tab_cap, 24);
         let tmp = settings_path(&dir).with_extension("json.tmp");

@@ -45,6 +45,12 @@ pub enum Command {
     /// Toggle the docked comms pane (conversations: misfin mail + murm cabals). A
     /// chrome-level action, like opening settings.
     ToggleComms,
+    /// Toggle the roster pane (graph manifest: nodes/edges/fields) (host action).
+    ToggleRoster,
+    /// Toggle the gloss / Navigator pane (host action).
+    ToggleGloss,
+    /// Toggle the apparatus pane (host diagnostics + settings) (host action).
+    ToggleApparatus,
     /// Toggle the selected-object inspector pane (host action).
     ToggleInspector,
     /// Toggle the live-operations steward pane (host action).
@@ -59,12 +65,15 @@ pub enum Command {
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 16] = [
+    pub const ALL: [Command; 19] = [
         Command::Back,
         Command::Forward,
         Command::Home,
         Command::ConnectPeer,
         Command::ToggleWorkbench,
+        Command::ToggleRoster,
+        Command::ToggleGloss,
+        Command::ToggleApparatus,
         Command::DeleteNode,
         Command::BackgroundNode,
         Command::HideSelectedEdge,
@@ -85,6 +94,9 @@ impl Command {
         matches!(
             self,
             Command::ToggleWorkbench
+                | Command::ToggleRoster
+                | Command::ToggleGloss
+                | Command::ToggleApparatus
                 | Command::DeleteNode
                 | Command::BackgroundNode
                 | Command::HideSelectedEdge
@@ -111,6 +123,9 @@ impl Command {
             Command::ShowAllEdges => "Show all edges",
             Command::OpenSettings => "Settings",
             Command::ToggleComms => "Comms (conversations)",
+            Command::ToggleRoster => "Roster (graph manifest)",
+            Command::ToggleGloss => "Gloss (navigator / map)",
+            Command::ToggleApparatus => "Apparatus (diagnostics + settings)",
             Command::ToggleInspector => "Inspector (selected object)",
             Command::ToggleSteward => "Steward (live operations)",
             Command::RetryFocusedContent => "Retry focused content",

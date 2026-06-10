@@ -76,6 +76,7 @@ mod inspector;
 mod observability;
 mod render;
 mod roster;
+mod shellbar;
 mod titlebar;
 mod tracing_layer;
 mod utility_panes;
@@ -305,6 +306,23 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             ".comms-field-label {{ font-size: 13px; color: {}; background-color: {}; padding: 8px 4px 2px 4px; }}",
             rgb(c.muted_text),
             rgb(c.panel_bg)
+        ),
+        // Shellbar: an absolutely-positioned chrome strip whose geometry the host
+        // sets inline each frame from the shellbar_rect() helper. Contains toggle
+        // buttons for each pane (F2.1).
+        format!(
+            ".shellbar {{ position: absolute; background-color: {}; display: flex; align-items: center; }}",
+            rgb(c.toolbar_bg)
+        ),
+        format!(
+            ".shellbar-btn {{ font-size: 17px; color: {}; background-color: {}; padding: 10px 8px; margin: 2px; }}",
+            rgb(c.control_text),
+            rgb(c.control_bg)
+        ),
+        format!(
+            ".shellbar-btn-active {{ font-size: 17px; color: {}; background-color: {}; padding: 10px 8px; margin: 2px; }}",
+            rgb(c.strong_text),
+            rgb(c.active_bg)
         ),
     ]
 }
@@ -546,6 +564,8 @@ struct App {
     /// The active-tab cap last written to the settings sidecar. Guards the persist
     /// path so an unchanged value isn't re-written on every chrome click.
     saved_tab_cap: usize,
+    /// Which window edge the shellbar is docked to. Persisted in settings.json.
+    shellbar_edge: session_runtime::ShellbarEdge,
     /// The kernel inbox: the typed receivers the I/O actors deliver on, behind the
     /// one winit wake. `user_event` is the single documented place that reads them.
     inbox: KernelInbox,
@@ -845,6 +865,7 @@ impl App {
             ),
             context_set: Vec::new(),
             saved_tab_cap: saved_settings.tab_cap,
+            shellbar_edge: saved_settings.shellbar_edge,
             inbox: KernelInbox {
                 fetch: fetch_rx,
                 sync: sync_rx,

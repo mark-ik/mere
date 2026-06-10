@@ -81,7 +81,7 @@ pub use switcher_thumbnail::{
     SwitcherThumbnail, SwitcherThumbnailOptions, ThumbnailEdge, ThumbnailNode,
     build_switcher_thumbnail,
 };
-pub use settings_store::{PersistedSettings, SETTINGS_FILENAME};
+pub use settings_store::{PersistedSettings, SETTINGS_FILENAME, ShellbarEdge};
 pub use tearout::{PaneDragPayload, TileDragPayload};
 pub use tile_state::{
     HistoryEntry, NavigateMode, SurfaceTileState, SurfaceTileStep, TileManager, TileState,

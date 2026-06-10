@@ -13,10 +13,12 @@ use xilem_serval::{
 
 use comms::{Direction, ProtocolKind};
 
+use session_runtime::ShellbarEdge;
+
 use super::command::Command;
 use super::nav;
 use super::suggest;
-use super::{Chrome, ContextMenu, HistoryStep};
+use super::{Chrome, ContextMenu, HistoryStep, ShellbarPaneStates};
 
 /// The erased view type meerkat's logic produces, so the toolbar's concrete
 /// `El<…>` tuple need not be spelled (it grows as the chrome does).
@@ -141,6 +143,10 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     if c.comms.is_open() {
         children.push(comms_pane(c));
     }
+    // Shellbar: always-visible pane-toggle strip docked to one window edge (F2.1).
+    // Its geometry is set inline each frame by the host via `set_attribute` on the
+    // `.shellbar` class node, following the comms-pane pattern.
+    children.push(shellbar_view(&c.shellbar_panes));
     // The context menu floats over everything (it is a transient cursor pop-up).
     if let Some(menu) = &c.context_menu {
         children.push(context_menu_view(menu));
@@ -477,6 +483,27 @@ pub fn submit_omnibar(c: &mut Chrome) {
     c.content_location = url.clone();
     c.history.visit(url);
     sync_chrome_from_history(c, true);
+}
+
+/// The shellbar strip: five pane-toggle buttons whose active state mirrors the
+/// current frame layout. The host positions the div inline each frame via the
+/// `.shellbar` class node, following the comms-pane geometry pattern (F2.1).
+fn shellbar_view(panes: &ShellbarPaneStates) -> ChromeView {
+    fn btn(label: &'static str, active: bool, cmd: Command) -> ChromeView {
+        let class = if active { "shellbar-btn-active" } else { "shellbar-btn" };
+        Box::new(on_click(
+            el::<_, Chrome, ()>("button", label).attr("class", class),
+            move |c: &mut Chrome, _: PointerClick| c.run_command(cmd),
+        )) as ChromeView
+    }
+    let buttons: Vec<ChromeView> = vec![
+        btn("\u{229e}", panes.workbench, Command::ToggleWorkbench), // ⊞
+        btn("\u{2261}", panes.roster, Command::ToggleRoster),       // ≡
+        btn("\u{25ce}", panes.gloss, Command::ToggleGloss),         // ◎
+        btn("\u{2699}", panes.apparatus, Command::ToggleApparatus), // ⚙
+        btn("\u{2709}", panes.comms, Command::ToggleComms),         // ✉
+    ];
+    Box::new(el::<_, Chrome, ()>("div", buttons).attr("class", "shellbar"))
 }
 
 /// Build the chrome via a [`ServalAppRunner`] over a fresh [`ScriptedDom`] — the

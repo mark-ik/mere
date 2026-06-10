@@ -24,10 +24,10 @@ fn toolbar_renders_from_reused_state() {
     let dom = runner.dom();
     let dom = dom.borrow();
     let root = runner.root();
-    assert_eq!(count_tag(&dom, root, "button"), 3, "back + forward + workbench buttons");
+    assert_eq!(count_tag(&dom, root, "button"), 8, "back + forward + workbench toolbar buttons + 5 shellbar buttons");
     assert_eq!(count_tag(&dom, root, "input"), 1, "the omnibar input");
-    // chrome container + toolbar row + sync chip + (empty, closed) suggestions.
-    assert_eq!(count_tag(&dom, root, "div"), 4, "chrome + toolbar + sync-chip + suggestions");
+    // chrome container + toolbar row + sync chip + (empty) suggestions + shellbar.
+    assert_eq!(count_tag(&dom, root, "div"), 5, "chrome + toolbar + sync-chip + suggestions + shellbar");
 }
 
 /// A back-button click records a one-shot history step for the host to apply to
@@ -181,8 +181,8 @@ fn palette_open_renders_rows() {
     assert_eq!(count_class(&dom, root, "palette"), 1, "the panel");
     assert_eq!(
         count_class(&dom, root, "cmd-row"),
-        16,
-        "chrome verbs + Tile / Delete / Background / Hide edge / Show edges / Settings / Comms / Inspector / Steward / operation hooks",
+        19,
+        "chrome verbs + Tile / Roster / Gloss / Apparatus / Delete / Background / Hide edge / Show edges / Settings / Comms / Inspector / Steward / operation hooks",
     );
 }
 

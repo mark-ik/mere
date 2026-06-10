@@ -195,6 +195,19 @@ impl App {
                             return;
                         }
                     }
+                    // The shellbar strip: right-click opens the move menu. (Shellbar F2.2.)
+                    let sb = super::shellbar::shellbar_rect(
+                        self.shellbar_edge,
+                        self.width as f32,
+                        self.height as f32,
+                        th,
+                    );
+                    if x >= sb[0] && x < sb[2] && y >= sb[1] && y < sb[3] {
+                        if button == MouseButton::Right {
+                            self.open_shellbar_menu_at(x, y);
+                        }
+                        return;
+                    }
                     // Route by content pane (the orrery + the workbench coexist).
                     // A press in either makes it the active (nav-target) pane.
                     let in_workbench = self

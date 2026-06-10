@@ -41,6 +41,7 @@ use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;
 use chrome::toolbar::ToolbarState;
 use comms::{CommsPane, ConversationId, Draft, ProtocolKind};
+pub use session_runtime::ShellbarEdge;
 use xilem_serval::TextInput;
 
 pub mod command;
@@ -148,6 +149,23 @@ pub struct Chrome {
     pub comms_new_to: TextInput,
     /// The compose-new form's body editing buffer.
     pub comms_new_body: TextInput,
+    /// Which panes are currently open — mirrored from App's frame_layout each
+    /// frame so the shellbar buttons show the correct active state.
+    pub shellbar_panes: ShellbarPaneStates,
+    /// Which window edge the shellbar is docked to — mirrored from App so the
+    /// view builds the right flex direction.
+    pub shellbar_edge: ShellbarEdge,
+}
+
+/// Which panes are currently open in the frame tree. The host syncs this into
+/// Chrome before each render pass so the shellbar buttons reflect live state.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ShellbarPaneStates {
+    pub workbench: bool,
+    pub roster: bool,
+    pub gloss: bool,
+    pub apparatus: bool,
+    pub comms: bool,
 }
 
 /// A comms action the host runs against the live `Comms` on the chrome's behalf:
@@ -213,12 +231,15 @@ impl ContextItem {
     }
 }
 
-/// What a context-menu row asks the host to do with the menu's member set: open
-/// each in its own split, or gather them into one tab-stack.
+/// What a context-menu row asks the host to do. Orrery node menus use
+/// `OpenSplits`/`Stack` (against the `context_set`); the shellbar right-click
+/// menu uses `ShellbarMove` (a global preference change, no member set needed).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ContextAction {
     OpenSplits,
     Stack,
+    /// Redock the shellbar to `edge`. Drains without touching `context_set`.
+    ShellbarMove(ShellbarEdge),
 }
 
 impl Chrome {
@@ -257,6 +278,8 @@ impl Chrome {
             comms_intent: None,
             comms_new_to: TextInput::new(""),
             comms_new_body: TextInput::new(""),
+            shellbar_panes: ShellbarPaneStates::default(),
+            shellbar_edge: ShellbarEdge::default(),
         }
     }
 
@@ -405,6 +428,9 @@ impl Chrome {
             // Chrome-level too: toggle the docked comms pane in place.
             Command::ToggleComms => self.toggle_comms(),
             Command::ToggleWorkbench
+            | Command::ToggleRoster
+            | Command::ToggleGloss
+            | Command::ToggleApparatus
             | Command::DeleteNode
             | Command::BackgroundNode
             | Command::HideSelectedEdge

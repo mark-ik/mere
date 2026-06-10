@@ -21,9 +21,10 @@ use super::resources::{ResourceLoader, ResourceStore};
 use frame::PaneContent;
 
 use super::{
-    App, CARD_BG, FALLBACK_TOOLBAR_H, all_with_class, first_with_class, frame_view,
+    App, CARD_BG, FALLBACK_TOOLBAR_H, all_with_class, first_with_class, frame_view, shellbar,
     measure_class_bottom, member_attr,
 };
+use meerkat::ShellbarPaneStates;
 
 impl App {
     /// The toolbar-band height (px), measuring + caching it on first use. The
@@ -73,10 +74,34 @@ impl App {
         // before laying the panes out, so the other panes make room for it. (Comms.)
         self.sync_comms_pane();
 
+        // Sync shellbar pane-open states + edge into Chrome before the runner so
+        // the view rebuilds with current active states. (Shellbar F2.1.)
+        let sb_panes = ShellbarPaneStates {
+            workbench: self.pane_of_content(&PaneContent::Workbench).is_some(),
+            roster: self.pane_of_content(&PaneContent::Roster).is_some(),
+            gloss: self.pane_of_content(&PaneContent::Gloss).is_some(),
+            apparatus: self.pane_of_content(&PaneContent::Apparatus).is_some(),
+            comms: self.pane_of_content(&PaneContent::Comms).is_some(),
+        };
+        let sb_edge = self.shellbar_edge;
+        if self.runner.state().shellbar_panes != sb_panes
+            || self.runner.state().shellbar_edge != sb_edge
+        {
+            self.runner.update(move |c| {
+                c.shellbar_panes = sb_panes;
+                c.shellbar_edge = sb_edge;
+            });
+        }
+
         // Frame tree: the content band (below the toolbar) split into pane rects.
-        // The orrery (always) renders into its leaf; the workbench + summoned panes
-        // render into theirs. With a single leaf, `orrery_rect` is the whole band.
-        let band = [0.0, toolbar_h as f32, w as f32, h as f32];
+        // The shellbar strip is carved out of the band first; the frame tree fills
+        // the remainder. (Shellbar F2.1.)
+        let band = shellbar::band_after_shellbar(
+            self.shellbar_edge,
+            w as f32,
+            h as f32,
+            toolbar_h as f32,
+        );
         let leaves = frame_view::leaf_rects(&self.frame_layout, band, self.maximized_pane);
         // The orrery is the always-present graph pane; the tiled workbench is its
         // summonable sibling. Each renders into its own leaf. (Workbench-as-pane.)
@@ -125,6 +150,34 @@ impl App {
             }
         });
         let scroll = ScrollOffsets::<NodeId>::default();
+        // Position the shellbar strip at its docked edge. The flex-direction
+        // follows the edge so buttons stack vertically (Left/Right) or
+        // horizontally (Top/Bottom). (Shellbar F2.1.)
+        {
+            let sr = shellbar::shellbar_rect(self.shellbar_edge, w as f32, h as f32, toolbar_h as f32);
+            let flex_dir = match self.shellbar_edge {
+                session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right => {
+                    "column"
+                }
+                session_runtime::ShellbarEdge::Top | session_runtime::ShellbarEdge::Bottom => {
+                    "row"
+                }
+            };
+            let mut dom = self.dom.borrow_mut();
+            let root = dom.document();
+            if let Some(node) = first_with_class(&dom, root, "shellbar") {
+                let style = format!(
+                    "position: absolute; left: {}px; top: {}px; width: {}px; height: {}px; flex-direction: {};",
+                    sr[0],
+                    sr[1],
+                    (sr[2] - sr[0]).max(0.0),
+                    (sr[3] - sr[1]).max(0.0),
+                    flex_dir,
+                );
+                let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
+                dom.set_attribute(node, attr, &style);
+            }
+        }
         // Position the chrome's comms overlay into its frame leaf (it's chrome-
         // rendered but laid out by the frame tree): set the geometry inline so it
         // fills the reserved Comms leaf rect. (Comms pane.)
