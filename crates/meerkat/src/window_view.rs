@@ -14,7 +14,7 @@
 //! pure view state (geometry of *this* window's surface this frame), so they
 //! move here first. (Multi-window plan MW1.)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use forme::GraphMemberId;
@@ -93,4 +93,21 @@ pub(crate) struct WindowView {
     /// In-progress session rename: the target session + its edit buffer. `Some` while
     /// the switcher label is being typed (F2 / right-click a tile).
     pub(crate) renaming: Option<(SessionId, String)>,
+
+    // ── View-session state: what this window is looking at within the shared
+    //    graph (its focus, its live cards, its nav target). ─────────────────────
+    /// Whether this window's orrery has been centered on its content band yet.
+    pub(crate) centered: bool,
+    /// The navigation target last synced into the orrery via `visit`; guards
+    /// re-visiting. Mirrors this window's chrome `content_location`.
+    pub(crate) content_location: String,
+    /// The location last pushed into the omnibar by focus-follow, so it only updates
+    /// when the focused tile / node actually changes (not every frame).
+    pub(crate) shown_location: Option<String>,
+    /// The tile in focus in this window's tiled view (the last activated / opened
+    /// member), so the omnibar can show its URL. `None` outside Tree / with no tiles.
+    pub(crate) focused_tile: Option<GraphMemberId>,
+    /// Nodes promoted to a *live* preview card in this window (double-clicked up from
+    /// their snapshot). Drives `needed_members` in Cartography.
+    pub(crate) live_previews: HashSet<GraphMemberId>,
 }

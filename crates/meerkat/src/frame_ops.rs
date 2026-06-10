@@ -40,7 +40,7 @@ impl App {
     /// in the orrery the focused node. `None` when nothing is focused.
     pub(super) fn current_focus_url(&self) -> Option<String> {
         if self.workbench_active() {
-            let member = self.focused_tile?;
+            let member = self.view.focused_tile?;
             self.orrery
                 .graph()
                 .get_node_by_id(member)
@@ -55,10 +55,10 @@ impl App {
     /// omnibar (no chrome field holds the caret) — so it never clobbers typing.
     pub(super) fn sync_location(&mut self) {
         let url = self.current_focus_url();
-        if url == self.shown_location {
+        if url == self.view.shown_location {
             return;
         }
-        self.shown_location = url.clone();
+        self.view.shown_location = url.clone();
         if let (Some(url), None) = (url, self.runner.focus()) {
             self.runner.update(move |c| c.show_location(&url));
             self.request_redraw();
@@ -94,19 +94,19 @@ impl App {
                 if !stacked {
                     self.workbench.open_tile(new_member);
                 }
-                self.focused_tile = Some(new_member);
+                self.view.focused_tile = Some(new_member);
             } else {
                 // Cartography: opening a node is deliberate — show it as a live
                 // card straight away (passive focus shows only the snapshot).
-                self.live_previews.insert(new_member);
+                self.view.live_previews.insert(new_member);
             }
             self.ensure_content(&loc);
-            self.content_location = loc;
+            self.view.content_location = loc;
             self.save_session();
             self.request_redraw();
             return;
         }
-        if loc == self.content_location {
+        if loc == self.view.content_location {
             return;
         }
         match self.nav_target_member() {
@@ -123,11 +123,11 @@ impl App {
         // active the node already tiled, so no card.
         if !self.workbench_active() {
             if let Some(member) = self.focused_member() {
-                self.live_previews.insert(member);
+                self.view.live_previews.insert(member);
             }
         }
         self.ensure_content(&loc);
-        self.content_location = loc;
+        self.view.content_location = loc;
         self.save_session();
         self.request_redraw();
     }
@@ -136,7 +136,7 @@ impl App {
     /// selected node in Cartography. `None` when nothing is focused.
     fn nav_target_member(&self) -> Option<GraphMemberId> {
         if self.workbench_active() {
-            self.focused_tile
+            self.view.focused_tile
         } else {
             self.orrery.focused_member()
         }
@@ -163,7 +163,7 @@ impl App {
             return;
         };
         self.view.scroll.remove(&member); // the revealed page starts at the top
-        self.content_location = url.clone();
+        self.view.content_location = url.clone();
         self.ensure_content(&url);
         self.runner.update(|c| {
             c.content_location = url.clone();
@@ -451,9 +451,9 @@ impl App {
         match restored_view.as_ref().and_then(|v| v.camera.as_ref()) {
             Some(snapshot) => {
                 self.orrery.set_camera(super::snapshot_to_camera(snapshot));
-                self.centered = true;
+                self.view.centered = true;
             }
-            None => self.centered = false,
+            None => self.view.centered = false,
         }
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
             self.orrery.select_by_url(url);
@@ -474,12 +474,12 @@ impl App {
         // Reset the prior session's runtime caches.
         self.constellation.clear();
         self.content.clear();
-        self.live_previews.clear();
+        self.view.live_previews.clear();
         self.view.tile_textures.clear();
         self.view.snapshot_textures.clear();
         self.view.scroll.clear();
-        self.focused_tile = None;
-        self.shown_location = None;
+        self.view.focused_tile = None;
+        self.view.shown_location = None;
         self.view.renaming = None;
         self.workbench = platen::Workbench::new();
         self.maximized_pane = None;
@@ -487,7 +487,7 @@ impl App {
         // Swap identity; the omnibar nav target follows the new orrery focus.
         self.session_dir = session_dir;
         self.active_session_id = id;
-        self.content_location = self
+        self.view.content_location = self
             .orrery
             .focused_url()
             .unwrap_or("mere://welcome")
@@ -542,7 +542,7 @@ impl App {
             }
             // Focus the node the open was seeded from (the primary selection), so the
             // omnibar shows its URL; fall back to the first opened tile.
-            self.focused_tile = self
+            self.view.focused_tile = self
                 .orrery
                 .selected_members()
                 .first()
@@ -640,7 +640,7 @@ impl App {
         // member set involved — return before the orrery-tile logic below.
         if let ContextAction::ShellbarMove(edge) = action {
             self.shellbar_edge = edge;
-            self.centered = false; // orrery band changed; recenter once
+            self.view.centered = false; // orrery band changed; recenter once
             self.toolbar_h = 0;   // re-measure (band height may change if Top/Bottom)
             self.persist_settings();
             self.request_redraw();
@@ -674,7 +674,7 @@ impl App {
     /// both, because the node itself is gone.
     pub(super) fn delete_focused_node(&mut self) {
         if let Some(member) = self.orrery.remove_focused() {
-            self.live_previews.remove(&member);
+            self.view.live_previews.remove(&member);
             self.constellation.reap(member);
             self.save_session();
             self.request_redraw();
@@ -739,11 +739,11 @@ impl App {
             self.workbench.close_tile(member);
             if self.workbench.open_members().is_empty() {
                 self.close_workbench();
-            } else if self.focused_tile == Some(member) {
-                self.focused_tile = self.workbench.open_members().first().copied();
+            } else if self.view.focused_tile == Some(member) {
+                self.view.focused_tile = self.workbench.open_members().first().copied();
             }
         }
-        self.live_previews.remove(&member);
+        self.view.live_previews.remove(&member);
         self.constellation.reap(member);
         self.observability
             .record_actor("content", "stopped", Some(member.to_string()));
@@ -764,7 +764,7 @@ impl App {
         if let Some(url) = self.current_focus_url() {
             self.ensure_content(&url);
         }
-        self.live_previews.insert(member);
+        self.view.live_previews.insert(member);
         let needed = self.needed_members();
         self.constellation.reconcile(&needed);
         if self.constellation.set_background(member, true) {
@@ -781,7 +781,7 @@ impl App {
         // The orrery and the workbench coexist, so the active set is the union: the
         // orrery's live-preview cards plus (when the workbench pane is open) every
         // open tile across every slot. A node showing in both counts once.
-        let mut needed: Vec<GraphMemberId> = self.live_previews.iter().copied().collect();
+        let mut needed: Vec<GraphMemberId> = self.view.live_previews.iter().copied().collect();
         if self.workbench_open() {
             for member in self.workbench.open_members() {
                 if !needed.contains(&member) {
@@ -801,10 +801,10 @@ impl App {
         let Some(member) = self.focused_member() else {
             return;
         };
-        if self.live_previews.remove(&member) {
+        if self.view.live_previews.remove(&member) {
             self.constellation.reap(member); // demote: actor down, scene -> snapshot
         } else {
-            self.live_previews.insert(member);
+            self.view.live_previews.insert(member);
         }
         self.request_redraw();
     }
@@ -896,7 +896,7 @@ impl App {
         match action {
             WorkbenchAction::Activate(member) => {
                 self.workbench.activate(member);
-                self.focused_tile = Some(member);
+                self.view.focused_tile = Some(member);
             }
             WorkbenchAction::Close(member) => {
                 self.workbench.close_tile(member);
@@ -906,8 +906,8 @@ impl App {
                     // to just the orrery), rather than leaving an empty pane.
                     // (Workbench-as-pane.)
                     self.close_workbench();
-                } else if self.focused_tile == Some(member) {
-                    self.focused_tile = self.workbench.open_members().first().copied();
+                } else if self.view.focused_tile == Some(member) {
+                    self.view.focused_tile = self.workbench.open_members().first().copied();
                 }
             }
             WorkbenchAction::TogglePin(member) => {
@@ -1141,7 +1141,7 @@ impl App {
                 self.frame_layout.close_leaf(&path);
             }
         }
-        self.focused_tile = None;
+        self.view.focused_tile = None;
         self.active_content = super::ContentPane::Orrery;
         self.maximized_pane = None;
         self.observability

@@ -215,9 +215,9 @@ impl App {
         // centered once). The tiled workbench, when its pane is open, composites a
         // separate scene into its own leaf — the two coexist now, no longer toggled.
         self.orrery.resize(orrery_w, orrery_h);
-        if !self.centered {
+        if !self.view.centered {
             self.orrery.recenter();
-            self.centered = true;
+            self.view.centered = true;
         }
         let (orrery_scene, orrery_redraw) = self.orrery.frame(orrery_w, orrery_h);
         // The workbench root (a serval flex-DOM document) for the Workbench pane;
@@ -352,7 +352,7 @@ impl App {
                 .orrery
                 .focused_node_screen()
                 .map(|(nx, ny)| (orrery_rect[0] + nx, orrery_rect[1] + ny));
-            if self.live_previews.contains(&member) {
+            if self.view.live_previews.contains(&member) {
                 const LIVE_W: u32 = 300;
                 const LIVE_H: u32 = 400;
                 let rect = node

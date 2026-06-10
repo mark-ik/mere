@@ -383,12 +383,6 @@ struct App {
     /// The content root: the [`Orrery`] — the graph's spatial presentation,
     /// rendered into the band below the chrome and driven by content-band input.
     orrery: Orrery,
-    /// The navigation target last synced into the orrery via `visit`; guards
-    /// re-visiting. Mirrors the chrome's `content_location`.
-    content_location: String,
-    /// Whether the orrery has been centered on its content band yet (done once,
-    /// the first render after the toolbar height is known).
-    centered: bool,
     /// The fetch actor's command handle (the kernel commands it over this; its
     /// outcomes arrive on `inbox.fetch`).
     fetch_handle: armillary::ActorHandle<fetch::FetchCommand>,
@@ -449,17 +443,6 @@ struct App {
     clipboard: Option<arboard::Clipboard>,
     /// Last cursor position in physical pixels (window space == content space).
     cursor: (f32, f32),
-    /// The tile in focus in the tiled view (the last activated / opened member), so
-    /// the omnibar can show its URL. `None` outside the tiled view or with no tiles.
-    focused_tile: Option<GraphMemberId>,
-    /// Nodes promoted to a *live* preview card (double-clicked up from their "last
-    /// visit" snapshot). Drives `needed_members` in Cartography, so a node is active
-    /// only when it has a live preview (or a tile) — focusing alone shows the static
-    /// snapshot with no actor. (Card system P2/P3.)
-    live_previews: std::collections::HashSet<GraphMemberId>,
-    /// The location last pushed into the omnibar by focus-follow, so it only updates
-    /// when the focused tile / node actually changes (not every frame).
-    shown_location: Option<String>,
     /// The nematic engine registry, for rendering "last visit" snapshot cards
     /// host-side from the durable content cache (no actor) — the same registry the
     /// content actor builds, kept here for the snapshot path. (Card #4.)
@@ -756,12 +739,13 @@ impl App {
             }
         }
         let a11y_proxy = proxy.clone();
+        let mut view = window_view::WindowView::default();
+        view.centered = restored_camera.is_some();
+        view.content_location = content_location;
         let mut app = Self {
             dom,
             runner,
             orrery,
-            content_location,
-            centered: restored_camera.is_some(),
             fetch_handle,
             constellation,
             sync_handle,
@@ -773,7 +757,7 @@ impl App {
             active_session_id,
             session_thumbnails: HashMap::new(),
             session_labels: HashMap::new(),
-            view: window_view::WindowView::default(),
+            view,
             host_text: text::HostText::new(),
             store,
             toolbar_h: 0,
@@ -782,9 +766,6 @@ impl App {
             modifiers: Modifiers::default(),
             clipboard: arboard::Clipboard::new().ok(),
             cursor: (0.0, 0.0),
-            live_previews: std::collections::HashSet::new(),
-            focused_tile: None,
-            shown_location: None,
             engine_registry,
             chrome_sheet,
             chrome_theme,

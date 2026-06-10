@@ -294,3 +294,15 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   (`focused_tile`, `live_previews`, `content_location`, `shown_location`,
   `active_content`, `maximized_pane`, `next_pane_id`, switcher caches, `host_text`)
   are the last MW1 cluster.
+- 2026-06-10: **MW1 clean-carve complete — view-session cluster moved (32 fields
+  total).** `WindowView` now also holds `centered`, `content_location`,
+  `shown_location`, `focused_tile`, `live_previews` (what this window looks at within
+  the shared graph). Careful exclusions: `content_location` is also a `Chrome` field in
+  the meerkat *library* — only the bin's `App` accesses were rewritten; the switcher
+  caches (`session_thumbnails` / `session_labels`) + `host_text` are **shared-derived**,
+  so they stay on `App` headed for `SharedState`, not `WindowView`. The frame cluster
+  (`frame_layout`, `next_pane_id`, `maximized_pane`, `active_content`) + the structural
+  fields (`window`, `host`, `runner`/`dom`, `workbench*`, `cursor`, `modifiers`,
+  `toolbar_h`, size) move in **MW2** with the `App`→`Shell` reshape, the `ShellCommand`
+  seam, and the method-receiver shift to `(&mut WindowView, &mut SharedState)`. 36
+  bin-file access sites updated; behavior-preserving (44 lib + 63 bin green).

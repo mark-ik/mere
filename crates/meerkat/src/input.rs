@@ -189,7 +189,7 @@ impl App {
                     // (its last scene is kept as the node's snapshot).
                     if button == MouseButton::Left {
                         if let Some(member) = self.close_button_at(x, y) {
-                            self.live_previews.remove(&member);
+                            self.view.live_previews.remove(&member);
                             self.constellation.reap(member);
                             self.request_redraw();
                             return;
@@ -329,7 +329,7 @@ impl App {
                                     self.workbench.move_to_slot_of(member, target)
                                 };
                                 if moved {
-                                    self.focused_tile = Some(member);
+                                    self.view.focused_tile = Some(member);
                                     self.request_redraw();
                                 }
                             }
