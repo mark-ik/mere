@@ -52,8 +52,8 @@ impl WindowCtx<'_> {
     pub(super) fn resize(&mut self, width: u32, height: u32) {
         self.view.width = width.max(1);
         self.view.height = height.max(1);
-        if let Some(host) = self.view.host.as_mut() {
-            host.resize(self.view.width, self.view.height);
+        if let (Some(surface), Some(core)) = (self.view.surface.as_mut(), self.render_core) {
+            surface.resize(core, self.view.width, self.view.height);
         }
         self.refresh_a11y_summary();
         self.view.request_redraw();
@@ -65,7 +65,7 @@ impl WindowCtx<'_> {
     /// dropdown float above the content while the rest lets the orrery show
     /// through. Composite order is content first, then chrome on top.
     pub(super) fn render(&mut self) {
-        if self.view.host.is_none() {
+        if self.view.surface.is_none() || self.render_core.is_none() {
             return;
         }
         let (w, h) = (self.view.width.max(1), self.view.height.max(1));
@@ -370,12 +370,12 @@ impl WindowCtx<'_> {
                         // node; drive the UI-thread scrying pool (spawn /
                         // resize / navigate + non-blocking frame import)
                         // instead of a content actor.
-                        if let (Some(window), Some(host)) =
-                            (self.view.window.as_ref(), self.view.host.as_ref())
+                        if let (Some(window), Some(core)) =
+                            (self.view.window.as_ref(), self.render_core)
                         {
                             let window = window.clone();
-                            let device = host.device().clone();
-                            let queue = host.queue().clone();
+                            let device = core.device().clone();
+                            let queue = core.queue().clone();
                             let session_dir = self.shared.session.session_dir.clone();
                             self.view.scrying.drive(
                                 member,
@@ -487,8 +487,11 @@ impl WindowCtx<'_> {
             None
         };
 
-        let host = self.view.host.as_ref().unwrap();
-        let (_chrome_tex, chrome_view) = host.rasterize(
+        // The shared core (rasterize / compose) + this window's surface (acquire /
+        // format); both checked present at the method entry. (MW3: one device, N surfaces.)
+        let core = self.render_core.expect("render core present");
+        let surface = self.view.surface.as_ref().expect("window surface present");
+        let (_chrome_tex, chrome_view) = core.rasterize(
             &chrome_scene,
             w,
             h,
@@ -502,7 +505,7 @@ impl WindowCtx<'_> {
             b: 0.100,
             a: 1.0,
         };
-        let (_orrery_tex, orrery_view) = host.rasterize(
+        let (_orrery_tex, orrery_view) = core.rasterize(
             &orrery_scene,
             orrery_w,
             orrery_h,
@@ -512,7 +515,7 @@ impl WindowCtx<'_> {
         // bound to `_workbench_tex` so it outlives the composite below.
         let (_workbench_tex, workbench_view) = match workbench_scene.as_ref() {
             Some((scene, ww, wh)) => {
-                let (tex, view) = host.rasterize(scene, *ww, *wh, ColorLoad::Clear(backdrop));
+                let (tex, view) = core.rasterize(scene, *ww, *wh, ColorLoad::Clear(backdrop));
                 (Some(tex), Some(view))
             }
             None => (None, None),
@@ -544,7 +547,7 @@ impl WindowCtx<'_> {
                 .is_some_and(|c| c.version == version && c.size == (*cw, tex_h));
             if !fresh {
                 if let Some(scene) = self.shared.content.constellation.scene(*member) {
-                    let (tex, view) = host.rasterize(scene, *cw, tex_h, ColorLoad::Clear(CARD_BG));
+                    let (tex, view) = core.rasterize(scene, *cw, tex_h, ColorLoad::Clear(CARD_BG));
                     self.view.tile_textures.insert(
                         *member,
                         super::CachedTile {
@@ -561,16 +564,16 @@ impl WindowCtx<'_> {
             }
         }
 
-        let Some(frame) = host.acquire() else { return };
+        let Some(frame) = surface.acquire(core) else { return };
         let target_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let format = host.format();
+        let format = surface.format();
         // Content fills [toolbar_h, h] (dest_rect is [x0, y0, x1, y1] corners;
         // viewport is the full surface). Then each content card floats over it, and
         // the transparent-cleared chrome composites over the whole window — toolbar
         // + dropdown on top, the rest letting the content through.
-        host.renderer().compose_external_texture(
+        core.renderer().compose_external_texture(
             &orrery_view,
             &target_view,
             format,
@@ -579,7 +582,7 @@ impl WindowCtx<'_> {
             ExternalTexturePlacement::new(orrery_rect),
         );
         if let (Some(wb_view), Some(wr)) = (&workbench_view, workbench_rect) {
-            host.renderer().compose_external_texture(
+            core.renderer().compose_external_texture(
                 wb_view,
                 &target_view,
                 format,
@@ -611,7 +614,7 @@ impl WindowCtx<'_> {
                 .unwrap_or(0.0)
                 .clamp(0.0, max_scroll);
             let uv = [0.0, scroll / tex_h, 1.0, (scroll + visible_h) / tex_h];
-            host.renderer().compose_external_texture(
+            core.renderer().compose_external_texture(
                 &cached.view,
                 &target_view,
                 format,
@@ -626,7 +629,7 @@ impl WindowCtx<'_> {
         self.view.scrying_rect = scrying_card;
         if let Some((member, dest)) = scrying_card {
             if let Some(view) = self.view.scrying.texture_view(member) {
-                host.renderer().compose_external_texture(
+                core.renderer().compose_external_texture(
                     view,
                     &target_view,
                     format,
@@ -649,7 +652,7 @@ impl WindowCtx<'_> {
             let size = btn.round().max(1.0) as u32;
             if self.view.close_button_tex.as_ref().map(|c| c.size) != Some((size, size)) {
                 let scene = super::card::close_button_scene(size);
-                let (tex, view) = host.rasterize(
+                let (tex, view) = core.rasterize(
                     &scene,
                     size,
                     size,
@@ -667,7 +670,7 @@ impl WindowCtx<'_> {
                 let bx0 = bx1 - btn;
                 let by0 = dest[1] + inset;
                 let by1 = by0 + btn;
-                host.renderer().compose_external_texture(
+                core.renderer().compose_external_texture(
                     &cached.view,
                     &target_view,
                     format,
@@ -684,7 +687,7 @@ impl WindowCtx<'_> {
         if let Some((member, url, rect, built)) = snapshot_card {
             if let Some((scene, content_h)) = built {
                 let tex_h = content_h.max(1).min(MAX_CARD_TEX_H);
-                let (tex, view) = host.rasterize(&scene, 300, tex_h, ColorLoad::Clear(CARD_BG));
+                let (tex, view) = core.rasterize(&scene, 300, tex_h, ColorLoad::Clear(CARD_BG));
                 self.view.snapshot_textures.insert(
                     url.clone(),
                     super::CachedTile {
@@ -710,7 +713,7 @@ impl WindowCtx<'_> {
                     .unwrap_or(0.0)
                     .clamp(0.0, max_scroll);
                 let uv = [0.0, scroll / tex_h, 1.0, (scroll + visible_h) / tex_h];
-                host.renderer().compose_external_texture(
+                core.renderer().compose_external_texture(
                     &cached.view,
                     &target_view,
                     format,
@@ -727,7 +730,7 @@ impl WindowCtx<'_> {
             let uh = (rect[3] - rect[1]).round().max(1.0) as u32;
             if self.view.unvisited_tex.as_ref().map(|c| c.size) != Some((uw, uh)) {
                 let scene = super::card::unvisited_card_scene(uw, uh);
-                let (tex, view) = host.rasterize(&scene, uw, uh, ColorLoad::Clear(CARD_BG));
+                let (tex, view) = core.rasterize(&scene, uw, uh, ColorLoad::Clear(CARD_BG));
                 self.view.unvisited_tex = Some(super::CachedTile {
                     version: 0,
                     size: (uw, uh),
@@ -736,7 +739,7 @@ impl WindowCtx<'_> {
                 });
             }
             if let Some(cached) = &self.view.unvisited_tex {
-                host.renderer().compose_external_texture(
+                core.renderer().compose_external_texture(
                     &cached.view,
                     &target_view,
                     format,
@@ -753,7 +756,7 @@ impl WindowCtx<'_> {
                 let mut scene = netrender::Scene::new(1, 1);
                 scene.push_rect(0.0, 0.0, 1.0, 1.0, [0.04, 0.05, 0.07, 1.0]);
                 let (tex, view) =
-                    host.rasterize(&scene, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    core.rasterize(&scene, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
                 self.view.divider_tex = Some(super::CachedTile {
                     version: 0,
                     size: (1, 1),
@@ -763,7 +766,7 @@ impl WindowCtx<'_> {
             }
             if let Some(cached) = &self.view.divider_tex {
                 for d in &dividers {
-                    host.renderer().compose_external_texture(
+                    core.renderer().compose_external_texture(
                         &cached.view,
                         &target_view,
                         format,
@@ -809,8 +812,8 @@ impl WindowCtx<'_> {
                 b: pb[2] as f64 / 255.0,
                 a: 1.0,
             };
-            let (_t, view) = host.rasterize(&scene, rw, rh, ColorLoad::Clear(clear));
-            host.renderer().compose_external_texture(
+            let (_t, view) = core.rasterize(&scene, rw, rh, ColorLoad::Clear(clear));
+            core.renderer().compose_external_texture(
                 &view,
                 &target_view,
                 format,
@@ -863,8 +866,8 @@ impl WindowCtx<'_> {
                 b: pb[2] as f64 / 255.0,
                 a: 1.0,
             };
-            let (_t, view) = host.rasterize(&scene, aw, ah, ColorLoad::Clear(clear));
-            host.renderer().compose_external_texture(
+            let (_t, view) = core.rasterize(&scene, aw, ah, ColorLoad::Clear(clear));
+            core.renderer().compose_external_texture(
                 &view,
                 &target_view,
                 format,
@@ -909,8 +912,8 @@ impl WindowCtx<'_> {
                 b: pb[2] as f64 / 255.0,
                 a: 1.0,
             };
-            let (_t, view) = host.rasterize(&scene, pw, ph, ColorLoad::Clear(clear));
-            host.renderer().compose_external_texture(
+            let (_t, view) = core.rasterize(&scene, pw, ph, ColorLoad::Clear(clear));
+            core.renderer().compose_external_texture(
                 &view,
                 &target_view,
                 format,
@@ -935,8 +938,8 @@ impl WindowCtx<'_> {
                 b: pb[2] as f64 / 255.0,
                 a: 1.0,
             };
-            let (_t, view) = host.rasterize(&scene, gw, gh, ColorLoad::Clear(clear));
-            host.renderer().compose_external_texture(
+            let (_t, view) = core.rasterize(&scene, gw, gh, ColorLoad::Clear(clear));
+            core.renderer().compose_external_texture(
                 &view,
                 &target_view,
                 format,
@@ -956,7 +959,7 @@ impl WindowCtx<'_> {
                 ));
             }
         }
-        host.renderer().compose_external_texture(
+        core.renderer().compose_external_texture(
             &chrome_view,
             &target_view,
             format,
@@ -971,7 +974,7 @@ impl WindowCtx<'_> {
         let strip_w = super::titlebar::CONTROLS_W.round().max(1.0) as u32;
         if self.view.window_controls_tex.as_ref().map(|c| c.size) != Some((strip_w, band_h)) {
             let scene = super::titlebar::controls_scene(band_h, &self.shared.presentation.chrome_theme);
-            let (tex, view) = host.rasterize(
+            let (tex, view) = core.rasterize(
                 &scene,
                 strip_w,
                 band_h,
@@ -986,7 +989,7 @@ impl WindowCtx<'_> {
         }
         if let Some(cached) = &self.view.window_controls_tex {
             let x0 = w as f32 - super::titlebar::CONTROLS_W;
-            host.renderer().compose_external_texture(
+            core.renderer().compose_external_texture(
                 &cached.view,
                 &target_view,
                 format,
@@ -1035,13 +1038,13 @@ impl WindowCtx<'_> {
                 renaming,
                 &mut self.shared.session.host_text,
             );
-            let (_t, view) = host.rasterize(
+            let (_t, view) = core.rasterize(
                 &scene,
                 region_w,
                 region_h,
                 ColorLoad::Clear(wgpu::Color::TRANSPARENT),
             );
-            host.renderer().compose_external_texture(
+            core.renderer().compose_external_texture(
                 &view,
                 &target_view,
                 format,

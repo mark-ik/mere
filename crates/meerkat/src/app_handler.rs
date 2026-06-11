@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use netrender::NetrenderOptions;
 use orrery::WHEEL_PAN_SCALE;
-use serval_winit_host::{SurfaceHost, modifiers_from_winit};
+use serval_winit_host::{RenderCore, modifiers_from_winit};
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
@@ -79,22 +79,40 @@ impl ApplicationHandler for Shell {
         view.width = size.width.max(1);
         view.height = size.height.max(1);
 
-        // The shared serval-on-winit present stack: wgpu + netrender boot, surface
-        // configured at the window size.
-        let options = NetrenderOptions {
-            tile_cache_size: Some(64),
-            enable_vello: true,
-            ..Default::default()
-        };
-        match SurfaceHost::boot(window.clone(), view.width, view.height, options) {
-            Ok(host) => view.host = Some(host),
+        // Boot the shared present core once (the first window): wgpu + netrender. Each
+        // window's surface is then created from it, so N windows share one device.
+        if self.render_core.is_none() {
+            let options = NetrenderOptions {
+                tile_cache_size: Some(64),
+                enable_vello: true,
+                ..Default::default()
+            };
+            match RenderCore::boot(options) {
+                Ok(core) => self.render_core = Some(core),
+                Err(err) => {
+                    eprintln!("[meerkat] {err}");
+                    self.pending_view = Some(view); // boot failed; keep the view to retry
+                    event_loop.exit();
+                    return;
+                }
+            }
+        }
+        // This window's swapchain surface, from the shared core.
+        let surface = match self
+            .render_core
+            .as_ref()
+            .expect("render core booted above")
+            .create_surface(window.clone(), view.width, view.height)
+        {
+            Ok(surface) => surface,
             Err(err) => {
                 eprintln!("[meerkat] {err}");
-                self.pending_view = Some(view); // boot failed; keep the view to retry
+                self.pending_view = Some(view); // surface failed; keep the view to retry
                 event_loop.exit();
                 return;
             }
-        }
+        };
+        view.surface = Some(surface);
         window.set_visible(true);
         window.request_redraw();
         view.window = Some(Arc::clone(&window));

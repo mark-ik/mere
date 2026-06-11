@@ -26,7 +26,7 @@ use meerkat::{Chrome, ChromeLogic, ChromeView};
 use platen::Workbench;
 use platen_view::{WorkbenchLogic, WorkbenchScene, WorkbenchTreeView};
 use serval_scripted_dom::ScriptedDom;
-use serval_winit_host::SurfaceHost;
+use serval_winit_host::WindowSurface;
 use winit::window::CursorIcon;
 use xilem_serval::{Modifiers, ServalAppRunner};
 
@@ -155,9 +155,10 @@ pub(crate) struct WindowView {
     //    All per-window by definition — a second window is a second of each. (MW2.) ─
     /// This view's OS window. `None` until the window is created on resume.
     pub(crate) window: Option<Arc<winit::window::Window>>,
-    /// The serval-on-winit present stack for this window's surface, built once the
-    /// window exists. (MW3 splits the shared device out of this; for now per-window.)
-    pub(crate) host: Option<SurfaceHost>,
+    /// This window's swapchain surface, created from the shared [`RenderCore`] once
+    /// the OS window exists. The device behind it lives on `Shell.render_core`, shared
+    /// across windows. `None` until resume. (MW3: one device, N surfaces.)
+    pub(crate) surface: Option<WindowSurface>,
     /// Cached measured height (px) of this window's chrome band; `0` until measured.
     pub(crate) toolbar_h: u32,
     /// This window's surface width (physical px).
@@ -238,7 +239,7 @@ impl WindowView {
             maximized_pane: Default::default(),
             active_content: Default::default(),
             window: Default::default(),
-            host: Default::default(),
+            surface: Default::default(),
             toolbar_h: Default::default(),
             width: 1024,
             height: 600,

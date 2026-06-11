@@ -50,6 +50,7 @@ use register_diagnostics::{DiagnosticEvent, install_global_sender};
 use register_theme::chrome::{ChromeTheme, Color32};
 use register_theme::theme::ThemeRegistry;
 use serval_scripted_dom::{NodeId, ScriptedDom};
+use serval_winit_host::RenderCore;
 use session_runtime::{
     ManifestStore, SwitcherThumbnail, frame_layout_store, manifest::GraphSessionManifest,
     session_graph_store, settings_store, view_intent_store,
@@ -510,6 +511,12 @@ struct Shell {
     /// window (and thus its `WindowId`) exists. winit splits construction from window
     /// creation, so the view outlives its registry key for exactly one step. (MW2 (d).)
     pending_view: Option<window_view::WindowView>,
+    /// The shared present core: one wgpu device + netrender `Renderer`, booted once on
+    /// the first `resumed`. Every window's `WindowSurface` is created from it, so N
+    /// windows present through one device. `None` until the first window boots it.
+    /// Shared infra, so it sits on `Shell` (like `clipboard`), not in `SharedState`.
+    /// (MW3: one device, N surfaces.)
+    render_core: Option<RenderCore>,
     /// System clipboard for the omnibar / palette Ctrl(Cmd)+C/X/V. `None` if the
     /// platform clipboard could not be opened (the shortcuts then no-op). System-
     /// global, so it stays on `Shell`, not in `SharedState`.
@@ -546,6 +553,9 @@ struct WindowCtx<'a> {
     clipboard: &'a mut Option<arboard::Clipboard>,
     a11y_bridge: &'a mut a11y_bridge::AccessKitBridge,
     a11y_action_routes: &'a mut HashMap<AccessNodeId, A11yHostAction>,
+    /// The shared present core (device + renderer). `None` before the first window
+    /// boots it, and in the headless harness; the render path early-returns then.
+    render_core: Option<&'a RenderCore>,
 }
 
 /// A tile's cached rasterized texture: the scene version + size it was rasterized
@@ -842,6 +852,7 @@ impl Shell {
             windows: HashMap::new(),
             primary: None,
             pending_view: Some(view),
+            render_core: None,
             clipboard: arboard::Clipboard::new().ok(),
             a11y_bridge: a11y_bridge::AccessKitBridge::new(move || {
                 let _ = a11y_proxy.send_event(());
@@ -886,11 +897,14 @@ impl Shell {
             clipboard: &mut self.clipboard,
             a11y_bridge: &mut self.a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
+            render_core: self.render_core.as_ref(),
         }
     }
 
     /// Read-only borrow of the primary window's view (registry entry, else the
-    /// pending bootstrap view). For read paths that don't need the full ctx. (d).)
+    /// pending bootstrap view). For read paths that don't need the full ctx — the
+    /// agent harness's `&Shell` closures. (MW2 (d).)
+    #[cfg(any(test, feature = "agent-harness"))]
     fn view(&self) -> &window_view::WindowView {
         match self.primary {
             Some(id) => &self.windows[&id],
@@ -911,6 +925,7 @@ impl Shell {
             clipboard: &mut self.clipboard,
             a11y_bridge: &mut self.a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
+            render_core: self.render_core.as_ref(),
         })
     }
 }
