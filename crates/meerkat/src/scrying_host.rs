@@ -87,6 +87,16 @@ impl ScryingHost {
         self.pool.clear();
     }
 
+    /// Park every live tile's visual off-screen. meerkat shows a compat tile by
+    /// positioning its visual at the card rect (visual hosting), so a tile that is
+    /// no longer rendered (node deselected / unpinned) would otherwise freeze at its
+    /// last position. Called once per frame before the shown tile(s) are re-driven,
+    /// so only the tiles driven this frame display. (X2 dismiss.)
+    pub fn hide_all(&mut self) {
+        #[cfg(target_os = "windows")]
+        self.pool.hide_all();
+    }
+
     /// Spawn / resize / navigate `member`'s WebView as needed and pump one
     /// non-blocking frame acquisition. Call once per redraw while the tile is
     /// visible. No-op (with a one-time warning) on platforms X1 does not
@@ -98,6 +108,7 @@ impl ScryingHost {
         url: &str,
         width: u32,
         height: u32,
+        origin: (f32, f32),
         window: &std::sync::Arc<winit::window::Window>,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -105,10 +116,10 @@ impl ScryingHost {
     ) {
         #[cfg(target_os = "windows")]
         self.pool
-            .drive(member, url, width, height, window, device, queue, session_dir);
+            .drive(member, url, width, height, origin, window, device, queue, session_dir);
         #[cfg(not(target_os = "windows"))]
         {
-            let _ = (member, url, width, height, window, device, queue, session_dir);
+            let _ = (member, url, width, height, origin, window, device, queue, session_dir);
             tracing::warn!("compatibility view: scrying X1 is Windows-only (plan X4)");
         }
     }
@@ -229,6 +240,16 @@ mod windows_pool {
             self.failed.clear();
         }
 
+        /// Park every tile's visual off the window (hidden). A tile re-driven this
+        /// frame moves itself back to its card rect; the rest stay hidden. (X2 dismiss.)
+        pub(super) fn hide_all(&mut self) {
+            /// Far enough off the window that the visual is fully clipped away.
+            const OFFSCREEN: f32 = -100_000.0;
+            for tile in self.tiles.values() {
+                let _ = tile.producer.set_offset(OFFSCREEN, OFFSCREEN);
+            }
+        }
+
         pub(super) fn texture_view(&self, member: GraphMemberId) -> Option<&wgpu::TextureView> {
             self.tiles
                 .get(&member)
@@ -320,6 +341,7 @@ mod windows_pool {
             url: &str,
             width: u32,
             height: u32,
+            origin: (f32, f32),
             window: &Arc<winit::window::Window>,
             device: &wgpu::Device,
             queue: &wgpu::Queue,
@@ -353,6 +375,12 @@ mod windows_pool {
                     Err(err) => tile.last_error = Some(format!("resize: {err}")),
                 }
             }
+            // Visual hosting: park the WebView's HWND-parented composition visual at the
+            // card's screen origin so it displays in place (the scrying demo's model).
+            // Capture-into-texture only renders while the visual is on-screen (DWM culls
+            // an off-screen visual), so meerkat shows the visual directly instead.
+            // Re-set every frame so it follows the card as the orrery pans / zooms.
+            let _ = tile.producer.set_offset(origin.0, origin.1);
             if tile.shown_url.as_deref() != Some(url) {
                 // Non-blocking navigation: the blocking trait method pumps a
                 // wait loop on the UI thread (plan X2 owns the full nav story).

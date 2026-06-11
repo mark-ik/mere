@@ -339,6 +339,10 @@ impl WindowCtx<'_> {
         } else {
             self.view.tile_rects.clear(); // no tile drag targets when the pane is closed
         }
+        // Hide every compat WebView visual up front; the focused card below re-shows
+        // its own by positioning it at the card rect. A tile whose node is no longer
+        // focused / pinned thus stops displaying instead of freezing in place. (X2.)
+        self.view.scrying.hide_all();
         // The orrery's focused-node card (always, alongside any workbench pane).
         if let (Some(member), Some(url)) = (
             self.focused_member(),
@@ -382,6 +386,7 @@ impl WindowCtx<'_> {
                                 &url,
                                 cw,
                                 ch,
+                                (x0, y0),
                                 &window,
                                 &device,
                                 &queue,
