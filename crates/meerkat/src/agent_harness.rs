@@ -507,6 +507,49 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_shift_n_queues_a_spawn_window_command() {
+        // The new-window verb can't create a window from a per-window handler (no
+        // event loop, no registry access), so it queues a `SpawnWindow` the shell
+        // applies in `about_to_wait`. Here we assert the verb→queue step; the actual
+        // spawn needs a live event loop (on-screen verify). (Multi-window MW3.)
+        let mut app = test_app();
+        {
+            let mut wc = app.ctx();
+            wc.view.modifiers.ctrl = true;
+            wc.view.modifiers.shift = true;
+            wc.on_key_pressed(&winit::keyboard::Key::Character("n".into()));
+        }
+        assert!(
+            matches!(app.commands.first(), Some(crate::ShellCommand::SpawnWindow)),
+            "Ctrl+Shift+N queues a SpawnWindow"
+        );
+        assert_eq!(app.commands.len(), 1, "exactly one command queued");
+        assert_eq!(
+            app.shared.session.manifests.len(),
+            1,
+            "the shifted verb must not also mint a session"
+        );
+    }
+
+    #[test]
+    fn ctrl_n_without_shift_makes_a_session_not_a_window() {
+        // The unshifted Ctrl+N is the older new-session verb; the shift is the only
+        // thing that distinguishes it from the new-window verb above. (Multi-window MW3.)
+        let mut app = test_app();
+        {
+            let mut wc = app.ctx();
+            wc.view.modifiers.ctrl = true;
+            wc.on_key_pressed(&winit::keyboard::Key::Character("n".into()));
+        }
+        assert!(app.commands.is_empty(), "no window spawn queued");
+        assert_eq!(
+            app.shared.session.manifests.len(),
+            2,
+            "a new session was minted instead"
+        );
+    }
+
+    #[test]
     fn switching_keeps_the_window_panes_and_resources_graph_bound_leaves() {
         let mut app = test_app();
         let first = app.shared.session.active_session_id;

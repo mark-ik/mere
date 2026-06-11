@@ -664,6 +664,18 @@ impl WindowCtx<'_> {
             self.toggle_maximize();
             return;
         }
+        // Cmd/Ctrl+Shift+N opens a new OS window over the same shared session (a
+        // second view). A per-window handler can't create a window itself (no event
+        // loop, no registry access), so it queues a `SpawnWindow` the shell applies in
+        // `about_to_wait`. Checked before the unshifted Ctrl+N (new session) so the
+        // shift distinguishes the two. (Multi-window MW3.)
+        if (self.view.modifiers.ctrl || self.view.modifiers.meta)
+            && self.view.modifiers.shift
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("n"))
+        {
+            self.commands.push(super::ShellCommand::SpawnWindow);
+            return;
+        }
         // Ctrl+N mints a new graph session and switches to it; Ctrl+PageDown /
         // Ctrl+PageUp cycle through the open sessions (the interim keyboard switch
         // until the F2.3 shellbar switcher). (Multi-graph MG2 / MG3.)

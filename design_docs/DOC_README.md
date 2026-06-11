@@ -76,6 +76,7 @@ names as receipts).
 - [two_natured_kernel_brief](mere_docs/research/2026-05-30_two_natured_kernel_brief.md) — the kernel's two natures (data + space); the `aether` (field-algebra) / `gyre` (rapier) naming; Coupling as a force, not a 7th edge family.
 - [murm_p2p_landscape_brief](mere_docs/research/2026-05-31_murm_p2p_landscape_brief.md) — orientation survey of the whole p2p program + external landscape verdicts. *(Pivot now executed; banner.)*
 - [resource_coordination_brief](mere_docs/research/2026-06-04_resource_coordination_brief.md) — sharing storage + compute as one model (trust-graduated rings, bounty grammar, two ledgers, verifiable compute, durability); supersedes the 2026-06-03 banking/mesh briefs.
+- [communal_compute_tiers_brief](mere_docs/research/2026-06-10_communal_compute_tiers_brief.md) — the social/tier layer over the resource-coordination mechanics: volunteer-computing lessons (F@h surge/decay, BOINC credit, LCZero's data-not-gradients communal model), the moot → moothold → coalition compute commons, time-bank as a constitution preset.
 
 ## mere_docs/design/
 

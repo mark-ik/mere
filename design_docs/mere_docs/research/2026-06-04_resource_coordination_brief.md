@@ -18,8 +18,22 @@ Findings.
 - [`../implementation_strategy/2026-05-07_event_dag_substrate_brief.md`](../implementation_strategy/2026-05-07_event_dag_substrate_brief.md) — the signed event-DAG (BLAKE3 + Ed25519 + CBOR) all events ride; §8.6 "the user is a one-member moot"; §8.7/§8.9 persona-chain Sybil posture; §8.8 the capability stack the sharing layer uses.
 - [`../implementation_strategy/2026-06-03_actor_constellation_plan.md`](../implementation_strategy/2026-06-03_actor_constellation_plan.md) — a mesh job is a compute actor (P6) whose recipient is a remote device; the armillary request-to-result message travels over the p2panda space.
 - [`../implementation_strategy/2026-06-01_p2panda_substrate_spike_plan.md`](../implementation_strategy/2026-06-01_p2panda_substrate_spike_plan.md) + [`2026-06-02_logsync_sync_as_projection_plan.md`](../implementation_strategy/2026-06-02_logsync_sync_as_projection_plan.md) — the live transport (`P2pandaTransport`, iroh underneath) + LogSync the mesh rides.
+- [`2026-06-10_communal_compute_tiers_brief.md`](2026-06-10_communal_compute_tiers_brief.md) — the social/tier layer over this brief's mechanics: volunteer-computing lessons, the moothold/coalition commons, the LCZero data-not-gradients loop for the moot geist, time-bank as a constitution preset.
 
 ---
+
+> **2026-06-10 correction (scripting).** The four-language scripting map this
+> brief leaned on was collapsed to **Rust + JS** (actor constellation plan,
+> Progress 2026-06-10): Rune and Rhai are dropped. Where this brief says
+> "sandboxed Rhai scripts" (§0, §8), read: untrusted strategy / brokering /
+> acceptance policy is a **non-Turing-complete declarative format evaluated by
+> Rust** (which also earns re-run-to-a-hash determinism host-side, resolving
+> §8's determinism caveat), and trusted orchestration logic is JS on serval's
+> DOM-neutral script-engine seam (Nova native / Boa wasm, both no-JIT and
+> wasm32-clean, so the browser/PWA reach argument is unchanged). The Plan-9
+> namespace isolation (iroh-blobs + caps) and the code-vs-data split stand.
+> Reopen trigger per the actor plan: a Rune 1.0 with a sandbox warranty, and
+> only if policy stays a script rather than data.
 
 ## 0. Thesis: a toolkit, not a prescription
 

@@ -654,3 +654,29 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   the `ShellCommand` queue + `Shell::apply` + `SpawnWindow`/`CloseWindow` + a
   Cmd/Ctrl+Shift+N verb: the first *actual* second window, where the deferred (e) seam
   becomes real (and step 4's `WindowKind::Leaf` gives that window its slim chrome).
+- 2026-06-10: **MW3 step 3 done — the `ShellCommand` seam + the first real second
+  window (the deferred MW2 (e), now real).** `ShellCommand { SpawnWindow,
+  CloseWindow(WindowId) }` + a `Shell.commands` queue, exposed to `WindowCtx` as
+  `&mut commands`: a per-window handler reaches exactly one view, so work that needs the
+  event loop (create a window) or the registry (mutate `windows`) can't run there — it
+  queues, and `Shell::apply` drains in **`about_to_wait`** (always fires, no
+  early-return fragility, decoupled from which handler queued). **Cmd/Ctrl+Shift+N**
+  (`on_key_pressed`, checked before the unshifted Ctrl+N new-session verb so the shift
+  distinguishes them) queues a `SpawnWindow`. Window creation factored out of `resumed`
+  into `Shell::create_window` — the boot-core-once stays in `resumed`, the
+  window+surface+registry-insert is shared — so the primary and a secondary are minted
+  the *same* way (the seam that makes a second window cheap). `build_window_view` mints
+  a fresh chrome + workbench runner pair + a default single-orrery frame over the shared
+  session. **Close forks by role** (`request_close`): the primary's CloseRequested /
+  custom close control saves the session + exits the app; a secondary just drops its
+  view (`close_window`), leaving the graph + the other windows intact (so closing the
+  2nd window no longer kills the app). The secondary is **full-chrome v0** (step 4 makes
+  it a slim `WindowKind::Leaf`), has **no own a11y bridge** yet (the bridge is still
+  shell-singular against the primary — step 6), and does **not live-update from actor
+  wakes** yet (step 5's d2 fan-out redraws only the primary). Headless tests cover the
+  verb→queue seam (Ctrl+Shift+N queues `SpawnWindow` and does *not* mint a session;
+  unshifted Ctrl+N still mints a session). 44 lib + **65** bin green (+2). **[gate]
+  on-screen verify (Windows laptop): Ctrl+Shift+N opens a 2nd window showing the shared
+  graph; closing it leaves the 1st intact; the app exits only when the primary closes.**
+  **Next: step 4** — `WindowKind::{Primary, Leaf}` + a slim leaf chrome template +
+  workbench-only leaf rendering shared tiles behind the read-only `NodeView` seam.

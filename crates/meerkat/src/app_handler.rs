@@ -58,27 +58,9 @@ impl ApplicationHandler for Shell {
         if self.primary.is_some() {
             return;
         }
-        let Some(mut view) = self.pending_view.take() else {
+        let Some(view) = self.pending_view.take() else {
             return;
         };
-        // Borderless: the OS title bar (and its accent border) is off; the chrome's
-        // toolbar band is the titlebar, with host-drawn window controls + edge
-        // resize (see `titlebar` + `input`). A min size keeps the bar usable.
-        let attributes = Window::default_attributes()
-            .with_title("Meerkat — Mere chrome on serval")
-            .with_decorations(false)
-            .with_visible(false)
-            .with_min_inner_size(PhysicalSize::new(480u32, 320u32))
-            .with_inner_size(PhysicalSize::new(view.width, view.height));
-        let window = Arc::new(
-            event_loop
-                .create_window(attributes)
-                .expect("failed to create meerkat window"),
-        );
-        let size = window.inner_size();
-        view.width = size.width.max(1);
-        view.height = size.height.max(1);
-
         // Boot the shared present core once (the first window): wgpu + netrender. Each
         // window's surface is then created from it, so N windows share one device.
         if self.render_core.is_none() {
@@ -97,31 +79,16 @@ impl ApplicationHandler for Shell {
                 }
             }
         }
-        // This window's swapchain surface, from the shared core.
-        let surface = match self
-            .render_core
-            .as_ref()
-            .expect("render core booted above")
-            .create_surface(window.clone(), view.width, view.height)
-        {
-            Ok(surface) => surface,
-            Err(err) => {
-                eprintln!("[meerkat] {err}");
-                self.pending_view = Some(view); // surface failed; keep the view to retry
-                event_loop.exit();
-                return;
-            }
+        // Create the OS window + swapchain surface and key it into the registry. The
+        // primary differs from a spawned window only in the bootstrap that follows
+        // (a11y install + the initial refresh + restored content).
+        let Some((id, window)) = self.create_window(event_loop, view) else {
+            event_loop.exit();
+            return;
         };
-        view.surface = Some(surface);
-        window.set_visible(true);
-        window.request_redraw();
-        view.window = Some(Arc::clone(&window));
-
-        // Key the primary into the registry, then drive everything else through the
-        // ctx (a11y install + the initial switcher / a11y refresh + restored content).
-        let id = window.id();
-        self.windows.insert(id, view);
         self.primary = Some(id);
+        // Drive the primary-only bootstrap through the ctx (a11y install + the initial
+        // switcher / a11y refresh + restored content).
         let mut wc = self.ctx();
         let initial_a11y = wc.build_a11y_projection().tree_update();
         match wc.a11y_bridge.install(&window, initial_a11y) {
@@ -391,16 +358,19 @@ impl ApplicationHandler for Shell {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        // A close request needs no ctx and forks by role: the primary saves the
+        // session and exits the app; a secondary just drops its view, leaving the
+        // graph and the other windows intact. (MW3.)
+        if matches!(event, WindowEvent::CloseRequested) {
+            self.request_close(event_loop, window_id);
+            return;
+        }
         // Route by id: resolve the event's window to its view in the registry. An
         // unknown id (a just-closed window) is dropped. (MW2 (d).)
         let Some(mut wc) = self.window_ctx(window_id) else {
             return;
         };
         match event {
-            WindowEvent::CloseRequested => {
-                wc.save_session();
-                event_loop.exit();
-            }
             WindowEvent::Resized(size) => wc.resize(size.width, size.height),
             WindowEvent::Focused(focused) => wc.update_a11y_window_focus(focused),
             WindowEvent::CursorMoved { position, .. } => {
@@ -515,12 +485,8 @@ impl ApplicationHandler for Shell {
             WindowEvent::MouseInput { state, button, .. } => {
                 wc.on_mouse_input(state, button);
                 // The custom close control sets `pending_exit` (input has no
-                // event-loop handle); honor it here, saving the session as the OS
-                // CloseRequested path does.
-                if wc.view.pending_exit {
-                    wc.save_session();
-                    event_loop.exit();
-                }
+                // event-loop handle); it's honored below, after the ctx borrow ends,
+                // forked by role like `CloseRequested`. (MW3: per-window close.)
             }
             WindowEvent::KeyboardInput { event, .. } => {
                 let pressed = event.state == ElementState::Pressed;
@@ -554,6 +520,150 @@ impl ApplicationHandler for Shell {
             }
             WindowEvent::RedrawRequested => wc.render(),
             _ => {}
+        }
+        // The custom close control set `pending_exit` on this window's view; honor it
+        // the same way as `CloseRequested`, forked by role. The ctx borrow has ended,
+        // so the registry op is reachable. Queued `SpawnWindow`s drain in
+        // `about_to_wait`. (MW3: per-window close.)
+        if self
+            .windows
+            .get(&window_id)
+            .is_some_and(|v| v.pending_exit)
+        {
+            self.request_close(event_loop, window_id);
+        }
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // Apply the cross-window commands queued during this event batch (spawn /
+        // close a window), now that every per-window ctx borrow has ended. (MW3.)
+        self.apply(event_loop);
+    }
+}
+
+impl Shell {
+    /// Create an OS window for `view`, attach a swapchain surface from the shared
+    /// (already-booted) render core, show it, and key it into the registry. Returns
+    /// the new window's id + handle, or `None` if window / surface creation failed.
+    /// Shared by `resumed` (the primary) and `spawn_window` (secondaries), so both
+    /// windows are minted the same way — the seam that makes a second window cheap.
+    /// (MW3: one device, N surfaces.)
+    fn create_window(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        mut view: super::window_view::WindowView,
+    ) -> Option<(WindowId, Arc<Window>)> {
+        // Borderless: the OS title bar (and its accent border) is off; the chrome's
+        // toolbar band is the titlebar, with host-drawn window controls + edge
+        // resize (see `titlebar` + `input`). A min size keeps the bar usable.
+        let attributes = Window::default_attributes()
+            .with_title("Meerkat — Mere chrome on serval")
+            .with_decorations(false)
+            .with_visible(false)
+            .with_min_inner_size(PhysicalSize::new(480u32, 320u32))
+            .with_inner_size(PhysicalSize::new(view.width, view.height));
+        let window = match event_loop.create_window(attributes) {
+            Ok(window) => Arc::new(window),
+            Err(err) => {
+                eprintln!("[meerkat] window creation failed: {err}");
+                return None;
+            }
+        };
+        let size = window.inner_size();
+        view.width = size.width.max(1);
+        view.height = size.height.max(1);
+        let surface = match self
+            .render_core
+            .as_ref()
+            .expect("render core booted before window creation")
+            .create_surface(window.clone(), view.width, view.height)
+        {
+            Ok(surface) => surface,
+            Err(err) => {
+                eprintln!("[meerkat] {err}");
+                return None;
+            }
+        };
+        view.surface = Some(surface);
+        window.set_visible(true);
+        window.request_redraw();
+        view.window = Some(Arc::clone(&window));
+        let id = window.id();
+        self.windows.insert(id, view);
+        Some((id, window))
+    }
+
+    /// Drain and apply the queued cross-window commands. Called from `about_to_wait`
+    /// once the per-window ctx borrows that queued them have ended. (MW3, the
+    /// deferred MW2 (e).)
+    fn apply(&mut self, event_loop: &ActiveEventLoop) {
+        if self.commands.is_empty() {
+            return;
+        }
+        for command in std::mem::take(&mut self.commands) {
+            match command {
+                super::ShellCommand::SpawnWindow => self.spawn_window(event_loop),
+                super::ShellCommand::CloseWindow(id) => self.close_window(id),
+            }
+        }
+    }
+
+    /// Open a second OS window over the shared session (Cmd/Ctrl+Shift+N → a queued
+    /// `SpawnWindow`). The render core is already booted (the primary did it on the
+    /// first resume), so the new view shares the graph, actors, and caches, differing
+    /// only in its own chrome + surface + frame. v0 is a full-chrome window; MW3 step
+    /// 4 makes it a slim workbench-only leaf.
+    ///
+    /// The secondary has no AccessKit bridge yet — the bridge is still shell-singular,
+    /// installed against the primary — so per-window a11y is MW3 step 6. It renders on
+    /// its own input + the spawn redraw; live actor-driven updates reach it once the
+    /// `user_event` fan-out lands (MW3 step 5, the deferred d2).
+    fn spawn_window(&mut self, event_loop: &ActiveEventLoop) {
+        // Can't happen via the keyboard verb (it's post-resume), but guard anyway.
+        if self.render_core.is_none() {
+            return;
+        }
+        let view = self.build_window_view();
+        if let Some((id, _window)) = self.create_window(event_loop, view) {
+            if let Some(view) = self.windows.get(&id) {
+                view.request_redraw();
+            }
+            self.shared.observability.record_probe(
+                "multi_window",
+                "spawned",
+                format!("windows={}", self.windows.len()),
+            );
+        }
+    }
+
+    /// Close a secondary window: drop its view, which releases its surface and OS
+    /// window. The primary is exempt — its close saves the session and exits the app
+    /// through [`Shell::request_close`]. (MW3.)
+    fn close_window(&mut self, id: WindowId) {
+        if Some(id) == self.primary {
+            return;
+        }
+        if self.windows.remove(&id).is_some() {
+            self.shared.observability.record_probe(
+                "multi_window",
+                "closed",
+                format!("windows={}", self.windows.len()),
+            );
+        }
+    }
+
+    /// Honor a close request for `window_id`, forked by role: the primary saves its
+    /// session and exits the app; a secondary just drops its view, leaving the graph
+    /// and the other windows intact. Both `CloseRequested` and the custom close
+    /// control route here. (MW3.)
+    fn request_close(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId) {
+        if Some(window_id) == self.primary {
+            if let Some(mut wc) = self.window_ctx(window_id) {
+                wc.save_session();
+            }
+            event_loop.exit();
+        } else {
+            self.close_window(window_id);
         }
     }
 }

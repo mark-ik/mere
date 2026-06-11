@@ -530,6 +530,10 @@ struct Shell {
     /// The bridge only queues raw AccessKit requests; the kernel thread resolves
     /// ids through this table and applies semantic host actions.
     a11y_action_routes: HashMap<AccessNodeId, A11yHostAction>,
+    /// The cross-window command queue: per-window handlers push [`ShellCommand`]s
+    /// here (spawn / close a window) and the event loop drains them through
+    /// [`Shell::apply`] in `about_to_wait`, once the borrowing ctx has ended. (MW3.)
+    commands: Vec<ShellCommand>,
     /// Marks this struct as the kernel-thread context: `!Send` by construction
     /// (armillary's typed boundary), so kernel authority cannot be moved onto an
     /// actor thread — the attempt is a compile error, not a review catch.
@@ -556,6 +560,28 @@ struct WindowCtx<'a> {
     /// The shared present core (device + renderer). `None` before the first window
     /// boots it, and in the headless harness; the render path early-returns then.
     render_core: Option<&'a RenderCore>,
+    /// The shell command queue. A per-window handler reaches exactly one window, so
+    /// work that touches the registry or a second window (spawn / close) can't run
+    /// here — it's pushed as a [`ShellCommand`] and applied by `Shell` after the ctx
+    /// borrow ends. (Multi-window MW3, the deferred MW2 (e).)
+    commands: &'a mut Vec<ShellCommand>,
+}
+
+/// A deferred shell-level operation a per-window handler requests but cannot perform
+/// itself: it needs full `&mut Shell` (to mutate the window registry) or the
+/// `ActiveEventLoop` (to create an OS window), neither reachable from a [`WindowCtx`]
+/// (which borrows exactly one window + the shared state). Handlers push onto
+/// `Shell.commands`; the event loop drains them through `Shell::apply` after the ctx
+/// borrow ends. This is the cross-window seam — spawning or closing a window is a
+/// registry op no single-view ctx can express. (Multi-window MW3, the deferred MW2 (e).)
+enum ShellCommand {
+    /// Open a new OS window over the shared session — a second [`WindowView`].
+    /// (Cmd/Ctrl+Shift+N; MW3 step 3. Step 4 differentiates its kind + chrome.)
+    SpawnWindow,
+    /// Close window `id` and drop its view. The primary is exempt — its close saves
+    /// the session and exits the app; a secondary just releases its surface. (MW3.)
+    #[allow(dead_code)] // queued by the close fork once leaf windows can self-close (MW4)
+    CloseWindow(WindowId),
 }
 
 /// A tile's cached rasterized texture: the scene version + size it was rasterized
@@ -858,6 +884,7 @@ impl Shell {
                 let _ = a11y_proxy.send_event(());
             }),
             a11y_action_routes: HashMap::new(),
+            commands: Vec::new(),
             _kernel: armillary::KernelThread::new(),
         };
         let pane_count = app
@@ -898,6 +925,7 @@ impl Shell {
             a11y_bridge: &mut self.a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
             render_core: self.render_core.as_ref(),
+            commands: &mut self.commands,
         }
     }
 
@@ -926,7 +954,46 @@ impl Shell {
             a11y_bridge: &mut self.a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
             render_core: self.render_core.as_ref(),
+            commands: &mut self.commands,
         })
+    }
+
+    /// Mint a fresh per-window view over the shared session: its own chrome +
+    /// workbench runners (a second pair of serval document authorities) and a default
+    /// single-orrery content frame bound to the active graph. The view-session bits
+    /// start at rest (no restored camera / frame); a spawned window opens on the
+    /// shared graph the way the primary first did. The caller (`SpawnWindow`) creates
+    /// the OS window + surface around it. (Multi-window MW3.)
+    fn build_window_view(&self) -> window_view::WindowView {
+        let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
+        let mut chrome = Chrome::new("mere://welcome");
+        chrome.settings.tab_cap = self.shared.presentation.saved_tab_cap;
+        let runner = ServalAppRunner::new(dom.clone(), chrome_view as ChromeLogic, chrome);
+        let content_location = runner.state().content_location().to_string();
+        let workbench_dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
+        let workbench_runner = ServalAppRunner::new(
+            workbench_dom.clone(),
+            workbench_view as WorkbenchLogic,
+            WorkbenchScene::default(),
+        );
+        let active_graph = self
+            .shared
+            .session
+            .manifests
+            .get(self.shared.session.active_session_id)
+            .map(|m| m.root_graph_id)
+            .unwrap_or_default();
+        let mut view = window_view::WindowView::new(
+            dom,
+            runner,
+            Workbench::new(),
+            workbench_dom,
+            workbench_runner,
+        );
+        view.content_location = content_location;
+        view.frame_layout = default_content_frame(active_graph);
+        view.next_pane_id = 1;
+        view
     }
 }
 
