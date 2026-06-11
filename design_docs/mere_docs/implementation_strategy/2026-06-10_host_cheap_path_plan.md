@@ -100,6 +100,26 @@ interaction (omnibar typing, palette open, divider drag) in this doc, with
 splice incidence per pane. **Done when** mutation Vecs are bounded and a
 baseline table exists below.
 
+**C0 DONE (2026-06-11).** Drain landed (`render.rs`, chrome + workbench, once per
+frame). Headline frame profile captured over ~280 rendered frames of a
+representative interaction (omnibar typing, palette open + arrow, roster +
+apparatus panes, divider drag, orrery pan), **unoptimized debug build**:
+
+| metric | median | p95 | min | max |
+| --- | --- | --- | --- | --- |
+| `render()` total | 56 ms | 132 ms | 51 ms | 248 ms (cold first frame) |
+| chrome cascade+layout+paint | 29 ms | 40 ms | 27 ms | 55 ms |
+
+**The stateless chrome pipeline is 53% of every rendered frame (median; 56% p95).**
+It is the single dominant, *unconditional* per-frame cost — the plan's thesis, now a
+number. Absolutes scale down in release, but the **ratio is build-independent** (both
+stateless paths scale together), so **sessionizing the chrome pane (C3) roughly halves
+the frame.** The p95→max tail (132–248 ms) is the splice/pane-heavy frames; per-pane
+granularity (the conditional roster — which runs the pipeline *twice* — apparatus, and
+utility panes) is the documented refinement, but the headline already justifies C3 and
+C1/C2 under it. Instrumentation lives behind `RUST_LOG=meerkat::profile=debug`
+(`render.rs`), so re-measuring the delta after C3 is one run.
+
 ### C1 — Laid-out-document query seam (serval)
 
 pelt-live (or serval-layout) exposes a query object over retained layout
@@ -230,3 +250,12 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   this plan is the checklist of record. Decided (with Mark) to pick this plan up next:
   the composition-enabling subset clears the runway before the pane-heavy composition
   phases, and the C0 baseline quantifies the per-pane cost before it is multiplied.
+- **2026-06-11** — **C0 done: baseline captured, thesis confirmed.** Added headline
+  frame-profile instrumentation (`render.rs`, behind `RUST_LOG=meerkat::profile=debug`)
+  and ran a representative interaction (~280 frames, debug build). Result: the stateless
+  **chrome cascade+layout+paint pipeline is 53% of every rendered frame** (median 29 ms
+  of a 56 ms frame; table in C0). The ratio is build-independent, so **C3 (sessionize the
+  chrome pane) roughly halves the frame** — the win is a number, not a guess. Next:
+  C1 (the laid-out-document query seam in serval) + C2 (persistent FontContext) are the
+  serval-side infra C3 sits on; or pick up the composition-enabling C6 subset in
+  parallel (independent of the perf chain). Re-measuring after C3 is one run.
