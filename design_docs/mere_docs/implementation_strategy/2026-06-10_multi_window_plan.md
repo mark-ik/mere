@@ -712,3 +712,16 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   `cursor_moved` calls. Hover + click now land true on nodes under a left-docked
   shellbar (Mark confirmed). Wires the formerly-dead `orrery_leaf_rect`. 44 lib + 65
   bin green.
+- 2026-06-11: **MW3 step 4 part 1 — `WindowKind` + slim leaf chrome.** Seated the
+  per-window `WindowKind { Primary, Leaf }` marker on `WindowView` (fixed at
+  construction; `WindowView::new` takes it). A Cmd/Ctrl+Shift+N spawn is now a
+  **Leaf** with **slim chrome**: `Chrome` gained a `slim` flag, `chrome_view` omits
+  the shellbar strip when set, `build_window_view` sets it; render + input agree that
+  a slim window carves no shellbar (render's band and `content_band` both return the
+  whole below-toolbar area) and the host-drawn session switcher is skipped (the
+  shellbar geometry write already no-ops via its `first_with_class` guard). Headless
+  test added (a leaf is slim, the primary is full). 44 lib + 66 bin green. **Part 2
+  (deferred, design-laden + wants on-screen verify):** swap a leaf's content from the
+  shared orrery to **workbench-only** rendering behind a read-only `NodeView` seam
+  (resolve member → url + metadata from the shared constellation). A leaf today still
+  shows the shared orrery under its slim chrome.
