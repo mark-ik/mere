@@ -1,4 +1,4 @@
-# Window Composition Plan — orrery-per-window, window taxonomy, cross-graph composability
+# Window Composition Plan — pooled orrery authorities, pane resolution, cross-graph composability
 
 **Date**: 2026-06-11
 **Status**: Planning. Supersedes the [multi-window plan](2026-06-10_multi_window_plan.md)'s
@@ -68,15 +68,31 @@ consumer of this general operation.
   different-graph case.
 - **Frame panes already carry `graph_id`** (MG5 / `FrameLayout` leaf `graph_id`), so the
   per-window frame already distinguishes which graph a pane belongs to.
-- **Provenance/lineage primitives exist.** forme has a per-node lineage facet; the graph
-  has a provenance edge family (persisted as `PersistedProvenanceEdgeData`); fork already
-  plans a cross-graph rekey (tear-out brief §7.5) and a weak `parent_session` ref. The
-  composability operation records into these, it does not invent them.
+- **Provenance/lineage primitives exist.** The graph substrate has a per-node lineage
+  facet (`graph/node-lineage`, not forme) and a provenance edge family (persisted as
+  `PersistedProvenanceEdgeData`); fork already plans a cross-graph rekey (tear-out brief
+  §7.5) and a weak `parent_session` ref. The composability operation records into these,
+  it does not invent them.
 - **Pooling whole orreries needs no graph extraction.** A `HashMap<GraphId, Orrery>` just
   holds N whole `Orrery` values (each its own graph + physics + camera); panes read the
   graph of the one they resolve to. The *only* thing that needs the camera pulled out of
   `Orrery` is *two spatial `Orrery` panes of the same graph* (one orrery, two cameras) —
   deferred, and orthogonal to the pool.
+- **member→graph routing: decided (2026-06-11) — stamp the active `Activation`.** With N
+  orreries pooled, the one thing that needs to know a member's graph is *routing a content
+  actor's `GraphContribution`s back to the right orrery* (scenes apply by UUID inside the
+  pool; subresources route by URL — both graph-agnostic; only contributions mutate a
+  specific graph). `Constellation.active: HashMap<GraphMemberId, Activation>` is the
+  per-member entry, and `drive(member, …)` already runs in a pane context that has the
+  `graph_id`. So **stamp each `Activation` with its `graph_id` at `drive`-time**;
+  `drain` pairs each contribution with its member's stamp (`contributions: Vec<(GraphId,
+  GraphContribution)>`); `user_event` routes to `shared.orreries.get_mut(&graph_id)`. Not
+  a global `member→graph` index (it would track dormant members + risk drift for a lookup
+  only *active* members need) and not a per-contribution pool search. `graph→members` stays
+  authoritative in each orrery's graph. The stamp is set once at activation and changes
+  only on a P4 cross-graph **move** (branch is intra-graph; fork's copies get fresh UUIDs).
+  Concrete P1 surface: `drive` gains a `graph_id` param, `Activation` a `graph_id` field,
+  `Drained.contributions` becomes `Vec<(GraphId, GraphContribution)>`.
 
 ## Architecture
 
@@ -95,7 +111,8 @@ struct SharedState {
 }
 
 // A pane is a view that resolves to an orrery by graph_id (panes already carry it, MG5).
-// PaneContent is the existing enum, the open set of view types:
+// PaneContent is the existing enum, the open set of view types (Alembic is aspirational —
+// not in the enum yet; the rest exist today):
 enum PaneContent { Orrery, Workbench, Gloss, Steward, Inspector, Apparatus, Alembic, Roster, Comms }
 // FrameLayout leaf: { pane_id, content: PaneContent, graph_id }  ← graph_id picks the orrery
 
@@ -125,9 +142,31 @@ Orrery>`, lazily loaded. The ~58 `self.orrery` sites resolve the operated pane's
 offloads to its own actor on the shared wake. At one graph this is behavior-identical;
 **this is also far-B / MG6** (many graphs live at once), so the two converge here.
 
+**The pool's blast radius includes lifecycle, not just resolution** (2026-06-11 review;
+three single-active-graph mechanisms are still wired to "switching graphs means
+teardown" and must be re-scoped here):
+
+- **Constellation becomes graph-scoped.** The MG2 contract (`Constellation::clear()` on
+  switch so actors "don't bleed into the new graph") is exactly wrong under the pool:
+  switching the shown graph must not kill another live graph's actors. The constellation
+  has *no graph dimension* today (members are bare UUIDs), so per-graph reaping doesn't
+  exist — either activations learn their graph at spawn, or reap-by-member-set resolves
+  through the owning orrery. `scrying.clear()` and the shared compat pins ride the same
+  switch path and re-scope the same way. The tab cap is now shared across live graphs
+  (a busy background graph competes with the active one's warm tabs); per-graph or
+  per-window caps join the configurable settings.
+- **Persistence goes per-orrery.** `session_dir` / `save_session` are
+  active-session-shaped; each pooled orrery saves to *its own* manifest's storage dir,
+  on switch, window close, exit, and eviction. Without this, the second live graph's
+  mutations are lost on exit.
+- **Physics wake fan-out.** A pooled orrery's physics tick should redraw only the
+  windows with panes resolving to that graph (the MW2 multicast seam), not broadcast.
+
 Done when the primary runs exactly as today with its orrery resolved from the pool, a
 second graph's orrery can be live in the pool at the same time (a pane resolving to it
-renders it), and neither disturbs the other. 44+/66+ green; on-screen verify.
+renders it), neither disturbs the other, **and a graph switch reaps only the switched
+graph's actors while both graphs save to their own dirs on exit**. 44+/66+ green;
+on-screen verify.
 
 ### P2 — Panes resolve everywhere (render / input / nav)
 
@@ -136,6 +175,18 @@ a window-global one. A window's panes may resolve to different graphs (graph A's
 beside graph B's gloss). The MW3 `{Primary, Leaf}` marker + `is_slim` fold away: the
 shellbar/switcher chrome shows when the window carries an `Orrery` pane (a graph surface),
 which is read off the panes, not a window kind.
+
+Two consequences of kindless windows land here:
+
+- **Exit/save semantics.** `Shell.primary` + the kind-forked `CloseRequested` lose their
+  rule when kinds fold away. Replacement: any window close saves its panes' view
+  intents; the *last* window close saves every dirty pooled orrery and exits. (Adjust if
+  a different rule is decided; the point is the rule must be restated, not inherited.)
+- **One compat WebView per window (carried constraint).** Scrying X2 surfaced that a
+  window has a single WebView2 composition target (`WINDOW_ALREADY_COMPOSED`;
+  `reap_except` exists because of it), so two compat tiles in one window cannot both be
+  live yet. P2's two-orreries-one-window done-condition holds for ordinary panes; compat
+  tiles inherit the one-live-per-window limit until that constraint is lifted.
 
 Done when one window can host panes resolving to two different orreries, each rendering
 correctly, with input routed to the right orrery per pane.
@@ -188,10 +239,17 @@ wanted.
 1. **How a pane names its orrery** — `graph_id` is on the `FrameLayout` leaf today; P1
    threads it through the ~58 resolution sites. Confirm every `self.orrery` site has a
    pane (and thus a `graph_id`) in scope, or whether some are genuinely window-global
-   (e.g. the active-nav target) and need a per-window "focused graph" fallback.
+   (e.g. the active-nav target) and need a per-window "focused graph" fallback. Related:
+   `follows_active_graph()` (frame lib.rs:203) changes meaning under the pool — today
+   panes *follow* the window's active graph (the Model A residue); pooling makes
+   follow-vs-pin a real per-pane choice (follow by default, pin deliberately, per the
+   configurability rule), and the switcher becomes "re-point the following panes."
 2. **Orrery pool lifecycle** — lazily load an orrery into the pool when a pane first
-   resolves to its graph; evict when no pane (in any window) resolves to it. N live
-   orreries = N physics actor threads; fine for a handful, revisit pooling if it bites.
+   resolves to its graph; evict when no pane (in any window) resolves to it. Eviction
+   needs a named flavor: **park** (stop the physics actor, keep the graph in memory) vs
+   **unload** (save to its dir + drop); park first, unload under memory pressure.
+   N live orreries = N physics actor threads; fine for a handful — and surface the live
+   count in Steward (real data, the no-placebo rule) as the tripwire for revisiting.
 3. **Provenance edge direction + family** — confirm the existing provenance edge family
    carries "copied-from across graphs" cleanly, or whether copy wants a distinct sub-kind
    (P4). Check before building, per the consumer-pull rule.
@@ -214,3 +272,19 @@ wanted.
   is **dropped** for P3 (cross-window pane resolution); the half-built orrery-isolation
   gate was reverted, returning in P1/P2 as "this pane is not an `Orrery` pane," not a
   slim-flag. P1 (the orrery pool) **converges with far-B / MG6** (many graphs live at once).
+- 2026-06-11: **member→graph mapping decided (with Mark): stamp the active `Activation`**
+  (see Findings). The one P1 lifecycle item carrying a real design choice — where the
+  member→graph mapping lives — is settled before the mechanical pool move: a `graph_id`
+  on each active constellation entry, set at `drive`-time, routing contributions to their
+  orrery. No global index, no pool search. P1 is unblocked.
+- 2026-06-11: **Review folded in** (code-verified pass). Verified: leaf `graph_id`
+  (frame lib.rs:247, with the serde-default migration), `GraphMemberId = Uuid`,
+  per-orrery physics is one `offload_physics(wake)` call each. Added the pool's
+  lifecycle blast radius to P1 (constellation clear-on-switch must become per-graph
+  reap — the constellation has no graph dimension yet; scrying pins ride the same path;
+  the shared tab cap; per-orrery persistence to each manifest's dir; physics wake
+  fan-out), the kindless exit/save rule + the one-compat-WebView-per-window constraint
+  to P2, follow-vs-pin to OQ1, park-vs-unload + a Steward live-count tripwire to OQ2.
+  Title corrected ("orrery-per-window" → pooled authorities; the retired two-axis
+  framing scrubbed); lineage facet re-attributed to `graph/node-lineage`;
+  `PaneContent::Alembic` marked aspirational (not in the enum yet; Steward is).
