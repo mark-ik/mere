@@ -51,15 +51,18 @@ comms = { workspace = true, features = ["misfin-adapter", "murm-adapter"] }
 misfin = { workspace = true, features = ["server"] }
 murm = { workspace = true }
 
-# ─── On-screen bin: the serval render + present stack (pelt-live-shaped) ──────
-# Reuse pelt-live's lib for the cascade -> layout -> paint -> netrender::Scene
-# builder (scene_from_scripted_dom) and the point->node hit-test (hit_test_node),
-# rather than reimplement them. This is the path dep that pulls serval-layout /
-# netrender / paint / taffy into mere's workspace.
-pelt-live = { path = "../../../serval/ports/pelt-live" }
-# ScrollOffsets, the per-node scroll map scene_from_scripted_dom takes (empty for
-# the chrome toolbar; populated when scrollable chrome lands).
+# ─── On-screen bin: the serval render + present stack ────────────────────────
+# meerkat owns its `ScriptedDom -> netrender::Scene` render glue (the
+# `serval_render` module), depending on serval's *components* directly rather than
+# on `pelt-live` (a serval-side probe). See the serval_render_glue_extraction_plan.
+# The cascade / layout / emit / query engine, plus ScrollOffsets (the per-node
+# scroll map the glue takes) and IncrementalLayout (the pane sessions).
 serval-layout = { path = "../../../serval/components/serval-layout" }
+# The paint-list -> netrender::Scene lowering (translate_paint_list); the same
+# crate the orrery + platen-view lower through.
+paint_list_render = { path = "../../../netrender/paint_list_render" }
+# Engine-agnostic paint command types (ColorF, DeviceIntSize) the render glue names.
+paint_list_api = { path = "../../../netrender/paint_list_api" }
 # Scene / Renderer / ColorLoad / ExternalTexturePlacement for the present pass.
 netrender = { path = "../../../netrender/netrender" }
 # Host text-into-scene path: parley shapes a single line; netrender_text lowers
@@ -178,7 +181,7 @@ raw-window-handle = { workspace = true }
 # Content engines for the card (S2.2b-ii): nematic's document engines (markdown /
 # gemtext / plain text / feeds / …) turn fetched bytes into an EngineDocument,
 # routed by content-type. HTML rides the serval lane instead (set_inner_html →
-# scene_from_scripted_dom via the pelt-live dep already present).
+# scene_from_scripted_dom via the host-owned serval_render glue).
 nematic = { workspace = true }
 
 # Session persistence (S3): the session graph survives restart as graph.json via

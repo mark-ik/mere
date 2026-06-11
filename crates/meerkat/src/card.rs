@@ -20,7 +20,7 @@ use inker::{
     EngineRegistry, InlineSpan,
 };
 use netrender::Scene;
-use pelt_live::scene_from_layout_dom;
+use crate::serval_render::scene_from_layout_dom;
 use serval_layout::{
     ImageLoader, ScrollOffsets, inline_stylesheets, linked_stylesheets_with_loader,
 };
@@ -253,7 +253,7 @@ fn base_type(content_type: &str) -> String {
 }
 
 /// Parse `body` as a full HTML document and render it through the shared content
-/// core ([`pelt_live::scene_from_layout_dom`]) — the same cascade → image-decode
+/// core ([`crate::serval_render::scene_from_layout_dom`]) — the same cascade → image-decode
 /// → layout → emit pipeline the static viewer uses. A full-document parse (not a
 /// body-only fragment) keeps `<head>`, so head `<style>` / `<link>` are seen.
 ///

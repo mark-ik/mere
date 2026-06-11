@@ -9,7 +9,7 @@ use forme::GraphMemberId;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
 use netrender::external_texture::ExternalTexturePlacement;
-use pelt_live::{TextCursor, fragments_from_scripted_dom, scene_from_scripted_dom};
+use crate::serval_render::{TextCursor, fragments_from_scripted_dom, scene_from_scripted_dom};
 use platen_view::{WORKBENCH_SHEET, WorkbenchScene};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
@@ -27,6 +27,7 @@ use super::{
     measure_class_bottom, member_attr,
 };
 use meerkat::ShellbarPaneStates;
+use crate::pane_session::PaneSession;
 
 impl WindowCtx<'_> {
     /// The toolbar-band height (px), measuring + caching it on first use. The
@@ -211,8 +212,20 @@ impl WindowCtx<'_> {
         }
         let chrome_sheet = self.shared.presentation.chrome_sheet_refs();
         let chrome_t = Instant::now();
-        let chrome_scene =
-            scene_from_scripted_dom(&self.view.dom.borrow(), &chrome_sheet, w, h, cursor, &scroll);
+        // C3 (cheap-path): render the chrome through its persistent
+        // `IncrementalLayout` session — the session drains this frame's mutations,
+        // rebuilds only on a structural / resize / theme frame, and otherwise
+        // restyles incrementally (RepaintOnly, no relayout). Same Scene for a given
+        // DOM as the old per-frame `scene_from_scripted_dom`.
+        let chrome_scene = PaneSession::scene(
+            &mut self.view.chrome_session,
+            &self.view.dom,
+            &chrome_sheet,
+            w,
+            h,
+            cursor,
+            &scroll,
+        );
         chrome_us = chrome_t.elapsed().as_micros();
 
         // Color the orrery's nodes by activation state (green open / red closed /
@@ -252,8 +265,12 @@ impl WindowCtx<'_> {
             if self.view.workbench_runner.state() != &scene {
                 self.view.workbench_runner.update(move |s| *s = scene);
             }
-            let wb = scene_from_scripted_dom(
-                &self.view.workbench_dom.borrow(),
+            // C5: render the workbench through its persistent session (drains +
+            // applies the runner's diff, rebuilding only on a tile-tree splice /
+            // resize). The slot-placement reads below share this one layout.
+            let wb = PaneSession::scene(
+                &mut self.view.workbench_session,
+                &self.view.workbench_dom,
                 WORKBENCH_SHEET,
                 ww,
                 wh,
@@ -303,12 +320,18 @@ impl WindowCtx<'_> {
             // slot-local origin and the tiles stack on each other. The collect
             // releases the DOM borrow before we mutate self. (member, content rect,
             // full slot rect) in window coords, offset by the workbench leaf origin.
-            let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
-            let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
             let placements: Vec<(GraphMemberId, [f32; 4], [f32; 4])> = {
                 let (ox, oy) = (wr[0], wr[1]);
                 let dom = self.view.workbench_dom.borrow();
-                let frags = fragments_from_scripted_dom(&dom, WORKBENCH_SHEET, ww, wh);
+                // C5: read slot placements off the same layout the render built
+                // (the session above), not a second `fragments_from_scripted_dom`
+                // pass. Built under the same `workbench_rect` gate, so it is `Some`.
+                let frags = self
+                    .view
+                    .workbench_session
+                    .as_ref()
+                    .expect("workbench session built by the render above")
+                    .fragments();
                 let root = dom.document();
                 let (wx, wy) = first_with_class(&dom, root, "workbench")
                     .and_then(|n| frags.rect_of(n))
@@ -1095,7 +1118,6 @@ impl WindowCtx<'_> {
         }
         frame.present();
         self.refresh_a11y_summary();
-        self.discard_dom_mutations();
 
         // C0 baseline: one line per rendered frame (gated by the `meerkat::profile`
         // target). `total_us` is the whole `render()`; `chrome_us` is the chrome
@@ -1113,18 +1135,4 @@ impl WindowCtx<'_> {
         }
     }
 
-    /// Drop the chrome + workbench DOM mutation streams accumulated this frame.
-    /// Both DOMs are persistent — the chrome and workbench runners diff their view
-    /// trees into them through shared `Rc`s — and each `set_attribute` / insert /
-    /// remove records a `DomMutation`. meerkat renders by full reflow
-    /// (`scene_from_scripted_dom` reads the whole tree and never consumes the
-    /// stream), so without a drain the two logs grow one record per mutation for
-    /// the life of the session. Draining and dropping them each frame bounds that
-    /// growth. If incremental relayout is ever wired here, consume the stream
-    /// before this point rather than discarding it.
-    fn discard_dom_mutations(&self) {
-        let mut sink = Vec::new();
-        self.view.dom.borrow_mut().drain_mutations(&mut sink);
-        self.view.workbench_dom.borrow_mut().drain_mutations(&mut sink);
-    }
 }

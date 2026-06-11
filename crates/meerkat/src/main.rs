@@ -6,10 +6,11 @@
 //!
 //! A winit window that runs the reused chrome ([`meerkat::chrome_view`] over a
 //! [`meerkat::Chrome`] wrapping the graphshell `ToolbarState`) through serval and
-//! presents via netrender — pelt-live-shaped. It reuses pelt-live's lib for the
-//! cascade → layout → paint → `Scene` builder ([`scene_from_scripted_dom`]) and
-//! the point→node hit-test ([`hit_test_node`]), so this file is the window +
-//! present + input-dispatch harness, not a second engine.
+//! presents via netrender. Its `ScriptedDom → Scene` render glue (the
+//! `serval_render` module: [`crate::serval_render::scene_from_scripted_dom`] and
+//! the point→node [`crate::serval_render::hit_test_node`]) calls serval-layout +
+//! paint_list_render directly, so this file is the window + present +
+//! input-dispatch harness, not a second engine.
 //!
 //! ## Two roots, one window
 //!
@@ -43,7 +44,8 @@ use inker::EngineRegistry;
 use layout_dom_api::LayoutDom;
 use meerkat::{Chrome, ChromeLogic, chrome_view};
 use orrery::{CameraView, Orrery};
-use pelt_live::fragments_from_scripted_dom;
+use crate::serval_render::fragments_from_scripted_dom;
+use serval_layout::FragmentPlane;
 use platen::Workbench;
 use platen_view::{WorkbenchLogic, WorkbenchScene, workbench_view};
 use register_diagnostics::{DiagnosticEvent, install_global_sender};
@@ -78,9 +80,11 @@ mod gloss;
 mod input;
 mod inspector;
 mod observability;
+mod pane_session;
 mod render;
 mod roster;
 mod scrying_host;
+mod serval_render;
 mod shellbar;
 mod switcher;
 mod text;
@@ -1211,6 +1215,15 @@ fn measure_class_bottom(
     class: &str,
 ) -> Option<u32> {
     let frags = fragments_from_scripted_dom(dom, sheet, w, h);
+    class_bottom_in(dom, &frags, class)
+}
+
+/// The border-box bottom (px, rounded up) of the first element carrying CSS
+/// `class`, read from an **already-computed** fragment plane. Lets a caller that
+/// holds a session's retained fragments (`ChromeSession::fragments`) measure the
+/// chrome-region gate off the rendered layout instead of re-laying-out (C4).
+/// `None` if no such element is laid out, or its bottom is non-positive.
+fn class_bottom_in(dom: &ScriptedDom, frags: &FragmentPlane<NodeId>, class: &str) -> Option<u32> {
     first_with_class(dom, dom.document(), class)
         .and_then(|node| frags.rect_of(node))
         .map(|layout| (layout.location.y + layout.size.height).ceil() as u32)

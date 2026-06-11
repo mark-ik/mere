@@ -58,12 +58,72 @@ First-class lexical search; the federated-contribution counterpart to the vector
 index. **Trigger**: a moot-side consumer pulls lexical search, or graph/semantic
 search demands exact-phrase recall.
 
-**Scope (detail when triggered)**: `SearchIndex` schema engram (corpus shape,
-tokenizer, ranking config, field set); `tantivy::Directory` over OPFS (browser)
-and native fs; index-merge plumbing for moot composability (design pass §7.5);
-segment-separable composition default.
+**The frame (2026-06-11): one index, two configurations.** eidetic is the
+**producer** (read-write, `IndexWriter`, OPFS/native Directory, indexing your
+own trails and notes); moot is the **consumer** (the `SearchIndex` engram is an
+immutable, schema-and-format-tagged, CID-addressed slice, shared read-only,
+range-fetched on demand, merged under per-moot policy, tessera-gated). The
+engram is the hand-off: eidetic mints it, moot federates it. tantivy's relevance
+to both is the same relevance seen from the two ends.
 
-**Dependencies**: Phase 3 (typed payloads), Phase 7 (OPFS for the browser case).
+**Scope (detailed 2026-06-11; verified against tantivy 0.26.0 — the source
+checkout at `Code/.tantivy-probe` — and the design pass §7.5):**
+
+- `SearchIndex` schema engram: corpus shape, tokenizer, ranking config, field
+  set, **and reserved fast-field columns** — the aggregations framework over
+  columnar fast fields (terms / histogram / stats / facets, composing across
+  merged segments) is what makes a moot's flora *browsable* (reports: counts
+  over time, top domains, topic facets per contributor), not just searchable.
+  Reserve the columns in the schema now so reports need no re-index later.
+- **The engram contract carries a tantivy format version** beside the schema:
+  tantivy does not promise index compatibility across releases, so recipients
+  reject-or-re-mint on mismatch (the workspace-pins doctrine applied to a wire
+  format). Re-minting is cheap in principle because the source corpus is itself
+  engrams — "re-index the flora at format N+1" is an indexing **bounty**
+  (communal-compute brief). Caveat for that bounty's verification: tantivy
+  indexing is **not byte-deterministic** (segment layout varies with threading
+  and merge policy), so index bounties verify by query-equivalence spot-checks
+  (claimed-task shaped), never first-valid-hash.
+- **Two Directory backends, not one** — the produce and consume paths have
+  different requirements and the consume path is strictly simpler:
+  - *Produce* (eidetic, read-write): `tantivy::Directory` over OPFS (browser)
+    and native fs; this is the only path that needs atomic writes, lock files,
+    and `ManagedDirectory` GC.
+  - *Consume* (moot, read-only): an **`EngramDirectory`** that lazily
+    range-fetches. The seam is `FileHandle::read_bytes(Range) -> OwnedBytes`
+    (+ `read_bytes_async`, `common/src/file_slice.rs:22-29`), and it maps
+    almost one-to-one onto **iroh-blobs range requests** — bao-tree streaming
+    already serves verified byte ranges of a blob, so per-range integrity
+    comes from the transport. Plus a small hot cache (the Quickwit
+    split/hotcache **technique** — borrow the idea; Quickwit is AGPL, tantivy
+    itself is MIT, keep the line clean). Payoff: a member browses a large
+    community index without downloading it first, reading only the sstable
+    blocks and posting ranges a query touches. No `IndexWriter`, no locks.
+- Index-merge plumbing for moot composability (design pass §7.5):
+  segment-separable composition default (per-contributor partitions; merge is
+  per-moot policy via `IndexMerger`), schema + format verified before merge.
+- **Defensive ingestion on the consume path**: transport integrity (bao) gates
+  tamper, tessera gates who, but parsing a peer's term dict / postings is
+  still an attack surface. Validate peer segments in a constellation-style
+  worker (panic isolation + respawn already exist there); a panic rejects the
+  engram, never the kernel. wasm caveat: panic-catching is unavailable under
+  panic=abort, so validation is Result-shaped there or runs native-side at
+  the moot boundary.
+- **The real browser gate is tantivy-on-wasm, not storage** (OPFS settles
+  where bytes live). One-command probe from the checkout:
+  `cargo check --target wasm32-unknown-unknown --no-default-features` (mmap is
+  a feature to drop; threads live mostly in `IndexWriter`, and the consumer
+  read path can run a single-thread executor). Fallback if the engine is too
+  heavy there: `ownedbytes` / `sstable` / `columnar` are individually MIT and
+  borrowable as building blocks — a big retreat, so probe first.
+- **Hybrid retrieval**: tantivy is also the BM25 half of geist RAG beside
+  `intel/embed`'s vector index (BM25 + vector fusion is the standard quality
+  move, and the resource-coordination brief already concluded RAG carries the
+  geist's factual side). Phase 9 is retrieval quality for every geist query,
+  not just a moot search box.
+
+**Dependencies**: Phase 3 (typed payloads), Phase 7 (OPFS for the browser
+*produce* case; the consume path depends on iroh-blobs ranges instead).
 
 ---
 
@@ -88,3 +148,16 @@ segment-separable composition default.
   sidequests 1-9 shipped (eidetic 67 tests + the four companion crates green per
   the archived plan's progress log). No new code; this plan holds the deferred
   tail until a consumer triggers each phase.
+- 2026-06-11 — **Phase 9 detailed** from a verified tantivy analysis (claims
+  checked against the tantivy 0.26.0 source checkout at `Code/.tantivy-probe`
+  and the design pass; `FileHandle::read_bytes(_async)` confirmed at
+  `common/src/file_slice.rs:22-29`). Folded in: the one-index-two-configurations
+  producer/consumer frame (the engram as hand-off), the produce/consume
+  Directory split (consume = read-only `EngramDirectory` range-fetching over
+  iroh-blobs bao ranges + hotcache, Quickwit technique-only), the
+  format-version engram contract (+ re-mint-via-bounty with the
+  non-byte-deterministic-indexing verification caveat), reserved fast-field
+  columns for the aggregations/reports half, defensive ingestion in a
+  constellation-style worker, the wasm probe as the real browser gate, and the
+  hybrid-retrieval (BM25 + vector) tie to geist RAG. Still trigger-gated; no
+  code.

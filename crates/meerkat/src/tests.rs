@@ -297,7 +297,7 @@ fn count_class(dom: &ScriptedDom, id: NodeId, class: &str) -> usize {
 /// ink under a full-width advance).
 #[test]
 fn omnibar_caret_tracks_bytes() {
-    use pelt_live::caret_screen_rect;
+    use serval_layout::IncrementalLayout;
     use xilem_serval::{Key, KeyEvent, NamedKey};
     const TEST_SHEET: &[&str] =
         &["div, button, input { display: block; } input { font-size: 22px; }"];
@@ -310,8 +310,13 @@ fn omnibar_caret_tracks_bytes() {
     let caret_x = |runner: &ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
                    node: NodeId,
                    byte: usize| {
-        caret_screen_rect(&runner.dom().borrow(), TEST_SHEET, 1024, 600, node, byte)
-            .map(|r| r.0)
+        let dom = runner.dom();
+        let dom = dom.borrow();
+        // The production caret primitive (a fresh session's retained layout), the
+        // same `IncrementalLayout::caret_rect` the chrome's session overlay uses.
+        IncrementalLayout::new(&*dom, TEST_SHEET, 1024.0, 600.0)
+            .caret_rect(&*dom, node, byte, 2.0)
+            .map(|r| r.x)
             .expect("caret rect")
     };
 

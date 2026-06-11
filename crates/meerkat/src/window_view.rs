@@ -31,6 +31,7 @@ use winit::window::CursorIcon;
 use xilem_serval::{Modifiers, ServalAppRunner};
 
 use super::{CachedTile, ContentPane, ResizeDrag};
+use crate::pane_session::PaneSession;
 
 /// What a window *is*, which selects its chrome template (and, from MW6, its camera
 /// ownership). The **primary** owns the orrery + the shellbar/switcher chrome and
@@ -73,6 +74,10 @@ pub(crate) struct WindowView {
     pub(crate) dom: Rc<RefCell<ScriptedDom>>,
     /// The chrome runner: this window's toolbar / omnibar / dropdown authority.
     pub(crate) runner: ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
+    /// The chrome DOM's incremental cascade+layout session (cheap-path C3). `None`
+    /// until the first render builds it; rebuilt on a structural / resize / theme
+    /// change, else the per-frame attribute batch applies on the `RepaintOnly` path.
+    pub(crate) chrome_session: Option<PaneSession>,
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
     /// (Cartography = the orrery, Tree = the tiled view).
     pub(crate) workbench: Workbench,
@@ -81,6 +86,10 @@ pub(crate) struct WindowView {
     pub(crate) workbench_dom: Rc<RefCell<ScriptedDom>>,
     /// The workbench runner driving `workbench_dom` from `workbench`.
     pub(crate) workbench_runner: ServalAppRunner<WorkbenchScene, WorkbenchLogic, WorkbenchTreeView>,
+    /// The workbench DOM's incremental cascade+layout session (cheap-path C5) — the
+    /// pane render, its slot-placement fragment reads, and its click hit-tests all
+    /// share this one layout per frame. `None` until the workbench first renders.
+    pub(crate) workbench_session: Option<PaneSession>,
 
     /// Each switcher row's on-screen rect this frame: a click switches to it.
     pub(crate) session_row_rects: Vec<(SessionId, [f32; 4])>,
@@ -233,9 +242,11 @@ impl WindowView {
             focused_graph,
             dom,
             runner,
+            chrome_session: None,
             workbench,
             workbench_dom,
             workbench_runner,
+            workbench_session: None,
             session_row_rects: Default::default(),
             session_close_rects: Default::default(),
             session_add_rect: Default::default(),

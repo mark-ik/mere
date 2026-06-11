@@ -230,7 +230,7 @@ fn qual(local: &str) -> QualName {
 mod tests {
     use super::*;
     use layout_dom_api::LayoutDom;
-    use pelt_live::fragments_from_scripted_dom;
+    use crate::serval_render::fragments_from_scripted_dom;
 
     #[test]
     fn roster_sheet_marks_root_as_scroll_container() {

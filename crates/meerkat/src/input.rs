@@ -11,7 +11,7 @@ use forme::GraphMemberId;
 use layout_dom_api::LayoutDom;
 use meerkat::{Chrome, submit_omnibar};
 use orrery::PointerButton;
-use pelt_live::hit_test_node;
+use crate::serval_render::hit_test_node;
 use platen_view::{WORKBENCH_SHEET, WorkbenchAction};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
@@ -24,8 +24,8 @@ use frame::PaneContent;
 
 use super::titlebar::{self, WindowControl};
 use super::{
-    FALLBACK_TOOLBAR_H, WindowCtx, first_tag, first_with_class, has_class, measure_class_bottom,
-    scrying_host,
+    FALLBACK_TOOLBAR_H, WindowCtx, class_bottom_in, first_tag, first_with_class, has_class,
+    measure_class_bottom, scrying_host,
 };
 
 /// Map a winit mouse button to the scrying host's button vocabulary. (Scrying X2.)
@@ -116,8 +116,20 @@ impl WindowCtx<'_> {
                 let sheet = self.shared.presentation.chrome_sheet_refs();
                 let chrome_h = {
                     let dom = self.view.dom.borrow();
-                    measure_class_bottom(&dom, &sheet, self.view.width, self.view.height, "chrome")
-                        .unwrap_or(self.view.toolbar_h.max(FALLBACK_TOOLBAR_H))
+                    // C4: read the chrome region off the render's retained layout
+                    // (the session); only the first press before any render falls
+                    // back to a stateless measure.
+                    let bottom = match &self.view.chrome_session {
+                        Some(s) => class_bottom_in(&dom, s.fragments(), "chrome"),
+                        None => measure_class_bottom(
+                            &dom,
+                            &sheet,
+                            self.view.width,
+                            self.view.height,
+                            "chrome",
+                        ),
+                    };
+                    bottom.unwrap_or(self.view.toolbar_h.max(FALLBACK_TOOLBAR_H))
                 };
                 if y < th {
                     // The toolbar bar doubles as the titlebar: defer a left press to
@@ -448,7 +460,12 @@ impl WindowCtx<'_> {
         let sheet = self.shared.presentation.chrome_sheet_refs();
         let hit = {
             let dom = self.view.dom.borrow();
-            hit_test_node(&dom, &sheet, self.view.width, self.view.height, x, y, &offsets)
+            // C4: hit-test against the render's retained chrome layout (the
+            // session); fall back to a stateless probe only before the first render.
+            match &self.view.chrome_session {
+                Some(s) => s.hit_test(&dom, x, y, &offsets),
+                None => hit_test_node(&dom, &sheet, self.view.width, self.view.height, x, y, &offsets),
+            }
         };
         if let Some(node) = hit {
             let palette_was_open = self.view.runner.state().palette_open;
@@ -482,7 +499,12 @@ impl WindowCtx<'_> {
         let offsets = ScrollOffsets::<NodeId>::default();
         let hit = {
             let dom = self.view.workbench_dom.borrow();
-            hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets)
+            // C5: hit-test the workbench off its render's retained layout (session);
+            // stateless fallback only before the workbench first renders.
+            match &self.view.workbench_session {
+                Some(s) => s.hit_test(&dom, lx, ly, &offsets),
+                None => hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets),
+            }
         };
         if let Some(node) = hit {
             self.view.workbench_runner
@@ -516,7 +538,11 @@ impl WindowCtx<'_> {
         let (lx, ly) = (x - wr[0], y - wr[1]);
         let offsets = ScrollOffsets::<NodeId>::default();
         let dom = self.view.workbench_dom.borrow();
-        let node = hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets)?;
+        // C5: divider probe off the workbench session's retained layout.
+        let node = (match &self.view.workbench_session {
+            Some(s) => s.hit_test(&dom, lx, ly, &offsets),
+            None => hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets),
+        })?;
         if !has_class(&dom, node, "wb-divider") {
             return None;
         }

@@ -131,6 +131,17 @@ query re-running cascade+layout (`pelt-live/render.rs:290-348`).
 can return the same object. **Done when** pelt-live's own bin serves render +
 all queries from one cascade+layout per dirty frame.
 
+**C1 seam DONE (2026-06-11, serval `7d87a3b668b`).** `LaidOutDocument`
+(`pelt-live/render.rs`) computes cascade+layout once and serves `hit_test`,
+`fragments`/`rect_of`, `caret_screen_rect`, `soft_wrap_caret_byte`,
+`caret_byte_at`, and `accesskit_tree` as methods over the retained (styles,
+fragments, box tree, text ctx). The free `*_from_scripted_dom` / `hit_test_node`
+/ caret functions now delegate to it (compute-once-then-query). **Remaining for
+the full done-condition:** the bin (`main.rs`/`input.rs`) builds *one*
+`LaidOutDocument` per dirty frame and routes its queries through it (the free
+functions still compute one layout each, so a multi-query frame still multiplies
+until the bin adopts the object).
+
 ### C2 — One font system per pass (serval)
 
 Layout entry points accept a persistent font context (host-held or
@@ -140,6 +151,18 @@ note: cascade font metrics and text shaping resolve from the same collection.
 meerkat's `text.rs` already holds its contexts for the host's life; this
 brings layout to the same discipline. **Done when** a steady-state frame
 performs no font discovery.
+
+**C2 DONE (2026-06-11, serval `2dc05c84087`).** `TextMeasureCtx::reset()` clears
+the per-pass parley-layout caches (stale Taffy keys) while keeping the persistent
+`font_ctx`/`layout_ctx`; `layout_via_box_tree` takes a caller-held
+`&mut TextMeasureCtx`. `IncrementalLayout` now builds its context once and reuses
+it across full relayouts (it previously *replaced* it each time), so a session
+runs **no font discovery in steady state** — the done-condition for the path C3
+sits on. The stateless `layout()` keeps a fresh-ctx wrapper so existing pelt-live
+render/query callers are unchanged; they migrate to a held context in C3+. The
+infra-scope §2 shared-collection note (cascade metrics + shaping from one
+`fontique::Collection`) is a consistency follow-up, not a discovery cost (the
+cascade's metrics collection is already thread-local-amortized).
 
 ### C3 — Chrome pane onto a session (mere)
 
@@ -151,6 +174,39 @@ capture stateless-vs-session Scene snapshot fixtures (netrender postcard) for
 a scripted set of chrome states and assert parity. **Done when** chrome
 renders through the session, fixtures are green, and the C0 table shows the
 delta.
+
+**C3 DONE (2026-06-11).** Chrome renders through a per-window `IncrementalLayout`
+session (`ChromeSession`, its own meerkat module at
+`crates/meerkat/src/chrome_session.rs`). Realized slightly differently from the
+sketch above: rather than recover from a `Spliced` apply (which invalidates the
+paint side), the session is **rebuilt** whenever the drained batch is structural
+(or the viewport / sheet changed) — a full layout, the same cost as the old
+stateless frame, but only on those frames — so `apply` only ever sees
+attribute-only batches and the session is never left un-emittable. Resize and
+theme self-heal through a dims/sheet compare; no caller invalidates it. Parity is
+a runtime fixture (`session_render_matches_stateless_render`, serval pelt-live):
+`scene_from_session` is **op-for-op identical** to `scene_from_scripted_dom`
+across plain / caret / selection states. The session overlay sources caret /
+selection / `::selection` color from new `IncrementalLayout` query methods (the C1
+seam applied to the session). Re-measured over 560 frames of a representative
+interaction, **same debug build as C0**:
+
+| metric | C0 (stateless) | C3 (session) | change |
+| --- | --- | --- | --- |
+| chrome cascade+layout+paint, median | 29 ms | **6.8 ms** | −77% (4.3×) |
+| chrome, p95 | 40 ms | 28 ms | −29% |
+| `render()` total, median | 56 ms | **33 ms** | −40% |
+| chrome share of the median frame | 53% | 20.5% | |
+
+Steady-frame chrome dropped 4.3× (the `RepaintOnly` path skips cascade+layout),
+taking the whole frame down ~40% (56 → 33 ms) — essentially the full achievable
+chrome saving (floor ≈ 33.8 ms = 56 − (29 − 6.8)). The frame is now dominated by
+the non-chrome panes + orrery; chrome is a fifth of it. The p95 tail (132 → 90 ms)
+is the rebuild frames (typing / palette structural batches) plus the pane-heavy
+frames C5 addresses. The ~6.5 ms steady residual is apply + emit + translate +
+overlays; an equality-guard on the per-frame shellbar inline-style write (→
+`Unchanged`, skipping even the restyle) is the obvious next trim. Instrumentation
+stays behind `RUST_LOG=meerkat::profile=debug`.
 
 ### C4 — Queries ride the seam (mere)
 
@@ -259,3 +315,28 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   C1 (the laid-out-document query seam in serval) + C2 (persistent FontContext) are the
   serval-side infra C3 sits on; or pick up the composition-enabling C6 subset in
   parallel (independent of the perf chain). Re-measuring after C3 is one run.
+- **2026-06-11** — **C1 + C2 landed (serval-side).** C2 (`2dc05c84087`):
+  `TextMeasureCtx::reset()` + `layout_via_box_tree` takes a persistent
+  `&mut TextMeasureCtx`; `IncrementalLayout` reuses one context across relayouts
+  instead of recreating it, so the session path runs no steady-state font
+  discovery. C1 (`7d87a3b668b`): `LaidOutDocument` serves every point query
+  (hit-test, fragments, caret ×3, a11y) off one cascade+layout; the free query
+  functions delegate to it. Both are tested in serval-layout / pelt-live and
+  build clean. **Now C3 (sessionize the chrome pane in meerkat) has both pieces
+  it sits on**; the remaining C1 step is the bin building one `LaidOutDocument`
+  per dirty frame (rolls into C3/C4's render.rs+input.rs adoption).
+- **2026-06-11** — **C3 done: chrome on a session, frame down ~40%.** meerkat's
+  chrome renders through a per-window `IncrementalLayout` (`ChromeSession`), rebuilt
+  only on a structural / resize / theme frame and riding the `RepaintOnly` path
+  otherwise; serval gained session-side `caret_rect` / `selection_rects` /
+  `selection_style` query methods + `scene_from_session` (the C1 seam applied to the
+  session). Parity is op-for-op (`session_render_matches_stateless_render`). Re-measured
+  over 560 frames (same debug build as C0): chrome cascade+layout+paint **29 → 6.8 ms**
+  median (4.3×), the whole frame **56 → 33 ms** (−40%), chrome now 20.5% of the median
+  frame (was 53%). Table in C3. The win matches the C0 prediction (the achievable chrome
+  saving was captured in full). Next: **C4** (queries ride the C1 seam — port input.rs
+  hit-tests / popup anchor / a11y rects off the stateless `fragments_from_scripted_dom`,
+  and have the bin build one `LaidOutDocument` per dirty frame) and **C5** (workbench /
+  roster / apparatus / utility panes), or the composition-enabling C6 subset (independent
+  of the perf chain). A cheap follow-up trim: equality-guard the per-frame shellbar
+  inline-style write so a static chrome frame returns `Unchanged` (skips even the restyle).
