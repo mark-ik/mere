@@ -21,7 +21,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use forme::GraphMemberId;
-use frame::{FrameLayout, PaneId, SessionId, SplitAxis, SplitChoice};
+use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
 use meerkat::{Chrome, ChromeLogic, ChromeView};
 use platen::Workbench;
 use platen_view::{WorkbenchLogic, WorkbenchScene, WorkbenchTreeView};
@@ -174,6 +174,11 @@ pub(crate) struct WindowView {
     pub(crate) maximized_pane: Option<PaneId>,
     /// Which content pane navigation acts on (the last-interacted one).
     pub(crate) active_content: ContentPane,
+    /// The graph this window's nav / focus / selection currently act on — the active
+    /// content pane's graph. Resolves which pooled orrery the ctx bundles as
+    /// `self.orrery`. At one graph per window it tracks the active session's graph;
+    /// session-switch updates it. (Window composition P1.)
+    pub(crate) focused_graph: GraphId,
 
     // ── Window + surface + size + input: the OS window itself, its present stack,
     //    its surface dimensions, and the pointer / modifier state of its focus.
@@ -216,6 +221,7 @@ impl WindowView {
     /// window is a second `new(...)` over the same shared session. (MW2.)
     pub(crate) fn new(
         kind: WindowKind,
+        focused_graph: GraphId,
         dom: Rc<RefCell<ScriptedDom>>,
         runner: ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
         workbench: Workbench,
@@ -224,6 +230,7 @@ impl WindowView {
     ) -> Self {
         Self {
             kind,
+            focused_graph,
             dom,
             runner,
             workbench,

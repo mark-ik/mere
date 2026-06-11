@@ -150,7 +150,7 @@ impl Shell {
         // Compute each self-derived value into a local first: the struct literal would
         // otherwise hold several borrows of `self` (ctx, orrery, agent_surfaces) at once.
         let active_theme_id = self.shared.presentation.active_theme_id.clone();
-        let focused_node = self.orrery.focused_url().map(str::to_string);
+        let focused_node = self.orrery().focused_url().map(str::to_string);
         let active_content = match self.ctx().view.active_content {
             ContentPane::Orrery => AgentPane::Orrery,
             ContentPane::Workbench => AgentPane::Workbench,
@@ -275,7 +275,7 @@ impl Shell {
 
     fn agent_select_node_by_url(&mut self, url: &str) -> (bool, String, String) {
         let action_id = "node.select_by_url".to_string();
-        if !self.orrery.select_by_url(url) {
+        if !self.orrery_mut().select_by_url(url) {
             return (false, action_id, format!("node not found: {url}"));
         }
         self.ctx().view.active_content = ContentPane::Orrery;
@@ -475,18 +475,18 @@ mod tests {
         let mut app = test_app();
         let first = app.shared.session.active_session_id;
         // Grow the first session's graph, then create + switch to a fresh second.
-        app.orrery.visit("mere://added-to-first");
-        let first_count = app.orrery.graph().nodes().count();
+        app.orrery_mut().visit("mere://added-to-first");
+        let first_count = app.orrery().graph().nodes().count();
         assert!(first_count >= 2, "welcome + the added node");
 
         let second = app.ctx().create_session();
         // The fresh session is its own (smaller) graph, not the first's.
-        assert!(app.orrery.graph().nodes().count() < first_count);
+        assert!(app.orrery().graph().nodes().count() < first_count);
 
         app.ctx().switch_session(first);
         assert_eq!(app.shared.session.active_session_id, first);
         assert_eq!(
-            app.orrery.graph().nodes().count(),
+            app.orrery().graph().nodes().count(),
             first_count,
             "the first session's graph was restored intact"
         );
@@ -759,7 +759,7 @@ mod tests {
     #[test]
     fn agent_can_select_node_and_report_blocked_actions() {
         let mut app = test_app();
-        app.orrery.visit("https://example.test");
+        app.orrery_mut().visit("https://example.test");
         let step =
             app.apply_agent_action(AgentAction::SelectNodeByUrl("mere://welcome".to_string()));
         assert!(step.result.applied);
@@ -799,8 +799,8 @@ mod tests {
     #[test]
     fn accesskit_actions_route_to_semantic_node_selection() {
         let mut app = test_app();
-        app.orrery.visit("https://example.test");
-        app.orrery.select_by_url("mere://welcome");
+        app.orrery_mut().visit("https://example.test");
+        app.orrery_mut().select_by_url("mere://welcome");
         app.ctx().refresh_a11y_summary();
         let target = app
             .a11y_action_routes
@@ -818,7 +818,7 @@ mod tests {
             target_node: target,
         });
 
-        assert_eq!(app.orrery.focused_url(), Some("https://example.test"));
+        assert_eq!(app.orrery().focused_url(), Some("https://example.test"));
         let observation = app.agent_observation();
         assert!(
             observation

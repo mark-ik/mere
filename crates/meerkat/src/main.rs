@@ -495,11 +495,13 @@ impl Presentation {
 struct Shell {
     /// Session + app state shared across every window. (Multi-window MW2.)
     shared: SharedState,
-    /// The content root: the [`Orrery`] — the graph's spatial presentation,
-    /// rendered into the band below the chrome and driven by content-band input.
-    /// Stays on `Shell` (the MW6 IOU: a leaf window holds no orrery; the primary's
-    /// camera moves into `WindowKind::Primary` only when MW6 splits it).
-    orrery: Orrery,
+    /// The pooled orrery authorities, keyed by graph. Each is a whole [`Orrery`]
+    /// (graph + physics + camera) — the source of every pane's content for that graph.
+    /// Panes resolve to one by `graph_id`; the ctx bundles the window's focused-graph
+    /// orrery as `self.orrery`. A sibling `Shell` field (not in `SharedState`) so it
+    /// borrows disjointly from `shared` / `view`, as the single `orrery` did before.
+    /// (Window composition P1; was the single `orrery: Orrery`.)
+    orreries: HashMap<GraphId, Orrery>,
     /// All live windows, keyed by OS `WindowId` — the registry. Every per-window
     /// handler is dispatched by resolving the event's id to its view here. At N=1
     /// it holds just the primary; tear-out (MW3+) inserts more. (Multi-window MW2 (d).)
@@ -828,6 +830,7 @@ impl Shell {
         );
         let mut view = window_view::WindowView::new(
             window_view::WindowKind::Primary,
+            active_graph,
             dom,
             runner,
             Workbench::new(),
@@ -875,7 +878,7 @@ impl Shell {
                 },
                 observability: HostObservability::new(),
             },
-            orrery,
+            orreries: HashMap::from([(active_graph, orrery)]),
             windows: HashMap::new(),
             primary: None,
             pending_view: Some(view),
@@ -918,10 +921,15 @@ impl Shell {
                 .as_mut()
                 .expect("a primary or pending view"),
         };
+        // Bundle this window's focused-graph orrery from the pool. (Window composition P1.)
+        let gid = view.focused_graph;
         WindowCtx {
             view,
             shared: &mut self.shared,
-            orrery: &mut self.orrery,
+            orrery: self
+                .orreries
+                .get_mut(&gid)
+                .expect("focused orrery is pooled"),
             clipboard: &mut self.clipboard,
             a11y_bridge: &mut self.a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
@@ -941,16 +949,35 @@ impl Shell {
         }
     }
 
+    /// The focused window's orrery resolved from the pool — for the read/write paths
+    /// that reach the orrery off `Shell` directly (the agent harness; the per-window
+    /// `WindowCtx` bundles it as `self.orrery`). (Window composition P1.)
+    #[cfg(any(test, feature = "agent-harness"))]
+    fn orrery(&self) -> &Orrery {
+        let gid = self.view().focused_graph;
+        self.orreries.get(&gid).expect("focused orrery is pooled")
+    }
+
+    #[cfg(any(test, feature = "agent-harness"))]
+    fn orrery_mut(&mut self) -> &mut Orrery {
+        let gid = self.view().focused_graph;
+        self.orreries.get_mut(&gid).expect("focused orrery is pooled")
+    }
+
     /// Borrow window `id` as a handling context: its view from the registry plus the
     /// shared state and shell singletons the active window drives. `None` if no such
     /// window. The construction is the per-window seam — a ctx reaches exactly one
     /// view, never the registry or its siblings. (MW2 (d).)
     fn window_ctx(&mut self, id: WindowId) -> Option<WindowCtx<'_>> {
         let view = self.windows.get_mut(&id)?;
+        let gid = view.focused_graph;
         Some(WindowCtx {
             view,
             shared: &mut self.shared,
-            orrery: &mut self.orrery,
+            orrery: self
+                .orreries
+                .get_mut(&gid)
+                .expect("focused orrery is pooled"),
             clipboard: &mut self.clipboard,
             a11y_bridge: &mut self.a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
@@ -987,6 +1014,7 @@ impl Shell {
             .unwrap_or_default();
         let mut view = window_view::WindowView::new(
             window_view::WindowKind::Leaf,
+            active_graph,
             dom,
             runner,
             Workbench::new(),
