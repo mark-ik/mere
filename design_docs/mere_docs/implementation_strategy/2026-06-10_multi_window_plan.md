@@ -346,6 +346,47 @@ Done when two windows coexist on one device, the second shows a shared node's li
 tile (texture shared, not re-rendered), and closing it leaves the graph + the first
 window intact.
 
+*MW3 implementation brief (2026-06-10, grounded in the `SurfaceHost` + netrender code):*
+
+- **Load-bearing unknown resolved — no netrender change needed.** `SurfaceHost::boot`
+  calls `netrender::boot()` (mints a fresh instance/adapter/device/queue) then
+  `create_netrender_instance(handles, options)`, which *moves* the handles into the
+  `Renderer`. But `netrender_device::WgpuHandles` exposes `pub instance:
+  wgpu::Instance` + `pub adapter: wgpu::Adapter`, reachable as
+  `renderer.wgpu_device.core.{instance, adapter}`. So a second window's surface is
+  `core.instance.create_surface(window)` + caps from `core.adapter` + configure with
+  `core.device` — all from the one shared `Renderer`. The one-device/N-surfaces split
+  is **entirely within `serval-winit-host` + `meerkat`**; the cross-repo `netrender`
+  checkout is untouched.
+- **The split (serval-winit-host).** `SurfaceHost { surface, surface_config, renderer }`
+  becomes `RenderCore { renderer }` (shared: owns instance/adapter/device/queue +
+  netrender pipelines) and `WindowSurface { surface, surface_config }` (per window).
+  Method assignment: `rasterize` / `renderer` / `device` / `queue` → `RenderCore`;
+  `acquire` / `resize` / `format` → `WindowSurface` (taking `&RenderCore` for the
+  device); new `RenderCore::create_surface(window, w, h) -> WindowSurface`. Keep
+  `boot`/`boot_async` as `RenderCore::boot`. (Other consumer to update: the orrery host,
+  per the crate's Cargo description — check it before landing.)
+- **The rewire (meerkat).** `Shell` gains `render_core: Option<RenderCore>` (booted once
+  on the first `resumed`; shared infra, so top-level like `clipboard`, not in
+  `SharedState`). `WindowView.host: Option<SurfaceHost>` becomes `surface:
+  Option<WindowSurface>`. The render path (`render.rs`, all `self.view.host.*`) splits
+  into `self.render_core` (rasterize/compose) + `self.view.surface` (acquire/resize) —
+  but those live on different borrow sources, so the render method takes them as
+  explicit params or the ctx grows a `render_core` field. Scrying `drive()` currently
+  pulls `device`/`queue` from the host → now from `render_core`. **Borrow note:** the
+  brief's render disjointness (`view.host` immut beside `view.tile_textures` mut) shifts
+  — `render_core` is now a separate field from `view`, which actually *eases* it.
+- **Step order, each green:** (1) split `SurfaceHost` in serval-winit-host, update the
+  current single-window caller in lockstep (still one window, behavior-preserving);
+  (2) `Shell.render_core` + `WindowView.surface`, rewire the render path + scrying
+  device source; (3) the **`ShellCommand` queue + `Shell::apply` (this is deferred
+  (e), now real)** with `SpawnWindow(WindowKind)` / `CloseWindow(id)` + a Cmd/Ctrl+
+  Shift+N verb; (4) `WindowKind::{Primary, Leaf}` + slim leaf chrome template +
+  workbench-only leaf rendering shared tiles behind a read-only `NodeView` seam; (5)
+  **(d2) the `user_event` fan-out** (now testable against window 2) + present stays
+  non-blocking; (6) `a11y_bridge` + routes → `WindowView` (open question 3). MW2's
+  deferred (d2) + (e) land in steps 3 and 5, where a second window finally exercises them.
+
 ### MW4 — leaf tear-out gesture
 
 - Drag a workbench tab (or a pane header) past the slop. The drag **ghost is rendered
