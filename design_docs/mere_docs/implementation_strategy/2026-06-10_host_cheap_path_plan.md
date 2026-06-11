@@ -355,3 +355,16 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   `pelt-live` is dropped (~30 transitive crates pruned). All green (110 meerkat tests).
   **Deferred:** C4's a11y half (the chrome a11y subtree from the rendered DOM, a
   UxTree → accesskit swap, correctness-sensitive) and the C6 grab-bag.
+- **2026-06-11** — **C4c done (a11y half): chrome a11y derives from the rendered DOM.**
+  A `serval_a11y` module walks the chrome `ScriptedDom` and the chrome session's
+  retained fragments into a `UxTree` (roles by tag, names folded from text, bounds
+  from the session's layout, ids salted out of the path-hash space), replacing the
+  single hand-built "Chrome" placeholder node; the bridge stitches it under the host
+  window as before, and focus lands on the actual focused field. It reads the session's
+  fragments, so it adds **no** layout (the a11y rides the render's one cascade+layout),
+  which satisfies C4's full done-condition (≤ one layout per dirty pane **and** the
+  chrome a11y from the same DOM that renders). Adapted from the dropped pelt-live a11y
+  builder, retargeted `accesskit::TreeUpdate` → `UxTree`. Green (111 meerkat tests).
+  **Still deferred:** chrome a11y *actions* (a screen reader activating the omnibar /
+  a toolbar button) — the chrome was unactionable before too, so no regression; and the
+  C6 grab-bag. So **C0–C5 + C4c are done**; C6 is what remains of the plan.

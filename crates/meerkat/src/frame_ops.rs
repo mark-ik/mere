@@ -1498,19 +1498,33 @@ impl WindowCtx<'_> {
     pub(super) fn build_a11y_projection(&self) -> A11yProjection {
         let leaves = self.laid_leaves();
         let surfaces = leaves.len() + 2; // host window + chrome root + content leaves
-        let mut chrome = Node::new(Role::Application);
-        chrome.set_label("Chrome");
-        chrome.set_bounds(Rect::new(
-            0.0,
-            0.0,
-            self.view.width as f64,
-            self.view.toolbar_h as f64,
-        ));
-        let chrome_root = node_id_for_path("meerkat/chrome");
-        let chrome_tree = UxTree {
-            root: chrome_root,
-            nodes: vec![(chrome_root, chrome)],
+        // C4c: the chrome a11y subtree derives from the chrome DOM that renders
+        // (the session's retained layout for bounds), so a screen reader navigates
+        // the real toolbar / omnibar / buttons rather than one placeholder node.
+        // Falls back to a single node covering the toolbar band before the first
+        // render builds the session.
+        let chrome_tree = match &self.view.chrome_session {
+            Some(session) => {
+                let dom = self.view.dom.borrow();
+                crate::serval_a11y::chrome_a11y_tree(&dom, session.fragments())
+            }
+            None => {
+                let mut chrome = Node::new(Role::Application);
+                chrome.set_label("Chrome");
+                chrome.set_bounds(Rect::new(
+                    0.0,
+                    0.0,
+                    self.view.width as f64,
+                    self.view.toolbar_h as f64,
+                ));
+                let chrome_root = node_id_for_path("meerkat/chrome");
+                UxTree {
+                    root: chrome_root,
+                    nodes: vec![(chrome_root, chrome)],
+                }
+            }
         };
+        let chrome_root = chrome_tree.root;
         let mut action_routes = HashMap::new();
         let leaf_bounds: HashMap<PaneId, [f32; 4]> = leaves
             .iter()
@@ -1531,10 +1545,14 @@ impl WindowCtx<'_> {
         host.set_bounds(Rect::new(0.0, 0.0, self.view.width as f64, self.view.height as f64));
         let mut tree = uxtree::stitch("meerkat/window", host, vec![chrome_tree, frame_tree]);
         attach_link_actions(&mut tree, &mut action_routes);
-        let focus = if self.view.runner.focus().is_some() {
-            chrome_root
-        } else {
-            self.active_frame_focus_node().unwrap_or(frame_root)
+        let focus = match self.view.runner.focus() {
+            // The focused chrome DOM node (the omnibar field) when the DOM-derived
+            // subtree is in use; the chrome subtree root in the placeholder fallback.
+            Some(focused) if self.view.chrome_session.is_some() => {
+                crate::serval_a11y::chrome_a11y_id(focused)
+            }
+            Some(_) => chrome_root,
+            None => self.active_frame_focus_node().unwrap_or(frame_root),
         };
         let audit = audit_a11y_tree(&tree, focus);
         let degraded = match self.a11y_bridge.status() {

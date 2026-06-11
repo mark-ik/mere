@@ -84,6 +84,7 @@ mod pane_session;
 mod render;
 mod roster;
 mod scrying_host;
+mod serval_a11y;
 mod serval_render;
 mod shellbar;
 mod switcher;
