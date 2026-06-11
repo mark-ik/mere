@@ -1,9 +1,14 @@
 # Multi-Window Tear-Out Plan
 
 **Date**: 2026-06-10
-**Status**: Planning. Greenfield on the meerkat host. The tear-out *payload* types
-exist (`session-runtime/tearout.rs`); execution is unbuilt. This plan carves the
-window seam and stages leaf → branch → fork.
+**Status**: MW1–MW3 **done** (the per-window reshape, the `WindowId` registry,
+one-device/N-surfaces, spawn/close, slim leaf chrome — see Progress). **MW4–MW6 are
+superseded** by the
+[window composition plan](2026-06-11_window_composition_plan.md), which reframes the
+second window as a two-axis `(content, linkage)` model and moves the orrery off `Shell`
+into the window (the MW6 "IOU", brought forward) after finding the shared constellation
+is UUID-keyed and graph-agnostic. The MW4–MW6 sections below are kept for history; read
+them through that plan. This plan carved the window seam and staged leaf → branch → fork.
 **Related**: [tear-out operations brief](../research/2026-05-11_tearout_operations_brief.md) (the leaf/branch/fork model this implements), [multi-graph activation plan](2026-06-09_multi_graph_activation_plan.md) (MG6 lists this; far-B and multi-window share the per-window-view-over-shared-graph split), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) (panes are per-window). Code: `crates/meerkat/`, `crates/system/session-runtime/`, `crates/shell/frame/`.
 
 Drag a pane or tile out of its window into a new OS window that shares the backing
