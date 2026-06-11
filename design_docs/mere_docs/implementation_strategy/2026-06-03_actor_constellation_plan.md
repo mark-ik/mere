@@ -794,3 +794,54 @@ what is most likely to break, the mitigation, and a pointer.
   open, no advance architecture, a permanent conformance-maintenance line only if a
   backend ships. The cross-backend `host_promise_bridges_js_await` tests seed that
   conformance suite.
+  - **piccolo (pure-Rust stackless Lua) is the convergent evidence for this entry.**
+    Designed independently for Lua game-scripting, it arrived at the same shape the seam
+    evolved into for JS: a fuel-metered `Executor::step` loop driving `Sequence` values
+    that are Future-like (= `pump_microtasks`), with coroutine yield/resume for the
+    host-promise pair and no `await` keyword (colorless async). Two unrelated designs
+    landing on one execution-driving model is the strongest case that the seam is
+    suspendable-VM-shaped, not JS-shaped. It is the **strongest fit on three axes**
+    (pump model; built-in `fuel` bounding CPU *and* memory, an explicit untrusted-DoS
+    goal; and Lua's modding-community pull, the broadest of any candidate) but the
+    **weakest on activity** (last release 0.3.3, 2024-06, ~2 years cold vs Rune's
+    2026-05), so it is a keep-open option to re-diligence at ship time (likely vendored,
+    as Nova already is), not a near-term backend. The candidates map to **communities,
+    not redundancy**: JS for web (fixed by semantics), Rune for Rust-natives who want to
+    script, piccolo/Lua for the modding masses. None reopens the untrusted lane: fuel
+    bounds DoS but not determinism or capability, so declarative-data still wins there.
+  - **Fork + adoption (2026-06-11).** The fork exists. piccolo is dual-licensed **MIT OR
+    CC0** (`Cargo.toml` declares MIT, hence crates.io; the repo also ships `LICENSE-CC0`,
+    "at your option"), so electing CC0 relicenses the fork with zero strings (the CC0
+    patent non-grant is inert here: MIT is equally silent and Apache is not offered, so
+    no option buys a patent grant anyway). Open check at vendor time: `gc-arena`'s
+    license (the load-bearing dep, almost certainly the same dual). **Backends are
+    target/feature-exclusive per shipped artifact** (Nova `cfg(not(wasm32))` native, Boa
+    wasm, piccolo opt-in feature-gated), so the seam keeps engines, and their GCs, from
+    co-linking, and an extra backend costs zero in any build that does not select it. The
+    sole intentional co-link is the WPT oracle runner (Nova + Boa on native, to diff
+    conformance), which is tooling, not a shipping target. That is the answer to "N
+    backends means N engines compiled in": it does not.
+  - **Alignment work landed (2026-06-11).** Three pieces, all tested:
+    - **The seam grew a budgeted pump (our end).** `script-engine-api` gained `Budget`
+      (`Unbounded` / `Steps(n)`) and `PumpOutcome`, and `pump_microtasks` is now a
+      *defaulted* unbounded drain over a required `pump(budget)` (non-breaking;
+      `script-runtime-api` and every `run_microtasks` caller untouched). Nova honors
+      `Steps` by job count (returning `Pending` while work remains); Boa drains fully and
+      reports `Quiescent` (its `SimpleJobExecutor` has no sub-drain). This is the
+      **bidirectional alignment**: piccolo's fuel model exposed that our pump was
+      fuel-blind, and the fix hands Nova a runaway-script bound it lacked. Tests:
+      `budgeted_pump_bounds_a_microtask_chain` (Nova), `pump_drains_fully_regardless_of_budget`
+      (Boa).
+    - **piccolo change 1: the `Deferred` primitive** (`crates/piccolo/src/deferred.rs`,
+      exported). An externally-settlable promise as a `Sequence` that returns
+      `SequencePoll::Pending` until host code calls `resolve(StashedValue)` /
+      `reject(StashedError)`, then resumes the suspended caller. The piccolo-native shape
+      of `new_host_promise` / `settle_host_promise`, colorless (the script just calls the
+      host function). Tests green (resume-with-value, reject-errors-execution).
+    - **piccolo change 2 was already done.** Reading the source, the rooting bridge is
+      piccolo's existing `StashedValue` + `registry` / `DynamicRootSet`:
+      `Context::stash(value)` held across `Executor::step` *is* the seam's `Value`. No new
+      code; the `Deferred` resolve test exercises it (stash, hold across a step, fetch).
+    - **License closed:** piccolo **and** `gc-arena` are both **MIT OR CC0**, so the
+      relicensing path is clean end to end. (Full piccolo suite green except a pre-existing
+      Windows `goldenscripts` mismatch, verified unrelated by stashing the change out.)

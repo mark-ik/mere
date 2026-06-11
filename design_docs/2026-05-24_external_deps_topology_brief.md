@@ -15,7 +15,7 @@ Two sibling directories under `Code/`:
   (tracks upstream, carries minimal fork patches). Current set: `xilem`
   (plus `xilem-graft-seam`, `xilem-pr-masonry-defaults`,
   `xilem-pr-with-default-properties`), `imaging`, `nova`, `glass-gpui`, `blitz`,
-  `weave`, `boa`.
+  `weave`, `boa`, `piccolo`.
   - **`boa`** (added 2026-05-25; shallow @ `v0.21.1`, `serval` branch) — fork of the
     Boa JS engine. Carries an icu-family pin widen (`~2.0` → `^2.1`) so its
     `icu_normalizer` unifies with serval's parley/nova-forced icu 2.2.x; serval
@@ -23,6 +23,13 @@ Two sibling directories under `Code/`:
     `nova`). Owned so it can later be restructured for weval-based AOT (the real reason
     to fork — the icu fix was free along the way). See
     [`serval/docs/2026-05-20_serval_script_engine_plan.md`](../../serval/docs/2026-05-20_serval_script_engine_plan.md).
+  - **`piccolo`** (noted 2026-06-11; v0.3.3, MIT) — fork of kyren's stackless Lua
+    VM. Two intended dividends: a `ScriptEngine` seam backend (the modding-Lua
+    *option*, not a third first-party substrate — the Rust+JS decision stands)
+    and gc-arena technique/dependency for the `serval-scripted-dom` refit.
+    Consumes `gc-arena` as a git dep pinned to kyren's `5a7534b`; when serval
+    takes gc-arena directly, align both on one deliberate workspace pin. Plan:
+    [`serval/docs/2026-06-11_gc_arena_dom_plan.md`](../../serval/docs/2026-06-11_gc_arena_dom_plan.md).
 - **`Code/repos/`** — Mark's own projects: `mere`, `serval`, `netrender`,
   `netfetcher`, `errand`, `strophe`, `woodshed`, `wgpu-graft`, `wgpu-scry`,
   `wgpu-weld`. (**`graphshell`** was here until 2026-05-27, when it was
