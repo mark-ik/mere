@@ -306,6 +306,23 @@ wanted.
   member→graph mapping lives — is settled before the mechanical pool move: a `graph_id`
   on each active constellation entry, set at `drive`-time, routing contributions to their
   orrery. No global index, no pool search. P1 is unblocked.
+- 2026-06-11: **P1 foundation landed (commit `4dddf0f`), behavior-preserving, 44+66
+  green.** The single `Shell.orrery` is now `Shell.orreries: HashMap<GraphId, Orrery>`,
+  seeded with the primary's orrery keyed by the active graph; `WindowView` gained
+  `focused_graph: GraphId`. **Two implementation refinements vs the sketch:** (1) the pool
+  is a **`Shell` field, not in `SharedState`** — it must borrow disjointly from `shared`
+  / `view` exactly as the old single `orrery` did, and `SharedState`-nesting would alias
+  every `self.shared.X` access; (2) resolution is **"the ctx bundles the window's focused
+  orrery as `self.orrery`"** (resolved once in `ctx()`/`window_ctx()` from
+  `view.focused_graph`), *not* a per-site `shared.orreries.get(graph_id)`. That kept the
+  ~60 `WindowCtx` sites **unchanged** — the scout's clean-sweep verdict confirmed in
+  practice (only the test harness's Shell-level `app.orrery` needed new `orrery()` /
+  `orrery_mut()` resolvers). The pool is a single degenerate entry for now; session-switch
+  still replaces the focused orrery's graph in place. **Remaining P1 (the multi-graph
+  increment):** `switch_session` re-keys the pool into distinct live entries + updates
+  `focused_graph`; the `Activation` `graph_id` stamp + contribution routing across the
+  shared constellation; per-graph physics offload. Per-pane resolution (a window hosting
+  panes on *different* graphs) stays P2 — P1 is one focused orrery per window, pooled.
 - 2026-06-11: **Review folded in** (code-verified pass). Verified: leaf `graph_id`
   (frame lib.rs:247, with the serde-default migration), `GraphMemberId = Uuid`,
   per-orrery physics is one `offload_physics(wake)` call each. Added the pool's
