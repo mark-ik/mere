@@ -344,10 +344,14 @@ impl WindowCtx<'_> {
         } else {
             self.view.tile_rects.clear(); // no tile drag targets when the pane is closed
         }
-        // Hide every compat WebView visual up front; the focused card below re-shows
-        // its own by positioning it at the card rect. A tile whose node is no longer
-        // focused / pinned thus stops displaying instead of freezing in place. (X2.)
-        self.view.scrying.hide_all();
+        // Reap every compat tile except the one about to be shown (the focused, pinned,
+        // live-preview node). A deselected / unpinned compat node is torn down here
+        // (reap-on-deselect, the X3 lifecycle Mark chose), so its WebView can't freeze
+        // on screen and the window's single composition target is freed for the next. (X2.)
+        let shown_compat = self.focused_member().filter(|m| {
+            self.view.live_previews.contains(m) && self.shared.content.compat_pins.contains(m)
+        });
+        self.view.scrying.reap_except(shown_compat);
         // The orrery's focused-node card (always, alongside any workbench pane).
         if let (Some(member), Some(url)) = (
             self.focused_member(),

@@ -87,14 +87,18 @@ impl ScryingHost {
         self.pool.clear();
     }
 
-    /// Park every live tile's visual off-screen. meerkat shows a compat tile by
-    /// positioning its visual at the card rect (visual hosting), so a tile that is
-    /// no longer rendered (node deselected / unpinned) would otherwise freeze at its
-    /// last position. Called once per frame before the shown tile(s) are re-driven,
-    /// so only the tiles driven this frame display. (X2 dismiss.)
-    pub fn hide_all(&mut self) {
+    /// Reap every live tile except `keep` (the one shown this frame), tearing down
+    /// its WebView. A compat node that is no longer the shown card is dropped
+    /// immediately (reap-on-deselect), so the visual cannot freeze at its last
+    /// position, and the window's single composition target is freed — so focusing a
+    /// *different* compat node spawns it cleanly instead of hitting
+    /// `WINDOW_ALREADY_COMPOSED`. `None` reaps all. Called each frame before the
+    /// shown tile is driven. (X2/X3 lifecycle.)
+    pub fn reap_except(&mut self, keep: Option<GraphMemberId>) {
         #[cfg(target_os = "windows")]
-        self.pool.hide_all();
+        self.pool.reap_except(keep);
+        #[cfg(not(target_os = "windows"))]
+        let _ = keep;
     }
 
     /// Spawn / resize / navigate `member`'s WebView as needed and pump one
@@ -240,14 +244,13 @@ mod windows_pool {
             self.failed.clear();
         }
 
-        /// Park every tile's visual off the window (hidden). A tile re-driven this
-        /// frame moves itself back to its card rect; the rest stay hidden. (X2 dismiss.)
-        pub(super) fn hide_all(&mut self) {
-            /// Far enough off the window that the visual is fully clipped away.
-            const OFFSCREEN: f32 = -100_000.0;
-            for tile in self.tiles.values() {
-                let _ = tile.producer.set_offset(OFFSCREEN, OFFSCREEN);
-            }
+        /// Reap (drop the WebView for) every tile except `keep`. Dropping a `Tile`
+        /// tears down its producer (and the per-HWND composition target), so the next
+        /// compat node can claim it. `failed` is cleared for the reaped members so a
+        /// re-pin retries. (X2/X3 lifecycle.)
+        pub(super) fn reap_except(&mut self, keep: Option<GraphMemberId>) {
+            self.tiles.retain(|member, _| Some(*member) == keep);
+            self.failed.retain(|member, _| Some(*member) == keep);
         }
 
         pub(super) fn texture_view(&self, member: GraphMemberId) -> Option<&wgpu::TextureView> {
