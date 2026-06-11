@@ -340,3 +340,18 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   roster / apparatus / utility panes), or the composition-enabling C6 subset (independent
   of the perf chain). A cheap follow-up trim: equality-guard the per-frame shellbar
   inline-style write so a static chrome frame returns `Unchanged` (skips even the restyle).
+- **2026-06-11** — **C4 + C5 done; render glue extracted.** C4: the chrome
+  hit-test and per-press region-gate read the session's retained layout (generic
+  `IncrementalLayout::hit_test`; `find_by_source_id` exposed), so the chrome lays
+  out once per frame. C5: generalized `ChromeSession` → **`PaneSession`**
+  (`pane_session.rs`); the workbench rides it (render + slot reads + click hit-tests
+  on one layout, was two-plus); roster + apparatus collapsed to one
+  `IncrementalLayout` per frame (its fragments feed the scroll-clamp / hit-rects, the
+  scene emits from the same layout); utility was already single-layout. **No DOM pane
+  lays out more than once per frame now.** Alongside, the **pelt-live glue extraction**
+  ([own plan](2026-06-11_serval_render_glue_extraction_plan.md)): meerkat owns its
+  `ScriptedDom → Scene` glue (`serval_render`), so C5's emit-once path is a
+  meerkat-local `scene_from_session` over a fresh session (no serval coordination), and
+  `pelt-live` is dropped (~30 transitive crates pruned). All green (110 meerkat tests).
+  **Deferred:** C4's a11y half (the chrome a11y subtree from the rendered DOM, a
+  UxTree → accesskit swap, correctness-sensitive) and the C6 grab-bag.

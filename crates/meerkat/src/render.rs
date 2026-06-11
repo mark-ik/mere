@@ -9,9 +9,9 @@ use forme::GraphMemberId;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
 use netrender::external_texture::ExternalTexturePlacement;
-use crate::serval_render::{TextCursor, fragments_from_scripted_dom, scene_from_scripted_dom};
+use crate::serval_render::{TextCursor, scene_from_scripted_dom, scene_from_session};
 use platen_view::{WORKBENCH_SHEET, WorkbenchScene};
-use serval_layout::ScrollOffsets;
+use serval_layout::{IncrementalLayout, ScrollOffsets};
 use serval_scripted_dom::NodeId;
 
 use std::cell::RefCell;
@@ -834,7 +834,11 @@ impl WindowCtx<'_> {
             let sheet_strings = super::roster::roster_sheet(&self.shared.presentation.chrome_theme);
             let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
             let root = dom.document();
-            let frags = fragments_from_scripted_dom(&dom, &sheet, rw, rh);
+            // C5: one cascade+layout for the whole pane — the scroll clamp and the
+            // row hit-rects read its fragments, and the scene emits from the same
+            // layout (was a separate fragments pass + a re-laying scene render).
+            let layout = IncrementalLayout::new(&dom, &sheet, rw as f32, rh as f32);
+            let frags = layout.fragments();
             let mut roster_scrolls = ScrollOffsets::<NodeId>::default();
             let roster_scroll = first_with_class(&dom, root, "roster")
                 .and_then(|node| {
@@ -850,7 +854,7 @@ impl WindowCtx<'_> {
                     Some(self.view.roster_scroll)
                 })
                 .unwrap_or(0.0);
-            let scene = scene_from_scripted_dom(&dom, &sheet, rw, rh, None, &roster_scrolls);
+            let scene = scene_from_session(&layout, &dom, None, &roster_scrolls, rw, rh);
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
@@ -904,7 +908,10 @@ impl WindowCtx<'_> {
             let sheet_strings = super::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
             let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
             let app_scroll = ScrollOffsets::<NodeId>::default();
-            let scene = scene_from_scripted_dom(&dom, &sheet, aw, ah, None, &app_scroll);
+            // C5: one cascade+layout — the scene emits from it and the button
+            // hit-rects below read its fragments (was two layout passes).
+            let layout = IncrementalLayout::new(&dom, &sheet, aw as f32, ah as f32);
+            let scene = scene_from_session(&layout, &dom, None, &app_scroll, aw, ah);
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
@@ -921,7 +928,7 @@ impl WindowCtx<'_> {
                 h,
                 ExternalTexturePlacement::new(arect),
             );
-            let frags = fragments_from_scripted_dom(&dom, &sheet, aw, ah);
+            let frags = layout.fragments();
             let root = dom.document();
             let mut buttons = all_with_class(&dom, root, "app-btn");
             buttons.extend(all_with_class(&dom, root, "app-btn-active"));

@@ -298,7 +298,6 @@ fn count_class(dom: &ScriptedDom, id: NodeId, class: &str) -> usize {
 #[test]
 fn omnibar_caret_tracks_bytes() {
     use serval_layout::IncrementalLayout;
-    use xilem_serval::{Key, KeyEvent, NamedKey};
     const TEST_SHEET: &[&str] =
         &["div, button, input { display: block; } input { font-size: 22px; }"];
     let input_of = |runner: &ServalAppRunner<Chrome, ChromeLogic, ChromeView>| {
