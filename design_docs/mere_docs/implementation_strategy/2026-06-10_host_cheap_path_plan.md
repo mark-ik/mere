@@ -14,7 +14,10 @@ serval's [layout infrastructure scope](../../../../serval/docs/2026-06-07_serval
 (§1 interaction state is what makes `:hover`/`:focus` styling work under
 sessions; §2's shared-font-collection note merges with C2 here);
 serval's [orrery transform perf spike](../../../../serval/docs/2026-06-01_orrery_transform_perf_spike.md)
-(the proof the session's `RepaintOnly` path holds at N=1000).
+(the proof the session's `RepaintOnly` path holds at N=1000);
+the [window composition plan](2026-06-11_window_composition_plan.md)
+(its P2+ pane-heavy phases build on C6's composition-enabling subset and benefit from
+the per-pane sessions, so this plan is the runway for that one).
 
 ---
 
@@ -148,7 +151,29 @@ meerkat's render path.
 
 ### C6 — Host wiring parity (mere + serval; the audit's adjacent gaps, tracked here until picked up)
 
-Each lands separately; spin out into its own plan if it grows.
+This is the **grab-bag of unused serval/xilem-serval host capability** — wired and
+tested one layer down, with zero or stub meerkat callers. Each lands separately; spin
+out into its own plan if it grows.
+
+**Sequencing split (2026-06-11).** Four of these are **composition-enabling**:
+[window composition](2026-06-11_window_composition_plan.md) P2+ (per-pane input/hit-test,
+interactive DOM under the orrery, the growing pane tree, cross-graph drags) builds
+directly on them, so they are the runway-clearing subset to do before the pane-heavy
+phases:
+
+- **`on_wheel` event view** → per-pane wheel routing (retires meerkat's hand-routed wheel).
+- **transform-aware hit-testing** → interactive DOM under the orrery camera.
+- **pointer cancellation** (the `Propagation` cell) → drags routed through `on_pointer`.
+- **`memoize` the stable chrome subtrees** → the rebuild cost of a growing pane tree.
+
+The other three are **host-completeness** (correctness, independent of composition; do
+anytime): **IME**, **environment threading**, **keyboard-model escape hatches**. The
+**a11y `accesskit_tree` swap** (in C4) is also host-completeness. The full grab-bag is
+the eleven items across C1–C6; this plan (C1–C6) is the checklist of record.
+
+*Adjacent but a different crate (not serval/xilem, so tracked in the scrying plan, not
+here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward + `can_go_*`,
+`poll_navigation_event` → omnibar/lineage, `poll_cursor_shape` → winit cursor, Tab focus.
 
 - **IME wiring in meerkat**: the library + demo are complete; meerkat has no
   `winit::Ime` arm, no `set_ime_allowed`, no `set_ime_cursor_area`, so the
@@ -194,3 +219,14 @@ Each lands separately; spin out into its own plan if it grows.
 - **2026-06-10** — Plan created from the stack audit. No code yet. C0 is the
   entry point and is deliberately tiny (a drain call and a profile) so the
   baseline lands before any structural change.
+- **2026-06-11** — **C0's drain landed** during the multi-window work: chrome +
+  workbench `DomMutation`s are drained once per frame (`render.rs:1092-1093`), so
+  those Vecs are bounded. C0's **baseline table is still pending** (needs the frame
+  profile + a recorded interaction). **Grab-bag folded:** C6 now calls out the
+  composition-enabling subset (`on_wheel`, transform-aware hit-test, pointer
+  cancellation, `memoize`) that [window composition](2026-06-11_window_composition_plan.md)
+  P2+ builds on, vs the host-completeness items (IME, environment threading, keyboard
+  escape hatches, the C4 a11y `accesskit_tree` swap). Eleven items total across C1–C6;
+  this plan is the checklist of record. Decided (with Mark) to pick this plan up next:
+  the composition-enabling subset clears the runway before the pane-heavy composition
+  phases, and the C0 baseline quantifies the per-pane cost before it is multiplied.
