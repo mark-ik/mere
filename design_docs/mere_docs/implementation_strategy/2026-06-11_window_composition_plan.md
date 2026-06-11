@@ -93,6 +93,35 @@ consumer of this general operation.
   only on a P4 cross-graph **move** (branch is intra-graph; fork's copies get fresh UUIDs).
   Concrete P1 surface: `drive` gains a `graph_id` param, `Activation` a `graph_id` field,
   `Drained.contributions` becomes `Vec<(GraphId, GraphContribution)>`.
+- **P1 site scout (2026-06-11): 69 `*.orrery` sites, no window-global-without-a-graph.**
+  Inventoried across `frame_ops` (36), `agent_harness` (10 tests), `render` (9),
+  `app_handler` (6), `input` (5), `main` (3). They fall into three resolution buckets:
+  - **Pane-scoped** (resolve via the pane being rendered/hit → its `graph_id`, already in
+    scope): the spatial Orrery-pane drive (`set_node_states/shapes/resize/recenter/frame`),
+    the `Workbench`/`Gloss` pane graph reads, `a11y project_graph` for the Orrery pane,
+    input's orrery `pointer_down/up`, orrery `cursor_moved`/`wheel`, roster/gloss
+    `select_by_url`. Render already iterates leaves and input hit-tests to a pane, so each
+    has its `graph_id`.
+  - **Window-focused-graph** (omnibar/keyboard/command-triggered nav + focus + selection +
+    edit): `visit`/`navigate_member`/`open_member_as_new_node`, `focused_member`/`_url`,
+    history `back`/`forward` + `can_*`, omnibar `select_by_url`, `selected_members`,
+    `remove_focused`, `hide`/`show` edges, the focused card. These want **one new
+    per-window accessor `focused_graph_id()` = the active content pane's leaf `graph_id`**
+    (the window already tracks `active_content`, and frame leaves carry `graph_id`), so
+    `self.orrery` → `shared.orreries.get(self.focused_graph_id())`. Open Q1's anticipated
+    "focused-graph fallback" is not a fallback — it is the primary resolution for ~half the
+    sites, and it is cleanly derivable (no new tracking, just a helper).
+  - **Special** (individual): contribution routing (`app_handler:224`, the stamp consumer);
+    `set_graph` (session switch → "load/swap the graph in the pool"); `save_session` (a
+    specific graph's snapshot + camera); switcher thumbnail (the active graph's live one);
+    `Shell::new` (seed the first orrery into the pool); the test harness (`app.shared.orreries`).
+  - **One P2 soft-spot, not a P1 blocker:** `set_ctrl`/`set_shift` and `cursor_moved`/`wheel`
+    (`app_handler`) assume one orrery-pane-under-cursor. Fine at one Orrery pane per window
+    (P1 pools but keeps one spatial view per window); once a window hosts *two* Orrery panes
+    (different graphs side by side), these must hit-test which orrery pane the cursor is
+    over. That is a P2 (multi-orrery-pane) concern.
+  - **Verdict: P1 is a clean sweep, two helpers (`focused_graph_id()` + the in-scope pane
+    `graph_id`) + the few special sites.** No soft spots that block the mechanical move.
 
 ## Architecture
 
