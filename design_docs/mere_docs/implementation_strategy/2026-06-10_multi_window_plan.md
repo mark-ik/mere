@@ -680,3 +680,27 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   graph; closing it leaves the 1st intact; the app exits only when the primary closes.**
   **Next: step 4** — `WindowKind::{Primary, Leaf}` + a slim leaf chrome template +
   workbench-only leaf rendering shared tiles behind the read-only `NodeView` seam.
+- 2026-06-10: **MW3 step 3 gate satisfied on-screen (Windows laptop), + one boot
+  bug fixed, + one pre-existing bug found.** Verified live: Ctrl+Shift+N opens a real
+  independent second OS window on the shared graph; closing the second leaves the
+  first running; closing the primary saves + exits the whole app (clean exit 0).
+  **Boot fix:** the first launch panicked in `accesskit_windows` 0.32.1 — "the
+  subclassing adapter must be created before the window is shown." The old `resumed`
+  (and my `create_window` that inherited its order) called `set_visible(true)` *before*
+  installing the a11y bridge. Fixed: `create_window` leaves the window hidden; the
+  primary shows it *after* `a11y_bridge.install`, a secondary shows it immediately (no
+  bridge yet, step 6). Latent until on-screen run (the dep assertion tightened); now
+  correct. **Two observations confirming documented boundaries:** (1) interacting in
+  either window converges both on one viewpoint — the **shared camera** (orrery still
+  single on `Shell`, the MW6 IOU); (2) the secondary's sync chip reads "p2p off" while
+  the primary reads "tessera: idle" — the **d2 deferral** (secondary doesn't get
+  actor-driven chrome updates until step 5). Both expected. **Pre-existing bug surfaced
+  (not a MW regression), logged for a focused follow-up:** the orrery input path passes
+  the cursor as `(x, y - toolbar_height)` — it subtracts the toolbar but never the
+  shellbar's X carve, and `content_band()` (frame_ops) returns `[0, th, w, h]` while
+  render uses `band_after_shellbar()` (`[SHELLBAR_THICKNESS, th, w, h]` for a left
+  shellbar). So with the shellbar left-docked (the default) every orrery click + hover
+  lands ~one shellbar-width (~48px) to the right; the same input/render band mismatch
+  drifts the roster/workbench/etc hit-rects. Fix is to unify the input-side band with
+  render's `band_after_shellbar` and subtract the full orrery-pane origin (not just the
+  toolbar) — wiring the currently-dead `orrery_leaf_rect` helper. Separate from MW3.

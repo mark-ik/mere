@@ -103,6 +103,9 @@ impl ApplicationHandler for Shell {
                 format!("OS AccessKit bridge unavailable: {err}"),
             ),
         }
+        // a11y is installed; safe to show the window now (the order Windows requires).
+        window.set_visible(true);
+        window.request_redraw();
         wc.refresh_a11y_summary();
         wc.refresh_session_thumbnails();
 
@@ -585,11 +588,12 @@ impl Shell {
             }
         };
         view.surface = Some(surface);
-        window.set_visible(true);
-        window.request_redraw();
         view.window = Some(Arc::clone(&window));
         let id = window.id();
         self.windows.insert(id, view);
+        // The window is left hidden: on Windows the AccessKit adapter must be created
+        // before the window is first shown, so the caller installs a11y (the primary)
+        // or skips it (a secondary) and then calls `set_visible(true)`. (MW3.)
         Some((id, window))
     }
 
@@ -624,10 +628,11 @@ impl Shell {
             return;
         }
         let view = self.build_window_view();
-        if let Some((id, _window)) = self.create_window(event_loop, view) {
-            if let Some(view) = self.windows.get(&id) {
-                view.request_redraw();
-            }
+        if let Some((_id, window)) = self.create_window(event_loop, view) {
+            // No a11y bridge on a secondary yet (step 6), so showing it immediately is
+            // safe — the AccessKit "adapter before first show" rule doesn't apply.
+            window.set_visible(true);
+            window.request_redraw();
             self.shared.observability.record_probe(
                 "multi_window",
                 "spawned",
