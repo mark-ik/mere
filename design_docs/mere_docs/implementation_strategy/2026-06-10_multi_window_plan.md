@@ -636,3 +636,21 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   type-seam via `WindowCtx`, and the `WindowId` registry routing events by id — the
   structural reshape that unblocks MW3. The `WindowKind` payload enum, the spawn path,
   the `ShellCommand` queue, and (d2) all land together in MW3, where they're real.
+- 2026-06-10: **MW3 steps 1–2 done — one device, N surfaces (the rendering
+  foundation).** Step 1 (`serval-winit-host`): `SurfaceHost` split into `RenderCore`
+  (the one wgpu device + netrender `Renderer` — instance/adapter/device/queue) and
+  `WindowSurface` (per-window swapchain + config, created via
+  `RenderCore::create_surface` from the core's *retained* wgpu instance — confirmed
+  `netrender_device::WgpuHandles` exposes `pub instance` + `pub adapter`, so **no
+  netrender change**). `SurfaceHost` kept as a real single-window `RenderCore` + one
+  `WindowSurface` wrapper for the standalone orrery host, so step 1 landed with zero
+  consumer churn. Step 2 (meerkat): `Shell.render_core: Option<RenderCore>` (booted
+  once on first `resumed`, shared like `clipboard`); `WindowView.host` → `surface:
+  Option<WindowSurface>`; `WindowCtx` gains `render_core: Option<&RenderCore>`. The
+  render path splits `self.view.host.*` into `self.render_core` (rasterize / renderer /
+  compose) + `self.view.surface` (acquire / format); scrying pulls device/queue from
+  the shared core. ~30 `host.*` sites rewired; behavior-preserving at N=1 (44 lib + 63
+  bin green; serval-winit-host + orrery green through the wrapper). **Next: step 3** —
+  the `ShellCommand` queue + `Shell::apply` + `SpawnWindow`/`CloseWindow` + a
+  Cmd/Ctrl+Shift+N verb: the first *actual* second window, where the deferred (e) seam
+  becomes real (and step 4's `WindowKind::Leaf` gives that window its slim chrome).
