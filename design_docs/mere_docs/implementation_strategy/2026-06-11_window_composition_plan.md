@@ -323,6 +323,24 @@ wanted.
   `focused_graph`; the `Activation` `graph_id` stamp + contribution routing across the
   shared constellation; per-graph physics offload. Per-pane resolution (a window hosting
   panes on *different* graphs) stays P2 — P1 is one focused orrery per window, pooled.
+- 2026-06-11: **Multi-graph increment scouted to the bottom — it is one coupled chunk,
+  gated on a session-op → Shell restructure.** Confirmed by reading the code: (1) the
+  pool is only mutable at the **Shell level**. The ctx bundles *one* `&mut Orrery`
+  (Approach A), so it cannot re-key or insert pool entries; `load_active_session`
+  (`frame_ops`) and its thin callers (`create`/`switch`/`cycle`/`close_session`) must
+  move to `impl Shell` (taking a `window_id`) to give a switch its own distinct pool
+  entry instead of re-pointing the shared one in place (`set_graph`). This is the gating
+  piece — without it there is never a second pool entry. (2) The **stamp threads at
+  spawn, not `drive`**: `Constellation::drive` returns early for an inactive member
+  (`constellation.rs:237`), so the `graph_id` must be set when the `Activation` is
+  created in the needed-set reconcile (where the requesting pane's graph is known), not
+  in `drive`. (3) Per-graph **physics** offloads when an orrery enters the pool — which
+  only happens at the new Shell-level load. So all three pieces are inert until the
+  session-op restructure exists; there is **no cleanly-separable green sub-increment**,
+  and building the stamp or physics first would be unexercised scaffolding. The increment
+  is best done as a focused unit with on-screen verify (two graphs coexisting). The P1
+  *foundation* (pool + ctx resolution, committed + proven) stands as the boundary; the
+  multi-graph increment starts from this fully-scoped brief.
 - 2026-06-11: **Review folded in** (code-verified pass). Verified: leaf `graph_id`
   (frame lib.rs:247, with the serde-default migration), `GraphMemberId = Uuid`,
   per-orrery physics is one `offload_physics(wake)` call each. Added the pool's
