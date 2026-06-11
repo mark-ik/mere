@@ -233,3 +233,36 @@ Linux box.
     concrete producer's non-blocking `inner_mut()`; back/forward + `can_go_*`;
     `poll_navigation_event` → omnibar + node lineage; `poll_cursor_shape` → winit
     cursor; Tab-into-tile focus (mouse focus hand-off is done).
+
+- **2026-06-11** — **X1/X2 verified on-screen (Windows laptop); three fixes + the
+  display model corrected.** Load, navigate, scroll, click, and keyboard input all
+  work in a live tile (typed into Google AI Mode through the embedded WebView and
+  got a reply), and deselect dismisses it. Fixes, in order found:
+  - **DispatcherQueue (scrying repo).** First spawn panicked: `Compositor::new` needs
+    a `DispatcherQueue` on the UI thread, which winit does not create.
+    `CompositionRoot::new` now ensures one (idempotent; honors a consumer's own),
+    retained thread-locally. Consumers need no setup. (`scrying` commit `3421982`.)
+  - **Display model: capture → visual hosting.** The X1 capture-into-texture
+    composite never delivered visible pixels; what showed was the producer's own
+    HWND-parented composition visual, at the window origin (offset 0,0), on top of
+    the swapchain. Parking it off-screen blanked it (DWM culls an off-screen visual,
+    so capture dies). So meerkat switched to the demo's model: **position the WebView
+    visual at the card's screen origin each frame** (origin threaded through
+    `ScryingHost::drive`). The visual displays directly; the texture composite is now
+    vestigial.
+  - **Dismiss.** `ScryingHost::hide_all()` parks every tile's visual off-screen at the
+    top of each frame; the focused card re-shows its own by positioning it. A
+    deselected / unpinned tile stops displaying instead of freezing in place.
+  - **Open refinements (not yet done), all from this session:**
+    - **One tile at a time per window.** A second pinned node fails to spawn with
+      `DCOMPOSITION_ERROR_WINDOW_ALREADY_COMPOSED` — Windows allows one
+      `DesktopWindowTarget` per HWND, and meerkat builds a fresh `CompositionRoot`
+      per producer. Multi-tile needs scrying's `new_attached` (share one root); X1's
+      "focused card only" scope can instead reap-on-new-pin.
+    - **The × is occluded.** The host's close button paints in the swapchain, under
+      the visual (DWM composites the visual above), so it can't be clicked. Needs a
+      close control *outside* the WebView rect (a tab handle above the card) or
+      reap-on-deselect. Deselect already dismisses (hide); the × is only for closing
+      without deselecting.
+    - **Scrollbars** want overlay / auto-hide (a WebView2 setting in scrying).
+  - meerkat 44 lib + 65 bin green throughout.
