@@ -403,7 +403,6 @@ impl ApplicationHandler for Shell {
                 // always present (its leaf sits at the band's top-left), so it owns
                 // moves it has an in-progress pan / drag for; an active tab drag in
                 // the workbench pane takes priority so its drop highlight tracks.
-                let th = wc.toolbar_height() as f32;
                 if wc.view.frame_divider_drag.is_some() {
                     wc.drag_frame_divider();
                 } else if wc.view.divider_drag.is_some() {
@@ -419,8 +418,13 @@ impl ApplicationHandler for Shell {
                         .scrying
                         .forward_mouse(member, lx, ly, scrying_host::MousePress::Move);
                     wc.view.request_redraw();
-                } else if wc.orrery.cursor_moved(wc.view.cursor.0, wc.view.cursor.1 - th) {
-                    wc.view.request_redraw();
+                } else {
+                    // Map to the orrery pane's local space (origin past the shellbar
+                    // carve, not just the toolbar) before feeding its hover. (Cursor fix.)
+                    let (ox, oy) = wc.orrery_point(wc.view.cursor.0, wc.view.cursor.1);
+                    if wc.orrery.cursor_moved(ox, oy) {
+                        wc.view.request_redraw();
+                    }
                 }
             }
             WindowEvent::ModifiersChanged(mods) => {

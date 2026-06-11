@@ -297,8 +297,8 @@ impl WindowCtx<'_> {
                         if button == MouseButton::Right {
                             self.open_context_menu_at(x, y);
                         } else if let Some(b) = orrery_button {
-                            if !self.point_over_card(x, y) && self.orrery.pointer_down(b, x, y - th)
-                            {
+                            let (ox, oy) = self.orrery_point(x, y);
+                            if !self.point_over_card(x, y) && self.orrery.pointer_down(b, ox, oy) {
                                 self.view.request_redraw();
                             }
                         }
@@ -339,7 +339,8 @@ impl WindowCtx<'_> {
                 // drag / marquee; a click-release selects the node under the cursor.
                 let over_card = self.point_over_card(x, y);
                 if let Some(b) = orrery_button {
-                    if !over_card && self.orrery.pointer_up(b, x, y - th) {
+                    let (ox, oy) = self.orrery_point(x, y);
+                    if !over_card && self.orrery.pointer_up(b, ox, oy) {
                         self.view.request_redraw();
                     }
                 }

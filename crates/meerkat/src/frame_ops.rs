@@ -1085,10 +1085,31 @@ impl WindowCtx<'_> {
         }
     }
 
-    /// The content band (below the toolbar) in window coords.
+    /// The content band (below the toolbar, inside the shellbar carve) in window
+    /// coords — the same band `render` lays the panes out in. It must match render's
+    /// `band_after_shellbar`: the input hit-rects (pane leaves, dividers, the orrery
+    /// origin) and the a11y bounds all derive from this, so any divergence shifts
+    /// every content click off from what's drawn (a left-docked shellbar carves the
+    /// band's left edge, so a band starting at x=0 would offset clicks by the strip
+    /// width). (Shellbar F2.1.)
     pub(super) fn content_band(&self) -> [f32; 4] {
         let th = self.view.toolbar_h.max(FALLBACK_TOOLBAR_H) as f32;
-        [0.0, th, self.view.width as f32, self.view.height as f32]
+        super::shellbar::band_after_shellbar(
+            self.shared.presentation.shellbar_edge,
+            self.view.width as f32,
+            self.view.height as f32,
+            th,
+        )
+    }
+
+    /// Map a window point to the orrery pane's local space (its rect origin at 0,0) —
+    /// the coordinate space the orrery's pointer + camera operate in (it rasterizes
+    /// into its own texture and `render` composites that at the orrery leaf's origin).
+    /// Subtracts the *leaf* origin, so it stays correct under a shellbar carve or a
+    /// frame split, not just the toolbar inset. (Cursor-offset fix.)
+    pub(super) fn orrery_point(&self, x: f32, y: f32) -> (f32, f32) {
+        let rect = self.orrery_leaf_rect();
+        (x - rect[0], y - rect[1])
     }
 
     /// The laid-out content panes (leaf rects) for the current frame layout.

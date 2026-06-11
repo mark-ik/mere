@@ -704,3 +704,11 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   drifts the roster/workbench/etc hit-rects. Fix is to unify the input-side band with
   render's `band_after_shellbar` and subtract the full orrery-pane origin (not just the
   toolbar) — wiring the currently-dead `orrery_leaf_rect` helper. Separate from MW3.
+- 2026-06-11: **Cursor-offset bug fixed + verified on-screen.** `content_band()` now
+  returns render's `band_after_shellbar` (so the input pane leaves, dividers, and a11y
+  bounds match what's drawn), and a new `orrery_point(x, y)` maps a window point into
+  the orrery pane's local space by subtracting the `orrery_leaf_rect` origin (not just
+  the toolbar inset), wired into the orrery's `pointer_down` / `pointer_up` /
+  `cursor_moved` calls. Hover + click now land true on nodes under a left-docked
+  shellbar (Mark confirmed). Wires the formerly-dead `orrery_leaf_rect`. 44 lib + 65
+  bin green.
