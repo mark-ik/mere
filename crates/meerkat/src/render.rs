@@ -15,6 +15,7 @@ use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
 
 use std::cell::RefCell;
+use std::time::Instant;
 
 use super::fetch::{ContentState, Fetched};
 use super::resources::{ResourceLoader, ResourceStore};
@@ -68,6 +69,12 @@ impl WindowCtx<'_> {
         if self.view.surface.is_none() || self.render_core.is_none() {
             return;
         }
+        // C0 baseline (cheap-path plan): time the whole frame + the always-present
+        // chrome pipeline. Enable with `RUST_LOG=meerkat::profile=debug` and drive a
+        // representative interaction. Per-pane granularity (roster/apparatus/utility,
+        // each conditional) is the documented C0 refinement on top of this headline.
+        let frame_t = Instant::now();
+        let chrome_us: u128;
         let (w, h) = (self.view.width.max(1), self.view.height.max(1));
         let toolbar_h = self.toolbar_height().min(h);
 
@@ -203,8 +210,10 @@ impl WindowCtx<'_> {
             }
         }
         let chrome_sheet = self.shared.presentation.chrome_sheet_refs();
+        let chrome_t = Instant::now();
         let chrome_scene =
             scene_from_scripted_dom(&self.view.dom.borrow(), &chrome_sheet, w, h, cursor, &scroll);
+        chrome_us = chrome_t.elapsed().as_micros();
 
         // Color the orrery's nodes by activation state (green open / red closed /
         // blue new) so the graph shows at a glance what's live. (Visible in
@@ -1087,6 +1096,16 @@ impl WindowCtx<'_> {
         frame.present();
         self.refresh_a11y_summary();
         self.discard_dom_mutations();
+
+        // C0 baseline: one line per rendered frame (gated by the `meerkat::profile`
+        // target). `total_us` is the whole `render()`; `chrome_us` is the chrome
+        // cascade+layout+paint pipeline inside it. (cheap-path plan C0.)
+        tracing::debug!(
+            target: "meerkat::profile",
+            total_us = frame_t.elapsed().as_micros(),
+            chrome_us,
+            "frame render profile"
+        );
 
         // Keep animating while the orrery is settling / gliding / dragging.
         if orrery_redraw {
