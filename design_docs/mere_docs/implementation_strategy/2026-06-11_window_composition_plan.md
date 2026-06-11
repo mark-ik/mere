@@ -16,36 +16,41 @@ operations rest on once a window can own its own orrery.
 
 The multi-window plan deferred the orrery split to MW6 as "the single hardest piece,"
 and routed the second window through a workbench-only leaf to avoid it. That was an
-over-deferral. The thing that looked hard — two orreries coexisting — is mostly already
+over-deferral. The thing that looked hard — many orreries coexisting — is mostly already
 supported one layer down, and the leaf-only interim throws away work.
 
-**Two windows want two axes, not one `WindowKind` ladder:**
+The first correct framing was still wrong: it is **not** "orrery windows vs orrery-less
+windows" (a window-level property). It is **orrery (authority) vs panes (views)**:
 
-- **Content axis** — what a window *renders*: an **orrery** over a graph, or an
-  **orrery-less** surface (a workbench tile, a gloss/navigator pane, later others). Not
-  every window should carry an orrery: tearing out a workbench tile should not force a
-  graph to render behind it.
-- **Linkage axis** — how a window *relates* to the others: **independent** (owns its
-  own `SessionId`/`GraphId`; aware of siblings but not dependent — closing one does not
-  break another) or **primary-secondary / linked** (shares a donor's backing state;
-  edits sync both ways).
+- An **orrery** is a graph's authority — its graph + physics + canonical state, the
+  *source* of every pane's content for that graph. Orreries live in a pool keyed by
+  `GraphId`/session, independent of any window. An orrery need not be rendered to exist.
+- A **pane** is a view that **resolves to an orrery** by `graph_id`: the spatial
+  orrery-view (with a camera), the **workbench, gloss, steward, inspector, apparatus,
+  alembic, roster, comms**. A pane reads and acts on its orrery's graph; the orrery's own
+  spatial view does **not** have to be present in the same window — the pane resolves to
+  it regardless.
+- A **window** is a frame-split of panes. The panes in one window may resolve to
+  *different* orreries (graph A's workbench beside graph B's gloss). A window has no
+  intrinsic orrery; it has panes, each pointing at its orrery.
 
-A window is a `(content, linkage)` pair. The tear-out trichotomy falls out of the two
-axes rather than being three special cases:
+**Linkage is emergent, not a second axis.** Panes resolving to the *same* orrery are
+synced (they share the one authority); panes resolving to *different* orreries are
+independent. The tear-out trichotomy is just which orrery a torn pane resolves to:
 
-| Operation | Content | Linkage | Identity |
-| --- | --- | --- | --- |
-| **Leaf** | workbench tile | linked (donor's node + graph) | none |
-| **Branch** | workbench tile (or orrery) | linked (donor's graph, own graphlet) | new `GraphletId` |
-| **Fork** | orrery (thin) | independent (own session + graph) | new `SessionId`+`GraphId` |
-| **"New graph window"** (Mark's case) | orrery | independent | own session |
-| **Primary** | orrery | independent root | the root session |
+| Operation | Torn pane resolves to | Identity |
+| --- | --- | --- |
+| **Leaf** | the donor's orrery (same graph) → synced | none |
+| **Branch** | the donor's orrery, new graphlet lineage → synced | new `GraphletId` |
+| **Fork** | a fresh orrery (new graph, rekeyed copy) → independent | new `SessionId`+`GraphId` |
+| **"New graph window"** | its own fresh orrery → independent | own session |
+| **Primary** | the root orrery (with a spatial orrery-view pane) | the root session |
 
-**Composability is the bridge between independent windows.** Because independent
-windows own separate graphs, you can take a tile/node from graph A's window and **move
-or copy** it into graph B's window. The resulting node in B records **provenance +
-lineage** back to A's node (where it came from / what it was copied from). This is the
-general operation; fork's cross-graph rekey is one consumer of it.
+**Composability is re-pointing a pane across orreries.** Because a pane resolves to an
+orrery by id, moving/copying a tile from graph A into graph B is re-pointing (move) or
+duplicating (copy) the binding across orreries; copy mints a node in B's orrery and
+records **provenance + lineage** back to A's node. Fork's cross-graph rekey is one
+consumer of this general operation.
 
 ## Findings (code-verified, why the refactor is cheaper than it looked)
 
@@ -67,119 +72,126 @@ general operation; fork's cross-graph rekey is one consumer of it.
   has a provenance edge family (persisted as `PersistedProvenanceEdgeData`); fork already
   plans a cross-graph rekey (tear-out brief §7.5) and a weak `parent_session` ref. The
   composability operation records into these, it does not invent them.
-- **The one case that still needs a registry** is *the same graph live in two windows*
-  (two cameras, shared nodes updating in both) — because the graph is bundled *inside*
-  `Orrery`, two instances are two graphs. Sharing one graph across two cameras means
-  extracting `Graph` (+ physics) into a `GraphId`-keyed registry. Deferred until a real
-  consumer wants it; the different-graph and linked-tile cases below do not.
+- **Pooling whole orreries needs no graph extraction.** A `HashMap<GraphId, Orrery>` just
+  holds N whole `Orrery` values (each its own graph + physics + camera); panes read the
+  graph of the one they resolve to. The *only* thing that needs the camera pulled out of
+  `Orrery` is *two spatial `Orrery` panes of the same graph* (one orrery, two cameras) —
+  deferred, and orthogonal to the pool.
 
 ## Architecture
 
+Orreries are pooled authorities; panes resolve to them by `graph_id`. Nothing is a
+"window kind"; a window is characterized by the panes in its split.
+
+```rust
+struct SharedState {
+    // Orreries: the graph authorities, one per graph, pooled (lazily loaded). Each is a
+    // whole `Orrery` = graph + physics + spatial state. Was the single `Shell.orrery`.
+    orreries: HashMap<GraphId, Orrery>,
+    // Content actors, keyed by the global node UUID — already graph-agnostic, so it
+    // serves every orrery's nodes from one pool. Unchanged.
+    constellation: Constellation,
+    // actor handles, manifests, theming, observability ... (unchanged, MW2)
+}
+
+// A pane is a view that resolves to an orrery by graph_id (panes already carry it, MG5).
+// PaneContent is the existing enum, the open set of view types:
+enum PaneContent { Orrery, Workbench, Gloss, Steward, Inspector, Apparatus, Alembic, Roster, Comms }
+// FrameLayout leaf: { pane_id, content: PaneContent, graph_id }  ← graph_id picks the orrery
+
+// A window is a frame-split of panes; per-window state stays in WindowView (MW2).
+// Render/input resolve the operated pane's orrery: shared.orreries.get(&pane.graph_id).
 ```
-struct WindowView {
-    kind: WindowKind,            // the (content, linkage) pair (below)
-    surface: WindowSurface,      // per-window (MW3, done)
-    runner/dom, workbench, frame_layout, input/scrying caches ...   // per-window (MW2, done)
-}
 
-enum WindowContent {
-    Orrery(Orrery),              // owns graph + camera + physics (moved off Shell)
-    Tile(GraphMemberId),         // an orrery-less workbench-tile window (leaf/branch)
-    Gloss(GraphId),              // an orrery-less navigator/minimap window
-    // ... future orrery-less surfaces
-}
+The shift from MW3: render/input read `self.orrery` (one, the active graph) →
+`self.shared.orreries.get(&graph_id)` for the pane being drawn / hit. The panes in a
+window can resolve to different graphs; a pane resolves to its orrery whether or not that
+orrery's spatial **Orrery pane** is shown anywhere. The reverted MW3 step-4-part-2
+isolation gate becomes simply "this pane is not a `PaneContent::Orrery`, so it does not
+drive a camera" — falling out of pane resolution, not a window-level slim flag.
 
-enum WindowLink {
-    Independent { session: SessionId },        // own graph; aware-not-dependent
-    Linked { donor: WindowId, graph: GraphId },// shares a donor's backing state, synced
-}
-```
-
-`WindowKind` becomes the `(WindowContent, WindowLink)` pair (exact shape decided in P2 —
-it may be one enum or two fields; the `{Primary, Leaf}` marker from MW3 step 4 is the
-seed). The shared `constellation`, actor handles, manifests, and theming stay on
-`SharedState`; **only the orrery (graph+camera+physics) moves into `WindowContent`.**
-
-Render/input already operate per-window (post-MW2), so they target the window's own
-content: an `Orrery` window drives its orrery; a `Tile`/`Gloss` window renders that
-surface from the shared constellation and never touches an orrery (the half-built
-isolation gate from MW3 step 4 part 2 — reverted — becomes "this window has no
-`Orrery`," cleaner than a `kind.is_slim()` check).
+**Camera note.** Pooling *whole* `Orrery` values means one camera per graph. That is
+correct for every pane except *two spatial Orrery panes of the same graph* (one orrery,
+two cameras) — which needs the camera pulled out of `Orrery` into the Orrery *pane*. That
+extraction is the one piece deferred (see below); pooling itself needs no extraction.
 
 ## Phases (done-conditions, not dates)
 
-### P1 — Orrery off `Shell`, into the window (the enabling move)
+### P1 — Orrery pool on `SharedState` (the enabling move)
 
-Move `orrery: Orrery` from a single `Shell` field into per-window state (the ~58 sites),
-behind `WindowContent::Orrery`. Per-window physics: each orrery offloads to its own actor
-on the shared wake. At N=1 (one primary orrery) behavior is identical. Render/input
-resolve the window's own orrery instead of `self.orrery`.
+`self.orrery` (single, the active graph) → `SharedState.orreries: HashMap<GraphId,
+Orrery>`, lazily loaded. The ~58 `self.orrery` sites resolve the operated pane's orrery by
+`graph_id` (`self.shared.orreries.get(&graph_id)`). Per-graph physics: each pooled orrery
+offloads to its own actor on the shared wake. At one graph this is behavior-identical;
+**this is also far-B / MG6** (many graphs live at once), so the two converge here.
 
-Done when the primary runs exactly as today with its orrery owned by its `WindowView`,
-and a second `Orrery` window can be spawned over a *different* graph (different
-`SessionId`) and panned/zoomed independently, both drawing content from the one shared
-constellation, neither disturbing the other's camera. 44+/66+ green; on-screen verify.
+Done when the primary runs exactly as today with its orrery resolved from the pool, a
+second graph's orrery can be live in the pool at the same time (a pane resolving to it
+renders it), and neither disturbs the other. 44+/66+ green; on-screen verify.
 
-### P2 — The `(content, linkage)` taxonomy
+### P2 — Panes resolve everywhere (render / input / nav)
 
-Generalize the MW3 `WindowKind {Primary, Leaf}` marker into the two-axis model. A window
-records its content (`Orrery` / `Tile` / `Gloss` / …) and its link (`Independent` /
-`Linked`). Close/save forks on linkage (independent windows save their own session;
-linked windows just drop). The slim-vs-full chrome derives from content (orrery windows
-get the shellbar/switcher; orrery-less windows get slim chrome — MW3 step 4 part 1 already
-built the slim path).
+Every render, hit-test, and navigation path operates on the *pane's* resolved orrery, not
+a window-global one. A window's panes may resolve to different graphs (graph A's workbench
+beside graph B's gloss). The MW3 `{Primary, Leaf}` marker + `is_slim` fold away: the
+shellbar/switcher chrome shows when the window carries an `Orrery` pane (a graph surface),
+which is read off the panes, not a window kind.
 
-Done when window role is one typed value driving chrome template, close behavior, and
-render path, with the MW3 special-cases (`primary` field, `is_slim`) folded into it.
+Done when one window can host panes resolving to two different orreries, each rendering
+correctly, with input routed to the right orrery per pane.
 
-### P3 — Orrery-less linked windows (leaf + gloss), generalized
+### P3 — Cross-window pane resolution (the leaf, done right)
 
-A `Tile(member)` window renders that one member's tile from the shared constellation,
-linked to its donor's graph; a `Gloss(graph)` window renders the navigator. Both are
-orrery-less and **independently navigable** (their own omnibar drives their own surface),
-linked so edits to the underlying node propagate (the leaf semantics from the tear-out
-brief §4.1). This is MW3 step 4 part 2, done right: not "a leaf is a slim orrery window
-with the orrery hidden," but "a leaf is a window whose content is a `Tile`, with no orrery
-at all."
+A pane in window B that resolves to an orrery whose spatial view lives in window A. A
+torn-out workbench tile is a `Workbench` pane in a new window resolving to the donor's
+orrery (same graph), with no `Orrery` pane of its own. **Independently navigable** (its
+own omnibar drives its own tile); edits propagate because it resolves to the *same* orrery
+(leaf semantics, tear-out brief §4.1). This is MW3 step 4 part 2 reframed: a leaf has no
+orrery because none of its panes is an `Orrery` pane — not because an orrery is "hidden."
 
-Done when a spawned/torn `Tile` window shows a shared node's live tile, navigates on its
-own, and propagates edits to the donor, with no orrery instantiated for it.
+Done when a torn `Workbench`-pane window shows a shared node's live tile, navigates on its
+own, propagates edits to the donor, and instantiates no orrery of its own (it resolves to
+the donor's in the pool).
 
-### P4 — Cross-graph composability (move / copy a node, with provenance)
+### P4 — Cross-graph composability (re-point / copy a pane, with provenance)
 
-A reusable `mere`-level operation: move or copy a tile/node from graph A into graph B's
-workbench. Copy mints a new node in B via the cross-graph rekey (tear-out brief §7.5) and
-records a **provenance edge** (origin: A's node) + lineage on the new node, so B's node
-knows where it came from. Move re-parents the binding. Surfaced as a drag between two
-independent orrery windows' workbenches (and a palette/command form).
+Move or copy a tile/node across orreries. Copy mints a node in the destination orrery via
+the cross-graph rekey (tear-out brief §7.5) and records a **provenance edge** (origin:
+source node) + lineage. Move re-points the binding. Surfaced as a drag between two panes
+resolving to *different* orreries (and a palette/command form).
 
-Done when a tile dragged from one independent graph window into another's workbench
-produces a node in the destination with correct provenance + lineage back to the source,
-and the source is either left intact (copy) or releases its binding (move).
+Done when a tile dragged from a pane on graph A into a pane on graph B produces a node in
+B with provenance + lineage back to A, and the source is left intact (copy) or releases
+its binding (move).
 
 ### P5 — The tear-out gesture model (leaf / branch / fork + toast)
 
 Implement the [tear-out brief](../research/2026-05-11_tearout_operations_brief.md) on top
-of P1–P4: drag = leaf (`Tile`, linked), Shift+drag = branch (new `GraphletId`, linked),
-Ctrl/Cmd+Shift+drag = fork (`Orrery`, independent, new session via the P4 rekey), toast on
-ambiguous drag. Spawn-on-drop with an in-donor drag ghost (the portable shape from MW4).
+of P1–P4: drag = leaf (a `Workbench` pane resolving to the donor's orrery), Shift+drag =
+branch (donor's orrery, new `GraphletId`), Ctrl/Cmd+Shift+drag = fork (a fresh orrery via
+the P4 rekey, + a thin `Orrery` pane), toast on ambiguous drag. Spawn-on-drop with an
+in-donor drag ghost (the portable shape from MW4).
 
 Done when all three operations run from the gesture model with the brief's identity
 semantics, and the toast escalates a leaf in place.
 
-### Deferred — same graph in two windows (the registry)
+### Deferred — per-pane camera (two spatial views of one graph)
 
-Extract `Graph` (+ physics) into a `GraphId`-keyed registry so two `Orrery` windows can
-share *one* live graph (two cameras, shared nodes). Not needed by P1–P5 (those are
-different-graph or linked-tile). Picked up when a real consumer wants the same graph open
-twice; far-B (multi-graph coexistence in one window) lands on the same registry.
+Pull the camera out of `Orrery` into the `Orrery` *pane*, so two `Orrery` panes of the
+same graph (in one split, or across windows) hold distinct cameras. Not needed by P1–P5
+(those have at most one spatial view per graph). The orrery *pool* already shares the
+graph; this is only the camera. Picked up when two cameras on one graph are actually
+wanted.
 
 ## Open questions
 
-1. **`WindowKind` shape** — one `(content, linkage)` enum, or two fields? Decide in P2;
-   the close/chrome/render consumers want cheap matches on both axes.
-2. **Per-window physics cost** — N orreries = N physics actor threads. Fine for a handful
-   of windows; revisit pooling only if it bites.
+1. **How a pane names its orrery** — `graph_id` is on the `FrameLayout` leaf today; P1
+   threads it through the ~58 resolution sites. Confirm every `self.orrery` site has a
+   pane (and thus a `graph_id`) in scope, or whether some are genuinely window-global
+   (e.g. the active-nav target) and need a per-window "focused graph" fallback.
+2. **Orrery pool lifecycle** — lazily load an orrery into the pool when a pane first
+   resolves to its graph; evict when no pane (in any window) resolves to it. N live
+   orreries = N physics actor threads; fine for a handful, revisit pooling if it bites.
 3. **Provenance edge direction + family** — confirm the existing provenance edge family
    carries "copied-from across graphs" cleanly, or whether copy wants a distinct sub-kind
    (P4). Check before building, per the consumer-pull rule.
@@ -190,10 +202,15 @@ twice; far-B (multi-graph coexistence in one window) lands on the same registry.
 
 ## Progress
 
-- 2026-06-11: Plan written, superseding the multi-window plan's MW4–MW6. Reframed the
-  second window from "workbench-only leaf to dodge the orrery split" to a two-axis
-  `(content, linkage)` model after verifying the shared constellation is UUID-keyed and
-  graph-agnostic (so two orreries over different graphs need only the per-window orrery
-  move, no registry). MW3 step 4 part 2 (the workbench-only-leaf interim) is **dropped**
-  in favor of P3 (orrery-less `Tile` windows). The half-built orrery-isolation render gate
-  was reverted; it returns in P1 as "this window has no orrery," not a slim-flag check.
+- 2026-06-11: Plan written, superseding the multi-window plan's MW4–MW6. First reframed
+  the second window from "workbench-only leaf to dodge the orrery split" to a window-level
+  `(content, linkage)` model, then (with Mark) corrected that to the right model: **orrery
+  (authority) vs panes (views that resolve to an orrery by `graph_id`)**. There is no
+  window kind; a window is a split of panes, each resolving to its orrery, co-located or
+  not, possibly to different graphs. Linkage is emergent (same orrery = synced). Grounded
+  on the verified fact that the constellation is UUID-keyed and graph-agnostic, so orreries
+  pool by `GraphId` with no graph extraction (only a same-graph two-camera case needs the
+  camera pulled per-pane — deferred). MW3 step 4 part 2 (the workbench-only-leaf interim)
+  is **dropped** for P3 (cross-window pane resolution); the half-built orrery-isolation
+  gate was reverted, returning in P1/P2 as "this pane is not an `Orrery` pane," not a
+  slim-flag. P1 (the orrery pool) **converges with far-B / MG6** (many graphs live at once).
