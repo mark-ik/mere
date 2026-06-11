@@ -32,6 +32,27 @@ use xilem_serval::{Modifiers, ServalAppRunner};
 
 use super::{CachedTile, ContentPane, ResizeDrag};
 
+/// What a window *is*, which selects its chrome template (and, from MW6, its camera
+/// ownership). The **primary** owns the orrery + the shellbar/switcher chrome and
+/// saves the session on close. A **leaf** is a torn-out tile: slim chrome (no
+/// shellbar, no switcher), workbench-only content over the shared graph, and closing
+/// it just drops the view. The orrery-owning payload (`Primary(OrreryView)`) arrives
+/// when MW6 splits the camera per-window; for now the variants are bare markers.
+/// (Multi-window MW3 step 4.)
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum WindowKind {
+    Primary,
+    Leaf,
+}
+
+impl WindowKind {
+    /// Whether this window uses the slim chrome template (a leaf: no shellbar, no
+    /// switcher). Read by the chrome sync + render + input band so all three agree.
+    pub(crate) fn is_slim(self) -> bool {
+        matches!(self, WindowKind::Leaf)
+    }
+}
+
 /// State owned by a single window's view. Methods on `Shell` reach it through
 /// `self.view`; when the window registry lands (MW2) the render / input paths
 /// take `&mut WindowView` for the target window explicitly.
@@ -41,6 +62,10 @@ use super::{CachedTile, ContentPane, ResizeDrag};
 /// derive-`Default` era ends here and a second window is minted by handing
 /// [`WindowView::new`] a fresh pair of runners over the shared session. (MW2.)
 pub(crate) struct WindowView {
+    /// What this window is (primary / leaf) — selects the chrome template and, from
+    /// MW6, camera ownership. Fixed at construction. (MW3 step 4.)
+    pub(crate) kind: WindowKind,
+
     // ── Chrome authority: this window's two serval document roots and the runners
     //    that drive them — the toolbar / omnibar / dropdowns (chrome) and the tiled
     //    workbench. Separate roots by discipline; both per-window. (MW2.) ──────────
@@ -190,6 +215,7 @@ impl WindowView {
     /// (`centered`, `content_location`, `frame_layout`, `next_pane_id`). A second
     /// window is a second `new(...)` over the same shared session. (MW2.)
     pub(crate) fn new(
+        kind: WindowKind,
         dom: Rc<RefCell<ScriptedDom>>,
         runner: ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
         workbench: Workbench,
@@ -197,6 +223,7 @@ impl WindowView {
         workbench_runner: ServalAppRunner<WorkbenchScene, WorkbenchLogic, WorkbenchTreeView>,
     ) -> Self {
         Self {
+            kind,
             dom,
             runner,
             workbench,

@@ -143,10 +143,12 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     if c.comms.is_open() {
         children.push(comms_pane(c));
     }
-    // Shellbar: always-visible pane-toggle strip docked to one window edge (F2.1).
-    // Its geometry is set inline each frame by the host via `set_attribute` on the
-    // `.shellbar` class node, following the comms-pane pattern.
-    children.push(shellbar_view(&c.shellbar_panes));
+    // Shellbar: a pane-toggle strip docked to one window edge (F2.1). Its geometry is
+    // set inline each frame by the host via `set_attribute` on the `.shellbar` class
+    // node, following the comms-pane pattern. A slim (leaf) window omits it. (MW3 step 4.)
+    if !c.slim {
+        children.push(shellbar_view(&c.shellbar_panes));
+    }
     // The context menu floats over everything (it is a transient cursor pop-up).
     if let Some(menu) = &c.context_menu {
         children.push(context_menu_view(menu));

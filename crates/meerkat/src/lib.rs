@@ -155,6 +155,10 @@ pub struct Chrome {
     /// Which window edge the shellbar is docked to — mirrored from Shell so the
     /// view builds the right flex direction.
     pub shellbar_edge: ShellbarEdge,
+    /// Slim chrome: a leaf (torn-out) window omits the shellbar (and the host omits
+    /// the switcher), leaving just the toolbar over workbench-only content. Set once
+    /// from the window's `WindowKind`. (Multi-window MW3 step 4.)
+    pub slim: bool,
 }
 
 /// Which panes are currently open in the frame tree. The host syncs this into
@@ -280,6 +284,7 @@ impl Chrome {
             comms_new_body: TextInput::new(""),
             shellbar_panes: ShellbarPaneStates::default(),
             shellbar_edge: ShellbarEdge::default(),
+            slim: false,
         }
     }
 

@@ -532,6 +532,18 @@ mod tests {
     }
 
     #[test]
+    fn a_spawned_window_is_a_slim_leaf() {
+        // A second window (Cmd/Ctrl+Shift+N → build_window_view) is a leaf: slim
+        // chrome (no shellbar / switcher). The primary stays full chrome. (MW3 step 4.)
+        let app = test_app();
+        let leaf = app.build_window_view();
+        assert_eq!(leaf.kind, crate::window_view::WindowKind::Leaf);
+        assert!(leaf.runner.state().slim, "a leaf's chrome is slim");
+        assert_eq!(app.view().kind, crate::window_view::WindowKind::Primary);
+        assert!(!app.view().runner.state().slim, "the primary's chrome is full");
+    }
+
+    #[test]
     fn ctrl_n_without_shift_makes_a_session_not_a_window() {
         // The unshifted Ctrl+N is the older new-session verb; the shift is the only
         // thing that distinguishes it from the new-window verb above. (Multi-window MW3.)

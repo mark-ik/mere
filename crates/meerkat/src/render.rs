@@ -96,13 +96,18 @@ impl WindowCtx<'_> {
 
         // Frame tree: the content band (below the toolbar) split into pane rects.
         // The shellbar strip is carved out of the band first; the frame tree fills
-        // the remainder. (Shellbar F2.1.)
-        let band = shellbar::band_after_shellbar(
-            self.shared.presentation.shellbar_edge,
-            w as f32,
-            h as f32,
-            toolbar_h as f32,
-        );
+        // the remainder. A slim (leaf) window has no shellbar, so the band is the
+        // whole area below the toolbar. (Shellbar F2.1; MW3 step 4.)
+        let band = if self.view.kind.is_slim() {
+            [0.0, toolbar_h as f32, w as f32, h as f32]
+        } else {
+            shellbar::band_after_shellbar(
+                self.shared.presentation.shellbar_edge,
+                w as f32,
+                h as f32,
+                toolbar_h as f32,
+            )
+        };
         let leaves = frame_view::leaf_rects(&self.view.frame_layout, band, self.view.maximized_pane);
         // The orrery is the always-present graph pane; the tiled workbench is its
         // summonable sibling. Each renders into its own leaf. (Workbench-as-pane.)
@@ -1011,10 +1016,12 @@ impl WindowCtx<'_> {
         self.view.session_row_rects.clear();
         self.view.session_close_rects.clear();
         self.view.session_add_rect = None;
-        if matches!(
-            self.shared.presentation.shellbar_edge,
-            session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right
-        ) && !self.shared.session.session_thumbnails.is_empty()
+        if !self.view.kind.is_slim()
+            && matches!(
+                self.shared.presentation.shellbar_edge,
+                session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right
+            )
+            && !self.shared.session.session_thumbnails.is_empty()
         {
             let strip =
                 shellbar::shellbar_rect(self.shared.presentation.shellbar_edge, w as f32, h as f32, toolbar_h as f32);

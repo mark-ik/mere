@@ -771,3 +771,26 @@ what is most likely to break, the mitigation, and a pointer.
   - **Reopen trigger:** a Rune 1.0 with a sandbox warranty would reopen only the
     untrusted-policy question, and only if that policy is kept as a script rather than
     data. Supersedes the 2026-06-04 Rune-placement entry above.
+- **2026-06-10 (addendum). The seam is engine-generic; a Rune option is a third backend,
+  not a new seam.** Re-reading `script-engine-api` against the code: it names no JS type
+  (`Value` / `CallCx` associated, reflectors opaque `u64`, host data `Rc<dyn Any>`,
+  promises opaque tokens with a settle-then-pump protocol, native callbacks captures-free
+  ZSTs). It is a sandboxed-async-scripting-VM contract, not a JS one, so the earlier
+  "build a smaller logic-engine seam one level up" framing is **retracted**: that seam
+  already exists. A Rune backend is three backend-internal adaptations behind the
+  unchanged trait (a suspended-execution queue as `pump_microtasks`, Rune's async being
+  Rust-future-shaped; host data captured by each trampoline closure, which Rune permits,
+  so it skips the JS side's `[[HostDefined]]` and leaked-`'static` hooks; oneshot-backed
+  awaitables for `new_host_promise` / `settle_host_promise`), plus stubs for residual
+  JS-isms (`null` vs `undefined`, ToString, reflector `===` identity). Even a sync-only
+  engine (Rhai, were it kept) rides the same seam with the promise methods returning
+  unsupported, so **no second seam is justified at all**. Language stays a **consumer
+  policy**: `serval-scripted-dom` binds JS only (fixed by web semantics); the P6
+  orchestration actor could take its backend by config (the real Rune appeal); nematic
+  living-knots are a hedged sidequest that **inherits the trusted/untrusted line** (Rune's
+  WIP sandbox makes them a local-authoring feature, not a run-a-stranger's-doc one). Does
+  not reopen the drop: first-party logic still needs no role only Rune fills, and
+  untrusted policy still wins as declarative-data-evaluated-by-Rust. Net: cheap to keep
+  open, no advance architecture, a permanent conformance-maintenance line only if a
+  backend ships. The cross-backend `host_promise_bridges_js_await` tests seed that
+  conformance suite.

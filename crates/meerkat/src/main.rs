@@ -827,6 +827,7 @@ impl Shell {
             WorkbenchScene::default(),
         );
         let mut view = window_view::WindowView::new(
+            window_view::WindowKind::Primary,
             dom,
             runner,
             Workbench::new(),
@@ -968,6 +969,7 @@ impl Shell {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = self.shared.presentation.saved_tab_cap;
+        chrome.slim = true; // a spawned window is a leaf: slim chrome (no shellbar / switcher)
         let runner = ServalAppRunner::new(dom.clone(), chrome_view as ChromeLogic, chrome);
         let content_location = runner.state().content_location().to_string();
         let workbench_dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
@@ -984,6 +986,7 @@ impl Shell {
             .map(|m| m.root_graph_id)
             .unwrap_or_default();
         let mut view = window_view::WindowView::new(
+            window_view::WindowKind::Leaf,
             dom,
             runner,
             Workbench::new(),
