@@ -1,10 +1,12 @@
 # Host Wiring Grab-Bag Plan
 
 **Date**: 2026-06-11
-**Status**: Planned. Spun out of the
+**Status**: Complete (2026-06-12). All eight items landed (G1.1–G1.4, G2.1–G2.4);
+per-item statuses below. Spun out of the
 [host cheap-path plan](2026-06-10_host_cheap_path_plan.md)'s C6 (which is now
-otherwise done: C0–C5 + C4c shipped). This is the checklist of record for the
-remaining host-wiring parity items.
+otherwise done: C0–C5 + C4c shipped). This was the checklist of record for the
+remaining host-wiring parity items; what is left is meerkat-side adoption of the
+serval-side runway (G1.1–G1.3, G2.3), which rides window-composition P2+.
 **Scope**: The grab-bag of serval / xilem-serval host capability that is wired
 and tested one layer down with zero or stub meerkat callers. Each item lands
 separately; this plan phases them by what unblocks what, not by date.
@@ -206,6 +208,28 @@ an overridable Tab default; Vec-per-node listener registries.
 **Done when**: a plain button is keyboard-activatable, Tab is overridable
 per-view, and a node can carry multiple listeners of one kind.
 
+**Status (2026-06-12): DONE (serval-side; meerkat adoption is the follow-up).**
+All three escape hatches landed in xilem-serval.
+(1) **Vec-per-node registries** — `click_handlers` / `key_handlers` now map a node
+to a `Vec<Handler>` (idempotent per routing path); `register_*` appends rather than
+overwrites and `unregister_*` removes by path, so stacked listeners coexist and
+`phase_ordered_paths` routes every one, in registration order within its phase.
+Guard: `stacked_click_listeners_all_fire`.
+(2) **`focusable()` marker** — a new transparent view (`focusable.rs`) registers a
+node in an explicit, refcounted focusable set, so `is_focusable` becomes "has a key
+handler **or** a marker"; a plain `focusable(button(..))` joins the Tab order.
+(3) **Enter/Space activation + overridable Tab** — `dispatch_key` now delivers Tab
+to the focused element's handlers *first* and traverses focus only when none
+prevented it (so a `textarea` can insert a tab char or a view impose a custom
+order), and synthesizes a click on Enter/Space for a focusable control that has a
+click handler but no key handler of its own (the plain-button case; a text field's
+own `on_key` owns the key, so its Space still inserts a space — the guard is "click
+handler present, key handler absent"). Guards:
+`enter_and_space_activate_a_focusable_button`, `tab_is_overridable_by_a_handler`.
+51/51 xilem-serval tests green. Forward-looking runway like G1.1–G1.3: no meerkat
+caller yet. Meerkat adoption (wrapping chrome buttons in `focusable()`, delivering
+winit Tab/Enter/Space through `dispatch_key`) is the on-device follow-up.
+
 ### G2.4 — Chrome a11y actions
 
 **Now**: C4c landed the chrome a11y *tree* (roles/names/bounds derive from the
@@ -277,5 +301,10 @@ firing the `ActionRequest`) is the one check left, as with G2.1's IME round-trip
   note after the first cut (salted-id reversal) proved debug-broken.
 - **2026-06-12** — G2.4 **complete**: part 2 host-routes chrome `ActionRequest`s via
   `A11yHostAction::ChromeNode(NodeId)` (the whole node, never the reversed id),
-  end-to-end verified headless. Remaining: **G2.3** (keyboard escapes) — the last
-  open item, the most involved of Phase G2.
+  end-to-end verified headless. Then **G2.3 complete** (the last item): the three
+  keyboard-model escape hatches landed in xilem-serval — Vec-per-node listener
+  registries, a `focusable()` marker, and Enter/Space activation + overridable Tab.
+  **Phase G2 done; the grab-bag plan is complete** (G1.1–G1.4, G2.1–G2.4 all
+  landed). The remaining work is meerkat-side adoption of the serval-side runway
+  (G1.1–G1.3 wheel/hit-test/cancel, G2.3 keyboard escapes), which arrives with
+  window-composition P2+ and on-device chrome-control work.
