@@ -468,20 +468,30 @@ impl WindowCtx<'_> {
             }
         };
         if let Some(node) = hit {
-            let palette_was_open = self.view.runner.state().palette_open;
-            self.view.runner.dispatch_click(node, PointerClick::at((x, y)));
-            self.drain_pending_connect();
-            self.drain_pending_command();
-            self.drain_comms_intent();
-            self.drain_pending_context();
-            self.drain_history_step();
-            self.sync_settings();
-            self.sync_orrery();
-            if palette_was_open && !self.view.runner.state().palette_open {
-                self.focus_after_palette_close();
-            }
-            self.view.request_redraw();
+            self.chrome_activate(node, (x, y));
         }
+    }
+
+    /// Dispatch a click to chrome `node` and drain every intent its handlers may
+    /// have queued — the shared tail of a pointer [`chrome_click`](Self::chrome_click)
+    /// (which hit-tests to find the node first) and an a11y-driven activation (which
+    /// already knows the node from its route, G2.4). `at` is element-local, so the
+    /// a11y path passes `(0.0, 0.0)` (the node's own origin) — a valid synthetic
+    /// activation point, ignored by the chrome's position-agnostic button handlers.
+    pub(super) fn chrome_activate(&mut self, node: NodeId, at: (f32, f32)) {
+        let palette_was_open = self.view.runner.state().palette_open;
+        self.view.runner.dispatch_click(node, PointerClick::at(at));
+        self.drain_pending_connect();
+        self.drain_pending_command();
+        self.drain_comms_intent();
+        self.drain_pending_context();
+        self.drain_history_step();
+        self.sync_settings();
+        self.sync_orrery();
+        if palette_was_open && !self.view.runner.state().palette_open {
+            self.focus_after_palette_close();
+        }
+        self.view.request_redraw();
     }
 
     /// Hit-test the workbench root at window `(x, y)` (content-band coords) and

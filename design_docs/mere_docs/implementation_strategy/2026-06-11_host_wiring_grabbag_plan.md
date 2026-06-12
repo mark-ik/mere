@@ -219,24 +219,35 @@ existing activation paths.
 **Done when**: a screen reader can activate a chrome control (omnibar focus, a
 toolbar button) through the a11y tree.
 
-**Status (2026-06-11): PART 1 DONE; host routing is the follow-up.** The chrome
-controls now *advertise* their action (`serval_a11y::build` calls
-`Node::add_action` — `Button`→`Click`, `TextInput`→`Focus`); guard in
-`chrome_dom_projects_to_a11y_subtree` (`supports_action`).
+**Status (2026-06-12): DONE.** Two parts. **Part 1** (2026-06-11): chrome controls
+*advertise* their action (`serval_a11y::build` calls `Node::add_action` —
+`Button`→`Click`, `TextInput`→`Focus`); guard in
+`chrome_dom_projects_to_a11y_subtree` (`supports_action`). **Part 2** (2026-06-12):
+the host now *routes* the resulting `ActionRequest` back to the chrome's activation
+paths. `chrome_a11y_tree` hands back the actionable nodes alongside the tree;
+`build_a11y_projection` keys each into an `A11yHostAction::ChromeNode(NodeId)` route
+by its `chrome_a11y_id`, and `apply_a11y_request`'s `Some` arm applies it — `Focus`
+→ `runner.set_focus(Some(node))`, `Click` → a new `chrome_activate` helper (the
+dispatch+drain tail factored out of the pointer `chrome_click`, dispatching at the
+element-local origin the chrome's position-agnostic button handlers ignore).
 
-The host *routing* of the resulting `ActionRequest` is **deferred with a design
-note**: the first cut reversed the salted a11y id back to a `NodeId`
-(`chrome_node_from_a11y_id`), but that is **debug-broken** — on 64-bit debug
-builds `NodeId::raw()` packs a process-unique doc-tag into the same high bits
-`CHROME_A11Y_SALT` (`0xC04E…`) uses, so `SALT | raw` corrupts the tag and `&
-!SALT` can't recover it (it works only in release, where the doc-tag fence
-compiles out; the false-passing test only passed as the first document, tag 0).
-The correct shape: **store the whole `NodeId` in the projection's
-`action_routes`** (keyed by `chrome_a11y_id(node)`, valued by a new
-`A11yHostAction::ChromeNode(NodeId)`), exactly as the orrery's `SelectNodeByUrl`
-routes do, and handle it in `apply_a11y_request`'s `Some` arm — no id reversal.
-`build_a11y_projection` adds the routes while it walks the chrome tree. Scoped,
-bounded, picked up fresh.
+The route stores the whole `NodeId`, **not** the salted id reversed: the first cut
+tried `chrome_node_from_a11y_id` (`SALT | raw` then `& !SALT`), which is
+**debug-broken** — on 64-bit debug builds `NodeId::raw()` packs a process-unique
+doc-tag into the same high bits `CHROME_A11Y_SALT` (`0xC04E…`) uses, so the tag
+corrupts the salted id and `& !SALT` can't recover it (it works only in release,
+where the doc-tag fence compiles out; the false-passing test only passed as the
+first document, tag 0). Storing the node whole sidesteps the id entirely — the
+orrery's `SelectNodeByUrl` pattern.
+
+Verified end-to-end, headless:
+`accesskit_focus_on_a_chrome_control_routes_to_the_runner` builds a real chrome
+session (`PaneSession::scene`, CPU layout — no GPU), runs the real projection, and
+asserts the omnibar's `chrome_a11y_id` keys a `ChromeNode` route to its own node and
+that a `Focus` request at that id lands the runner's focus on the omnibar — so the
+projection id and the route key round-trip (the exact seam the reversal got wrong).
+69/69 meerkat bin tests green. The on-device screen-reader round-trip (a real AT
+firing the `ActionRequest`) is the one check left, as with G2.1's IME round-trip.
 
 ---
 
@@ -261,3 +272,10 @@ bounded, picked up fresh.
   perf chain (C0–C5 + C4c) finished. No code yet. Phase G1 is the entry point
   (composition runway); start with G1.1 / G1.2 (the two that need real serval
   code) since G1.3 / G1.4 are mechanical wraps that ride them.
+- **2026-06-11** — Phase G1 complete (G1.1–G1.4); G2.1 (IME), G2.2 (env threading),
+  and G2.4 part 1 (advertise actions) landed. G2.4 part 2 deferred with a design
+  note after the first cut (salted-id reversal) proved debug-broken.
+- **2026-06-12** — G2.4 **complete**: part 2 host-routes chrome `ActionRequest`s via
+  `A11yHostAction::ChromeNode(NodeId)` (the whole node, never the reversed id),
+  end-to-end verified headless. Remaining: **G2.3** (keyboard escapes) — the last
+  open item, the most involved of Phase G2.

@@ -859,4 +859,60 @@ mod tests {
                 .any(|record| record.channel == "meerkat.agent.action_applied")
         );
     }
+
+    #[test]
+    fn accesskit_focus_on_a_chrome_control_routes_to_the_runner() {
+        // G2.4 part 2: a screen reader's action on a chrome control routes back to
+        // the host's activation path. The route stores the whole `NodeId` keyed by
+        // the node's salted a11y id, so the projection's node id and the route key
+        // round-trip — the seam the first cut (reversing the salted id) got
+        // debug-wrong, a doc-tag riding the salt's high bits.
+        use serval_layout::ScrollOffsets;
+        let mut app = test_app();
+        let mut wc = app.ctx();
+
+        // The omnibar is a real chrome DOM node — an `<input>`, so it advertises
+        // `Focus`.
+        let omnibar = wc
+            .input_under_class("toolbar")
+            .expect("the omnibar input exists in the chrome DOM");
+
+        // Build the chrome session so the projection derives from the live chrome
+        // DOM (the placeholder fallback carries no actionable nodes). CPU layout, no
+        // GPU — the same `PaneSession::scene` the render path runs.
+        let sheet = wc.shared.presentation.chrome_sheet_refs();
+        let scroll = ScrollOffsets::default();
+        crate::pane_session::PaneSession::scene(
+            &mut wc.view.chrome_session,
+            &wc.view.dom,
+            &sheet,
+            1200,
+            80,
+            None,
+            &scroll,
+        );
+
+        // Project: the omnibar carries a `ChromeNode` route under its own a11y id —
+        // the key the bridge targets a request with.
+        wc.refresh_a11y_summary();
+        let target = crate::serval_a11y::chrome_a11y_id(omnibar);
+        assert_eq!(
+            wc.a11y_action_routes.get(&target),
+            Some(&crate::A11yHostAction::ChromeNode(omnibar)),
+            "the omnibar's a11y id keys a ChromeNode route to its own node",
+        );
+
+        // Apply a `Focus` request at that id: the runner's focus lands on the
+        // omnibar, proving the projection id and the route key round-trip.
+        wc.view.runner.set_focus(None);
+        wc.apply_a11y_request(crate::a11y_bridge::A11yActionRequest {
+            action: Action::Focus,
+            target_node: target,
+        });
+        assert_eq!(
+            wc.view.runner.focus(),
+            Some(omnibar),
+            "Focus routed through the ChromeNode route to the omnibar node",
+        );
+    }
 }

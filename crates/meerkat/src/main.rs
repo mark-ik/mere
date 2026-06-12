@@ -379,6 +379,13 @@ pub(crate) enum ContentPane {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum A11yHostAction {
     SelectNodeByUrl(String),
+    /// A chrome control, by its DOM node in the chrome runner. A screen reader's
+    /// `Focus` sets the runner's focus to it; a `Click` dispatches to its handler
+    /// — the same activation paths a pointer drives. The whole `NodeId` is stored
+    /// (keyed by the node's salted a11y id) rather than reversed from that id,
+    /// because on 64-bit debug builds `NodeId::raw()` packs a doc-tag into the same
+    /// high bits the salt uses, so the salted id cannot be inverted. (G2.4.)
+    ChromeNode(NodeId),
 }
 
 /// The meerkat shell application: the shared chrome DOM, the runner that diffs

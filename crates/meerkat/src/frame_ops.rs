@@ -1470,6 +1470,39 @@ impl WindowCtx<'_> {
                     );
                 }
             }
+            Some(A11yHostAction::ChromeNode(node)) => match request.action {
+                // Focus the chrome control directly — the same as a programmatic
+                // `element.focus()` (the omnibar field, a palette row).
+                Action::Focus => {
+                    self.view.runner.set_focus(Some(node));
+                    self.shared.observability.record_diagnostic(
+                        "meerkat.agent.action_applied",
+                        super::observability::Severity::Info,
+                        format!("accesskit.{action_id}: focus chrome node"),
+                    );
+                    self.refresh_a11y_summary();
+                    self.view.request_redraw();
+                }
+                // Activate it through the same path a pointer click drives: dispatch
+                // to the node (element-local origin, which chrome controls ignore)
+                // and drain whatever intents its handler queued.
+                Action::Click => {
+                    self.chrome_activate(node, (0.0, 0.0));
+                    self.shared.observability.record_diagnostic(
+                        "meerkat.agent.action_applied",
+                        super::observability::Severity::Info,
+                        format!("accesskit.{action_id}: activate chrome node"),
+                    );
+                    self.refresh_a11y_summary();
+                }
+                _ => {
+                    self.shared.observability.record_diagnostic(
+                        "meerkat.agent.intent_dropped",
+                        super::observability::Severity::Warn,
+                        format!("accesskit.{action_id}: unsupported action for chrome node"),
+                    );
+                }
+            },
             Some(_) => {
                 self.shared.observability.record_diagnostic(
                     "meerkat.agent.intent_dropped",
@@ -1503,7 +1536,7 @@ impl WindowCtx<'_> {
         // the real toolbar / omnibar / buttons rather than one placeholder node.
         // Falls back to a single node covering the toolbar band before the first
         // render builds the session.
-        let chrome_tree = match &self.view.chrome_session {
+        let (chrome_tree, chrome_actionable) = match &self.view.chrome_session {
             Some(session) => {
                 let dom = self.view.dom.borrow();
                 crate::serval_a11y::chrome_a11y_tree(&dom, session.fragments())
@@ -1518,14 +1551,27 @@ impl WindowCtx<'_> {
                     self.view.toolbar_h as f64,
                 ));
                 let chrome_root = node_id_for_path("meerkat/chrome");
-                UxTree {
-                    root: chrome_root,
-                    nodes: vec![(chrome_root, chrome)],
-                }
+                (
+                    UxTree {
+                        root: chrome_root,
+                        nodes: vec![(chrome_root, chrome)],
+                    },
+                    Vec::new(),
+                )
             }
         };
         let chrome_root = chrome_tree.root;
         let mut action_routes = HashMap::new();
+        // Route each actionable chrome control to its whole DOM node, keyed by the
+        // same salted id the projection gave that node, so a screen reader's request
+        // resolves here in `apply_a11y_request`. Storing the node (not the salted id
+        // reversed back to one) sidesteps the debug-broken doc-tag overlap. (G2.4.)
+        for node in chrome_actionable {
+            action_routes.insert(
+                crate::serval_a11y::chrome_a11y_id(node),
+                A11yHostAction::ChromeNode(node),
+            );
+        }
         let leaf_bounds: HashMap<PaneId, [f32; 4]> = leaves
             .iter()
             .map(|leaf| (leaf.pane_id, leaf.rect))

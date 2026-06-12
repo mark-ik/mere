@@ -17,14 +17,17 @@
 //! `accesskit::TreeUpdate` to meerkat's `UxTree` (which the bridge converts to a
 //! `TreeUpdate` once, after stitching). Each control also declares the host action
 //! a screen reader can invoke (a button a `Click`, a field a `Focus`), so the
-//! chrome advertises its affordances. (Grab-bag G2.4, part 1.)
+//! chrome advertises its affordances, and [`chrome_a11y_tree`] hands back the
+//! actionable nodes so the host can route a screen reader's request to the chrome's
+//! activation paths. (Grab-bag G2.4.)
 //!
-//! Host *routing* of the resulting `ActionRequest` back to the chrome's activation
-//! paths is the follow-up: a chrome node's a11y id is `CHROME_A11Y_SALT |
-//! node.raw()`, but on 64-bit debug builds `raw()` packs a doc-tag into the same
-//! high bits the salt uses, so the id cannot be reversed to a `NodeId`. Routing
-//! must instead store the whole `NodeId` in the projection's `action_routes` (as
-//! the orrery's `SelectNodeByUrl` routes do), keyed by `chrome_a11y_id(node)`.
+//! The route stores the whole `NodeId` (`A11yHostAction::ChromeNode`, keyed by
+//! `chrome_a11y_id(node)`), the way the orrery's `SelectNodeByUrl` routes do —
+//! *not* the salted id reversed back to a `NodeId`. The reversal is debug-broken:
+//! a chrome node's a11y id is `CHROME_A11Y_SALT | node.raw()`, but on 64-bit debug
+//! builds `raw()` packs a process-unique doc-tag into the same high bits the salt
+//! uses, so `& !SALT` cannot recover the tag (it works only in release, where the
+//! doc-tag fence compiles out). Storing the node whole sidesteps the id entirely.
 
 use accesskit::{Action, Node, NodeId as AccessNodeId, Rect, Role};
 use layout_dom_api::{LayoutDom, NodeKind};
@@ -77,26 +80,33 @@ fn chrome_direct_text(dom: &ScriptedDom, node: NodeId) -> String {
 }
 
 /// Build the a11y node for `node` (whose parent sits at `parent_origin` in
-/// absolute coords), append it + its element descendants to `out`, and return its
-/// id. Bounds accumulate down the tree (taffy locations are parent-relative).
+/// absolute coords), append it + its element descendants to `out`, record it in
+/// `actionable` if it advertises a host action, and return its id. Bounds
+/// accumulate down the tree (taffy locations are parent-relative).
 fn build(
     dom: &ScriptedDom,
     fragments: &FragmentPlane<NodeId>,
     node: NodeId,
     parent_origin: (f64, f64),
     out: &mut Vec<(AccessNodeId, Node)>,
+    actionable: &mut Vec<NodeId>,
 ) -> AccessNodeId {
     let id = chrome_a11y_id(node);
     let role = chrome_role(dom, node);
     let mut access = Node::new(role);
     // Declare the host action a screen reader can invoke on this control, so the
-    // chrome is *actionable*: a button takes a `Click`, a text field a `Focus`.
-    // `apply_a11y_request` recovers the node via `chrome_node_from_a11y_id` and
-    // routes the request to the chrome's activation paths. (G2.4.)
-    match role {
-        Role::Button => access.add_action(Action::Click),
-        Role::TextInput => access.add_action(Action::Focus),
-        _ => {}
+    // chrome is *actionable*: a button takes a `Click`, a text field a `Focus`. The
+    // node is recorded in `actionable` so the host can route the request back to
+    // the chrome's activation paths (`A11yHostAction::ChromeNode`, keyed by this
+    // node's `chrome_a11y_id`). (G2.4.)
+    let action = match role {
+        Role::Button => Some(Action::Click),
+        Role::TextInput => Some(Action::Focus),
+        _ => None,
+    };
+    if let Some(action) = action {
+        access.add_action(action);
+        actionable.push(node);
     }
 
     let name = chrome_direct_text(dom, node);
@@ -124,7 +134,7 @@ fn build(
     let mut children = Vec::new();
     for child in dom.dom_children(node) {
         if dom.kind(child) == NodeKind::Element {
-            children.push(build(dom, fragments, child, origin, out));
+            children.push(build(dom, fragments, child, origin, out, actionable));
         }
     }
     access.set_children(children);
@@ -134,18 +144,28 @@ fn build(
 }
 
 /// Project the chrome `dom` into a [`UxTree`] using `fragments` (the chrome
-/// session's retained layout) for node geometry. The document is the subtree root
-/// ([`Role::Window`]); every element below becomes a node with a role, accessible
-/// name, bounds, and its element children. The a11y bridge stitches this under the
-/// host window.
-pub(crate) fn chrome_a11y_tree(dom: &ScriptedDom, fragments: &FragmentPlane<NodeId>) -> UxTree {
+/// session's retained layout) for node geometry, returning the tree paired with
+/// the chrome nodes that advertise a host action (buttons, fields). The document
+/// is the subtree root ([`Role::Window`]); every element below becomes a node with
+/// a role, accessible name, bounds, and its element children. The a11y bridge
+/// stitches the tree under the host window; the host turns each actionable node
+/// into an [`A11yHostAction::ChromeNode`](crate::A11yHostAction::ChromeNode) route
+/// keyed by its [`chrome_a11y_id`].
+pub(crate) fn chrome_a11y_tree(
+    dom: &ScriptedDom,
+    fragments: &FragmentPlane<NodeId>,
+) -> (UxTree, Vec<NodeId>) {
     let root = dom.document();
     let mut nodes = Vec::new();
-    build(dom, fragments, root, (0.0, 0.0), &mut nodes);
-    UxTree {
-        root: chrome_a11y_id(root),
-        nodes,
-    }
+    let mut actionable = Vec::new();
+    build(dom, fragments, root, (0.0, 0.0), &mut nodes, &mut actionable);
+    (
+        UxTree {
+            root: chrome_a11y_id(root),
+            nodes,
+        },
+        actionable,
+    )
 }
 
 #[cfg(test)]
@@ -181,7 +201,7 @@ mod tests {
 
         let frags =
             serval_layout::render(&dom, &["div, input, button { display: block; }"], 400.0, 60.0);
-        let tree = chrome_a11y_tree(&dom, &frags);
+        let (tree, actionable) = chrome_a11y_tree(&dom, &frags);
 
         let node = |n: NodeId| {
             tree.nodes
@@ -201,9 +221,18 @@ mod tests {
         assert_eq!(node(button).label(), Some("Go"));
         assert!(node(button).bounds().is_some(), "a laid-out node has bounds");
 
-        // Controls declare the host action a screen reader invokes. (G2.4 part 1.)
+        // Controls declare the host action a screen reader invokes. (G2.4.)
         assert!(node(button).supports_action(Action::Click), "the button advertises Click");
         assert!(node(input).supports_action(Action::Focus), "the input advertises Focus");
+
+        // The actionable controls are handed back for host routing — exactly the
+        // button + input, never the container or document. The host keys each into
+        // an `A11yHostAction::ChromeNode` route by its `chrome_a11y_id`. (G2.4.)
+        assert_eq!(actionable.len(), 2, "only the button + input are actionable");
+        assert!(actionable.contains(&button), "the button is routed");
+        assert!(actionable.contains(&input), "the input is routed");
+        assert!(!actionable.contains(&root), "the document is not actionable");
+        assert!(!actionable.contains(&bar), "the container is not actionable");
 
         // Every id sits in the salted chrome range, disjoint from path hashes.
         assert!(
