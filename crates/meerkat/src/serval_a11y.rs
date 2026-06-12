@@ -15,12 +15,18 @@
 //!
 //! Adapted from the former `pelt-live` a11y builder, retargeted from
 //! `accesskit::TreeUpdate` to meerkat's `UxTree` (which the bridge converts to a
-//! `TreeUpdate` once, after stitching). Read-only for now: chrome a11y *actions*
-//! (a screen reader activating the omnibar / a toolbar button) are a follow-up, so
-//! the nodes carry roles + names + bounds but no host action routes yet (the
-//! chrome was unactionable before this too, so it is no regression).
+//! `TreeUpdate` once, after stitching). Each control also declares the host action
+//! a screen reader can invoke (a button a `Click`, a field a `Focus`), so the
+//! chrome advertises its affordances. (Grab-bag G2.4, part 1.)
+//!
+//! Host *routing* of the resulting `ActionRequest` back to the chrome's activation
+//! paths is the follow-up: a chrome node's a11y id is `CHROME_A11Y_SALT |
+//! node.raw()`, but on 64-bit debug builds `raw()` packs a doc-tag into the same
+//! high bits the salt uses, so the id cannot be reversed to a `NodeId`. Routing
+//! must instead store the whole `NodeId` in the projection's `action_routes` (as
+//! the orrery's `SelectNodeByUrl` routes do), keyed by `chrome_a11y_id(node)`.
 
-use accesskit::{Node, NodeId as AccessNodeId, Rect, Role};
+use accesskit::{Action, Node, NodeId as AccessNodeId, Rect, Role};
 use layout_dom_api::{LayoutDom, NodeKind};
 use serval_layout::FragmentPlane;
 use serval_scripted_dom::{NodeId, ScriptedDom};
@@ -81,7 +87,17 @@ fn build(
     out: &mut Vec<(AccessNodeId, Node)>,
 ) -> AccessNodeId {
     let id = chrome_a11y_id(node);
-    let mut access = Node::new(chrome_role(dom, node));
+    let role = chrome_role(dom, node);
+    let mut access = Node::new(role);
+    // Declare the host action a screen reader can invoke on this control, so the
+    // chrome is *actionable*: a button takes a `Click`, a text field a `Focus`.
+    // `apply_a11y_request` recovers the node via `chrome_node_from_a11y_id` and
+    // routes the request to the chrome's activation paths. (G2.4.)
+    match role {
+        Role::Button => access.add_action(Action::Click),
+        Role::TextInput => access.add_action(Action::Focus),
+        _ => {}
+    }
 
     let name = chrome_direct_text(dom, node);
     if !name.is_empty() {
@@ -184,6 +200,10 @@ mod tests {
         assert_eq!(node(button).role(), Role::Button);
         assert_eq!(node(button).label(), Some("Go"));
         assert!(node(button).bounds().is_some(), "a laid-out node has bounds");
+
+        // Controls declare the host action a screen reader invokes. (G2.4 part 1.)
+        assert!(node(button).supports_action(Action::Click), "the button advertises Click");
+        assert!(node(input).supports_action(Action::Focus), "the input advertises Focus");
 
         // Every id sits in the salted chrome range, disjoint from path hashes.
         assert!(

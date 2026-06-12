@@ -219,6 +219,25 @@ existing activation paths.
 **Done when**: a screen reader can activate a chrome control (omnibar focus, a
 toolbar button) through the a11y tree.
 
+**Status (2026-06-11): PART 1 DONE; host routing is the follow-up.** The chrome
+controls now *advertise* their action (`serval_a11y::build` calls
+`Node::add_action` — `Button`→`Click`, `TextInput`→`Focus`); guard in
+`chrome_dom_projects_to_a11y_subtree` (`supports_action`).
+
+The host *routing* of the resulting `ActionRequest` is **deferred with a design
+note**: the first cut reversed the salted a11y id back to a `NodeId`
+(`chrome_node_from_a11y_id`), but that is **debug-broken** — on 64-bit debug
+builds `NodeId::raw()` packs a process-unique doc-tag into the same high bits
+`CHROME_A11Y_SALT` (`0xC04E…`) uses, so `SALT | raw` corrupts the tag and `&
+!SALT` can't recover it (it works only in release, where the doc-tag fence
+compiles out; the false-passing test only passed as the first document, tag 0).
+The correct shape: **store the whole `NodeId` in the projection's
+`action_routes`** (keyed by `chrome_a11y_id(node)`, valued by a new
+`A11yHostAction::ChromeNode(NodeId)`), exactly as the orrery's `SelectNodeByUrl`
+routes do, and handle it in `apply_a11y_request`'s `Some` arm — no id reversal.
+`build_a11y_projection` adds the routes while it walks the chrome tree. Scoped,
+bounded, picked up fresh.
+
 ---
 
 ## Findings
