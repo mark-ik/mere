@@ -8,7 +8,7 @@ use std::rc::Rc;
 use serval_scripted_dom::ScriptedDom;
 use xilem_serval::{
     AnyView, PointerClick, ServalAppRunner, ServalCtx, ServalElement, TextField, TextInput, el,
-    lens, on_click, text_field_typed,
+    lens, memoize, on_click, text_field_typed,
 };
 
 use comms::{Direction, ProtocolKind};
@@ -72,24 +72,24 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // Reflect the reused nav-capability flags onto the buttons: a spent
     // direction carries a `disabled` class (the host sheet greys it; the
     // handler is already a no-op at the history's edge).
-    let back_class = if c.toolbar.can_go_back {
-        "nav"
-    } else {
-        "nav disabled"
-    };
-    let forward_class = if c.toolbar.can_go_forward {
-        "nav"
-    } else {
-        "nav disabled"
-    };
-    let back = on_click(
-        el::<_, Chrome, ()>("button", "back").attr("class", back_class),
-        go_back as fn(&mut Chrome, PointerClick),
-    );
-    let forward = on_click(
-        el::<_, Chrome, ()>("button", "forward").attr("class", forward_class),
-        go_forward as fn(&mut Chrome, PointerClick),
-    );
+    // The nav buttons depend only on their reused capability flag, so memoize
+    // each on its bool: typing in the omnibar (which leaves nav state untouched)
+    // does not rebuild them. A spent direction carries a `disabled` class (the
+    // host sheet greys it; the handler is already a no-op at the history's edge).
+    let back = memoize(c.toolbar.can_go_back, |&can_back: &bool| {
+        let class = if can_back { "nav" } else { "nav disabled" };
+        on_click(
+            el::<_, Chrome, ()>("button", "back").attr("class", class),
+            go_back as fn(&mut Chrome, PointerClick),
+        )
+    });
+    let forward = memoize(c.toolbar.can_go_forward, |&can_forward: &bool| {
+        let class = if can_forward { "nav" } else { "nav disabled" };
+        on_click(
+            el::<_, Chrome, ()>("button", "forward").attr("class", class),
+            go_forward as fn(&mut Chrome, PointerClick),
+        )
+    });
     // The omnibar text_field, lensed onto `Chrome::omnibar`. `text_field_typed`
     // names its concrete view so the `lens` projection can be a `fn` pointer
     // (no captured borrow), as in pelt-live.
@@ -102,10 +102,15 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     let sync_chip = el::<_, Chrome, ()>("div", c.sync.summary()).attr("class", "sync-chip");
     // A workbench toggle next to the omnibar — the reliable way to flip the tiled
     // view (Ctrl+T can be flaky), routed through the `ToggleWorkbench` host action.
-    let workbench_btn = on_click(
-        el::<_, Chrome, ()>("button", "\u{229e}").attr("class", "workbench-btn"),
-        |c: &mut Chrome, _: PointerClick| c.run_command(Command::ToggleWorkbench),
-    );
+    // A fully static button (icon + fixed command) — memoize on `()` so it is
+    // built once and never rebuilt.
+    let workbench_btn = memoize((), |_: &()| {
+        on_click(
+            el::<_, Chrome, ()>("button", "\u{229e}").attr("class", "workbench-btn"),
+            (|c: &mut Chrome, _: PointerClick| c.run_command(Command::ToggleWorkbench))
+                as fn(&mut Chrome, PointerClick),
+        )
+    });
     let toolbar = el::<_, Chrome, ()>("div", (back, forward, omnibar, workbench_btn, sync_chip))
         .attr("class", "toolbar");
 
@@ -147,7 +152,11 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // set inline each frame by the host via `set_attribute` on the `.shellbar` class
     // node, following the comms-pane pattern. A slim (leaf) window omits it. (MW3 step 4.)
     if !c.slim {
-        children.push(shellbar_view(&c.shellbar_panes));
+        // The shellbar depends only on the pane-open states, so memoize on them:
+        // an omnibar keystroke (panes unchanged) skips rebuilding the whole strip.
+        children.push(Box::new(memoize(c.shellbar_panes, |panes: &ShellbarPaneStates| {
+            shellbar_view(panes)
+        })) as ChromeView);
     }
     // The context menu floats over everything (it is a transient cursor pop-up).
     if let Some(menu) = &c.context_menu {

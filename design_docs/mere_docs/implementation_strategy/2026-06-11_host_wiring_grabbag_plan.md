@@ -34,6 +34,13 @@ call site).
 
 ## Phase G1 — Composition runway (do before window-composition P2+)
 
+**G1 COMPLETE (2026-06-11).** All four landed: G1.1 `on_wheel` infra, G1.2
+transform-aware hit-test, G1.3 pointer cancellation (serval, committed
+`718cf5d7d3c` / `bab5a2c7f1c` / `173282dde89`), G1.4 `memoize` (meerkat). The
+serval-side seams (G1.1–G1.3) are forward-looking runway — their meerkat callers
+arrive with window-composition P2+; G1.4 ships its meerkat caller now. Per-item
+status under each heading.
+
 ### G1.1 — `on_wheel` event view (serval)
 
 **Now**: meerkat hand-routes wheel input (`app_handler.rs:370-414`) and owns
@@ -99,6 +106,18 @@ pointer pass's own.
 **Done when**: a drag routed through `on_pointer` can cancel/stop-propagate —
 relevant the moment drags move onto the pointer path.
 
+**Status (2026-06-11): DONE.** `PointerEvent` now carries a clone-through
+`prop: Propagation` (+ a `PointerEvent::new` constructor), the twin of the
+`PointerClick` / `KeyEvent` cell, so a drag handler can call
+`e.prop.prevent_default()`. `route_pointer` records the pass's own
+`default_prevented` (cloning the event into the message so the shared cell is
+read back), and `dispatch_pointer_down`/`_move`/`_up` reset it first — so a
+pointer pass no longer leaves the stale click/key value. Guard
+`each_pointer_event_records_its_own_default_prevented` (the press prevents, the
+move resets). Constructor sites updated (pelt-live + tests); 48/48 xilem-serval
+green, pelt-live builds clean. Forward-looking like G1.2 — no meerkat drag rides
+the pointer path yet.
+
 ### G1.4 — `memoize` the stable chrome subtrees (xilem-serval)
 
 **Now**: `memoize` is re-exported and tested over `ServalCtx` but has zero
@@ -109,6 +128,18 @@ meerkat callers, so the whole view tree rebuilds per event.
 **Done when**: an event that touches one pane does not rebuild the
 `O(view tree)` of the unaffected stable subtrees — the rebuild cost of a growing
 pane tree is bounded.
+
+**Status (2026-06-11): DONE (meerkat caller landed).** `chrome_view`
+(`meerkat/views.rs`) now wraps its stable subtrees in `memoize`: the **shellbar**
+on `c.shellbar_panes` (a `Copy + PartialEq` key) — the substantial win, since an
+omnibar keystroke leaves the panes unchanged and so skips rebuilding the whole
+toggle strip — plus the **nav buttons** (each on its `can_go_*` bool) and the
+**static workbench button** (on `()`, built once). `memoize` is transparent (no
+wrapper element), so the chrome DOM is byte-identical: all 7 meerkat chrome tests
+green, build clean. Further per-element memoization (omnibar / suggestions) is
+not worthwhile — those change on the very keystroke that drives the rebuild. The
+larger payoff arrives when window-composition P2+ multiplies the panes; this is
+the seam it rides.
 
 ---
 
