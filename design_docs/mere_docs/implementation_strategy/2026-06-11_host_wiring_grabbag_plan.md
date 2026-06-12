@@ -182,6 +182,17 @@ environment-dependent view (theming, scaling) lands in chrome.
 **Done when**: dispatch and build share one environment; an environment-reading
 view in chrome behaves the same on both paths.
 
+**Status (2026-06-11): DONE.** Correction to the "(mechanical)" note above:
+`Environment` is not `Clone`, and `MessageCtx::new` takes it by value while
+`finish()` hands it back — so the fix is a **take → route → finish → restore**
+thread, not a swap, and there are **four** dispatch sites (click, key, pointer,
+and the G1.1 wheel), the click/key ones looping over multiple paths (env threaded
+through the loop). New `ServalCtx::take_environment` / `set_environment` back it.
+Behaviorally a no-op today — nothing reads the env in a message path, so the real
+env and `Environment::new()` are both empty — so verification is the full suite
+staying green (48/48; no dispatch regression) plus by-construction correctness;
+the first environment-reading view inherits the shared env for free.
+
 ### G2.3 — Keyboard-model escape hatches (xilem-serval; per the configurability rule)
 
 **Now**: three gaps. (1) `focusable == has-on_key`, so a plain button is
