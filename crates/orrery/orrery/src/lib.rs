@@ -283,16 +283,48 @@ impl Orrery {
     /// Set the viewport the orrery culls + centers against. The host calls this on
     /// a surface resize; the next [`frame`](Orrery::frame) rebuilds the node-pool
     /// layout at the new size.
+    ///
+    /// Keeps whatever world point sits at the viewport center fixed across the
+    /// resize by shifting the offset by half the size delta (the camera maps
+    /// `screen = world * zoom + offset`, so the center moves by half the change in
+    /// each axis, independent of zoom). Without this, the startup 1024->2560 grow
+    /// would leave a freshly centered camera anchored to the old, smaller center
+    /// and slide the graph toward a corner.
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.view_w = width.max(1);
-        self.view_h = height.max(1);
+        let (new_w, new_h) = (width.max(1), height.max(1));
+        self.camera.offset.0 += (new_w as f32 - self.view_w as f32) / 2.0;
+        self.camera.offset.1 += (new_h as f32 - self.view_h as f32) / 2.0;
+        self.view_w = new_w;
+        self.view_h = new_h;
     }
 
-    /// Put the world origin at the viewport center — the sample graph is laid out
-    /// around `(0, 0)`, so this frames it at zoom 1. (A fit-to-`content_bounds`
-    /// camera replaces this when a real graph is hosted.)
+    /// Put the world origin at the viewport center **at zoom 1** — the graph is
+    /// laid out around `(0, 0)`, so this frames it. Resets the zoom too (a drifted
+    /// zoom would otherwise leave the graph a speck or off-screen even after the
+    /// offset is centered). (A fit-to-`content_bounds` camera replaces this when a
+    /// real graph is hosted.)
     pub fn recenter(&mut self) {
         self.camera.offset = (self.view_w as f32 / 2.0, self.view_h as f32 / 2.0);
+        self.camera.zoom = 1.0;
+    }
+
+    /// Whether the graph is empty, or at least one node lies within the current
+    /// viewport. `false` means every node is off-screen — a degenerate camera (a
+    /// restored pan/zoom that no longer frames the graph), which the host recovers
+    /// with [`recenter`](Self::recenter).
+    pub fn graph_visible(&self) -> bool {
+        self.graph.nodes().next().is_none()
+            || self.view.cull_aabb(self.world_viewport()).into_iter().next().is_some()
+    }
+
+    /// Whether the graph currently holds any nodes. The host gates its one-shot
+    /// camera heal on this so the heal waits for an async session load to populate
+    /// the graph, rather than firing (and spending its one shot) against the empty
+    /// graph that exists for the first frames after launch — at which point
+    /// [`graph_visible`](Self::graph_visible) is trivially true and would suppress
+    /// the recenter the restored-camera case needs.
+    pub fn has_nodes(&self) -> bool {
+        self.graph.nodes().next().is_some()
     }
 
     /// Re-sync the physics bodies, edge topology, and node-children pool to the

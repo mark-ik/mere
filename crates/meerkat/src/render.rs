@@ -245,6 +245,18 @@ impl WindowCtx<'_> {
         if !self.view.centered {
             self.orrery.recenter();
             self.view.centered = true;
+        } else if !self.view.healed && self.orrery.has_nodes() {
+            // One-shot self-heal: a restored camera that frames nothing (a
+            // degenerate saved pan/zoom) snaps back to the graph. Gated on
+            // has_nodes() so it waits for the async session load — firing against
+            // the still-empty graph would spend the one shot while graph_visible()
+            // is trivially true, leaving the restored degenerate camera in place
+            // once the nodes actually arrive. Checked once, so it never fights an
+            // intentional pan into empty space.
+            self.view.healed = true;
+            if !self.orrery.graph_visible() {
+                self.orrery.recenter();
+            }
         }
         let (orrery_scene, orrery_redraw) = self.orrery.frame(orrery_w, orrery_h);
         // The workbench root (a serval flex-DOM document) for the Workbench pane;

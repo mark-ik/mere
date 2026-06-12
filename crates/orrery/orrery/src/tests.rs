@@ -165,6 +165,31 @@ fn camera_round_trips_and_guards_bad_zoom() {
 }
 
 #[test]
+fn resize_keeps_the_viewport_center_world_point_fixed() {
+    let mut orrery = Orrery::new();
+    // A non-trivial pan + zoom at the starting viewport.
+    orrery.camera.offset = (512.0, 300.0);
+    orrery.camera.zoom = 1.5;
+    let center_world =
+        |o: &Orrery| o.screen_to_world((o.view_w as f32 / 2.0, o.view_h as f32 / 2.0));
+    let before = center_world(&orrery);
+    // Grow the surface the way startup does (1024x600 -> 2560x1504).
+    orrery.resize(2560, 1504);
+    let after = center_world(&orrery);
+    assert!((after.x - before.x).abs() < 0.01, "center world x fixed across resize");
+    assert!((after.y - before.y).abs() < 0.01, "center world y fixed across resize");
+    assert_eq!(orrery.camera.zoom, 1.5, "resize leaves zoom untouched");
+}
+
+#[test]
+fn has_nodes_tracks_the_graph() {
+    let mut orrery = Orrery::new();
+    assert!(!orrery.has_nodes(), "a fresh empty session has no nodes");
+    orrery.visit("mere://welcome");
+    assert!(orrery.has_nodes(), "a visited node makes the graph non-empty");
+}
+
+#[test]
 fn select_by_url_selects_existing_or_reports_missing() {
     let mut orrery = Orrery::new();
     orrery.visit("https://one.example");

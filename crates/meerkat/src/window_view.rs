@@ -161,6 +161,10 @@ pub(crate) struct WindowView {
     //    graph (its focus, its live cards, its nav target). ─────────────────────
     /// Whether this window's orrery has been centered on its content band yet.
     pub(crate) centered: bool,
+    /// Whether the one-shot camera-restore self-heal has run for this window: it
+    /// recenters once if a restored camera frames nothing (a degenerate saved
+    /// pan/zoom), so a bad saved camera recovers on launch. (Orrery recovery.)
+    pub(crate) healed: bool,
     /// The navigation target last synced into the orrery via `visit`; guards
     /// re-visiting. Mirrors this window's chrome `content_location`.
     pub(crate) content_location: String,
@@ -275,6 +279,7 @@ impl WindowView {
             context_set: Default::default(),
             renaming: Default::default(),
             centered: Default::default(),
+            healed: Default::default(),
             content_location: Default::default(),
             shown_location: Default::default(),
             focused_tile: Default::default(),

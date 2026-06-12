@@ -1,7 +1,8 @@
 # Host Cheap-Path Plan
 
 **Date**: 2026-06-10
-**Status**: Planned. No code written yet.
+**Status**: C0–C5 + C4c DONE (the perf chain). C6 spun out →
+[host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md). Ready to archive.
 **Scope**: Move meerkat's DOM panes off the stateless per-frame pipeline and onto
 the incremental machinery that already exists on both sides of the seam
 (serval's `IncrementalLayout` + the always-recorded `DomMutation` stream), and
@@ -225,7 +226,13 @@ Workbench (equality-guarded writes already skip most frames), roster
 **Done when** no per-frame `scene_from_scripted_dom` callers remain in
 meerkat's render path.
 
-### C6 — Host wiring parity (mere + serval; the audit's adjacent gaps, tracked here until picked up)
+### C6 — Host wiring parity (mere + serval; the audit's adjacent gaps)
+
+**SPUN OUT (2026-06-11) → [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md).**
+With C0–C5 + C4c done, C6 is all that remained here, so it grew into its own plan
+(eight items, two phases: G1 composition-runway, G2 host-completeness). The text
+below is the snapshot it was scoped from; the grab-bag plan is now the checklist
+of record. This plan (the perf chain) is **ready to archive**.
 
 This is the **grab-bag of unused serval/xilem-serval host capability** — wired and
 tested one layer down, with zero or stub meerkat callers. Each lands separately; spin
@@ -368,3 +375,10 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   **Still deferred:** chrome a11y *actions* (a screen reader activating the omnibar /
   a toolbar button) — the chrome was unactionable before too, so no regression; and the
   C6 grab-bag. So **C0–C5 + C4c are done**; C6 is what remains of the plan.
+- **2026-06-11** — **C6 spun out; this plan is closed.** With the perf chain
+  (C0–C5 + C4c) done, the only remaining work was the C6 host-wiring grab-bag, so
+  it grew into its own plan:
+  [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md) (eight items,
+  G1 composition-runway + G2 host-completeness). This plan is ready to move to
+  `archive_docs/` — the cheap-path thesis (sessionize → halve the frame) is proven
+  and shipped (chrome 4.3×, whole frame −40%).
