@@ -56,7 +56,7 @@ euclid = "0.22"
 # the winit window + wgpu present + the shared SurfaceHost are bin-only and gated
 # off wasm. The wasm present path (canvas + WebGPU) is a later step. (P2, 2026-06-06.)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-serval-winit-host = { path = "../../serval-winit-host" }
+serval-winit-host = { path = "../../../../serval/components/serval-winit-host" }
 winit = { workspace = true }
 wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 

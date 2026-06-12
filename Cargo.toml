@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "crates/meerkat",
     "crates/armillary",
-    "crates/serval-winit-host",
     "crates/orrery/orrery",
     "crates/persona/identity",
     "crates/orrery/aether",
