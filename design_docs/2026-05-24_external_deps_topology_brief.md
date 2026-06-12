@@ -44,6 +44,19 @@ Anything "essentially a library I don't maintain" moves into `crates/`. The
 `xilem` fork (branch `mere-wgpu-29-vello-0-9`, rebased onto the `mark-ik/xilem`
 fork's main) lives there alongside the `imaging` fork it depends on.
 
+## Cross-repo smoke (added 2026-06-12)
+
+The lattice has no CI, so a `git pull` (or an agent edit) in any sibling can
+break the others silently — the audit's standing "no net under the
+five-checkout lattice" gap. The net is
+[`repos/mere/scripts/cross-repo-smoke.ps1`](../scripts/cross-repo-smoke.ps1):
+targeted `cargo check`s of the load-bearing crates in dependency order,
+innermost first (netrender → netfetcher → serval components → pelt → orrery →
+meerkat), so a failure names the repo that introduced it; `-Tests` adds the
+fast lib suites, `-KeepGoing` collects all failures; logs land in
+`target/smoke/` (gitignored). Run it after pulling or landing cross-repo
+work. First run 2026-06-12: green across the lattice, ~3 minutes warm.
+
 ## Path-dep convention (`repos/` → `crates/`)
 
 Because `crates/` and `repos/` are siblings, a path-dep from a repo into a

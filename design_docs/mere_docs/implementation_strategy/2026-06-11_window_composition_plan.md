@@ -220,6 +220,60 @@ Two consequences of kindless windows land here:
 Done when one window can host panes resolving to two different orreries, each rendering
 correctly, with input routed to the right orrery per pane.
 
+### P2 companion — the xilem-serval input spine (the proper-use target)
+
+Context (2026-06-12): the
+[host wiring grabbag plan](2026-06-11_host_wiring_grabbag_plan.md) completed
+its serval-side seams (on_wheel, transform-aware hit-testing, pointer
+cancellation, keyboard escape hatches; 51/51 green) and correctly recorded
+G1.1–G1.3 + G2.3 as *runway* — their meerkat callers cannot exist yet,
+because the content surfaces aren't view nodes. The honest usage inventory:
+meerkat runs **two** xilem-serval runners (chrome root: full consumer,
+render + dispatch; workbench root: render-only, drags host-level), while the
+roster / apparatus / utility panes are hand-built per-frame DOMs hit-tested
+through the `WindowView` rect caches, and the orrery / cards / gloss are
+scene composition. Three parallel input systems. That was deliberate staging
+(the flip rebuilt chrome first; the orrery is host-composited by design;
+cards are off-thread actor textures), but it is the most expensive place to
+*stay*. The target, landed alongside / after this plan's P2:
+
+- **List-shaped panes become view functions** (roster, apparatus, utility,
+  steward, inspector): kills their rebuild-per-frame waste, their rect
+  caches, and their hand-built-UxTree a11y drift in one move; gives them
+  runner dispatch. Startable independently of P2; composes with the
+  cheap-path plan's C5 sessions.
+- **The external-texture element view is the bridge for content** (tracked
+  in the scrying plan's Later + grabbag G1 notes): once a card / tile /
+  scrying texture is an element *in* the pane DOM, `on_wheel` attaches,
+  placement comes from layout (no hand-summed rects), and pointer
+  cancellation gets its first consumer. This single primitive turns
+  G1.1/G1.3 from runway into road.
+- **The orrery stays composed but routes at its pane boundary**: never a
+  diffed view tree (the node pool is the IncrementalLayout path by design),
+  but its pane *element* takes `on_wheel`/`on_key` and forwards semantically
+  to gyre. Transform-aware hit-testing (G1.2) goes live exactly when
+  in-graph DOM becomes interactive under the camera.
+- **One input spine**: chrome-root dispatch on top → unconsumed events fall
+  to the pane tree → pane handlers forward into content (orrery semantic
+  input, scrying `forward_*`, card scroll). The nine rect caches shrink
+  toward zero as panes become views; `default_prevented()` finally gets
+  read.
+- **Keyboard order**: Tab-to-traverse is additive *now* (Tab is unhandled in
+  meerkat). Enter/Space synthetic activation waits on key routing unifying
+  through `dispatch_key` — the omnibar collision is an artifact of
+  hand-interception in input.rs, not a design conflict; once keys dispatch,
+  the omnibar's Enter is just its own `on_key` consuming first.
+
+pelt V2 (serval's reference shell) demonstrates the same pattern mere-free
+at 1/20th the size, and is the clean-room check that the spine works.
+Charter note (2026-06-12): pelt's plan now carries V5/V6 — the surface grows
+a tile tree (presentation-grade, over a serval-side plan-shaped contract
+that platen's `tree_projection` maps forme onto) and then sheds its host
+loop to become **this plan's workbench pane** (mixed content via serval
+content-roots + the external-texture element). Design pane work here with
+that destination in mind; the pane-module contract (standalone-or-hosted
+surface) gets written down at pelt V6.
+
 ### P3 — Cross-window pane resolution (the leaf, done right)
 
 A pane in window B that resolves to an orrery whose spatial view lives in window A. A
@@ -289,6 +343,15 @@ wanted.
 
 ## Progress
 
+- 2026-06-12: **P2 companion added** (the xilem-serval input-spine target), prompted by
+  the host-wiring grabbag plan completing its serval-side seams with their meerkat
+  callers correctly recorded as blocked-on-composition. Records the honest usage
+  inventory (two runners; chrome-only dispatch; three parallel input systems), why the
+  current state was deliberate staging but a bad place to stay, and the landing order:
+  pane view-ification (startable now) → external-texture element (the content bridge,
+  unblocks G1.1/G1.3 callers) → orrery pane-boundary routing (G1.2 with interactive
+  in-graph DOM) → Enter/Space after key routing unifies through `dispatch_key` (Tab is
+  additive immediately).
 - 2026-06-11: Plan written, superseding the multi-window plan's MW4–MW6. First reframed
   the second window from "workbench-only leaf to dodge the orrery split" to a window-level
   `(content, linkage)` model, then (with Mark) corrected that to the right model: **orrery

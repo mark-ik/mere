@@ -1,0 +1,47 @@
+[package]
+name = "mesh"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "The personal-space compute mesh: signed job operations over the LogSync event-DAG, a deterministic job board, and the worker loop. Resource-coordination milestone 1 (own devices, no economy)."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# The operation/signing substrate the job ops ride (the same signed
+# Operation<Ext> wire as tessera and murm posts; mirrors moothold's pin).
+p2panda-core = "0.6.1"
+# Persona-derived signing keys (the same identity flow tessera's wire uses).
+identity = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
+# The mesh store rides p2panda-store's own SQLite implementation of the three
+# traits LogSync reconciles (`LogStore` + `TopicStore`, plus `OperationStore`
+# for the rows themselves) — the M1 plan's step-0 outcome: no custom redb
+# mirror, the in-memory default for tests and a file URL for real devices.
+# (moothold went `default-features = false` because its ops already lived in
+# redb; the mesh has no prior store, so the sqlite backend IS the store.)
+p2panda-store = "0.6.1"
+# The sync lane (`sync::SyncedMesh`): LogSync over the store, mirroring
+# tessera's `sync.rs`. `p2panda-net` is the protocol (its `Endpoint`/`Gossip`
+# come from the host's transport via `sync_parts`, keeping the lib decoupled
+# from the `transport` crate), `p2panda-sync` its event types; `rt` runs the
+# drain task, `time` bounds the manual `resync` checkpoint, `tokio-stream`
+# reads the subscription.
+p2panda-net = "0.6.1"
+p2panda-sync = "0.6.1"
+tokio = { version = "1", features = ["rt", "time"] }
+tokio-stream = "0.1"
+
+[dev-dependencies]
+# `transport` (dev-only) builds the real p2panda-net peers for the two-peer
+# convergence test and the `mesh-peer` example bin — the library itself takes
+# raw `Endpoint`/`Gossip`. `macros` + `rt-multi-thread` run the async tests;
+# `io-std`/`io-util` read pasted peer tickets in the example; tempfile backs
+# the file-store reopen test.
+transport = { workspace = true }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time", "io-std", "io-util"] }
+tempfile = "3"

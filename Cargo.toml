@@ -52,6 +52,7 @@ members = [
     "crates/murm/webfinger",
     "crates/moot/moothold",
     "crates/moot/mooting",
+    "crates/mesh/mesh",
 ]
 exclude = [
     "crates/probes",
@@ -130,6 +131,10 @@ transport = { path = "crates/murm/transport" }
 
 moothold = { path = "crates/moot/moothold" }
 mooting = { path = "crates/moot/mooting" }
+
+# The personal-space compute mesh (resource-coordination M1): signed job ops
+# over the tessera-proven LogSync lane + the deterministic job board.
+mesh = { path = "crates/mesh/mesh" }
 
 identity = { path = "crates/persona/identity" }
 

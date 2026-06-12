@@ -713,8 +713,10 @@ Every number is a setting with a sane default, never a hardcode:
   (literary/manga, low-resource, document-level) directly; ALMA-R's crossover is
   metric-circular and high-resource only; how stacking multiple domain LoRAs
   interacts with intruder-dimension forgetting is untested.
-- **Where the mesh lives as a crate**, and how its scheduler relates to the actor
-  constellation's P6 compute actors (same machinery, wider recipient).
+- **Where the mesh lives as a crate** — *resolved 2026-06-12*: `crates/mesh/`
+  (the [mesh M1 plan](../implementation_strategy/2026-06-12_mesh_m1_plan.md));
+  the scheduler-vs-P6 relation stands as designed (P6's compute actor drives
+  this crate's wire/state; same machinery, wider recipient).
 - **Communal training: bandwidth is solved, RAM and trust are not.** DiLoCo solves
   WAN bandwidth but is data-parallel (each node holds the full model); a sharded +
   low-comm scheme giving true aggregate-swarm RAM for *training* is unproven

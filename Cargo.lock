@@ -6452,6 +6452,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mesh"
+version = "0.0.1"
+dependencies = [
+ "identity",
+ "p2panda-core",
+ "p2panda-net",
+ "p2panda-store",
+ "p2panda-sync",
+ "serde",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-stream",
+ "transport",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10431,6 +10448,7 @@ dependencies = [
  "stylo",
  "stylo_atoms",
  "stylo_dom",
+ "stylo_static_prefs",
  "stylo_taffy",
  "stylo_traits",
  "taffy 0.11.0-experimental-cache-fix.3",

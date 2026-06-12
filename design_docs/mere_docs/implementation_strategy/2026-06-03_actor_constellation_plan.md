@@ -511,7 +511,11 @@ complete.
   placeholder + respawn from `ActorSpec` is P4). *Done:* content leaves the UI
   thread with the
   cascade confirmed safe off-thread, the producer/applier split is honest, and a
-  content panic no longer kills the host.
+  content panic no longer kills the host. *(2026-06-12: under the window-composition
+  orrery pool, contributions ship graph-stamped — `Drained.contributions:
+  Vec<(GraphId, GraphContribution)>`, the `Activation` stamped at drive-time — so the
+  kernel routes each to `shared.orreries.get_mut(&graph_id)`; the decision lives in
+  the window-composition plan's member→graph finding.)*
 - **P3 Nova.** A scripted page runs JS in the content actor (Nova, dedicated
   thread, `!Send`); DOM mutations reflow to a new `Scene`; the input -> script ->
   paint protocol implements the **Script protocol floor** above, including
@@ -526,6 +530,30 @@ complete.
   wasm-safe), especially on Safari/iOS; Nova-in-browser waits on a wasm32 build plus
   WebKit Memory64. The engine is internal to the content actor, so swapping it is
   actor-local, not a boundary change.
+  **P3 is the *isolated lane* of a two-lane scripted tier (2026-06-12).** Since this
+  phase was written, pelt V4 was chartered to drive full-page scripting **on the UI
+  thread** (the host pumps microtasks and drains dead reflectors; the gc-arena plan's
+  liveness/collect machinery is host-driven), and the pelt-module charter (V5/V6) puts
+  scripted documents *in the pane DOM* as content-root subtrees. So the scripted tier
+  has two homes, and the choice is a **routing decision inker already names**
+  (`SurfaceContractMode`: in-DOM content-root vs `CompositedTexture`):
+  - **In-DOM lane** (pelt V4 → meerkat content-roots): the document lives on the UI
+    thread in the pane's DOM; document scroll / selection / a11y come natively;
+    rendering rides the pane's incremental session. Cheaper; develops **first**; feeds
+    the gc-arena work real reflector workloads.
+  - **Actor-texture lane** (this P3): the document lives on an isolated actor thread,
+    ships scenes, composites as a texture, forwards input by message — in-process
+    scrying, with this phase's script protocol floor as its spec. The lane for
+    isolation and heavy pages.
+  P3 therefore re-scopes, not shrinks: same engine bindings through the same
+  DOM-neutral seam, hosted on an actor thread, **sequenced after the in-DOM lane
+  proves the bindings under pelt V4**. Two supporting notes: (1) "DOM mutations
+  reflow to a new `Scene`" above predates the matured `IncrementalLayout` — a
+  scripted content actor owns a per-document **incremental session** (sessions are
+  thread-local by nature; the cheap path applies on actor threads too). (2) The
+  gc-arena plan's host-driven design generalizes as **"host = whoever owns the
+  document's thread"** — on this lane the actor is the host for its document,
+  pumping and collecting locally.
 - **P4 N actors + lifecycle.** One actor per open origin; the kernel spawns and
   reaps; per-origin pooling; respawn uses the kernel-owned `ActorSpec`. The fault
   default is thread respawn, not in-place `catch_unwind`: a panic mid-cascade can
@@ -845,3 +873,15 @@ what is most likely to break, the mitigation, and a pointer.
     - **License closed:** piccolo **and** `gc-arena` are both **MIT OR CC0**, so the
       relicensing path is clean end to end. (Full piccolo suite green except a pre-existing
       Windows `goldenscripts` mismatch, verified unrelated by stashing the change out.)
+- **2026-06-12. P3 re-scoped to the isolated lane of a two-lane scripted tier** (see
+  the dated note inside P3). Prompted by the pelt-module charter (pelt V5/V6: the
+  tile-tree surface that sheds its host loop into meerkat) meeting pelt V4 (UI-thread
+  scripted profile) and the gc-arena plan's host-driven liveness: the scripted tier
+  now has an in-DOM/UI-thread lane (develops first, feeds gc-arena real workloads)
+  and an actor-texture lane (this plan's P3, the script protocol floor unchanged as
+  its spec), with `SurfaceContractMode` as the per-page routing seam. Also noted:
+  scripted content actors own per-document `IncrementalLayout` sessions (the
+  reflow-to-new-Scene wording predates the cheap path), and P2's `Drained`
+  contributions are graph-stamped under the window-composition orrery pool. The
+  constellation's actor scenes remain the texture lane of pelt V6's mixed-content
+  tiles — this plan's outputs plug into the pane contract unchanged.
