@@ -737,7 +737,11 @@ any economy.
 1. **Compute actor over the personal space.** One owned device posts a request into
    `SpaceId::Personal`, another claims it and returns the result via LogSync. *Done
    when* a laptop's job runs on the workstation and the result lands back, no
-   economy involved.
+   economy involved. **DONE 2026-06-12**: `crates/mesh/mesh` + the `mesh-peer`
+   bin ran the literal shape — the Windows laptop posted, the Fedora ThinkPad
+   claimed and executed, the result landed back over LogSync (ticket bootstrap,
+   both ways). See the
+   [mesh M1 plan](../implementation_strategy/2026-06-12_mesh_m1_plan.md).
 2. **Resource adapter + first kind.** A `MeshResource` trait plus one adapter (a
    Burn-wgpu job or an embeddings batch). *Done when* a second kind is one adapter,
    not a core change.
