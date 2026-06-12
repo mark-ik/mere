@@ -46,6 +46,20 @@ becomes view-owned and per-pane.
 **Done when**: meerkat's hand-routed wheel and host-owned `ScrollOffsets` retire
 in favour of per-pane view-routed wheel.
 
+**Status (2026-06-11): serval half DONE; meerkat retirement gated on
+composition.** The event-view gap is closed: `xilem-serval` now has `on_wheel`
+parallel to `on_pointer` — `WheelEvent { delta, local, size }` + `OnWheel` view
+(`wheel.rs`), a no-phase `wheel_handlers` registry (`context.rs`), and
+`dispatch_wheel` / `wheel_target` / `route_wheel` (`runner.rs`, ancestor-walk to
+the nearest handler, no capture). Covered by
+`wheel_routes_to_nearest_handler_no_capture`; 47/47 xilem-serval tests green.
+The meerkat-side retirement of the hand-routed wheel (`app_handler.rs`) +
+host-owned `ScrollOffsets` is **deferred**: meerkat's scrollable surfaces (the
+orrery, content cards, roster) are hand-composited, not `xilem-serval` view
+nodes, so there is nothing in today's view tree to attach `on_wheel` to. That
+retirement lands when window-composition P2+ expresses those panes as views —
+the infra is now the runway it needs.
+
 ### G1.2 — Transform-aware hit-testing (serval)
 
 **Now**: `walk_for_hit` (`serval_lane.rs`) composes box *locations* only, not CSS
@@ -58,6 +72,20 @@ transforms; the matrices it needs already exist in the same crate
 **Done when**: a point inside a transformed subtree hit-tests correctly — gating
 any interactive DOM content under the orrery camera (and, with G1.3, the
 *interactive* external-texture element).
+
+**Status (2026-06-11): DONE.** `walk_for_hit` (`serval_lane.rs`) now folds each
+node's CSS transform into the walk: it maps the incoming point through the
+node's transform conjugated at the box origin (`conjugate_at` +
+`compute_transform_matrix`, made `pub(crate)`), the exact composition
+`paint_emit::walk` paints with, so a hit resolves where paint drew it. Identity
+is a no-op (untransformed DOMs byte-identical); the inverse telescopes through
+nesting (each node maps the already-mapped point); a singular transform skips its
+subtree. Guards: `hit_test_resolves_a_point_inside_a_translated_subtree` and
+`..._scaled_subtree` (scale exercises the around-origin conjugation a translate
+can't); clip/scroll/topmost tests unregressed; 141/141 serval-layout green,
+meerkat builds clean. No current consumer (the orrery picks geometrically), so
+this is runway — interactive DOM under the orrery camera in composition P2+ is
+the first caller.
 
 ### G1.3 — Pointer cancellation (xilem-serval)
 

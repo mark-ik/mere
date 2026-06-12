@@ -382,3 +382,13 @@ here):* scrying X2's leftover host wiring — omnibar `load_url`, back/forward +
   G1 composition-runway + G2 host-completeness). This plan is ready to move to
   `archive_docs/` — the cheap-path thesis (sessionize → halve the frame) is proven
   and shipped (chrome 4.3×, whole frame −40%).
+- **2026-06-11** — **Re-measured on a live orrery (post freeze-fix), win holds.**
+  The earlier C3 numbers were taken before the orrery animated continuously, so
+  re-ran the profile over 582 frames of a representative interaction (same debug
+  build). chrome cascade+layout+paint **7.2 ms median / 8.9 ms p95** (was 6.8 ms
+  at C3 — the +0.4 ms is the serval-layout F4 box-tree style refresh now on every
+  `RepaintOnly` apply, negligible), whole frame **34.8 ms median** (≈ the C3 33 ms),
+  chrome **~21%** of the frame. `total_us` includes `frame.present()` and quantizes
+  near 16.7 ms multiples (vsync-paced), so the clean CPU win lives in `chrome_us`.
+  Confirms C3–C5 intact with the orrery live; the frozen-orrery skew worry is
+  cleared.
