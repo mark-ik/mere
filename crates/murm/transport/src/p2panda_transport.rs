@@ -23,8 +23,9 @@
 //!
 //! Three mechanisms share the one endpoint, each opt-in via the builder:
 //!
-//! - **Explicit peer** (tests, LAN): a peer's loopback [`endpoint_addr`] is
-//!   shared out-of-band and inserted via [`add_peer`].
+//! - **Explicit peer** (tests, LAN): a peer's [`endpoint_addr`] (its real
+//!   interface addresses, with loopback covering wildcard binds) is shared
+//!   out-of-band and inserted via [`add_peer`].
 //! - **mDNS** (`builder().mdns(..)`): same-network peers auto-populate the
 //!   address book.
 //! - **Random-walk** (`builder().discovery()`): walkers explore outward from
@@ -40,6 +41,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::task::{Context, Poll};
+use std::time::Duration;
 
 use identity::Ed25519Keypair;
 use iroh::EndpointAddr;
@@ -335,16 +337,32 @@ impl P2pandaTransport {
         })
     }
 
-    /// This node's dialable loopback [`EndpointAddr`]. Pass to a peer's
-    /// [`add_peer`](Self::add_peer) so they can connect without discovery — the
-    /// test pattern. Wildcard bind addresses are rewritten to loopback.
+    /// This node's dialable [`EndpointAddr`]: iroh's current candidates (the
+    /// machine's real interface addresses, plus a relay when one is reached),
+    /// with wildcard binds also rewritten to loopback so in-process peers —
+    /// the test pattern — stay dialable even with no network up. Pass to a
+    /// peer's [`add_peer`](Self::add_peer), or share as a
+    /// [`ticket`](Self::ticket), so they can connect without discovery.
     pub async fn endpoint_addr(&self) -> Result<EndpointAddr, TransportError> {
         let iroh_ep = self
             .endpoint
             .endpoint()
             .await
             .map_err(|e| TransportError::Backend(format!("endpoint(): {e}")))?;
-        let mut addr = EndpointAddr::new(iroh_ep.id());
+        // iroh discovers its direct (interface) addresses asynchronously just
+        // after bind; give it a beat so the address carries the LAN
+        // candidates a remote machine actually needs, not only the loopback
+        // fallback below.
+        let mut addr = iroh_ep.addr();
+        for _ in 0..40 {
+            if addr.ip_addrs().any(|a| !a.ip().is_loopback()) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+            addr = iroh_ep.addr();
+        }
+        // Wildcard binds are not dialable as-is; add their loopback rewrite
+        // so same-machine pairs connect even on an interface-less host.
         for sock in iroh_ep.bound_sockets() {
             let dial = if sock.ip().is_unspecified() {
                 let ip = if sock.is_ipv4() {

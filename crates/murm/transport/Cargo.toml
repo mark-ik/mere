@@ -17,7 +17,8 @@ path = "src/lib.rs"
 # Path + version: path is used during local workspace builds; version is
 # required for `cargo publish` to record the crates.io dependency.
 identity.workspace = true
-tokio = { version = "1", features = ["io-util", "sync", "rt", "macros"] }
+# `time` paces `endpoint_addr`'s brief wait for iroh's interface discovery.
+tokio = { version = "1", features = ["io-util", "sync", "rt", "macros", "time"] }
 thiserror = "1"
 tracing = "0.1"
 # iroh 0.98 wraps quinn QUIC; ed25519-dalek =3.0.0-pre.6 internally.

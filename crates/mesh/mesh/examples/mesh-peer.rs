@@ -104,7 +104,7 @@ async fn connect_ticket(
         .set_topics(peer, &[transport::sync_overlay_topic(mesh_id)])
         .await
         .map_err(|e| format!("set topics: {e}"))?;
-    println!("connected peer {peer:?}");
+    println!("connected peer {}", hex8(&peer.to_bytes()));
     Ok(())
 }
 
@@ -146,10 +146,19 @@ async fn main() -> Result<(), String> {
         .ticket()
         .await
         .map_err(|e| format!("ticket: {e}"))?;
+    let dialable = transport
+        .endpoint_addr()
+        .await
+        .map_err(|e| format!("endpoint addr: {e}"))?
+        .ip_addrs()
+        .map(|a| a.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
 
     println!("mesh-peer — resource-coordination M1 rehearsal");
     println!("space  : {}", hex8(&mesh_id));
     println!("me     : {}", hex8(&me));
+    println!("addrs  : {dialable}");
     println!("ticket : {ticket}");
     println!("paste a peer's ticket on stdin (or pass --peer) to connect.\n");
 
