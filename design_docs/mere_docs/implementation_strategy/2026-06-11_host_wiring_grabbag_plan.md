@@ -157,6 +157,20 @@ rect from the session's C1 caret seam.
 **Done when**: CJK/composition preedit renders in the omnibar, positioned at the
 caret.
 
+**Status (2026-06-11): DONE (on-device IME round-trip pending).** New
+`meerkat/ime.rs` adds `WindowCtx::handle_ime`, wired from a `WindowEvent::Ime`
+arm (`app_handler.rs`), with `set_ime_allowed(true)` on window creation. Preedit
+→ `set_preedit` on the *focused* field (resolved by the same mapping as
+`caret_field`, meerkat's twist over pelt-live's single field); commit → clear +
+`dispatch_key(Character)` (the focus-routed insert path); disabled → clear. The
+candidate window follows the caret via `set_ime_cursor_area`, sourcing the rect
+from a new `PaneSession::caret_rect` passthrough (the same C1 rect the painted
+caret uses). Guard `ime_preedit_and_commit_route_to_the_focused_field` (preedit
+stays out of the committed buffer; commit inserts 你好) — the meerkat-specific
+routing. Build clean. The OS-IME round-trip (a real IME firing `winit::Ime` +
+candidate placement) can't be unit-tested headlessly and is the one on-device
+check left.
+
 ### G2.2 — Environment threading (xilem-serval)
 
 **Now**: dispatch builds `MessageCtx::new(Environment::new(), ...)` while builds

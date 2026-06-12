@@ -532,6 +532,38 @@ mod tests {
     }
 
     #[test]
+    fn ime_preedit_and_commit_route_to_the_focused_field() {
+        // G2.1: the meerkat-specific half of IME — routing `WindowEvent::Ime` to
+        // the *focused* chrome field. (The candidate-area call no-ops headlessly:
+        // no window / chrome session.) Preedit shows inline (out of the committed
+        // buffer); commit clears it and inserts via the focus-routed key path.
+        use winit::event::Ime;
+        let mut app = test_app();
+        let mut wc = app.ctx();
+        let omnibar = wc.input_under_class("toolbar");
+        assert!(omnibar.is_some(), "the omnibar input exists in the chrome DOM");
+        wc.view.runner.set_focus(omnibar);
+
+        let committed = wc.view.runner.state().omnibar.text().to_string();
+        wc.handle_ime(Ime::Preedit("ni".to_string(), None));
+        assert_eq!(wc.view.runner.state().omnibar.preedit(), "ni", "preedit routed to the omnibar");
+        assert_eq!(
+            wc.view.runner.state().omnibar.text().to_string(),
+            committed,
+            "preedit stays out of the committed buffer",
+        );
+
+        // 你好 — commit clears the preedit and inserts the composed text.
+        wc.handle_ime(Ime::Commit("\u{4f60}\u{597d}".to_string()));
+        assert_eq!(wc.view.runner.state().omnibar.preedit(), "", "commit clears the preedit");
+        assert!(
+            wc.view.runner.state().omnibar.text().contains("\u{4f60}\u{597d}"),
+            "commit inserts the composed text into the omnibar, got {:?}",
+            wc.view.runner.state().omnibar.text(),
+        );
+    }
+
+    #[test]
     fn a_spawned_window_is_a_slim_leaf() {
         // A second window (Cmd/Ctrl+Shift+N → build_window_view) is a leaf: slim
         // chrome (no shellbar / switcher). The primary stays full chrome. (MW3 step 4.)

@@ -525,6 +525,7 @@ impl ApplicationHandler for Shell {
                     wc.on_key_pressed(&event.logical_key);
                 }
             }
+            WindowEvent::Ime(ime) => wc.handle_ime(ime),
             WindowEvent::RedrawRequested => wc.render(),
             _ => {}
         }
@@ -593,6 +594,10 @@ impl Shell {
         };
         view.surface = Some(surface);
         view.window = Some(Arc::clone(&window));
+        // Allow the platform IME so composed input (CJK, transliteration, dead-key
+        // accents) is delivered as `WindowEvent::Ime` and routed into the focused
+        // chrome field; `set_ime_cursor_area` then follows the caret. (G2.1 IME.)
+        window.set_ime_allowed(true);
         let id = window.id();
         self.windows.insert(id, view);
         // The window is left hidden: on Windows the AccessKit adapter must be created

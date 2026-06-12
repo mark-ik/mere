@@ -137,6 +137,23 @@ impl PaneSession {
     pub(crate) fn fragments(&self) -> &FragmentPlane<NodeId> {
         self.layout.fragments()
     }
+
+    /// The caret rect for `byte` within `node`, from the session's retained layout
+    /// — the same one [`scene`](Self::scene) paints the caret from, so the IME
+    /// candidate area matches the visible caret. `(x, y, w, h)` in the chrome's
+    /// (window) coordinate space; `None` before the session is built or when the
+    /// node carries no laid-out caret. (G2.1 IME T3.)
+    pub(crate) fn caret_rect(
+        &self,
+        dom: &ScriptedDom,
+        node: NodeId,
+        byte: usize,
+        width: f32,
+    ) -> Option<(f32, f32, f32, f32)> {
+        self.layout
+            .caret_rect(dom, node, byte, width)
+            .map(|r| (r.x, r.y, r.width, r.height))
+    }
 }
 
 /// Whether the session's stored sheet set still matches the frame's resolved

@@ -29,7 +29,7 @@ use serval_layout::{FragmentPlane, ImageLoader, IncrementalLayout, ScrollOffsets
 use serval_scripted_dom::{NodeId, ScriptedDom};
 
 /// Caret bar thickness, device px.
-const CARET_WIDTH: f32 = 2.0;
+pub(crate) const CARET_WIDTH: f32 = 2.0;
 /// Caret bar colour (near-black, opaque).
 const CARET_COLOR: ColorF = ColorF { r: 0.12, g: 0.12, b: 0.20, a: 1.0 };
 /// Selection highlight colour (translucent blue; the text shows through).

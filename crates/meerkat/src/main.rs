@@ -77,6 +77,7 @@ mod apparatus;
 mod frame_ops;
 mod frame_view;
 mod gloss;
+mod ime;
 mod input;
 mod inspector;
 mod observability;
