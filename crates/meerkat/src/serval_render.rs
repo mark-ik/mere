@@ -129,7 +129,10 @@ pub(crate) fn scene_from_layout_dom<D, L>(
 ) -> Scene
 where
     D: LayoutDom,
-    D::NodeId: Copy + Eq + Hash + 'static,
+    // serval-layout's Send-ification (parallel shaping pre-pass) requires
+    // `Send + Sync` on the node id; both real DOM node ids are usize newtypes,
+    // so no concrete caller is restricted.
+    D::NodeId: Copy + Eq + Hash + Send + Sync + 'static,
     L: ImageLoader,
 {
     paint_list_render::translate_paint_list(&serval_layout::paint_list_from_layout_dom(
