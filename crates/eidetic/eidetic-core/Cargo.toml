@@ -19,6 +19,14 @@ blake3 = "1.5"
 jsonschema = { version = "0.18", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+# The browsing lineage bridge (`browsing::lineage`, feature `lineage`):
+# projects node-lineage's live visit authority into durable BrowsingTrace
+# engrams. Optional so wasm/OPFS consumers that only read memory skip the
+# graph crate.
+node-lineage = { workspace = true, optional = true }
+
+[features]
+lineage = ["dep:node-lineage"]
 
 [dev-dependencies]
 pollster = "0.4"

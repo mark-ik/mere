@@ -261,8 +261,11 @@ impl DocumentBlock {
                 out.push('\n');
             }
             Self::Paragraph { spans } => {
+                // A link-only paragraph (e.g. a parsed `=>` line, or a bare
+                // link on its own line) IS the link line — emitting its text
+                // first would double it.
                 let text = inline_text(spans);
-                if !text.is_empty() {
+                if !text.is_empty() && !is_link_only(spans) {
                     out.push_str(&text);
                     out.push('\n');
                 }
@@ -515,6 +518,22 @@ fn write_inline_markdown(spans: &[InlineSpan], out: &mut String) {
     }
 }
 
+/// Whether a span list is links and whitespace only (with at least one
+/// link) — the "this paragraph IS a link line" case shared by the gemtext
+/// and gophermap writers.
+fn is_link_only(spans: &[InlineSpan]) -> bool {
+    let mut saw_link = false;
+    for span in spans {
+        match span {
+            InlineSpan::Link { .. } => saw_link = true,
+            InlineSpan::Text(text) if text.trim().is_empty() => {}
+            InlineSpan::SoftBreak | InlineSpan::LineBreak => {}
+            _ => return false,
+        }
+    }
+    saw_link
+}
+
 fn collect_link_targets(span: &InlineSpan, out: &mut Vec<(String, String)>) {
     match span {
         InlineSpan::Link { url, spans, .. } => {
@@ -531,6 +550,11 @@ fn collect_link_targets(span: &InlineSpan, out: &mut Vec<(String, String)>) {
         _ => {}
     }
 }
+
+// Gophermap + plain-text exporters live in `render/export.rs` (this file is
+// at the 600-LOC ceiling); tests live in `render/tests.rs`.
+mod export;
+pub use export::GophermapContext;
 
 // Tests live in `render/tests.rs` to keep this file under the 600-LOC ceiling.
 #[cfg(test)]

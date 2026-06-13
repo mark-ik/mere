@@ -46,7 +46,10 @@ pub mod statements;
 pub use a11y::A11yCapability;
 pub use document::{
     BlockProvenance, BlockProvenanceMap, DocumentBlock, DocumentDiagnostic, DocumentProvenance,
-    DocumentTrustState, EngineDocument, InlineSpan, ResolvedProvenance, inline_text,
+    BlockEvaluator, BlockEvaluators, DocumentTrustState, EngineDocument, EvalOutcome, EvalOutput,
+    EvaluationPolicy, Fetched, GophermapContext, InlineSpan, ResolvedProvenance, TranscludeOutcome,
+    TransclusionPolicy, evaluate_blocks, inline_text, parse_eval, parse_include,
+    resolve_transclusions,
 };
 pub use engine::{Engine, EngineError, EngineInput, EngineRegistry};
 pub use routing::{

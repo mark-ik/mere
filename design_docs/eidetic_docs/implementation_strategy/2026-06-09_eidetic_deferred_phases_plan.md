@@ -25,6 +25,7 @@ pulls (likely `intel/embed` running embeddings in-browser, or browser-side
 persistence of a vector index).
 
 **Scope**:
+
 - New crate `crates/eidetic/eidetic-opfs/`.
 - Hand-rolled `Store` over `FileSystemSyncAccessHandle` in a dedicated worker.
 - One file per blob keyed by hash; manifest store as a directory under a known prefix.
@@ -38,6 +39,10 @@ quota-exceeded returns a clean error; persistence survives reload after
 **Dependencies**: Phases 1-2 shipped (the OPFS impl is at Layer 1).
 
 ### Phase 8 — `eidetic::browsing` (Layer-4 browsing memory)
+
+**ACTIVATED 2026-06-12** → built under the
+[browsing derivation plan](2026-06-12_eidetic_browsing_derivation_plan.md)
+(slices E1/E2; the pull is Mark directly — the single-consumer rule).
 
 Browsing-memory accumulation composing `BrowsingTrace` and related typed payloads
 into a user-facing `BrowsingMemory` API. **Trigger**: a UI surface pulls, e.g.
@@ -53,6 +58,14 @@ gives nodes a durable nav history; browsing memory should read from that rather
 than duplicate a visited-set.
 
 ### Phase 9 — `SearchIndex` schema + tantivy
+
+**Producer half ACTIVATED 2026-06-12** → built native-first under the
+[browsing derivation plan](2026-06-12_eidetic_browsing_derivation_plan.md)
+(slices E3/E4: `eidetic-search`, the format-versioned `SearchIndex` engram,
+BM25 recall + fast-field reports, the engine-agnostic hybrid-fusion seam).
+The **consume half stays here** (EngramDirectory over iroh-blobs ranges,
+per-moot merge policy, defensive ingestion, the wasm probe) — trigger
+unchanged: a moot-side consumer.
 
 First-class lexical search; the federated-contribution counterpart to the vector
 index. **Trigger**: a moot-side consumer pulls lexical search, or graph/semantic
@@ -161,3 +174,8 @@ checkout at `Code/.tantivy-probe` — and the design pass §7.5):**
   constellation-style worker, the wasm probe as the real browser gate, and the
   hybrid-retrieval (BM25 + vector) tie to geist RAG. Still trigger-gated; no
   code.
+- 2026-06-12 — **Phase 8 and Phase 9's producer half activated** into the
+  [browsing derivation plan](2026-06-12_eidetic_browsing_derivation_plan.md)
+  (Mark pulled the user-value arc directly: derive useful information from
+  your own browsing). This plan remains the umbrella for Phase 7, the wasm
+  probe, and Phase 9's consume/federation half.

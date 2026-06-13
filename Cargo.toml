@@ -43,6 +43,7 @@ members = [
     "crates/eidetic/eidetic-fjall",
     "crates/eidetic/eidetic-https-fetcher",
     "crates/eidetic/eidetic-iroh-fetcher",
+    "crates/eidetic/eidetic-search",
     "crates/import",
     "crates/intel/embed",
     "crates/murm/misfin",
@@ -53,6 +54,7 @@ members = [
     "crates/moot/moothold",
     "crates/moot/mooting",
     "crates/mesh/mesh",
+    "crates/script/rhai",
 ]
 exclude = [
     "crates/probes",
@@ -121,6 +123,13 @@ eidetic = { path = "crates/eidetic/eidetic-core" }
 eidetic-fjall = { path = "crates/eidetic/eidetic-fjall" }
 eidetic-https-fetcher = { path = "crates/eidetic/eidetic-https-fetcher" }
 eidetic-iroh-fetcher = { path = "crates/eidetic/eidetic-iroh-fetcher" }
+# Lexical search over the trail (Phase 9 producer half): tantivy index +
+# BM25 recall + fast-field reports + the hybrid-fusion seam.
+eidetic-search = { path = "crates/eidetic/eidetic-search" }
+
+# Browser-data ingest (bookmarks/history/session models + parsers); consumed
+# by the eidetic-recall bridge and, later, the shell's import verbs.
+import = { path = "crates/import" }
 
 embed = { path = "crates/intel/embed" }
 
@@ -137,6 +146,10 @@ mooting = { path = "crates/moot/mooting" }
 mesh = { path = "crates/mesh/mesh" }
 
 identity = { path = "crates/persona/identity" }
+
+# Rhai backend for the knot block-evaluator lane (the thin BlockEvaluator
+# slice, distinct from serval's full ScriptEngine seam). Pure Rust, sandboxed.
+script-rhai = { path = "crates/script/rhai" }
 
 # ─── External pins ───────────────────────────────────────────────────────────
 # Linebender visual stack — one row, one wgpu, vello upstream-current.

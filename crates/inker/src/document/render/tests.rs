@@ -174,3 +174,103 @@ fn to_knot_emits_each_trust_state_correctly() {
         assert!(document.to_knot().contains(expected));
     }
 }
+
+// ── export.rs (gophermap + plain text) ──────────────────────────────────────
+
+use super::export::GophermapContext;
+
+fn ctx() -> GophermapContext {
+    GophermapContext {
+        host: "gopher.example".into(),
+        port: 70,
+    }
+}
+
+#[test]
+fn to_gophermap_renders_info_lines_links_and_terminator() {
+    let document = doc(vec![
+        DocumentBlock::Heading {
+            level: 1,
+            spans: vec![InlineSpan::Text("Notes".into())],
+        },
+        DocumentBlock::Paragraph {
+            spans: vec![
+                InlineSpan::Text("see ".into()),
+                InlineSpan::Link {
+                    url: "https://x.test/page".into(),
+                    title: None,
+                    spans: vec![InlineSpan::Text("docs".into())],
+                    predicate: None,
+                },
+            ],
+        },
+    ]);
+    let map = document.to_gophermap(&ctx());
+    assert!(map.contains("iNotes\tfake\t(NULL)\t0\r\n"), "heading is an info line: {map}");
+    assert!(map.contains("isee docs\tfake\t(NULL)\t0\r\n"), "paragraph text flattens: {map}");
+    assert!(
+        map.contains("hdocs\tURL:https://x.test/page\tgopher.example\t70\r\n"),
+        "non-gopher link uses the URL: form on the serving host: {map}"
+    );
+    assert!(map.ends_with(".\r\n"), "terminator line: {map:?}");
+}
+
+#[test]
+fn to_gophermap_decomposes_native_gopher_links() {
+    let document = doc(vec![DocumentBlock::Paragraph {
+        spans: vec![InlineSpan::Link {
+            url: "gopher://floodgap.com/1/gopher".into(),
+            title: None,
+            spans: vec![InlineSpan::Text("floodgap".into())],
+            predicate: None,
+        }],
+    }]);
+    let map = document.to_gophermap(&ctx());
+    assert!(
+        map.contains("1floodgap\t/gopher\tfloodgap.com\t70\r\n"),
+        "gopher links become native menu entries: {map}"
+    );
+}
+
+#[test]
+fn to_text_flattens_structure_readably() {
+    let document = doc(vec![
+        DocumentBlock::Heading {
+            level: 2,
+            spans: vec![InlineSpan::Text("Reading".into())],
+        },
+        DocumentBlock::Paragraph {
+            spans: vec![
+                InlineSpan::Text("see ".into()),
+                InlineSpan::Link {
+                    url: "https://x.test/".into(),
+                    title: None,
+                    spans: vec![InlineSpan::Text("docs".into())],
+                    predicate: None,
+                },
+            ],
+        },
+        DocumentBlock::List {
+            ordered: true,
+            items: vec![
+                vec![DocumentBlock::Paragraph {
+                    spans: vec![InlineSpan::Text("first".into())],
+                }],
+                vec![DocumentBlock::Paragraph {
+                    spans: vec![InlineSpan::Text("second".into())],
+                }],
+            ],
+        },
+        DocumentBlock::Quote {
+            blocks: vec![DocumentBlock::Paragraph {
+                spans: vec![InlineSpan::Text("quoted".into())],
+            }],
+        },
+    ]);
+    let text = document.to_text();
+    assert!(text.contains("Reading\n\n"));
+    assert!(text.contains("see docs <https://x.test/>"));
+    assert!(text.contains("1. first\n"));
+    assert!(text.contains("2. second\n"));
+    assert!(text.contains("> quoted"));
+}

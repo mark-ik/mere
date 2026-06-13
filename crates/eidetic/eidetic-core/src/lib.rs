@@ -60,6 +60,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+pub mod browsing;
 pub mod bundle;
 pub mod engram;
 pub mod manifest;
@@ -68,12 +69,16 @@ pub mod schema;
 pub mod schema_def;
 pub mod typed;
 
+pub use browsing::{
+    BROWSING_TRACE_SCHEMA_REF, BrowsingMemory, BrowsingTrace, PageRef, TraceEvent,
+    TraceTransition, bootstrap_browsing_schema, save_trace,
+};
 pub use bundle::{
     BUNDLE_SCHEMA_REF, Bundle, BundleMember, bundle_schema_ref, load_bundle, save_bundle,
     verify_required_members,
 };
 pub use engram::{Engram, TimeBounds};
-pub use manifest::{BlobFetcher, BlobManifest, BlobSource, NoFetcher};
+pub use manifest::{BlobFetcher, BlobManifest, BlobSource, NoFetcher, delete_manifest};
 pub use models::{ModelComponents, ModelLibrary, ModelManifest};
 pub use schema::{
     Hash, ManifestId, ModerationState, PrivacyClass, ProvenanceOrigin, ProvenanceRecord, SchemaRef,
@@ -162,6 +167,20 @@ pub trait Store {
     async fn iter_keys(&mut self, _prefix: &str) -> Result<Vec<String>> {
         Err(Error::new(
             "Store implementation does not support iter_keys",
+        ))
+    }
+
+    /// Delete the value under `key`, returning whether something was
+    /// deleted. Backends that don't support deletion return an error (the
+    /// default impl).
+    ///
+    /// Layer-4 quota policies (e.g. browsing-memory age-out) delete
+    /// *manifests* via [`manifest::delete_manifest`]; blob bytes stay until
+    /// an explicit GC pass walks reachability (design pass §8 — a blob may
+    /// be referenced by multiple manifests).
+    async fn delete_blob(&mut self, _key: &str) -> Result<bool> {
+        Err(Error::new(
+            "Store implementation does not support delete_blob",
         ))
     }
 }

@@ -23,3 +23,8 @@ quick-xml = "0.39"
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = "0.1"
+
+# `test = true` runs the example's embedded round-trip tests under `cargo test`.
+[[example]]
+name = "knot-render"
+test = true

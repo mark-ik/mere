@@ -1,0 +1,40 @@
+[package]
+name = "eidetic-search"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Lexical search over eidetic browsing memory — the Phase 9 producer half: a tantivy index minted from BrowsingTrace engrams, BM25 recall, fast-field reports, and the engine-agnostic hybrid-fusion seam."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+eidetic = { workspace = true }
+# The lexical engine (MIT). Stays out of eidetic-core deliberately — the
+# index is derived state minted from trace engrams, not part of the memory
+# substrate. Default features include the mmap directory the native produce
+# path uses; the wasm/OPFS question is Phase 7 + the probe, not this crate.
+tantivy = "0.26"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+
+[dev-dependencies]
+pollster = "0.4"
+tempfile = "3"
+# The eidetic-recall example (the browsing-derivation rehearsal bin, moved
+# here so one bin carries ingest → index → recall → report): import supplies
+# the bookmark parser + history interchange types; fjall the on-disk store;
+# embed (BERT over burn's CPU backend) the vector half of fused recall —
+# burn is here only to name the backend type, pinned as embed pins it.
+import = { workspace = true }
+eidetic-fjall = { workspace = true }
+embed = { workspace = true, features = ["bert"] }
+burn = { version = "0.21", default-features = false, features = ["ndarray", "std"] }
+
+# `test = true` runs the example's embedded mapper tests under `cargo test`.
+[[example]]
+name = "eidetic-recall"
+test = true

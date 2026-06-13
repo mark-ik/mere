@@ -39,7 +39,17 @@
 use serde::{Deserialize, Serialize};
 
 mod block_provenance;
+mod evaluate;
 mod render;
+mod transclude;
+pub use evaluate::{
+    BlockEvaluator, BlockEvaluators, EvalOutcome, EvalOutput, EvaluationPolicy, evaluate_blocks,
+    parse_eval,
+};
+pub use render::GophermapContext;
+pub use transclude::{
+    Fetched, TranscludeOutcome, TransclusionPolicy, parse_include, resolve_transclusions,
+};
 
 pub use block_provenance::{BlockProvenance, BlockProvenanceMap, ResolvedProvenance};
 

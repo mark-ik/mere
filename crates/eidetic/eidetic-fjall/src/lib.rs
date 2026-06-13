@@ -91,6 +91,19 @@ impl Store for FjallStore {
         }
         Ok(keys)
     }
+
+    async fn delete_blob(&mut self, key: &str) -> Result<bool> {
+        let present = self
+            .partition
+            .contains_key(key)
+            .map_err(|e| Error::new(format!("fjall contains {key}: {e}")))?;
+        if present {
+            self.partition
+                .remove(key)
+                .map_err(|e| Error::new(format!("fjall remove {key}: {e}")))?;
+        }
+        Ok(present)
+    }
 }
 
 #[cfg(test)]

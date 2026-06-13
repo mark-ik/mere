@@ -167,6 +167,13 @@ pub(super) fn parse_netscape_bookmark_html(contents: &str) -> Vec<ImportedBookma
                 }
                 let decoded_url = decode_html_entities(raw_url);
                 let decoded_title = decode_html_entities(&title);
+                // Netscape exports stamp unix seconds on the anchor itself.
+                let created_at_unix_secs = tag
+                    .attr("add_date")
+                    .and_then(|v| v.trim().parse::<i64>().ok());
+                let modified_at_unix_secs = tag
+                    .attr("last_modified")
+                    .and_then(|v| v.trim().parse::<i64>().ok());
                 if let Some(page) =
                     build_page_seed(&decoded_url, Some(decoded_title.as_str()), None)
                 {
@@ -175,8 +182,8 @@ pub(super) fn parse_netscape_bookmark_html(contents: &str) -> Vec<ImportedBookma
                         bookmark_id: None,
                         folder_path: folder_path.clone(),
                         location: BookmarkLocation::Unknown,
-                        created_at_unix_secs: None,
-                        modified_at_unix_secs: None,
+                        created_at_unix_secs,
+                        modified_at_unix_secs,
                         tags: Vec::new(),
                     });
                 }

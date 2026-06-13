@@ -208,6 +208,16 @@ pub async fn save_manifest(store: &mut dyn Store, manifest: &BlobManifest) -> Re
     store.save_blob(&manifest.id.store_key(), &bytes).await
 }
 
+/// Delete a manifest by id, returning whether one was present.
+///
+/// Deletes only the `"manifest:<id>"` record. The blob bytes deliberately
+/// stay: a blob may be referenced by multiple manifests, so blob reclamation
+/// is an explicit GC pass over manifest reachability (design pass §8), never
+/// a side effect of dropping one manifest.
+pub async fn delete_manifest(store: &mut dyn Store, id: ManifestId) -> Result<bool> {
+    store.delete_blob(&id.store_key()).await
+}
+
 /// Load a manifest by id. Returns `Ok(None)` if no manifest is stored under
 /// that id.
 ///

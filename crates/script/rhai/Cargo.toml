@@ -1,0 +1,21 @@
+[package]
+name = "script-rhai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Rhai backend for the knot block-evaluator lane: an inker BlockEvaluator over the Rhai scripting engine (pure Rust, sandboxed, native operation budget)."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# The thin knot-eval contract (BlockEvaluator + EvalOutput). This backend
+# satisfies that slice, *not* serval's full DOM-shaped ScriptEngine seam —
+# Rhai is a logic/mod language with no DOM, async, or GC.
+inker = { workspace = true }
+# Rhai: pure Rust, embeddable, sandboxed by default (no file/network), with a
+# built-in operation budget (`set_max_operations`) so `eval_block`'s runaway
+# cap is first-class rather than hand-rolled.
+rhai = "1"
