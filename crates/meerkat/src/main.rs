@@ -84,6 +84,7 @@ mod observability;
 mod pane_session;
 mod render;
 mod roster;
+mod roster_view;
 mod scrying_host;
 mod serval_a11y;
 mod serval_render;

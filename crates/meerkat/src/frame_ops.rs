@@ -1567,8 +1567,14 @@ impl WindowCtx<'_> {
     ) -> UxTree {
         let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "roster");
         let root = node_id_for_path(&root_path);
-        let row_bounds: HashMap<GraphMemberId, [f32; 4]> =
-            self.view.roster_row_rects.iter().copied().collect();
+        // Row bounds come off the roster pane's cached layout (the rect-cache
+        // replacement), keyed by member. (P2 companion — list-pane view-ification.)
+        let row_bounds: HashMap<GraphMemberId, [f32; 4]> = self
+            .roster_leaf_rect()
+            .map(|rrect| self.view.roster_pane.row_bounds(rrect, self.view.roster_scroll))
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
         let mut nodes = Vec::new();
         let mut children = Vec::new();
         for row in self.roster_rows() {
@@ -1744,14 +1750,6 @@ impl WindowCtx<'_> {
         // `set_split_ratio` clamps to a sane minimum so a pane can't collapse.
         self.view.frame_layout.set_split_ratio(&path, ratio);
         self.view.request_redraw();
-    }
-
-    /// The node whose roster row contains window point `(x, y)`, if any.
-    pub(super) fn roster_row_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
-        self.view.roster_row_rects
-            .iter()
-            .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
-            .map(|(member, _)| *member)
     }
 
     /// The roster rows: every graph node as a row (url as title, content type as

@@ -836,38 +836,19 @@ impl WindowCtx<'_> {
                 }
             }
         }
-        // The roster pane: render the node list into its leaf, composite it, and
-        // record each row's window rect for click-to-focus. (Frame tree, F1 roster.)
-        self.view.roster_row_rects.clear();
+        // The roster pane renders through its view-driven `RosterPane` bundle: set the
+        // rows, clamp the stored scroll to the last frame's content height, frame, and
+        // composite. Row clicks dispatch through the runner DOM and the a11y projection
+        // reads bounds off the same cached layout, so there is no rect cache.
+        // (Window composition P2 companion — list-pane view-ification.)
         if let Some(rrect) = roster_rect {
             let rw = (rrect[2] - rrect[0]).round().max(1.0) as u32;
             let rh = (rrect[3] - rrect[1]).round().max(1.0) as u32;
             let rows = self.roster_rows();
-            let dom = super::roster::build_roster_dom(&rows);
-            let sheet_strings = super::roster::roster_sheet(&self.shared.presentation.chrome_theme);
-            let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
-            let root = dom.document();
-            // C5: one cascade+layout for the whole pane — the scroll clamp and the
-            // row hit-rects read its fragments, and the scene emits from the same
-            // layout (was a separate fragments pass + a re-laying scene render).
-            let layout = IncrementalLayout::new(&dom, &sheet, rw as f32, rh as f32);
-            let frags = layout.fragments();
-            let mut roster_scrolls = ScrollOffsets::<NodeId>::default();
-            let roster_scroll = first_with_class(&dom, root, "roster")
-                .and_then(|node| {
-                    let layout = frags.rect_of(node)?;
-                    let inner_h = layout.size.height
-                        - layout.padding.top
-                        - layout.padding.bottom
-                        - layout.border.top
-                        - layout.border.bottom;
-                    let max_scroll = (layout.content_size.height - inner_h).max(0.0);
-                    self.view.roster_scroll = self.view.roster_scroll.clamp(0.0, max_scroll);
-                    roster_scrolls.insert(node, (0.0, self.view.roster_scroll));
-                    Some(self.view.roster_scroll)
-                })
-                .unwrap_or(0.0);
-            let scene = scene_from_session(&layout, &dom, None, &roster_scrolls, rw, rh);
+            self.view.roster_pane.set_rows(&self.shared.presentation.chrome_theme, rows);
+            let max_scroll = self.view.roster_pane.max_scroll();
+            self.view.roster_scroll = self.view.roster_scroll.clamp(0.0, max_scroll);
+            let scene = self.view.roster_pane.frame(rw, rh, self.view.roster_scroll);
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
@@ -884,28 +865,6 @@ impl WindowCtx<'_> {
                 h,
                 ExternalTexturePlacement::new(rrect),
             );
-            // Row rects for hit-testing (window coords = roster origin + leaf-local).
-            let mut row_nodes = all_with_class(&dom, root, "roster-row");
-            row_nodes.extend(all_with_class(&dom, root, "roster-row-selected"));
-            for node in row_nodes {
-                if let (Some(member), Some(l)) = (member_attr(&dom, node), frags.rect_of(node)) {
-                    let x0 = rrect[0] + l.location.x;
-                    let y0 = rrect[1] + l.location.y - roster_scroll;
-                    let x1 = x0 + l.size.width;
-                    let y1 = y0 + l.size.height;
-                    if x1 > rrect[0] && x0 < rrect[2] && y1 > rrect[1] && y0 < rrect[3] {
-                        self.view.roster_row_rects.push((
-                            member,
-                            [
-                                x0.max(rrect[0]),
-                                y0.max(rrect[1]),
-                                x1.min(rrect[2]),
-                                y1.min(rrect[3]),
-                            ],
-                        ));
-                    }
-                }
-            }
         }
         // The apparatus pane: theme buttons + system diagnostics, rendered into
         // its leaf with button hit-rects recorded for theme switching. (A1.)

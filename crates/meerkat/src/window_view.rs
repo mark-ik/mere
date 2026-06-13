@@ -90,6 +90,10 @@ pub(crate) struct WindowView {
     /// pane render, its slot-placement fragment reads, and its click hit-tests all
     /// share this one layout per frame. `None` until the workbench first renders.
     pub(crate) workbench_session: Option<PaneSession>,
+    /// The roster pane as a view-driven bundle (runner + cached layout + sheet): a
+    /// `roster_view` over its rows, dispatching row clicks through the DOM instead of
+    /// a rect cache. (Window composition P2 companion — list-pane view-ification.)
+    pub(crate) roster_pane: crate::roster_view::RosterPane,
 
     /// Each switcher row's on-screen rect this frame: a click switches to it.
     pub(crate) session_row_rects: Vec<(SessionId, [f32; 4])>,
@@ -97,8 +101,6 @@ pub(crate) struct WindowView {
     pub(crate) session_close_rects: Vec<(SessionId, [f32; 4])>,
     /// The "+" new-graph tile rect this frame, if the switcher is shown.
     pub(crate) session_add_rect: Option<[f32; 4]>,
-    /// Each roster row's on-screen rect this frame (node id): a press focuses it.
-    pub(crate) roster_row_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Each apparatus theme-button's rect this frame (theme id): a press switches.
     pub(crate) apparatus_button_rects: Vec<(String, [f32; 4])>,
     /// Each gloss minimap node's rect this frame (node id): a press focuses it.
@@ -251,10 +253,10 @@ impl WindowView {
             workbench_dom,
             workbench_runner,
             workbench_session: None,
+            roster_pane: crate::roster_view::RosterPane::new(),
             session_row_rects: Default::default(),
             session_close_rects: Default::default(),
             session_add_rect: Default::default(),
-            roster_row_rects: Default::default(),
             apparatus_button_rects: Default::default(),
             gloss_node_rects: Default::default(),
             tile_rects: Default::default(),

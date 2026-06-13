@@ -165,15 +165,32 @@ impl WindowCtx<'_> {
                     if let Some(rrect) = self.roster_leaf_rect() {
                         if x >= rrect[0] && x < rrect[2] && y >= rrect[1] && y < rrect[3] {
                             if button == MouseButton::Left {
-                                if let Some(member) = self.roster_row_at(x, y) {
-                                    if let Some(url) = self
-                                        .orrery
-                                        .graph()
-                                        .get_node_by_id(member)
-                                        .map(|(_, n)| n.url().to_string())
-                                    {
-                                        self.orrery.select_by_url(&url);
-                                        self.view.request_redraw();
+                                // Route through the roster runner: hit-test its DOM,
+                                // dispatch the click (the row handler queues a Select),
+                                // then apply each queued selection. (P2 companion.)
+                                let local = (x - rrect[0], y - rrect[1]);
+                                if let Some(node) = self.view.roster_pane.hit_test(
+                                    local.0,
+                                    local.1,
+                                    self.view.roster_scroll,
+                                ) {
+                                    self.view
+                                        .roster_pane
+                                        .dispatch_click(node, PointerClick::at(local));
+                                    for intent in self.view.roster_pane.take_intents() {
+                                        match intent {
+                                            crate::roster_view::RosterIntent::Select(member) => {
+                                                if let Some(url) = self
+                                                    .orrery
+                                                    .graph()
+                                                    .get_node_by_id(member)
+                                                    .map(|(_, n)| n.url().to_string())
+                                                {
+                                                    self.orrery.select_by_url(&url);
+                                                    self.view.request_redraw();
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
