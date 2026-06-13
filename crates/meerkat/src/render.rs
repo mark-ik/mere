@@ -169,8 +169,11 @@ impl WindowCtx<'_> {
         // another pane's DOM.
         let mut chrome_scroll = ScrollOffsets::<NodeId>::default();
         if self.view.runner.state().palette_open {
-            // Bound the list to the window so a long palette can't overflow it.
-            let max_h = (h as f32 - 140.0).max(120.0);
+            // Bound the list to the window so a long palette can't overflow it. The
+            // overlay floats the panel ~56px down with an input + paddings above the
+            // list, so leave generous headroom + a bottom margin — otherwise a small
+            // window pushes the last rows past its edge even when scrolled.
+            let max_h = (h as f32 - 200.0).max(120.0);
             {
                 let mut dom = self.view.dom.borrow_mut();
                 let root = dom.document();
