@@ -464,7 +464,9 @@ impl Chrome {
             | Command::RetryFocusedContent
             | Command::StopFocusedOperation
             | Command::PinFocusedOperation
-            | Command::ToggleCompatView => {
+            | Command::ToggleCompatView
+            | Command::AssertEdge
+            | Command::RetractEdge => {
                 // Host actions over the frame, orrery, workbench, or actor pool:
                 // record the intent; the host drains it and runs the matching
                 // method.

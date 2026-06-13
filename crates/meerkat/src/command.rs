@@ -64,11 +64,18 @@ pub enum Command {
     /// Toggle the focused node's compatibility view — render it through the
     /// system WebView (scrying) instead of the built-in engines (host action).
     ToggleCompatView,
+    /// Assert a user relation between exactly two selected nodes — the manual
+    /// edge-creation gesture (host action). Defaults to a `UserGrouped` semantic
+    /// relation; honest provenance (a human asserted it).
+    AssertEdge,
+    /// Retract the user relation(s) on the selected edge — a true removal, not the
+    /// display-only `HideSelectedEdge` (host action).
+    RetractEdge,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 20] = [
+    pub const ALL: [Command; 22] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -89,6 +96,8 @@ impl Command {
         Command::StopFocusedOperation,
         Command::PinFocusedOperation,
         Command::ToggleCompatView,
+        Command::AssertEdge,
+        Command::RetractEdge,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -111,6 +120,8 @@ impl Command {
                 | Command::StopFocusedOperation
                 | Command::PinFocusedOperation
                 | Command::ToggleCompatView
+                | Command::AssertEdge
+                | Command::RetractEdge
         )
     }
 
@@ -143,6 +154,8 @@ impl Command {
             Command::RetryFocusedContent => "retry",
             Command::StopFocusedOperation => "stop",
             Command::PinFocusedOperation => "pin",
+            Command::AssertEdge => "relate",
+            Command::RetractEdge => "unrelate",
         }
     }
 
@@ -169,6 +182,8 @@ impl Command {
             Command::StopFocusedOperation => "Stop focused operation",
             Command::PinFocusedOperation => "Pin focused operation",
             Command::ToggleCompatView => "Compatibility view (system WebView, focused node)",
+            Command::AssertEdge => "Relate selected nodes",
+            Command::RetractEdge => "Unrelate selected edge",
         }
     }
 }
@@ -220,6 +235,18 @@ mod tests {
     #[test]
     fn unmatched_query_is_empty() {
         assert!(filter("zzz").is_empty());
+    }
+
+    #[test]
+    fn edge_commands_are_host_actions_with_verbs() {
+        assert_eq!(Command::AssertEdge.verb(), "relate");
+        assert_eq!(Command::RetractEdge.verb(), "unrelate");
+        assert!(Command::AssertEdge.is_host_action());
+        assert!(Command::RetractEdge.is_host_action());
+        // The unambiguous label substring resolves; "relate" alone also matches
+        // "Unrelate", so filter on the distinct token.
+        assert_eq!(filter("unrelate"), vec![Command::RetractEdge]);
+        assert!(filter("Relate selected").contains(&Command::AssertEdge));
     }
 
     #[test]

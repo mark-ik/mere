@@ -1,7 +1,7 @@
 use super::*;
 use super::build::hyperlink;
 use kernel::geometry::PortablePoint;
-use kernel::graph::Graph;
+use kernel::graph::{Graph, SemanticSubKind};
 use std::collections::HashMap;
 
 #[test]
@@ -110,6 +110,88 @@ fn open_as_new_node_mints_distinct_node_with_navigated_from_edge() {
         edges_now,
         "an origin-less open mints no navigated-from edge",
     );
+}
+
+#[test]
+fn assert_selected_relation_links_exactly_two_selected_nodes() {
+    let mut orrery = Orrery::new();
+    // Two unlinked nodes (origin-less mints carry no edge).
+    let a = orrery.open_member_as_new_node(None, "https://a.test");
+    let b = orrery.open_member_as_new_node(None, "https://b.test");
+    let edges_before = orrery.graph().relations().count();
+    let ak = orrery.graph().get_node_by_id(a).unwrap().0;
+    let bk = orrery.graph().get_node_by_id(b).unwrap().0;
+
+    // A single-node selection is not a clean pair → no edge.
+    orrery.selected.clear();
+    orrery.selected.insert(ak);
+    assert!(!orrery.assert_selected_relation(SemanticSubKind::UserGrouped));
+    assert_eq!(orrery.graph().relations().count(), edges_before);
+
+    // Both selected → one user-grouped semantic edge.
+    orrery.selected.insert(bk);
+    assert!(orrery.assert_selected_relation(SemanticSubKind::UserGrouped));
+    assert_eq!(
+        orrery.graph().relations().count(),
+        edges_before + 1,
+        "exactly one edge is created between the pair",
+    );
+
+    // Idempotent: re-asserting the same sub-kind succeeds but does not multiply
+    // (the relation is already present, so the edge count is unchanged).
+    assert!(orrery.assert_selected_relation(SemanticSubKind::UserGrouped));
+    assert_eq!(orrery.graph().relations().count(), edges_before + 1);
+}
+
+#[test]
+fn retract_selected_relation_removes_the_user_relation() {
+    let mut orrery = Orrery::new();
+    let a = orrery.open_member_as_new_node(None, "https://a.test");
+    let b = orrery.open_member_as_new_node(None, "https://b.test");
+    let ak = orrery.graph().get_node_by_id(a).unwrap().0;
+    let bk = orrery.graph().get_node_by_id(b).unwrap().0;
+    orrery.selected.clear();
+    orrery.selected.insert(ak);
+    orrery.selected.insert(bk);
+    orrery.assert_selected_relation(SemanticSubKind::UserGrouped);
+    let with_edge = orrery.graph().relations().count();
+
+    // The edge is stored in the asserted (uuid-sorted) direction; select it and
+    // retract.
+    let mut pair = [ak, bk];
+    pair.sort_by_key(|k| orrery.graph().get_node(*k).map(|n| n.id));
+    orrery.selected_edges.clear();
+    orrery.selected_edges.insert((pair[0], pair[1]));
+    assert_eq!(orrery.retract_selected_relation(), 1, "the user relation is retracted");
+    assert_eq!(
+        orrery.graph().relations().count(),
+        with_edge - 1,
+        "the edge is gone (no families left → garbage-collected)",
+    );
+    assert!(orrery.selected_edges.is_empty(), "retraction clears the edge selection");
+}
+
+#[test]
+fn unrelate_is_symmetric_with_relate_on_a_two_node_selection() {
+    // `>unrelate` mirrors `>relate`: the same two-node selection that related a
+    // pair also unrelates it, without having to click the edge.
+    let mut orrery = Orrery::new();
+    let a = orrery.open_member_as_new_node(None, "https://a.test");
+    let b = orrery.open_member_as_new_node(None, "https://b.test");
+    let ak = orrery.graph().get_node_by_id(a).unwrap().0;
+    let bk = orrery.graph().get_node_by_id(b).unwrap().0;
+    let base = orrery.graph().relations().count();
+    orrery.selected.clear();
+    orrery.selected.insert(ak);
+    orrery.selected.insert(bk);
+
+    orrery.assert_selected_relation(SemanticSubKind::UserGrouped);
+    assert_eq!(orrery.graph().relations().count(), base + 1, "related");
+
+    // No edge selected — the two-node selection alone retracts the relation.
+    assert!(orrery.selected_edges.is_empty());
+    assert_eq!(orrery.retract_selected_relation(), 1, "the pair selection unrelates");
+    assert_eq!(orrery.graph().relations().count(), base, "back to no relation");
 }
 
 #[test]

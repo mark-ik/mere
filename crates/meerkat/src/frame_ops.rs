@@ -842,6 +842,18 @@ impl WindowCtx<'_> {
             Command::StopFocusedOperation => self.stop_focused_operation(),
             Command::PinFocusedOperation => self.pin_focused_operation(),
             Command::ToggleCompatView => self.toggle_focus_compat(),
+            Command::AssertEdge => {
+                if self.orrery.assert_selected_relation(SemanticSubKind::UserGrouped) {
+                    self.save_session();
+                    self.view.request_redraw();
+                }
+            }
+            Command::RetractEdge => {
+                if self.orrery.retract_selected_relation() > 0 {
+                    self.save_session();
+                    self.view.request_redraw();
+                }
+            }
             // History / connect / settings / comms verbs run in the chrome; never
             // queued here as host intents.
             Command::Back

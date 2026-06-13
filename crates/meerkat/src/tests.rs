@@ -209,8 +209,8 @@ fn palette_open_renders_rows() {
     assert_eq!(count_class(&dom, root, "palette"), 1, "the panel");
     assert_eq!(
         count_class(&dom, root, "cmd-row"),
-        20,
-        "chrome verbs + Tile / Roster / Gloss / Apparatus / Delete / Background / Hide edge / Show edges / Settings / Comms / Inspector / Steward / operation hooks / Compatibility view",
+        Command::ALL.len(),
+        "one row per command (chrome verbs + pane toggles + node/edge ops + Relate / Unrelate)",
     );
 }
 

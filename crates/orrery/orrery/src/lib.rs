@@ -34,7 +34,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use euclid::default::{Box2D, Point2D};
 use gyre::{LayoutSnapshot, LayoutView};
-use kernel::graph::{Graph, NodeKey};
+use kernel::graph::{EdgeAssertion, Graph, NodeKey, RelationSelector, SemanticSubKind};
 use platen::scene_paint::{Camera, ScenePaintStyle};
 use serval_layout::IncrementalLayout;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
@@ -493,6 +493,84 @@ impl Orrery {
         self.selected.clear();
         self.selected_edges.clear();
         self.reconcile_derived();
+    }
+
+    /// Assert a semantic relation of `sub_kind` between exactly two selected
+    /// nodes — the user-initiated edge-creation gesture the rich kernel taxonomy
+    /// always supported but the UI never reached. The pair is ordered by node
+    /// UUID so a symmetric relation is reproducible; the edge is created or
+    /// merged (idempotent per sub-kind) via [`Graph::assert_relation`]. Returns
+    /// `true` when an edge was asserted, `false` for any selection that is not a
+    /// clean pair. The springs / drawn edges refresh on the next reconcile.
+    pub fn assert_selected_relation(&mut self, sub_kind: SemanticSubKind) -> bool {
+        if self.selected.len() != 2 {
+            return false;
+        }
+        let mut pair: Vec<NodeKey> = self.selected.iter().copied().collect();
+        pair.sort_by_key(|k| self.graph.get_node(*k).map(|n| n.id));
+        // `assert_relation` returns `None` for a no-op re-assert (the sub-kind is
+        // already present), so we don't gate success on its return: for a clean
+        // pair the relation is present afterwards either way, which is what
+        // "relate these two" means. Reconcile rebuilds edges / springs.
+        self.graph.assert_relation(
+            pair[0],
+            pair[1],
+            EdgeAssertion::Semantic {
+                sub_kind,
+                label: None,
+                decay_progress: None,
+            },
+        );
+        self.reconcile_derived();
+        true
+    }
+
+    /// Retract the user-asserted semantic relation(s) on the selected edge(s) —
+    /// a true removal, not the display-only [`hide_selected_edges`]. Scoped to the
+    /// `Semantic` family, so navigation / provenance history on the same edge
+    /// survives; an edge left with no families is garbage-collected by the kernel.
+    /// Returns how many relations were retracted, and clears the edge selection.
+    pub fn retract_selected_relation(&mut self) -> usize {
+        let mut removed = 0;
+        // Symmetric with `assert_selected_relation`: a two-node selection retracts
+        // the relation between the pair (either stored direction), so `>unrelate`
+        // mirrors `>relate` on the same gesture.
+        if self.selected.len() == 2 {
+            let mut pair: Vec<NodeKey> = self.selected.iter().copied().collect();
+            pair.sort_by_key(|k| self.graph.get_node(*k).map(|n| n.id));
+            removed += self.retract_semantic_between(pair[0], pair[1]);
+            removed += self.retract_semantic_between(pair[1], pair[0]);
+        }
+        // Also retract any directly-selected edges (the click-an-edge path).
+        for (a, b) in self.selected_edges.drain().collect::<Vec<_>>() {
+            removed += self.retract_semantic_between(a, b);
+        }
+        if removed > 0 {
+            self.reconcile_derived();
+        }
+        removed
+    }
+
+    /// Retract every semantic relation on the directed edge `a -> b`. The `Family`
+    /// selector is read-only (not retractable), so enumerate the edge's semantic
+    /// sub-kinds and retract each — the user-meaning relations go, while traversal
+    /// / provenance history on the same edge survives (an edge left with no
+    /// families is garbage-collected by the kernel). Returns how many were removed.
+    fn retract_semantic_between(&mut self, a: NodeKey, b: NodeKey) -> usize {
+        let sub_kinds: Vec<SemanticSubKind> = self
+            .graph
+            .find_edge_key(a, b)
+            .and_then(|k| self.graph.get_edge(k))
+            .and_then(|p| p.semantic_data())
+            .map(|s| s.sub_kinds.iter().copied().collect())
+            .unwrap_or_default();
+        let mut removed = 0;
+        for sk in sub_kinds {
+            removed += self
+                .graph
+                .retract_relations(a, b, RelationSelector::Semantic(sk));
+        }
+        removed
     }
 
     /// Hide the currently-selected edges: move them into the hidden set (as
