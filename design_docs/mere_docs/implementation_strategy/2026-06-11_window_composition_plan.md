@@ -341,13 +341,17 @@ wanted.
    **unload** (save to its dir + drop); park first, unload under memory pressure.
    N live orreries = N physics actor threads; fine for a handful — and surface the live
    count in Steward (real data, the no-placebo rule) as the tripwire for revisiting.
-   **Unload landed (2026-06-13, `7a8304b`):** a `MAX_POOLED_ORRERIES` cap + an
-   `orrery_lru` order drop the stalest non-focused orrery over the cap (the drop ends
-   its physics actor thread; its content actors are reaped). No save on evict — the
-   graph was persisted when last switched away from, so it reloads on switch-back. The
-   eviction already skips every window's focused graph (P2-ready). **Still open:** the
-   *park* flavor (pause a warm-but-idle graph's physics rather than evict it) and the
-   Steward live-count surface.
+   **Park + unload landed (2026-06-13).** Unload (`7a8304b`): a `MAX_POOLED_ORRERIES`
+   cap + an `orrery_lru` order drop the stalest non-focused orrery over the cap (the
+   drop ends its physics actor thread; its content actors are reaped). No save on evict
+   — the graph was persisted when last switched away from, so it reloads on switch-back.
+   Park (`0f94f04`): `Orrery::park_physics()` halts a switched-away graph's settle so it
+   stops ticking + waking the loop while warm (the actor then idles on its channel, no
+   busy-spin); no explicit unpark, since the layout is left settled and interaction
+   resumes it. Together: park first, unload under memory pressure. Eviction already skips
+   every window's focused graph (P2-ready). **Still open:** the Steward live-count
+   surface; and a minor edge — `close_session` leaves a trashed session's orrery pooled
+   until LRU eviction rather than dropping it immediately.
 3. **Provenance edge direction + family** — confirm the existing provenance edge family
    carries "copied-from across graphs" cleanly, or whether copy wants a distinct sub-kind
    (P4). Check before building, per the consumer-pull rule.
@@ -384,10 +388,14 @@ wanted.
     pool, frames settling, zero panic/warn); and an **on-screen round-trip driven by
     injected keystrokes** — session A (node "4") → Ctrl+PageDown → empty "New" graph →
     Ctrl+PageUp → node "4" still there, served from the live pooled orrery, not reloaded.
-  - **Still deferred:** OQ2 *park* + Steward count; physics-wake fan-out (a parked-but-not-
-    evicted graph's settle still wakes every window until it quiesces); per-orrery save on
-    *exit* (parked graphs save at switch-away; only physics positions drift after); and the
-    P2 items above.
+  - **OQ2 park + unload both landed** (`7a8304b` unload, `0f94f04` park). **Still
+    deferred:** the Steward live-count surface. **Re-scoped by park:** per-orrery save on
+    *exit* is now near-moot — park halts a switched-away graph's physics, so it stops
+    changing after its switch-away save (only sub-pixel drift between save and halt, which
+    re-settles on reload); physics-wake fan-out's P1 case is handled (parked graphs no
+    longer wake), leaving only the multi-window "route a graph's wake to its own windows"
+    routing, which is inherently **P2**. The P2 items (per-pane resolution, non-focused
+    contribution routing, that wake routing) follow the P2 companion.
 - 2026-06-12: **P2 companion added** (the xilem-serval input-spine target), prompted by
   the host-wiring grabbag plan completing its serval-side seams with their meerkat
   callers correctly recorded as blocked-on-composition. Records the honest usage
