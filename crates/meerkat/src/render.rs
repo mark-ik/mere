@@ -9,9 +9,9 @@ use forme::GraphMemberId;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
 use netrender::external_texture::ExternalTexturePlacement;
-use crate::serval_render::{TextCursor, scene_from_scripted_dom, scene_from_session};
+use crate::serval_render::{TextCursor, scene_from_scripted_dom};
 use platen_view::{WORKBENCH_SHEET, WorkbenchScene};
-use serval_layout::{IncrementalLayout, ScrollOffsets};
+use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
 
 use std::cell::RefCell;
@@ -866,9 +866,10 @@ impl WindowCtx<'_> {
                 ExternalTexturePlacement::new(rrect),
             );
         }
-        // The apparatus pane: theme buttons + system diagnostics, rendered into
-        // its leaf with button hit-rects recorded for theme switching. (A1.)
-        self.view.apparatus_button_rects.clear();
+        // The apparatus pane renders through its view-driven `ListPane`: build the
+        // items (theme buttons + host diagnostics), set them on the pane, frame, and
+        // composite. Theme-button clicks dispatch through the runner DOM, so there is
+        // no button rect cache. (Apparatus; window composition P2 companion.)
         if let Some(arect) = self.apparatus_leaf_rect() {
             let aw = (arect[2] - arect[0]).round().max(1.0) as u32;
             let ah = (arect[3] - arect[1]).round().max(1.0) as u32;
@@ -876,14 +877,10 @@ impl WindowCtx<'_> {
             let (system_rows, observability) = apparatus_data
                 .as_ref()
                 .expect("apparatus data was prepared when the pane was open");
-            let dom = super::apparatus::build_apparatus_dom(&themes, &system_rows, &observability);
-            let sheet_strings = super::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
-            let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
-            let app_scroll = ScrollOffsets::<NodeId>::default();
-            // C5: one cascade+layout — the scene emits from it and the button
-            // hit-rects below read its fragments (was two layout passes).
-            let layout = IncrementalLayout::new(&dom, &sheet, aw as f32, ah as f32);
-            let scene = scene_from_session(&layout, &dom, None, &app_scroll, aw, ah);
+            let items = super::apparatus::apparatus_items(&themes, system_rows, observability);
+            let sheet = super::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
+            self.view.apparatus_pane.set(sheet, "apparatus", items);
+            let scene = self.view.apparatus_pane.frame(aw, ah);
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
@@ -900,21 +897,6 @@ impl WindowCtx<'_> {
                 h,
                 ExternalTexturePlacement::new(arect),
             );
-            let frags = layout.fragments();
-            let root = dom.document();
-            let mut buttons = all_with_class(&dom, root, "app-btn");
-            buttons.extend(all_with_class(&dom, root, "app-btn-active"));
-            for node in buttons {
-                if let (Some(id), Some(l)) = (
-                    super::string_attr(&dom, node, "data-theme"),
-                    frags.rect_of(node),
-                ) {
-                    let x0 = arect[0] + l.location.x;
-                    let y0 = arect[1] + l.location.y;
-                    self.view.apparatus_button_rects
-                        .push((id, [x0, y0, x0 + l.size.width, y0 + l.size.height]));
-                }
-            }
         }
         for leaf in self
             .laid_leaves()

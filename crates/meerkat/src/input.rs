@@ -197,13 +197,23 @@ impl WindowCtx<'_> {
                             return;
                         }
                     }
-                    // The apparatus pane consumes the press: a left click on a
-                    // theme button switches the theme. (Apparatus.)
+                    // The apparatus pane consumes the press: a left click routes
+                    // through the apparatus runner — hit-test its DOM, dispatch the
+                    // click (a theme button queues its id), then switch to each
+                    // drained theme id. (Apparatus; P2 companion.)
                     if let Some(arect) = self.apparatus_leaf_rect() {
                         if x >= arect[0] && x < arect[2] && y >= arect[1] && y < arect[3] {
                             if button == MouseButton::Left {
-                                if let Some(theme_id) = self.apparatus_button_at(x, y) {
-                                    self.set_theme(&theme_id);
+                                let local = (x - arect[0], y - arect[1]);
+                                if let Some(node) =
+                                    self.view.apparatus_pane.hit_test(local.0, local.1)
+                                {
+                                    self.view
+                                        .apparatus_pane
+                                        .dispatch_click(node, PointerClick::at(local));
+                                    for theme_id in self.view.apparatus_pane.take_activations() {
+                                        self.set_theme(&theme_id);
+                                    }
                                 }
                             }
                             return;

@@ -1291,14 +1291,6 @@ impl WindowCtx<'_> {
             .map(|l| l.rect)
     }
 
-    /// The theme id whose apparatus button contains window point `(x, y)`, if any.
-    pub(super) fn apparatus_button_at(&self, x: f32, y: f32) -> Option<String> {
-        self.view.apparatus_button_rects
-            .iter()
-            .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
-            .map(|(id, _)| id.clone())
-    }
-
     /// The registered themes as apparatus options (id + display name + active),
     /// from the known theme ids. (The registry doesn't list themes yet.)
     pub(super) fn theme_options(&self) -> Vec<apparatus::ThemeOption> {

@@ -80,6 +80,7 @@ mod gloss;
 mod ime;
 mod input;
 mod inspector;
+mod list_pane;
 mod observability;
 mod pane_session;
 mod render;
@@ -1330,14 +1331,6 @@ fn member_attr(dom: &ScriptedDom, id: NodeId) -> Option<GraphMemberId> {
     dom.attributes(id)
         .find(|a| a.name.local.as_ref() == "data-member")
         .and_then(|a| a.value.parse::<GraphMemberId>().ok())
-}
-
-/// The value of element `id`'s attribute `name`, if present — host-composited
-/// panes read their `data-*` hit-test keys (e.g. `data-theme`) this way.
-fn string_attr(dom: &ScriptedDom, id: NodeId, name: &str) -> Option<String> {
-    dom.attributes(id)
-        .find(|a| a.name.local.as_ref() == name)
-        .map(|a| a.value.to_string())
 }
 
 /// The orrery's themed palette — `(backdrop, edge)` as straight `[r, g, b, a]`

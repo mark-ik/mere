@@ -5,15 +5,16 @@
 //! The apparatus pane (A1): the system pane — settings + host diagnostics — as a
 //! frame leaf. v0 carries a **Theme** section (the registered themes as buttons,
 //! the active one highlighted) and a **System** section (read-only diagnostics).
-//! Rendered as a serval DOM themed from the chrome tokens, like the `roster`
-//! pane; the host hit-tests theme buttons (`data-theme`) to switch the theme.
+//! Rendered as a view-driven [`ListPane`](crate::list_pane::ListPane) themed from
+//! the chrome tokens: each theme button is a clickable [`PaneItem`] whose activation
+//! key is its theme id, so a click dispatches through the runner DOM and the host
+//! drains the id to switch the theme — no `data-theme` rect cache.
 //! Settings beyond the theme (the tab cap) fold in here later (plan A3).
 
-use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use register_theme::chrome::{ChromeTheme, Color32};
-use serval_scripted_dom::ScriptedDom;
 
 use super::observability::{ObservabilitySnapshot, age, severity_label};
+use crate::list_pane::PaneItem;
 
 /// One theme option in the Theme section: its id (the hit-test key), display
 /// name, and whether it is the active theme.
@@ -62,232 +63,140 @@ pub fn apparatus_sheet(c: &ChromeTheme) -> Vec<String> {
     ]
 }
 
-/// Build the apparatus DOM: a Theme section (one `data-theme` button per option)
-/// plus host observability sections.
-pub fn build_apparatus_dom(
+/// Build the apparatus pane's item list: a Theme section (one clickable button per
+/// option, its theme id the activation key) plus the host observability sections as
+/// display rows. The [`ListPane`](crate::list_pane::ListPane) renders these and
+/// drains a clicked button's id; the host switches the theme to it. The section
+/// structure mirrors the old `build_apparatus_dom`.
+pub fn apparatus_items(
     themes: &[ThemeOption],
     system_rows: &[(String, String)],
     obs: &ObservabilitySnapshot,
-) -> ScriptedDom {
-    let mut dom = ScriptedDom::new();
-    let root = dom.document();
-    let container = dom.create_element(qual("div"));
-    dom.set_attribute(container, qual("class"), "apparatus");
-    dom.append_child(root, container);
+) -> Vec<PaneItem> {
+    let mut items = Vec::new();
 
-    append_title(&mut dom, container, "Theme");
+    items.push(PaneItem::text("app-title", "Theme"));
     for theme in themes {
-        let btn = dom.create_element(qual("div"));
-        let class = if theme.active {
-            "app-btn-active"
-        } else {
-            "app-btn"
-        };
-        dom.set_attribute(btn, qual("class"), class);
-        dom.set_attribute(btn, qual("data-theme"), &theme.id);
-        let label = dom.create_text(&theme.name);
-        dom.append_child(btn, label);
-        dom.append_child(container, btn);
+        let class = if theme.active { "app-btn-active" } else { "app-btn" };
+        items.push(PaneItem::button(class, theme.name.clone(), theme.id.clone()));
     }
 
-    append_title(&mut dom, container, "Overview");
+    items.push(PaneItem::text("app-title", "Overview"));
     for (label, value) in system_rows {
-        append_row(&mut dom, container, "app-row", &format!("{label}: {value}"));
+        items.push(PaneItem::text("app-row", format!("{label}: {value}")));
     }
 
-    append_title(&mut dom, container, "UX Events");
+    items.push(PaneItem::text("app-title", "UX Events"));
     if obs.ux.is_empty() {
-        append_row(&mut dom, container, "app-row-muted", "No UX events yet");
+        items.push(PaneItem::text("app-row-muted", "No UX events yet"));
     } else {
         for event in &obs.ux {
             let detail = event.detail.as_deref().unwrap_or("");
-            append_row(
-                &mut dom,
-                container,
+            items.push(PaneItem::text(
                 "app-row",
-                &format!(
-                    "{} {} {} {}",
-                    event.surface,
-                    event.event,
-                    detail,
-                    age(event.at)
-                ),
-            );
+                format!("{} {} {} {}", event.surface, event.event, detail, age(event.at)),
+            ));
         }
     }
 
-    append_title(&mut dom, container, "Actors");
+    items.push(PaneItem::text("app-title", "Actors"));
     if obs.actors.is_empty() {
-        append_row(&mut dom, container, "app-row-muted", "No actor events yet");
+        items.push(PaneItem::text("app-row-muted", "No actor events yet"));
     } else {
         for actor in &obs.actors {
             let detail = actor.detail.as_deref().unwrap_or("");
-            append_row(
-                &mut dom,
-                container,
+            items.push(PaneItem::text(
                 "app-row",
-                &format!(
-                    "{} {} {} {}",
-                    actor.actor,
-                    actor.event,
-                    detail,
-                    age(actor.at)
-                ),
-            );
+                format!("{} {} {} {}", actor.actor, actor.event, detail, age(actor.at)),
+            ));
         }
     }
 
-    append_title(&mut dom, container, "Accessibility");
-    append_row(
-        &mut dom,
-        container,
+    items.push(PaneItem::text("app-title", "Accessibility"));
+    items.push(PaneItem::text(
         "app-row",
-        &format!(
+        format!(
             "Surfaces: {}; nodes: {}; degraded: {}",
             obs.a11y.surfaces, obs.a11y.nodes, obs.a11y.degraded
         ),
-    );
-    append_row(
-        &mut dom,
-        container,
+    ));
+    items.push(PaneItem::text(
         "app-row",
-        &format!("Root: {}; focus: {}", obs.a11y.root, obs.a11y.focus),
-    );
-    append_row(
-        &mut dom,
-        container,
+        format!("Root: {}; focus: {}", obs.a11y.root, obs.a11y.focus),
+    ));
+    items.push(PaneItem::text(
         "app-row",
-        &format!(
+        format!(
             "Missing labels: {}; missing bounds: {}; duplicate ids: {}",
             obs.a11y.missing_labels, obs.a11y.missing_bounds, obs.a11y.duplicate_ids
         ),
-    );
+    ));
     if obs.a11y.audit.is_empty() {
-        append_row(
-            &mut dom,
-            container,
-            "app-row-muted",
-            "No a11y audit failures",
-        );
+        items.push(PaneItem::text("app-row-muted", "No a11y audit failures"));
     } else {
         for finding in &obs.a11y.audit {
-            append_row(&mut dom, container, "app-row", finding);
+            items.push(PaneItem::text("app-row", finding.clone()));
         }
     }
 
-    append_title(&mut dom, container, "Diagnostics");
+    items.push(PaneItem::text("app-title", "Diagnostics"));
     if obs.diagnostics.is_empty() {
-        append_row(&mut dom, container, "app-row-muted", "No diagnostics yet");
+        items.push(PaneItem::text("app-row-muted", "No diagnostics yet"));
     } else {
         for diagnostic in &obs.diagnostics {
-            append_row(
-                &mut dom,
-                container,
+            items.push(PaneItem::text(
                 "app-row",
-                &format!(
+                format!(
                     "{} {}: {} {}",
                     severity_label(diagnostic.severity),
                     diagnostic.channel,
                     diagnostic.message,
                     age(diagnostic.at)
                 ),
-            );
+            ));
         }
     }
 
-    append_title(&mut dom, container, "Tracing");
+    items.push(PaneItem::text("app-title", "Tracing"));
     if obs.traces.is_empty() {
-        append_row(
-            &mut dom,
-            container,
-            "app-row-muted",
-            "No portable trace events yet",
-        );
+        items.push(PaneItem::text("app-row-muted", "No portable trace events yet"));
     } else {
         for trace in &obs.traces {
             let detail = trace.detail.as_deref().unwrap_or("");
-            append_row(
-                &mut dom,
-                container,
+            items.push(PaneItem::text(
                 "app-row",
-                &format!(
-                    "{} {} {} {}",
-                    trace.name,
-                    trace.event,
-                    detail,
-                    age(trace.at)
-                ),
-            );
+                format!("{} {} {} {}", trace.name, trace.event, detail, age(trace.at)),
+            ));
         }
     }
 
-    append_title(&mut dom, container, "Registry");
-    append_row(
-        &mut dom,
-        container,
+    items.push(PaneItem::text("app-title", "Registry"));
+    items.push(PaneItem::text(
         "app-row",
-        &format!("Registered channels: {}", obs.registry.registered_channels),
-    );
+        format!("Registered channels: {}", obs.registry.registered_channels),
+    ));
     if obs.registry.orphan_channels.is_empty() {
-        append_row(&mut dom, container, "app-row-muted", "No orphan channels");
+        items.push(PaneItem::text("app-row-muted", "No orphan channels"));
     } else {
         for (channel, count) in &obs.registry.orphan_channels {
-            append_row(
-                &mut dom,
-                container,
-                "app-row",
-                &format!("orphan {channel}: {count}"),
-            );
+            items.push(PaneItem::text("app-row", format!("orphan {channel}: {count}")));
         }
     }
     for violation in &obs.registry.invariant_violations {
-        append_row(
-            &mut dom,
-            container,
-            "app-row",
-            &format!("invariant: {violation}"),
-        );
+        items.push(PaneItem::text("app-row", format!("invariant: {violation}")));
     }
 
-    append_title(&mut dom, container, "Probes");
+    items.push(PaneItem::text("app-title", "Probes"));
     if obs.probes.is_empty() {
-        append_row(&mut dom, container, "app-row-muted", "No probe failures");
+        items.push(PaneItem::text("app-row-muted", "No probe failures"));
     } else {
         for probe in &obs.probes {
-            append_row(
-                &mut dom,
-                container,
+            items.push(PaneItem::text(
                 "app-row",
-                &format!(
-                    "{} {}: {} {}",
-                    probe.name,
-                    probe.status,
-                    probe.detail,
-                    age(probe.at)
-                ),
-            );
+                format!("{} {}: {} {}", probe.name, probe.status, probe.detail, age(probe.at)),
+            ));
         }
     }
-    dom
-}
 
-fn append_title(dom: &mut ScriptedDom, parent: serval_scripted_dom::NodeId, text: &str) {
-    let title = dom.create_element(qual("div"));
-    dom.set_attribute(title, qual("class"), "app-title");
-    let label = dom.create_text(text);
-    dom.append_child(title, label);
-    dom.append_child(parent, title);
-}
-
-fn append_row(dom: &mut ScriptedDom, parent: serval_scripted_dom::NodeId, class: &str, text: &str) {
-    let row = dom.create_element(qual("div"));
-    dom.set_attribute(row, qual("class"), class);
-    let text = dom.create_text(text);
-    dom.append_child(row, text);
-    dom.append_child(parent, row);
-}
-
-/// A `QualName` in the null namespace (the shape `ScriptedDom` builders take).
-fn qual(local: &str) -> QualName {
-    QualName::new(None, Namespace::from(""), LocalName::from(local))
+    items
 }

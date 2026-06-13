@@ -65,11 +65,6 @@ where
         self.runner.update(f);
     }
 
-    /// Read the view state (for the host to inspect what handlers queued, etc.).
-    pub fn state(&self) -> &State {
-        self.runner.state()
-    }
-
     /// Render the pane to a scene at `w`×`h` with the given scroll offsets, reusing
     /// the cached layout (rebuilt only on a structural / resize / theme change).
     pub fn frame(&mut self, w: u32, h: u32, scroll: &ScrollOffsets<NodeId>) -> Scene {

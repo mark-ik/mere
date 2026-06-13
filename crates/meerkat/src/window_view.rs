@@ -101,8 +101,10 @@ pub(crate) struct WindowView {
     pub(crate) session_close_rects: Vec<(SessionId, [f32; 4])>,
     /// The "+" new-graph tile rect this frame, if the switcher is shown.
     pub(crate) session_add_rect: Option<[f32; 4]>,
-    /// Each apparatus theme-button's rect this frame (theme id): a press switches.
-    pub(crate) apparatus_button_rects: Vec<(String, [f32; 4])>,
+    /// The apparatus pane as a view-driven [`ListPane`](crate::list_pane::ListPane)
+    /// (settings + host diagnostics): theme buttons dispatch through the runner DOM
+    /// and the host drains the clicked id, so there is no theme-button rect cache.
+    pub(crate) apparatus_pane: crate::list_pane::ListPane,
     /// Each gloss minimap node's rect this frame (node id): a press focuses it.
     pub(crate) gloss_node_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Each open tile's content rect this frame (member): the drag resolves its
@@ -257,7 +259,7 @@ impl WindowView {
             session_row_rects: Default::default(),
             session_close_rects: Default::default(),
             session_add_rect: Default::default(),
-            apparatus_button_rects: Default::default(),
+            apparatus_pane: crate::list_pane::ListPane::new(),
             gloss_node_rects: Default::default(),
             tile_rects: Default::default(),
             content_rects: Default::default(),
