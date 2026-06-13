@@ -36,32 +36,6 @@ use script_rhai::rhai::{Array, Dynamic};
 
 use crate::command::Command;
 
-/// The action verbs, each a zero-argument rhai function that enqueues its
-/// [`Command`]. The names are the command line's vocabulary; they act on the
-/// focused / selected target exactly as the palette equivalents do.
-const VERBS: &[(&str, Command)] = &[
-    ("back", Command::Back),
-    ("forward", Command::Forward),
-    ("home", Command::Home),
-    ("connect_peer", Command::ConnectPeer),
-    ("workbench", Command::ToggleWorkbench),
-    ("roster", Command::ToggleRoster),
-    ("gloss", Command::ToggleGloss),
-    ("apparatus", Command::ToggleApparatus),
-    ("inspector", Command::ToggleInspector),
-    ("steward", Command::ToggleSteward),
-    ("comms", Command::ToggleComms),
-    ("settings", Command::OpenSettings),
-    ("compat_view", Command::ToggleCompatView),
-    ("delete_node", Command::DeleteNode),
-    ("background_node", Command::BackgroundNode),
-    ("hide_edge", Command::HideSelectedEdge),
-    ("show_all_edges", Command::ShowAllEdges),
-    ("retry", Command::RetryFocusedContent),
-    ("stop", Command::StopFocusedOperation),
-    ("pin", Command::PinFocusedOperation),
-];
-
 /// The zero-argument read-only query function names (used for the bare-call
 /// sugar, so `>current_url` works like `>current_url()`).
 const QUERIES: &[&str] = &[
@@ -130,11 +104,13 @@ impl CommandShell {
         let snapshot = Rc::new(ctx.clone());
         let mut engine = script_rhai::base_engine();
 
-        // Action verbs: each enqueues its command.
-        for (name, cmd) in VERBS {
+        // Action verbs: one zero-argument function per command, derived from
+        // `Command::ALL` so the omnibar's vocabulary *is* the palette's — a new
+        // command is callable here the moment it has a `verb()`, with no second
+        // list to maintain. Each enqueues its command.
+        for cmd in Command::ALL {
             let buf = commands.clone();
-            let cmd = *cmd;
-            engine.register_fn(*name, move || {
+            engine.register_fn(cmd.verb(), move || {
                 buf.borrow_mut().push(cmd);
             });
         }
@@ -173,13 +149,37 @@ impl CommandShell {
     }
 }
 
+/// The best inline-autocomplete completion for a partial command-mode token:
+/// the first callable name (a [`Command`] verb or a read-only query) that
+/// `prefix` is a *proper* prefix of. `None` when `prefix` is empty, not an
+/// identifier fragment, already a complete name, or matches nothing.
+///
+/// The candidates are exactly the omnibar's vocabulary — `Command::ALL` verbs
+/// then the queries — so the ghost a user sees and the palette's command set are
+/// one surface. The caller derives the ghost suffix as `full[prefix.len()..]`.
+pub fn complete(prefix: &str) -> Option<&'static str> {
+    if prefix.is_empty()
+        || !prefix
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    {
+        return None;
+    }
+    Command::ALL
+        .iter()
+        .map(|c| c.verb())
+        .chain(QUERIES.iter().copied())
+        .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
+}
+
 /// Bare-call sugar: a lone identifier naming a zero-arg verb or query becomes a
 /// call, so `>back` runs `back()` and `>current_url` echoes the location.
 /// Anything else (a call, an expression, a statement block) passes through to be
 /// evaluated as ordinary rhai.
 fn desugar(source: &str) -> String {
     let trimmed = source.trim();
-    let is_bare = VERBS.iter().any(|(name, _)| *name == trimmed) || QUERIES.contains(&trimmed);
+    let is_bare =
+        Command::ALL.iter().any(|c| c.verb() == trimmed) || QUERIES.contains(&trimmed);
     if is_bare {
         format!("{trimmed}()")
     } else {
@@ -284,5 +284,20 @@ mod tests {
     fn an_empty_expression_is_a_no_op() {
         let out = CommandShell::new().eval("", &ctx());
         assert_eq!(out, ShellOutcome::default());
+    }
+
+    #[test]
+    fn complete_resolves_a_partial_token_to_a_callable() {
+        // A partial verb completes to its full name (the caller takes the suffix).
+        assert_eq!(complete("ros"), Some("roster"));
+        assert_eq!(complete("back"[..2].as_ref()), Some("back")); // "ba" -> back
+        // Queries are in the same vocabulary.
+        assert_eq!(complete("cur"), Some("current_url"));
+        // A complete name has no further completion (no ghost when already done).
+        assert_eq!(complete("roster"), None);
+        // Non-identifier fragments and empties never complete (mid-expression).
+        assert_eq!(complete(""), None);
+        assert_eq!(complete("for n in"), None);
+        assert_eq!(complete("zzz"), None);
     }
 }

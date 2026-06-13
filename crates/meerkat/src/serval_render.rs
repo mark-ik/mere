@@ -30,10 +30,13 @@ use serval_scripted_dom::{NodeId, ScriptedDom};
 
 /// Caret bar thickness, device px.
 pub(crate) const CARET_WIDTH: f32 = 2.0;
-/// Caret bar colour (near-black, opaque).
-const CARET_COLOR: ColorF = ColorF { r: 0.12, g: 0.12, b: 0.20, a: 1.0 };
-/// Selection highlight colour (translucent blue; the text shows through).
-const SELECTION_COLOR: ColorF = ColorF { r: 0.40, g: 0.60, b: 0.95, a: 0.40 };
+/// Caret bar colour: a light bar, visible against the dark/grey chrome the omnibar
+/// sits in (the old near-black navy vanished on the dark theme). A theme-driven
+/// `caret-color` read is the eventual fix; this is the legible default.
+const CARET_COLOR: ColorF = ColorF { r: 0.88, g: 0.90, b: 0.96, a: 1.0 };
+/// Selection highlight colour (translucent blue; the text shows through). Alpha
+/// raised so the highlight actually reads against the chrome background.
+const SELECTION_COLOR: ColorF = ColorF { r: 0.42, g: 0.62, b: 0.98, a: 0.55 };
 /// Scrollbar thumb colour (translucent dark grey, on the container's right edge).
 const SCROLLBAR_COLOR: ColorF = ColorF { r: 0.30, g: 0.30, b: 0.36, a: 0.65 };
 /// Scrollbar thumb width, device px.

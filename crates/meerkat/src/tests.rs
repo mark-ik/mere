@@ -30,6 +30,34 @@ fn toolbar_renders_from_reused_state() {
     assert_eq!(count_tag(&dom, root, "div"), 5, "chrome + toolbar + sync-chip + suggestions + shellbar");
 }
 
+/// Ghost autocomplete in command mode: a partial `>ros` shows the dim `ter`
+/// suffix from the shared command vocabulary; accepting completes the buffer to
+/// `>roster`; an address (no sigil) shows no ghost. The ghost never enters the
+/// committed buffer, so submit evaluates only what was typed.
+#[test]
+fn omnibar_ghost_completes_command_mode() {
+    let mut runner = runner("mere://welcome");
+    runner.update(|c| {
+        c.omnibar = TextInput::new(">ros");
+        c.refresh_suggestions();
+    });
+    assert_eq!(runner.state().omnibar.ghost(), "ter", "completes >ros -> >roster");
+    assert_eq!(runner.state().omnibar.text(), ">ros", "the ghost stays out of the buffer");
+
+    runner.update(|c| {
+        c.omnibar.accept_ghost();
+        c.refresh_suggestions();
+    });
+    assert_eq!(runner.state().omnibar.text(), ">roster");
+    assert_eq!(runner.state().omnibar.ghost(), "", "a complete verb has no further ghost");
+
+    runner.update(|c| {
+        c.omnibar = TextInput::new("example.com");
+        c.refresh_suggestions();
+    });
+    assert_eq!(runner.state().omnibar.ghost(), "", "navigation text is not completed");
+}
+
 /// A back-button click records a one-shot history step for the host to apply to
 /// the **focused node's own** history (per-node navigation, the node-lineage
 /// model). The chrome no longer owns a linear history and does not self-navigate;

@@ -114,6 +114,38 @@ impl Command {
         )
     }
 
+    /// The omnibar command-shell token: the short identifier a `>`-expression
+    /// calls (`>back`, `>workbench`). The palette's [`label`](Self::label) is the
+    /// human phrase; this is the verb. It is the single source of truth the
+    /// command shell derives its bindings from (over [`ALL`](Self::ALL)), so a new
+    /// command is callable from the omnibar the moment it has a verb here — the
+    /// exhaustive match makes that a compile-time obligation, not a second list to
+    /// remember. Must stay a valid, unique rhai identifier (lowercase / `_`).
+    pub fn verb(self) -> &'static str {
+        match self {
+            Command::Back => "back",
+            Command::Forward => "forward",
+            Command::Home => "home",
+            Command::ConnectPeer => "connect_peer",
+            Command::ToggleWorkbench => "workbench",
+            Command::ToggleRoster => "roster",
+            Command::ToggleGloss => "gloss",
+            Command::ToggleApparatus => "apparatus",
+            Command::ToggleInspector => "inspector",
+            Command::ToggleSteward => "steward",
+            Command::ToggleComms => "comms",
+            Command::OpenSettings => "settings",
+            Command::ToggleCompatView => "compat_view",
+            Command::DeleteNode => "delete_node",
+            Command::BackgroundNode => "background_node",
+            Command::HideSelectedEdge => "hide_edge",
+            Command::ShowAllEdges => "show_all_edges",
+            Command::RetryFocusedContent => "retry",
+            Command::StopFocusedOperation => "stop",
+            Command::PinFocusedOperation => "pin",
+        }
+    }
+
     /// The user-facing label shown in the palette and matched against the query.
     pub fn label(self) -> &'static str {
         match self {
@@ -188,5 +220,27 @@ mod tests {
     #[test]
     fn unmatched_query_is_empty() {
         assert!(filter("zzz").is_empty());
+    }
+
+    #[test]
+    fn every_verb_is_a_unique_valid_identifier() {
+        // The command shell registers one rhai function per verb over `ALL`, so a
+        // verb must be a non-empty, unique, identifier-safe token (lowercase /
+        // digits / `_`, not starting with a digit). This guards a new command from
+        // silently colliding with or shadowing another's binding.
+        let mut seen = std::collections::HashSet::new();
+        for cmd in Command::ALL {
+            let v = cmd.verb();
+            assert!(!v.is_empty(), "{cmd:?} has an empty verb");
+            assert!(
+                !v.starts_with(|c: char| c.is_ascii_digit()),
+                "{cmd:?} verb starts with a digit: {v}"
+            );
+            assert!(
+                v.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'),
+                "{cmd:?} verb is not identifier-safe: {v}"
+            );
+            assert!(seen.insert(v), "duplicate verb: {v}");
+        }
     }
 }

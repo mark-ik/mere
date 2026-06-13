@@ -314,6 +314,24 @@ impl Chrome {
     pub fn refresh_suggestions(&mut self) {
         self.suggest = suggest::suggestions(self.omnibar.text(), &self.history);
         self.suggest_active = None;
+        self.refresh_ghost();
+    }
+
+    /// Recompute the omnibar's inline ghost completion. In command mode
+    /// (`>token`) the best-matching command verb / query completes the partial
+    /// token, shown dim until → / Tab accept it (the same `Command` vocabulary the
+    /// palette lists); anything else clears the ghost. Only a clean token at the
+    /// buffer end gets a ghost, so accepting — which appends — always lands right.
+    pub fn refresh_ghost(&mut self) {
+        let ghost = match nav::classify(self.omnibar.text()) {
+            nav::NavTarget::Command(expr) if self.omnibar.text().ends_with(&expr) => {
+                shell_eval::complete(&expr)
+                    .map(|full| full[expr.len()..].to_string())
+                    .unwrap_or_default()
+            }
+            _ => String::new(),
+        };
+        self.omnibar.set_ghost(ghost);
     }
 
     /// Move the suggestion highlight by `delta` (wrapping), opening the

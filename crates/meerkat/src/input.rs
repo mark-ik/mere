@@ -817,9 +817,17 @@ impl WindowCtx<'_> {
                 self.view.runner.update(|c| c.step_suggestion(-1));
                 self.view.request_redraw();
             }
-            WinitKey::Named(WinitNamedKey::Escape) if suggestions_open => {
-                self.view.runner.update(Chrome::close_suggestions);
-                self.view.request_redraw();
+            // Accept the inline ghost completion. Right arrow only at the buffer
+            // end (otherwise it is an ordinary caret move); Tab whenever a ghost is
+            // present. Either splices `>ros` + "ter" → `>roster`; Enter still
+            // evaluates only what is in the buffer, never the ghost.
+            WinitKey::Named(WinitNamedKey::ArrowRight)
+                if self.omnibar_ghost_acceptable(true) =>
+            {
+                self.accept_omnibar_ghost();
+            }
+            WinitKey::Named(WinitNamedKey::Tab) if self.omnibar_ghost_acceptable(false) => {
+                self.accept_omnibar_ghost();
             }
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.view.modifiers) {
@@ -829,6 +837,25 @@ impl WindowCtx<'_> {
                 }
             }
         }
+    }
+
+    /// Whether the omnibar has a ghost completion to accept. `at_end_only` gates
+    /// the Right-arrow case to a caret at the buffer end (so a mid-text → is still
+    /// a plain caret move); Tab passes `false` (it has no other omnibar meaning).
+    fn omnibar_ghost_acceptable(&self, at_end_only: bool) -> bool {
+        let omnibar = &self.view.runner.state().omnibar;
+        !omnibar.ghost().is_empty()
+            && (!at_end_only || omnibar.caret() == omnibar.text().chars().count())
+    }
+
+    /// Splice the omnibar's ghost completion into the buffer and recompute (which
+    /// clears the now-complete ghost and refreshes suggestions).
+    fn accept_omnibar_ghost(&mut self) {
+        self.view.runner.update(|c| {
+            c.omnibar.accept_ghost();
+            c.refresh_suggestions();
+        });
+        self.view.request_redraw();
     }
 
     /// Ctrl/Cmd + C / X / V on the active text editor — the command-palette query

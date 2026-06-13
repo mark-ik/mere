@@ -867,6 +867,56 @@ mod tests {
     }
 
     #[test]
+    fn omnibar_ctrl_a_selects_all() {
+        // Ctrl+A reaches the focused omnibar (no host shortcut eats it) and selects
+        // the whole buffer, so the next keystroke replaces it.
+        let mut app = test_app();
+        {
+            let mut wc = app.ctx();
+            let omnibar = wc
+                .input_under_class("toolbar")
+                .expect("the omnibar input exists in the chrome DOM");
+            wc.view.runner.set_focus(Some(omnibar));
+            wc.view
+                .runner
+                .update(|c| c.omnibar = xilem_serval::TextInput::new("hello world"));
+            wc.view.modifiers.ctrl = true;
+            wc.on_key_pressed(&winit::keyboard::Key::Character("a".into()));
+        }
+        let state = app.view().runner.state();
+        assert!(state.omnibar.has_selection(), "Ctrl+A selected the omnibar text");
+        assert_eq!(state.omnibar.selected_text(), "hello world");
+    }
+
+    #[test]
+    fn omnibar_right_arrow_accepts_the_ghost_completion() {
+        // The driven half of ghost autocomplete: with `>ros` typed and the omnibar
+        // focused, Right arrow at the buffer end splices the ghost in, giving
+        // `>roster`. Enter would then run it; the ghost itself is never evaluated.
+        let mut app = test_app();
+        {
+            let mut wc = app.ctx();
+            let omnibar = wc
+                .input_under_class("toolbar")
+                .expect("the omnibar input exists in the chrome DOM");
+            wc.view.runner.set_focus(Some(omnibar));
+            wc.view.runner.update(|c| {
+                c.omnibar = xilem_serval::TextInput::new(">ros");
+                c.refresh_suggestions();
+            });
+            assert_eq!(wc.view.runner.state().omnibar.ghost(), "ter", "the ghost is shown");
+            wc.on_key_pressed(&winit::keyboard::Key::Named(
+                winit::keyboard::NamedKey::ArrowRight,
+            ));
+        }
+        assert_eq!(
+            app.view().runner.state().omnibar.text(),
+            ">roster",
+            "Right arrow accepted the ghost into the buffer"
+        );
+    }
+
+    #[test]
     fn omnibar_command_expression_drives_the_command_spine() {
         // The fourth driver: a `>`-prefixed omnibar expression reaches the same
         // `Command` spine the palette and the agent harness drive. Type `>roster`,
