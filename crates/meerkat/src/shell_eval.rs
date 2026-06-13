@@ -83,6 +83,10 @@ pub struct ShellOutcome {
     pub text: String,
     /// The commands the expression called, in order. The host drains these.
     pub commands: Vec<Command>,
+    /// A relation kind chosen via `relate("cites")` — the host asserts it on the
+    /// selected pair (the kind-qualified edge-creation form). `None` for the
+    /// default `relate()`, which rides the `AssertEdge` command path.
+    pub relation_kind: Option<String>,
     /// A compile / runtime error message, if the script failed. Commands called
     /// before a mid-script failure are still present in `commands`.
     pub error: Option<String>,
@@ -106,6 +110,7 @@ impl CommandShell {
     /// unknown identifier becomes [`ShellOutcome::error`].
     pub fn eval(&self, source: &str, ctx: &ShellContext) -> ShellOutcome {
         let commands: Rc<RefCell<Vec<Command>>> = Rc::new(RefCell::new(Vec::new()));
+        let relation_kind: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let snapshot = Rc::new(ctx.clone());
         let mut engine = script_rhai::base_engine();
 
@@ -147,18 +152,30 @@ impl CommandShell {
             map
         });
 
+        // `relate("cites")` — the kind-qualified form. The 0-arg `relate()` above
+        // (from the verb loop) emits `AssertEdge` with the default kind; this 1-arg
+        // overload instead records the chosen relation kind, which the host applies
+        // to the selected pair. rhai dispatches the two by arity.
+        let rk = relation_kind.clone();
+        engine.register_fn("relate", move |kind: &str| {
+            *rk.borrow_mut() = Some(kind.to_string());
+        });
+
         engine.set_max_operations(OP_BUDGET);
         let result = engine.eval::<Dynamic>(&desugar(source));
         let commands = commands.borrow().clone();
+        let relation_kind = relation_kind.borrow().clone();
         match result {
             Ok(value) => ShellOutcome {
                 text: stringify(value),
                 commands,
+                relation_kind,
                 error: None,
             },
             Err(err) => ShellOutcome {
                 text: String::new(),
                 commands,
+                relation_kind,
                 error: Some(err.to_string()),
             },
         }
@@ -304,6 +321,20 @@ mod tests {
     fn an_empty_expression_is_a_no_op() {
         let out = CommandShell::new().eval("", &ctx());
         assert_eq!(out, ShellOutcome::default());
+    }
+
+    #[test]
+    fn relate_with_a_kind_records_the_relation_kind() {
+        // The 0-arg form rides the AssertEdge command path (default kind).
+        let plain = CommandShell::new().eval("relate", &ctx());
+        assert_eq!(plain.commands, vec![Command::AssertEdge]);
+        assert!(plain.relation_kind.is_none());
+        // The 1-arg form records the chosen kind for the host to apply, and does
+        // not also emit AssertEdge.
+        let kinded = CommandShell::new().eval(r#"relate("cites")"#, &ctx());
+        assert_eq!(kinded.relation_kind.as_deref(), Some("cites"));
+        assert!(kinded.commands.is_empty());
+        assert!(kinded.error.is_none());
     }
 
     #[test]

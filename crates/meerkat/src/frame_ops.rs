@@ -36,6 +36,26 @@ use super::{
     apparatus, comms_host, fetch, frame_view, roster, sync,
 };
 
+/// Map a `relate("…")` kind word to a [`SemanticSubKind`]. A small curated set
+/// of the relations a user reaches for by hand; anything unrecognized falls back
+/// to `UserGrouped` (the honest default — a human asserted it).
+fn relation_kind_from_str(s: &str) -> SemanticSubKind {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "cites" | "cite" => SemanticSubKind::Cites,
+        "quotes" | "quote" => SemanticSubKind::Quotes,
+        "summarizes" | "summary" => SemanticSubKind::Summarizes,
+        "elaborates" | "elaborate" => SemanticSubKind::Elaborates,
+        "example" | "example_of" | "exampleof" => SemanticSubKind::ExampleOf,
+        "supports" | "support" => SemanticSubKind::Supports,
+        "contradicts" | "contradict" => SemanticSubKind::Contradicts,
+        "questions" | "question" => SemanticSubKind::Questions,
+        "same" | "same_entity" | "sameentity" => SemanticSubKind::SameEntityAs,
+        "duplicate" | "duplicate_of" | "duplicateof" => SemanticSubKind::DuplicateOf,
+        "hyperlink" | "link" => SemanticSubKind::Hyperlink,
+        _ => SemanticSubKind::UserGrouped,
+    }
+}
+
 impl WindowCtx<'_> {
     /// The URL of whatever is in focus: in the tiled view the focused tile's node,
     /// in the orrery the focused node. `None` when nothing is focused.
@@ -898,6 +918,17 @@ impl WindowCtx<'_> {
             self.drain_history_step();
             self.sync_settings();
             self.sync_orrery();
+        }
+        // A kind-qualified `relate("cites")` applies the chosen relation to the
+        // selected pair directly (the 0-arg `relate()` rode the AssertEdge path
+        // above with the default kind).
+        if let Some(kind) = &outcome.relation_kind {
+            if self.orrery.assert_selected_relation(relation_kind_from_str(kind)) {
+                self.save_session();
+                self.view.request_redraw();
+            } else {
+                note = Some("Select exactly two nodes to relate".to_string());
+            }
         }
         let (severity, echo) = match &outcome.error {
             Some(err) => (Severity::Warn, format!("error: {err}")),
