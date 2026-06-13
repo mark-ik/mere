@@ -153,6 +153,17 @@ fn with_graph_restores_nodes_and_positions() {
 }
 
 #[test]
+fn park_physics_halts_an_in_progress_settle() {
+    let mut orrery = Orrery::with_sample_graph();
+    assert!(orrery.is_settling(), "the sample graph settles its initial spiral");
+    orrery.park_physics();
+    assert!(
+        !orrery.is_settling(),
+        "park halts the settle so a backgrounded graph stops ticking and waking the loop",
+    );
+}
+
+#[test]
 fn camera_round_trips_and_guards_bad_zoom() {
     let mut orrery = Orrery::new();
     orrery.set_camera(CameraView { offset: (123.0, -45.0), zoom: 2.5 });

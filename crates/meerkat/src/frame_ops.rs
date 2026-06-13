@@ -2009,6 +2009,16 @@ impl super::Shell {
         }
         self.focused_view_mut().focused_graph = target_graph;
 
+        // Park the outgoing graph's physics (OQ2 park): a switched-away graph stays
+        // warm in the pool, but stop it settling so it does not keep ticking and
+        // waking the loop in the background — its actor then idles on its channel.
+        // Switching back shows its settled positions; interaction resumes the settle.
+        if old_gid != target_graph {
+            if let Some(parked) = self.orreries.get_mut(&old_gid) {
+                parked.park_physics();
+            }
+        }
+
         // Pool eviction (OQ2 unload): keep `target_graph` most-recent in the LRU,
         // then drop the stalest pooled orreries over the cap that no window is
         // focused on. Dropping an orrery ends its physics actor thread; its content

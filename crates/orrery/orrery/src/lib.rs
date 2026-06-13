@@ -390,6 +390,17 @@ impl Orrery {
         self.physics.offload(wake);
     }
 
+    /// Park this orrery's physics: stop any in-progress settle so a backgrounded
+    /// graph does not keep ticking and waking the host loop. The off-thread actor
+    /// then idles on its command channel (no busy-spin, no CPU) and stays warm in
+    /// the pool. The host calls this when a pooled graph loses focus. No explicit
+    /// unpark is needed: the layout is left at its current positions (a restored
+    /// session must not re-scramble), and any later interaction resumes the settle.
+    /// (Window composition P1, OQ2 park.)
+    pub fn park_physics(&mut self) {
+        self.physics.halt();
+    }
+
     /// Apply a structural mutation to the session graph and reconcile every derived
     /// view, so externally-ingested nodes/edges (e.g. a linked-data merge) join the
     /// spatial field. `mutate` returns whether it changed the graph; on a change,
