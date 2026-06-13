@@ -917,6 +917,32 @@ mod tests {
     }
 
     #[test]
+    fn omnibar_relate_without_a_pair_reports_a_note() {
+        // `>relate` with fewer than two nodes selected no-ops; the bar explains why
+        // instead of silently doing nothing.
+        let mut app = test_app();
+        {
+            let mut wc = app.ctx();
+            let omnibar = wc
+                .input_under_class("toolbar")
+                .expect("the omnibar input exists in the chrome DOM");
+            wc.view.runner.set_focus(Some(omnibar));
+            wc.view.runner.update(|c| {
+                c.omnibar = xilem_serval::TextInput::new(">relate");
+                c.refresh_suggestions();
+            });
+            wc.on_key_pressed(&winit::keyboard::Key::Named(
+                winit::keyboard::NamedKey::Enter,
+            ));
+        }
+        assert!(
+            app.view().runner.state().omnibar.text().contains("two nodes"),
+            "the bar reports the no-op, got {:?}",
+            app.view().runner.state().omnibar.text()
+        );
+    }
+
+    #[test]
     fn omnibar_command_expression_drives_the_command_spine() {
         // The fourth driver: a `>`-prefixed omnibar expression reaches the same
         // `Command` spine the palette and the agent harness drive. Type `>roster`,

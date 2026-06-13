@@ -813,12 +813,15 @@ impl WindowCtx<'_> {
     }
 
     /// Execute a pending host action the palette queued: take it from the chrome
-    /// and dispatch to the matching shell method.
-    pub(super) fn drain_pending_command(&mut self) {
+    /// and dispatch to the matching shell method. Returns a one-shot user-facing
+    /// note for commands that want to report why they no-opped (the omnibar echoes
+    /// it; other callers ignore the return). `None` means "nothing to say".
+    pub(super) fn drain_pending_command(&mut self) -> Option<String> {
         let Some(cmd) = self.view.runner.state().pending_command else {
-            return;
+            return None;
         };
         self.view.runner.update(|c| c.pending_command = None);
+        let mut note = None;
         match cmd {
             Command::ToggleWorkbench => self.toggle_workbench(),
             Command::DeleteNode => self.delete_focused_node(),
@@ -846,12 +849,16 @@ impl WindowCtx<'_> {
                 if self.orrery.assert_selected_relation(SemanticSubKind::UserGrouped) {
                     self.save_session();
                     self.view.request_redraw();
+                } else {
+                    note = Some("Select exactly two nodes to relate".to_string());
                 }
             }
             Command::RetractEdge => {
                 if self.orrery.retract_selected_relation() > 0 {
                     self.save_session();
                     self.view.request_redraw();
+                } else {
+                    note = Some("Select two nodes (or an edge) to unrelate".to_string());
                 }
             }
             // History / connect / settings / comms verbs run in the chrome; never
@@ -863,6 +870,7 @@ impl WindowCtx<'_> {
             | Command::OpenSettings
             | Command::ToggleComms => {}
         }
+        note
     }
 
     /// Evaluate a `>`-prefixed omnibar command expression through the privileged
@@ -879,10 +887,13 @@ impl WindowCtx<'_> {
         // `pending_command` is a single slot, so each emitted command is applied
         // and drained before the next — the same per-interaction routine
         // `chrome_activate` runs.
+        let mut note: Option<String> = None;
         for &cmd in &outcome.commands {
             self.view.runner.update(move |c| c.run_command_and_close(cmd));
             self.drain_pending_connect();
-            self.drain_pending_command();
+            if let Some(n) = self.drain_pending_command() {
+                note = Some(n);
+            }
             self.drain_comms_intent();
             self.drain_history_step();
             self.sync_settings();
@@ -899,15 +910,13 @@ impl WindowCtx<'_> {
             severity,
             format!("{expr:?} -> {} command(s); {echo}", outcome.commands.len()),
         );
-        // Reset the bar: a query result or an error is echoed; a pure action run
-        // restores the focused location. Either way the typed `>expr` is cleared
-        // and the (now command-empty) suggestion dropdown closes — the bar never
-        // strands `>roster` behind a command that already ran.
-        let shown = if echo.is_empty() {
-            self.current_focus_url().unwrap_or_default()
-        } else {
-            echo
-        };
+        // Reset the bar. Priority: a command's no-op note (e.g. "select two nodes
+        // to relate") so a silent no-op explains itself; else a query result /
+        // error; else the focused location. Either way the typed `>expr` is cleared
+        // and the (now command-empty) suggestion dropdown closes.
+        let shown = note
+            .or(if echo.is_empty() { None } else { Some(echo) })
+            .unwrap_or_else(|| self.current_focus_url().unwrap_or_default());
         self.view.runner.update(move |c| c.show_location(&shown));
         self.view.request_redraw();
     }
