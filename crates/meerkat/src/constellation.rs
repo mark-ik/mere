@@ -26,6 +26,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 
 use armillary::{ActorHandle, Generations, Pool, Wake};
 use forme::GraphMemberId;
+use frame::GraphId;
 use linked_data::GraphContribution;
 use netrender::Scene;
 
@@ -76,6 +77,14 @@ struct Activation {
     /// that panics on every load stops storming the pool. Reset when a fresh actor
     /// delivers a scene (it recovered).
     respawns: u32,
+    /// Which graph this node belongs to, stamped at spawn (the requesting pane's
+    /// graph, known at reconcile time). The constellation is one shared pool across
+    /// every live graph — members are bare UUIDs — so this is the only graph
+    /// dimension: it routes a node's harvested contributions back to *its* orrery
+    /// ([`Constellation::drain`]) and scopes per-graph reaping ([`reap_graph`]).
+    /// Set once at spawn; a P4 cross-graph move re-stamps it. (Window composition
+    /// P1, multi-graph.)
+    graph_id: GraphId,
 }
 
 /// The most times a faulted tab's actor is respawned before the pool gives up (and
@@ -115,9 +124,10 @@ pub struct Drained {
     /// durable-cache hit feeds the node directly via [`Constellation::send_resource`];
     /// a miss spawns a network fetch whose bytes return as a broadcast).
     pub wanted: Vec<(GraphMemberId, Vec<String>)>,
-    /// Linked data harvested from active documents, for the host to apply to the
-    /// graph.
-    pub contributions: Vec<GraphContribution>,
+    /// Linked data harvested from active documents, each paired with the graph the
+    /// harvesting node belongs to so the host applies it to *that* graph's orrery
+    /// (not always the focused one — a background graph's node can contribute).
+    pub contributions: Vec<(GraphId, GraphContribution)>,
     /// Tabs whose content actor died (its thread panicked or exited) and was
     /// respawned this drain. The host redraws so the next frame re-`Show`s them.
     pub respawned: Vec<GraphMemberId>,
@@ -176,9 +186,11 @@ impl Constellation {
     /// [`cap`](Self::cap), the least-recently-touched tab that is neither needed
     /// now nor `background` is evicted, until within the cap (or none remain to
     /// evict). Explicit close is [`reap`](Self::reap).
-    pub fn reconcile(&mut self, needed: &[GraphMemberId]) {
-        // Spawn needed-but-dormant nodes, each touch-stamped so LRU is well-ordered.
-        for &member in needed {
+    pub fn reconcile(&mut self, needed: &[(GraphMemberId, GraphId)]) {
+        // Spawn needed-but-dormant nodes, each touch-stamped so LRU is well-ordered
+        // and graph-stamped (the requesting pane's graph) so its contributions route
+        // back to the right orrery.
+        for &(member, graph_id) in needed {
             if !self.active.contains_key(&member) {
                 self.touch_clock += 1;
                 let touch = self.touch_clock;
@@ -196,13 +208,14 @@ impl Constellation {
                         background: false,
                         last_touched: touch,
                         respawns: 0,
+                        graph_id,
                     },
                 );
             }
         }
         // Enforce the cap: evict the least-recently-touched evictable tab (neither
         // needed now nor backgrounded) until within the cap, or until none remain.
-        let needed_set: HashSet<GraphMemberId> = needed.iter().copied().collect();
+        let needed_set: HashSet<GraphMemberId> = needed.iter().map(|(m, _)| *m).collect();
         while self.active.len() > self.cap {
             let victim = self
                 .active
@@ -311,6 +324,16 @@ impl Constellation {
         self.pool = Pool::new();
     }
 
+    /// Reap only the active nodes belonging to `graph` — the per-graph form of
+    /// [`clear`](Self::clear). A session switch parks the *outgoing* graph this way,
+    /// so another live graph's actors (in this or another window's panes) survive.
+    /// Unlike `clear` it does **not** reset the worker pool: the pool is shared
+    /// across every live graph, so resetting it would kill the survivors' actors.
+    /// (Window composition P1, multi-graph.)
+    pub fn reap_graph(&mut self, graph: GraphId) {
+        self.active.retain(|_, a| a.graph_id != graph);
+    }
+
     /// Whether `member` is flagged to keep working in the background.
     pub fn is_background(&self, member: GraphMemberId) -> bool {
         self.active.get(&member).is_some_and(|a| a.background)
@@ -408,7 +431,12 @@ impl Constellation {
                         }
                     }
                     ContentUpdate::Contribution { contributions } => {
-                        out.contributions.extend(contributions);
+                        // Pair each with the harvesting node's graph, so the host
+                        // routes it to that graph's orrery.
+                        if let Some(graph_id) = self.active.get(&member).map(|a| a.graph_id) {
+                            out.contributions
+                                .extend(contributions.into_iter().map(|c| (graph_id, c)));
+                        }
                     }
                 }
             }
@@ -453,6 +481,12 @@ mod tests {
         Uuid::from_u128(n)
     }
 
+    /// A fixed graph id for the reconcile tests — they exercise spawn / warmth /
+    /// LRU eviction, all graph-agnostic, so one stamp serves.
+    fn g() -> GraphId {
+        GraphId(Uuid::from_u128(0))
+    }
+
     fn noop_wake() -> Wake {
         std::sync::Arc::new(|| {})
     }
@@ -460,9 +494,9 @@ mod tests {
     #[test]
     fn reconcile_keeps_tabs_warm() {
         let mut c = Constellation::new(noop_wake());
-        c.reconcile(&[m(1), m(2)]);
+        c.reconcile(&[(m(1), g()), (m(2), g())]);
         assert_eq!(c.active_count(), 2, "two needed nodes spawned");
-        c.reconcile(&[m(2)]); // m(1) is no longer needed...
+        c.reconcile(&[(m(2), g())]); // m(1) is no longer needed...
         assert!(
             c.is_active(m(1)),
             "...but stays a warm tab — no reap on blur"
@@ -474,9 +508,9 @@ mod tests {
     fn reconcile_evicts_least_recently_touched_over_cap() {
         let mut c = Constellation::new(noop_wake());
         c.set_cap(2);
-        c.reconcile(&[m(1)]); // touch 1
-        c.reconcile(&[m(2)]); // touch 2 — m(1) is now the stalest
-        c.reconcile(&[m(3)]); // touch 3, over the cap of 2 → evict the stalest evictable
+        c.reconcile(&[(m(1), g())]); // touch 1
+        c.reconcile(&[(m(2), g())]); // touch 2 — m(1) is now the stalest
+        c.reconcile(&[(m(3), g())]); // touch 3, over the cap of 2 → evict the stalest evictable
         assert_eq!(c.active_count(), 2, "the cap holds");
         assert!(
             !c.is_active(m(1)),
@@ -489,12 +523,12 @@ mod tests {
     fn a_background_tab_is_exempt_from_eviction() {
         let mut c = Constellation::new(noop_wake());
         c.set_cap(1);
-        c.reconcile(&[m(1)]);
+        c.reconcile(&[(m(1), g())]);
         assert!(
             c.set_background(m(1), true),
             "flagging an active node succeeds"
         );
-        c.reconcile(&[m(2)]); // over the cap of 1, but m(1) is background → not evictable
+        c.reconcile(&[(m(2), g())]); // over the cap of 1, but m(1) is background → not evictable
         assert!(c.is_active(m(1)), "a background tab survives cap pressure");
         assert!(c.is_active(m(2)), "the needed node is still spawned");
         assert!(
@@ -506,7 +540,7 @@ mod tests {
     #[test]
     fn respawn_replays_the_tab_and_caps_the_storm() {
         let mut c = Constellation::new(noop_wake());
-        c.reconcile(&[m(1)]);
+        c.reconcile(&[(m(1), g())]);
         c.drive(m(1), "mere://welcome", None, 100, 100); // gives it a `shown` state
         assert!(c.active.get(&m(1)).unwrap().shown.is_some());
         // A respawn replaces the actor and clears `shown` so the next drive re-Shows.

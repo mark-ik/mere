@@ -549,6 +549,11 @@ struct Shell {
     /// here (spawn / close a window) and the event loop drains them through
     /// [`Shell::apply`] in `about_to_wait`, once the borrowing ctx has ended. (MW3.)
     commands: Vec<ShellCommand>,
+    /// The wake every pooled orrery's physics actor pokes (the winit proxy, host-
+    /// neutral). Held so a graph minted into the pool at session-switch time gets
+    /// its own offloaded physics, like the seed orrery did at boot. (Window
+    /// composition P1, multi-graph.)
+    physics_wake: armillary::Wake,
     /// Marks this struct as the kernel-thread context: `!Send` by construction
     /// (armillary's typed boundary), so kernel authority cannot be moved onto an
     /// actor thread — the attempt is a compile error, not a review catch.
@@ -747,7 +752,7 @@ impl Shell {
         let physics_wake: armillary::Wake = Arc::new(move || {
             let _ = physics_proxy.send_event(());
         });
-        orrery.offload_physics(physics_wake);
+        orrery.offload_physics(physics_wake.clone());
         // The fetch actor wakes the loop through the winit proxy; armillary takes
         // the wake as a host-neutral callback.
         let fetch_proxy = proxy.clone();
@@ -913,6 +918,7 @@ impl Shell {
             }),
             a11y_action_routes: HashMap::new(),
             commands: Vec::new(),
+            physics_wake,
             _kernel: armillary::KernelThread::new(),
         };
         let pane_count = app

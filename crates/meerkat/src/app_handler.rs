@@ -221,9 +221,17 @@ impl ApplicationHandler for Shell {
             }
         }
         if !drained.contributions.is_empty() {
+            // Each contribution carries the graph its harvesting node belongs to.
+            // Apply the focused graph's here, through the ctx's bundled orrery; a
+            // background graph's contributions route to that graph's pooled orrery
+            // with the multi-graph flip (at one focused graph there are none).
+            let focused = wc.view.focused_graph;
             graph_changed |= wc.orrery.ingest_graph(|g| {
                 let mut changed = false;
-                for contribution in &drained.contributions {
+                for (gid, contribution) in &drained.contributions {
+                    if *gid != focused {
+                        continue;
+                    }
                     let outcome = linked_data::apply_contribution(g, contribution);
                     changed |= outcome.nodes_created > 0 || outcome.edges_asserted > 0;
                 }

@@ -637,7 +637,8 @@ impl WindowCtx<'_> {
             self.ensure_content(&url);
         }
         self.view.live_previews.insert(member);
-        let needed = self.needed_members();
+        let gid = self.view.focused_graph;
+        let needed: Vec<_> = self.needed_members().into_iter().map(|m| (m, gid)).collect();
         self.shared.content.constellation.reconcile(&needed);
         if self.shared.content.constellation.set_background(member, true) {
             self.shared.observability
@@ -1982,18 +1983,30 @@ impl super::Shell {
             .get(id)
             .map(|m| m.root_graph_id)
             .unwrap_or_default();
-        // Pool re-key (Shell-level): pull the focused orrery out under its old graph
-        // id, load the new graph into it, and re-insert it under the target id, then
-        // point the focused view at it. One entry, as before — the multi-graph
-        // increment (mint a distinct entry, keep both live) refines this next.
+        // Pool the target graph's orrery (Shell-level — a WindowCtx cannot insert
+        // pool entries), keeping the *outgoing* graph's orrery live so two graphs
+        // coexist. A graph shown for the first time mints a fresh orrery from its
+        // loaded graph and offloads its own physics actor (like the seed did at
+        // boot); switching back to a still-pooled graph reuses its live orrery —
+        // its state was kept warm, so disk is not reloaded over it. The outgoing
+        // graph is parked (its content actors reaped per-graph below); its orrery
+        // stays in the pool.
         let old_gid = self.focused_view().focused_graph;
-        let mut orrery = self.orreries.remove(&old_gid).expect("focused orrery is pooled");
-        orrery.set_graph(graph);
-        // An empty session opens on the welcome node, like first launch.
-        if empty {
-            orrery.visit("mere://welcome");
+        let wake = self.physics_wake.clone();
+        match self.orreries.entry(target_graph) {
+            std::collections::hash_map::Entry::Occupied(_) => {
+                // Switching back: the pooled orrery is authoritative. No reload.
+            }
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                let mut orrery = orrery::Orrery::with_graph(graph);
+                // An empty session opens on the welcome node, like first launch.
+                if empty {
+                    orrery.visit("mere://welcome");
+                }
+                orrery.offload_physics(wake);
+                slot.insert(orrery);
+            }
         }
-        self.orreries.insert(target_graph, orrery);
         self.focused_view_mut().focused_graph = target_graph;
 
         // The remainder runs on the focused window's ctx (now resolving the re-keyed
@@ -2015,7 +2028,7 @@ impl super::Shell {
             ctx.orrery.select_by_url(url);
         }
         ctx.view.frame_layout.retag_graph_bound(target_graph);
-        ctx.shared.content.constellation.clear();
+        ctx.shared.content.constellation.reap_graph(old_gid);
         ctx.view.scrying.clear();
         ctx.shared.content.compat_pins.clear();
         ctx.view.scrying_input_focus = None;

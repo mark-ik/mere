@@ -295,7 +295,8 @@ impl WindowCtx<'_> {
         // Reconcile the active-node pool to what this frame shows — the open tiles
         // (Tree) or the focused node (Cartography). Needed-but-dormant nodes spawn
         // an actor; active nodes no longer shown are reaped, unless backgrounded.
-        let needed = self.needed_members();
+        let gid = self.view.focused_graph;
+        let needed: Vec<_> = self.needed_members().into_iter().map(|m| (m, gid)).collect();
         self.shared.content.constellation.reconcile(&needed);
 
         // Content cards floating over the band: one per laid-out tile in Tree, the
