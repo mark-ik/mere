@@ -165,6 +165,14 @@ extraction is the one piece deferred (see below); pooling itself needs no extrac
 
 ### P1 — Orrery pool on `SharedState` (the enabling move)
 
+**Status: done (2026-06-13)** — landed `16b02b9` (gating restructure) + `aba14ba`
+(multi-graph payload) + `7a8304b` (OQ2 unload); two graphs coexist, on-screen-verified
+(see the Progress log). The pool is a **`Shell` field, not `SharedState`** (the
+foundation's refinement; the heading wording predates it). One done-condition clause is
+not fully met: *both graphs save to their own dirs on exit* — parked graphs persist at
+switch-away, so only physics-position drift is lost after, making per-orrery exit-save
+the remaining bit (tracked under OQ2 + the Progress log).
+
 `self.orrery` (single, the active graph) → `SharedState.orreries: HashMap<GraphId,
 Orrery>`, lazily loaded. The ~58 `self.orrery` sites resolve the operated pane's orrery by
 `graph_id` (`self.shared.orreries.get(&graph_id)`). Per-graph physics: each pooled orrery
@@ -333,6 +341,13 @@ wanted.
    **unload** (save to its dir + drop); park first, unload under memory pressure.
    N live orreries = N physics actor threads; fine for a handful — and surface the live
    count in Steward (real data, the no-placebo rule) as the tripwire for revisiting.
+   **Unload landed (2026-06-13, `7a8304b`):** a `MAX_POOLED_ORRERIES` cap + an
+   `orrery_lru` order drop the stalest non-focused orrery over the cap (the drop ends
+   its physics actor thread; its content actors are reaped). No save on evict — the
+   graph was persisted when last switched away from, so it reloads on switch-back. The
+   eviction already skips every window's focused graph (P2-ready). **Still open:** the
+   *park* flavor (pause a warm-but-idle graph's physics rather than evict it) and the
+   Steward live-count surface.
 3. **Provenance edge direction + family** — confirm the existing provenance edge family
    carries "copied-from across graphs" cleanly, or whether copy wants a distinct sub-kind
    (P4). Check before building, per the consumer-pull rule.
@@ -343,6 +358,36 @@ wanted.
 
 ## Progress
 
+- 2026-06-13: **Multi-graph increment landed — two graphs coexist. P1 is done.** Built
+  from the scouted brief, in two commits, behavior-preserving at each step, 114 green.
+  - **Gating restructure (`16b02b9`).** `create`/`switch`/`cycle`/`close_session` +
+    `load_active_session` moved from `impl WindowCtx` to `impl Shell`, where the whole
+    pool is mutable. **One refinement vs the scout:** they do *not* take a `window_id`.
+    The harness boots with `primary: None` (the view is `pending_view`), and a
+    `WindowCtx` carries no id, so the ops resolve the focused view primary-or-pending the
+    way `ctx()` does, and re-enter `self.ctx()` for the WindowCtx-shaped sub-steps
+    (save / cache-reset / thumbnails). Per-window input handlers can't reach `&mut Shell`,
+    so they push new `ShellCommand::{CreateSession,SwitchSession,CycleSession,CloseSession}`
+    and `Shell::apply` drains them after the ctx borrow ends — the existing spawn/close seam.
+  - **Multi-graph payload (`aba14ba`).** `Activation` gained `graph_id`, stamped at spawn
+    in `reconcile` (which now takes `(member, graph_id)` pairs; `render`/`frame_ops` pass
+    `focused_graph`) — exactly the scout's "stamp at spawn, not `drive`." `drain` pairs
+    each contribution with its node's graph; `constellation.clear()`-on-switch became
+    `reap_graph(outgoing)` so another live graph's actors survive (the blast-radius item).
+    `load_active_session` mints a *distinct* pool entry per graph (`Orrery::with_graph` +
+    its own `offload_physics`, the wake now held on `Shell`) or reuses a still-pooled one,
+    instead of re-keying one entry. Contribution routing applies the *focused* graph's
+    here; a background graph's routes to its pooled orrery — but there are no live
+    non-focused actors at P1 (a switched-away graph's are reaped), so that path is **P2**
+    (two panes, two graphs).
+  - **Verified three ways:** 114 unit tests; a clean runtime boot (graph restored from the
+    pool, frames settling, zero panic/warn); and an **on-screen round-trip driven by
+    injected keystrokes** — session A (node "4") → Ctrl+PageDown → empty "New" graph →
+    Ctrl+PageUp → node "4" still there, served from the live pooled orrery, not reloaded.
+  - **Still deferred:** OQ2 *park* + Steward count; physics-wake fan-out (a parked-but-not-
+    evicted graph's settle still wakes every window until it quiesces); per-orrery save on
+    *exit* (parked graphs save at switch-away; only physics positions drift after); and the
+    P2 items above.
 - 2026-06-12: **P2 companion added** (the xilem-serval input-spine target), prompted by
   the host-wiring grabbag plan completing its serval-side seams with their meerkat
   callers correctly recorded as blocked-on-composition. Records the honest usage
