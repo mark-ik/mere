@@ -364,6 +364,33 @@ wanted.
 
 ## Progress
 
+- 2026-06-13: **P2-companion scout — list-pane view-ification, the pelt-informed design.**
+  Code-checked the input spine before building. The three systems, concretely: **chrome**
+  is the good pattern (`chrome_view(&Chrome) -> ChromeView` declarative views with
+  `on_click(el(...), handler)`, driven by a `ServalAppRunner` that diffs into a persistent
+  DOM and dispatches input, no rect caches); **list panes** are the debt (per frame
+  `build_roster_dom`/`build_utility_pane_dom` rebuild a fresh `ScriptedDom` →
+  `scene_from_*` → rasterize → `compose_external_texture` into the pane rect, with the
+  interactive ones bolting on hand-maintained `WindowView` rect caches —
+  `roster_row_rects`, `apparatus_button_rects` — rebuilt in render + hit-tested in
+  frame_ops, plus a separately hand-built UxTree); **orrery/cards/gloss** are scene
+  composition (not a view target — that is the external-texture-element piece).
+  - **The pelt lesson (`serval/ports/pelt-desktop/chrome.rs`):** a view-driven pane is one
+    self-contained struct bundling its runner + sheets, exposing `frame(w,h) -> Scene`,
+    `hit_test(x,y,w,h) -> Option<NodeId>` (lays out inline, no stored session field),
+    `dispatch_click(node)` / `dispatch_key`, and `take_intents()` / `state()`. The shell
+    just calls those. Meerkat already runs two runners (chrome, `workbench_runner`), so a
+    third pane runner has a precedent; the cleanup is bundling it pelt-style rather than
+    scattering `dom`/`session`/`runner` across `WindowView` + the rect caches.
+  - **Roster slice (first, startable now):** a `RosterPane` bundle over `roster_view(&Roster
+    State)` whose rows carry `on_click` queuing `Select`; `set_rows` from `roster_rows()`
+    each frame; render calls `frame()`+compose; input calls `hit_test`+`dispatch_click`
+    then drains the select intent; the runner DOM becomes the a11y tree. Deletes
+    `roster_row_rects`, `build_roster_dom`, `roster_row_at`, and the hand-built roster
+    UxTree. Confirm-on-build: the row-click action (member-select vs `SelectNodeByUrl`,
+    [frame_ops a11y path]) and the `el` text-vs-children content API. Apparatus follows the
+    same shape; Steward/Inspector are the display-only conversions; then extract a shared
+    component (pelt kept `Chrome` concrete and would generalize on the second consumer).
 - 2026-06-13: **Multi-graph increment landed — two graphs coexist. P1 is done.** Built
   from the scouted brief, in two commits, behavior-preserving at each step, 114 green.
   - **Gating restructure (`16b02b9`).** `create`/`switch`/`cycle`/`close_session` +
