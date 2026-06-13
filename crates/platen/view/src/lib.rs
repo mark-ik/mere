@@ -60,6 +60,12 @@ pub const WORKBENCH_SHEET: &[&str] = &[
     ".wb-close { font-size: 15px; color: rgb(214, 218, 228); \
         background-color: rgb(40, 44, 54); padding: 5px 10px; }",
     ".wb-content { flex-grow: 1; background-color: rgb(17, 20, 26); }",
+    // The "add tile" button — a small fixed square at the end of the slot row,
+    // aligned with the tab strips (an explicit height + align-self: flex-start keeps
+    // the flex row's default stretch from making it a full-height column).
+    ".wb-add { width: 28px; height: 28px; flex-grow: 0; flex-shrink: 0; \
+        align-self: flex-start; font-size: 18px; color: rgb(214, 218, 228); \
+        background-color: rgb(40, 44, 54); }",
 ];
 
 /// One tab to render in a slot's strip: its graph member (for click routing) and
@@ -103,6 +109,8 @@ pub enum WorkbenchAction {
     /// Toggle this tab's pin (a strip pin button) — the background-keep flag, which
     /// also exempts it from the actor pool's eviction.
     TogglePin(GraphMemberId),
+    /// Mint a fresh tile (the in-view "+" affordance) — the host opens a new node.
+    NewTile,
 }
 
 /// The render model the workbench view diffs into serval DOM: the slots to draw
@@ -176,6 +184,11 @@ impl WorkbenchScene {
         self.pending = Some(WorkbenchAction::TogglePin(member));
     }
 
+    /// Capture a "mint a fresh tile" request (the in-view "+" button).
+    pub fn new_tile(&mut self) {
+        self.pending = Some(WorkbenchAction::NewTile);
+    }
+
     /// Take the captured action, if any. The host drains this after a click and
     /// applies it to the real [`Workbench`].
     pub fn take_pending(&mut self) -> Option<WorkbenchAction> {
@@ -209,6 +222,13 @@ pub fn workbench_view(scene: &WorkbenchScene) -> WorkbenchTreeView {
             ));
         }
     }
+    // The "add tile" affordance: a "+" always appended at the end of the row. The
+    // host only renders the workbench pane when it has >=1 slot (closing the last
+    // tile drops the pane), so an empty row with a lone "+" never actually shows.
+    columns.push(Box::new(on_click(
+        el::<_, WorkbenchScene, ()>("button", "+").attr("class", "wb-add"),
+        |s: &mut WorkbenchScene, _: PointerClick| s.new_tile(),
+    )));
     // The root carries a *definite* size (the host's band) so the flex row fills the
     // width (slots grow equally) and the height (each slot's content area fills below
     // its strip). taffy hands the root the viewport as available space, not a definite
@@ -461,5 +481,23 @@ mod tests {
         assert_eq!(s.take_pending(), None, "drained");
         s.close(Uuid::from_u128(2));
         assert_eq!(s.pending, Some(WorkbenchAction::Close(Uuid::from_u128(2))));
+        s.new_tile();
+        assert_eq!(s.pending, Some(WorkbenchAction::NewTile));
+    }
+
+    #[test]
+    fn workbench_renders_one_add_tile_button() {
+        let r = runner(scene(vec![
+            SlotPlan { tabs: vec![tab(1, "a")], active: 0, pinned: false, weight: 1.0, recovering: false },
+            SlotPlan { tabs: vec![tab(2, "b")], active: 0, pinned: false, weight: 1.0, recovering: false },
+        ]));
+        let dom = r.dom();
+        let dom = dom.borrow();
+        let root = r.root();
+        assert_eq!(
+            count_class(&dom, root, "wb-add"),
+            1,
+            "exactly one global add-tile button regardless of slot count",
+        );
     }
 }

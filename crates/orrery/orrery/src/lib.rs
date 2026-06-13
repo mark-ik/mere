@@ -462,6 +462,22 @@ impl Orrery {
         }
     }
 
+    /// Toggle `member` in or out of the selection (a multi-select add), keeping the
+    /// rest selected — the member-keyed twin of the canvas's Shift-click. Clears the
+    /// edge selection (matching that gesture) so a mixed node+edge selection can't
+    /// confuse the pairwise relate. Returns `false` if the member is not in the
+    /// graph. Selection is read live at frame time, so no reconcile is needed.
+    pub fn toggle_select_member(&mut self, member: uuid::Uuid) -> bool {
+        let Some(key) = self.graph.get_node_key_by_id(member) else {
+            return false;
+        };
+        if !self.selected.remove(&key) {
+            self.selected.insert(key);
+        }
+        self.selected_edges.clear();
+        true
+    }
+
     /// Remove the single focused node from the session graph (if exactly one is
     /// selected), returning its member id (the kernel node UUID) so the host can
     /// reap any activation for it. Clears the selection and reconciles the physics

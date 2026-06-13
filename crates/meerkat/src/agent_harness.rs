@@ -917,6 +917,94 @@ mod tests {
     }
 
     #[test]
+    fn shellbar_roster_button_toggles_the_roster() {
+        // The shellbar pane-toggle buttons are real chrome-DOM nodes; activating the
+        // roster button runs ToggleRoster through the command spine. (The pointer
+        // routing that reaches this — the inert-shellbar fix — is verified on-screen;
+        // this guards the button→command→toggle chain it unblocks.)
+        let has_roster = |app: &Shell| {
+            app.view().frame_layout
+                .iter_leaves()
+                .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
+        };
+        let mut app = test_app();
+        assert!(!has_roster(&app), "no roster before");
+        let roster_btn = {
+            use layout_dom_api::LayoutDom;
+            let dom = app.view().runner.dom();
+            let dom = dom.borrow();
+            let buttons = crate::all_with_class(&dom, dom.document(), "shellbar-btn");
+            assert!(buttons.len() >= 2, "the shellbar carries its pane-toggle buttons");
+            buttons[1] // workbench, ROSTER, gloss, apparatus, comms
+        };
+        app.ctx().chrome_activate(roster_btn, (0.0, 0.0));
+        assert!(has_roster(&app), "the shellbar roster button toggled the roster pane");
+    }
+
+    #[test]
+    fn empty_space_right_click_adds_a_node() {
+        // Right-clicking empty graph space offers "Add node"; running it mints a
+        // fresh node at the captured cursor anchor and selects it.
+        let mut app = test_app();
+        app.orrery_mut().clear_selection();
+        let before = app.orrery().graph().nodes().count();
+        {
+            let mut wc = app.ctx();
+            wc.open_context_menu_at(200.0, 300.0);
+            assert!(wc.view.context_origin.is_some(), "the empty-space menu captured a cursor anchor");
+            wc.view.runner.update(|c| c.pick_context(meerkat::ContextAction::AddNode));
+            wc.drain_pending_context();
+        }
+        assert_eq!(app.orrery().graph().nodes().count(), before + 1, "AddNode minted a node");
+        assert!(app.orrery().focused_url().is_some(), "the new node is selected");
+        assert!(app.view().context_origin.is_none(), "the anchor was consumed");
+    }
+
+    #[test]
+    fn workbench_new_tile_mints_and_opens_a_tile() {
+        // The workbench "+" affordance: a NewTile action mints a node and opens it
+        // as a tile.
+        let mut app = test_app();
+        let nodes_before = app.orrery().graph().nodes().count();
+        let tiles_before = app.view().workbench.open_members().len();
+        {
+            let mut wc = app.ctx();
+            wc.view.workbench_runner.update(|s| s.new_tile());
+            wc.drain_workbench_action();
+        }
+        assert_eq!(app.orrery().graph().nodes().count(), nodes_before + 1, "NewTile minted a node");
+        assert_eq!(
+            app.view().workbench.open_members().len(),
+            tiles_before + 1,
+            "and opened it as a tile",
+        );
+        // The pane is actually shown (not just a model row): NewTile summons + tiles
+        // the workbench and focuses the new tile.
+        assert!(app.ctx().workbench_open(), "the workbench pane is open");
+        assert!(app.view().workbench.is_tiled(), "in the tiled (Tree) projection");
+        assert!(app.view().focused_tile.is_some(), "the new tile is focused");
+    }
+
+    #[test]
+    fn roster_rows_highlight_a_multi_selection() {
+        // The roster highlights by member-id set membership, so a multi-selection
+        // (built by Shift-click) shows every selected row — not zero (the focused_url
+        // collapse the review caught).
+        let mut app = test_app();
+        app.orrery_mut().visit("https://a.test");
+        let b = app.orrery_mut().visit("https://b.test");
+        let b_id = app.orrery().graph().get_node(b).unwrap().id;
+        app.orrery_mut().select_by_url("https://a.test");
+        app.orrery_mut().toggle_select_member(b_id);
+        let rows = app.ctx().roster_rows();
+        assert_eq!(
+            rows.iter().filter(|r| r.selected).count(),
+            2,
+            "both selected members are highlighted in the roster",
+        );
+    }
+
+    #[test]
     fn delete_key_removes_the_focused_node() {
         // With no chrome field focused, a bare Delete removes the focused node (the
         // Ctrl+Backspace muscle-memory, now reachable with Delete).

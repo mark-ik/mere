@@ -113,6 +113,55 @@ fn open_as_new_node_mints_distinct_node_with_navigated_from_edge() {
 }
 
 #[test]
+fn add_node_at_mints_an_unlinked_node_at_the_cursor_world_point() {
+    let mut orrery = Orrery::new();
+    orrery.camera.offset = (100.0, 50.0);
+    orrery.camera.zoom = 2.0;
+    let before_nodes = orrery.graph().nodes().count();
+    let before_edges = orrery.graph().relations().count();
+
+    let id = orrery.add_node_at((300.0, 150.0), "mere://welcome");
+    assert_eq!(orrery.graph().nodes().count(), before_nodes + 1, "a node was added");
+    assert_eq!(
+        orrery.graph().relations().count(),
+        before_edges,
+        "the add-node is unlinked (no navigated-from edge)",
+    );
+    assert_eq!(orrery.focused_url(), Some("mere://welcome"), "the new node is selected");
+
+    // world = ((300-100)/2, (150-50)/2) = (100, 50); the seed is set before any
+    // settle runs (settle is consumed by frame(), not called here).
+    let (key, _) = orrery.graph().get_node_by_id(id).unwrap();
+    let pos = orrery.view.position_of(key).expect("the new node has a position");
+    assert!((pos.x - 100.0).abs() < 0.5, "minted at the cursor world x, got {pos:?}");
+    assert!((pos.y - 50.0).abs() < 0.5, "minted at the cursor world y, got {pos:?}");
+}
+
+#[test]
+fn toggle_select_member_builds_a_multi_selection() {
+    let mut orrery = Orrery::new();
+    let _a = orrery.visit("https://a.test");
+    let b = orrery.visit("https://b.test");
+    let b_id = orrery.graph().get_node(b).unwrap().id;
+
+    // Replace to a single selection, then additively toggle the second in.
+    assert!(orrery.select_by_url("https://a.test"));
+    assert_eq!(orrery.selected_members().len(), 1);
+    assert!(orrery.toggle_select_member(b_id), "a known member toggles in");
+    assert_eq!(orrery.selected_members().len(), 2, "the selection grew to the pair");
+    assert!(
+        orrery.assert_selected_relation(SemanticSubKind::UserGrouped),
+        "the two-node selection can be related",
+    );
+
+    // Toggling the same member again removes it; an unknown member is a no-op.
+    assert!(orrery.toggle_select_member(b_id));
+    assert_eq!(orrery.selected_members().len(), 1, "toggling off shrinks back");
+    assert!(!orrery.toggle_select_member(uuid::Uuid::new_v4()), "unknown member → false");
+    assert_eq!(orrery.selected_members().len(), 1, "and leaves the selection intact");
+}
+
+#[test]
 fn assert_selected_relation_links_exactly_two_selected_nodes() {
     let mut orrery = Orrery::new();
     // Two unlinked nodes (origin-less mints carry no edge).

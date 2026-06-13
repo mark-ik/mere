@@ -248,6 +248,11 @@ pub enum ContextAction {
     /// Relate the two selected nodes (a user-grouped relation). Offered only for a
     /// two-node selection; drains like `ShellbarMove` without opening tiles.
     Relate,
+    /// Mint a fresh node at the saved cursor point (the no-selection right-click).
+    /// The anchor in `context_origin` is leaf-local screen px; the camera inversion
+    /// to world happens inside `Orrery::add_node_at`. Drains like `ShellbarMove` /
+    /// `Relate` without touching `context_set`.
+    AddNode,
 }
 
 impl Chrome {

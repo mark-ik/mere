@@ -177,10 +177,22 @@ impl WindowCtx<'_> {
                                     self.view
                                         .roster_pane
                                         .dispatch_click(node, PointerClick::at(local));
+                                    // Shift makes a roster click additive (build a
+                                    // multi-selection); without it, the click replaces
+                                    // the selection. The click event carries no
+                                    // modifier, so the host decides from its live
+                                    // modifier state (as the canvas does). This applies
+                                    // to edge rows too: a plain edge click traverses to
+                                    // the other endpoint, Shift+edge additively selects
+                                    // it — Shift = additive everywhere in the roster.
+                                    let additive = self.view.modifiers.shift;
                                     for intent in self.view.roster_pane.take_intents() {
                                         match intent {
                                             crate::roster_view::RosterIntent::Select(member) => {
-                                                if let Some(url) = self
+                                                if additive {
+                                                    self.orrery.toggle_select_member(member);
+                                                    self.view.request_redraw();
+                                                } else if let Some(url) = self
                                                     .orrery
                                                     .graph()
                                                     .get_node_by_id(member)
@@ -291,6 +303,17 @@ impl WindowCtx<'_> {
                                 self.commands.push(super::ShellCommand::SwitchSession(id));
                                 return;
                             }
+                            // Not a host-drawn session tile → a chrome-DOM control in
+                            // the strip (the pane-toggle buttons). Commit an in-progress
+                            // rename first (clicking away accepts it), then route to the
+                            // chrome so its hit-test fires the button's `run_command`;
+                            // without this the press falls to the strip's catch-all
+                            // `return` below and the toggle buttons stay inert.
+                            if self.view.renaming.is_some() {
+                                self.commit_rename();
+                            }
+                            self.chrome_click(x, y);
+                            return;
                         }
                         // A right press on a tile renames that session; elsewhere in the
                         // strip it opens the shellbar move menu. (Host text path.)

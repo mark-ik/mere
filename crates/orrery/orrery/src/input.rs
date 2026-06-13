@@ -205,6 +205,35 @@ impl Orrery {
         self.graph.get_node(key).map(|n| n.id).expect("a freshly minted node has an id")
     }
 
+    /// Mint a fresh unlinked node at the cursor's world position — the empty-space
+    /// right-click "Add node" gesture. `content_band_xy` is the orrery-leaf-local
+    /// cursor point (screen px); the camera inversion happens here, so the host
+    /// needn't reach the crate-private [`screen_to_world`](Self::screen_to_world).
+    /// Returns the new node's member id.
+    pub fn add_node_at(&mut self, content_band_xy: (f32, f32), url: &str) -> uuid::Uuid {
+        let world = self.screen_to_world(content_band_xy);
+        let key = self.mint_node_at(world, url);
+        self.graph.get_node(key).map(|n| n.id).expect("a freshly minted node has an id")
+    }
+
+    /// Mint an unlinked node at an explicit world `seed`, selecting it. The
+    /// origin-less twin of [`mint_node`](Self::mint_node): no navigated-from edge,
+    /// no branched history — a fresh graphlet candidate placed exactly where asked.
+    fn mint_node_at(&mut self, seed: Point2D<f32>, url: &str) -> NodeKey {
+        let key = self.graph.add_node_with_id(
+            uuid::Uuid::new_v4(),
+            url.to_string(),
+            PortablePoint::new(seed.x, seed.y),
+        );
+        self.graph.navigate_node(key, url);
+        self.reconcile_derived();
+        self.view.set_position(key, seed);
+        self.physics.seed(vec![(key, seed)]);
+        self.select_only(key);
+        self.physics.settle(SETTLE_TICKS);
+        key
+    }
+
     /// Mint a brand-new node at `url`, seeded just off `origin`, linked back to it
     /// with a navigated-from edge when `origin` is present, and with its own
     /// within-node history seeded so its back/forward work from birth. Selects it

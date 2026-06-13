@@ -445,8 +445,19 @@ impl WindowCtx<'_> {
     pub(super) fn open_context_menu_at(&mut self, x: f32, y: f32) {
         let set = self.selection_working_set();
         if set.is_empty() {
+            // No selection (typically a right-click on empty canvas): offer "Add
+            // node" at the cursor. Remember the content-band cursor point so AddNode
+            // mints the node under it; leave context_set empty (no member set). A
+            // node-hit-test for true spatial emptiness is a refinement.
+            self.view.context_origin = Some(self.orrery_point(x, y));
+            self.view.context_set.clear();
+            let items = vec![ContextItem::new("Add node", ContextAction::AddNode)];
+            self.view.runner.update(move |c| c.open_context_menu(x, y, items));
+            self.view.request_redraw();
             return;
         }
+        // A selection-based menu never mints at the cursor; clear any stale anchor.
+        self.view.context_origin = None;
         let items = if set.len() == 1 {
             vec![ContextItem::new("Open tile", ContextAction::OpenSplits)]
         } else {
@@ -466,9 +477,11 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
-    /// Dismiss the context menu (an outside click / Escape), dropping its set.
+    /// Dismiss the context menu (an outside click / Escape), dropping its set and
+    /// the add-node cursor anchor.
     pub(super) fn close_context_menu(&mut self) {
         self.view.context_set.clear();
+        self.view.context_origin = None;
         self.view.runner.update(Chrome::close_context_menu);
         self.view.request_redraw();
     }
@@ -524,6 +537,17 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Add a fresh node at the empty-space right-click cursor. No member set.
+        if let ContextAction::AddNode = action {
+            if let Some(origin) = self.view.context_origin.take() {
+                let url = "mere://welcome";
+                let _member = self.orrery.add_node_at(origin, url);
+                self.ensure_content(url);
+                self.save_session();
+                self.view.request_redraw();
+            }
+            return;
+        }
         let set = std::mem::take(&mut self.view.context_set);
         if set.is_empty() {
             return;
@@ -541,7 +565,7 @@ impl WindowCtx<'_> {
             ContextAction::Stack => {
                 self.view.workbench.open_stack(&set);
             }
-            ContextAction::ShellbarMove(_) | ContextAction::Relate => {
+            ContextAction::ShellbarMove(_) | ContextAction::Relate | ContextAction::AddNode => {
                 unreachable!("handled above")
             }
         }
@@ -823,6 +847,19 @@ impl WindowCtx<'_> {
             WorkbenchAction::TogglePin(member) => {
                 let pinned = self.shared.content.constellation.is_background(member);
                 self.shared.content.constellation.set_background(member, !pinned);
+            }
+            WorkbenchAction::NewTile => {
+                // The "+" affordance: mint a fresh unlinked node and open it as a
+                // tile, focused — a non-omnibar "new tile". Summon/tile the workbench
+                // pane first (idempotent), matching every other tile-opening path, so
+                // the new tile is actually shown regardless of the prior projection.
+                self.open_workbench();
+                let url = "mere://welcome";
+                let member = self.orrery.open_member_as_new_node(None, url);
+                self.view.workbench.open_tile(member);
+                self.view.focused_tile = Some(member);
+                self.ensure_content(url);
+                self.save_session();
             }
         }
         self.view.request_redraw();
@@ -1825,7 +1862,11 @@ impl WindowCtx<'_> {
     /// The roster rows: every graph node as a row (url as title, content type as
     /// subtitle, focused node marked selected). (Frame tree, F1 roster.)
     pub(super) fn roster_rows(&self) -> Vec<roster::RosterRow> {
-        let focused_url = self.orrery.focused_url();
+        // Highlight by member id against the live selection set (not by focused_url,
+        // which collapses to None for a multi-selection and aliases duplicate URLs
+        // — both common now that Add node / New tile mint same-URL nodes).
+        let selected_members: std::collections::HashSet<GraphMemberId> =
+            self.orrery.selected_members().into_iter().collect();
         let graph = self.orrery.graph();
         let mut rows: Vec<roster::RosterRow> = self
             .orrery
@@ -1846,9 +1887,10 @@ impl WindowCtx<'_> {
                 };
                 let mut tags: Vec<String> = node.tags.iter().cloned().collect();
                 tags.sort();
-                let selected = focused_url == Some(node.url());
-                // Edge detail only for the focused row (avoids O(n) per row).
-                let edges = if selected {
+                let selected = selected_members.contains(&node.id);
+                // Edge detail only for a sole focused node (not every row of a
+                // multi-selection), keeping it O(n) once, never per selected row.
+                let edges = if selected && selected_members.len() == 1 {
                     let node_key = graph.get_node_by_id(node.id).map(|(k, _)| k);
                     if let Some(key) = node_key {
                         graph
