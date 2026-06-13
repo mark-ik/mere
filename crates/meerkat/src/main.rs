@@ -505,6 +505,13 @@ impl Presentation {
     }
 }
 
+/// How many graph orreries stay warm in the pool before the least-recently-
+/// focused non-focused one is evicted. Each live orrery costs memory + its own
+/// physics actor thread, so the pool is bounded; "a handful" keeps several
+/// sessions warm (instant switch-back) without unbounded growth. A configurable
+/// setting later (per the configurability rule). (Window composition P1, OQ2.)
+const MAX_POOLED_ORRERIES: usize = 8;
+
 struct Shell {
     /// Session + app state shared across every window. (Multi-window MW2.)
     shared: SharedState,
@@ -515,6 +522,13 @@ struct Shell {
     /// borrows disjointly from `shared` / `view`, as the single `orrery` did before.
     /// (Window composition P1; was the single `orrery: Orrery`.)
     orreries: HashMap<GraphId, Orrery>,
+    /// Pooled graphs in least-recently-focused order (front = stalest). A graph
+    /// moves to the back when focused; over [`MAX_POOLED_ORRERIES`] the stalest
+    /// non-focused one is evicted (dropped, ending its physics thread). The graph
+    /// was already saved when it was last switched away from, so eviction needs no
+    /// save; switching back to it reloads from disk. (Window composition P1, OQ2 —
+    /// the unload half of pool eviction.)
+    orrery_lru: Vec<GraphId>,
     /// All live windows, keyed by OS `WindowId` — the registry. Every per-window
     /// handler is dispatched by resolving the event's id to its view here. At N=1
     /// it holds just the primary; tear-out (MW3+) inserts more. (Multi-window MW2 (d).)
@@ -908,6 +922,7 @@ impl Shell {
                 observability: HostObservability::new(),
             },
             orreries: HashMap::from([(active_graph, orrery)]),
+            orrery_lru: vec![active_graph],
             windows: HashMap::new(),
             primary: None,
             pending_view: Some(view),

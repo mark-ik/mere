@@ -507,6 +507,26 @@ mod tests {
     }
 
     #[test]
+    fn orrery_pool_is_bounded_and_keeps_the_focused_graph() {
+        let mut app = test_app();
+        // Mint more sessions than the pool holds; each switches to a fresh graph,
+        // growing the pool until the cap evicts the stalest non-focused orrery.
+        for _ in 0..(crate::MAX_POOLED_ORRERIES + 3) {
+            app.create_session();
+        }
+        assert_eq!(
+            app.orreries.len(),
+            crate::MAX_POOLED_ORRERIES,
+            "the orrery pool is bounded at the cap, not unbounded per session"
+        );
+        let focused = app.view().focused_graph;
+        assert!(
+            app.orreries.contains_key(&focused),
+            "the focused graph is never evicted"
+        );
+    }
+
+    #[test]
     fn ctrl_shift_n_queues_a_spawn_window_command() {
         // The new-window verb can't create a window from a per-window handler (no
         // event loop, no registry access), so it queues a `SpawnWindow` the shell

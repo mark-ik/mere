@@ -2009,6 +2009,31 @@ impl super::Shell {
         }
         self.focused_view_mut().focused_graph = target_graph;
 
+        // Pool eviction (OQ2 unload): keep `target_graph` most-recent in the LRU,
+        // then drop the stalest pooled orreries over the cap that no window is
+        // focused on. Dropping an orrery ends its physics actor thread; its content
+        // actors are reaped too. The graph was already saved when it was last
+        // switched away from, so eviction loses no data — switching back reloads it.
+        self.orrery_lru.retain(|g| *g != target_graph);
+        self.orrery_lru.push(target_graph);
+        if self.orreries.len() > super::MAX_POOLED_ORRERIES {
+            let focused: std::collections::HashSet<GraphId> = self
+                .windows
+                .values()
+                .map(|v| v.focused_graph)
+                .chain(self.pending_view.iter().map(|v| v.focused_graph))
+                .collect();
+            while self.orreries.len() > super::MAX_POOLED_ORRERIES {
+                let Some(stale) = self.orrery_lru.iter().copied().find(|g| !focused.contains(g))
+                else {
+                    break;
+                };
+                self.orrery_lru.retain(|g| *g != stale);
+                self.orreries.remove(&stale); // drop → physics actor thread ends
+                self.shared.content.constellation.reap_graph(stale);
+            }
+        }
+
         // The remainder runs on the focused window's ctx (now resolving the re-keyed
         // orrery): restore camera + focus, retag the graph-bound leaves, reset the
         // prior session's runtime caches, and swap identity.
