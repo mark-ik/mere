@@ -17,6 +17,7 @@ use kernel::graph::{
     ContainmentSubKind, Graph, ProvenanceSubKind, RelationKind, SemanticSubKind,
 };
 use meerkat::command::Command;
+use meerkat::shell_eval::{CommandShell, ShellContext};
 use meerkat::{Chrome, CommsIntent, ContextAction, ContextItem};
 use orrery::{NodeShape, NodeState};
 use platen_view::WorkbenchAction;
@@ -29,7 +30,7 @@ use uxtree::{UxTree, node_id_for_path};
 
 use super::switcher::{SWITCHER_THUMB_H, SWITCHER_THUMB_W};
 
-use super::observability::{A11ySnapshot, ObservabilitySnapshot};
+use super::observability::{A11ySnapshot, ObservabilitySnapshot, Severity};
 use super::{
     A11yHostAction, DEFAULT_FRAME, DEFAULT_PANE, FALLBACK_TOOLBAR_H, GRAPH_PANE, WindowCtx,
     apparatus, comms_host, fetch, frame_view, roster, sync,
@@ -849,6 +850,73 @@ impl WindowCtx<'_> {
             | Command::ConnectPeer
             | Command::OpenSettings
             | Command::ToggleComms => {}
+        }
+    }
+
+    /// Evaluate a `>`-prefixed omnibar command expression through the privileged
+    /// [`CommandShell`] and apply what it emits. The expression reads a read-only
+    /// [`ShellContext`] snapshot and returns the [`Command`]s it called; each is
+    /// run through the same chrome path a palette pick takes (so back / forward /
+    /// pane toggles behave identically), then the result text (or the error) is
+    /// echoed in the omnibar. The fourth driver of the one `Command` spine,
+    /// alongside the palette, the agent harness, and accesskit actions. (Omnibar
+    /// command shell, S3.)
+    pub(super) fn submit_omnibar_command(&mut self, expr: &str) {
+        let context = self.shell_context();
+        let outcome = CommandShell::new().eval(expr, &context);
+        // `pending_command` is a single slot, so each emitted command is applied
+        // and drained before the next — the same per-interaction routine
+        // `chrome_activate` runs.
+        for &cmd in &outcome.commands {
+            self.view.runner.update(move |c| c.run_command_and_close(cmd));
+            self.drain_pending_connect();
+            self.drain_pending_command();
+            self.drain_comms_intent();
+            self.drain_history_step();
+            self.sync_settings();
+            self.sync_orrery();
+        }
+        let (severity, echo) = match &outcome.error {
+            Some(err) => (Severity::Warn, format!("error: {err}")),
+            None => (Severity::Info, outcome.text.clone()),
+        };
+        // An honest, inspectable record of every command-line eval (no placebo):
+        // the expression, how many commands it ran, and the result / error.
+        self.shared.observability.record_diagnostic(
+            "meerkat.omnibar.command",
+            severity,
+            format!("{expr:?} -> {} command(s); {echo}", outcome.commands.len()),
+        );
+        // Reset the bar: a query result or an error is echoed; a pure action run
+        // restores the focused location. Either way the typed `>expr` is cleared
+        // and the (now command-empty) suggestion dropdown closes — the bar never
+        // strands `>roster` behind a command that already ran.
+        let shown = if echo.is_empty() {
+            self.current_focus_url().unwrap_or_default()
+        } else {
+            echo
+        };
+        self.view.runner.update(move |c| c.show_location(&shown));
+        self.view.request_redraw();
+    }
+
+    /// A read-only snapshot of host state the command shell may query: the
+    /// location, history + nav capability, the focused node, and every graph node
+    /// URL (the cross-to-orrery reach). Built fresh per eval; nothing writes it.
+    fn shell_context(&self) -> ShellContext {
+        let chrome = self.view.runner.state();
+        ShellContext {
+            current_url: self.current_focus_url().unwrap_or_default(),
+            history: chrome.history.entries().to_vec(),
+            can_back: chrome.toolbar.can_go_back,
+            can_forward: chrome.toolbar.can_go_forward,
+            focused_node: self.orrery.focused_url().map(str::to_string),
+            nodes: self
+                .orrery
+                .graph()
+                .nodes()
+                .map(|(_, node)| node.url().to_string())
+                .collect(),
         }
     }
 

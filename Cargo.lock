@@ -6502,6 +6502,7 @@ dependencies = [
  "register-diagnostics",
  "register-theme",
  "rustls-pki-types",
+ "script-rhai",
  "scrying",
  "serval-layout",
  "serval-scripted-dom",

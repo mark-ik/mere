@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use forme::GraphMemberId;
 use layout_dom_api::LayoutDom;
-use meerkat::{Chrome, submit_omnibar};
+use meerkat::{Chrome, nav, submit_omnibar};
 use orrery::PointerButton;
 use crate::serval_render::hit_test_node;
 use platen_view::{WORKBENCH_SHEET, WorkbenchAction};
@@ -763,6 +763,22 @@ impl WindowCtx<'_> {
         let suggestions_open = !self.view.runner.state().suggest.is_empty();
         match key {
             WinitKey::Named(WinitNamedKey::Enter) => {
+                // A `>`-prefixed expression with no highlighted suggestion is a
+                // command, not an address: route it to the command shell instead of
+                // navigating. (Omnibar command shell, S3.)
+                let chrome = self.view.runner.state();
+                let command_expr = if chrome.suggest_active.is_none() {
+                    match nav::classify(chrome.omnibar.text()) {
+                        nav::NavTarget::Command(expr) => Some(expr),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                if let Some(expr) = command_expr {
+                    self.submit_omnibar_command(&expr);
+                    return;
+                }
                 let as_new_node = self.view.modifiers.ctrl || self.view.modifiers.meta;
                 self.view.runner.update(move |c| {
                     submit_omnibar(c);

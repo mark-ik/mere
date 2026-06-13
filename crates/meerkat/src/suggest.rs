@@ -41,6 +41,12 @@ pub fn suggestions(query: &str, history: &History) -> Vec<OmnibarMatch> {
     if q.is_empty() {
         return Vec::new();
     }
+    // Command mode (`>expr`) is not an address: offer no navigation / search rows
+    // (it would read as "search the web for >roster"). Command-aware hints can
+    // hang off this branch later.
+    if let NavTarget::Command(_) = nav::classify(q) {
+        return Vec::new();
+    }
     let needle = q.to_lowercase();
     let mut out: Vec<OmnibarMatch> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();

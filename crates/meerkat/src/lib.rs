@@ -47,6 +47,7 @@ use xilem_serval::TextInput;
 pub mod command;
 pub mod ingest;
 pub mod nav;
+pub mod shell_eval;
 pub mod suggest;
 pub mod sync_indicator;
 

@@ -15,6 +15,11 @@
 //! (the content-root slice) canonicalizes the resolved URL on load — meerkat
 //! does not try to be a URL parser.
 
+/// The default omnibar command-mode sigil. A leading `>` switches the bar from
+/// address resolution to the command shell. Configurable (the host passes the
+/// user's setting to [`classify_with`]); `>` is the command-palette convention.
+pub const DEFAULT_COMMAND_SIGIL: char = '>';
+
 /// What a piece of typed location-bar text resolves to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NavTarget {
@@ -23,31 +28,52 @@ pub enum NavTarget {
     Url(String),
     /// Free text with no usable scheme or host: a web search.
     Search(String),
+    /// A command-shell expression (the text after the command sigil, trimmed).
+    /// The host routes this to the `CommandShell` rather than navigating; it
+    /// never goes through [`resolve`](Self::resolve).
+    Command(String),
 }
 
 impl NavTarget {
     /// The absolute URL to actually load. [`Url`](Self::Url) passes through;
     /// [`Search`](Self::Search) becomes a provider query URL (DuckDuckGo for
     /// now — the provider becomes configurable when the omnibar session lands).
+    ///
+    /// [`Command`](Self::Command) has no URL: the caller branches on it before
+    /// resolving, so this returns the raw expression as a harmless total
+    /// fallback.
     pub fn resolve(&self) -> String {
         match self {
             NavTarget::Url(u) => u.clone(),
             NavTarget::Search(q) => format!("https://duckduckgo.com/?q={}", encode_query(q)),
+            NavTarget::Command(src) => src.clone(),
         }
     }
 }
 
-/// Classify location-bar text into a [`NavTarget`].
+/// Classify location-bar text into a [`NavTarget`] using the default command
+/// sigil ([`DEFAULT_COMMAND_SIGIL`]). See [`classify_with`].
+pub fn classify(input: &str) -> NavTarget {
+    classify_with(input, DEFAULT_COMMAND_SIGIL)
+}
+
+/// Classify location-bar text into a [`NavTarget`], with `sigil` selecting
+/// command mode.
 ///
 /// - Leading / trailing whitespace is trimmed.
+/// - Text whose first non-whitespace character is `sigil` is a
+///   [`Command`](NavTarget::Command); the expression is the remainder, trimmed.
 /// - Anything containing `://`, or an authority-less scheme we recognize
 ///   (`about:`, `data:`, `mailto:`), is taken as a URL verbatim.
 /// - Otherwise a single whitespace-free token whose authority is `localhost`
 ///   or carries a dotted host (`example.com`, `sub.example.co.uk/path`) gets
 ///   an `https://` prefix.
 /// - Everything else is a search query.
-pub fn classify(input: &str) -> NavTarget {
+pub fn classify_with(input: &str, sigil: char) -> NavTarget {
     let s = input.trim();
+    if let Some(expr) = s.strip_prefix(sigil) {
+        return NavTarget::Command(expr.trim().to_string());
+    }
     if s.is_empty() {
         return NavTarget::Search(String::new());
     }
@@ -203,6 +229,31 @@ mod tests {
         assert_eq!(
             classify("localhost:8080"),
             NavTarget::Url("https://localhost:8080".into())
+        );
+    }
+
+    #[test]
+    fn classify_routes_sigil_prefix_to_command() {
+        assert_eq!(classify(">back"), NavTarget::Command("back".into()));
+        // The expression is the remainder, trimmed on both sides.
+        assert_eq!(
+            classify("  >  for n in nodes() { delete(n) }  "),
+            NavTarget::Command("for n in nodes() { delete(n) }".into())
+        );
+        // A bare sigil is an empty command, not a search.
+        assert_eq!(classify(">"), NavTarget::Command(String::new()));
+    }
+
+    #[test]
+    fn classify_with_honors_a_custom_sigil() {
+        assert_eq!(
+            classify_with(":home", ':'),
+            NavTarget::Command("home".into())
+        );
+        // Under a `:` sigil, a leading `>` is just ordinary text (a search).
+        assert_eq!(
+            classify_with(">home", ':'),
+            NavTarget::Search(">home".into())
         );
     }
 

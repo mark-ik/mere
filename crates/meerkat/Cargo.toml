@@ -96,6 +96,12 @@ mere-orrery.workspace = true
 inker = { workspace = true }
 document-canvas = { workspace = true, features = ["netrender"] }
 
+# The omnibar command shell's rhai lane. meerkat reuses `script-rhai::base_engine`
+# (the shared sandbox config) and layers the `Command`-verb + graph-query bindings
+# on top: the privileged tier of the two-tier trust model (the note lane stays
+# binding-free). See the omnibar_command_shell_plan.
+script-rhai = { workspace = true }
+
 # The graph kernel (the `Graph` type) and the linked-data bridge: a fetched
 # JSON-LD document (or JSON-LD embedded in HTML) merges into the session graph,
 # remote `@context`s resolved offline against the bundled full pack (schema.org /

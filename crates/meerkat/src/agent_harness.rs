@@ -867,6 +867,52 @@ mod tests {
     }
 
     #[test]
+    fn omnibar_command_expression_drives_the_command_spine() {
+        // The fourth driver: a `>`-prefixed omnibar expression reaches the same
+        // `Command` spine the palette and the agent harness drive. Type `>roster`,
+        // press Enter, and the host runs `ToggleRoster` through the full drain — a
+        // Roster frame leaf appears, with no navigation. (Omnibar command shell, S3.)
+        let has_roster = |app: &Shell| {
+            app.view().frame_layout
+                .iter_leaves()
+                .any(|(_, c, _)| matches!(c, frame::PaneContent::Roster))
+        };
+        let mut app = test_app();
+        assert!(!has_roster(&app), "no roster pane before the command");
+        let entries_before = app.view().runner.state().history.entries().len();
+
+        {
+            let mut wc = app.ctx();
+            let omnibar = wc
+                .input_under_class("toolbar")
+                .expect("the omnibar input exists in the chrome DOM");
+            wc.view.runner.set_focus(Some(omnibar));
+            wc.view.runner.update(|c| c.show_location(">roster"));
+            wc.on_key_pressed(&winit::keyboard::Key::Named(
+                winit::keyboard::NamedKey::Enter,
+            ));
+        }
+
+        assert!(
+            has_roster(&app),
+            "the `>roster` command toggled the roster pane through the host drain"
+        );
+        assert_eq!(
+            app.view().runner.state().history.entries().len(),
+            entries_before,
+            "a command runs without navigating (no new history entry)"
+        );
+        // The bar is reset after the command: the typed `>roster` is cleared (a
+        // pure action restores the location), never stranded behind a command that
+        // already ran.
+        assert!(
+            !app.view().runner.state().omnibar.text().starts_with('>'),
+            "the omnibar no longer shows the run command, got {:?}",
+            app.view().runner.state().omnibar.text()
+        );
+    }
+
+    #[test]
     fn accesskit_actions_route_to_semantic_node_selection() {
         let mut app = test_app();
         app.orrery_mut().visit("https://example.test");

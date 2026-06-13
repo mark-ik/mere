@@ -28,24 +28,43 @@
 use inker::{BlockEvaluator, EvalOutput};
 use rhai::{Dynamic, Engine, Map};
 
+// Re-export the rhai surface a privileged lane needs (the omnibar command shell
+// builds on [`base_engine`] and registers bindings that traffic in these types),
+// so consumers depend on this crate rather than pinning rhai directly.
+pub use rhai::{self, Array, Dynamic as RhaiDynamic, Engine as RhaiEngine};
+
+/// A sandboxed base [`Engine`] shared by every rhai lane: the standard engine
+/// (no file or network builtins) with belt-and-braces depth / recursion caps and
+/// stdout silenced. The per-call operation budget is set by the caller
+/// (`set_max_operations`), not here.
+///
+/// The note lane ([`RhaiEvaluator`]) uses this bare. A privileged lane (the
+/// omnibar command shell) starts from this and layers host bindings on top, so
+/// the sandbox configuration stays in one place and the two lanes differ only by
+/// their binding set.
+pub fn base_engine() -> Engine {
+    let mut engine = Engine::new();
+    engine.set_max_call_levels(64);
+    engine.set_max_expr_depths(128, 64);
+    // No `print`/`debug` to stdout from a rendered note or a command line.
+    engine.on_print(|_| {});
+    engine.on_debug(|_, _, _| {});
+    engine
+}
+
 /// A Rhai-backed [`BlockEvaluator`] for `rhai eval` knot fences.
 pub struct RhaiEvaluator {
     engine: Engine,
 }
 
 impl RhaiEvaluator {
-    /// A sandboxed Rhai evaluator. The standard engine has no file or network
-    /// access; this adds belt-and-braces depth/recursion caps against
-    /// pathological scripts (the operation budget is per-call in
-    /// [`eval_block`](BlockEvaluator::eval_block)).
+    /// A sandboxed Rhai evaluator over the shared [`base_engine`]. It registers
+    /// no host bindings, so a note's `rhai eval` fence is pure logic; the
+    /// operation budget is per-call in [`eval_block`](BlockEvaluator::eval_block).
     pub fn new() -> Self {
-        let mut engine = Engine::new();
-        engine.set_max_call_levels(64);
-        engine.set_max_expr_depths(128, 64);
-        // No `print`/`debug` to stdout from a rendered note.
-        engine.on_print(|_| {});
-        engine.on_debug(|_, _, _| {});
-        Self { engine }
+        Self {
+            engine: base_engine(),
+        }
     }
 }
 
