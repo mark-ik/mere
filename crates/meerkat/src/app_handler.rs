@@ -617,6 +617,12 @@ impl Shell {
             match command {
                 super::ShellCommand::SpawnWindow => self.spawn_window(event_loop),
                 super::ShellCommand::CloseWindow(id) => self.close_window(id),
+                super::ShellCommand::CreateSession => {
+                    self.create_session();
+                }
+                super::ShellCommand::SwitchSession(id) => self.switch_session(id),
+                super::ShellCommand::CycleSession(forward) => self.cycle_session(forward),
+                super::ShellCommand::CloseSession(id) => self.close_session(id),
             }
         }
     }

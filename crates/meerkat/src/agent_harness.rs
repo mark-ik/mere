@@ -457,7 +457,7 @@ mod tests {
         let mut app = test_app();
         let first = app.shared.session.active_session_id;
         assert_eq!(app.shared.session.manifests.len(), 1);
-        let second = app.ctx().create_session();
+        let second = app.create_session();
         assert_ne!(second, first, "a fresh session id is minted");
         assert_eq!(app.shared.session.active_session_id, second, "the new session is active");
         assert_eq!(app.shared.session.manifests.len(), 2);
@@ -479,11 +479,11 @@ mod tests {
         let first_count = app.orrery().graph().nodes().count();
         assert!(first_count >= 2, "welcome + the added node");
 
-        let second = app.ctx().create_session();
+        let second = app.create_session();
         // The fresh session is its own (smaller) graph, not the first's.
         assert!(app.orrery().graph().nodes().count() < first_count);
 
-        app.ctx().switch_session(first);
+        app.switch_session(first);
         assert_eq!(app.shared.session.active_session_id, first);
         assert_eq!(
             app.orrery().graph().nodes().count(),
@@ -491,7 +491,7 @@ mod tests {
             "the first session's graph was restored intact"
         );
 
-        app.ctx().switch_session(second);
+        app.switch_session(second);
         assert_eq!(app.shared.session.active_session_id, second);
     }
 
@@ -499,10 +499,10 @@ mod tests {
     fn cycle_session_wraps_through_the_open_sessions() {
         let mut app = test_app();
         let a = app.shared.session.active_session_id;
-        let b = app.ctx().create_session(); // active = b, two sessions
-        app.ctx().cycle_session(true);
+        let b = app.create_session(); // active = b, two sessions
+        app.cycle_session(true);
         assert_eq!(app.shared.session.active_session_id, a, "wrapped forward to the other session");
-        app.ctx().cycle_session(true);
+        app.cycle_session(true);
         assert_eq!(app.shared.session.active_session_id, b, "wrapped forward back to the first");
     }
 
@@ -579,18 +579,20 @@ mod tests {
     fn ctrl_n_without_shift_makes_a_session_not_a_window() {
         // The unshifted Ctrl+N is the older new-session verb; the shift is the only
         // thing that distinguishes it from the new-window verb above. (Multi-window MW3.)
+        // A session op re-keys the orrery pool, so — like spawn/close — it runs on
+        // `Shell` via a queued `ShellCommand`, not synchronously in the handler.
+        // (Window composition P1, multi-graph.)
         let mut app = test_app();
         {
             let mut wc = app.ctx();
             wc.view.modifiers.ctrl = true;
             wc.on_key_pressed(&winit::keyboard::Key::Character("n".into()));
         }
-        assert!(app.commands.is_empty(), "no window spawn queued");
-        assert_eq!(
-            app.shared.session.manifests.len(),
-            2,
-            "a new session was minted instead"
+        assert!(
+            matches!(app.commands.first(), Some(crate::ShellCommand::CreateSession)),
+            "a new-session command was queued, not a window spawn"
         );
+        assert_eq!(app.commands.len(), 1, "exactly the one session command");
     }
 
     #[test]
@@ -618,7 +620,7 @@ mod tests {
         // Switch to a fresh session: the pane arrangement persists (the frame is
         // window-scoped) and the graph-bound orrery leaf re-sources to the new graph.
         // (Model B, MG5.)
-        app.ctx().create_session();
+        app.create_session();
         let second_graph = app.ctx().active_graph_id();
         assert_ne!(second_graph, first_graph, "the new session has its own graph");
         assert!(
@@ -632,7 +634,7 @@ mod tests {
         );
 
         // Back to the first: the layout still holds; the orrery follows it again.
-        app.ctx().switch_session(first);
+        app.switch_session(first);
         assert!(has_roster(&app), "the pane layout persists across switches");
         assert_eq!(orrery_graph(&app), first_graph);
     }

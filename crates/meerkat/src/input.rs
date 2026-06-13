@@ -250,18 +250,18 @@ impl WindowCtx<'_> {
                                 self.view.session_close_rects.iter().find(|(_, r)| hit(r))
                             {
                                 let id = *id;
-                                self.close_session(id);
+                                self.commands.push(super::ShellCommand::CloseSession(id));
                                 return;
                             }
                             if self.view.session_add_rect.as_ref().is_some_and(hit) {
-                                self.create_session();
+                                self.commands.push(super::ShellCommand::CreateSession);
                                 return;
                             }
                             if let Some((id, _)) =
                                 self.view.session_row_rects.iter().find(|(_, r)| hit(r))
                             {
                                 let id = *id;
-                                self.switch_session(id);
+                                self.commands.push(super::ShellCommand::SwitchSession(id));
                                 return;
                             }
                         }
@@ -719,15 +719,15 @@ impl WindowCtx<'_> {
         if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("n"))
         {
-            self.create_session();
+            self.commands.push(super::ShellCommand::CreateSession);
             return;
         }
         if self.view.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::PageDown)) {
-            self.cycle_session(true);
+            self.commands.push(super::ShellCommand::CycleSession(true));
             return;
         }
         if self.view.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::PageUp)) {
-            self.cycle_session(false);
+            self.commands.push(super::ShellCommand::CycleSession(false));
             return;
         }
         if self.view.modifiers.ctrl && matches!(key, WinitKey::Named(WinitNamedKey::Backspace)) {

@@ -597,6 +597,17 @@ enum ShellCommand {
     /// the session and exits the app; a secondary just releases its surface. (MW3.)
     #[allow(dead_code)] // queued by the close fork once leaf windows can self-close (MW4)
     CloseWindow(WindowId),
+    /// Mint a fresh session + graph and make it active. (Cmd-N.) A session op
+    /// re-keys the orrery pool, which a per-window `WindowCtx` cannot do (it holds
+    /// one orrery borrowed out of the pool), so it runs on `Shell` after the ctx
+    /// borrow ends — like spawn/close. (Window composition P1, multi-graph.)
+    CreateSession,
+    /// Switch the active session to `id` (load its graph into the pool, focus it).
+    SwitchSession(SessionId),
+    /// Cycle to the next (`true`) / previous session in id order, wrapping.
+    CycleSession(bool),
+    /// Close (trash) session `id`, switching to a survivor first if it was active.
+    CloseSession(SessionId),
 }
 
 /// A tile's cached rasterized texture: the scene version + size it was rasterized
@@ -997,6 +1008,27 @@ impl Shell {
             render_core: self.render_core.as_ref(),
             commands: &mut self.commands,
         })
+    }
+
+    /// The focused window's view (primary, or the pending bootstrap view) — the same
+    /// primary-or-pending resolution `ctx()` uses, for the Shell-level session ops.
+    /// Unlike `ctx()` it touches only the view, so it is valid mid-re-key when the
+    /// focused orrery is not yet pooled under the new graph id. (Window composition
+    /// P1, multi-graph.)
+    fn focused_view_mut(&mut self) -> &mut window_view::WindowView {
+        match self.primary {
+            Some(id) => self.windows.get_mut(&id).expect("primary window missing from registry"),
+            None => self.pending_view.as_mut().expect("a primary or pending view"),
+        }
+    }
+
+    /// Read-only twin of [`Self::focused_view_mut`] — reads the focused graph id
+    /// before a re-key without holding a mutable borrow.
+    fn focused_view(&self) -> &window_view::WindowView {
+        match self.primary {
+            Some(id) => &self.windows[&id],
+            None => self.pending_view.as_ref().expect("a primary or pending view"),
+        }
     }
 
     /// Mint a fresh per-window view over the shared session: its own chrome +

@@ -245,84 +245,6 @@ impl WindowCtx<'_> {
         self.shared.session.session_thumbnails.insert(self.shared.session.active_session_id, thumb);
     }
 
-    /// Mint a fresh, empty session and make it active (persisting the current one
-    /// first). The new session opens on the welcome node. Returns its id.
-    /// (Multi-graph MG3 — the create half; Cmd-N binds to it.)
-    pub(super) fn create_session(&mut self) -> SessionId {
-        self.save_session();
-        let session_id = SessionId::new();
-        let session_dir = self.shared.session.mere_root
-            .join("sessions")
-            .join(session_id.as_uuid().to_string());
-        let _ = std::fs::create_dir_all(&session_dir);
-        let mut manifest = GraphSessionManifest::new(session_id, GraphId::new());
-        manifest.storage_path = Some(session_dir.clone());
-        self.shared.session.manifests.insert(manifest);
-        let _ = self.shared.session.manifests.flush_dirty();
-        self.load_active_session(session_id, session_dir, true);
-        session_id
-    }
-
-    /// Switch the active session to `target`: persist the current one, then load
-    /// the target's graph + camera + frame. A no-op if `target` is already active
-    /// or unknown to the registry. (Multi-graph MG2 — the Model-A switch.)
-    pub(super) fn switch_session(&mut self, target: SessionId) {
-        if target == self.shared.session.active_session_id || self.shared.session.manifests.get(target).is_none() {
-            return;
-        }
-        self.save_session();
-        let session_dir = self.shared.session.mere_root
-            .join("sessions")
-            .join(target.as_uuid().to_string());
-        let _ = std::fs::create_dir_all(&session_dir);
-        self.load_active_session(target, session_dir, false);
-    }
-
-    /// Switch to the next (`forward`) or previous session in id order, wrapping.
-    /// The interim keyboard affordance (Ctrl+PageDown / Ctrl+PageUp) until the
-    /// F2.3 shellbar switcher lands. No-op with fewer than two sessions. (MG2.)
-    pub(super) fn cycle_session(&mut self, forward: bool) {
-        let mut ids: Vec<SessionId> = self.shared.session.manifests.iter().map(|(id, _)| id).collect();
-        if ids.len() < 2 {
-            return;
-        }
-        ids.sort_by_key(|id| *id.as_uuid());
-        let Some(pos) = ids.iter().position(|id| *id == self.shared.session.active_session_id) else {
-            return;
-        };
-        let next = if forward {
-            (pos + 1) % ids.len()
-        } else {
-            (pos + ids.len() - 1) % ids.len()
-        };
-        self.switch_session(ids[next]);
-    }
-
-    /// Close (trash) the `target` session. Refuses to close the last one. If it was
-    /// the active session, switches to the most-recently-updated survivor first.
-    /// The on-disk dir moves to `.trash/` (recoverable). (Multi-graph MG3.)
-    pub(super) fn close_session(&mut self, target: SessionId) {
-        if self.shared.session.manifests.len() <= 1 || self.shared.session.manifests.get(target).is_none() {
-            return;
-        }
-        if target == self.shared.session.active_session_id {
-            let survivor = self.shared.session.manifests
-                .iter()
-                .filter(|(id, _)| *id != target)
-                .max_by_key(|(_, m)| m.updated_at)
-                .map(|(id, _)| id);
-            if let Some(next) = survivor {
-                self.switch_session(next);
-            }
-        }
-        if let Err(err) = self.shared.session.manifests.move_to_trash(target) {
-            tracing::warn!(%err, "failed to trash the closed session");
-        }
-        self.view.renaming = None;
-        self.refresh_session_thumbnails();
-        self.view.request_redraw();
-    }
-
     /// Begin renaming `id`: seed the switcher edit buffer from its current label, so
     /// editing starts from the shown name (display or derived). (Host text path.)
     pub(super) fn start_rename(&mut self, id: SessionId) {
@@ -415,83 +337,6 @@ impl WindowCtx<'_> {
             self.shared.session.session_thumbnails.insert(id, thumb);
             self.shared.session.session_labels.insert(id, label);
         }
-    }
-
-    /// Make `id` (whose dir is `session_dir`) the active session: load its graph +
-    /// camera + frame, re-point the orrery in place, and clear the prior session's
-    /// runtime caches so its content actors and cards do not bleed through. `fresh`
-    /// marks a just-minted empty session (no graph on disk yet). This is the
-    /// Model-A whole-content-band swap. (Multi-graph MG2.)
-    fn load_active_session(&mut self, id: SessionId, session_dir: std::path::PathBuf, fresh: bool) {
-        // The target graph (empty for a fresh session, or a missing/corrupt file).
-        let graph = if fresh {
-            Graph::new()
-        } else {
-            session_graph_store::load(&session_dir.join(session_graph_store::GRAPH_FILE))
-                .ok()
-                .flatten()
-                .unwrap_or_else(Graph::new)
-        };
-        let empty = graph.nodes().count() == 0;
-        self.orrery.set_graph(graph);
-        // An empty session opens on the welcome node, like first launch.
-        if empty {
-            self.orrery.visit("mere://welcome");
-        }
-        // Restore the camera + focus from the target's view-intent (Model A).
-        let restored_view =
-            view_intent_store::load_view_intent(&session_dir, DEFAULT_FRAME, DEFAULT_PANE)
-                .ok()
-                .flatten();
-        match restored_view.as_ref().and_then(|v| v.camera.as_ref()) {
-            Some(snapshot) => {
-                self.orrery.set_camera(super::snapshot_to_camera(snapshot));
-                self.view.centered = true;
-            }
-            None => self.view.centered = false,
-        }
-        if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
-            self.orrery.select_by_url(url);
-        }
-        // The frame is **window-scoped** (Model B, MG5): keep the current pane
-        // arrangement and re-point its graph-bound leaves (orrery / roster / gloss /
-        // inspector / workbench) at the target session's graph — window-chrome leaves
-        // (Steward / Comms / Apparatus) stay put. The graph-bound panes read the live
-        // orrery, so the actual content follows from `set_graph` above; this keeps the
-        // persisted leaf `graph_id` tags consistent (and is what far-B will resolve
-        // per leaf). `next_pane_id` is window-scoped too, so it is not reset.
-        let target_graph = self.shared.session.manifests
-            .get(id)
-            .map(|m| m.root_graph_id)
-            .unwrap_or_default();
-        self.view.frame_layout.retag_graph_bound(target_graph);
-        // Reset the prior session's runtime caches.
-        self.shared.content.constellation.clear();
-        self.view.scrying.clear();
-        self.shared.content.compat_pins.clear();
-        self.view.scrying_input_focus = None;
-        self.view.scrying_rect = None;
-        self.shared.content.pages.clear();
-        self.view.live_previews.clear();
-        self.view.tile_textures.clear();
-        self.view.snapshot_textures.clear();
-        self.view.scroll.clear();
-        self.view.focused_tile = None;
-        self.view.shown_location = None;
-        self.view.renaming = None;
-        self.view.workbench = platen::Workbench::new();
-        self.view.maximized_pane = None;
-        self.view.active_content = super::ContentPane::Orrery;
-        // Swap identity; the omnibar nav target follows the new orrery focus.
-        self.shared.session.session_dir = session_dir;
-        self.shared.session.active_session_id = id;
-        self.view.content_location = self
-            .orrery
-            .focused_url()
-            .unwrap_or("mere://welcome")
-            .to_string();
-        self.refresh_session_thumbnails();
-        self.view.request_redraw();
     }
 
     /// Make the focused node's content available. A network address already in
@@ -2013,6 +1858,185 @@ impl WindowCtx<'_> {
         } else {
             "off".to_string()
         }
+    }
+}
+
+// Session ops live on `Shell`, not `WindowCtx`: switching a session re-keys the
+// orrery pool, and a `WindowCtx` holds exactly one orrery borrowed *out* of the
+// pool, so it cannot insert or re-key entries. Per-window input handlers request
+// these by pushing a [`ShellCommand`]; `Shell::apply` runs them after the ctx
+// borrow ends (the same seam as spawn/close). WindowCtx-shaped sub-steps
+// (save_session, the cache reset, thumbnails) re-enter through `self.ctx()`, which
+// resolves the focused view primary-or-pending and bundles its pooled orrery.
+// (Window composition P1, multi-graph.)
+impl super::Shell {
+    /// Mint a fresh, empty session and make it active (persisting the current one
+    /// first). The new session opens on the welcome node. Returns its id. (MG3.)
+    pub(super) fn create_session(&mut self) -> SessionId {
+        self.ctx().save_session();
+        let session_id = SessionId::new();
+        let session_dir = self
+            .shared
+            .session
+            .mere_root
+            .join("sessions")
+            .join(session_id.as_uuid().to_string());
+        let _ = std::fs::create_dir_all(&session_dir);
+        let mut manifest = GraphSessionManifest::new(session_id, GraphId::new());
+        manifest.storage_path = Some(session_dir.clone());
+        self.shared.session.manifests.insert(manifest);
+        let _ = self.shared.session.manifests.flush_dirty();
+        self.load_active_session(session_id, session_dir, true);
+        session_id
+    }
+
+    /// Switch the active session to `target`: persist the current one, then load the
+    /// target's graph + camera + frame. No-op if already active or unknown. (MG2.)
+    pub(super) fn switch_session(&mut self, target: SessionId) {
+        if target == self.shared.session.active_session_id
+            || self.shared.session.manifests.get(target).is_none()
+        {
+            return;
+        }
+        self.ctx().save_session();
+        let session_dir = self
+            .shared
+            .session
+            .mere_root
+            .join("sessions")
+            .join(target.as_uuid().to_string());
+        let _ = std::fs::create_dir_all(&session_dir);
+        self.load_active_session(target, session_dir, false);
+    }
+
+    /// Switch to the next (`forward`) or previous session in id order, wrapping.
+    /// No-op with fewer than two sessions. (MG2.)
+    pub(super) fn cycle_session(&mut self, forward: bool) {
+        let mut ids: Vec<SessionId> =
+            self.shared.session.manifests.iter().map(|(id, _)| id).collect();
+        if ids.len() < 2 {
+            return;
+        }
+        ids.sort_by_key(|id| *id.as_uuid());
+        let Some(pos) = ids.iter().position(|id| *id == self.shared.session.active_session_id)
+        else {
+            return;
+        };
+        let next = if forward {
+            (pos + 1) % ids.len()
+        } else {
+            (pos + ids.len() - 1) % ids.len()
+        };
+        self.switch_session(ids[next]);
+    }
+
+    /// Close (trash) the `target` session. Refuses to close the last one. If it was
+    /// active, switches to the most-recently-updated survivor first. (MG3.)
+    pub(super) fn close_session(&mut self, target: SessionId) {
+        if self.shared.session.manifests.len() <= 1
+            || self.shared.session.manifests.get(target).is_none()
+        {
+            return;
+        }
+        if target == self.shared.session.active_session_id {
+            let survivor = self
+                .shared
+                .session
+                .manifests
+                .iter()
+                .filter(|(id, _)| *id != target)
+                .max_by_key(|(_, m)| m.updated_at)
+                .map(|(id, _)| id);
+            if let Some(next) = survivor {
+                self.switch_session(next);
+            }
+        }
+        if let Err(err) = self.shared.session.manifests.move_to_trash(target) {
+            tracing::warn!(%err, "failed to trash the closed session");
+        }
+        self.focused_view_mut().renaming = None;
+        self.ctx().refresh_session_thumbnails();
+        self.focused_view_mut().request_redraw();
+    }
+
+    /// Make `id` (whose dir is `session_dir`) the active session: load its graph +
+    /// camera + frame and reset the prior session's runtime caches. `fresh` marks a
+    /// just-minted empty session. Re-keys the focused orrery to the target graph in
+    /// the pool (the Shell-only step a WindowCtx cannot do); the rest runs on the
+    /// re-entered ctx, which now resolves that re-keyed orrery. (MG2.)
+    fn load_active_session(&mut self, id: SessionId, session_dir: std::path::PathBuf, fresh: bool) {
+        // The target graph (empty for a fresh session, or a missing/corrupt file).
+        let graph = if fresh {
+            Graph::new()
+        } else {
+            session_graph_store::load(&session_dir.join(session_graph_store::GRAPH_FILE))
+                .ok()
+                .flatten()
+                .unwrap_or_else(Graph::new)
+        };
+        let empty = graph.nodes().count() == 0;
+        let target_graph = self
+            .shared
+            .session
+            .manifests
+            .get(id)
+            .map(|m| m.root_graph_id)
+            .unwrap_or_default();
+        // Pool re-key (Shell-level): pull the focused orrery out under its old graph
+        // id, load the new graph into it, and re-insert it under the target id, then
+        // point the focused view at it. One entry, as before — the multi-graph
+        // increment (mint a distinct entry, keep both live) refines this next.
+        let old_gid = self.focused_view().focused_graph;
+        let mut orrery = self.orreries.remove(&old_gid).expect("focused orrery is pooled");
+        orrery.set_graph(graph);
+        // An empty session opens on the welcome node, like first launch.
+        if empty {
+            orrery.visit("mere://welcome");
+        }
+        self.orreries.insert(target_graph, orrery);
+        self.focused_view_mut().focused_graph = target_graph;
+
+        // The remainder runs on the focused window's ctx (now resolving the re-keyed
+        // orrery): restore camera + focus, retag the graph-bound leaves, reset the
+        // prior session's runtime caches, and swap identity.
+        let restored_view =
+            view_intent_store::load_view_intent(&session_dir, DEFAULT_FRAME, DEFAULT_PANE)
+                .ok()
+                .flatten();
+        let mut ctx = self.ctx();
+        match restored_view.as_ref().and_then(|v| v.camera.as_ref()) {
+            Some(snapshot) => {
+                ctx.orrery.set_camera(super::snapshot_to_camera(snapshot));
+                ctx.view.centered = true;
+            }
+            None => ctx.view.centered = false,
+        }
+        if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
+            ctx.orrery.select_by_url(url);
+        }
+        ctx.view.frame_layout.retag_graph_bound(target_graph);
+        ctx.shared.content.constellation.clear();
+        ctx.view.scrying.clear();
+        ctx.shared.content.compat_pins.clear();
+        ctx.view.scrying_input_focus = None;
+        ctx.view.scrying_rect = None;
+        ctx.shared.content.pages.clear();
+        ctx.view.live_previews.clear();
+        ctx.view.tile_textures.clear();
+        ctx.view.snapshot_textures.clear();
+        ctx.view.scroll.clear();
+        ctx.view.focused_tile = None;
+        ctx.view.shown_location = None;
+        ctx.view.renaming = None;
+        ctx.view.workbench = platen::Workbench::new();
+        ctx.view.maximized_pane = None;
+        ctx.view.active_content = super::ContentPane::Orrery;
+        ctx.shared.session.session_dir = session_dir;
+        ctx.shared.session.active_session_id = id;
+        ctx.view.content_location =
+            ctx.orrery.focused_url().unwrap_or("mere://welcome").to_string();
+        ctx.refresh_session_thumbnails();
+        ctx.view.request_redraw();
     }
 }
 
