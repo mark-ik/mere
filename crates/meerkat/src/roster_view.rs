@@ -13,19 +13,16 @@
 //! `Select`, so the runner dispatches input through the DOM and there is no rect
 //! cache to drift. (Window composition P2 companion — list-pane view-ification.)
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 use forme::GraphMemberId;
 use layout_dom_api::LayoutDom;
 use netrender::Scene;
 use register_theme::chrome::ChromeTheme;
 use serval_layout::ScrollOffsets;
-use serval_scripted_dom::{NodeId, ScriptedDom};
-use xilem_serval::{AnyView, PointerClick, ServalAppRunner, ServalCtx, ServalElement, el, on_click};
+use serval_scripted_dom::NodeId;
+use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, el, on_click};
 
-use crate::pane_session::PaneSession;
 use crate::roster::{roster_sheet, EdgeDir, RosterRow};
+use crate::view_pane::ViewPane;
 
 /// The erased view the roster logic produces (mirrors `ChromeView`).
 pub type RosterView = Box<dyn AnyView<RosterState, (), ServalCtx, ServalElement>>;
@@ -128,67 +125,53 @@ pub fn roster_view(state: &RosterState) -> RosterView {
     Box::new(el::<_, RosterState, ()>("div", children).attr("class", "roster"))
 }
 
-/// A self-contained, view-driven roster pane: the runner over its own DOM, a
-/// cached cascade+layout session, and the resolved stylesheet. The shell sets the
-/// rows, asks for a frame, hit-tests, dispatches clicks, and drains the queued
-/// selections — no rect cache, no per-frame hand-built DOM. (Pelt's `Chrome`
-/// bundle, applied to a mere list pane.)
+/// The roster as a view-driven pane: a [`ViewPane`] over `RosterState`, plus the
+/// roster-specific scroll (its `.roster` container), row-member a11y bounds, and
+/// selection draining. The shell sets the rows, frames, hit-tests, dispatches
+/// clicks, and drains the queued selections — no rect cache, no per-frame DOM.
 pub struct RosterPane {
-    runner: ServalAppRunner<RosterState, RosterLogic, RosterView>,
-    session: Option<PaneSession>,
-    sheets: Vec<String>,
+    pane: ViewPane<RosterState, RosterLogic, RosterView>,
 }
 
 impl RosterPane {
     pub fn new() -> Self {
-        let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
-        let runner = ServalAppRunner::new(dom, roster_view as RosterLogic, RosterState::default());
         Self {
-            runner,
-            session: None,
-            sheets: Vec::new(),
+            pane: ViewPane::new(roster_view as RosterLogic, RosterState::default()),
         }
     }
 
     /// Refresh the rows (from `roster_rows()`) and the themed stylesheet. The runner
     /// diffs the new view into its DOM; the next `frame` lays the change out.
     pub fn set_rows(&mut self, theme: &ChromeTheme, rows: Vec<RosterRow>) {
-        self.sheets = roster_sheet(theme);
-        self.runner.update(|s| s.rows = rows);
+        self.pane.set_sheets(roster_sheet(theme));
+        self.pane.update(|s| s.rows = rows);
     }
 
     /// Render the pane to a scene at `w`×`h`, scrolled `scroll` px down its `.roster`
-    /// container, reusing the cached layout (rebuilt only on a structural / resize /
-    /// theme change). The scroll node is resolved inside the pane.
+    /// container.
     pub fn frame(&mut self, w: u32, h: u32, scroll: f32) -> Scene {
-        let sheet: Vec<&str> = self.sheets.iter().map(String::as_str).collect();
-        let dom = self.runner.dom();
-        let scrolls = Self::scroll_offsets(&dom.borrow(), scroll);
-        PaneSession::scene(&mut self.session, &dom, &sheet, w, h, None, &scrolls)
+        let scrolls = self.scroll_offsets(scroll);
+        self.pane.frame(w, h, &scrolls)
     }
 
     /// The maximum scroll (content height beyond the visible pane) of the last laid-
     /// out frame, for the host to clamp its stored scroll. `0` before the first frame.
     pub fn max_scroll(&self) -> f32 {
-        let Some(session) = self.session.as_ref() else { return 0.0 };
-        let dom = self.runner.dom();
+        let dom = self.pane.dom();
         let dom = dom.borrow();
         let Some(node) = crate::first_with_class(&dom, dom.document(), "roster") else {
             return 0.0;
         };
-        let Some(l) = session.fragments().rect_of(node) else { return 0.0 };
+        let Some(frags) = self.pane.fragments() else { return 0.0 };
+        let Some(l) = frags.rect_of(node) else { return 0.0 };
         let inner = l.size.height - l.padding.top - l.padding.bottom - l.border.top - l.border.bottom;
         (l.content_size.height - inner).max(0.0)
     }
 
-    /// Hit-test pane-local `(x, y)` (with the pane scrolled by `scroll`) against the
-    /// cached layout, returning the DOM node, or `None` if not laid out / nothing hit.
+    /// Hit-test pane-local `(x, y)` (with the pane scrolled by `scroll`).
     pub fn hit_test(&self, x: f32, y: f32, scroll: f32) -> Option<NodeId> {
-        let session = self.session.as_ref()?;
-        let dom = self.runner.dom();
-        let dom = dom.borrow();
-        let scrolls = Self::scroll_offsets(&dom, scroll);
-        session.hit_test(&dom, x, y, &scrolls)
+        let scrolls = self.scroll_offsets(scroll);
+        self.pane.hit_test(x, y, &scrolls)
     }
 
     /// Window-space bounds of each row, keyed by member, for the a11y projection —
@@ -196,9 +179,8 @@ impl RosterPane {
     /// the pane's window rect `[x0,y0,x1,y1]`; rows offscreen are dropped, partials
     /// clipped to the pane.
     pub fn row_bounds(&self, origin: [f32; 4], scroll: f32) -> Vec<(GraphMemberId, [f32; 4])> {
-        let Some(session) = self.session.as_ref() else { return Vec::new() };
-        let frags = session.fragments();
-        let dom = self.runner.dom();
+        let Some(frags) = self.pane.fragments() else { return Vec::new() };
+        let dom = self.pane.dom();
         let dom = dom.borrow();
         let root = dom.document();
         let mut nodes = crate::all_with_class(&dom, root, "roster-row");
@@ -224,20 +206,22 @@ impl RosterPane {
     /// Dispatch a click that hit `node`, firing its `on_click` (which queues a
     /// `Select`); the shell then [`take_intents`](Self::take_intents).
     pub fn dispatch_click(&mut self, node: NodeId, event: PointerClick) {
-        self.runner.dispatch_click(node, event);
+        self.pane.dispatch_click(node, event);
     }
 
     /// Drain the selections queued by row handlers since the last call.
     pub fn take_intents(&mut self) -> Vec<RosterIntent> {
         let mut out = Vec::new();
-        self.runner.update(|s| out = std::mem::take(&mut s.pending));
+        self.pane.update(|s| out = std::mem::take(&mut s.pending));
         out
     }
 
     /// Scroll offsets for the `.roster` container at `scroll` px (empty if absent).
-    fn scroll_offsets(dom: &ScriptedDom, scroll: f32) -> ScrollOffsets<NodeId> {
+    fn scroll_offsets(&self, scroll: f32) -> ScrollOffsets<NodeId> {
         let mut offsets = ScrollOffsets::default();
-        if let Some(node) = crate::first_with_class(dom, dom.document(), "roster") {
+        let dom = self.pane.dom();
+        let dom = dom.borrow();
+        if let Some(node) = crate::first_with_class(&dom, dom.document(), "roster") {
             offsets.insert(node, (0.0, scroll));
         }
         offsets
