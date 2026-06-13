@@ -105,6 +105,11 @@ pub(crate) struct WindowView {
     /// (settings + host diagnostics): theme buttons dispatch through the runner DOM
     /// and the host drains the clicked id, so there is no theme-button rect cache.
     pub(crate) apparatus_pane: crate::list_pane::ListPane,
+    /// The steward + inspector utility panes as view-driven [`ListPane`]s
+    /// (display-only): the host sets their rows each frame and frames them. Separate
+    /// bundles so both can be open at once without sharing one cached layout.
+    pub(crate) steward_pane: crate::list_pane::ListPane,
+    pub(crate) inspector_pane: crate::list_pane::ListPane,
     /// Each gloss minimap node's rect this frame (node id): a press focuses it.
     pub(crate) gloss_node_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Each open tile's content rect this frame (member): the drag resolves its
@@ -260,6 +265,8 @@ impl WindowView {
             session_close_rects: Default::default(),
             session_add_rect: Default::default(),
             apparatus_pane: crate::list_pane::ListPane::new(),
+            steward_pane: crate::list_pane::ListPane::new(),
+            inspector_pane: crate::list_pane::ListPane::new(),
             gloss_node_rects: Default::default(),
             tile_rects: Default::default(),
             content_rects: Default::default(),

@@ -9,7 +9,7 @@ use forme::GraphMemberId;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
 use netrender::external_texture::ExternalTexturePlacement;
-use crate::serval_render::{TextCursor, scene_from_scripted_dom};
+use crate::serval_render::TextCursor;
 use platen_view::{WORKBENCH_SHEET, WorkbenchScene};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
@@ -898,6 +898,10 @@ impl WindowCtx<'_> {
                 ExternalTexturePlacement::new(arect),
             );
         }
+        // The steward + inspector utility panes render through their view-driven
+        // `ListPane`s (display-only): set the rows as inert items, frame, composite.
+        // Each content type has its own bundle, so both can be open at once without
+        // thrashing one cached layout. (Window composition P2 companion.)
         for leaf in self
             .laid_leaves()
             .into_iter()
@@ -907,12 +911,16 @@ impl WindowCtx<'_> {
             let pw = (rect[2] - rect[0]).round().max(1.0) as u32;
             let ph = (rect[3] - rect[1]).round().max(1.0) as u32;
             let rows = self.utility_pane_rows(&leaf.content);
-            let dom = super::utility_panes::build_utility_pane_dom(&leaf.content, &rows);
-            let sheet_strings = super::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
-            let sheet: Vec<&str> = sheet_strings.iter().map(String::as_str).collect();
-            let pane_scroll = ScrollOffsets::<NodeId>::default();
-            let scene = scene_from_scripted_dom(&dom, &sheet, pw, ph, None, &pane_scroll);
+            let items = super::utility_panes::utility_pane_items(&leaf.content, &rows);
+            let sheet = super::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
+            let pane = match &leaf.content {
+                PaneContent::Inspector => &mut self.view.inspector_pane,
+                PaneContent::Steward => &mut self.view.steward_pane,
+                _ => continue,
+            };
+            pane.set(sheet, "utility-pane", items);
+            let scene = pane.frame(pw, ph);
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
                 g: pb[1] as f64 / 255.0,

@@ -13,12 +13,12 @@
 //! Scene lowering); only the convenience signatures live here. See
 //! `design_docs/.../2026-06-11_serval_render_glue_extraction_plan.md`.
 //!
-//! The stateless functions express themselves through a fresh
-//! [`IncrementalLayout`] and its session queries, which is exactly the equivalence
-//! the C3 parity fixture proved (`scene_from_session` over a fresh session equals
-//! the old stateless `scene_from_scripted_dom`), so this is a behaviour-preserving
-//! re-expression. A fresh session does one cascade+layout, the same work the old
-//! stateless path did.
+//! The stateless helpers that remain (`fragments_from_scripted_dom` for measure,
+//! `hit_test_node` for point-to-node) express themselves through a fresh
+//! [`IncrementalLayout`]: one cascade+layout, the same work the session path does
+//! for a steady frame. The scene path is session-only now. Every pane renders via
+//! [`scene_from_session`] over a retained or fresh [`IncrementalLayout`], the
+//! equivalence the C3 parity fixture proved.
 
 use std::hash::Hash;
 
@@ -99,24 +99,6 @@ fn paint_list_from_session(
 
     push_scrollbars(&mut plist, session.fragments(), scroll);
     plist
-}
-
-/// Stateless cascade → layout → paint-emit → Scene over `dom`: the per-frame path
-/// for panes without a persistent session (roster / apparatus / utility). A fresh
-/// [`IncrementalLayout`] does one cascade+layout, then the same emit + overlays as
-/// the session path, so this equals the session render for the same DOM (the C3
-/// parity fixture's invariant). meerkat only ever passes `cursor: None` here (the
-/// chrome's caret rides `scene_from_session`); the overlay arm stays for parity.
-pub(crate) fn scene_from_scripted_dom(
-    dom: &ScriptedDom,
-    stylesheets: &[&str],
-    width: u32,
-    height: u32,
-    cursor: Option<TextCursor>,
-    scroll: &ScrollOffsets<NodeId>,
-) -> Scene {
-    let session = IncrementalLayout::new(dom, stylesheets, width as f32, height as f32);
-    scene_from_session(&session, dom, cursor, scroll, width, height)
 }
 
 /// Any `LayoutDom` document (with image decode) → `netrender::Scene`, through

@@ -2,12 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Placeholder DOMs for D8 utility panes while their domain models are split out.
+//! Item lists for the D8 utility panes (inspector / steward) while their domain
+//! models are split out. They render through a view-driven
+//! [`ListPane`](crate::list_pane::ListPane): a title, the data rows, and a muted
+//! status line, all inert text (these panes are display-only).
 
 use frame::PaneContent;
-use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use register_theme::chrome::{ChromeTheme, Color32};
-use serval_scripted_dom::ScriptedDom;
+
+use crate::list_pane::PaneItem;
 
 /// The utility pane CSS, themed from chrome tokens.
 pub fn utility_pane_sheet(c: &ChromeTheme) -> Vec<String> {
@@ -38,29 +41,16 @@ pub fn utility_pane_sheet(c: &ChromeTheme) -> Vec<String> {
     ]
 }
 
-pub fn build_utility_pane_dom(content: &PaneContent, rows: &[(String, String)]) -> ScriptedDom {
-    let mut dom = ScriptedDom::new();
-    let root = dom.document();
-    let container = dom.create_element(qual("div"));
-    dom.set_attribute(container, qual("class"), "utility-pane");
-    dom.append_child(root, container);
-
-    append_row(&mut dom, container, "utility-title", pane_title(content));
+/// A utility pane's item list: a title row, the data rows (`label: value`), then a
+/// muted status line. The [`ListPane`](crate::list_pane::ListPane) renders these
+/// under the `utility-pane` root; every item is inert text (display-only).
+pub fn utility_pane_items(content: &PaneContent, rows: &[(String, String)]) -> Vec<PaneItem> {
+    let mut items = vec![PaneItem::text("utility-title", pane_title(content))];
     for (label, value) in rows {
-        append_row(
-            &mut dom,
-            container,
-            "utility-row",
-            &format!("{label}: {value}"),
-        );
+        items.push(PaneItem::text("utility-row", format!("{label}: {value}")));
     }
-    append_row(
-        &mut dom,
-        container,
-        "utility-row-muted",
-        pane_status(content),
-    );
-    dom
+    items.push(PaneItem::text("utility-row-muted", pane_status(content)));
+    items
 }
 
 pub fn pane_title(content: &PaneContent) -> &'static str {
@@ -81,16 +71,4 @@ pub fn pane_status(content: &PaneContent) -> &'static str {
         }
         _ => "No utility pane data.",
     }
-}
-
-fn append_row(dom: &mut ScriptedDom, parent: serval_scripted_dom::NodeId, class: &str, text: &str) {
-    let row = dom.create_element(qual("div"));
-    dom.set_attribute(row, qual("class"), class);
-    let label = dom.create_text(text);
-    dom.append_child(row, label);
-    dom.append_child(parent, row);
-}
-
-fn qual(name: &str) -> QualName {
-    QualName::new(None, Namespace::from(""), LocalName::from(name))
 }

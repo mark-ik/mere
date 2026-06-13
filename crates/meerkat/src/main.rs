@@ -7,7 +7,7 @@
 //! A winit window that runs the reused chrome ([`meerkat::chrome_view`] over a
 //! [`meerkat::Chrome`] wrapping the graphshell `ToolbarState`) through serval and
 //! presents via netrender. Its `ScriptedDom → Scene` render glue (the
-//! `serval_render` module: [`crate::serval_render::scene_from_scripted_dom`] and
+//! `serval_render` module: [`crate::serval_render::scene_from_session`] and
 //! the point→node [`crate::serval_render::hit_test_node`]) calls serval-layout +
 //! paint_list_render directly, so this file is the window + present +
 //! input-dispatch harness, not a second engine.
