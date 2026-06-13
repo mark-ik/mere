@@ -1791,7 +1791,7 @@ impl WindowCtx<'_> {
         }
     }
 
-    fn steward_rows(&self) -> Vec<(String, String)> {
+    pub(super) fn steward_rows(&self) -> Vec<(String, String)> {
         let operations = self.shared.content.constellation.active_operations();
         let mut rows = vec![
             (
@@ -1799,6 +1799,10 @@ impl WindowCtx<'_> {
                 operations.len().to_string(),
             ),
             ("Tab cap".to_string(), self.shared.presentation.saved_tab_cap.to_string()),
+            (
+                "Live graphs".to_string(),
+                format!("{} / {}", self.orrery_pool_count, super::MAX_POOLED_ORRERIES),
+            ),
             (
                 "Loading fetches".to_string(),
                 self.fetch_state_count(1).to_string(),

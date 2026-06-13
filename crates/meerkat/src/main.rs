@@ -599,6 +599,10 @@ struct WindowCtx<'a> {
     /// here — it's pushed as a [`ShellCommand`] and applied by `Shell` after the ctx
     /// borrow ends. (Multi-window MW3, the deferred MW2 (e).)
     commands: &'a mut Vec<ShellCommand>,
+    /// How many graphs are live in the orrery pool right now (a plain count, not a
+    /// borrow — resolved at ctx build). Surfaced in Steward as the tripwire for the
+    /// pool's bound (live / cap). (Window composition P1, OQ2.)
+    orrery_pool_count: usize,
 }
 
 /// A deferred shell-level operation a per-window handler requests but cannot perform
@@ -968,6 +972,7 @@ impl Shell {
         };
         // Bundle this window's focused-graph orrery from the pool. (Window composition P1.)
         let gid = view.focused_graph;
+        let pool_count = self.orreries.len();
         WindowCtx {
             view,
             shared: &mut self.shared,
@@ -980,6 +985,7 @@ impl Shell {
             a11y_action_routes: &mut self.a11y_action_routes,
             render_core: self.render_core.as_ref(),
             commands: &mut self.commands,
+            orrery_pool_count: pool_count,
         }
     }
 
@@ -1016,6 +1022,7 @@ impl Shell {
     fn window_ctx(&mut self, id: WindowId) -> Option<WindowCtx<'_>> {
         let view = self.windows.get_mut(&id)?;
         let gid = view.focused_graph;
+        let pool_count = self.orreries.len();
         Some(WindowCtx {
             view,
             shared: &mut self.shared,
@@ -1028,6 +1035,7 @@ impl Shell {
             a11y_action_routes: &mut self.a11y_action_routes,
             render_core: self.render_core.as_ref(),
             commands: &mut self.commands,
+            orrery_pool_count: pool_count,
         })
     }
 

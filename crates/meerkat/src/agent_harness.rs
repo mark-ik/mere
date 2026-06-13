@@ -527,6 +527,22 @@ mod tests {
     }
 
     #[test]
+    fn steward_surfaces_the_live_graph_count() {
+        let mut app = test_app();
+        app.create_session(); // seed + the new graph = 2 live in the pool
+        let rows = app.ctx().steward_rows();
+        let live = rows
+            .iter()
+            .find(|(k, _)| k.as_str() == "Live graphs")
+            .expect("Steward shows a Live graphs row");
+        assert_eq!(
+            live.1,
+            format!("2 / {}", crate::MAX_POOLED_ORRERIES),
+            "the row reports the real pool count over the cap (the no-placebo tripwire)"
+        );
+    }
+
+    #[test]
     fn ctrl_shift_n_queues_a_spawn_window_command() {
         // The new-window verb can't create a window from a per-window handler (no
         // event loop, no registry access), so it queues a `SpawnWindow` the shell
