@@ -30,9 +30,10 @@ use serval_scripted_dom::{NodeId, ScriptedDom};
 
 /// Caret bar thickness, device px.
 pub(crate) const CARET_WIDTH: f32 = 2.0;
-/// Caret bar colour: a light bar, visible against the dark/grey chrome the omnibar
-/// sits in (the old near-black navy vanished on the dark theme). A theme-driven
-/// `caret-color` read is the eventual fix; this is the legible default.
+/// Caret bar fallback colour, used only when the field's text colour can't be
+/// resolved. The caret normally tracks the node's cascaded text colour (so it is
+/// theme-correct on every theme); this light bar is the legible default if that
+/// lookup misses.
 const CARET_COLOR: ColorF = ColorF { r: 0.88, g: 0.90, b: 0.96, a: 1.0 };
 /// Selection highlight colour (translucent blue; the text shows through). Alpha
 /// raised so the highlight actually reads against the chrome background.
@@ -93,7 +94,14 @@ fn paint_list_from_session(
             plist.push_selection(&rects, highlight);
         }
         if let Some(rect) = session.caret_rect(dom, c.node, c.caret, CARET_WIDTH) {
-            plist.push_caret(rect, CARET_COLOR);
+            // The caret tracks the field's cascaded text colour (`caret-color:
+            // auto`), so it stays legible on every theme; fall back to the light
+            // default if the colour can't be resolved.
+            let caret = session
+                .caret_color(dom, c.node)
+                .map(|[r, g, b, a]| ColorF { r, g, b, a })
+                .unwrap_or(CARET_COLOR);
+            plist.push_caret(rect, caret);
         }
     }
 
