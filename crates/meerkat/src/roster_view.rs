@@ -102,9 +102,19 @@ pub fn roster_view(state: &RosterState) -> RosterView {
                             .attr("class", "roster-edge-target"),
                     ),
                 ];
-                edges.push(Box::new(
-                    el::<_, RosterState, ()>("div", edge_kids).attr("class", "roster-edge"),
-                ));
+                // Edge traversal: clicking a relation selects its *other* endpoint,
+                // walking the graph along the edge. `stop_propagation` keeps the
+                // parent row's own select from also firing.
+                let target = edge.other_member;
+                edges.push(Box::new(on_click(
+                    el::<_, RosterState, ()>("div", edge_kids)
+                        .attr("class", "roster-edge")
+                        .attr("data-edge-target", target.to_string()),
+                    move |st: &mut RosterState, ev: PointerClick| {
+                        ev.stop_propagation();
+                        st.pending.push(RosterIntent::Select(target));
+                    },
+                )));
             }
             entry.push(Box::new(
                 el::<_, RosterState, ()>("div", edges).attr("class", "roster-edges"),
@@ -405,6 +415,45 @@ mod tests {
             assert_eq!(count_by_class(dom, root, "roster-edge"), 2);
             assert_eq!(count_by_class(dom, root, "roster-edge-kind"), 2);
         });
+    }
+
+    /// Edge traversal: clicking a relation row selects its *other* endpoint (not
+    /// the focused row), so the roster walks the graph along the edge.
+    #[test]
+    fn clicking_an_edge_selects_the_other_endpoint() {
+        let mut pane = RosterPane::new();
+        pane.set_rows(
+            &ChromeTheme::default(),
+            vec![RosterRow {
+                member: GraphMemberId::from_u128(1),
+                title: "Focused".to_string(),
+                url: "https://a.example/".to_string(),
+                content_type: None,
+                tags: Vec::new(),
+                edges: vec![EdgeRow {
+                    direction: EdgeDir::Out,
+                    kind_label: "Hyperlink".to_string(),
+                    other_title: "Target".to_string(),
+                    other_url: "https://b.example/".to_string(),
+                    other_member: GraphMemberId::from_u128(2),
+                }],
+                selected: true,
+                section_header: None,
+            }],
+        );
+        let _ = pane.frame(300, 400, 0.0);
+        let edge_node = {
+            let dom = pane.dom();
+            let dom = dom.borrow();
+            first_by_class(&dom, dom.document(), "roster-edge").expect("an edge row")
+        };
+        pane.dispatch_click(edge_node, PointerClick::at((40.0, 60.0)));
+        let intents = pane.take_intents();
+        assert!(
+            matches!(intents.first(), Some(RosterIntent::Select(m)) if *m == GraphMemberId::from_u128(2)),
+            "clicking the edge selects its other endpoint, not the focused row",
+        );
+        assert_eq!(intents.len(), 1, "stop_propagation kept the row's own select from firing");
     }
 
     /// Each row that opens a content-type section emits a section header.
