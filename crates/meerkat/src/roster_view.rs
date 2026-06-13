@@ -216,6 +216,13 @@ impl RosterPane {
         out
     }
 
+    /// The realized pane DOM (the runner has diffed the current rows into it), for
+    /// tests asserting the emitted element structure.
+    #[cfg(test)]
+    pub(crate) fn dom(&self) -> std::rc::Rc<std::cell::RefCell<serval_scripted_dom::ScriptedDom>> {
+        self.pane.dom()
+    }
+
     /// Scroll offsets for the `.roster` container at `scroll` px (empty if absent).
     fn scroll_offsets(&self, scroll: f32) -> ScrollOffsets<NodeId> {
         let mut offsets = ScrollOffsets::default();
@@ -237,11 +244,13 @@ impl Default for RosterPane {
 #[cfg(test)]
 mod tests {
     use forme::GraphMemberId;
+    use layout_dom_api::LayoutDom;
     use register_theme::chrome::ChromeTheme;
+    use serval_scripted_dom::{NodeId, ScriptedDom};
     use xilem_serval::PointerClick;
 
     use super::*;
-    use crate::roster::RosterRow;
+    use crate::roster::{EdgeDir, EdgeRow, RosterRow};
 
     fn row(n: u128, url: &str) -> RosterRow {
         RosterRow {
@@ -254,6 +263,38 @@ mod tests {
             selected: false,
             section_header: None,
         }
+    }
+
+    /// Build a roster pane over `rows`, lay it out (so the runner diffs them into the
+    /// DOM), and hand the realized DOM + its root to `check`. The structural twin of
+    /// the old `build_roster_dom` tests, now asserting against the view's output.
+    fn with_rendered<R>(rows: Vec<RosterRow>, check: impl FnOnce(&ScriptedDom, NodeId) -> R) -> R {
+        let mut pane = RosterPane::new();
+        pane.set_rows(&ChromeTheme::default(), rows);
+        let _ = pane.frame(240, 200, 0.0);
+        let dom = pane.dom();
+        let dom = dom.borrow();
+        let root = dom.document();
+        check(&dom, root)
+    }
+
+    /// The first node at/under `id` carrying `class`, by depth-first walk.
+    fn first_by_class(dom: &ScriptedDom, id: NodeId, class: &str) -> Option<NodeId> {
+        if dom.attributes(id).any(|attr| {
+            attr.name.local.as_ref() == "class" && attr.value.split_whitespace().any(|c| c == class)
+        }) {
+            return Some(id);
+        }
+        dom.dom_children(id).find_map(|child| first_by_class(dom, child, class))
+    }
+
+    /// How many nodes at/under `id` carry `class`.
+    fn count_by_class(dom: &ScriptedDom, id: NodeId, class: &str) -> usize {
+        let here = usize::from(dom.attributes(id).any(|attr| {
+            attr.name.local.as_ref() == "class"
+                && attr.value.split_whitespace().any(|c| c == class)
+        }));
+        here + dom.dom_children(id).map(|c| count_by_class(dom, c, class)).sum::<usize>()
     }
 
     /// The input-spine proof: a row-click routes through the runner's DOM dispatch
@@ -277,6 +318,146 @@ mod tests {
         assert!(
             matches!(intents.first(), Some(RosterIntent::Select(m)) if *m == first),
             "the first row's member is selected via runner dispatch, not a rect cache",
+        );
+    }
+
+    /// A row's facets strip carries its content-type chip and one tag per tag.
+    #[test]
+    fn facets_render_content_type_and_tags() {
+        let rows = vec![RosterRow {
+            member: GraphMemberId::from_u128(1),
+            title: "My Page".to_string(),
+            url: "https://example.com/".to_string(),
+            content_type: Some("text/html".to_string()),
+            tags: vec!["gemini".to_string(), "research".to_string()],
+            edges: Vec::new(),
+            selected: false,
+            section_header: None,
+        }];
+        with_rendered(rows, |dom, root| {
+            assert!(first_by_class(dom, root, "roster-facets").is_some());
+            assert!(first_by_class(dom, root, "roster-chip").is_some());
+            assert_eq!(count_by_class(dom, root, "roster-tag"), 2);
+        });
+    }
+
+    /// A row with no content type and no tags emits no facets strip.
+    #[test]
+    fn no_facets_strip_when_empty() {
+        let rows = vec![RosterRow {
+            member: GraphMemberId::from_u128(1),
+            title: "Bare".to_string(),
+            url: "mere://welcome".to_string(),
+            content_type: None,
+            tags: Vec::new(),
+            edges: Vec::new(),
+            selected: false,
+            section_header: None,
+        }];
+        with_rendered(rows, |dom, root| {
+            assert!(first_by_class(dom, root, "roster-facets").is_none());
+        });
+    }
+
+    /// The focused row renders its edge detail: one `roster-edge` (with a kind
+    /// label) per relation.
+    #[test]
+    fn edge_rows_render_for_focused_node() {
+        let rows = vec![
+            RosterRow {
+                member: GraphMemberId::from_u128(1),
+                title: "Focused".to_string(),
+                url: "https://a.example/".to_string(),
+                content_type: None,
+                tags: Vec::new(),
+                edges: vec![
+                    EdgeRow {
+                        direction: EdgeDir::Out,
+                        kind_label: "Hyperlink".to_string(),
+                        other_title: "Target".to_string(),
+                        other_url: "https://b.example/".to_string(),
+                        other_member: GraphMemberId::from_u128(2),
+                    },
+                    EdgeRow {
+                        direction: EdgeDir::In,
+                        kind_label: "Traversal".to_string(),
+                        other_title: "Source".to_string(),
+                        other_url: "https://c.example/".to_string(),
+                        other_member: GraphMemberId::from_u128(3),
+                    },
+                ],
+                selected: true,
+                section_header: None,
+            },
+            RosterRow {
+                member: GraphMemberId::from_u128(2),
+                title: "Other".to_string(),
+                url: "https://b.example/".to_string(),
+                content_type: None,
+                tags: Vec::new(),
+                edges: Vec::new(),
+                selected: false,
+                section_header: None,
+            },
+        ];
+        with_rendered(rows, |dom, root| {
+            assert!(first_by_class(dom, root, "roster-edges").is_some());
+            assert_eq!(count_by_class(dom, root, "roster-edge"), 2);
+            assert_eq!(count_by_class(dom, root, "roster-edge-kind"), 2);
+        });
+    }
+
+    /// Each row that opens a content-type section emits a section header.
+    #[test]
+    fn section_headers_render_for_grouped_rows() {
+        let rows = vec![
+            RosterRow {
+                member: GraphMemberId::from_u128(1),
+                title: "A Feed".to_string(),
+                url: "https://example.com/feed".to_string(),
+                content_type: Some("application/rss+xml".to_string()),
+                tags: Vec::new(),
+                edges: Vec::new(),
+                selected: false,
+                section_header: Some("Feeds".to_string()),
+            },
+            RosterRow {
+                member: GraphMemberId::from_u128(2),
+                title: "A Page".to_string(),
+                url: "https://example.com/page".to_string(),
+                content_type: Some("text/html".to_string()),
+                tags: Vec::new(),
+                edges: Vec::new(),
+                selected: false,
+                section_header: Some("Documents".to_string()),
+            },
+        ];
+        with_rendered(rows, |dom, root| {
+            assert_eq!(count_by_class(dom, root, "roster-section"), 2);
+        });
+    }
+
+    /// Enough rows overflow a short pane, so the scroll-clamp path reports headroom.
+    #[test]
+    fn rows_overflow_small_pane() {
+        let rows: Vec<RosterRow> = (0..12)
+            .map(|i| RosterRow {
+                member: GraphMemberId::from_u128(i + 1),
+                title: format!("node-{i}"),
+                url: format!("https://example.com/node-{i}"),
+                content_type: Some("text/html".to_string()),
+                tags: Vec::new(),
+                edges: Vec::new(),
+                selected: i == 0,
+                section_header: None,
+            })
+            .collect();
+        let mut pane = RosterPane::new();
+        pane.set_rows(&ChromeTheme::default(), rows);
+        let _ = pane.frame(220, 120, 0.0);
+        assert!(
+            pane.max_scroll() > 0.0,
+            "roster rows should overflow the visible pane",
         );
     }
 }
