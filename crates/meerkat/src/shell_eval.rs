@@ -32,7 +32,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use script_rhai::rhai::{Array, Dynamic};
+use script_rhai::rhai::{Array, Dynamic, Map};
 
 use crate::command::Command;
 
@@ -45,6 +45,7 @@ const QUERIES: &[&str] = &[
     "can_forward",
     "focused_node",
     "nodes",
+    "inspect",
 ];
 
 /// The per-call operation budget: rhai's native runaway guard, generous enough
@@ -68,6 +69,10 @@ pub struct ShellContext {
     pub focused_node: Option<String>,
     /// Every graph node's URL, in graph order.
     pub nodes: Vec<String>,
+    /// The focused node's inspection rows (the same `(label, value)` pairs the
+    /// Inspector pane shows: node metadata, fetch state, content structure). Empty
+    /// when nothing is focused. Surfaced to scripts as the `inspect()` map.
+    pub inspect: Vec<(String, String)>,
 }
 
 /// The result of evaluating a command expression.
@@ -130,6 +135,17 @@ impl CommandShell {
         engine.register_fn("history", move || to_array(&s.history));
         let s = snapshot.clone();
         engine.register_fn("nodes", move || to_array(&s.nodes));
+        let s = snapshot.clone();
+        engine.register_fn("inspect", move || {
+            // The focused node's inspection rows as a map (`inspect()["Title"]`,
+            // `inspect()["Content type"]`, …) — the command-line reach into the
+            // Inspector's per-node content report.
+            let mut map = Map::new();
+            for (label, value) in &s.inspect {
+                map.insert(label.as_str().into(), Dynamic::from(value.clone()));
+            }
+            map
+        });
 
         engine.set_max_operations(OP_BUDGET);
         let result = engine.eval::<Dynamic>(&desugar(source));
@@ -214,6 +230,10 @@ mod tests {
             can_forward: false,
             focused_node: Some("mere://welcome".into()),
             nodes: vec!["mere://welcome".into(), "https://servo.org".into()],
+            inspect: vec![
+                ("Title".into(), "Welcome".into()),
+                ("Content type".into(), "text/html".into()),
+            ],
         }
     }
 
@@ -284,6 +304,20 @@ mod tests {
     fn an_empty_expression_is_a_no_op() {
         let out = CommandShell::new().eval("", &ctx());
         assert_eq!(out, ShellOutcome::default());
+    }
+
+    #[test]
+    fn inspect_exposes_the_focused_nodes_rows_as_a_map() {
+        // The focused node's inspection rows are queryable by label.
+        let out = CommandShell::new().eval(r#"inspect()["Title"]"#, &ctx());
+        assert_eq!(out.text, "Welcome");
+        assert!(out.error.is_none());
+        let ct = CommandShell::new().eval(r#"inspect()["Content type"]"#, &ctx());
+        assert_eq!(ct.text, "text/html");
+        // The bare form sugars to a call and stringifies the whole map.
+        let bare = CommandShell::new().eval("inspect", &ctx());
+        assert!(bare.error.is_none());
+        assert!(!bare.text.is_empty(), "the map renders");
     }
 
     #[test]

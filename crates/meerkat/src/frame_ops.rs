@@ -916,6 +916,15 @@ impl WindowCtx<'_> {
     /// location, history + nav capability, the focused node, and every graph node
     /// URL (the cross-to-orrery reach). Built fresh per eval; nothing writes it.
     fn shell_context(&self) -> ShellContext {
+        // The focused node's inspection rows (the same the Inspector pane shows),
+        // surfaced to scripts as `inspect()`.
+        let node = self
+            .focused_member()
+            .and_then(|member| self.orrery.graph().get_node_by_id(member))
+            .map(|(_, node)| node);
+        let state = node.and_then(|node| self.shared.content.pages.get(node.url()));
+        let inspect = super::inspector::inspector_rows(node, state);
+
         let chrome = self.view.runner.state();
         ShellContext {
             current_url: self.current_focus_url().unwrap_or_default(),
@@ -929,6 +938,7 @@ impl WindowCtx<'_> {
                 .nodes()
                 .map(|(_, node)| node.url().to_string())
                 .collect(),
+            inspect,
         }
     }
 
