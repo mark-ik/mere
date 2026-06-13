@@ -917,6 +917,25 @@ mod tests {
     }
 
     #[test]
+    fn delete_key_removes_the_focused_node() {
+        // With no chrome field focused, a bare Delete removes the focused node (the
+        // Ctrl+Backspace muscle-memory, now reachable with Delete).
+        let mut app = test_app();
+        app.orrery_mut().visit("https://x.test");
+        let before = app.orrery().graph().nodes().count();
+        {
+            let mut wc = app.ctx();
+            wc.view.runner.set_focus(None); // graph has the keyboard
+            wc.on_key_pressed(&winit::keyboard::Key::Named(winit::keyboard::NamedKey::Delete));
+        }
+        assert_eq!(
+            app.orrery().graph().nodes().count(),
+            before - 1,
+            "Delete removed the focused node",
+        );
+    }
+
+    #[test]
     fn omnibar_relate_without_a_pair_reports_a_note() {
         // `>relate` with fewer than two nodes selected no-ops; the bar explains why
         // instead of silently doing nothing.

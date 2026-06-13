@@ -170,7 +170,10 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             ".palette {{ width: 540px; background-color: {}; padding: 10px; }}",
             rgb(c.surface_bg)
         ),
-        format!(".cmd-list {{ background-color: {}; }}", rgb(c.surface_bg)),
+        // The command list scrolls (the host bounds its height per-window inline
+        // and offsets it to follow the selection, so a long list stays reachable in
+        // a small window).
+        format!(".cmd-list {{ overflow: scroll; background-color: {}; }}", rgb(c.surface_bg)),
         format!(
             ".cmd-row {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 12px; }}",
             rgb(c.body_text),

@@ -245,6 +245,9 @@ pub enum ContextAction {
     Stack,
     /// Redock the shellbar to `edge`. Drains without touching `context_set`.
     ShellbarMove(ShellbarEdge),
+    /// Relate the two selected nodes (a user-grouped relation). Offered only for a
+    /// two-node selection; drains like `ShellbarMove` without opening tiles.
+    Relate,
 }
 
 impl Chrome {

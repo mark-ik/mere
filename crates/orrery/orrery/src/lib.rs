@@ -573,6 +573,12 @@ impl Orrery {
         removed
     }
 
+    /// Whether any edge is currently selected (the host routes a `Delete` to edge
+    /// retraction when so, else to node deletion).
+    pub fn has_selected_edges(&self) -> bool {
+        !self.selected_edges.is_empty()
+    }
+
     /// Hide the currently-selected edges: move them into the hidden set (as
     /// undirected pairs) so the edge pass skips them, and clear the selection.
     /// Returns how many were hidden. The relations and their physics springs

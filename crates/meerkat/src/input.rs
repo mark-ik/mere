@@ -777,6 +777,30 @@ impl WindowCtx<'_> {
             self.on_comms_key(key);
         } else if self.omnibar_focused() {
             self.on_omnibar_key(key);
+        } else {
+            // No chrome field holds the caret: graph-level keys act on the
+            // selection in the orrery.
+            self.on_graph_key(key);
+        }
+    }
+
+    /// Keys handled when no chrome field is focused (the graph has the keyboard).
+    /// `Delete` / `Backspace` removes the selection: a selected edge's relation is
+    /// retracted; otherwise the focused node is deleted (the same as the legacy
+    /// Ctrl+Backspace, now reachable with a bare `Delete`).
+    fn on_graph_key(&mut self, key: &WinitKey) {
+        if matches!(
+            key,
+            WinitKey::Named(WinitNamedKey::Delete) | WinitKey::Named(WinitNamedKey::Backspace)
+        ) {
+            if self.orrery.has_selected_edges() {
+                if self.orrery.retract_selected_relation() > 0 {
+                    self.save_session();
+                    self.view.request_redraw();
+                }
+            } else if self.focused_member().is_some() {
+                self.delete_focused_node();
+            }
         }
     }
 

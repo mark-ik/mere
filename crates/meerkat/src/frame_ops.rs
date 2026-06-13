@@ -450,10 +450,15 @@ impl WindowCtx<'_> {
         let items = if set.len() == 1 {
             vec![ContextItem::new("Open tile", ContextAction::OpenSplits)]
         } else {
-            vec![
+            let mut items = vec![
                 ContextItem::new("Open in splits", ContextAction::OpenSplits),
                 ContextItem::new("Open in a stack", ContextAction::Stack),
-            ]
+            ];
+            // Relate is pairwise — offer it only for exactly two selected nodes.
+            if set.len() == 2 {
+                items.push(ContextItem::new("Relate", ContextAction::Relate));
+            }
+            items
         };
         self.view.context_set = set;
         self.view.runner
@@ -510,6 +515,15 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Relate the two selected nodes — no tile / member-set logic, like the
+        // shellbar move above.
+        if let ContextAction::Relate = action {
+            if self.orrery.assert_selected_relation(SemanticSubKind::UserGrouped) {
+                self.save_session();
+            }
+            self.view.request_redraw();
+            return;
+        }
         let set = std::mem::take(&mut self.view.context_set);
         if set.is_empty() {
             return;
@@ -527,7 +541,9 @@ impl WindowCtx<'_> {
             ContextAction::Stack => {
                 self.view.workbench.open_stack(&set);
             }
-            ContextAction::ShellbarMove(_) => unreachable!("handled above"),
+            ContextAction::ShellbarMove(_) | ContextAction::Relate => {
+                unreachable!("handled above")
+            }
         }
         self.view.request_redraw();
     }

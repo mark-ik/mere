@@ -164,6 +164,41 @@ impl WindowCtx<'_> {
             }
         });
         let scroll = ScrollOffsets::<NodeId>::default();
+        // The chrome's own scroll (the command palette follows its selection); kept
+        // separate from the content `scroll` so a cmd-list offset never bleeds into
+        // another pane's DOM.
+        let mut chrome_scroll = ScrollOffsets::<NodeId>::default();
+        if self.view.runner.state().palette_open {
+            // Bound the list to the window so a long palette can't overflow it.
+            let max_h = (h as f32 - 140.0).max(120.0);
+            {
+                let mut dom = self.view.dom.borrow_mut();
+                let root = dom.document();
+                if let Some(node) = first_with_class(&dom, root, "cmd-list") {
+                    let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
+                    dom.set_attribute(node, attr, &format!("overflow: scroll; max-height: {max_h}px;"));
+                }
+            }
+            // Follow the selection: centre the active row in the bounded viewport,
+            // from the prior frame's layout (one-frame lag, like the roster clamp).
+            if let Some(session) = &self.view.chrome_session {
+                let frags = session.fragments();
+                let dom = self.view.dom.borrow();
+                let root = dom.document();
+                if let (Some(list), Some(active)) = (
+                    first_with_class(&dom, root, "cmd-list"),
+                    first_with_class(&dom, root, "cmd-row-active"),
+                ) {
+                    if let (Some(lr), Some(ar)) = (frags.rect_of(list), frags.rect_of(active)) {
+                        let viewport_h = lr.size.height;
+                        let content_h = lr.content_size.height;
+                        let target = (ar.location.y + ar.size.height / 2.0 - viewport_h / 2.0)
+                            .clamp(0.0, (content_h - viewport_h).max(0.0));
+                        chrome_scroll.insert(list, (0.0, target));
+                    }
+                }
+            }
+        }
         // Position the shellbar strip at its docked edge. The flex-direction
         // follows the edge so buttons stack vertically (Left/Right) or
         // horizontally (Top/Bottom). (Shellbar F2.1.)
@@ -224,7 +259,7 @@ impl WindowCtx<'_> {
             w,
             h,
             cursor,
-            &scroll,
+            &chrome_scroll,
         );
         chrome_us = chrome_t.elapsed().as_micros();
 
