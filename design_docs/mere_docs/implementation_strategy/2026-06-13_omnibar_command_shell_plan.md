@@ -138,8 +138,13 @@ there until a second consumer pulls it out.
   commands). The result text / error echoes via `show_location`; every eval is
   recorded as a `meerkat.omnibar.command` diagnostic. One driven host test
   (`>roster` toggles a Roster leaf, no navigation).
-- **S4** (deferred) the richer per-node `inspect()` (serval `ContentReport` as a
-  map) over the laid-out-document query seam; converges with the inspector work.
+- **S4** ✅ `inspect()` returns the focused node's inspection rows (the Inspector
+  pane's `(label, value)` pairs: node metadata, fetch state, content structure) as
+  a rhai map, queryable by label (`inspect()["Title"]`). `ShellContext` carries the
+  rows as plain `(String, String)` (no cross-crate dep); the bin populates them
+  from `inspector_rows` over the focused node, `CommandShell` surfaces the map.
+  (Broader than the originally-scoped serval `ContentReport`, and reuses the
+  existing inspector logic — closes the omnibar↔inspector loop.)
 
 ## Decisions (2026-06-13)
 
@@ -162,3 +167,9 @@ there until a second consumer pulls it out.
   echoing via `show_location` + a `meerkat.omnibar.command` diagnostic (1 driven
   host test). Full meerkat suite green (54 lib + 72 bin). On-screen verify of a
   live `>`-command and the S4 `inspect()` query remain.
+- 2026-06-13: **polish + unification + S4 shipped.** Palette/omnibar single source
+  (`Command::verb()`; bindings + completion derive from `Command::ALL`); ghost-text
+  autocomplete (serval `TextInput` ghost suffix + `accept_ghost`, `shell_eval::complete`,
+  → / Tab accept; `f12f013`, `e6b459646da`); caret/selection/Ctrl+A input polish;
+  `>relate` / `>unrelate` edge commands (`d4f7787`); S4 `inspect()` (`f4eee77`).
+  All on-screen verified. Suite: 59 lib + 76 bin.
