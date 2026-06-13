@@ -166,12 +166,13 @@ extraction is the one piece deferred (see below); pooling itself needs no extrac
 ### P1 — Orrery pool on `SharedState` (the enabling move)
 
 **Status: done (2026-06-13)** — landed `16b02b9` (gating restructure) + `aba14ba`
-(multi-graph payload) + `7a8304b` (OQ2 unload); two graphs coexist, on-screen-verified
-(see the Progress log). The pool is a **`Shell` field, not `SharedState`** (the
-foundation's refinement; the heading wording predates it). One done-condition clause is
-not fully met: *both graphs save to their own dirs on exit* — parked graphs persist at
-switch-away, so only physics-position drift is lost after, making per-orrery exit-save
-the remaining bit (tracked under OQ2 + the Progress log).
+(multi-graph payload) + OQ2 (`7a8304b` unload, `0f94f04` park, `a23fc7c` Steward count);
+two graphs coexist, on-screen-verified (see the Progress log). The pool is a **`Shell`
+field, not `SharedState`** (the foundation's refinement; the heading wording predates
+it). The *save-to-dirs-on-exit* done-condition clause resolved through park rather than a
+separate exit-save pass: park halts a switched-away graph's physics, so it stops changing
+after its switch-away save, making that save final (only sub-pixel drift remains, which
+re-settles on reload).
 
 `self.orrery` (single, the active graph) → `SharedState.orreries: HashMap<GraphId,
 Orrery>`, lazily loaded. The ~58 `self.orrery` sites resolve the operated pane's orrery by
@@ -349,9 +350,10 @@ wanted.
    stops ticking + waking the loop while warm (the actor then idles on its channel, no
    busy-spin); no explicit unpark, since the layout is left settled and interaction
    resumes it. Together: park first, unload under memory pressure. Eviction already skips
-   every window's focused graph (P2-ready). **Still open:** the Steward live-count
-   surface; and a minor edge — `close_session` leaves a trashed session's orrery pooled
-   until LRU eviction rather than dropping it immediately.
+   every window's focused graph (P2-ready). The Steward live-count surface landed too
+   (`a23fc7c`): a "Live graphs" row shows live / cap as the no-placebo tripwire. **OQ2 is
+   resolved.** One minor edge remains: `close_session` leaves a trashed session's orrery
+   pooled until LRU eviction rather than dropping it immediately.
 3. **Provenance edge direction + family** — confirm the existing provenance edge family
    carries "copied-from across graphs" cleanly, or whether copy wants a distinct sub-kind
    (P4). Check before building, per the consumer-pull rule.
@@ -388,8 +390,8 @@ wanted.
     pool, frames settling, zero panic/warn); and an **on-screen round-trip driven by
     injected keystrokes** — session A (node "4") → Ctrl+PageDown → empty "New" graph →
     Ctrl+PageUp → node "4" still there, served from the live pooled orrery, not reloaded.
-  - **OQ2 park + unload both landed** (`7a8304b` unload, `0f94f04` park). **Still
-    deferred:** the Steward live-count surface. **Re-scoped by park:** per-orrery save on
+  - **OQ2 resolved** (`7a8304b` unload, `0f94f04` park, `a23fc7c` Steward count). **Re-
+    scoped by park:** per-orrery save on
     *exit* is now near-moot — park halts a switched-away graph's physics, so it stops
     changing after its switch-away save (only sub-pixel drift between save and halt, which
     re-settles on reload); physics-wake fan-out's P1 case is handled (parked graphs no
