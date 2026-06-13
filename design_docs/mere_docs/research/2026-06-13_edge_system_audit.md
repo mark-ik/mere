@@ -118,13 +118,23 @@ UUID-keyed replay path (`replay_retract_relations_by_ids`).
 
 ## Recommendation
 
-> **Status (2026-06-13): creation + retraction shipped.**
-> `orrery::assert_selected_relation` / `retract_selected_relation`, the
-> `Command::AssertEdge` / `RetractEdge` pair (→ palette, agent harness, accesskit,
-> and `>relate` / `>unrelate` via the `verb()` unification), and the host drain are
-> wired and tested. Default kind is `UserGrouped`. Still open: the relation-kind
-> picker (gap 2), edge traversal from the roster (gap 4), drag-to-connect, and
-> success/failure feedback when the selection is not a clean pair.
+> **Status (2026-06-13): create / retract / traverse + kind choice + feedback all shipped.**
+> - **Create / retract** (`d4f7787`): `orrery::assert_selected_relation` /
+>   `retract_selected_relation`, the `Command::AssertEdge` / `RetractEdge` pair (→
+>   palette, agent harness, accesskit, `>relate` / `>unrelate` via the `verb()`
+>   unification). `>unrelate` is symmetric (two-node selection or a clicked edge).
+> - **Relation-kind choice** (`a84fc94`, gap 2): the scriptable `relate("cites")`
+>   form maps a kind word → `SemanticSubKind` (cites/quotes/supports/contradicts/
+>   same/…; unknown → `UserGrouped`). A *discoverable kind-menu UI* is the one
+>   remaining layer.
+> - **Edge traversal** (`2b3ff83`, gap 4): a roster edge row's `on_click` selects
+>   the other endpoint (the previously-unread `EdgeRow.other_member`).
+> - **No-op feedback** (`fed6af2`): `>relate` / `>unrelate` echo "select two nodes…"
+>   in the bar instead of silently no-opping.
+>
+> Still open: the discoverable relation-kind menu, drag-to-connect, edges
+> rendering distinct sub-kinds (Cites looks like UserGrouped today), and the five
+> spine threads below.
 
 This is a wiring task on a finished substrate, not a new system. The shape:
 
