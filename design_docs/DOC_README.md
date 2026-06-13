@@ -82,12 +82,14 @@ names as receipts).
 - [murm_p2p_landscape_brief](mere_docs/research/2026-05-31_murm_p2p_landscape_brief.md) — orientation survey of the whole p2p program + external landscape verdicts. *(Pivot now executed; banner.)*
 - [resource_coordination_brief](mere_docs/research/2026-06-04_resource_coordination_brief.md) — sharing storage + compute as one model (trust-graduated rings, bounty grammar, two ledgers, verifiable compute, durability); supersedes the 2026-06-03 banking/mesh briefs.
 - [communal_compute_tiers_brief](mere_docs/research/2026-06-10_communal_compute_tiers_brief.md) — the social/tier layer over the resource-coordination mechanics: volunteer-computing lessons (F@h surge/decay, BOINC credit, LCZero's data-not-gradients communal model), the moot → moothold → coalition compute commons, time-bank as a constitution preset.
+- [edge_system_audit](mere_docs/research/2026-06-13_edge_system_audit.md) — code-verified audit of edge generation/management. The kernel model is complete (`assert_relation`, 6 families, a `SemanticSubKind` vocabulary incl. `UserGrouped`), multi-node selection + edge pick/hide already exist; the gap is purely host wiring: no action relates two existing nodes, no relation-kind UX, no true edge retraction (only display hide). Recommends a thin `assert_selected_relation` host action surfaced four ways over the omnibar `Command` spine, plus a kind picker.
 
 ## mere_docs/design/
 
 - [pane_ux_design_pass_brief](mere_docs/design/2026-05-11_pane_ux_design_pass_brief.md) — the five-gap pane-UX target (drag-rearrange, frame split, click hierarchy, context menus). *(gpui-era; largely realized; merge-then-archive into the frame taxonomy; banner.)*
 - [gloss_navigator_design](mere_docs/design/2026-06-07_gloss_navigator_design.md) — gloss = the Navigator: one configurable summary surface across scope (document ↔ graph ↔ graphlet) and form factor (outline ↔ swatch).
 - [graph_roster_and_frame_taxonomy](mere_docs/design/2026-06-07_graph_roster_and_frame_taxonomy.md) — the graph roster (graph manifest) + the surface/frame taxonomy (orrery/gloss/roster/apparatus/workbench/shellbar); §4 shellbar decision.
+- [graphlet_derivation_from_selection](mere_docs/design/2026-06-13_graphlet_derivation_from_selection.md) — select nodes → reveal latent edges → read the shape (9 canonical detectors over a chosen `EdgeProjectionSpec`) → crystallize. The read-side sibling of edge creation: reveal/derive/project/frontier are pure read over graph truth; only crystallize writes (one `GraphletRef` + an Arrangement or Containment edge). Substrate mostly exists (SelectionOverride projection, shapes, binding, reconciliation); the gap is the shape classifier + canvas choreography. Default projection = all-families with the dominant shape pre-ranked.
 
 ## Per-crate areas
 
