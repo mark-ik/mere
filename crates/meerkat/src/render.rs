@@ -121,11 +121,12 @@ impl WindowCtx<'_> {
         let leaves = frame_view::leaf_rects(&self.view.frame_layout, band, self.view.maximized_pane);
         // The orrery is the always-present graph pane; the tiled workbench is its
         // summonable sibling. Each renders into its own leaf. (Workbench-as-pane.)
-        let orrery_rect = leaves
-            .iter()
-            .find(|l| matches!(l.content, PaneContent::Orrery))
-            .map(|l| l.rect)
-            .unwrap_or(band);
+        let orrery_leaf = leaves.iter().find(|l| matches!(l.content, PaneContent::Orrery));
+        let orrery_rect = orrery_leaf.map(|l| l.rect).unwrap_or(band);
+        // The graph this Orrery pane resolves to (its leaf's graph_id) — render
+        // drives *that* pooled orrery, not the window-global one, so a second
+        // Orrery pane of another graph would drive its own. (Window composition P2.)
+        let orrery_gid = orrery_leaf.map(|l| l.graph_id).unwrap_or(self.view.focused_graph);
         let workbench_rect = leaves
             .iter()
             .find(|l| matches!(l.content, PaneContent::Workbench))
@@ -272,20 +273,20 @@ impl WindowCtx<'_> {
         // blue new) so the graph shows at a glance what's live. (Visible in
         // Cartography; the orrery is hidden in the tiled view.)
         let states = self.node_states();
-        self.orrery_mut().set_node_states(states);
+        self.pane_orrery_mut(orrery_gid).set_node_states(states);
         // Shape each node by its content type (square document / rounded menu /
         // circle feed), the same per-node-hint path as the color states.
         let shapes = self.node_shapes();
-        self.orrery_mut().set_node_shapes(shapes);
+        self.pane_orrery_mut(orrery_gid).set_node_shapes(shapes);
 
         // The orrery always composites its own scene into its leaf (kept in sync,
         // centered once). The tiled workbench, when its pane is open, composites a
         // separate scene into its own leaf — the two coexist now, no longer toggled.
-        self.orrery_mut().resize(orrery_w, orrery_h);
+        self.pane_orrery_mut(orrery_gid).resize(orrery_w, orrery_h);
         if !self.view.centered {
-            self.orrery_mut().recenter();
+            self.pane_orrery_mut(orrery_gid).recenter();
             self.view.centered = true;
-        } else if !self.view.healed && self.orrery().has_nodes() {
+        } else if !self.view.healed && self.pane_orrery(orrery_gid).has_nodes() {
             // One-shot self-heal: a restored camera that frames nothing (a
             // degenerate saved pan/zoom) snaps back to the graph. Gated on
             // has_nodes() so it waits for the async session load — firing against
@@ -294,11 +295,11 @@ impl WindowCtx<'_> {
             // once the nodes actually arrive. Checked once, so it never fights an
             // intentional pan into empty space.
             self.view.healed = true;
-            if !self.orrery().graph_visible() {
-                self.orrery_mut().recenter();
+            if !self.pane_orrery(orrery_gid).graph_visible() {
+                self.pane_orrery_mut(orrery_gid).recenter();
             }
         }
-        let (orrery_scene, orrery_redraw) = self.orrery_mut().frame(orrery_w, orrery_h);
+        let (orrery_scene, orrery_redraw) = self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
         // The workbench root (a serval flex-DOM document) for the Workbench pane;
         // taffy lays the tiles out. `(scene, w, h)` so the composite can rasterize
         // it at the pane size. `None` when the workbench pane isn't open.

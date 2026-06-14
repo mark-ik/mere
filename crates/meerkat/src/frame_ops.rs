@@ -163,6 +163,24 @@ impl WindowCtx<'_> {
             .expect("focused orrery is pooled")
     }
 
+    /// A specific pooled orrery by `graph_id`, mutable — the per-pane resolution a
+    /// render / hit-test drives the orrery a pane resolves to with. Panics if the
+    /// graph isn't pooled, which a laid-out leaf's graph always is. (Window
+    /// composition P2.)
+    pub(super) fn pane_orrery_mut(&mut self, graph_id: GraphId) -> &mut Orrery {
+        self.orreries
+            .get_mut(&graph_id)
+            .expect("a laid-out pane's graph is pooled")
+    }
+
+    /// Read twin of [`pane_orrery_mut`](Self::pane_orrery_mut). (Window
+    /// composition P2.)
+    pub(super) fn pane_orrery(&self, graph_id: GraphId) -> &Orrery {
+        self.orreries
+            .get(&graph_id)
+            .expect("a laid-out pane's graph is pooled")
+    }
+
     /// Whether the tiled-workbench pane is open (a Workbench leaf exists).
     pub(super) fn workbench_open(&self) -> bool {
         self.pane_of_content(&PaneContent::Workbench).is_some()

@@ -9,17 +9,21 @@
 //! whole band. Rendering + input walk these results; nothing else in the host
 //! needs to know the tree shape.
 
-use frame::{FrameLayout, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
+use frame::{FrameLayout, GraphId, PaneContent, PaneId, PaneNode, SplitAxis, SplitChoice};
 
 /// Width (px) of the gutter reserved between split siblings — the draggable
 /// frame divider (distinct from the workbench tile tree's slot dividers).
 pub const DIVIDER: f32 = 6.0;
 
-/// A laid-out leaf: its pane id, content, and screen rect `[x0, y0, x1, y1]`.
-/// (Split paths come from [`pane_path`] / [`divider_rects`] when an op needs one.)
+/// A laid-out leaf: its pane id, content, the `graph_id` it resolves to, and its
+/// screen rect `[x0, y0, x1, y1]`. The `graph_id` is what render / input resolve
+/// the pane's orrery with (per-pane resolution), so two Orrery leaves of
+/// different graphs each drive their own. (Split paths come from [`pane_path`] /
+/// [`divider_rects`] when an op needs one.) (Window composition P2.)
 pub struct LaidLeaf {
     pub pane_id: PaneId,
     pub content: PaneContent,
+    pub graph_id: GraphId,
     pub rect: [f32; 4],
 }
 
@@ -42,10 +46,11 @@ pub fn leaf_rects(
     maximized: Option<PaneId>,
 ) -> Vec<LaidLeaf> {
     if let Some(pid) = maximized {
-        if let Some((content, _path)) = find_leaf(&layout.root, pid, &mut Vec::new()) {
+        if let Some((content, graph_id, _path)) = find_leaf(&layout.root, pid, &mut Vec::new()) {
             return vec![LaidLeaf {
                 pane_id: pid,
                 content,
+                graph_id,
                 rect: band,
             }];
         }
@@ -73,10 +78,13 @@ pub fn divider_rects(
 fn walk_leaves(node: &PaneNode, rect: [f32; 4], out: &mut Vec<LaidLeaf>) {
     match node {
         PaneNode::Leaf {
-            pane_id, content, ..
+            pane_id,
+            content,
+            graph_id,
         } => out.push(LaidLeaf {
             pane_id: *pane_id,
             content: content.clone(),
+            graph_id: *graph_id,
             rect,
         }),
         PaneNode::Split {
@@ -158,19 +166,21 @@ fn gutter_rect(rect: [f32; 4], axis: SplitAxis, ratio: f32) -> [f32; 4] {
 
 /// The split path to leaf `pane`, if present (for close / maximize / divider ops).
 pub fn pane_path(layout: &FrameLayout, pane: PaneId) -> Option<Vec<SplitChoice>> {
-    find_leaf(&layout.root, pane, &mut Vec::new()).map(|(_, path)| path)
+    find_leaf(&layout.root, pane, &mut Vec::new()).map(|(_, _, path)| path)
 }
 
-/// Find leaf `pid`, returning its content + split path.
+/// Find leaf `pid`, returning its content + graph_id + split path.
 fn find_leaf(
     node: &PaneNode,
     pid: PaneId,
     path: &mut Vec<SplitChoice>,
-) -> Option<(PaneContent, Vec<SplitChoice>)> {
+) -> Option<(PaneContent, GraphId, Vec<SplitChoice>)> {
     match node {
         PaneNode::Leaf {
-            pane_id, content, ..
-        } if *pane_id == pid => Some((content.clone(), path.clone())),
+            pane_id,
+            content,
+            graph_id,
+        } if *pane_id == pid => Some((content.clone(), *graph_id, path.clone())),
         PaneNode::Leaf { .. } => None,
         PaneNode::Split { first, second, .. } => {
             path.push(SplitChoice::First);
