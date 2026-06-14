@@ -143,6 +143,11 @@ pub(crate) struct WindowView {
     pub(crate) scroll: HashMap<GraphMemberId, f32>,
     /// Roster pane scroll offset (device px), clamped at render.
     pub(crate) roster_scroll: f32,
+    /// Inspector / steward / apparatus pane scroll offsets (device px), each clamped
+    /// to its own laid-out content extent at render. (Same vertical scroll as roster.)
+    pub(crate) inspector_scroll: f32,
+    pub(crate) steward_scroll: f32,
+    pub(crate) apparatus_scroll: f32,
     /// The last left-button release (time + window pos), for double-click detection.
     pub(crate) last_left_release: Option<(Instant, (f32, f32))>,
     /// An in-progress workbench tab drag: the pressed tab's member + press position.
@@ -283,6 +288,9 @@ impl WindowView {
             divider_tex: Default::default(),
             scroll: Default::default(),
             roster_scroll: Default::default(),
+            inspector_scroll: Default::default(),
+            steward_scroll: Default::default(),
+            apparatus_scroll: Default::default(),
             last_left_release: Default::default(),
             tab_drag: Default::default(),
             divider_drag: Default::default(),

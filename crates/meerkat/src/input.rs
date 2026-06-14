@@ -218,7 +218,7 @@ impl WindowCtx<'_> {
                             if button == MouseButton::Left {
                                 let local = (x - arect[0], y - arect[1]);
                                 if let Some(node) =
-                                    self.view.apparatus_pane.hit_test(local.0, local.1)
+                                    self.view.apparatus_pane.hit_test(local.0, local.1, self.view.apparatus_scroll)
                                 {
                                     self.view
                                         .apparatus_pane

@@ -33,7 +33,7 @@ pub fn apparatus_sheet(c: &ChromeTheme) -> Vec<String> {
     vec![
         "div { display: block; }".to_string(),
         format!(
-            ".apparatus {{ background-color: {}; padding: 8px; }}",
+            ".apparatus {{ overflow: scroll; height: 100%; background-color: {}; padding: 8px; }}",
             rgb(c.panel_bg)
         ),
         format!(

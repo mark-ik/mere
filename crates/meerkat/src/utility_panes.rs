@@ -21,7 +21,7 @@ pub fn utility_pane_sheet(c: &ChromeTheme) -> Vec<String> {
     vec![
         "div { display: block; }".to_string(),
         format!(
-            ".utility-pane {{ background-color: {}; padding: 10px; }}",
+            ".utility-pane {{ overflow: scroll; height: 100%; background-color: {}; padding: 10px; }}",
             rgb(c.panel_bg)
         ),
         format!(

@@ -920,7 +920,9 @@ impl WindowCtx<'_> {
             let items = super::apparatus::apparatus_items(&themes, system_rows, observability);
             let sheet = super::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
             self.view.apparatus_pane.set(sheet, "apparatus", items);
-            let scene = self.view.apparatus_pane.frame(aw, ah);
+            let max_scroll = self.view.apparatus_pane.max_scroll();
+            self.view.apparatus_scroll = self.view.apparatus_scroll.clamp(0.0, max_scroll);
+            let scene = self.view.apparatus_pane.frame(aw, ah, self.view.apparatus_scroll);
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
@@ -954,13 +956,15 @@ impl WindowCtx<'_> {
             let items = super::utility_panes::utility_pane_items(&leaf.content, &rows);
             let sheet = super::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
-            let pane = match &leaf.content {
-                PaneContent::Inspector => &mut self.view.inspector_pane,
-                PaneContent::Steward => &mut self.view.steward_pane,
+            let (pane, scroll) = match &leaf.content {
+                PaneContent::Inspector => (&mut self.view.inspector_pane, &mut self.view.inspector_scroll),
+                PaneContent::Steward => (&mut self.view.steward_pane, &mut self.view.steward_scroll),
                 _ => continue,
             };
             pane.set(sheet, "utility-pane", items);
-            let scene = pane.frame(pw, ph);
+            let max_scroll = pane.max_scroll();
+            *scroll = scroll.clamp(0.0, max_scroll);
+            let scene = pane.frame(pw, ph, *scroll);
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
                 g: pb[1] as f64 / 255.0,

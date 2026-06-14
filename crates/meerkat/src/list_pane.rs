@@ -12,6 +12,7 @@
 //!
 //! (Window composition P2 companion — list-pane view-ification.)
 
+use layout_dom_api::LayoutDom;
 use netrender::Scene;
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
@@ -77,17 +78,22 @@ pub fn list_pane_view(state: &ListPaneState) -> ListView {
     Box::new(el::<_, ListPaneState, ()>("div", children).attr("class", state.root_class.clone()))
 }
 
-/// A view-driven display/button pane: a [`ViewPane`] over [`ListPaneState`]. The
-/// panes that use it do not scroll and carry no a11y row bounds (their a11y is a
-/// skeleton), so the surface is just set / frame / hit_test / dispatch / drain.
+/// A view-driven display/button pane: a [`ViewPane`] over [`ListPaneState`]. It
+/// scrolls its root container when the item list overflows (the same vertical
+/// scroll as the roster) and carries no a11y row bounds (its a11y is a skeleton),
+/// so the surface is set / frame / hit_test / dispatch / drain plus the scroll.
 pub struct ListPane {
     pane: ViewPane<ListPaneState, ListLogic, ListView>,
+    /// The root container's class (set each frame), so [`scroll_offsets`](Self::scroll_offsets)
+    /// can find the scroll container to shift. Empty before the first `set`.
+    root_class: String,
 }
 
 impl ListPane {
     pub fn new() -> Self {
         Self {
             pane: ViewPane::new(list_pane_view as ListLogic, ListPaneState::default()),
+            root_class: String::new(),
         }
     }
 
@@ -95,20 +101,53 @@ impl ListPane {
     pub fn set(&mut self, sheets: Vec<String>, root_class: &str, items: Vec<PaneItem>) {
         self.pane.set_sheets(sheets);
         let root_class = root_class.to_string();
+        self.root_class = root_class.clone();
         self.pane.update(|s| {
             s.root_class = root_class;
             s.items = items;
         });
     }
 
-    /// Render the pane to a scene at `w`×`h` (these panes do not scroll).
-    pub fn frame(&mut self, w: u32, h: u32) -> Scene {
-        self.pane.frame(w, h, &ScrollOffsets::default())
+    /// Render the pane to a scene at `w`×`h`, scrolled `scroll` px down its root
+    /// container (the list scrolls when it overflows the pane).
+    pub fn frame(&mut self, w: u32, h: u32, scroll: f32) -> Scene {
+        let scrolls = self.scroll_offsets(scroll);
+        self.pane.frame(w, h, &scrolls)
     }
 
-    /// Hit-test pane-local `(x, y)`.
-    pub fn hit_test(&self, x: f32, y: f32) -> Option<NodeId> {
-        self.pane.hit_test(x, y, &ScrollOffsets::default())
+    /// The maximum scroll (content height beyond the visible pane) of the last laid-
+    /// out frame, for the host to clamp its stored scroll. `0` before the first frame
+    /// or when nothing overflows.
+    pub fn max_scroll(&self) -> f32 {
+        let dom = self.pane.dom();
+        let dom = dom.borrow();
+        let Some(node) = crate::first_with_class(&dom, dom.document(), &self.root_class) else {
+            return 0.0;
+        };
+        let Some(frags) = self.pane.fragments() else { return 0.0 };
+        let Some(l) = frags.rect_of(node) else { return 0.0 };
+        let inner = l.size.height - l.padding.top - l.padding.bottom - l.border.top - l.border.bottom;
+        (l.content_size.height - inner).max(0.0)
+    }
+
+    /// Hit-test pane-local `(x, y)` (with the pane scrolled by `scroll`).
+    pub fn hit_test(&self, x: f32, y: f32, scroll: f32) -> Option<NodeId> {
+        let scrolls = self.scroll_offsets(scroll);
+        self.pane.hit_test(x, y, &scrolls)
+    }
+
+    /// Scroll offsets for the root container at `scroll` px (empty if unset / absent).
+    fn scroll_offsets(&self, scroll: f32) -> ScrollOffsets<NodeId> {
+        let mut offsets = ScrollOffsets::default();
+        if self.root_class.is_empty() {
+            return offsets;
+        }
+        let dom = self.pane.dom();
+        let dom = dom.borrow();
+        if let Some(node) = crate::first_with_class(&dom, dom.document(), &self.root_class) {
+            offsets.insert(node, (0.0, scroll));
+        }
+        offsets
     }
 
     /// Dispatch a click that hit `node`, firing its `on_click` (a button queues its
@@ -159,9 +198,9 @@ mod tests {
             ],
         );
         // Lay the pane out so the hit-test has a cached layout to probe.
-        let _ = pane.frame(240, 160);
+        let _ = pane.frame(240, 160, 0.0);
         // A point inside the button (below the inert title row, within its padding).
-        let node = pane.hit_test(30.0, 40.0).expect("a node under the button");
+        let node = pane.hit_test(30.0, 40.0, 0.0).expect("a node under the button");
         pane.dispatch_click(node, PointerClick::at((30.0, 40.0)));
         let keys = pane.take_activations();
         assert_eq!(

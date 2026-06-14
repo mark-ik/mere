@@ -474,6 +474,27 @@ impl ApplicationHandler for Shell {
                     wc.view.request_redraw();
                     return;
                 }
+                // A wheel over a scrollable utility pane (inspector / steward /
+                // apparatus) scrolls that pane rather than panning the orrery
+                // underneath. Render clamps each to its live content extent.
+                if let Some(content) = wc
+                    .laid_leaves()
+                    .into_iter()
+                    .find(|l| cx >= l.rect[0] && cx < l.rect[2] && cy >= l.rect[1] && cy < l.rect[3])
+                    .map(|l| l.content)
+                {
+                    let scroll = match content {
+                        frame::PaneContent::Inspector => Some(&mut wc.view.inspector_scroll),
+                        frame::PaneContent::Steward => Some(&mut wc.view.steward_scroll),
+                        frame::PaneContent::Apparatus => Some(&mut wc.view.apparatus_scroll),
+                        _ => None,
+                    };
+                    if let Some(s) = scroll {
+                        *s = (*s - dy).max(0.0);
+                        wc.view.request_redraw();
+                        return;
+                    }
+                }
                 let over_card = wc
                     .view
                     .content_rects
