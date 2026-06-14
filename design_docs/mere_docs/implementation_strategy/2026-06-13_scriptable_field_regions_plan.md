@@ -150,6 +150,41 @@ no idea what to do with the field."* The durable requirements:
   (`physics.advance_frame`) — wiring couplings (rebuilt on graph mutation) into the
   sim is the load-bearing P1 work, not a flip.
 
+## Physics tuning — deferred to a settings menu (post-window-composition)
+
+After P1 shipped, testing the force well surfaced three physics issues. The user's
+call: these belong in a **physics settings menu**, **deferred until after the
+window-composition plan** (which unblocks pelt in meerkat) — not hardcoded guesses
+now. Captured here so the menu's scope is ready:
+
+- **Field strength is configurable, and the default is probably too weak.** Nodes
+  already inside a field's radius do gather, but the pull wants more force, and the
+  right strength varies — so it is a **per-field setting**, not one global constant
+  (`configurability over opinionated defaults`). The disk's small gradient
+  (~slope/radius) means the strength number is large; the menu exposes it (plus
+  field radius / falloff) per field.
+- **A coupling does not pick up nodes added after the field** *(correctness, not
+  just tuning)*. `CouplingForce::from_coupling` snapshots its target set
+  (`NodeSelector::All`) at build time, and the orrery only *adds* the force on
+  placement — so a node minted *later* is in no field's target set and feels no
+  pull (it drifts on the default forces, which looked like "the new node went to
+  the old field"). The fix is the **rebuild-on-mutation** the P1 note already flags:
+  on a node/field change, re-resolve every coupling's targets (a gyre force-replace
+  API, or a position-preserving sim rebuild — the live sim is add-only today). This
+  is the load-bearing gap; arguably worth fixing before the menu since it makes
+  fields feel broken.
+- **Inertia/damping is not preserved across pause/resume.** Settling damps momentum
+  to rest (the right *default*), but when scrubbing with pause/play the user wants
+  the momentum preserved so the motion continues from where it froze — a **damping
+  toggle** (or a "resume with inertia" mode) in the menu. Today resume kicks a fresh
+  settle budget; the body velocities survive a halt, but the settle damping bleeds
+  them off.
+
+Also deferred into the same surface: per-field **response** (gather / repel / wall /
+dampen), the **move/resize re-aims the well** behavior (today the force snapshots
+the field definition at placement, so dragging the field doesn't move its pull
+until rebuild), and field **removal** dropping its force.
+
 ## Progress
 
 - 2026-06-13: Plan written from the field-system scout (kernel `Field`/`Coupling`,
@@ -168,3 +203,16 @@ no idea what to do with the field."* The durable requirements:
   (forces, the no-placebo coupling) ahead of further P0 polish. Open question put
   back to the user: which effect to make tangible first (forces / edge-visibility /
   layout).
+- 2026-06-14: **P1 shipped — the force well** (`48067be`). User chose "force well"
+  as the field's first job. `add_field_at` attaches a default `RepelFromMax`
+  coupling over the disk peak (nodes pulled up the gradient toward the center) and
+  pushes the resolved gyre `CouplingForce` into the live sim via a new
+  `Physics::add_coupling_force` / `PhysicsCommand::AddCouplingForce` (no
+  position-losing rebuild); `build_simulation` also folds field couplings in for a
+  session reload. Default strength `5000` (the disk gradient is small). Also shipped
+  **physics pause/resume** (`b2ecaaf`): Space + a toolbar pause/play button, with a
+  gated `settle_physics` so a paused graph stays frozen through mutations. Testing
+  surfaced the three physics issues above (weak/strength-per-field, new-node not
+  captured, inertia-on-pause) → **deferred to a physics settings menu, gated on the
+  window-composition plan** (the section above). No further field code until the
+  user resumes the follow-ups (move/resize, box-on-interaction, roster + hide).
