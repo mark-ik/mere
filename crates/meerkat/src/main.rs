@@ -84,6 +84,7 @@ mod input;
 mod inspector;
 mod list_pane;
 mod observability;
+mod pane_geom;
 mod pane_session;
 mod render;
 mod roster;
