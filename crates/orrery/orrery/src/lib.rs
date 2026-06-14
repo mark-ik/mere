@@ -135,6 +135,8 @@ pub struct Orrery {
     middle_drag: Option<(f32, f32)>,
     /// An in-progress left-button node click/drag, if any.
     drag: Option<Drag>,
+    /// An in-progress field move / resize drag, if any. (Field regions.)
+    field_drag: Option<fields::FieldDrag>,
     /// Currently-selected nodes (click selects one; marquee selects many).
     selected: HashSet<NodeKey>,
     /// Currently-selected edges (edge-pick, or covered by a marquee), as the
@@ -236,6 +238,7 @@ impl Orrery {
         self.node_states.clear();
         self.node_shapes.clear();
         self.drag = None;
+        self.field_drag = None;
         self.marquee = None;
         self.middle_drag = None;
         self.reconcile_derived();
@@ -283,6 +286,7 @@ impl Orrery {
             pan_velocity: (0.0, 0.0),
             middle_drag: None,
             drag: None,
+            field_drag: None,
             selected: HashSet::new(),
             selected_edges: HashSet::new(),
             hidden_edges: HashSet::new(),
@@ -360,6 +364,10 @@ impl Orrery {
             .collect();
         self.physics.sync_nodes(nodes);
         self.physics.sync_edges(dedup_edges(&self.graph));
+        // Re-resolve field couplings against the new node set, so a field gathers
+        // nodes added after it was placed (its targets snapshot at build time).
+        // (Field regions — rebuild-on-mutation / new-node capture.)
+        self.rebuild_coupling_forces();
         let (node_dom, gnode_of, stage_node) = build_pool_dom(&self.graph);
         self.node_dom = node_dom;
         self.gnode_of = gnode_of;

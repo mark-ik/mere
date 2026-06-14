@@ -435,6 +435,13 @@ impl ApplicationHandler for Shell {
                     }
                 }
             }
+            WindowEvent::CursorLeft { .. } => {
+                // The pointer left the window: drop any field hover so its box doesn't
+                // stay stuck on. (Field regions — box-on-interaction.)
+                if wc.orrery.clear_active_field() {
+                    wc.view.request_redraw();
+                }
+            }
             WindowEvent::ModifiersChanged(mods) => {
                 wc.view.modifiers = modifiers_from_winit(mods.state());
                 wc.orrery.set_ctrl(wc.view.modifiers.ctrl);

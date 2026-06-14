@@ -52,9 +52,10 @@ pub(crate) enum PhysicsCommand {
     Halt,
     /// Whether a drag is in progress (keep ticking so neighbors react).
     SetDragging(bool),
-    /// Add a field coupling's force to the live simulation (a freshly placed field's
-    /// well), so it pulls its nodes without a position-losing rebuild. (Field regions P1.)
-    AddCouplingForce(CouplingForce),
+    /// Replace the live field-coupling forces wholesale (the rebuild a field place /
+    /// move / resize / new node triggers), without a position-losing sim rebuild.
+    /// (Field regions — rebuild-on-mutation.)
+    SetCouplingForces(Vec<CouplingForce>),
 }
 
 /// One layout the actor produced: the positions plus whether it is still
@@ -148,14 +149,15 @@ impl Physics {
         }
     }
 
-    /// Add a field coupling's force to the live simulation (a freshly placed field's
-    /// well) without a position-losing rebuild — the force then pulls its nodes on
-    /// the next ticks. (Field regions P1.)
-    pub fn add_coupling_force(&mut self, force: CouplingForce) {
+    /// Replace the live field-coupling forces wholesale — the rebuild a field place /
+    /// move / resize / new node triggers (the host re-resolves every coupling against
+    /// the current graph). Position-preserving (forces don't touch body state).
+    /// (Field regions — rebuild-on-mutation.)
+    pub fn set_coupling_forces(&mut self, forces: Vec<CouplingForce>) {
         match self {
-            Physics::Inline(p) => p.sim.add_force(force),
+            Physics::Inline(p) => p.sim.set_coupling_forces(forces),
             Physics::Actor(p) => {
-                p.handle.command(PhysicsCommand::AddCouplingForce(force));
+                p.handle.command(PhysicsCommand::SetCouplingForces(forces));
             },
         }
     }
@@ -333,7 +335,7 @@ fn apply(
         PhysicsCommand::Settle(n) => *ticks_remaining = (*ticks_remaining).max(n),
         PhysicsCommand::Halt => *ticks_remaining = 0,
         PhysicsCommand::SetDragging(d) => *dragging = d,
-        PhysicsCommand::AddCouplingForce(force) => sim.add_force(force),
+        PhysicsCommand::SetCouplingForces(forces) => sim.set_coupling_forces(forces),
     }
 }
 

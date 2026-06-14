@@ -149,6 +149,13 @@ pub struct Simulation {
     nodes_by_body: HashMap<RigidBodyHandle, NodeKey>,
     edges: Vec<(NodeKey, NodeKey)>,
     forces: Vec<Box<dyn Force>>,
+    /// Field couplings as a separately-replaceable force list (built-in layout
+    /// forces stay in `forces`). A `CouplingForce` snapshots its target node set at
+    /// build time, so a field move / resize / new node needs the whole set
+    /// re-resolved — the host rebuilds these wholesale via
+    /// [`set_coupling_forces`](Self::set_coupling_forces). (Field regions —
+    /// rebuild-on-mutation.)
+    coupling_forces: Vec<CouplingForce>,
 }
 
 impl Default for Simulation {
@@ -184,6 +191,7 @@ impl Simulation {
             nodes_by_body: HashMap::new(),
             edges: Vec::new(),
             forces: Vec::new(),
+            coupling_forces: Vec::new(),
         }
     }
 
@@ -195,6 +203,20 @@ impl Simulation {
 
     pub fn force_count(&self) -> usize {
         self.forces.len()
+    }
+
+    /// Replace the field-coupling forces wholesale (the built-in layout forces in
+    /// `forces` are untouched). The host re-resolves every coupling against the
+    /// current graph + node set and hands the fresh set here — the move / resize /
+    /// new-node rebuild. Position-preserving: forces never touch body state, so
+    /// swapping them leaves the layout exactly where it is. (Field regions.)
+    pub fn set_coupling_forces(&mut self, forces: Vec<CouplingForce>) {
+        self.coupling_forces = forces;
+    }
+
+    /// Number of field-coupling forces currently applied.
+    pub fn coupling_force_count(&self) -> usize {
+        self.coupling_forces.len()
     }
 
     /// Replace the topology the layout forces pull along (see
@@ -453,7 +475,7 @@ impl Simulation {
         // steps until reset), so clear last tick's force forces before this
         // tick's forces set fresh ones. Without this, per-tick forces compound
         // and the layout goes unstable.
-        if !self.forces.is_empty() {
+        if !self.forces.is_empty() || !self.coupling_forces.is_empty() {
             for (_, body) in self.bodies.iter_mut() {
                 body.reset_forces(false);
             }
@@ -467,6 +489,10 @@ impl Simulation {
                 query_index: &self.query_pipeline,
             };
             for force in &self.forces {
+                force.apply(&mut ctx, dt);
+            }
+            // Field couplings apply after the built-ins, in the same reset window.
+            for force in &self.coupling_forces {
                 force.apply(&mut ctx, dt);
             }
         }

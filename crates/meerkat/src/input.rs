@@ -429,7 +429,13 @@ impl WindowCtx<'_> {
                 }
                 if let Some(b) = orrery_button {
                     let (ox, oy) = self.orrery_point(x, y);
+                    // A field move / resize ends here; its geometry is graph truth, so
+                    // persist the session on release. (Field regions — move/resize.)
+                    let was_field_drag = self.orrery.dragging_field();
                     if !over_card && self.orrery.pointer_up(b, ox, oy) {
+                        if was_field_drag {
+                            self.save_session();
+                        }
                         self.view.request_redraw();
                     }
                 }

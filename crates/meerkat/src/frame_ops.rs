@@ -2035,6 +2035,14 @@ impl WindowCtx<'_> {
                 .unwrap_or_else(|| format!("Field {}", &uuid[..8.min(uuid.len())]));
             out.push(roster::FieldRow { id, name, hidden: !self.orrery.field_visible(id) });
         }
+        // Deterministic order (graph.fields() is HashMap-unordered): by name, then id
+        // — matching the node rows' explicit sort. (Field regions — roster.)
+        out.sort_by(|a, b| {
+            a.name
+                .to_lowercase()
+                .cmp(&b.name.to_lowercase())
+                .then_with(|| a.id.as_uuid().cmp(&b.id.as_uuid()))
+        });
         out
     }
 

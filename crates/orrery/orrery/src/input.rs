@@ -7,7 +7,6 @@
 //! the workspace 600-LOC ceiling.
 
 use euclid::default::{Box2D, Point2D};
-use gyre::CouplingForce;
 use kernel::geometry::PortablePoint;
 use kernel::graph::{
     Coupling, CouplingId, CouplingResponse, Falloff, Field, FieldDefinition, FieldExtent, FieldId,
@@ -75,9 +74,14 @@ impl Orrery {
             self.drag = Some(d);
         }
         self.cursor = new;
-        // Box-on-interaction: track which field the cursor is over so its extent box
-        // shows on hover (the disk well always draws). (Field regions.)
-        if self.update_active_field(new) {
+        if self.dragging_field() {
+            // A field move / resize drag follows the cursor (its box stays active);
+            // the well re-aims live. (Field regions — move/resize.)
+            self.drag_field_to(new);
+            redraw = true;
+        } else if self.update_active_field(new) {
+            // Box-on-interaction: the field under the cursor shows its extent box (the
+            // disk well always draws). (Field regions.)
             redraw = true;
         }
         if self.marquee.is_some() {
@@ -114,6 +118,9 @@ impl Orrery {
                 let world = self.screen_to_world(self.cursor);
                 if let Some(node) = self.view.hit_test(world) {
                     self.drag = Some(Drag { node, press: self.cursor, moved: false });
+                } else if self.begin_field_drag(world) {
+                    // Grabbed a field's box edge (move) or corner (resize) — the deep
+                    // interior fell through, so no marquee starts. (Field regions.)
                 } else {
                     self.marquee = Some(self.cursor);
                 }
@@ -135,6 +142,12 @@ impl Orrery {
                 false
             },
             PointerButton::Left => {
+                // End a field move / resize drag: re-aim already happened live; just
+                // settle the layout into the new well and persist. (Field regions.)
+                if self.end_field_drag() {
+                    self.settle_physics(SETTLE_TICKS / 3);
+                    return true;
+                }
                 if let Some(d) = self.drag.take() {
                     if d.moved {
                         self.physics.unpin(d.node);
@@ -271,11 +284,12 @@ impl Orrery {
             CouplingResponse::RepelFromMax,
             DEFAULT_FIELD_STRENGTH,
         );
-        if let Some(force) = CouplingForce::from_coupling(&coupling, &self.graph) {
-            self.physics.add_coupling_force(force);
-            self.settle_physics(SETTLE_TICKS);
-        }
         self.graph.add_coupling(coupling);
+        // Rebuild the live coupling forces (re-resolving every coupling against the
+        // current nodes) so the new field's well pulls immediately, then settle.
+        // (Field regions — rebuild-on-mutation.)
+        self.rebuild_coupling_forces();
+        self.settle_physics(SETTLE_TICKS);
         uuid
     }
 

@@ -117,13 +117,13 @@ pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
     sim.add_force(EdgeSpring::default());
     sim.add_force(Boundary::default());
     // Field couplings: each resolves to a CouplingForce gyre integrates, so a placed
-    // field's well actually pulls its nodes (on a fresh build — session reload; the
-    // live add-on-placement path is `Physics::add_coupling_force`). (Field regions P1.)
-    for coupling in graph.couplings() {
-        if let Some(force) = CouplingForce::from_coupling(coupling, graph) {
-            sim.add_force(force);
-        }
-    }
+    // field's well actually pulls its nodes. The live place / move / new-node rebuild
+    // re-resolves these via `Physics::set_coupling_forces`. (Field regions.)
+    let coupling_forces: Vec<CouplingForce> = graph
+        .couplings()
+        .filter_map(|c| CouplingForce::from_coupling(c, graph))
+        .collect();
+    sim.set_coupling_forces(coupling_forces);
 
     sim.seed_positions(seed_cluster(graph));
     sim
