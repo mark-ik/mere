@@ -364,6 +364,29 @@ wanted.
 
 ## Progress
 
+- 2026-06-14: **Audit (code-verified against the tree).** P1 confirmed done (pool +
+  `focused_graph` + `Activation.graph_id` stamp + `reap_graph` + park/unload/LRU +
+  Steward live-count all present; OQ2 resolved). **The P2-companion list-pane
+  view-ification has SHIPPED** (the entry below scoped it; it then landed and the
+  Progress log missed it): roster / inspector / steward / apparatus are now
+  `ViewPane`-driven (`view_pane.rs`, `roster_view.rs`/`RosterPane`,
+  `list_pane.rs`/`ListPane`), and `build_roster_dom`, `roster_row_rects`,
+  `build_utility_pane_dom`, `apparatus_button_rects`, `roster_row_at` are deleted —
+  the rect caches + per-frame DOM rebuilds for these panes are gone, replaced by
+  runner dispatch over a cached `PaneSession` (the C5 cheap-path). **Still open:**
+  - **P2 (per-pane resolution) is unstarted** — render.rs / frame_ops still read the
+    single ctx-bundled `self.orrery` (~68 sites); `leaf_graph_id()` exists but is not
+    yet the per-pane render/input resolver. This is the next mere-lane phase, and it
+    is mechanical (the P1 site-scout's three buckets are its spec). **Risk:**
+    `frame_ops.rs` is ~2.7k LOC (4.5× the 600 ceiling) and P2 concentrates there —
+    split it, don't grow it.
+  - **The external-texture element view is the unstarted lynchpin** — no DOM
+    element/view exists yet (only the host-compositor `ExternalTexturePlacement`).
+    It gates the content-pane input spine (G1.1/G1.3), interactive in-graph DOM
+    (G1.2), and **pelt V6** (workbench-pane → pelt surface). It lives in
+    xilem-serval / serval-scripted-dom — the **serval/pelt agent's repo**, so the
+    content half of the P2 companion is coordinated, not solo. The workbench pane's
+    current `platen_view` internals are throwaway pending that convergence.
 - 2026-06-13: **P2-companion scout — list-pane view-ification, the pelt-informed design.**
   Code-checked the input spine before building. The three systems, concretely: **chrome**
   is the good pattern (`chrome_view(&Chrome) -> ChromeView` declarative views with
