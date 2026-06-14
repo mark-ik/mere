@@ -14,7 +14,7 @@ use frame::PaneContent;
 use kernel::graph::{ContainmentSubKind, ProvenanceSubKind, RelationKind, SemanticSubKind};
 use orrery::NodeShape;
 
-use super::frame_ops::content_shape;
+use super::node_ops::content_shape;
 use super::{WindowCtx, fetch, roster};
 
 impl WindowCtx<'_> {

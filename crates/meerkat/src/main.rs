@@ -84,6 +84,7 @@ mod ime;
 mod input;
 mod menus;
 mod nav_sync;
+mod node_ops;
 mod inspector;
 mod list_pane;
 mod observability;
