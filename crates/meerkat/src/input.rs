@@ -746,10 +746,13 @@ impl WindowCtx<'_> {
             self.close_context_menu();
             return;
         }
-        // F2 renames the active session (the switcher's keyboard rename affordance;
-        // right-clicking a tile renames that one). (Host text path.)
+        // F2 renames the focused pane's session (the switcher's keyboard rename
+        // affordance; right-clicking a tile renames that one). (Host text path;
+        // pane-as-unit — the focused pane's session, not a global active one.)
         if matches!(key, WinitKey::Named(WinitNamedKey::F2)) {
-            self.start_rename(self.shared.session.active_session_id);
+            if let Some((id, _)) = self.session_for_graph(self.view.focused_graph) {
+                self.start_rename(id);
+            }
             return;
         }
         // While the settings overlay is open, Escape closes it and other keys are

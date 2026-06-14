@@ -1133,12 +1133,15 @@ impl WindowCtx<'_> {
             // Order tiles by session id, matching `cycle_session`'s row order.
             let mut ids: Vec<SessionId> = self.shared.session.session_thumbnails.keys().copied().collect();
             ids.sort_by_key(|id| *id.as_uuid());
+            // The highlighted tile is the *focused pane's* session (pane-as-unit),
+            // resolved from focused_graph — equal to the active session today.
+            let focused_session = self.session_for_graph(self.view.focused_graph).map(|(id, _)| id);
             let entries: Vec<(SessionId, &SwitcherThumbnail, &str, bool)> = ids
                 .iter()
                 .filter_map(|id| {
                     let thumb = self.shared.session.session_thumbnails.get(id)?;
                     let label = self.shared.session.session_labels.get(id).map(String::as_str).unwrap_or("");
-                    Some((*id, thumb, label, *id == self.shared.session.active_session_id))
+                    Some((*id, thumb, label, Some(*id) == focused_session))
                 })
                 .collect();
             let region_w = (strip[2] - strip[0]).round().max(1.0) as u32;

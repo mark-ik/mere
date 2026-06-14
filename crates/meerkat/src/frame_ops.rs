@@ -131,13 +131,15 @@ impl WindowCtx<'_> {
             .unwrap_or_default()
     }
 
-    /// The `graph_id` a freshly-summoned leaf of `content` should carry: the active
-    /// graph for graph-bound panes, a nil (unbound) id for window-chrome. Keeps the
-    /// "graph-bound leaves in this window share the active graph" invariant instead of
-    /// the old random-per-leaf `GraphId::default()`. (MG5.)
+    /// The `graph_id` a freshly-summoned leaf of `content` should carry: the
+    /// **focused** pane's graph for graph-bound panes (so a pane summoned beside the
+    /// one you're in shows your graph), a nil (unbound) id for window-chrome. Was the
+    /// active session's graph; now keyed off `focused_graph` directly — equal today,
+    /// but the pane-as-unit choice once focus can leave the active session. (MG5;
+    /// Window composition — pane-as-unit.)
     fn leaf_graph_id(&self, content: &PaneContent) -> GraphId {
         if content.follows_active_graph() {
-            self.active_graph_id()
+            self.view.focused_graph
         } else {
             GraphId::nil()
         }

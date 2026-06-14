@@ -168,8 +168,18 @@ impl WindowCtx<'_> {
                 .get(id)
                 .and_then(|m| m.display_name.clone())
                 .filter(|n| !n.trim().is_empty());
-            let (thumb, label) = if id == self.shared.session.active_session_id {
-                let g = self.orrery().graph();
+            // A session whose graph is *pooled* (live in any pane, not just the
+            // focused one) thumbnails off its live orrery; the rest cold-load from
+            // disk. (Pane-as-unit — was "the active session only".)
+            let pooled = self
+                .shared
+                .session
+                .manifests
+                .get(id)
+                .map(|m| m.root_graph_id)
+                .and_then(|gid| self.orreries.get(&gid));
+            let (thumb, label) = if let Some(orrery) = pooled {
+                let g = orrery.graph();
                 let label = display_name.unwrap_or_else(|| derive_session_label(g));
                 (build_switcher_thumbnail(g, opts), label)
             } else {
