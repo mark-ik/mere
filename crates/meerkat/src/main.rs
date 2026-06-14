@@ -81,6 +81,7 @@ mod frame_view;
 mod gloss;
 mod ime;
 mod input;
+mod menus;
 mod nav_sync;
 mod inspector;
 mod list_pane;
