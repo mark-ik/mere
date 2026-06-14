@@ -216,3 +216,20 @@ until rebuild), and field **removal** dropping its force.
   captured, inertia-on-pause) → **deferred to a physics settings menu, gated on the
   window-composition plan** (the section above). No further field code until the
   user resumes the follow-ups (move/resize, box-on-interaction, roster + hide).
+- 2026-06-14: **Follow-ups shipped** (user said "knock out each", ultracode on).
+  Scouted the seams (4 parallel agents), implemented in the main loop, adversarial
+  review (8 agents). **Box-on-interaction** (`d43f3c1`): the dashed extent box draws
+  only on hover (new `fields.rs` module; `active_field`). **Roster listing + hide +
+  locate** (`bfd753a`): a Fields section with per-field hide/show toggle and
+  click-to-center (`hidden_fields` mirroring `hidden_edges`, `center_on_field`).
+  **Play runs continuously** (`fada862`): resume settles ~forever so a well can be
+  watched. **Move + resize + rebuild-on-mutation** (`7445e70`): grab a field's box
+  edge (move) / corner (resize); the disk + extent follow and the **well re-aims
+  live**. This required the rebuild-on-mutation fix — gyre was add-only, so it now
+  keeps a replaceable `coupling_forces` list (`set_coupling_forces`) and the orrery
+  re-resolves all couplings on place / move / resize **and in `reconcile_derived`,
+  which also fixes the new-node-capture bug** (a node added after a field is now
+  pulled). Review fixes folded in (hover-clear on viewport exit, roster sort, z-order
+  comment). **Still deferred to the physics menu (post-window-composition):**
+  per-field strength, response (gather/repel/wall/dampen), and the inertia/damping
+  toggle — the *tuning* surface, distinct from the now-shipped *mechanics*.
