@@ -97,6 +97,7 @@ mod view_pane;
 mod scrying_host;
 mod serval_a11y;
 mod serval_render;
+mod session_ops;
 mod shellbar;
 mod switcher;
 mod text;
