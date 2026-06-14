@@ -20,11 +20,42 @@ use super::switcher::{SWITCHER_THUMB_H, SWITCHER_THUMB_W};
 use super::{DEFAULT_FRAME, DEFAULT_PANE, WindowCtx};
 
 impl WindowCtx<'_> {
-    /// Persist the session (graph + camera view-intent) under the session dir.
-    /// Best-effort: a write failure is logged, not fatal. Called after each
-    /// navigation and on window close.
+    /// The session a `graph_id` belongs to: its [`SessionId`] and storage dir,
+    /// resolved by the graph (manifests are keyed by session but each carries its
+    /// `root_graph_id`). This is the pane-as-unit resolution — a pane pinned to a
+    /// graph saves / renames / navigates through *this* session, not a global
+    /// active one. Falls back to the conventional `sessions/<id>` dir when a
+    /// manifest has no explicit `storage_path`. (Window composition — pane-as-unit.)
+    pub(super) fn session_for_graph(
+        &self,
+        graph_id: GraphId,
+    ) -> Option<(SessionId, std::path::PathBuf)> {
+        self.shared.session.manifests.iter().find_map(|(id, m)| {
+            (m.root_graph_id == graph_id).then(|| {
+                let dir = m.storage_path.clone().unwrap_or_else(|| {
+                    self.shared
+                        .session
+                        .mere_root
+                        .join("sessions")
+                        .join(id.as_uuid().to_string())
+                });
+                (id, dir)
+            })
+        })
+    }
+
+    /// Persist the **focused pane's** session: its graph + camera view-intent under
+    /// that session's dir, resolved from `focused_graph` (not a global active
+    /// session), so two live graphs each persist to their own storage. The frame
+    /// layout is window-scoped and stays at the shared root. Best-effort: a write
+    /// failure is logged, not fatal. Called after each navigation and on close.
+    /// (Window composition — pane-as-unit; per-pane save.)
     pub(super) fn save_session(&mut self) {
-        let graph_file = self.shared.session.session_dir.join(session_graph_store::GRAPH_FILE);
+        let Some((session_id, session_dir)) = self.session_for_graph(self.view.focused_graph)
+        else {
+            return; // the focused graph has no session manifest (should not happen)
+        };
+        let graph_file = session_dir.join(session_graph_store::GRAPH_FILE);
         if let Err(err) = session_graph_store::save(&graph_file, self.orrery().graph()) {
             tracing::warn!(%err, path = ?graph_file, "failed to persist the session graph");
         }
@@ -33,13 +64,10 @@ impl WindowCtx<'_> {
             focus: self.orrery().focused_url().map(str::to_string),
             ..Default::default()
         };
-        if let Err(err) = view_intent_store::save_view_intent(
-            &self.shared.session.session_dir,
-            DEFAULT_FRAME,
-            DEFAULT_PANE,
-            &intent,
-        ) {
-            tracing::warn!(%err, dir = ?self.shared.session.session_dir, "failed to persist the view intent");
+        if let Err(err) =
+            view_intent_store::save_view_intent(&session_dir, DEFAULT_FRAME, DEFAULT_PANE, &intent)
+        {
+            tracing::warn!(%err, dir = ?session_dir, "failed to persist the view intent");
         }
         // The content frame's pane layout (which panes are open + split ratios) is
         // **window-scoped** (Model B, MG5): it persists at the shared root and stays
@@ -49,22 +77,21 @@ impl WindowCtx<'_> {
         {
             tracing::warn!(%err, dir = ?self.shared.session.mere_root, "failed to persist the frame layout");
         }
-        // Record the save in the active session's manifest (advances `updated_at`,
-        // the switcher's recency key) and flush the registry. (Multi-graph MG1.)
-        let active = self.shared.session.active_session_id;
-        self.shared.session.manifests.update(active, |_| {});
+        // Record the save in this session's manifest (advances `updated_at`, the
+        // switcher's recency key) and flush the registry. (Multi-graph MG1.)
+        self.shared.session.manifests.update(session_id, |_| {});
         if let Err(err) = self.shared.session.manifests.flush_dirty() {
             tracing::warn!(%err, "failed to flush the session registry");
         }
-        // Keep the active session's switcher thumbnail live as its graph grows
-        // (cheap; no disk read, unlike the full refresh on a session change).
+        // Keep this session's switcher thumbnail live as its graph grows (cheap; no
+        // disk read, unlike the full refresh on a session change).
         let opts = SwitcherThumbnailOptions {
             width: SWITCHER_THUMB_W,
             height: SWITCHER_THUMB_H,
             ..SwitcherThumbnailOptions::default()
         };
         let thumb = build_switcher_thumbnail(self.orrery().graph(), opts);
-        self.shared.session.session_thumbnails.insert(self.shared.session.active_session_id, thumb);
+        self.shared.session.session_thumbnails.insert(session_id, thumb);
     }
 
     /// Begin renaming `id`: seed the switcher edit buffer from its current label, so
