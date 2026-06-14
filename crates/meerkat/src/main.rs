@@ -74,6 +74,8 @@ mod a11y_bridge;
 mod agent_harness;
 mod app_handler;
 mod apparatus;
+mod frame_a11y;
+mod frame_a11y_panes;
 mod frame_ops;
 mod frame_view;
 mod gloss;
