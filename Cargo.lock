@@ -8489,6 +8489,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "pelt-core"
+version = "0.2.0"
+
+[[package]]
 name = "pem"
 version = "3.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8708,6 +8712,7 @@ dependencies = [
  "inker",
  "kernel",
  "paint_list_api",
+ "pelt-core",
  "serde",
  "serde_json",
  "tracing",

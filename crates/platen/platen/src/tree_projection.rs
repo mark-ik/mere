@@ -110,6 +110,50 @@ pub fn project_tree(arrangement: &Arrangement) -> WorkbenchPlan {
     WorkbenchPlan { slots }
 }
 
+/// Project a [`WorkbenchPlan`] onto pelt's [`TileTree`] contract (V5/V6) — the seam
+/// that lets meerkat host the standalone pelt tile surface as its workbench pane.
+///
+/// The plan owns the **structure** (the left-to-right slots, each a tile or a
+/// tab-stack); the host owns each tile's **resolution** — its stable [`TileId`], title,
+/// and content lane (a member's actor texture is an
+/// [`ExternalTexture`](pelt_core::tile::ContentSource::ExternalTexture), a document is a
+/// [`Document`](pelt_core::tile::ContentSource::Document)) — supplied by `tile_for`. So
+/// this stays a pure projection: forme remains the arrangement authority, this never
+/// writes back (mere applies tile events to forme and re-projects).
+///
+/// An empty plan yields `None` (the surface has nothing to show). A single slot maps to
+/// that slot's stack directly (no enclosing split); multiple slots map to a `Row` split
+/// with **equal** fractions — the plan is geometry-free, so split ratios start even and
+/// a [`DividerMoved`](pelt_core::tile::TileEvent::DividerMoved) refines them (the real
+/// ratios live in platen's projection-state, applied by the host).
+pub fn tile_tree_from_plan(
+    plan: &WorkbenchPlan,
+    mut tile_for: impl FnMut(&TilePlan) -> pelt_core::tile::Tile,
+) -> Option<pelt_core::tile::TileTree> {
+    use pelt_core::tile::{SplitAxis, TileBranch, TileTree};
+
+    if plan.slots.is_empty() {
+        return None;
+    }
+    let slot_tree = |slot: &PlanSlot, tile_for: &mut dyn FnMut(&TilePlan) -> pelt_core::tile::Tile| {
+        match slot {
+            PlanSlot::Tile(t) => TileTree::single(tile_for(t)),
+            PlanSlot::Tabs(v) => TileTree::stack(v.iter().map(|t| tile_for(t)).collect(), 0),
+        }
+    };
+
+    if plan.slots.len() == 1 {
+        return Some(slot_tree(&plan.slots[0], &mut tile_for));
+    }
+    let fraction = 1.0 / plan.slots.len() as f32;
+    let children = plan
+        .slots
+        .iter()
+        .map(|slot| TileBranch::new(fraction, slot_tree(slot, &mut tile_for)))
+        .collect();
+    Some(TileTree::split(SplitAxis::Row, children))
+}
+
 /// A leaf tile plan for member/tile-intent nodes; `None` for non-leaf kinds
 /// (root, group, portal, collapsed-graphlet — not surfaced in the v1 tree).
 fn tile_plan(node: &ArrangementNode) -> Option<TilePlan> {
@@ -218,5 +262,82 @@ mod tests {
         let json = serde_json::to_string(&plan).unwrap();
         let back: WorkbenchPlan = serde_json::from_str(&json).unwrap();
         assert_eq!(plan, back);
+    }
+
+    // ── WorkbenchPlan -> pelt TileTree projection (the V6 surface seam) ──
+
+    use pelt_core::tile::{ContentSource, DocumentRef, SplitAxis, Tile, TileId, TileTree};
+
+    /// A host resolver standing in for meerkat's: sequential tile ids, the label as
+    /// title, a document lane. (The real host resolves a member to its actor-texture
+    /// key or document subtree; the projection is agnostic to which.)
+    fn make_tile_for() -> impl FnMut(&TilePlan) -> Tile {
+        let mut next = 0u64;
+        move |t: &TilePlan| {
+            next += 1;
+            Tile {
+                id: TileId(next),
+                title: t.label.clone().unwrap_or_default(),
+                content: ContentSource::Document(DocumentRef(String::new())),
+            }
+        }
+    }
+
+    /// An empty arrangement projects to no tree (the surface shows nothing).
+    #[test]
+    fn empty_plan_projects_to_no_tree() {
+        let plan = project_tree(&Arrangement::new());
+        assert!(tile_tree_from_plan(&plan, make_tile_for()).is_none());
+    }
+
+    /// A single slot maps to its stack directly — no enclosing split.
+    #[test]
+    fn single_slot_projects_to_a_bare_stack() {
+        let mut a = Arrangement::new();
+        a.add_tile_intent(Some(Uuid::from_u128(1)));
+        let plan = project_tree(&a);
+        let tree = tile_tree_from_plan(&plan, make_tile_for()).expect("one slot -> a tree");
+        assert!(matches!(tree, TileTree::Stack(_)), "a lone slot is the stack itself");
+        assert_eq!(tree.tiles().len(), 1);
+    }
+
+    /// A `StackedWith` slot maps to a tabbed stack with the first tab active.
+    #[test]
+    fn stacked_slot_projects_to_a_tabbed_stack() {
+        let mut a = Arrangement::new();
+        let t1 = a.add_tile_intent(Some(Uuid::from_u128(1)));
+        let t2 = a.add_tile_intent(Some(Uuid::from_u128(2)));
+        a.stack(t1, t2);
+        let plan = project_tree(&a);
+        let tree = tile_tree_from_plan(&plan, make_tile_for()).expect("tree");
+        match tree {
+            TileTree::Stack(s) => {
+                assert_eq!(s.tabs.len(), 2, "both stacked tiles are tabs");
+                assert_eq!(s.active, 0, "the first is active");
+            }
+            other => panic!("expected a stack, got {other:?}"),
+        }
+    }
+
+    /// Several unstacked slots map to an even `Row` split, one branch each.
+    #[test]
+    fn multiple_slots_project_to_an_even_row_split() {
+        let mut a = Arrangement::new();
+        a.add_tile_intent(Some(Uuid::from_u128(1)));
+        a.add_tile_intent(Some(Uuid::from_u128(2)));
+        a.add_tile_intent(Some(Uuid::from_u128(3)));
+        let plan = project_tree(&a);
+        let tree = tile_tree_from_plan(&plan, make_tile_for()).expect("tree");
+        match tree {
+            TileTree::Split { axis, children } => {
+                assert_eq!(axis, SplitAxis::Row, "side-by-side slots are a row");
+                assert_eq!(children.len(), 3);
+                for b in &children {
+                    assert!((b.fraction - 1.0 / 3.0).abs() < 1e-6, "even shares, got {}", b.fraction);
+                }
+            }
+            other => panic!("expected a row split, got {other:?}"),
+        }
+        assert_eq!(tile_tree_from_plan(&plan, make_tile_for()).unwrap().tiles().len(), 3);
     }
 }
