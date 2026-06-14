@@ -314,6 +314,16 @@ impl Orrery {
         self.physics_paused
     }
 
+    /// Set the linear damping (the "inertia" physics setting) on this orrery's
+    /// bodies: lower preserves more drift after a settle, higher rests sooner. Takes
+    /// effect immediately on the live bodies, then a short settle lets the new
+    /// damping express itself. The host owns the setting value (persisted); this
+    /// just applies it. (Physics settings.)
+    pub fn set_physics_damping(&mut self, damping: f32) {
+        self.physics.set_linear_damping(damping);
+        self.settle_physics(SETTLE_TICKS / 3);
+    }
+
     /// Request a settle of `ticks`, unless the physics is paused — a paused graph
     /// stays frozen through mutations until the user resumes. The single gate every
     /// settle trigger routes through (the only direct `physics.settle` caller).

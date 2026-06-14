@@ -56,6 +56,8 @@ pub(crate) enum PhysicsCommand {
     /// move / resize / new node triggers), without a position-losing sim rebuild.
     /// (Field regions — rebuild-on-mutation.)
     SetCouplingForces(Vec<CouplingForce>),
+    /// Set the linear damping (the "inertia" physics setting) on new + live bodies.
+    SetLinearDamping(f32),
 }
 
 /// One layout the actor produced: the positions plus whether it is still
@@ -159,6 +161,17 @@ impl Physics {
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetCouplingForces(forces));
             },
+        }
+    }
+
+    /// Set the linear damping (the "inertia" physics setting) on new + live node
+    /// bodies. (Physics settings.)
+    pub fn set_linear_damping(&mut self, damping: f32) {
+        match self {
+            Physics::Inline(p) => p.sim.set_linear_damping(damping),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::SetLinearDamping(damping));
+            }
         }
     }
 
@@ -336,6 +349,7 @@ fn apply(
         PhysicsCommand::Halt => *ticks_remaining = 0,
         PhysicsCommand::SetDragging(d) => *dragging = d,
         PhysicsCommand::SetCouplingForces(forces) => sim.set_coupling_forces(forces),
+        PhysicsCommand::SetLinearDamping(damping) => sim.set_linear_damping(damping),
     }
 }
 

@@ -156,6 +156,11 @@ pub struct Simulation {
     /// [`set_coupling_forces`](Self::set_coupling_forces). (Field regions —
     /// rebuild-on-mutation.)
     coupling_forces: Vec<CouplingForce>,
+    /// Linear damping applied to every node body — runtime-tunable (the "inertia"
+    /// the physics settings expose): lower keeps more drift after a settle, higher
+    /// brings nodes to rest sooner. New bodies take this; [`set_linear_damping`]
+    /// also re-applies it to the live ones. (Physics settings.)
+    linear_damping: f32,
 }
 
 impl Default for Simulation {
@@ -192,6 +197,22 @@ impl Simulation {
             edges: Vec::new(),
             forces: Vec::new(),
             coupling_forces: Vec::new(),
+            linear_damping: DEFAULT_LINEAR_DAMPING,
+        }
+    }
+
+    /// The linear damping every node body carries (the "inertia" tunable).
+    pub fn linear_damping(&self) -> f32 {
+        self.linear_damping
+    }
+
+    /// Set the linear damping for new node bodies and re-apply it to every live
+    /// one, so a settings change takes effect immediately rather than only for
+    /// nodes added afterward. (Physics settings.)
+    pub fn set_linear_damping(&mut self, damping: f32) {
+        self.linear_damping = damping;
+        for (_, body) in self.bodies.iter_mut() {
+            body.set_linear_damping(damping);
         }
     }
 
@@ -413,7 +434,7 @@ impl Simulation {
             }
             let body = RigidBodyBuilder::dynamic()
                 .translation(vector![position.x, position.y])
-                .linear_damping(DEFAULT_LINEAR_DAMPING)
+                .linear_damping(self.linear_damping)
                 .angular_damping(DEFAULT_ANGULAR_DAMPING)
                 .build();
             let handle = self.bodies.insert(body);
