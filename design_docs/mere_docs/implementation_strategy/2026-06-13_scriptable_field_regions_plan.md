@@ -107,9 +107,9 @@ lanes (sandboxed note-blocks vs the privileged omnibar/region authoring), privil
 
 ## Open decisions
 
-- **Default field shape**: disk (radius) vs box (the `Region` extent). The extent
-  is a box; the *definition* can be a disk. Likely a disk-in-a-box default, both
-  draggable/resizable.
+- **Default field shape**: *resolved (2026-06-14)* — disk-in-a-box. The soft disk
+  well is the persistent visual; the box is the extent, shown **only on
+  interaction** (hover / select / drag), both draggable/resizable.
 - **Rule editing surface**: where the region's rhai script is written — an
   inspector pane (the field editor the configurability preference wants), the
   omnibar (`>` over a selected region), or a knot-style block. Likely the inspector
@@ -123,6 +123,33 @@ lanes (sandboxed note-blocks vs the privileged omnibar/region authoring), privil
 - **Persistence**: fields already persist (`PersistedField*` in the kernel); the
   region's rhai *script* needs a persisted home alongside the field.
 
+## Field as a first-class object (2026-06-14 user direction)
+
+On first contact with a placed field, the user reframed it from "a thing on the
+canvas" to a **manipulable, listable object**, and surfaced the core gap: *"I have
+no idea what to do with the field."* The durable requirements:
+
+- **Manipulation** — a field is moved, **resized**, and otherwise handled like any
+  object (select, drag, resize handles). Move/resize re-anchor the `Region` extent
+  (and the disk center/radius), and the rules re-evaluate over the new contents.
+- **Box-on-interaction, not persistent chrome** — the dashed extent box should
+  appear only while you are *interacting* with the field (hover / select / drag);
+  the soft disk well is the persistent at-rest visual. An always-on box reads as
+  clutter. (Supersedes P0b's always-drawn box.)
+- **Hideable but findable in the roster** — a field can be **hidden** from the
+  canvas yet remain listed in the **roster** (a third member kind beside nodes and
+  edge-rows), so it stays findable and re-showable. The roster is the field's
+  index + visibility control.
+- **Purpose must be tangible** — the "no idea what to do with it" gap is the real
+  one: an inert translucent disk has no evident point. The fix is **P1 first** — a
+  placed field must *immediately do something visible* (the no-placebo gesture):
+  its default coupling gathers / repels the nodes in its extent, so placing and
+  dragging a field visibly moves the graph. Forces make the field self-explanatory
+  before any rhai rule surface exists. **Gyre wiring note:** `CouplingForce` (gyre,
+  `impl Force`) exists but is **not yet added into the orrery's live physics tick**
+  (`physics.advance_frame`) — wiring couplings (rebuilt on graph mutation) into the
+  sim is the load-bearing P1 work, not a flip.
+
 ## Progress
 
 - 2026-06-13: Plan written from the field-system scout (kernel `Field`/`Coupling`,
@@ -131,3 +158,13 @@ lanes (sandboxed note-blocks vs the privileged omnibar/region authoring), privil
   rules govern forces + edge visibility + node layout — "do it right" (place +
   render + couple, then the full rule surface). No code yet; P0 (place + render +
   move) is the foundation, mirroring the shipped `add_node_at`.
+- 2026-06-14: P0a + P0b shipped. `Orrery::add_field_at` places a disk-in-box
+  `Region` field at the cursor (`3c62b15`); the orrery renders it as a soft
+  radial-gradient well inside a faint dashed square, spliced *under* the edges via
+  `CanvasPaintList::splice_world_underlay`, placeable from the empty-space
+  right-click and the add-pill (`80c05fb`). User feedback on first contact (above):
+  fields want manipulation (move/**resize**), box-on-interaction only, roster
+  listing + hide/show, and — the priority — a **tangible purpose**, which moves P1
+  (forces, the no-placebo coupling) ahead of further P0 polish. Open question put
+  back to the user: which effect to make tangible first (forces / edge-visibility /
+  layout).
