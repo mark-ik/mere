@@ -94,6 +94,10 @@ pub struct Orrery {
     /// off-thread armillary actor (native always-offload). The orrery never reads
     /// it directly; it feeds positions into `view` each frame.
     physics: Physics,
+    /// Whether the layout physics is paused (the user froze the graph with Space /
+    /// the pause button). While paused the sim is halted and settle requests are
+    /// suppressed, so the graph holds still through mutations until resumed.
+    physics_paused: bool,
     /// The rapier-free read model the frame loop and input handlers read from —
     /// positions, node/edge picks, cull. Refreshed from `sim` each frame (and on
     /// every structural / seed change). This is the seam that lets `sim` move to
@@ -252,6 +256,7 @@ impl Orrery {
         Self {
             graph,
             physics,
+            physics_paused: false,
             view,
             node_dom,
             node_layout: None,
@@ -439,7 +444,7 @@ impl Orrery {
             self.view.set_position(key, pos);
         }
         self.physics.seed(seeds);
-        self.physics.settle(SETTLE_TICKS);
+        self.settle_physics(SETTLE_TICKS);
         true
     }
 

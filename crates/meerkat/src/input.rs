@@ -579,6 +579,7 @@ impl WindowCtx<'_> {
         self.drain_comms_intent();
         self.drain_pending_context();
         self.drain_history_step();
+        self.drain_physics_toggle();
         self.sync_settings();
         self.sync_orrery();
         if palette_was_open && !self.view.runner.state().palette_open {
@@ -868,6 +869,12 @@ impl WindowCtx<'_> {
                 self.delete_focused_node();
             }
         }
+        // Space pauses / resumes the layout physics, so you can freeze the graph
+        // mid-settle (or let a field's pull keep running). (Physics pause.)
+        if matches!(key, WinitKey::Named(WinitNamedKey::Space)) {
+            self.orrery.toggle_physics_paused();
+            self.view.request_redraw();
+        }
     }
 
     /// Route a key to the focused omnibar: Enter submits (Ctrl/Cmd-Enter opens the
@@ -1067,6 +1074,7 @@ impl WindowCtx<'_> {
                 self.drain_pending_command();
                 self.drain_comms_intent();
                 self.drain_history_step();
+                self.drain_physics_toggle();
                 self.sync_orrery();
                 self.focus_after_palette_close();
                 self.view.request_redraw();

@@ -134,7 +134,7 @@ impl Orrery {
                     if d.moved {
                         self.physics.unpin(d.node);
                         self.physics.set_dragging(false);
-                        self.physics.settle(SETTLE_TICKS / 3);
+                        self.settle_physics(SETTLE_TICKS / 3);
                     } else if self.shift {
                         // Shift-click toggles the node in the selection (multi-select).
                         if !self.selected.remove(&d.node) {
@@ -184,7 +184,7 @@ impl Orrery {
             self.view.set_position(key, pos);
         }
         self.physics.seed(seeds);
-        self.physics.settle(SETTLE_TICKS);
+        self.settle_physics(SETTLE_TICKS);
         true
     }
 
@@ -268,10 +268,37 @@ impl Orrery {
         );
         if let Some(force) = CouplingForce::from_coupling(&coupling, &self.graph) {
             self.physics.add_coupling_force(force);
-            self.physics.settle(SETTLE_TICKS);
+            self.settle_physics(SETTLE_TICKS);
         }
         self.graph.add_coupling(coupling);
         uuid
+    }
+
+    /// Toggle the layout physics between paused (frozen) and running. Pausing halts
+    /// the sim; resuming kicks a fresh settle. (Physics pause — Space / the button.)
+    pub fn toggle_physics_paused(&mut self) {
+        self.physics_paused = !self.physics_paused;
+        if self.physics_paused {
+            self.physics.halt();
+        } else {
+            // Unpaused now, so this passes the gate and resumes the sim.
+            self.settle_physics(SETTLE_TICKS);
+        }
+    }
+
+    /// Whether the layout physics is currently paused (for the host's pause/play glyph).
+    pub fn physics_paused(&self) -> bool {
+        self.physics_paused
+    }
+
+    /// Request a settle of `ticks`, unless the physics is paused — a paused graph
+    /// stays frozen through mutations until the user resumes. The single gate every
+    /// settle trigger routes through (the only direct `physics.settle` caller).
+    /// (Physics pause.)
+    pub(crate) fn settle_physics(&mut self, ticks: u32) {
+        if !self.physics_paused {
+            self.physics.settle(ticks);
+        }
     }
 
     /// Mint an unlinked node at an explicit world `seed`, selecting it. The
@@ -288,7 +315,7 @@ impl Orrery {
         self.view.set_position(key, seed);
         self.physics.seed(vec![(key, seed)]);
         self.select_only(key);
-        self.physics.settle(SETTLE_TICKS);
+        self.settle_physics(SETTLE_TICKS);
         key
     }
 
@@ -330,7 +357,7 @@ impl Orrery {
         self.view.set_position(key, seed);
         self.physics.seed(vec![(key, seed)]);
         self.select_only(key);
-        self.physics.settle(SETTLE_TICKS);
+        self.settle_physics(SETTLE_TICKS);
         key
     }
 }

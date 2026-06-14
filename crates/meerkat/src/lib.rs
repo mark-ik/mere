@@ -127,6 +127,12 @@ pub struct Chrome {
     /// history (not a chrome-global linear history). The buttons / palette record
     /// it; the host drains it via `orrery.member_history_*` and clears it.
     pub history_step: Option<HistoryStep>,
+    /// A one-shot "toggle the layout physics" intent — set by the toolbar's
+    /// pause/play button; the host drains it into `orrery.toggle_physics_paused`.
+    pub physics_toggle: bool,
+    /// Whether the layout physics is paused, synced from the orrery each frame so the
+    /// pause/play button shows the right glyph (▶ when paused, ⏸ when running).
+    pub physics_paused: bool,
     /// A one-shot "open the submitted address as a **new node**" intent — set by
     /// Ctrl/Cmd-Enter in the omnibar (the `OpenAddressAsNewNode` gesture). When
     /// set, the host's `sync_orrery` mints a new browsing surface linked from the
@@ -287,6 +293,8 @@ impl Chrome {
             history: History::new(location.clone()),
             content_location: location,
             history_step: None,
+            physics_toggle: false,
+            physics_paused: false,
             open_as_new_node: false,
             suggest: Vec::new(),
             suggest_active: None,
@@ -524,6 +532,12 @@ impl Chrome {
     /// [`Chrome::show_location`] + [`Chrome::content_location`].
     pub fn take_history_step(&mut self) -> Option<HistoryStep> {
         self.history_step.take()
+    }
+
+    /// Take the pending pause/play toggle, if the button was clicked this pass. The
+    /// host applies it to the orrery's physics. (Physics pause.)
+    pub fn take_physics_toggle(&mut self) -> bool {
+        std::mem::take(&mut self.physics_toggle)
     }
 
     /// Open the settings overlay (closing the palette + suggestions dropdown).

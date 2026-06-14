@@ -205,18 +205,32 @@ impl WindowCtx<'_> {
             ),
             None => (false, false),
         };
-        let (cur_back, cur_forward) = {
+        let paused = self.orrery.physics_paused();
+        let (cur_back, cur_forward, cur_paused) = {
             let c = self.view.runner.state();
-            (c.toolbar.can_go_back, c.toolbar.can_go_forward)
+            (c.toolbar.can_go_back, c.toolbar.can_go_forward, c.physics_paused)
         };
-        if cur_back == can_back && cur_forward == can_forward {
+        if cur_back == can_back && cur_forward == can_forward && cur_paused == paused {
             return;
         }
         self.view.runner.update(move |c| {
             c.toolbar.can_go_back = can_back;
             c.toolbar.can_go_forward = can_forward;
+            c.physics_paused = paused;
         });
         self.view.request_redraw();
+    }
+
+    /// Apply a pending pause/play toggle the toolbar button queued (the chrome can't
+    /// reach the orrery). Mirrors `drain_history_step`'s shape. (Physics pause.)
+    pub(super) fn drain_physics_toggle(&mut self) {
+        let mut toggled = false;
+        self.view.runner.update(|c| toggled = c.take_physics_toggle());
+        if toggled {
+            self.orrery.toggle_physics_paused();
+            self.sync_nav_buttons();
+            self.view.request_redraw();
+        }
     }
 
     /// Persist the session (graph + camera view-intent) under the session dir.
@@ -1019,6 +1033,7 @@ impl WindowCtx<'_> {
             }
             self.drain_comms_intent();
             self.drain_history_step();
+            self.drain_physics_toggle();
             self.sync_settings();
             self.sync_orrery();
         }

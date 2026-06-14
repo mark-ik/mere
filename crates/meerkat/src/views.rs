@@ -90,6 +90,17 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
             go_forward as fn(&mut Chrome, PointerClick),
         )
     });
+    // The layout-physics pause/play button: ⏸ while running, ▶ while paused, the
+    // same toggle as Space. Memoized on the synced `physics_paused` so the glyph
+    // flips with the state; the click sets a one-shot intent the host drains into
+    // `orrery.toggle_physics_paused`. (Physics pause.)
+    let pause = memoize(c.physics_paused, |&paused: &bool| {
+        let glyph = if paused { "\u{25b6}" } else { "\u{23f8}" }; // ▶ / ⏸
+        on_click(
+            el::<_, Chrome, ()>("button", glyph).attr("class", "nav"),
+            (|c: &mut Chrome, _: PointerClick| c.physics_toggle = true) as fn(&mut Chrome, PointerClick),
+        )
+    });
     // The omnibar text_field, lensed onto `Chrome::omnibar`. `text_field_typed`
     // names its concrete view so the `lens` projection can be a `fn` pointer
     // (no captured borrow), as in pelt-live.
@@ -112,7 +123,7 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
                 as fn(&mut Chrome, PointerClick),
         )
     });
-    let toolbar = el::<_, Chrome, ()>("div", (back, forward, omnibar, add_pill, sync_chip))
+    let toolbar = el::<_, Chrome, ()>("div", (back, forward, pause, omnibar, add_pill, sync_chip))
         .attr("class", "toolbar");
 
     // The suggestions dropdown: one row per reused `OmnibarMatch`, the highlight
