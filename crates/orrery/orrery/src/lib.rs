@@ -34,7 +34,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use euclid::default::{Box2D, Point2D};
 use gyre::{LayoutSnapshot, LayoutView};
-use kernel::graph::{EdgeAssertion, Graph, NodeKey, RelationSelector, SemanticSubKind};
+use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
 use platen::scene_paint::{Camera, ScenePaintStyle};
 use serval_layout::IncrementalLayout;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
@@ -48,6 +48,7 @@ pub use types::{CameraView, NodeShape, NodeState, PointerButton};
 
 mod input;
 mod frame;
+mod fields;
 
 mod physics;
 use physics::Physics;
@@ -144,6 +145,14 @@ pub struct Orrery {
     /// physics spring persist (hiding is display-only). In-session for now;
     /// persistence rides view-intent's `hidden_relations`.
     hidden_edges: HashSet<(NodeKey, NodeKey)>,
+    /// The field the cursor is over (hover) — drives box-on-interaction: a field's
+    /// dashed extent box draws only while it is the active field; the soft disk well
+    /// is always shown. `None` when the cursor is over no field. (Field regions.)
+    active_field: Option<FieldId>,
+    /// Fields the user has hidden from the canvas (the roster's hide toggle). The
+    /// field pass skips these; the field and its coupling persist (hiding is
+    /// display-only). In-session, mirroring `hidden_edges`. (Field regions.)
+    hidden_fields: HashSet<FieldId>,
     /// Per-node activation state the host pushes for node coloring (open / closed
     /// / idle). Resolved to `NodeKey` on set; a node absent here colors as `Idle`.
     node_states: HashMap<NodeKey, NodeState>,
@@ -222,6 +231,8 @@ impl Orrery {
         self.selected.clear();
         self.selected_edges.clear();
         self.hidden_edges.clear();
+        self.active_field = None;
+        self.hidden_fields.clear();
         self.node_states.clear();
         self.node_shapes.clear();
         self.drag = None;
@@ -275,6 +286,8 @@ impl Orrery {
             selected: HashSet::new(),
             selected_edges: HashSet::new(),
             hidden_edges: HashSet::new(),
+            active_field: None,
+            hidden_fields: HashSet::new(),
             node_states: HashMap::new(),
             node_shapes: HashMap::new(),
             marquee: None,

@@ -88,8 +88,13 @@ impl Orrery {
         );
         // Placed field regions paint *under* the edges + demoted nodes (a background
         // the graph sits within), spliced at the bottom of the same camera transform.
-        // (Field regions P0 — the disk-in-box visual.)
-        underlay.splice_world_underlay(field_overlay(&self.graph));
+        // The dashed extent box shows only for the hovered field (box-on-interaction);
+        // hidden fields are skipped. (Field regions — disk-in-box + box-on-interaction.)
+        underlay.splice_world_underlay(field_overlay(
+            &self.graph,
+            self.active_field(),
+            self.hidden_field_ids(),
+        ));
         // Highlight selected edges by splicing thicker strokes inside the
         // underlay's camera transform (world space — no transform replication).
         if !self.selected_edges.is_empty() {

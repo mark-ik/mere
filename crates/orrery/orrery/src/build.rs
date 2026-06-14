@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use euclid::default::Point2D;
 use gyre::{Boundary, CouplingForce, EdgeSpring, LayoutView, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
-use kernel::graph::{EdgeAssertion, FieldExtent, Graph, NodeKey, SemanticSubKind};
+use kernel::graph::{EdgeAssertion, FieldExtent, FieldId, Graph, NodeKey, SemanticSubKind};
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use paint_list_api::{
     ColorF, CommonPlacement, DashPattern, ExtendMode, GradientStop, LayoutPoint, LayoutRect,
@@ -268,12 +268,18 @@ pub(crate) fn selected_edge_overlay(
 /// Background paint for placed field regions, in **world space** (no transform) —
 /// spliced *under* the orrery underlay so the graph appears to sit within each
 /// field. A field with a `Region` extent draws as a soft radial-gradient "well"
-/// (its `Disk` falloff made visible) inside a faint dashed square (its draggable
-/// extent). Retired fields are skipped. (Field regions P0 — the disk-in-box visual.)
-pub(crate) fn field_overlay(graph: &Graph) -> Vec<PaintCmd> {
+/// (its `Disk` falloff made visible); its faint dashed extent square draws **only
+/// while it is the `active` (hovered) field** — box-on-interaction, so the canvas
+/// stays uncluttered at rest. `hidden` fields are skipped entirely; retired fields
+/// too. (Field regions — disk-in-box visual + box-on-interaction.)
+pub(crate) fn field_overlay(
+    graph: &Graph,
+    active: Option<FieldId>,
+    hidden: &HashSet<FieldId>,
+) -> Vec<PaintCmd> {
     let mut cmds = Vec::new();
     for field in graph.fields() {
-        if !field.is_active() {
+        if !field.is_active() || hidden.contains(&field.id) {
             continue;
         }
         let FieldExtent::Region { min_x, min_y, max_x, max_y } = field.extent else {
@@ -302,26 +308,28 @@ pub(crate) fn field_overlay(graph: &Graph) -> Vec<PaintCmd> {
             tile_size: LayoutSize::new(w, h),
             tile_spacing: LayoutSize::zero(),
         }));
-        // The faint dashed square: the field's extent (draggable / resizable),
-        // dashed to distinguish it from solid graph edges.
-        let corner = |x: f32, y: f32| LayoutPoint::new(x, y);
-        cmds.push(PaintCmd::DrawStroke(StrokeItem {
-            placement: CommonPlacement::new(rect),
-            path: PathData {
-                commands: vec![
-                    PathCommand::MoveTo(corner(min_x, min_y)),
-                    PathCommand::LineTo(corner(max_x, min_y)),
-                    PathCommand::LineTo(corner(max_x, max_y)),
-                    PathCommand::LineTo(corner(min_x, max_y)),
-                    PathCommand::LineTo(corner(min_x, min_y)),
-                ],
-            },
-            color: ColorF::new(0.52, 0.66, 0.92, 0.50),
-            width: 1.5,
-            cap: StrokeCap::Round,
-            join: StrokeJoin::Round,
-            dash: Some(DashPattern { intervals: vec![7.0, 5.0], offset: 0.0 }),
-        }));
+        // The faint dashed square (the field's extent) draws only while this is the
+        // hovered field — box-on-interaction. Dashed to distinguish it from edges.
+        if active == Some(field.id) {
+            let corner = |x: f32, y: f32| LayoutPoint::new(x, y);
+            cmds.push(PaintCmd::DrawStroke(StrokeItem {
+                placement: CommonPlacement::new(rect),
+                path: PathData {
+                    commands: vec![
+                        PathCommand::MoveTo(corner(min_x, min_y)),
+                        PathCommand::LineTo(corner(max_x, min_y)),
+                        PathCommand::LineTo(corner(max_x, max_y)),
+                        PathCommand::LineTo(corner(min_x, max_y)),
+                        PathCommand::LineTo(corner(min_x, min_y)),
+                    ],
+                },
+                color: ColorF::new(0.62, 0.74, 0.98, 0.65),
+                width: 1.5,
+                cap: StrokeCap::Round,
+                join: StrokeJoin::Round,
+                dash: Some(DashPattern { intervals: vec![7.0, 5.0], offset: 0.0 }),
+            }));
+        }
     }
     cmds
 }

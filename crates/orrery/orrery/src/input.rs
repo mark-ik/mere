@@ -75,6 +75,11 @@ impl Orrery {
             self.drag = Some(d);
         }
         self.cursor = new;
+        // Box-on-interaction: track which field the cursor is over so its extent box
+        // shows on hover (the disk well always draws). (Field regions.)
+        if self.update_active_field(new) {
+            redraw = true;
+        }
         if self.marquee.is_some() {
             redraw = true;
         }
