@@ -26,7 +26,7 @@ use std::time::Duration;
 
 use armillary::{spawn, ActorHandle, Emitter, Wake};
 use euclid::default::Point2D;
-use gyre::{LayoutSnapshot, LayoutView, Simulation};
+use gyre::{CouplingForce, LayoutSnapshot, LayoutView, Simulation};
 use kernel::graph::NodeKey;
 
 use super::TICK_DT;
@@ -52,6 +52,9 @@ pub(crate) enum PhysicsCommand {
     Halt,
     /// Whether a drag is in progress (keep ticking so neighbors react).
     SetDragging(bool),
+    /// Add a field coupling's force to the live simulation (a freshly placed field's
+    /// well), so it pulls its nodes without a position-losing rebuild. (Field regions P1.)
+    AddCouplingForce(CouplingForce),
 }
 
 /// One layout the actor produced: the positions plus whether it is still
@@ -141,6 +144,18 @@ impl Physics {
             Physics::Inline(p) => p.sim.seed_positions(positions),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::Seed(positions));
+            },
+        }
+    }
+
+    /// Add a field coupling's force to the live simulation (a freshly placed field's
+    /// well) without a position-losing rebuild — the force then pulls its nodes on
+    /// the next ticks. (Field regions P1.)
+    pub fn add_coupling_force(&mut self, force: CouplingForce) {
+        match self {
+            Physics::Inline(p) => p.sim.add_force(force),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::AddCouplingForce(force));
             },
         }
     }
@@ -318,6 +333,7 @@ fn apply(
         PhysicsCommand::Settle(n) => *ticks_remaining = (*ticks_remaining).max(n),
         PhysicsCommand::Halt => *ticks_remaining = 0,
         PhysicsCommand::SetDragging(d) => *dragging = d,
+        PhysicsCommand::AddCouplingForce(force) => sim.add_force(force),
     }
 }
 

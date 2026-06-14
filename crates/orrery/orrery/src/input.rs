@@ -7,8 +7,12 @@
 //! the workspace 600-LOC ceiling.
 
 use euclid::default::{Box2D, Point2D};
+use gyre::CouplingForce;
 use kernel::geometry::PortablePoint;
-use kernel::graph::{Falloff, Field, FieldDefinition, FieldExtent, FieldId, NodeKey, ScalarField};
+use kernel::graph::{
+    Coupling, CouplingId, CouplingResponse, Falloff, Field, FieldDefinition, FieldExtent, FieldId,
+    NodeSelector, NodeKey, ScalarField,
+};
 
 use super::build::{hyperlink, seed_cluster};
 use super::{Drag, Orrery, PointerButton, CLICK_SLOP, EDGE_PICK_TOL, SETTLE_TICKS, WHEEL_PAN_SCALE, ZOOM_STEP};
@@ -17,6 +21,12 @@ use super::{Drag, Orrery, PointerButton, CLICK_SLOP, EDGE_PICK_TOL, SETTLE_TICKS
 /// radius and its enclosing square `Region` half-extent. A sensible default the
 /// user can later resize. (Field regions P0.)
 const DEFAULT_FIELD_RADIUS: f32 = 120.0;
+
+/// Strength of a placed field's default gather coupling. The `Disk` scalar's
+/// gradient is small (~falloff-slope / radius ≈ 0.01), so the strength is large to
+/// make the inward pull visible — the first knob to tune if the gather is too weak
+/// or too violent. (Field regions P1.)
+const DEFAULT_FIELD_STRENGTH: f32 = 5000.0;
 
 impl Orrery {
     // ----- Input (semantic; each returns whether the host should redraw) --------
@@ -242,6 +252,25 @@ impl Orrery {
             max_y: world.y + radius,
         };
         self.graph.add_field(Field::new(id, definition).with_extent(extent));
+        // The no-placebo gesture: a default coupling so the placed field immediately
+        // *does* something — its nodes gather toward the disk's center. The disk is a
+        // peak (1 at center → 0 at the radius), so `RepelFromMax` (force along +grad,
+        // up the gradient toward the peak) pulls nodes inward; `NodeSelector::All` is
+        // safe because the disk's bounded falloff zeroes the force outside the radius.
+        // Add it to the graph, then push the resolved force into the live sim so it
+        // pulls without a position-losing rebuild. (Field regions P1.)
+        let coupling = Coupling::new(
+            CouplingId::from_uuid(uuid::Uuid::new_v4()),
+            id,
+            NodeSelector::All,
+            CouplingResponse::RepelFromMax,
+            DEFAULT_FIELD_STRENGTH,
+        );
+        if let Some(force) = CouplingForce::from_coupling(&coupling, &self.graph) {
+            self.physics.add_coupling_force(force);
+            self.physics.settle(SETTLE_TICKS);
+        }
+        self.graph.add_coupling(coupling);
         uuid
     }
 

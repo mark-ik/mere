@@ -13,7 +13,7 @@
 use std::collections::{HashMap, HashSet};
 
 use euclid::default::Point2D;
-use gyre::{Boundary, EdgeSpring, LayoutView, NodeExclusion, Simulation};
+use gyre::{Boundary, CouplingForce, EdgeSpring, LayoutView, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, FieldExtent, Graph, NodeKey, SemanticSubKind};
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
@@ -116,6 +116,14 @@ pub(crate) fn build_simulation(graph: &Graph) -> Simulation {
     sim.add_force(NodeExclusion::default());
     sim.add_force(EdgeSpring::default());
     sim.add_force(Boundary::default());
+    // Field couplings: each resolves to a CouplingForce gyre integrates, so a placed
+    // field's well actually pulls its nodes (on a fresh build — session reload; the
+    // live add-on-placement path is `Physics::add_coupling_force`). (Field regions P1.)
+    for coupling in graph.couplings() {
+        if let Some(force) = CouplingForce::from_coupling(coupling, graph) {
+            sim.add_force(force);
+        }
+    }
 
     sim.seed_positions(seed_cluster(graph));
     sim

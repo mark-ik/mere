@@ -139,11 +139,12 @@ fn add_node_at_mints_an_unlinked_node_at_the_cursor_world_point() {
 
 #[test]
 fn add_field_at_places_a_region_field_at_the_cursor_world_point() {
-    use kernel::graph::{FieldExtent, FieldId};
+    use kernel::graph::{CouplingResponse, FieldExtent, FieldId};
     let mut orrery = Orrery::new();
     orrery.camera.offset = (100.0, 50.0);
     orrery.camera.zoom = 2.0;
     let before = orrery.graph().fields().count();
+    let before_couplings = orrery.graph().couplings().count();
 
     let id = orrery.add_field_at((300.0, 150.0));
     assert_eq!(orrery.graph().fields().count(), before + 1, "a field was placed");
@@ -158,6 +159,25 @@ fn add_field_at_places_a_region_field_at_the_cursor_world_point() {
     };
     assert!(((min_x + max_x) / 2.0 - 100.0).abs() < 0.5, "centered at world x, got {min_x}..{max_x}");
     assert!(((min_y + max_y) / 2.0 - 50.0).abs() < 0.5, "centered at world y, got {min_y}..{max_y}");
+
+    // The no-placebo default coupling: it couples the placed field and gathers nodes
+    // toward the disk peak (`RepelFromMax` = force up the gradient). Gyre's own tests
+    // verify the force *behavior*; this verifies the field places the coupling.
+    assert_eq!(
+        orrery.graph().couplings().count(),
+        before_couplings + 1,
+        "a default gather coupling was placed with the field"
+    );
+    let coupling = orrery
+        .graph()
+        .couplings_for_field(FieldId::from_uuid(id))
+        .next()
+        .expect("a coupling targets the placed field");
+    assert!(
+        matches!(coupling.response, CouplingResponse::RepelFromMax),
+        "the default coupling gathers toward the disk peak, got {:?}",
+        coupling.response
+    );
 }
 
 #[test]
