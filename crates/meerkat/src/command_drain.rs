@@ -156,6 +156,13 @@ impl WindowCtx<'_> {
                     note = Some("Select two nodes (or an edge) to unrelate".to_string());
                 }
             }
+            Command::CloseGraphPane => {
+                if self.has_multiple_graph_panes() {
+                    self.close_focused_graph_pane();
+                } else {
+                    note = Some("Only one graph view is open".to_string());
+                }
+            }
             // History / connect / settings / comms verbs run in the chrome; never
             // queued here as host intents.
             Command::Back

@@ -22,6 +22,11 @@ impl WindowCtx<'_> {
     /// single-member set offers one "open tile"; a larger set offers splits vs a
     /// stack. The host remembers the set; the chrome renders the rows.
     pub(super) fn open_context_menu_at(&mut self, x: f32, y: f32) {
+        // "Close graph view" is offered whenever a second graph-pane is open, so it
+        // sits at the foot of the menu in either branch. (Pane-as-unit.)
+        let multi_graph = self.has_multiple_graph_panes();
+        let close_item =
+            || ContextItem::new("Close graph view", ContextAction::CloseGraphPane);
         let set = self.selection_working_set();
         if set.is_empty() {
             // No selection (typically a right-click on empty canvas): offer "Add
@@ -30,17 +35,20 @@ impl WindowCtx<'_> {
             // node-hit-test for true spatial emptiness is a refinement.
             self.view.context_origin = Some(self.orrery_point(x, y));
             self.view.context_set.clear();
-            let items = vec![
+            let mut items = vec![
                 ContextItem::new("Add node", ContextAction::AddNode),
                 ContextItem::new("Add field", ContextAction::AddField),
             ];
+            if multi_graph {
+                items.push(close_item());
+            }
             self.view.runner.update(move |c| c.open_context_menu(x, y, items));
             self.view.request_redraw();
             return;
         }
         // A selection-based menu never mints at the cursor; clear any stale anchor.
         self.view.context_origin = None;
-        let items = if set.len() == 1 {
+        let mut items = if set.len() == 1 {
             vec![ContextItem::new("Open tile", ContextAction::OpenSplits)]
         } else {
             let mut items = vec![
@@ -53,6 +61,9 @@ impl WindowCtx<'_> {
             }
             items
         };
+        if multi_graph {
+            items.push(close_item());
+        }
         self.view.context_set = set;
         self.view.runner
             .update(move |c| c.open_context_menu(x, y, items));
@@ -172,6 +183,11 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Close the focused graph pane — a pane op, no member set. (Pane-as-unit.)
+        if let ContextAction::CloseGraphPane = action {
+            self.close_focused_graph_pane();
+            return;
+        }
         let set = std::mem::take(&mut self.view.context_set);
         if set.is_empty() {
             return;
@@ -194,7 +210,8 @@ impl WindowCtx<'_> {
             | ContextAction::AddNode
             | ContextAction::AddTile
             | ContextAction::AddSession
-            | ContextAction::AddField => {
+            | ContextAction::AddField
+            | ContextAction::CloseGraphPane => {
                 unreachable!("handled above")
             }
         }

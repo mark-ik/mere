@@ -413,4 +413,51 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
+    /// Whether more than one graph (Orrery) pane is open — gates the close-pane
+    /// affordances (you can't close the last graph view). (Window composition —
+    /// pane-as-unit.)
+    pub(super) fn has_multiple_graph_panes(&self) -> bool {
+        self.view
+            .frame_layout
+            .iter_leaves()
+            .filter(|(_, c, _)| matches!(c, PaneContent::Orrery))
+            .count()
+            > 1
+    }
+
+    /// Close the focused graph (Orrery) pane when more than one is open — the
+    /// dismiss for a second graph-pane (Ctrl+W, the `close_pane` command, the orrery
+    /// context menu). A no-op with a single graph pane (never close the last graph
+    /// view). Focus hands off to a surviving graph pane; the closed graph's orrery
+    /// stays pooled (the LRU evicts it later). (Window composition — pane-as-unit.)
+    pub(super) fn close_focused_graph_pane(&mut self) {
+        let orrery_panes: Vec<(PaneId, GraphId)> = self
+            .view
+            .frame_layout
+            .iter_leaves()
+            .filter(|(_, c, _)| matches!(c, PaneContent::Orrery))
+            .map(|(id, _, gid)| (id, gid))
+            .collect();
+        if orrery_panes.len() <= 1 {
+            return;
+        }
+        // The focused graph pane (else the first one), and a survivor to focus next.
+        let focused = self.view.focused_graph;
+        let (target_pane, _) = orrery_panes
+            .iter()
+            .find(|(_, g)| *g == focused)
+            .copied()
+            .unwrap_or(orrery_panes[0]);
+        if let Some(path) = frame_view::pane_path(&self.view.frame_layout, target_pane) {
+            self.view.frame_layout.close_leaf(&path);
+        }
+        self.view.maximized_pane = None;
+        if let Some((_, surviving)) = orrery_panes.iter().find(|(p, _)| *p != target_pane) {
+            self.focus_pane_graph(*surviving);
+        }
+        self.shared
+            .observability
+            .record_frame_layout_changed("graph pane closed");
+        self.view.request_redraw();
+    }
 }

@@ -273,6 +273,10 @@ pub enum ContextAction {
     /// happens inside `Orrery::add_field_at`. From the add-pill (no anchor) it
     /// places at the orrery view center. (Field regions P0.)
     AddField,
+    /// Close the focused graph (Orrery) pane — offered only when more than one
+    /// graph pane is open. Drains like `ShellbarMove` without touching
+    /// `context_set`. (Window composition — pane-as-unit.)
+    CloseGraphPane,
 }
 
 impl Chrome {
@@ -506,7 +510,8 @@ impl Chrome {
             | Command::PinFocusedOperation
             | Command::ToggleCompatView
             | Command::AssertEdge
-            | Command::RetractEdge => {
+            | Command::RetractEdge
+            | Command::CloseGraphPane => {
                 // Host actions over the frame, orrery, workbench, or actor pool:
                 // record the intent; the host drains it and runs the matching
                 // method.

@@ -830,6 +830,15 @@ impl WindowCtx<'_> {
             self.toggle_maximize();
             return;
         }
+        // Ctrl+W closes the focused graph pane when a second graph-pane is open (the
+        // dismiss for an open-beside graph). A no-op with a single graph view, so it
+        // never closes your last graph. (Window composition — pane-as-unit.)
+        if self.view.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("w"))
+        {
+            self.close_focused_graph_pane();
+            return;
+        }
         // Cmd/Ctrl+Shift+N opens a new OS window over the same shared session (a
         // second view). A per-window handler can't create a window itself (no event
         // loop, no registry access), so it queues a `SpawnWindow` the shell applies in

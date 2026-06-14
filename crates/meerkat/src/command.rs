@@ -71,11 +71,15 @@ pub enum Command {
     /// Retract the user relation(s) on the selected edge — a true removal, not the
     /// display-only `HideSelectedEdge` (host action).
     RetractEdge,
+    /// Close the focused graph (Orrery) pane when more than one is open — the
+    /// dismiss for a second graph-pane. A no-op with a single graph view (host
+    /// action). (Window composition — pane-as-unit.)
+    CloseGraphPane,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 22] = [
+    pub const ALL: [Command; 23] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -98,6 +102,7 @@ impl Command {
         Command::ToggleCompatView,
         Command::AssertEdge,
         Command::RetractEdge,
+        Command::CloseGraphPane,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -122,6 +127,7 @@ impl Command {
                 | Command::ToggleCompatView
                 | Command::AssertEdge
                 | Command::RetractEdge
+                | Command::CloseGraphPane
         )
     }
 
@@ -156,6 +162,7 @@ impl Command {
             Command::PinFocusedOperation => "pin",
             Command::AssertEdge => "relate",
             Command::RetractEdge => "unrelate",
+            Command::CloseGraphPane => "close_pane",
         }
     }
 
@@ -184,6 +191,7 @@ impl Command {
             Command::ToggleCompatView => "Compatibility view (system WebView, focused node)",
             Command::AssertEdge => "Relate selected nodes",
             Command::RetractEdge => "Unrelate selected edge",
+            Command::CloseGraphPane => "Close graph view (focused pane)",
         }
     }
 }
