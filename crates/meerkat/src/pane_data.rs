@@ -25,10 +25,10 @@ impl WindowCtx<'_> {
         // which collapses to None for a multi-selection and aliases duplicate URLs
         // — both common now that Add node / New tile mint same-URL nodes).
         let selected_members: std::collections::HashSet<GraphMemberId> =
-            self.orrery.selected_members().into_iter().collect();
-        let graph = self.orrery.graph();
+            self.orrery().selected_members().into_iter().collect();
+        let graph = self.orrery().graph();
         let mut rows: Vec<roster::RosterRow> = self
-            .orrery
+            .orrery()
             .graph()
             .nodes()
             .map(|(_key, node)| {
@@ -117,7 +117,7 @@ impl WindowCtx<'_> {
     /// authoring name, else a short id) and hidden state. (Field regions — roster.)
     pub(super) fn roster_field_rows(&self) -> Vec<roster::FieldRow> {
         let mut out = Vec::new();
-        for field in self.orrery.graph().fields() {
+        for field in self.orrery().graph().fields() {
             if !field.is_active() {
                 continue;
             }
@@ -127,7 +127,7 @@ impl WindowCtx<'_> {
                 .name
                 .clone()
                 .unwrap_or_else(|| format!("Field {}", &uuid[..8.min(uuid.len())]));
-            out.push(roster::FieldRow { id, name, hidden: !self.orrery.field_visible(id) });
+            out.push(roster::FieldRow { id, name, hidden: !self.orrery().field_visible(id) });
         }
         // Deterministic order (graph.fields() is HashMap-unordered): by name, then id
         // — matching the node rows' explicit sort. (Field regions — roster.)
@@ -145,7 +145,7 @@ impl WindowCtx<'_> {
             PaneContent::Inspector => {
                 let focused = self.focused_member();
                 let node = focused
-                    .and_then(|member| self.orrery.graph().get_node_by_id(member))
+                    .and_then(|member| self.orrery().graph().get_node_by_id(member))
                     .map(|(_, node)| node);
                 let state = node.and_then(|node| self.shared.content.pages.get(node.url()));
                 super::inspector::inspector_rows(node, state)

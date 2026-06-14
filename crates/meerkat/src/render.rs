@@ -272,20 +272,20 @@ impl WindowCtx<'_> {
         // blue new) so the graph shows at a glance what's live. (Visible in
         // Cartography; the orrery is hidden in the tiled view.)
         let states = self.node_states();
-        self.orrery.set_node_states(states);
+        self.orrery_mut().set_node_states(states);
         // Shape each node by its content type (square document / rounded menu /
         // circle feed), the same per-node-hint path as the color states.
         let shapes = self.node_shapes();
-        self.orrery.set_node_shapes(shapes);
+        self.orrery_mut().set_node_shapes(shapes);
 
         // The orrery always composites its own scene into its leaf (kept in sync,
         // centered once). The tiled workbench, when its pane is open, composites a
         // separate scene into its own leaf — the two coexist now, no longer toggled.
-        self.orrery.resize(orrery_w, orrery_h);
+        self.orrery_mut().resize(orrery_w, orrery_h);
         if !self.view.centered {
-            self.orrery.recenter();
+            self.orrery_mut().recenter();
             self.view.centered = true;
-        } else if !self.view.healed && self.orrery.has_nodes() {
+        } else if !self.view.healed && self.orrery().has_nodes() {
             // One-shot self-heal: a restored camera that frames nothing (a
             // degenerate saved pan/zoom) snaps back to the graph. Gated on
             // has_nodes() so it waits for the async session load — firing against
@@ -294,11 +294,11 @@ impl WindowCtx<'_> {
             // once the nodes actually arrive. Checked once, so it never fights an
             // intentional pan into empty space.
             self.view.healed = true;
-            if !self.orrery.graph_visible() {
-                self.orrery.recenter();
+            if !self.orrery().graph_visible() {
+                self.orrery_mut().recenter();
             }
         }
-        let (orrery_scene, orrery_redraw) = self.orrery.frame(orrery_w, orrery_h);
+        let (orrery_scene, orrery_redraw) = self.orrery_mut().frame(orrery_w, orrery_h);
         // The workbench root (a serval flex-DOM document) for the Workbench pane;
         // taffy lays the tiles out. `(scene, w, h)` so the composite can rasterize
         // it at the pane size. `None` when the workbench pane isn't open.
@@ -308,7 +308,7 @@ impl WindowCtx<'_> {
             let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
             let mut scene = WorkbenchScene::from_workbench(
                 &self.view.workbench,
-                self.orrery.graph(),
+                self.orrery().graph(),
                 (ww as f32, wh as f32),
                 |m| self.shared.content.constellation.is_background(m),
                 |m| self.shared.content.constellation.is_recovering(m),
@@ -411,7 +411,7 @@ impl WindowCtx<'_> {
             for (member, content, slot) in placements {
                 slot_rects.push((member, slot));
                 let Some(url) = self
-                    .orrery
+                    .orrery()
                     .graph()
                     .get_node_by_id(member)
                     .map(|(_, n)| n.url().to_string())
@@ -440,7 +440,7 @@ impl WindowCtx<'_> {
         // The orrery's focused-node card (always, alongside any workbench pane).
         if let (Some(member), Some(url)) = (
             self.focused_member(),
-            self.orrery.focused_url().map(str::to_string),
+            self.orrery().focused_url().map(str::to_string),
         ) {
             // Float the card next to the focused node (fall back to the fixed
             // top-right rect when the node's screen pos is unknown). A live preview
@@ -451,7 +451,7 @@ impl WindowCtx<'_> {
             // by the orrery leaf's origin for window coords, and anchor the card
             // within the orrery leaf rect (so it stays in the orrery pane when split).
             let node = self
-                .orrery
+                .orrery()
                 .focused_node_screen()
                 .map(|(nx, ny)| (orrery_rect[0] + nx, orrery_rect[1] + ny));
             if self.view.live_previews.contains(&member) {
@@ -500,7 +500,7 @@ impl WindowCtx<'_> {
                         live_card = Some((member, [x0, y0, x1, y1]));
                     }
                 }
-            } else if self.orrery.member_visited(member) {
+            } else if self.orrery().member_visited(member) {
                 // "Last visit" snapshot: a small fixed-size card, rendered host-side
                 // from the durable cache / synthesis below (no actor), so it survives
                 // a restart. Composited uniform-scaled into a scrollable thumbnail.
@@ -992,7 +992,7 @@ impl WindowCtx<'_> {
         if let Some(grect) = self.gloss_leaf_rect() {
             let gw = (grect[2] - grect[0]).round().max(1.0) as u32;
             let gh = (grect[3] - grect[1]).round().max(1.0) as u32;
-            let (nodes, edges) = self.orrery.minimap_geometry();
+            let (nodes, edges) = self.orrery().minimap_geometry();
             let (scene, local) =
                 super::gloss::minimap_scene(&nodes, &edges, gw, gh, &self.shared.presentation.chrome_theme);
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();

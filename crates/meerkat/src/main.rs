@@ -612,12 +612,20 @@ struct Shell {
 /// the ctx over `windows[&id]`; that construction is the seam — a ctx method
 /// cannot reach another window or the window map, so cross-window work (spawn /
 /// close / move-tile) goes through `ShellCommand` instead. Bodies are unchanged
-/// from when these were `&mut self` on `Shell`: `self.view` / `self.shared` /
-/// `self.orrery` resolve to these fields. (Multi-window MW2 (c).)
+/// from when these were `&mut self` on `Shell`: `self.view` / `self.shared`
+/// resolve to these fields; `self.orrery()` / `self.orrery_mut()` resolve the
+/// focused pane's orrery out of the pool. (Multi-window MW2 (c); Window
+/// composition P2.)
 struct WindowCtx<'a> {
     view: &'a mut window_view::WindowView,
     shared: &'a mut SharedState,
-    orrery: &'a mut Orrery,
+    /// The orrery pool (every live graph's authority), borrowed whole so render
+    /// and input can resolve *any* pane's orrery by `graph_id`, not just the
+    /// window-focused one. The focused-bucket sites reach it through
+    /// [`WindowCtx::orrery`] / [`WindowCtx::orrery_mut`]; per-pane paths resolve a
+    /// specific `graph_id`. Was the single bundled `orrery: &mut Orrery` (P1).
+    /// (Window composition P2.)
+    orreries: &'a mut HashMap<GraphId, Orrery>,
     clipboard: &'a mut Option<arboard::Clipboard>,
     a11y_bridge: &'a mut a11y_bridge::AccessKitBridge,
     a11y_action_routes: &'a mut HashMap<AccessNodeId, A11yHostAction>,
@@ -1000,16 +1008,13 @@ impl Shell {
                 .as_mut()
                 .expect("a primary or pending view"),
         };
-        // Bundle this window's focused-graph orrery from the pool. (Window composition P1.)
-        let gid = view.focused_graph;
+        // Pass the whole pool; the ctx resolves the focused (or a per-pane) orrery
+        // by `graph_id`. (Window composition P2; was a single bundled orrery, P1.)
         let pool_count = self.orreries.len();
         WindowCtx {
             view,
             shared: &mut self.shared,
-            orrery: self
-                .orreries
-                .get_mut(&gid)
-                .expect("focused orrery is pooled"),
+            orreries: &mut self.orreries,
             clipboard: &mut self.clipboard,
             a11y_bridge: &mut self.a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
@@ -1051,15 +1056,11 @@ impl Shell {
     /// view, never the registry or its siblings. (MW2 (d).)
     fn window_ctx(&mut self, id: WindowId) -> Option<WindowCtx<'_>> {
         let view = self.windows.get_mut(&id)?;
-        let gid = view.focused_graph;
         let pool_count = self.orreries.len();
         Some(WindowCtx {
             view,
             shared: &mut self.shared,
-            orrery: self
-                .orreries
-                .get_mut(&gid)
-                .expect("focused orrery is pooled"),
+            orreries: &mut self.orreries,
             clipboard: &mut self.clipboard,
             a11y_bridge: &mut self.a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,

@@ -26,7 +26,7 @@ impl WindowCtx<'_> {
         action_routes: &mut HashMap<AccessNodeId, A11yHostAction>,
     ) -> UxTree {
         match content {
-            PaneContent::Orrery => mere_orrery::project_graph(self.orrery.graph()),
+            PaneContent::Orrery => mere_orrery::project_graph(self.orrery().graph()),
             PaneContent::Workbench => workbench_domain::project_workbench(&self.view.workbench),
             PaneContent::Apparatus | PaneContent::System => apparatus_domain::project_skeleton(),
             PaneContent::Roster => self.roster_a11y_tree(pane_id, action_routes),
@@ -93,10 +93,10 @@ impl WindowCtx<'_> {
         let root = node_id_for_path(&root_path);
         let node_bounds: HashMap<GraphMemberId, [f32; 4]> =
             self.view.gloss_node_rects.iter().copied().collect();
-        let focused = self.orrery.focused_member();
+        let focused = self.orrery().focused_member();
         let mut nodes = Vec::new();
         let mut children = Vec::new();
-        for (_key, graph_node) in self.orrery.graph().nodes() {
+        for (_key, graph_node) in self.orrery().graph().nodes() {
             let id = node_id_for_path(&format!("{root_path}/node/{}", graph_node.id));
             let mut node = Node::new(Role::Link);
             let label = if graph_node.title.is_empty() {

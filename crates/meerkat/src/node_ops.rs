@@ -24,7 +24,7 @@ impl WindowCtx<'_> {
     /// removes the node's data; deactivation just stops its actor — this does
     /// both, because the node itself is gone.
     pub(super) fn delete_focused_node(&mut self) {
-        if let Some(member) = self.orrery.remove_focused() {
+        if let Some(member) = self.orrery_mut().remove_focused() {
             self.view.live_previews.remove(&member);
             self.shared.content.constellation.reap(member);
             self.save_session();
@@ -195,7 +195,7 @@ impl WindowCtx<'_> {
     /// showing it, else `Closed` (red); everything else — a local / synthesized
     /// page, a blank (loading) one, or an errored one — is `Idle` (blue).
     pub(super) fn node_states(&self) -> HashMap<GraphMemberId, NodeState> {
-        self.orrery
+        self.orrery()
             .graph()
             .nodes()
             .map(|(_key, node)| {
@@ -220,7 +220,7 @@ impl WindowCtx<'_> {
     /// nodes fall back to [`NodeShape::Square`] (the orrery's default), so a node
     /// takes its content shape as soon as it loads.
     pub(super) fn node_shapes(&self) -> HashMap<GraphMemberId, NodeShape> {
-        self.orrery
+        self.orrery()
             .graph()
             .nodes()
             .filter_map(|(_key, node)| match self.shared.content.pages.get(node.url()) {
@@ -235,8 +235,8 @@ impl WindowCtx<'_> {
     /// The focused node's graph member, if a node is focused (resolved URL → node
     /// UUID via the kernel node id).
     pub(super) fn focused_member(&self) -> Option<GraphMemberId> {
-        let url = self.orrery.focused_url()?;
-        self.orrery
+        let url = self.orrery().focused_url()?;
+        self.orrery()
             .graph()
             .get_node_by_url(url)
             .map(|(_, node)| node.id)

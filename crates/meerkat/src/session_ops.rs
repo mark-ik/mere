@@ -25,12 +25,12 @@ impl WindowCtx<'_> {
     /// navigation and on window close.
     pub(super) fn save_session(&mut self) {
         let graph_file = self.shared.session.session_dir.join(session_graph_store::GRAPH_FILE);
-        if let Err(err) = session_graph_store::save(&graph_file, self.orrery.graph()) {
+        if let Err(err) = session_graph_store::save(&graph_file, self.orrery().graph()) {
             tracing::warn!(%err, path = ?graph_file, "failed to persist the session graph");
         }
         let intent = ViewIntent {
-            camera: Some(super::camera_to_snapshot(self.orrery.camera())),
-            focus: self.orrery.focused_url().map(str::to_string),
+            camera: Some(super::camera_to_snapshot(self.orrery().camera())),
+            focus: self.orrery().focused_url().map(str::to_string),
             ..Default::default()
         };
         if let Err(err) = view_intent_store::save_view_intent(
@@ -63,7 +63,7 @@ impl WindowCtx<'_> {
             height: SWITCHER_THUMB_H,
             ..SwitcherThumbnailOptions::default()
         };
-        let thumb = build_switcher_thumbnail(self.orrery.graph(), opts);
+        let thumb = build_switcher_thumbnail(self.orrery().graph(), opts);
         self.shared.session.session_thumbnails.insert(self.shared.session.active_session_id, thumb);
     }
 
@@ -142,7 +142,7 @@ impl WindowCtx<'_> {
                 .and_then(|m| m.display_name.clone())
                 .filter(|n| !n.trim().is_empty());
             let (thumb, label) = if id == self.shared.session.active_session_id {
-                let g = self.orrery.graph();
+                let g = self.orrery().graph();
                 let label = display_name.unwrap_or_else(|| derive_session_label(g));
                 (build_switcher_thumbnail(g, opts), label)
             } else {
@@ -354,13 +354,13 @@ impl super::Shell {
         let mut ctx = self.ctx();
         match restored_view.as_ref().and_then(|v| v.camera.as_ref()) {
             Some(snapshot) => {
-                ctx.orrery.set_camera(super::snapshot_to_camera(snapshot));
+                ctx.orrery_mut().set_camera(super::snapshot_to_camera(snapshot));
                 ctx.view.centered = true;
             }
             None => ctx.view.centered = false,
         }
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
-            ctx.orrery.select_by_url(url);
+            ctx.orrery_mut().select_by_url(url);
         }
         ctx.view.frame_layout.retag_graph_bound(target_graph);
         ctx.shared.content.constellation.reap_graph(old_gid);
@@ -382,7 +382,7 @@ impl super::Shell {
         ctx.shared.session.session_dir = session_dir;
         ctx.shared.session.active_session_id = id;
         ctx.view.content_location =
-            ctx.orrery.focused_url().unwrap_or("mere://welcome").to_string();
+            ctx.orrery().focused_url().unwrap_or("mere://welcome").to_string();
         ctx.refresh_session_thumbnails();
         ctx.view.request_redraw();
     }

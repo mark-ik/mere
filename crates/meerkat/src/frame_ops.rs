@@ -9,6 +9,7 @@
 use forme::GraphMemberId;
 use frame::{GraphId, InsertSide, PaneContent, PaneId, PaneNode};
 use meerkat::Chrome;
+use orrery::Orrery;
 use session_runtime::{PersistedSettings, settings_store};
 
 use super::observability::ObservabilitySnapshot;
@@ -62,7 +63,7 @@ impl WindowCtx<'_> {
             // Focus the node the open was seeded from (the primary selection), so the
             // omnibar shows its URL; fall back to the first opened tile.
             self.view.focused_tile = self
-                .orrery
+                .orrery()
                 .selected_members()
                 .first()
                 .copied()
@@ -78,13 +79,13 @@ impl WindowCtx<'_> {
     /// selection yields nothing. Shared by entering the workbench and the right-click
     /// menu.
     pub(super) fn selection_working_set(&self) -> Vec<GraphMemberId> {
-        let selected = self.orrery.selected_members();
+        let selected = self.orrery().selected_members();
         if selected.len() > 1 {
             return selected; // multi-select → the selection
         }
         match selected.first() {
             Some(&focus) => self
-                .orrery
+                .orrery()
                 .connected_members(focus)
                 .into_iter()
                 .filter(|m| *m == focus || self.shared.content.constellation.is_active(*m))
@@ -140,6 +141,26 @@ impl WindowCtx<'_> {
         } else {
             GraphId::nil()
         }
+    }
+
+    /// The focused window's orrery, resolved from the pool by the window's tracked
+    /// `focused_graph`. The read half of the bundled `self.orrery` field P1
+    /// removed: P2 hands the ctx the whole pool so render / input can resolve any
+    /// pane's orrery, and the window-focused-graph sites reach the focused one
+    /// here. Resolution-identical to P1's bundling key. (Window composition P2.)
+    pub(super) fn orrery(&self) -> &Orrery {
+        self.orreries
+            .get(&self.view.focused_graph)
+            .expect("focused orrery is pooled")
+    }
+
+    /// The focused window's orrery, mutable — the write half of the removed
+    /// `self.orrery` field. (Window composition P2.)
+    pub(super) fn orrery_mut(&mut self) -> &mut Orrery {
+        let gid = self.view.focused_graph;
+        self.orreries
+            .get_mut(&gid)
+            .expect("focused orrery is pooled")
     }
 
     /// Whether the tiled-workbench pane is open (a Workbench leaf exists).
@@ -305,7 +326,7 @@ impl WindowCtx<'_> {
         self.shared.presentation.chrome_sheet = crate::chrome_sheet(&self.shared.presentation.chrome_theme);
         // Re-theme the orrery's backdrop + edges to match. (A2.)
         let (backdrop, edge) = crate::orrery_palette(&resolution.tokens);
-        self.orrery.set_palette(backdrop, edge);
+        self.orrery_mut().set_palette(backdrop, edge);
         self.view.window_controls_tex = None;
         self.view.divider_tex = None;
         self.persist_settings();
@@ -343,7 +364,7 @@ impl WindowCtx<'_> {
         vec![
             (
                 "Nodes".to_string(),
-                self.orrery.graph().nodes().count().to_string(),
+                self.orrery().graph().nodes().count().to_string(),
             ),
             (
                 "Active actors".to_string(),

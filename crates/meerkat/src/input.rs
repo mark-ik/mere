@@ -190,27 +190,27 @@ impl WindowCtx<'_> {
                                         match intent {
                                             crate::roster_view::RosterIntent::Select(member) => {
                                                 if additive {
-                                                    self.orrery.toggle_select_member(member);
+                                                    self.orrery_mut().toggle_select_member(member);
                                                     self.view.request_redraw();
                                                 } else if let Some(url) = self
-                                                    .orrery
+                                                    .orrery()
                                                     .graph()
                                                     .get_node_by_id(member)
                                                     .map(|(_, n)| n.url().to_string())
                                                 {
-                                                    self.orrery.select_by_url(&url);
+                                                    self.orrery_mut().select_by_url(&url);
                                                     self.view.request_redraw();
                                                 }
                                             }
                                             crate::roster_view::RosterIntent::SelectField(id) => {
                                                 // Click a field row: center the canvas on it.
-                                                if self.orrery.center_on_field(id) {
+                                                if self.orrery_mut().center_on_field(id) {
                                                     self.view.request_redraw();
                                                 }
                                             }
                                             crate::roster_view::RosterIntent::ToggleFieldVisibility(id) => {
                                                 // The field row's hide/show toggle.
-                                                self.orrery.toggle_field_visible(id);
+                                                self.orrery_mut().toggle_field_visible(id);
                                                 self.view.request_redraw();
                                             }
                                         }
@@ -249,12 +249,12 @@ impl WindowCtx<'_> {
                             if button == MouseButton::Left {
                                 if let Some(member) = self.gloss_node_at(x, y) {
                                     if let Some(url) = self
-                                        .orrery
+                                        .orrery()
                                         .graph()
                                         .get_node_by_id(member)
                                         .map(|(_, n)| n.url().to_string())
                                     {
-                                        self.orrery.select_by_url(&url);
+                                        self.orrery_mut().select_by_url(&url);
                                         self.view.request_redraw();
                                     }
                                 }
@@ -371,7 +371,7 @@ impl WindowCtx<'_> {
                             self.open_context_menu_at(x, y);
                         } else if let Some(b) = orrery_button {
                             let (ox, oy) = self.orrery_point(x, y);
-                            if !self.point_over_card(x, y) && self.orrery.pointer_down(b, ox, oy) {
+                            if !self.point_over_card(x, y) && self.orrery_mut().pointer_down(b, ox, oy) {
                                 self.view.request_redraw();
                             }
                         }
@@ -431,8 +431,8 @@ impl WindowCtx<'_> {
                     let (ox, oy) = self.orrery_point(x, y);
                     // A field move / resize ends here; its geometry is graph truth, so
                     // persist the session on release. (Field regions — move/resize.)
-                    let was_field_drag = self.orrery.dragging_field();
-                    if !over_card && self.orrery.pointer_up(b, ox, oy) {
+                    let was_field_drag = self.orrery().dragging_field();
+                    if !over_card && self.orrery_mut().pointer_up(b, ox, oy) {
                         if was_field_drag {
                             self.save_session();
                         }
@@ -488,7 +488,7 @@ impl WindowCtx<'_> {
                         self.view.last_left_release = None; // don't chain a triple-click
                         if over_card {
                             self.toggle_live_preview();
-                        } else if !self.orrery.selected_members().is_empty() {
+                        } else if !self.orrery().selected_members().is_empty() {
                             self.toggle_workbench();
                         }
                     }
@@ -521,7 +521,7 @@ impl WindowCtx<'_> {
                 if let Some(href) = self.shared.content.constellation.link_at(*member, lx, ly) {
                     let href = href.to_string();
                     let base = self
-                        .orrery
+                        .orrery()
                         .graph()
                         .get_node_by_id(*member)
                         .map(|(_, n)| n.url().to_string())
@@ -877,8 +877,8 @@ impl WindowCtx<'_> {
             key,
             WinitKey::Named(WinitNamedKey::Delete) | WinitKey::Named(WinitNamedKey::Backspace)
         ) {
-            if self.orrery.has_selected_edges() {
-                if self.orrery.retract_selected_relation() > 0 {
+            if self.orrery().has_selected_edges() {
+                if self.orrery_mut().retract_selected_relation() > 0 {
                     self.save_session();
                     self.view.request_redraw();
                 }
@@ -889,7 +889,7 @@ impl WindowCtx<'_> {
         // Space pauses / resumes the layout physics, so you can freeze the graph
         // mid-settle (or let a field's pull keep running). (Physics pause.)
         if matches!(key, WinitKey::Named(WinitNamedKey::Space)) {
-            self.orrery.toggle_physics_paused();
+            self.orrery_mut().toggle_physics_paused();
             self.view.request_redraw();
         }
     }

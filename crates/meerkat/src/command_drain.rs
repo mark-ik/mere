@@ -77,7 +77,7 @@ impl WindowCtx<'_> {
                 // the new tile is actually shown regardless of the prior projection.
                 self.open_workbench();
                 let url = "mere://welcome";
-                let member = self.orrery.open_member_as_new_node(None, url);
+                let member = self.orrery_mut().open_member_as_new_node(None, url);
                 self.view.workbench.open_tile(member);
                 self.view.focused_tile = Some(member);
                 self.ensure_content(url);
@@ -122,12 +122,12 @@ impl WindowCtx<'_> {
             Command::DeleteNode => self.delete_focused_node(),
             Command::BackgroundNode => self.toggle_focus_background(),
             Command::HideSelectedEdge => {
-                if self.orrery.hide_selected_edges() > 0 {
+                if self.orrery_mut().hide_selected_edges() > 0 {
                     self.view.request_redraw();
                 }
             }
             Command::ShowAllEdges => {
-                if self.orrery.show_all_edges() > 0 {
+                if self.orrery_mut().show_all_edges() > 0 {
                     self.view.request_redraw();
                 }
             }
@@ -141,7 +141,7 @@ impl WindowCtx<'_> {
             Command::PinFocusedOperation => self.pin_focused_operation(),
             Command::ToggleCompatView => self.toggle_focus_compat(),
             Command::AssertEdge => {
-                if self.orrery.assert_selected_relation(SemanticSubKind::UserGrouped) {
+                if self.orrery_mut().assert_selected_relation(SemanticSubKind::UserGrouped) {
                     self.save_session();
                     self.view.request_redraw();
                 } else {
@@ -149,7 +149,7 @@ impl WindowCtx<'_> {
                 }
             }
             Command::RetractEdge => {
-                if self.orrery.retract_selected_relation() > 0 {
+                if self.orrery_mut().retract_selected_relation() > 0 {
                     self.save_session();
                     self.view.request_redraw();
                 } else {
@@ -199,7 +199,7 @@ impl WindowCtx<'_> {
         // selected pair directly (the 0-arg `relate()` rode the AssertEdge path
         // above with the default kind).
         if let Some(kind) = &outcome.relation_kind {
-            if self.orrery.assert_selected_relation(relation_kind_from_str(kind)) {
+            if self.orrery_mut().assert_selected_relation(relation_kind_from_str(kind)) {
                 self.save_session();
                 self.view.request_redraw();
             } else {
@@ -236,7 +236,7 @@ impl WindowCtx<'_> {
         // surfaced to scripts as `inspect()`.
         let node = self
             .focused_member()
-            .and_then(|member| self.orrery.graph().get_node_by_id(member))
+            .and_then(|member| self.orrery().graph().get_node_by_id(member))
             .map(|(_, node)| node);
         let state = node.and_then(|node| self.shared.content.pages.get(node.url()));
         let inspect = super::inspector::inspector_rows(node, state);
@@ -247,9 +247,9 @@ impl WindowCtx<'_> {
             history: chrome.history.entries().to_vec(),
             can_back: chrome.toolbar.can_go_back,
             can_forward: chrome.toolbar.can_go_forward,
-            focused_node: self.orrery.focused_url().map(str::to_string),
+            focused_node: self.orrery().focused_url().map(str::to_string),
             nodes: self
-                .orrery
+                .orrery()
                 .graph()
                 .nodes()
                 .map(|(_, node)| node.url().to_string())

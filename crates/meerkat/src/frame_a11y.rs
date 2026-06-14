@@ -40,7 +40,7 @@ impl WindowCtx<'_> {
             Some(A11yHostAction::SelectNodeByUrl(url))
                 if matches!(request.action, Action::Click | Action::Focus) =>
             {
-                if self.orrery.select_by_url(&url) {
+                if self.orrery_mut().select_by_url(&url) {
                     self.view.active_content = super::ContentPane::Orrery;
                     self.sync_location();
                     self.shared.observability.record_diagnostic(

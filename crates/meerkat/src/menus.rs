@@ -113,7 +113,7 @@ impl WindowCtx<'_> {
         // Relate the two selected nodes — no tile / member-set logic, like the
         // shellbar move above.
         if let ContextAction::Relate = action {
-            if self.orrery.assert_selected_relation(SemanticSubKind::UserGrouped) {
+            if self.orrery_mut().assert_selected_relation(SemanticSubKind::UserGrouped) {
                 self.save_session();
             }
             self.view.request_redraw();
@@ -126,10 +126,10 @@ impl WindowCtx<'_> {
             let url = "mere://welcome";
             match self.view.context_origin.take() {
                 Some(origin) => {
-                    let _ = self.orrery.add_node_at(origin, url);
+                    let _ = self.orrery_mut().add_node_at(origin, url);
                 }
                 None => {
-                    let _ = self.orrery.open_member_as_new_node(None, url);
+                    let _ = self.orrery_mut().open_member_as_new_node(None, url);
                 }
             }
             self.ensure_content(url);
@@ -142,7 +142,7 @@ impl WindowCtx<'_> {
         if let ContextAction::AddTile = action {
             self.open_workbench();
             let url = "mere://welcome";
-            let member = self.orrery.open_member_as_new_node(None, url);
+            let member = self.orrery_mut().open_member_as_new_node(None, url);
             self.view.workbench.open_tile(member);
             self.view.focused_tile = Some(member);
             self.ensure_content(url);
@@ -167,7 +167,7 @@ impl WindowCtx<'_> {
                     self.orrery_point((r[0] + r[2]) / 2.0, (r[1] + r[3]) / 2.0)
                 }
             };
-            let _ = self.orrery.add_field_at(anchor);
+            let _ = self.orrery_mut().add_field_at(anchor);
             self.save_session();
             self.view.request_redraw();
             return;

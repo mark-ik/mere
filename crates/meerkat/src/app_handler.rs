@@ -112,7 +112,7 @@ impl ApplicationHandler for Shell {
         // Show the restored focused node's content from the durable cache (so a
         // reload re-opens its card without a navigation). A fresh `mere://welcome`
         // focus is not fetchable, so this is a no-op there.
-        if let Some(url) = wc.orrery.focused_url().map(str::to_string) {
+        if let Some(url) = wc.orrery().focused_url().map(str::to_string) {
             wc.ensure_content(&url);
         }
     }
@@ -226,7 +226,7 @@ impl ApplicationHandler for Shell {
             // background graph's contributions route to that graph's pooled orrery
             // with the multi-graph flip (at one focused graph there are none).
             let focused = wc.view.focused_graph;
-            graph_changed |= wc.orrery.ingest_graph(|g| {
+            graph_changed |= wc.orrery_mut().ingest_graph(|g| {
                 let mut changed = false;
                 for (gid, contribution) in &drained.contributions {
                     if *gid != focused {
@@ -430,7 +430,7 @@ impl ApplicationHandler for Shell {
                     // Map to the orrery pane's local space (origin past the shellbar
                     // carve, not just the toolbar) before feeding its hover. (Cursor fix.)
                     let (ox, oy) = wc.orrery_point(wc.view.cursor.0, wc.view.cursor.1);
-                    if wc.orrery.cursor_moved(ox, oy) {
+                    if wc.orrery_mut().cursor_moved(ox, oy) {
                         wc.view.request_redraw();
                     }
                 }
@@ -438,14 +438,15 @@ impl ApplicationHandler for Shell {
             WindowEvent::CursorLeft { .. } => {
                 // The pointer left the window: drop any field hover so its box doesn't
                 // stay stuck on. (Field regions — box-on-interaction.)
-                if wc.orrery.clear_active_field() {
+                if wc.orrery_mut().clear_active_field() {
                     wc.view.request_redraw();
                 }
             }
             WindowEvent::ModifiersChanged(mods) => {
                 wc.view.modifiers = modifiers_from_winit(mods.state());
-                wc.orrery.set_ctrl(wc.view.modifiers.ctrl);
-                wc.orrery.set_shift(wc.view.modifiers.shift);
+                let (ctrl, shift) = (wc.view.modifiers.ctrl, wc.view.modifiers.shift);
+                wc.orrery_mut().set_ctrl(ctrl);
+                wc.orrery_mut().set_shift(shift);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 // A wheel over the compatibility-view tile scrolls the WebView (Win32
@@ -520,7 +521,7 @@ impl ApplicationHandler for Shell {
                     let in_workbench = wc
                         .workbench_leaf_rect()
                         .is_some_and(|wr| cx >= wr[0] && cx < wr[2] && cy >= wr[1] && cy < wr[3]);
-                    if cy >= th && !in_workbench && wc.orrery.wheel(dx, dy) {
+                    if cy >= th && !in_workbench && wc.orrery_mut().wheel(dx, dy) {
                         wc.view.request_redraw();
                     }
                 }

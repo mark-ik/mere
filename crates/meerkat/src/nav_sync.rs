@@ -19,12 +19,12 @@ impl WindowCtx<'_> {
     pub(super) fn current_focus_url(&self) -> Option<String> {
         if self.workbench_active() {
             let member = self.view.focused_tile?;
-            self.orrery
+            self.orrery()
                 .graph()
                 .get_node_by_id(member)
                 .map(|(_, node)| node.url().to_string())
         } else {
-            self.orrery.focused_url().map(str::to_string)
+            self.orrery().focused_url().map(str::to_string)
         }
     }
 
@@ -62,7 +62,7 @@ impl WindowCtx<'_> {
         if self.view.runner.state().open_as_new_node {
             self.view.runner.update(|c| c.open_as_new_node = false);
             let origin = self.nav_target_member();
-            let new_member = self.orrery.open_member_as_new_node(origin, &loc);
+            let new_member = self.orrery_mut().open_member_as_new_node(origin, &loc);
             // With the workbench active, tile the new node: stack it into the
             // focused tile's slot as the active tab (or a fresh slot when nothing is
             // focused), and focus it so the next navigation targets it. Otherwise
@@ -89,11 +89,11 @@ impl WindowCtx<'_> {
         }
         match self.nav_target_member() {
             Some(member) => {
-                self.orrery.navigate_member(member, &loc);
+                self.orrery_mut().navigate_member(member, &loc);
                 self.view.scroll.remove(&member); // a new page starts at the top
             }
             None => {
-                self.orrery.visit(&loc);
+                self.orrery_mut().visit(&loc);
             }
         }
         // Navigating is deliberate: with the orrery active, show the target as a
@@ -116,7 +116,7 @@ impl WindowCtx<'_> {
         if self.workbench_active() {
             self.view.focused_tile
         } else {
-            self.orrery.focused_member()
+            self.orrery().focused_member()
         }
     }
 
@@ -134,8 +134,8 @@ impl WindowCtx<'_> {
             return;
         };
         let url = match step {
-            meerkat::HistoryStep::Back => self.orrery.member_history_back(member),
-            meerkat::HistoryStep::Forward => self.orrery.member_history_forward(member),
+            meerkat::HistoryStep::Back => self.orrery_mut().member_history_back(member),
+            meerkat::HistoryStep::Forward => self.orrery_mut().member_history_forward(member),
         };
         let Some(url) = url else {
             return;
@@ -157,12 +157,12 @@ impl WindowCtx<'_> {
     pub(super) fn sync_nav_buttons(&mut self) {
         let (can_back, can_forward) = match self.nav_target_member() {
             Some(m) => (
-                self.orrery.member_can_back(m),
-                self.orrery.member_can_forward(m),
+                self.orrery().member_can_back(m),
+                self.orrery().member_can_forward(m),
             ),
             None => (false, false),
         };
-        let paused = self.orrery.physics_paused();
+        let paused = self.orrery().physics_paused();
         let (cur_back, cur_forward, cur_paused) = {
             let c = self.view.runner.state();
             (c.toolbar.can_go_back, c.toolbar.can_go_forward, c.physics_paused)
@@ -184,7 +184,7 @@ impl WindowCtx<'_> {
         let mut toggled = false;
         self.view.runner.update(|c| toggled = c.take_physics_toggle());
         if toggled {
-            self.orrery.toggle_physics_paused();
+            self.orrery_mut().toggle_physics_paused();
             self.sync_nav_buttons();
             self.view.request_redraw();
         }
