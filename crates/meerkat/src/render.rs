@@ -973,7 +973,12 @@ impl WindowCtx<'_> {
             let (system_rows, observability) = apparatus_data
                 .as_ref()
                 .expect("apparatus data was prepared when the pane was open");
-            let items = super::apparatus::apparatus_items(&themes, system_rows, observability);
+            let items = super::apparatus::apparatus_items(
+                &themes,
+                self.physics_damping(),
+                system_rows,
+                observability,
+            );
             let sheet = super::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
             self.view.apparatus_pane.set(sheet, "apparatus", items);
             let max_scroll = self.view.apparatus_pane.max_scroll();

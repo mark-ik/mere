@@ -114,10 +114,36 @@ impl WindowCtx<'_> {
             tab_cap: self.shared.presentation.saved_tab_cap,
             theme_id: Some(self.shared.presentation.active_theme_id.clone()),
             shellbar_edge: self.shared.presentation.shellbar_edge,
+            physics_damping: self.shared.presentation.physics_damping,
         };
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");
         }
+    }
+
+    /// The current "inertia" physics setting (linear damping), for the apparatus
+    /// readout. (Physics settings.)
+    pub(super) fn physics_damping(&self) -> f32 {
+        self.shared.presentation.physics_damping
+    }
+
+    /// Adjust the "inertia" setting (linear damping) by `delta`, clamped to a sane
+    /// range, apply it to **every** pooled orrery (the setting is global), persist
+    /// it, and redraw so the apparatus readout updates. The apparatus −/+ buttons and
+    /// the omnibar drive this. Lower damping keeps more drift after a settle; higher
+    /// brings nodes to rest sooner. (Physics settings.)
+    pub(super) fn adjust_physics_damping(&mut self, delta: f32) {
+        let current = self.shared.presentation.physics_damping;
+        let next = (current + delta).clamp(0.5, 8.0);
+        if (next - current).abs() < f32::EPSILON {
+            return;
+        }
+        self.shared.presentation.physics_damping = next;
+        for orrery in self.orreries.values_mut() {
+            orrery.set_physics_damping(next);
+        }
+        self.persist_settings();
+        self.view.request_redraw();
     }
 
     // ── Frame tree (F1) ──────────────────────────────────────────────────────

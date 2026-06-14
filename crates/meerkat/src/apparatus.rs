@@ -70,6 +70,7 @@ pub fn apparatus_sheet(c: &ChromeTheme) -> Vec<String> {
 /// structure mirrors the old `build_apparatus_dom`.
 pub fn apparatus_items(
     themes: &[ThemeOption],
+    physics_damping: f32,
     system_rows: &[(String, String)],
     obs: &ObservabilitySnapshot,
 ) -> Vec<PaneItem> {
@@ -80,6 +81,25 @@ pub fn apparatus_items(
         let class = if theme.active { "app-btn-active" } else { "app-btn" };
         items.push(PaneItem::button(class, theme.name.clone(), theme.id.clone()));
     }
+
+    // Physics: the orrery's node damping (the "inertia" tunable). Lower keeps more
+    // drift after a settle; higher rests sooner. − / + step it; the host applies the
+    // change to every live graph and persists it. (Physics settings.)
+    items.push(PaneItem::text("app-title", "Physics"));
+    items.push(PaneItem::text(
+        "app-row",
+        format!("Node damping (inertia): {physics_damping:.1}"),
+    ));
+    items.push(PaneItem::button(
+        "app-btn",
+        "− less damping (more drift)".to_string(),
+        "phys:damping:down".to_string(),
+    ));
+    items.push(PaneItem::button(
+        "app-btn",
+        "+ more damping (settle sooner)".to_string(),
+        "phys:damping:up".to_string(),
+    ));
 
     items.push(PaneItem::text("app-title", "Overview"));
     for (label, value) in system_rows {

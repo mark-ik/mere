@@ -234,8 +234,15 @@ impl WindowCtx<'_> {
                                     self.view
                                         .apparatus_pane
                                         .dispatch_click(node, PointerClick::at(local));
-                                    for theme_id in self.view.apparatus_pane.take_activations() {
-                                        self.set_theme(&theme_id);
+                                    // An apparatus button key routes by prefix: the
+                                    // Physics −/+ step the damping; anything else is a
+                                    // theme id. (Physics settings.)
+                                    for key in self.view.apparatus_pane.take_activations() {
+                                        match key.as_str() {
+                                            "phys:damping:down" => self.adjust_physics_damping(-0.5),
+                                            "phys:damping:up" => self.adjust_physics_damping(0.5),
+                                            _ => self.set_theme(&key),
+                                        }
                                     }
                                 }
                             }

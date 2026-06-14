@@ -523,6 +523,10 @@ struct Presentation {
     saved_tab_cap: usize,
     /// Which window edge the shellbar is docked to. Persisted in settings.json.
     shellbar_edge: session_runtime::ShellbarEdge,
+    /// Linear damping for orrery node bodies — the "inertia" physics setting,
+    /// adjusted in the apparatus pane and persisted. The host owns the value and
+    /// pushes it to each orrery via `set_physics_damping`. (Physics settings.)
+    physics_damping: f32,
 }
 
 impl Presentation {
@@ -971,6 +975,11 @@ impl Shell {
             orreries.insert(gid, extra);
             orrery_lru.push(gid);
         }
+        // Apply the persisted "inertia" (linear damping) to every pooled orrery, so a
+        // restart honors the saved physics setting. (Physics settings.)
+        for orrery in orreries.values_mut() {
+            orrery.set_physics_damping(saved_settings.physics_damping);
+        }
         let mut app = Self {
             shared: SharedState {
                 content: Content {
@@ -997,6 +1006,7 @@ impl Shell {
                     active_theme_id,
                     saved_tab_cap: saved_settings.tab_cap,
                     shellbar_edge: saved_settings.shellbar_edge,
+                    physics_damping: saved_settings.physics_damping,
                 },
                 comms_handle,
                 sync_handle,

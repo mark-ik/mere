@@ -44,7 +44,8 @@ pub enum ShellbarEdge {
 /// Persistable user settings. v0 carried the active-tab cap; `theme_id` joined
 /// with the runtime theme switcher. Future preferences join as their controls
 /// land, each with a serde default so old files keep parsing.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+// Not `Eq`: `physics_damping` is an `f32`. `PartialEq` is all the `==` checks need.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PersistedSettings {
     /// The most warm tabs the actor pool keeps before LRU eviction.
     #[serde(default = "default_tab_cap")]
@@ -56,11 +57,27 @@ pub struct PersistedSettings {
     /// Which window edge the shellbar is docked to. Defaults to Left.
     #[serde(default)]
     pub shellbar_edge: ShellbarEdge,
+    /// Linear damping for orrery node bodies — the "inertia" physics setting: lower
+    /// keeps more drift after a settle, higher rests sooner. Defaults to the layout
+    /// engine's tuned value.
+    #[serde(default = "default_physics_damping")]
+    pub physics_damping: f32,
+}
+
+/// The layout engine's tuned default linear damping (mirrors gyre's
+/// `DEFAULT_LINEAR_DAMPING`); the seed when no setting is persisted.
+fn default_physics_damping() -> f32 {
+    2.5
 }
 
 impl Default for PersistedSettings {
     fn default() -> Self {
-        Self { tab_cap: default_tab_cap(), theme_id: None, shellbar_edge: ShellbarEdge::default() }
+        Self {
+            tab_cap: default_tab_cap(),
+            theme_id: None,
+            shellbar_edge: ShellbarEdge::default(),
+            physics_damping: default_physics_damping(),
+        }
     }
 }
 
@@ -123,7 +140,7 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let dir = temp_session_dir("round-trip");
-        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left };
+        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5 };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir).unwrap().expect("settings file should be present");
         assert_eq!(restored, original);
@@ -149,8 +166,8 @@ mod tests {
     #[test]
     fn save_overwrites_atomically_with_no_tmp_left() {
         let dir = temp_session_dir("overwrite");
-        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left }).unwrap();
-        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5 }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, physics_damping: 2.5 }).unwrap();
         let restored = load_settings(&dir).unwrap().unwrap();
         assert_eq!(restored.tab_cap, 24);
         let tmp = settings_path(&dir).with_extension("json.tmp");
