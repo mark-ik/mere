@@ -100,18 +100,19 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // lane, sitting at the toolbar's right (the omnibar's flex-grow pushes it
     // there). The host folds the real `SyncStatus` into `c.sync`.
     let sync_chip = el::<_, Chrome, ()>("div", c.sync.summary()).attr("class", "sync-chip");
-    // A workbench toggle next to the omnibar — the reliable way to flip the tiled
-    // view (Ctrl+T can be flaky), routed through the `ToggleWorkbench` host action.
-    // A fully static button (icon + fixed command) — memoize on `()` so it is
-    // built once and never rebuilt.
-    let workbench_btn = memoize((), |_: &()| {
+    // The add pill next to the omnibar: a "+" that opens a small menu — Add node /
+    // Add tile / Add session — the unified create affordance (the toolbar's old
+    // workbench toggle was redundant with the shellbar's, so the pill takes its
+    // slot). Static (icon + fixed handler) — memoize on `()` so it is built once.
+    // The menu anchors at the click point (`PointerClick::local`, window coords).
+    let add_pill = memoize((), |_: &()| {
         on_click(
-            el::<_, Chrome, ()>("button", "\u{229e}").attr("class", "workbench-btn"),
-            (|c: &mut Chrome, _: PointerClick| c.run_command(Command::ToggleWorkbench))
+            el::<_, Chrome, ()>("button", "\u{ff0b}").attr("class", "add-pill"),
+            (|c: &mut Chrome, ev: PointerClick| c.open_add_menu(ev.local.0, ev.local.1))
                 as fn(&mut Chrome, PointerClick),
         )
     });
-    let toolbar = el::<_, Chrome, ()>("div", (back, forward, omnibar, workbench_btn, sync_chip))
+    let toolbar = el::<_, Chrome, ()>("div", (back, forward, omnibar, add_pill, sync_chip))
         .attr("class", "toolbar");
 
     // The suggestions dropdown: one row per reused `OmnibarMatch`, the highlight
@@ -496,9 +497,10 @@ pub fn submit_omnibar(c: &mut Chrome) {
     sync_chrome_from_history(c, true);
 }
 
-/// The shellbar strip: five pane-toggle buttons whose active state mirrors the
-/// current frame layout. The host positions the div inline each frame via the
-/// `.shellbar` class node, following the comms-pane geometry pattern (F2.1).
+/// The shellbar strip: one pane-toggle button per toggle-able pane, each active
+/// state mirroring the current frame layout. The host positions the div inline
+/// each frame via the `.shellbar` class node, following the comms-pane geometry
+/// pattern (F2.1).
 fn shellbar_view(panes: &ShellbarPaneStates) -> ChromeView {
     fn btn(label: &'static str, active: bool, cmd: Command) -> ChromeView {
         let class = if active { "shellbar-btn-active" } else { "shellbar-btn" };
@@ -512,6 +514,8 @@ fn shellbar_view(panes: &ShellbarPaneStates) -> ChromeView {
         btn("\u{2261}", panes.roster, Command::ToggleRoster),       // ≡
         btn("\u{25ce}", panes.gloss, Command::ToggleGloss),         // ◎
         btn("\u{2699}", panes.apparatus, Command::ToggleApparatus), // ⚙
+        btn("\u{25c9}", panes.inspector, Command::ToggleInspector), // ◉
+        btn("\u{2692}", panes.steward, Command::ToggleSteward),     // ⚒
         btn("\u{2709}", panes.comms, Command::ToggleComms),         // ✉
     ];
     Box::new(el::<_, Chrome, ()>("div", buttons).attr("class", "shellbar"))

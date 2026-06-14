@@ -934,8 +934,8 @@ mod tests {
             let dom = app.view().runner.dom();
             let dom = dom.borrow();
             let buttons = crate::all_with_class(&dom, dom.document(), "shellbar-btn");
-            assert!(buttons.len() >= 2, "the shellbar carries its pane-toggle buttons");
-            buttons[1] // workbench, ROSTER, gloss, apparatus, comms
+            assert!(buttons.len() >= 7, "the shellbar carries a button per toggle-able pane");
+            buttons[1] // workbench, ROSTER, gloss, apparatus, inspector, steward, comms
         };
         app.ctx().chrome_activate(roster_btn, (0.0, 0.0));
         assert!(has_roster(&app), "the shellbar roster button toggled the roster pane");

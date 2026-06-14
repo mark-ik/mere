@@ -90,6 +90,8 @@ impl WindowCtx<'_> {
             roster: self.pane_of_content(&PaneContent::Roster).is_some(),
             gloss: self.pane_of_content(&PaneContent::Gloss).is_some(),
             apparatus: self.pane_of_content(&PaneContent::Apparatus).is_some(),
+            inspector: self.pane_of_content(&PaneContent::Inspector).is_some(),
+            steward: self.pane_of_content(&PaneContent::Steward).is_some(),
             comms: self.pane_of_content(&PaneContent::Comms).is_some(),
         };
         let sb_edge = self.shared.presentation.shellbar_edge;

@@ -537,15 +537,41 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
-        // Add a fresh node at the empty-space right-click cursor. No member set.
+        // Add a fresh node. From the empty-space right-click it lands at the saved
+        // cursor anchor; from the add-pill (no anchor) it mints at the default
+        // position. No member set.
         if let ContextAction::AddNode = action {
-            if let Some(origin) = self.view.context_origin.take() {
-                let url = "mere://welcome";
-                let _member = self.orrery.add_node_at(origin, url);
-                self.ensure_content(url);
-                self.save_session();
-                self.view.request_redraw();
+            let url = "mere://welcome";
+            match self.view.context_origin.take() {
+                Some(origin) => {
+                    let _ = self.orrery.add_node_at(origin, url);
+                }
+                None => {
+                    let _ = self.orrery.open_member_as_new_node(None, url);
+                }
             }
+            self.ensure_content(url);
+            self.save_session();
+            self.view.request_redraw();
+            return;
+        }
+        // Add a tile (the add-pill's "Add tile"): mint a node and open it as a tile,
+        // summoning the workbench pane — the same body as WorkbenchAction::NewTile.
+        if let ContextAction::AddTile = action {
+            self.open_workbench();
+            let url = "mere://welcome";
+            let member = self.orrery.open_member_as_new_node(None, url);
+            self.view.workbench.open_tile(member);
+            self.view.focused_tile = Some(member);
+            self.ensure_content(url);
+            self.save_session();
+            self.view.request_redraw();
+            return;
+        }
+        // Add a session (the add-pill's "Add session"): a cross-window new-graph op
+        // the host queues — `create_session` is on `Shell`, not `WindowCtx`.
+        if let ContextAction::AddSession = action {
+            self.commands.push(super::ShellCommand::CreateSession);
             return;
         }
         let set = std::mem::take(&mut self.view.context_set);
@@ -565,7 +591,11 @@ impl WindowCtx<'_> {
             ContextAction::Stack => {
                 self.view.workbench.open_stack(&set);
             }
-            ContextAction::ShellbarMove(_) | ContextAction::Relate | ContextAction::AddNode => {
+            ContextAction::ShellbarMove(_)
+            | ContextAction::Relate
+            | ContextAction::AddNode
+            | ContextAction::AddTile
+            | ContextAction::AddSession => {
                 unreachable!("handled above")
             }
         }

@@ -144,9 +144,16 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // The p2p sync chip: small + muted, no flex-grow, so the omnibar pushes it
         // to the toolbar's right edge.
         format!(
-            ".sync-chip {{ font-size: 14px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px; }}",
+            ".sync-chip {{ font-size: 14px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px; border-radius: 14px; }}",
             rgb(c.muted_text),
             rgb(c.menu_bg)
+        ),
+        // The add pill — the primary create affordance, an accent pill (matching the
+        // sync-chip's pill shape) with a "+" that opens the Add node/tile/session menu.
+        format!(
+            ".add-pill {{ font-size: 18px; color: {}; background-color: {}; padding: 6px 16px; margin: 4px; border-radius: 14px; }}",
+            rgb(c.strong_text),
+            rgb(c.active_bg)
         ),
         format!(
             ".suggestions {{ background-color: {}; padding-bottom: 6px; }}",
@@ -331,16 +338,24 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // sets inline each frame from the shellbar_rect() helper. Contains toggle
         // buttons for each pane (F2.1).
         format!(
-            ".shellbar {{ position: absolute; background-color: {}; display: flex; align-items: center; }}",
+            ".shellbar {{ position: absolute; background-color: {}; display: flex; \
+                align-items: center; justify-content: flex-start; }}",
             rgb(c.toolbar_bg)
         ),
+        // Uniform square buttons: every glyph occupies an identical 44x44 box (the
+        // strip is 48px thick) and is flex-centred within it, so differing glyph
+        // widths read even instead of ragged. The two rules differ only in colour.
         format!(
-            ".shellbar-btn {{ font-size: 17px; color: {}; background-color: {}; padding: 10px 8px; margin: 2px; }}",
+            ".shellbar-btn {{ display: flex; align-items: center; justify-content: center; \
+                width: 44px; height: 44px; font-size: 17px; padding: 0; margin: 2px 0; \
+                color: {}; background-color: {}; }}",
             rgb(c.control_text),
             rgb(c.control_bg)
         ),
         format!(
-            ".shellbar-btn-active {{ font-size: 17px; color: {}; background-color: {}; padding: 10px 8px; margin: 2px; }}",
+            ".shellbar-btn-active {{ display: flex; align-items: center; justify-content: center; \
+                width: 44px; height: 44px; font-size: 17px; padding: 0; margin: 2px 0; \
+                color: {}; background-color: {}; }}",
             rgb(c.strong_text),
             rgb(c.active_bg)
         ),

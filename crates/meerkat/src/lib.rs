@@ -170,6 +170,8 @@ pub struct ShellbarPaneStates {
     pub roster: bool,
     pub gloss: bool,
     pub apparatus: bool,
+    pub inspector: bool,
+    pub steward: bool,
     pub comms: bool,
 }
 
@@ -251,8 +253,14 @@ pub enum ContextAction {
     /// Mint a fresh node at the saved cursor point (the no-selection right-click).
     /// The anchor in `context_origin` is leaf-local screen px; the camera inversion
     /// to world happens inside `Orrery::add_node_at`. Drains like `ShellbarMove` /
-    /// `Relate` without touching `context_set`.
+    /// `Relate` without touching `context_set`. From the add-pill (no cursor anchor)
+    /// it mints at the default position.
     AddNode,
+    /// Mint a fresh node and open it as a workbench tile (the add-pill's "Add tile").
+    AddTile,
+    /// Mint a fresh graph session (the add-pill's "Add session") — a cross-window op
+    /// the host queues as a `ShellCommand`.
+    AddSession,
 }
 
 impl Chrome {
@@ -530,6 +538,21 @@ impl Chrome {
     pub fn open_context_menu(&mut self, x: f32, y: f32, items: Vec<ContextItem>) {
         self.close_suggestions();
         self.context_menu = Some(ContextMenu { x, y, items });
+    }
+
+    /// Open the add-pill's menu at `(x, y)`: add a node, a tile, or a session. The
+    /// three rows reuse the context-menu machinery; the host drains the chosen
+    /// `ContextAction`.
+    pub fn open_add_menu(&mut self, x: f32, y: f32) {
+        self.open_context_menu(
+            x,
+            y,
+            vec![
+                ContextItem::new("Add node", ContextAction::AddNode),
+                ContextItem::new("Add tile", ContextAction::AddTile),
+                ContextItem::new("Add session", ContextAction::AddSession),
+            ],
+        );
     }
 
     /// Close the context menu without running anything.
