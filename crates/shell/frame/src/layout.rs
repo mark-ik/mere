@@ -277,6 +277,35 @@ impl FrameLayout {
         walk(&mut self.root, from, to);
     }
 
+    /// Re-source the graph-bound leaves whose `graph_id` is **not** in `valid` (a
+    /// nil / stale id from a persisted layout, or a graph whose session is gone) to
+    /// `fallback`, leaving leaves pinned to a *valid* graph untouched. The restore
+    /// path: a layout reloaded with a second graph-pane keeps that pane pinned (its
+    /// graph is real), while genuinely stale leaves snap to the active graph. (MG5;
+    /// Window composition — pane-as-unit restore.)
+    pub fn retag_graph_bound_invalid(
+        &mut self,
+        valid: &std::collections::HashSet<GraphId>,
+        fallback: GraphId,
+    ) {
+        fn walk(node: &mut PaneNode, valid: &std::collections::HashSet<GraphId>, fallback: GraphId) {
+            match node {
+                PaneNode::Leaf {
+                    content, graph_id, ..
+                } => {
+                    if content.follows_active_graph() && !valid.contains(graph_id) {
+                        *graph_id = fallback;
+                    }
+                }
+                PaneNode::Split { first, second, .. } => {
+                    walk(first, valid, fallback);
+                    walk(second, valid, fallback);
+                }
+            }
+        }
+        walk(&mut self.root, valid, fallback);
+    }
+
     /// Iterate every leaf in the layout in depth-first order
     /// (first-child before second-child). Yields `(pane_id, content,
     /// graph_id)` triples. Used by the host to assemble per-pane

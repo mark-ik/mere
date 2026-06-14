@@ -903,9 +903,14 @@ impl Shell {
                     .max()
                     .unwrap_or(0)
                     + 1;
-                // Reattach graph-bound leaves to the active graph (a persisted layout's
-                // leaf `graph_id`s, or pre-`graph_id` nil ones, may not match). (MG5.)
-                restored.retag_graph_bound(active_graph);
+                // Reattach only the graph-bound leaves whose graph_id is nil / stale
+                // (no live session) to the active graph; a leaf pinned to a *valid*
+                // graph (a second graph-pane restored from a prior run) stays put, so
+                // it reloads instead of being clobbered onto the active graph. (MG5;
+                // pane-as-unit restore.)
+                let valid_graphs: HashSet<GraphId> =
+                    manifests.iter().map(|(_, m)| m.root_graph_id).collect();
+                restored.retag_graph_bound_invalid(&valid_graphs, active_graph);
                 frame_layout = restored;
             }
         }
@@ -930,6 +935,39 @@ impl Shell {
         view.content_location = content_location;
         view.frame_layout = frame_layout;
         view.next_pane_id = next_pane_id;
+        // Pool every graph a restored pane resolves to, not just the active one, so a
+        // second graph-pane (persisted from a prior run) loads instead of leaving a
+        // blank pane the user can't dismiss. Each cold-loads its graph from its
+        // session dir and offloads its own physics, like the active orrery above; the
+        // render then centres it on first frame. (Window composition — pane-as-unit
+        // restore.)
+        let mut orreries: HashMap<GraphId, Orrery> = HashMap::from([(active_graph, orrery)]);
+        let mut orrery_lru: Vec<GraphId> = vec![active_graph];
+        let extra_graphs: HashSet<GraphId> = view
+            .frame_layout
+            .iter_leaves()
+            .filter(|(_, c, gid)| matches!(c, PaneContent::Orrery) && *gid != active_graph)
+            .map(|(_, _, gid)| gid)
+            .collect();
+        for gid in extra_graphs {
+            let dir = manifests.iter().find(|(_, m)| m.root_graph_id == gid).map(|(id, m)| {
+                m.storage_path
+                    .clone()
+                    .unwrap_or_else(|| mere_root.join("sessions").join(id.as_uuid().to_string()))
+            });
+            let graph = dir.and_then(|d| {
+                session_graph_store::load(&d.join(session_graph_store::GRAPH_FILE))
+                    .ok()
+                    .flatten()
+            });
+            let mut extra = match graph {
+                Some(g) => Orrery::with_graph(g),
+                None => Orrery::new(),
+            };
+            extra.offload_physics(physics_wake.clone());
+            orreries.insert(gid, extra);
+            orrery_lru.push(gid);
+        }
         let mut app = Self {
             shared: SharedState {
                 content: Content {
@@ -967,8 +1005,8 @@ impl Shell {
                 },
                 observability: HostObservability::new(),
             },
-            orreries: HashMap::from([(active_graph, orrery)]),
-            orrery_lru: vec![active_graph],
+            orreries,
+            orrery_lru,
             windows: HashMap::new(),
             primary: None,
             pending_view: Some(view),
