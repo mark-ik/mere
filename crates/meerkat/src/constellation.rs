@@ -30,6 +30,7 @@ use frame::GraphId;
 use linked_data::GraphContribution;
 use netrender::Scene;
 
+use crate::card::LinkHit;
 use crate::content::{ContentCommand, ContentUpdate, spawn_content};
 use crate::fetch::ContentState;
 
@@ -64,6 +65,11 @@ struct Activation {
     /// grows past the visible card, so the host rasterizes a texture this tall and
     /// scrolls a window of it on the GPU. Defaults to 0 until the first scene.
     content_height: u32,
+    /// Content-local clickable link regions from the latest scene — the host
+    /// hit-tests a click on the card (offset by its scroll) against these and
+    /// navigates the matching URL. Empty until the first scene; cleared on a new
+    /// document (a stale link map must not survive a navigation). (Inline-link nav.)
+    links: Vec<LinkHit>,
     /// Bumped each time a new scene is accepted, so the host can cache a tile's
     /// rasterized texture and re-rasterize only when this changes (not every frame).
     scene_version: u64,
@@ -204,6 +210,7 @@ impl Constellation {
                         shown: None,
                         scene: None,
                         content_height: 0,
+                        links: Vec::new(),
                         scene_version: 0,
                         background: false,
                         last_touched: touch,
@@ -268,6 +275,7 @@ impl Constellation {
         } else {
             activation.gens.nav.bump();
             activation.scene = None;
+            activation.links.clear();
             activation.handle.command(ContentCommand::Show {
                 url: url.to_string(),
                 state,
@@ -296,6 +304,21 @@ impl Constellation {
     /// not yet rendered.
     pub fn content_height(&self, member: GraphMemberId) -> u32 {
         self.active.get(&member).map_or(0, |a| a.content_height)
+    }
+
+    /// The URL of the clickable link whose content-local rect contains `(x, y)`, if
+    /// any. `(x, y)` is in the document's own coordinate space (the host subtracts
+    /// the card's window origin and adds its scroll before calling). Last match wins,
+    /// so a link nested in an enclosing region resolves to the innermost. `None` when
+    /// the point lands on no link (the caller keeps its normal click). (Inline-link nav.)
+    pub fn link_at(&self, member: GraphMemberId, x: f32, y: f32) -> Option<&str> {
+        let activation = self.active.get(&member)?;
+        activation
+            .links
+            .iter()
+            .rev()
+            .find(|l| x >= l.rect[0] && x <= l.rect[2] && y >= l.rect[1] && y <= l.rect[3])
+            .map(|l| l.url.as_str())
     }
 
     /// Whether `member` is recovering from a crash: its actor was respawned and has
@@ -409,6 +432,7 @@ impl Constellation {
                         viewport_gen,
                         scene,
                         content_height,
+                        links,
                     } => {
                         if let Some(activation) = self.active.get_mut(&member) {
                             let stamp = Generations {
@@ -418,6 +442,7 @@ impl Constellation {
                             if activation.gens.accepts(stamp) {
                                 activation.scene = Some(scene);
                                 activation.content_height = content_height;
+                                activation.links = links;
                                 activation.scene_version += 1;
                                 activation.respawns = 0; // a fresh scene = recovered
                                 out.any_scene = true;

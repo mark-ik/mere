@@ -26,7 +26,7 @@ use inker::EngineRegistry;
 use linked_data::GraphContribution;
 use netrender::Scene;
 
-use crate::card::render_content_scene;
+use crate::card::{render_content_scene, LinkHit};
 use crate::fetch::ContentState;
 use crate::resources::{ResourceLoader, ResourceStore};
 
@@ -65,6 +65,9 @@ pub enum ContentUpdate {
         viewport_gen: ViewportGeneration,
         scene: Scene,
         content_height: u32,
+        /// Content-local clickable link regions harvested from the laid-out
+        /// document; the host hit-tests a click against these and navigates.
+        links: Vec<LinkHit>,
     },
     /// Subresource URLs (absolute) the last render needs but did not have cached.
     /// The kernel fetches them and feeds the bytes back as [`ContentCommand::Resource`].
@@ -166,7 +169,7 @@ fn render(
 ) {
     let wanted = RefCell::new(Vec::new());
     let (w, h) = content.viewport;
-    let (scene, content_height) = {
+    let (scene, content_height, links) = {
         let loader = ResourceLoader::new(store, &content.url, &wanted);
         render_content_scene(
             &content.url,
@@ -182,6 +185,7 @@ fn render(
         viewport_gen: content.viewport_gen,
         scene,
         content_height,
+        links,
     });
     // Ship only never-requested subresources, so a re-render before the bytes
     // arrive does not re-request them (the store dedups).

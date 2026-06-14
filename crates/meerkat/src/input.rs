@@ -400,6 +400,22 @@ impl WindowCtx<'_> {
                 // reaches the orrery, which acts only if it owns an in-progress pan /
                 // drag / marquee; a click-release selects the node under the cursor.
                 let over_card = self.point_over_card(x, y);
+                // A left click on a link inside a content card follows it: map the
+                // click into the card's content-local space (its rect origin + the
+                // card's scroll), resolve the link URL (relative gemtext / markdown
+                // links join the card's own URL), and navigate the focused node to
+                // it — the omnibar's record-the-visit path. Consumes the release so
+                // it doesn't fall through to the card's live-preview toggle.
+                // (Inline-link nav; the document lane carries link regions today.)
+                if button == MouseButton::Left {
+                    if let Some((base, href)) = self.card_link_at(x, y) {
+                        let url = nav::resolve_href(&base, &href);
+                        self.view.runner.update(|c| c.follow_link(url));
+                        self.sync_orrery();
+                        self.view.request_redraw();
+                        return;
+                    }
+                }
                 if let Some(b) = orrery_button {
                     let (ox, oy) = self.orrery_point(x, y);
                     if !over_card && self.orrery.pointer_up(b, ox, oy) {
@@ -471,6 +487,33 @@ impl WindowCtx<'_> {
         self.view.content_rects
             .iter()
             .any(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
+    }
+
+    /// The `(card URL, link href)` under window point `(x, y)`, if it lands on a link
+    /// in a composited content card. Maps the point into the card's content-local
+    /// space (its rect origin + the card's scroll) and queries the actor's link map;
+    /// the base is the card member's own URL, for resolving relative links. `None`
+    /// when the point is over no card link (the caller keeps its normal click).
+    /// (Inline-link nav.)
+    fn card_link_at(&self, x: f32, y: f32) -> Option<(String, String)> {
+        for (member, r) in &self.view.content_rects {
+            if x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3] {
+                let scroll = self.view.scroll.get(member).copied().unwrap_or(0.0);
+                let lx = x - r[0];
+                let ly = (y - r[1]) + scroll;
+                if let Some(href) = self.shared.content.constellation.link_at(*member, lx, ly) {
+                    let href = href.to_string();
+                    let base = self
+                        .orrery
+                        .graph()
+                        .get_node_by_id(*member)
+                        .map(|(_, n)| n.url().to_string())
+                        .unwrap_or_default();
+                    return Some((base, href));
+                }
+            }
+        }
+        None
     }
 
     /// Apply a window-control press (borderless titlebar). Minimize / maximize act

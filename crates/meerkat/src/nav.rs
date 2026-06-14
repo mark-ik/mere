@@ -57,6 +57,21 @@ pub fn classify(input: &str) -> NavTarget {
     classify_with(input, DEFAULT_COMMAND_SIGIL)
 }
 
+/// Resolve a link `href` (from a clicked content-card link) against the document's
+/// `base` URL. An absolute href (one that parses standalone, e.g. `gemini://…`) is
+/// used as-is; a relative href (`page.gmi`, `../up`, `/root`) joins the base via the
+/// `url` crate — the common case for gemtext / markdown links; if neither parses,
+/// fall back to the omnibar heuristic ([`classify`]). (Inline-link nav.)
+pub fn resolve_href(base: &str, href: &str) -> String {
+    if let Ok(absolute) = url::Url::parse(href) {
+        return absolute.to_string();
+    }
+    if let Ok(joined) = url::Url::parse(base).and_then(|b| b.join(href)) {
+        return joined.to_string();
+    }
+    classify(href).resolve()
+}
+
 /// Classify location-bar text into a [`NavTarget`], with `sigil` selecting
 /// command mode.
 ///
@@ -213,6 +228,30 @@ mod tests {
         assert_eq!(
             classify("about:blank"),
             NavTarget::Url("about:blank".into())
+        );
+    }
+
+    #[test]
+    fn resolve_href_passes_through_absolute_and_joins_relative() {
+        // An absolute href (any scheme with an authority) is used verbatim.
+        assert_eq!(
+            resolve_href("gemini://example.org/dir/page.gmi", "gemini://other.test/x"),
+            "gemini://other.test/x"
+        );
+        // A relative href joins the document's base (the common gemtext case).
+        assert_eq!(
+            resolve_href("gemini://example.org/dir/page.gmi", "next.gmi"),
+            "gemini://example.org/dir/next.gmi"
+        );
+        // A root-relative href joins the base authority.
+        assert_eq!(
+            resolve_href("gemini://example.org/dir/page.gmi", "/top.gmi"),
+            "gemini://example.org/top.gmi"
+        );
+        // A parent-relative href resolves up the path.
+        assert_eq!(
+            resolve_href("gemini://example.org/a/b/page.gmi", "../up.gmi"),
+            "gemini://example.org/a/up.gmi"
         );
     }
 

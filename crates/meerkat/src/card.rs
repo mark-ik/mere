@@ -14,7 +14,9 @@
 //! response content-type; the layout + scene + composite path here stays.
 
 use document_canvas::netrender_backend::scene_from_packet;
-use document_canvas::{ColorVocabulary, StyleConfig, Viewport, layout_document};
+use document_canvas::{
+    ColorVocabulary, InteractionKind, InteractionRegion, StyleConfig, Viewport, layout_document,
+};
 use inker::{
     DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput,
     EngineRegistry, InlineSpan,
@@ -139,20 +141,55 @@ fn document(url: &str, blocks: Vec<DocumentBlock>) -> EngineDocument {
 /// see [`layout_document`]'s `content_bounds`), so the host can rasterize a tall
 /// texture and scroll a window of it on the GPU. The caller composites the scene
 /// at the card rect with an opaque card background.
-pub fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> (Scene, u32) {
+pub fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> (Scene, u32, Vec<LinkHit>) {
     let mut laid = layout_document(
         doc,
         Viewport::new(w as f32, h as f32),
         &StyleConfig::default(),
     );
     let content_height = laid.packet.content_bounds.size.height.ceil().max(1.0);
+    // The document-canvas lane lays out hit-testable link regions (content-local px,
+    // full-document space) right here. Harvest them before the viewport rewrite below
+    // so the host can route a click on a link to its navigation. (Inline-link nav.)
+    let links = link_hits(&laid.packet.interactions);
     // Expand the paint-list viewport to the full content height before lowering, so
     // the rasterizer renders the *whole* document into the tall texture. The paint
     // list otherwise inherits the visible viewport (`h`) and culls everything below
     // it — which would leave a tall texture blank past `h` and nothing to scroll to.
     laid.packet.viewport = Viewport::new(w as f32, content_height);
     let scene = scene_from_packet(&laid.packet, &laid.fonts, &card_vocabulary());
-    (scene, content_height as u32)
+    (scene, content_height as u32, links)
+}
+
+/// A clickable link in a rendered content card: its bounds in content-local px
+/// (document space, pre-scroll) and target URL. The host hit-tests a click against
+/// these (offset by the card's scroll) and navigates the URL. (Inline-link nav.)
+#[derive(Clone, Debug, PartialEq)]
+pub struct LinkHit {
+    pub rect: [f32; 4],
+    pub url: String,
+}
+
+/// Flatten the document-canvas interaction regions into the host's link-hit map —
+/// `[x0, y0, x1, y1]` content-local bounds + URL. (Today every interaction is a
+/// link; the match keeps it honest if more kinds land.)
+fn link_hits(regions: &[InteractionRegion]) -> Vec<LinkHit> {
+    regions
+        .iter()
+        .map(|r| {
+            let InteractionKind::Link { url } = &r.kind;
+            let b = &r.bounds;
+            LinkHit {
+                rect: [
+                    b.origin.x,
+                    b.origin.y,
+                    b.origin.x + b.size.width,
+                    b.origin.y + b.size.height,
+                ],
+                url: url.clone(),
+            }
+        })
+        .collect()
 }
 
 /// Light-on-dark text palette for the card's synthesized + nematic document
@@ -184,7 +221,7 @@ pub fn render_content_scene(
     loader: &impl ImageLoader,
     w: u32,
     h: u32,
-) -> (Scene, u32) {
+) -> (Scene, u32, Vec<LinkHit>) {
     if let Some(ContentState::Ready(fetched)) = state {
         if is_html(fetched.content_type.as_deref()) {
             return html_scene(&fetched.body, loader, w, h);
@@ -262,7 +299,7 @@ fn base_type(content_type: &str) -> String {
 /// `<img>` / `background-image` and `<link>` bytes resolve through `loader`:
 /// `data:` URIs decode inline; remote URLs come from the host's resource cache,
 /// absent on the first frame and filled by the demand fetch that re-renders.
-fn html_scene(body: &str, loader: &impl ImageLoader, w: u32, h: u32) -> (Scene, u32) {
+fn html_scene(body: &str, loader: &impl ImageLoader, w: u32, h: u32) -> (Scene, u32, Vec<LinkHit>) {
     let doc = StaticDocument::parse(body);
     let inline = inline_stylesheets(&doc);
     let linked = linked_stylesheets_with_loader(&doc, loader);
@@ -274,8 +311,10 @@ fn html_scene(body: &str, loader: &impl ImageLoader, w: u32, h: u32) -> (Scene, 
     // The serval lane lays out to the viewport height and does not yet report a
     // taller content extent, so HTML cards report `h` and simply do not scroll
     // until that serval-side change lands. The document lane (most smolweb content)
-    // reports its true content height and scrolls.
-    (scene, h.max(1))
+    // reports its true content height and scrolls. Link hit regions for the HTML
+    // lane are a follow-up (harvest `<a href>` rects off serval's fragment plane
+    // via the new inline hit-test); for now the document lane carries link nav.
+    (scene, h.max(1), Vec::new())
 }
 
 /// The floating card rectangle within the content band (top-right, inset by
@@ -484,7 +523,7 @@ mod tests {
     #[test]
     fn card_scene_lowers_text_to_glyph_runs() {
         let doc = content_document("mere://welcome", None);
-        let (scene, _) = render_card_scene(&doc, 420, 360);
+        let (scene, _, _) = render_card_scene(&doc, 420, 360);
         let glyph_runs = scene
             .ops
             .iter()
@@ -574,7 +613,7 @@ mod tests {
             content_type: Some("text/markdown".into()),
             body: "# Heading\n\nA paragraph.".into(),
         });
-        let (scene, _) = render_content_scene(
+        let (scene, _, _) = render_content_scene(
             "https://example.com",
             Some(&ready),
             &registry,
@@ -589,6 +628,38 @@ mod tests {
     }
 
     #[test]
+    fn document_lane_surfaces_link_hit_regions() {
+        // The document lane (here markdown) lays out hit-testable link regions; the
+        // render surfaces them as `LinkHit`s so the host can route a click to the URL.
+        // (Inline-link nav.)
+        let mut registry = EngineRegistry::new();
+        for engine in nematic::engines() {
+            registry.register(engine);
+        }
+        let ready = ContentState::Ready(Fetched {
+            content_type: Some("text/markdown".into()),
+            body: "See [the spec](https://example.test/spec) for details.".into(),
+        });
+        let (_scene, _h, links) = render_content_scene(
+            "https://example.test/",
+            Some(&ready),
+            &registry,
+            &NoImageLoader,
+            420,
+            360,
+        );
+        let hit = links
+            .iter()
+            .find(|l| l.url == "https://example.test/spec")
+            .expect("the markdown link is surfaced as a clickable region");
+        assert!(
+            hit.rect[2] > hit.rect[0] && hit.rect[3] > hit.rect[1],
+            "the link hit region has a positive-area bounds: {:?}",
+            hit.rect
+        );
+    }
+
+    #[test]
     fn html_routes_through_serval_to_glyph_runs() {
         // The serval lane needs no document engine registered.
         let registry = EngineRegistry::new();
@@ -596,7 +667,7 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<h1>Hello</h1><p>World</p>".into(),
         });
-        let (scene, _) = render_content_scene(
+        let (scene, _, _) = render_content_scene(
             "https://example.com",
             Some(&ready),
             &registry,
@@ -620,7 +691,7 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<style>p { display: none; }</style><p>Hidden by the page.</p>".into(),
         });
-        let (scene, _) = render_content_scene(
+        let (scene, _, _) = render_content_scene(
             "https://example.com",
             Some(&hidden),
             &registry,
@@ -639,7 +710,7 @@ mod tests {
             content_type: Some("text/html".into()),
             body: "<p>Visible.</p>".into(),
         });
-        let (scene, _) = render_content_scene(
+        let (scene, _, _) = render_content_scene(
             "https://example.com",
             Some(&shown),
             &registry,
@@ -677,7 +748,7 @@ mod tests {
                    <body><p>Hidden by the linked sheet.</p></body>"
                 .into(),
         });
-        let (scene, _) = render_content_scene(
+        let (scene, _, _) = render_content_scene(
             "https://example.com/page.html",
             Some(&ready),
             &registry,

@@ -528,14 +528,18 @@ impl WindowCtx<'_> {
                         let store = RefCell::new(ResourceStore::default());
                         let wanted = RefCell::new(Vec::new());
                         let loader = ResourceLoader::new(&store, &url, &wanted);
-                        Some(super::card::render_content_scene(
+                        // A snapshot is a non-interactive peek (no actor, no
+                        // content_rects entry), so its link map is dropped here —
+                        // link nav rides the live actor cards. (Inline-link nav.)
+                        let (scene, content_height, _links) = super::card::render_content_scene(
                             &url,
                             state.as_ref(),
                             &self.shared.content.engine_registry,
                             &loader,
                             RENDER_W,
                             RENDER_H,
-                        ))
+                        );
+                        Some((scene, content_height))
                     };
                     snapshot_card = Some((member, url, [x0, y0, x1, y1], built));
                 }

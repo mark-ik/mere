@@ -383,6 +383,16 @@ impl Chrome {
         }
     }
 
+    /// Navigate the content to a fully-resolved link URL — a click on a link inside
+    /// a rendered content card. Records the visit and mirrors it into the toolbar +
+    /// omnibar, the same record-the-visit path as a suggestion; the host resolves the
+    /// href (relative links join the card's own URL) before calling. (Inline-link nav.)
+    pub fn follow_link(&mut self, url: String) {
+        self.content_location = url.clone();
+        self.history.visit(url);
+        sync_chrome_from_history(self, true);
+    }
+
     /// Toggle the command palette open/closed.
     pub fn toggle_palette(&mut self) {
         if self.palette_open {
