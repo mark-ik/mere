@@ -202,6 +202,17 @@ impl WindowCtx<'_> {
                                                     self.view.request_redraw();
                                                 }
                                             }
+                                            crate::roster_view::RosterIntent::SelectField(id) => {
+                                                // Click a field row: center the canvas on it.
+                                                if self.orrery.center_on_field(id) {
+                                                    self.view.request_redraw();
+                                                }
+                                            }
+                                            crate::roster_view::RosterIntent::ToggleFieldVisibility(id) => {
+                                                // The field row's hide/show toggle.
+                                                self.orrery.toggle_field_visible(id);
+                                                self.view.request_redraw();
+                                            }
                                         }
                                     }
                                 }

@@ -10,6 +10,7 @@
 //! R3: sort/filter by content type; content-type shapes in the orrery.
 
 use forme::GraphMemberId;
+use kernel::graph::FieldId;
 use register_theme::chrome::{ChromeTheme, Color32};
 
 /// Directionality of a relation from the perspective of the focused node.
@@ -47,6 +48,17 @@ pub struct RosterRow {
     /// When `Some`, this row is the first in a new content-type section; render
     /// the header label before the row itself.
     pub section_header: Option<String>,
+}
+
+/// One field-region row — the roster's third member kind, beside node rows and
+/// edge rows. The row click centers the field on the canvas; the hide toggle
+/// controls its visibility (the field + its coupling persist regardless).
+pub struct FieldRow {
+    pub id: FieldId,
+    /// Display name (the field's authoring name, else a short id).
+    pub name: String,
+    /// Whether the field is currently hidden from the canvas.
+    pub hidden: bool,
 }
 
 /// The roster's author CSS, themed from the chrome tokens.
@@ -106,6 +118,18 @@ pub fn roster_sheet(c: &ChromeTheme) -> Vec<String> {
         format!(
             ".roster-empty {{ font-size: 14px; color: {}; padding: 12px; }}",
             rgb(c.muted_text)
+        ),
+        // Field rows: a name + a hide/show toggle, muted when hidden.
+        format!(
+            ".roster-field {{ display: flex; justify-content: space-between; align-items: center; background-color: {}; padding: 8px 10px; margin: 2px 0; }}",
+            rgb(c.surface_bg)
+        ),
+        format!(".roster-field-hidden {{ opacity: 0.5; }}"),
+        format!(".roster-field-name {{ font-size: 14px; color: {}; }}", rgb(c.body_text)),
+        format!(
+            ".roster-field-toggle {{ font-size: 11px; color: {}; background-color: {}; padding: 1px 7px; border-radius: 3px; }}",
+            rgb(c.muted_text),
+            rgb(c.control_bg)
         ),
     ]
 }

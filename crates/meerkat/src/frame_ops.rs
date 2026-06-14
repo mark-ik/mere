@@ -2019,6 +2019,25 @@ impl WindowCtx<'_> {
         rows
     }
 
+    /// Field-region rows for the roster: one per active field, its display name (the
+    /// authoring name, else a short id) and hidden state. (Field regions — roster.)
+    pub(super) fn roster_field_rows(&self) -> Vec<roster::FieldRow> {
+        let mut out = Vec::new();
+        for field in self.orrery.graph().fields() {
+            if !field.is_active() {
+                continue;
+            }
+            let id = field.id;
+            let uuid = id.as_uuid().to_string();
+            let name = field
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("Field {}", &uuid[..8.min(uuid.len())]));
+            out.push(roster::FieldRow { id, name, hidden: !self.orrery.field_visible(id) });
+        }
+        out
+    }
+
     pub(super) fn utility_pane_rows(&self, content: &PaneContent) -> Vec<(String, String)> {
         match content {
             PaneContent::Inspector => {

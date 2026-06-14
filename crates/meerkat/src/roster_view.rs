@@ -21,7 +21,9 @@ use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
 use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, el, on_click};
 
-use crate::roster::{roster_sheet, EdgeDir, RosterRow};
+use kernel::graph::FieldId;
+
+use crate::roster::{roster_sheet, EdgeDir, FieldRow, RosterRow};
 use crate::view_pane::ViewPane;
 
 /// The erased view the roster logic produces (mirrors `ChromeView`).
@@ -35,12 +37,19 @@ pub type RosterLogic = fn(&RosterState) -> RosterView;
 /// as the old pointer path did).
 pub enum RosterIntent {
     Select(GraphMemberId),
+    /// Center the canvas on a field region (a field row's click). (Field regions.)
+    SelectField(FieldId),
+    /// Hide / show a field region on the canvas (a field row's toggle). (Field regions.)
+    ToggleFieldVisibility(FieldId),
 }
 
-/// The roster's view state: the rows to render plus the intents row handlers queue.
+/// The roster's view state: the node rows + field rows to render, plus the intents
+/// row handlers queue.
 #[derive(Default)]
 pub struct RosterState {
     pub rows: Vec<RosterRow>,
+    /// Field-region rows, rendered in a "Fields" section after the node rows.
+    pub field_rows: Vec<FieldRow>,
     pub pending: Vec<RosterIntent>,
 }
 
@@ -48,7 +57,7 @@ pub struct RosterState {
 /// `build_roster_dom`, with each row carrying an `on_click` that queues a
 /// `Select(member)` instead of relying on a row-rect hit-test.
 pub fn roster_view(state: &RosterState) -> RosterView {
-    if state.rows.is_empty() {
+    if state.rows.is_empty() && state.field_rows.is_empty() {
         let empty: RosterView =
             Box::new(el::<_, RosterState, ()>("div", "No nodes yet").attr("class", "roster-empty"));
         return Box::new(el::<_, RosterState, ()>("div", vec![empty]).attr("class", "roster"));
@@ -132,6 +141,39 @@ pub fn roster_view(state: &RosterState) -> RosterView {
         )));
     }
 
+    // The "Fields" section after the nodes: one row per field region — its name and
+    // a hide/show toggle. The row click centers the field; the toggle (which stops
+    // propagation so it doesn't also center) hides/shows it. (Field regions.)
+    if !state.field_rows.is_empty() {
+        children.push(Box::new(
+            el::<_, RosterState, ()>("div", "Fields").attr("class", "roster-section"),
+        ));
+        for fr in &state.field_rows {
+            let id = fr.id;
+            let toggle_label = if fr.hidden { "show" } else { "hide" };
+            let toggle = on_click(
+                el::<_, RosterState, ()>("span", toggle_label).attr("class", "roster-field-toggle"),
+                move |st: &mut RosterState, ev: PointerClick| {
+                    ev.stop_propagation();
+                    st.pending.push(RosterIntent::ToggleFieldVisibility(id));
+                },
+            );
+            let entry: Vec<RosterView> = vec![
+                Box::new(
+                    el::<_, RosterState, ()>("span", fr.name.clone()).attr("class", "roster-field-name"),
+                ),
+                Box::new(toggle),
+            ];
+            let class = if fr.hidden { "roster-field roster-field-hidden" } else { "roster-field" };
+            children.push(Box::new(on_click(
+                el::<_, RosterState, ()>("div", entry).attr("class", class),
+                move |st: &mut RosterState, _: PointerClick| {
+                    st.pending.push(RosterIntent::SelectField(id));
+                },
+            )));
+        }
+    }
+
     Box::new(el::<_, RosterState, ()>("div", children).attr("class", "roster"))
 }
 
@@ -152,9 +194,17 @@ impl RosterPane {
 
     /// Refresh the rows (from `roster_rows()`) and the themed stylesheet. The runner
     /// diffs the new view into its DOM; the next `frame` lays the change out.
-    pub fn set_rows(&mut self, theme: &ChromeTheme, rows: Vec<RosterRow>) {
+    pub fn set_rows(
+        &mut self,
+        theme: &ChromeTheme,
+        rows: Vec<RosterRow>,
+        field_rows: Vec<FieldRow>,
+    ) {
         self.pane.set_sheets(roster_sheet(theme));
-        self.pane.update(|s| s.rows = rows);
+        self.pane.update(|s| {
+            s.rows = rows;
+            s.field_rows = field_rows;
+        });
     }
 
     /// Render the pane to a scene at `w`×`h`, scrolled `scroll` px down its `.roster`
@@ -280,7 +330,7 @@ mod tests {
     /// the old `build_roster_dom` tests, now asserting against the view's output.
     fn with_rendered<R>(rows: Vec<RosterRow>, check: impl FnOnce(&ScriptedDom, NodeId) -> R) -> R {
         let mut pane = RosterPane::new();
-        pane.set_rows(&ChromeTheme::default(), rows);
+        pane.set_rows(&ChromeTheme::default(), rows, Vec::new());
         let _ = pane.frame(240, 200, 0.0);
         let dom = pane.dom();
         let dom = dom.borrow();
@@ -317,6 +367,7 @@ mod tests {
         pane.set_rows(
             &ChromeTheme::default(),
             vec![row(1, "https://a.example"), row(2, "https://b.example")],
+            Vec::new(),
         );
         // Lay the pane out so the hit-test has a cached layout to probe.
         let _ = pane.frame(300, 400, 0.0);
@@ -440,6 +491,7 @@ mod tests {
                 selected: true,
                 section_header: None,
             }],
+            Vec::new(),
         );
         let _ = pane.frame(300, 400, 0.0);
         let edge_node = {
@@ -502,7 +554,7 @@ mod tests {
             })
             .collect();
         let mut pane = RosterPane::new();
-        pane.set_rows(&ChromeTheme::default(), rows);
+        pane.set_rows(&ChromeTheme::default(), rows, Vec::new());
         let _ = pane.frame(220, 120, 0.0);
         assert!(
             pane.max_scroll() > 0.0,

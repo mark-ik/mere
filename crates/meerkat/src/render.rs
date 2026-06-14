@@ -889,7 +889,8 @@ impl WindowCtx<'_> {
             let rw = (rrect[2] - rrect[0]).round().max(1.0) as u32;
             let rh = (rrect[3] - rrect[1]).round().max(1.0) as u32;
             let rows = self.roster_rows();
-            self.view.roster_pane.set_rows(&self.shared.presentation.chrome_theme, rows);
+            let field_rows = self.roster_field_rows();
+            self.view.roster_pane.set_rows(&self.shared.presentation.chrome_theme, rows, field_rows);
             let max_scroll = self.view.roster_pane.max_scroll();
             self.view.roster_scroll = self.view.roster_scroll.clamp(0.0, max_scroll);
             let scene = self.view.roster_pane.frame(rw, rh, self.view.roster_scroll);
