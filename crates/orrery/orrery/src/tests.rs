@@ -138,6 +138,29 @@ fn add_node_at_mints_an_unlinked_node_at_the_cursor_world_point() {
 }
 
 #[test]
+fn add_field_at_places_a_region_field_at_the_cursor_world_point() {
+    use kernel::graph::{FieldExtent, FieldId};
+    let mut orrery = Orrery::new();
+    orrery.camera.offset = (100.0, 50.0);
+    orrery.camera.zoom = 2.0;
+    let before = orrery.graph().fields().count();
+
+    let id = orrery.add_field_at((300.0, 150.0));
+    assert_eq!(orrery.graph().fields().count(), before + 1, "a field was placed");
+
+    // world = ((300-100)/2, (150-50)/2) = (100, 50); a square Region centered there.
+    let field = orrery
+        .graph()
+        .field(FieldId::from_uuid(id))
+        .expect("the placed field exists by id");
+    let FieldExtent::Region { min_x, min_y, max_x, max_y } = field.extent else {
+        panic!("a placed field carries a Region extent, got {:?}", field.extent);
+    };
+    assert!(((min_x + max_x) / 2.0 - 100.0).abs() < 0.5, "centered at world x, got {min_x}..{max_x}");
+    assert!(((min_y + max_y) / 2.0 - 50.0).abs() < 0.5, "centered at world y, got {min_y}..{max_y}");
+}
+
+#[test]
 fn toggle_select_member_builds_a_multi_selection() {
     let mut orrery = Orrery::new();
     let _a = orrery.visit("https://a.test");

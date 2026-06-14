@@ -8,10 +8,15 @@
 
 use euclid::default::{Box2D, Point2D};
 use kernel::geometry::PortablePoint;
-use kernel::graph::NodeKey;
+use kernel::graph::{Falloff, Field, FieldDefinition, FieldExtent, FieldId, NodeKey, ScalarField};
 
 use super::build::{hyperlink, seed_cluster};
 use super::{Drag, Orrery, PointerButton, CLICK_SLOP, EDGE_PICK_TOL, SETTLE_TICKS, WHEEL_PAN_SCALE, ZOOM_STEP};
+
+/// World-space radius of a freshly placed field region — its `Disk` definition
+/// radius and its enclosing square `Region` half-extent. A sensible default the
+/// user can later resize. (Field regions P0.)
+const DEFAULT_FIELD_RADIUS: f32 = 120.0;
 
 impl Orrery {
     // ----- Input (semantic; each returns whether the host should redraw) --------
@@ -214,6 +219,30 @@ impl Orrery {
         let world = self.screen_to_world(content_band_xy);
         let key = self.mint_node_at(world, url);
         self.graph.get_node(key).map(|n| n.id).expect("a freshly minted node has an id")
+    }
+
+    /// Place a fresh disk field region at the cursor's world position — the empty-space
+    /// "Add field" gesture, the spatial-rule twin of [`add_node_at`](Self::add_node_at).
+    /// `content_band_xy` is the orrery-leaf-local cursor point (screen px); the camera
+    /// inversion happens here. The field is a `Disk` scalar definition inside a square
+    /// `Region` extent centered on the point (the placed-extent the rules later evaluate
+    /// over). Inert until coupled/projected; returns the new field's id. (Field regions P0.)
+    pub fn add_field_at(&mut self, content_band_xy: (f32, f32)) -> uuid::Uuid {
+        let world = self.screen_to_world(content_band_xy);
+        let radius = DEFAULT_FIELD_RADIUS;
+        let uuid = uuid::Uuid::new_v4();
+        let id = FieldId::from_uuid(uuid);
+        let definition = FieldDefinition::Scalar(ScalarField::disk_at(
+            world.x, world.y, radius, Falloff::Smoothstep,
+        ));
+        let extent = FieldExtent::Region {
+            min_x: world.x - radius,
+            min_y: world.y - radius,
+            max_x: world.x + radius,
+            max_y: world.y + radius,
+        };
+        self.graph.add_field(Field::new(id, definition).with_extent(extent));
+        uuid
     }
 
     /// Mint an unlinked node at an explicit world `seed`, selecting it. The
