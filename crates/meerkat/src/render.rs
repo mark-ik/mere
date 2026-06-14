@@ -300,6 +300,26 @@ impl WindowCtx<'_> {
             }
         }
         let (orrery_scene, orrery_redraw) = self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
+        // P2 per-pane render: a second graph-pane (Shift+click a switcher tile)
+        // drives its own pooled orrery into its own leaf, beside the focused one,
+        // so two graphs show at once. Node coloring + the focused-node card stay
+        // on the primary pane for now; this draws each extra graph live. (Window
+        // composition P2 — second graph-pane.)
+        let secondary_orreries: Vec<(netrender::Scene, [f32; 4], u32, u32)> = leaves
+            .iter()
+            .filter(|l| matches!(l.content, PaneContent::Orrery) && l.graph_id != orrery_gid)
+            .map(|l| {
+                let sw = (l.rect[2] - l.rect[0]).round().max(1.0) as u32;
+                let sh = (l.rect[3] - l.rect[1]).round().max(1.0) as u32;
+                let orrery = self.pane_orrery_mut(l.graph_id);
+                orrery.resize(sw, sh);
+                if !orrery.graph_visible() {
+                    orrery.recenter();
+                }
+                let (scene, _) = orrery.frame(sw, sh);
+                (scene, l.rect, sw, sh)
+            })
+            .collect();
         // The workbench root (a serval flex-DOM document) for the Workbench pane;
         // taffy lays the tiles out. `(scene, w, h)` so the composite can rasterize
         // it at the pane size. `None` when the workbench pane isn't open.
@@ -615,6 +635,17 @@ impl WindowCtx<'_> {
             orrery_h,
             ColorLoad::Clear(backdrop),
         );
+        // Rasterize each secondary graph-pane's scene. The textures must outlive
+        // the composite below (they back the views), so they are held in this Vec
+        // until the command buffer is submitted. (Window composition P2.)
+        let secondary_textures: Vec<(wgpu::Texture, wgpu::TextureView, [f32; 4])> =
+            secondary_orreries
+                .iter()
+                .map(|(scene, rect, sw, sh)| {
+                    let (tex, view) = core.rasterize(scene, *sw, *sh, ColorLoad::Clear(backdrop));
+                    (tex, view, *rect)
+                })
+                .collect();
         // Rasterize the workbench pane scene too, when its pane is open. The tex is
         // bound to `_workbench_tex` so it outlives the composite below.
         let (_workbench_tex, workbench_view) = match workbench_scene.as_ref() {
@@ -685,6 +716,18 @@ impl WindowCtx<'_> {
             h,
             ExternalTexturePlacement::new(orrery_rect),
         );
+        // Composite each secondary graph-pane's orrery into its own leaf. (Window
+        // composition P2 — two graphs side by side.)
+        for (_tex, view, rect) in &secondary_textures {
+            core.renderer().compose_external_texture(
+                view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new(*rect),
+            );
+        }
         if let (Some(wb_view), Some(wr)) = (&workbench_view, workbench_rect) {
             core.renderer().compose_external_texture(
                 wb_view,

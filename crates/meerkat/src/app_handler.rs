@@ -660,6 +660,7 @@ impl Shell {
                 super::ShellCommand::SwitchSession(id) => self.switch_session(id),
                 super::ShellCommand::CycleSession(forward) => self.cycle_session(forward),
                 super::ShellCommand::CloseSession(id) => self.close_session(id),
+                super::ShellCommand::OpenGraphBeside(id) => self.open_graph_beside(id),
             }
         }
     }

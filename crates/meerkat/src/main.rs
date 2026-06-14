@@ -669,6 +669,10 @@ enum ShellCommand {
     CycleSession(bool),
     /// Close (trash) session `id`, switching to a survivor first if it was active.
     CloseSession(SessionId),
+    /// Open session `id`'s graph in a second Orrery pane beside the current one,
+    /// without switching focus (the per-pane render path shows two graphs at
+    /// once). (Window composition P2 — second graph-pane.)
+    OpenGraphBeside(SessionId),
 }
 
 /// A tile's cached rasterized texture: the scene version + size it was rasterized

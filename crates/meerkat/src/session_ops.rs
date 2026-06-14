@@ -292,21 +292,7 @@ impl super::Shell {
         // graph is parked (its content actors reaped per-graph below); its orrery
         // stays in the pool.
         let old_gid = self.focused_view().focused_graph;
-        let wake = self.physics_wake.clone();
-        match self.orreries.entry(target_graph) {
-            std::collections::hash_map::Entry::Occupied(_) => {
-                // Switching back: the pooled orrery is authoritative. No reload.
-            }
-            std::collections::hash_map::Entry::Vacant(slot) => {
-                let mut orrery = orrery::Orrery::with_graph(graph);
-                // An empty session opens on the welcome node, like first launch.
-                if empty {
-                    orrery.visit("mere://welcome");
-                }
-                orrery.offload_physics(wake);
-                slot.insert(orrery);
-            }
-        }
+        self.pool_orrery(target_graph, graph, empty);
         self.focused_view_mut().focused_graph = target_graph;
 
         // Park the outgoing graph's physics (OQ2 park): a switched-away graph stays
@@ -318,31 +304,7 @@ impl super::Shell {
                 parked.park_physics();
             }
         }
-
-        // Pool eviction (OQ2 unload): keep `target_graph` most-recent in the LRU,
-        // then drop the stalest pooled orreries over the cap that no window is
-        // focused on. Dropping an orrery ends its physics actor thread; its content
-        // actors are reaped too. The graph was already saved when it was last
-        // switched away from, so eviction loses no data — switching back reloads it.
-        self.orrery_lru.retain(|g| *g != target_graph);
-        self.orrery_lru.push(target_graph);
-        if self.orreries.len() > super::MAX_POOLED_ORRERIES {
-            let focused: std::collections::HashSet<GraphId> = self
-                .windows
-                .values()
-                .map(|v| v.focused_graph)
-                .chain(self.pending_view.iter().map(|v| v.focused_graph))
-                .collect();
-            while self.orreries.len() > super::MAX_POOLED_ORRERIES {
-                let Some(stale) = self.orrery_lru.iter().copied().find(|g| !focused.contains(g))
-                else {
-                    break;
-                };
-                self.orrery_lru.retain(|g| *g != stale);
-                self.orreries.remove(&stale); // drop → physics actor thread ends
-                self.shared.content.constellation.reap_graph(stale);
-            }
-        }
+        self.touch_and_evict(target_graph);
 
         // The remainder runs on the focused window's ctx (now resolving the re-keyed
         // orrery): restore camera + focus, retag the graph-bound leaves, reset the
@@ -385,6 +347,113 @@ impl super::Shell {
             ctx.orrery().focused_url().unwrap_or("mere://welcome").to_string();
         ctx.refresh_session_thumbnails();
         ctx.view.request_redraw();
+    }
+
+    /// Pool `graph`'s orrery under `graph_id` if it isn't already pooled, minting
+    /// it from the loaded graph with its own offloaded physics actor (an empty one
+    /// opens on the welcome node, like first launch). A no-op when the graph is
+    /// already live — its pooled orrery is authoritative, so disk is not reloaded
+    /// over it. Touches no focus: both session-switch and open-graph-beside pool
+    /// through here. (Window composition P2.)
+    fn pool_orrery(&mut self, graph_id: GraphId, graph: Graph, empty: bool) {
+        if let std::collections::hash_map::Entry::Vacant(slot) = self.orreries.entry(graph_id) {
+            let mut orrery = orrery::Orrery::with_graph(graph);
+            if empty {
+                orrery.visit("mere://welcome");
+            }
+            orrery.offload_physics(self.physics_wake.clone());
+            slot.insert(orrery);
+        }
+    }
+
+    /// Mark `graph_id` most-recently-used, then drop the stalest pooled orreries
+    /// over the cap that **no pane in any window resolves to** — not just each
+    /// window's focused graph, so a second graph-pane's orrery is not evicted out
+    /// from under it. Dropping an orrery ends its physics actor and reaps its
+    /// content actors; the graph was saved on its last switch-away, so eviction
+    /// loses no data (switching / re-opening reloads it). (Window composition P2,
+    /// OQ2 unload — now pane-aware.)
+    fn touch_and_evict(&mut self, graph_id: GraphId) {
+        self.orrery_lru.retain(|g| *g != graph_id);
+        self.orrery_lru.push(graph_id);
+        if self.orreries.len() <= super::MAX_POOLED_ORRERIES {
+            return;
+        }
+        let live: std::collections::HashSet<GraphId> = self
+            .windows
+            .values()
+            .chain(self.pending_view.iter())
+            .flat_map(|v| {
+                std::iter::once(v.focused_graph)
+                    .chain(v.frame_layout.iter_leaves().map(|(_, _, gid)| gid))
+            })
+            .collect();
+        while self.orreries.len() > super::MAX_POOLED_ORRERIES {
+            let Some(stale) = self.orrery_lru.iter().copied().find(|g| !live.contains(g)) else {
+                break;
+            };
+            self.orrery_lru.retain(|g| *g != stale);
+            self.orreries.remove(&stale); // drop → physics actor thread ends
+            self.shared.content.constellation.reap_graph(stale);
+        }
+    }
+
+    /// Open session `id`'s graph in a second Orrery pane beside the current one
+    /// **without switching focus**: pool its orrery (cold-loading from disk if it
+    /// isn't live) and summon an Orrery leaf bound to its `graph_id`, split beside
+    /// the primary graph pane. The two graphs then render side by side, each
+    /// driving its own pooled orrery (the P2 per-pane render path). No-op if the
+    /// session is unknown or its graph already shows in this window. (Window
+    /// composition P2 — second graph-pane.)
+    pub(super) fn open_graph_beside(&mut self, id: SessionId) {
+        let Some(graph_id) = self.shared.session.manifests.get(id).map(|m| m.root_graph_id) else {
+            return;
+        };
+        // Already shown beside in the focused window? Don't double-summon.
+        if self
+            .focused_view()
+            .frame_layout
+            .iter_leaves()
+            .any(|(_, c, gid)| matches!(c, frame::PaneContent::Orrery) && gid == graph_id)
+        {
+            return;
+        }
+        let session_dir = self
+            .shared
+            .session
+            .mere_root
+            .join("sessions")
+            .join(id.as_uuid().to_string());
+        let graph = session_graph_store::load(&session_dir.join(session_graph_store::GRAPH_FILE))
+            .ok()
+            .flatten()
+            .unwrap_or_else(Graph::new);
+        let empty = graph.nodes().count() == 0;
+        self.pool_orrery(graph_id, graph, empty);
+        self.touch_and_evict(graph_id);
+        // Summon a second Orrery leaf bound to this graph, split right of the
+        // primary graph pane (an even split — two graphs share the band).
+        let view = self.focused_view_mut();
+        let pane_id = frame::PaneId(view.next_pane_id);
+        view.next_pane_id += 1;
+        let leaf = frame::PaneNode::Leaf {
+            pane_id,
+            content: frame::PaneContent::Orrery,
+            graph_id,
+        };
+        let anchor =
+            super::frame_view::pane_path(&view.frame_layout, super::GRAPH_PANE).unwrap_or_default();
+        if view
+            .frame_layout
+            .summon_leaf(&anchor, frame::InsertSide::Right, leaf)
+        {
+            view.frame_layout.set_split_ratio(&anchor, 0.5);
+        }
+        view.maximized_pane = None;
+        view.request_redraw();
+        self.shared
+            .observability
+            .record_frame_layout_changed("second graph pane opened");
     }
 }
 

@@ -311,7 +311,15 @@ impl WindowCtx<'_> {
                                 self.view.session_row_rects.iter().find(|(_, r)| hit(r))
                             {
                                 let id = *id;
-                                self.commands.push(super::ShellCommand::SwitchSession(id));
+                                // Shift+click opens that session's graph in a second
+                                // Orrery pane beside the current one (per-pane render);
+                                // a plain click switches the focused session. (Window
+                                // composition P2 — second graph-pane.)
+                                if self.view.modifiers.shift {
+                                    self.commands.push(super::ShellCommand::OpenGraphBeside(id));
+                                } else {
+                                    self.commands.push(super::ShellCommand::SwitchSession(id));
+                                }
                                 return;
                             }
                             // Not a host-drawn session tile → a chrome-DOM control in
