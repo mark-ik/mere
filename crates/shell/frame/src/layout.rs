@@ -251,6 +251,32 @@ impl FrameLayout {
         walk(&mut self.root, graph);
     }
 
+    /// Re-source only the graph-bound leaves currently on `from` to `to`, leaving
+    /// leaves bound to *other* graphs (a second graph-pane) and window-chrome
+    /// leaves untouched. The pane-as-unit switch: a session switch re-points the
+    /// panes that were showing the outgoing graph, not every graph-bound leaf, so
+    /// a pane pinned to a different graph survives the switch. (Window composition
+    /// — pane-as-unit; supersedes [`retag_graph_bound`] on the switch path, which
+    /// stays for the initial all-leaves binding at restore.)
+    pub fn retag_graph_bound_from(&mut self, from: GraphId, to: GraphId) {
+        fn walk(node: &mut PaneNode, from: GraphId, to: GraphId) {
+            match node {
+                PaneNode::Leaf {
+                    content, graph_id, ..
+                } => {
+                    if content.follows_active_graph() && *graph_id == from {
+                        *graph_id = to;
+                    }
+                }
+                PaneNode::Split { first, second, .. } => {
+                    walk(first, from, to);
+                    walk(second, from, to);
+                }
+            }
+        }
+        walk(&mut self.root, from, to);
+    }
+
     /// Iterate every leaf in the layout in depth-first order
     /// (first-child before second-child). Yields `(pane_id, content,
     /// graph_id)` triples. Used by the host to assemble per-pane

@@ -260,3 +260,41 @@ fn retag_graph_bound_repoints_only_graph_bound_leaves() {
     assert_eq!(by_pane(2), new, "orrery (graph-bound) follows the new graph");
     assert_eq!(by_pane(3), old, "apparatus (window-chrome) stays put");
 }
+
+#[test]
+fn retag_graph_bound_from_repoints_only_the_outgoing_graph() {
+    // Two Orrery panes pinned to different graphs (a second graph-pane). Switching
+    // the active session `a -> c` must move only the pane on `a`, leaving the pane
+    // pinned to `b`. (Pane-as-unit: a session switch doesn't clobber a pinned pane.)
+    let a = GraphId::from_uuid(uuid::Uuid::from_u128(0xa));
+    let b = GraphId::from_uuid(uuid::Uuid::from_u128(0xb));
+    let c = GraphId::from_uuid(uuid::Uuid::from_u128(0xc));
+    let mut layout = FrameLayout {
+        id: FrameId::new("content"),
+        label: "content".to_string(),
+        root: PaneNode::Split {
+            axis: SplitAxis::Horizontal,
+            ratio: 0.5,
+            first: Box::new(PaneNode::Leaf {
+                pane_id: PaneId(1),
+                content: PaneContent::Orrery,
+                graph_id: a,
+            }),
+            second: Box::new(PaneNode::Leaf {
+                pane_id: PaneId(2),
+                content: PaneContent::Orrery,
+                graph_id: b,
+            }),
+        },
+    };
+    layout.retag_graph_bound_from(a, c);
+    let by_pane = |id: u64| {
+        layout
+            .iter_leaves()
+            .find(|(p, _, _)| p.0 == id)
+            .map(|(_, _, g)| g)
+            .unwrap()
+    };
+    assert_eq!(by_pane(1), c, "the outgoing-graph pane follows the switch");
+    assert_eq!(by_pane(2), b, "the pane pinned to another graph stays put");
+}

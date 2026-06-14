@@ -351,7 +351,9 @@ impl super::Shell {
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
             ctx.orrery_mut().select_by_url(url);
         }
-        ctx.view.frame_layout.retag_graph_bound(target_graph);
+        // Re-point only the panes that were on the outgoing graph, so a second
+        // graph-pane pinned to a different graph survives the switch. (Pane-as-unit.)
+        ctx.view.frame_layout.retag_graph_bound_from(old_gid, target_graph);
         ctx.shared.content.constellation.reap_graph(old_gid);
         ctx.view.scrying.clear();
         ctx.shared.content.compat_pins.clear();
