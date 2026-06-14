@@ -364,6 +364,66 @@ wanted.
 
 ## Progress
 
+- 2026-06-14: **Scoping note — the focus/active-session decoupling (pane-as-unit), the
+  prerequisite for per-pane *pointer* input.** Found while wiring the second graph-pane:
+  per-pane *render* and *wheel/hover* fell out cleanly (a pane resolves its orrery by
+  `graph_id`; landed `85f307c`, `21d9821`). Per-pane *pointer-select / nav* does **not**,
+  and the blocker is architectural, not grind.
+
+  **The mismatch.** mere ties an orrery to a *session* (graph + `session_dir` + manifest),
+  and the shell holds one global `active_session_id`. That active session **re-points
+  panes**: `load_active_session` calls `retag_graph_bound(active_graph)`, which retags
+  *every* graph-bound leaf to the active graph. So a pane's graph is not pinned — it
+  follows the global active session. Consequences: (1) a second pane pinned to graph B is
+  clobbered the instant you switch sessions (all leaves retag); (2) "focused graph" (what
+  input/render resolve) and "active session" (what save/nav/omnibar use) are coupled —
+  clicking pane B to nav it either desyncs save (still writes A's `session_dir`) or
+  triggers a switch that re-points the primary pane. P1/P2 are a halfway state: panes
+  carry `graph_id` + an orrery pool, but the single-active-session model still lives under
+  them.
+
+  **The model (the plan's own).** Make the *pane* the unit: each graph-pane **pinned** to
+  its `graph_id`; "focused" = *which pane has input focus* (a per-window `focused_pane`),
+  not which session is globally active; every session op resolves through the focused
+  pane's `graph_id` → its session. Then pointer input dispatches to the pane at the cursor,
+  that pane owns its orrery + session context, and the focus/save coupling + the retag
+  clobber both dissolve (no pane is ever retagged).
+
+  **Enabler.** A `graph_id → session` resolution: `manifests` are keyed by `SessionId` and
+  carry `root_graph_id`, so `session_for_graph(gid) = manifests.find(root_graph_id == gid)`
+  yields the `SessionId` + `storage_path` (the `session_dir`). Session ops take the focused
+  pane's `graph_id` and resolve their dir / manifest from it, instead of reading the global
+  `active_session_id` / `session_dir`.
+
+  **The coupled sites (code-verified inventory).**
+  - `save_session` (`session_ops` 27/37/42/54/67) — **the critical one**: saves the focused
+    orrery's graph to the *global* `session_dir` + active manifest + thumbnail. Re-scope to
+    the focused pane's session (resolved from `focused_graph`).
+  - `load_active_session` (`session_ops` 327/345) — `retag_graph_bound(target)` + sets
+    `active_session_id`. Retag must re-point only the **focused** pane (or be removed once
+    panes are pinned); `active_session_id` becomes the focused pane's session.
+  - `retag_graph_bound` (`frame/layout.rs` 235; called `main.rs` 908, `session_ops` 327) —
+    the "active re-points all leaves" mechanism; the change's center of gravity.
+  - `active_graph_id` / `leaf_graph_id` (`frame_ops` 127/138) — a new leaf binds to the
+    active graph; should bind to the focused pane's graph.
+  - `refresh_session_thumbnails` (`session_ops` 144) — `id == active_session_id` picks the
+    live orrery; generalize to "any session whose graph is pooled (any pane)" (the
+    eviction was already made pane-aware this way, `21d9821`/`85f307c`).
+  - `switch_session` / `cycle_session` / `close_session` (`session_ops` 197/222/242) and the
+    switcher highlight (`render` 1134) + F2 rename (`input` 752) — all read
+    `active_session_id`; re-key to "the focused pane's session."
+  - Window-cache reset in `load_active_session` (clears `pages` / `scrying` / `live_previews`
+    / textures) assumes a full session swap; with pinned panes a focus change must **not**
+    clear them (both graphs' content coexists; `pages` is already URL-keyed, graph-agnostic).
+
+  **Increments (deliberate, watched — not a blind sweep).** (1) `session_for_graph` +
+  per-pane `save_session(graph_id)`; (2) `focused_pane` (which Orrery leaf has focus) +
+  `focused_graph` derives from it; (3) retire `retag_graph_bound` from the focus path (panes
+  pinned; switch re-points only the focused pane); (4) re-key the switcher / rename /
+  thumbnails / `leaf_graph_id` off the focused pane; (5) per-pane pointer input (dispatch to
+  the pane at the cursor; click sets `focused_pane`; nav/save resolve through it). Cost is
+  real but contained to the session lane + the input dispatch; it is the clean foundation
+  that makes input, save, and nav per-pane all *fall out* instead of each being bolted on.
 - 2026-06-14: **P2 landed (the load-bearing half) + frame_ops carved under the ceiling.**
   Two milestones, both behaviour-preserving, all green (84 bin tests throughout):
   - **frame_ops split, 2739 → 375 LOC** across nine cohesive modules, each under the
