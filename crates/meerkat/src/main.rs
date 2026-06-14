@@ -74,6 +74,7 @@ mod a11y_bridge;
 mod agent_harness;
 mod app_handler;
 mod apparatus;
+mod command_drain;
 mod frame_a11y;
 mod frame_a11y_panes;
 mod frame_ops;
