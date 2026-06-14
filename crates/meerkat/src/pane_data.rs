@@ -127,7 +127,12 @@ impl WindowCtx<'_> {
                 .name
                 .clone()
                 .unwrap_or_else(|| format!("Field {}", &uuid[..8.min(uuid.len())]));
-            out.push(roster::FieldRow { id, name, hidden: !self.orrery().field_visible(id) });
+            out.push(roster::FieldRow {
+                id,
+                name,
+                hidden: !self.orrery().field_visible(id),
+                strength: self.orrery().field_strength(id).unwrap_or(0.0),
+            });
         }
         // Deterministic order (graph.fields() is HashMap-unordered): by name, then id
         // — matching the node rows' explicit sort. (Field regions — roster.)

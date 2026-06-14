@@ -41,6 +41,9 @@ pub enum RosterIntent {
     SelectField(FieldId),
     /// Hide / show a field region on the canvas (a field row's toggle). (Field regions.)
     ToggleFieldVisibility(FieldId),
+    /// Adjust a field's coupling strength by the given delta (a field row's − / +).
+    /// (Field regions — strength tuning.)
+    AdjustFieldStrength(FieldId, f32),
 }
 
 /// The roster's view state: the node rows + field rows to render, plus the intents
@@ -158,10 +161,33 @@ pub fn roster_view(state: &RosterState) -> RosterView {
                     st.pending.push(RosterIntent::ToggleFieldVisibility(id));
                 },
             );
+            // − / value / + tune the field's coupling strength (the value is the raw
+            // strength / 1000, a compact level). Each step stops propagation so it
+            // doesn't also center the field. (Field regions — strength tuning.)
+            let weaker = on_click(
+                el::<_, RosterState, ()>("span", "\u{2212}").attr("class", "roster-field-step"),
+                move |st: &mut RosterState, ev: PointerClick| {
+                    ev.stop_propagation();
+                    st.pending.push(RosterIntent::AdjustFieldStrength(id, -1000.0));
+                },
+            );
+            let stronger = on_click(
+                el::<_, RosterState, ()>("span", "+").attr("class", "roster-field-step"),
+                move |st: &mut RosterState, ev: PointerClick| {
+                    ev.stop_propagation();
+                    st.pending.push(RosterIntent::AdjustFieldStrength(id, 1000.0));
+                },
+            );
             let entry: Vec<RosterView> = vec![
                 Box::new(
                     el::<_, RosterState, ()>("span", fr.name.clone()).attr("class", "roster-field-name"),
                 ),
+                Box::new(weaker),
+                Box::new(
+                    el::<_, RosterState, ()>("span", format!("{:.0}", fr.strength / 1000.0))
+                        .attr("class", "roster-field-strength"),
+                ),
+                Box::new(stronger),
                 Box::new(toggle),
             ];
             let class = if fr.hidden { "roster-field roster-field-hidden" } else { "roster-field" };

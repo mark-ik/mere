@@ -213,6 +213,21 @@ impl WindowCtx<'_> {
                                                 self.orrery_mut().toggle_field_visible(id);
                                                 self.view.request_redraw();
                                             }
+                                            crate::roster_view::RosterIntent::AdjustFieldStrength(id, delta) => {
+                                                // − / + the field's coupling strength,
+                                                // clamped to a sane range. Strength is
+                                                // graph truth, so persist on a change.
+                                                // (Field regions — strength tuning.)
+                                                if let Some(current) = self.orrery().field_strength(id) {
+                                                    let next = (current + delta).clamp(1000.0, 20000.0);
+                                                    if (next - current).abs() > f32::EPSILON
+                                                        && self.orrery_mut().set_field_strength(id, next)
+                                                    {
+                                                        self.save_session();
+                                                        self.view.request_redraw();
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }

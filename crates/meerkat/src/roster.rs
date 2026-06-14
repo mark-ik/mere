@@ -59,6 +59,9 @@ pub struct FieldRow {
     pub name: String,
     /// Whether the field is currently hidden from the canvas.
     pub hidden: bool,
+    /// The field's coupling strength (the per-field force-well), shown + tuned in
+    /// the row. (Field regions — strength tuning.)
+    pub strength: f32,
 }
 
 /// The roster's author CSS, themed from the chrome tokens.
@@ -125,11 +128,21 @@ pub fn roster_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.surface_bg)
         ),
         format!(".roster-field-hidden {{ opacity: 0.5; }}"),
-        format!(".roster-field-name {{ font-size: 14px; color: {}; }}", rgb(c.body_text)),
+        format!(".roster-field-name {{ font-size: 14px; color: {}; flex: 1 1 auto; }}", rgb(c.body_text)),
         format!(
-            ".roster-field-toggle {{ font-size: 11px; color: {}; background-color: {}; padding: 1px 7px; border-radius: 3px; }}",
+            ".roster-field-toggle {{ font-size: 11px; color: {}; background-color: {}; padding: 1px 7px; border-radius: 3px; margin-left: 6px; }}",
             rgb(c.muted_text),
             rgb(c.control_bg)
+        ),
+        // The − / + strength steppers and the value between them. (Field regions.)
+        format!(
+            ".roster-field-step {{ font-size: 13px; color: {}; background-color: {}; padding: 1px 7px; border-radius: 3px; margin-left: 4px; }}",
+            rgb(c.body_text),
+            rgb(c.control_bg)
+        ),
+        format!(
+            ".roster-field-strength {{ font-size: 12px; color: {}; min-width: 18px; padding: 0 4px; }}",
+            rgb(c.muted_text)
         ),
     ]
 }

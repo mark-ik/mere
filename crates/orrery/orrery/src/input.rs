@@ -293,6 +293,26 @@ impl Orrery {
         uuid
     }
 
+    /// Field `id`'s current coupling strength (the per-field force-well), for the
+    /// roster's strength readout. `None` if the field has no coupling. The default a
+    /// fresh field starts at is [`DEFAULT_FIELD_STRENGTH`]. (Field regions — strength.)
+    pub fn field_strength(&self, id: FieldId) -> Option<f32> {
+        self.graph.field_coupling_strength(id)
+    }
+
+    /// Set field `id`'s coupling strength (the per-field force), re-resolve its well
+    /// into the live sim, and re-settle so the change pulls at once. Returns whether
+    /// the field was found. Strength is graph truth, so the host persists on a
+    /// change. (Field regions — strength tuning.)
+    pub fn set_field_strength(&mut self, id: FieldId, strength: f32) -> bool {
+        let changed = self.graph.set_field_coupling_strength(id, strength);
+        if changed {
+            self.rebuild_coupling_forces();
+            self.settle_physics(SETTLE_TICKS);
+        }
+        changed
+    }
+
     /// Toggle the layout physics between paused (frozen) and running. Pausing halts
     /// the sim; resuming kicks a fresh settle. (Physics pause — Space / the button.)
     pub fn toggle_physics_paused(&mut self) {

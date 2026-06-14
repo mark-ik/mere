@@ -78,6 +78,27 @@ impl Graph {
         self.couplings.values().filter(move |c| c.field == field)
     }
 
+    /// The `strength` of the first coupling targeting `field`, if any (a field
+    /// carries one default coupling). For the roster's per-field strength readout.
+    /// (Field regions — strength tuning.)
+    pub fn field_coupling_strength(&self, field: FieldId) -> Option<f32> {
+        self.couplings.values().find(|c| c.field == field).map(|c| c.strength)
+    }
+
+    /// Set the `strength` of every coupling targeting `field`, returning whether any
+    /// was updated — the per-field force-well tuning the roster drives. (Field
+    /// regions — strength tuning.)
+    pub fn set_field_coupling_strength(&mut self, field: FieldId, strength: f32) -> bool {
+        let mut changed = false;
+        for coupling in self.couplings.values_mut() {
+            if coupling.field == field {
+                coupling.strength = strength;
+                changed = true;
+            }
+        }
+        changed
+    }
+
     // ── Selector evaluation ───────────────────────────────────────────────────
 
     /// Resolve a coupling's [`NodeSelector`] to the matching nodes, against node
