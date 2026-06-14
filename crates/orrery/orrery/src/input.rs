@@ -281,8 +281,12 @@ impl Orrery {
         if self.physics_paused {
             self.physics.halt();
         } else {
-            // Unpaused now, so this passes the gate and resumes the sim.
-            self.settle_physics(SETTLE_TICKS);
+            // Resuming via the pause/play control means "run so I can watch": settle
+            // for effectively forever (until the next pause) so a field's pull plays
+            // out fully, instead of resting after the normal ~6s budget. The cold-
+            // start auto-settle (node/field adds) keeps its short budget; only the
+            // explicit play enters this continuous run. (Physics pause — continuous run.)
+            self.settle_physics(u32::MAX);
         }
     }
 
