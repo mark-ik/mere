@@ -70,13 +70,19 @@ impl WindowCtx<'_> {
         frame_view::leaf_rects(&self.view.frame_layout, self.content_band(), self.view.maximized_pane)
     }
 
-    /// The orrery (graph) pane's screen rect; the whole band when no orrery leaf is
-    /// laid out (e.g. another pane is maximized). The orrery is always present.
+    /// The *focused* orrery pane's screen rect: the Orrery leaf bound to
+    /// `focused_graph` (so input coords + the primary drive follow focus), falling
+    /// back to the first Orrery leaf, then the whole band when none is laid out
+    /// (e.g. another pane is maximized). The orrery is always present. (Window
+    /// composition — pane-as-unit: the focused pane is the primary one.)
     pub(super) fn orrery_leaf_rect(&self) -> [f32; 4] {
         let band = self.content_band();
-        self.laid_leaves()
-            .into_iter()
-            .find(|l| matches!(l.content, PaneContent::Orrery))
+        let gid = self.view.focused_graph;
+        let leaves = self.laid_leaves();
+        leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Orrery) && l.graph_id == gid)
+            .or_else(|| leaves.iter().find(|l| matches!(l.content, PaneContent::Orrery)))
             .map(|l| l.rect)
             .unwrap_or(band)
     }

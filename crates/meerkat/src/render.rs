@@ -121,7 +121,14 @@ impl WindowCtx<'_> {
         let leaves = frame_view::leaf_rects(&self.view.frame_layout, band, self.view.maximized_pane);
         // The orrery is the always-present graph pane; the tiled workbench is its
         // summonable sibling. Each renders into its own leaf. (Workbench-as-pane.)
-        let orrery_leaf = leaves.iter().find(|l| matches!(l.content, PaneContent::Orrery));
+        // The *focused* Orrery leaf (bound to focused_graph) is the primary one — it
+        // gets the full drive (node colouring, cards, centring); the rest render as
+        // secondaries. Falls back to the first Orrery leaf. (Pane-as-unit.)
+        let focused_gid = self.view.focused_graph;
+        let orrery_leaf = leaves
+            .iter()
+            .find(|l| matches!(l.content, PaneContent::Orrery) && l.graph_id == focused_gid)
+            .or_else(|| leaves.iter().find(|l| matches!(l.content, PaneContent::Orrery)));
         let orrery_rect = orrery_leaf.map(|l| l.rect).unwrap_or(band);
         // The graph this Orrery pane resolves to (its leaf's graph_id) — render
         // drives *that* pooled orrery, not the window-global one, so a second
