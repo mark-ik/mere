@@ -10,11 +10,29 @@
 //! `frame_ops`. Factored out to keep files under the 600-LOC ceiling.
 
 use forme::GraphMemberId;
-use frame::{PaneContent, PaneId, SplitAxis, SplitChoice};
+use frame::{GraphId, PaneContent, PaneId, SplitAxis, SplitChoice};
 
 use super::{FALLBACK_TOOLBAR_H, WindowCtx, frame_view};
 
 impl WindowCtx<'_> {
+    /// The graph + screen rect of the Orrery pane under window point `(x, y)`, if the
+    /// cursor is over one — for routing hover / wheel to the orrery that pane
+    /// resolves to, so a second graph-pane pans / zooms independently of the focused
+    /// one. `None` off every Orrery leaf (over the workbench / a utility pane / the
+    /// toolbar). (Window composition P2 — per-pane input.)
+    pub(super) fn orrery_pane_at(&self, x: f32, y: f32) -> Option<(GraphId, [f32; 4])> {
+        self.laid_leaves()
+            .into_iter()
+            .find(|l| {
+                matches!(l.content, PaneContent::Orrery)
+                    && x >= l.rect[0]
+                    && x < l.rect[2]
+                    && y >= l.rect[1]
+                    && y < l.rect[3]
+            })
+            .map(|l| (l.graph_id, l.rect))
+    }
+
     /// The content band (below the toolbar, inside the shellbar carve) in window
     /// coords — the same band `render` lays the panes out in. It must match render's
     /// `band_after_shellbar`: the input hit-rects (pane leaves, dividers, the orrery

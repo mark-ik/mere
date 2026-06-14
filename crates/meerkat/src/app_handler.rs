@@ -426,11 +426,16 @@ impl ApplicationHandler for Shell {
                         .scrying
                         .forward_mouse(member, lx, ly, scrying_host::MousePress::Move);
                     wc.view.request_redraw();
-                } else {
-                    // Map to the orrery pane's local space (origin past the shellbar
-                    // carve, not just the toolbar) before feeding its hover. (Cursor fix.)
-                    let (ox, oy) = wc.orrery_point(wc.view.cursor.0, wc.view.cursor.1);
-                    if wc.orrery_mut().cursor_moved(ox, oy) {
+                } else if let Some((gid, rect)) =
+                    wc.orrery_pane_at(wc.view.cursor.0, wc.view.cursor.1)
+                {
+                    // Route hover to the Orrery pane under the cursor, mapped to that
+                    // pane's local space (origin at its leaf rect). A second graph-pane
+                    // hovers / fields independently, and its internal cursor stays
+                    // current so a wheel-zoom there pivots on the right point. (Window
+                    // composition P2 — per-pane input.)
+                    let (ox, oy) = (wc.view.cursor.0 - rect[0], wc.view.cursor.1 - rect[1]);
+                    if wc.pane_orrery_mut(gid).cursor_moved(ox, oy) {
                         wc.view.request_redraw();
                     }
                 }
@@ -516,12 +521,13 @@ impl ApplicationHandler for Shell {
                     // Wheel up (dy > 0) scrolls toward the top; down toward the bottom.
                     *offset = (*offset - dy).clamp(0.0, max);
                     wc.view.request_redraw();
-                } else {
+                } else if let Some((gid, _)) = wc.orrery_pane_at(cx, cy) {
+                    // Pan / Ctrl-zoom the Orrery pane under the cursor (per-pane: a
+                    // second graph-pane navigates independently). A cursor over the
+                    // workbench / a utility pane resolves to no Orrery leaf, so the
+                    // wheel does nothing there. (Window composition P2 — per-pane input.)
                     let th = wc.toolbar_height() as f32;
-                    let in_workbench = wc
-                        .workbench_leaf_rect()
-                        .is_some_and(|wr| cx >= wr[0] && cx < wr[2] && cy >= wr[1] && cy < wr[3]);
-                    if cy >= th && !in_workbench && wc.orrery_mut().wheel(dx, dy) {
+                    if cy >= th && wc.pane_orrery_mut(gid).wheel(dx, dy) {
                         wc.view.request_redraw();
                     }
                 }
