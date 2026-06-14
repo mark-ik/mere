@@ -451,7 +451,10 @@ impl WindowCtx<'_> {
             // node-hit-test for true spatial emptiness is a refinement.
             self.view.context_origin = Some(self.orrery_point(x, y));
             self.view.context_set.clear();
-            let items = vec![ContextItem::new("Add node", ContextAction::AddNode)];
+            let items = vec![
+                ContextItem::new("Add node", ContextAction::AddNode),
+                ContextItem::new("Add field", ContextAction::AddField),
+            ];
             self.view.runner.update(move |c| c.open_context_menu(x, y, items));
             self.view.request_redraw();
             return;
@@ -574,6 +577,22 @@ impl WindowCtx<'_> {
             self.commands.push(super::ShellCommand::CreateSession);
             return;
         }
+        // Place a field region. From the empty-space right-click it lands at the saved
+        // cursor anchor; from the add-pill (no anchor) it places at the orrery view
+        // center. No member set. (Field regions P0.)
+        if let ContextAction::AddField = action {
+            let anchor = match self.view.context_origin.take() {
+                Some(origin) => origin,
+                None => {
+                    let r = self.orrery_leaf_rect();
+                    self.orrery_point((r[0] + r[2]) / 2.0, (r[1] + r[3]) / 2.0)
+                }
+            };
+            let _ = self.orrery.add_field_at(anchor);
+            self.save_session();
+            self.view.request_redraw();
+            return;
+        }
         let set = std::mem::take(&mut self.view.context_set);
         if set.is_empty() {
             return;
@@ -595,7 +614,8 @@ impl WindowCtx<'_> {
             | ContextAction::Relate
             | ContextAction::AddNode
             | ContextAction::AddTile
-            | ContextAction::AddSession => {
+            | ContextAction::AddSession
+            | ContextAction::AddField => {
                 unreachable!("handled above")
             }
         }

@@ -18,7 +18,8 @@ use serval_layout::{Applied, IncrementalLayout, ScrollOffsets};
 use serval_scripted_dom::NodeId as DomNodeId;
 
 use super::build::{
-    background_cmds, marquee_rect_cmds, selected_edge_overlay, set_class, set_style, NODE_SHEET,
+    background_cmds, field_overlay, marquee_rect_cmds, selected_edge_overlay, set_class, set_style,
+    NODE_SHEET,
 };
 use super::{NodeShape, NodeState, Orrery, NODE_HALF, PAN_DECAY};
 
@@ -85,6 +86,10 @@ impl Orrery {
             &self.style,
             self.generation,
         );
+        // Placed field regions paint *under* the edges + demoted nodes (a background
+        // the graph sits within), spliced at the bottom of the same camera transform.
+        // (Field regions P0 — the disk-in-box visual.)
+        underlay.splice_world_underlay(field_overlay(&self.graph));
         // Highlight selected edges by splicing thicker strokes inside the
         // underlay's camera transform (world space — no transform replication).
         if !self.selected_edges.is_empty() {

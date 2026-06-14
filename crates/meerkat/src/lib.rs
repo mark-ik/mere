@@ -261,6 +261,12 @@ pub enum ContextAction {
     /// Mint a fresh graph session (the add-pill's "Add session") — a cross-window op
     /// the host queues as a `ShellCommand`.
     AddSession,
+    /// Place a fresh field region at the saved cursor point (the no-selection
+    /// right-click's "Add field" / the add-pill's "Add field"). The anchor in
+    /// `context_origin` is leaf-local screen px; the camera inversion to world
+    /// happens inside `Orrery::add_field_at`. From the add-pill (no anchor) it
+    /// places at the orrery view center. (Field regions P0.)
+    AddField,
 }
 
 impl Chrome {
@@ -561,6 +567,7 @@ impl Chrome {
                 ContextItem::new("Add node", ContextAction::AddNode),
                 ContextItem::new("Add tile", ContextAction::AddTile),
                 ContextItem::new("Add session", ContextAction::AddSession),
+                ContextItem::new("Add field", ContextAction::AddField),
             ],
         );
     }

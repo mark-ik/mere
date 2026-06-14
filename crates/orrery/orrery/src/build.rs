@@ -15,11 +15,12 @@ use std::collections::{HashMap, HashSet};
 use euclid::default::Point2D;
 use gyre::{Boundary, EdgeSpring, LayoutView, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
-use kernel::graph::{EdgeAssertion, Graph, NodeKey, SemanticSubKind};
+use kernel::graph::{EdgeAssertion, FieldExtent, Graph, NodeKey, SemanticSubKind};
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use paint_list_api::{
-    ColorF, CommonPlacement, LayoutPoint, LayoutRect, PaintCmd, PathCommand, PathData, RectItem,
-    StrokeCap, StrokeItem, StrokeJoin,
+    ColorF, CommonPlacement, DashPattern, ExtendMode, GradientStop, LayoutPoint, LayoutRect,
+    LayoutSize, PaintCmd, PathCommand, PathData, RadialGradientItem, RadialGradientPayload,
+    RectItem, StrokeCap, StrokeItem, StrokeJoin,
 };
 use platen::scene_paint::ScenePaintStyle;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
@@ -251,6 +252,67 @@ pub(crate) fn selected_edge_overlay(
             cap: StrokeCap::Round,
             join: StrokeJoin::Round,
             dash: None,
+        }));
+    }
+    cmds
+}
+
+/// Background paint for placed field regions, in **world space** (no transform) —
+/// spliced *under* the orrery underlay so the graph appears to sit within each
+/// field. A field with a `Region` extent draws as a soft radial-gradient "well"
+/// (its `Disk` falloff made visible) inside a faint dashed square (its draggable
+/// extent). Retired fields are skipped. (Field regions P0 — the disk-in-box visual.)
+pub(crate) fn field_overlay(graph: &Graph) -> Vec<PaintCmd> {
+    let mut cmds = Vec::new();
+    for field in graph.fields() {
+        if !field.is_active() {
+            continue;
+        }
+        let FieldExtent::Region { min_x, min_y, max_x, max_y } = field.extent else {
+            continue;
+        };
+        let (w, h) = (max_x - min_x, max_y - min_y);
+        if w <= 0.0 || h <= 0.0 {
+            continue;
+        }
+        let rect = LayoutRect::new(LayoutPoint::new(min_x, min_y), LayoutPoint::new(max_x, max_y));
+        let (cx, cy) = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0);
+        let radius = w.min(h) / 2.0;
+        // The soft falloff well: a translucent tint at the center fading to clear at
+        // the disk radius (the field's `Disk` definition made visible).
+        cmds.push(PaintCmd::DrawRadialGradient(RadialGradientItem {
+            placement: CommonPlacement::new(rect),
+            gradient: RadialGradientPayload {
+                center: LayoutPoint::new(cx, cy),
+                radius: LayoutSize::new(radius, radius),
+                extend_mode: ExtendMode::Clamp,
+                stops: vec![
+                    GradientStop { offset: 0.0, color: ColorF::new(0.42, 0.62, 0.98, 0.20) },
+                    GradientStop { offset: 1.0, color: ColorF::new(0.42, 0.62, 0.98, 0.0) },
+                ],
+            },
+            tile_size: LayoutSize::new(w, h),
+            tile_spacing: LayoutSize::zero(),
+        }));
+        // The faint dashed square: the field's extent (draggable / resizable),
+        // dashed to distinguish it from solid graph edges.
+        let corner = |x: f32, y: f32| LayoutPoint::new(x, y);
+        cmds.push(PaintCmd::DrawStroke(StrokeItem {
+            placement: CommonPlacement::new(rect),
+            path: PathData {
+                commands: vec![
+                    PathCommand::MoveTo(corner(min_x, min_y)),
+                    PathCommand::LineTo(corner(max_x, min_y)),
+                    PathCommand::LineTo(corner(max_x, max_y)),
+                    PathCommand::LineTo(corner(min_x, max_y)),
+                    PathCommand::LineTo(corner(min_x, min_y)),
+                ],
+            },
+            color: ColorF::new(0.52, 0.66, 0.92, 0.50),
+            width: 1.5,
+            cap: StrokeCap::Round,
+            join: StrokeJoin::Round,
+            dash: Some(DashPattern { intervals: vec![7.0, 5.0], offset: 0.0 }),
         }));
     }
     cmds

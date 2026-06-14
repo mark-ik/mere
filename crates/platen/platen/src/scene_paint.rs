@@ -66,6 +66,17 @@ impl CanvasPaintList {
         let before_pop = self.commands.len().saturating_sub(1);
         self.commands.splice(before_pop..before_pop, overlays);
     }
+
+    /// Splice world-space overlay commands in at the **bottom** of the camera
+    /// transform (immediately after the leading `PushTransform`), so they share the
+    /// scene's world→view mapping but paint *beneath* the projection's nodes + edges.
+    /// The under-content twin of [`splice_world_overlays`] — for background regions
+    /// like field extents, which the graph should appear to sit *within*. On the
+    /// (unreachable) empty list this is a head insert.
+    pub fn splice_world_underlay(&mut self, overlays: impl IntoIterator<Item = PaintCmd>) {
+        let after_push = self.commands.len().min(1);
+        self.commands.splice(after_push..after_push, overlays);
+    }
 }
 
 /// World-to-view camera: a pan offset plus a uniform zoom, emitted as the
