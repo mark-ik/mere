@@ -298,3 +298,43 @@ fn retag_graph_bound_from_repoints_only_the_outgoing_graph() {
     assert_eq!(by_pane(1), c, "the outgoing-graph pane follows the switch");
     assert_eq!(by_pane(2), b, "the pane pinned to another graph stays put");
 }
+
+#[test]
+fn dedupe_graph_panes_keeps_one_orrery_per_graph() {
+    let a = GraphId::from_uuid(uuid::Uuid::from_u128(0xa));
+    let b = GraphId::from_uuid(uuid::Uuid::from_u128(0xb));
+    // [ [orrery@a | orrery@a(dup)] | orrery@b ] — three Orrery panes, two on `a`.
+    let mut layout = FrameLayout {
+        id: FrameId::new("content"),
+        label: "content".to_string(),
+        root: PaneNode::Split {
+            axis: SplitAxis::Horizontal,
+            ratio: 0.5,
+            first: Box::new(PaneNode::Split {
+                axis: SplitAxis::Horizontal,
+                ratio: 0.5,
+                first: Box::new(PaneNode::Leaf {
+                    pane_id: PaneId(1),
+                    content: PaneContent::Orrery,
+                    graph_id: a,
+                }),
+                second: Box::new(PaneNode::Leaf {
+                    pane_id: PaneId(2),
+                    content: PaneContent::Orrery,
+                    graph_id: a,
+                }),
+            }),
+            second: Box::new(PaneNode::Leaf {
+                pane_id: PaneId(3),
+                content: PaneContent::Orrery,
+                graph_id: b,
+            }),
+        },
+    };
+    layout.dedupe_graph_panes();
+    let leaves: Vec<(u64, GraphId)> = layout.iter_leaves().map(|(p, _, g)| (p.0, g)).collect();
+    assert_eq!(leaves.len(), 2, "one Orrery pane per graph: {leaves:?}");
+    assert!(leaves.iter().any(|(p, g)| *p == 1 && *g == a), "the first `a` pane kept");
+    assert!(leaves.iter().any(|(p, g)| *p == 3 && *g == b), "the `b` pane kept");
+    assert!(!leaves.iter().any(|(p, _)| *p == 2), "the duplicate `a` pane dropped");
+}

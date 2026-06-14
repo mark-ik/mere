@@ -935,6 +935,9 @@ impl Shell {
         view.content_location = content_location;
         view.frame_layout = frame_layout;
         view.next_pane_id = next_pane_id;
+        // Collapse any duplicate Orrery panes a persisted layout accumulated (two
+        // panes on one graph render the extra blank); keep one per graph. (Pane-as-unit.)
+        view.frame_layout.dedupe_graph_panes();
         // Pool every graph a restored pane resolves to, not just the active one, so a
         // second graph-pane (persisted from a prior run) loads instead of leaving a
         // blank pane the user can't dismiss. Each cold-loads its graph from its

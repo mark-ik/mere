@@ -306,6 +306,17 @@ impl FrameLayout {
         walk(&mut self.root, valid, fallback);
     }
 
+    /// Collapse duplicate graph panes: keep only the **first** Orrery leaf per
+    /// `graph_id`, dropping any later one (its split folds into its sibling). Two
+    /// spatial panes on one graph can't hold independent cameras yet, so a duplicate
+    /// renders blank; this is the guardrail that stops them forming or accumulating
+    /// across restores. Window-chrome leaves and distinct-graph panes are untouched.
+    /// (Window composition — pane-as-unit; one Orrery pane per graph.)
+    pub fn dedupe_graph_panes(&mut self) {
+        let mut seen: std::collections::HashSet<GraphId> = std::collections::HashSet::new();
+        dedup_node(&mut self.root, &mut seen);
+    }
+
     /// Iterate every leaf in the layout in depth-first order
     /// (first-child before second-child). Yields `(pane_id, content,
     /// graph_id)` triples. Used by the host to assemble per-pane
@@ -342,6 +353,52 @@ fn walk_mut<'a>(node: &'a mut PaneNode, path: &[SplitChoice]) -> Option<&'a mut 
         };
     }
     Some(current)
+}
+
+/// Walk `node` left-to-right, recording each Orrery leaf's `graph_id` in `seen`;
+/// when a child reduces to a duplicate Orrery leaf, fold the split into its other
+/// child (the survivor is then re-examined, so a chain of duplicates collapses).
+/// Returns `true` if `node` *itself* is a duplicate Orrery leaf the caller should
+/// drop. (Backs [`FrameLayout::dedupe_graph_panes`].)
+fn dedup_node(node: &mut PaneNode, seen: &mut std::collections::HashSet<GraphId>) -> bool {
+    match node {
+        PaneNode::Leaf {
+            content, graph_id, ..
+        } => matches!(content, PaneContent::Orrery) && !seen.insert(*graph_id),
+        PaneNode::Split { first, second, .. } => {
+            // Process both children left-to-right (recording graph_ids, collapsing
+            // their own duplicates) *before* folding, so the survivor is never
+            // re-counted. Each child reduces to "drop me" only if it is itself a lone
+            // duplicate Orrery leaf.
+            let drop_first = dedup_node(first, seen);
+            let drop_second = dedup_node(second, seen);
+            match (drop_first, drop_second) {
+                // Both children are duplicate leaves → this split collapses too.
+                (true, true) => true,
+                (true, false) => {
+                    let keeper = std::mem::replace(second.as_mut(), dedup_placeholder());
+                    *node = keeper;
+                    false
+                }
+                (false, true) => {
+                    let keeper = std::mem::replace(first.as_mut(), dedup_placeholder());
+                    *node = keeper;
+                    false
+                }
+                (false, false) => false,
+            }
+        }
+    }
+}
+
+/// A throwaway leaf used as the `mem::replace` stand-in while promoting a split's
+/// survivor over a dropped duplicate (never observed — the node is overwritten).
+fn dedup_placeholder() -> PaneNode {
+    PaneNode::Leaf {
+        pane_id: PaneId(0),
+        content: PaneContent::Custom("__dedup_placeholder__".to_string()),
+        graph_id: GraphId(uuid::Uuid::nil()),
+    }
 }
 
 /// Read-only walker — sibling of [`walk_mut`].

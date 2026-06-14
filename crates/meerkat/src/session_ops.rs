@@ -384,6 +384,9 @@ impl super::Shell {
         // Re-point only the panes that were on the outgoing graph, so a second
         // graph-pane pinned to a different graph survives the switch. (Pane-as-unit.)
         ctx.view.frame_layout.retag_graph_bound_from(old_gid, target_graph);
+        // Switching toward a graph already shown beside would leave two panes on it;
+        // collapse the duplicate so it doesn't render blank. (Pane-as-unit.)
+        ctx.view.frame_layout.dedupe_graph_panes();
         ctx.shared.content.constellation.reap_graph(old_gid);
         ctx.view.scrying.clear();
         ctx.shared.content.compat_pins.clear();
