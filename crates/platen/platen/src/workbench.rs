@@ -326,6 +326,54 @@ impl Workbench {
     pub fn clear_tiles(&mut self) {
         self.slots.clear();
     }
+
+    /// Project this workbench onto pelt's [`TileTree`] contract (V5/V6) — the builder a
+    /// host (meerkat) uses to render the workbench through the standalone pelt tile
+    /// surface. The **structure** comes from the workbench (side-by-side slots, each a
+    /// plain tile or a tab-stack with its active tab, the slot weights as split
+    /// fractions); the host supplies `tile_for`, resolving each member to its
+    /// [`Tile`](pelt_core::tile::Tile) — a stable id, a title, and a content lane (a
+    /// member's actor texture is an
+    /// [`ExternalTexture`](pelt_core::tile::ContentSource::ExternalTexture), a document
+    /// a [`Document`](pelt_core::tile::ContentSource::Document)).
+    ///
+    /// An empty workbench yields `None`; a lone slot is its stack directly (no enclosing
+    /// split); several slots are a `Row` split with each slot's weight as its fraction.
+    /// A projection, never a second authority: the workbench stays the tiling truth, and
+    /// the surface is driven entirely through the contract (the host applies tile events
+    /// back to the workbench and re-projects).
+    pub fn to_tile_tree(
+        &self,
+        mut tile_for: impl FnMut(GraphMemberId) -> pelt_core::tile::Tile,
+    ) -> Option<pelt_core::tile::TileTree> {
+        use pelt_core::tile::{SplitAxis, TileBranch, TileTree};
+
+        let slots: Vec<SlotView<'_>> = self.slot_views().collect();
+        if slots.is_empty() {
+            return None;
+        }
+        let mut to_tree = |slot: &SlotView<'_>| {
+            if slot.members.len() == 1 {
+                TileTree::single(tile_for(slot.members[0]))
+            } else {
+                TileTree::stack(slot.members.iter().map(|m| tile_for(*m)).collect(), slot.active)
+            }
+        };
+        if slots.len() == 1 {
+            return Some(to_tree(&slots[0]));
+        }
+        let total: f32 = slots.iter().map(|s| s.weight).sum();
+        let n = slots.len();
+        let children = slots
+            .iter()
+            .map(|slot| {
+                let fraction =
+                    if total > f32::EPSILON { slot.weight / total } else { 1.0 / n as f32 };
+                TileBranch::new(fraction, to_tree(slot))
+            })
+            .collect();
+        Some(TileTree::split(SplitAxis::Row, children))
+    }
 }
 
 #[cfg(test)]
@@ -503,5 +551,77 @@ mod tests {
         assert_eq!(wb.weights(), vec![2.0, 0.5]);
         wb.set_weights(&[-1.0, 0.0]);
         assert_eq!(wb.weights(), vec![0.05, 0.05], "floored so no slot collapses");
+    }
+
+    // ── Workbench -> pelt TileTree projection (the V6 surface builder) ──
+
+    use pelt_core::tile::{ContentSource, SplitAxis, TextureKey, Tile, TileId, TileTree};
+
+    /// A host resolver standing in for meerkat's: a member maps to its actor-texture
+    /// lane, keyed (id + texture) by the member's low bits.
+    fn actor_tile_for(member: GraphMemberId) -> Tile {
+        let key = member.as_u128() as u64;
+        Tile {
+            id: TileId(key),
+            title: String::new(),
+            content: ContentSource::ExternalTexture(TextureKey(key)),
+        }
+    }
+
+    /// An empty workbench projects to no tree.
+    #[test]
+    fn to_tile_tree_empty_is_none() {
+        assert!(Workbench::new().to_tile_tree(actor_tile_for).is_none());
+    }
+
+    /// A lone slot is its stack directly (no enclosing split).
+    #[test]
+    fn to_tile_tree_single_slot_is_a_stack() {
+        let mut wb = Workbench::new();
+        wb.open_tile(m(1));
+        let tree = wb.to_tile_tree(actor_tile_for).expect("one slot");
+        assert!(matches!(tree, TileTree::Stack(_)), "a lone slot is the stack itself");
+        assert_eq!(tree.tiles().len(), 1);
+    }
+
+    /// A tab-stack slot becomes a tabbed stack with its active tab preserved.
+    #[test]
+    fn to_tile_tree_stacked_slot_keeps_active() {
+        let mut wb = Workbench::new();
+        wb.open_tile(m(1));
+        wb.open_tile(m(2));
+        wb.open_tile(m(3));
+        wb.stack_all();
+        wb.activate(m(3));
+        let tree = wb.to_tile_tree(actor_tile_for).expect("tree");
+        match tree {
+            TileTree::Stack(s) => {
+                assert_eq!(s.tabs.len(), 3, "all tabs carried");
+                assert_eq!(s.active, 2, "the active tab is preserved");
+            }
+            other => panic!("expected a stack, got {other:?}"),
+        }
+    }
+
+    /// Several slots become a `Row` split with each slot's weight as its fraction.
+    #[test]
+    fn to_tile_tree_slots_become_a_weighted_row_split() {
+        let mut wb = Workbench::new();
+        wb.open_split(&[m(1), m(2)]);
+        wb.set_weights(&[3.0, 1.0]);
+        let tree = wb.to_tile_tree(actor_tile_for).expect("tree");
+        match tree {
+            TileTree::Split { axis, children } => {
+                assert_eq!(axis, SplitAxis::Row, "slots lay side by side");
+                assert_eq!(children.len(), 2);
+                assert!(
+                    (children[0].fraction - 0.75).abs() < 1e-6,
+                    "weight 3/(3+1) = 0.75, got {}",
+                    children[0].fraction,
+                );
+                assert!((children[1].fraction - 0.25).abs() < 1e-6, "got {}", children[1].fraction);
+            }
+            other => panic!("expected a row split, got {other:?}"),
+        }
     }
 }
