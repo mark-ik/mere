@@ -375,6 +375,13 @@ impl WindowCtx<'_> {
                         // / middle press pans / selects / drags (unless it's over the
                         // orrery's card, which owns its own clicks).
                         self.view.active_content = super::ContentPane::Orrery;
+                        // Focus-follows-click: a press on a graph-pane moves focus to
+                        // it, so the context menu, selection, and pointer all act on
+                        // *this* pane (the existing handlers resolve focused_graph).
+                        // (Window composition — pane-as-unit; per-pane pointer input.)
+                        if let Some((gid, _)) = self.orrery_pane_at(x, y) {
+                            self.focus_pane_graph(gid);
+                        }
                         if button == MouseButton::Right {
                             self.open_context_menu_at(x, y);
                         } else if let Some(b) = orrery_button {

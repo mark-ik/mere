@@ -44,6 +44,26 @@ impl WindowCtx<'_> {
         })
     }
 
+    /// Move input focus to the graph-pane resolving to `graph_id`: point the
+    /// window's `focused_graph` at it and re-key the active session (id + dir) to its
+    /// session, so the context menu, selection, nav, the omnibar, and save all act on
+    /// *this* pane. Focus is just a pointer — this does **not** reload the graph or
+    /// clear the window's content caches (both graphs coexist), unlike a session
+    /// switch. No-op if already focused or the graph has no session. (Window
+    /// composition — pane-as-unit; focus-follows-click.)
+    pub(super) fn focus_pane_graph(&mut self, graph_id: GraphId) {
+        if self.view.focused_graph == graph_id {
+            return;
+        }
+        let Some((session_id, session_dir)) = self.session_for_graph(graph_id) else {
+            return;
+        };
+        self.view.focused_graph = graph_id;
+        self.shared.session.active_session_id = session_id;
+        self.shared.session.session_dir = session_dir;
+        self.view.request_redraw();
+    }
+
     /// Persist the **focused pane's** session: its graph + camera view-intent under
     /// that session's dir, resolved from `focused_graph` (not a global active
     /// session), so two live graphs each persist to their own storage. The frame
