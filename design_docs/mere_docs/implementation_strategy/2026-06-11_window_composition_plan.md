@@ -364,6 +364,41 @@ wanted.
 
 ## Progress
 
+- 2026-06-14: **P2 landed (the load-bearing half) + frame_ops carved under the ceiling.**
+  Two milestones, both behaviour-preserving, all green (84 bin tests throughout):
+  - **frame_ops split, 2739 → 375 LOC** across nine cohesive modules, each under the
+    600 ceiling (the audit's "split it, don't grow it" risk, cleared before the sweep):
+    `frame_a11y` + `frame_a11y_panes` (a11y projection), `pane_geom` (leaf rects /
+    hit-tests / divider), `pane_data` (roster / steward / utility rows), `nav_sync`
+    (location + history + physics-toggle), `menus` (context + shellbar), `command_drain`
+    (omnibar / palette / comms dispatch), `session_ops` (save / rename / thumbnails +
+    the Shell create/switch/cycle/close), `node_ops` (focused-node + content/node-state).
+    Eight pure-move commits (`ea13654`..`200927b`).
+  - **P2 sweep (`30d5570`): the ctx resolves the orrery from the pool.** `WindowCtx`
+    no longer bundles one `orrery: &mut Orrery`; it borrows the whole pool
+    (`orreries: &mut HashMap<GraphId, Orrery>`) and the ~110 `self.orrery.x` sites
+    resolve through `orrery()` / `orrery_mut()` keyed on `view.focused_graph` (P1's
+    exact bundling key, so resolution-identical). This is the mechanical move that
+    makes per-pane resolution *expressible*.
+  - **Render per-pane (`d124040`): render drives the Orrery pane's own graph.** A
+    `LaidLeaf` now carries its `graph_id` (threaded through `leaf_rects` / `find_leaf`),
+    so render reads the Orrery leaf's graph and drives that pooled orrery
+    (`pane_orrery` / `pane_orrery_mut` by `graph_id`), not the window-focused one.
+    One Orrery pane → identical; a second of another graph drives its own.
+  - **Finding — `focused_graph_id()` is NOT yet a drop-in for `orrery()`.** The plan
+    framed it as "cleanly derivable (no new tracking)". But `load_active_session`
+    resolves + drives the re-keyed orrery (`set_camera`, `select_by_url`) **before**
+    `retag_graph_bound` retags the leaves, so an active-content-leaf-derived key would
+    resolve the *outgoing* graph mid-switch. The focused accessors must keep reading
+    `view.focused_graph` until that retag is moved ahead of the orrery resolution.
+    (Render is safe — it reads the leaf's stamped `graph_id` after layout, not a
+    derivation.) The derived accessor was written then removed (premature, no safe
+    consumer); reintroduce with the retag re-order, or for the cursor→pane hit-test.
+  - **Remaining P2 tail (gated on a 2nd-graph-pane UI, ~P3):** iterate Orrery leaves
+    in render to draw 2+ graphs at once; route the input pointer / wheel to the Orrery
+    pane *under the cursor* (the P1-scout soft-spot, still on the focused orrery —
+    correct for one pane). No way to summon a second Orrery pane exists today, so this
+    tail is untestable until that affordance lands; the resolution plumbing is in place.
 - 2026-06-14: **Audit (code-verified against the tree).** P1 confirmed done (pool +
   `focused_graph` + `Activation.graph_id` stamp + `reap_graph` + park/unload/LRU +
   Steward live-count all present; OQ2 resolved). **The P2-companion list-pane
