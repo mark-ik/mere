@@ -114,11 +114,13 @@ surface node drops out of `scrying_surfaces`, and the per-frame `retain` tears i
 producer down. *Verified:* engine_activation 4/4, settings_store 7/7; headed, with
 `scrying.web` disabled a `>compat_view` node falls back to serval with no producer,
 and re-enabling spawns it again.
-- **Phase 1b (NEXT, small):** thread the activation to the off-thread content actor
-  so a deactivated *document* engine (nematic.*) also falls back in
-  `route_document_engine`. Today only the UI-thread tier decision honors activation,
-  which fully covers surface engines (scrying) but lets a disabled nematic engine
-  still render via the actor's own default-availability.
+- **Phase 1b (DONE, b4706c6):** the constellation carries the deactivated-engine set
+  (`set_disabled_engines`, seeded from settings) and passes it to each spawned actor,
+  which registers only the engines outside it — so a deactivated *document* engine is
+  routed past by `route_document_engine` and falls to the synthesized card. Snapshot
+  at spawn time; the Phase 2 live toggle reaps affected actors. *Verified:* with
+  `nematic.gemtext` disabled, a gemini capsule renders the synthesized fallback (raw
+  `#`/`##` text) instead of the formatted gemtext document.
 - **Per-session persistence:** `session_override` is in memory; it persists when the
   session manifest is wired (multiplexer §3).
 
