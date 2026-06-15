@@ -888,6 +888,58 @@ impl WindowCtx<'_> {
                 );
             }
         }
+        // Tile decorations (workbench pane): a "Reloading…" placeholder over a tile
+        // whose actor is recovering (respawned, no scene yet — so nothing composited
+        // there), and a small amber "kept-warm" badge on a background-pinned tile (the
+        // star the old strip carried). Both draw over the tile's content rect; the
+        // click-to-pin toggle stays on the Ctrl+B / command path. State is collected
+        // first so the composite loop holds no `self` borrow. (Decoration re-applied on
+        // the pelt surface path.)
+        let tile_decos: Vec<([f32; 4], bool, bool)> = self
+            .view
+            .tile_rects
+            .iter()
+            .map(|(m, r)| {
+                (
+                    *r,
+                    self.shared.content.constellation.is_recovering(*m),
+                    self.shared.content.constellation.is_background(*m),
+                )
+            })
+            .collect();
+        for (rect, recovering, background) in &tile_decos {
+            if *recovering {
+                let rw = (rect[2] - rect[0]).round().max(1.0) as u32;
+                let rh = (rect[3] - rect[1]).round().max(1.0) as u32;
+                let scene = super::card::recovering_card_scene(rw, rh);
+                let (_t, view) = core.rasterize(&scene, rw, rh, ColorLoad::Clear(CARD_BG));
+                core.renderer().compose_external_texture(
+                    &view,
+                    &target_view,
+                    format,
+                    w,
+                    h,
+                    ExternalTexturePlacement::new(*rect),
+                );
+            }
+            if *background {
+                let mut scene = netrender::Scene::new(1, 1);
+                scene.push_rect(0.0, 0.0, 1.0, 1.0, [0.88, 0.66, 0.27, 1.0]);
+                let (_t, view) =
+                    core.rasterize(&scene, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                let bs = 10.0;
+                let bx1 = rect[2] - 6.0;
+                let by0 = rect[1] + 6.0;
+                core.renderer().compose_external_texture(
+                    &view,
+                    &target_view,
+                    format,
+                    w,
+                    h,
+                    ExternalTexturePlacement::new([bx1 - bs, by0, bx1, by0 + bs]),
+                );
+            }
+        }
         // The unvisited placeholder card: rasterize its (static) scene once per
         // size and composite it at the anchored rect.
         if let Some((_, rect)) = unvisited_card {

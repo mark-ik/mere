@@ -439,6 +439,23 @@ pub fn unvisited_card_scene(w: u32, h: u32) -> Scene {
     scene
 }
 
+/// The placeholder for a tile whose actor is recovering from a crash (respawned,
+/// not yet re-rendered): a centered "Reloading…" hint, shown until the respawned
+/// actor delivers a scene whose texture covers it. Mirrors [`unvisited_card_scene`]
+/// (the same doc → layout → scene path) but carries no dashed border — it is a
+/// transient status, not an affordance. (Workbench tile decoration, re-applied on the
+/// pelt surface path.)
+pub fn recovering_card_scene(w: u32, h: u32) -> Scene {
+    let doc = document("mere://recovering", vec![paragraph("Reloading\u{2026}")]);
+    let mut laid = layout_document(
+        &doc,
+        Viewport::new(w as f32, h as f32),
+        &StyleConfig::default(),
+    );
+    laid.packet.viewport = Viewport::new(w as f32, h as f32);
+    scene_from_packet(&laid.packet, &laid.fonts, &card_vocabulary())
+}
+
 fn heading(level: u8, text: &str) -> DocumentBlock {
     DocumentBlock::Heading {
         level,
