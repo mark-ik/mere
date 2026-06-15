@@ -327,37 +327,55 @@ impl WindowCtx<'_> {
                 (scene, l.rect, sw, sh)
             })
             .collect();
-        // The workbench root (a serval flex-DOM document) for the Workbench pane;
-        // taffy lays the tiles out. `(scene, w, h)` so the composite can rasterize
-        // it at the pane size. `None` when the workbench pane isn't open.
+        // The workbench pane renders through the pelt `TileSurface` (V6): meerkat owns
+        // the `Workbench` (the authority), projects it onto pelt's tile-tree contract
+        // each frame, drives the surface, and composites each member's actor texture
+        // into the surface's reported tile rects below. `workbench_scene` is the
+        // surface's frame (tab bars + dividers); `None` when the pane isn't open.
         let mut workbench_scene: Option<(netrender::Scene, u32, u32)> = None;
+        // The surface's external-texture tile rects this frame, `(tile, (x,y,w,h), key)`
+        // in surface-local px — carried to the placement step below.
+        let mut workbench_external: Vec<(
+            pelt_core::tile::TileId,
+            (f32, f32, f32, f32),
+            pelt_core::tile::TextureKey,
+        )> = Vec::new();
         if let Some(wr) = workbench_rect {
             let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
             let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
-            let mut scene = WorkbenchScene::from_workbench(
-                &self.view.workbench,
-                self.orrery().graph(),
-                (ww as f32, wh as f32),
-                |m| self.shared.content.constellation.is_background(m),
-                |m| self.shared.content.constellation.is_recovering(m),
-            );
-            scene.drag_target = self.drag_target_member();
-            if self.view.workbench_runner.state() != &scene {
-                self.view.workbench_runner.update(move |s| *s = scene);
+            // Each open member projects to an external-texture tile, keyed by its UUID
+            // low 64 bits so the surface's reported key maps back to the member; titles
+            // come from the graph node's URL.
+            let titles: std::collections::HashMap<GraphMemberId, String> = self
+                .view
+                .workbench
+                .open_members()
+                .iter()
+                .filter_map(|&m| {
+                    self.orrery().graph().get_node_by_id(m).map(|(_, n)| (m, n.url().to_string()))
+                })
+                .collect();
+            let tree = self.view.workbench.to_tile_tree(|m| {
+                let key = m.as_u128() as u64;
+                pelt_core::tile::Tile {
+                    id: pelt_core::tile::TileId(key),
+                    title: titles.get(&m).cloned().unwrap_or_default(),
+                    content: pelt_core::tile::ContentSource::ExternalTexture(
+                        pelt_core::tile::TextureKey(key),
+                    ),
+                }
+            });
+            if let Some(tree) = tree {
+                // Host-authority: set the projected tree (the surface is a driven view),
+                // then render its frame. Created lazily on the first tiled frame.
+                match self.view.pelt_surface.as_mut() {
+                    Some(s) => s.set_tree(tree),
+                    None => self.view.pelt_surface = Some(pelt_desktop::TileSurface::new(tree)),
+                }
+                let frame = self.view.pelt_surface.as_mut().unwrap().frame(ww, wh);
+                workbench_external = frame.external_tiles;
+                workbench_scene = Some((frame.frame_scene, ww, wh));
             }
-            // C5: render the workbench through its persistent session (drains +
-            // applies the runner's diff, rebuilding only on a tile-tree splice /
-            // resize). The slot-placement reads below share this one layout.
-            let wb = PaneSession::scene(
-                &mut self.view.workbench_session,
-                &self.view.workbench_dom,
-                WORKBENCH_SHEET,
-                ww,
-                wh,
-                None,
-                &scroll,
-            );
-            workbench_scene = Some((wb, ww, wh));
         }
 
         // Reconcile the active-node pool to what this frame shows — the open tiles
@@ -403,35 +421,19 @@ impl WindowCtx<'_> {
             // full slot rect) in window coords, offset by the workbench leaf origin.
             let placements: Vec<(GraphMemberId, [f32; 4], [f32; 4])> = {
                 let (ox, oy) = (wr[0], wr[1]);
-                let dom = self.view.workbench_dom.borrow();
-                // C5: read slot placements off the same layout the render built
-                // (the session above), not a second `fragments_from_scripted_dom`
-                // pass. Built under the same `workbench_rect` gate, so it is `Some`.
-                let frags = self
-                    .view
-                    .workbench_session
-                    .as_ref()
-                    .expect("workbench session built by the render above")
-                    .fragments();
-                let root = dom.document();
-                let (wx, wy) = first_with_class(&dom, root, "workbench")
-                    .and_then(|n| frags.rect_of(n))
-                    .map(|l| (l.location.x, l.location.y))
-                    .unwrap_or((0.0, 0.0));
-                all_with_class(&dom, root, "wb-slot")
-                    .into_iter()
-                    .filter_map(|slot| {
-                        let sl = frags.rect_of(slot)?;
-                        let content = first_with_class(&dom, slot, "wb-content")?;
-                        let member = member_attr(&dom, content)?;
-                        let cl = frags.rect_of(content)?;
-                        let cx = ox + wx + sl.location.x + cl.location.x;
-                        let cy = oy + wy + sl.location.y + cl.location.y;
-                        let content_rect = [cx, cy, cx + cl.size.width, cy + cl.size.height];
-                        let sx = ox + wx + sl.location.x;
-                        let sy = oy + wy + sl.location.y;
-                        let slot_rect = [sx, sy, sx + sl.size.width, sy + sl.size.height];
-                        Some((member, content_rect, slot_rect))
+                // Map the surface's external-texture tile rects (surface-local px) to
+                // window coords + their members: the surface reports each tile's content
+                // rect + the host's key, and the key is the member's UUID low 64 bits.
+                let members = self.view.workbench.open_members();
+                workbench_external
+                    .iter()
+                    .filter_map(|(_tile, rect, key)| {
+                        let member = members.iter().copied().find(|m| m.as_u128() as u64 == key.0)?;
+                        let r = [ox + rect.0, oy + rect.1, ox + rect.0 + rect.2, oy + rect.1 + rect.3];
+                        // The surface gives one content rect per tile (below the tab
+                        // bar); use it as both the content rect (actor composite) and
+                        // the slot rect (drag target).
+                        Some((member, r, r))
                     })
                     .collect()
             };

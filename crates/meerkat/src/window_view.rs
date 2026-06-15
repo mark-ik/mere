@@ -90,6 +90,13 @@ pub(crate) struct WindowView {
     /// pane render, its slot-placement fragment reads, and its click hit-tests all
     /// share this one layout per frame. `None` until the workbench first renders.
     pub(crate) workbench_session: Option<PaneSession>,
+    /// The pelt tile surface the workbench pane renders through (V6): meerkat owns the
+    /// `Workbench` (the authority) and projects it onto pelt's tile-tree contract each
+    /// frame (`Workbench::to_tile_tree`), drives this GPU-free surface (`set_tree` /
+    /// `frame` / `take_events`), and composites each member's actor texture into the
+    /// surface's reported tile rects — the same lib pelt's bin wraps. `None` until the
+    /// workbench pane first renders.
+    pub(crate) pelt_surface: Option<pelt_desktop::TileSurface>,
     /// The roster pane as a view-driven bundle (runner + cached layout + sheet): a
     /// `roster_view` over its rows, dispatching row clicks through the DOM instead of
     /// a rect cache. (Window composition P2 companion — list-pane view-ification.)
@@ -269,6 +276,7 @@ impl WindowView {
             workbench_dom,
             workbench_runner,
             workbench_session: None,
+            pelt_surface: None,
             roster_pane: crate::roster_view::RosterPane::new(),
             session_row_rects: Default::default(),
             session_close_rects: Default::default(),
