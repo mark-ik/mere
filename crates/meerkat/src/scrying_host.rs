@@ -56,9 +56,10 @@ pub struct KeyMods {
 }
 
 /// One window's live compatibility-view producer pool: the HWND-parented
-/// WebViews that serve this window's compat tiles. The *pins* (which members are
-/// in compat) are shared session state on `SharedState.content.compat_pins`; this
-/// pool is per-`WindowView`, because each producer is bound to one window's HWND.
+/// WebViews that serve this window's surface-engine tiles. The *pins* (which
+/// members route to `scrying.web`) are shared session state on
+/// `SharedState.content.engine_pins`; this pool is per-`WindowView`, because each
+/// producer is bound to one window's HWND.
 /// (Scrying X1; the per-window/shared split is MW2 (b2).)
 #[derive(Default)]
 pub struct ScryingHost {

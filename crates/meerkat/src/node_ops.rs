@@ -61,12 +61,17 @@ impl WindowCtx<'_> {
             return;
         };
         // The pin is shared session state; the WebView that serves it is this
-        // window's per-view pool. Toggle the shared pin, reap the local tile.
-        let on = if self.shared.content.compat_pins.remove(&member) {
+        // window's per-view pool. Toggle this node's `scrying.web` pin specifically
+        // (a different engine pin from the picker is left alone), reap the local tile.
+        let scrying = inker::routing::ENGINE_SCRYING_WEB;
+        let on = if self.shared.content.engine_pins.get(&member).map(String::as_str)
+            == Some(scrying)
+        {
+            self.shared.content.engine_pins.remove(&member);
             self.view.scrying.reap(member);
             false
         } else {
-            self.shared.content.compat_pins.insert(member);
+            self.shared.content.engine_pins.insert(member, scrying.to_string());
             true
         };
         if on {
@@ -233,6 +238,64 @@ impl WindowCtx<'_> {
                 _ => None,
             })
             .collect()
+    }
+
+    /// The engine routing decision for `member` at nav time: its pin + the address
+    /// scheme + any per-host override, over the active policy, filtered to engines
+    /// this host actually has ([`engine_available`](Self::engine_available)). The
+    /// document-engine re-route by content-type is the actor's second pass. The
+    /// `engine_id` tells the host which lane to drive. (engine-picker Phase 0.)
+    pub(super) fn route_engine(
+        &self,
+        member: GraphMemberId,
+        url: &str,
+    ) -> inker::routing::EngineRouteDecision {
+        let request = inker::routing::EngineRouteRequest {
+            workspace_id: inker::routing::WorkspaceRouteId::new("meerkat"),
+            view: None,
+            node: None,
+            address: url.to_string(),
+            content_type: None,
+            pinned_engine: self.shared.content.engine_pins.get(&member).cloned(),
+        };
+        self.shared
+            .content
+            .route_policy
+            .route_filtered(&request, |id| self.engine_available(id))
+    }
+
+    /// Whether engine `id` is present on this host: a registered document engine,
+    /// or a known surface engine available on this platform. The routing policy
+    /// walks past engines this returns false for, so a pin to an absent engine
+    /// (e.g. `scrying.web` off Windows) falls back to the scheme rule. (Phase 0.)
+    pub(super) fn engine_available(&self, id: &str) -> bool {
+        use inker::routing::{
+            ENGINE_EXTERNAL_PROTOCOL, ENGINE_GRAPHSHELL_INTERNAL, ENGINE_LINKED_DATA_INGEST,
+            ENGINE_SCRYING_WEB, ENGINE_SERVAL_WEB,
+        };
+        if self.shared.content.engine_registry.contains(id) {
+            return true; // nematic.* document engines, registered at startup
+        }
+        // Lanes meerkat handles without a document-registry entry: the serval html
+        // lane, mere:// internal pages, the OS hand-off fallback, and JSON-LD ingest.
+        if matches!(
+            id,
+            ENGINE_SERVAL_WEB
+                | ENGINE_GRAPHSHELL_INTERNAL
+                | ENGINE_EXTERNAL_PROTOCOL
+                | ENGINE_LINKED_DATA_INGEST
+        ) {
+            return true;
+        }
+        // The scrying surface engine is the system WebView pool — Windows only today.
+        cfg!(target_os = "windows") && id == ENGINE_SCRYING_WEB
+    }
+
+    /// Whether `member`'s node renders through a tier-2 **surface** engine (a system
+    /// WebView via scrying, etc.) this frame. Surface-tier nodes drive the scrying
+    /// pool; the rest drive the constellation (document / web lane). (Phase 0.)
+    pub(super) fn is_surface_tier(&self, member: GraphMemberId, url: &str) -> bool {
+        inker::routing::is_surface_engine(&self.route_engine(member, url).engine_id)
     }
 
     /// The focused node's graph member, if a node is focused (resolved URL → node

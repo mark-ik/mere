@@ -510,12 +510,19 @@ struct Content {
     /// The nematic engine registry, for rendering "last visit" snapshot cards
     /// host-side from the durable content cache (no actor). (Card #4.)
     engine_registry: EngineRegistry,
-    /// Members pinned to the compatibility view (scrying). Session state, shared
-    /// across windows: the pin is the *intent*; each window's per-`WindowView`
-    /// producer pool spawns the HWND-bound WebView that serves it. A torn-out
-    /// compat tile (MW4) carries the pin, the recipient spawns a fresh WebView.
-    /// (The durable per-node `compat_mode` graph field takes over in scrying X3.)
-    compat_pins: HashSet<GraphMemberId>,
+    /// Per-node engine pins (member → engine id). The compatibility view is a pin
+    /// to `scrying.web`; the picker (engine-picker plan) writes other ids here.
+    /// Session state, shared across windows: the pin is the *intent*; for a
+    /// surface-engine pin, each window's per-`WindowView` producer pool spawns the
+    /// HWND-bound WebView that serves it. A torn-out compat tile (MW4) carries the
+    /// pin, the recipient spawns a fresh WebView. (Replaces the `compat_pins` bool;
+    /// engine-picker Phase 0. The durable per-node graph field takes over later.)
+    engine_pins: HashMap<GraphMemberId, String>,
+    /// The engine routing policy: scheme / content-type / per-host / pin → engine
+    /// id. Consulted at nav time (scheme + pin) to choose the tier (surface engine
+    /// vs the document/constellation lane); the document-engine re-route by
+    /// content-type is the actor's second pass. (engine-picker Phase 0.)
+    route_policy: inker::routing::EngineRoutePolicy,
 }
 
 /// The `session` subsystem: the session registry plus the active session's
@@ -1016,7 +1023,8 @@ impl Shell {
                     store,
                     fetch_handle,
                     engine_registry,
-                    compat_pins: HashSet::new(),
+                    engine_pins: HashMap::new(),
+                    route_policy: inker::routing::EngineRoutePolicy::default(),
                 },
                 session: Session {
                     manifests,

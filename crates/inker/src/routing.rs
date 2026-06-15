@@ -79,6 +79,16 @@ pub fn is_graph_contribution_route(engine_id: &str) -> bool {
     engine_id == ENGINE_LINKED_DATA_INGEST
 }
 
+/// Whether `engine_id` names a tier-2 **surface** engine — one that produces GPU
+/// frames (a system WebView via [`ENGINE_SCRYING_WEB`], an overlay via
+/// [`ENGINE_WRY_WEB`]; CEF via weld and Servo via graft when those land) rather
+/// than a portable [`crate::EngineDocument`]. Surface engines go through the
+/// [`crate::SurfaceEngineRegistry`] / producer path; document engines go through
+/// the [`crate::EngineRegistry`]. A host branches on this to pick the lane.
+pub fn is_surface_engine(engine_id: &str) -> bool {
+    matches!(engine_id, ENGINE_SCRYING_WEB | ENGINE_WRY_WEB)
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WorkspaceRouteId(pub String);
 

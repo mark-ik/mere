@@ -484,8 +484,8 @@ impl WindowCtx<'_> {
                 };
                 let cw = (content[2] - content[0]).round().max(1.0) as u32;
                 let ch = (content[3] - content[1]).round().max(1.0) as u32;
-                if self.shared.content.compat_pins.contains(&member) {
-                    // Compat tile: drive the UI-thread scrying pool into this tile's
+                if self.is_surface_tier(member, &url) {
+                    // Surface-tier tile: drive the UI-thread scrying pool into this tile's
                     // own pane on the shared composition root — park the WebView's
                     // visual at the tile's content origin and import its frame. Each
                     // compat tile is an independent pane, so several render at once.
@@ -551,9 +551,9 @@ impl WindowCtx<'_> {
                     })
                     .or_else(|| super::card::card_rect(orrery_rect));
                 if let Some((x0, y0, x1, y1, cw, ch)) = rect {
-                    if self.shared.content.compat_pins.contains(&member) {
-                        // Compatibility view: the system WebView renders this
-                        // node; drive the UI-thread scrying pool (spawn /
+                    if self.is_surface_tier(member, &url) {
+                        // Surface-tier (compatibility view): the system WebView
+                        // renders this node; drive the UI-thread scrying pool (spawn /
                         // resize / navigate + non-blocking frame import)
                         // instead of a content actor. When the node is already
                         // shown as a workbench tile its WebView fills the tile,
