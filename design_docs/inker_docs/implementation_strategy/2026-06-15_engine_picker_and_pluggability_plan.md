@@ -87,15 +87,21 @@ host learns the MIME type from a response"). So Phase 0 splits:
   `inker::routing::is_surface_engine` as the canonical tier-2 classifier.
   *Verified:* a `>compat_view` node renders through WebView2 via the route (producer
   spawns, no `EngineNotFound`); normal http/gemini unchanged.
-- **0b — actor content-type pass (NEXT).** The off-thread actor's
-  `engine_id_for` + `is_html` in [card.rs](../../../crates/meerkat/src/card.rs) is the
-  second altitude (post-fetch, content-type known) and the `register-viewer`-shaped
-  duplicate. Fold it into the same `route_policy` (the content-type rules already
-  exist there), dispatching the decision to the document `EngineRegistry` (tier 1)
-  or the serval html lane. Harvest `register-viewer`'s capability/conformance
-  declarations into `inker::routing`; retire the duplicate (integration plan §1.9 / §6).
-- *Phase 0 done when:* both altitudes consult one `route_policy`, and the only
-  bespoke per-content `match` left is gone.
+- **0b — actor content-type pass (DONE, 1966183).** `render_content_scene` now
+  routes through the policy (`route_document_engine` → `serval.web` html lane vs a
+  registered nematic engine); `engine_id_for`, `is_html`, `base_type` deleted. The
+  canonical `EngineRoutePolicy::default` was made a **superset** of the old match: a
+  `titan` scheme rule + `ENGINE_NEMATIC_TITAN`, and content-type rules for
+  `text/html`/`application/xhtml+xml` → `serval.web` (HTML → serval regardless of
+  scheme, so a local `file://` HTML page lands on the web engine — Phase 4 arriving
+  early) plus the smolweb refinements. *Verified:* inker routing 25/25, card 10/10;
+  headed, https HTML renders via serval and a gemini capsule via nematic.gemtext,
+  both via the one policy.
+- **register-viewer harvest** turned out to be *latent* (a11y/security/storage/history
+  capability declarations, not the live mime table; not wired into meerkat), so it is
+  a separate small follow-up, not part of this reconcile.
+- *Phase 0 done (both shipped):* both altitudes consult one `route_policy`; the
+  bespoke selectors (`compat_pins`, `engine_id_for`, `is_html`) are gone.
 
 **Phase 1 — activation model**
 - `EngineEnableSet` (global default, app setting) + a per-engine session-manifest override field; `is_available = contains && enabled`.
@@ -137,4 +143,5 @@ host learns the MIME type from a response"). So Phase 0 splits:
 
 - 2026-06-15: scry-in-tile (single focused tile) shipped + verified (meerkat 0adca6e); multi-tile scry shipped + verified (06b6ac7) — two independent WebView2 panes on one shared `CompositionRoot`, per-pane input. This advances the verso charter's P4 (scrying tile as a live, interactive actor) but through the ad-hoc `compat_pins` path; Phase 0 folds it into routing.
 - 2026-06-15: Plan authored from a read of routing.rs, engine.rs, surface_engine.rs, scrying-engine, the verso charter, the engine-profile-boundary plan, the browser-multiplexer framing, and the modular-integration plan. Activation scope decided: global default + per-session override.
-- 2026-06-15: **Phase 0a shipped + verified (meerkat d4a1350).** `compat_pins` retired into `engine_pins: HashMap<member, engine_id>` + a host `route_policy`; the UI-thread tier decision routes via `route_filtered(request{pinned_engine}, is_available)` → `is_surface_engine` picks the scrying lane. Added `inker::routing::is_surface_engine`. `>compat_view` is now a pin to `scrying.web`. Headed-verified: pinned node renders through WebView2 via the route (producer spawns, no `EngineNotFound`); http/gemini nodes render unchanged through the constellation. Phase 0b (fold card.rs `engine_id_for`/`is_html` into the policy + harvest register-viewer) is next.
+- 2026-06-15: **Phase 0a shipped + verified (meerkat d4a1350).** `compat_pins` retired into `engine_pins: HashMap<member, engine_id>` + a host `route_policy`; the UI-thread tier decision routes via `route_filtered(request{pinned_engine}, is_available)` → `is_surface_engine` picks the scrying lane. Added `inker::routing::is_surface_engine`. `>compat_view` is now a pin to `scrying.web`. Headed-verified: pinned node renders through WebView2 via the route (producer spawns, no `EngineNotFound`); http/gemini nodes render unchanged through the constellation.
+- 2026-06-15: **Phase 0b shipped + verified (meerkat 1966183). Phase 0 complete.** `render_content_scene` routes through the policy (`route_document_engine`); `engine_id_for` / `is_html` / `base_type` deleted; the canonical `EngineRoutePolicy::default` made a superset (titan scheme rule + `ENGINE_NEMATIC_TITAN`, `text/html` → `serval.web`, smolweb content-type refinements). Both routing altitudes (UI-thread tier, actor content-type) now consult one policy; all three bespoke selectors are gone. Verified: inker routing 25/25, card 10/10; headed, https HTML → serval and a gemini capsule → nematic.gemtext via the one policy. **Next: Phase 1 (activation model).**
