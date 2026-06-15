@@ -279,6 +279,7 @@ mod tests {
                 id: TileId(next),
                 title: t.label.clone().unwrap_or_default(),
                 content: ContentSource::Document(DocumentRef(String::new())),
+                accent: None,
             }
         }
     }

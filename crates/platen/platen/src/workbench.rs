@@ -7,68 +7,46 @@
 //! The orrery and the tiled workbench are two **projections of one arrangement**
 //! (the composition spine): the orrery is the [`ProjectionKind::Cartography`]
 //! projection (graph members positioned spatially), the tiled workbench the
-//! [`ProjectionKind::Tree`] one. This module owns the tiling state (which tiles are
-//! open, how they group into tab-stacks, the active tab per stack, the projection
-//! mode) and turns it into placed, content-resolved slots a host renders.
+//! [`ProjectionKind::Tree`] one. This module owns the tiling state (the split tree of
+//! tab-stacks, the active tab per stack, the projection mode) and turns it into placed,
+//! content-resolved tiles a host renders.
 //!
-//! A workbench is a list of slots laid side by side. A slot holds one or more graph
-//! members: one member is a plain tile, several are a **tab-stack** (a tab strip,
-//! one tab visible at a time). The model is geometry-free: it owns the slots, the
-//! grouping, and the active tab; layout is the host's serval/taffy job (see
-//! [`platen-view`](https://crates.io/crates/platen-view)), reading the structure
-//! via [`Workbench::slot_views`].
+//! The workbench is a **recursive split tree** (see [`tree`]): a leaf is a tab-stack
+//! (one or more members, one visible), and a split lays its children along an axis (a
+//! `Row` side-by-side, a `Column` top-to-bottom), each with a fractional share. Splits
+//! nest, so the tree expresses every variation: horizontal, vertical, and combinations.
+//! It is geometry-free; layout is the host's serval/taffy job, reached through
+//! [`Workbench::to_tile_tree`] (the pelt surface) and [`Workbench::slot_views`] (the
+//! a11y / automation projection).
 //!
 //! Replaces the legacy `FrameState` / `PaneBinding` frame model (the pre-spine
 //! pane-binding workbench), per the 2026-06-04 platen taffy-retarget plan.
 
 use forme::GraphMemberId;
+use pelt_core::tile::SplitAxis;
 
 use crate::ProjectionKind;
 
-/// One workbench slot: a stack of one or more graph members sharing a column,
-/// with `active` the index of the visible tab. A single member is a plain tile.
-/// `weight` is the slot's share of the row width (flex-grow); equal by default,
-/// changed by a divider drag.
-#[derive(Clone, Debug, PartialEq)]
-struct Slot {
-    members: Vec<GraphMemberId>,
-    active: usize,
-    weight: f32,
-}
+mod tree;
+use tree::{Branch, Pane, Stack};
 
-impl Slot {
-    fn single(member: GraphMemberId) -> Self {
-        Self { members: vec![member], active: 0, weight: 1.0 }
-    }
-
-    /// A stack of `members` with the first active, equal weight.
-    fn stack(members: Vec<GraphMemberId>) -> Self {
-        Self { members, active: 0, weight: 1.0 }
-    }
-
-    /// The visible tab's member (the active one, or the first as a fallback).
-    fn active_member(&self) -> Option<GraphMemberId> {
-        self.members.get(self.active).or_else(|| self.members.first()).copied()
-    }
-}
-
-/// A geometry-free view of one slot's structure: its members in order and which is
-/// active. For projections (a11y, automation) that need the tab grouping without a
-/// viewport or a graph to lay anything out.
+/// A geometry-free view of one leaf stack: its members in order and which is active.
+/// For projections (a11y, automation) that need the tab grouping without a viewport or
+/// a graph to lay anything out. The tree is flattened to its leaves here, in order.
 #[derive(Clone, Copy, Debug)]
 pub struct SlotView<'a> {
     pub members: &'a [GraphMemberId],
     pub active: usize,
-    /// The slot's share of the row width (flex-grow). Equal by default.
+    /// The leaf's fractional share of its immediate parent split (1.0 for a lone root).
     pub weight: f32,
 }
 
-/// The host's tiled-workbench composition: the slots and the projection mode.
+/// The host's tiled-workbench composition: the split tree and the projection mode.
 /// Cartography (the orrery) is the default; the host flips to Tree for tiles.
 #[derive(Clone, Debug)]
 pub struct Workbench {
     mode: ProjectionKind,
-    slots: Vec<Slot>,
+    root: Option<Pane>,
 }
 
 impl Default for Workbench {
@@ -78,9 +56,9 @@ impl Default for Workbench {
 }
 
 impl Workbench {
-    /// A new workbench: no slots, in Cartography (orrery) mode.
+    /// A new workbench: empty, in Cartography (orrery) mode.
     pub fn new() -> Self {
-        Self { mode: ProjectionKind::Cartography, slots: Vec::new() }
+        Self { mode: ProjectionKind::Cartography, root: None }
     }
 
     /// The current projection mode.
@@ -108,8 +86,8 @@ impl Workbench {
         self.mode = mode;
     }
 
-    /// Switch into the tiled (Tree) projection if not already there, returning
-    /// whether the mode changed (so the caller can do entry work just once).
+    /// Switch into the tiled (Tree) projection if not already there, returning whether
+    /// the mode changed (so the caller can do entry work just once).
     pub fn ensure_tiled(&mut self) -> bool {
         if self.is_tiled() {
             false
@@ -119,69 +97,87 @@ impl Workbench {
         }
     }
 
-    /// Every open member, flattened across all slots (the host's reconcile needed
-    /// set: every tab stays a warm actor, the active one is what renders).
+    /// Every open member, flattened across the tree left-to-right / top-to-bottom (the
+    /// host's reconcile needed set: every tab stays a warm actor, the active one
+    /// renders).
     pub fn open_members(&self) -> Vec<GraphMemberId> {
-        self.slots.iter().flat_map(|s| s.members.iter().copied()).collect()
-    }
-
-    /// How many tabs are open across all slots.
-    pub fn tile_count(&self) -> usize {
-        self.slots.iter().map(|s| s.members.len()).sum()
-    }
-
-    /// How many slots (side-by-side columns) are open.
-    pub fn slot_count(&self) -> usize {
-        self.slots.len()
-    }
-
-    /// A geometry-free structural view of every slot, in order (each slot's members
-    /// and active index). The projection-friendly read of the model, used by the
-    /// a11y / automation tree without needing a viewport or a graph.
-    pub fn slot_views(&self) -> impl Iterator<Item = SlotView<'_>> {
-        self.slots
-            .iter()
-            .map(|s| SlotView { members: &s.members, active: s.active, weight: s.weight })
-    }
-
-    /// Each slot's width weight (flex-grow), in slot order.
-    pub fn weights(&self) -> Vec<f32> {
-        self.slots.iter().map(|s| s.weight).collect()
-    }
-
-    /// Set each slot's width weight (flex-grow), in slot order — a divider drag.
-    /// Extra / missing entries are ignored; each weight is floored at a small
-    /// minimum so no slot collapses to nothing.
-    pub fn set_weights(&mut self, weights: &[f32]) {
-        for (slot, &w) in self.slots.iter_mut().zip(weights) {
-            slot.weight = w.max(0.05);
+        let mut out = Vec::new();
+        if let Some(root) = &self.root {
+            root.collect_members(&mut out);
         }
+        out
     }
 
-    /// Whether `member` is open in some slot.
+    /// How many tabs are open across the tree.
+    pub fn tile_count(&self) -> usize {
+        self.open_members().len()
+    }
+
+    /// How many leaf stacks (cells) are open.
+    pub fn slot_count(&self) -> usize {
+        self.root.as_ref().map_or(0, Pane::leaf_count)
+    }
+
+    /// A flattened, in-order view of every leaf stack (members + active tab). The
+    /// projection-friendly read of the model for the a11y / automation tree.
+    pub fn slot_views(&self) -> impl Iterator<Item = SlotView<'_>> {
+        let mut out = Vec::new();
+        if let Some(root) = &self.root {
+            collect_slots(root, 1.0, &mut out);
+        }
+        out.into_iter()
+    }
+
+    /// The top-level split's child fractions, in order — a top-level divider drag's
+    /// snapshot. Empty when the root is a lone stack (no top-level divider). For nested
+    /// dividers use [`split_fractions`](Self::split_fractions).
+    pub fn weights(&self) -> Vec<f32> {
+        self.split_fractions(&[]).unwrap_or_default()
+    }
+
+    /// Set the top-level split's child fractions (clamped, renormalized) — a top-level
+    /// divider drag. A no-op when the root is not a split.
+    pub fn set_weights(&mut self, weights: &[f32]) {
+        self.set_split_fractions(&[], weights);
+    }
+
+    /// The child fractions of the split addressed by `path` (the child index taken at
+    /// each level from the root), or `None` if `path` does not land on a split. The
+    /// per-split divider read (a nested divider carries its split's path).
+    pub fn split_fractions(&self, path: &[usize]) -> Option<Vec<f32>> {
+        self.root.as_ref().and_then(|r| r.fractions_at(path))
+    }
+
+    /// Set the child fractions of the split at `path` (clamped, renormalized). Returns
+    /// whether the split was found. The per-split divider write.
+    pub fn set_split_fractions(&mut self, path: &[usize], fractions: &[f32]) -> bool {
+        self.root.as_mut().is_some_and(|r| r.set_fractions_at(path, fractions))
+    }
+
+    /// Whether `member` is open somewhere in the tree.
     pub fn has_tile(&self, member: GraphMemberId) -> bool {
-        self.slots.iter().any(|s| s.members.contains(&member))
+        self.root.as_ref().is_some_and(|r| r.contains(member))
     }
 
-    /// Open `member` as a new single-tile slot (appended). A no-op if it is
-    /// already open somewhere. Returns whether a new slot was added.
+    /// Open `member` as a new top-level column (a fresh single-tile cell appended along
+    /// the Row). A no-op if it is already open. Returns whether one was added.
     pub fn open_tile(&mut self, member: GraphMemberId) -> bool {
         if self.has_tile(member) {
             return false;
         }
-        self.slots.push(Slot::single(member));
+        self.push_column(Pane::leaf(member));
         true
     }
 
-    /// Open `members` as separate single-tile slots (each appended, de-duplicated);
-    /// already-open members stay where they are. Returns how many were newly opened.
+    /// Open `members` as separate top-level columns (each appended, de-duplicated);
+    /// already-open members stay put. Returns how many were newly opened.
     pub fn open_split(&mut self, members: &[GraphMemberId]) -> usize {
         members.iter().filter(|&&m| self.open_tile(m)).count()
     }
 
-    /// Open `members` as one tab-stack slot: gather them into a single new slot
-    /// (first tab active), pulling any that were already open elsewhere into it so
-    /// a member never sits in two slots. A no-op for an empty list.
+    /// Open `members` as one new tab-stack column: gather them into a single appended
+    /// cell (first tab active), pulling any already open elsewhere into it so a member
+    /// never sits in two cells. A no-op for an empty list.
     pub fn open_stack(&mut self, members: &[GraphMemberId]) {
         let mut stack: Vec<GraphMemberId> = Vec::new();
         for &m in members {
@@ -195,35 +191,25 @@ impl Workbench {
         for &m in &stack {
             self.detach(m);
         }
-        self.slots.push(Slot::stack(stack));
+        self.push_column(Pane::Stack(Stack { members: stack, active: 0 }));
     }
 
-    /// Open `member` as a new tab in the slot holding `target`, made the active
-    /// (visible) tab — "stack into the active slot." Returns `false` if `target`
-    /// is not open in any slot (the caller then falls back to [`open_tile`]). If
-    /// `member` was open elsewhere it is pulled into this slot, never duplicated.
-    /// Used by the open-as-new-node gesture so a minted node tiles beside the one
-    /// it branched from rather than spawning a stray column.
+    /// Open `member` as a new tab in the cell holding `target`, made the active tab —
+    /// "stack into the target cell." Returns `false` if `target` is not open (the caller
+    /// falls back to [`open_tile`]). A member open elsewhere is pulled in, not
+    /// duplicated. `member == target` just activates it.
     pub fn open_in_slot_of(&mut self, member: GraphMemberId, target: GraphMemberId) -> bool {
-        if member != target && self.has_tile(member) {
+        if member == target {
+            return self.activate(member);
+        }
+        if self.has_tile(member) {
             self.detach(member);
         }
-        let Some(slot) = self.slots.iter_mut().find(|s| s.members.contains(&target)) else {
-            return false;
-        };
-        match slot.members.iter().position(|m| *m == member) {
-            Some(pos) => slot.active = pos,
-            None => {
-                slot.members.push(member);
-                slot.active = slot.members.len() - 1;
-            },
-        }
-        true
+        self.root.as_mut().is_some_and(|r| r.stack_into(member, target))
     }
 
-    /// Close the tab showing `member`: drop it from its slot (removing the slot if
-    /// it empties, clamping the active index otherwise). Returns whether one was
-    /// removed.
+    /// Close the tab showing `member`: drop it from its cell (collapsing an emptied cell
+    /// and any single-child split it leaves behind). Returns whether one was removed.
     pub fn close_tile(&mut self, member: GraphMemberId) -> bool {
         if !self.has_tile(member) {
             return false;
@@ -232,147 +218,145 @@ impl Workbench {
         true
     }
 
-    /// Remove `member` from whatever slot holds it, dropping the slot if it empties
-    /// and clamping the active index otherwise. Shared by `close_tile` (a user
-    /// close) and `open_stack` (re-homing a member into a new stack).
-    fn detach(&mut self, member: GraphMemberId) {
-        let Some(i) = self.slots.iter().position(|s| s.members.contains(&member)) else {
-            return;
-        };
-        let slot = &mut self.slots[i];
-        slot.members.retain(|m| *m != member);
-        if slot.members.is_empty() {
-            self.slots.remove(i);
-        } else if slot.active >= slot.members.len() {
-            slot.active = slot.members.len() - 1;
-        }
-    }
-
-    /// Make `member` the active (visible) tab of its slot. Returns whether it was
-    /// found.
+    /// Make `member` the active (visible) tab of its cell. Returns whether it was found.
     pub fn activate(&mut self, member: GraphMemberId) -> bool {
-        for slot in &mut self.slots {
-            if let Some(pos) = slot.members.iter().position(|m| *m == member) {
-                slot.active = pos;
-                return true;
-            }
-        }
-        false
+        self.root.as_mut().is_some_and(|r| r.activate(member))
     }
 
-    /// Drag-drop `dragged` onto `target`'s slot. In the same slot it reorders
-    /// `dragged` to just after `target` (tab reorder); across slots it pulls
-    /// `dragged` out of its slot (dropping an emptied one) and appends it to
-    /// `target`'s slot. Either way `dragged` becomes that slot's active tab.
-    /// Returns whether anything moved. A no-op when `dragged == target` or either
-    /// is not open.
+    /// Drag-drop `dragged` onto `target`'s cell (stack it there, made active). Within
+    /// the same cell it reorders to just after `target`. Returns whether anything moved.
+    /// A no-op when `dragged == target` or either is not open.
     pub fn move_to_slot_of(&mut self, dragged: GraphMemberId, target: GraphMemberId) -> bool {
         if dragged == target || !self.has_tile(dragged) || !self.has_tile(target) {
             return false;
         }
-        // Same slot: reorder dragged to just after target.
-        if let Some(slot) = self.slots.iter_mut().find(|s| s.members.contains(&target)) {
-            if slot.members.contains(&dragged) {
-                let from = slot.members.iter().position(|m| *m == dragged).unwrap();
-                slot.members.remove(from);
-                let after = slot.members.iter().position(|m| *m == target).unwrap() + 1;
-                slot.members.insert(after, dragged);
-                slot.active = after;
-                return true;
-            }
-        }
-        // Across slots: detach dragged, append to target's slot, make it active.
         self.detach(dragged);
-        let ti = self.slots.iter().position(|s| s.members.contains(&target)).unwrap();
-        let slot = &mut self.slots[ti];
-        slot.members.push(dragged);
-        slot.active = slot.members.len() - 1;
-        true
+        self.root.as_mut().is_some_and(|r| r.stack_into(dragged, target))
     }
 
-    /// Split `dragged` out as its own new single-tile slot, placed immediately
-    /// before (`after == false`) or after `target`'s slot — a drag onto a slot's
-    /// edge. `dragged` leaves its old slot (dropping it if it empties). Returns
-    /// whether it moved. A no-op when `dragged == target` or either is not open.
+    /// Split `dragged` out as its own cell beside `target`, along the **Row** axis, on
+    /// the left (`after == false`) or right (`after == true`) — the back-compatible
+    /// horizontal split. See [`split_beside_axis`](Self::split_beside_axis) for vertical
+    /// and nesting.
     pub fn split_beside(&mut self, dragged: GraphMemberId, target: GraphMemberId, after: bool) -> bool {
+        self.split_beside_axis(dragged, target, SplitAxis::Row, after)
+    }
+
+    /// Split `dragged` out as its own cell beside `target` along `axis` (a `Row` puts it
+    /// left/right, a `Column` above/below), on the `after` side. When the split holding
+    /// `target` already runs along `axis` the new cell extends it; otherwise it nests a
+    /// fresh `axis` split there. Returns whether it moved. A no-op when `dragged ==
+    /// target` or either is not open.
+    pub fn split_beside_axis(
+        &mut self,
+        dragged: GraphMemberId,
+        target: GraphMemberId,
+        axis: SplitAxis,
+        after: bool,
+    ) -> bool {
         if dragged == target || !self.has_tile(dragged) || !self.has_tile(target) {
             return false;
         }
         self.detach(dragged);
-        let Some(ti) = self.slots.iter().position(|s| s.members.contains(&target)) else {
-            return false;
-        };
-        let at = if after { ti + 1 } else { ti };
-        self.slots.insert(at, Slot::single(dragged));
-        true
+        self.root.as_mut().is_some_and(|r| r.split_beside(dragged, target, axis, after))
     }
 
-    /// Collapse every open member into a single tab-stack (stack everything). The
-    /// first member's tab stays active. A no-op below two members.
+    /// Collapse every open member into a single tab-stack (stack everything). The first
+    /// member's tab stays active. A no-op below two members.
     pub fn stack_all(&mut self) {
         let members = self.open_members();
         if members.len() > 1 {
-            self.slots = vec![Slot::stack(members)];
+            self.root = Some(Pane::Stack(Stack { members, active: 0 }));
         }
     }
 
-    /// Split every tab into its own single-tile slot (the inverse of `stack_all`).
+    /// Split every tab into its own top-level column (the inverse of `stack_all`).
     pub fn split_all(&mut self) {
         let members = self.open_members();
-        self.slots = members.into_iter().map(Slot::single).collect();
+        self.root = match members.len() {
+            0 => None,
+            1 => Some(Pane::leaf(members[0])),
+            n => {
+                let frac = 1.0 / n as f32;
+                Some(Pane::Split {
+                    axis: SplitAxis::Row,
+                    children: members
+                        .into_iter()
+                        .map(|m| Branch { fraction: frac, pane: Pane::leaf(m) })
+                        .collect(),
+                })
+            }
+        };
     }
 
-    /// Close every slot (the projection mode is left unchanged).
+    /// Close every cell (the projection mode is left unchanged).
     pub fn clear_tiles(&mut self) {
-        self.slots.clear();
+        self.root = None;
     }
 
-    /// Project this workbench onto pelt's [`TileTree`] contract (V5/V6) — the builder a
-    /// host (meerkat) uses to render the workbench through the standalone pelt tile
-    /// surface. The **structure** comes from the workbench (side-by-side slots, each a
-    /// plain tile or a tab-stack with its active tab, the slot weights as split
-    /// fractions); the host supplies `tile_for`, resolving each member to its
-    /// [`Tile`](pelt_core::tile::Tile) — a stable id, a title, and a content lane (a
-    /// member's actor texture is an
-    /// [`ExternalTexture`](pelt_core::tile::ContentSource::ExternalTexture), a document
-    /// a [`Document`](pelt_core::tile::ContentSource::Document)).
-    ///
-    /// An empty workbench yields `None`; a lone slot is its stack directly (no enclosing
-    /// split); several slots are a `Row` split with each slot's weight as its fraction.
-    /// A projection, never a second authority: the workbench stays the tiling truth, and
-    /// the surface is driven entirely through the contract (the host applies tile events
-    /// back to the workbench and re-projects).
+    /// Project this workbench onto pelt's [`TileTree`](pelt_core::tile::TileTree)
+    /// contract (V5/V6) — the builder meerkat uses to render the workbench through the
+    /// standalone pelt tile surface. The **structure** is the split tree (nested
+    /// `Row`/`Column` splits with their fractions, each leaf a stack with its active
+    /// tab); the host supplies `tile_for`, resolving each member to its
+    /// [`Tile`](pelt_core::tile::Tile). An empty workbench yields `None`. A projection,
+    /// never a second authority: the workbench stays the tiling truth, and the surface
+    /// is driven entirely through the contract (the host applies tile events back and
+    /// re-projects).
     pub fn to_tile_tree(
         &self,
         mut tile_for: impl FnMut(GraphMemberId) -> pelt_core::tile::Tile,
     ) -> Option<pelt_core::tile::TileTree> {
-        use pelt_core::tile::{SplitAxis, TileBranch, TileTree};
+        self.root.as_ref().map(|r| r.to_tile_tree(&mut tile_for))
+    }
 
-        let slots: Vec<SlotView<'_>> = self.slot_views().collect();
-        if slots.is_empty() {
-            return None;
-        }
-        let mut to_tree = |slot: &SlotView<'_>| {
-            if slot.members.len() == 1 {
-                TileTree::single(tile_for(slot.members[0]))
-            } else {
-                TileTree::stack(slot.members.iter().map(|m| tile_for(*m)).collect(), slot.active)
+    /// Append `pane` as a new top-level column (a Row child), wrapping the existing root
+    /// in a Row split when it is not already one. Preserves the existing columns'
+    /// relative shares; the newcomer takes an equal share of the row.
+    fn push_column(&mut self, pane: Pane) {
+        match self.root.take() {
+            None => self.root = Some(pane),
+            Some(Pane::Split { axis: SplitAxis::Row, mut children }) => {
+                let frac = 1.0 / (children.len() + 1) as f32;
+                for b in &mut children {
+                    b.fraction *= 1.0 - frac;
+                }
+                children.push(Branch { fraction: frac, pane });
+                self.root = Some(Pane::Split { axis: SplitAxis::Row, children });
             }
-        };
-        if slots.len() == 1 {
-            return Some(to_tree(&slots[0]));
+            Some(other) => {
+                self.root = Some(Pane::Split {
+                    axis: SplitAxis::Row,
+                    children: vec![
+                        Branch { fraction: 0.5, pane: other },
+                        Branch { fraction: 0.5, pane },
+                    ],
+                });
+            }
         }
-        let total: f32 = slots.iter().map(|s| s.weight).sum();
-        let n = slots.len();
-        let children = slots
-            .iter()
-            .map(|slot| {
-                let fraction =
-                    if total > f32::EPSILON { slot.weight / total } else { 1.0 / n as f32 };
-                TileBranch::new(fraction, to_tree(slot))
-            })
-            .collect();
-        Some(TileTree::split(SplitAxis::Row, children))
+    }
+
+    /// Remove `member` from its cell, dropping an emptied root.
+    fn detach(&mut self, member: GraphMemberId) {
+        if let Some(root) = &mut self.root {
+            root.remove(member);
+            if root.is_empty() {
+                self.root = None;
+            }
+        }
+    }
+}
+
+/// Walk the tree's leaves in order, pushing a [`SlotView`] per stack with its parent
+/// fraction as the weight.
+fn collect_slots<'a>(pane: &'a Pane, weight: f32, out: &mut Vec<SlotView<'a>>) {
+    match pane {
+        Pane::Stack(s) => out.push(SlotView { members: &s.members, active: s.active, weight }),
+        Pane::Split { children, .. } => {
+            for b in children {
+                collect_slots(&b.pane, b.fraction, out);
+            }
+        }
     }
 }
 
@@ -402,7 +386,7 @@ mod tests {
         assert!(wb.open_tile(m(2)), "a distinct member is new");
         assert!(!wb.open_tile(m(1)), "re-opening an open member is a no-op");
         assert_eq!(wb.open_members(), vec![m(1), m(2)]);
-        assert_eq!(wb.slot_count(), 2, "two single-tile slots");
+        assert_eq!(wb.slot_count(), 2, "two single-tile columns");
         assert_eq!(wb.tile_count(), 2);
     }
 
@@ -416,7 +400,7 @@ mod tests {
         assert_eq!(wb.slot_count(), 1, "all three collapse into one stack");
         assert_eq!(wb.tile_count(), 3, "all three tabs are still open");
         wb.split_all();
-        assert_eq!(wb.slot_count(), 3, "each tab back to its own slot");
+        assert_eq!(wb.slot_count(), 3, "each tab back to its own column");
     }
 
     #[test]
@@ -426,7 +410,6 @@ mod tests {
         wb.open_tile(m(2));
         wb.open_tile(m(3));
         wb.stack_all();
-        // One stacked slot, first tab active by default (read structurally).
         {
             let view = wb.slot_views().next().unwrap();
             assert_eq!(view.members, &[m(1), m(2), m(3)], "three stacked tabs");
@@ -440,7 +423,7 @@ mod tests {
     fn open_split_opens_each_as_its_own_slot_and_dedups() {
         let mut wb = Workbench::new();
         assert_eq!(wb.open_split(&[m(1), m(2), m(3)]), 3, "all three are new");
-        assert_eq!(wb.slot_count(), 3, "one slot per member");
+        assert_eq!(wb.slot_count(), 3, "one column per member");
         assert_eq!(wb.open_split(&[m(2), m(4)]), 1, "only the unseen member opens");
         assert_eq!(wb.slot_count(), 4);
     }
@@ -448,14 +431,12 @@ mod tests {
     #[test]
     fn open_stack_gathers_into_one_slot_and_rehomes_open_members() {
         let mut wb = Workbench::new();
-        wb.open_split(&[m(1), m(2)]); // two single slots
-        wb.open_stack(&[m(2), m(3)]); // m(2) is pulled out of its slot into the stack
-        assert_eq!(wb.slot_count(), 2, "m(1)'s slot + the new [2,3] stack");
+        wb.open_split(&[m(1), m(2)]); // two single columns
+        wb.open_stack(&[m(2), m(3)]); // m(2) is pulled out of its column into the stack
+        assert_eq!(wb.slot_count(), 2, "m(1)'s column + the new [2,3] stack");
         assert_eq!(wb.tile_count(), 3, "no member is lost or duplicated");
-        // The stack is the appended slot; activating m(3) proves they share it.
         assert!(wb.activate(m(3)));
         assert!(wb.has_tile(m(2)) && wb.has_tile(m(3)));
-        // De-dup within the input: a repeated member appears once.
         let mut wb2 = Workbench::new();
         wb2.open_stack(&[m(7), m(7), m(8)]);
         assert_eq!(wb2.slot_count(), 1);
@@ -475,30 +456,27 @@ mod tests {
         let mut wb = Workbench::new();
         wb.open_tile(m(1));
         wb.open_tile(m(2));
-        wb.stack_all(); // one stack of [1, 2]
+        wb.stack_all();
         assert!(wb.close_tile(m(1)), "closing a tab in the stack");
         assert_eq!(wb.tile_count(), 1, "the other tab remains");
-        assert_eq!(wb.slot_count(), 1, "the slot survives with one tab");
+        assert_eq!(wb.slot_count(), 1, "the cell survives with one tab");
         assert!(wb.close_tile(m(2)), "closing the last tab");
-        assert_eq!(wb.slot_count(), 0, "the emptied slot is removed");
+        assert_eq!(wb.slot_count(), 0, "the emptied cell is removed");
     }
 
     #[test]
     fn move_to_slot_of_moves_across_and_reorders_within() {
         let mut wb = Workbench::new();
-        wb.open_split(&[m(1), m(2), m(3)]); // three single slots
-        // Drag m(1) onto m(3)'s slot: m(1) leaves its (now empty, dropped) slot.
+        wb.open_split(&[m(1), m(2), m(3)]);
         assert!(wb.move_to_slot_of(m(1), m(3)));
-        assert_eq!(wb.slot_count(), 2, "m(1)'s slot emptied + dropped");
+        assert_eq!(wb.slot_count(), 2, "m(1)'s column emptied + dropped");
         assert_eq!(wb.tile_count(), 3, "no tab lost");
         let stack = wb.slot_views().find(|s| s.members.contains(&m(1))).unwrap();
-        assert_eq!(stack.members, &[m(3), m(1)], "m(1) appended to m(3)'s slot");
+        assert_eq!(stack.members, &[m(3), m(1)], "m(1) appended to m(3)'s cell");
         assert_eq!(stack.members[stack.active], m(1), "the dragged tab is active");
-        // Reorder within the stack: drag m(3) after m(1).
         assert!(wb.move_to_slot_of(m(3), m(1)));
         let stack = wb.slot_views().find(|s| s.members.contains(&m(3))).unwrap();
         assert_eq!(stack.members, &[m(1), m(3)], "m(3) reordered to after m(1)");
-        // No-ops: self-drop, or an unknown member.
         assert!(!wb.move_to_slot_of(m(1), m(1)));
         assert!(!wb.move_to_slot_of(m(99), m(1)));
     }
@@ -506,18 +484,15 @@ mod tests {
     #[test]
     fn open_in_slot_of_stacks_a_new_tab_and_activates_it() {
         let mut wb = Workbench::new();
-        wb.open_split(&[m(1), m(2)]); // two single slots
-        // A brand-new member stacks into m(1)'s slot and becomes active.
+        wb.open_split(&[m(1), m(2)]);
         assert!(wb.open_in_slot_of(m(3), m(1)));
-        assert_eq!(wb.slot_count(), 2, "no new slot — it joined m(1)'s");
+        assert_eq!(wb.slot_count(), 2, "no new column — it joined m(1)'s");
         let stack = wb.slot_views().find(|s| s.members.contains(&m(3))).unwrap();
-        assert_eq!(stack.members, &[m(1), m(3)], "appended to m(1)'s slot");
+        assert_eq!(stack.members, &[m(1), m(3)], "appended to m(1)'s cell");
         assert_eq!(stack.members[stack.active], m(3), "the new tab is active");
-        // A member open elsewhere is pulled in, never duplicated.
         assert!(wb.open_in_slot_of(m(2), m(1)));
         assert_eq!(wb.tile_count(), 3, "m(2) moved, not copied");
-        assert_eq!(wb.slot_count(), 1, "m(2)'s old slot emptied + dropped");
-        // An unknown target reports false (caller falls back to open_tile).
+        assert_eq!(wb.slot_count(), 1, "m(2)'s old column emptied + dropped");
         assert!(!wb.open_in_slot_of(m(9), m(404)));
     }
 
@@ -528,14 +503,11 @@ mod tests {
         wb.open_tile(m(2));
         wb.stack_all(); // one stack [1, 2]
         assert_eq!(wb.slot_count(), 1);
-        // Split m(2) out to the right of the stack's slot.
         assert!(wb.split_beside(m(2), m(1), true));
-        assert_eq!(wb.slot_count(), 2, "m(2) is its own slot now");
+        assert_eq!(wb.slot_count(), 2, "m(2) is its own column now");
         assert_eq!(wb.tile_count(), 2);
-        // m(1)'s slot is first, m(2)'s new slot second (after).
         let members: Vec<_> = wb.slot_views().map(|s| s.members.to_vec()).collect();
         assert_eq!(members, vec![vec![m(1)], vec![m(2)]]);
-        // before: split m(1) to the left of m(2).
         assert!(wb.split_beside(m(1), m(2), false));
         let members: Vec<_> = wb.slot_views().map(|s| s.members.to_vec()).collect();
         assert_eq!(members, vec![vec![m(1)], vec![m(2)]], "m(1) inserted before m(2)");
@@ -543,19 +515,53 @@ mod tests {
     }
 
     #[test]
-    fn weights_default_equal_and_set_clamps() {
+    fn split_beside_axis_makes_a_vertical_split() {
+        let mut wb = Workbench::new();
+        wb.open_split(&[m(1), m(2)]); // [1 | 2] (top-level Row)
+        // Split m(2) below m(1) along Column: m(1)'s column nests a Column [1 / 2].
+        assert!(wb.split_beside_axis(m(2), m(1), SplitAxis::Column, true));
+        assert_eq!(wb.slot_count(), 2, "two leaves: 1 and 2");
+        assert_eq!(wb.tile_count(), 2);
+        // The top level is still a Row of one child (collapsed), nesting the Column.
+        let tree = wb.to_tile_tree(actor_tile_for).expect("tree");
+        // A single top-level child collapses, so the root is the Column split itself.
+        match tree {
+            pelt_core::tile::TileTree::Split { axis, children } => {
+                assert_eq!(axis, SplitAxis::Column, "a vertical split");
+                assert_eq!(children.len(), 2);
+            }
+            other => panic!("expected a column split, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn weights_are_fractions_default_equal_and_set_renormalizes() {
         let mut wb = Workbench::new();
         wb.open_split(&[m(1), m(2)]);
-        assert_eq!(wb.weights(), vec![1.0, 1.0], "equal by default");
-        wb.set_weights(&[2.0, 0.5]);
-        assert_eq!(wb.weights(), vec![2.0, 0.5]);
+        assert_eq!(wb.weights(), vec![0.5, 0.5], "equal fractions by default");
+        wb.set_weights(&[3.0, 1.0]);
+        let w = wb.weights();
+        assert!((w[0] - 0.75).abs() < 1e-5 && (w[1] - 0.25).abs() < 1e-5, "renormalized to sum 1");
         wb.set_weights(&[-1.0, 0.0]);
-        assert_eq!(wb.weights(), vec![0.05, 0.05], "floored so no slot collapses");
+        assert_eq!(wb.weights(), vec![0.5, 0.5], "clamped + renormalized so neither collapses");
+    }
+
+    #[test]
+    fn nested_split_fractions_addressed_by_path() {
+        let mut wb = Workbench::new();
+        wb.open_split(&[m(1), m(2), m(3)]); // [1 | 2 | 3]
+        wb.split_beside_axis(m(3), m(2), SplitAxis::Column, true); // [1 | (2 / 3)]
+        // The top-level row has two children; child 1 is the nested column.
+        assert_eq!(wb.split_fractions(&[]).unwrap().len(), 2);
+        assert_eq!(wb.split_fractions(&[1]).unwrap().len(), 2, "the nested column");
+        assert!(wb.set_split_fractions(&[1], &[0.7, 0.3]));
+        let nested = wb.split_fractions(&[1]).unwrap();
+        assert!((nested[0] - 0.7).abs() < 1e-5 && (nested[1] - 0.3).abs() < 1e-5);
     }
 
     // ── Workbench -> pelt TileTree projection (the V6 surface builder) ──
 
-    use pelt_core::tile::{ContentSource, SplitAxis, TextureKey, Tile, TileId, TileTree};
+    use pelt_core::tile::{ContentSource, SplitAxis as Axis, TextureKey, Tile, TileId, TileTree};
 
     /// A host resolver standing in for meerkat's: a member maps to its actor-texture
     /// lane, keyed (id + texture) by the member's low bits.
@@ -565,16 +571,15 @@ mod tests {
             id: TileId(key),
             title: String::new(),
             content: ContentSource::ExternalTexture(TextureKey(key)),
+            accent: None,
         }
     }
 
-    /// An empty workbench projects to no tree.
     #[test]
     fn to_tile_tree_empty_is_none() {
         assert!(Workbench::new().to_tile_tree(actor_tile_for).is_none());
     }
 
-    /// A lone slot is its stack directly (no enclosing split).
     #[test]
     fn to_tile_tree_single_slot_is_a_stack() {
         let mut wb = Workbench::new();
@@ -584,7 +589,6 @@ mod tests {
         assert_eq!(tree.tiles().len(), 1);
     }
 
-    /// A tab-stack slot becomes a tabbed stack with its active tab preserved.
     #[test]
     fn to_tile_tree_stacked_slot_keeps_active() {
         let mut wb = Workbench::new();
@@ -603,7 +607,6 @@ mod tests {
         }
     }
 
-    /// Several slots become a `Row` split with each slot's weight as its fraction.
     #[test]
     fn to_tile_tree_slots_become_a_weighted_row_split() {
         let mut wb = Workbench::new();
@@ -612,13 +615,9 @@ mod tests {
         let tree = wb.to_tile_tree(actor_tile_for).expect("tree");
         match tree {
             TileTree::Split { axis, children } => {
-                assert_eq!(axis, SplitAxis::Row, "slots lay side by side");
+                assert_eq!(axis, Axis::Row, "slots lay side by side");
                 assert_eq!(children.len(), 2);
-                assert!(
-                    (children[0].fraction - 0.75).abs() < 1e-6,
-                    "weight 3/(3+1) = 0.75, got {}",
-                    children[0].fraction,
-                );
+                assert!((children[0].fraction - 0.75).abs() < 1e-6, "got {}", children[0].fraction);
                 assert!((children[1].fraction - 0.25).abs() < 1e-6, "got {}", children[1].fraction);
             }
             other => panic!("expected a row split, got {other:?}"),
