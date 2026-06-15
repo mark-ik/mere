@@ -118,6 +118,12 @@ pub struct Constellation {
     /// Monotonic clock, bumped on each spawn / drive and stamped into a tab's
     /// `last_touched`, so eviction picks the genuinely-stalest tab.
     touch_clock: u64,
+    /// Engine ids deactivated this session, pushed from the host's activation set.
+    /// A spawned actor registers only the document engines NOT in this set, so a
+    /// deactivated nematic engine routes to the fallback (synthesized) card instead
+    /// of rendering. A snapshot at spawn time — the host respawns affected actors
+    /// when the set changes. (engine-picker Phase 1b.)
+    disabled_engines: HashSet<String>,
 }
 
 /// What a [`Constellation::drain`] surfaced for the host to act on. Scenes are
@@ -148,12 +154,21 @@ impl Constellation {
             pool: Pool::new(),
             cap: DEFAULT_TAB_CAP,
             touch_clock: 0,
+            disabled_engines: HashSet::new(),
         }
     }
 
     /// Set the active-tab cap (the configurable setting; clamped to at least 1).
     pub fn set_cap(&mut self, cap: usize) {
         self.cap = cap.max(1);
+    }
+
+    /// Push the host's deactivated-engine set. New actors register only the document
+    /// engines outside it. Existing actors keep their registry, so the caller reaps
+    /// the affected active members (forcing a respawn) when the set changes for them.
+    /// (engine-picker Phase 1b.)
+    pub fn set_disabled_engines(&mut self, disabled: HashSet<String>) {
+        self.disabled_engines = disabled;
     }
 
     /// Whether `member` currently has a live actor.
@@ -200,7 +215,8 @@ impl Constellation {
             if !self.active.contains_key(&member) {
                 self.touch_clock += 1;
                 let touch = self.touch_clock;
-                let (handle, rx) = spawn_content(&self.pool, self.wake.clone());
+                let (handle, rx) =
+                    spawn_content(&self.pool, self.wake.clone(), self.disabled_engines.clone());
                 self.active.insert(
                     member,
                     Activation {
@@ -486,7 +502,8 @@ impl Constellation {
         if activation.respawns >= MAX_RESPAWNS {
             return false;
         }
-        let (handle, rx) = spawn_content(&self.pool, self.wake.clone());
+        let (handle, rx) =
+            spawn_content(&self.pool, self.wake.clone(), self.disabled_engines.clone());
         activation.handle = handle;
         activation.rx = rx;
         activation.gens = Generations::default();

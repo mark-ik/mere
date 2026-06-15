@@ -883,6 +883,9 @@ impl Shell {
         });
         let mut constellation = Constellation::new(content_wake);
         constellation.set_cap(saved_settings.tab_cap);
+        // Seed the actor pool's deactivated-engine set so a globally-disabled
+        // document engine renders the fallback off-thread too. (engine-picker Phase 1b.)
+        constellation.set_disabled_engines(saved_settings.disabled_engines.iter().cloned().collect());
         // The p2p sync actor: an armillary actor whose run closure owns a tokio
         // runtime (built on its thread) that binds the transport + joins the tessera
         // demo moot, polling status back through the same wake shape as fetch/content.

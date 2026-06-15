@@ -97,14 +97,20 @@ struct Content {
 pub fn spawn_content(
     pool: &Pool,
     wake: Wake,
+    disabled: std::collections::HashSet<String>,
 ) -> (
     ActorHandle<ContentCommand>,
     std::sync::mpsc::Receiver<ContentUpdate>,
 ) {
-    spawn_on(pool, wake, |commands, out: Emitter<ContentUpdate>| {
+    spawn_on(pool, wake, move |commands, out: Emitter<ContentUpdate>| {
         let mut registry = EngineRegistry::new();
         for engine in nematic::engines() {
-            registry.register(engine);
+            // Skip engines deactivated this session: an unregistered engine is
+            // routed past by the policy (`route_document_engine`), so its content
+            // falls to the synthesized card. (engine-picker Phase 1b.)
+            if !disabled.contains(engine.engine_id()) {
+                registry.register(engine);
+            }
         }
         // The actor's own copy of the default routing policy (it owns its registry
         // too); content-type routing for this node's document runs against it.
@@ -241,7 +247,8 @@ mod tests {
 
     #[test]
     fn show_renders_a_scene_off_thread() {
-        let (handle, updates) = spawn_content(&Pool::new(), noop_wake());
+        let (handle, updates) =
+            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new());
         handle.command(show(
             "https://example.com/",
             "text/html",
@@ -264,7 +271,8 @@ mod tests {
 
     #[test]
     fn show_harvests_embedded_jsonld_into_a_contribution() {
-        let (handle, updates) = spawn_content(&Pool::new(), noop_wake());
+        let (handle, updates) =
+            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new());
         handle.command(show(
             "https://example.com/",
             "text/html",
