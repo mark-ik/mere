@@ -441,6 +441,10 @@ impl WindowCtx<'_> {
         // the system WebView's imported texture composites at this rect instead
         // of a constellation scene. (Scrying tile plan, X1.)
         let mut scrying_card: Option<(GraphMemberId, [f32; 4])> = None;
+        // True when the focused, compat-pinned node is shown as a workbench tile this
+        // frame: its system WebView fills the tile (the single per-window scry surface),
+        // so the floating-card lane below suppresses its card. (Scrying in tiles, #2b.)
+        let mut compat_in_tile = false;
         if let Some(wr) = workbench_rect {
             // Read each content placeholder's laid-out rect + member out of the
             // workbench DOM (taffy laid it out above), then drive that tile's actor
@@ -468,6 +472,13 @@ impl WindowCtx<'_> {
                     })
                     .collect()
             };
+            // The focused node when it's pinned to the compatibility view: if it's
+            // also an open tile, its system WebView fills that tile (driven in the
+            // placement loop below) instead of a constellation actor. The single
+            // per-window scry surface follows focus. (Scrying in tiles, #2b.)
+            let focus_compat = self
+                .nav_target_member()
+                .filter(|m| self.shared.content.compat_pins.contains(m));
             let mut slot_rects = Vec::with_capacity(placements.len());
             for (member, content, slot) in placements {
                 slot_rects.push((member, slot));
@@ -479,9 +490,41 @@ impl WindowCtx<'_> {
                 else {
                     continue;
                 };
-                self.ensure_content(&url);
                 let cw = (content[2] - content[0]).round().max(1.0) as u32;
                 let ch = (content[3] - content[1]).round().max(1.0) as u32;
+                if Some(member) == focus_compat {
+                    // Drive the UI-thread scrying pool into this tile: park the
+                    // WebView's composition visual at the tile's content origin and
+                    // import its frame, exactly as the floating compat card does but
+                    // at the tile rect. The tile gets no constellation actor; its
+                    // imported texture composites at `scrying_card` below, and
+                    // `scrying_rect` (= this rect) routes input into the WebView.
+                    if let (Some(window), Some(core)) =
+                        (self.view.window.as_ref(), self.render_core)
+                    {
+                        let window = window.clone();
+                        let device = core.device().clone();
+                        let queue = core.queue().clone();
+                        let session_dir = self.shared.session.session_dir.clone();
+                        self.view.scrying.drive(
+                            member,
+                            &url,
+                            cw,
+                            ch,
+                            (content[0], content[1]),
+                            &window,
+                            &device,
+                            &queue,
+                            &session_dir,
+                        );
+                    }
+                    scrying_card = Some((member, content));
+                    compat_in_tile = true;
+                    // The WebView paints on its own schedule; keep frames coming.
+                    self.view.request_redraw();
+                    continue;
+                }
+                self.ensure_content(&url);
                 let state = self.shared.content.pages.get(&url).cloned();
                 self.shared.content.constellation.drive(member, &url, state, cw, ch);
                 cards.push((member, content, (cw, ch)));
@@ -494,9 +537,17 @@ impl WindowCtx<'_> {
         // live-preview node). A deselected / unpinned compat node is torn down here
         // (reap-on-deselect, the X3 lifecycle Mark chose), so its WebView can't freeze
         // on screen and the window's single composition target is freed for the next. (X2.)
-        let shown_compat = self.focused_member().filter(|m| {
-            self.view.live_previews.contains(m) && self.shared.content.compat_pins.contains(m)
-        });
+        // Shown in a workbench tile (compat_in_tile) the surface is the focused,
+        // pinned node regardless of live-preview state; otherwise it's the focused,
+        // pinned, live-preview node shown as a floating card.
+        let shown_compat = if compat_in_tile {
+            self.nav_target_member()
+                .filter(|m| self.shared.content.compat_pins.contains(m))
+        } else {
+            self.focused_member().filter(|m| {
+                self.view.live_previews.contains(m) && self.shared.content.compat_pins.contains(m)
+            })
+        };
         self.view.scrying.reap_except(shown_compat);
         // The orrery's focused-node card (always, alongside any workbench pane).
         if let (Some(member), Some(url)) = (
@@ -528,31 +579,35 @@ impl WindowCtx<'_> {
                         // Compatibility view: the system WebView renders this
                         // node; drive the UI-thread scrying pool (spawn /
                         // resize / navigate + non-blocking frame import)
-                        // instead of a content actor.
-                        if let (Some(window), Some(core)) =
-                            (self.view.window.as_ref(), self.render_core)
-                        {
-                            let window = window.clone();
-                            let device = core.device().clone();
-                            let queue = core.queue().clone();
-                            let session_dir = self.shared.session.session_dir.clone();
-                            self.view.scrying.drive(
-                                member,
-                                &url,
-                                cw,
-                                ch,
-                                (x0, y0),
-                                &window,
-                                &device,
-                                &queue,
-                                &session_dir,
-                            );
+                        // instead of a content actor. When the node is already
+                        // shown as a workbench tile, its WebView fills the tile
+                        // (the single per-window scry surface), so skip the card.
+                        if !compat_in_tile {
+                            if let (Some(window), Some(core)) =
+                                (self.view.window.as_ref(), self.render_core)
+                            {
+                                let window = window.clone();
+                                let device = core.device().clone();
+                                let queue = core.queue().clone();
+                                let session_dir = self.shared.session.session_dir.clone();
+                                self.view.scrying.drive(
+                                    member,
+                                    &url,
+                                    cw,
+                                    ch,
+                                    (x0, y0),
+                                    &window,
+                                    &device,
+                                    &queue,
+                                    &session_dir,
+                                );
+                            }
+                            scrying_card = Some((member, [x0, y0, x1, y1]));
+                            live_card = Some((member, [x0, y0, x1, y1]));
+                            // The WebView paints on its own schedule; keep frames
+                            // coming while the card is visible.
+                            self.view.request_redraw();
                         }
-                        scrying_card = Some((member, [x0, y0, x1, y1]));
-                        live_card = Some((member, [x0, y0, x1, y1]));
-                        // The WebView paints on its own schedule; keep frames
-                        // coming while the card is visible.
-                        self.view.request_redraw();
                     } else {
                         self.ensure_content(&url);
                         let state = self.shared.content.pages.get(&url).cloned();

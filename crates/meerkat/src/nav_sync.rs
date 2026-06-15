@@ -111,8 +111,10 @@ impl WindowCtx<'_> {
     }
 
     /// The node per-node navigation acts on: the focused tile in Tree, the single
-    /// selected node in Cartography. `None` when nothing is focused.
-    fn nav_target_member(&self) -> Option<GraphMemberId> {
+    /// selected node in Cartography. `None` when nothing is focused. Also the
+    /// compatibility-view target — `>compat_view` pins, and the renderer scries,
+    /// whatever this points at, so the pin and the surface agree in both modes.
+    pub(super) fn nav_target_member(&self) -> Option<GraphMemberId> {
         if self.workbench_active() {
             self.view.focused_tile
         } else {

@@ -54,7 +54,10 @@ impl WindowCtx<'_> {
     /// (Scrying tile plan, X1; session-local pin — the durable `compat_mode`
     /// node field takes over in X3.)
     pub(super) fn toggle_focus_compat(&mut self) {
-        let Some(member) = self.focused_member() else {
+        // Target what's in focus in the active mode: the focused tile in Tree, the
+        // selected node in Cartography. The renderer scries this same target, so the
+        // pin lands on (and the WebView fills) the surface the user is looking at.
+        let Some(member) = self.nav_target_member() else {
             return;
         };
         // The pin is shared session state; the WebView that serves it is this
