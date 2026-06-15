@@ -24,6 +24,15 @@ pub struct ThemeOption {
     pub active: bool,
 }
 
+/// One engine in the Engines section: its id (carried in the toggle key), display
+/// name, and whether it is active (not deactivated) this session. (engine-picker
+/// Phase 2.)
+pub struct EngineRow {
+    pub id: String,
+    pub name: String,
+    pub active: bool,
+}
+
 /// The apparatus pane's author CSS, themed from the chrome tokens.
 pub fn apparatus_sheet(c: &ChromeTheme) -> Vec<String> {
     let rgb = |color: Color32| {
@@ -70,6 +79,7 @@ pub fn apparatus_sheet(c: &ChromeTheme) -> Vec<String> {
 /// structure mirrors the old `build_apparatus_dom`.
 pub fn apparatus_items(
     themes: &[ThemeOption],
+    engines: &[EngineRow],
     physics_damping: f32,
     system_rows: &[(String, String)],
     obs: &ObservabilitySnapshot,
@@ -80,6 +90,21 @@ pub fn apparatus_items(
     for theme in themes {
         let class = if theme.active { "app-btn-active" } else { "app-btn" };
         items.push(PaneItem::button(class, theme.name.clone(), theme.id.clone()));
+    }
+
+    // Engines: each present engine as a toggle. An active engine highlights (like the
+    // active theme); clicking flips its activation — a deactivated engine is never
+    // routed to and spawns no actors. The id rides the key as `engine:toggle:<id>`.
+    // (engine-picker Phase 2.)
+    items.push(PaneItem::text("app-title", "Engines"));
+    for engine in engines {
+        let class = if engine.active { "app-btn-active" } else { "app-btn" };
+        let label = format!(
+            "{}  —  {}",
+            engine.name,
+            if engine.active { "active" } else { "off" }
+        );
+        items.push(PaneItem::button(class, label, format!("engine:toggle:{}", engine.id)));
     }
 
     // Physics: the orrery's node damping (the "inertia" tunable). Lower keeps more

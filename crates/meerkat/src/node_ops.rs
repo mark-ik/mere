@@ -315,6 +315,62 @@ impl WindowCtx<'_> {
         self.shared.content.engine_activation.is_enabled(id)
     }
 
+    /// The engine rows for the apparatus manager: each present, user-facing engine
+    /// (the surface / web engines headline, then the nematic document engines) with
+    /// its active state. Host lanes are structural and not listed. (Phase 2.)
+    pub(super) fn engine_rows(&self) -> Vec<super::apparatus::EngineRow> {
+        use inker::routing::{ENGINE_SCRYING_WEB, ENGINE_SERVAL_WEB, ENGINE_WRY_WEB};
+        let row = |id: &str, name: String| super::apparatus::EngineRow {
+            id: id.to_string(),
+            name,
+            active: self.shared.content.engine_activation.is_enabled(id),
+        };
+        let mut rows = Vec::new();
+        for &(id, name) in &[
+            (ENGINE_SERVAL_WEB, "Serval (web)"),
+            (ENGINE_SCRYING_WEB, "System WebView"),
+            (ENGINE_WRY_WEB, "Wry overlay"),
+        ] {
+            if self.engine_present(id) {
+                rows.push(row(id, name.to_string()));
+            }
+        }
+        // The nematic document engines (protocol renderers), sorted for a stable order.
+        let mut doc_ids: Vec<String> = self
+            .shared
+            .content
+            .engine_registry
+            .engine_ids()
+            .map(str::to_string)
+            .collect();
+        doc_ids.sort();
+        for id in doc_ids {
+            let name = id.strip_prefix("nematic.").unwrap_or(&id).to_string();
+            rows.push(row(&id, name));
+        }
+        rows
+    }
+
+    /// Flip engine `id`'s activation (the apparatus toggle): update the global
+    /// default, push the new deactivated set to the actor pool, persist, and redraw.
+    /// Surface engines take effect immediately via the UI-thread tier gate + the
+    /// render's `retain`; document-engine changes apply to new navigations (an actor's
+    /// registry is fixed at spawn time). (engine-picker Phase 2.)
+    pub(super) fn toggle_engine(&mut self, id: &str) {
+        let now_active = self.shared.content.engine_activation.is_enabled(id);
+        self.shared.content.engine_activation.set_global(id, !now_active);
+        let disabled = self
+            .shared
+            .content
+            .engine_activation
+            .global_disabled_vec()
+            .into_iter()
+            .collect();
+        self.shared.content.constellation.set_disabled_engines(disabled);
+        self.persist_settings();
+        self.view.request_redraw();
+    }
+
     /// Whether `member`'s node renders through a tier-2 **surface** engine (a system
     /// WebView via scrying, etc.) this frame. Surface-tier nodes drive the scrying
     /// pool; the rest drive the constellation (document / web lane). (Phase 0.)

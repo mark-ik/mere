@@ -1128,11 +1128,13 @@ impl WindowCtx<'_> {
             let aw = (arect[2] - arect[0]).round().max(1.0) as u32;
             let ah = (arect[3] - arect[1]).round().max(1.0) as u32;
             let themes = self.theme_options();
+            let engines = self.engine_rows();
             let (system_rows, observability) = apparatus_data
                 .as_ref()
                 .expect("apparatus data was prepared when the pane was open");
             let items = super::apparatus::apparatus_items(
                 &themes,
+                &engines,
                 self.physics_damping(),
                 system_rows,
                 observability,

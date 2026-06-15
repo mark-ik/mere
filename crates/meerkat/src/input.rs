@@ -249,12 +249,16 @@ impl WindowCtx<'_> {
                                         .apparatus_pane
                                         .dispatch_click(node, PointerClick::at(local));
                                     // An apparatus button key routes by prefix: the
-                                    // Physics −/+ step the damping; anything else is a
-                                    // theme id. (Physics settings.)
+                                    // Physics −/+ step the damping; `engine:toggle:<id>`
+                                    // flips an engine's activation; anything else is a
+                                    // theme id. (Physics / engine-picker settings.)
                                     for key in self.view.apparatus_pane.take_activations() {
                                         match key.as_str() {
                                             "phys:damping:down" => self.adjust_physics_damping(-0.5),
                                             "phys:damping:up" => self.adjust_physics_damping(0.5),
+                                            k if k.starts_with("engine:toggle:") => {
+                                                self.toggle_engine(&k["engine:toggle:".len()..]);
+                                            }
                                             _ => self.set_theme(&key),
                                         }
                                     }
