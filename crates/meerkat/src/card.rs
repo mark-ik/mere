@@ -19,7 +19,7 @@ use document_canvas::{
 };
 use inker::{
     DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput,
-    EngineRegistry, InlineSpan,
+    EngineRegistry, EngineRoutePolicy, EngineRouteRequest, InlineSpan, WorkspaceRouteId,
 };
 use netrender::Scene;
 use crate::serval_render::scene_from_layout_dom;
@@ -209,39 +209,68 @@ fn card_vocabulary() -> ColorVocabulary {
     }
 }
 
-/// Render the focused node's card scene, routing Ready content by type: HTML
-/// parses + renders through serval ([`html_scene`], resolving subresources via
-/// `loader`); a content-type with a matching nematic engine goes through the
-/// document lane; everything else (welcome / loading / failed / unrouted)
-/// renders the synthesized document.
+/// Render the focused node's card scene, routing Ready content through the engine
+/// policy: an id of [`serval.web`](inker::routing::ENGINE_SERVAL_WEB) parses +
+/// renders through serval ([`html_scene`], resolving subresources via `loader`); a
+/// registered nematic engine renders through the document lane; everything else
+/// (welcome / loading / failed / unrouted) renders the synthesized document.
 pub fn render_content_scene(
     url: &str,
     state: Option<&ContentState>,
     registry: &EngineRegistry,
+    policy: &EngineRoutePolicy,
     loader: &impl ImageLoader,
     w: u32,
     h: u32,
 ) -> (Scene, u32, Vec<LinkHit>) {
     if let Some(ContentState::Ready(fetched)) = state {
-        if is_html(fetched.content_type.as_deref()) {
+        let engine_id = route_document_engine(url, fetched.content_type.as_deref(), registry, policy);
+        if engine_id == inker::routing::ENGINE_SERVAL_WEB {
             return html_scene(&fetched.body, loader, w, h);
         }
-        if let Some(doc) = routed_document(url, fetched, registry) {
+        if let Some(doc) = dispatch_document(url, fetched, &engine_id, registry) {
             return render_card_scene(&doc, w, h);
         }
     }
     render_card_scene(&content_document(url, state), w, h)
 }
 
-/// Dispatch Ready content to the nematic engine matching its content-type, if any,
-/// producing an [`EngineDocument`]. `None` when no engine matches (the caller then
-/// falls back to the plain rendering).
-fn routed_document(
+/// Route Ready content to an engine id through the policy: scheme + content-type
+/// over the active rules, filtered to engines this lane can serve (registered
+/// document engines plus the serval html lane). Surface-engine pins are resolved
+/// at nav time on the UI thread and never reach the actor, so this pass carries no
+/// pin. (engine-picker Phase 0b — replaces the bespoke `engine_id_for` match.)
+fn route_document_engine(
+    url: &str,
+    content_type: Option<&str>,
+    registry: &EngineRegistry,
+    policy: &EngineRoutePolicy,
+) -> String {
+    let request = EngineRouteRequest {
+        workspace_id: WorkspaceRouteId::new("meerkat"),
+        view: None,
+        node: None,
+        address: url.to_string(),
+        content_type: content_type.map(str::to_string),
+        pinned_engine: None,
+    };
+    policy
+        .route_filtered(&request, |id| {
+            registry.contains(id) || id == inker::routing::ENGINE_SERVAL_WEB
+        })
+        .engine_id
+}
+
+/// Dispatch Ready content to the document engine `id` (a registered nematic
+/// engine), producing an [`EngineDocument`]. `None` when `id` is not a registered
+/// document engine (the serval / internal / external / ingest ids), so the caller
+/// falls back to the synthesized document.
+fn dispatch_document(
     url: &str,
     fetched: &Fetched,
+    id: &str,
     registry: &EngineRegistry,
 ) -> Option<EngineDocument> {
-    let id = engine_id_for(fetched.content_type.as_deref())?;
     let engine = registry.engine(id)?;
     // Bound the body before the engine lays it out: an arbitrarily long document
     // renders to one full-height vello scene, and a large enough one overflows wgpu's
@@ -274,44 +303,6 @@ fn bound_document_body(body: &str) -> String {
     body[..end].to_string()
 }
 
-/// Map an HTTP content-type to a nematic document engine id (the base type, minus
-/// any `; charset=…`). `None` for HTML (the serval lane) or unknown types.
-fn engine_id_for(content_type: Option<&str>) -> Option<&'static str> {
-    let base = base_type(content_type?);
-    Some(match base.as_str() {
-        "text/markdown" | "text/x-markdown" => nematic::ENGINE_MARKDOWN,
-        "text/gemini" => nematic::ENGINE_GEMTEXT,
-        "text/plain" => nematic::ENGINE_TEXT,
-        "application/gopher-menu" => nematic::ENGINE_GOPHER,
-        "text/x-finger" => nematic::ENGINE_FINGER,
-        "application/x-nex" => nematic::ENGINE_NEX,
-        "application/x-guppy" => nematic::ENGINE_GUPPY,
-        "application/x-titan" => nematic::ENGINE_TITAN,
-        "message/x-misfin" => nematic::ENGINE_MISFIN,
-        "application/rss+xml" | "application/atom+xml" | "application/feed+json" => {
-            nematic::ENGINE_FEED
-        }
-        _ => return None,
-    })
-}
-
-/// Whether the content-type is HTML (handled by the serval lane).
-fn is_html(content_type: Option<&str>) -> bool {
-    content_type
-        .map(base_type)
-        .is_some_and(|b| b == "text/html" || b == "application/xhtml+xml")
-}
-
-/// The lowercased base media type, dropping parameters
-/// (`text/HTML; charset=utf-8` → `text/html`).
-fn base_type(content_type: &str) -> String {
-    content_type
-        .split(';')
-        .next()
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase()
-}
 
 /// Parse `body` as a full HTML document and render it through the shared content
 /// core ([`crate::serval_render::scene_from_layout_dom`]) — the same cascade → image-decode
@@ -591,49 +582,35 @@ mod tests {
     }
 
     #[test]
-    fn engine_id_for_maps_known_types() {
+    fn route_document_engine_maps_known_types() {
+        let mut reg = inker::EngineRegistry::new();
+        for engine in nematic::engines() {
+            reg.register(engine);
+        }
+        let policy = inker::EngineRoutePolicy::default();
+        // Content-type rules win over the scheme, so the url scheme doesn't matter
+        // for these; pass an https url to exercise the scheme fallback in the last case.
+        let route =
+            |ct: Option<&str>| route_document_engine("https://example.test/x", ct, &reg, &policy);
+        assert_eq!(route(Some("text/markdown")).as_str(), nematic::ENGINE_MARKDOWN);
+        assert_eq!(route(Some("text/plain; charset=utf-8")).as_str(), nematic::ENGINE_TEXT);
+        assert_eq!(route(Some("text/gemini")).as_str(), nematic::ENGINE_GEMTEXT);
+        assert_eq!(route(Some("application/x-nex")).as_str(), nematic::ENGINE_NEX);
+        assert_eq!(route(Some("application/x-guppy")).as_str(), nematic::ENGINE_GUPPY);
+        assert_eq!(route(Some("application/x-titan")).as_str(), nematic::ENGINE_TITAN);
+        assert_eq!(route(Some("message/x-misfin")).as_str(), nematic::ENGINE_MISFIN);
+        assert_eq!(route(Some("application/gopher-menu")).as_str(), nematic::ENGINE_GOPHER);
+        // HTML routes to the serval web lane by content-type, regardless of scheme.
         assert_eq!(
-            engine_id_for(Some("text/markdown")),
-            Some(nematic::ENGINE_MARKDOWN)
+            route(Some("text/html")).as_str(),
+            inker::routing::ENGINE_SERVAL_WEB
         );
         assert_eq!(
-            engine_id_for(Some("text/plain; charset=utf-8")),
-            Some(nematic::ENGINE_TEXT)
+            route(Some("application/xhtml+xml")).as_str(),
+            inker::routing::ENGINE_SERVAL_WEB
         );
-        assert_eq!(
-            engine_id_for(Some("text/gemini")),
-            Some(nematic::ENGINE_GEMTEXT)
-        );
-        assert_eq!(
-            engine_id_for(Some("application/x-nex")),
-            Some(nematic::ENGINE_NEX)
-        );
-        assert_eq!(
-            engine_id_for(Some("application/x-guppy")),
-            Some(nematic::ENGINE_GUPPY)
-        );
-        assert_eq!(
-            engine_id_for(Some("application/x-titan")),
-            Some(nematic::ENGINE_TITAN)
-        );
-        assert_eq!(
-            engine_id_for(Some("message/x-misfin")),
-            Some(nematic::ENGINE_MISFIN)
-        );
-        assert_eq!(
-            engine_id_for(Some("text/html")),
-            None,
-            "HTML uses the serval lane"
-        );
-        assert_eq!(engine_id_for(None), None);
-    }
-
-    #[test]
-    fn is_html_detects_html_types() {
-        assert!(is_html(Some("text/html; charset=utf-8")));
-        assert!(is_html(Some("application/xhtml+xml")));
-        assert!(!is_html(Some("text/markdown")));
-        assert!(!is_html(None));
+        // No content-type over an https url falls to the scheme rule (serval).
+        assert_eq!(route(None).as_str(), inker::routing::ENGINE_SERVAL_WEB);
     }
 
     fn glyph_runs(scene: &netrender::Scene) -> usize {
@@ -658,6 +635,7 @@ mod tests {
             "https://example.com",
             Some(&ready),
             &registry,
+            &inker::EngineRoutePolicy::default(),
             &NoImageLoader,
             420,
             360,
@@ -685,6 +663,7 @@ mod tests {
             "https://example.test/",
             Some(&ready),
             &registry,
+            &inker::EngineRoutePolicy::default(),
             &NoImageLoader,
             420,
             360,
@@ -712,6 +691,7 @@ mod tests {
             "https://example.com",
             Some(&ready),
             &registry,
+            &inker::EngineRoutePolicy::default(),
             &NoImageLoader,
             420,
             360,
@@ -736,6 +716,7 @@ mod tests {
             "https://example.com",
             Some(&hidden),
             &registry,
+            &inker::EngineRoutePolicy::default(),
             &NoImageLoader,
             420,
             360,
@@ -755,6 +736,7 @@ mod tests {
             "https://example.com",
             Some(&shown),
             &registry,
+            &inker::EngineRoutePolicy::default(),
             &NoImageLoader,
             420,
             360,
@@ -793,6 +775,7 @@ mod tests {
             "https://example.com/page.html",
             Some(&ready),
             &registry,
+            &inker::EngineRoutePolicy::default(),
             &loader,
             420,
             360,

@@ -630,6 +630,7 @@ impl WindowCtx<'_> {
                             &url,
                             state.as_ref(),
                             &self.shared.content.engine_registry,
+                            &self.shared.content.route_policy,
                             &loader,
                             RENDER_W,
                             RENDER_H,

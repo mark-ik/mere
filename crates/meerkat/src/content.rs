@@ -22,7 +22,7 @@
 use std::cell::RefCell;
 
 use armillary::{ActorHandle, Emitter, NavGeneration, Pool, ViewportGeneration, Wake, spawn_on};
-use inker::EngineRegistry;
+use inker::{EngineRegistry, EngineRoutePolicy};
 use linked_data::GraphContribution;
 use netrender::Scene;
 
@@ -106,6 +106,9 @@ pub fn spawn_content(
         for engine in nematic::engines() {
             registry.register(engine);
         }
+        // The actor's own copy of the default routing policy (it owns its registry
+        // too); content-type routing for this node's document runs against it.
+        let policy = EngineRoutePolicy::default();
         let store = RefCell::new(ResourceStore::default());
         let mut current: Option<Content> = None;
 
@@ -135,7 +138,7 @@ pub fn spawn_content(
                         nav,
                         viewport_gen,
                     };
-                    render(&content, &store, &registry, &out);
+                    render(&content, &store, &registry, &policy, &out);
                     current = Some(content);
                 }
                 ContentCommand::Resize {
@@ -145,13 +148,13 @@ pub fn spawn_content(
                     if let Some(content) = current.as_mut() {
                         content.viewport = viewport;
                         content.viewport_gen = viewport_gen;
-                        render(content, &store, &registry, &out);
+                        render(content, &store, &registry, &policy, &out);
                     }
                 }
                 ContentCommand::Resource { url, bytes } => {
                     store.borrow_mut().insert(url, bytes);
                     if let Some(content) = current.as_ref() {
-                        render(content, &store, &registry, &out);
+                        render(content, &store, &registry, &policy, &out);
                     }
                 }
             }
@@ -165,6 +168,7 @@ fn render(
     content: &Content,
     store: &RefCell<ResourceStore>,
     registry: &EngineRegistry,
+    policy: &EngineRoutePolicy,
     out: &Emitter<ContentUpdate>,
 ) {
     let wanted = RefCell::new(Vec::new());
@@ -175,6 +179,7 @@ fn render(
             &content.url,
             content.state.as_ref(),
             registry,
+            policy,
             &loader,
             w,
             h,

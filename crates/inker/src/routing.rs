@@ -60,6 +60,8 @@ pub const ENGINE_NEMATIC_MISFIN: &str = "nematic.misfin";
 pub const ENGINE_NEMATIC_NEX: &str = "nematic.nex";
 pub const ENGINE_NEMATIC_SCROLL: &str = "nematic.scroll";
 pub const ENGINE_NEMATIC_TEXT: &str = "nematic.text";
+/// Titan (`titan://`) response bodies — gemtext re-tagged with titan provenance.
+pub const ENGINE_NEMATIC_TITAN: &str = "nematic.titan";
 pub const ENGINE_GRAPHSHELL_INTERNAL: &str = "graphshell.internal";
 pub const ENGINE_EXTERNAL_PROTOCOL: &str = "host.external-protocol";
 
@@ -300,6 +302,11 @@ impl Default for EngineRoutePolicy {
                     SurfaceContractMode::CompositedTexture,
                 ),
                 EngineRouteRule::new(
+                    ["titan"],
+                    ENGINE_NEMATIC_TITAN,
+                    SurfaceContractMode::CompositedTexture,
+                ),
+                EngineRouteRule::new(
                     ["file"],
                     ENGINE_NEMATIC_FILE,
                     SurfaceContractMode::CompositedTexture,
@@ -343,6 +350,53 @@ impl Default for EngineRoutePolicy {
                     // Phase 5); the CommonMark `nematic.knot` engine stays
                     // available by explicit pin for import/compat.
                     ENGINE_NEMATIC_KNOT_DJOT,
+                    SurfaceContractMode::CompositedTexture,
+                ),
+                // HTML by content-type routes to serval regardless of scheme, so a
+                // local `file://` page or an HTTPS response that turns out to be HTML
+                // both land on the web engine. (Web-standard content → serval.)
+                EngineRouteRule::content_type(
+                    ["text/html", "application/xhtml+xml"],
+                    ENGINE_SERVAL_WEB,
+                    SurfaceContractMode::CompositedTexture,
+                ),
+                // Smolweb content-type refinements: a fetch that learns one of these
+                // routes to the matching nematic engine even when the scheme alone
+                // would not (e.g. an HTTPS endpoint serving a gophermap or a feed).
+                EngineRouteRule::content_type(
+                    ["application/gopher-menu"],
+                    ENGINE_NEMATIC_GOPHER,
+                    SurfaceContractMode::CompositedTexture,
+                ),
+                EngineRouteRule::content_type(
+                    ["text/x-finger"],
+                    ENGINE_NEMATIC_FINGER,
+                    SurfaceContractMode::CompositedTexture,
+                ),
+                EngineRouteRule::content_type(
+                    ["application/x-nex"],
+                    ENGINE_NEMATIC_NEX,
+                    SurfaceContractMode::CompositedTexture,
+                ),
+                EngineRouteRule::content_type(
+                    ["application/x-guppy"],
+                    ENGINE_NEMATIC_GUPPY,
+                    SurfaceContractMode::CompositedTexture,
+                ),
+                EngineRouteRule::content_type(
+                    ["application/x-titan"],
+                    ENGINE_NEMATIC_TITAN,
+                    SurfaceContractMode::CompositedTexture,
+                ),
+                EngineRouteRule::content_type(
+                    ["message/x-misfin"],
+                    ENGINE_NEMATIC_MISFIN,
+                    SurfaceContractMode::CompositedTexture,
+                ),
+                // `application/feed+json` (JSON Feed) alongside the XML feed types above.
+                EngineRouteRule::content_type(
+                    ["application/feed+json"],
+                    ENGINE_NEMATIC_FEED,
                     SurfaceContractMode::CompositedTexture,
                 ),
                 // JSON-LD is a graph contribution, not a render: the host feeds
