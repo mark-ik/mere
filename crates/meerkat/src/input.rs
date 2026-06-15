@@ -386,11 +386,12 @@ impl WindowCtx<'_> {
                         // / pin).
                         self.view.active_content = super::ContentPane::Workbench;
                         if button == MouseButton::Left {
-                            if let Some(i) = self.divider_at(x, y) {
-                                self.view.divider_drag = Some((i, x, self.view.workbench.weights()));
-                            } else {
-                                self.workbench_click(x, y);
-                            }
+                            // Route the press to the pelt tile surface (host-authority):
+                            // hit-test its frame, dispatch the click, and apply the
+                            // emitted gesture to the Workbench. (Divider resize + tab
+                            // drag move to the surface's pointer state machine in a
+                            // follow-on.)
+                            self.workbench_surface_click(x, y);
                         }
                     } else {
                         // The orrery pane: right-click opens the context menu; a left
@@ -638,6 +639,51 @@ impl WindowCtx<'_> {
         self.sync_orrery();
         if palette_was_open && !self.view.runner.state().palette_open {
             self.focus_after_palette_close();
+        }
+        self.view.request_redraw();
+    }
+
+    /// Route a left press in the workbench pane to the pelt tile surface (V6,
+    /// host-authority): hit-test the surface frame at the pane-local point, dispatch the
+    /// click (queuing a gesture), then apply each emitted [`TileEvent`] to the
+    /// `Workbench` — the authority — keyed back to its member by the tile id's UUID low
+    /// 64 bits. A tab activates / closes its member; drag + divider resize are a
+    /// follow-on (the surface's pointer state machine). Re-projection happens on the
+    /// next render (`Workbench::to_tile_tree`), so the surface stays a driven view.
+    fn workbench_surface_click(&mut self, x: f32, y: f32) {
+        let Some(wr) = self.workbench_leaf_rect() else { return };
+        let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
+        let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
+        let (lx, ly) = (x - wr[0], y - wr[1]);
+        let events = {
+            let Some(surface) = self.view.pelt_surface.as_mut() else { return };
+            let Some(node) = surface.hit_test_frame(lx, ly, ww, wh) else { return };
+            surface.dispatch_click(node, xilem_serval::PointerClick::at((lx, ly)));
+            surface.take_events()
+        };
+        if events.is_empty() {
+            return;
+        }
+        let members = self.view.workbench.open_members();
+        let member_of = |id: pelt_core::tile::TileId| {
+            members.iter().copied().find(|m| m.as_u128() as u64 == id.0)
+        };
+        for event in events {
+            match event {
+                pelt_core::tile::TileEvent::Activated(id) => {
+                    if let Some(m) = member_of(id) {
+                        self.view.workbench.activate(m);
+                    }
+                },
+                pelt_core::tile::TileEvent::Closed(id) => {
+                    if let Some(m) = member_of(id) {
+                        self.view.workbench.close_tile(m);
+                    }
+                },
+                // Dragged / DividerMoved: handled when the surface's pointer state
+                // machine is wired in (it tracks the drag + emits these on release).
+                _ => {},
+            }
         }
         self.view.request_redraw();
     }
