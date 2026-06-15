@@ -103,10 +103,24 @@ host learns the MIME type from a response"). So Phase 0 splits:
 - *Phase 0 done (both shipped):* both altitudes consult one `route_policy`; the
   bespoke selectors (`compat_pins`, `engine_id_for`, `is_html`) are gone.
 
-**Phase 1 — activation model**
-- `EngineEnableSet` (global default, app setting) + a per-engine session-manifest override field; `is_available = contains && enabled`.
-- Deactivating a live engine reaps its actors/producers and re-routes its nodes (which then fall through to the next available rule).
-- *Done when:* turning `scrying.web` off in settings makes a scry-pinned node fall back to serval (or external), no producer spawns, and flipping it back restores it.
+**Phase 1 — activation model (DONE, e90825e).** `engine_available` split into
+`engine_present` (host capability) AND `engine_active` (not deactivated), so the
+policy walks past a deactivated engine like an absent one. `EngineActivation` holds
+two layers (per-session override wins over global default): `global_disabled` from
+the app-wide `settings.json` `disabled_engines` (new field), `session_override`
+in memory for the Phase 2 toggle. Host lanes (internal / external / ingest) are
+structural, not deactivatable. Deactivation needs no explicit reap — a no-longer-
+surface node drops out of `scrying_surfaces`, and the per-frame `retain` tears its
+producer down. *Verified:* engine_activation 4/4, settings_store 7/7; headed, with
+`scrying.web` disabled a `>compat_view` node falls back to serval with no producer,
+and re-enabling spawns it again.
+- **Phase 1b (NEXT, small):** thread the activation to the off-thread content actor
+  so a deactivated *document* engine (nematic.*) also falls back in
+  `route_document_engine`. Today only the UI-thread tier decision honors activation,
+  which fully covers surface engines (scrying) but lets a disabled nematic engine
+  still render via the actor's own default-availability.
+- **Per-session persistence:** `session_override` is in memory; it persists when the
+  session manifest is wired (multiplexer §3).
 
 **Phase 2 — engine manager (apparatus pane)**
 - A panel listing registered engines with build/active/off state, the `per_host_overrides` table, and the default-policy editor. Reuses the apparatus settings surface.
@@ -144,4 +158,5 @@ host learns the MIME type from a response"). So Phase 0 splits:
 - 2026-06-15: scry-in-tile (single focused tile) shipped + verified (meerkat 0adca6e); multi-tile scry shipped + verified (06b6ac7) — two independent WebView2 panes on one shared `CompositionRoot`, per-pane input. This advances the verso charter's P4 (scrying tile as a live, interactive actor) but through the ad-hoc `compat_pins` path; Phase 0 folds it into routing.
 - 2026-06-15: Plan authored from a read of routing.rs, engine.rs, surface_engine.rs, scrying-engine, the verso charter, the engine-profile-boundary plan, the browser-multiplexer framing, and the modular-integration plan. Activation scope decided: global default + per-session override.
 - 2026-06-15: **Phase 0a shipped + verified (meerkat d4a1350).** `compat_pins` retired into `engine_pins: HashMap<member, engine_id>` + a host `route_policy`; the UI-thread tier decision routes via `route_filtered(request{pinned_engine}, is_available)` → `is_surface_engine` picks the scrying lane. Added `inker::routing::is_surface_engine`. `>compat_view` is now a pin to `scrying.web`. Headed-verified: pinned node renders through WebView2 via the route (producer spawns, no `EngineNotFound`); http/gemini nodes render unchanged through the constellation.
-- 2026-06-15: **Phase 0b shipped + verified (meerkat 1966183). Phase 0 complete.** `render_content_scene` routes through the policy (`route_document_engine`); `engine_id_for` / `is_html` / `base_type` deleted; the canonical `EngineRoutePolicy::default` made a superset (titan scheme rule + `ENGINE_NEMATIC_TITAN`, `text/html` → `serval.web`, smolweb content-type refinements). Both routing altitudes (UI-thread tier, actor content-type) now consult one policy; all three bespoke selectors are gone. Verified: inker routing 25/25, card 10/10; headed, https HTML → serval and a gemini capsule → nematic.gemtext via the one policy. **Next: Phase 1 (activation model).**
+- 2026-06-15: **Phase 0b shipped + verified (meerkat 1966183). Phase 0 complete.** `render_content_scene` routes through the policy (`route_document_engine`); `engine_id_for` / `is_html` / `base_type` deleted; the canonical `EngineRoutePolicy::default` made a superset (titan scheme rule + `ENGINE_NEMATIC_TITAN`, `text/html` → `serval.web`, smolweb content-type refinements). Both routing altitudes (UI-thread tier, actor content-type) now consult one policy; all three bespoke selectors are gone. Verified: inker routing 25/25, card 10/10; headed, https HTML → serval and a gemini capsule → nematic.gemtext via the one policy.
+- 2026-06-15: **Phase 1 shipped + verified (meerkat e90825e).** `engine_available` = `engine_present && engine_active`; `EngineActivation` (global default from `settings.json` `disabled_engines` + in-memory per-session override); host lanes exempt. Verified: engine_activation 4/4, settings_store 7/7; headed, `scrying.web` disabled → `>compat_view` node falls back to serval with no producer, re-enable spawns it again. **Next: Phase 1b (thread activation to the content actor for document engines), then Phase 2 (apparatus engine manager) + Phase 3 (per-node picker).**
