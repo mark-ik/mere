@@ -73,10 +73,29 @@ The scry tier-2 engine is real: [`ScryingTileEngine`](../../../crates/inker/engi
 Done-conditions, not dates (per house rule).
 
 **Phase 0 — routing reconcile + meerkat onto `EngineRoutePolicy`** *(foundation; unblocks all)*
-- meerkat builds an `EngineRoutePolicy`, routes every content address through `route_filtered(|id| registry.contains(id))`, and dispatches the decision to the document registry (tier 1) or the surface registry (tier 2) by engine id.
-- Replace the `compat_pins` bool with a per-node `pinned_engine = "scrying.web"` carried on the route request; the multi-tile scry path becomes "tiles whose node pins a tier-2 engine."
-- Harvest `register-viewer`'s capability/conformance declarations into `inker::routing`; retire the duplicate (integration plan §1.9 / §6).
-- *Done when:* a gemtext node and an http node and a scry-pinned node all render through one routing call, and `compat_pins` is gone.
+
+Routing in meerkat is genuinely **two-altitude**, and the policy was already
+designed for exactly that (its comment: "the same address can re-route after the
+host learns the MIME type from a response"). So Phase 0 splits:
+
+- **0a — UI-thread tier decision (DONE, d4a1350).** At nav time the host knows the
+  url (scheme) and the node's pin but not yet the content-type. `compat_pins:
+  HashSet<member>` became `engine_pins: HashMap<member, engine_id>`; the host holds
+  a `route_policy`; each node routes via `route_filtered(request{pinned_engine},
+  is_available)`, and `is_surface_engine(decision.engine_id)` picks the scrying lane
+  vs the constellation. The compatibility view is a pin to `scrying.web`. Added
+  `inker::routing::is_surface_engine` as the canonical tier-2 classifier.
+  *Verified:* a `>compat_view` node renders through WebView2 via the route (producer
+  spawns, no `EngineNotFound`); normal http/gemini unchanged.
+- **0b — actor content-type pass (NEXT).** The off-thread actor's
+  `engine_id_for` + `is_html` in [card.rs](../../../crates/meerkat/src/card.rs) is the
+  second altitude (post-fetch, content-type known) and the `register-viewer`-shaped
+  duplicate. Fold it into the same `route_policy` (the content-type rules already
+  exist there), dispatching the decision to the document `EngineRegistry` (tier 1)
+  or the serval html lane. Harvest `register-viewer`'s capability/conformance
+  declarations into `inker::routing`; retire the duplicate (integration plan §1.9 / §6).
+- *Phase 0 done when:* both altitudes consult one `route_policy`, and the only
+  bespoke per-content `match` left is gone.
 
 **Phase 1 — activation model**
 - `EngineEnableSet` (global default, app setting) + a per-engine session-manifest override field; `is_available = contains && enabled`.
@@ -112,8 +131,10 @@ Done-conditions, not dates (per house rule).
 
 - 2026-06-15: Routing precedence, `pinned_engine`, `per_host_overrides`, `route_filtered`, and the `host.external-protocol` fallback are all already implemented in [routing.rs](../../../crates/inker/src/routing.rs). The two registries ([engine.rs](../../../crates/inker/src/engine.rs), [surface_engine.rs](../../../crates/inker/src/surface_engine.rs)) cleanly encode the user's two-tier model, and that split coincides with the charter's glass/black-box fidelity axis and the wasm/native build axis. The single missing piece for a picker is consumption: meerkat routes nothing through the policy today.
 - 2026-06-15: The verso charter (Mark, 2026-06-10) already assigns the picker to inker and reserves verso for the flip. The user's "verso = engine switcher" framing resolves to picker (inker) + flip (verso) composed.
+- 2026-06-15: meerkat's content routing is **two-altitude**, and that is inherent, not accidental: at nav time the host has the url (scheme + pin) but not the content-type, which only the off-thread actor learns post-fetch. The policy is built for this (scheme/pin first pass, content-type second pass), so Phase 0 splits cleanly into 0a (UI-thread tier + pin) and 0b (actor content-type), both consulting one `route_policy`. The `is_available` closure must report *true* for the lanes meerkat handles without a document-registry entry (serval html, mere:// internal, external-protocol, linked-data) or an http node would wrongly fall through to the OS hand-off.
 
 ## Progress
 
 - 2026-06-15: scry-in-tile (single focused tile) shipped + verified (meerkat 0adca6e); multi-tile scry shipped + verified (06b6ac7) — two independent WebView2 panes on one shared `CompositionRoot`, per-pane input. This advances the verso charter's P4 (scrying tile as a live, interactive actor) but through the ad-hoc `compat_pins` path; Phase 0 folds it into routing.
 - 2026-06-15: Plan authored from a read of routing.rs, engine.rs, surface_engine.rs, scrying-engine, the verso charter, the engine-profile-boundary plan, the browser-multiplexer framing, and the modular-integration plan. Activation scope decided: global default + per-session override.
+- 2026-06-15: **Phase 0a shipped + verified (meerkat d4a1350).** `compat_pins` retired into `engine_pins: HashMap<member, engine_id>` + a host `route_policy`; the UI-thread tier decision routes via `route_filtered(request{pinned_engine}, is_available)` → `is_surface_engine` picks the scrying lane. Added `inker::routing::is_surface_engine`. `>compat_view` is now a pin to `scrying.web`. Headed-verified: pinned node renders through WebView2 via the route (producer spawns, no `EngineNotFound`); http/gemini nodes render unchanged through the constellation. Phase 0b (fold card.rs `engine_id_for`/`is_html` into the policy + harvest register-viewer) is next.
