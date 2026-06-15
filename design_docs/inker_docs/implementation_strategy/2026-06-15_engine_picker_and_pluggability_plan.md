@@ -128,9 +128,12 @@ and re-enabling spawns it again.
 - A panel listing registered engines with build/active/off state, the `per_host_overrides` table, and the default-policy editor. Reuses the apparatus settings surface.
 - *Done when:* a per-host override ("example.com → scrying.web") set in the panel takes effect on next navigation.
 
-**Phase 3 — per-node picker**
-- "Open in \<engine\>" on the tile / card, listing only `is_available` engines, writing `pinned_engine` on the node. The single most direct expression of the user's ask.
-- *Done when:* right-clicking a node and choosing an engine re-renders it through that engine and persists the pin.
+**Phase 3 — per-node picker (DONE, c5f63d8).** The single-node context menu offers
+"Auto (default engine)" + "Open in \<engine\>" for each pickable web/surface engine
+that is `engine_available`, the current choice ✓-marked; picking writes `engine_pins`
+(Auto clears it). `ContextAction::PinEngine(&'static str)` + `AutoEngine`. *Verified:*
+menu shows Auto ✓ / Serval / System WebView (Wry filtered out); clicking System
+WebView flips the node from serval to a live WebView2.
 
 **Phase 4 — no-handler UX + local files**
 - Surface `route_degraded` in the picker; "open externally" affordance. Content-sniffer for `file://` feeding `content_type`; serval as the web-standard default for local files.
