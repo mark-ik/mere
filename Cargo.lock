@@ -6620,7 +6620,6 @@ dependencies = [
  "pelt-core",
  "pelt-desktop",
  "platen",
- "platen-view",
  "pollster",
  "raw-window-handle",
  "register-diagnostics",
@@ -8862,20 +8861,6 @@ dependencies = [
  "serde_json",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "platen-view"
-version = "0.0.1"
-dependencies = [
- "forme",
- "kernel",
- "layout-dom-api",
- "platen",
- "serval-scripted-dom",
- "tracing",
- "uuid",
- "xilem-serval",
 ]
 
 [[package]]

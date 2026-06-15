@@ -38,7 +38,6 @@ members = [
     "crates/platen/domain/gloss",
     "crates/platen/domain/workbench",
     "crates/platen/platen",
-    "crates/platen/view",
     "crates/eidetic/eidetic-core",
     "crates/eidetic/eidetic-fjall",
     "crates/eidetic/eidetic-https-fetcher",
@@ -114,7 +113,6 @@ forme = { path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }
 
 platen = { path = "crates/platen/platen" }
-platen-view = { path = "crates/platen/view" }
 apparatus = { path = "crates/platen/domain/apparatus" }
 gloss = { path = "crates/platen/domain/gloss" }
 workbench = { path = "crates/platen/domain/workbench" }

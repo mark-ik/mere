@@ -59,7 +59,7 @@ murm = { workspace = true }
 # scroll map the glue takes) and IncrementalLayout (the pane sessions).
 serval-layout = { path = "../../../serval/components/serval-layout" }
 # The paint-list -> netrender::Scene lowering (translate_paint_list); the same
-# crate the orrery + platen-view lower through.
+# crate the orrery lowers through.
 paint_list_render = { path = "../../../netrender/paint_list_render" }
 # Engine-agnostic paint command types (ColorF, DeviceIntSize) the render glue names.
 paint_list_api = { path = "../../../netrender/paint_list_api" }
@@ -115,10 +115,10 @@ linked-data = { workspace = true }
 armillary = { workspace = true }
 
 # Tiled-workbench composition (S4): forme owns the geometry-free arrangement
-# (a graph of tile / member intents); platen projects it into a WorkbenchPlan;
-# platen-view emits it as flex DOM that serval lays out. meerkat holds the open
-# tiles, drives the projection, and resolves each tile's member UUID to a node
-# URL against the session graph. The orrery is that same arrangement's
+# (a graph of tile / member intents); platen projects it into a WorkbenchPlan,
+# which `Workbench::to_tile_tree` hands to pelt's `TileSurface` to render. meerkat
+# holds the open tiles, drives the projection, and resolves each tile's member UUID
+# to a node URL against the session graph. The orrery is that same arrangement's
 # Cartography projection; the tiled mode is its Tree projection.
 # The frame tree: the window-level pane arranger (FrameLayout = split tree of
 # resizable panes). meerkat hosts the graph pane plus summoned sibling panes
@@ -131,11 +131,6 @@ platen = { workspace = true }
 # Domain a11y projections for panes hosted by the frame tree.
 apparatus-domain = { package = "apparatus", path = "../platen/domain/apparatus" }
 workbench-domain = { package = "workbench", path = "../platen/domain/workbench" }
-# The serval view layer for the tiled workbench (taffy retarget, Phase 2): emits
-# the Workbench as flex DOM that serval lays out. meerkat owns a second runner over
-# it (the workbench root), composites its band in Tree mode, reads each tile's
-# content rect back, and composites that tile's actor texture there.
-platen-view = { workspace = true }
 # Pelt's tile-tree contract + the GPU-free tile surface (V6): meerkat hosts the
 # standalone pelt `TileSurface` as its workbench pane, driven entirely through the
 # contract (`Workbench::to_tile_tree` projects forme's tiling onto it). The
