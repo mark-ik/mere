@@ -74,6 +74,7 @@ mod agent_harness;
 mod app_handler;
 mod apparatus;
 mod command_drain;
+mod engine_activation;
 mod frame_a11y;
 mod frame_a11y_panes;
 mod frame_ops;
@@ -523,6 +524,10 @@ struct Content {
     /// vs the document/constellation lane); the document-engine re-route by
     /// content-type is the actor's second pass. (engine-picker Phase 0.)
     route_policy: inker::routing::EngineRoutePolicy,
+    /// Which present engines are active this session (global default from settings +
+    /// per-session overrides). `engine_available` gates routing on this, so a
+    /// deactivated engine is never picked and spawns no actors. (engine-picker Phase 1.)
+    engine_activation: engine_activation::EngineActivation,
 }
 
 /// The `session` subsystem: the session registry plus the active session's
@@ -1025,6 +1030,9 @@ impl Shell {
                     engine_registry,
                     engine_pins: HashMap::new(),
                     route_policy: inker::routing::EngineRoutePolicy::default(),
+                    engine_activation: engine_activation::EngineActivation::new(
+                        saved_settings.disabled_engines.clone(),
+                    ),
                 },
                 session: Session {
                     manifests,

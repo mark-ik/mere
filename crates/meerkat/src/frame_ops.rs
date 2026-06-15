@@ -115,6 +115,7 @@ impl WindowCtx<'_> {
             theme_id: Some(self.shared.presentation.active_theme_id.clone()),
             shellbar_edge: self.shared.presentation.shellbar_edge,
             physics_damping: self.shared.presentation.physics_damping,
+            disabled_engines: self.shared.content.engine_activation.global_disabled_vec(),
         };
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");

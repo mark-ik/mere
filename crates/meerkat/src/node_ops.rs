@@ -264,11 +264,18 @@ impl WindowCtx<'_> {
             .route_filtered(&request, |id| self.engine_available(id))
     }
 
-    /// Whether engine `id` is present on this host: a registered document engine,
-    /// or a known surface engine available on this platform. The routing policy
-    /// walks past engines this returns false for, so a pin to an absent engine
-    /// (e.g. `scrying.web` off Windows) falls back to the scheme rule. (Phase 0.)
+    /// Whether engine `id` can be routed to this session: it is **present** on this
+    /// host (registered / known) **and** **active** (not deactivated). The routing
+    /// policy walks past engines this returns false for, so a pin to an absent or
+    /// deactivated engine falls back to the scheme rule. (engine-picker Phase 0/1.)
     pub(super) fn engine_available(&self, id: &str) -> bool {
+        self.engine_present(id) && self.engine_active(id)
+    }
+
+    /// Whether engine `id` is **present** on this host: a registered document engine,
+    /// the serval html lane, the host-handled internal / external / ingest lanes, or
+    /// a known surface engine available on this platform. (engine-picker Phase 0.)
+    fn engine_present(&self, id: &str) -> bool {
         use inker::routing::{
             ENGINE_EXTERNAL_PROTOCOL, ENGINE_GRAPHSHELL_INTERNAL, ENGINE_LINKED_DATA_INGEST,
             ENGINE_SCRYING_WEB, ENGINE_SERVAL_WEB,
@@ -289,6 +296,23 @@ impl WindowCtx<'_> {
         }
         // The scrying surface engine is the system WebView pool — Windows only today.
         cfg!(target_os = "windows") && id == ENGINE_SCRYING_WEB
+    }
+
+    /// Whether engine `id` is **active** (not deactivated this session). The host
+    /// lanes (mere:// internal, the OS hand-off fallback, JSON-LD ingest) are
+    /// structural and never user-deactivatable; every real engine honors the
+    /// session's activation set (global default + per-session override). (Phase 1.)
+    fn engine_active(&self, id: &str) -> bool {
+        use inker::routing::{
+            ENGINE_EXTERNAL_PROTOCOL, ENGINE_GRAPHSHELL_INTERNAL, ENGINE_LINKED_DATA_INGEST,
+        };
+        if matches!(
+            id,
+            ENGINE_GRAPHSHELL_INTERNAL | ENGINE_EXTERNAL_PROTOCOL | ENGINE_LINKED_DATA_INGEST
+        ) {
+            return true;
+        }
+        self.shared.content.engine_activation.is_enabled(id)
     }
 
     /// Whether `member`'s node renders through a tier-2 **surface** engine (a system

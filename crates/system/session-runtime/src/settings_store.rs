@@ -62,6 +62,11 @@ pub struct PersistedSettings {
     /// engine's tuned value.
     #[serde(default = "default_physics_damping")]
     pub physics_damping: f32,
+    /// Globally deactivated engine ids (e.g. `scrying.web`). A present-but-disabled
+    /// engine is never routed to and spawns no actors; the picker shows it as off.
+    /// Empty = every engine the build carries is active. (engine-picker Phase 1.)
+    #[serde(default)]
+    pub disabled_engines: Vec<String>,
 }
 
 /// The layout engine's tuned default linear damping (mirrors gyre's
@@ -77,6 +82,7 @@ impl Default for PersistedSettings {
             theme_id: None,
             shellbar_edge: ShellbarEdge::default(),
             physics_damping: default_physics_damping(),
+            disabled_engines: Vec::new(),
         }
     }
 }
@@ -140,7 +146,7 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let dir = temp_session_dir("round-trip");
-        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5 };
+        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()] };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir).unwrap().expect("settings file should be present");
         assert_eq!(restored, original);
@@ -166,8 +172,8 @@ mod tests {
     #[test]
     fn save_overwrites_atomically_with_no_tmp_left() {
         let dir = temp_session_dir("overwrite");
-        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5 }).unwrap();
-        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, physics_damping: 2.5 }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5, disabled_engines: Vec::new() }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, physics_damping: 2.5, disabled_engines: Vec::new() }).unwrap();
         let restored = load_settings(&dir).unwrap().unwrap();
         assert_eq!(restored.tab_cap, 24);
         let tmp = settings_path(&dir).with_extension("json.tmp");
