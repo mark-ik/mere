@@ -386,12 +386,14 @@ impl WindowCtx<'_> {
                         // / pin).
                         self.view.active_content = super::ContentPane::Workbench;
                         if button == MouseButton::Left {
-                            // Route the press to the pelt tile surface (host-authority):
-                            // hit-test its frame, dispatch the click, and apply the
-                            // emitted gesture to the Workbench. (Divider resize + tab
-                            // drag move to the surface's pointer state machine in a
-                            // follow-on.)
-                            self.workbench_surface_click(x, y);
+                            // A press on a slot divider starts a resize (host-authority:
+                            // the drag reweights the Workbench directly); otherwise it
+                            // routes to the surface frame (tab activate / close).
+                            if let Some(i) = self.surface_divider_at(x, y) {
+                                self.view.divider_drag = Some((i, x, self.view.workbench.weights()));
+                            } else {
+                                self.workbench_surface_click(x, y);
+                            }
                         }
                     } else {
                         // The orrery pane: right-click opens the context menu; a left
@@ -752,6 +754,28 @@ impl WindowCtx<'_> {
         }
         dom.attributes(node)
             .find(|a| a.name.local.as_ref() == "data-divider")
+            .and_then(|a| a.value.parse::<usize>().ok())
+    }
+
+    /// The slot-boundary index of a `.tile-divider` in the pelt surface frame under
+    /// window `(x, y)`, or `None` — the surface counterpart to [`divider_at`]. The
+    /// surface lays its frame out, marks each divider with `data-dindex` (the boundary
+    /// index), and the boundary maps 1:1 to the Workbench's slots (the projection keeps
+    /// slot order), so the resize ([`drag_divider`]) reweights the right pair.
+    fn surface_divider_at(&self, x: f32, y: f32) -> Option<usize> {
+        let wr = self.workbench_leaf_rect()?;
+        let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
+        let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
+        let (lx, ly) = (x - wr[0], y - wr[1]);
+        let surface = self.view.pelt_surface.as_ref()?;
+        let node = surface.hit_test_frame(lx, ly, ww, wh)?;
+        let dom = surface.dom();
+        let dom = dom.borrow();
+        if !has_class(&dom, node, "tile-divider") {
+            return None;
+        }
+        dom.attributes(node)
+            .find(|a| a.name.local.as_ref() == "data-dindex")
             .and_then(|a| a.value.parse::<usize>().ok())
     }
 
