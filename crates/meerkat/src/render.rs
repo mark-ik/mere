@@ -354,14 +354,36 @@ impl WindowCtx<'_> {
                     self.orrery().graph().get_node_by_id(m).map(|(_, n)| (m, n.url().to_string()))
                 })
                 .collect();
+            // Each tab is tinted to match its graph node, so a tab reads as its node:
+            // the orrery's gnode coloring (NODE_SHEET) — selection wins (amber, dark
+            // label), else the activation state (open green / closed red / idle blue),
+            // each with that gnode's own label color. Recomputed per frame, so selecting
+            // a node recolors its tab (the yellow highlight) live.
+            let states = self.node_states();
+            let selected: std::collections::HashSet<GraphMemberId> =
+                self.orrery().selected_members().into_iter().collect();
             let tree = self.view.workbench.to_tile_tree(|m| {
                 let key = m.as_u128() as u64;
+                let accent = if selected.contains(&m) {
+                    pelt_core::tile::TabAccent { background: [232, 150, 40], foreground: [28, 22, 10] }
+                } else {
+                    match states.get(&m) {
+                        Some(orrery::NodeState::Open) => {
+                            pelt_core::tile::TabAccent { background: [58, 140, 94], foreground: [238, 250, 243] }
+                        }
+                        Some(orrery::NodeState::Closed) => {
+                            pelt_core::tile::TabAccent { background: [166, 72, 72], foreground: [250, 240, 240] }
+                        }
+                        _ => pelt_core::tile::TabAccent { background: [54, 92, 156], foreground: [245, 247, 252] },
+                    }
+                };
                 pelt_core::tile::Tile {
                     id: pelt_core::tile::TileId(key),
                     title: titles.get(&m).cloned().unwrap_or_default(),
                     content: pelt_core::tile::ContentSource::ExternalTexture(
                         pelt_core::tile::TextureKey(key),
                     ),
+                    accent: Some(accent),
                 }
             });
             if let Some(tree) = tree {
