@@ -243,11 +243,35 @@ fn routed_document(
 ) -> Option<EngineDocument> {
     let id = engine_id_for(fetched.content_type.as_deref())?;
     let engine = registry.engine(id)?;
-    let mut input = EngineInput::new(url, fetched.body.clone());
+    // Bound the body before the engine lays it out: an arbitrarily long document
+    // renders to one full-height vello scene, and a large enough one overflows wgpu's
+    // max buffer (a 166 KB gemini capsule built a 384 MB scene > the 256 MB cap and
+    // panicked the device). The cap is generous — a very long page still renders, the
+    // tail is dropped at a line boundary — and mirrors how `ready_blocks` bounds the
+    // plain lane. (Card / tile render robustness.)
+    let mut input = EngineInput::new(url, bound_document_body(&fetched.body));
     if let Some(ct) = &fetched.content_type {
         input = input.with_content_type(ct.clone());
     }
     engine.render(&input).ok()
+}
+
+/// Cap a document-lane body so its laid-out scene stays well under the GPU's max
+/// buffer. Returns the body unchanged when already small; otherwise truncates to the
+/// last line boundary within the cap.
+fn bound_document_body(body: &str) -> String {
+    const MAX_DOC_BYTES: usize = 32 * 1024;
+    if body.len() <= MAX_DOC_BYTES {
+        return body.to_string();
+    }
+    let mut end = MAX_DOC_BYTES;
+    while end > 0 && !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    if let Some(nl) = body[..end].rfind('\n') {
+        end = nl;
+    }
+    body[..end].to_string()
 }
 
 /// Map an HTTP content-type to a nematic document engine id (the base type, minus
