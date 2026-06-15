@@ -674,15 +674,31 @@ impl WindowCtx<'_> {
                 pelt_core::tile::TileEvent::Activated(id) => {
                     if let Some(m) = member_of(id) {
                         self.view.workbench.activate(m);
+                        self.view.focused_tile = Some(m);
+                        // Remember the activated tab as a drag candidate (the press is
+                        // kept in window coords, matching `tile_rects`). The release
+                        // resolves it: a move/split when dragged onto another slot past
+                        // the slop, else a plain click (the tab already activated here).
+                        self.view.tab_drag = Some((m, (x, y)));
                     }
                 },
                 pelt_core::tile::TileEvent::Closed(id) => {
                     if let Some(m) = member_of(id) {
                         self.view.workbench.close_tile(m);
+                        self.shared.content.constellation.reap(m);
+                        if self.view.workbench.open_members().is_empty() {
+                            // Closing the last tile closes the workbench pane entirely
+                            // (back to just the orrery). (Workbench-as-pane.)
+                            self.close_workbench();
+                        } else if self.view.focused_tile == Some(m) {
+                            self.view.focused_tile =
+                                self.view.workbench.open_members().first().copied();
+                        }
                     }
                 },
-                // Dragged / DividerMoved: handled when the surface's pointer state
-                // machine is wired in (it tracks the drag + emits these on release).
+                // DividerMoved is handled by the host divider-drag path
+                // (`surface_divider_at` + `drag_divider`); the surface does not own
+                // the resize gesture.
                 _ => {},
             }
         }

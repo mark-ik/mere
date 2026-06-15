@@ -932,6 +932,34 @@ impl WindowCtx<'_> {
                 }
             }
         }
+        // Drop-target highlight: while a tab is dragged past the slop, tint the tile
+        // under the cursor — the slot the drop will move/split into. A translucent
+        // fill over the target's reported rect, composited on top of the tiles. The
+        // host owns this overlay because the pelt surface is a driven view and does
+        // not know about the in-flight drag. (Tab-drag feedback; styling is a polish
+        // pass.)
+        if let Some(target) = self.drag_target_member() {
+            if let Some(rect) = self
+                .view
+                .tile_rects
+                .iter()
+                .find(|(m, _)| *m == target)
+                .map(|(_, r)| *r)
+            {
+                let mut scene = netrender::Scene::new(1, 1);
+                scene.push_rect(0.0, 0.0, 1.0, 1.0, [0.30, 0.55, 0.95, 0.28]);
+                let (_t, view) =
+                    core.rasterize(&scene, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                core.renderer().compose_external_texture(
+                    &view,
+                    &target_view,
+                    format,
+                    w,
+                    h,
+                    ExternalTexturePlacement::new(rect),
+                );
+            }
+        }
         // The roster pane renders through its view-driven `RosterPane` bundle: set the
         // rows, clamp the stored scroll to the last frame's content height, frame, and
         // composite. Row clicks dispatch through the runner DOM and the a11y projection
