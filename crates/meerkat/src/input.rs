@@ -466,6 +466,21 @@ impl WindowCtx<'_> {
                         return;
                     }
                 }
+                // The same inline-link follow for a workbench tile: a click on a link in
+                // a tile's content navigates *that tile's member* in place — focus it so
+                // the omnibar + `sync_orrery` target it (`nav_target_member` is the
+                // focused tile in Tree), then follow the link the card path's way.
+                if button == MouseButton::Left {
+                    if let Some((member, base, href)) = self.tile_link_at(x, y) {
+                        self.view.workbench.activate(member);
+                        self.view.focused_tile = Some(member);
+                        let url = nav::resolve_href(&base, &href);
+                        self.view.runner.update(|c| c.follow_link(url));
+                        self.sync_orrery();
+                        self.view.request_redraw();
+                        return;
+                    }
+                }
                 if let Some(b) = orrery_button {
                     let (ox, oy) = self.orrery_point(x, y);
                     // A field move / resize ends here; its geometry is graph truth, so
@@ -585,6 +600,33 @@ impl WindowCtx<'_> {
                         .map(|(_, n)| n.url().to_string())
                         .unwrap_or_default();
                     return Some((base, href));
+                }
+            }
+        }
+        None
+    }
+
+    /// The `(tile member, member URL, link href)` under window `(x, y)`, if it lands on
+    /// a link in a workbench tile's composited content. The tile counterpart to
+    /// [`card_link_at`](Self::card_link_at): the tiles composite at `tile_rects` (window
+    /// axis-aligned, no orrery camera), so the same content-local mapping (rect origin +
+    /// the tile's scroll) and the same actor link map resolve it. Returns the member too,
+    /// since a tile click navigates *that* tile rather than the focused card.
+    fn tile_link_at(&self, x: f32, y: f32) -> Option<(GraphMemberId, String, String)> {
+        for (member, r) in &self.view.tile_rects {
+            if x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3] {
+                let scroll = self.view.scroll.get(member).copied().unwrap_or(0.0);
+                let lx = x - r[0];
+                let ly = (y - r[1]) + scroll;
+                if let Some(href) = self.shared.content.constellation.link_at(*member, lx, ly) {
+                    let href = href.to_string();
+                    let base = self
+                        .orrery()
+                        .graph()
+                        .get_node_by_id(*member)
+                        .map(|(_, n)| n.url().to_string())
+                        .unwrap_or_default();
+                    return Some((*member, base, href));
                 }
             }
         }
