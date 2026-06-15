@@ -483,22 +483,41 @@ impl WindowCtx<'_> {
                     self.view.divider_drag = None;
                     self.view.frame_divider_drag = None;
                 }
-                // Resolve a tab drag (tiled view): if the press moved past the slop
-                // and released over a tile, drop by zone — the outer quarter on
-                // either side splits the tab out to a new slot there, the center
-                // moves / stacks it into that slot (reorder within, move across). A
-                // release in place was a plain click (the tab activated on press).
+                // Resolve a tab drag (tiled view): if the press moved past the slop and
+                // released over a tile, drop by zone. The nearest edge within the outer
+                // quarter splits — left/right makes a horizontal (Row) split, top/bottom
+                // a vertical (Column) split — and the center stacks the tab into that
+                // cell (reorder within, move across). Dropping on the dragged tab's own
+                // cell edge splits it out of its stack. A release in place was a plain
+                // click (the tab activated on press).
                 if button == MouseButton::Left {
                     if let Some((member, (px, py))) = self.view.tab_drag.take() {
                         if (x - px).hypot(y - py) > 6.0 {
-                            if let Some((target, [x0, _, x1, _])) = self.tile_at(x, y) {
-                                let edge = (x1 - x0).max(1.0) * 0.25;
-                                let moved = if x < x0 + edge {
-                                    self.view.workbench.split_beside(member, target, false)
-                                } else if x > x1 - edge {
-                                    self.view.workbench.split_beside(member, target, true)
-                                } else {
+                            if let Some((target, [x0, y0, x1, y1])) = self.tile_at(x, y) {
+                                let w = (x1 - x0).max(1.0);
+                                let h = (y1 - y0).max(1.0);
+                                let left = (x - x0) / w;
+                                let right = (x1 - x) / w;
+                                let top = (y - y0) / h;
+                                let bottom = (y1 - y) / h;
+                                let nearest = left.min(right).min(top).min(bottom);
+                                let moved = if nearest > 0.25 {
                                     self.view.workbench.move_to_slot_of(member, target)
+                                } else {
+                                    let (axis, after) = if nearest == left {
+                                        (pelt_core::tile::SplitAxis::Row, false)
+                                    } else if nearest == right {
+                                        (pelt_core::tile::SplitAxis::Row, true)
+                                    } else if nearest == top {
+                                        (pelt_core::tile::SplitAxis::Column, false)
+                                    } else {
+                                        (pelt_core::tile::SplitAxis::Column, true)
+                                    };
+                                    if target == member {
+                                        self.view.workbench.split_out(member, axis, after)
+                                    } else {
+                                        self.view.workbench.split_beside_axis(member, target, axis, after)
+                                    }
                                 };
                                 if moved {
                                     self.view.focused_tile = Some(member);
@@ -729,6 +748,17 @@ impl WindowCtx<'_> {
         let dom = surface.dom();
         let dom = dom.borrow();
         if !has_class(&dom, node, "tile-divider") {
+            return None;
+        }
+        // Only the top-level split's dividers resize here (the back-compat `weights`
+        // path): they carry an empty `data-divider` path. Nested-split dividers stay
+        // inert until per-split resize lands, so a nested drag can't corrupt the
+        // top-level fractions.
+        let nested = dom
+            .attributes(node)
+            .find(|a| a.name.local.as_ref() == "data-divider")
+            .is_some_and(|a| !a.value.is_empty());
+        if nested {
             return None;
         }
         dom.attributes(node)

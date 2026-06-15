@@ -261,6 +261,22 @@ impl Workbench {
         self.root.as_mut().is_some_and(|r| r.split_beside(dragged, target, axis, after))
     }
 
+    /// Split `dragged` out of its current cell into a fresh cell beside that cell along
+    /// `axis`, on the `after` side — a tab dragged onto an edge of its **own** cell.
+    /// Anchors on another member of the cell, so a no-op when `dragged` is already alone
+    /// in its cell (it is its own cell). Returns whether it moved.
+    pub fn split_out(&mut self, dragged: GraphMemberId, axis: SplitAxis, after: bool) -> bool {
+        let Some(anchor) = self.cell_sibling(dragged) else {
+            return false;
+        };
+        self.split_beside_axis(dragged, anchor, axis, after)
+    }
+
+    /// A different member sharing `member`'s cell, if any (the split-out anchor).
+    fn cell_sibling(&self, member: GraphMemberId) -> Option<GraphMemberId> {
+        self.root.as_ref().and_then(|r| r.sibling_in_stack(member))
+    }
+
     /// Collapse every open member into a single tab-stack (stack everything). The first
     /// member's tab stays active. A no-op below two members.
     pub fn stack_all(&mut self) {
@@ -532,6 +548,22 @@ mod tests {
             }
             other => panic!("expected a column split, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn split_out_pulls_a_tab_out_of_its_own_stack() {
+        let mut wb = Workbench::new();
+        wb.open_tile(m(1));
+        wb.open_tile(m(2));
+        wb.stack_all(); // one stack [1, 2]
+        assert_eq!(wb.slot_count(), 1);
+        assert!(wb.split_out(m(1), SplitAxis::Row, true), "m(1) splits out beside the stack");
+        assert_eq!(wb.slot_count(), 2);
+        assert_eq!(wb.tile_count(), 2, "no tab lost");
+        // A tab alone in its cell has no sibling to anchor on — a no-op.
+        let mut wb2 = Workbench::new();
+        wb2.open_tile(m(5));
+        assert!(!wb2.split_out(m(5), SplitAxis::Column, false), "alone → no-op");
     }
 
     #[test]

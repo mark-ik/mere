@@ -81,6 +81,20 @@ impl Pane {
         }
     }
 
+    /// A different member sharing `member`'s stack, if any — the anchor for splitting
+    /// `member` out of a multi-tab cell. `None` when `member` is alone in its cell.
+    pub(super) fn sibling_in_stack(&self, member: GraphMemberId) -> Option<GraphMemberId> {
+        match self {
+            Pane::Stack(s) if s.members.contains(&member) => {
+                s.members.iter().copied().find(|m| *m != member)
+            }
+            Pane::Stack(_) => None,
+            Pane::Split { children, .. } => {
+                children.iter().find_map(|b| b.pane.sibling_in_stack(member))
+            }
+        }
+    }
+
     /// The number of leaf stacks (the "slots").
     pub(super) fn leaf_count(&self) -> usize {
         match self {
