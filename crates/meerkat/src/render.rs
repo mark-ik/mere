@@ -371,6 +371,16 @@ impl WindowCtx<'_> {
                     Some(s) => s.set_tree(tree),
                     None => self.view.pelt_surface = Some(pelt_desktop::TileSurface::new(tree)),
                 }
+                // Theme the tiles to match the chrome: layer the chrome-theme-derived
+                // tile CSS over the surface's structural default, rebuilt only when the
+                // active theme changed (the surface persists across frames).
+                let theme = self.shared.presentation.chrome_theme;
+                if self.view.pelt_theme != Some(theme) {
+                    if let Some(s) = self.view.pelt_surface.as_mut() {
+                        s.set_theme(crate::tile_sheet(&theme));
+                    }
+                    self.view.pelt_theme = Some(theme);
+                }
                 let frame = self.view.pelt_surface.as_mut().unwrap().frame(ww, wh);
                 workbench_external = frame.external_tiles;
                 workbench_scene = Some((frame.frame_scene, ww, wh));

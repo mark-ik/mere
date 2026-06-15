@@ -370,6 +370,47 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
     ]
 }
 
+/// Build the pelt tile-surface theme sheet from the resolved [`ChromeTheme`], so the
+/// workbench tiles read as the same shell as the chrome. The surface layers this over
+/// its structural default CSS (`TileSurface::set_theme`), so it only restates colors,
+/// not layout. Roles mirror [`chrome_sheet`] and the Strophos shared-palette model
+/// (woodshed's `audio-widgets::theme` — surface ladder + selection fill + text
+/// weights): the tab bar is the toolbar band, an inactive tab a control surface, the
+/// active tab the selection fill, the content area the band tone (matching [`CARD_BG`]
+/// so the gap below a short card is seamless, replacing pelt's white page default),
+/// and the gutter a darkened seam.
+fn tile_sheet(c: &ChromeTheme) -> String {
+    let rgb = |color: Color32| {
+        let [r, g, b, _] = color.to_array();
+        format!("rgb({r}, {g}, {b})")
+    };
+    // A darker step off a token, for the slot gutter (no "darkest" theme token; the
+    // chrome's frame dividers use a near-black seam, so halve the band tone here).
+    let darken = |color: Color32, f: f32| {
+        let [r, g, b, _] = color.to_array();
+        let s = |v: u8| (v as f32 * f).round().clamp(0.0, 255.0) as u8;
+        format!("rgb({}, {}, {})", s(r), s(g), s(b))
+    };
+    format!(
+        ".tile-tabbar {{ background: {tabbar}; }} \
+         .tile-tab {{ color: {tab_text}; background: {tab_bg}; }} \
+         .tile-tab.active {{ color: {active_text}; background: {active_bg}; }} \
+         .tile-close {{ color: {close}; }} \
+         .tile-content {{ background: {content}; }} \
+         .tile-divider {{ background: {divider}; }} \
+         .tile-ghost {{ color: {active_text}; background: {active_bg}; border: 1px solid {ghost_border}; }}",
+        tabbar = rgb(c.toolbar_bg),
+        tab_text = rgb(c.muted_text),
+        tab_bg = rgb(c.control_bg),
+        active_text = rgb(c.strong_text),
+        active_bg = rgb(c.active_bg),
+        close = rgb(c.muted_text),
+        content = rgb(c.toolbar_bg),
+        divider = darken(c.toolbar_bg, 0.5),
+        ghost_border = rgb(c.muted_text),
+    )
+}
+
 /// Fallback chrome-band height (px) if the toolbar can't be measured.
 const FALLBACK_TOOLBAR_H: u32 = 64;
 

@@ -87,6 +87,9 @@ pub(crate) struct WindowView {
     /// surface's reported tile rects — the same lib pelt's bin wraps. `None` until the
     /// workbench pane first renders.
     pub(crate) pelt_surface: Option<pelt_desktop::TileSurface>,
+    /// The chrome theme last applied to `pelt_surface` (via `set_theme`), so the tile
+    /// theme is rebuilt only when the active theme actually changes, not every frame.
+    pub(crate) pelt_theme: Option<register_theme::chrome::ChromeTheme>,
     /// The roster pane as a view-driven bundle (runner + cached layout + sheet): a
     /// `roster_view` over its rows, dispatching row clicks through the DOM instead of
     /// a rect cache. (Window composition P2 companion — list-pane view-ification.)
@@ -262,6 +265,7 @@ impl WindowView {
             chrome_session: None,
             workbench,
             pelt_surface: None,
+            pelt_theme: None,
             roster_pane: crate::roster_view::RosterPane::new(),
             session_row_rects: Default::default(),
             session_close_rects: Default::default(),
