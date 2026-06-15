@@ -124,9 +124,16 @@ and re-enabling spawns it again.
 - **Per-session persistence:** `session_override` is in memory; it persists when the
   session manifest is wired (multiplexer §3).
 
-**Phase 2 — engine manager (apparatus pane)**
-- A panel listing registered engines with build/active/off state, the `per_host_overrides` table, and the default-policy editor. Reuses the apparatus settings surface.
-- *Done when:* a per-host override ("example.com → scrying.web") set in the panel takes effect on next navigation.
+**Phase 2 — engine manager (apparatus pane) (DONE, a7e609e).** The apparatus pane
+gained an "Engines" section: every present user-facing engine (Serval + System
+WebView headline, then the nematic document engines) as an active/off toggle button,
+active ones highlighted. Clicking flips the engine's **global** activation
+(`engine:toggle:<id>` → `toggle_engine`), pushes the deactivated set to the actor
+pool, and persists to `settings.json`. *Verified:* toggling System WebView off writes
+`disabled_engines:["scrying.web"]`, toggling on clears it.
+- **Phase 2b (deferred):** the `per_host_overrides` editor (host text field + engine
+  choice) and a per-session toggle (vs the global one this ships). Absent engines are
+  simply not listed; an explicit "in build / absent" row is cosmetic, deferred.
 
 **Phase 3 — per-node picker (DONE, c5f63d8).** The single-node context menu offers
 "Auto (default engine)" + "Open in \<engine\>" for each pickable web/surface engine
@@ -164,4 +171,5 @@ WebView flips the node from serval to a live WebView2.
 - 2026-06-15: Plan authored from a read of routing.rs, engine.rs, surface_engine.rs, scrying-engine, the verso charter, the engine-profile-boundary plan, the browser-multiplexer framing, and the modular-integration plan. Activation scope decided: global default + per-session override.
 - 2026-06-15: **Phase 0a shipped + verified (meerkat d4a1350).** `compat_pins` retired into `engine_pins: HashMap<member, engine_id>` + a host `route_policy`; the UI-thread tier decision routes via `route_filtered(request{pinned_engine}, is_available)` → `is_surface_engine` picks the scrying lane. Added `inker::routing::is_surface_engine`. `>compat_view` is now a pin to `scrying.web`. Headed-verified: pinned node renders through WebView2 via the route (producer spawns, no `EngineNotFound`); http/gemini nodes render unchanged through the constellation.
 - 2026-06-15: **Phase 0b shipped + verified (meerkat 1966183). Phase 0 complete.** `render_content_scene` routes through the policy (`route_document_engine`); `engine_id_for` / `is_html` / `base_type` deleted; the canonical `EngineRoutePolicy::default` made a superset (titan scheme rule + `ENGINE_NEMATIC_TITAN`, `text/html` → `serval.web`, smolweb content-type refinements). Both routing altitudes (UI-thread tier, actor content-type) now consult one policy; all three bespoke selectors are gone. Verified: inker routing 25/25, card 10/10; headed, https HTML → serval and a gemini capsule → nematic.gemtext via the one policy.
-- 2026-06-15: **Phase 1 shipped + verified (meerkat e90825e).** `engine_available` = `engine_present && engine_active`; `EngineActivation` (global default from `settings.json` `disabled_engines` + in-memory per-session override); host lanes exempt. Verified: engine_activation 4/4, settings_store 7/7; headed, `scrying.web` disabled → `>compat_view` node falls back to serval with no producer, re-enable spawns it again. **Next: Phase 1b (thread activation to the content actor for document engines), then Phase 2 (apparatus engine manager) + Phase 3 (per-node picker).**
+- 2026-06-15: **Phase 1 shipped + verified (meerkat e90825e).** `engine_available` = `engine_present && engine_active`; `EngineActivation` (global default from `settings.json` `disabled_engines` + in-memory per-session override); host lanes exempt. Verified: engine_activation 4/4, settings_store 7/7; headed, `scrying.web` disabled → `>compat_view` node falls back to serval with no producer, re-enable spawns it again.
+- 2026-06-15: **Phases 1b / 3 / 2 shipped + verified (b4706c6, c5f63d8, a7e609e).** 1b: the constellation passes its deactivated set to each spawned actor, which registers only enabled engines (disabled `nematic.gemtext` → synthesized fallback). 3: the single-node context menu offers Auto + "Open in \<engine\>" (✓-marked), writing `engine_pins`; clicking System WebView flips a node to a live WebView2. 2: the apparatus "Engines" section toggles each engine's global activation, persisted to `settings.json`. **The whole picker arc (route → activate → manage → pick) is in and verified. Remaining: Phase 4 (no-handler / local files), Phase 5 (weld/graft + verso flip), Phase 2b (per-host overrides + per-session toggle), register-viewer harvest.**
