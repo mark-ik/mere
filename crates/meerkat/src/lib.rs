@@ -277,6 +277,14 @@ pub enum ContextAction {
     /// graph pane is open. Drains like `ShellbarMove` without touching
     /// `context_set`. (Window composition — pane-as-unit.)
     CloseGraphPane,
+    /// Pin the context node(s) to a specific engine — the per-node engine picker
+    /// ("Open in <engine>"). The id is a stable engine constant (`&'static str`, so
+    /// `ContextAction` stays `Copy`). Routing then prefers this engine for the node.
+    /// (engine-picker Phase 3.)
+    PinEngine(&'static str),
+    /// Clear the context node(s)' engine pin — "Auto (default routing)". The node
+    /// returns to scheme/content-type routing. (engine-picker Phase 3.)
+    AutoEngine,
 }
 
 impl Chrome {

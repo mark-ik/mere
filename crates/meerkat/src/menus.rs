@@ -10,6 +10,7 @@
 //! the action. Factored out of `frame_ops.rs` to keep files under the 600-LOC
 //! ceiling.
 
+use forme::GraphMemberId;
 use kernel::graph::SemanticSubKind;
 use meerkat::{Chrome, ContextAction, ContextItem};
 use session_runtime::ShellbarEdge;
@@ -49,7 +50,11 @@ impl WindowCtx<'_> {
         // A selection-based menu never mints at the cursor; clear any stale anchor.
         self.view.context_origin = None;
         let mut items = if set.len() == 1 {
-            vec![ContextItem::new("Open tile", ContextAction::OpenSplits)]
+            // Single node: "Open tile" plus the per-node engine picker ("Open in
+            // <engine>"), so the user can flip this node's engine. (Phase 3.)
+            let mut items = vec![ContextItem::new("Open tile", ContextAction::OpenSplits)];
+            items.extend(self.engine_picker_items(set[0]));
+            items
         } else {
             let mut items = vec![
                 ContextItem::new("Open in splits", ContextAction::OpenSplits),
@@ -68,6 +73,42 @@ impl WindowCtx<'_> {
         self.view.runner
             .update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
+    }
+
+    /// The engine-picker rows for `member`: "Auto (default engine)" plus each
+    /// pickable web / surface engine that is available this session (present +
+    /// active), with the node's current choice ✓-marked. Routing prefers the picked
+    /// engine for the node. (engine-picker Phase 3.)
+    fn engine_picker_items(&self, member: GraphMemberId) -> Vec<ContextItem> {
+        // The web-rendering alternatives a node can be flipped between. Smolweb
+        // protocols route to one engine each, so they are not offered here; the
+        // surface engines (system WebView, later weld / graft) are the compat path.
+        const PICKABLE: &[(&str, &str)] = &[
+            (inker::routing::ENGINE_SERVAL_WEB, "Serval (web)"),
+            (inker::routing::ENGINE_SCRYING_WEB, "System WebView"),
+            (inker::routing::ENGINE_WRY_WEB, "Wry overlay"),
+        ];
+        let pin = self.shared.content.engine_pins.get(&member).map(String::as_str);
+        let mark = |label: &str, on: bool| {
+            if on {
+                format!("{label}  \u{2713}") // ✓ marks the current choice
+            } else {
+                label.to_string()
+            }
+        };
+        let mut items = vec![ContextItem::new(
+            mark("Auto (default engine)", pin.is_none()),
+            ContextAction::AutoEngine,
+        )];
+        for &(id, name) in PICKABLE {
+            if self.engine_available(id) {
+                items.push(ContextItem::new(
+                    mark(&format!("Open in {name}"), pin == Some(id)),
+                    ContextAction::PinEngine(id),
+                ));
+            }
+        }
+        items
     }
 
     /// Dismiss the context menu (an outside click / Escape), dropping its set and
@@ -188,6 +229,23 @@ impl WindowCtx<'_> {
             self.close_focused_graph_pane();
             return;
         }
+        // Engine picker: pin (or clear) the engine for the context node(s) without
+        // opening tiles. The change re-routes the node next frame; the render's
+        // `retain` reaps any now-unused scrying producer. (engine-picker Phase 3.)
+        if let ContextAction::PinEngine(id) = action {
+            for member in std::mem::take(&mut self.view.context_set) {
+                self.shared.content.engine_pins.insert(member, id.to_string());
+            }
+            self.view.request_redraw();
+            return;
+        }
+        if let ContextAction::AutoEngine = action {
+            for member in std::mem::take(&mut self.view.context_set) {
+                self.shared.content.engine_pins.remove(&member);
+            }
+            self.view.request_redraw();
+            return;
+        }
         let set = std::mem::take(&mut self.view.context_set);
         if set.is_empty() {
             return;
@@ -211,7 +269,9 @@ impl WindowCtx<'_> {
             | ContextAction::AddTile
             | ContextAction::AddSession
             | ContextAction::AddField
-            | ContextAction::CloseGraphPane => {
+            | ContextAction::CloseGraphPane
+            | ContextAction::PinEngine(_)
+            | ContextAction::AutoEngine => {
                 unreachable!("handled above")
             }
         }
