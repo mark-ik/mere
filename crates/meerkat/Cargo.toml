@@ -136,6 +136,14 @@ workbench-domain = { package = "workbench", path = "../platen/domain/workbench" 
 # it (the workbench root), composites its band in Tree mode, reads each tile's
 # content rect back, and composites that tile's actor texture there.
 platen-view = { workspace = true }
+# Pelt's tile-tree contract + the GPU-free tile surface (V6): meerkat hosts the
+# standalone pelt `TileSurface` as its workbench pane, driven entirely through the
+# contract (`Workbench::to_tile_tree` projects forme's tiling onto it). The
+# `tile-surface` feature is the GPU-free surface only — `default-features = false`
+# keeps pelt's reference-shell windowing (serval-winit-host / wgpu present stack)
+# out; meerkat brings its own. `pelt-core` is the zero-dependency contract leaf.
+pelt-core = { path = "../../../serval/ports/pelt-core" }
+pelt-desktop = { path = "../../../serval/ports/pelt-desktop", default-features = false, features = ["tile-surface"] }
 
 # Off-UI-thread fetch (S2.2b): netfetcher's async WHATWG Fetch runs on a tokio
 # worker pool; results are delivered back to the winit loop over a channel + an
