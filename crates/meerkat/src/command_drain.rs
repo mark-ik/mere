@@ -15,7 +15,6 @@ use kernel::graph::SemanticSubKind;
 use meerkat::CommsIntent;
 use meerkat::command::Command;
 use meerkat::shell_eval::{CommandShell, ShellContext};
-use platen_view::WorkbenchAction;
 
 use super::observability::Severity;
 use super::{WindowCtx, comms_host, sync};
@@ -41,52 +40,6 @@ fn relation_kind_from_str(s: &str) -> SemanticSubKind {
 }
 
 impl WindowCtx<'_> {
-    /// Apply a pending workbench action the workbench root captured: switch the
-    /// visible tab, close a tab (reaping its actor), or toggle its pin (the
-    /// background-keep flag, which also exempts it from cap eviction).
-    pub(super) fn drain_workbench_action(&mut self) {
-        let Some(action) = self.view.workbench_runner.state().pending else {
-            return;
-        };
-        self.view.workbench_runner.update(|s| s.pending = None);
-        match action {
-            WorkbenchAction::Activate(member) => {
-                self.view.workbench.activate(member);
-                self.view.focused_tile = Some(member);
-            }
-            WorkbenchAction::Close(member) => {
-                self.view.workbench.close_tile(member);
-                self.shared.content.constellation.reap(member);
-                if self.view.workbench.open_members().is_empty() {
-                    // Closing the last tile closes the workbench pane entirely (back
-                    // to just the orrery), rather than leaving an empty pane.
-                    // (Workbench-as-pane.)
-                    self.close_workbench();
-                } else if self.view.focused_tile == Some(member) {
-                    self.view.focused_tile = self.view.workbench.open_members().first().copied();
-                }
-            }
-            WorkbenchAction::TogglePin(member) => {
-                let pinned = self.shared.content.constellation.is_background(member);
-                self.shared.content.constellation.set_background(member, !pinned);
-            }
-            WorkbenchAction::NewTile => {
-                // The "+" affordance: mint a fresh unlinked node and open it as a
-                // tile, focused — a non-omnibar "new tile". Summon/tile the workbench
-                // pane first (idempotent), matching every other tile-opening path, so
-                // the new tile is actually shown regardless of the prior projection.
-                self.open_workbench();
-                let url = "mere://welcome";
-                let member = self.orrery_mut().open_member_as_new_node(None, url);
-                self.view.workbench.open_tile(member);
-                self.view.focused_tile = Some(member);
-                self.ensure_content(url);
-                self.save_session();
-            }
-        }
-        self.view.request_redraw();
-    }
-
     /// Execute a pending "connect to peer" request the chrome queued (S5.1): take
     /// the ticket the verb captured from the address bar and drive the sync actor.
     /// The chrome records the intent; this is the host executing it.

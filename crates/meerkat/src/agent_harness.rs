@@ -962,15 +962,15 @@ mod tests {
 
     #[test]
     fn workbench_new_tile_mints_and_opens_a_tile() {
-        // The workbench "+" affordance: a NewTile action mints a node and opens it
-        // as a tile.
+        // The "add tile" affordance: an AddTile context action mints a node and opens
+        // it as a tile (the live path the surface "+" routes to via `pick_context`).
         let mut app = test_app();
         let nodes_before = app.orrery().graph().nodes().count();
         let tiles_before = app.view().workbench.open_members().len();
         {
             let mut wc = app.ctx();
-            wc.view.workbench_runner.update(|s| s.new_tile());
-            wc.drain_workbench_action();
+            wc.view.runner.update(|c| c.pick_context(meerkat::ContextAction::AddTile));
+            wc.drain_pending_context();
         }
         assert_eq!(app.orrery().graph().nodes().count(), nodes_before + 1, "NewTile minted a node");
         assert_eq!(

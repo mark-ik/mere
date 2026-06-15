@@ -10,7 +10,6 @@ use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
 use netrender::external_texture::ExternalTexturePlacement;
 use crate::serval_render::TextCursor;
-use platen_view::{WORKBENCH_SHEET, WorkbenchScene};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
 

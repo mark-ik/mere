@@ -24,7 +24,6 @@ use forme::GraphMemberId;
 use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
 use meerkat::{Chrome, ChromeLogic, ChromeView};
 use platen::Workbench;
-use platen_view::{WorkbenchLogic, WorkbenchScene, WorkbenchTreeView};
 use serval_scripted_dom::ScriptedDom;
 use serval_winit_host::WindowSurface;
 use winit::window::CursorIcon;
@@ -81,15 +80,6 @@ pub(crate) struct WindowView {
     /// The tiled-workbench composition (S4): the open tiles + the projection mode
     /// (Cartography = the orrery, Tree = the tiled view).
     pub(crate) workbench: Workbench,
-    /// The workbench root: a second serval document authority (separate from the
-    /// chrome root) that renders the tile tree as flex DOM via `platen_view`.
-    pub(crate) workbench_dom: Rc<RefCell<ScriptedDom>>,
-    /// The workbench runner driving `workbench_dom` from `workbench`.
-    pub(crate) workbench_runner: ServalAppRunner<WorkbenchScene, WorkbenchLogic, WorkbenchTreeView>,
-    /// The workbench DOM's incremental cascade+layout session (cheap-path C5) — the
-    /// pane render, its slot-placement fragment reads, and its click hit-tests all
-    /// share this one layout per frame. `None` until the workbench first renders.
-    pub(crate) workbench_session: Option<PaneSession>,
     /// The pelt tile surface the workbench pane renders through (V6): meerkat owns the
     /// `Workbench` (the authority) and projects it onto pelt's tile-tree contract each
     /// frame (`Workbench::to_tile_tree`), drives this GPU-free surface (`set_tree` /
@@ -263,8 +253,6 @@ impl WindowView {
         dom: Rc<RefCell<ScriptedDom>>,
         runner: ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
         workbench: Workbench,
-        workbench_dom: Rc<RefCell<ScriptedDom>>,
-        workbench_runner: ServalAppRunner<WorkbenchScene, WorkbenchLogic, WorkbenchTreeView>,
     ) -> Self {
         Self {
             kind,
@@ -273,9 +261,6 @@ impl WindowView {
             runner,
             chrome_session: None,
             workbench,
-            workbench_dom,
-            workbench_runner,
-            workbench_session: None,
             pelt_surface: None,
             roster_pane: crate::roster_view::RosterPane::new(),
             session_row_rects: Default::default(),

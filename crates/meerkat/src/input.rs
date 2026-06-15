@@ -12,7 +12,6 @@ use layout_dom_api::LayoutDom;
 use meerkat::{Chrome, nav, submit_omnibar};
 use orrery::PointerButton;
 use crate::serval_render::hit_test_node;
-use platen_view::{WORKBENCH_SHEET, WorkbenchAction};
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
 use serval_winit_host::key_event_from_winit;
@@ -690,42 +689,6 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
-    /// Hit-test the workbench root at window `(x, y)` (content-band coords) and
-    /// dispatch the click — a tab switch, a close, or a pin toggle. The action is
-    /// captured in the workbench scene and drained immediately onto the model.
-    pub(super) fn workbench_click(&mut self, x: f32, y: f32) {
-        // The workbench DOM is laid out at the workbench leaf size + composited at
-        // its origin, so hit-test in leaf-local coordinates. (Workbench-as-pane.)
-        let Some(wr) = self.workbench_leaf_rect() else {
-            return;
-        };
-        let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
-        let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
-        let (lx, ly) = (x - wr[0], y - wr[1]);
-        let offsets = ScrollOffsets::<NodeId>::default();
-        let hit = {
-            let dom = self.view.workbench_dom.borrow();
-            // C5: hit-test the workbench off its render's retained layout (session);
-            // stateless fallback only before the workbench first renders.
-            match &self.view.workbench_session {
-                Some(s) => s.hit_test(&dom, lx, ly, &offsets),
-                None => hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets),
-            }
-        };
-        if let Some(node) = hit {
-            self.view.workbench_runner
-                .dispatch_click(node, PointerClick::at((lx, ly)));
-            // A tab activated → remember it as a drag candidate (resolved on
-            // release: a move when dragged onto another slot, else a plain click).
-            // The press is kept in window coords (tile_rects are window-space).
-            if let Some(WorkbenchAction::Activate(member)) = self.view.workbench_runner.state().pending {
-                self.view.tab_drag = Some((member, (x, y)));
-            }
-            self.drain_workbench_action();
-            self.view.request_redraw();
-        }
-    }
-
     /// The tile (member + window rect) under `(x, y)` — the drag drop target, from
     /// this frame's laid-out tile rects.
     pub(super) fn tile_at(&self, x: f32, y: f32) -> Option<(GraphMemberId, [f32; 4])> {
@@ -733,28 +696,6 @@ impl WindowCtx<'_> {
             .iter()
             .find(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
             .copied()
-    }
-
-    /// If `(x, y)` is over a divider (the gutter between two slots), its left-slot
-    /// index — the start of a resize drag.
-    pub(super) fn divider_at(&self, x: f32, y: f32) -> Option<usize> {
-        let wr = self.workbench_leaf_rect()?;
-        let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
-        let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
-        let (lx, ly) = (x - wr[0], y - wr[1]);
-        let offsets = ScrollOffsets::<NodeId>::default();
-        let dom = self.view.workbench_dom.borrow();
-        // C5: divider probe off the workbench session's retained layout.
-        let node = (match &self.view.workbench_session {
-            Some(s) => s.hit_test(&dom, lx, ly, &offsets),
-            None => hit_test_node(&dom, WORKBENCH_SHEET, ww, wh, lx, ly, &offsets),
-        })?;
-        if !has_class(&dom, node, "wb-divider") {
-            return None;
-        }
-        dom.attributes(node)
-            .find(|a| a.name.local.as_ref() == "data-divider")
-            .and_then(|a| a.value.parse::<usize>().ok())
     }
 
     /// The slot-boundary index of a `.tile-divider` in the pelt surface frame under

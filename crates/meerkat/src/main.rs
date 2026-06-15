@@ -47,7 +47,6 @@ use orrery::{CameraView, Orrery};
 use crate::serval_render::fragments_from_scripted_dom;
 use serval_layout::FragmentPlane;
 use platen::Workbench;
-use platen_view::{WorkbenchLogic, WorkbenchScene, workbench_view};
 use register_diagnostics::{DiagnosticEvent, install_global_sender};
 use register_theme::chrome::{ChromeTheme, Color32};
 use register_theme::theme::ThemeRegistry;
@@ -736,9 +735,6 @@ impl Shell {
         mere_root: PathBuf,
     ) -> Self {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
-        // The workbench root's own document, separate from the chrome root (the
-        // separate-roots discipline). Empty until the tiled view syncs it.
-        let workbench_dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         // Shared per-user root (`<data_dir>/mere`): settings, the content cache, and
         // comms live here; per-session graph/frame/views live under sessions/<id>/.
         let _ = std::fs::create_dir_all(&mere_root);
@@ -919,21 +915,12 @@ impl Shell {
             }
         }
         let a11y_proxy = proxy.clone();
-        // This window's workbench runner (the tiled-view document authority),
-        // built beside its chrome runner; both move into the per-window view.
-        let workbench_runner = ServalAppRunner::new(
-            workbench_dom.clone(),
-            workbench_view as WorkbenchLogic,
-            WorkbenchScene::default(),
-        );
         let mut view = window_view::WindowView::new(
             window_view::WindowKind::Primary,
             active_graph,
             dom,
             runner,
             Workbench::new(),
-            workbench_dom,
-            workbench_runner,
         );
         view.centered = restored_camera.is_some();
         view.content_location = content_location;
@@ -1159,12 +1146,6 @@ impl Shell {
         chrome.slim = true; // a spawned window is a leaf: slim chrome (no shellbar / switcher)
         let runner = ServalAppRunner::new(dom.clone(), chrome_view as ChromeLogic, chrome);
         let content_location = runner.state().content_location().to_string();
-        let workbench_dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
-        let workbench_runner = ServalAppRunner::new(
-            workbench_dom.clone(),
-            workbench_view as WorkbenchLogic,
-            WorkbenchScene::default(),
-        );
         let active_graph = self
             .shared
             .session
@@ -1178,8 +1159,6 @@ impl Shell {
             dom,
             runner,
             Workbench::new(),
-            workbench_dom,
-            workbench_runner,
         );
         view.content_location = content_location;
         view.frame_layout = default_content_frame(active_graph);
