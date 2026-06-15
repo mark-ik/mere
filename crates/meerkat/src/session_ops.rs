@@ -391,7 +391,7 @@ impl super::Shell {
         ctx.view.scrying.clear();
         ctx.shared.content.compat_pins.clear();
         ctx.view.scrying_input_focus = None;
-        ctx.view.scrying_rect = None;
+        ctx.view.scrying_rects.clear();
         ctx.shared.content.pages.clear();
         ctx.view.live_previews.clear();
         ctx.view.tile_textures.clear();

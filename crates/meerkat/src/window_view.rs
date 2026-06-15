@@ -237,9 +237,10 @@ pub(crate) struct WindowView {
     /// The scrying pool: system-WebView tiles on the UI thread, beside the
     /// constellation.
     pub(crate) scrying: super::scrying_host::ScryingHost,
-    /// The focused scrying tile's (member, window rect) this frame, set by render;
-    /// the input path hit-tests it to forward mouse / wheel into the WebView.
-    pub(crate) scrying_rect: Option<(GraphMemberId, [f32; 4])>,
+    /// Every live scrying surface's (member, window rect) this frame, set by render;
+    /// the input path hit-tests the list to forward mouse / wheel into the pane under
+    /// the cursor. Several compat tiles can be live at once. (Multi-tile scry.)
+    pub(crate) scrying_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// The scrying tile that currently owns the keyboard (clicked into).
     pub(crate) scrying_input_focus: Option<GraphMemberId>,
 }
@@ -317,7 +318,7 @@ impl WindowView {
             cursor: Default::default(),
             modifiers: Default::default(),
             scrying: Default::default(),
-            scrying_rect: Default::default(),
+            scrying_rects: Default::default(),
             scrying_input_focus: Default::default(),
         }
     }

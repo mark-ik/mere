@@ -87,16 +87,16 @@ impl ScryingHost {
         self.pool.clear();
     }
 
-    /// Reap every live tile except `keep` (the one shown this frame), tearing down
-    /// its WebView. A compat node that is no longer the shown card is dropped
-    /// immediately (reap-on-deselect), so the visual cannot freeze at its last
-    /// position, and the window's single composition target is freed — so focusing a
-    /// *different* compat node spawns it cleanly instead of hitting
-    /// `WINDOW_ALREADY_COMPOSED`. `None` reaps all. Called each frame before the
-    /// shown tile is driven. (X2/X3 lifecycle.)
-    pub fn reap_except(&mut self, keep: Option<GraphMemberId>) {
+    /// Reap every live tile whose member is not in `keep` (the surfaces shown this
+    /// frame), tearing down its WebView. A compat node that is no longer shown is
+    /// dropped immediately (reap-on-deselect), so its visual cannot freeze at its
+    /// last position. Multiple panes share one per-HWND composition target (scry's
+    /// `new_attached`), so any number of compat tiles can stay live at once; this is
+    /// just the "drop what's gone" pass. Called each frame before the shown surfaces
+    /// are driven. (X2/X3 lifecycle; multi-tile.)
+    pub fn retain(&mut self, keep: &std::collections::HashSet<GraphMemberId>) {
         #[cfg(target_os = "windows")]
-        self.pool.reap_except(keep);
+        self.pool.retain(keep);
         #[cfg(not(target_os = "windows"))]
         let _ = keep;
     }
@@ -208,7 +208,8 @@ mod windows_pool {
     };
     use scrying::{
         FocusReason, KeyEventKind, KeyModifierFlags, KeyboardInput, MouseEventKind, MouseInput,
-        MouseVirtualKeys, PlatformWebSurfaceConfig, PlatformWebSurfaceProducer, WebSurfaceFrame,
+        MouseVirtualKeys, PlatformCompositionRoot, PlatformWebSurfaceConfig,
+        PlatformWebSurfaceProducer, WebSurfaceFrame,
     };
 
     use super::{KeyMods, MouseBtn, MousePress};
@@ -220,6 +221,12 @@ mod windows_pool {
         /// re-spawning every redraw. Cleared by reap (so a re-pin retries).
         failed: HashMap<GraphMemberId, String>,
         importer: Option<WgpuTextureImporter>,
+        /// The one `DesktopWindowTarget` for this window's HWND, shared by every
+        /// pane. Created once on the first spawn and never dropped while the pool
+        /// lives — a second `CreateDesktopWindowTarget` on the same HWND fails with
+        /// `WINDOW_ALREADY_COMPOSED`, so producers attach to this via
+        /// `new_attached` rather than each making its own. (Multi-tile scry.)
+        composition_root: Option<Arc<PlatformCompositionRoot>>,
     }
 
     struct Tile {
@@ -244,13 +251,13 @@ mod windows_pool {
             self.failed.clear();
         }
 
-        /// Reap (drop the WebView for) every tile except `keep`. Dropping a `Tile`
-        /// tears down its producer (and the per-HWND composition target), so the next
-        /// compat node can claim it. `failed` is cleared for the reaped members so a
-        /// re-pin retries. (X2/X3 lifecycle.)
-        pub(super) fn reap_except(&mut self, keep: Option<GraphMemberId>) {
-            self.tiles.retain(|member, _| Some(*member) == keep);
-            self.failed.retain(|member, _| Some(*member) == keep);
+        /// Reap (drop the WebView for) every tile whose member is not in `keep`.
+        /// Dropping a `Tile` tears down its producer and removes its pane visual from
+        /// the shared composition root; the root itself stays (it's per-HWND).
+        /// `failed` is pruned the same way so a re-pin retries. (Multi-tile scry.)
+        pub(super) fn retain(&mut self, keep: &std::collections::HashSet<GraphMemberId>) {
+            self.tiles.retain(|member, _| keep.contains(member));
+            self.failed.retain(|member, _| keep.contains(member));
         }
 
         pub(super) fn texture_view(&self, member: GraphMemberId) -> Option<&wgpu::TextureView> {
@@ -359,7 +366,20 @@ mod windows_pool {
             });
 
             if !self.tiles.contains_key(&member) {
-                match spawn(url, width, height, window, session_dir) {
+                // Create the one per-HWND composition target on first spawn, then
+                // attach every pane to it so any number of compat tiles coexist.
+                let root = match self.composition_root.as_ref() {
+                    Some(root) => root.clone(),
+                    None => match build_composition_root(window) {
+                        Ok(root) => self.composition_root.insert(root).clone(),
+                        Err(err) => {
+                            tracing::warn!(%member, %err, "scrying composition root failed");
+                            self.failed.insert(member, err);
+                            return;
+                        }
+                    },
+                };
+                match spawn(&root, member, url, width, height, origin, session_dir) {
                     Ok(tile) => {
                         self.tiles.insert(member, tile);
                     }
@@ -459,14 +479,35 @@ mod windows_pool {
         vk
     }
 
+    /// Create the one `DesktopWindowTarget` for this window's HWND. Called once per
+    /// pool (the result is cached); a second call on the same HWND would fail.
+    fn build_composition_root(
+        window: &Arc<winit::window::Window>,
+    ) -> Result<Arc<PlatformCompositionRoot>, String> {
+        let handle = window
+            .window_handle()
+            .map_err(|err| format!("window handle: {err}"))?;
+        let RawWindowHandle::Win32(win32) = handle.as_raw() else {
+            return Err("not a Win32 window".to_string());
+        };
+        let hwnd = win32.hwnd.get() as *mut std::ffi::c_void;
+        // Safety: `hwnd` is the live meerkat top-level window, which outlives the
+        // pool (the pool is dropped with `Shell` before the window closes).
+        #[allow(unsafe_code)]
+        unsafe { PlatformCompositionRoot::new(hwnd) }
+            .map_err(|err| format!("composition root: {err}"))
+    }
+
     fn spawn(
+        root: &Arc<PlatformCompositionRoot>,
+        member: GraphMemberId,
         url: &str,
         width: u32,
         height: u32,
-        window: &Arc<winit::window::Window>,
+        origin: (f32, f32),
         session_dir: &Path,
     ) -> Result<Tile, String> {
-        let producer = build_producer(width, height, window, session_dir)?;
+        let producer = build_producer(root, member, width, height, origin, session_dir)?;
         let mut tile = Tile {
             producer,
             imported: None,
@@ -482,27 +523,26 @@ mod windows_pool {
     }
 
     fn build_producer(
+        root: &Arc<PlatformCompositionRoot>,
+        member: GraphMemberId,
         width: u32,
         height: u32,
-        window: &Arc<winit::window::Window>,
+        origin: (f32, f32),
         session_dir: &Path,
     ) -> Result<PlatformWebSurfaceProducer, String> {
-        let handle = window
-            .window_handle()
-            .map_err(|err| format!("window handle: {err}"))?;
-        let RawWindowHandle::Win32(win32) = handle.as_raw() else {
-            return Err("not a Win32 window".to_string());
-        };
-        let hwnd = win32.hwnd.get() as *mut std::ffi::c_void;
-        // One shared WebView2 profile per session for X1; the per-persona
-        // engine-profile binding (engine-profile-boundary plan) lands in X3.
-        let profile = session_dir.join("scrying").join("profile");
-        let config =
-            PlatformWebSurfaceConfig::new(dpi::PhysicalSize::new(width, height), profile);
-        // Safety: `hwnd` is the live meerkat top-level window, which outlives
-        // the pool (the pool is dropped with `Shell` before the window closes).
+        // Attach this pane to the shared per-HWND target at its tile origin. A
+        // per-pane profile folder (keyed by member) keeps each tile's WebView2
+        // environment on its own user-data dir — the proven multi-pane shape, one
+        // environment per folder. A shared cookie jar across tiles is a later
+        // refinement. (Multi-tile scry; the per-persona engine-profile binding
+        // lands in X3.)
+        let profile = session_dir
+            .join("scrying")
+            .join(format!("pane-{:032x}", member.as_u128()));
+        let config = PlatformWebSurfaceConfig::new(dpi::PhysicalSize::new(width, height), profile)
+            .with_offset(origin.0, origin.1);
         #[allow(unsafe_code)]
-        unsafe { PlatformWebSurfaceProducer::new(hwnd, config) }
-            .map_err(|err| format!("WebView2 spawn: {err}"))
+        unsafe { PlatformWebSurfaceProducer::new_attached(root, config) }
+            .map_err(|err| format!("WebView2 attach: {err}"))
     }
 }

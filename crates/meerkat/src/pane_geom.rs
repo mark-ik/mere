@@ -119,12 +119,17 @@ impl WindowCtx<'_> {
             .map(|l| l.rect)
     }
 
-    /// If window point `(x, y)` falls on the focused scrying tile, the member +
-    /// **tile-local** `(x, y)` to forward into its WebView. (Scrying X2.)
+    /// If window point `(x, y)` falls on a live scrying surface, the member +
+    /// **surface-local** `(x, y)` to forward into its WebView. Scans the surfaces
+    /// last-first so the most recently composited (topmost) pane wins on overlap.
+    /// (Scrying X2; multi-tile.)
     pub(super) fn scrying_at(&self, x: f32, y: f32) -> Option<(GraphMemberId, i32, i32)> {
-        let (member, r) = self.view.scrying_rect?;
-        (x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
-            .then(|| (member, (x - r[0]) as i32, (y - r[1]) as i32))
+        self.view
+            .scrying_rects
+            .iter()
+            .rev()
+            .find(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
+            .map(|(member, r)| (*member, (x - r[0]) as i32, (y - r[1]) as i32))
     }
 
     /// The node whose gloss minimap square contains window point `(x, y)`, if any.

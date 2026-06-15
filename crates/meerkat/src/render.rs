@@ -437,14 +437,13 @@ impl WindowCtx<'_> {
             Option<(netrender::Scene, u32)>,
         )> = None;
         let mut live_card: Option<(GraphMemberId, [f32; 4])> = None;
-        // The focused card when its node is pinned to the compatibility view:
-        // the system WebView's imported texture composites at this rect instead
-        // of a constellation scene. (Scrying tile plan, X1.)
-        let mut scrying_card: Option<(GraphMemberId, [f32; 4])> = None;
-        // True when the focused, compat-pinned node is shown as a workbench tile this
-        // frame: its system WebView fills the tile (the single per-window scry surface),
-        // so the floating-card lane below suppresses its card. (Scrying in tiles, #2b.)
-        let mut compat_in_tile = false;
+        // Every compat-pinned surface shown this frame, as (member, window rect):
+        // each open compat tile in Tree, plus the focused compat card in Cartography.
+        // The panes share one per-HWND composition target (scry's `new_attached`), so
+        // any number stay live at once; the imported textures composite at these
+        // rects and the input path resolves a point against this list. (Multi-tile
+        // scry; was a single `scrying_card` under the one-surface X1 model.)
+        let mut scrying_surfaces: Vec<(GraphMemberId, [f32; 4])> = Vec::new();
         if let Some(wr) = workbench_rect {
             // Read each content placeholder's laid-out rect + member out of the
             // workbench DOM (taffy laid it out above), then drive that tile's actor
@@ -472,13 +471,6 @@ impl WindowCtx<'_> {
                     })
                     .collect()
             };
-            // The focused node when it's pinned to the compatibility view: if it's
-            // also an open tile, its system WebView fills that tile (driven in the
-            // placement loop below) instead of a constellation actor. The single
-            // per-window scry surface follows focus. (Scrying in tiles, #2b.)
-            let focus_compat = self
-                .nav_target_member()
-                .filter(|m| self.shared.content.compat_pins.contains(m));
             let mut slot_rects = Vec::with_capacity(placements.len());
             for (member, content, slot) in placements {
                 slot_rects.push((member, slot));
@@ -492,13 +484,14 @@ impl WindowCtx<'_> {
                 };
                 let cw = (content[2] - content[0]).round().max(1.0) as u32;
                 let ch = (content[3] - content[1]).round().max(1.0) as u32;
-                if Some(member) == focus_compat {
-                    // Drive the UI-thread scrying pool into this tile: park the
-                    // WebView's composition visual at the tile's content origin and
-                    // import its frame, exactly as the floating compat card does but
-                    // at the tile rect. The tile gets no constellation actor; its
-                    // imported texture composites at `scrying_card` below, and
-                    // `scrying_rect` (= this rect) routes input into the WebView.
+                if self.shared.content.compat_pins.contains(&member) {
+                    // Compat tile: drive the UI-thread scrying pool into this tile's
+                    // own pane on the shared composition root — park the WebView's
+                    // visual at the tile's content origin and import its frame. Each
+                    // compat tile is an independent pane, so several render at once.
+                    // The tile gets no constellation actor; its imported texture
+                    // composites at its rect below, and `scrying_rects` routes input
+                    // into the WebView. (Multi-tile scry.)
                     if let (Some(window), Some(core)) =
                         (self.view.window.as_ref(), self.render_core)
                     {
@@ -518,8 +511,7 @@ impl WindowCtx<'_> {
                             &session_dir,
                         );
                     }
-                    scrying_card = Some((member, content));
-                    compat_in_tile = true;
+                    scrying_surfaces.push((member, content));
                     // The WebView paints on its own schedule; keep frames coming.
                     self.view.request_redraw();
                     continue;
@@ -533,22 +525,6 @@ impl WindowCtx<'_> {
         } else {
             self.view.tile_rects.clear(); // no tile drag targets when the pane is closed
         }
-        // Reap every compat tile except the one about to be shown (the focused, pinned,
-        // live-preview node). A deselected / unpinned compat node is torn down here
-        // (reap-on-deselect, the X3 lifecycle Mark chose), so its WebView can't freeze
-        // on screen and the window's single composition target is freed for the next. (X2.)
-        // Shown in a workbench tile (compat_in_tile) the surface is the focused,
-        // pinned node regardless of live-preview state; otherwise it's the focused,
-        // pinned, live-preview node shown as a floating card.
-        let shown_compat = if compat_in_tile {
-            self.nav_target_member()
-                .filter(|m| self.shared.content.compat_pins.contains(m))
-        } else {
-            self.focused_member().filter(|m| {
-                self.view.live_previews.contains(m) && self.shared.content.compat_pins.contains(m)
-            })
-        };
-        self.view.scrying.reap_except(shown_compat);
         // The orrery's focused-node card (always, alongside any workbench pane).
         if let (Some(member), Some(url)) = (
             self.focused_member(),
@@ -580,9 +556,12 @@ impl WindowCtx<'_> {
                         // node; drive the UI-thread scrying pool (spawn /
                         // resize / navigate + non-blocking frame import)
                         // instead of a content actor. When the node is already
-                        // shown as a workbench tile, its WebView fills the tile
-                        // (the single per-window scry surface), so skip the card.
-                        if !compat_in_tile {
+                        // shown as a workbench tile its WebView fills the tile,
+                        // so don't also float a card for it (skip when it's in
+                        // `scrying_surfaces` already).
+                        let already_tiled =
+                            scrying_surfaces.iter().any(|(m, _)| *m == member);
+                        if !already_tiled {
                             if let (Some(window), Some(core)) =
                                 (self.view.window.as_ref(), self.render_core)
                             {
@@ -602,7 +581,7 @@ impl WindowCtx<'_> {
                                     &session_dir,
                                 );
                             }
-                            scrying_card = Some((member, [x0, y0, x1, y1]));
+                            scrying_surfaces.push((member, [x0, y0, x1, y1]));
                             live_card = Some((member, [x0, y0, x1, y1]));
                             // The WebView paints on its own schedule; keep frames
                             // coming while the card is visible.
@@ -674,6 +653,15 @@ impl WindowCtx<'_> {
             }
         }
 
+        // Reap every compat WebView whose member isn't a surface shown this frame:
+        // a tile that was closed / unpinned, or a card that lost focus, is torn down
+        // here (reap-on-deselect) so its visual can't freeze on screen. The shared
+        // composition target persists, so the surviving panes are untouched. (X3
+        // lifecycle; multi-tile.)
+        let shown: std::collections::HashSet<GraphMemberId> =
+            scrying_surfaces.iter().map(|(m, _)| *m).collect();
+        self.view.scrying.retain(&shown);
+
         // Record each card's on-screen content rect so a wheel over it scrolls the
         // card (resolved in the wheel handler) rather than panning the orrery. The
         // unvisited placeholder counts as a card too, so a double-click over it
@@ -688,8 +676,8 @@ impl WindowCtx<'_> {
         if let Some((member, _, rect, _)) = &snapshot_card {
             self.view.content_rects.push((*member, *rect));
         }
-        if let Some((member, rect)) = scrying_card {
-            self.view.content_rects.push((member, rect));
+        for (member, rect) in &scrying_surfaces {
+            self.view.content_rects.push((*member, *rect));
         }
 
         // The omnibar follows focus: point it at the focused tile / node when that
@@ -865,22 +853,23 @@ impl WindowCtx<'_> {
                 ExternalTexturePlacement::new(*dest).with_uv(uv),
             );
         }
-        // The compatibility-view card: the imported WebView texture at the card
-        // rect. No UV window — the WebView scrolls itself. The rect is recorded so
-        // the input path can forward mouse / wheel / keys into the WebView. (X2.)
-        self.view.scrying_rect = scrying_card;
-        if let Some((member, dest)) = scrying_card {
-            if let Some(view) = self.view.scrying.texture_view(member) {
+        // The compatibility-view surfaces: each pane's imported WebView texture at
+        // its tile / card rect. No UV window — the WebView scrolls itself. The rects
+        // are recorded so the input path can forward mouse / wheel / keys into the
+        // pane under the cursor. (X2; multi-tile.)
+        for (member, dest) in &scrying_surfaces {
+            if let Some(view) = self.view.scrying.texture_view(*member) {
                 core.renderer().compose_external_texture(
                     view,
                     &target_view,
                     format,
                     w,
                     h,
-                    ExternalTexturePlacement::new(dest),
+                    ExternalTexturePlacement::new(*dest),
                 );
             }
         }
+        self.view.scrying_rects = scrying_surfaces;
         // Live cards carry a close (X) button at their top-right corner. Rasterize
         // the shared button texture once, composite it on each live card, and
         // record its rect so a press there reaps the live preview. (Card system.)
