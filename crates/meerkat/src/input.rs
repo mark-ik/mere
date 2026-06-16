@@ -53,6 +53,19 @@ impl WindowCtx<'_> {
         let th = self.toolbar_height() as f32;
         match state {
             ElementState::Pressed => {
+                // The dedicated mouse back/forward thumb buttons step the focused
+                // node's own history, the same intent as Alt+Left / Alt+Right. They
+                // are never forwarded to a scrying tile, so they navigate everywhere.
+                // (Browser flow.)
+                if let Some(step) = match button {
+                    MouseButton::Back => Some(HistoryStep::Back),
+                    MouseButton::Forward => Some(HistoryStep::Forward),
+                    _ => None,
+                } {
+                    self.view.runner.update(|c| c.history_step = Some(step));
+                    self.drain_history_step();
+                    return;
+                }
                 // Borderless window: a left press on a window control acts on it; a
                 // press near a window edge starts an OS resize drag. Both take
                 // priority over the chrome / content (and any open menu).

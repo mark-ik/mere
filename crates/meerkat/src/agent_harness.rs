@@ -997,6 +997,40 @@ mod tests {
     }
 
     #[test]
+    fn mouse_thumb_buttons_step_the_focused_nodes_history() {
+        // The dedicated mouse back/forward (thumb) buttons walk the focused node's
+        // own history, same intent as Alt+Left / Alt+Right, driven through
+        // on_mouse_input.
+        let mut app = test_app();
+        app.orrery_mut().visit("gemini://a.example/");
+        let member = app
+            .orrery()
+            .focused_member()
+            .expect("the visited node is focused");
+        app.orrery_mut().navigate_member(member, "gemini://b.example/");
+        assert!(app.orrery().member_can_back(member), "a -> b leaves a back step");
+
+        {
+            let mut wc = app.ctx();
+            wc.on_mouse_input(
+                winit::event::ElementState::Pressed,
+                winit::event::MouseButton::Back,
+            );
+        }
+        assert!(!app.orrery().member_can_back(member), "thumb-back lands at the root a");
+        assert!(app.orrery().member_can_forward(member), "and forward to b is available");
+
+        {
+            let mut wc = app.ctx();
+            wc.on_mouse_input(
+                winit::event::ElementState::Pressed,
+                winit::event::MouseButton::Forward,
+            );
+        }
+        assert!(app.orrery().member_can_back(member), "thumb-forward returns to the tip b");
+    }
+
+    #[test]
     fn shellbar_roster_button_toggles_the_roster() {
         // The shellbar pane-toggle buttons are real chrome-DOM nodes; activating the
         // roster button runs ToggleRoster through the command spine. (The pointer
