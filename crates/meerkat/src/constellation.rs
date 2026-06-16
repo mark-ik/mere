@@ -94,6 +94,14 @@ struct Activation {
     /// navigates the matching URL. Empty until the first scene; cleared on a new
     /// document (a stale link map must not survive a navigation). (Inline-link nav.)
     links: Vec<LinkHit>,
+    /// Find-in-page match rects (full-document px) from the latest find query — one
+    /// inner `Vec` per match (a wrapped match spans lines). The host highlights these
+    /// and scrolls to the active one. Empty until a find query, on an empty query, or
+    /// when a new document arrives (a stale match set must not survive). (Find-in-page.)
+    find_matches: Vec<Vec<[f32; 4]>>,
+    /// The query last sent to the actor via [`ContentCommand::Find`], so the host does
+    /// not re-command an unchanged query every frame. (Find-in-page.)
+    find_query: String,
     /// Bumped each time a new scene is accepted, so the host can cache a tile's
     /// rasterized texture and re-rasterize only when this changes (not every frame).
     scene_version: u64,
@@ -258,6 +266,8 @@ impl Constellation {
                         band: (0, 0),
                         requested_band: (0, 0),
                         links: Vec::new(),
+                        find_matches: Vec::new(),
+                        find_query: String::new(),
                         scene_version: 0,
                         background: false,
                         last_touched: touch,
@@ -323,6 +333,10 @@ impl Constellation {
             activation.gens.nav.bump();
             activation.scene = None;
             activation.links.clear();
+            // A new document invalidates the old find matches + query (a stale
+            // highlight must not survive a navigation). (Find-in-page.)
+            activation.find_matches.clear();
+            activation.find_query.clear();
             activation.handle.command(ContentCommand::Show {
                 url: url.to_string(),
                 state,
@@ -403,6 +417,37 @@ impl Constellation {
             // re-emitted band is accepted at the current generation.
             viewport_gen: activation.gens.viewport,
         });
+    }
+
+    /// Ask `member`'s actor to find `query` in its current document (find-in-page),
+    /// shipping back the match rects the host highlights. Deduped against the last
+    /// query, so the host can call this every frame the find bar is open without
+    /// re-commanding. An empty query clears the matches locally (and tells the actor
+    /// to clear too). No-op for a node that is not active. (Find-in-page.)
+    pub fn request_find(&mut self, member: GraphMemberId, query: &str) {
+        let Some(activation) = self.active.get_mut(&member) else {
+            return;
+        };
+        if activation.find_query == query {
+            return;
+        }
+        activation.find_query = query.to_string();
+        if query.is_empty() {
+            // Clear locally now; no need to round-trip an empty query for rects.
+            activation.find_matches.clear();
+        }
+        activation.handle.command(ContentCommand::Find {
+            query: query.to_string(),
+            viewport_gen: activation.gens.viewport,
+        });
+    }
+
+    /// `member`'s find-in-page match rects (full-document px, one inner slice per
+    /// match), from the latest [`request_find`](Self::request_find). Empty when no
+    /// query is active or nothing matched. The host maps these into the card the same
+    /// way it maps link rects (offset by the card scroll). (Find-in-page.)
+    pub fn find_matches(&self, member: GraphMemberId) -> &[Vec<[f32; 4]>] {
+        self.active.get(&member).map_or(&[], |a| &a.find_matches)
     }
 
     /// The member's retained document-lane packet (plus font sidecar), if it is a
@@ -612,6 +657,24 @@ impl Constellation {
                         if let Some(graph_id) = self.active.get(&member).map(|a| a.graph_id) {
                             out.contributions
                                 .extend(contributions.into_iter().map(|c| (graph_id, c)));
+                        }
+                    }
+                    ContentUpdate::FindMatches {
+                        nav,
+                        viewport_gen,
+                        matches,
+                    } => {
+                        if let Some(activation) = self.active.get_mut(&member) {
+                            let stamp = Generations {
+                                nav,
+                                viewport: viewport_gen,
+                            };
+                            // Accept only matches for the current document + size; a
+                            // find result for a page the node has left is dropped.
+                            if activation.gens.accepts(stamp) {
+                                activation.find_matches = matches;
+                                out.any_scene = true; // redraw to paint the highlights
+                            }
                         }
                     }
                 }

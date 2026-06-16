@@ -62,6 +62,13 @@ pub enum ContentCommand {
         band_h: u32,
         viewport_gen: ViewportGeneration,
     },
+    /// Find `query` in the current HTML/serval document (find-in-page). The actor runs
+    /// the search where its layout lives and ships the match rects back; the HTML lane
+    /// has no host-queryable packet. An empty query clears the matches. (Find-in-page.)
+    Find {
+        query: String,
+        viewport_gen: ViewportGeneration,
+    },
 }
 
 /// An update from a content actor to the kernel. All variants are `Send`.
@@ -108,6 +115,16 @@ pub enum ContentUpdate {
     /// Linked data harvested from the document, for the kernel to apply.
     Contribution {
         contributions: Vec<GraphContribution>,
+    },
+    /// Find-in-page match rects for the current HTML document: one inner `Vec` per
+    /// match (a wrapped match spans lines), in full-document px (`[x0, y0, x1, y1]`,
+    /// unscrolled, the same space as the link rects). The host highlights these and
+    /// scrolls to the active one. Empty when the query cleared or nothing matched.
+    /// (Find-in-page.)
+    FindMatches {
+        nav: NavGeneration,
+        viewport_gen: ViewportGeneration,
+        matches: Vec<Vec<[f32; 4]>>,
     },
 }
 
@@ -214,6 +231,33 @@ pub fn spawn_content(
                         content.band_h = band_h;
                         content.viewport_gen = viewport_gen;
                         render(content, &store, &registry, &policy, &out);
+                    }
+                }
+                ContentCommand::Find {
+                    query,
+                    viewport_gen,
+                } => {
+                    if let Some(content) = current.as_ref() {
+                        let wanted = RefCell::new(Vec::new());
+                        let (w, h) = content.viewport;
+                        let matches = {
+                            let loader = ResourceLoader::new(&store, &content.url, &wanted);
+                            crate::card::find_content(
+                                &content.url,
+                                content.state.as_ref(),
+                                &registry,
+                                &policy,
+                                &loader,
+                                w,
+                                h,
+                                &query,
+                            )
+                        };
+                        out.emit(ContentUpdate::FindMatches {
+                            nav: content.nav,
+                            viewport_gen,
+                            matches,
+                        });
                     }
                 }
             }

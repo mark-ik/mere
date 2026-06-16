@@ -443,6 +443,39 @@ fn html_scene(
     (scene, content_height, links, masks)
 }
 
+/// Find every occurrence of `query` in the focused node's HTML content, returning the
+/// highlight rects per match in full-document px (`[x0, y0, x1, y1]`). Only the
+/// HTML/serval lane is searched here: it ships a flat scene the host cannot query, so
+/// the actor runs the search where the layout lives. Document-lane content returns no
+/// matches (its find rides the retained packet, a separate path). An empty query, or
+/// non-Ready / non-HTML content, yields nothing. (Find-in-page.)
+pub fn find_content(
+    url: &str,
+    state: Option<&ContentState>,
+    registry: &EngineRegistry,
+    policy: &EngineRoutePolicy,
+    loader: &impl ImageLoader,
+    w: u32,
+    h: u32,
+    query: &str,
+) -> Vec<Vec<[f32; 4]>> {
+    let Some(ContentState::Ready(fetched)) = state else {
+        return Vec::new();
+    };
+    if route_document_engine(url, fetched.content_type.as_deref(), registry, policy)
+        != inker::routing::ENGINE_SERVAL_WEB
+    {
+        return Vec::new();
+    }
+    let doc = StaticDocument::parse(&fetched.body);
+    let inline = inline_stylesheets(&doc);
+    let linked = linked_stylesheets_with_loader(&doc, loader);
+    let mut sheets: Vec<&str> = HTML_SHEET.to_vec();
+    sheets.extend(inline.iter().map(String::as_str));
+    sheets.extend(linked.iter().map(String::as_str));
+    serval_layout::find_text_rects_from_layout_dom(&doc, &sheets, loader, w, h, query)
+}
+
 /// The floating card rectangle within the content band (top-right, inset by
 /// [`CARD_MARGIN`]). Returns `(x0, y0, x1, y1, w, h)` — window-space corners for
 /// the composite plus the pixel size to rasterize at — or `None` when the band
