@@ -81,6 +81,12 @@ impl WindowCtx<'_> {
     /// pickable web / surface engine that is available this session (present +
     /// active), with the node's current choice ✓-marked. Routing prefers the picked
     /// engine for the node. (engine-picker Phase 3.)
+    ///
+    /// The web/surface engines only render **web** content (http/https), so they are
+    /// offered only for web nodes — picking "System WebView" for a `gemini://` node
+    /// would route it to WebView2, which cannot load gemtext, and render blank. For a
+    /// non-web node the picker is empty unless a (stale) pin needs clearing, in which
+    /// case only "Auto" is offered to reset it.
     fn engine_picker_items(&self, member: GraphMemberId) -> Vec<ContextItem> {
         // The web-rendering alternatives a node can be flipped between. Smolweb
         // protocols route to one engine each, so they are not offered here; the
@@ -91,6 +97,21 @@ impl WindowCtx<'_> {
             (inker::routing::ENGINE_WRY_WEB, "Wry overlay"),
         ];
         let pin = self.shared.content.engine_pins.get(&member).map(String::as_str);
+        // Web nodes (http/https) can flip between the web engines; other schemes
+        // cannot render through them. Scheme resolved from the node's url (owned, to
+        // release the graph borrow).
+        let scheme = self
+            .orrery()
+            .graph()
+            .get_node_by_id(member)
+            .and_then(|(_, n)| inker::routing::address_scheme(n.url()).map(str::to_string));
+        let is_web = scheme
+            .as_deref()
+            .is_some_and(|s| s.eq_ignore_ascii_case("http") || s.eq_ignore_ascii_case("https"));
+        // Nothing to choose and no pin to clear → no picker rows for this node.
+        if !is_web && pin.is_none() {
+            return Vec::new();
+        }
         let mark = |label: &str, on: bool| {
             if on {
                 format!("{label}  \u{2713}") // ✓ marks the current choice
@@ -102,12 +123,14 @@ impl WindowCtx<'_> {
             mark("Auto (default engine)", pin.is_none()),
             ContextAction::AutoEngine,
         )];
-        for &(id, name) in PICKABLE {
-            if self.engine_available(id) {
-                items.push(ContextItem::new(
-                    mark(&format!("Open in {name}"), pin == Some(id)),
-                    ContextAction::PinEngine(id),
-                ));
+        if is_web {
+            for &(id, name) in PICKABLE {
+                if self.engine_available(id) {
+                    items.push(ContextItem::new(
+                        mark(&format!("Open in {name}"), pin == Some(id)),
+                        ContextAction::PinEngine(id),
+                    ));
+                }
             }
         }
         items
