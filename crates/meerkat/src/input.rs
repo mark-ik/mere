@@ -988,13 +988,15 @@ impl WindowCtx<'_> {
             }
             return;
         }
-        // Ctrl+L focuses the address bar (browser convention) so a new URL can be
-        // typed without the mouse.
+        // Ctrl+L focuses the address bar and selects its whole contents (browser
+        // convention) so a new URL can be typed to replace the shown one, without the
+        // mouse.
         if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("l"))
         {
             let omnibar = self.input_under_class("toolbar");
             self.view.runner.set_focus(omnibar);
+            self.view.runner.update(|c| c.omnibar.select_all());
             self.view.request_redraw();
             return;
         }

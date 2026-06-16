@@ -945,14 +945,19 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_l_focuses_the_omnibar() {
-        // Ctrl+L moves the caret to the address bar (browser convention) without the
-        // mouse, so a URL can be typed straightaway.
+    fn ctrl_l_focuses_and_selects_the_omnibar() {
+        // Ctrl+L moves the caret to the address bar AND selects its whole contents
+        // (browser convention) so the next keystroke replaces the shown URL rather
+        // than appending to it. (The appending bug was caught on-screen.)
         let mut app = test_app();
         let mut wc = app.ctx();
         let omnibar = wc
             .input_under_class("toolbar")
             .expect("the omnibar input exists in the chrome DOM");
+        // Seed the bar with a shown location and put the caret at its end (focused).
+        wc.view
+            .runner
+            .update(|c| c.omnibar = xilem_serval::TextInput::new("gemini://shown.example/"));
         wc.view.runner.set_focus(None);
         wc.view.modifiers.ctrl = true;
         wc.on_key_pressed(&winit::keyboard::Key::Character("l".into()));
@@ -960,6 +965,13 @@ mod tests {
             wc.view.runner.focus(),
             Some(omnibar),
             "Ctrl+L focused the omnibar"
+        );
+        let state = wc.view.runner.state();
+        assert!(state.omnibar.has_selection(), "Ctrl+L selected the omnibar text");
+        assert_eq!(
+            state.omnibar.selected_text(),
+            "gemini://shown.example/",
+            "the whole address is selected, so typing replaces it"
         );
     }
 
