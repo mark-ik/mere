@@ -84,20 +84,29 @@ Confirm the two load-bearing assumptions before touching the render path:
 
 Done: a short findings note in this doc; no code change.
 
-### Phase 1 — Windowed render + retained packet (clears the blocker)
+### Phase 1 — Windowed render + retained packet (clears the blocker) — DONE 2026-06-16
 
-- Host keeps the laid `DocumentRenderPacket` (plus its font sidecar) per node,
-  keyed by `(node, width)`; re-layout only on width or content change.
-- `render_card_scene` becomes scroll-aware: lower the band `[scroll_y, scroll_y + h]`
-  (translated to origin) into a viewport-tall texture, instead of the full height.
-- Rasterize with vertical overscan (a band taller than the viewport) and keep the
-  free UV-shift within the overscan; re-raster only when the scroll leaves the
-  retained band. Scroll range is `content_bounds.height - visible_h`.
-- Retire `bound_document_body`'s 12 KiB truncation and the `MAX_CARD_TEX_H` height
-  cap. Keep an area/limit guard sized to the **band** texture, not the whole page.
+- Host keeps the laid `DocumentRenderPacket` (plus its font sidecar) per node, on the
+  constellation `Activation`; re-laid by the actor only on a new document / size.
+- The render loop is scroll-aware: it picks a band centred on the scroll, windows the
+  retained packet to it (`DocumentRenderPacket::window`), lowers that band
+  (`card::lower_window`), and rasterizes a `band_h`-tall texture. It UV-shifts within
+  the band for fine scroll and re-rasters only when the scroll leaves it (the band-y
+  is stored in `view.tile_bands`). Scroll range is the full `content_height`.
+- Retired `bound_document_body`'s 12 KiB truncation and the `MAX_CARD_TEX_H` (8192 px)
+  height cap. The texture is bounded by `BAND_CAP` (6144 px) and the area guard.
 
-Done: the 166 KB capsule renders and scrolls top to bottom with no truncation and
-no blank; memory per card stays bounded by the band, not the page.
+Done: verified headed on `gemini://geminiprotocol.net/docs/faq.gmi` (the reported
+blank-page blocker). The page renders, scrolls monotonically top to bottom (controlled
+steps: intro → 1.2 → benefits → "wrong tool" limits, all forward), reaches deep
+content (section 2.5+), and returns cleanly to the top. 91 meerkat bin tests green.
+
+**Architecture note (DOC_POLICY §9):** layout stays off-thread in the content actor
+(the expensive parley pass), but band **lowering** moved to the host render loop. A
+band is a few visible blocks, so the per-band lower is cheap; the actor model's "scenes
+travel as messages" now reads "packets travel as messages" for the document lane (the
+HTML/serval lane still ships a pre-lowered scene until Phase 5). The retained packet
+host-side is exactly what Phase 2's query API (find / selection / hit-test) reads.
 
 ### Phase 2 — Query API over the retained packet
 
@@ -160,10 +169,51 @@ page navigates.
 
 ## Findings
 
-(Phase 0 results land here.)
+### Phase 0 probe (2026-06-15)
+
+1. **The packet is retainable for free.** `DocumentRenderPacket` is pure data,
+   built every layout and dropped right after lowering. Retaining it per node
+   costs only the keep.
+2. **document-canvas does not cull; the cull is downstream.** `paint_list_from_packet`
+   (`paint_list.rs:105`) iterates and emits **every** block; `packet.viewport` rides
+   along only as metadata into the `InkerPaintList`. The actual viewport cull lives
+   in `paint_list_render::translate_paint_list` / the rasterizer (proven by the
+   existing workaround at `card.rs:159`, which expands the viewport to full height
+   precisely to stop content being culled).
+   - **Refinement to the approach.** Windowing cannot be done by shrinking
+     `packet.viewport` alone: the builder would still emit blocks at their full-document
+     y, then they would be clipped (wasteful, and the over-tall-texture failure path).
+     The correct mechanism is a pure `window_packet(packet, band_y, band_h) ->
+     DocumentRenderPacket` in document-canvas that **filters** blocks whose `bounds`
+     intersect the band and **translates** the survivors (and nested `Group` children,
+     and `interactions`) by `-band_y`, then sets `viewport = (w, band_h)`. The host
+     lowers that windowed packet and rasterizes a band-tall texture. Portable, testable
+     on the packet type, no host coupling.
+3. **parley clusters are reachable for Phase 3.** The glyph harvest at `text.rs:231-275`
+   already holds the parley `Run` (`text.rs:240` `parley_run.run()`); parley exposes
+   per-cluster source text ranges there. Surfacing a source-char range onto
+   `PositionedGlyph` / `GlyphRun` is a bounded document-canvas change. Searchable/copyable
+   text itself comes via `RenderedBlock::source_block_index` into the `EngineDocument`
+   blocks, so find-in-page and copy do not need the glyph-level mapping except for
+   precise highlight/caret rects.
+
+**One open question for Phase 1 (resolve empirically, not by static trace):** whether
+`core.rasterize` clips to the scene's `viewport_height` or strictly to the passed
+texture `(w, h)`. If the latter, `window_packet` need only translate (the texture
+bound clips the band); if the former, it must also set `viewport = band_h`. Phase 1
+sets both (harmless) and confirms on a headed tall-page run.
 
 ## Progress
 
 - 2026-06-15: Plan drafted. Current state verified against `card.rs`, `render.rs`,
   and `document-canvas/src/types.rs` (line refs above confirmed this session).
   Awaiting sign-off on phasing before Phase 1.
+- 2026-06-15: Phase 0 probe done (findings above). Sign-off received for Phase 0+1.
+- 2026-06-16: Phase 1 landed. `DocumentRenderPacket::window` added + unit-tested in
+  document-canvas (commit 35e3c4b). Host wiring: `card::render_content` forks the
+  lane (document packet vs HTML scene) and `card::lower_window` lowers a band;
+  `content.rs` ships a `Document` update; the constellation retains packet+fonts and
+  exposes `packet()`; the render loop bands + UV-windows it; the 12 KiB body cap and
+  8192 px texture cap are gone. 91 meerkat bin tests green; headed faq.gmi verified
+  (renders, scrolls fully, monotonic). Next: Phase 2 query API over the retained
+  packet.
