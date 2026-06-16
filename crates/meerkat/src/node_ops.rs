@@ -58,6 +58,33 @@ impl WindowCtx<'_> {
         })
     }
 
+    /// Recover a removed node from its eidetic tombstone: find it by `node_id`,
+    /// re-mint it (url + title + tags) into the focused graph, select it, and
+    /// persist. The Trail › Removed rows queue `recover:<node_id>`; this is the
+    /// other half of [`delete_focused_node`](Self::delete_focused_node)'s tombstone
+    /// write. (Recover-deleted-node, Lane 0.) A no-op if the store or tombstone is
+    /// gone. The tombstone is intentionally left in the log (re-mint is duplicate-
+    /// friendly per the node-identity model); pruning it on recover is a follow-up.
+    pub(super) fn recover_deleted_node(&mut self, node_id: &str) {
+        let tomb = {
+            let Some(store) = self.shared.content.store.as_mut() else {
+                return;
+            };
+            pollster::block_on(eidetic::list_deleted(store))
+                .unwrap_or_default()
+                .into_iter()
+                .find(|t| t.node_id == node_id)
+        };
+        let Some(tomb) = tomb else {
+            return;
+        };
+        self.orrery_mut()
+            .recover_node(&tomb.url, tomb.title.as_deref(), &tomb.tags);
+        self.orrery_mut().select_by_url(&tomb.url);
+        self.save_session();
+        self.view.request_redraw();
+    }
+
     /// Toggle the focused node's background flag: when set, its actor keeps
     /// running after focus moves away (the headless-active state for background
     /// work). A no-op when nothing is focused or the focused node has no live

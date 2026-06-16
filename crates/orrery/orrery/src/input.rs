@@ -238,6 +238,20 @@ impl Orrery {
         self.graph.get_node(key).map(|n| n.id).expect("a freshly minted node has an id")
     }
 
+    /// Re-mint a deleted node from its tombstone: open a fresh unlinked node on
+    /// `url`, then restore its title and tags (node truth that does not re-derive
+    /// from a re-fetch). Returns the new node's id. (Recover-deleted-node, Lane 0.)
+    pub fn recover_node(&mut self, url: &str, title: Option<&str>, tags: &[String]) -> uuid::Uuid {
+        let key = self.mint_node(None, url);
+        if let Some(title) = title.filter(|t| !t.is_empty()) {
+            self.graph.set_node_title(key, title.to_string());
+        }
+        for tag in tags {
+            self.graph.insert_node_tag(key, tag.clone());
+        }
+        self.graph.get_node(key).map(|n| n.id).expect("a freshly minted node has an id")
+    }
+
     /// Mint a fresh unlinked node at the cursor's world position — the empty-space
     /// right-click "Add node" gesture. `content_band_xy` is the orrery-leaf-local
     /// cursor point (screen px); the camera inversion happens here, so the host

@@ -203,7 +203,13 @@ impl WindowCtx<'_> {
         if !removed.is_empty() {
             items.push(PaneItem::text("utility-title", "Removed"));
             for tomb in removed.iter().take(12) {
-                items.push(PaneItem::text("utility-row-muted", short(&tomb.url)));
+                // A clickable row: a click queues `recover:<node_id>`, which the host
+                // re-mints back into the graph. (Recover-deleted-node, Lane 0.)
+                items.push(PaneItem::button(
+                    "utility-row",
+                    short(&tomb.url),
+                    format!("recover:{}", tomb.node_id),
+                ));
             }
         }
         items

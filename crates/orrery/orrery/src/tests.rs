@@ -255,6 +255,29 @@ fn tag_selected_inserts_the_trimmed_tag_on_every_selected_node() {
 }
 
 #[test]
+fn recover_node_re_mints_with_restored_title_and_tags() {
+    let mut orrery = Orrery::new();
+    let before = orrery.graph().nodes().count();
+
+    let id = orrery.recover_node(
+        "https://recovered.test",
+        Some("Recovered Page"),
+        &["reading".to_string(), "archived".to_string()],
+    );
+    assert_eq!(orrery.graph().nodes().count(), before + 1, "a node was re-minted");
+    let (key, node) = orrery.graph().get_node_by_id(id).unwrap();
+    assert_eq!(node.url(), "https://recovered.test", "the url is restored");
+    assert_eq!(node.title, "Recovered Page", "the title is restored");
+    let tags = orrery.graph().node_tags(key).unwrap();
+    assert!(tags.contains("reading") && tags.contains("archived"), "both tags restored");
+
+    // A tombstone with no stored title still re-mints a node (its title is left to
+    // the mint default / a later fetch, not forced empty).
+    let id2 = orrery.recover_node("https://untitled.test", None, &[]);
+    assert!(orrery.graph().get_node_by_id(id2).is_some(), "the untitled node re-mints");
+}
+
+#[test]
 fn retract_selected_relation_removes_the_user_relation() {
     let mut orrery = Orrery::new();
     let a = orrery.open_member_as_new_node(None, "https://a.test");

@@ -291,6 +291,31 @@ impl WindowCtx<'_> {
                             return;
                         }
                     }
+                    // The trail pane consumes the press: a left click on a Removed row
+                    // queues `recover:<node_id>`; re-mint that tombstone back into the
+                    // graph. (Recover-deleted-node; Lane 0.)
+                    if let Some(trect) = self.trail_leaf_rect() {
+                        if x >= trect[0] && x < trect[2] && y >= trect[1] && y < trect[3] {
+                            if button == MouseButton::Left {
+                                let local = (x - trect[0], y - trect[1]);
+                                if let Some(node) = self
+                                    .view
+                                    .trail_pane
+                                    .hit_test(local.0, local.1, self.view.trail_scroll)
+                                {
+                                    self.view
+                                        .trail_pane
+                                        .dispatch_click(node, PointerClick::at(local));
+                                    for key in self.view.trail_pane.take_activations() {
+                                        if let Some(id) = key.strip_prefix("recover:") {
+                                            self.recover_deleted_node(id);
+                                        }
+                                    }
+                                }
+                            }
+                            return;
+                        }
+                    }
                     // The gloss pane consumes the press: a left click on a minimap
                     // node focuses it (shared selection with the orrery). (Gloss.)
                     if let Some(grect) = self.gloss_leaf_rect() {

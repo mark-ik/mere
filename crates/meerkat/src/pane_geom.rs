@@ -172,6 +172,14 @@ impl WindowCtx<'_> {
             .map(|l| l.rect)
     }
 
+    /// The trail pane's screen rect, if open.
+    pub(super) fn trail_leaf_rect(&self) -> Option<[f32; 4]> {
+        self.laid_leaves()
+            .into_iter()
+            .find(|l| matches!(l.content, PaneContent::Trail))
+            .map(|l| l.rect)
+    }
+
     /// The frame divider gutter under window point `(x, y)`, as its split path +
     /// the split's (parent) rect + axis — for starting a divider drag.
     pub(super) fn frame_divider_at(
