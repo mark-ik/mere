@@ -1055,6 +1055,13 @@ impl WindowCtx<'_> {
             self.toggle_palette();
             return;
         }
+        // Ctrl+F opens / closes the find-in-page bar (HTML/serval lane).
+        if self.view.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("f"))
+        {
+            self.toggle_find();
+            return;
+        }
         if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("k"))
         {
@@ -1154,6 +1161,10 @@ impl WindowCtx<'_> {
         }
         if self.view.runner.state().palette_open {
             self.on_palette_key(key);
+            return;
+        }
+        if self.view.runner.state().find_open {
+            self.on_find_key(key);
             return;
         }
         // Route the key to whichever field owns the caret. Each focusable field has
@@ -1512,6 +1523,79 @@ impl WindowCtx<'_> {
     pub(super) fn focus_after_palette_close(&mut self) {
         let omnibar = self.input_under_class("toolbar");
         self.view.runner.set_focus(omnibar);
+    }
+
+    /// Toggle the find bar and move focus to match: into the find query when it
+    /// opens, back to the omnibar when it closes (clearing the actor's matches).
+    pub(super) fn toggle_find(&mut self) {
+        self.view.runner.update(Chrome::toggle_find);
+        if self.view.runner.state().find_open {
+            if let Some(node) = self.input_under_class("find-bar") {
+                self.view.runner.set_focus(Some(node));
+            }
+        } else {
+            self.clear_find_matches();
+            self.focus_after_palette_close();
+        }
+        self.view.request_redraw();
+    }
+
+    /// Route a key to the open find bar: Enter = next match, Shift+Enter = prev,
+    /// Escape closes, anything else edits the query and re-runs the search.
+    pub(super) fn on_find_key(&mut self, key: &WinitKey) {
+        match key {
+            WinitKey::Named(WinitNamedKey::Enter) => {
+                let delta = if self.view.modifiers.shift { -1 } else { 1 };
+                self.step_find_match(delta);
+            }
+            WinitKey::Named(WinitNamedKey::Escape) => {
+                self.view.runner.update(Chrome::close_find);
+                self.clear_find_matches();
+                self.focus_after_palette_close();
+                self.view.request_redraw();
+            }
+            other => {
+                if let Some(key_event) = key_event_from_winit(other, self.view.modifiers) {
+                    self.view.runner.dispatch_key(key_event);
+                    self.submit_find_query();
+                    self.view.request_redraw();
+                }
+            }
+        }
+    }
+
+    /// Push the edited find query to the content actor for the focused node, and
+    /// reset the active match to the first. (The actor dedups and clears on empty.)
+    fn submit_find_query(&mut self) {
+        let query = self.view.runner.state().find_input.text().to_string();
+        if let Some(member) = self.focused_member() {
+            self.shared.content.constellation.request_find(member, &query);
+        }
+        self.view.runner.update(|c| c.find_active = 0);
+    }
+
+    /// Clear the focused node's find matches (an empty query), so highlights vanish.
+    fn clear_find_matches(&mut self) {
+        if let Some(member) = self.focused_member() {
+            self.shared.content.constellation.request_find(member, "");
+        }
+    }
+
+    /// Cycle the active match by `delta`, wrapping within the live match count.
+    /// (S2 adds the auto-scroll into view; S1 cycles the index.)
+    fn step_find_match(&mut self, delta: isize) {
+        let Some(member) = self.focused_member() else {
+            return;
+        };
+        let count = self.shared.content.constellation.find_matches(member).len();
+        if count == 0 {
+            return;
+        }
+        self.view.runner.update(|c| {
+            let cur = c.find_active.min(count - 1) as isize;
+            c.find_active = (cur + delta).rem_euclid(count as isize) as usize;
+        });
+        self.view.request_redraw();
     }
 
     /// The first `<input>` under the first element carrying CSS class `class`

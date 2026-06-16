@@ -202,6 +202,18 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.strong_text),
             rgb(c.active_bg)
         ),
+        // Find-in-page bar: docked top-right under the toolbar (flex end), a small
+        // panel with a label + the query field.
+        ".find-overlay { display: flex; justify-content: flex-end; padding-top: 56px; padding-right: 12px; }"
+            .to_string(),
+        format!(
+            ".find-bar {{ background-color: {}; padding: 6px 10px; }}",
+            rgb(c.surface_bg)
+        ),
+        format!(
+            ".find-label {{ font-size: 16px; color: {}; padding: 6px 8px; }}",
+            rgb(c.body_text)
+        ),
         // Settings overlay: a centered panel (like the palette) with rows of controls.
         ".settings-overlay { display: flex; justify-content: center; padding-top: 56px; }"
             .to_string(),

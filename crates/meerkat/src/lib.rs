@@ -93,6 +93,14 @@ pub struct Chrome {
     /// The palette's live query buffer (caret / editing), mirrored into
     /// `palette.query` — the same host-owns-the-buffer split the omnibar uses.
     pub palette_input: TextInput,
+    /// Whether the find-in-page bar is open (Ctrl+F; HTML/serval lane).
+    pub find_open: bool,
+    /// The find query buffer (caret / editing); the host pushes it to the content
+    /// actor via `Constellation::request_find` on each edit.
+    pub find_input: TextInput,
+    /// The active match index, cycled by next/prev. Clamped against the live match
+    /// count (held host-side in the constellation) when rendered.
+    pub find_active: usize,
     /// The p2p sync-status chip's view-model (S5.0). The host folds the joined
     /// lane's real `SyncStatus` in here; default reads "p2p off".
     pub sync: SyncIndicator,
@@ -322,6 +330,9 @@ impl Chrome {
             palette_open: false,
             palette: CommandPaletteSession::default(),
             palette_input: TextInput::new(""),
+            find_open: false,
+            find_input: TextInput::new(""),
+            find_active: 0,
             sync: SyncIndicator::default(),
             pending_connect: None,
             pending_command: None,
@@ -450,6 +461,29 @@ impl Chrome {
     pub fn close_palette(&mut self) {
         self.palette_open = false;
         self.palette.selected_index = None;
+    }
+
+    /// Toggle the find-in-page bar open/closed.
+    pub fn toggle_find(&mut self) {
+        if self.find_open {
+            self.close_find();
+        } else {
+            self.open_find();
+        }
+    }
+
+    /// Open the find bar: a fresh empty query, the active match reset, the omnibar
+    /// dropdown closed.
+    pub fn open_find(&mut self) {
+        self.find_open = true;
+        self.find_input = TextInput::new("");
+        self.find_active = 0;
+        self.close_suggestions();
+    }
+
+    /// Close the find bar (the host clears the actor's matches separately).
+    pub fn close_find(&mut self) {
+        self.find_open = false;
     }
 
     /// The commands matching the current palette query.

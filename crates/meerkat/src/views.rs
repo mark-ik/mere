@@ -154,6 +154,9 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     if c.palette_open {
         children.push(palette_overlay(c));
     }
+    if c.find_open {
+        children.push(find_bar(c));
+    }
     if c.settings_open {
         children.push(settings_overlay(c));
     }
@@ -266,6 +269,20 @@ fn palette_overlay(c: &Chrome) -> ChromeView {
         |c: &mut Chrome, _: PointerClick| c.close_palette(),
     );
     Box::new(overlay)
+}
+
+/// The find-in-page bar (Ctrl+F): a query field docked top-right under the
+/// toolbar. The host pushes the query to the content actor on each edit and
+/// composites the match highlights over the page (HTML lane); this is just the
+/// query surface. Mirrors `palette_overlay`'s field-via-lens construction.
+fn find_bar(c: &Chrome) -> ChromeView {
+    let _ = c;
+    let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
+    let to_input: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.find_input;
+    let input = lens(make, to_input);
+    let label = el::<_, Chrome, ()>("div", "Find").attr("class", "find-label");
+    let panel = el::<_, Chrome, ()>("div", (label, input)).attr("class", "find-bar");
+    Box::new(el::<_, Chrome, ()>("div", panel).attr("class", "find-overlay"))
 }
 
 /// The docked comms pane (P6): a right-edge panel of conversations, an open
