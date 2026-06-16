@@ -285,11 +285,16 @@ fn dispatch_document(
     engine.render(&input).ok()
 }
 
-/// Cap a document-lane body so its laid-out scene stays well under the GPU's max
-/// buffer. Returns the body unchanged when already small; otherwise truncates to the
-/// last line boundary within the cap.
+/// Cap a document-lane body so its laid-out scene stays renderable. The card / tile
+/// texture is capped at `MAX_CARD_TEX_H` (8192 px), and content past that is never
+/// shown; rendering a much taller scene is wasted and, large enough, fails to
+/// rasterize (leaving the card blank — a 166 KB gemtext capsule laid out to ~19000
+/// px and rendered nothing). The byte cap is sized to keep the laid-out height near
+/// one texture's worth at the narrow card width (~1.7 bytes/px measured), so the
+/// scene stays well within GPU limits. A longer page renders its head, truncated at
+/// a line boundary. (Card / tile render robustness.)
 fn bound_document_body(body: &str) -> String {
-    const MAX_DOC_BYTES: usize = 32 * 1024;
+    const MAX_DOC_BYTES: usize = 12 * 1024;
     if body.len() <= MAX_DOC_BYTES {
         return body.to_string();
     }
