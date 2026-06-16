@@ -7,7 +7,7 @@ the `pelt-live` dependency is dropped; serval is untouched. Green (110 meerkat t
 assembly it consumes from `pelt-live`) into a meerkat-owned module that calls
 `serval-layout` + `paint_list_render` directly, and drop the `pelt-live`
 dependency. serval/pelt-live is left untouched; it stays the headless probe.
-**Related**: [host_cheap_path_plan](2026-06-10_host_cheap_path_plan.md) (this
+**Related**: [host_cheap_path_plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md) *(archived)* (this
 removes the shared edit surface that was forcing serval-side detours, unblocking
 that plan's C5-remaining and C6 serval items); the archived serval-as-host flip
 plan established "keep host-coupling retargetable", which this sharpens.

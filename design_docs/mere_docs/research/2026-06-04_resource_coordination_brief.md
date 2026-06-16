@@ -714,7 +714,7 @@ Every number is a setting with a sane default, never a hardcode:
   metric-circular and high-resource only; how stacking multiple domain LoRAs
   interacts with intruder-dimension forgetting is untested.
 - **Where the mesh lives as a crate** — *resolved 2026-06-12*: `crates/mesh/`
-  (the [mesh M1 plan](../implementation_strategy/2026-06-12_mesh_m1_plan.md));
+  (the [mesh M1 plan](../../archive_docs/2026-06-15_completed_plans/2026-06-12_mesh_m1_plan.md));
   the scheduler-vs-P6 relation stands as designed (P6's compute actor drives
   this crate's wire/state; same machinery, wider recipient).
 - **Communal training: bandwidth is solved, RAM and trust are not.** DiLoCo solves
@@ -741,7 +741,7 @@ any economy.
    bin ran the literal shape — the Windows laptop posted, the Fedora ThinkPad
    claimed and executed, the result landed back over LogSync (ticket bootstrap,
    both ways). See the
-   [mesh M1 plan](../implementation_strategy/2026-06-12_mesh_m1_plan.md).
+   [mesh M1 plan](../../archive_docs/2026-06-15_completed_plans/2026-06-12_mesh_m1_plan.md).
 2. **Resource adapter + first kind.** A `MeshResource` trait plus one adapter (a
    Burn-wgpu job or an embeddings batch). *Done when* a second kind is one adapter,
    not a core change.

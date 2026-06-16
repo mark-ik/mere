@@ -1,16 +1,21 @@
 # Host Wiring Grab-Bag Plan
 
 **Date**: 2026-06-11
-**Status**: Complete (2026-06-12). All eight items landed (G1.1–G1.4, G2.1–G2.4);
-per-item statuses below. Spun out of the
-[host cheap-path plan](2026-06-10_host_cheap_path_plan.md)'s C6 (which is now
+**Status**: **Serval-side complete (2026-06-12); meerkat adoption of 4 items still
+open.** All eight items' serval / xilem-serval seams landed (G1.1–G1.4, G2.1–G2.4).
+Two have live meerkat callers (G2.1 IME, G2.4 chrome a11y actions); the other four
+(G1.1 on_wheel, G1.2 transform hit-test, G1.3 pointer cancel, G2.3 keyboard escapes)
+are runway with **no meerkat caller**, their own done-conditions (meerkat adoption)
+awaiting window-composition P2+. So this is 6-wired / 4-runway at the meerkat layer,
+not 8/0. Per-item statuses below. Spun out of the
+[host cheap-path plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md)'s C6 (which is now
 otherwise done: C0–C5 + C4c shipped). This was the checklist of record for the
 remaining host-wiring parity items; what is left is meerkat-side adoption of the
 serval-side runway (G1.1–G1.3, G2.3), which rides window-composition P2+.
 **Scope**: The grab-bag of serval / xilem-serval host capability that is wired
 and tested one layer down with zero or stub meerkat callers. Each item lands
 separately; this plan phases them by what unblocks what, not by date.
-**Related**: the [host cheap-path plan](2026-06-10_host_cheap_path_plan.md) (the
+**Related**: the [host cheap-path plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md) (the
 parent; C6 lived there until it grew); the
 [window composition plan](2026-06-11_window_composition_plan.md) (its P2+
 pane-heavy phases build directly on Phase G1 below — G1 is the runway).

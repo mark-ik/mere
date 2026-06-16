@@ -457,8 +457,13 @@ wanted.
   - **Remaining P2 tail (gated on a 2nd-graph-pane UI, ~P3):** iterate Orrery leaves
     in render to draw 2+ graphs at once; route the input pointer / wheel to the Orrery
     pane *under the cursor* (the P1-scout soft-spot, still on the focused orrery —
-    correct for one pane). No way to summon a second Orrery pane exists today, so this
-    tail is untestable until that affordance lands; the resolution plumbing is in place.
+    correct for one pane). **Updated 2026-06-15:** the summon affordance now exists.
+    `OpenGraphBeside` (Shift+click a switcher tile, `input.rs:370` →
+    `session_ops.rs:470` → `app_handler.rs:670`) draws a second Orrery pane of another
+    graph, with per-pane render + wheel/hover live (`85f307c`, `21d9821`, `d124040`).
+    The remaining tail is per-pane *pointer-select / nav*, blocked on the
+    focus/active-session decoupling (the 2026-06-14 scoping note above), not on a
+    missing affordance.
 - 2026-06-14: **Audit (code-verified against the tree).** P1 confirmed done (pool +
   `focused_graph` + `Activation.graph_id` stamp + `reap_graph` + park/unload/LRU +
   Steward live-count all present; OQ2 resolved). **The P2-companion list-pane

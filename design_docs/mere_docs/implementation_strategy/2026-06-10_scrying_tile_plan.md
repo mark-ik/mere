@@ -131,7 +131,7 @@ Linux box.
   *interactive* version — what this lane wants under the orrery camera —
   additionally needs transform-aware hit-testing and the pointer propagation
   cell, both tracked in the
-  [host cheap-path plan](2026-06-10_host_cheap_path_plan.md) C6. Not one PR.
+  [host cheap-path plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md) C6 *(archived)*. Not one PR.
 - Explicit fence sync (the scrying README's ~150-250-line wgpu-hal path) if
   keyed-mutex/implicit sync shows artifacts under load.
 - Frame-arrival wake instead of acquire-per-redraw (battery/perf refinement).

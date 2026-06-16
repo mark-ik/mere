@@ -1,5 +1,14 @@
 # Omnibar Command Shell Plan
 
+> **ARCHIVED 2026-06-15** (DOC_POLICY §8). The privileged omnibar command shell
+> (S0–S4) is **shipped and on-screen verified**: a `>`-expression evals against a
+> read-only `ShellContext` snapshot and emits `Command`s drained through the existing
+> run path, with ghost-text completion and the `inspect()` query. The **sandboxed
+> knot-note `rhai eval` lane** (the other half of the two-tier trust model in this
+> doc) is a *different* plan's scope and remains unwired: tracked in
+> `knot_evaluation_export_plan` and the in-the-wings audit's Tier B. Original
+> location: `mere_docs/implementation_strategy/`.
+
 The omnibar becomes a programmable command line over the existing `Command`
 spine: type an address to navigate (today), type a `>`-prefixed expression to run
 a script that drives the shell. One language (rhai) on two surfaces (sandboxed

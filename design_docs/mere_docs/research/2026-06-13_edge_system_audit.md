@@ -1,5 +1,17 @@
 # Edge System Audit
 
+> **Current state (2026-06-15 reconciliation).** The opening symptom below is
+> **resolved**: create / retract / traverse between two existing nodes all shipped
+> (`command_drain.rs:97-112`, context menu `menus.rs:193`, `>relate` / `>unrelate`,
+> roster edge-row click). The accurate state is the "Status (2026-06-13)" block in
+> the Recommendation section, not this top framing, which is preserved as the
+> original audit record. The **one remaining gap is the discoverable relation-kind
+> picker** (Tier A in the
+> [in-the-wings audit](2026-06-15_in_the_wings_and_browser_bar_audit.md)): the
+> string→`SemanticSubKind` map exists at `command_drain.rs:25`, but the context-menu
+> Relate handler hardcodes `UserGrouped`. Read top-down without this note, the doc
+> mis-prioritizes done work.
+
 A code-verified audit of edge generation and management, prompted by a concrete
 symptom: there is no way to draw an edge between two existing nodes. The finding
 is that the symptom is shallow. The kernel edge model is rich and complete, the

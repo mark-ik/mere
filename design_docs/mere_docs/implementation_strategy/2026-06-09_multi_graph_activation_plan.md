@@ -4,8 +4,13 @@
 **Status**: In progress. MG1–MG5 done plus the host text path — meerkat runs
 multi-graph with a window-scoped pane layout (near-Model-B): the shellbar
 switcher creates / switches / closes / **renames** graphs (labelled tiles), and
-switching keeps the panes while re-sourcing the graph-bound ones. MG6 (far-B
-leaf coexistence, multi-window tear-out, persona chip) remains.
+switching keeps the panes while re-sourcing the graph-bound ones. MG6's **far-B
+(different-graph leaves coexisting) and multi-window tear-out are now delivered /
+owned by the [window composition plan](2026-06-11_window_composition_plan.md)** (its
+P1 explicitly converges far-B / MG6, and `OpenGraphBeside` summons a second Orrery
+pane, `session_ops.rs:470`). What remains uniquely here: the **persona chip** (gated
+on multi-persona) and **per-session engine-profile escalation** (manifest field
+present, unwired).
 **Related**: [shellbar plan F2.3](2026-06-09_shellbar_plan.md), [graph session manifest plan](2026-05-11_graph_session_manifest_plan.md), [switcher thumbnails plan](2026-05-14_switcher_thumbnails_plan.md), [multi-window plan](2026-06-10_multi_window_plan.md), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) (panes are per-window), [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md). Code: `crates/system/session-runtime/`, `crates/meerkat/`, `crates/shell/frame/`.
 
 Give one window many graphs, switchable from the shellbar. The destination is
@@ -106,6 +111,11 @@ Done when switching graphs keeps the window's pane arrangement and re-sources on
 Near-B is reached: all graph-bound leaves follow one active graph (they read the live orrery, so the re-source is automatic; the leaf `graph_id` tags are kept consistent via `retag_graph_bound` for far-B to resolve per-leaf). Far-B (leaves of *different* `graph_id` coexisting) is MG6.
 
 ### MG6 — later
+
+> **Reconciled 2026-06-15:** the first two items moved to the
+> [window composition plan](2026-06-11_window_composition_plan.md) (which supersedes
+> MW4–MW6 and delivers far-B in P1/P2 plus `OpenGraphBeside`). Only the persona chip
+> and the engine-profile escalation are still owned here.
 
 - Far-B: leaves of different `graph_id` coexisting in one window.
 - Multi-window tear-out over `tearout.rs` (each window an independent active-graph view; compounds with far-B).

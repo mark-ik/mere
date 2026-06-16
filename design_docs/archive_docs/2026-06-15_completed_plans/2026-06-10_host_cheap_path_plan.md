@@ -1,5 +1,10 @@
 # Host Cheap-Path Plan
 
+> **ARCHIVED 2026-06-15** (DOC_POLICY §8). The perf chain (C0–C5 + C4c) shipped and
+> is proven (chrome cascade+layout 4.3×, whole frame −40%). The spun-out C6 grab-bag
+> lives in `host_wiring_grabbag_plan` (still active). Original location:
+> `mere_docs/implementation_strategy/`; internal relative links resolve against that path.
+
 **Date**: 2026-06-10
 **Status**: C0–C5 + C4c DONE (the perf chain). C6 spun out →
 [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md). Ready to archive.

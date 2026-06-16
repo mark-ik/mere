@@ -14,7 +14,7 @@ in conversation, but `mooting`'s charter (its own crate docs) is the
 ActivityPub adapters over a unified social-primitive API) — not the moot
 object. The object lane lands in **`moothold::moot`**, beside the tessera
 lane it composes with; `mooting` keeps its adapter charter untouched.
-**Related**: the [mesh M1 plan](../../mere_docs/implementation_strategy/2026-06-12_mesh_m1_plan.md)
+**Related**: the [mesh M1 plan](../../archive_docs/2026-06-15_completed_plans/2026-06-12_mesh_m1_plan.md) *(archived — M1 done)*
 (this is the third lap of the proven wire/state/sync recipe);
 the [eidetic browsing derivation plan](../../eidetic_docs/implementation_strategy/2026-06-12_eidetic_browsing_derivation_plan.md)
 (the flora is where a shared `SearchIndex` reference would land — the

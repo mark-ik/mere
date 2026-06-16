@@ -1,9 +1,14 @@
 # Engine picker + pluggability — implementation plan
 
 **Date**: 2026-06-15
-**Status**: Plan / pre-implementation. Phase 0 is the load-bearing reconcile;
-everything else hangs off it. The live scrying path (multi-tile, shipped
-2026-06-15) is the ad-hoc precursor Phase 0 folds into routing.
+**Status**: **Phases 0–3 shipped + verified** (route → activate → manage → pick):
+meerkat now routes both altitudes through `EngineRoutePolicy` (0a/0b), and the
+activation model (global default + per-session override), the apparatus engine
+manager, and the per-node picker all landed. **Remaining:** Phase 4 (no-handler UX +
+local-file sniff), Phase 2b (per-host overrides + per-session toggle), Phase 5
+(verso flip), and the register-viewer harvest. *(The §2 "Findings" below are the
+point-in-time pre-Phase-0 state; the "gap" it names is now closed, see the Progress
+log.)*
 **Scope**: The user-facing engine **picker** (an inker affordance), the
 **pluggability / extension model** that makes engines build-, session-, and
 activation-managable, the no-handler fallback, local-file ingestion, and the
@@ -53,7 +58,9 @@ The scry tier-2 engine is real: [`ScryingTileEngine`](../../../crates/inker/engi
 
 **Profile scoping.** `EngineProfileBinding` (Persona / Session / Graph) and the pure `engine_profile_path` resolver already exist in `session-runtime`; this plan reuses that tiering shape for *activation* scope.
 
-**The gap.** meerkat does **not** route through `EngineRoutePolicy` at all. It registers `nematic::engines()` only for snapshot cards, drives live content through the constellation, and runs scry through an ad-hoc `compat_pins: HashSet<GraphMemberId>` bool (the path the 2026-06-15 multi-tile work extended). The [modular integration plan §6](../../mere_docs/implementation_strategy/2026-06-02_modular_integration_plan.md) names the same gap: `register-viewer` (mime→viewer) duplicates `inker::routing`; reconcile when meerkat first routes >1 content engine. That moment is Phase 0.
+**The gap.** *(Closed by Phase 0, shipped 2026-06-15; this paragraph is the
+pre-Phase-0 record, kept for the Findings narrative.)* meerkat does **not** route
+through `EngineRoutePolicy` at all. It registers `nematic::engines()` only for snapshot cards, drives live content through the constellation, and runs scry through an ad-hoc `compat_pins: HashSet<GraphMemberId>` bool (the path the 2026-06-15 multi-tile work extended). The [modular integration plan §6](../../mere_docs/implementation_strategy/2026-06-02_modular_integration_plan.md) names the same gap: `register-viewer` (mime→viewer) duplicates `inker::routing`; reconcile when meerkat first routes >1 content engine. That moment is Phase 0.
 
 ## 3. Architecture decisions
 
