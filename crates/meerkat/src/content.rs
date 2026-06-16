@@ -67,9 +67,9 @@ pub enum ContentUpdate {
         packet: DocumentRenderPacket,
         fonts: FontTable,
         content_height: u32,
-        /// Content-local clickable link regions in full-document space; the host
-        /// hit-tests a click (offset by the card's scroll) against these.
-        links: Vec<LinkHit>,
+        // Link hit-testing reads the packet's own interactions
+        // (`DocumentRenderPacket::link_at`), so the document lane ships no separate
+        // link-rect table. (Phase 2 query API.)
     },
     /// An HTML/serval-lane render: one pre-lowered scene (a different pipeline that
     /// does not produce a document packet). `content_height` is the full laid-out
@@ -214,14 +214,12 @@ fn render(
             packet,
             fonts,
             content_height,
-            links,
         } => out.emit(ContentUpdate::Document {
             nav: content.nav,
             viewport_gen: content.viewport_gen,
             packet,
             fonts,
             content_height,
-            links,
         }),
         RenderedContent::Html {
             scene,

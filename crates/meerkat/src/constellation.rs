@@ -365,6 +365,12 @@ impl Constellation {
     /// the point lands on no link (the caller keeps its normal click). (Inline-link nav.)
     pub fn link_at(&self, member: GraphMemberId, x: f32, y: f32) -> Option<&str> {
         let activation = self.active.get(&member)?;
+        // Document lane: hit-test the retained packet's interactions directly (the
+        // query API subsumes the old parallel link-rect table). HTML lane has no
+        // packet, so it walks `links` (empty until the Phase 5 lane parity).
+        if let Some(packet) = &activation.packet {
+            return packet.link_at(x, y);
+        }
         activation
             .links
             .iter()
@@ -485,7 +491,6 @@ impl Constellation {
                         packet,
                         fonts,
                         content_height,
-                        links,
                     } => {
                         if let Some(activation) = self.active.get_mut(&member) {
                             let stamp = Generations {
@@ -498,7 +503,9 @@ impl Constellation {
                                 activation.scene = None; // forget any stale HTML scene
                                 activation.masks = Vec::new(); // document lane has no shadow masks
                                 activation.content_height = content_height;
-                                activation.links = links;
+                                // Document-lane hit-testing reads the packet; clear any
+                                // stale HTML link table. (Phase 2 query API.)
+                                activation.links = Vec::new();
                                 activation.scene_version += 1;
                                 activation.respawns = 0; // a fresh render = recovered
                                 out.any_scene = true;

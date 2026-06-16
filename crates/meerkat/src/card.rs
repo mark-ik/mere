@@ -15,9 +15,12 @@
 
 use document_canvas::netrender_backend::scene_from_packet;
 use document_canvas::{
-    ColorVocabulary, DocumentRenderPacket, FontTable, InteractionKind, InteractionRegion,
-    StyleConfig, Viewport, layout_document,
+    ColorVocabulary, DocumentRenderPacket, FontTable, StyleConfig, Viewport, layout_document,
 };
+// Used only by the `#[cfg(test)]` link-lowering helper + tests; the live path queries
+// `DocumentRenderPacket::link_at` directly. (Phase 2 query API.)
+#[cfg(test)]
+use document_canvas::{InteractionKind, InteractionRegion};
 use inker::{
     DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput,
     EngineRegistry, EngineRoutePolicy, EngineRouteRequest, InlineSpan, WorkspaceRouteId,
@@ -136,13 +139,12 @@ fn document(url: &str, blocks: Vec<DocumentBlock>) -> EngineDocument {
     }
 }
 
-/// Lay out `doc` at width `w` and lower it to a `netrender::Scene` — the proven
-/// document pipeline (parley layout + the shared paint-list translator). Returns
-/// the scene plus the **full content height** in px (the document grows past `h`;
-/// see [`layout_document`]'s `content_bounds`), so the host can rasterize a tall
-/// texture and scroll a window of it on the GPU. The caller composites the scene
-/// at the card rect with an opaque card background.
-pub fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> (Scene, u32, Vec<LinkHit>) {
+/// Lay out `doc` at width `w` and lower it to one full-height `netrender::Scene`
+/// (the pre-windowing path: parley layout + the shared paint-list translator). The
+/// live path now windows per band ([`lower_window`]); this stays as a test helper for
+/// the document-lowering unit tests, returning the scene plus full content height.
+#[cfg(test)]
+fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> (Scene, u32, Vec<LinkHit>) {
     let mut laid = layout_document(
         doc,
         Viewport::new(w as f32, h as f32),
@@ -171,9 +173,11 @@ pub struct LinkHit {
     pub url: String,
 }
 
-/// Flatten the document-canvas interaction regions into the host's link-hit map —
-/// `[x0, y0, x1, y1]` content-local bounds + URL. (Today every interaction is a
-/// link; the match keeps it honest if more kinds land.)
+/// Flatten the document-canvas interaction regions into a link-hit map —
+/// `[x0, y0, x1, y1]` content-local bounds + URL. The live path hit-tests the
+/// retained packet directly ([`DocumentRenderPacket::link_at`]); this stays for the
+/// [`render_card_scene`] test helper. (Today every interaction is a link.)
+#[cfg(test)]
 fn link_hits(regions: &[InteractionRegion]) -> Vec<LinkHit> {
     regions
         .iter()
@@ -220,7 +224,6 @@ pub enum RenderedContent {
         packet: DocumentRenderPacket,
         fonts: FontTable,
         content_height: u32,
-        links: Vec<LinkHit>,
     },
     Html {
         scene: Scene,
@@ -262,17 +265,18 @@ pub fn render_content(
 /// Lay out a document-lane doc into its retained packet (no lowering). The host
 /// windows + lowers a band of the packet per scroll, so the full content height is
 /// reachable without rasterizing the whole document into one texture. Returns the
-/// packet, its font sidecar, the full content height (px), and the link hit map (in
-/// full-document space; the host offsets it by the card's scroll).
+/// packet, its font sidecar, and the full content height (px); link hit-testing reads
+/// the packet's interactions directly (see [`DocumentRenderPacket::link_at`]).
 fn layout_document_content(doc: &EngineDocument, w: u32, h: u32) -> RenderedContent {
     let laid = layout_document(doc, Viewport::new(w as f32, h as f32), &StyleConfig::default());
     let content_height = laid.packet.content_bounds.size.height.ceil().max(1.0) as u32;
-    let links = link_hits(&laid.packet.interactions);
+    // Link hit-testing reads the retained packet's interactions directly (the host
+    // queries `DocumentRenderPacket::link_at`), so the document lane no longer ships a
+    // parallel link-rect table. (Inline-link nav; Phase 2 query API.)
     RenderedContent::Document {
         packet: laid.packet,
         fonts: laid.fonts,
         content_height,
-        links,
     }
 }
 
@@ -338,10 +342,9 @@ pub fn render_content_scene(
             packet,
             fonts,
             content_height,
-            links,
         } => {
             let band = content_height.min(PREVIEW_BAND_PX) as f32;
-            (lower_window(&packet, &fonts, 0.0, band), content_height, links)
+            (lower_window(&packet, &fonts, 0.0, band), content_height, Vec::new())
         }
     }
 }
@@ -824,9 +827,9 @@ mod tests {
 
     #[test]
     fn document_lane_surfaces_link_hit_regions() {
-        // The document lane (here markdown) lays out hit-testable link regions; the
-        // render surfaces them as `LinkHit`s so the host can route a click to the URL.
-        // (Inline-link nav.)
+        // The document lane (here markdown) lays hit-testable link regions onto the
+        // retained packet; the host queries them via `DocumentRenderPacket::link_at`.
+        // (Inline-link nav; Phase 2 query API.)
         let mut registry = EngineRegistry::new();
         for engine in nematic::engines() {
             registry.register(engine);
@@ -835,7 +838,7 @@ mod tests {
             content_type: Some("text/markdown".into()),
             body: "See [the spec](https://example.test/spec) for details.".into(),
         });
-        let (_scene, _h, links) = render_content_scene(
+        let RenderedContent::Document { packet, .. } = render_content(
             "https://example.test/",
             Some(&ready),
             &registry,
@@ -843,15 +846,22 @@ mod tests {
             &NoImageLoader,
             420,
             360,
-        );
-        let hit = links
+        ) else {
+            panic!("markdown routes to the document lane");
+        };
+        // The packet carries the link as a positive-area interaction region...
+        let region = packet
+            .interactions
             .iter()
-            .find(|l| l.url == "https://example.test/spec")
-            .expect("the markdown link is surfaced as a clickable region");
-        assert!(
-            hit.rect[2] > hit.rect[0] && hit.rect[3] > hit.rect[1],
-            "the link hit region has a positive-area bounds: {:?}",
-            hit.rect
+            .find(|r| matches!(&r.kind, InteractionKind::Link { url } if url == "https://example.test/spec"))
+            .expect("the markdown link is laid out as an interaction region");
+        let b = region.bounds;
+        assert!(b.size.width > 0.0 && b.size.height > 0.0, "positive-area link bounds: {b:?}");
+        // ...and link_at at its center resolves to the URL.
+        assert_eq!(
+            packet.link_at(b.origin.x + b.size.width * 0.5, b.origin.y + b.size.height * 0.5),
+            Some("https://example.test/spec"),
+            "link_at resolves the link at its center"
         );
     }
 
