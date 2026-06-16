@@ -469,6 +469,19 @@ impl Orrery {
         true
     }
 
+    /// Stamp a fetched favicon (RGBA8 + dimensions) onto the node currently at
+    /// `url`, if one exists. A metadata-only change: unlike [`ingest_graph`], it
+    /// neither reconciles the derived views nor disturbs the spatial layout (no node
+    /// or edge is added), so a favicon arriving mid-browse does not jostle the field.
+    /// The tile reads the stamped favicon on the next frame. Returns whether a node
+    /// was found and its favicon changed. (Favicon-on-tile.)
+    pub fn set_node_favicon(&mut self, url: &str, rgba: Vec<u8>, width: u32, height: u32) -> bool {
+        let Some(key) = self.graph.get_node_by_url(url).map(|(k, _)| k) else {
+            return false;
+        };
+        self.graph.set_node_favicon(key, rgba, width, height)
+    }
+
     /// Replace the selection with just `key` (clearing any selected nodes/edges).
     fn select_only(&mut self, key: NodeKey) {
         self.selected.clear();

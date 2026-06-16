@@ -11,7 +11,10 @@ use kernel::geometry::PortablePoint;
 use layout_dom_api::LayoutDomMut;
 use kernel::graph::NodeKey;
 use netrender::Scene;
-use paint_list_api::{DeviceIntSize, PaintList};
+use paint_list_api::{
+    AlphaType, ColorF, CommonPlacement, DeviceIntSize, IdNamespace, ImageItem, ImageKey,
+    ImageRendering, ImageResource, LayoutPoint, LayoutRect, PaintCmd, PaintList,
+};
 use paint_list_render::{composite_paint_layers, CompositeLayer};
 use platen::orrery::orrery_paint_list_demoted;
 use serval_layout::{Applied, IncrementalLayout, ScrollOffsets};
@@ -161,7 +164,49 @@ impl Orrery {
         let nodes_plist =
             self.node_layout.as_ref().unwrap().emit_paint_list(&self.node_dom, &scroll, viewport);
 
-        // A third (screen-space) layer for the marquee rubber-band, when active.
+        // Favicon layer: a textured quad over each on-screen tile that carries a
+        // favicon. This layer is NOT under the `.stage` camera transform (it is a
+        // bare command list, not the serval DOM), so the camera is applied here:
+        // a world point maps to screen by `world * zoom + offset`. The favicon's
+        // `favicon_rgba` is already the `ImageResource` shape (RGBA8, straight alpha),
+        // so the host's existing rasterize uploads it with no GPU plumbing in the
+        // orrery. It draws above the colored tile square and below the marquee.
+        // (Favicon-on-tile.)
+        let (cam_ox, cam_oy, cam_z) =
+            (self.camera.offset.0, self.camera.offset.1, self.camera.zoom);
+        let mut favicon_cmds: Vec<PaintCmd> = Vec::new();
+        let mut favicon_images: Vec<ImageResource> = Vec::new();
+        for &key in &on_screen {
+            let Some(pos) = positions.get(&key) else { continue };
+            let Some(node) = self.graph.get_node(key) else { continue };
+            let Some(rgba) = node.favicon_rgba.as_ref() else { continue };
+            if rgba.is_empty() || node.favicon_width == 0 || node.favicon_height == 0 {
+                continue;
+            }
+            let img_key = ImageKey::new(IdNamespace(0), favicon_images.len() as u32);
+            favicon_images.push(ImageResource {
+                key: img_key,
+                width: node.favicon_width,
+                height: node.favicon_height,
+                data: rgba.clone(),
+            });
+            let x0 = (pos.x - NODE_HALF) * cam_z + cam_ox;
+            let y0 = (pos.y - NODE_HALF) * cam_z + cam_oy;
+            let x1 = (pos.x + NODE_HALF) * cam_z + cam_ox;
+            let y1 = (pos.y + NODE_HALF) * cam_z + cam_oy;
+            favicon_cmds.push(PaintCmd::DrawImage(ImageItem {
+                placement: CommonPlacement::new(LayoutRect::new(
+                    LayoutPoint::new(x0, y0),
+                    LayoutPoint::new(x1, y1),
+                )),
+                image_key: img_key,
+                image_rendering: ImageRendering::Auto,
+                alpha_type: AlphaType::Alpha,
+                color: ColorF { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+            }));
+        }
+
+        // A screen-space layer for the marquee rubber-band, when active.
         let marquee_cmds = self.marquee.map(|origin| marquee_rect_cmds(origin, self.cursor));
         // The orrery's own opaque backdrop is the bottom layer (so the surface is
         // dark without depending on the host clear color); then the underlay edges
@@ -176,6 +221,13 @@ impl Orrery {
                 images: nodes_plist.images(),
             },
         ];
+        if !favicon_cmds.is_empty() {
+            layers.push(CompositeLayer {
+                commands: &favicon_cmds,
+                fonts: &[],
+                images: &favicon_images,
+            });
+        }
         if let Some(cmds) = marquee_cmds.as_ref() {
             layers.push(CompositeLayer::commands_only(cmds));
         }
@@ -183,5 +235,44 @@ impl Orrery {
 
         let needs_redraw = settling || gliding || dragging;
         (scene, needs_redraw)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Orrery;
+    use euclid::default::Point2D;
+    use kernel::graph::Graph;
+
+    fn graph_with_one_node(url: &str) -> (Graph, kernel::graph::NodeKey) {
+        let mut graph = Graph::new();
+        let key =
+            graph.add_node_with_id(Graph::node_namespace_id(url), url.to_string(), Point2D::zero());
+        (graph, key)
+    }
+
+    fn image_op_count(scene: &netrender::Scene) -> usize {
+        scene.ops.iter().filter(|op| matches!(op, netrender::SceneOp::Image(_))).count()
+    }
+
+    /// A node carrying favicon RGBA emits an image op over its on-screen tile, so the
+    /// host rasterizes a real favicon on the square. (Favicon-on-tile.)
+    #[test]
+    fn favicon_node_emits_an_image_op() {
+        let (mut graph, key) = graph_with_one_node("https://ex.test/");
+        // A tiny 2x2 opaque favicon (RGBA8, 16 bytes).
+        assert!(graph.set_node_favicon(key, vec![255u8; 2 * 2 * 4], 2, 2));
+        let mut orrery = Orrery::with_graph(graph);
+        let (scene, _) = orrery.frame(800, 600);
+        assert!(image_op_count(&scene) >= 1, "a favicon node emits at least one image op");
+    }
+
+    /// Without a favicon, no image op is emitted (the tile is just a colored square).
+    #[test]
+    fn node_without_favicon_emits_no_image_op() {
+        let (graph, _key) = graph_with_one_node("https://ex.test/");
+        let mut orrery = Orrery::with_graph(graph);
+        let (scene, _) = orrery.frame(800, 600);
+        assert_eq!(image_op_count(&scene), 0, "no favicon -> no image op");
     }
 }

@@ -109,12 +109,20 @@ pub enum FetchCommand {
     Page(String),
     /// Fetch the subresource at the (already absolute) `url` as raw bytes.
     Subresource(String),
+    /// Fetch the favicon at `url` (already absolute) as raw bytes, remembering it
+    /// belongs to the node currently at `owner_url` so the host applies the decoded
+    /// icon to that node. Carried separately from `Subresource` so favicon bytes
+    /// reach the graph, not the content actors' render stores. (Favicon-on-tile.)
+    Favicon { owner_url: String, url: String },
 }
 
-/// An update from the fetch actor: one completed page or subresource fetch.
+/// An update from the fetch actor: one completed page, subresource, or favicon fetch.
 pub enum FetchUpdate {
     Page(FetchOutcome),
     Subresource(SubresourceOutcome),
+    /// Raw favicon bytes (only on success) plus the page they belong to; the host
+    /// decodes them to RGBA and stamps them on that node. (Favicon-on-tile.)
+    Favicon { owner_url: String, bytes: Vec<u8> },
 }
 
 /// Spawn the fetch actor on its own thread (armillary harness). It owns a
@@ -149,6 +157,16 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
                         // host's requested-set stops it being re-spawned.
                         if let Some(bytes) = fetch_bytes(&url).await {
                             out.emit(FetchUpdate::Subresource(SubresourceOutcome { url, bytes }));
+                        }
+                    });
+                }
+                FetchCommand::Favicon { owner_url, url } => {
+                    let out = out.clone();
+                    runtime.spawn(async move {
+                        // Best-effort: a missing / undecodable favicon simply never
+                        // arrives, and the node keeps its colored tile.
+                        if let Some(bytes) = fetch_bytes(&url).await {
+                            out.emit(FetchUpdate::Favicon { owner_url, bytes });
                         }
                     });
                 }

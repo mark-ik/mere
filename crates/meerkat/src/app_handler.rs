@@ -19,6 +19,28 @@ use winit::window::{CursorIcon, Window, WindowId};
 use super::observability::Severity;
 use super::{Shell, comms_host, fetch, scrying_host, sync, titlebar};
 
+/// The favicon URL to fetch for a freshly-loaded HTML page: the resolved
+/// `<link rel="icon">` href if the head declares one, else the well-known
+/// `{origin}/favicon.ico` for an http(s) page. `None` for a page with neither (a
+/// non-http(s) scheme with no icon link, e.g. gemtext). A lightweight parse of the
+/// already-fetched body, reusing serval's `<link>` scan. (Favicon-on-tile.)
+fn favicon_url_for(page_url: &str, body: &str) -> Option<String> {
+    let base = url::Url::parse(page_url).ok()?;
+    let doc = serval_static_dom::StaticDocument::parse(body);
+    if let Some(href) = serval_layout::linked_icon_href(&doc) {
+        if let Ok(resolved) = base.join(&href) {
+            return Some(resolved.to_string());
+        }
+    }
+    // No declared icon: fall back to the well-known location for web pages only.
+    if matches!(base.scheme(), "http" | "https") {
+        if let Ok(fallback) = base.join("/favicon.ico") {
+            return Some(fallback.to_string());
+        }
+    }
+    None
+}
+
 /// The platform virtual-key code for a winit key event, for forwarding into a
 /// scrying tile's WebView. Named keys map to their Win32 VKs; character keys use
 /// the uppercased char (matching Win32 VK_A..VK_Z / VK_0..VK_9). (Scrying X2.)
@@ -152,6 +174,18 @@ impl ApplicationHandler for Shell {
                                 "succeeded",
                                 Some(outcome.url.clone()),
                             );
+                            // Best-effort: fetch this page's favicon so its graph
+                            // tile can show a real icon. The bytes route back as
+                            // `FetchUpdate::Favicon`, keyed to this page url.
+                            // (Favicon-on-tile.)
+                            if let Some(icon_url) = favicon_url_for(&outcome.url, &fetched.body) {
+                                wc.shared.content.fetch_handle.command(
+                                    fetch::FetchCommand::Favicon {
+                                        owner_url: outcome.url.clone(),
+                                        url: icon_url,
+                                    },
+                                );
+                            }
                             fetch::ContentState::Ready(fetched)
                         }
                         Err(reason) => {
@@ -182,6 +216,20 @@ impl ApplicationHandler for Shell {
                         .record_actor("fetch", "subresource", Some(sub.url.clone()));
                     wc.save_cached(&sub.url, None, &sub.bytes);
                     wc.shared.content.constellation.broadcast_resource(&sub.url, &sub.bytes);
+                }
+                // A page's favicon arrived: decode it to RGBA and stamp it on the
+                // node currently at the owner url, so the orrery paints it on that
+                // node's tile. Snapshot persistence carries it across restarts.
+                // (Favicon-on-tile.)
+                fetch::FetchUpdate::Favicon { owner_url, bytes } => {
+                    if let Some(decoded) = serval_layout::decode_image_bytes(&bytes) {
+                        graph_changed |= wc.orrery_mut().set_node_favicon(
+                            &owner_url,
+                            decoded.rgba,
+                            decoded.width,
+                            decoded.height,
+                        );
+                    }
                 }
             }
         }
