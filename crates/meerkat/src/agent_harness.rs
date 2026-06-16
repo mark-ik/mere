@@ -964,6 +964,39 @@ mod tests {
     }
 
     #[test]
+    fn alt_arrows_step_the_focused_nodes_history() {
+        // Alt+Left / Alt+Right walk the focused node's own browse history (browser
+        // back/forward), driven through on_key_pressed so the real key path is
+        // guarded, not just drain_history_step.
+        let mut app = test_app();
+        app.orrery_mut().visit("gemini://a.example/");
+        let member = app
+            .orrery()
+            .focused_member()
+            .expect("the visited node is focused");
+        // Navigate the same node in place a -> b, growing its within-node history.
+        app.orrery_mut().navigate_member(member, "gemini://b.example/");
+        assert!(app.orrery().member_can_back(member), "a -> b leaves a back step");
+        assert!(!app.orrery().member_can_forward(member), "and no forward step yet");
+
+        let press = |app: &mut Shell, named: winit::keyboard::NamedKey| {
+            let mut wc = app.ctx();
+            wc.view.modifiers.alt = true;
+            wc.on_key_pressed(&winit::keyboard::Key::Named(named));
+        };
+
+        // Alt+Left steps back to the root (a).
+        press(&mut app, winit::keyboard::NamedKey::ArrowLeft);
+        assert!(!app.orrery().member_can_back(member), "back from b lands at the root a");
+        assert!(app.orrery().member_can_forward(member), "and forward to b is available");
+
+        // Alt+Right steps forward to the tip (b) again.
+        press(&mut app, winit::keyboard::NamedKey::ArrowRight);
+        assert!(app.orrery().member_can_back(member), "forward returns to b");
+        assert!(!app.orrery().member_can_forward(member), "and b is the tip");
+    }
+
+    #[test]
     fn shellbar_roster_button_toggles_the_roster() {
         // The shellbar pane-toggle buttons are real chrome-DOM nodes; activating the
         // roster button runs ToggleRoster through the command spine. (The pointer

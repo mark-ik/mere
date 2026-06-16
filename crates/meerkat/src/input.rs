@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use forme::GraphMemberId;
 use layout_dom_api::LayoutDom;
-use meerkat::{Chrome, ContextAction, ContextItem, nav, submit_omnibar};
+use meerkat::{Chrome, ContextAction, ContextItem, HistoryStep, nav, submit_omnibar};
 use orrery::PointerButton;
 use crate::serval_render::hit_test_node;
 use serval_layout::ScrollOffsets;
@@ -988,6 +988,24 @@ impl WindowCtx<'_> {
         // F5 reloads the focused node's page — re-fetch, bypassing the durable cache.
         if matches!(key, WinitKey::Named(WinitNamedKey::F5)) {
             self.retry_focused_content();
+            return;
+        }
+        // Alt+Left / Alt+Right step the focused node's own history (browser
+        // back/forward). Mirror the toolbar buttons: record the intent on the chrome,
+        // then drain it this pass so the revealed page loads at once. A no-op when
+        // nothing is focused or the node is at a history end.
+        if self.view.modifiers.alt
+            && matches!(key, WinitKey::Named(WinitNamedKey::ArrowLeft))
+        {
+            self.view.runner.update(|c| c.history_step = Some(HistoryStep::Back));
+            self.drain_history_step();
+            return;
+        }
+        if self.view.modifiers.alt
+            && matches!(key, WinitKey::Named(WinitNamedKey::ArrowRight))
+        {
+            self.view.runner.update(|c| c.history_step = Some(HistoryStep::Forward));
+            self.drain_history_step();
             return;
         }
         // Command palette: Ctrl+P. Ctrl+K toggles the comms pane (freed up for it).
