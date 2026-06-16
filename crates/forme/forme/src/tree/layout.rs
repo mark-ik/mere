@@ -142,8 +142,8 @@ impl<N: MemberId> GraphTree<N> {
             .new_with_children(
                 taffy::Style {
                     size: taffy::Size {
-                        width: taffy::Dimension::length(available.w),
-                        height: taffy::Dimension::length(available.h),
+                        width: taffy::Dimension::Length(available.w),
+                        height: taffy::Dimension::Length(available.h),
                     },
                     flex_direction: Self::taffy_direction(root_direction),
                     ..Default::default()
@@ -252,11 +252,11 @@ impl<N: MemberId> GraphTree<N> {
         let (flex_basis, flex_grow, flex_shrink) =
             if let Some(ratio) = lo.and_then(|o| o.split_ratio) {
                 // Explicit user-set ratio: use flex_basis percentage.
-                (taffy::Dimension::percent(ratio), 0.0, 1.0)
+                (taffy::Dimension::Percent(ratio), 0.0, 1.0)
             } else {
                 // Default: equal flex distribution.
                 (
-                    taffy::Dimension::auto(),
+                    taffy::Dimension::Auto,
                     lo.and_then(|o| o.flex_grow).unwrap_or(1.0),
                     lo.and_then(|o| o.flex_shrink).unwrap_or(1.0),
                 )
@@ -269,12 +269,12 @@ impl<N: MemberId> GraphTree<N> {
             min_size: taffy::Size {
                 width: lo
                     .and_then(|o| o.min_width)
-                    .map(taffy::Dimension::length)
-                    .unwrap_or(taffy::Dimension::auto()),
+                    .map(taffy::Dimension::Length)
+                    .unwrap_or(taffy::Dimension::Auto),
                 height: lo
                     .and_then(|o| o.min_height)
-                    .map(taffy::Dimension::length)
-                    .unwrap_or(taffy::Dimension::auto()),
+                    .map(taffy::Dimension::Length)
+                    .unwrap_or(taffy::Dimension::Auto),
             },
             ..Default::default()
         }
