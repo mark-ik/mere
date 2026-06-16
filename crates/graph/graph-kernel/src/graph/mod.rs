@@ -521,6 +521,12 @@ pub mod edge_ops;
 // live in `graph/query.rs` (2026-05-11 decomposition pass).
 pub mod query;
 
+// `node_display_label`: a human-meaningful label derived from a node's title /
+// linked-data role / @type / address, for the canvas tiles + roster (so an
+// anonymous ingested entity reads as "publisher" / "Organization", not a raw
+// `urn:mere:bnode:` string).
+pub mod display;
+
 // Snapshot serialization (`to_snapshot` / `from_snapshot`), the rkyv
 // trait impls that delegate through them, `containment_parent_url`,
 // and `impl Default for Graph` live in `graph/snapshot.rs`

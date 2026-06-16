@@ -33,17 +33,17 @@ use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 pub(crate) const NODE_SHEET: &[&str] = &[
     "div { display: block; }",
     ".stage { position: relative; }",
-    ".gnode { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
+    ".gnode { position: absolute; left: 0; top: 0; width: 36px; height: 36px; overflow: hidden; \
         background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
-    ".gnode-selected { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
+    ".gnode-selected { position: absolute; left: 0; top: 0; width: 36px; height: 36px; overflow: hidden; \
         background-color: rgb(232, 150, 40); color: rgb(28, 22, 10); font-size: 15px; }",
     // Activation-state colors: open (green), closed (red), idle (blue, the same
     // fill as the default `.gnode`). The host pushes the state per node.
-    ".gnode-open { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
+    ".gnode-open { position: absolute; left: 0; top: 0; width: 36px; height: 36px; overflow: hidden; \
         background-color: rgb(58, 140, 94); color: rgb(238, 250, 243); font-size: 15px; }",
-    ".gnode-closed { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
+    ".gnode-closed { position: absolute; left: 0; top: 0; width: 36px; height: 36px; overflow: hidden; \
         background-color: rgb(166, 72, 72); color: rgb(250, 240, 240); font-size: 15px; }",
-    ".gnode-idle { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
+    ".gnode-idle { position: absolute; left: 0; top: 0; width: 36px; height: 36px; overflow: hidden; \
         background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
     // Content-type silhouettes, layered on the state/color class as a second class
     // (border-radius only, so they merge with whichever color class is set). Square
@@ -161,11 +161,15 @@ pub(crate) fn build_pool_dom(graph: &Graph) -> (ScriptedDom, HashMap<NodeKey, Do
     dom.append_child(root, stage);
 
     let mut gnode_of = HashMap::new();
-    for (i, (key, _node)) in graph.nodes().enumerate() {
+    for (key, _node) in graph.nodes() {
         let gnode = dom.create_element(qual("div"));
         dom.set_attribute(gnode, qual("class"), "gnode");
         dom.set_attribute(gnode, qual("style"), "transform: translate(0px, 0px);");
-        let label = dom.create_text(&i.to_string());
+        // A human-meaningful label (an ingested entity reads as "publisher" /
+        // "Organization", a page as its host, not a raw index or `urn:`); the tile
+        // clips the overflow (`overflow: hidden` in NODE_SHEET), the roster carries
+        // the full text. (Node legibility.)
+        let label = dom.create_text(&graph.node_display_label(key));
         dom.append_child(gnode, label);
         dom.append_child(stage, gnode);
         gnode_of.insert(key, gnode);

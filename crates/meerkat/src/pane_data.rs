@@ -31,15 +31,12 @@ impl WindowCtx<'_> {
             .orrery()
             .graph()
             .nodes()
-            .map(|(_key, node)| {
+            .map(|(key, node)| {
                 let url = node.url().to_string();
-                let title = if !node.title.is_empty() {
-                    node.title.clone()
-                } else if let Some(host) = &node.cached_host {
-                    host.clone()
-                } else {
-                    url.clone()
-                };
+                // A human-meaningful label: a real title, else an ingested entity's
+                // role / @type ("publisher" / "Organization"), else the host, never a
+                // raw `urn:mere:bnode:` string. (Node legibility.)
+                let title = graph.node_display_label(key);
                 let content_type = match self.shared.content.pages.get(&url) {
                     Some(fetch::ContentState::Ready(fetched)) => fetched.content_type.clone(),
                     _ => node.mime_hint.clone(),
@@ -62,11 +59,7 @@ impl WindowCtx<'_> {
                                     (roster::EdgeDir::In, r.from)
                                 };
                                 let other = graph.get_node(other_key)?;
-                                let other_title = if !other.title.is_empty() {
-                                    other.title.clone()
-                                } else {
-                                    other.cached_host.clone().unwrap_or_else(|| other.url().to_string())
-                                };
+                                let other_title = graph.node_display_label(other_key);
                                 Some(roster::EdgeRow {
                                     direction,
                                     kind_label: relation_kind_label(r.kind).to_string(),
