@@ -207,12 +207,16 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         ".find-overlay { display: flex; justify-content: flex-end; padding-top: 56px; padding-right: 12px; }"
             .to_string(),
         format!(
-            ".find-bar {{ background-color: {}; padding: 6px 10px; }}",
+            ".find-bar {{ display: flex; align-items: center; background-color: {}; padding: 6px 10px; }}",
             rgb(c.surface_bg)
         ),
         format!(
             ".find-label {{ font-size: 16px; color: {}; padding: 6px 8px; }}",
             rgb(c.body_text)
+        ),
+        format!(
+            ".find-count {{ font-size: 14px; color: {}; padding: 6px 8px; }}",
+            rgb(c.muted_text)
         ),
         // Settings overlay: a centered panel (like the palette) with rows of controls.
         ".settings-overlay { display: flex; justify-content: center; padding-top: 56px; }"

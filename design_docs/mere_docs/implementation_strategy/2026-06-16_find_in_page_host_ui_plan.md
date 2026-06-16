@@ -75,3 +75,17 @@ no new plumbing.
   toolbar + its CSS. `cargo check -p meerkat` clean. So: the bar opens, takes a query, sends it to the
   actor, matches arrive (auto-redraw) — not yet highlighted. **Known follow-up:** paste-into-find
   (`handle_clipboard_shortcut` routes to omnibar/palette, not the find field). Next: S2 (overlay).
+- **2026-06-16** — **S2 (overlay half) DONE.** Chrome `find_count` (synced host-side from
+  `constellation.find_matches(focused).len()` each frame the bar is open); `find_bar` shows
+  `active/total` (or `0/0`) with a `.find-count` rule; the highlight overlay in `render.rs` after the
+  card composite loop maps each match rect (`[x0,y0,x1,y1]` full-document px) content→window with the
+  same scale + scroll the composite uses (1:1 for a live card/tile), tinting the active match stronger
+  and culling matches scrolled out of the band; `step_find_match` auto-scrolls the newly-active match
+  into view (~20% down) when it falls outside the focused card/tile's visible band, via a
+  `find_member_viewport` helper. `cargo check -p meerkat` clean (no new warnings); 61 lib tests green.
+  **Build note:** the workspace was mid-migration (a Cargo.toml dep-source flip to git deps pulled a
+  newer taffy whose `Dimension` is a struct, not an enum), which broke `forme`; the 8
+  `Dimension::Length/Percent/Auto` sites in `forme/tree/layout.rs` were updated to the
+  `length`/`percent`/`auto` constructor fns to unblock the build (separate commit). On-screen verify
+  against a long HTML page still pending (GPU run). **Feature complete; gemtext-lane find is the
+  remaining follow-on.**

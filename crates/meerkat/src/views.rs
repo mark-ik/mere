@@ -276,12 +276,21 @@ fn palette_overlay(c: &Chrome) -> ChromeView {
 /// composites the match highlights over the page (HTML lane); this is just the
 /// query surface. Mirrors `palette_overlay`'s field-via-lens construction.
 fn find_bar(c: &Chrome) -> ChromeView {
-    let _ = c;
     let make: fn(&mut TextInput) -> TextField = |t: &mut TextInput| text_field_typed(t);
     let to_input: fn(&mut Chrome) -> &mut TextInput = |c: &mut Chrome| &mut c.find_input;
     let input = lens(make, to_input);
     let label = el::<_, Chrome, ()>("div", "Find").attr("class", "find-label");
-    let panel = el::<_, Chrome, ()>("div", (label, input)).attr("class", "find-bar");
+    // "active/total" once a query is present; "0/0" when nothing matched. The
+    // count is synced host-side from the constellation each frame (`find_count`).
+    let count_text = if c.find_input.text().is_empty() {
+        String::new()
+    } else if c.find_count == 0 {
+        "0/0".to_string()
+    } else {
+        format!("{}/{}", c.find_active.min(c.find_count - 1) + 1, c.find_count)
+    };
+    let count = el::<_, Chrome, ()>("div", count_text).attr("class", "find-count");
+    let panel = el::<_, Chrome, ()>("div", (label, input, count)).attr("class", "find-bar");
     Box::new(el::<_, Chrome, ()>("div", panel).attr("class", "find-overlay"))
 }
 

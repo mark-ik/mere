@@ -1581,21 +1581,52 @@ impl WindowCtx<'_> {
         }
     }
 
-    /// Cycle the active match by `delta`, wrapping within the live match count.
-    /// (S2 adds the auto-scroll into view; S1 cycles the index.)
+    /// Cycle the active match by `delta` (wrapping within the live count) and, if the
+    /// newly-active match falls outside the focused card / tile's visible band, scroll
+    /// it into view (placed ~20% down). The highlight overlay then tints it. (Find S2.)
     fn step_find_match(&mut self, delta: isize) {
         let Some(member) = self.focused_member() else {
             return;
         };
-        let count = self.shared.content.constellation.find_matches(member).len();
+        let matches = self.shared.content.constellation.find_matches(member);
+        let count = matches.len();
         if count == 0 {
             return;
         }
-        self.view.runner.update(|c| {
-            let cur = c.find_active.min(count - 1) as isize;
-            c.find_active = (cur + delta).rem_euclid(count as isize) as usize;
-        });
+        let cur = self.view.runner.state().find_active.min(count - 1) as isize;
+        let next = (cur + delta).rem_euclid(count as isize) as usize;
+        // The active match's vertical extent (full-document px), for the auto-scroll.
+        let (match_top, match_bot) = matches[next]
+            .iter()
+            .fold((f32::MAX, f32::MIN), |(t, b), r| (t.min(r[1]), b.max(r[3])));
+        self.view.runner.update(move |c| c.find_active = next);
+        if let Some((vis_h, content_h)) = self.find_member_viewport(member) {
+            let scroll = self.view.scroll.get(&member).copied().unwrap_or(0.0);
+            let out_of_view = match_top < scroll || match_bot > scroll + vis_h;
+            if out_of_view && match_top.is_finite() {
+                let target =
+                    (match_top - vis_h * 0.2).clamp(0.0, (content_h - vis_h).max(0.0));
+                self.view.scroll.insert(member, target);
+            }
+        }
         self.view.request_redraw();
+    }
+
+    /// The focused find surface's `(visible_height, content_height)` in px — the live
+    /// card or workbench tile showing `member`, 1:1 so the dest height is the visible
+    /// document window. Drives the find auto-scroll. (Find S2.)
+    fn find_member_viewport(&self, member: GraphMemberId) -> Option<(f32, f32)> {
+        let rect = self
+            .view
+            .content_rects
+            .iter()
+            .chain(self.view.tile_rects.iter())
+            .find(|(m, _)| *m == member)
+            .map(|(_, r)| *r)?;
+        let vis_h = (rect[3] - rect[1]).max(1.0);
+        let content_h =
+            (self.shared.content.constellation.content_height(member) as f32).max(vis_h);
+        Some((vis_h, content_h))
     }
 
     /// The first `<input>` under the first element carrying CSS class `class`

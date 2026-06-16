@@ -101,6 +101,9 @@ pub struct Chrome {
     /// The active match index, cycled by next/prev. Clamped against the live match
     /// count (held host-side in the constellation) when rendered.
     pub find_active: usize,
+    /// The live match count for the focused node, synced host-side from the
+    /// constellation each frame the bar is open so the bar can show "active/total".
+    pub find_count: usize,
     /// The p2p sync-status chip's view-model (S5.0). The host folds the joined
     /// lane's real `SyncStatus` in here; default reads "p2p off".
     pub sync: SyncIndicator,
@@ -333,6 +336,7 @@ impl Chrome {
             find_open: false,
             find_input: TextInput::new(""),
             find_active: 0,
+            find_count: 0,
             sync: SyncIndicator::default(),
             pending_connect: None,
             pending_command: None,

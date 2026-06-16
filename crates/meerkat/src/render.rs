@@ -103,6 +103,18 @@ impl WindowCtx<'_> {
             });
         }
 
+        // Sync the focused node's live find-match count into Chrome so the find bar
+        // shows "active/total" before the chrome is rasterized this frame. (Find S2.)
+        if self.view.runner.state().find_open {
+            let find_count = self
+                .focused_member()
+                .map(|m| self.shared.content.constellation.find_matches(m).len())
+                .unwrap_or(0);
+            if self.view.runner.state().find_count != find_count {
+                self.view.runner.update(move |c| c.find_count = find_count);
+            }
+        }
+
         // Frame tree: the content band (below the toolbar) split into pane rects.
         // The shellbar strip is carved out of the band first; the frame tree fills
         // the remainder. A slim (leaf) window has no shellbar, so the band is the
@@ -975,6 +987,91 @@ impl WindowCtx<'_> {
                 h,
                 ExternalTexturePlacement::new(*dest).with_uv(uv),
             );
+        }
+        // Find-in-page highlights (S2): translucent rects over the focused node's
+        // match rects, mapped content-local -> window with the same scale + scroll
+        // the composite loop above used. The active match is tinted stronger. The
+        // host owns this overlay: the actor only ships rects (full-document px); the
+        // host knows the card's dest rect + scroll. HTML/serval lane only.
+        if self.view.runner.state().find_open {
+            if let Some(focused) = self.focused_member() {
+                let active = self.view.runner.state().find_active;
+                let mut overlays: Vec<([f32; 4], bool)> = Vec::new();
+                for (dest, member) in &composite {
+                    if *member != focused {
+                        continue;
+                    }
+                    let Some(cached) = self.view.tile_textures.get(member) else {
+                        continue;
+                    };
+                    let tex_w = cached.size.0 as f32;
+                    let dest_w = (dest[2] - dest[0]).max(1.0);
+                    let dest_h = (dest[3] - dest[1]).max(1.0);
+                    // Window px per document px (1.0 for a 1:1 live card / tile).
+                    let s = dest_w / tex_w;
+                    let visible_h = dest_h / s;
+                    let content_h = (self.shared.content.constellation.content_height(*member)
+                        as f32)
+                        .max(visible_h);
+                    let scroll = self
+                        .view
+                        .scroll
+                        .get(member)
+                        .copied()
+                        .unwrap_or(0.0)
+                        .clamp(0.0, (content_h - visible_h).max(0.0));
+                    for (mi, rects) in self
+                        .shared
+                        .content
+                        .constellation
+                        .find_matches(*member)
+                        .iter()
+                        .enumerate()
+                    {
+                        let is_active = mi == active;
+                        for r in rects {
+                            let wy0 = dest[1] + (r[1] - scroll) * s;
+                            let wy1 = dest[1] + (r[3] - scroll) * s;
+                            // Cull a match scrolled out of the card's visible band.
+                            if wy1 <= dest[1] || wy0 >= dest[3] {
+                                continue;
+                            }
+                            let wx0 = (dest[0] + r[0] * s).max(dest[0]);
+                            let wx1 = (dest[0] + r[2] * s).min(dest[2]);
+                            let cy0 = wy0.max(dest[1]);
+                            let cy1 = wy1.min(dest[3]);
+                            if wx1 <= wx0 || cy1 <= cy0 {
+                                continue;
+                            }
+                            overlays.push(([wx0, cy0, wx1, cy1], is_active));
+                        }
+                    }
+                }
+                if !overlays.is_empty() {
+                    // Two 1x1 translucent textures (amber normal, stronger active),
+                    // rasterized once and composited per rect — the drop-target /
+                    // divider overlay idiom.
+                    let mut normal = netrender::Scene::new(1, 1);
+                    normal.push_rect(0.0, 0.0, 1.0, 1.0, [1.0, 0.82, 0.20, 0.38]);
+                    let (_n, normal_view) =
+                        core.rasterize(&normal, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    let mut act = netrender::Scene::new(1, 1);
+                    act.push_rect(0.0, 0.0, 1.0, 1.0, [1.0, 0.55, 0.10, 0.55]);
+                    let (_a, active_view) =
+                        core.rasterize(&act, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+                    for (rect, is_active) in &overlays {
+                        let view = if *is_active { &active_view } else { &normal_view };
+                        core.renderer().compose_external_texture(
+                            view,
+                            &target_view,
+                            format,
+                            w,
+                            h,
+                            ExternalTexturePlacement::new(*rect),
+                        );
+                    }
+                }
+            }
         }
         // The compatibility-view surfaces: each pane's imported WebView texture at
         // its tile / card rect. No UV window — the WebView scrolls itself. The rects
