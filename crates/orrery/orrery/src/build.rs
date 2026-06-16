@@ -33,23 +33,29 @@ use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 pub(crate) const NODE_SHEET: &[&str] = &[
     "div { display: block; }",
     ".stage { position: relative; }",
-    ".gnode { position: absolute; left: 0; top: 0; width: 36px; height: 36px; overflow: hidden; \
+    ".gnode { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
-    ".gnode-selected { position: absolute; left: 0; top: 0; width: 36px; height: 36px; overflow: hidden; \
+    ".gnode-selected { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(232, 150, 40); color: rgb(28, 22, 10); font-size: 15px; }",
     // Activation-state colors: open (green), closed (red), idle (blue, the same
     // fill as the default `.gnode`). The host pushes the state per node.
-    ".gnode-open { position: absolute; left: 0; top: 0; width: 36px; height: 36px; overflow: hidden; \
+    ".gnode-open { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(58, 140, 94); color: rgb(238, 250, 243); font-size: 15px; }",
-    ".gnode-closed { position: absolute; left: 0; top: 0; width: 36px; height: 36px; overflow: hidden; \
+    ".gnode-closed { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(166, 72, 72); color: rgb(250, 240, 240); font-size: 15px; }",
-    ".gnode-idle { position: absolute; left: 0; top: 0; width: 36px; height: 36px; overflow: hidden; \
+    ".gnode-idle { position: absolute; left: 0; top: 0; width: 36px; height: 36px; \
         background-color: rgb(54, 92, 156); color: rgb(245, 247, 252); font-size: 15px; }",
     // Content-type silhouettes, layered on the state/color class as a second class
     // (border-radius only, so they merge with whichever color class is set). Square
     // is the default (no class); rounded = small-web menu, circle = feed.
     ".gnode-rounded { border-radius: 9px; }",
     ".gnode-circle { border-radius: 50%; }",
+    // The node's display label, riding beside the tile (not inside the 36px box):
+    // absolutely positioned just right of the square so a long name reads in full on
+    // the canvas instead of overflowing the tile. It is a child of the `.gnode`, so
+    // the per-frame transform carries it along. (Node legibility.)
+    ".gcaption { position: absolute; left: 42px; top: 8px; white-space: nowrap; \
+        color: rgb(216, 222, 234); font-size: 14px; }",
 ];
 
 /// A small sample graph: a ring of nodes around the origin with ring edges plus a
@@ -166,11 +172,14 @@ pub(crate) fn build_pool_dom(graph: &Graph) -> (ScriptedDom, HashMap<NodeKey, Do
         dom.set_attribute(gnode, qual("class"), "gnode");
         dom.set_attribute(gnode, qual("style"), "transform: translate(0px, 0px);");
         // A human-meaningful label (an ingested entity reads as "publisher" /
-        // "Organization", a page as its host, not a raw index or `urn:`); the tile
-        // clips the overflow (`overflow: hidden` in NODE_SHEET), the roster carries
-        // the full text. (Node legibility.)
+        // "Organization", a page as its host, not a raw index or `urn:`), riding in a
+        // caption beside the tile so a long name reads in full rather than overflowing
+        // the 36px square. (Node legibility.)
+        let caption = dom.create_element(qual("div"));
+        dom.set_attribute(caption, qual("class"), "gcaption");
         let label = dom.create_text(&graph.node_display_label(key));
-        dom.append_child(gnode, label);
+        dom.append_child(caption, label);
+        dom.append_child(gnode, caption);
         dom.append_child(stage, gnode);
         gnode_of.insert(key, gnode);
     }
