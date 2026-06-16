@@ -84,6 +84,7 @@ names as receipts).
 - [resource_coordination_brief](mere_docs/research/2026-06-04_resource_coordination_brief.md) — sharing storage + compute as one model (trust-graduated rings, bounty grammar, two ledgers, verifiable compute, durability); supersedes the 2026-06-03 banking/mesh briefs.
 - [communal_compute_tiers_brief](mere_docs/research/2026-06-10_communal_compute_tiers_brief.md) — the social/tier layer over the resource-coordination mechanics: volunteer-computing lessons (F@h surge/decay, BOINC credit, LCZero's data-not-gradients communal model), the moot → moothold → coalition compute commons, time-bank as a constitution preset.
 - [edge_system_audit](mere_docs/research/2026-06-13_edge_system_audit.md) — code-verified audit of edge generation/management. The kernel model is complete (`assert_relation`, 6 families, a `SemanticSubKind` vocabulary incl. `UserGrouped`), multi-node selection + edge pick/hide already exist; the gap is purely host wiring: no action relates two existing nodes, no relation-kind UX, no true edge retraction (only display hide). Recommends a thin `assert_selected_relation` host action surfaced four ways over the omnibar `Command` spine, plus a kind picker.
+- [contact_identity_model_brief](mere_docs/research/2026-06-15_contact_identity_model_brief.md) — the *them* side of identity (pairs with the persona brief's *me*): contacts are key-rooted (petname → stable key → endpoints, kith/kin), WebFinger is one endpoint resolver not the identity, the NIP-05-shaped key resolver must return (`webfinger` is de-nostr'd), contacts are persona-scoped; plus the SHARP-comparison stances (keep `@` not `#`; hashcash via the reserved misfin code 64; ephemeral murm-native + misfin-local) and the `misfind` daemon split.
 
 ## mere_docs/design/
 
@@ -128,7 +129,7 @@ in the 2026-05-19 B1–B7 naming pass; the directory path disambiguates.
 | *(verso)* | *(retired 2026-06-10)* | crates deleted (`SurfaceTargetId` inlined into inker); the name is the engine-flip seam — see verso_docs charter |
 | `eidetic` | `crates/eidetic/` | durable memory: `eidetic-core` + fjall / https / iroh fetchers |
 | `intel` | `crates/intel/` | local intelligence: `embed` owns embeddings + vector index + semantic search |
-| `murm` | `crates/murm/` | bilateral comms + transport: `murm`, `murmuring`, `transport` (p2panda), `misfin`, `webfinger` |
+| `murm` | `crates/murm/` | bilateral comms + transport: `murm`, `murmuring`, `transport` (p2panda), `misfin`, `gazette` (resolution/discovery; formerly `webfinger`) |
 | `moot` | `crates/moot/` | community/federation: `mooting` (t2), `moothold` (t3, tessera + constitution) |
 | `persona` | `crates/persona/` | persona `identity` + keypair vault |
 | `armillary` | `crates/armillary/` | alembic memory + engrams (see the 2026-06-09 alembic doc) |

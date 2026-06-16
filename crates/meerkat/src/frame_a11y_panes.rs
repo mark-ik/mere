@@ -33,6 +33,7 @@ impl WindowCtx<'_> {
             PaneContent::Gloss => self.gloss_a11y_tree(pane_id),
             PaneContent::Comms => self.comms_a11y_tree(pane_id),
             PaneContent::Inspector
+            | PaneContent::Trail
             | PaneContent::Steward
             | PaneContent::Tile(_)
             | PaneContent::Custom(_) => {

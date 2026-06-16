@@ -88,6 +88,7 @@ impl WindowCtx<'_> {
             Command::ToggleGloss => self.toggle_pane(PaneContent::Gloss),
             Command::ToggleApparatus => self.toggle_pane(PaneContent::Apparatus),
             Command::ToggleInspector => self.toggle_pane(PaneContent::Inspector),
+            Command::ToggleTrail => self.toggle_pane(PaneContent::Trail),
             Command::ToggleSteward => self.toggle_pane(PaneContent::Steward),
             Command::RetryFocusedContent => self.retry_focused_content(),
             Command::StopFocusedOperation => self.stop_focused_operation(),

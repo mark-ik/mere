@@ -110,8 +110,12 @@ pub(crate) struct WindowView {
     /// bundles so both can be open at once without sharing one cached layout.
     pub(crate) steward_pane: crate::list_pane::ListPane,
     pub(crate) inspector_pane: crate::list_pane::ListPane,
+    /// The trail pane (nav history + recent + removed), a view-driven list pane.
+    pub(crate) trail_pane: crate::list_pane::ListPane,
     /// Each gloss minimap node's rect this frame (node id): a press focuses it.
     pub(crate) gloss_node_rects: Vec<(GraphMemberId, [f32; 4])>,
+    /// Each gloss "recent" row's rect this frame (node id): a press focuses it.
+    pub(crate) gloss_recent_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Each open tile's content rect this frame (member): the drag resolves its
     /// drop target + zone against it.
     pub(crate) tile_rects: Vec<(GraphMemberId, [f32; 4])>,
@@ -148,6 +152,7 @@ pub(crate) struct WindowView {
     pub(crate) inspector_scroll: f32,
     pub(crate) steward_scroll: f32,
     pub(crate) apparatus_scroll: f32,
+    pub(crate) trail_scroll: f32,
     /// The last left-button release (time + window pos), for double-click detection.
     pub(crate) last_left_release: Option<(Instant, (f32, f32))>,
     /// An in-progress workbench tab drag: the pressed tab's member + press position.
@@ -174,6 +179,10 @@ pub(crate) struct WindowView {
     /// In-progress session rename: the target session + its edit buffer. `Some` while
     /// the switcher label is being typed (F2 / right-click a tile).
     pub(crate) renaming: Option<(SessionId, String)>,
+    /// In-progress node tag entry: the live buffer. `Some` while the host is
+    /// capturing a tag for the selected node(s) (context menu → "Add tag…"); the
+    /// committed text inserts as a tag on the orrery selection. (Add-tag.)
+    pub(crate) tagging: Option<String>,
 
     // ── View-session state: what this window is looking at within the shared
     //    graph (its focus, its live cards, its nav target). ─────────────────────
@@ -274,7 +283,9 @@ impl WindowView {
             apparatus_pane: crate::list_pane::ListPane::new(),
             steward_pane: crate::list_pane::ListPane::new(),
             inspector_pane: crate::list_pane::ListPane::new(),
+            trail_pane: crate::list_pane::ListPane::new(),
             gloss_node_rects: Default::default(),
+            gloss_recent_rects: Default::default(),
             tile_rects: Default::default(),
             content_rects: Default::default(),
             close_button_rects: Default::default(),
@@ -289,6 +300,7 @@ impl WindowView {
             inspector_scroll: Default::default(),
             steward_scroll: Default::default(),
             apparatus_scroll: Default::default(),
+            trail_scroll: Default::default(),
             last_left_release: Default::default(),
             tab_drag: Default::default(),
             divider_drag: Default::default(),
@@ -300,6 +312,7 @@ impl WindowView {
             context_set: Default::default(),
             context_origin: Default::default(),
             renaming: Default::default(),
+            tagging: Default::default(),
             centered: Default::default(),
             healed: Default::default(),
             content_location: Default::default(),

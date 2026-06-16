@@ -140,6 +140,14 @@ impl WindowCtx<'_> {
             .map(|(member, _)| *member)
     }
 
+    /// The node whose gloss "recent" row contains window point `(x, y)`, if any.
+    pub(super) fn gloss_recent_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
+        self.view.gloss_recent_rects
+            .iter()
+            .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
+            .map(|(member, _)| *member)
+    }
+
     /// The pane (leaf) under window point `(x, y)`, if any.
     pub(super) fn pane_at(&self, x: f32, y: f32) -> Option<PaneId> {
         self.laid_leaves()

@@ -53,6 +53,8 @@ pub enum Command {
     ToggleApparatus,
     /// Toggle the selected-object inspector pane (host action).
     ToggleInspector,
+    /// Toggle the trail pane: nav history + recent + removed nodes (host action).
+    ToggleTrail,
     /// Toggle the live-operations steward pane (host action).
     ToggleSteward,
     /// Retry the focused node's page fetch / render operation (host action).
@@ -79,7 +81,7 @@ pub enum Command {
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 23] = [
+    pub const ALL: [Command; 24] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -95,6 +97,7 @@ impl Command {
         Command::OpenSettings,
         Command::ToggleComms,
         Command::ToggleInspector,
+        Command::ToggleTrail,
         Command::ToggleSteward,
         Command::RetryFocusedContent,
         Command::StopFocusedOperation,
@@ -120,6 +123,7 @@ impl Command {
                 | Command::HideSelectedEdge
                 | Command::ShowAllEdges
                 | Command::ToggleInspector
+                | Command::ToggleTrail
                 | Command::ToggleSteward
                 | Command::RetryFocusedContent
                 | Command::StopFocusedOperation
@@ -149,6 +153,7 @@ impl Command {
             Command::ToggleGloss => "gloss",
             Command::ToggleApparatus => "apparatus",
             Command::ToggleInspector => "inspector",
+            Command::ToggleTrail => "trail",
             Command::ToggleSteward => "steward",
             Command::ToggleComms => "comms",
             Command::OpenSettings => "settings",
@@ -184,6 +189,7 @@ impl Command {
             Command::ToggleGloss => "Gloss (navigator / map)",
             Command::ToggleApparatus => "Apparatus (diagnostics + settings)",
             Command::ToggleInspector => "Inspector (selected object)",
+            Command::ToggleTrail => "Trail (history + recent + removed)",
             Command::ToggleSteward => "Steward (live operations)",
             Command::RetryFocusedContent => "Retry focused content",
             Command::StopFocusedOperation => "Stop focused operation",

@@ -24,12 +24,38 @@ impl WindowCtx<'_> {
     /// removes the node's data; deactivation just stops its actor — this does
     /// both, because the node itself is gone.
     pub(super) fn delete_focused_node(&mut self) {
+        // Capture the to-be-deleted node's data for the eidetic tombstone *before*
+        // removing it (the deleted-nodes log; the Trail pane's "Removed" section).
+        let tombstone = self.focused_tombstone();
         if let Some(member) = self.orrery_mut().remove_focused() {
             self.view.live_previews.remove(&member);
             self.shared.content.constellation.reap(member);
+            // Record the deletion in private memory. fjall resolves synchronously,
+            // so this does not stall the UI.
+            if let (Some(deleted), Some(store)) = (tombstone, self.shared.content.store.as_mut()) {
+                let _ = pollster::block_on(eidetic::record_deleted(store, &deleted));
+            }
             self.save_session();
             self.view.request_redraw();
         }
+    }
+
+    /// The focused node as an eidetic tombstone (url + title + tags), for the
+    /// deleted-nodes log. `None` when zero or many nodes are focused.
+    fn focused_tombstone(&self) -> Option<eidetic::DeletedNode> {
+        let member = self.focused_member()?;
+        let (_, node) = self.orrery().graph().get_node_by_id(member)?;
+        Some(eidetic::DeletedNode {
+            node_id: member.to_string(),
+            url: node.url().to_string(),
+            title: (!node.title.is_empty()).then(|| node.title.clone()),
+            tags: node.tags.iter().cloned().collect(),
+            graph_id: None,
+            deleted_at_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        })
     }
 
     /// Toggle the focused node's background flag: when set, its actor keeps

@@ -160,6 +160,62 @@ impl WindowCtx<'_> {
         }
     }
 
+    /// The Trail pane's item list: the graph-wide recently-visited nodes, the
+    /// focused node's own url history, and the eidetic deleted-nodes log — three
+    /// titled sections of inert rows. (Lineage + eidetic pane.)
+    pub(super) fn trail_items(&mut self) -> Vec<crate::list_pane::PaneItem> {
+        use crate::list_pane::PaneItem;
+        // Strip the scheme and cap the length so a row reads cleanly.
+        let short = |url: &str| -> String {
+            url.strip_prefix("https://")
+                .or_else(|| url.strip_prefix("http://"))
+                .unwrap_or(url)
+                .chars()
+                .take(56)
+                .collect()
+        };
+
+        let mut items = vec![PaneItem::text("utility-title", "Recent")];
+        let recent = self.orrery().graph().recent_visited(8);
+        if recent.is_empty() {
+            items.push(PaneItem::text("utility-row-muted", "nothing visited yet"));
+        } else {
+            for rv in &recent {
+                items.push(PaneItem::text("utility-row", short(&rv.url)));
+            }
+        }
+
+        // The focused node's own url history (shown only when it has gone somewhere).
+        let history = self
+            .focused_member()
+            .and_then(|member| self.orrery().graph().get_node_by_id(member).map(|(key, _)| key))
+            .map(|key| self.orrery().graph().node_history_projection(key).entries)
+            .unwrap_or_default();
+        if history.len() > 1 {
+            items.push(PaneItem::text("utility-title", "This node"));
+            for url in &history {
+                items.push(PaneItem::text("utility-row", short(url)));
+            }
+        }
+
+        // Removed: the eidetic deleted-nodes log (newest first; fjall resolves
+        // synchronously, so `block_on` does not stall the UI).
+        let removed = self
+            .shared
+            .content
+            .store
+            .as_mut()
+            .map(|store| pollster::block_on(eidetic::list_deleted(store)).unwrap_or_default())
+            .unwrap_or_default();
+        if !removed.is_empty() {
+            items.push(PaneItem::text("utility-title", "Removed"));
+            for tomb in removed.iter().take(12) {
+                items.push(PaneItem::text("utility-row-muted", short(&tomb.url)));
+            }
+        }
+        items
+    }
+
     pub(super) fn steward_rows(&self) -> Vec<(String, String)> {
         let operations = self.shared.content.constellation.active_operations();
         let mut rows = vec![

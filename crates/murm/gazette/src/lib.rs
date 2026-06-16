@@ -2,15 +2,20 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! WebFinger ([RFC 7033](https://www.rfc-editor.org/rfc/rfc7033)) resolver
-//! for Mere.
+//! Gazette: Mere's handle-resolution layer.
 //!
-//! Resolves an `acct:user@host` handle to its JRD document and classifies
-//! the document's aliases and links into typed peer-discovery endpoints
-//! (gemini capsules, gopher resources, misfin mailboxes, ActivityPub
-//! actors, HTTP profile pages, and a typed catch-all). This turns a
-//! human-readable handle into the set of addresses Mere can navigate to or
-//! message.
+//! Turns a name, handle, or key into the set of reachable, trust-stated
+//! endpoints Mere can navigate to or message. **Today** it implements
+//! WebFinger ([RFC 7033](https://www.rfc-editor.org/rfc/rfc7033)): it resolves
+//! an `acct:user@host` handle to its JRD document and classifies the
+//! document's aliases and links into typed peer-discovery endpoints (gemini
+//! capsules, gopher resources, misfin mailboxes, ActivityPub actors, HTTP
+//! profile pages, and a typed catch-all).
+//!
+//! The other resolvers land here as siblings behind the same facade: the
+//! key-rooted NIP-05 (`/.well-known/nostr.json`) and atproto-did lookups, and
+//! the moot web-of-trust directory (member lists as vouched handle->key
+//! bindings). See the contact identity model brief.
 
 use std::time::Duration;
 

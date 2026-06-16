@@ -154,6 +154,9 @@ pub enum PaneContent {
     /// Selected object details: provenance, trust, parse diagnostics, document
     /// structure, cache state, and lineage for the active graph object.
     Inspector,
+    /// Navigation trail + memory: the focused node's url history, the graph-wide
+    /// recently-visited nodes, and the eidetic deleted-nodes log.
+    Trail,
     /// Live async operations: fetch/sync/content actors, retries, background work,
     /// and user-facing controls over running jobs.
     Steward,
@@ -181,6 +184,7 @@ impl PaneContent {
             PaneContent::Gloss => "gloss",
             PaneContent::Roster => "roster",
             PaneContent::Inspector => "inspector",
+            PaneContent::Trail => "trail",
             PaneContent::Steward => "steward",
             PaneContent::Comms => "comms",
             PaneContent::Apparatus => "apparatus",
@@ -207,6 +211,7 @@ impl PaneContent {
             | PaneContent::Gloss
             | PaneContent::Roster
             | PaneContent::Inspector
+            | PaneContent::Trail
             | PaneContent::Tile(_) => true,
             PaneContent::Steward
             | PaneContent::Comms

@@ -567,6 +567,26 @@ impl Orrery {
         true
     }
 
+    /// Insert `tag` on every selected node — the user-initiated tagging gesture
+    /// (the context menu's "Add tag…"). Trims the tag; an empty tag or empty
+    /// selection is a no-op. Returns how many nodes newly gained the tag (an
+    /// already-tagged node counts 0). Tags are node truth the host persists; they
+    /// do not affect layout, so no reconcile is needed.
+    pub fn tag_selected(&mut self, tag: &str) -> usize {
+        let tag = tag.trim();
+        if tag.is_empty() {
+            return 0;
+        }
+        let keys: Vec<NodeKey> = self.selected.iter().copied().collect();
+        let mut tagged = 0;
+        for key in keys {
+            if self.graph.insert_node_tag(key, tag.to_string()) {
+                tagged += 1;
+            }
+        }
+        tagged
+    }
+
     /// Retract the user-asserted semantic relation(s) on the selected edge(s) —
     /// a true removal, not the display-only [`hide_selected_edges`]. Scoped to the
     /// `Semantic` family, so navigation / provenance history on the same edge

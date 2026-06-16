@@ -101,6 +101,7 @@ mod serval_render;
 mod session_ops;
 mod shellbar;
 mod switcher;
+mod tags;
 mod text;
 mod titlebar;
 mod tracing_layer;

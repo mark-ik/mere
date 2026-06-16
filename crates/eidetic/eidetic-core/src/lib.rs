@@ -62,6 +62,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod browsing;
 pub mod bundle;
+pub mod deleted;
 pub mod engram;
 pub mod manifest;
 pub mod models;
@@ -77,6 +78,7 @@ pub use bundle::{
     BUNDLE_SCHEMA_REF, Bundle, BundleMember, bundle_schema_ref, load_bundle, save_bundle,
     verify_required_members,
 };
+pub use deleted::{DeletedNode, list_deleted, record_deleted};
 pub use engram::{Engram, TimeBounds};
 pub use manifest::{BlobFetcher, BlobManifest, BlobSource, NoFetcher, delete_manifest};
 pub use models::{ModelComponents, ModelLibrary, ModelManifest};

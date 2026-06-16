@@ -397,7 +397,7 @@ impl AgentPane {
             PaneContent::Gloss => Self::Gloss,
             PaneContent::Comms => Self::Comms,
             PaneContent::Apparatus | PaneContent::System => Self::Apparatus,
-            PaneContent::Tile(_) | PaneContent::Custom(_) => Self::Workbench,
+            PaneContent::Trail | PaneContent::Tile(_) | PaneContent::Custom(_) => Self::Workbench,
         }
     }
 }

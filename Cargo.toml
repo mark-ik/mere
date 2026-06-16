@@ -49,7 +49,7 @@ members = [
     "crates/murm/murm",
     "crates/murm/murmuring",
     "crates/murm/transport",
-    "crates/murm/webfinger",
+    "crates/murm/gazette",
     "crates/moot/moothold",
     "crates/moot/mooting",
     "crates/mesh/mesh",

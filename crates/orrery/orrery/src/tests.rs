@@ -236,6 +236,25 @@ fn assert_selected_relation_links_exactly_two_selected_nodes() {
 }
 
 #[test]
+fn tag_selected_inserts_the_trimmed_tag_on_every_selected_node() {
+    let mut orrery = Orrery::new();
+    let a = orrery.open_member_as_new_node(None, "https://a.test");
+    let b = orrery.open_member_as_new_node(None, "https://b.test");
+    let ak = orrery.graph().get_node_by_id(a).unwrap().0;
+    let bk = orrery.graph().get_node_by_id(b).unwrap().0;
+    orrery.selected.clear();
+    orrery.selected.insert(ak);
+    orrery.selected.insert(bk);
+    // Both selected nodes gain the (trimmed) tag; re-tagging adds nothing new.
+    assert_eq!(orrery.tag_selected("  reading  "), 2, "both nodes newly tagged");
+    assert_eq!(orrery.tag_selected("reading"), 0, "re-tag is idempotent");
+    assert!(orrery.graph().node_tags(ak).unwrap().contains("reading"));
+    assert!(orrery.graph().node_tags(bk).unwrap().contains("reading"));
+    // An all-whitespace tag is a no-op.
+    assert_eq!(orrery.tag_selected("   "), 0, "blank tag is ignored");
+}
+
+#[test]
 fn retract_selected_relation_removes_the_user_relation() {
     let mut orrery = Orrery::new();
     let a = orrery.open_member_as_new_node(None, "https://a.test");

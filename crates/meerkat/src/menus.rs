@@ -54,6 +54,7 @@ impl WindowCtx<'_> {
             // <engine>"), so the user can flip this node's engine. (Phase 3.)
             let mut items = vec![ContextItem::new("Open tile", ContextAction::OpenSplits)];
             items.extend(self.engine_picker_items(set[0]));
+            items.push(ContextItem::new("Add tag\u{2026}", ContextAction::AddTag));
             items
         } else {
             let mut items = vec![
@@ -64,6 +65,7 @@ impl WindowCtx<'_> {
             if set.len() == 2 {
                 items.push(ContextItem::new("Relate", ContextAction::Relate));
             }
+            items.push(ContextItem::new("Add tag\u{2026}", ContextAction::AddTag));
             items
         };
         if multi_graph {
@@ -171,6 +173,12 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Begin tagging the selected node(s): open the host tag prompt. The
+        // selection is the target; commit inserts the typed tag on each. (Add-tag.)
+        if let ContextAction::AddTag = action {
+            self.start_tag();
+            return;
+        }
         // Add a fresh node. From the empty-space right-click it lands at the saved
         // cursor anchor; from the add-pill (no anchor) it mints at the default
         // position. No member set.
@@ -271,7 +279,8 @@ impl WindowCtx<'_> {
             | ContextAction::AddField
             | ContextAction::CloseGraphPane
             | ContextAction::PinEngine(_)
-            | ContextAction::AutoEngine => {
+            | ContextAction::AutoEngine
+            | ContextAction::AddTag => {
                 unreachable!("handled above")
             }
         }

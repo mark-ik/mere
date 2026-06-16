@@ -15,6 +15,8 @@ use forme::GraphMemberId;
 use netrender::Scene;
 use register_theme::chrome::{ChromeTheme, Color32};
 
+use super::text::HostText;
+
 /// Inset (px) of the swatch from the pane edges.
 const PAD: f32 = 16.0;
 /// Edge length (px) of a minimap node square.
@@ -92,4 +94,80 @@ pub fn minimap_scene(
         rects.push((*id, [cx - half, cy - half, cx + half, cy + half]));
     }
     (scene, rects)
+}
+
+/// Row height (px), row font, and header font for the recent-visited list.
+const RECENT_ROW_H: f32 = 16.0;
+const RECENT_FONT: f32 = 11.0;
+const RECENT_HEADER_FONT: f32 = 10.0;
+
+/// Build the gloss "recent" list: a header plus one row per recently-visited node
+/// (its label, truncated to fit), drawn into the `w` x `h` recent sub-pane. `text`
+/// shapes the labels. Returns the scene plus each row's **pane-local** rect (node
+/// id), so the host hit-tests a click to focus that node, exactly like the minimap
+/// squares. (gloss recent-nodes; the `SharedNavigationMemory` projection.)
+pub fn recent_scene(
+    recent: &[(GraphMemberId, String)],
+    w: u32,
+    h: u32,
+    theme: &ChromeTheme,
+    text: &mut HostText,
+) -> (Scene, Vec<(GraphMemberId, [f32; 4])>) {
+    let mut scene = Scene::new(w.max(1), h.max(1));
+    let mut rects = Vec::new();
+    let wf = w as f32;
+    // A thin divider at the top separates the list from the minimap above.
+    let mut path = netrender::ScenePath::new();
+    path.move_to(PAD, 0.5).line_to(wf - PAD, 0.5);
+    scene.push_shape_stroked(path, rgba(theme.muted_text, 0.4), 1.0);
+
+    let mut y = 5.0;
+    text.push_line(&mut scene, "Recent", RECENT_HEADER_FONT, rgba(theme.muted_text, 0.9), [PAD, y]);
+    y += RECENT_HEADER_FONT + 5.0;
+
+    if recent.is_empty() {
+        text.push_line(
+            &mut scene,
+            "nothing visited yet",
+            RECENT_FONT,
+            rgba(theme.muted_text, 0.55),
+            [PAD, y],
+        );
+        return (scene, rects);
+    }
+
+    let row_color = rgba(theme.body_text, 0.95);
+    for (id, label) in recent {
+        if y + RECENT_ROW_H > h as f32 {
+            break; // out of vertical room
+        }
+        let fitted = fit_label(text, label, wf - 2.0 * PAD, RECENT_FONT);
+        if !fitted.is_empty() {
+            text.push_line(&mut scene, &fitted, RECENT_FONT, row_color, [PAD, y]);
+        }
+        rects.push((*id, [PAD, y, wf - PAD, y + RECENT_ROW_H]));
+        y += RECENT_ROW_H;
+    }
+    (scene, rects)
+}
+
+/// Trim `label` from the end until it fits `max_w` at `font`. Returns at least the
+/// first char of a non-empty label.
+fn fit_label(text: &mut HostText, label: &str, max_w: f32, font: f32) -> String {
+    let label = label.trim();
+    if label.is_empty() || max_w <= 0.0 {
+        return String::new();
+    }
+    if text.measure(label, font).0 <= max_w {
+        return label.to_string();
+    }
+    let mut chars: Vec<char> = label.chars().collect();
+    while chars.len() > 1 {
+        chars.pop();
+        let candidate: String = chars.iter().collect();
+        if text.measure(&candidate, font).0 <= max_w {
+            return candidate;
+        }
+    }
+    chars.into_iter().collect()
 }

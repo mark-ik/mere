@@ -500,6 +500,7 @@ impl ApplicationHandler for Shell {
                         frame::PaneContent::Inspector => Some(&mut wc.view.inspector_scroll),
                         frame::PaneContent::Steward => Some(&mut wc.view.steward_scroll),
                         frame::PaneContent::Apparatus => Some(&mut wc.view.apparatus_scroll),
+                        frame::PaneContent::Trail => Some(&mut wc.view.trail_scroll),
                         _ => None,
                     };
                     if let Some(s) = scroll {

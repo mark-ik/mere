@@ -201,6 +201,7 @@ dirs = "6"
 # eidetic fjall store under the session dir, so a reload shows them without
 # re-fetching. pollster drives the async Store calls to completion on the UI
 # thread (the fjall backend's futures are ready, so this does not block on I/O).
+eidetic = { workspace = true }
 eidetic-fjall = { workspace = true }
 pollster = "0.4"
 

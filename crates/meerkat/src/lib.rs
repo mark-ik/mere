@@ -285,6 +285,10 @@ pub enum ContextAction {
     /// Clear the context node(s)' engine pin — "Auto (default routing)". The node
     /// returns to scheme/content-type routing. (engine-picker Phase 3.)
     AutoEngine,
+    /// Begin tagging the selected node(s): open the host tag-entry prompt, whose
+    /// committed text inserts as a tag on the selection. Drains by opening the
+    /// prompt; no member set consumed. (Add-tag.)
+    AddTag,
 }
 
 impl Chrome {
@@ -512,6 +516,7 @@ impl Chrome {
             | Command::HideSelectedEdge
             | Command::ShowAllEdges
             | Command::ToggleInspector
+            | Command::ToggleTrail
             | Command::ToggleSteward
             | Command::RetryFocusedContent
             | Command::StopFocusedOperation

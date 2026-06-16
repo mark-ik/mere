@@ -1,9 +1,9 @@
 [package]
-name = "webfinger"
+name = "gazette"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "WebFinger (RFC 7033) resolver for Mere — resolves acct: handles to a JRD document and classifies its links into gemini / gopher / misfin / ActivityPub / profile endpoints for peer discovery."
+description = "Gazette: Mere's handle-resolution layer — turns a name / handle / key into reachable, trust-stated endpoints. Today implements WebFinger (RFC 7033, acct: handle -> JRD -> typed gemini / gopher / misfin / ActivityPub / profile endpoints); NIP-05, atproto-did, and the moot web-of-trust directory land here."
 
 [features]
 # Expose test-only helpers (resolver fetch overrides) to downstream crates

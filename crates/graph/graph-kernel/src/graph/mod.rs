@@ -90,7 +90,8 @@ pub use node::{Node, NodeLifecycle};
 // (`kernel::graph::NodeNavigationMemory`, etc.) keep resolving.
 pub use history::{
     NodeHistoryBranchAlternative, NodeHistoryBranchProjection, NodeHistoryBranchVisit,
-    NodeHistoryOwner, NodeHistoryProjection, NodeHistorySemanticSummary, SharedNavigationMemory,
+    NodeHistoryOwner, NodeHistoryProjection, NodeHistorySemanticSummary, RecentVisit,
+    SharedNavigationMemory,
 };
 
 // Edge taxonomy (family/sub-kind enums) and per-family runtime data structs
@@ -486,6 +487,13 @@ impl Graph {
             .node_weight(key)
             .map(|node| self.nav.semantic_summary(node.id))
             .unwrap_or_default()
+    }
+
+    /// The graph's recently-visited nodes, newest first, capped at `limit` — the
+    /// graph-wide "recent" projection over the shared visit space (gloss; the
+    /// lineage pane). Delegates to [`SharedNavigationMemory::recent_visited`].
+    pub fn recent_visited(&self, limit: usize) -> Vec<RecentVisit> {
+        self.nav.recent_visited(limit)
     }
 
     /// Milliseconds since the Unix epoch, for visit timestamps (live-app clock).

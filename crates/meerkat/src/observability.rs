@@ -819,6 +819,9 @@ fn surface_for_pane(content: &PaneContent) -> SurfaceId {
         PaneContent::Gloss => SurfaceId::GlossPane,
         PaneContent::Roster => SurfaceId::RosterPane,
         PaneContent::Inspector => SurfaceId::InspectorPane,
+        // Trail reuses the generic host surface for telemetry; a dedicated
+        // SurfaceId::TrailPane is a later refinement.
+        PaneContent::Trail => SurfaceId::NavigatorHost,
         PaneContent::Steward => SurfaceId::StewardPane,
         PaneContent::Comms => SurfaceId::CommsPane,
         PaneContent::Apparatus | PaneContent::System => SurfaceId::ApparatusPane,

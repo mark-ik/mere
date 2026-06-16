@@ -750,15 +750,24 @@ impl WindowCtx<'_> {
         // scrolling is a GPU UV-window shift over the cached tall texture rather
         // than a re-layout per tick (the gpui-flavored path).
         const MAX_CARD_TEX_H: u32 = 8192;
+        // Also cap the texture *area*: vello binds a buffer of width*height*4 bytes,
+        // and the wgpu downlevel-minimum `max_buffer_binding_size` is 128 MiB, so a
+        // card that is both wide and tall (a tall gemini page in a wide tile, e.g.
+        // after a sibling tile closes and this one reflows wider) overflows the limit
+        // and wgpu panics. ~120 MB stays under 128 MiB on every backend. The height
+        // is reduced to fit; narrow cards are unaffected. (Render-target clamp.)
+        const MAX_CARD_TEX_AREA: u32 = 30 * 1024 * 1024;
         let mut composite: Vec<([f32; 4], GraphMemberId)> = Vec::with_capacity(cards.len());
         for (member, dest, (cw, ch)) in &cards {
             // A live tile/preview bumps scene_version each scene; a static snapshot
             // has version 0, so its texture rasterizes once and then stays cached.
             let version = self.shared.content.constellation.scene_version(*member);
+            let max_h_for_width = (MAX_CARD_TEX_AREA / (*cw).max(1)).max(1);
             let tex_h = self.shared.content.constellation
                 .content_height(*member)
                 .max(*ch)
-                .min(MAX_CARD_TEX_H);
+                .min(MAX_CARD_TEX_H)
+                .min(max_h_for_width);
             let fresh = self
                 .view
                 .tile_textures
@@ -1165,21 +1174,29 @@ impl WindowCtx<'_> {
         // `ListPane`s (display-only): set the rows as inert items, frame, composite.
         // Each content type has its own bundle, so both can be open at once without
         // thrashing one cached layout. (Window composition P2 companion.)
-        for leaf in self
-            .laid_leaves()
-            .into_iter()
-            .filter(|leaf| matches!(leaf.content, PaneContent::Inspector | PaneContent::Steward))
-        {
+        for leaf in self.laid_leaves().into_iter().filter(|leaf| {
+            matches!(
+                leaf.content,
+                PaneContent::Inspector | PaneContent::Steward | PaneContent::Trail
+            )
+        }) {
             let rect = leaf.rect;
             let pw = (rect[2] - rect[0]).round().max(1.0) as u32;
             let ph = (rect[3] - rect[1]).round().max(1.0) as u32;
-            let rows = self.utility_pane_rows(&leaf.content);
-            let items = super::utility_panes::utility_pane_items(&leaf.content, &rows);
+            // The trail pane builds its own sectioned items (history / recent /
+            // removed); the others are key:value rows from `utility_pane_rows`.
+            let items = if matches!(leaf.content, PaneContent::Trail) {
+                self.trail_items()
+            } else {
+                let rows = self.utility_pane_rows(&leaf.content);
+                super::utility_panes::utility_pane_items(&leaf.content, &rows)
+            };
             let sheet = super::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let (pane, scroll) = match &leaf.content {
                 PaneContent::Inspector => (&mut self.view.inspector_pane, &mut self.view.inspector_scroll),
                 PaneContent::Steward => (&mut self.view.steward_pane, &mut self.view.steward_scroll),
+                PaneContent::Trail => (&mut self.view.trail_pane, &mut self.view.trail_scroll),
                 _ => continue,
             };
             pane.set(sheet, "utility-pane", items);
@@ -1202,15 +1219,12 @@ impl WindowCtx<'_> {
                 ExternalTexturePlacement::new(rect),
             );
         }
-        // The gloss pane: a whole-graph minimap swatch, with node hit-rects for
-        // click-to-focus. (Gloss; the Navigator's graph-scope swatch cell.)
+        // The gloss pane (the Navigator): a whole-graph minimap swatch on top, the
+        // recently-visited nodes listed below. Both carry node hit-rects for
+        // click-to-focus; recent is the `SharedNavigationMemory` projection. (Gloss.)
         self.view.gloss_node_rects.clear();
+        self.view.gloss_recent_rects.clear();
         if let Some(grect) = self.gloss_leaf_rect() {
-            let gw = (grect[2] - grect[0]).round().max(1.0) as u32;
-            let gh = (grect[3] - grect[1]).round().max(1.0) as u32;
-            let (nodes, edges) = self.orrery().minimap_geometry();
-            let (scene, local) =
-                super::gloss::minimap_scene(&nodes, &edges, gw, gh, &self.shared.presentation.chrome_theme);
             let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
             let clear = wgpu::Color {
                 r: pb[0] as f64 / 255.0,
@@ -1218,23 +1232,77 @@ impl WindowCtx<'_> {
                 b: pb[2] as f64 / 255.0,
                 a: 1.0,
             };
-            let (_t, view) = core.rasterize(&scene, gw, gh, ColorLoad::Clear(clear));
+            // Split the pane: minimap (top ~58%), recent list (the rest).
+            let minimap_h = ((grect[3] - grect[1]) * 0.58).max(1.0);
+            let minimap_rect = [grect[0], grect[1], grect[2], grect[1] + minimap_h];
+            let recent_rect = [grect[0], grect[1] + minimap_h, grect[2], grect[3]];
+
+            // Minimap swatch.
+            let (nodes, edges) = self.orrery().minimap_geometry();
+            let mw = (minimap_rect[2] - minimap_rect[0]).round().max(1.0) as u32;
+            let mh = (minimap_rect[3] - minimap_rect[1]).round().max(1.0) as u32;
+            let (scene, local) = super::gloss::minimap_scene(
+                &nodes,
+                &edges,
+                mw,
+                mh,
+                &self.shared.presentation.chrome_theme,
+            );
+            let (_t, view) = core.rasterize(&scene, mw, mh, ColorLoad::Clear(clear));
             core.renderer().compose_external_texture(
                 &view,
                 &target_view,
                 format,
                 w,
                 h,
-                ExternalTexturePlacement::new(grect),
+                ExternalTexturePlacement::new(minimap_rect),
             );
             for (id, r) in local {
                 self.view.gloss_node_rects.push((
                     id,
                     [
-                        grect[0] + r[0],
-                        grect[1] + r[1],
-                        grect[0] + r[2],
-                        grect[1] + r[3],
+                        minimap_rect[0] + r[0],
+                        minimap_rect[1] + r[1],
+                        minimap_rect[0] + r[2],
+                        minimap_rect[1] + r[3],
+                    ],
+                ));
+            }
+
+            // Recently-visited list.
+            let recent: Vec<_> = self
+                .orrery()
+                .graph()
+                .recent_visited(8)
+                .into_iter()
+                .map(|rv| (rv.node, rv.url))
+                .collect();
+            let rw = (recent_rect[2] - recent_rect[0]).round().max(1.0) as u32;
+            let rh = (recent_rect[3] - recent_rect[1]).round().max(1.0) as u32;
+            let (rscene, rlocal) = super::gloss::recent_scene(
+                &recent,
+                rw,
+                rh,
+                &self.shared.presentation.chrome_theme,
+                &mut self.shared.session.host_text,
+            );
+            let (_t2, rview) = core.rasterize(&rscene, rw, rh, ColorLoad::Clear(clear));
+            core.renderer().compose_external_texture(
+                &rview,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new(recent_rect),
+            );
+            for (id, r) in rlocal {
+                self.view.gloss_recent_rects.push((
+                    id,
+                    [
+                        recent_rect[0] + r[0],
+                        recent_rect[1] + r[1],
+                        recent_rect[0] + r[2],
+                        recent_rect[1] + r[3],
                     ],
                 ));
             }
@@ -1352,6 +1420,32 @@ impl WindowCtx<'_> {
                 self.view.session_close_rects.push((id, offset(r)));
             }
             self.view.session_add_rect = hits.add.map(offset);
+        }
+        // The add-tag prompt: a centered text-entry box over the content while the
+        // host captures a tag for the selected node(s). Drawn last so it sits over
+        // the orrery + panes. (Add-tag.)
+        if let Some(buf) = self.view.tagging.clone() {
+            let pw: u32 = 360;
+            let ph: u32 = 40;
+            let scene = super::tags::tag_prompt_scene(
+                &buf,
+                pw,
+                ph,
+                &self.shared.presentation.chrome_theme,
+                &mut self.shared.session.host_text,
+            );
+            let (_t, view) =
+                core.rasterize(&scene, pw, ph, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+            let x0 = ((w as f32) - pw as f32) * 0.5;
+            let y0 = toolbar_h as f32 + 16.0;
+            core.renderer().compose_external_texture(
+                &view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new([x0, y0, x0 + pw as f32, y0 + ph as f32]),
+            );
         }
         frame.present();
         self.refresh_a11y_summary();

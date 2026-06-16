@@ -272,7 +272,9 @@ impl WindowCtx<'_> {
                     if let Some(grect) = self.gloss_leaf_rect() {
                         if x >= grect[0] && x < grect[2] && y >= grect[1] && y < grect[3] {
                             if button == MouseButton::Left {
-                                if let Some(member) = self.gloss_node_at(x, y) {
+                                if let Some(member) =
+                                    self.gloss_node_at(x, y).or_else(|| self.gloss_recent_at(x, y))
+                                {
                                     if let Some(url) = self
                                         .orrery()
                                         .graph()
@@ -866,6 +868,24 @@ impl WindowCtx<'_> {
                         && !s.chars().any(char::is_control) =>
                 {
                     self.rename_push(s.as_str());
+                }
+                _ => {}
+            }
+            return;
+        }
+        // Tagging a node captures the keyboard like renaming: type the tag, Enter
+        // commits it onto the selection, Escape cancels, Backspace deletes. (Add-tag.)
+        if self.view.tagging.is_some() {
+            match key {
+                WinitKey::Named(WinitNamedKey::Enter) => self.commit_tag(),
+                WinitKey::Named(WinitNamedKey::Escape) => self.cancel_tag(),
+                WinitKey::Named(WinitNamedKey::Backspace) => self.tag_backspace(),
+                WinitKey::Character(s)
+                    if !self.view.modifiers.ctrl
+                        && !self.view.modifiers.meta
+                        && !s.chars().any(char::is_control) =>
+                {
+                    self.tag_push(s.as_str());
                 }
                 _ => {}
             }

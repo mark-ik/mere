@@ -137,6 +137,10 @@ make it a live shell (compose, send, read, conversation list) with murm cabals
 - **The comms-domain model shape.** How a `Conversation` is keyed across protocols
   (misfin mailbox thread vs murm cabal vs a future Matrix room), and the identity
   model (one persona, many protocol handles). Settle in P5.
+  *(2026-06-15: the self leaf (`Identity`) landed in P5; the remote/contact model —
+  petname → stable key → endpoints, kith/kin — is specced in the [contact identity
+  model brief](../research/2026-06-15_contact_identity_model_brief.md) and deferred
+  to a later phase.)*
 - **External misfin server config.** How a user points the shell at an external
   server (a setting, a per-identity host field). P3 detail.
 - **Async move correctness.** Moving misfin send sync → async (into errand) must
@@ -392,3 +396,20 @@ make it a live shell (compose, send, read, conversation list) with murm cabals
     pieces (own phases): the misfin **server** socket (receive real mail), networked
     murm cabals (a real join path), and the misfin **send** path (errand + the P2
     vault identity). Worked inline/foreground.
+- **2026-06-15 — design reconciliation (no code): the remote/contact identity model.**
+  Prompted by a SHARP (`user#domain`) comparison and Mark's questions on
+  addressing / personas / contacts. Read the persona brief, the murm p2p landscape
+  brief, and this plan against the tree. Verdict: the
+  [persona brief](../research/2026-05-14_persona_model_brief.md) settles the *self*
+  (one-human-many-personas; a persona is a key-bag, §7); the *remote* party was
+  deferred here (open point above) and only the per-protocol `Identity` leaf landed
+  in P5 — no contact rollup, no stable key in the middle. New
+  [contact identity model brief](../research/2026-06-15_contact_identity_model_brief.md)
+  settles it: contacts are **key-rooted** (petname → stable key → endpoints,
+  kith/kin), WebFinger is one resolver not the identity, the NIP-05-shaped key
+  resolver must return (`gazette` is de-nostr'd today), contacts are
+  persona-scoped. Records three protocol stances: keep `@` (not SHARP's `#`);
+  hashcash as the **code-64** cost knob (design now, gate the misfin wire, murm PoW
+  is ours); ephemeral = murm-native real + misfin local-only. And the **`misfind`**
+  daemon split (the adapter reads a `MailboxStore`, not a socket) for decision 3's
+  receive-server. No code; frames a later phase.
