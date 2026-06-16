@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use forme::GraphMemberId;
 use layout_dom_api::LayoutDom;
-use meerkat::{Chrome, nav, submit_omnibar};
+use meerkat::{Chrome, ContextAction, ContextItem, nav, submit_omnibar};
 use orrery::PointerButton;
 use crate::serval_render::hit_test_node;
 use serval_layout::ScrollOffsets;
@@ -108,6 +108,12 @@ impl WindowCtx<'_> {
                     return;
                 }
                 self.view.scrying_input_focus = None;
+                // A right-click on a link (in a tile or card) opens the link context
+                // menu (open in new tab / copy link) before any region routing, so it
+                // works over either surface. (Browser link flow.)
+                if button == MouseButton::Right && self.try_open_link_menu(x, y) {
+                    return;
+                }
                 // The chrome's interactive area is the toolbar plus any open
                 // dropdown (its `.chrome` border-box). A left press there dispatches
                 // the chrome; below it (the content band) a right press opens the
@@ -637,6 +643,30 @@ impl WindowCtx<'_> {
             }
         }
         None
+    }
+
+    /// A right-click on a link in a tile or card opens the link context menu — open
+    /// in new tab, copy link — instead of navigating in place. Resolves the link and
+    /// its source member, stashes them in `context_link`, opens the menu, and returns
+    /// whether a link was actually hit. (Browser link flow.)
+    fn try_open_link_menu(&mut self, x: f32, y: f32) -> bool {
+        let (origin, url) = if let Some((member, base, href)) = self.tile_link_at(x, y) {
+            (member, nav::resolve_href(&base, &href))
+        } else if let (Some(focused), Some((base, href))) =
+            (self.focused_member(), self.card_link_at(x, y))
+        {
+            (focused, nav::resolve_href(&base, &href))
+        } else {
+            return false;
+        };
+        self.view.context_link = Some((origin, url));
+        let items = vec![
+            ContextItem::new("Open link in new tab", ContextAction::OpenLinkNewTab),
+            ContextItem::new("Copy link address", ContextAction::CopyLink),
+        ];
+        self.view.runner.update(move |c| c.open_context_menu(x, y, items));
+        self.view.request_redraw();
+        true
     }
 
     /// Apply a window-control press (borderless titlebar). Minimize / maximize act

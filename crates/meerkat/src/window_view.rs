@@ -176,6 +176,10 @@ pub(crate) struct WindowView {
     /// menu was opened at, so `AddNode` mints the node under the cursor. Set in
     /// `open_context_menu_at`, taken in `drain_pending_context`.
     pub(crate) context_origin: Option<(f32, f32)>,
+    /// The link a right-click-on-link context menu acts on: `(source member, resolved
+    /// url)`. Set when the menu opens over a tile / card link; consumed by the
+    /// open-in-new-tab / copy-link actions. (Browser link flow.)
+    pub(crate) context_link: Option<(GraphMemberId, String)>,
     /// In-progress session rename: the target session + its edit buffer. `Some` while
     /// the switcher label is being typed (F2 / right-click a tile).
     pub(crate) renaming: Option<(SessionId, String)>,
@@ -311,6 +315,7 @@ impl WindowView {
             pending_exit: Default::default(),
             context_set: Default::default(),
             context_origin: Default::default(),
+            context_link: Default::default(),
             renaming: Default::default(),
             tagging: Default::default(),
             centered: Default::default(),

@@ -141,7 +141,24 @@ impl WindowCtx<'_> {
     pub(super) fn close_context_menu(&mut self) {
         self.view.context_set.clear();
         self.view.context_origin = None;
+        self.view.context_link = None;
         self.view.runner.update(Chrome::close_context_menu);
+        self.view.request_redraw();
+    }
+
+    /// Open `url` (a right-clicked link) as a new tab: a new node linked from
+    /// `origin`, stacked into `origin`'s tile slot when it is a tile, else a fresh
+    /// tile, then focused. Summons the workbench. (Browser link flow.)
+    fn open_link_in_new_tab(&mut self, origin: GraphMemberId, url: String) {
+        self.open_workbench();
+        let new_member = self.orrery_mut().open_member_as_new_node(Some(origin), &url);
+        let stacked = self.view.workbench.open_in_slot_of(new_member, origin);
+        if !stacked {
+            self.view.workbench.open_tile(new_member);
+        }
+        self.view.focused_tile = Some(new_member);
+        self.ensure_content(&url);
+        self.save_session();
         self.view.request_redraw();
     }
 
@@ -277,6 +294,22 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Browser link flow: open the right-clicked link as a new tab, or copy it.
+        // Reads `context_link` (source member + resolved url); no node set involved.
+        if let ContextAction::OpenLinkNewTab = action {
+            if let Some((origin, url)) = self.view.context_link.take() {
+                self.open_link_in_new_tab(origin, url);
+            }
+            return;
+        }
+        if let ContextAction::CopyLink = action {
+            if let Some((_, url)) = self.view.context_link.take() {
+                if let Some(cb) = self.clipboard.as_mut() {
+                    let _ = cb.set_text(url);
+                }
+            }
+            return;
+        }
         let set = std::mem::take(&mut self.view.context_set);
         if set.is_empty() {
             return;
@@ -303,7 +336,9 @@ impl WindowCtx<'_> {
             | ContextAction::CloseGraphPane
             | ContextAction::PinEngine(_)
             | ContextAction::AutoEngine
-            | ContextAction::AddTag => {
+            | ContextAction::AddTag
+            | ContextAction::OpenLinkNewTab
+            | ContextAction::CopyLink => {
                 unreachable!("handled above")
             }
         }

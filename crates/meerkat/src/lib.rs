@@ -289,6 +289,11 @@ pub enum ContextAction {
     /// committed text inserts as a tag on the selection. Drains by opening the
     /// prompt; no member set consumed. (Add-tag.)
     AddTag,
+    /// Open the right-clicked link as a new tab (a new node stacked into the source
+    /// tile's slot, or a fresh tile). The link is in `context_link`. (Browser flow.)
+    OpenLinkNewTab,
+    /// Copy the right-clicked link's resolved url to the clipboard. (Browser flow.)
+    CopyLink,
 }
 
 impl Chrome {
