@@ -70,6 +70,10 @@ struct Activation {
     /// (find / selection / hit-test) reads this. (Retained-text / tiled render.)
     packet: Option<DocumentRenderPacket>,
     fonts: FontTable,
+    /// Blurred box-shadow mask requests for the latest HTML-lane `scene`: the host
+    /// builds these GPU masks and registers them before rasterizing it, so the
+    /// shadow image ops resolve. Empty for the document lane / no blurred shadows.
+    masks: Vec<paint_list_render::BoxShadowMaskRequest>,
     /// The full laid-out content height (px) of the latest scene — the document
     /// grows past the visible card, so the host rasterizes a texture this tall and
     /// scrolls a window of it on the GPU. Defaults to 0 until the first scene.
@@ -238,6 +242,7 @@ impl Constellation {
                         scene: None,
                         packet: None,
                         fonts: FontTable::default(),
+                        masks: Vec::new(),
                         content_height: 0,
                         links: Vec::new(),
                         scene_version: 0,
@@ -319,6 +324,14 @@ impl Constellation {
     /// The latest composited scene for `member`, if it has rendered one.
     pub fn scene(&self, member: GraphMemberId) -> Option<&Scene> {
         self.active.get(&member).and_then(|a| a.scene.as_ref())
+    }
+
+    /// The blurred box-shadow mask requests for `member`'s latest HTML scene. The
+    /// host builds + registers these GPU masks before rasterizing [`scene`](Self::scene).
+    /// Empty for the document lane, an unrendered node, or a page without blurred
+    /// shadows. (Box-shadow.)
+    pub fn scene_masks(&self, member: GraphMemberId) -> &[paint_list_render::BoxShadowMaskRequest] {
+        self.active.get(&member).map_or(&[], |a| &a.masks)
     }
 
     /// The member's scene version — bumped each time a new scene is accepted. The
@@ -483,6 +496,7 @@ impl Constellation {
                                 activation.packet = Some(packet);
                                 activation.fonts = fonts;
                                 activation.scene = None; // forget any stale HTML scene
+                                activation.masks = Vec::new(); // document lane has no shadow masks
                                 activation.content_height = content_height;
                                 activation.links = links;
                                 activation.scene_version += 1;
@@ -497,6 +511,7 @@ impl Constellation {
                         scene,
                         content_height,
                         links,
+                        masks,
                     } => {
                         if let Some(activation) = self.active.get_mut(&member) {
                             let stamp = Generations {
@@ -506,6 +521,7 @@ impl Constellation {
                             if activation.gens.accepts(stamp) {
                                 activation.scene = Some(scene);
                                 activation.packet = None; // forget any stale document packet
+                                activation.masks = masks;
                                 activation.content_height = content_height;
                                 activation.links = links;
                                 activation.scene_version += 1;

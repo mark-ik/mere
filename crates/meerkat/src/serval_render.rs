@@ -119,7 +119,7 @@ pub(crate) fn scene_from_layout_dom<D, L>(
     width: u32,
     height: u32,
     scroll: &ScrollOffsets<D::NodeId>,
-) -> Scene
+) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>)
 where
     D: LayoutDom,
     // serval-layout's Send-ification (parallel shaping pre-pass) requires
@@ -128,14 +128,19 @@ where
     D::NodeId: Copy + Eq + Hash + Send + Sync + 'static,
     L: ImageLoader,
 {
-    paint_list_render::translate_paint_list(&serval_layout::paint_list_from_layout_dom(
-        dom,
-        stylesheets,
-        loader,
-        width,
-        height,
-        scroll,
-    ))
+    use paint_list_api::PaintList;
+    // Lower through `translate_paint_cmd_stream` (not the scene-only
+    // `translate_paint_list`) so the blurred box-shadow mask requests survive: the
+    // host builds those GPU masks and registers them before rasterizing, otherwise
+    // the shadow image ops reference textures that were never built. (Box-shadow.)
+    let list = serval_layout::paint_list_from_layout_dom(dom, stylesheets, loader, width, height, scroll);
+    let tdl = paint_list_render::translate_paint_cmd_stream(
+        list.viewport(),
+        list.commands(),
+        list.fonts(),
+        list.images(),
+    );
+    (tdl.scene, tdl.box_shadow_masks)
 }
 
 /// Cascade + lay out `dom` and return its per-node fragment plane (no paint). The

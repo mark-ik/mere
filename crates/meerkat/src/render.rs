@@ -825,6 +825,20 @@ impl WindowCtx<'_> {
                     );
                     self.view.tile_bands.insert(*member, new_band_y);
                 } else if let Some(scene) = self.shared.content.constellation.scene(*member) {
+                    // Build + register the page's blurred box-shadow masks (GPU)
+                    // before rasterizing, so the shadow image ops resolve to a texture
+                    // instead of being skipped. Built per member right before its own
+                    // rasterize, so the per-scene mask keys never collide across cards.
+                    // (Box-shadow.)
+                    for m in self.shared.content.constellation.scene_masks(*member) {
+                        core.renderer().build_box_shadow_mask(
+                            m.key,
+                            m.dim,
+                            m.bounds,
+                            m.corner_radius,
+                            m.blur_radius_px,
+                        );
+                    }
                     let (tex, view) = core.rasterize(scene, *cw, band_px, ColorLoad::Clear(CARD_BG));
                     self.view.tile_textures.insert(
                         *member,

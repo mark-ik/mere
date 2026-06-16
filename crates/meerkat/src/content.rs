@@ -83,6 +83,9 @@ pub enum ContentUpdate {
         /// Content-local clickable link regions harvested from the laid-out
         /// document; the host hit-tests a click against these and navigates.
         links: Vec<LinkHit>,
+        /// Blurred box-shadow mask requests the host builds (GPU) and registers
+        /// before rasterizing `scene`. Empty when the page has no blurred shadows.
+        masks: Vec<paint_list_render::BoxShadowMaskRequest>,
     },
     /// Subresource URLs (absolute) the last render needs but did not have cached.
     /// The kernel fetches them and feeds the bytes back as [`ContentCommand::Resource`].
@@ -224,11 +227,13 @@ fn render(
             scene,
             content_height,
             links,
+            masks,
         } => out.emit(ContentUpdate::Scene {
             nav: content.nav,
             viewport_gen: content.viewport_gen,
             scene,
             content_height,
+            masks,
             links,
         }),
     }

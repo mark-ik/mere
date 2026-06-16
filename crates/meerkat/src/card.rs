@@ -226,6 +226,9 @@ pub enum RenderedContent {
         scene: Scene,
         content_height: u32,
         links: Vec<LinkHit>,
+        /// Blurred box-shadow masks the host builds (GPU) + registers before
+        /// rasterizing `scene`. Empty when the page has no blurred shadows.
+        masks: Vec<paint_list_render::BoxShadowMaskRequest>,
     },
 }
 
@@ -246,8 +249,8 @@ pub fn render_content(
     if let Some(ContentState::Ready(fetched)) = state {
         let engine_id = route_document_engine(url, fetched.content_type.as_deref(), registry, policy);
         if engine_id == inker::routing::ENGINE_SERVAL_WEB {
-            let (scene, content_height, links) = html_scene(&fetched.body, loader, w, h);
-            return RenderedContent::Html { scene, content_height, links };
+            let (scene, content_height, links, masks) = html_scene(&fetched.body, loader, w, h);
+            return RenderedContent::Html { scene, content_height, links, masks };
         }
         if let Some(doc) = dispatch_document(url, fetched, &engine_id, registry) {
             return layout_document_content(&doc, w, h);
@@ -329,6 +332,7 @@ pub fn render_content_scene(
             scene,
             content_height,
             links,
+            masks: _, // the snapshot/preview path does not build shadow masks
         } => (scene, content_height, links),
         RenderedContent::Document {
             packet,
@@ -399,7 +403,12 @@ fn dispatch_document(
 /// `<img>` / `background-image` and `<link>` bytes resolve through `loader`:
 /// `data:` URIs decode inline; remote URLs come from the host's resource cache,
 /// absent on the first frame and filled by the demand fetch that re-renders.
-fn html_scene(body: &str, loader: &impl ImageLoader, w: u32, h: u32) -> (Scene, u32, Vec<LinkHit>) {
+fn html_scene(
+    body: &str,
+    loader: &impl ImageLoader,
+    w: u32,
+    h: u32,
+) -> (Scene, u32, Vec<LinkHit>, Vec<paint_list_render::BoxShadowMaskRequest>) {
     let doc = StaticDocument::parse(body);
     let inline = inline_stylesheets(&doc);
     let linked = linked_stylesheets_with_loader(&doc, loader);
@@ -407,14 +416,17 @@ fn html_scene(body: &str, loader: &impl ImageLoader, w: u32, h: u32) -> (Scene, 
     sheets.extend(inline.iter().map(String::as_str));
     sheets.extend(linked.iter().map(String::as_str));
     let scroll = ScrollOffsets::default();
-    let scene = scene_from_layout_dom(&doc, &sheets, loader, w, h, &scroll);
+    // `masks` are the blurred box-shadow requests the host builds (GPU) and registers
+    // before rasterizing this scene; without them the shadow image ops are unsourced
+    // and the renderer skips them (a crash before the netrender guard). (Box-shadow.)
+    let (scene, masks) = scene_from_layout_dom(&doc, &sheets, loader, w, h, &scroll);
     // The serval lane lays out to the viewport height and does not yet report a
     // taller content extent, so HTML cards report `h` and simply do not scroll
     // until that serval-side change lands. The document lane (most smolweb content)
     // reports its true content height and scrolls. Link hit regions for the HTML
     // lane are a follow-up (harvest `<a href>` rects off serval's fragment plane
     // via the new inline hit-test); for now the document lane carries link nav.
-    (scene, h.max(1), Vec::new())
+    (scene, h.max(1), Vec::new(), masks)
 }
 
 /// The floating card rectangle within the content band (top-right, inset by
