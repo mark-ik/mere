@@ -146,17 +146,24 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
-    /// Open `url` (a right-clicked link) as a new tab: a new node linked from
-    /// `origin`, stacked into `origin`'s tile slot when it is a tile, else a fresh
-    /// tile, then focused. Summons the workbench. (Browser link flow.)
-    fn open_link_in_new_tab(&mut self, origin: GraphMemberId, url: String) {
-        self.open_workbench();
+    /// Open `url` (a clicked link) as a new tab linked from `origin`. When `origin`
+    /// is itself a tile, the new tab stacks into its slot in the **background** — the
+    /// source tab stays active, the browser convention — so middle / Ctrl / right-click
+    /// "open in new tab" don't yank you off the page you clicked from. When `origin` is
+    /// not a tile (a card in Cartography, no tab context), it promotes to a focused new
+    /// tile in the workbench. (Browser link flow.)
+    pub(super) fn open_link_in_new_tab(&mut self, origin: GraphMemberId, url: String) {
         let new_member = self.orrery_mut().open_member_as_new_node(Some(origin), &url);
-        let stacked = self.view.workbench.open_in_slot_of(new_member, origin);
-        if !stacked {
+        if self.view.workbench.open_in_slot_of(new_member, origin) {
+            // Stacked into the source's slot (which activates it); re-activate the
+            // source so the new tab sits in the background.
+            self.view.workbench.activate(origin);
+        } else {
+            // No tab context (card / Cartography): promote to a focused new tile.
+            self.open_workbench();
             self.view.workbench.open_tile(new_member);
+            self.view.focused_tile = Some(new_member);
         }
-        self.view.focused_tile = Some(new_member);
         self.ensure_content(&url);
         self.save_session();
         self.view.request_redraw();

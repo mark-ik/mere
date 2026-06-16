@@ -114,6 +114,11 @@ impl WindowCtx<'_> {
                 if button == MouseButton::Right && self.try_open_link_menu(x, y) {
                     return;
                 }
+                // A middle-click on a tile link opens it in a new background tab
+                // directly; elsewhere middle stays the orrery's pan. (Browser flow.)
+                if button == MouseButton::Middle && self.try_open_link_new_tab(x, y) {
+                    return;
+                }
                 // The chrome's interactive area is the toolbar plus any open
                 // dropdown (its `.chrome` border-box). A left press there dispatches
                 // the chrome; below it (the content band) a right press opens the
@@ -478,18 +483,22 @@ impl WindowCtx<'_> {
                         return;
                     }
                 }
-                // The same inline-link follow for a workbench tile: a click on a link in
-                // a tile's content navigates *that tile's member* in place — focus it so
-                // the omnibar + `sync_orrery` target it (`nav_target_member` is the
-                // focused tile in Tree), then follow the link the card path's way.
+                // A click on a link in a workbench tile: Ctrl+click opens it in a new
+                // background tab (browser flow); a plain click navigates *that tile's
+                // member* in place — focus it so the omnibar + `sync_orrery` target it
+                // (`nav_target_member` is the focused tile in Tree), then follow the link.
                 if button == MouseButton::Left {
                     if let Some((member, base, href)) = self.tile_link_at(x, y) {
-                        self.view.workbench.activate(member);
-                        self.view.focused_tile = Some(member);
                         let url = nav::resolve_href(&base, &href);
-                        self.view.runner.update(|c| c.follow_link(url));
-                        self.sync_orrery();
-                        self.view.request_redraw();
+                        if self.view.modifiers.ctrl {
+                            self.open_link_in_new_tab(member, url);
+                        } else {
+                            self.view.workbench.activate(member);
+                            self.view.focused_tile = Some(member);
+                            self.view.runner.update(|c| c.follow_link(url));
+                            self.sync_orrery();
+                            self.view.request_redraw();
+                        }
                         return;
                     }
                 }
@@ -667,6 +676,20 @@ impl WindowCtx<'_> {
         self.view.runner.update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
         true
+    }
+
+    /// Middle / Ctrl-click on a tile link opens it in a new background tab directly
+    /// (no menu). Tile-only: a card link uses the right-click menu, and this keeps the
+    /// orrery's own middle-drag pan free. Returns whether a tile link was hit.
+    /// (Browser link flow.)
+    fn try_open_link_new_tab(&mut self, x: f32, y: f32) -> bool {
+        if let Some((member, base, href)) = self.tile_link_at(x, y) {
+            let url = nav::resolve_href(&base, &href);
+            self.open_link_in_new_tab(member, url);
+            true
+        } else {
+            false
+        }
     }
 
     /// Apply a window-control press (borderless titlebar). Minimize / maximize act
