@@ -678,6 +678,12 @@ impl WindowCtx<'_> {
         true
     }
 
+    /// Whether `(x, y)` is over a clickable link in a tile or card — drives the hover
+    /// (hand) cursor so links are discoverable. (Browser link flow.)
+    pub(super) fn over_link(&self, x: f32, y: f32) -> bool {
+        self.tile_link_at(x, y).is_some() || self.card_link_at(x, y).is_some()
+    }
+
     /// Middle / Ctrl-click on a tile link opens it in a new background tab directly
     /// (no menu). Tile-only: a card link uses the right-click menu, and this keeps the
     /// orrery's own middle-drag pan free. Returns whether a tile link was hit.
@@ -967,6 +973,21 @@ impl WindowCtx<'_> {
                 self.view.runner.update(Chrome::close_settings);
                 self.view.request_redraw();
             }
+            return;
+        }
+        // Ctrl+L focuses the address bar (browser convention) so a new URL can be
+        // typed without the mouse.
+        if self.view.modifiers.ctrl
+            && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("l"))
+        {
+            let omnibar = self.input_under_class("toolbar");
+            self.view.runner.set_focus(omnibar);
+            self.view.request_redraw();
+            return;
+        }
+        // F5 reloads the focused node's page — re-fetch, bypassing the durable cache.
+        if matches!(key, WinitKey::Named(WinitNamedKey::F5)) {
+            self.retry_focused_content();
             return;
         }
         // Command palette: Ctrl+P. Ctrl+K toggles the comms pane (freed up for it).

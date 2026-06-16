@@ -800,6 +800,8 @@ impl super::WindowCtx<'_> {
             CursorIcon::Default
         } else if let Some(dir) = titlebar::resize_dir_at(x, y, self.view.width, self.view.height) {
             titlebar::resize_cursor(dir)
+        } else if self.over_link(x, y) {
+            CursorIcon::Pointer // a hand over a clickable link (browser feel)
         } else {
             CursorIcon::Default
         };

@@ -917,6 +917,53 @@ mod tests {
     }
 
     #[test]
+    fn f5_reloads_the_focused_nodes_page() {
+        // F5 re-fetches the focused node's page, putting it back into Loading so the
+        // live fetch actor retries (browser reload, bypassing the durable cache).
+        // Driven through on_key_pressed so it guards the real key path, not just
+        // retry_focused_content in isolation.
+        let mut app = test_app();
+        app.orrery_mut().visit("gemini://capsule.example/");
+        let url = app
+            .orrery()
+            .focused_url()
+            .expect("the visited node is focused")
+            .to_string();
+        // Start from a clean slate so the assertion is about F5, not the visit.
+        app.shared.content.pages.remove(&url);
+        {
+            let mut wc = app.ctx();
+            wc.on_key_pressed(&winit::keyboard::Key::Named(winit::keyboard::NamedKey::F5));
+        }
+        assert!(
+            matches!(
+                app.shared.content.pages.get(&url),
+                Some(crate::fetch::ContentState::Loading)
+            ),
+            "F5 queued a fresh fetch (the focused node's page is Loading)"
+        );
+    }
+
+    #[test]
+    fn ctrl_l_focuses_the_omnibar() {
+        // Ctrl+L moves the caret to the address bar (browser convention) without the
+        // mouse, so a URL can be typed straightaway.
+        let mut app = test_app();
+        let mut wc = app.ctx();
+        let omnibar = wc
+            .input_under_class("toolbar")
+            .expect("the omnibar input exists in the chrome DOM");
+        wc.view.runner.set_focus(None);
+        wc.view.modifiers.ctrl = true;
+        wc.on_key_pressed(&winit::keyboard::Key::Character("l".into()));
+        assert_eq!(
+            wc.view.runner.focus(),
+            Some(omnibar),
+            "Ctrl+L focused the omnibar"
+        );
+    }
+
+    #[test]
     fn shellbar_roster_button_toggles_the_roster() {
         // The shellbar pane-toggle buttons are real chrome-DOM nodes; activating the
         // roster button runs ToggleRoster through the command spine. (The pointer
