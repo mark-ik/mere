@@ -145,6 +145,25 @@ Done: a paragraph on a fetched page is selectable and copyable.
 
 Done: a fetched HTML page scrolls fully and a link on it navigates.
 
+**Attempt + finding (2026-06-16, reverted): HTML scroll needs band virtualization,
+not just the true height.** serval exposes the height cheaply (added
+`document_scroll_range` + a `paint_list_and_scroll_range_from_layout_dom` entry that
+emits taller than the viewport). But the host CANNOT window a serval scene the way it
+windows the document packet: serval hands back one flat `netrender::Scene`, not a
+queryable packet, and the translator culls paint commands below the emit viewport. So:
+emitting at the viewport height clips to one screen (scrolling hits blank past it); and
+emitting at the full content height makes a dense real page (ycombinator.com, ~7500 px)
+**OOM vello at rasterize** — it is the paint-op *density*, not the texture size, so
+capping the texture height does not help. The document lane avoids this by windowing
+the retained packet (only the visible band's blocks lower). The HTML lane has no packet
+to window, so the real fix is **actor-side band re-emit**: a `Scroll` command drives the
+content actor to re-emit the page at the scroll offset (one viewport band), shipping a
+band scene the host composites — mirroring `window_packet`, but in the actor since only
+it holds the serval layout. Links are independent of this (a `<a href>` rect harvest off
+the fragment plane needs no scroll mechanism) and can land first. All Phase 5 code was
+reverted to no-regression; the serval `document_scroll_range` plumbing is the reusable
+foundation.
+
 ## Done condition (whole plan)
 
 Matches the audit's Lane 2 acceptance: a 166 KB capsule renders and scrolls fully;
