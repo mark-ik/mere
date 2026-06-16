@@ -22,11 +22,12 @@
 use std::cell::RefCell;
 
 use armillary::{ActorHandle, Emitter, NavGeneration, Pool, ViewportGeneration, Wake, spawn_on};
+use document_canvas::{DocumentRenderPacket, FontTable};
 use inker::{EngineRegistry, EngineRoutePolicy};
 use linked_data::GraphContribution;
 use netrender::Scene;
 
-use crate::card::{render_content_scene, LinkHit};
+use crate::card::{render_content, LinkHit, RenderedContent};
 use crate::fetch::ContentState;
 use crate::resources::{ResourceLoader, ResourceStore};
 
@@ -56,10 +57,24 @@ pub enum ContentCommand {
 
 /// An update from a content actor to the kernel. All variants are `Send`.
 pub enum ContentUpdate {
-    /// A freshly rendered scene, generation-tagged; the kernel composites the
-    /// latest and drops any whose generations are stale. `content_height` is the
-    /// full laid-out document height in px (≥ the viewport height): the host
-    /// rasterizes a texture this tall and scrolls a window of it on the GPU.
+    /// A document-lane render: the **retained packet** plus its font sidecar, the
+    /// host windows + lowers a band of per scroll. `content_height` is the full
+    /// laid-out height (px); the host scrolls the full extent and rasterizes one band
+    /// at a time, so a tall page is never one giant texture. (Tiled render.)
+    Document {
+        nav: NavGeneration,
+        viewport_gen: ViewportGeneration,
+        packet: DocumentRenderPacket,
+        fonts: FontTable,
+        content_height: u32,
+        /// Content-local clickable link regions in full-document space; the host
+        /// hit-tests a click (offset by the card's scroll) against these.
+        links: Vec<LinkHit>,
+    },
+    /// An HTML/serval-lane render: one pre-lowered scene (a different pipeline that
+    /// does not produce a document packet). `content_height` is the full laid-out
+    /// height; the host rasterizes a texture this tall and scrolls a window of it on
+    /// the GPU. Its true-height + windowing is the Phase 5 lane-parity work.
     Scene {
         nav: NavGeneration,
         viewport_gen: ViewportGeneration,
@@ -179,9 +194,9 @@ fn render(
 ) {
     let wanted = RefCell::new(Vec::new());
     let (w, h) = content.viewport;
-    let (scene, content_height, links) = {
+    let rendered = {
         let loader = ResourceLoader::new(store, &content.url, &wanted);
-        render_content_scene(
+        render_content(
             &content.url,
             content.state.as_ref(),
             registry,
@@ -191,13 +206,32 @@ fn render(
             h,
         )
     };
-    out.emit(ContentUpdate::Scene {
-        nav: content.nav,
-        viewport_gen: content.viewport_gen,
-        scene,
-        content_height,
-        links,
-    });
+    match rendered {
+        RenderedContent::Document {
+            packet,
+            fonts,
+            content_height,
+            links,
+        } => out.emit(ContentUpdate::Document {
+            nav: content.nav,
+            viewport_gen: content.viewport_gen,
+            packet,
+            fonts,
+            content_height,
+            links,
+        }),
+        RenderedContent::Html {
+            scene,
+            content_height,
+            links,
+        } => out.emit(ContentUpdate::Scene {
+            nav: content.nav,
+            viewport_gen: content.viewport_gen,
+            scene,
+            content_height,
+            links,
+        }),
+    }
     // Ship only never-requested subresources, so a re-render before the bytes
     // arrive does not re-request them (the store dedups).
     let fresh: Vec<String> = wanted

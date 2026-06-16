@@ -27,6 +27,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use armillary::{ActorHandle, Generations, Pool, Wake};
 use forme::GraphMemberId;
 use frame::GraphId;
+use document_canvas::{DocumentRenderPacket, FontTable};
 use linked_data::GraphContribution;
 use netrender::Scene;
 
@@ -59,8 +60,16 @@ struct Activation {
     /// `(url, content-tag, w, h)` the actor was last told to show; a change
     /// drives a `Show` (new document) or `Resize` (same document, new size).
     shown: Option<(String, u8, u32, u32)>,
-    /// The latest generation-accepted scene, composited at the node's pane.
+    /// The latest generation-accepted scene, composited at the node's pane. Set by
+    /// the HTML/serval lane; `None` for a document-lane node (which carries `packet`
+    /// instead and the host lowers a band of it per scroll).
     scene: Option<Scene>,
+    /// The retained document-lane packet (plus its font sidecar): the host windows +
+    /// lowers a band of this per scroll, so a tall document is not one giant texture.
+    /// `None` for an HTML-lane node (which carries `scene`). The Phase 2 query API
+    /// (find / selection / hit-test) reads this. (Retained-text / tiled render.)
+    packet: Option<DocumentRenderPacket>,
+    fonts: FontTable,
     /// The full laid-out content height (px) of the latest scene — the document
     /// grows past the visible card, so the host rasterizes a texture this tall and
     /// scrolls a window of it on the GPU. Defaults to 0 until the first scene.
@@ -191,7 +200,9 @@ impl Constellation {
                 member: *member,
                 url: activation.shown.as_ref().map(|(url, ..)| url.clone()),
                 background: activation.background,
-                recovering: activation.respawns > 0 && activation.scene.is_none(),
+                recovering: activation.respawns > 0
+                    && activation.scene.is_none()
+                    && activation.packet.is_none(),
                 scene_version: activation.scene_version,
                 content_height: activation.content_height,
             })
@@ -225,6 +236,8 @@ impl Constellation {
                         gens: Generations::default(),
                         shown: None,
                         scene: None,
+                        packet: None,
+                        fonts: FontTable::default(),
                         content_height: 0,
                         links: Vec::new(),
                         scene_version: 0,
@@ -322,6 +335,16 @@ impl Constellation {
         self.active.get(&member).map_or(0, |a| a.content_height)
     }
 
+    /// The member's retained document-lane packet (plus font sidecar), if it is a
+    /// document-lane node that has rendered. The host windows + lowers a band of this
+    /// per scroll; `None` for an HTML-lane node (use [`scene`](Self::scene)) or an
+    /// unrendered one. (Retained-text / tiled render.)
+    pub fn packet(&self, member: GraphMemberId) -> Option<(&DocumentRenderPacket, &FontTable)> {
+        self.active
+            .get(&member)
+            .and_then(|a| a.packet.as_ref().map(|p| (p, &a.fonts)))
+    }
+
     /// The URL of the clickable link whose content-local rect contains `(x, y)`, if
     /// any. `(x, y)` is in the document's own coordinate space (the host subtracts
     /// the card's window origin and adds its scroll before calling). Last match wins,
@@ -344,7 +367,7 @@ impl Constellation {
     pub fn is_recovering(&self, member: GraphMemberId) -> bool {
         self.active
             .get(&member)
-            .is_some_and(|a| a.respawns > 0 && a.scene.is_none())
+            .is_some_and(|a| a.respawns > 0 && a.scene.is_none() && a.packet.is_none())
     }
 
     /// Deactivate `member` now — its actor winds down on drop. For when a tile /
@@ -443,6 +466,31 @@ impl Constellation {
             }
             for update in updates {
                 match update {
+                    ContentUpdate::Document {
+                        nav,
+                        viewport_gen,
+                        packet,
+                        fonts,
+                        content_height,
+                        links,
+                    } => {
+                        if let Some(activation) = self.active.get_mut(&member) {
+                            let stamp = Generations {
+                                nav,
+                                viewport: viewport_gen,
+                            };
+                            if activation.gens.accepts(stamp) {
+                                activation.packet = Some(packet);
+                                activation.fonts = fonts;
+                                activation.scene = None; // forget any stale HTML scene
+                                activation.content_height = content_height;
+                                activation.links = links;
+                                activation.scene_version += 1;
+                                activation.respawns = 0; // a fresh render = recovered
+                                out.any_scene = true;
+                            }
+                        }
+                    }
                     ContentUpdate::Scene {
                         nav,
                         viewport_gen,
@@ -457,6 +505,7 @@ impl Constellation {
                             };
                             if activation.gens.accepts(stamp) {
                                 activation.scene = Some(scene);
+                                activation.packet = None; // forget any stale document packet
                                 activation.content_height = content_height;
                                 activation.links = links;
                                 activation.scene_version += 1;

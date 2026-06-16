@@ -130,6 +130,10 @@ pub(crate) struct WindowView {
     //    across frames while their version + size hold. ────────────────────────
     /// Cached rasterized texture per tile, keyed by member; evicted on close.
     pub(crate) tile_textures: HashMap<GraphMemberId, CachedTile>,
+    /// The document-y the cached document-lane texture was rasterized at (the top of
+    /// its band). The composite UV-windows within `[band_y, band_y + tex_h]`; absent
+    /// (or 0) for HTML-lane / full textures. (Retained-text / tiled render.)
+    pub(crate) tile_bands: HashMap<GraphMemberId, f32>,
     /// Cached rasterized close (×) button texture, shared across live cards.
     pub(crate) close_button_tex: Option<CachedTile>,
     /// Cached rasterized "unvisited" placeholder card.
@@ -294,6 +298,7 @@ impl WindowView {
             content_rects: Default::default(),
             close_button_rects: Default::default(),
             tile_textures: Default::default(),
+            tile_bands: Default::default(),
             close_button_tex: Default::default(),
             unvisited_tex: Default::default(),
             snapshot_textures: Default::default(),

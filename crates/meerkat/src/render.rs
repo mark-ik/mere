@@ -754,45 +754,83 @@ impl WindowCtx<'_> {
         // closed tiles first so theirs free. `composite` is what to draw, in order.
         self.view.tile_textures
             .retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
-        // Rasterize each card at its FULL content height (clamped to the cap), so
-        // scrolling is a GPU UV-window shift over the cached tall texture rather
-        // than a re-layout per tick (the gpui-flavored path).
-        const MAX_CARD_TEX_H: u32 = 8192;
-        // Also cap the texture *area*: vello binds a buffer of width*height*4 bytes,
-        // and the wgpu downlevel-minimum `max_buffer_binding_size` is 128 MiB, so a
-        // card that is both wide and tall (a tall gemini page in a wide tile, e.g.
-        // after a sibling tile closes and this one reflows wider) overflows the limit
-        // and wgpu panics. ~120 MB stays under 128 MiB on every backend. The height
-        // is reduced to fit; narrow cards are unaffected. (Render-target clamp.)
+        self.view.tile_bands
+            .retain(|m, _| cards.iter().any(|(cm, _, _)| cm == m));
+        // Rasterize each card as a vertical BAND of its content, not one giant
+        // texture: a tall document (a 166 KB gemtext capsule lays out to ~19000 px)
+        // overflows the GPU texture limits and fails to rasterize whole. The host
+        // lowers + rasterizes only the band the scroll sits in (centred, with
+        // overscan), UV-shifts within it for fine scroll, and re-rasters when the
+        // scroll leaves the band. The full scroll range is the document's real height.
+        // (Retained-text / tiled render; document lane. The HTML/serval lane still
+        // rasterizes one capped texture until Phase 5 lane parity.)
+        const BAND_CAP: u32 = 6144;
+        // Cap the texture *area* too: vello binds width*height*4 bytes against wgpu's
+        // 128 MiB downlevel-minimum `max_buffer_binding_size`, so a wide+tall band
+        // would overflow. ~30 MiB stays well under; the band height is reduced to fit.
+        // (Render-target clamp.)
         const MAX_CARD_TEX_AREA: u32 = 30 * 1024 * 1024;
         let mut composite: Vec<([f32; 4], GraphMemberId)> = Vec::with_capacity(cards.len());
         for (member, dest, (cw, ch)) in &cards {
-            // A live tile/preview bumps scene_version each scene; a static snapshot
-            // has version 0, so its texture rasterizes once and then stays cached.
+            // A live tile/preview bumps scene_version each render; a static snapshot
+            // has version 0, so its band rasterizes once and stays cached until scroll.
             let version = self.shared.content.constellation.scene_version(*member);
-            let max_h_for_width = (MAX_CARD_TEX_AREA / (*cw).max(1)).max(1);
-            let tex_h = self.shared.content.constellation
-                .content_height(*member)
-                .max(*ch)
-                .min(MAX_CARD_TEX_H)
-                .min(max_h_for_width);
+            let dest_w = (dest[2] - dest[0]).max(1.0);
+            let dest_h = (dest[3] - dest[1]).max(1.0);
+            // Document-px shown in the dest rect (= ch for a 1:1 live card; less for a
+            // downscaled snapshot thumbnail).
+            let visible_h = dest_h * (*cw as f32) / dest_w;
+            let content_h = (self.shared.content.constellation.content_height(*member) as f32)
+                .max(visible_h)
+                .max(*ch as f32);
+            let scroll = self
+                .view
+                .scroll
+                .get(member)
+                .copied()
+                .unwrap_or(0.0)
+                .clamp(0.0, (content_h - visible_h).max(0.0));
+            let max_h_for_width = (MAX_CARD_TEX_AREA / (*cw).max(1)) as f32;
+            let band_h = content_h.min(BAND_CAP as f32).min(max_h_for_width).max(1.0);
+            let band_px = band_h.ceil() as u32;
+            // Reuse the cached band if version + width match and it still covers the
+            // visible window; otherwise re-pick a band centred on the scroll.
+            let band_y = self.view.tile_bands.get(member).copied().unwrap_or(0.0);
+            let covers = band_y <= scroll && scroll + visible_h <= band_y + band_h + 0.5;
             let fresh = self
                 .view
                 .tile_textures
                 .get(member)
-                .is_some_and(|c| c.version == version && c.size == (*cw, tex_h));
+                .is_some_and(|c| c.version == version && c.size == (*cw, band_px))
+                && covers;
             if !fresh {
-                if let Some(scene) = self.shared.content.constellation.scene(*member) {
-                    let (tex, view) = core.rasterize(scene, *cw, tex_h, ColorLoad::Clear(CARD_BG));
+                let new_band_y =
+                    (scroll - (band_h - visible_h) * 0.5).clamp(0.0, (content_h - band_h).max(0.0));
+                // Document lane: window the retained packet to the band, then lower it.
+                // Take the owned scene first so the constellation borrow ends before we
+                // touch self.view. HTML lane: rasterize its full (capped) scene at band 0.
+                let doc_scene = self
+                    .shared
+                    .content
+                    .constellation
+                    .packet(*member)
+                    .map(|(packet, fonts)| {
+                        crate::card::lower_window(packet, fonts, new_band_y, band_h)
+                    });
+                if let Some(scene) = doc_scene {
+                    let (tex, view) = core.rasterize(&scene, *cw, band_px, ColorLoad::Clear(CARD_BG));
                     self.view.tile_textures.insert(
                         *member,
-                        super::CachedTile {
-                            version,
-                            size: (*cw, tex_h),
-                            tex,
-                            view,
-                        },
+                        super::CachedTile { version, size: (*cw, band_px), tex, view },
                     );
+                    self.view.tile_bands.insert(*member, new_band_y);
+                } else if let Some(scene) = self.shared.content.constellation.scene(*member) {
+                    let (tex, view) = core.rasterize(scene, *cw, band_px, ColorLoad::Clear(CARD_BG));
+                    self.view.tile_textures.insert(
+                        *member,
+                        super::CachedTile { version, size: (*cw, band_px), tex, view },
+                    );
+                    self.view.tile_bands.insert(*member, 0.0);
                 }
             }
             if self.view.tile_textures.contains_key(member) {
@@ -843,25 +881,33 @@ impl WindowCtx<'_> {
             let Some(cached) = self.view.tile_textures.get(member) else {
                 continue;
             };
-            // Scroll is a vertical UV window over the tall cached texture — a GPU
-            // sample shift, no re-raster. Clamp the offset to the scrollable range.
+            // Scroll is a vertical UV window over the cached band — a GPU sample
+            // shift, no re-raster within the band. The visible window
+            // [scroll, scroll+visible_h] maps into the band [band_y, band_y+band_h].
+            let band_y = self.view.tile_bands.get(member).copied().unwrap_or(0.0);
             let tex_w = cached.size.0 as f32;
-            let tex_h = cached.size.1 as f32;
+            let band_h = cached.size.1 as f32;
             let dest_w = (dest[2] - dest[0]).max(1.0);
             let dest_h = (dest[3] - dest[1]).max(1.0);
-            // Height of the texture slice shown, sized so the vertical scale equals
-            // the horizontal one (tex_w -> dest_w): a uniform downscale for snapshot
-            // thumbnails, and a no-op (= dest_h) for 1:1 live cards / tiles.
+            // Document-px shown, sized so the vertical scale equals the horizontal one
+            // (tex_w -> dest_w): a uniform downscale for snapshot thumbnails, 1:1 for
+            // live cards / tiles.
             let visible_h = dest_h * tex_w / dest_w;
-            let max_scroll = (tex_h - visible_h).max(0.0);
+            let content_h = (self.shared.content.constellation.content_height(*member) as f32)
+                .max(visible_h);
             let scroll = self
                 .view
                 .scroll
                 .get(member)
                 .copied()
                 .unwrap_or(0.0)
-                .clamp(0.0, max_scroll);
-            let uv = [0.0, scroll / tex_h, 1.0, (scroll + visible_h) / tex_h];
+                .clamp(0.0, (content_h - visible_h).max(0.0));
+            let uv = [
+                0.0,
+                ((scroll - band_y) / band_h).clamp(0.0, 1.0),
+                1.0,
+                ((scroll + visible_h - band_y) / band_h).clamp(0.0, 1.0),
+            ];
             core.renderer().compose_external_texture(
                 &cached.view,
                 &target_view,
@@ -935,7 +981,10 @@ impl WindowCtx<'_> {
         // the same vertical-scroll UV window as the other cards.
         if let Some((member, url, rect, built)) = snapshot_card {
             if let Some((scene, content_h)) = built {
-                let tex_h = content_h.max(1).min(MAX_CARD_TEX_H);
+                // The snapshot scene is one top band (capped at PREVIEW_BAND_PX by
+                // render_content_scene), so cap the texture to match — a tall dormant
+                // page previews its head rather than failing as one over-tall texture.
+                let tex_h = content_h.max(1).min(crate::card::PREVIEW_BAND_PX);
                 let (tex, view) = core.rasterize(&scene, 300, tex_h, ColorLoad::Clear(CARD_BG));
                 self.view.snapshot_textures.insert(
                     url.clone(),

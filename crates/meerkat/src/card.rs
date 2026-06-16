@@ -15,7 +15,8 @@
 
 use document_canvas::netrender_backend::scene_from_packet;
 use document_canvas::{
-    ColorVocabulary, InteractionKind, InteractionRegion, StyleConfig, Viewport, layout_document,
+    ColorVocabulary, DocumentRenderPacket, FontTable, InteractionKind, InteractionRegion,
+    StyleConfig, Viewport, layout_document,
 };
 use inker::{
     DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, EngineInput,
@@ -209,11 +210,95 @@ fn card_vocabulary() -> ColorVocabulary {
     }
 }
 
-/// Render the focused node's card scene, routing Ready content through the engine
+/// A node's rendered content, forked by lane. The document lane (gemtext, feeds,
+/// synthesized cards: most smolweb content) ships the **retained packet** the host
+/// windows and lowers a band of at a time, so a tall page is not baked into one
+/// capped texture. The HTML/serval lane still ships one pre-lowered scene (a
+/// different pipeline; its windowing is the Phase 5 lane-parity work).
+pub enum RenderedContent {
+    Document {
+        packet: DocumentRenderPacket,
+        fonts: FontTable,
+        content_height: u32,
+        links: Vec<LinkHit>,
+    },
+    Html {
+        scene: Scene,
+        content_height: u32,
+        links: Vec<LinkHit>,
+    },
+}
+
+/// Render the focused node's content, routing Ready content through the engine
 /// policy: an id of [`serval.web`](inker::routing::ENGINE_SERVAL_WEB) parses +
-/// renders through serval ([`html_scene`], resolving subresources via `loader`); a
-/// registered nematic engine renders through the document lane; everything else
-/// (welcome / loading / failed / unrouted) renders the synthesized document.
+/// renders through serval ([`html_scene`], resolving subresources via `loader`) to a
+/// scene; a registered nematic engine and everything else (welcome / loading /
+/// failed / unrouted) lay out through the document lane to a retained packet.
+pub fn render_content(
+    url: &str,
+    state: Option<&ContentState>,
+    registry: &EngineRegistry,
+    policy: &EngineRoutePolicy,
+    loader: &impl ImageLoader,
+    w: u32,
+    h: u32,
+) -> RenderedContent {
+    if let Some(ContentState::Ready(fetched)) = state {
+        let engine_id = route_document_engine(url, fetched.content_type.as_deref(), registry, policy);
+        if engine_id == inker::routing::ENGINE_SERVAL_WEB {
+            let (scene, content_height, links) = html_scene(&fetched.body, loader, w, h);
+            return RenderedContent::Html { scene, content_height, links };
+        }
+        if let Some(doc) = dispatch_document(url, fetched, &engine_id, registry) {
+            return layout_document_content(&doc, w, h);
+        }
+    }
+    layout_document_content(&content_document(url, state), w, h)
+}
+
+/// Lay out a document-lane doc into its retained packet (no lowering). The host
+/// windows + lowers a band of the packet per scroll, so the full content height is
+/// reachable without rasterizing the whole document into one texture. Returns the
+/// packet, its font sidecar, the full content height (px), and the link hit map (in
+/// full-document space; the host offsets it by the card's scroll).
+fn layout_document_content(doc: &EngineDocument, w: u32, h: u32) -> RenderedContent {
+    let laid = layout_document(doc, Viewport::new(w as f32, h as f32), &StyleConfig::default());
+    let content_height = laid.packet.content_bounds.size.height.ceil().max(1.0) as u32;
+    let links = link_hits(&laid.packet.interactions);
+    RenderedContent::Document {
+        packet: laid.packet,
+        fonts: laid.fonts,
+        content_height,
+        links,
+    }
+}
+
+/// Lower a vertical band `[band_y, band_y + band_h]` of a retained document packet
+/// into a band-tall scene the host rasterizes. The window translates the band to
+/// `y = 0`, so the scene fits a `band_h`-tall texture regardless of the document's
+/// full height — the heart of the tiled render. (Retained-text / tiled render.)
+pub fn lower_window(
+    packet: &DocumentRenderPacket,
+    fonts: &FontTable,
+    band_y: f32,
+    band_h: f32,
+) -> Scene {
+    let windowed = packet.window(band_y, band_h);
+    scene_from_packet(&windowed, fonts, &card_vocabulary())
+}
+
+/// Cap (px) for a single-shot preview band. The synchronous snapshot/thumbnail
+/// path ([`render_content_scene`]) lowers one band from the top of a document at
+/// this height, so even a very tall dormant page rasterizes for its preview rather
+/// than failing as one over-tall texture. Live cards window the full height instead.
+pub(crate) const PREVIEW_BAND_PX: u32 = 6144;
+
+/// Render content straight to one scene for the synchronous snapshot/thumbnail path
+/// (dormant-node previews in the orrery) and the card unit tests. The live actor
+/// path uses [`render_content`] + per-band [`lower_window`]; here the document lane
+/// lowers a single band from the top, capped at [`PREVIEW_BAND_PX`], so a tall page
+/// still rasterizes for its preview. The returned `content_height` is the full
+/// height (the caller caps its own texture to the band).
 pub fn render_content_scene(
     url: &str,
     state: Option<&ContentState>,
@@ -223,16 +308,22 @@ pub fn render_content_scene(
     w: u32,
     h: u32,
 ) -> (Scene, u32, Vec<LinkHit>) {
-    if let Some(ContentState::Ready(fetched)) = state {
-        let engine_id = route_document_engine(url, fetched.content_type.as_deref(), registry, policy);
-        if engine_id == inker::routing::ENGINE_SERVAL_WEB {
-            return html_scene(&fetched.body, loader, w, h);
-        }
-        if let Some(doc) = dispatch_document(url, fetched, &engine_id, registry) {
-            return render_card_scene(&doc, w, h);
+    match render_content(url, state, registry, policy, loader, w, h) {
+        RenderedContent::Html {
+            scene,
+            content_height,
+            links,
+        } => (scene, content_height, links),
+        RenderedContent::Document {
+            packet,
+            fonts,
+            content_height,
+            links,
+        } => {
+            let band = content_height.min(PREVIEW_BAND_PX) as f32;
+            (lower_window(&packet, &fonts, 0.0, band), content_height, links)
         }
     }
-    render_card_scene(&content_document(url, state), w, h)
 }
 
 /// Route Ready content to an engine id through the policy: scheme + content-type
@@ -272,42 +363,15 @@ fn dispatch_document(
     registry: &EngineRegistry,
 ) -> Option<EngineDocument> {
     let engine = registry.engine(id)?;
-    // Bound the body before the engine lays it out: an arbitrarily long document
-    // renders to one full-height vello scene, and a large enough one overflows wgpu's
-    // max buffer (a 166 KB gemini capsule built a 384 MB scene > the 256 MB cap and
-    // panicked the device). The cap is generous — a very long page still renders, the
-    // tail is dropped at a line boundary — and mirrors how `ready_blocks` bounds the
-    // plain lane. (Card / tile render robustness.)
-    let mut input = EngineInput::new(url, bound_document_body(&fetched.body));
+    // The full body lays out: the host windows + lowers a band of the retained
+    // packet per scroll (see [`lower_window`]), so an arbitrarily tall document is
+    // never baked into one texture. (This is what retired the old 12 KiB body cap.)
+    let mut input = EngineInput::new(url, fetched.body.clone());
     if let Some(ct) = &fetched.content_type {
         input = input.with_content_type(ct.clone());
     }
     engine.render(&input).ok()
 }
-
-/// Cap a document-lane body so its laid-out scene stays renderable. The card / tile
-/// texture is capped at `MAX_CARD_TEX_H` (8192 px), and content past that is never
-/// shown; rendering a much taller scene is wasted and, large enough, fails to
-/// rasterize (leaving the card blank — a 166 KB gemtext capsule laid out to ~19000
-/// px and rendered nothing). The byte cap is sized to keep the laid-out height near
-/// one texture's worth at the narrow card width (~1.7 bytes/px measured), so the
-/// scene stays well within GPU limits. A longer page renders its head, truncated at
-/// a line boundary. (Card / tile render robustness.)
-fn bound_document_body(body: &str) -> String {
-    const MAX_DOC_BYTES: usize = 12 * 1024;
-    if body.len() <= MAX_DOC_BYTES {
-        return body.to_string();
-    }
-    let mut end = MAX_DOC_BYTES;
-    while end > 0 && !body.is_char_boundary(end) {
-        end -= 1;
-    }
-    if let Some(nl) = body[..end].rfind('\n') {
-        end = nl;
-    }
-    body[..end].to_string()
-}
-
 
 /// Parse `body` as a full HTML document and render it through the shared content
 /// core ([`crate::serval_render::scene_from_layout_dom`]) — the same cascade → image-decode
