@@ -287,6 +287,22 @@ pub fn lower_window(
     scene_from_packet(&windowed, fonts, &card_vocabulary())
 }
 
+/// The image-op keys in `scene` that are absent from its own `image_sources`.
+/// netrender's rasterizer skips exactly these — a self-consistent scene returns
+/// empty. Used by the card scene-consistency tests.
+#[cfg(test)]
+pub(crate) fn unsourced_image_keys(scene: &Scene) -> Vec<netrender::ImageKey> {
+    scene
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            netrender::SceneOp::Image(i) => Some(i.key),
+            _ => None,
+        })
+        .filter(|key| !scene.image_sources.contains_key(key))
+        .collect()
+}
+
 /// Cap (px) for a single-shot preview band. The synchronous snapshot/thumbnail
 /// path ([`render_content_scene`]) lowers one band from the top of a document at
 /// this height, so even a very tall dormant page rasterizes for its preview rather
@@ -688,20 +704,6 @@ mod tests {
             .iter()
             .filter(|op| matches!(op, netrender::SceneOp::GlyphRun(_)))
             .count()
-    }
-
-    /// Keys referenced by image / pattern scene ops that are absent from the scene's
-    /// own `image_sources` — netrender's rasterizer panics on exactly these.
-    fn unsourced_image_keys(scene: &netrender::Scene) -> Vec<netrender::ImageKey> {
-        scene
-            .ops
-            .iter()
-            .filter_map(|op| match op {
-                netrender::SceneOp::Image(i) => Some(i.key),
-                _ => None,
-            })
-            .filter(|key| !scene.image_sources.contains_key(key))
-            .collect()
     }
 
     #[test]
