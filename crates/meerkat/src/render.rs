@@ -525,9 +525,17 @@ impl WindowCtx<'_> {
         } else {
             self.view.tile_rects.clear(); // no tile drag targets when the pane is closed
         }
-        // The orrery's focused-node card (always, alongside any workbench pane).
+        // The orrery's focused-node card, alongside any workbench pane — but not when
+        // the focused node is itself an open tile. The tile is the view; a second card
+        // would drive the node's one content actor at a different viewport size and
+        // contend with the tile (last-writer-per-frame thrash, so opening the card
+        // visibly reflows the tile). The proper fix is per-surface scenes; until then
+        // the tile wins. (Card/tile contention fix.)
+        let card_member = self.focused_member().filter(|m| {
+            workbench_rect.is_none() || !self.view.workbench.open_members().contains(m)
+        });
         if let (Some(member), Some(url)) = (
-            self.focused_member(),
+            card_member,
             self.orrery().focused_url().map(str::to_string),
         ) {
             // Float the card next to the focused node (fall back to the fixed
