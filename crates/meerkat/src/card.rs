@@ -690,6 +690,99 @@ mod tests {
             .count()
     }
 
+    /// Keys referenced by image / pattern scene ops that are absent from the scene's
+    /// own `image_sources` — netrender's rasterizer panics on exactly these.
+    fn unsourced_image_keys(scene: &netrender::Scene) -> Vec<netrender::ImageKey> {
+        scene
+            .ops
+            .iter()
+            .filter_map(|op| match op {
+                netrender::SceneOp::Image(i) => Some(i.key),
+                _ => None,
+            })
+            .filter(|key| !scene.image_sources.contains_key(key))
+            .collect()
+    }
+
+    #[test]
+    fn html_with_an_unloaded_image_stays_scene_consistent() {
+        // Repro for the crash Mark hit (serval -> scry -> serval, open a new node):
+        // the dormant-node snapshot renders HTML through an empty image loader
+        // (render.rs), so an `<img>` whose bytes are not cached has no source. The
+        // lowered scene must NOT carry a `SceneImage` op whose key is absent from
+        // `image_sources`, or netrender's rasterizer `.expect()`s and crashes the app
+        // ("SceneImage references unknown ImageKey").
+        let mut registry = EngineRegistry::new();
+        for engine in nematic::engines() {
+            registry.register(engine);
+        }
+        let ready = ContentState::Ready(Fetched {
+            content_type: Some("text/html".into()),
+            body: r#"<html><body><p>before</p>
+                <img src="https://example.com/missing.png" width="80" height="60">
+                <p>after</p></body></html>"#
+                .into(),
+        });
+        let RenderedContent::Html { scene, .. } = render_content(
+            "https://example.com/",
+            Some(&ready),
+            &registry,
+            &inker::EngineRoutePolicy::default(),
+            &NoImageLoader,
+            420,
+            360,
+        ) else {
+            panic!("text/html routes to the serval HTML lane");
+        };
+        let missing = unsourced_image_keys(&scene);
+        assert!(
+            missing.is_empty(),
+            "an unloaded <img> left a SceneImage with no source (rasterizer would \
+             panic): {missing:?}"
+        );
+    }
+
+    #[test]
+    fn html_with_an_undecodable_image_stays_scene_consistent() {
+        // The decode-failure case: the loader returns bytes, but they are not a valid
+        // image. If serval emits a SceneImage op without sourcing it (because the
+        // decode failed), the rasterizer panics. The scene must stay consistent.
+        struct GarbageLoader;
+        impl serval_layout::ImageLoader for GarbageLoader {
+            fn load(&self, _url: &str) -> Option<Vec<u8>> {
+                Some(vec![0xDE, 0xAD, 0xBE, 0xEF, 0, 1, 2, 3, 4, 5]) // not a valid image
+            }
+        }
+        let mut registry = EngineRegistry::new();
+        for engine in nematic::engines() {
+            registry.register(engine);
+        }
+        let ready = ContentState::Ready(Fetched {
+            content_type: Some("text/html".into()),
+            body: r#"<html><body><p>before</p>
+                <img src="https://example.com/broken.png" width="80" height="60">
+                <p>after</p></body></html>"#
+                .into(),
+        });
+        let RenderedContent::Html { scene, .. } = render_content(
+            "https://example.com/",
+            Some(&ready),
+            &registry,
+            &inker::EngineRoutePolicy::default(),
+            &GarbageLoader,
+            420,
+            360,
+        ) else {
+            panic!("text/html routes to the serval HTML lane");
+        };
+        let missing = unsourced_image_keys(&scene);
+        assert!(
+            missing.is_empty(),
+            "an undecodable <img> left a SceneImage with no source (rasterizer would \
+             panic): {missing:?}"
+        );
+    }
+
     #[test]
     fn markdown_routes_through_nematic_to_glyph_runs() {
         let mut registry = EngineRegistry::new();
