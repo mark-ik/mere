@@ -235,11 +235,53 @@ impl DocumentRenderPacket {
             interactions,
         }
     }
+
+    /// The URL of the topmost link whose rect contains `(x, y)`, in full-document
+    /// coordinates (the host subtracts the card origin and adds the scroll before
+    /// calling). Last match wins, so a link nested in an enclosing region resolves to
+    /// the innermost. `None` when the point lands on no link. The host hit-tests
+    /// against this retained packet instead of a parallel link-rect table.
+    /// (Inline-link nav.)
+    pub fn link_at(&self, x: f32, y: f32) -> Option<&str> {
+        self.interactions
+            .iter()
+            .rev()
+            .find(|r| rect_contains(r.bounds, x, y))
+            .map(|r| match &r.kind {
+                InteractionKind::Link { url } => url.as_str(),
+            })
+    }
+
+    /// The deepest rendered block whose bounds contain `(x, y)` (full-document
+    /// coordinates). Walks into `Group` children, so a point inside a list resolves to
+    /// the innermost item, not the container. Groundwork for find-in-page and
+    /// selection (point to block to source text via `RenderedBlock::source_block_index`).
+    pub fn block_at(&self, x: f32, y: f32) -> Option<&RenderedBlock> {
+        fn deepest(blocks: &[RenderedBlock], x: f32, y: f32) -> Option<&RenderedBlock> {
+            blocks.iter().rev().find_map(|b| {
+                if !rect_contains(b.bounds, x, y) {
+                    return None;
+                }
+                if let RenderedBlockKind::Group { children } = &b.kind {
+                    if let Some(child) = deepest(children, x, y) {
+                        return Some(child);
+                    }
+                }
+                Some(b)
+            })
+        }
+        deepest(&self.blocks, x, y)
+    }
 }
 
 /// A rect overlaps the half-open vertical band `[top, bot)`.
 fn rect_intersects_band(r: Rect, top: f32, bot: f32) -> bool {
     r.origin.y < bot && r.max_y() > top
+}
+
+/// Whether `(x, y)` lies within `r` (inclusive edges).
+fn rect_contains(r: Rect, x: f32, y: f32) -> bool {
+    x >= r.origin.x && x <= r.max_x() && y >= r.origin.y && y <= r.max_y()
 }
 
 /// Shift a rect vertically by `dy` (x and size unchanged).
@@ -388,5 +430,48 @@ mod window_tests {
         assert_eq!(w.interactions.len(), 1, "only the in-band link survives");
         assert_eq!(w.interactions[0].bounds.origin.y, 60.0, "link translated into the band");
         assert!(matches!(&w.interactions[0].kind, InteractionKind::Link { url } if url == "in"));
+    }
+
+    #[test]
+    fn link_at_returns_the_innermost_link_url() {
+        let mut p = packet(vec![text_block(0.0, 100.0, 12.0)], 200.0);
+        p.interactions = vec![
+            InteractionRegion {
+                bounds: Rect::from_xywh(0.0, 10.0, 80.0, 20.0),
+                kind: InteractionKind::Link { url: "outer".into() },
+            },
+            InteractionRegion {
+                bounds: Rect::from_xywh(10.0, 12.0, 40.0, 16.0),
+                kind: InteractionKind::Link { url: "inner".into() },
+            },
+        ];
+        assert_eq!(p.link_at(20.0, 18.0), Some("inner"), "the last (innermost) match wins");
+        assert_eq!(p.link_at(70.0, 18.0), Some("outer"), "outside inner, inside outer");
+        assert_eq!(p.link_at(300.0, 300.0), None, "no link at an empty point");
+    }
+
+    #[test]
+    fn block_at_finds_the_deepest_block() {
+        let mut child = text_block(100.0, 50.0, 112.0);
+        child.source_block_index = 7;
+        let group = RenderedBlock {
+            source_block_index: 0,
+            bounds: Rect::from_xywh(0.0, 0.0, 400.0, 300.0),
+            kind: RenderedBlockKind::Group {
+                children: vec![child],
+            },
+        };
+        let p = packet(vec![group], 300.0);
+        assert_eq!(
+            p.block_at(10.0, 120.0).map(|b| b.source_block_index),
+            Some(7),
+            "a point inside the child resolves to the child, not the group"
+        );
+        assert_eq!(
+            p.block_at(10.0, 290.0).map(|b| b.source_block_index),
+            Some(0),
+            "a point in the group but outside any child resolves to the group"
+        );
+        assert!(p.block_at(500.0, 500.0).is_none(), "no block at an outside point");
     }
 }
