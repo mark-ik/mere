@@ -529,7 +529,8 @@ impl Chrome {
             | Command::ToggleCompatView
             | Command::AssertEdge
             | Command::RetractEdge
-            | Command::CloseGraphPane => {
+            | Command::CloseGraphPane
+            | Command::ExportGraph => {
                 // Host actions over the frame, orrery, workbench, or actor pool:
                 // record the intent; the host drains it and runs the matching
                 // method.

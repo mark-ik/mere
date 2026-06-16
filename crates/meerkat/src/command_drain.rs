@@ -117,6 +117,9 @@ impl WindowCtx<'_> {
                     note = Some("Only one graph view is open".to_string());
                 }
             }
+            Command::ExportGraph => {
+                note = Some(self.export_graph_jsonld());
+            }
             // History / connect / settings / comms verbs run in the chrome; never
             // queued here as host intents.
             Command::Back

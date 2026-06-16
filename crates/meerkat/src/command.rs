@@ -77,11 +77,14 @@ pub enum Command {
     /// dismiss for a second graph-pane. A no-op with a single graph view (host
     /// action). (Window composition — pane-as-unit.)
     CloseGraphPane,
+    /// Export the focused graph as JSON-LD to a file (host action). The dormant
+    /// inverse of the wired linked-data ingest; `linked_data::to_jsonld_string`.
+    ExportGraph,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 24] = [
+    pub const ALL: [Command; 25] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -106,6 +109,7 @@ impl Command {
         Command::AssertEdge,
         Command::RetractEdge,
         Command::CloseGraphPane,
+        Command::ExportGraph,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -132,6 +136,7 @@ impl Command {
                 | Command::AssertEdge
                 | Command::RetractEdge
                 | Command::CloseGraphPane
+                | Command::ExportGraph
         )
     }
 
@@ -168,6 +173,7 @@ impl Command {
             Command::AssertEdge => "relate",
             Command::RetractEdge => "unrelate",
             Command::CloseGraphPane => "close_pane",
+            Command::ExportGraph => "export_graph",
         }
     }
 
@@ -198,6 +204,7 @@ impl Command {
             Command::AssertEdge => "Relate selected nodes",
             Command::RetractEdge => "Unrelate selected edge",
             Command::CloseGraphPane => "Close graph view (focused pane)",
+            Command::ExportGraph => "Export graph (JSON-LD)",
         }
     }
 }
