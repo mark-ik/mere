@@ -433,11 +433,14 @@ fn html_scene(
     // window, so emitting the whole tall dense page would overflow the GPU. The host
     // requests bands as the scroll moves. `content_height` is the full page height (the
     // scroll range); the band carries only its slice of ops. `masks` are the blurred
-    // box-shadow requests the host builds + registers before rasterizing. (HTML scroll;
-    // box-shadow.) Link hit regions are still a follow-up (harvest `<a href>` rects).
-    let (scene, masks, content_height) =
+    // box-shadow requests the host builds + registers before rasterizing. `link_rects`
+    // are every `<a href>`'s href + full-document-px hit rect, lowered to `LinkHit`s
+    // for the host's click hit-test (the flat scene is not queryable). (HTML scroll;
+    // box-shadow; inline-link nav.)
+    let (scene, masks, content_height, link_rects) =
         scene_from_layout_dom(&doc, &sheets, loader, w, h, band_y, band_h, &scroll);
-    (scene, content_height, Vec::new(), masks)
+    let links = link_rects.into_iter().map(|(url, rect)| LinkHit { rect, url }).collect();
+    (scene, content_height, links, masks)
 }
 
 /// The floating card rectangle within the content band (top-right, inset by
@@ -900,6 +903,42 @@ mod tests {
             glyph_runs(&scene) >= 1,
             "HTML renders text via the serval lane"
         );
+    }
+
+    #[test]
+    fn html_lane_harvests_link_hit_regions() {
+        // The HTML/serval lane has no retained packet, so it ships a parallel
+        // `LinkHit` table harvested off the fragment plane; the host hit-tests a
+        // click against it via `Constellation::link_at`'s HTML branch. (Inline-link
+        // nav; Phase 5 lane parity.)
+        let registry = EngineRegistry::new();
+        let ready = ContentState::Ready(Fetched {
+            content_type: Some("text/html".into()),
+            body: "<html><body><p>see <a href=\"https://example.test/spec\">the spec</a> now</p></body></html>"
+                .into(),
+        });
+        let RenderedContent::Html { links, .. } = render_content(
+            "https://example.test/",
+            Some(&ready),
+            &registry,
+            &inker::EngineRoutePolicy::default(),
+            &NoImageLoader,
+            420,
+            360,
+            0,
+            360,
+        ) else {
+            panic!("text/html routes to the serval HTML lane");
+        };
+        let hit = links
+            .iter()
+            .find(|l| l.url == "https://example.test/spec")
+            .expect("the inline <a href> is harvested into a LinkHit");
+        let [x0, y0, x1, y1] = hit.rect;
+        assert!(x1 > x0 && y1 > y0, "positive-area link rect: {:?}", hit.rect);
+        // The link follows "see ", so it starts a little right of the content origin
+        // (document-px, pre-scroll — the space the host adds the card's scroll into).
+        assert!(x0 > 0.0, "link starts after the leading text, got x0={x0}");
     }
 
     #[test]

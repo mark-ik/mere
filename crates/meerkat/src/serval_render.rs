@@ -121,7 +121,7 @@ pub(crate) fn scene_from_layout_dom<D, L>(
     band_y: u32,
     band_h: u32,
     scroll: &ScrollOffsets<D::NodeId>,
-) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>, u32)
+) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>, u32, Vec<(String, [f32; 4])>)
 where
     D: LayoutDom,
     // serval-layout's Send-ification (parallel shaping pre-pass) requires
@@ -132,12 +132,14 @@ where
 {
     use paint_list_api::PaintList;
     // Lay out at the viewport, then emit ONE band (`band_y`..`band_y + band_h`) of the
-    // page plus the document scroll range, so the host knows the full height and can
-    // request the next band. A flat serval scene the host cannot window, so the actor
-    // does the windowing here. Lower through `translate_paint_cmd_stream` (not the
-    // scene-only `translate_paint_list`) so the box-shadow mask requests survive for the
-    // host to build. (HTML scroll; box-shadow.)
-    let (list, scroll_range) = serval_layout::paint_list_band_from_layout_dom(
+    // page plus the document scroll range and the page's `<a href>` hit rects, so the
+    // host knows the full height, can request the next band, and can hit-test a click
+    // against the links (the flat serval scene is not queryable). A flat serval scene
+    // the host cannot window, so the actor does the windowing here. Lower through
+    // `translate_paint_cmd_stream` (not the scene-only `translate_paint_list`) so the
+    // box-shadow mask requests survive for the host to build. The link rects are
+    // full-document px (band-independent). (HTML scroll; box-shadow; inline-link nav.)
+    let (list, scroll_range, links) = serval_layout::paint_list_band_from_layout_dom(
         dom, stylesheets, loader, width, height, band_y, band_h, scroll,
     );
     let tdl = paint_list_render::translate_paint_cmd_stream(
@@ -147,7 +149,7 @@ where
         list.images(),
     );
     let content_height = (height as f32 + scroll_range.1).ceil().max(1.0) as u32;
-    (tdl.scene, tdl.box_shadow_masks, content_height)
+    (tdl.scene, tdl.box_shadow_masks, content_height, links)
 }
 
 /// Cascade + lay out `dom` and return its per-node fragment plane (no paint). The

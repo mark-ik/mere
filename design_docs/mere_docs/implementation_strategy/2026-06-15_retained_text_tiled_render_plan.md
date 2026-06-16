@@ -194,8 +194,32 @@ ycombinator.com itself stays a short "peephole" (its body is JS/image-driven and
 in serval's static layout, so it has almost no scroll range); that is a serval layout-fidelity
 matter, separate from band windowing, which the tall-page test isolates and confirms working.
 
-Still open in Phase 5: the `<a href>` rect harvest so links on a fetched HTML page navigate
-(independent of scroll; the document lane already has its link table).
+**Built + verified (2026-06-16): `<a href>` rect harvest, HTML links navigate.** The
+host pipe (`Activation.links` → `Constellation::link_at`'s HTML branch → `card_link_at`
+→ `resolve_href` → `follow_link`) was already wired and consumed; the only gap was the
+producer (`html_scene` returned `Vec::new()`). Filled:
+
+- serval grew a `link_harvest` module, folded into `paint_list_band_from_layout_dom` (so
+  it reuses the band's existing layout pass, no second cascade/layout). Two anchor shapes,
+  both emitting **full-document px, unscrolled** rects (band-independent — the host adds
+  the card's scroll itself): **text anchors** map each `<a href>` to its byte span within
+  its inline-formatting leaf (via `BoxTree::inline_sources`) and reuse `caret::selection_rects`
+  for one rect per line box (the same per-line geometry selection highlighting uses, so a
+  wrapped link is N boxes, not one gutter-spanning union); **boxed anchors** (`display:block`
+  / `inline-block`) add their border-box rect for a full-width clickable row.
+- `scene_from_layout_dom` + `card::html_scene` thread the `(href, rect)` list through and
+  lower it to `LinkHit`s.
+
+Verified headed: on the Rust Wikipedia article, clicking the "Main page" sidebar link
+navigated to `en.wikipedia.org/wiki/Main_Page` (relative `/wiki/Main_Page` resolved against
+the base) and rendered the Main Page, whose own links harvested in turn. Unit-tested in
+serval (`link_harvest`: inline line rect, block box, no-links) and meerkat
+(`html_lane_harvests_link_hit_regions`).
+
+Still open in Phase 5: an `<a>` that wraps only a replaced element while staying `inline`
+(image-only inline link) establishes no box and carries no text, so it is not yet harvested.
+Perf note: links re-harvest on every band re-emit (they are band-independent); layout
+already dominates per band, but a tall page with hundreds of links could cache them.
 
 ## Done condition (whole plan)
 
