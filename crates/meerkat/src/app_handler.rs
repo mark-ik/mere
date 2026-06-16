@@ -24,7 +24,7 @@ use super::{Shell, comms_host, fetch, scrying_host, sync, titlebar};
 /// `{origin}/favicon.ico` for an http(s) page. `None` for a page with neither (a
 /// non-http(s) scheme with no icon link, e.g. gemtext). A lightweight parse of the
 /// already-fetched body, reusing serval's `<link>` scan. (Favicon-on-tile.)
-fn favicon_url_for(page_url: &str, body: &str) -> Option<String> {
+pub(crate) fn favicon_url_for(page_url: &str, body: &str) -> Option<String> {
     let base = url::Url::parse(page_url).ok()?;
     let doc = serval_static_dom::StaticDocument::parse(body);
     if let Some(href) = serval_layout::linked_icon_href(&doc) {

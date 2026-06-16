@@ -94,6 +94,25 @@ fn node_address_field_stays_in_sync_after_url_update() {
 }
 
 #[test]
+fn navigation_to_a_new_host_clears_the_favicon_a_same_host_path_keeps_it() {
+    let mut graph = Graph::new();
+    let key = graph.add_node("https://a.test/one".to_string(), Point2D::new(0.0, 0.0));
+    graph.set_node_favicon(key, vec![255u8; 4], 1, 1);
+    // A same-host path change keeps the favicon (still the same site's icon).
+    graph.update_node_url(key, "https://a.test/two".to_string());
+    assert!(
+        graph.get_node(key).unwrap().favicon_rgba.is_some(),
+        "a same-host navigation keeps the favicon"
+    );
+    // A different host invalidates it.
+    graph.update_node_url(key, "https://b.test/".to_string());
+    assert!(
+        graph.get_node(key).unwrap().favicon_rgba.is_none(),
+        "a new host clears the stale favicon"
+    );
+}
+
+#[test]
 fn snapshot_roundtrip_preserves_mime_hint_and_address_kind() {
     let mut graph = Graph::new();
     let key = graph.add_node(

@@ -25,10 +25,25 @@ impl WindowCtx<'_> {
             return;
         }
         if let Some(stored) = self.load_cached(url) {
-            self.shared.content.pages.insert(
-                url.to_string(),
-                fetch::ContentState::Ready(super::fetched_from(stored)),
-            );
+            let fetched = super::fetched_from(stored);
+            // A cached page skips the network `FetchUpdate::Page` favicon discovery,
+            // so do it here when the node still has no favicon (a first-time cache
+            // hit, or after a host change cleared the old one). (Favicon-on-tile.)
+            let needs_favicon = self
+                .orrery()
+                .graph()
+                .get_node_by_url(url)
+                .is_none_or(|(_, node)| node.favicon_rgba.is_none());
+            if needs_favicon {
+                if let Some(icon_url) = crate::app_handler::favicon_url_for(url, &fetched.body) {
+                    self.shared.content.fetch_handle.command(fetch::FetchCommand::Favicon {
+                        owner_url: url.to_string(),
+                        url: icon_url,
+                    });
+                }
+            }
+            self.shared.content.pages
+                .insert(url.to_string(), fetch::ContentState::Ready(fetched));
             return;
         }
         self.shared.content.pages

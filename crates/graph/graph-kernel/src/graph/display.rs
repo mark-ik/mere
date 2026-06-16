@@ -60,7 +60,10 @@ impl Graph {
                 .unwrap_or_else(|| short_blank_id(stripped))
         } else {
             // Addressable resource: a filename, else the host, else its type, else
-            // the scheme-stripped URL.
+            // the scheme-stripped URL. The host comes from `cached_host` when set
+            // (navigated nodes), else parsed from the URL — an ingested node (a
+            // linked-data resource that is an edge target, never visited) has no
+            // cached host, so without this it fell through to the raw URL.
             url_filename(url)
                 .or_else(|| {
                     node.cached_host
@@ -68,6 +71,7 @@ impl Graph {
                         .filter(|h| !h.trim().is_empty())
                         .map(str::to_string)
                 })
+                .or_else(|| host_of(url))
                 .or_else(|| first_type_term(node))
                 .unwrap_or_else(|| scheme_stripped(url))
         }
@@ -159,6 +163,12 @@ fn url_filename(url: &str) -> Option<String> {
     }
 }
 
+/// The host of a URL (`https://en.wikipedia.org/wiki/Foo` → `en.wikipedia.org`),
+/// for a node whose `cached_host` was never computed (an ingested resource node).
+fn host_of(url: &str) -> Option<String> {
+    url::Url::parse(url).ok()?.host_str().map(str::to_string)
+}
+
 /// A short tail for an anonymous node when nothing better is known: the blank
 /// label after the leading document-hash namespace (`<16hex>:_:b3` → `node _:b3`).
 /// The namespace is the first colon segment; the blank label itself may contain a
@@ -247,6 +257,17 @@ mod tests {
         let page = add(&mut g, "https://en.wikipedia.org/wiki/Rust_(programming_language)");
         // `add_node_with_id` caches the host; no extension on the slug, so host wins.
         assert_eq!(g.node_display_label(page), "en.wikipedia.org");
+    }
+
+    #[test]
+    fn resource_without_cached_host_derives_host_from_url() {
+        let mut g = Graph::new();
+        let url = "https://en.wikipedia.org/wiki/Rust_(programming_language)";
+        let key = add(&mut g, url);
+        // An ingested resource node (a linked-data edge target, never navigated) has
+        // no cached host; the host is parsed from the URL instead of the raw URL.
+        g.get_node_mut(key).unwrap().cached_host = None;
+        assert_eq!(g.node_display_label(key), "en.wikipedia.org");
     }
 
     #[test]

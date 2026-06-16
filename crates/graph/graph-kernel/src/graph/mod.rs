@@ -388,6 +388,14 @@ impl Graph {
         let node = self.inner.node_weight_mut(key)?;
         let old_url = node.primary_address().as_url_str().to_string();
         node.cached_host = cached_host_from_url(&new_url);
+        // A navigation to a different host invalidates the favicon (it was the old
+        // site's icon); clear it so a stale favicon does not linger on the tile until
+        // the new one loads. A same-host path change keeps it. (Favicon-on-tile.)
+        if cached_host_from_url(&old_url) != node.cached_host {
+            node.favicon_rgba = None;
+            node.favicon_width = 0;
+            node.favicon_height = 0;
+        }
         // Replace the Primary claim's address; aliases (if any) are
         // preserved.
         let new_primary_address = address_from_url(&new_url);
