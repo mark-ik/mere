@@ -345,7 +345,7 @@ impl WindowCtx<'_> {
     /// (the surface / web engines headline, then the nematic document engines) with
     /// its active state. Host lanes are structural and not listed. (Phase 2.)
     pub(super) fn engine_rows(&self) -> Vec<super::apparatus::EngineRow> {
-        use inker::routing::{ENGINE_SCRYING_WEB, ENGINE_SERVAL_WEB, ENGINE_WRY_WEB};
+        use inker::routing::{ENGINE_SCRYING_WEB, ENGINE_SERVAL_WEB};
         let row = |id: &str, name: String| super::apparatus::EngineRow {
             id: id.to_string(),
             name,
@@ -355,7 +355,6 @@ impl WindowCtx<'_> {
         for &(id, name) in &[
             (ENGINE_SERVAL_WEB, "Serval (web)"),
             (ENGINE_SCRYING_WEB, "System WebView"),
-            (ENGINE_WRY_WEB, "Wry overlay"),
         ] {
             if self.engine_present(id) {
                 rows.push(row(id, name.to_string()));

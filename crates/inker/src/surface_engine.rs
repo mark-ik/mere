@@ -10,7 +10,7 @@
 //! a composited-frame stream + events until torn down. Both registries
 //! coexist; the host dispatches through whichever holds the resolved engine ID
 //! (document registry for `nematic.*` / `serval.web`; surface registry for
-//! `scrying.web` / `wry.web`).
+//! `scrying.web`).
 
 use std::collections::HashMap;
 use std::fmt;

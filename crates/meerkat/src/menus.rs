@@ -94,7 +94,6 @@ impl WindowCtx<'_> {
         const PICKABLE: &[(&str, &str)] = &[
             (inker::routing::ENGINE_SERVAL_WEB, "Serval (web)"),
             (inker::routing::ENGINE_SCRYING_WEB, "System WebView"),
-            (inker::routing::ENGINE_WRY_WEB, "Wry overlay"),
         ];
         let pin = self.shared.content.engine_pins.get(&member).map(String::as_str);
         // Web nodes (http/https) can flip between the web engines; other schemes

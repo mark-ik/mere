@@ -38,15 +38,6 @@ pub const ENGINE_SERVAL_WEB: &str = "serval.web";
 ///
 /// See `design_docs/mere_docs/research/2026-05-11_engine_peers_and_scrying_library_brief.md`.
 pub const ENGINE_SCRYING_WEB: &str = "scrying.web";
-/// Optional overlay-based Wry tile driven by the upstream `wry` crate.
-/// Different composition model from [`ENGINE_SCRYING_WEB`] (overlay
-/// native window, not embedded frame), so it's a separate engine
-/// rather than a mode of the scrying one. Not in the default routing
-/// policy; offered as a user-selectable per-tile choice for cases
-/// where the overlay model is wanted.
-///
-/// See the same brief as `ENGINE_SCRYING_WEB`.
-pub const ENGINE_WRY_WEB: &str = "wry.web";
 pub const ENGINE_NEMATIC_FEED: &str = "nematic.feed";
 pub const ENGINE_NEMATIC_FILE: &str = "nematic.file";
 pub const ENGINE_NEMATIC_FINGER: &str = "nematic.finger";
@@ -82,13 +73,13 @@ pub fn is_graph_contribution_route(engine_id: &str) -> bool {
 }
 
 /// Whether `engine_id` names a tier-2 **surface** engine — one that produces GPU
-/// frames (a system WebView via [`ENGINE_SCRYING_WEB`], an overlay via
-/// [`ENGINE_WRY_WEB`]; CEF via weld and Servo via graft when those land) rather
-/// than a portable [`crate::EngineDocument`]. Surface engines go through the
-/// [`crate::SurfaceEngineRegistry`] / producer path; document engines go through
-/// the [`crate::EngineRegistry`]. A host branches on this to pick the lane.
+/// frames (a system WebView via [`ENGINE_SCRYING_WEB`]; CEF via weld and Servo via
+/// graft when those land) rather than a portable [`crate::EngineDocument`]. Surface
+/// engines go through the [`crate::SurfaceEngineRegistry`] / producer path; document
+/// engines go through the [`crate::EngineRegistry`]. A host branches on this to pick
+/// the lane.
 pub fn is_surface_engine(engine_id: &str) -> bool {
-    matches!(engine_id, ENGINE_SCRYING_WEB | ENGINE_WRY_WEB)
+    matches!(engine_id, ENGINE_SCRYING_WEB)
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]

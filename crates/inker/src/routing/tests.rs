@@ -249,17 +249,6 @@ fn scrying_web_pin_wins_over_default_serval_routing() {
 }
 
 #[test]
-fn wry_web_pin_wins_over_default_serval_routing() {
-    // Same shape for the optional Wry overlay engine. Distinct from
-    // `scrying.web` because the composition model differs.
-    let policy = EngineRoutePolicy::default();
-    let mut req = request("https://example.test/");
-    req.pinned_engine = Some(ENGINE_WRY_WEB.to_string());
-    let decision = policy.route(&req);
-    assert_eq!(decision.engine_id, ENGINE_WRY_WEB);
-}
-
-#[test]
 fn per_host_override_wins_over_scheme_rule() {
     let mut policy = EngineRoutePolicy::default();
     policy.per_host_overrides.insert(
