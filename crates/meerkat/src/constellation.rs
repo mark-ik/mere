@@ -78,6 +78,17 @@ struct Activation {
     /// grows past the visible card, so the host rasterizes a texture this tall and
     /// scrolls a window of it on the GPU. Defaults to 0 until the first scene.
     content_height: u32,
+    /// The vertical band the latest HTML-lane `scene` covers: `(band_y, band_h)`, the
+    /// document scrolled to `band_y` into a `band_h`-tall viewport. The host
+    /// composites the flat scene at this offset (UV = scroll − band_y) and requests a
+    /// new band as the scroll moves out of it. `(0, 0)` until the first HTML scene;
+    /// meaningless for a document-lane node (which windows its packet). (HTML scroll.)
+    band: (u32, u32),
+    /// The band last *requested* of the actor via [`ContentCommand::Scroll`], so a
+    /// repeat scroll to the same band does not re-command the actor (and re-lay-out)
+    /// every frame. Distinct from `band`: this is what we asked for, `band` is what
+    /// has arrived. `(0, 0)` until the first request. (HTML scroll.)
+    requested_band: (u32, u32),
     /// Content-local clickable link regions from the latest scene — the host
     /// hit-tests a click on the card (offset by its scroll) against these and
     /// navigates the matching URL. Empty until the first scene; cleared on a new
@@ -244,6 +255,8 @@ impl Constellation {
                         fonts: FontTable::default(),
                         masks: Vec::new(),
                         content_height: 0,
+                        band: (0, 0),
+                        requested_band: (0, 0),
                         links: Vec::new(),
                         scene_version: 0,
                         background: false,
@@ -318,6 +331,10 @@ impl Constellation {
                 viewport_gen: activation.gens.viewport,
             });
         }
+        // Both a Show and a Resize re-anchor the actor's band to the top, so the
+        // last requested band is stale; clear it so the next `request_scroll` always
+        // re-commands the genuinely-wanted band. (HTML scroll.)
+        activation.requested_band = (0, 0);
         activation.shown = Some(key);
     }
 
@@ -346,6 +363,46 @@ impl Constellation {
     /// not yet rendered.
     pub fn content_height(&self, member: GraphMemberId) -> u32 {
         self.active.get(&member).map_or(0, |a| a.content_height)
+    }
+
+    /// The vertical band `(band_y, band_h)` the member's latest HTML/serval scene
+    /// covers: the page scrolled to `band_y` into a `band_h`-tall window. The host
+    /// composites the flat scene at this offset (the visible UV row is
+    /// `scroll − band_y`) and requests a new band via [`request_scroll`](Self::request_scroll)
+    /// once the scroll leaves it. `(0, 0)` for a document-lane node (which windows
+    /// its packet directly), an unrendered node, or before the first HTML scene.
+    /// (HTML scroll.)
+    pub fn scene_band(&self, member: GraphMemberId) -> (u32, u32) {
+        self.active.get(&member).map_or((0, 0), |a| a.band)
+    }
+
+    /// Ask `member`'s actor to re-emit the HTML/serval band covering
+    /// `(band_y, band_h)` — the document scrolled to `band_y` into a `band_h`-tall
+    /// viewport — so a tall dense page is windowed one band at a time instead of
+    /// rasterized whole (which overflows the GPU encode budget). Deduped against the
+    /// last request, so holding the scroll still does not re-command (and re-lay-out)
+    /// the actor every frame. No-op for a node that is not active or is on the
+    /// document lane (whose packet the host windows itself). (HTML scroll.)
+    pub fn request_scroll(&mut self, member: GraphMemberId, band_y: u32, band_h: u32) {
+        let Some(activation) = self.active.get_mut(&member) else {
+            return;
+        };
+        // The document lane carries a packet the host windows directly; only the
+        // flat HTML/serval scene needs an actor-side re-emit.
+        if activation.packet.is_some() {
+            return;
+        }
+        if activation.requested_band == (band_y, band_h) {
+            return;
+        }
+        activation.requested_band = (band_y, band_h);
+        activation.handle.command(ContentCommand::Scroll {
+            band_y,
+            band_h,
+            // Scroll is not a resize: the viewport generation is unchanged, so the
+            // re-emitted band is accepted at the current generation.
+            viewport_gen: activation.gens.viewport,
+        });
     }
 
     /// The member's retained document-lane packet (plus font sidecar), if it is a
@@ -517,6 +574,8 @@ impl Constellation {
                         viewport_gen,
                         scene,
                         content_height,
+                        band_y,
+                        band_h,
                         links,
                         masks,
                     } => {
@@ -530,6 +589,10 @@ impl Constellation {
                                 activation.packet = None; // forget any stale document packet
                                 activation.masks = masks;
                                 activation.content_height = content_height;
+                                // Record the band this scene covers so the host composites
+                                // it at the right offset; a Show/Resize that re-anchors the
+                                // band to the top arrives as band_y == 0. (HTML scroll.)
+                                activation.band = (band_y, band_h);
                                 activation.links = links;
                                 activation.scene_version += 1;
                                 activation.respawns = 0; // a fresh scene = recovered

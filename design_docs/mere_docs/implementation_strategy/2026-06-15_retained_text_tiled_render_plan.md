@@ -160,9 +160,42 @@ to window, so the real fix is **actor-side band re-emit**: a `Scroll` command dr
 content actor to re-emit the page at the scroll offset (one viewport band), shipping a
 band scene the host composites — mirroring `window_packet`, but in the actor since only
 it holds the serval layout. Links are independent of this (a `<a href>` rect harvest off
-the fragment plane needs no scroll mechanism) and can land first. All Phase 5 code was
-reverted to no-regression; the serval `document_scroll_range` plumbing is the reusable
-foundation.
+the fragment plane needs no scroll mechanism) and can land first. The first attempt's
+code was reverted to no-regression; the serval `document_scroll_range` plumbing was kept
+as the reusable foundation.
+
+**Built + verified (2026-06-16): actor-side band re-emit, HTML scroll works.** The fix
+shipped as the finding prescribed:
+
+- serval grew `paint_list_band_from_layout_dom` (`serval-layout/lib.rs`): cascade + layout
+  at the real viewport, compute `document_scroll_range` for the full height, then
+  `emit_paint_list_scrolled` with `viewport = (w, band_h)` and `viewport_scroll =
+  (0, band_y)`. The translator culls to the band viewport, so the returned flat scene holds
+  only the band's ops, not the whole page's. This is what dodges the OOM: density, not
+  texture size, was the limit, and a band re-emit bounds density.
+- The content actor (`content.rs`) carries a `band_y` / `band_h` and accepts a `Scroll`
+  command (distinct from `Resize`: viewport generation unchanged); on it, it re-renders
+  the current document at the new band and echoes the band back on `ContentUpdate::Scene`.
+- The constellation (`constellation.rs`) records the band each scene covers
+  (`scene_band`) and exposes `request_scroll(member, band_y, band_h)`, deduped against the
+  last request so holding still does not re-command (and re-lay-out) the actor every frame.
+- The host band loop (`render.rs`) branches by lane: the document lane windows its retained
+  packet host-side (unchanged); the HTML lane asks the actor for the band centred on the
+  scroll (`request_scroll`) and composites whatever band has arrived (`scene_band`), UV =
+  `scroll − band_y`. A fresh band bumps `scene_version`, so the texture cache re-rasterizes
+  exactly when a new band lands and only UV-shifts when holding still. HTML bands are capped
+  near 2× the visible window (`HTML_BAND_CAP = 2560`) to keep per-band op density near the
+  single viewport that always rendered.
+
+Verified headed (61 lib + 93 bin tests green): a tall HTML page (a long Wikipedia article)
+scrolls fully in both directions, content re-emitting per band, with no OOM, no panic, no
+`unknown ImageKey`, and no vanish — the exact failure modes the first attempt hit.
+ycombinator.com itself stays a short "peephole" (its body is JS/image-driven and collapses
+in serval's static layout, so it has almost no scroll range); that is a serval layout-fidelity
+matter, separate from band windowing, which the tall-page test isolates and confirms working.
+
+Still open in Phase 5: the `<a href>` rect harvest so links on a fetched HTML page navigate
+(independent of scroll; the document lane already has its link table).
 
 ## Done condition (whole plan)
 

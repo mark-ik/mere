@@ -765,6 +765,13 @@ impl WindowCtx<'_> {
         // (Retained-text / tiled render; document lane. The HTML/serval lane still
         // rasterizes one capped texture until Phase 5 lane parity.)
         const BAND_CAP: u32 = 6144;
+        // The HTML/serval lane re-emits its band actor-side, culled to the band
+        // viewport, so the constraint is the band's *op density* (the whole dense
+        // page's op count overflowed vello's encode budget even capped to a 6144
+        // texture), not the texture size. Keep the band near twice the visible window
+        // so density stays close to the single viewport that always rendered fine.
+        // The document lane keeps the larger BAND_CAP — its packet windowing is cheap.
+        const HTML_BAND_CAP: u32 = 2560;
         // Cap the texture *area* too: vello binds width*height*4 bytes against wgpu's
         // 128 MiB downlevel-minimum `max_buffer_binding_size`, so a wide+tall band
         // would overflow. ~30 MiB stays well under; the band height is reduced to fit.
@@ -790,61 +797,99 @@ impl WindowCtx<'_> {
                 .copied()
                 .unwrap_or(0.0)
                 .clamp(0.0, (content_h - visible_h).max(0.0));
-            let max_h_for_width = (MAX_CARD_TEX_AREA / (*cw).max(1)) as f32;
-            let band_h = content_h.min(BAND_CAP as f32).min(max_h_for_width).max(1.0);
-            let band_px = band_h.ceil() as u32;
-            // Reuse the cached band if version + width match and it still covers the
-            // visible window; otherwise re-pick a band centred on the scroll.
-            let band_y = self.view.tile_bands.get(member).copied().unwrap_or(0.0);
-            let covers = band_y <= scroll && scroll + visible_h <= band_y + band_h + 0.5;
-            let fresh = self
-                .view
-                .tile_textures
-                .get(member)
-                .is_some_and(|c| c.version == version && c.size == (*cw, band_px))
-                && covers;
-            if !fresh {
-                let new_band_y =
-                    (scroll - (band_h - visible_h) * 0.5).clamp(0.0, (content_h - band_h).max(0.0));
-                // Document lane: window the retained packet to the band, then lower it.
-                // Take the owned scene first so the constellation borrow ends before we
-                // touch self.view. HTML lane: rasterize its full (capped) scene at band 0.
-                let doc_scene = self
-                    .shared
-                    .content
-                    .constellation
-                    .packet(*member)
-                    .map(|(packet, fonts)| {
-                        crate::card::lower_window(packet, fonts, new_band_y, band_h)
-                    });
-                if let Some(scene) = doc_scene {
-                    let (tex, view) = core.rasterize(&scene, *cw, band_px, ColorLoad::Clear(CARD_BG));
-                    self.view.tile_textures.insert(
-                        *member,
-                        super::CachedTile { version, size: (*cw, band_px), tex, view },
-                    );
-                    self.view.tile_bands.insert(*member, new_band_y);
-                } else if let Some(scene) = self.shared.content.constellation.scene(*member) {
-                    // Build + register the page's blurred box-shadow masks (GPU)
-                    // before rasterizing, so the shadow image ops resolve to a texture
-                    // instead of being skipped. Built per member right before its own
-                    // rasterize, so the per-scene mask keys never collide across cards.
-                    // (Box-shadow.)
-                    for m in self.shared.content.constellation.scene_masks(*member) {
-                        core.renderer().build_box_shadow_mask(
-                            m.key,
-                            m.dim,
-                            m.bounds,
-                            m.corner_radius,
-                            m.blur_radius_px,
+            // The HTML/serval lane windows actor-side (the host cannot lower an
+            // arbitrary band of a flat scene, so the actor re-emits the band it is
+            // told); the document lane windows host-side (the host lowers any band of
+            // the retained packet itself). Branch on which lane this node is.
+            if self.shared.content.constellation.scene(*member).is_some() {
+                // HTML lane. Ask the actor for the band centred on the scroll — a
+                // culled re-emit, so only the band's ops are encoded (the whole dense
+                // page overflows vello). Keep the band near 2x the visible window so op
+                // density stays close to the single viewport that always rendered.
+                let overscan = visible_h * 0.5;
+                let desired_h = (visible_h + 2.0 * overscan)
+                    .min(content_h)
+                    .min(HTML_BAND_CAP as f32)
+                    .max(1.0);
+                let desired_y = (scroll - overscan).clamp(0.0, (content_h - desired_h).max(0.0));
+                self.shared.content.constellation.request_scroll(
+                    *member,
+                    desired_y.floor() as u32,
+                    desired_h.ceil() as u32,
+                );
+                // Composite the band the actor has actually delivered (it may lag the
+                // request by a frame). A fresh band bumps scene_version, so the cache
+                // miss below re-rasterizes exactly when a new band lands; holding still
+                // (request deduped, version unchanged) reuses the cached texture and
+                // only UV-shifts at composite time.
+                let (actor_band_y, actor_band_h) =
+                    self.shared.content.constellation.scene_band(*member);
+                let band_px = actor_band_h.max(1);
+                let fresh = self
+                    .view
+                    .tile_textures
+                    .get(member)
+                    .is_some_and(|c| c.version == version && c.size == (*cw, band_px));
+                if !fresh {
+                    if let Some(scene) = self.shared.content.constellation.scene(*member) {
+                        // Build + register the page's blurred box-shadow masks (GPU)
+                        // before rasterizing, so the shadow image ops resolve to a
+                        // texture instead of being skipped. Per member right before its
+                        // own rasterize, so per-scene mask keys never collide across
+                        // cards. (Box-shadow.)
+                        for m in self.shared.content.constellation.scene_masks(*member) {
+                            core.renderer().build_box_shadow_mask(
+                                m.key,
+                                m.dim,
+                                m.bounds,
+                                m.corner_radius,
+                                m.blur_radius_px,
+                            );
+                        }
+                        let (tex, view) =
+                            core.rasterize(scene, *cw, band_px, ColorLoad::Clear(CARD_BG));
+                        self.view.tile_textures.insert(
+                            *member,
+                            super::CachedTile { version, size: (*cw, band_px), tex, view },
                         );
+                        self.view.tile_bands.insert(*member, actor_band_y as f32);
                     }
-                    let (tex, view) = core.rasterize(scene, *cw, band_px, ColorLoad::Clear(CARD_BG));
-                    self.view.tile_textures.insert(
-                        *member,
-                        super::CachedTile { version, size: (*cw, band_px), tex, view },
-                    );
-                    self.view.tile_bands.insert(*member, 0.0);
+                }
+            } else {
+                // Document lane: window the retained packet to a band centred on the
+                // scroll, then lower it. Reuse the cached band if version + width match
+                // and it still covers the visible window; otherwise re-pick.
+                let max_h_for_width = (MAX_CARD_TEX_AREA / (*cw).max(1)) as f32;
+                let band_h = content_h.min(BAND_CAP as f32).min(max_h_for_width).max(1.0);
+                let band_px = band_h.ceil() as u32;
+                let band_y = self.view.tile_bands.get(member).copied().unwrap_or(0.0);
+                let covers = band_y <= scroll && scroll + visible_h <= band_y + band_h + 0.5;
+                let fresh = self
+                    .view
+                    .tile_textures
+                    .get(member)
+                    .is_some_and(|c| c.version == version && c.size == (*cw, band_px))
+                    && covers;
+                if !fresh {
+                    let new_band_y = (scroll - (band_h - visible_h) * 0.5)
+                        .clamp(0.0, (content_h - band_h).max(0.0));
+                    let doc_scene = self
+                        .shared
+                        .content
+                        .constellation
+                        .packet(*member)
+                        .map(|(packet, fonts)| {
+                            crate::card::lower_window(packet, fonts, new_band_y, band_h)
+                        });
+                    if let Some(scene) = doc_scene {
+                        let (tex, view) =
+                            core.rasterize(&scene, *cw, band_px, ColorLoad::Clear(CARD_BG));
+                        self.view.tile_textures.insert(
+                            *member,
+                            super::CachedTile { version, size: (*cw, band_px), tex, view },
+                        );
+                        self.view.tile_bands.insert(*member, new_band_y);
+                    }
                 }
             }
             if self.view.tile_textures.contains_key(member) {

@@ -248,11 +248,17 @@ pub fn render_content(
     loader: &impl ImageLoader,
     w: u32,
     h: u32,
+    // The HTML/serval lane emits only this vertical band (`band_y`..`band_y + band_h`)
+    // so a tall dense page does not overflow the GPU; the document lane ignores it (the
+    // host windows its retained packet). (HTML scroll.)
+    band_y: u32,
+    band_h: u32,
 ) -> RenderedContent {
     if let Some(ContentState::Ready(fetched)) = state {
         let engine_id = route_document_engine(url, fetched.content_type.as_deref(), registry, policy);
         if engine_id == inker::routing::ENGINE_SERVAL_WEB {
-            let (scene, content_height, links, masks) = html_scene(&fetched.body, loader, w, h);
+            let (scene, content_height, links, masks) =
+                html_scene(&fetched.body, loader, w, h, band_y, band_h);
             return RenderedContent::Html { scene, content_height, links, masks };
         }
         if let Some(doc) = dispatch_document(url, fetched, &engine_id, registry) {
@@ -331,7 +337,8 @@ pub fn render_content_scene(
     w: u32,
     h: u32,
 ) -> (Scene, u32, Vec<LinkHit>) {
-    match render_content(url, state, registry, policy, loader, w, h) {
+    // The snapshot/preview shows the page top: band_y = 0, one viewport tall.
+    match render_content(url, state, registry, policy, loader, w, h, 0, h) {
         RenderedContent::Html {
             scene,
             content_height,
@@ -411,6 +418,8 @@ fn html_scene(
     loader: &impl ImageLoader,
     w: u32,
     h: u32,
+    band_y: u32,
+    band_h: u32,
 ) -> (Scene, u32, Vec<LinkHit>, Vec<paint_list_render::BoxShadowMaskRequest>) {
     let doc = StaticDocument::parse(body);
     let inline = inline_stylesheets(&doc);
@@ -419,17 +428,16 @@ fn html_scene(
     sheets.extend(inline.iter().map(String::as_str));
     sheets.extend(linked.iter().map(String::as_str));
     let scroll = ScrollOffsets::default();
-    // `masks` are the blurred box-shadow requests the host builds (GPU) and registers
-    // before rasterizing this scene; without them the shadow image ops are unsourced
-    // and the renderer skips them (a crash before the netrender guard). (Box-shadow.)
-    let (scene, masks) = scene_from_layout_dom(&doc, &sheets, loader, w, h, &scroll);
-    // The serval lane lays out to the viewport height and does not yet report a
-    // taller content extent, so HTML cards report `h` and simply do not scroll
-    // until that serval-side change lands. The document lane (most smolweb content)
-    // reports its true content height and scrolls. Link hit regions for the HTML
-    // lane are a follow-up (harvest `<a href>` rects off serval's fragment plane
-    // via the new inline hit-test); for now the document lane carries link nav.
-    (scene, h.max(1), Vec::new(), masks)
+    // Lay out at the viewport (so `@media` cascades right) and emit ONE band
+    // (`band_y`..`band_y + band_h`) of the page: a flat serval scene the host cannot
+    // window, so emitting the whole tall dense page would overflow the GPU. The host
+    // requests bands as the scroll moves. `content_height` is the full page height (the
+    // scroll range); the band carries only its slice of ops. `masks` are the blurred
+    // box-shadow requests the host builds + registers before rasterizing. (HTML scroll;
+    // box-shadow.) Link hit regions are still a follow-up (harvest `<a href>` rects).
+    let (scene, masks, content_height) =
+        scene_from_layout_dom(&doc, &sheets, loader, w, h, band_y, band_h, &scroll);
+    (scene, content_height, Vec::new(), masks)
 }
 
 /// The floating card rectangle within the content band (top-right, inset by
@@ -748,6 +756,8 @@ mod tests {
             &NoImageLoader,
             420,
             360,
+            0,
+            360,
         ) else {
             panic!("text/html routes to the serval HTML lane");
         };
@@ -788,6 +798,8 @@ mod tests {
             &inker::EngineRoutePolicy::default(),
             &GarbageLoader,
             420,
+            360,
+            0,
             360,
         ) else {
             panic!("text/html routes to the serval HTML lane");
@@ -845,6 +857,8 @@ mod tests {
             &inker::EngineRoutePolicy::default(),
             &NoImageLoader,
             420,
+            360,
+            0,
             360,
         ) else {
             panic!("markdown routes to the document lane");

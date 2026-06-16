@@ -53,6 +53,15 @@ pub enum ContentCommand {
     /// A subresource the kernel fetched on the actor's behalf has arrived: cache
     /// its bytes and re-render so the demand loader now hits.
     Resource { url: String, bytes: Vec<u8> },
+    /// Re-emit the current HTML/serval document at a new scroll band (the host's
+    /// windowing of the flat serval scene). `band_y` is the document scroll offset,
+    /// `band_h` the band height; the actor emits only that band so a tall dense page
+    /// does not overflow the GPU. The document lane never receives this. (HTML scroll.)
+    Scroll {
+        band_y: u32,
+        band_h: u32,
+        viewport_gen: ViewportGeneration,
+    },
 }
 
 /// An update from a content actor to the kernel. All variants are `Send`.
@@ -71,15 +80,18 @@ pub enum ContentUpdate {
         // (`DocumentRenderPacket::link_at`), so the document lane ships no separate
         // link-rect table. (Phase 2 query API.)
     },
-    /// An HTML/serval-lane render: one pre-lowered scene (a different pipeline that
-    /// does not produce a document packet). `content_height` is the full laid-out
-    /// height; the host rasterizes a texture this tall and scrolls a window of it on
-    /// the GPU. Its true-height + windowing is the Phase 5 lane-parity work.
+    /// An HTML/serval-lane render: one pre-lowered scene for a vertical BAND of the
+    /// page. `content_height` is the full laid-out height; `band_y` / `band_h` are the
+    /// band this scene covers (the page scrolled to `band_y`, `band_h` tall). The host
+    /// composites it at that offset and requests the next band as the scroll moves
+    /// (its windowing of a flat serval scene the actor emits one band of). (HTML scroll.)
     Scene {
         nav: NavGeneration,
         viewport_gen: ViewportGeneration,
         scene: Scene,
         content_height: u32,
+        band_y: u32,
+        band_h: u32,
         /// Content-local clickable link regions harvested from the laid-out
         /// document; the host hit-tests a click against these and navigates.
         links: Vec<LinkHit>,
@@ -106,6 +118,12 @@ struct Content {
     viewport: (u32, u32),
     nav: NavGeneration,
     viewport_gen: ViewportGeneration,
+    /// The vertical band of the HTML/serval lane to emit: `band_y` is the document
+    /// scroll offset, `band_h` the band height. The host requests bands as the scroll
+    /// moves (its windowing of a flat serval scene, done here because only the actor
+    /// holds the layout). Ignored by the document lane (the host windows its packet).
+    band_y: u32,
+    band_h: u32,
 }
 
 /// Spawn a content actor on its own thread (armillary harness). It builds the
@@ -155,12 +173,16 @@ pub fn spawn_content(
                             out.emit(ContentUpdate::Contribution { contributions });
                         }
                     }
+                    // A fresh navigation resets the band to the top, one viewport tall
+                    // (the host requests a taller scroll band once it has the content).
                     let content = Content {
                         url,
                         state,
                         viewport,
                         nav,
                         viewport_gen,
+                        band_y: 0,
+                        band_h: viewport.1,
                     };
                     render(&content, &store, &registry, &policy, &out);
                     current = Some(content);
@@ -172,12 +194,25 @@ pub fn spawn_content(
                     if let Some(content) = current.as_mut() {
                         content.viewport = viewport;
                         content.viewport_gen = viewport_gen;
+                        content.band_y = 0; // a resize relays out; re-anchor the band
                         render(content, &store, &registry, &policy, &out);
                     }
                 }
                 ContentCommand::Resource { url, bytes } => {
                     store.borrow_mut().insert(url, bytes);
                     if let Some(content) = current.as_ref() {
+                        render(content, &store, &registry, &policy, &out);
+                    }
+                }
+                ContentCommand::Scroll {
+                    band_y,
+                    band_h,
+                    viewport_gen,
+                } => {
+                    if let Some(content) = current.as_mut() {
+                        content.band_y = band_y;
+                        content.band_h = band_h;
+                        content.viewport_gen = viewport_gen;
                         render(content, &store, &registry, &policy, &out);
                     }
                 }
@@ -207,6 +242,8 @@ fn render(
             &loader,
             w,
             h,
+            content.band_y,
+            content.band_h,
         )
     };
     match rendered {
@@ -233,6 +270,10 @@ fn render(
             content_height,
             masks,
             links,
+            // Echo the band this scene represents so the host composites it at the
+            // right offset and knows when to request the next band.
+            band_y: content.band_y,
+            band_h: content.band_h,
         }),
     }
     // Ship only never-requested subresources, so a re-render before the bytes
