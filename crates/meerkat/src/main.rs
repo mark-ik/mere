@@ -832,8 +832,8 @@ impl Shell {
             .unwrap_or_default();
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = saved_settings.tab_cap;
-        let runner = ServalAppRunner::new(dom.clone(), chrome_view as ChromeLogic, chrome);
-        let content_location = runner.state().content_location().to_string();
+        let runner = window_view::shell_runner(dom.clone(), chrome);
+        let content_location = runner.state().chrome.content_location().to_string();
         // Durable content cache (S3.2c), shared (persona-scoped) under the mere root
         // so sessions don't re-fetch each other's pages; `None` disables caching.
         let store = match FjallStore::open(mere_root.join("content")) {
@@ -1257,8 +1257,8 @@ impl Shell {
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = self.shared.presentation.saved_tab_cap;
         chrome.slim = true; // a spawned window is a leaf: slim chrome (no shellbar / switcher)
-        let runner = ServalAppRunner::new(dom.clone(), chrome_view as ChromeLogic, chrome);
-        let content_location = runner.state().content_location().to_string();
+        let runner = window_view::shell_runner(dom.clone(), chrome);
+        let content_location = runner.state().chrome.content_location().to_string();
         let active_graph = self
             .shared
             .session

@@ -22,12 +22,12 @@ use std::time::Instant;
 
 use forme::GraphMemberId;
 use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
-use meerkat::{Chrome, ChromeLogic, ChromeView};
+use meerkat::{Chrome, ChromeView, chrome_view};
 use platen::Workbench;
 use serval_scripted_dom::ScriptedDom;
 use serval_winit_host::WindowSurface;
 use winit::window::CursorIcon;
-use xilem_serval::{Modifiers, ServalAppRunner};
+use xilem_serval::{AnyView, Modifiers, ServalAppRunner, ServalCtx, ServalElement, lens};
 
 use super::{CachedTile, ContentPane, ResizeDrag};
 use crate::pane_session::PaneSession;
@@ -72,7 +72,7 @@ pub(crate) struct WindowView {
     /// The chrome DOM the runner mutates and the render path reads.
     pub(crate) dom: Rc<RefCell<ScriptedDom>>,
     /// The chrome runner: this window's toolbar / omnibar / dropdown authority.
-    pub(crate) runner: ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
+    pub(crate) runner: ShellRunner,
     /// The chrome DOM's incremental cascade+layout session (cheap-path C3). `None`
     /// until the first render builds it; rebuilt on a structural / resize / theme
     /// change, else the per-frame attribute batch applies on the `RepaintOnly` path.
@@ -286,19 +286,51 @@ pub(crate) struct WindowView {
     pub(crate) scrying_input_focus: Option<GraphMemberId>,
 }
 
+/// The window shell's composed view-state. Phase 1 carries only the chrome, so the
+/// produced DOM is byte-identical to the standalone chrome runner; the runner's state
+/// type is what widens. Phase 2 adds an `orrery` field (the orrery-as-element) and the
+/// document panes as sibling subtrees. (Unified document host.)
+pub(crate) struct ShellState {
+    pub(crate) chrome: Chrome,
+}
+
+/// The erased shell root view, like [`ChromeView`] but over [`ShellState`].
+pub(crate) type ShellView = Box<dyn AnyView<ShellState, (), ServalCtx, ServalElement>>;
+
+/// The runner logic: shell state to shell view.
+pub(crate) type ShellLogic = fn(&ShellState) -> ShellView;
+
+/// The runner type the window holds: one document over the composed shell state.
+pub(crate) type ShellRunner = ServalAppRunner<ShellState, ShellLogic, ShellView>;
+
+/// The shell root view: the chrome lifted onto `ShellState` via `lens`. No wrapper
+/// element, so the DOM matches the standalone chrome until a second subtree joins.
+fn shell_view(_s: &ShellState) -> ShellView {
+    let make_chrome: fn(&mut Chrome) -> ChromeView = |c: &mut Chrome| chrome_view(c);
+    let to_chrome: fn(&mut ShellState) -> &mut Chrome = |s: &mut ShellState| &mut s.chrome;
+    Box::new(lens(make_chrome, to_chrome))
+}
+
+/// Build a window's shell runner over `dom`, seeded with `chrome`. The host view
+/// constructor and `main`'s window builders use this instead of a bare chrome runner.
+/// (Unified document host — Phase 1.)
+pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> ShellRunner {
+    ServalAppRunner::new(dom, shell_view as ShellLogic, ShellState { chrome })
+}
+
 impl WindowView {
     /// The chrome view-state, read-only. Phase 1 insulation seam: call sites read the
     /// chrome through this rather than `runner.state()` directly, so the runner's state
     /// type can later widen from `Chrome` to a composed shell state without touching
     /// them. (Unified document host — Phase 1.)
     pub(crate) fn chrome(&self) -> &Chrome {
-        self.runner.state()
+        &self.runner.state().chrome
     }
 
     /// Mutate the chrome view-state; the runner re-renders and diffs the change. The
     /// mutation counterpart to [`chrome`](Self::chrome), and the same insulation seam.
     pub(crate) fn chrome_update(&mut self, f: impl FnOnce(&mut Chrome)) {
-        self.runner.update(f);
+        self.runner.update(|s| f(&mut s.chrome));
     }
 
     /// Mint a window's view over a fresh pair of serval runners. Everything else
@@ -310,7 +342,7 @@ impl WindowView {
         kind: WindowKind,
         focused_graph: GraphId,
         dom: Rc<RefCell<ScriptedDom>>,
-        runner: ServalAppRunner<Chrome, ChromeLogic, ChromeView>,
+        runner: ShellRunner,
         workbench: Workbench,
     ) -> Self {
         Self {
