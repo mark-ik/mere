@@ -1568,17 +1568,13 @@ impl WindowCtx<'_> {
     /// reset the active match to the first. (The actor dedups and clears on empty.)
     fn submit_find_query(&mut self) {
         let query = self.view.runner.state().find_input.text().to_string();
-        if let Some(member) = self.focused_member() {
-            self.shared.content.constellation.request_find(member, &query);
-        }
+        self.recompute_find(&query);
         self.view.runner.update(|c| c.find_active = 0);
     }
 
-    /// Clear the focused node's find matches (an empty query), so highlights vanish.
+    /// Clear the find matches (an empty query / bar closed), so highlights vanish.
     fn clear_find_matches(&mut self) {
-        if let Some(member) = self.focused_member() {
-            self.shared.content.constellation.request_find(member, "");
-        }
+        self.clear_find();
     }
 
     /// Cycle the active match by `delta` (wrapping within the live count) and, if the
@@ -1588,7 +1584,7 @@ impl WindowCtx<'_> {
         let Some(member) = self.focused_member() else {
             return;
         };
-        let matches = self.shared.content.constellation.find_matches(member);
+        let matches = self.find_matches_for(member);
         let count = matches.len();
         if count == 0 {
             return;

@@ -108,7 +108,7 @@ impl WindowCtx<'_> {
         if self.view.runner.state().find_open {
             let find_count = self
                 .focused_member()
-                .map(|m| self.shared.content.constellation.find_matches(m).len())
+                .map(|m| self.find_matches_for(m).len())
                 .unwrap_or(0);
             if self.view.runner.state().find_count != find_count {
                 self.view.runner.update(move |c| c.find_count = find_count);
@@ -1020,14 +1020,7 @@ impl WindowCtx<'_> {
                         .copied()
                         .unwrap_or(0.0)
                         .clamp(0.0, (content_h - visible_h).max(0.0));
-                    for (mi, rects) in self
-                        .shared
-                        .content
-                        .constellation
-                        .find_matches(*member)
-                        .iter()
-                        .enumerate()
-                    {
+                    for (mi, rects) in self.find_matches_for(*member).iter().enumerate() {
                         let is_active = mi == active;
                         for r in rects {
                             let wy0 = dest[1] + (r[1] - scroll) * s;

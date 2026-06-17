@@ -156,6 +156,13 @@ pub struct Constellation {
     /// of rendering. A snapshot at spawn time — the host respawns affected actors
     /// when the set changes. (engine-picker Phase 1b.)
     disabled_engines: HashSet<String>,
+    /// Whether new content actors auto-harvest each loaded document's embedded
+    /// linked data (JSON-LD/RDFa) into graph contributions. Off by default: a page's
+    /// own structured data (e.g. a Wikipedia article's) would otherwise flood the
+    /// graph on every visit. Opt-in (a future setting / explicit "ingest" action
+    /// flips it; actors snapshot it at spawn, like `disabled_engines`). (Linked-data
+    /// ingest.)
+    auto_ingest_linked_data: bool,
 }
 
 /// What a [`Constellation::drain`] surfaced for the host to act on. Scenes are
@@ -187,7 +194,16 @@ impl Constellation {
             cap: DEFAULT_TAB_CAP,
             touch_clock: 0,
             disabled_engines: HashSet::new(),
+            auto_ingest_linked_data: false,
         }
+    }
+
+    /// Toggle whether new content actors auto-harvest embedded linked data on load.
+    /// Off by default (a page's structured data would otherwise flood the graph);
+    /// actors snapshot it at spawn, so the caller reaps affected members to respawn
+    /// them when it changes. (Linked-data ingest.)
+    pub fn set_auto_ingest_linked_data(&mut self, on: bool) {
+        self.auto_ingest_linked_data = on;
     }
 
     /// Set the active-tab cap (the configurable setting; clamped to at least 1).
@@ -250,7 +266,12 @@ impl Constellation {
                 self.touch_clock += 1;
                 let touch = self.touch_clock;
                 let (handle, rx) =
-                    spawn_content(&self.pool, self.wake.clone(), self.disabled_engines.clone());
+                    spawn_content(
+                        &self.pool,
+                        self.wake.clone(),
+                        self.disabled_engines.clone(),
+                        self.auto_ingest_linked_data,
+                    );
                 self.active.insert(
                     member,
                     Activation {
@@ -701,7 +722,12 @@ impl Constellation {
             return false;
         }
         let (handle, rx) =
-            spawn_content(&self.pool, self.wake.clone(), self.disabled_engines.clone());
+            spawn_content(
+                        &self.pool,
+                        self.wake.clone(),
+                        self.disabled_engines.clone(),
+                        self.auto_ingest_linked_data,
+                    );
         activation.handle = handle;
         activation.rx = rx;
         activation.gens = Generations::default();

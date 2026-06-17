@@ -125,6 +125,18 @@ pub(crate) struct WindowView {
     /// Each live card's close-button rect this frame (member): a press reaps that
     /// live preview.
     pub(crate) close_button_rects: Vec<(GraphMemberId, [f32; 4])>,
+    /// Find-in-page match rects for `find_member`, computed host-side (no actor
+    /// round-trip) against the focused page's cached body — full-document px
+    /// (`[x0,y0,x1,y1]`), one inner `Vec` per match. The overlay maps these like the
+    /// link rects. Empty when no query / nothing matched. (Find-in-page.)
+    pub(crate) find_matches: Vec<Vec<[f32; 4]>>,
+    /// The member `find_matches` belongs to (the focused page at query time); the
+    /// overlay only draws when it matches the composited member. (Find-in-page.)
+    pub(crate) find_member: Option<GraphMemberId>,
+    /// The generation of the latest find request shipped to the worker. Replies carry
+    /// it back; only the latest is applied (a stale layout for an old query is dropped),
+    /// so fast typing never paints an out-of-date highlight set. (Find-in-page.)
+    pub(crate) find_gen: u64,
 
     // ── Paint caches: GPU textures rasterized for this window's surface, reused
     //    across frames while their version + size hold. ────────────────────────
@@ -297,6 +309,9 @@ impl WindowView {
             tile_rects: Default::default(),
             content_rects: Default::default(),
             close_button_rects: Default::default(),
+            find_matches: Default::default(),
+            find_member: None,
+            find_gen: 0,
             tile_textures: Default::default(),
             tile_bands: Default::default(),
             close_button_tex: Default::default(),

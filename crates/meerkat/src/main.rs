@@ -76,6 +76,8 @@ mod apparatus;
 mod command_drain;
 mod engine_activation;
 mod export;
+mod find;
+mod find_worker;
 mod frame_a11y;
 mod frame_a11y_panes;
 mod frame_ops;
@@ -526,6 +528,9 @@ struct Content {
     /// The fetch actor's command handle (the kernel commands it over this; its
     /// outcomes arrive on `inbox.fetch`).
     fetch_handle: armillary::ActorHandle<fetch::FetchCommand>,
+    /// The find-in-page worker's command handle: the kernel ships it the focused page +
+    /// query off the UI thread, and its match rects arrive on `inbox.find`. (Find.)
+    find_worker: armillary::ActorHandle<find_worker::FindCommand>,
     /// The nematic engine registry, for rendering "last visit" snapshot cards
     /// host-side from the durable content cache (no actor). (Card #4.)
     engine_registry: EngineRegistry,
@@ -786,6 +791,8 @@ pub(crate) struct ResizeDrag {
 /// holds only the I/O streams.
 struct KernelInbox {
     fetch: Receiver<fetch::FetchUpdate>,
+    /// Find-in-page worker replies (match rects per query generation). (Find.)
+    find: Receiver<find_worker::FindResult>,
     sync: Receiver<sync::SyncUpdate>,
     comms: Receiver<comms_host::CommsUpdate>,
     /// Portable diagnostics emitted through `register_diagnostics::emit`.
@@ -891,6 +898,14 @@ impl Shell {
             let _ = fetch_proxy.send_event(());
         });
         let (fetch_handle, fetch_rx) = fetch::spawn_fetcher(fetch_wake);
+        // The find-in-page worker lays out the focused page off the UI thread (a full
+        // serval layout costs ~1-2s, far too slow per keystroke) and ships back match
+        // rects, woken through the same proxy.
+        let find_proxy = proxy.clone();
+        let find_wake: armillary::Wake = Arc::new(move || {
+            let _ = find_proxy.send_event(());
+        });
+        let (find_worker, find_rx) = find_worker::spawn_find_worker(find_wake);
         // The content actor renders the focused card off the UI thread (it owns the
         // serval cascade + nematic engines + a per-tile subresource cache on its own
         // thread) and ships scenes / wanted subresources / harvested linked data
@@ -1048,6 +1063,7 @@ impl Shell {
                     pages: HashMap::new(),
                     store,
                     fetch_handle,
+                    find_worker,
                     engine_registry,
                     engine_pins: HashMap::new(),
                     route_policy: inker::routing::EngineRoutePolicy::default(),
@@ -1077,6 +1093,7 @@ impl Shell {
                 sync_handle,
                 inbox: KernelInbox {
                     fetch: fetch_rx,
+                    find: find_rx,
                     sync: sync_rx,
                     comms: comms_rx,
                     diagnostics: diagnostics_rx,

@@ -233,6 +233,16 @@ impl ApplicationHandler for Shell {
                 }
             }
         }
+        // Drain the find worker's replies: apply the latest query's match rects (older
+        // generations are dropped) and feed any wanted subresources back from the cache.
+        // Collected first so the receiver borrow ends before the &mut apply. (Find.)
+        let mut find_results = Vec::new();
+        while let Ok(result) = wc.shared.inbox.find.try_recv() {
+            find_results.push(result);
+        }
+        for result in find_results {
+            card_changed |= wc.apply_find_result(result);
+        }
         // Drain every active node's actor in one pass: scenes land in the pool, the
         // wanted subresources + harvested contributions come back for the host.
         let drained = wc.shared.content.constellation.drain();

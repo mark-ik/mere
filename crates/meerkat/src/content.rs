@@ -151,6 +151,7 @@ pub fn spawn_content(
     pool: &Pool,
     wake: Wake,
     disabled: std::collections::HashSet<String>,
+    auto_ingest: bool,
 ) -> (
     ActorHandle<ContentCommand>,
     std::sync::mpsc::Receiver<ContentUpdate>,
@@ -181,13 +182,19 @@ pub fn spawn_content(
                     viewport_gen,
                 } => {
                     // Harvest the document's linked data once, on load (Ready only).
-                    if let Some(ContentState::Ready(fetched)) = &state {
-                        let contributions = meerkat::ingest::harvest_contributions(
-                            fetched.content_type.as_deref(),
-                            &fetched.body,
-                        );
-                        if !contributions.is_empty() {
-                            out.emit(ContentUpdate::Contribution { contributions });
+                    // Off by default: auto-ingesting every page's embedded JSON-LD/RDFa
+                    // floods the graph with the page's own entities (e.g. a Wikipedia
+                    // article's structured data on each visit), so this is opt-in. The
+                    // host passes the flag; default false. (Linked-data ingest.)
+                    if auto_ingest {
+                        if let Some(ContentState::Ready(fetched)) = &state {
+                            let contributions = meerkat::ingest::harvest_contributions(
+                                fetched.content_type.as_deref(),
+                                &fetched.body,
+                            );
+                            if !contributions.is_empty() {
+                                out.emit(ContentUpdate::Contribution { contributions });
+                            }
                         }
                     }
                     // A fresh navigation resets the band to the top, one viewport tall
@@ -370,7 +377,7 @@ mod tests {
     #[test]
     fn show_renders_a_scene_off_thread() {
         let (handle, updates) =
-            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new());
+            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), false);
         handle.command(show(
             "https://example.com/",
             "text/html",
@@ -394,7 +401,7 @@ mod tests {
     #[test]
     fn show_harvests_embedded_jsonld_into_a_contribution() {
         let (handle, updates) =
-            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new());
+            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), true);
         handle.command(show(
             "https://example.com/",
             "text/html",
