@@ -374,8 +374,8 @@ impl ApplicationHandler for Shell {
                         "succeeded",
                         Some("send_outcome".to_string()),
                     );
-                    wc.view.runner
-                        .update(|c| c.comms.set_send_status(line.clone()));
+                    wc.view
+                        .chrome_update(|c| c.comms.set_send_status(line.clone()));
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::Identity {

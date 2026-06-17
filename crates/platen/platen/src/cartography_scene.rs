@@ -140,10 +140,13 @@ pub fn step_with<S: StreamingLayoutStrategy>(
     strategy.step(&request, state, dt)
 }
 
-/// The layout strategies the orrery's per-pane picker offers: `(projection_id,
-/// label)`. The force-directed default (gyre physics) is the host's `None`, not
-/// listed here. First cut: the graph-only analytic adapters — they lay out from the
-/// node set alone, needing no selection focus, axis values, or intelligence signals.
+/// The graph-wide layout strategies the orrery's empty-canvas picker offers:
+/// `(projection_id, label)`. The force-directed default (gyre physics) is the host's
+/// `None`, not listed here. These analytic adapters lay out from the node set alone,
+/// needing no selection focus. Focus-driven `radial.default` is *not* here — it rides
+/// the selection menu (it centers on the selected node) and dispatches through
+/// [`project_orrery_strategy`] all the same. Axis- and signal-driven strategies join
+/// once their inputs are plumbed.
 pub const ORRERY_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
     ("phyllotaxis.default", "Phyllotaxis"),
     ("grid.default", "Grid"),
@@ -161,10 +164,13 @@ pub const ORRERY_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
 pub fn project_orrery_strategy(
     id: &str,
     graph: &Graph,
+    focus: Option<NodeKey>,
     width: u32,
     height: u32,
 ) -> Vec<(NodeKey, PortablePoint)> {
-    use arrangements::adapters::{GridAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter};
+    use arrangements::adapters::{
+        GridAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter, RadialAdapter,
+    };
     let signals = IntelligenceSignals::default();
     let options = CartographySceneOptions::canvas_pixels(width, height);
     let projection = match id {
@@ -174,6 +180,15 @@ pub fn project_orrery_strategy(
         "grid.default" => project_with(graph, &signals, &options, &GridAdapter::default()),
         "penrose.default" => project_with(graph, &signals, &options, &PenroseAdapter::default()),
         "lsystem.default" => project_with(graph, &signals, &options, &LSystemAdapter::default()),
+        // Focus-driven: centers on `focus` (the pane's selection), BFS rings outward.
+        // Without a focus there is no layout to compute, so leave the orrery as-is.
+        "radial.default" => {
+            if focus.is_none() {
+                return Vec::new();
+            }
+            let focused = CartographySceneOptions { focus, ..options.clone() };
+            project_with(graph, &signals, &focused, &RadialAdapter::default())
+        }
         _ => return Vec::new(),
     };
     projection.nodes.iter().map(|n| (n.node, n.position)).collect()
@@ -220,6 +235,22 @@ mod tests {
             Some("phyllotaxis.default")
         );
         assert!(projection.metadata.settled);
+    }
+
+    #[test]
+    fn project_orrery_strategy_radial_centers_on_focus_and_no_ops_without_one() {
+        let (graph, [a, _, _]) = triangle_graph();
+        // With a focus, radial lays out the whole graph (focus at center).
+        let with_focus = project_orrery_strategy("radial.default", &graph, Some(a), 800, 600);
+        assert_eq!(with_focus.len(), 3, "radial projects every node around the focus");
+        let focus_pos = with_focus.iter().find(|(k, _)| *k == a).unwrap().1;
+        assert!(
+            focus_pos.x.abs() < 0.001 && focus_pos.y.abs() < 0.001,
+            "the focus sits at the radial center"
+        );
+        // Without a focus there is nothing to center on, so it leaves the layout alone.
+        let no_focus = project_orrery_strategy("radial.default", &graph, None, 800, 600);
+        assert!(no_focus.is_empty(), "radial without a selection no-ops");
     }
 
     #[test]

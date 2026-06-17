@@ -61,7 +61,7 @@ impl WindowCtx<'_> {
             if multi_graph {
                 items.push(close_item());
             }
-            self.view.runner.update(move |c| c.open_context_menu(x, y, items));
+            self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
             self.view.request_redraw();
             return;
         }
@@ -86,6 +86,26 @@ impl WindowCtx<'_> {
             items.push(ContextItem::new("Add tag\u{2026}", ContextAction::AddTag));
             items
         };
+        // Radial layout: centers the orrery on a single selected node (BFS rings
+        // outward) and re-centers live as the selection moves. Focus-driven, so it
+        // rides the selection menu rather than the empty-canvas layout picker, and only
+        // for a single selection (a clean focus). A toggle — ✓ when active, picking it
+        // again reverts to force-directed. (Layout picker — radial.)
+        if self.orrery().focused_key().is_some() {
+            let radial_on = self.orrery().layout_strategy() == Some("radial.default");
+            items.push(ContextItem::new(
+                if radial_on {
+                    "Radial layout  \u{2713}"
+                } else {
+                    "Radial layout"
+                },
+                if radial_on {
+                    ContextAction::SetLayoutStrategy("")
+                } else {
+                    ContextAction::SetLayoutStrategy("radial.default")
+                },
+            ));
+        }
         // Isolate the selection into the orrery's scope lens (a curated subgraph). A
         // pane-level lens, offered on any selection. (Curated orrery.)
         items.push(ContextItem::new("Isolate", ContextAction::IsolateSelection));
@@ -93,8 +113,7 @@ impl WindowCtx<'_> {
             items.push(close_item());
         }
         self.view.context_set = set;
-        self.view.runner
-            .update(move |c| c.open_context_menu(x, y, items));
+        self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
     }
 
@@ -188,7 +207,7 @@ impl WindowCtx<'_> {
         self.view.context_set.clear();
         self.view.context_origin = None;
         self.view.context_link = None;
-        self.view.runner.update(Chrome::close_context_menu);
+        self.view.chrome_update(Chrome::close_context_menu);
         self.view.request_redraw();
     }
 
@@ -235,7 +254,7 @@ impl WindowCtx<'_> {
             ContextItem::new(label, ContextAction::ShellbarMove(edge))
         })
         .collect();
-        self.view.runner.update(move |c| c.open_context_menu(x, y, items));
+        self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
     }
 
@@ -243,10 +262,10 @@ impl WindowCtx<'_> {
     /// member set as splits or as one stack, switching into the tiled (Tree)
     /// projection first if needed.
     pub(super) fn drain_pending_context(&mut self) {
-        let Some(action) = self.view.runner.state().pending_context else {
+        let Some(action) = self.view.chrome().pending_context else {
             return;
         };
-        self.view.runner.update(|c| c.pending_context = None);
+        self.view.chrome_update(|c| c.pending_context = None);
         // Shellbar move: redock the strip to the chosen edge and persist. No
         // member set involved — return before the orrery-tile logic below.
         if let ContextAction::ShellbarMove(edge) = action {
@@ -410,7 +429,7 @@ impl WindowCtx<'_> {
         // These open tiles, so summon the workbench pane (closing the suggestions
         // dropdown on the way in, like Ctrl+T does).
         if !self.workbench_open() {
-            self.view.runner.update(Chrome::close_suggestions);
+            self.view.chrome_update(Chrome::close_suggestions);
         }
         self.open_workbench();
         match action {

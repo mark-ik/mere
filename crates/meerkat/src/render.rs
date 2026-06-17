@@ -94,10 +94,10 @@ impl WindowCtx<'_> {
             comms: self.pane_of_content(&PaneContent::Comms).is_some(),
         };
         let sb_edge = self.shared.presentation.shellbar_edge;
-        if self.view.runner.state().shellbar_panes != sb_panes
-            || self.view.runner.state().shellbar_edge != sb_edge
+        if self.view.chrome().shellbar_panes != sb_panes
+            || self.view.chrome().shellbar_edge != sb_edge
         {
-            self.view.runner.update(move |c| {
+            self.view.chrome_update(move |c| {
                 c.shellbar_panes = sb_panes;
                 c.shellbar_edge = sb_edge;
             });
@@ -105,13 +105,13 @@ impl WindowCtx<'_> {
 
         // Sync the focused node's live find-match count into Chrome so the find bar
         // shows "active/total" before the chrome is rasterized this frame. (Find S2.)
-        if self.view.runner.state().find_open {
+        if self.view.chrome().find_open {
             let find_count = self
                 .focused_member()
                 .map(|m| self.find_matches_for(m).len())
                 .unwrap_or(0);
-            if self.view.runner.state().find_count != find_count {
-                self.view.runner.update(move |c| c.find_count = find_count);
+            if self.view.chrome().find_count != find_count {
+                self.view.chrome_update(move |c| c.find_count = find_count);
             }
         }
 
@@ -189,7 +189,7 @@ impl WindowCtx<'_> {
         // separate from the content `scroll` so a cmd-list offset never bleeds into
         // another pane's DOM.
         let mut chrome_scroll = ScrollOffsets::<NodeId>::default();
-        if self.view.runner.state().palette_open {
+        if self.view.chrome().palette_open {
             // Bound the list to the window so a long palette can't overflow it. The
             // overlay floats the panel ~56px down with an input + paddings above the
             // list, so leave generous headroom + a bottom margin — otherwise a small
@@ -328,8 +328,12 @@ impl WindowCtx<'_> {
         // through platen's cartography dispatch and push them in; the orrery overlays
         // them on the physics snapshot each frame. No-op under force-directed. (Layout picker.)
         if let Some(id) = self.pane_orrery(orrery_gid).layout_strategy().map(str::to_string) {
+            // Focus-driven strategies (radial) center on the pane's single selection;
+            // passing it each frame lets radial re-center live as the selection moves.
+            // The graph-only strategies ignore it. (Layout picker.)
+            let pane = self.pane_orrery(orrery_gid);
             let positions =
-                platen::project_orrery_strategy(&id, self.pane_orrery(orrery_gid).graph(), orrery_w, orrery_h);
+                platen::project_orrery_strategy(&id, pane.graph(), pane.focused_key(), orrery_w, orrery_h);
             self.pane_orrery_mut(orrery_gid).apply_strategy_positions(&positions);
         }
         let (orrery_scene, orrery_redraw) = self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
@@ -350,7 +354,8 @@ impl WindowCtx<'_> {
                     orrery.recenter();
                 }
                 if let Some(id) = orrery.layout_strategy().map(str::to_string) {
-                    let positions = platen::project_orrery_strategy(&id, orrery.graph(), sw, sh);
+                    let positions =
+                        platen::project_orrery_strategy(&id, orrery.graph(), orrery.focused_key(), sw, sh);
                     orrery.apply_strategy_positions(&positions);
                 }
                 let (scene, _) = orrery.frame(sw, sh);
@@ -1026,9 +1031,9 @@ impl WindowCtx<'_> {
         // the composite loop above used. The active match is tinted stronger. The
         // host owns this overlay: the actor only ships rects (full-document px); the
         // host knows the card's dest rect + scroll. HTML/serval lane only.
-        if self.view.runner.state().find_open {
+        if self.view.chrome().find_open {
             if let Some(focused) = self.focused_member() {
-                let active = self.view.runner.state().find_active;
+                let active = self.view.chrome().find_active;
                 let mut overlays: Vec<([f32; 4], bool)> = Vec::new();
                 for (dest, member) in &composite {
                     if *member != focused {

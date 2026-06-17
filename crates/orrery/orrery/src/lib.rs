@@ -567,6 +567,17 @@ impl Orrery {
         self.reconcile_derived();
     }
 
+    /// The single focused node key, for layout strategies that center on a selection
+    /// (radial). `None` when zero or many nodes are selected, so a focus-driven layout
+    /// stays well-defined (it no-ops rather than picking an arbitrary node from a
+    /// multi-selection). (Layout picker — radial.)
+    pub fn focused_key(&self) -> Option<NodeKey> {
+        match self.selected.len() {
+            1 => self.selected.iter().copied().next(),
+            _ => None,
+        }
+    }
+
     /// Assert a semantic relation of `sub_kind` between exactly two selected
     /// nodes — the user-initiated edge-creation gesture the rich kernel taxonomy
     /// always supported but the UI never reached. The pair is ordered by node
