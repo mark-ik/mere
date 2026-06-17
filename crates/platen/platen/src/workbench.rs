@@ -27,6 +27,7 @@ use pelt_core::tile::SplitAxis;
 
 use crate::ProjectionKind;
 
+mod bridge;
 mod tree;
 use tree::{Branch, Pane, Stack};
 

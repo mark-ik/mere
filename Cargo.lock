@@ -345,7 +345,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "parking_lot",
  "percent-encoding",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
  "x11rb",
 ]
 
@@ -1950,7 +1950,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -3055,7 +3055,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccc2776f0c61eca1ca32528f85548abd1a4be8fb53d1b21c013e4f18da1e7090"
 dependencies = [
  "data-encoding",
- "syn 2.0.117",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3625,6 +3625,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 [[package]]
 name = "engine-observables-api"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "malloc_size_of_derive",
  "serde",
@@ -4141,7 +4142,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_json",
- "taffy 0.7.7",
+ "taffy 0.11.0-experimental-cache-fix.3",
  "uuid",
 ]
 
@@ -4678,12 +4679,6 @@ checksum = "fdf242682df893b86f33a73828fb09ca4b2d3bb6cc95249707fc684d27484b91"
 dependencies = [
  "bitflags 2.11.1",
 ]
-
-[[package]]
-name = "grid"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36119f3a540b086b4e436bb2b588cf98a68863470e0e880f4d0842f112a3183a"
 
 [[package]]
 name = "grid"
@@ -6206,6 +6201,7 @@ dependencies = [
 [[package]]
 name = "layout-dom-api"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "markup5ever",
 ]
@@ -7251,6 +7247,7 @@ dependencies = [
 [[package]]
 name = "netrender"
 version = "0.0.1"
+source = "git+https://github.com/mark-ik/webrender-wgpu.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
 dependencies = [
  "log",
  "netrender_device",
@@ -7262,6 +7259,7 @@ dependencies = [
 [[package]]
 name = "netrender_device"
 version = "0.0.1"
+source = "git+https://github.com/mark-ik/webrender-wgpu.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
 dependencies = [
  "log",
  "pollster",
@@ -7271,6 +7269,7 @@ dependencies = [
 [[package]]
 name = "netrender_text"
 version = "0.0.1"
+source = "git+https://github.com/mark-ik/webrender-wgpu.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
 dependencies = [
  "netrender",
  "parley",
@@ -8330,7 +8329,7 @@ checksum = "0afd5c28e4a399c57ee2bc3accd40c7b671fdc7b6537499f14e95b265af7d7e0"
 dependencies = [
  "oxilangtag",
  "oxiri",
- "rand 0.9.4",
+ "rand 0.8.6",
  "thiserror 2.0.18",
 ]
 
@@ -8428,6 +8427,7 @@ dependencies = [
 [[package]]
 name = "paint_list_api"
 version = "0.0.1"
+source = "git+https://github.com/mark-ik/webrender-wgpu.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
 dependencies = [
  "euclid",
  "serde",
@@ -8436,6 +8436,7 @@ dependencies = [
 [[package]]
 name = "paint_list_render"
 version = "0.0.1"
+source = "git+https://github.com/mark-ik/webrender-wgpu.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
 dependencies = [
  "log",
  "netrender",
@@ -8629,10 +8630,12 @@ dependencies = [
 [[package]]
 name = "pelt-core"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 
 [[package]]
 name = "pelt-desktop"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "ash",
  "data-url",
@@ -9353,7 +9356,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -10237,7 +10240,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -10715,6 +10718,7 @@ dependencies = [
 [[package]]
 name = "serval-layout"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "app_units",
  "atomic_refcell",
@@ -10753,6 +10757,7 @@ dependencies = [
 [[package]]
 name = "serval-render"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "accesskit",
  "engine-observables-api",
@@ -10769,6 +10774,7 @@ dependencies = [
 [[package]]
 name = "serval-scripted-dom"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "layout-dom-api",
  "markup5ever",
@@ -10778,6 +10784,7 @@ dependencies = [
 [[package]]
 name = "serval-static-dom"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "html5ever",
  "layout-dom-api",
@@ -10787,6 +10794,7 @@ dependencies = [
 [[package]]
 name = "serval-winit-host"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "netrender",
  "wgpu",
@@ -10797,6 +10805,7 @@ dependencies = [
 [[package]]
 name = "servo-allocator"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "libc",
  "tikv-jemalloc-sys",
@@ -10807,6 +10816,7 @@ dependencies = [
 [[package]]
 name = "servo-base"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "accesskit",
  "crossbeam-channel",
@@ -10831,6 +10841,7 @@ dependencies = [
 [[package]]
 name = "servo-canvas-traits"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "crossbeam-channel",
  "euclid",
@@ -10850,6 +10861,7 @@ dependencies = [
 [[package]]
 name = "servo-config"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "serde",
  "serde_json",
@@ -10861,6 +10873,7 @@ dependencies = [
 [[package]]
 name = "servo-config-macro"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10871,6 +10884,7 @@ dependencies = [
 [[package]]
 name = "servo-constellation-traits"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "base64 0.22.1",
  "content-security-policy",
@@ -10905,6 +10919,7 @@ dependencies = [
 [[package]]
 name = "servo-devtools-traits"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "http 1.4.0",
  "malloc_size_of_derive",
@@ -10921,6 +10936,7 @@ dependencies = [
 [[package]]
 name = "servo-embedder-traits"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "accesskit",
  "bitflags 2.11.1",
@@ -10954,6 +10970,7 @@ dependencies = [
 [[package]]
 name = "servo-fonts-traits"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "atomic_refcell",
  "dwrote",
@@ -10977,6 +10994,7 @@ dependencies = [
 [[package]]
 name = "servo-geometry"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "app_units",
  "euclid",
@@ -10989,6 +11007,7 @@ dependencies = [
 [[package]]
 name = "servo-hyper-serde"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "cookie 0.18.1",
  "headers",
@@ -11002,6 +11021,7 @@ dependencies = [
 [[package]]
 name = "servo-malloc-size-of"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "app_units",
  "atomic_refcell",
@@ -11040,6 +11060,7 @@ dependencies = [
 [[package]]
 name = "servo-net-traits"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "content-security-policy",
  "cookie 0.18.1",
@@ -11079,6 +11100,7 @@ dependencies = [
 [[package]]
 name = "servo-paint"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "ash",
  "bytemuck",
@@ -11118,6 +11140,7 @@ dependencies = [
 [[package]]
 name = "servo-paint-api"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "bitflags 2.11.1",
  "crossbeam-channel",
@@ -11152,6 +11175,7 @@ dependencies = [
 [[package]]
 name = "servo-paint-types"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "app_units",
  "euclid",
@@ -11163,6 +11187,7 @@ dependencies = [
 [[package]]
 name = "servo-pixels"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "euclid",
  "image",
@@ -11177,6 +11202,7 @@ dependencies = [
 [[package]]
 name = "servo-profile-traits"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "crossbeam-channel",
  "ipc-channel",
@@ -11192,6 +11218,7 @@ dependencies = [
 [[package]]
 name = "servo-storage-traits"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "malloc_size_of_derive",
  "serde",
@@ -11205,6 +11232,7 @@ dependencies = [
 [[package]]
 name = "servo-tracing"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -11214,6 +11242,7 @@ dependencies = [
 [[package]]
 name = "servo-url"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "encoding_rs",
  "malloc_size_of_derive",
@@ -11227,6 +11256,7 @@ dependencies = [
 [[package]]
 name = "servo-wakelock"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "serde",
  "servo-embedder-traits",
@@ -11235,6 +11265,7 @@ dependencies = [
 [[package]]
 name = "servo-webxr-api"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "euclid",
  "ipc-channel",
@@ -12223,24 +12254,12 @@ dependencies = [
 
 [[package]]
 name = "taffy"
-version = "0.7.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab4f4d046dd956a47a7e1a2947083d7ac3e6aa3cfaaead36173ceaa5ab11878c"
-dependencies = [
- "arrayvec",
- "grid 0.15.0",
- "serde",
- "slotmap",
-]
-
-[[package]]
-name = "taffy"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aea22054047c16c3f34d3ac473a2170be1424b1115b2a3adcf28cfb067c88859"
 dependencies = [
  "arrayvec",
- "grid 1.0.1",
+ "grid",
  "serde",
  "slotmap",
 ]
@@ -12252,7 +12271,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e87b88128d417cd7c2c75b8a398177fb9efcb2ae5cddad22bcec106ba9c8e1c3"
 dependencies = [
  "arrayvec",
- "grid 1.0.1",
+ "grid",
  "serde",
  "slotmap",
 ]
@@ -14312,7 +14331,7 @@ dependencies = [
  "objc2-metal 0.3.2",
  "objc2-quartz-core 0.3.2",
  "once_cell",
- "ordered-float 5.3.0",
+ "ordered-float 4.6.0",
  "parking_lot",
  "portable-atomic",
  "portable-atomic-util",
@@ -14405,7 +14424,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -15147,6 +15166,7 @@ checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 [[package]]
 name = "xilem-serval"
 version = "0.2.0"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "layout-dom-api",
  "serval-scripted-dom",
@@ -15156,7 +15176,7 @@ dependencies = [
 [[package]]
 name = "xilem_core"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/xilem.git?branch=mere-wgpu-29-vello-0-9#f8014ddaaf83fa95af66a1a6a19ddb4695c60a38"
+source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "anymore",
  "hashbrown 0.17.0",

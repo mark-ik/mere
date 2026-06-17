@@ -1018,6 +1018,12 @@ impl Shell {
         // Collapse any duplicate Orrery panes a persisted layout accumulated (two
         // panes on one graph render the extra blank); keep one per graph. (Pane-as-unit.)
         view.frame_layout.dedupe_graph_panes();
+        // Restore this session's persisted workbench tiling at boot (not just on a
+        // later session switch), so split shape / tabs / active tab survive a restart;
+        // pruned to the loaded graph's members. (A3 persistence.)
+        let present_members: HashSet<forme::GraphMemberId> =
+            orrery.graph().nodes().map(|(_, node)| node.id).collect();
+        view.workbench = session_ops::load_workbench(&session_dir, &present_members);
         // Pool every graph a restored pane resolves to, not just the active one, so a
         // second graph-pane (persisted from a prior run) loads instead of leaving a
         // blank pane the user can't dismiss. Each cold-loads its graph from its

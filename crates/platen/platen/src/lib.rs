@@ -89,10 +89,17 @@ pub mod workbench;
 /// lattice) are added when a surface needs one.
 pub mod tree_projection;
 
+/// Projection geometry — the geometry sidecar for a forme's Tree projection
+/// (split skeleton, fractions, active tab), keyed `(FormeRef, ProjectionKind)`.
+/// The layout refinement over [`tree_projection::project_tree`]'s default flat
+/// projection; the [`workbench`] bridge derives/rebuilds it losslessly.
+pub mod projection_geometry;
+
 pub use cartography_scene::{
     CartographySceneOptions, build_projection_request, project_with, step_with,
 };
 pub use document_scene::build_document_scene;
+pub use projection_geometry::{Axis, TreeBranch, TreeGeometry};
 pub use tree_projection::{PlanSlot, ProjectionKind, TilePlan, WorkbenchPlan, project_tree};
 pub use workbench::{SlotView, Workbench};
 

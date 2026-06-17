@@ -18,7 +18,11 @@ store = []
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-taffy = "0.7"
+# Match the workspace's taffy: stylo_taffy (via serval-layout) hard-pins this
+# exact pre-release, and cargo unifies one taffy per 0.11.x slot, so forme tracks
+# the same version rather than lagging at 0.7. It carries the stable-0.11 struct
+# `Dimension` API. Revisit when stylo_taffy ships against stable taffy 0.11.0.
+taffy = "=0.11.0-experimental-cache-fix.3"
 petgraph = { version = "0.8", features = ["serde-1"], optional = true }
 # Forme + graph-member ids are UUID-backed (kernel's stable node id and
 # `GraphId` are both UUIDs). forme stays framework-free — it holds ids;

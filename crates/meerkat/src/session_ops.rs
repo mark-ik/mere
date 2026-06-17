@@ -19,6 +19,35 @@ use session_runtime::{
 use super::switcher::{SWITCHER_THUMB_H, SWITCHER_THUMB_W};
 use super::{DEFAULT_FRAME, DEFAULT_PANE, WindowCtx};
 
+/// Filename for the workbench tiling sidecar (beside `graph.json`): the platen
+/// bridge's canonical `(arrangement, geometry)` pair, so a workbench's split shape,
+/// tab stacks, and active tab survive a restart. The live `Pane` tree carries no
+/// serde, so it persists through the bridge rather than directly. (A3 persistence.)
+const WORKBENCH_FILE: &str = "workbench.json";
+
+/// Kill-switch for restoring persisted workbench tiling on load. The read already
+/// falls back to an empty workbench on any IO/parse error; flipping this to `false`
+/// disables the whole path, should the round-trip ever prove wanting in the field.
+const RESTORE_WORKBENCH_TILING: bool = true;
+
+/// Load a persisted workbench from `session_dir`, pruned to `present` (the loaded
+/// graph's member ids, so a tile whose node was deleted is reconciled away). Empty
+/// workbench when the feature is off, the file is absent, or the JSON fails to
+/// parse. Shared by the session-switch path ([`WindowCtx::restore_workbench`]) and
+/// the boot restore in `main.rs`, so a restart reloads the tiling too. (A3.)
+pub(crate) fn load_workbench(
+    session_dir: &std::path::Path,
+    present: &std::collections::HashSet<forme::GraphMemberId>,
+) -> platen::Workbench {
+    if !RESTORE_WORKBENCH_TILING {
+        return platen::Workbench::new();
+    }
+    std::fs::read_to_string(session_dir.join(WORKBENCH_FILE))
+        .ok()
+        .and_then(|json| platen::Workbench::from_persisted_json(json.as_str(), present))
+        .unwrap_or_else(platen::Workbench::new)
+}
+
 impl WindowCtx<'_> {
     /// The session a `graph_id` belongs to: its [`SessionId`] and storage dir,
     /// resolved by the graph (manifests are keyed by session but each carries its
@@ -97,6 +126,18 @@ impl WindowCtx<'_> {
         {
             tracing::warn!(%err, dir = ?self.shared.session.mere_root, "failed to persist the frame layout");
         }
+        // The workbench tiling is the focused graph's, so it persists per-session
+        // beside graph.json. Saved as the bridge's (arrangement, geometry) pair (the
+        // Pane tree is the derived live model, not serde). Best-effort. (A3.)
+        match self.view.workbench.to_persisted_json() {
+            Ok(json) => {
+                let path = session_dir.join(WORKBENCH_FILE);
+                if let Err(err) = std::fs::write(&path, json) {
+                    tracing::warn!(%err, path = ?path, "failed to persist the workbench tiling");
+                }
+            }
+            Err(err) => tracing::warn!(%err, "failed to serialize the workbench tiling"),
+        }
         // Record the save in this session's manifest (advances `updated_at`, the
         // switcher's recency key) and flush the registry. (Multi-graph MG1.)
         self.shared.session.manifests.update(session_id, |_| {});
@@ -112,6 +153,14 @@ impl WindowCtx<'_> {
         };
         let thumb = build_switcher_thumbnail(self.orrery().graph(), opts);
         self.shared.session.session_thumbnails.insert(session_id, thumb);
+    }
+
+    /// Restore the focused graph's persisted workbench tiling from its sidecar,
+    /// pruned to the live graph's members. Thin wrapper over [`load_workbench`] for
+    /// the session-switch path (which has a live `ctx`). (A3 persistence.)
+    pub(super) fn restore_workbench(&self, session_dir: &std::path::Path) -> platen::Workbench {
+        let present = self.orrery().graph().nodes().map(|(_, node)| node.id).collect();
+        load_workbench(session_dir, &present)
     }
 
     /// Begin renaming `id`: seed the switcher edit buffer from its current label, so
@@ -400,7 +449,9 @@ impl super::Shell {
         ctx.view.focused_tile = None;
         ctx.view.shown_location = None;
         ctx.view.renaming = None;
-        ctx.view.workbench = platen::Workbench::new();
+        // Restore this graph's persisted tiling instead of wiping to an empty
+        // workbench (the split shape / tabs / active tab now survive a restart). (A3.)
+        ctx.view.workbench = ctx.restore_workbench(&session_dir);
         ctx.view.maximized_pane = None;
         ctx.view.active_content = super::ContentPane::Orrery;
         ctx.shared.session.session_dir = session_dir;
