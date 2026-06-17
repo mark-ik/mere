@@ -317,6 +317,14 @@ impl WindowCtx<'_> {
                 self.pane_orrery_mut(orrery_gid).recenter();
             }
         }
+        // Drive the pane's active layout strategy (if any): compute its node positions
+        // through platen's cartography dispatch and push them in; the orrery overlays
+        // them on the physics snapshot each frame. No-op under force-directed. (Layout picker.)
+        if let Some(id) = self.pane_orrery(orrery_gid).layout_strategy().map(str::to_string) {
+            let positions =
+                platen::project_orrery_strategy(&id, self.pane_orrery(orrery_gid).graph(), orrery_w, orrery_h);
+            self.pane_orrery_mut(orrery_gid).apply_strategy_positions(&positions);
+        }
         let (orrery_scene, orrery_redraw) = self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
         // P2 per-pane render: a second graph-pane (Shift+click a switcher tile)
         // drives its own pooled orrery into its own leaf, beside the focused one,
@@ -333,6 +341,10 @@ impl WindowCtx<'_> {
                 orrery.resize(sw, sh);
                 if !orrery.graph_visible() {
                     orrery.recenter();
+                }
+                if let Some(id) = orrery.layout_strategy().map(str::to_string) {
+                    let positions = platen::project_orrery_strategy(&id, orrery.graph(), sw, sh);
+                    orrery.apply_strategy_positions(&positions);
                 }
                 let (scene, _) = orrery.frame(sw, sh);
                 (scene, l.rect, sw, sh)

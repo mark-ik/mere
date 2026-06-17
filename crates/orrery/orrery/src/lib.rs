@@ -34,6 +34,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use euclid::default::{Box2D, Point2D};
 use gyre::{LayoutSnapshot, LayoutView};
+use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
 use platen::scene_paint::{Camera, ScenePaintStyle};
 use serval_layout::IncrementalLayout;
@@ -173,6 +174,15 @@ pub struct Orrery {
     /// [`resize`](Orrery::resize); used by `world_viewport` (cull) + `recenter`.
     view_w: u32,
     view_h: u32,
+    /// The pane's active layout strategy (a cartography adapter `projection_id`, e.g.
+    /// `"phyllotaxis.default"`), or `None` for the default force-directed (gyre) layout.
+    /// Persisted per pane via view-intent; the host pushes positions for it via
+    /// [`apply_strategy_positions`](Orrery::apply_strategy_positions). (Layout picker.)
+    active_strategy: Option<String>,
+    /// Buffered positions for the active non-gyre strategy, applied into `view` each
+    /// frame **after** the physics snapshot (so they win over gyre regardless of the
+    /// off-thread actor's timing). `None` under force-directed. (Layout picker.)
+    strategy_positions: Option<Vec<(NodeKey, PortablePoint)>>,
 }
 
 impl Default for Orrery {
@@ -299,6 +309,8 @@ impl Orrery {
             shift: false,
             view_w: 1024,
             view_h: 600,
+            active_strategy: None,
+            strategy_positions: None,
         }
     }
 
@@ -878,6 +890,51 @@ impl Orrery {
             1.0
         };
         self.camera.offset = view.offset;
+    }
+
+    /// The pane's active layout-strategy id, or `None` for force-directed (gyre).
+    /// The host persists this as view-intent and checkmarks it in the layout picker.
+    pub fn layout_strategy(&self) -> Option<&str> {
+        self.active_strategy.as_deref()
+    }
+
+    /// Switch the orrery's layout strategy. `Some(id)` selects a cartography adapter
+    /// (the host then pushes its positions via [`apply_strategy_positions`]) and halts
+    /// gyre so the analytic layout holds still; `None` reverts to force-directed,
+    /// dropping the buffered positions and re-settling the physics. (Layout picker.)
+    pub fn set_layout_strategy(&mut self, id: Option<String>) {
+        let reverting = id.is_none() && self.active_strategy.is_some();
+        self.active_strategy = id;
+        if self.active_strategy.is_some() {
+            self.physics.halt();
+        } else if reverting {
+            self.strategy_positions = None;
+            self.settle_physics(SETTLE_TICKS);
+        }
+    }
+
+    /// Buffer the active strategy's node positions (host-computed through platen's
+    /// cartography dispatch). They are written into the read model each frame after
+    /// the physics snapshot, so they take effect regardless of the off-thread sim's
+    /// timing. A no-op unless a strategy is active. (Layout picker.)
+    pub fn apply_strategy_positions(&mut self, positions: &[(NodeKey, PortablePoint)]) {
+        if self.active_strategy.is_some() {
+            self.strategy_positions = Some(positions.to_vec());
+        }
+    }
+
+    /// Overlay the buffered strategy positions onto `view` — called by
+    /// [`frame`](Orrery::frame) right after the physics snapshot, so the underlay,
+    /// DOM nodes, cull, and edges (all reading `view`) stay consistent in one write.
+    /// A no-op under force-directed. (Layout picker.)
+    fn apply_strategy_to_view(&mut self) {
+        let Some(positions) = self.strategy_positions.take() else {
+            return;
+        };
+        for &(key, p) in &positions {
+            self.view.set_position(key, Point2D::new(p.x, p.y));
+        }
+        self.strategy_positions = Some(positions);
     }
 
     /// Zoom by `factor`, keeping the world point under `anchor` (screen px) fixed.

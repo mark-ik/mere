@@ -35,6 +35,7 @@ use cartography::{
     FormFactor, IntelligenceSignals, LayoutStrategy, ProjectionDimension, ProjectionRequest,
     StreamingLayoutStrategy, TargetSize, ViewIntent,
 };
+use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NodeKey};
 
 /// Inputs the host supplies for a cartography projection.
@@ -137,6 +138,45 @@ pub fn step_with<S: StreamingLayoutStrategy>(
 ) -> cartography::Projection {
     let request = build_projection_request(graph, signals, options);
     strategy.step(&request, state, dt)
+}
+
+/// The layout strategies the orrery's per-pane picker offers: `(projection_id,
+/// label)`. The force-directed default (gyre physics) is the host's `None`, not
+/// listed here. First cut: the graph-only analytic adapters — they lay out from the
+/// node set alone, needing no selection focus, axis values, or intelligence signals.
+pub const ORRERY_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
+    ("phyllotaxis.default", "Phyllotaxis"),
+    ("grid.default", "Grid"),
+    ("penrose.default", "Penrose"),
+    ("lsystem.default", "L-system"),
+];
+
+/// Compute an orrery layout strategy's node positions: dispatch `id` to its
+/// cartography adapter and project against `graph` at viewport `(width, height)`,
+/// returning the `(NodeKey, position)` pairs the orrery applies through
+/// [`Orrery::apply_strategy_positions`](../../orrery). Empty for an unknown or
+/// not-yet-wired id (the host then leaves the layout unchanged). Only the graph-only
+/// analytic strategies in [`ORRERY_LAYOUT_STRATEGIES`] are dispatched here; focus /
+/// axis / signal-driven strategies join once their inputs are plumbed.
+pub fn project_orrery_strategy(
+    id: &str,
+    graph: &Graph,
+    width: u32,
+    height: u32,
+) -> Vec<(NodeKey, PortablePoint)> {
+    use arrangements::adapters::{GridAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter};
+    let signals = IntelligenceSignals::default();
+    let options = CartographySceneOptions::canvas_pixels(width, height);
+    let projection = match id {
+        "phyllotaxis.default" => {
+            project_with(graph, &signals, &options, &PhyllotaxisAdapter::default())
+        }
+        "grid.default" => project_with(graph, &signals, &options, &GridAdapter::default()),
+        "penrose.default" => project_with(graph, &signals, &options, &PenroseAdapter::default()),
+        "lsystem.default" => project_with(graph, &signals, &options, &LSystemAdapter::default()),
+        _ => return Vec::new(),
+    };
+    projection.nodes.iter().map(|n| (n.node, n.position)).collect()
 }
 
 #[cfg(test)]

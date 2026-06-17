@@ -305,6 +305,11 @@ pub enum ContextAction {
     OpenLinkNewTab,
     /// Copy the right-clicked link's resolved url to the clipboard. (Browser flow.)
     CopyLink,
+    /// Set the focused orrery pane's layout strategy — the per-pane layout picker. The
+    /// id is a cartography adapter `projection_id` (`&'static str`, so `ContextAction`
+    /// stays `Copy`), or `""` for force-directed (gyre, the default). Drains like
+    /// `ShellbarMove` without touching `context_set`. (Layout picker.)
+    SetLayoutStrategy(&'static str),
 }
 
 impl Chrome {

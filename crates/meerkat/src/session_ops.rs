@@ -111,6 +111,7 @@ impl WindowCtx<'_> {
         let intent = ViewIntent {
             camera: Some(super::camera_to_snapshot(self.orrery().camera())),
             focus: self.orrery().focused_url().map(str::to_string),
+            strategy: self.orrery().layout_strategy().map(str::to_string),
             ..Default::default()
         };
         if let Err(err) =
@@ -430,6 +431,8 @@ impl super::Shell {
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
             ctx.orrery_mut().select_by_url(url);
         }
+        // Restore the pane's layout strategy (None = force-directed). (Layout picker.)
+        ctx.orrery_mut().set_layout_strategy(restored_view.as_ref().and_then(|v| v.strategy.clone()));
         // Re-point only the panes that were on the outgoing graph, so a second
         // graph-pane pinned to a different graph survives the switch. (Pane-as-unit.)
         ctx.view.frame_layout.retag_graph_bound_from(old_gid, target_graph);

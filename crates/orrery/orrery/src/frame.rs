@@ -40,6 +40,9 @@ impl Orrery {
         // into the read model, and learn whether the layout is still settling.
         // Everything below reprojects from the view — never the rapier world.
         let settling = self.physics.advance_frame(&mut self.view);
+        // A non-gyre layout strategy overrides the physics snapshot: write its buffered
+        // positions into the view before anything reads it. (Layout picker.)
+        self.apply_strategy_to_view();
         // A dragged node tracks the cursor with zero round-trip: re-pin it locally
         // over whatever the backend just reported (the actor lags a frame behind,
         // and the in-thread snapshot already agrees, so this is a no-op there).

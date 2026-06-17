@@ -128,6 +128,12 @@ pub struct ViewIntent {
     /// `None` when nothing is focused.
     #[serde(default)]
     pub focus: Option<String>,
+    /// The orrery pane's active layout strategy (a cartography adapter `projection_id`,
+    /// e.g. `"phyllotaxis.default"`), or `None` for force-directed (gyre, the default).
+    /// The host re-applies it on load; the positions themselves are recomputed, never
+    /// persisted (analytic layouts re-derive from the node set). (Layout picker.)
+    #[serde(default)]
+    pub strategy: Option<String>,
 }
 
 impl ViewIntent {
@@ -139,7 +145,10 @@ impl ViewIntent {
     /// The save path can skip the file for the empty case; the load
     /// path returns `Ok(None)` and the host falls back to default.
     pub fn is_empty(&self) -> bool {
-        self.hidden_relations.is_empty() && self.camera.is_none() && self.focus.is_none()
+        self.hidden_relations.is_empty()
+            && self.camera.is_none()
+            && self.focus.is_none()
+            && self.strategy.is_none()
     }
 }
 
@@ -273,6 +282,19 @@ mod tests {
         save_view_intent(&dir, &frame, 1, &intent).unwrap();
         let restored = load_view_intent(&dir, &frame, 1).unwrap().unwrap();
         assert_eq!(restored.focus.as_deref(), Some("https://example.com/page"));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn strategy_round_trips_and_counts_as_nonempty() {
+        let dir = temp_session_dir("strategy");
+        let frame = fixture_frame();
+        let mut intent = ViewIntent::new();
+        intent.strategy = Some("phyllotaxis.default".to_string());
+        assert!(!intent.is_empty(), "a layout strategy alone is worth persisting");
+        save_view_intent(&dir, &frame, 1, &intent).unwrap();
+        let restored = load_view_intent(&dir, &frame, 1).unwrap().unwrap();
+        assert_eq!(restored.strategy.as_deref(), Some("phyllotaxis.default"));
         fs::remove_dir_all(&dir).ok();
     }
 

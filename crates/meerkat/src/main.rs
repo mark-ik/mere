@@ -881,6 +881,9 @@ impl Shell {
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
             orrery.select_by_url(url);
         }
+        // Restore the orrery pane's layout strategy at boot (None = force-directed),
+        // recomputed on the first frame from the node set. (Layout picker.)
+        orrery.set_layout_strategy(restored_view.as_ref().and_then(|v| v.strategy.clone()));
         // Always-offload physics (P6): move the orrery's gyre simulation onto its
         // own armillary actor thread, so a heavy settle never blocks compositing or
         // input. It wakes the loop through the same winit proxy as the other

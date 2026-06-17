@@ -40,6 +40,8 @@ impl WindowCtx<'_> {
                 ContextItem::new("Add node", ContextAction::AddNode),
                 ContextItem::new("Add field", ContextAction::AddField),
             ];
+            // Layout is a pane-level choice, so it rides the empty-canvas menu. (Layout picker.)
+            items.extend(self.layout_picker_items());
             if multi_graph {
                 items.push(close_item());
             }
@@ -135,6 +137,32 @@ impl WindowCtx<'_> {
         items
     }
 
+    /// The layout-strategy rows for the focused orrery pane: "Force-directed" (the
+    /// gyre default) plus each wired cartography strategy ([`platen::ORRERY_LAYOUT_STRATEGIES`]),
+    /// with the pane's current choice ✓-marked. A pane-level choice, so it rides the
+    /// no-selection right-click beside "Add node". (Layout picker.)
+    fn layout_picker_items(&self) -> Vec<ContextItem> {
+        let mark = |label: &str, on: bool| {
+            if on {
+                format!("{label}  \u{2713}") // ✓ marks the active layout
+            } else {
+                label.to_string()
+            }
+        };
+        let active = self.orrery().layout_strategy();
+        let mut items = vec![ContextItem::new(
+            mark("Force-directed", active.is_none()),
+            ContextAction::SetLayoutStrategy(""),
+        )];
+        for &(id, label) in platen::ORRERY_LAYOUT_STRATEGIES {
+            items.push(ContextItem::new(
+                mark(label, active == Some(id)),
+                ContextAction::SetLayoutStrategy(id),
+            ));
+        }
+        items
+    }
+
     /// Dismiss the context menu (an outside click / Escape), dropping its set and
     /// the add-node cursor anchor.
     pub(super) fn close_context_menu(&mut self) {
@@ -207,6 +235,15 @@ impl WindowCtx<'_> {
             self.view.centered = false; // orrery band changed; recenter once
             self.view.toolbar_h = 0;   // re-measure (band height may change if Top/Bottom)
             self.persist_settings();
+            self.view.request_redraw();
+            return;
+        }
+        // Set the focused orrery pane's layout strategy (the layout picker). An empty
+        // id reverts to force-directed (gyre); persisted per pane via view-intent on
+        // save_session. No member set — return before the orrery-tile logic below.
+        if let ContextAction::SetLayoutStrategy(id) = action {
+            self.orrery_mut().set_layout_strategy((!id.is_empty()).then(|| id.to_string()));
+            self.save_session();
             self.view.request_redraw();
             return;
         }
@@ -344,7 +381,8 @@ impl WindowCtx<'_> {
             | ContextAction::AutoEngine
             | ContextAction::AddTag
             | ContextAction::OpenLinkNewTab
-            | ContextAction::CopyLink => {
+            | ContextAction::CopyLink
+            | ContextAction::SetLayoutStrategy(_) => {
                 unreachable!("handled above")
             }
         }

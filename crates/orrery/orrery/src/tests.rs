@@ -369,6 +369,31 @@ fn with_graph_restores_nodes_and_positions() {
 }
 
 #[test]
+fn layout_strategy_overrides_node_positions_until_reverted() {
+    let mut graph = Graph::new();
+    graph.add_node("https://one.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut orrery = Orrery::with_graph(graph);
+    let key = orrery.graph().get_node_by_url("https://one.example").unwrap().0;
+    assert_eq!(orrery.layout_strategy(), None, "force-directed (gyre) by default");
+
+    // Activate a strategy and push a position; the overlay (what `frame` runs after
+    // the physics snapshot) writes it into the read model, winning over gyre.
+    orrery.set_layout_strategy(Some("test.grid".to_string()));
+    assert_eq!(orrery.layout_strategy(), Some("test.grid"));
+    orrery.apply_strategy_positions(&[(key, PortablePoint::new(321.0, 654.0))]);
+    orrery.apply_strategy_to_view();
+    let pos = orrery.view.position_of(key).expect("node position");
+    assert!(
+        (pos.x - 321.0).abs() < 0.01 && (pos.y - 654.0).abs() < 0.01,
+        "the strategy position overrides the physics position, got {pos:?}",
+    );
+
+    // Reverting drops the buffer and clears the strategy (gyre resumes).
+    orrery.set_layout_strategy(None);
+    assert_eq!(orrery.layout_strategy(), None, "revert clears the strategy");
+}
+
+#[test]
 fn park_physics_halts_an_in_progress_settle() {
     let mut orrery = Orrery::with_sample_graph();
     assert!(orrery.is_settling(), "the sample graph settles its initial spiral");
