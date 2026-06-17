@@ -27,7 +27,7 @@ use platen::Workbench;
 use serval_scripted_dom::ScriptedDom;
 use serval_winit_host::WindowSurface;
 use winit::window::CursorIcon;
-use xilem_serval::{AnyView, Modifiers, ServalAppRunner, ServalCtx, ServalElement, lens};
+use xilem_serval::{AnyView, Modifiers, ServalAppRunner, ServalCtx, ServalElement, el, lens};
 
 use super::{CachedTile, ContentPane, ResizeDrag};
 use crate::pane_session::PaneSession;
@@ -286,12 +286,24 @@ pub(crate) struct WindowView {
     pub(crate) scrying_input_focus: Option<GraphMemberId>,
 }
 
-/// The window shell's composed view-state. Phase 1 carries only the chrome, so the
-/// produced DOM is byte-identical to the standalone chrome runner; the runner's state
-/// type is what widens. Phase 2 adds an `orrery` field (the orrery-as-element) and the
-/// document panes as sibling subtrees. (Unified document host.)
+/// A single orrery node card in the shell document: a label placed by a per-node
+/// transform (gyre's world position). The host snapshots the focused orrery into a
+/// `Vec<OrreryCard>` each frame, and the orrery element renders one card per entry.
+/// (Orrery-as-element — Phase 2.)
+pub(crate) struct OrreryCard {
+    pub(crate) label: String,
+    pub(crate) x: f32,
+    pub(crate) y: f32,
+}
+
+/// The window shell's composed view-state: the chrome plus the orrery-as-element's
+/// node cards (and later the document panes), all one document under one runner.
+/// (Unified document host.)
 pub(crate) struct ShellState {
     pub(crate) chrome: Chrome,
+    /// The focused orrery's node cards, snapshotted from gyre each frame. Empty until
+    /// the host wires the snapshot. (Orrery-as-element — Phase 2.)
+    pub(crate) orrery: Vec<OrreryCard>,
 }
 
 /// The erased shell root view, like [`ChromeView`] but over [`ShellState`].
@@ -303,19 +315,55 @@ pub(crate) type ShellLogic = fn(&ShellState) -> ShellView;
 /// The runner type the window holds: one document over the composed shell state.
 pub(crate) type ShellRunner = ServalAppRunner<ShellState, ShellLogic, ShellView>;
 
-/// The shell root view: the chrome lifted onto `ShellState` via `lens`. No wrapper
-/// element, so the DOM matches the standalone chrome until a second subtree joins.
-fn shell_view(_s: &ShellState) -> ShellView {
+/// The shell root view: a full-bleed container holding the chrome (lifted onto
+/// `ShellState` via `lens`) and the orrery element as siblings. The chrome stays in
+/// normal flow exactly as it laid out when it was the root; the orrery element is
+/// absolutely positioned, so it does not disturb the chrome. (Orrery-as-element.)
+fn shell_view(s: &ShellState) -> ShellView {
     let make_chrome: fn(&mut Chrome) -> ChromeView = |c: &mut Chrome| chrome_view(c);
     let to_chrome: fn(&mut ShellState) -> &mut Chrome = |s: &mut ShellState| &mut s.chrome;
-    Box::new(lens(make_chrome, to_chrome))
+    let chrome = lens(make_chrome, to_chrome);
+    Box::new(
+        el::<_, ShellState, ()>("shell", (chrome, orrery_element(&s.orrery)))
+            .attr("style", "position:relative;width:100%;height:100%"),
+    )
+}
+
+/// The orrery element: a positioned container whose node cards are `position:absolute`
+/// + `transform: translate(...)` DOM placed by gyre's world positions (the cards both
+/// paint and hit-test where the transform puts them). Empty until the host snapshots
+/// the focused orrery; the underlay (edges + demoted dots) joins in (ii). The rect is a
+/// placeholder until the frame tree drives the container layout (iii). (Phase 2.)
+fn orrery_element(cards: &[OrreryCard]) -> ShellView {
+    let card_views: Vec<ShellView> = cards
+        .iter()
+        .map(|c| {
+            Box::new(
+                el::<_, ShellState, ()>("div", c.label.clone())
+                    .attr("class", "node-card")
+                    .attr(
+                        "style",
+                        format!("position:absolute;transform:translate({}px,{}px)", c.x, c.y),
+                    ),
+            ) as ShellView
+        })
+        .collect();
+    Box::new(
+        el::<_, ShellState, ()>("div", card_views)
+            .attr("class", "orrery")
+            .attr("style", "position:absolute;left:0;top:48px;width:60%;height:90%"),
+    )
 }
 
 /// Build a window's shell runner over `dom`, seeded with `chrome`. The host view
 /// constructor and `main`'s window builders use this instead of a bare chrome runner.
 /// (Unified document host — Phase 1.)
 pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> ShellRunner {
-    ServalAppRunner::new(dom, shell_view as ShellLogic, ShellState { chrome })
+    ServalAppRunner::new(
+        dom,
+        shell_view as ShellLogic,
+        ShellState { chrome, orrery: Vec::new() },
+    )
 }
 
 impl WindowView {
@@ -331,6 +379,13 @@ impl WindowView {
     /// mutation counterpart to [`chrome`](Self::chrome), and the same insulation seam.
     pub(crate) fn chrome_update(&mut self, f: impl FnOnce(&mut Chrome)) {
         self.runner.update(|s| f(&mut s.chrome));
+    }
+
+    /// Replace the orrery element's node cards with a fresh gyre snapshot. The runner
+    /// re-renders, re-placing the cards by their transforms on the RepaintOnly path.
+    /// (Orrery-as-element — Phase 2.)
+    pub(crate) fn set_orrery(&mut self, cards: Vec<OrreryCard>) {
+        self.runner.update(|s| s.orrery = cards);
     }
 
     /// Mint a window's view over a fresh pair of serval runners. Everything else
