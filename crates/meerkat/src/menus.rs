@@ -45,10 +45,16 @@ impl WindowCtx<'_> {
                 items.push(ContextItem::new("Show all", ContextAction::ShowAllNodes));
             }
             // Mirror the workbench's open tiles into the orrery — the same arrangement as
-            // both a tiled workbench and a spatial map. Offered when tiles are open.
-            // (Curated orrery — workbench mirror.)
-            if !self.view.workbench.open_members().is_empty() {
-                items.push(ContextItem::new("Mirror tiles", ContextAction::MirrorTiles));
+            // both a tiled workbench and a spatial map, tracked live. A toggle (✓ when
+            // on); offered when tiles are open or the mirror is already on so it can be
+            // turned off. (Curated orrery — workbench mirror.)
+            if self.view.mirror_tiles || !self.view.workbench.open_members().is_empty() {
+                let label = if self.view.mirror_tiles {
+                    "Mirror tiles  \u{2713}"
+                } else {
+                    "Mirror tiles"
+                };
+                items.push(ContextItem::new(label, ContextAction::MirrorTiles));
             }
             // Layout is a pane-level choice, so it rides the empty-canvas menu. (Layout picker.)
             items.extend(self.layout_picker_items());
@@ -264,20 +270,28 @@ impl WindowCtx<'_> {
         // lift it. A transient lens (keyed by NodeKey, not persisted). No member set.
         // (Curated orrery.)
         if let ContextAction::IsolateSelection = action {
+            self.view.mirror_tiles = false; // a snapshot lens; don't let the live mirror override it
             self.orrery_mut().isolate_selection();
             self.view.request_redraw();
             return;
         }
         if let ContextAction::ShowAllNodes = action {
+            self.view.mirror_tiles = false; // lift the live mirror too
             self.orrery_mut().clear_scope();
             self.view.request_redraw();
             return;
         }
-        // Mirror the workbench's open tiles into the orrery's scope (a snapshot of the
-        // current tiles). No member set. (Curated orrery — workbench mirror.)
+        // Toggle the live workbench mirror. When on, the render loop re-scopes the
+        // orrery to the open tiles each frame; turning it off lifts the lens. No member
+        // set. (Curated orrery — workbench mirror.)
         if let ContextAction::MirrorTiles = action {
-            let members = self.view.workbench.open_members();
-            self.orrery_mut().scope_to_members(members);
+            self.view.mirror_tiles = !self.view.mirror_tiles;
+            if self.view.mirror_tiles {
+                let members = self.view.workbench.open_members();
+                self.orrery_mut().scope_to_members(members);
+            } else {
+                self.orrery_mut().clear_scope();
+            }
             self.view.request_redraw();
             return;
         }

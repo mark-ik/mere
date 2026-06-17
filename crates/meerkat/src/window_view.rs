@@ -240,6 +240,10 @@ pub(crate) struct WindowView {
     pub(crate) next_pane_id: u64,
     /// The leaf maximized to the whole content band, if any (the maximize toggle).
     pub(crate) maximized_pane: Option<PaneId>,
+    /// Live workbench-mirror mode: when set, the focused orrery re-scopes to the
+    /// workbench's open tiles every frame, so the spatial map tracks the tile set as
+    /// it changes. Off by default. (Curated orrery — workbench mirror.)
+    pub(crate) mirror_tiles: bool,
     /// Which content pane navigation acts on (the last-interacted one).
     pub(crate) active_content: ContentPane,
     /// The graph this window's nav / focus / selection currently act on — the active
@@ -353,6 +357,7 @@ impl WindowView {
             live_previews: Default::default(),
             frame_layout: Default::default(),
             next_pane_id: Default::default(),
+            mirror_tiles: false,
             maximized_pane: Default::default(),
             active_content: Default::default(),
             window: Default::default(),

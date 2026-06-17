@@ -317,6 +317,13 @@ impl WindowCtx<'_> {
                 self.pane_orrery_mut(orrery_gid).recenter();
             }
         }
+        // Live workbench mirror: re-scope the focused orrery to the workbench's open
+        // tiles each frame, so the spatial map tracks the tile set as it changes (the
+        // two surfaces stay in lockstep). (Curated orrery — workbench mirror.)
+        if self.view.mirror_tiles {
+            let members = self.view.workbench.open_members();
+            self.pane_orrery_mut(orrery_gid).scope_to_members(members);
+        }
         // Drive the pane's active layout strategy (if any): compute its node positions
         // through platen's cartography dispatch and push them in; the orrery overlays
         // them on the physics snapshot each frame. No-op under force-directed. (Layout picker.)
