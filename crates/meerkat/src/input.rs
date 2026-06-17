@@ -23,7 +23,7 @@ use frame::PaneContent;
 
 use super::titlebar::{self, WindowControl};
 use super::{
-    FALLBACK_TOOLBAR_H, WindowCtx, class_bottom_in, first_tag, first_with_class, has_class,
+    FALLBACK_TOOLBAR_H, WindowCtx, class_bottom_in, first_tag, first_with_class,
     measure_class_bottom, scrying_host,
 };
 
@@ -34,6 +34,25 @@ fn scrying_btn(button: MouseButton) -> Option<scrying_host::MouseBtn> {
         MouseButton::Right => Some(scrying_host::MouseBtn::Right),
         MouseButton::Middle => Some(scrying_host::MouseBtn::Middle),
         _ => None,
+    }
+}
+
+/// The (active, else first) tile id under the `TileTree` node addressed by `path` (a
+/// chain of split-child indices). Resolves a tab-bar drop's target stack back to a
+/// member for the Workbench mutation. (Drag via pelt TileEvents.)
+fn member_at_path(
+    tree: &pelt_core::tile::TileTree,
+    path: &[usize],
+) -> Option<pelt_core::tile::TileId> {
+    use pelt_core::tile::TileTree;
+    match (tree, path.split_first()) {
+        (TileTree::Stack(s), _) => {
+            s.tabs.get(s.active).or_else(|| s.tabs.first()).map(|t| t.id)
+        }
+        (TileTree::Split { children, .. }, Some((i, rest))) => {
+            member_at_path(&children.get(*i)?.tree, rest)
+        }
+        (TileTree::Split { .. }, None) => None,
     }
 }
 
@@ -440,14 +459,10 @@ impl WindowCtx<'_> {
                         // / pin).
                         self.view.active_content = super::ContentPane::Workbench;
                         if button == MouseButton::Left {
-                            // A press on a slot divider starts a resize (host-authority:
-                            // the drag reweights the Workbench directly); otherwise it
-                            // routes to the surface frame (tab activate / close).
-                            if let Some(i) = self.surface_divider_at(x, y) {
-                                self.view.divider_drag = Some((i, x, self.view.workbench.weights()));
-                            } else {
-                                self.workbench_surface_click(x, y);
-                            }
+                            // Drive the pelt shell's pointer state machine: it hit-tests
+                            // the frame (divider / tab / close) at the pane-local point
+                            // and emits gestures the Workbench applies. (Drag via TileEvents.)
+                            self.workbench_pointer_down(x, y);
                         }
                     } else {
                         // The orrery pane: right-click opens the context menu; a left
@@ -512,6 +527,17 @@ impl WindowCtx<'_> {
                 // it — the omnibar's record-the-visit path. Consumes the release so
                 // it doesn't fall through to the card's live-preview toggle.
                 // (Inline-link nav; the document lane carries link regions today.)
+                //
+                // A workbench tab / divider gesture resolves through the pelt shell
+                // wherever the release lands (a drop can end outside the pane). If the
+                // shell consumed it (tab activate / close / drop / divider end) we're
+                // done; otherwise the press was a tile-content click — fall through to
+                // the link paths below. (Drag via pelt TileEvents.)
+                if button == MouseButton::Left && self.view.workbench_gesture {
+                    if self.workbench_pointer_up(x, y) {
+                        return;
+                    }
+                }
                 if button == MouseButton::Left {
                     if let Some((base, href)) = self.card_link_at(x, y) {
                         let url = nav::resolve_href(&base, &href);
@@ -552,54 +578,10 @@ impl WindowCtx<'_> {
                         self.view.request_redraw();
                     }
                 }
-                // A divider resize ends on release (tile-tree slot + frame pane).
+                // A frame-divider (host FrameLayout) resize ends on release. The pelt
+                // tile-divider resize ended in the workbench-gesture path above.
                 if button == MouseButton::Left {
-                    self.view.divider_drag = None;
                     self.view.frame_divider_drag = None;
-                }
-                // Resolve a tab drag (tiled view): if the press moved past the slop and
-                // released over a tile, drop by zone. The nearest edge within the outer
-                // quarter splits — left/right makes a horizontal (Row) split, top/bottom
-                // a vertical (Column) split — and the center stacks the tab into that
-                // cell (reorder within, move across). Dropping on the dragged tab's own
-                // cell edge splits it out of its stack. A release in place was a plain
-                // click (the tab activated on press).
-                if button == MouseButton::Left {
-                    if let Some((member, (px, py))) = self.view.tab_drag.take() {
-                        if (x - px).hypot(y - py) > 6.0 {
-                            if let Some((target, [x0, y0, x1, y1])) = self.tile_at(x, y) {
-                                let w = (x1 - x0).max(1.0);
-                                let h = (y1 - y0).max(1.0);
-                                let left = (x - x0) / w;
-                                let right = (x1 - x) / w;
-                                let top = (y - y0) / h;
-                                let bottom = (y1 - y) / h;
-                                let nearest = left.min(right).min(top).min(bottom);
-                                let moved = if nearest > 0.25 {
-                                    self.view.workbench.move_to_slot_of(member, target)
-                                } else {
-                                    let (axis, after) = if nearest == left {
-                                        (pelt_core::tile::SplitAxis::Row, false)
-                                    } else if nearest == right {
-                                        (pelt_core::tile::SplitAxis::Row, true)
-                                    } else if nearest == top {
-                                        (pelt_core::tile::SplitAxis::Column, false)
-                                    } else {
-                                        (pelt_core::tile::SplitAxis::Column, true)
-                                    };
-                                    if target == member {
-                                        self.view.workbench.split_out(member, axis, after)
-                                    } else {
-                                        self.view.workbench.split_beside_axis(member, target, axis, after)
-                                    }
-                                };
-                                if moved {
-                                    self.view.focused_tile = Some(member);
-                                    self.view.request_redraw();
-                                }
-                            }
-                        }
-                    }
                 }
                 // Double-click routing (orrery pane): on the focused card it toggles
                 // the live preview (snapshot -> live actor, or back); on a node it
@@ -808,31 +790,66 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
-    /// Route a left press in the workbench pane to the pelt tile surface (V6,
-    /// host-authority): hit-test the surface frame at the pane-local point, dispatch the
-    /// click (queuing a gesture), then apply each emitted [`TileEvent`] to the
-    /// `Workbench` — the authority — keyed back to its member by the tile id's UUID low
-    /// 64 bits. A tab activates / closes its member; drag + divider resize are a
-    /// follow-on (the surface's pointer state machine). Re-projection happens on the
-    /// next render (`Workbench::to_tile_tree`), so the surface stays a driven view.
-    fn workbench_surface_click(&mut self, x: f32, y: f32) {
+    /// Route a left press in the workbench pane into the host-authoritative pelt shell:
+    /// set its cursor (pane-local), press, and apply each emitted gesture to the
+    /// `Workbench` — the authority. Marks a gesture in flight so subsequent moves feed
+    /// the shell (a drag continues past the pane edge). The shell does the frame
+    /// hit-testing (tab / divider / close) internally; tile-content link clicks were
+    /// already resolved earlier (`tile_link_at`). Re-projection is on the next render
+    /// (`Workbench::to_tile_tree`), so the shell stays a driven view. (Drag via TileEvents.)
+    pub(super) fn workbench_pointer_down(&mut self, x: f32, y: f32) {
         let Some(wr) = self.workbench_leaf_rect() else { return };
-        let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
-        let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
         let (lx, ly) = (x - wr[0], y - wr[1]);
         let events = {
-            let Some(surface) = self.view.pelt_surface.as_mut() else { return };
-            let Some(node) = surface.hit_test_frame(lx, ly, ww, wh) else { return };
-            surface.dispatch_click(node, xilem_serval::PointerClick::at((lx, ly)));
-            surface.take_events()
+            let Some(shell) = self.view.pelt_shell.as_mut() else { return };
+            shell.pointer_move(lx, ly);
+            shell.pointer_down();
+            shell.take_events()
         };
-        if events.is_empty() {
-            return;
-        }
+        self.view.workbench_gesture = true;
         for event in events {
-            self.apply_tile_event(event, Some((x, y)));
+            self.apply_tile_event(event);
         }
         self.view.request_redraw();
+    }
+
+    /// Feed a pointer move to the shell while a workbench gesture is in flight (advances
+    /// a divider resize / tab drag), applying any emitted gesture. (Drag via TileEvents.)
+    pub(super) fn workbench_pointer_move(&mut self, x: f32, y: f32) {
+        let Some(wr) = self.workbench_leaf_rect() else { return };
+        let (lx, ly) = (x - wr[0], y - wr[1]);
+        let events = {
+            let Some(shell) = self.view.pelt_shell.as_mut() else { return };
+            shell.pointer_move(lx, ly);
+            shell.take_events()
+        };
+        for event in events {
+            self.apply_tile_event(event);
+        }
+        self.view.request_redraw();
+    }
+
+    /// End a workbench gesture: release the shell (resolving a tab drop / activate),
+    /// apply the emitted gesture, and clear the in-flight flag. Returns whether the
+    /// shell consumed the release (it emitted a gesture); `false` means the press was a
+    /// tile-content click that should fall through to the link/card paths. (Drag via
+    /// TileEvents.)
+    pub(super) fn workbench_pointer_up(&mut self, x: f32, y: f32) -> bool {
+        self.view.workbench_gesture = false;
+        let Some(wr) = self.workbench_leaf_rect() else { return false };
+        let (lx, ly) = (x - wr[0], y - wr[1]);
+        let events = {
+            let Some(shell) = self.view.pelt_shell.as_mut() else { return false };
+            shell.pointer_move(lx, ly);
+            shell.pointer_up();
+            shell.take_events()
+        };
+        let consumed = !events.is_empty();
+        for event in events {
+            self.apply_tile_event(event);
+        }
+        self.view.request_redraw();
+        consumed
     }
 
     /// The workbench member a pelt [`TileId`](pelt_core::tile::TileId) addresses, keyed
@@ -858,24 +875,13 @@ impl WindowCtx<'_> {
     /// tab-drag candidate (a click sets it; a surface-emitted gesture passes `None`).
     /// Re-projection happens on the next render (`Workbench::to_tile_tree`), so the
     /// surface stays a driven view. (Tile-event seam.)
-    pub(super) fn apply_tile_event(
-        &mut self,
-        event: pelt_core::tile::TileEvent,
-        press: Option<(f32, f32)>,
-    ) {
-        use pelt_core::tile::TileEvent;
+    pub(super) fn apply_tile_event(&mut self, event: pelt_core::tile::TileEvent) {
+        use pelt_core::tile::{DropTarget, Edge, SplitAxis, TileEvent};
         match event {
             TileEvent::Activated(id) => {
                 if let Some(m) = self.tile_member(id) {
                     self.view.workbench.activate(m);
                     self.view.focused_tile = Some(m);
-                    // Remember the activated tab as a drag candidate (press kept in
-                    // window coords, matching `tile_rects`). The release resolves it:
-                    // a move/split when dragged onto another slot past the slop, else a
-                    // plain click (the tab already activated here).
-                    if let Some(p) = press {
-                        self.view.tab_drag = Some((m, p));
-                    }
                 }
             }
             TileEvent::Closed(id) => {
@@ -892,86 +898,58 @@ impl WindowCtx<'_> {
                     }
                 }
             }
-            // Dragged / DividerMoved: filled in B3, once the host-authoritative
-            // TileShell drives the drag/resize gestures through `take_events`.
-            _ => {}
+            // A tab dropped past the slop: onto a tab bar (Stack) it merges into that
+            // stack; onto another tile's content (Edge) it splits that pane on the
+            // dropped edge. The drag itself + the drop-zone resolution live in the pelt
+            // shell; here each resolved DropTarget maps to a Workbench mutation.
+            TileEvent::Dragged { tile, to } => {
+                let Some(dragged) = self.tile_member(tile) else {
+                    return;
+                };
+                match to {
+                    DropTarget::Stack { stack, .. } => {
+                        // Any member in the target stack identifies the slot; insertion
+                        // index is appended for now (DropTarget::Stack{index} is a
+                        // follow-on for precise reorder).
+                        let target_id = self
+                            .view
+                            .pelt_shell
+                            .as_ref()
+                            .and_then(|sh| member_at_path(sh.tree(), &stack.0));
+                        let target = target_id.and_then(|tid| self.tile_member(tid));
+                        if let Some(target) = target {
+                            if self.view.workbench.move_to_slot_of(dragged, target) {
+                                self.view.focused_tile = Some(dragged);
+                            }
+                        }
+                    }
+                    DropTarget::Edge { tile: target_id, edge } => {
+                        let Some(target) = self.tile_member(target_id) else {
+                            return;
+                        };
+                        let (axis, after) = match edge {
+                            Edge::Left => (SplitAxis::Row, false),
+                            Edge::Right => (SplitAxis::Row, true),
+                            Edge::Top => (SplitAxis::Column, false),
+                            Edge::Bottom => (SplitAxis::Column, true),
+                        };
+                        let moved = if target == dragged {
+                            self.view.workbench.split_out(dragged, axis, after)
+                        } else {
+                            self.view.workbench.split_beside_axis(dragged, target, axis, after)
+                        };
+                        if moved {
+                            self.view.focused_tile = Some(dragged);
+                        }
+                    }
+                }
+            }
+            // A divider drag: reweight the addressed split. Path-addressed, so nested
+            // splits resize too (the host divider path only reached the top level).
+            TileEvent::DividerMoved { split, fractions } => {
+                self.view.workbench.set_split_fractions(&split.0, &fractions);
+            }
         }
-    }
-
-    /// The tile (member + window rect) under `(x, y)` — the drag drop target, from
-    /// this frame's laid-out tile rects.
-    pub(super) fn tile_at(&self, x: f32, y: f32) -> Option<(GraphMemberId, [f32; 4])> {
-        self.view.tile_rects
-            .iter()
-            .find(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
-            .copied()
-    }
-
-    /// The slot-boundary index of a `.tile-divider` in the pelt surface frame under
-    /// window `(x, y)`, or `None` — the surface counterpart to [`divider_at`]. The
-    /// surface lays its frame out, marks each divider with `data-dindex` (the boundary
-    /// index), and the boundary maps 1:1 to the Workbench's slots (the projection keeps
-    /// slot order), so the resize ([`drag_divider`]) reweights the right pair.
-    fn surface_divider_at(&self, x: f32, y: f32) -> Option<usize> {
-        let wr = self.workbench_leaf_rect()?;
-        let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
-        let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
-        let (lx, ly) = (x - wr[0], y - wr[1]);
-        let surface = self.view.pelt_surface.as_ref()?;
-        let node = surface.hit_test_frame(lx, ly, ww, wh)?;
-        let dom = surface.dom();
-        let dom = dom.borrow();
-        if !has_class(&dom, node, "tile-divider") {
-            return None;
-        }
-        // Only the top-level split's dividers resize here (the back-compat `weights`
-        // path): they carry an empty `data-divider` path. Nested-split dividers stay
-        // inert until per-split resize lands, so a nested drag can't corrupt the
-        // top-level fractions.
-        let nested = dom
-            .attributes(node)
-            .find(|a| a.name.local.as_ref() == "data-divider")
-            .is_some_and(|a| !a.value.is_empty());
-        if nested {
-            return None;
-        }
-        dom.attributes(node)
-            .find(|a| a.name.local.as_ref() == "data-dindex")
-            .and_then(|a| a.value.parse::<usize>().ok())
-    }
-
-    /// Resize on a divider drag: shift width between the two slots the divider sits
-    /// between, by the cursor's offset from the press as a fraction of the band.
-    pub(super) fn drag_divider(&mut self) {
-        let Some((i, press_x, snapshot)) = self.view.divider_drag.clone() else {
-            return;
-        };
-        if i + 1 >= snapshot.len() {
-            return;
-        }
-        // The slots span the workbench leaf, so reweight against the leaf width.
-        let band_w = self
-            .workbench_leaf_rect()
-            .map(|wr| (wr[2] - wr[0]).max(1.0))
-            .unwrap_or(self.view.width.max(1) as f32);
-        let sum: f32 = snapshot.iter().sum();
-        let dw = (self.view.cursor.0 - press_x) / band_w * sum;
-        let mut weights = snapshot;
-        weights[i] = (weights[i] + dw).max(0.05);
-        weights[i + 1] = (weights[i + 1] - dw).max(0.05);
-        self.view.workbench.set_weights(&weights);
-        self.view.request_redraw();
-    }
-
-    /// While a tab is being dragged (moved past the slop), the member of the tile
-    /// under the pointer — the highlighted drop target. `None` otherwise.
-    pub(super) fn drag_target_member(&self) -> Option<GraphMemberId> {
-        let (_, (px, py)) = self.view.tab_drag?;
-        let (cx, cy) = self.view.cursor;
-        if (cx - px).hypot(cy - py) <= 6.0 {
-            return None; // not dragging yet (still a click)
-        }
-        self.tile_at(cx, cy).map(|(m, _)| m)
     }
 
     /// Handle a pressed key. First the global chords (Ctrl+P palette, Ctrl+K comms,

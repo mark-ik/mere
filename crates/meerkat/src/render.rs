@@ -351,6 +351,9 @@ impl WindowCtx<'_> {
             (f32, f32, f32, f32),
             pelt_core::tile::TextureKey,
         )> = Vec::new();
+        // The dragged-tab ghost (pane-local rect + its scene), composited over the
+        // workbench leaf while a tab drag is in flight. (Drag via pelt TileEvents.)
+        let mut workbench_ghost: Option<((f32, f32, f32, f32), netrender::Scene)> = None;
         if let Some(wr) = workbench_rect {
             let ww = (wr[2] - wr[0]).round().max(1.0) as u32;
             let wh = (wr[3] - wr[1]).round().max(1.0) as u32;
@@ -399,25 +402,35 @@ impl WindowCtx<'_> {
                 }
             });
             if let Some(tree) = tree {
-                // Host-authority: set the projected tree (the surface is a driven view),
-                // then render its frame. Created lazily on the first tiled frame.
-                match self.view.pelt_surface.as_mut() {
+                // Host-authority: set the projected tree (the shell is a driven view),
+                // then render its frame. Created lazily on the first tiled frame. The
+                // shell (vs the bare surface) also owns the pointer state machine that
+                // turns drag / divider gestures into TileEvents the host applies.
+                match self.view.pelt_shell.as_mut() {
                     Some(s) => s.set_tree(tree),
-                    None => self.view.pelt_surface = Some(pelt_desktop::TileSurface::new(tree)),
+                    None => {
+                        self.view.pelt_shell =
+                            Some(pelt_desktop::TileShell::new_host_authoritative(tree))
+                    }
                 }
                 // Theme the tiles to match the chrome: layer the chrome-theme-derived
-                // tile CSS over the surface's structural default, rebuilt only when the
-                // active theme changed (the surface persists across frames).
+                // tile CSS over the shell's structural default, rebuilt only when the
+                // active theme changed (the shell persists across frames).
                 let theme = self.shared.presentation.chrome_theme;
                 if self.view.pelt_theme != Some(theme) {
-                    if let Some(s) = self.view.pelt_surface.as_mut() {
+                    if let Some(s) = self.view.pelt_shell.as_mut() {
                         s.set_theme(crate::tile_sheet(&theme));
                     }
                     self.view.pelt_theme = Some(theme);
                 }
-                let frame = self.view.pelt_surface.as_mut().unwrap().frame(ww, wh);
+                let shell = self.view.pelt_shell.as_mut().unwrap();
+                shell.resize(ww, wh);
+                let frame = shell.frame();
                 workbench_external = frame.external_tiles;
                 workbench_scene = Some((frame.frame_scene, ww, wh));
+                // A tab drag carries a ghost of the dragged tab at the cursor; composite
+                // it over the workbench leaf. (Replaces the host drop-target highlight.)
+                workbench_ghost = frame.ghost.map(|g| (g.rect, g.scene));
             }
         }
 
@@ -1276,33 +1289,26 @@ impl WindowCtx<'_> {
                 }
             }
         }
-        // Drop-target highlight: while a tab is dragged past the slop, tint the tile
-        // under the cursor — the slot the drop will move/split into. A translucent
-        // fill over the target's reported rect, composited on top of the tiles. The
-        // host owns this overlay because the pelt surface is a driven view and does
-        // not know about the in-flight drag. (Tab-drag feedback; styling is a polish
-        // pass.)
-        if let Some(target) = self.drag_target_member() {
-            if let Some(rect) = self
-                .view
-                .tile_rects
-                .iter()
-                .find(|(m, _)| *m == target)
-                .map(|(_, r)| *r)
-            {
-                let mut scene = netrender::Scene::new(1, 1);
-                scene.push_rect(0.0, 0.0, 1.0, 1.0, [0.30, 0.55, 0.95, 0.28]);
-                let (_t, view) =
-                    core.rasterize(&scene, 1, 1, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
-                core.renderer().compose_external_texture(
-                    &view,
-                    &target_view,
-                    format,
-                    w,
-                    h,
-                    ExternalTexturePlacement::new(rect),
-                );
-            }
+        // Dragged-tab ghost: while a tab drag is in flight the shell carries a ghost of
+        // the dragged tab at the cursor (pane-local); composite it on top of the tiles,
+        // offset into the workbench leaf. The shell owns the drag, so this replaces the
+        // host's old drop-target highlight. (Drag via pelt TileEvents.)
+        if let (Some(((gx, gy, gw, gh), scene)), Some(wr)) =
+            (workbench_ghost.as_ref(), workbench_rect)
+        {
+            let gw_px = gw.round().max(1.0) as u32;
+            let gh_px = gh.round().max(1.0) as u32;
+            let (_t, view) =
+                core.rasterize(scene, gw_px, gh_px, ColorLoad::Clear(wgpu::Color::TRANSPARENT));
+            let (x0, y0) = (wr[0] + gx, wr[1] + gy);
+            core.renderer().compose_external_texture(
+                &view,
+                &target_view,
+                format,
+                w,
+                h,
+                ExternalTexturePlacement::new([x0, y0, x0 + gw, y0 + gh]),
+            );
         }
         // The roster pane renders through its view-driven `RosterPane` bundle: set the
         // rows, clamp the stored scroll to the last frame's content height, frame, and

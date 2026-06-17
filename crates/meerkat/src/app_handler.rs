@@ -471,11 +471,13 @@ impl ApplicationHandler for Shell {
                 // the workbench pane takes priority so its drop highlight tracks.
                 if wc.view.frame_divider_drag.is_some() {
                     wc.drag_frame_divider();
-                } else if wc.view.divider_drag.is_some() {
-                    wc.drag_divider();
-                } else if wc.view.tab_drag.is_some() {
-                    // Follow the drag: the drop-target highlight tracks the pointer.
-                    wc.view.request_redraw();
+                } else if wc.view.workbench_gesture {
+                    // A workbench tab drag / divider resize in flight: feed the pelt
+                    // shell's pointer state machine, which advances the gesture (emitting
+                    // DividerMoved while resizing) and carries the drag ghost. (Drag via
+                    // pelt TileEvents.)
+                    let (cx, cy) = wc.view.cursor;
+                    wc.workbench_pointer_move(cx, cy);
                 } else if let Some((member, lx, ly)) = wc.scrying_at(wc.view.cursor.0, wc.view.cursor.1)
                 {
                     // Hover / drag over the compatibility-view tile feeds the WebView;

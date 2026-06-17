@@ -86,8 +86,14 @@ pub(crate) struct WindowView {
     /// `frame` / `take_events`), and composites each member's actor texture into the
     /// surface's reported tile rects — the same lib pelt's bin wraps. `None` until the
     /// workbench pane first renders.
-    pub(crate) pelt_surface: Option<pelt_desktop::TileSurface>,
-    /// The chrome theme last applied to `pelt_surface` (via `set_theme`), so the tile
+    /// The host-authoritative tile shell: pelt's pointer state machine over the surface.
+    /// The host feeds it pane-local pointer events and drains its [`TileEvent`]s through
+    /// `take_events`, applying each to the `Workbench` (the authority) and re-projecting
+    /// via `set_tree` — so tab activate/close, tab drag (move/split), and divider resize
+    /// all flow through one seam, and the surface stays a driven view. `None` until the
+    /// workbench pane first renders.
+    pub(crate) pelt_shell: Option<pelt_desktop::TileShell>,
+    /// The chrome theme last applied to `pelt_shell` (via `set_theme`), so the tile
     /// theme is rebuilt only when the active theme actually changes, not every frame.
     pub(crate) pelt_theme: Option<register_theme::chrome::ChromeTheme>,
     /// The roster pane as a view-driven bundle (runner + cached layout + sheet): a
@@ -171,10 +177,12 @@ pub(crate) struct WindowView {
     pub(crate) trail_scroll: f32,
     /// The last left-button release (time + window pos), for double-click detection.
     pub(crate) last_left_release: Option<(Instant, (f32, f32))>,
-    /// An in-progress workbench tab drag: the pressed tab's member + press position.
-    pub(crate) tab_drag: Option<(GraphMemberId, (f32, f32))>,
-    /// An in-progress workbench slot-divider drag: left-slot index, press x, weights.
-    pub(crate) divider_drag: Option<(usize, f32, Vec<f32>)>,
+    /// Whether a left-button gesture inside the workbench pane is in flight (press →
+    /// release). While set, pointer moves feed the `pelt_shell`'s pointer state machine
+    /// (so a tab drag / divider resize continues even past the pane edge); cleared on
+    /// release. Replaces the host-side tab-drag / divider-drag tracking the shell now
+    /// owns. (Drag via pelt TileEvents.)
+    pub(crate) workbench_gesture: bool,
     /// An in-progress frame-divider drag: split path, parent rect, axis.
     pub(crate) frame_divider_drag: Option<(Vec<SplitChoice>, [f32; 4], SplitAxis)>,
     /// An in-progress manual window resize from an edge / corner (custom titlebar).
@@ -294,7 +302,7 @@ impl WindowView {
             runner,
             chrome_session: None,
             workbench,
-            pelt_surface: None,
+            pelt_shell: None,
             pelt_theme: None,
             roster_pane: crate::roster_view::RosterPane::new(),
             session_row_rects: Default::default(),
@@ -326,8 +334,7 @@ impl WindowView {
             apparatus_scroll: Default::default(),
             trail_scroll: Default::default(),
             last_left_release: Default::default(),
-            tab_drag: Default::default(),
-            divider_drag: Default::default(),
+            workbench_gesture: false,
             frame_divider_drag: Default::default(),
             resize_drag: Default::default(),
             titlebar_press: Default::default(),
