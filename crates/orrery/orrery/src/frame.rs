@@ -16,7 +16,7 @@ use paint_list_api::{
     ImageRendering, ImageResource, LayoutPoint, LayoutRect, PaintCmd, PaintList,
 };
 use paint_list_render::{composite_paint_layers, CompositeLayer};
-use platen::orrery::orrery_paint_list_demoted;
+use platen::orrery::{identity_arrangement, orrery_paint_list_demoted_from_arrangement};
 use serval_layout::{Applied, IncrementalLayout, ScrollOffsets};
 use serval_scripted_dom::NodeId as DomNodeId;
 
@@ -74,8 +74,16 @@ impl Orrery {
         let on_screen: HashSet<NodeKey> =
             self.view.cull_aabb(self.world_viewport()).into_iter().collect();
 
-        let mut underlay = orrery_paint_list_demoted(
+        // Route the underlay through the orrery's read-through Identity arrangement,
+        // so the orrery renders as a Cartography projection of a forme arrangement —
+        // the same arrangement contract the workbench's Tree projection consumes (the
+        // spine's "two projections of one arrangement"). Byte-identical to the
+        // whole-graph path for Identity; the seam a curated / compare arrangement
+        // would later drive an orrery-shaped projection through.
+        let arrangement = identity_arrangement(&self.graph);
+        let mut underlay = orrery_paint_list_demoted_from_arrangement(
             &self.graph,
+            &arrangement,
             |k| positions.get(&k).copied(),
             |k| !on_screen.contains(&k),
             // Skip relations whose undirected pair the user has hidden.

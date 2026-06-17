@@ -151,6 +151,21 @@ impl Arrangement {
         }
     }
 
+    /// A read-through *Identity* arrangement (spine §14.2 `FormeRef::Identity`):
+    /// every `member` as a [`MemberIntent`](ArrangementNodeKind::MemberIntent) under
+    /// the root, no curation. The orrery's binding — derived from a graph's current
+    /// node set, never a stored or copied roster. This is the Cartography
+    /// projection's membership source, mirroring how a curated arrangement sources
+    /// the Tree projection (the tiled workbench): the seam that makes the orrery and
+    /// the workbench two projections of one arrangement.
+    pub fn identity(members: impl IntoIterator<Item = GraphMemberId>) -> Self {
+        let mut arrangement = Self::new();
+        for member in members {
+            arrangement.add_member_intent(member);
+        }
+        arrangement
+    }
+
     /// The root node's id.
     pub fn root(&self) -> ArrangementNodeId {
         self.root
@@ -301,6 +316,18 @@ mod tests {
             a.node(a.root()).unwrap().kind,
             ArrangementNodeKind::WorkbenchRoot
         );
+    }
+
+    #[test]
+    fn identity_references_every_member_under_the_root() {
+        let a = Arrangement::identity([Uuid::from_u128(3), Uuid::from_u128(1), Uuid::from_u128(2)]);
+        assert_eq!(
+            a.referenced_members(),
+            vec![Uuid::from_u128(1), Uuid::from_u128(2), Uuid::from_u128(3)]
+        );
+        assert_eq!(a.len(), 4, "root + three member intents");
+        // Every member intent is a direct member of the root (read-through, no groups).
+        assert_eq!(a.members_of(a.root()).count(), 3);
     }
 
     #[test]

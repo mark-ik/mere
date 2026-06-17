@@ -22,6 +22,7 @@ use std::collections::HashSet;
 
 use cartography::Projection;
 use cartography::projection::{PositionedEdge, PositionedNode, ProjectionMetadata};
+use forme::{Arrangement, GraphMemberId};
 use kernel::geometry::{PortablePoint, PortableRect, PortableSize};
 use kernel::graph::{Graph, NodeKey, RelationView};
 use paint_list_api::DeviceIntSize;
@@ -62,6 +63,54 @@ where
     )
 }
 
+/// The orrery's read-through *Identity* arrangement for `graph`: every graph member
+/// as a `MemberIntent` (spine §14.2 `FormeRef::Identity`). Derived from the current
+/// node set, never stored. Projecting the orrery through this is what makes the
+/// orrery and the tiled workbench two projections of one forme arrangement.
+pub fn identity_arrangement(graph: &Graph) -> Arrangement {
+    Arrangement::identity(graph.nodes().map(|(_, node)| node.id))
+}
+
+/// Build a [`Projection`] whose node SET comes from a forme [`Arrangement`]'s
+/// membership rather than the whole graph — the seam that makes the orrery a
+/// Cartography projection of an arrangement. Positions come from `position_of`
+/// (committed fallback); edges still come from `graph.relations()`. For an Identity
+/// arrangement (every graph member) this is byte-identical to
+/// [`projection_from_positions`]; a curated arrangement projects only its members.
+pub fn projection_from_arrangement<F>(
+    graph: &Graph,
+    arrangement: &Arrangement,
+    position_of: F,
+) -> Projection
+where
+    F: Fn(NodeKey) -> Option<PortablePoint>,
+{
+    let keys = arrangement_keys(graph, arrangement);
+    project_keys(
+        graph,
+        &keys,
+        |k| position_of(k).or_else(|| graph.node_committed_position(k)),
+        |_| true,
+        "orrery.live",
+        false,
+    )
+}
+
+/// The graph node keys for an arrangement's members, in GRAPH order (so an Identity
+/// arrangement projects byte-identically to the whole-graph path). The arrangement
+/// keys members by UUID (`GraphMemberId`) and the projection by `NodeKey`, so this
+/// is a membership filter over `graph.nodes()`; a member absent from the graph is
+/// skipped.
+fn arrangement_keys(graph: &Graph, arrangement: &Arrangement) -> Vec<NodeKey> {
+    let members: HashSet<GraphMemberId> =
+        arrangement.referenced_members().into_iter().collect();
+    graph
+        .nodes()
+        .filter(|(_, node)| members.contains(&node.id))
+        .map(|(key, _)| key)
+        .collect()
+}
+
 /// Shared projection core: positioned nodes from `position_of`, undirected
 /// de-duplicated edges (filtered by `edge_visible`), and `content_bounds`, tagged
 /// with the strategy metadata. `edge_visible` is checked per *relation* before
@@ -78,9 +127,30 @@ where
     F: Fn(NodeKey) -> Option<PortablePoint>,
     V: Fn(&RelationView) -> bool,
 {
-    let nodes: Vec<PositionedNode> = graph
-        .nodes()
-        .map(|(key, _node)| PositionedNode {
+    let keys: Vec<NodeKey> = graph.nodes().map(|(key, _node)| key).collect();
+    project_keys(graph, &keys, position_of, edge_visible, strategy_id, settled)
+}
+
+/// Projection core over an explicit node-key set — the membership source. Both the
+/// whole graph ([`project`]) and a forme [`Arrangement`]'s members
+/// ([`arrangement_keys`]) feed this; the output is identical when `keys` is every
+/// graph node in graph order. Edges still come from `graph.relations()` (an
+/// arrangement is geometry-free and holds no spatial edges).
+fn project_keys<F, V>(
+    graph: &Graph,
+    keys: &[NodeKey],
+    position_of: F,
+    edge_visible: V,
+    strategy_id: &str,
+    settled: bool,
+) -> Projection
+where
+    F: Fn(NodeKey) -> Option<PortablePoint>,
+    V: Fn(&RelationView) -> bool,
+{
+    let nodes: Vec<PositionedNode> = keys
+        .iter()
+        .map(|&key| PositionedNode {
             node: key,
             position: position_of(key).unwrap_or_default(),
             radius: 0.0,
@@ -192,6 +262,43 @@ where
     // committed-position fallback) so the edge-visibility predicate threads in.
     let projection = project(
         graph,
+        |k| position_of(k).or_else(|| graph.node_committed_position(k)),
+        edge_visible,
+        "orrery.live",
+        false,
+    );
+    let mut list =
+        paint_projection_filtered(&projection, viewport, camera, style, generation, is_demoted);
+    list.splice_world_overlays(visual_overlays(graph, &projection, style));
+    list
+}
+
+/// [`orrery_paint_list_demoted`] with the node SET sourced from a forme
+/// [`Arrangement`]'s membership instead of the whole graph — the orrery rendered as
+/// a Cartography projection of an arrangement (the spine's "two projections of one
+/// arrangement"). For an Identity arrangement the output is byte-identical to
+/// `orrery_paint_list_demoted`; a curated arrangement would show only its members.
+/// Edges, positions, demotion, and visual overlays are otherwise unchanged.
+pub fn orrery_paint_list_demoted_from_arrangement<F, G, V>(
+    graph: &Graph,
+    arrangement: &Arrangement,
+    position_of: F,
+    is_demoted: G,
+    edge_visible: V,
+    viewport: DeviceIntSize,
+    camera: Camera,
+    style: &ScenePaintStyle,
+    generation: u64,
+) -> CanvasPaintList
+where
+    F: Fn(NodeKey) -> Option<PortablePoint>,
+    G: Fn(NodeKey) -> bool,
+    V: Fn(&RelationView) -> bool,
+{
+    let keys = arrangement_keys(graph, arrangement);
+    let projection = project_keys(
+        graph,
+        &keys,
         |k| position_of(k).or_else(|| graph.node_committed_position(k)),
         edge_visible,
         "orrery.live",
@@ -407,6 +514,49 @@ mod tests {
             with_halo.commands().last(),
             Some(PaintCmd::PopTransform)
         ));
+    }
+
+    #[test]
+    fn identity_arrangement_projects_byte_identically_to_the_whole_graph() {
+        // Routing the orrery through its Identity arrangement must not change a pixel:
+        // the member set, order, positions, and edges all match the whole-graph path.
+        let mut g = Graph::new();
+        let a = node(&mut g, 1, 10.0, 20.0);
+        let b = node(&mut g, 2, 30.0, 40.0);
+        let c = node(&mut g, 3, 50.0, 60.0);
+        let _ = g.assert_relation(a, b, hyperlink());
+        let _ = g.assert_relation(b, c, hyperlink());
+
+        let pos = |k: NodeKey| (k == a).then_some(PortablePoint::new(99.0, 99.0));
+        let via_graph = projection_from_positions(&g, pos);
+        let via_arrangement = projection_from_arrangement(&g, &identity_arrangement(&g), pos);
+
+        let tuples = |p: &Projection| {
+            p.nodes.iter().map(|n| (n.node, n.position)).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            tuples(&via_arrangement),
+            tuples(&via_graph),
+            "same nodes + positions, in the same (graph) order"
+        );
+        assert_eq!(via_arrangement.edges.len(), via_graph.edges.len(), "same edges");
+        assert_eq!(via_arrangement.content_bounds.min_x(), via_graph.content_bounds.min_x());
+        assert_eq!(via_arrangement.content_bounds.max_y(), via_graph.content_bounds.max_y());
+    }
+
+    #[test]
+    fn curated_arrangement_projects_only_its_members() {
+        // The seam generalizes: a curated (non-Identity) arrangement shows only its
+        // members, the affordance the orrery-through-platen routing unlocks.
+        let mut g = Graph::new();
+        let a = node(&mut g, 1, 0.0, 0.0);
+        let _b = node(&mut g, 2, 10.0, 10.0);
+        let c = node(&mut g, 3, 20.0, 20.0);
+        let arr = Arrangement::identity([Uuid::from_u128(1), Uuid::from_u128(3)]);
+        let p = projection_from_arrangement(&g, &arr, |_| None);
+        let keys: HashSet<NodeKey> = p.nodes.iter().map(|n| n.node).collect();
+        assert_eq!(p.nodes.len(), 2, "only the curated members project");
+        assert!(keys.contains(&a) && keys.contains(&c), "members 1 and 3, not 2");
     }
 
     fn hyperlink() -> EdgeAssertion {
