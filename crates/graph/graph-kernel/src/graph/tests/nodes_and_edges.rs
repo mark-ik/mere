@@ -40,8 +40,6 @@ fn test_add_node() {
     assert_eq!(node.title, "https://example.com");
     assert_eq!(node.position.x, 100.0);
     assert_eq!(node.position.y, 200.0);
-    assert_eq!(node.committed_position.x, 100.0);
-    assert_eq!(node.committed_position.y, 200.0);
     assert_eq!(node.velocity.x, 0.0);
     assert_eq!(node.velocity.y, 0.0);
     assert!(!node.is_pinned);
@@ -119,37 +117,19 @@ fn test_get_node_mut() {
 }
 
 #[test]
-fn test_projected_position_does_not_change_committed_snapshot_position() {
+fn test_projected_position_is_the_single_node_position() {
+    // Positions are now a single field; durability is the cartography sidecar's job,
+    // not the kernel's, so a projected move is the position the snapshot persists.
     let mut graph = Graph::new();
     let key = graph.add_node("https://example.com".to_string(), Point2D::new(10.0, 20.0));
 
     assert!(graph.set_node_projected_position(key, Point2D::new(150.0, 250.0)));
-
-    let node = graph.get_node(key).unwrap();
-    assert_eq!(node.position, Point2D::new(150.0, 250.0));
-    assert_eq!(node.committed_position, Point2D::new(10.0, 20.0));
+    assert_eq!(graph.node_projected_position(key), Some(Point2D::new(150.0, 250.0)));
+    assert_eq!(graph.projected_centroid(), Some(Point2D::new(150.0, 250.0)));
 
     let snapshot = graph.to_snapshot();
-    assert_eq!(snapshot.nodes[0].position_x, 10.0);
-    assert_eq!(snapshot.nodes[0].position_y, 20.0);
-}
-
-#[test]
-fn test_projected_helpers_expose_projected_and_committed_positions() {
-    let mut graph = Graph::new();
-    let key = graph.add_node("https://example.com".to_string(), Point2D::new(10.0, 20.0));
-
-    assert!(graph.set_node_projected_position(key, Point2D::new(40.0, 60.0)));
-
-    assert_eq!(
-        graph.node_projected_position(key),
-        Some(Point2D::new(40.0, 60.0))
-    );
-    assert_eq!(
-        graph.node_committed_position(key),
-        Some(Point2D::new(10.0, 20.0))
-    );
-    assert_eq!(graph.projected_centroid(), Some(Point2D::new(40.0, 60.0)));
+    assert_eq!(snapshot.nodes[0].position_x, 150.0);
+    assert_eq!(snapshot.nodes[0].position_y, 250.0);
 }
 
 #[test]

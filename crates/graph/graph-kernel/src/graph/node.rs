@@ -45,11 +45,6 @@ pub struct Node {
     #[rkyv(with = Point2DAsTuple)]
     pub(crate) position: Point2D<f32>,
 
-    /// Durable committed position used for snapshots and reducer-authored
-    /// moves. `pub(crate)` for the same reason as `position`.
-    #[rkyv(with = Point2DAsTuple)]
-    pub(crate) committed_position: Point2D<f32>,
-
     /// Velocity for physics simulation
     #[rkyv(with = Vector2DAsTuple)]
     pub velocity: Vector2D<f32>,
@@ -171,10 +166,6 @@ impl Node {
         self.position
     }
 
-    pub fn committed_position(&self) -> Point2D<f32> {
-        self.committed_position
-    }
-
     /// Returns the node's canonical retrieval address (the Primary claim).
     ///
     /// Panics if the per-node invariant (exactly one Primary claim) is
@@ -204,7 +195,6 @@ impl Node {
             cached_host: cached_host_from_url(url),
             title: url.to_string(),
             position: Point2D::new(0.0, 0.0),
-            committed_position: Point2D::new(0.0, 0.0),
             velocity: Vector2D::new(0.0, 0.0),
             tags: HashSet::new(),
             tag_presentation: NodeTagPresentationState::default(),

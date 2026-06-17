@@ -362,11 +362,10 @@ impl Graph {
         let Some(node) = self.inner.node_weight_mut(key) else {
             return false;
         };
-        if node.position == position && node.committed_position == position {
+        if node.position == position {
             return false;
         }
         node.position = position;
-        node.committed_position = position;
         true
     }
 
@@ -383,10 +382,6 @@ impl Graph {
 
     pub fn node_projected_position(&self, key: NodeKey) -> Option<Point2D<f32>> {
         self.get_node(key).map(Node::projected_position)
-    }
-
-    pub fn node_committed_position(&self, key: NodeKey) -> Option<Point2D<f32>> {
-        self.get_node(key).map(Node::committed_position)
     }
 
     pub fn projected_centroid(&self) -> Option<Point2D<f32>> {

@@ -36,7 +36,7 @@ use crate::scene_paint::{paint_projection_filtered, Camera, CanvasPaintList, Sce
 /// (the paint layer substitutes the style default); `content_bounds` is the
 /// axis-aligned box of the node positions, for a host that fits the view.
 pub fn projection_from_graph(graph: &Graph) -> Projection {
-    project(graph, |k| graph.node_committed_position(k), |_| true, "orrery.stored", true)
+    project(graph, |k| graph.node_projected_position(k), |_| true, "orrery.stored", true)
 }
 
 /// Build a [`Projection`] from a caller-supplied *live* position lookup (e.g. the
@@ -56,7 +56,7 @@ where
 {
     project(
         graph,
-        |k| position_of(k).or_else(|| graph.node_committed_position(k)),
+        |k| position_of(k).or_else(|| graph.node_projected_position(k)),
         |_| true,
         "orrery.live",
         false,
@@ -101,7 +101,7 @@ where
     project_keys(
         graph,
         &keys,
-        |k| position_of(k).or_else(|| graph.node_committed_position(k)),
+        |k| position_of(k).or_else(|| graph.node_projected_position(k)),
         |_| true,
         "orrery.live",
         false,
@@ -274,7 +274,7 @@ where
     // committed-position fallback) so the edge-visibility predicate threads in.
     let projection = project(
         graph,
-        |k| position_of(k).or_else(|| graph.node_committed_position(k)),
+        |k| position_of(k).or_else(|| graph.node_projected_position(k)),
         edge_visible,
         "orrery.live",
         false,
@@ -311,7 +311,7 @@ where
     let projection = project_keys(
         graph,
         &keys,
-        |k| position_of(k).or_else(|| graph.node_committed_position(k)),
+        |k| position_of(k).or_else(|| graph.node_projected_position(k)),
         edge_visible,
         "orrery.live",
         false,

@@ -319,7 +319,6 @@ impl Graph {
             title: url.clone(),
             cached_host: cached_host_from_url(&url),
             position,
-            committed_position: position,
             velocity: Vector2D::zero(),
             tags: HashSet::new(),
             tag_presentation: NodeTagPresentationState::default(),
