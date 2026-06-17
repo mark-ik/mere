@@ -34,17 +34,17 @@ armillary.workspace = true
 
 # Compose the underlay (+ the node-children document) into one Scene, and
 # present it. Path deps on the sibling netrender checkout, like meerkat's.
-paint_list_render = { git = "https://github.com/mark-ik/webrender-wgpu.git", branch = "main" }
-paint_list_api = { git = "https://github.com/mark-ik/webrender-wgpu.git", branch = "main" }
-netrender = { git = "https://github.com/mark-ik/webrender-wgpu.git", branch = "main" }
+paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
+netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 
 # The node-children layer: a persistent serval ScriptedDom (abs-pos node subtrees
 # under the camera-transformed container), driven through IncrementalLayout
 # (apply on the RepaintOnly path + emit_paint_list) from serval-layout and
 # composited with the underlay. layout_dom_api supplies the build traits + names.
-serval-scripted-dom = { git = "https://github.com/mark-ik/servo-wgpu.git", branch = "main" }
-serval-layout = { git = "https://github.com/mark-ik/servo-wgpu.git", branch = "main" }
-layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik/servo-wgpu.git", branch = "main" }
+serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+serval-layout = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik/serval.git", branch = "main" }
 
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -56,7 +56,7 @@ euclid = "0.22"
 # the winit window + wgpu present + the shared SurfaceHost are bin-only and gated
 # off wasm. The wasm present path (canvas + WebGPU) is a later step. (P2, 2026-06-06.)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-serval-winit-host = { git = "https://github.com/mark-ik/servo-wgpu.git", branch = "main" }
+serval-winit-host = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 winit = { workspace = true }
 wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 

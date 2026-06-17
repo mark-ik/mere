@@ -26,13 +26,13 @@ kernel.workspace = true
 # Projection into a PaintList here; netrender (behind the host) consumes it.
 # Direct path dep like inker/document-canvas, so the heavy renderer stays
 # host-side and this dep does not propagate through the contract crates.
-paint_list_api = { git = "https://github.com/mark-ik/webrender-wgpu.git", branch = "main" }
+paint_list_api = { git = "https://github.com/mark-ik/netrender.git", branch = "main" }
 # Pelt's tile-tree contract (V5/V6): platen projects a forme arrangement's
 # WorkbenchPlan onto it (`tree_projection::tile_tree_from_plan`), so meerkat can
 # host the standalone pelt tile surface as its workbench pane. A zero-dependency
 # contract leaf in serval; the projection is the only seam between forme and the
 # surface (the projection-not-a-second-authority rule).
-pelt-core = { git = "https://github.com/mark-ik/servo-wgpu.git", branch = "main" }
+pelt-core = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 # Platen projects a forme arrangement into a presentation plan (the
 # tree projection — its core role under the composition spine).
 forme.workspace = true

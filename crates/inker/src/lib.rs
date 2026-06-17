@@ -2,7 +2,7 @@
 //!
 //! Modular engine/renderer controller for the
 //! [`mere`](https://crates.io/crates/mere) browser — selects and orchestrates
-//! content engines (Wry system webview, Serval/Servo-wgpu,
+//! content engines (Wry system webview, Serval,
 //! [`nematic`](https://crates.io/crates/nematic) smolweb, file/media viewers).
 //!
 //! In the printing-press metaphor that organizes Mere's architecture, the

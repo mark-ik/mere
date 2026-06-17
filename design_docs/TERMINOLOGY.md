@@ -11,7 +11,7 @@ For terms not addressed here, see the donor harvest indexes ([full harvest](mere
 
 ## Architectural roles (printing-press metaphor)
 
-- **Engines** — content producers. Three flavors: **Wry** (system webview, third-party), **Serval** (servo-wgpu fork), **Nematic** (portable smolweb engine for Gemini/Gopher/HTML/Markdown/RSS-Atom).
+- **Engines** — content producers. Three flavors: **Wry** (system webview, third-party), **Serval** (Servo fork, wgpu-rendered), **Nematic** (portable smolweb engine for Gemini/Gopher/HTML/Markdown/RSS-Atom).
 - **Inker** — engine controller. Selects which engine renders which content; manages engine lifecycle; routes URIs to engines.
 - **Platen** — graph-aware composition surface. Knows graph semantics; presses node-data into renderable form for the verso-tile layer to receive.
 - **Verso** — rendering-surface manager. Receives engine output (via inker) and places it into tile slots. *Verso* is the brand-level concept (the page that catches the impression); the crate family is `verso` (`verso-core`, `tile-state`).

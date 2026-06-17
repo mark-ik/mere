@@ -3625,7 +3625,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 [[package]]
 name = "engine-observables-api"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "malloc_size_of_derive",
  "serde",
@@ -6201,7 +6201,7 @@ dependencies = [
 [[package]]
 name = "layout-dom-api"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "markup5ever",
 ]
@@ -7247,7 +7247,7 @@ dependencies = [
 [[package]]
 name = "netrender"
 version = "0.0.1"
-source = "git+https://github.com/mark-ik/webrender-wgpu.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
+source = "git+https://github.com/mark-ik/netrender.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
 dependencies = [
  "log",
  "netrender_device",
@@ -7259,7 +7259,7 @@ dependencies = [
 [[package]]
 name = "netrender_device"
 version = "0.0.1"
-source = "git+https://github.com/mark-ik/webrender-wgpu.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
+source = "git+https://github.com/mark-ik/netrender.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
 dependencies = [
  "log",
  "pollster",
@@ -7269,7 +7269,7 @@ dependencies = [
 [[package]]
 name = "netrender_text"
 version = "0.0.1"
-source = "git+https://github.com/mark-ik/webrender-wgpu.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
+source = "git+https://github.com/mark-ik/netrender.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
 dependencies = [
  "netrender",
  "parley",
@@ -8427,7 +8427,7 @@ dependencies = [
 [[package]]
 name = "paint_list_api"
 version = "0.0.1"
-source = "git+https://github.com/mark-ik/webrender-wgpu.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
+source = "git+https://github.com/mark-ik/netrender.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
 dependencies = [
  "euclid",
  "serde",
@@ -8436,7 +8436,7 @@ dependencies = [
 [[package]]
 name = "paint_list_render"
 version = "0.0.1"
-source = "git+https://github.com/mark-ik/webrender-wgpu.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
+source = "git+https://github.com/mark-ik/netrender.git?branch=main#6054a0256acf546873cad3c990fc2f9d23f900eb"
 dependencies = [
  "log",
  "netrender",
@@ -8630,12 +8630,12 @@ dependencies = [
 [[package]]
 name = "pelt-core"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 
 [[package]]
 name = "pelt-desktop"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "ash",
  "data-url",
@@ -10718,7 +10718,7 @@ dependencies = [
 [[package]]
 name = "serval-layout"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "app_units",
  "atomic_refcell",
@@ -10757,7 +10757,7 @@ dependencies = [
 [[package]]
 name = "serval-render"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "accesskit",
  "engine-observables-api",
@@ -10774,7 +10774,7 @@ dependencies = [
 [[package]]
 name = "serval-scripted-dom"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "layout-dom-api",
  "markup5ever",
@@ -10784,7 +10784,7 @@ dependencies = [
 [[package]]
 name = "serval-static-dom"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "html5ever",
  "layout-dom-api",
@@ -10794,7 +10794,7 @@ dependencies = [
 [[package]]
 name = "serval-winit-host"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "netrender",
  "wgpu",
@@ -10805,7 +10805,7 @@ dependencies = [
 [[package]]
 name = "servo-allocator"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "libc",
  "tikv-jemalloc-sys",
@@ -10816,7 +10816,7 @@ dependencies = [
 [[package]]
 name = "servo-base"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "accesskit",
  "crossbeam-channel",
@@ -10841,7 +10841,7 @@ dependencies = [
 [[package]]
 name = "servo-canvas-traits"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "crossbeam-channel",
  "euclid",
@@ -10861,7 +10861,7 @@ dependencies = [
 [[package]]
 name = "servo-config"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "serde",
  "serde_json",
@@ -10873,7 +10873,7 @@ dependencies = [
 [[package]]
 name = "servo-config-macro"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10884,7 +10884,7 @@ dependencies = [
 [[package]]
 name = "servo-constellation-traits"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "base64 0.22.1",
  "content-security-policy",
@@ -10919,7 +10919,7 @@ dependencies = [
 [[package]]
 name = "servo-devtools-traits"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "http 1.4.0",
  "malloc_size_of_derive",
@@ -10936,7 +10936,7 @@ dependencies = [
 [[package]]
 name = "servo-embedder-traits"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "accesskit",
  "bitflags 2.11.1",
@@ -10970,7 +10970,7 @@ dependencies = [
 [[package]]
 name = "servo-fonts-traits"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "atomic_refcell",
  "dwrote",
@@ -10994,7 +10994,7 @@ dependencies = [
 [[package]]
 name = "servo-geometry"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "app_units",
  "euclid",
@@ -11007,7 +11007,7 @@ dependencies = [
 [[package]]
 name = "servo-hyper-serde"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "cookie 0.18.1",
  "headers",
@@ -11021,7 +11021,7 @@ dependencies = [
 [[package]]
 name = "servo-malloc-size-of"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "app_units",
  "atomic_refcell",
@@ -11060,7 +11060,7 @@ dependencies = [
 [[package]]
 name = "servo-net-traits"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "content-security-policy",
  "cookie 0.18.1",
@@ -11100,7 +11100,7 @@ dependencies = [
 [[package]]
 name = "servo-paint"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "ash",
  "bytemuck",
@@ -11140,7 +11140,7 @@ dependencies = [
 [[package]]
 name = "servo-paint-api"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "bitflags 2.11.1",
  "crossbeam-channel",
@@ -11175,7 +11175,7 @@ dependencies = [
 [[package]]
 name = "servo-paint-types"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "app_units",
  "euclid",
@@ -11187,7 +11187,7 @@ dependencies = [
 [[package]]
 name = "servo-pixels"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "euclid",
  "image",
@@ -11202,7 +11202,7 @@ dependencies = [
 [[package]]
 name = "servo-profile-traits"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "crossbeam-channel",
  "ipc-channel",
@@ -11218,7 +11218,7 @@ dependencies = [
 [[package]]
 name = "servo-storage-traits"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "malloc_size_of_derive",
  "serde",
@@ -11232,7 +11232,7 @@ dependencies = [
 [[package]]
 name = "servo-tracing"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -11242,7 +11242,7 @@ dependencies = [
 [[package]]
 name = "servo-url"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "encoding_rs",
  "malloc_size_of_derive",
@@ -11256,7 +11256,7 @@ dependencies = [
 [[package]]
 name = "servo-wakelock"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "serde",
  "servo-embedder-traits",
@@ -11265,7 +11265,7 @@ dependencies = [
 [[package]]
 name = "servo-webxr-api"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "euclid",
  "ipc-channel",
@@ -15166,7 +15166,7 @@ checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 [[package]]
 name = "xilem-serval"
 version = "0.2.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "layout-dom-api",
  "serval-scripted-dom",
@@ -15176,7 +15176,7 @@ dependencies = [
 [[package]]
 name = "xilem_core"
 version = "0.4.0"
-source = "git+https://github.com/mark-ik/servo-wgpu.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
+source = "git+https://github.com/mark-ik/serval.git?branch=main#eef768775f7b8e1f4733a35fb59f13350d44d0b0"
 dependencies = [
  "anymore",
  "hashbrown 0.17.0",
