@@ -829,44 +829,73 @@ impl WindowCtx<'_> {
         if events.is_empty() {
             return;
         }
-        let members = self.view.workbench.open_members();
-        let member_of = |id: pelt_core::tile::TileId| {
-            members.iter().copied().find(|m| m.as_u128() as u64 == id.0)
-        };
         for event in events {
-            match event {
-                pelt_core::tile::TileEvent::Activated(id) => {
-                    if let Some(m) = member_of(id) {
-                        self.view.workbench.activate(m);
-                        self.view.focused_tile = Some(m);
-                        // Remember the activated tab as a drag candidate (the press is
-                        // kept in window coords, matching `tile_rects`). The release
-                        // resolves it: a move/split when dragged onto another slot past
-                        // the slop, else a plain click (the tab already activated here).
-                        self.view.tab_drag = Some((m, (x, y)));
-                    }
-                },
-                pelt_core::tile::TileEvent::Closed(id) => {
-                    if let Some(m) = member_of(id) {
-                        self.view.workbench.close_tile(m);
-                        self.shared.content.constellation.reap(m);
-                        if self.view.workbench.open_members().is_empty() {
-                            // Closing the last tile closes the workbench pane entirely
-                            // (back to just the orrery). (Workbench-as-pane.)
-                            self.close_workbench();
-                        } else if self.view.focused_tile == Some(m) {
-                            self.view.focused_tile =
-                                self.view.workbench.open_members().first().copied();
-                        }
-                    }
-                },
-                // DividerMoved is handled by the host divider-drag path
-                // (`surface_divider_at` + `drag_divider`); the surface does not own
-                // the resize gesture.
-                _ => {},
-            }
+            self.apply_tile_event(event, Some((x, y)));
         }
         self.view.request_redraw();
+    }
+
+    /// The workbench member a pelt [`TileId`](pelt_core::tile::TileId) addresses, keyed
+    /// by the UUID's low 64 bits (the encoding `Workbench::to_tile_tree` mints in
+    /// `render.rs`). `None` if no open member matches.
+    pub(super) fn tile_member(
+        &self,
+        id: pelt_core::tile::TileId,
+    ) -> Option<GraphMemberId> {
+        self.view
+            .workbench
+            .open_members()
+            .iter()
+            .copied()
+            .find(|m| m.as_u128() as u64 == id.0)
+    }
+
+    /// Apply one pelt-surface [`TileEvent`](pelt_core::tile::TileEvent) to the
+    /// `Workbench` (the single tiling authority). The one seam every tile gesture
+    /// funnels through: a tab activates / closes its member today; drag + divider
+    /// resize fill the remaining arms once the surface's pointer state machine drives
+    /// them (B3). `press` is the window-space press point for the host's transitional
+    /// tab-drag candidate (a click sets it; a surface-emitted gesture passes `None`).
+    /// Re-projection happens on the next render (`Workbench::to_tile_tree`), so the
+    /// surface stays a driven view. (Tile-event seam.)
+    pub(super) fn apply_tile_event(
+        &mut self,
+        event: pelt_core::tile::TileEvent,
+        press: Option<(f32, f32)>,
+    ) {
+        use pelt_core::tile::TileEvent;
+        match event {
+            TileEvent::Activated(id) => {
+                if let Some(m) = self.tile_member(id) {
+                    self.view.workbench.activate(m);
+                    self.view.focused_tile = Some(m);
+                    // Remember the activated tab as a drag candidate (press kept in
+                    // window coords, matching `tile_rects`). The release resolves it:
+                    // a move/split when dragged onto another slot past the slop, else a
+                    // plain click (the tab already activated here).
+                    if let Some(p) = press {
+                        self.view.tab_drag = Some((m, p));
+                    }
+                }
+            }
+            TileEvent::Closed(id) => {
+                if let Some(m) = self.tile_member(id) {
+                    self.view.workbench.close_tile(m);
+                    self.shared.content.constellation.reap(m);
+                    if self.view.workbench.open_members().is_empty() {
+                        // Closing the last tile closes the workbench pane entirely
+                        // (back to just the orrery). (Workbench-as-pane.)
+                        self.close_workbench();
+                    } else if self.view.focused_tile == Some(m) {
+                        self.view.focused_tile =
+                            self.view.workbench.open_members().first().copied();
+                    }
+                }
+            }
+            // Dragged / DividerMoved: filled in B3, once the host-authoritative
+            // TileShell drives the drag/resize gestures through `take_events`.
+            _ => {}
+        }
     }
 
     /// The tile (member + window rect) under `(x, y)` — the drag drop target, from
