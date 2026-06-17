@@ -390,3 +390,79 @@ fn first_tag(dom: &ScriptedDom, id: NodeId, tag: &str) -> Option<NodeId> {
     }
     None
 }
+
+/// Phase 1 spike (unified-document-host plan, 2026-06-17): one `ServalAppRunner`
+/// hosts the real chrome **and** a second pane as two `lens`-composed subtrees of a
+/// single shell-container root in one `ScriptedDom`. This is the host-side container
+/// that replaces the per-pane-runner fragmentation, proving (a) both surfaces coexist
+/// in one document and (b) input routes through the one runner to each surface's own
+/// lensed sub-state. The chrome is lifted exactly as it already lifts its omnibar
+/// field (`views::chrome_view`); the second pane stands in for roster / apparatus.
+#[test]
+fn shell_container_hosts_chrome_and_pane_under_one_runner() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use xilem_serval::{el, lens, on_click, AnyView, ServalCtx, ServalElement};
+
+    struct DemoPane {
+        clicks: u32,
+    }
+    struct ShellState {
+        chrome: Chrome,
+        pane: DemoPane,
+    }
+    type ShellView = Box<dyn AnyView<ShellState, (), ServalCtx, ServalElement>>;
+    type DemoView = Box<dyn AnyView<DemoPane, (), ServalCtx, ServalElement>>;
+
+    fn demo_pane_view(p: &DemoPane) -> DemoView {
+        Box::new(on_click(
+            el::<_, DemoPane, ()>("section", format!("pane {}", p.clicks)),
+            (|p: &mut DemoPane, _: PointerClick| p.clicks += 1) as fn(&mut DemoPane, PointerClick),
+        ))
+    }
+
+    // The state arg is unused: the lenses pull each surface's sub-state from the
+    // runner at build/rebuild time, so the root view is pure structure.
+    fn shell_view(_s: &ShellState) -> ShellView {
+        let make_chrome: fn(&mut Chrome) -> ChromeView = |c: &mut Chrome| chrome_view(c);
+        let to_chrome: fn(&mut ShellState) -> &mut Chrome = |s: &mut ShellState| &mut s.chrome;
+        let make_pane: fn(&mut DemoPane) -> DemoView = |p: &mut DemoPane| demo_pane_view(p);
+        let to_pane: fn(&mut ShellState) -> &mut DemoPane = |s: &mut ShellState| &mut s.pane;
+        Box::new(el::<_, ShellState, ()>(
+            "shell",
+            (lens(make_chrome, to_chrome), lens(make_pane, to_pane)),
+        ))
+    }
+
+    let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
+    let mut runner = ServalAppRunner::new(
+        dom,
+        shell_view as fn(&ShellState) -> ShellView,
+        ShellState {
+            chrome: Chrome::new("mere://welcome"),
+            pane: DemoPane { clicks: 0 },
+        },
+    );
+
+    let root = runner.root();
+    let pane_node = {
+        let dom = runner.dom();
+        let dom = dom.borrow();
+        assert!(
+            first_tag(&dom, root, "input").is_some(),
+            "the chrome subtree (its omnibar input) is in the one document"
+        );
+        assert!(
+            count_tag(&dom, root, "button") >= 2,
+            "the chrome's buttons coexist under the shell root"
+        );
+        first_tag(&dom, root, "section").expect("the pane subtree is under the same shell root")
+    };
+
+    // Input dispatched through the single runner reaches the pane's own lensed sub-state.
+    runner.dispatch_click(pane_node, PointerClick::at((0.0, 0.0)));
+    assert_eq!(
+        runner.state().pane.clicks, 1,
+        "a click on the pane child mutated its own lensed sub-state, through one runner"
+    );
+}
