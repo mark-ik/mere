@@ -278,7 +278,7 @@ impl WindowCtx<'_> {
     }
 
     fn sync_summary(&self) -> String {
-        let indicator = &self.view.runner.state().sync;
+        let indicator = &self.view.chrome().sync;
         if indicator.active {
             format!(
                 "{} syncing={} ops={}",

@@ -44,10 +44,10 @@ impl WindowCtx<'_> {
     /// the ticket the verb captured from the address bar and drive the sync actor.
     /// The chrome records the intent; this is the host executing it.
     pub(super) fn drain_pending_connect(&mut self) {
-        let Some(ticket) = self.view.runner.state().pending_connect.clone() else {
+        let Some(ticket) = self.view.chrome().pending_connect.clone() else {
             return;
         };
-        self.view.runner.update(|c| {
+        self.view.chrome_update(|c| {
             c.pending_connect = None;
         });
         if ticket.is_empty() {
@@ -65,10 +65,10 @@ impl WindowCtx<'_> {
     /// note for commands that want to report why they no-opped (the omnibar echoes
     /// it; other callers ignore the return). `None` means "nothing to say".
     pub(super) fn drain_pending_command(&mut self) -> Option<String> {
-        let Some(cmd) = self.view.runner.state().pending_command else {
+        let Some(cmd) = self.view.chrome().pending_command else {
             return None;
         };
-        self.view.runner.update(|c| c.pending_command = None);
+        self.view.chrome_update(|c| c.pending_command = None);
         let mut note = None;
         match cmd {
             Command::ToggleWorkbench => self.toggle_workbench(),
@@ -148,7 +148,7 @@ impl WindowCtx<'_> {
         // `chrome_activate` runs.
         let mut note: Option<String> = None;
         for &cmd in &outcome.commands {
-            self.view.runner.update(move |c| c.run_command_and_close(cmd));
+            self.view.chrome_update(move |c| c.run_command_and_close(cmd));
             self.drain_pending_connect();
             if let Some(n) = self.drain_pending_command() {
                 note = Some(n);
@@ -188,7 +188,7 @@ impl WindowCtx<'_> {
         let shown = note
             .or(if echo.is_empty() { None } else { Some(echo) })
             .unwrap_or_else(|| self.current_focus_url().unwrap_or_default());
-        self.view.runner.update(move |c| c.show_location(&shown));
+        self.view.chrome_update(move |c| c.show_location(&shown));
         self.view.request_redraw();
     }
 
@@ -205,7 +205,7 @@ impl WindowCtx<'_> {
         let state = node.and_then(|node| self.shared.content.pages.get(node.url()));
         let inspect = super::inspector::inspector_rows(node, state);
 
-        let chrome = self.view.runner.state();
+        let chrome = self.view.chrome();
         ShellContext {
             current_url: self.current_focus_url().unwrap_or_default(),
             history: chrome.history.entries().to_vec(),
@@ -227,10 +227,10 @@ impl WindowCtx<'_> {
     /// chrome can't reach the actor, so it records the intent and the host drains
     /// it here (mirrors [`drain_pending_command`](Self::drain_pending_command)).
     pub(super) fn drain_comms_intent(&mut self) {
-        let Some(intent) = self.view.runner.state().comms_intent.clone() else {
+        let Some(intent) = self.view.chrome().comms_intent.clone() else {
             return;
         };
-        self.view.runner.update(|c| c.comms_intent = None);
+        self.view.chrome_update(|c| c.comms_intent = None);
         self.shared.observability
             .record_actor("comms", "started", Some(format!("{intent:?}")));
         match intent {

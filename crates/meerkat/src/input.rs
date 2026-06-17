@@ -81,7 +81,7 @@ impl WindowCtx<'_> {
                     MouseButton::Forward => Some(HistoryStep::Forward),
                     _ => None,
                 } {
-                    self.view.runner.update(|c| c.history_step = Some(step));
+                    self.view.chrome_update(|c| c.history_step = Some(step));
                     self.drain_history_step();
                     return;
                 }
@@ -116,11 +116,11 @@ impl WindowCtx<'_> {
                 // A context menu swallows the next press: a left click on one of its
                 // rows runs that action (the chrome closes the menu); a click
                 // anywhere else just dismisses it.
-                if self.view.runner.state().context_menu.is_some() {
+                if self.view.chrome().context_menu.is_some() {
                     if button == MouseButton::Left {
                         self.chrome_click(x, y);
                     }
-                    if self.view.runner.state().context_menu.is_some() {
+                    if self.view.chrome().context_menu.is_some() {
                         self.close_context_menu();
                     }
                     return;
@@ -190,9 +190,9 @@ impl WindowCtx<'_> {
                     // away" from the omnibar: blur the chrome caret and close the
                     // suggestion dropdown, so focus actually leaves the omnibar
                     // instead of the caret + dropdown lingering over the content.
-                    if self.view.runner.focus().is_some() || !self.view.runner.state().suggest.is_empty() {
+                    if self.view.runner.focus().is_some() || !self.view.chrome().suggest.is_empty() {
                         self.view.runner.set_focus(None);
-                        self.view.runner.update(Chrome::close_suggestions);
+                        self.view.chrome_update(Chrome::close_suggestions);
                         self.view.request_redraw();
                     }
                     // A press on a frame divider starts a pane-resize drag. (F1.)
@@ -541,7 +541,7 @@ impl WindowCtx<'_> {
                 if button == MouseButton::Left {
                     if let Some((base, href)) = self.card_link_at(x, y) {
                         let url = nav::resolve_href(&base, &href);
-                        self.view.runner.update(|c| c.follow_link(url));
+                        self.view.chrome_update(|c| c.follow_link(url));
                         self.sync_orrery();
                         self.view.request_redraw();
                         return;
@@ -559,7 +559,7 @@ impl WindowCtx<'_> {
                         } else {
                             self.view.workbench.activate(member);
                             self.view.focused_tile = Some(member);
-                            self.view.runner.update(|c| c.follow_link(url));
+                            self.view.chrome_update(|c| c.follow_link(url));
                             self.sync_orrery();
                             self.view.request_redraw();
                         }
@@ -693,7 +693,7 @@ impl WindowCtx<'_> {
             ContextItem::new("Open link in new tab", ContextAction::OpenLinkNewTab),
             ContextItem::new("Copy link address", ContextAction::CopyLink),
         ];
-        self.view.runner.update(move |c| c.open_context_menu(x, y, items));
+        self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
         true
     }
@@ -774,7 +774,7 @@ impl WindowCtx<'_> {
     /// a11y path passes `(0.0, 0.0)` (the node's own origin) — a valid synthetic
     /// activation point, ignored by the chrome's position-agnostic button handlers.
     pub(super) fn chrome_activate(&mut self, node: NodeId, at: (f32, f32)) {
-        let palette_was_open = self.view.runner.state().palette_open;
+        let palette_was_open = self.view.chrome().palette_open;
         self.view.runner.dispatch_click(node, PointerClick::at(at));
         self.drain_pending_connect();
         self.drain_pending_command();
@@ -784,7 +784,7 @@ impl WindowCtx<'_> {
         self.drain_physics_toggle();
         self.sync_settings();
         self.sync_orrery();
-        if palette_was_open && !self.view.runner.state().palette_open {
+        if palette_was_open && !self.view.chrome().palette_open {
             self.focus_after_palette_close();
         }
         self.view.request_redraw();
@@ -996,7 +996,7 @@ impl WindowCtx<'_> {
             return;
         }
         // An open context menu eats Escape to dismiss (other keys fall through).
-        if self.view.runner.state().context_menu.is_some()
+        if self.view.chrome().context_menu.is_some()
             && matches!(key, WinitKey::Named(WinitNamedKey::Escape))
         {
             self.close_context_menu();
@@ -1013,9 +1013,9 @@ impl WindowCtx<'_> {
         }
         // While the settings overlay is open, Escape closes it and other keys are
         // swallowed (clicks on its controls go through the chrome path).
-        if self.view.runner.state().settings_open {
+        if self.view.chrome().settings_open {
             if matches!(key, WinitKey::Named(WinitNamedKey::Escape)) {
-                self.view.runner.update(Chrome::close_settings);
+                self.view.chrome_update(Chrome::close_settings);
                 self.view.request_redraw();
             }
             return;
@@ -1028,7 +1028,7 @@ impl WindowCtx<'_> {
         {
             let omnibar = self.input_under_class("toolbar");
             self.view.runner.set_focus(omnibar);
-            self.view.runner.update(|c| c.omnibar.select_all());
+            self.view.chrome_update(|c| c.omnibar.select_all());
             self.view.request_redraw();
             return;
         }
@@ -1044,14 +1044,14 @@ impl WindowCtx<'_> {
         if self.view.modifiers.alt
             && matches!(key, WinitKey::Named(WinitNamedKey::ArrowLeft))
         {
-            self.view.runner.update(|c| c.history_step = Some(HistoryStep::Back));
+            self.view.chrome_update(|c| c.history_step = Some(HistoryStep::Back));
             self.drain_history_step();
             return;
         }
         if self.view.modifiers.alt
             && matches!(key, WinitKey::Named(WinitNamedKey::ArrowRight))
         {
-            self.view.runner.update(|c| c.history_step = Some(HistoryStep::Forward));
+            self.view.chrome_update(|c| c.history_step = Some(HistoryStep::Forward));
             self.drain_history_step();
             return;
         }
@@ -1072,7 +1072,7 @@ impl WindowCtx<'_> {
         if self.view.modifiers.ctrl
             && matches!(key, WinitKey::Character(s) if s.eq_ignore_ascii_case("k"))
         {
-            self.view.runner.update(Chrome::toggle_comms);
+            self.view.chrome_update(Chrome::toggle_comms);
             self.drain_comms_intent();
             self.view.request_redraw();
             return;
@@ -1166,11 +1166,11 @@ impl WindowCtx<'_> {
         if self.handle_clipboard_shortcut(key) {
             return;
         }
-        if self.view.runner.state().palette_open {
+        if self.view.chrome().palette_open {
             self.on_palette_key(key);
             return;
         }
-        if self.view.runner.state().find_open {
+        if self.view.chrome().find_open {
             self.on_find_key(key);
             return;
         }
@@ -1223,13 +1223,13 @@ impl WindowCtx<'_> {
     /// the caret, so it refreshes unconditionally — the source of the old "any
     /// focused field is the omnibar" bug, now scoped to the omnibar's own handler.
     fn on_omnibar_key(&mut self, key: &WinitKey) {
-        let suggestions_open = !self.view.runner.state().suggest.is_empty();
+        let suggestions_open = !self.view.chrome().suggest.is_empty();
         match key {
             WinitKey::Named(WinitNamedKey::Enter) => {
                 // A `>`-prefixed expression with no highlighted suggestion is a
                 // command, not an address: route it to the command shell instead of
                 // navigating. (Omnibar command shell, S3.)
-                let chrome = self.view.runner.state();
+                let chrome = self.view.chrome();
                 let command_expr = if chrome.suggest_active.is_none() {
                     match nav::classify(chrome.omnibar.text()) {
                         nav::NavTarget::Command(expr) => Some(expr),
@@ -1243,12 +1243,12 @@ impl WindowCtx<'_> {
                     return;
                 }
                 let as_new_node = self.view.modifiers.ctrl || self.view.modifiers.meta;
-                self.view.runner.update(move |c| {
+                self.view.chrome_update(move |c| {
                     submit_omnibar(c);
                     c.open_as_new_node = as_new_node;
                 });
                 tracing::info!(
-                    location = %self.view.runner.state().toolbar.editable.location,
+                    location = %self.view.chrome().toolbar.editable.location,
                     as_new_node,
                     "omnibar submit"
                 );
@@ -1256,11 +1256,11 @@ impl WindowCtx<'_> {
                 self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowDown) if suggestions_open => {
-                self.view.runner.update(|c| c.step_suggestion(1));
+                self.view.chrome_update(|c| c.step_suggestion(1));
                 self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowUp) if suggestions_open => {
-                self.view.runner.update(|c| c.step_suggestion(-1));
+                self.view.chrome_update(|c| c.step_suggestion(-1));
                 self.view.request_redraw();
             }
             // Accept the inline ghost completion. Right arrow only at the buffer
@@ -1278,7 +1278,7 @@ impl WindowCtx<'_> {
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.view.modifiers) {
                     self.view.runner.dispatch_key(key_event);
-                    self.view.runner.update(Chrome::refresh_suggestions);
+                    self.view.chrome_update(Chrome::refresh_suggestions);
                     self.view.request_redraw();
                 }
             }
@@ -1289,7 +1289,7 @@ impl WindowCtx<'_> {
     /// the Right-arrow case to a caret at the buffer end (so a mid-text → is still
     /// a plain caret move); Tab passes `false` (it has no other omnibar meaning).
     fn omnibar_ghost_acceptable(&self, at_end_only: bool) -> bool {
-        let omnibar = &self.view.runner.state().omnibar;
+        let omnibar = &self.view.chrome().omnibar;
         !omnibar.ghost().is_empty()
             && (!at_end_only || omnibar.caret() == omnibar.text().chars().count())
     }
@@ -1297,7 +1297,7 @@ impl WindowCtx<'_> {
     /// Splice the omnibar's ghost completion into the buffer and recompute (which
     /// clears the now-complete ghost and refreshes suggestions).
     fn accept_omnibar_ghost(&mut self) {
-        self.view.runner.update(|c| {
+        self.view.chrome_update(|c| {
             c.omnibar.accept_ghost();
             c.refresh_suggestions();
         });
@@ -1315,7 +1315,7 @@ impl WindowCtx<'_> {
         let WinitKey::Character(s) = key else {
             return false;
         };
-        let palette = self.view.runner.state().palette_open;
+        let palette = self.view.chrome().palette_open;
         // The clipboard shortcuts act on the palette query or the omnibar; when
         // another field (the comms compose box) holds the caret, let the key fall
         // through to that field's handler rather than editing the omnibar.
@@ -1334,7 +1334,7 @@ impl WindowCtx<'_> {
     /// Copy the active editor's selection to the system clipboard.
     fn clipboard_copy(&mut self, palette: bool) {
         let text = {
-            let c = self.view.runner.state();
+            let c = self.view.chrome();
             if palette {
                 c.palette_input.selected_text()
             } else {
@@ -1353,7 +1353,7 @@ impl WindowCtx<'_> {
     /// Cut: copy the selection, then delete it. No-op without a selection.
     fn clipboard_cut(&mut self, palette: bool) {
         let has = {
-            let c = self.view.runner.state();
+            let c = self.view.chrome();
             if palette {
                 c.palette_input.has_selection()
             } else {
@@ -1364,7 +1364,7 @@ impl WindowCtx<'_> {
             return;
         }
         self.clipboard_copy(palette);
-        self.view.runner.update(|c| {
+        self.view.chrome_update(|c| {
             if palette {
                 c.palette_input.backspace();
             } else {
@@ -1382,7 +1382,7 @@ impl WindowCtx<'_> {
         if text.is_empty() {
             return;
         }
-        self.view.runner.update(|c| {
+        self.view.chrome_update(|c| {
             if palette {
                 c.palette_input.insert_str(&text);
             } else {
@@ -1396,9 +1396,9 @@ impl WindowCtx<'_> {
     /// typed keystroke does (palette query sync, or omnibar suggestions), then redraw.
     fn after_field_edit(&mut self, palette: bool) {
         if palette {
-            self.view.runner.update(Chrome::sync_palette_query);
+            self.view.chrome_update(Chrome::sync_palette_query);
         } else {
-            self.view.runner.update(Chrome::refresh_suggestions);
+            self.view.chrome_update(Chrome::refresh_suggestions);
         }
         self.view.request_redraw();
     }
@@ -1408,7 +1408,7 @@ impl WindowCtx<'_> {
     pub(super) fn on_palette_key(&mut self, key: &WinitKey) {
         match key {
             WinitKey::Named(WinitNamedKey::Enter) => {
-                self.view.runner.update(Chrome::run_palette_selection);
+                self.view.chrome_update(Chrome::run_palette_selection);
                 self.drain_pending_connect();
                 self.drain_pending_command();
                 self.drain_comms_intent();
@@ -1419,22 +1419,22 @@ impl WindowCtx<'_> {
                 self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::Escape) => {
-                self.view.runner.update(Chrome::close_palette);
+                self.view.chrome_update(Chrome::close_palette);
                 self.focus_after_palette_close();
                 self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowDown) => {
-                self.view.runner.update(|c| c.step_palette(1));
+                self.view.chrome_update(|c| c.step_palette(1));
                 self.view.request_redraw();
             }
             WinitKey::Named(WinitNamedKey::ArrowUp) => {
-                self.view.runner.update(|c| c.step_palette(-1));
+                self.view.chrome_update(|c| c.step_palette(-1));
                 self.view.request_redraw();
             }
             other => {
                 if let Some(key_event) = key_event_from_winit(other, self.view.modifiers) {
                     self.view.runner.dispatch_key(key_event);
-                    self.view.runner.update(Chrome::sync_palette_query);
+                    self.view.chrome_update(Chrome::sync_palette_query);
                     self.view.request_redraw();
                 }
             }
@@ -1445,14 +1445,14 @@ impl WindowCtx<'_> {
     /// Escape blurs back to the omnibar, anything else edits the field — never
     /// touching the omnibar suggestions (the dropdown stays closed while chatting).
     pub(super) fn on_comms_key(&mut self, key: &WinitKey) {
-        let composing_new = self.view.runner.state().comms.new_message_open();
+        let composing_new = self.view.chrome().comms.new_message_open();
         match key {
             WinitKey::Named(WinitNamedKey::Enter) => {
                 // Enter sends: the compose-new form when it's open, else the reply.
                 if composing_new {
-                    self.view.runner.update(Chrome::send_new_message);
+                    self.view.chrome_update(Chrome::send_new_message);
                 } else {
-                    self.view.runner.update(Chrome::send_comms);
+                    self.view.chrome_update(Chrome::send_comms);
                 }
                 self.drain_comms_intent();
                 self.view.request_redraw();
@@ -1460,7 +1460,7 @@ impl WindowCtx<'_> {
             WinitKey::Named(WinitNamedKey::Escape) => {
                 // Escape closes the compose-new form, else blurs to the omnibar.
                 if composing_new {
-                    self.view.runner.update(Chrome::close_new_message);
+                    self.view.chrome_update(Chrome::close_new_message);
                 }
                 self.focus_after_palette_close();
                 self.view.request_redraw();
@@ -1497,7 +1497,7 @@ impl WindowCtx<'_> {
     /// comms compose / new-message field, the palette query, else the omnibar.
     pub(super) fn caret_field(&self, node: NodeId) -> &xilem_serval::TextInput {
         let focus = Some(node);
-        let c = self.view.runner.state();
+        let c = self.view.chrome();
         if focus == self.input_under_class("comms-new-to") {
             &c.comms_new_to
         } else if focus == self.input_under_class("comms-new-body") {
@@ -1514,8 +1514,8 @@ impl WindowCtx<'_> {
     /// Toggle the palette and move focus to match: into the palette query when
     /// it opens, back to the omnibar when it closes.
     pub(super) fn toggle_palette(&mut self) {
-        self.view.runner.update(Chrome::toggle_palette);
-        if self.view.runner.state().palette_open {
+        self.view.chrome_update(Chrome::toggle_palette);
+        if self.view.chrome().palette_open {
             if let Some(node) = self.input_under_class("palette") {
                 self.view.runner.set_focus(Some(node));
             }
@@ -1535,8 +1535,8 @@ impl WindowCtx<'_> {
     /// Toggle the find bar and move focus to match: into the find query when it
     /// opens, back to the omnibar when it closes (clearing the actor's matches).
     pub(super) fn toggle_find(&mut self) {
-        self.view.runner.update(Chrome::toggle_find);
-        if self.view.runner.state().find_open {
+        self.view.chrome_update(Chrome::toggle_find);
+        if self.view.chrome().find_open {
             if let Some(node) = self.input_under_class("find-bar") {
                 self.view.runner.set_focus(Some(node));
             }
@@ -1556,7 +1556,7 @@ impl WindowCtx<'_> {
                 self.step_find_match(delta);
             }
             WinitKey::Named(WinitNamedKey::Escape) => {
-                self.view.runner.update(Chrome::close_find);
+                self.view.chrome_update(Chrome::close_find);
                 self.clear_find_matches();
                 self.focus_after_palette_close();
                 self.view.request_redraw();
@@ -1574,9 +1574,9 @@ impl WindowCtx<'_> {
     /// Push the edited find query to the content actor for the focused node, and
     /// reset the active match to the first. (The actor dedups and clears on empty.)
     fn submit_find_query(&mut self) {
-        let query = self.view.runner.state().find_input.text().to_string();
+        let query = self.view.chrome().find_input.text().to_string();
         self.recompute_find(&query);
-        self.view.runner.update(|c| c.find_active = 0);
+        self.view.chrome_update(|c| c.find_active = 0);
     }
 
     /// Clear the find matches (an empty query / bar closed), so highlights vanish.
@@ -1596,13 +1596,13 @@ impl WindowCtx<'_> {
         if count == 0 {
             return;
         }
-        let cur = self.view.runner.state().find_active.min(count - 1) as isize;
+        let cur = self.view.chrome().find_active.min(count - 1) as isize;
         let next = (cur + delta).rem_euclid(count as isize) as usize;
         // The active match's vertical extent (full-document px), for the auto-scroll.
         let (match_top, match_bot) = matches[next]
             .iter()
             .fold((f32::MAX, f32::MIN), |(t, b), r| (t.min(r[1]), b.max(r[3])));
-        self.view.runner.update(move |c| c.find_active = next);
+        self.view.chrome_update(move |c| c.find_active = next);
         if let Some((vis_h, content_h)) = self.find_member_viewport(member) {
             let scroll = self.view.scroll.get(&member).copied().unwrap_or(0.0);
             let out_of_view = match_top < scroll || match_bot > scroll + vis_h;

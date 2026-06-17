@@ -38,7 +38,7 @@ impl WindowCtx<'_> {
         }
         self.view.shown_location = url.clone();
         if let (Some(url), None) = (url, self.view.runner.focus()) {
-            self.view.runner.update(move |c| c.show_location(&url));
+            self.view.chrome_update(move |c| c.show_location(&url));
             self.view.request_redraw();
         }
     }
@@ -54,13 +54,13 @@ impl WindowCtx<'_> {
     /// first-context case. Called after any input that can navigate (omnibar
     /// submit, suggestion / palette).
     pub(super) fn sync_orrery(&mut self) {
-        let loc = self.view.runner.state().content_location().to_string();
+        let loc = self.view.chrome().content_location().to_string();
         // Ctrl/Cmd-Enter: open the address as a *new node* linked from the focused
         // one. Handled before the change guard below, since duplicates are welcome
         // (the node-identity model) — opening the current page as a new node is a
         // valid branch, not a no-op.
-        if self.view.runner.state().open_as_new_node {
-            self.view.runner.update(|c| c.open_as_new_node = false);
+        if self.view.chrome().open_as_new_node {
+            self.view.chrome_update(|c| c.open_as_new_node = false);
             let origin = self.nav_target_member();
             let new_member = self.orrery_mut().open_member_as_new_node(origin, &loc);
             // With the workbench active, tile the new node: stack it into the
@@ -128,10 +128,10 @@ impl WindowCtx<'_> {
     /// change and does not record a fresh visit, and refetch it. Drained each input
     /// pass, before `sync_orrery`.
     pub(super) fn drain_history_step(&mut self) {
-        let Some(step) = self.view.runner.state().history_step else {
+        let Some(step) = self.view.chrome().history_step else {
             return;
         };
-        self.view.runner.update(|c| c.history_step = None);
+        self.view.chrome_update(|c| c.history_step = None);
         let Some(member) = self.nav_target_member() else {
             return;
         };
@@ -145,7 +145,7 @@ impl WindowCtx<'_> {
         self.view.scroll.remove(&member); // the revealed page starts at the top
         self.view.content_location = url.clone();
         self.ensure_content(&url);
-        self.view.runner.update(|c| {
+        self.view.chrome_update(|c| {
             c.content_location = url.clone();
             c.show_location(&url);
         });
@@ -166,13 +166,13 @@ impl WindowCtx<'_> {
         };
         let paused = self.orrery().physics_paused();
         let (cur_back, cur_forward, cur_paused) = {
-            let c = self.view.runner.state();
+            let c = self.view.chrome();
             (c.toolbar.can_go_back, c.toolbar.can_go_forward, c.physics_paused)
         };
         if cur_back == can_back && cur_forward == can_forward && cur_paused == paused {
             return;
         }
-        self.view.runner.update(move |c| {
+        self.view.chrome_update(move |c| {
             c.toolbar.can_go_back = can_back;
             c.toolbar.can_go_forward = can_forward;
             c.physics_paused = paused;
@@ -184,7 +184,7 @@ impl WindowCtx<'_> {
     /// reach the orrery). Mirrors `drain_history_step`'s shape. (Physics pause.)
     pub(super) fn drain_physics_toggle(&mut self) {
         let mut toggled = false;
-        self.view.runner.update(|c| toggled = c.take_physics_toggle());
+        self.view.chrome_update(|c| toggled = c.take_physics_toggle());
         if toggled {
             self.orrery_mut().toggle_physics_paused();
             self.sync_nav_buttons();

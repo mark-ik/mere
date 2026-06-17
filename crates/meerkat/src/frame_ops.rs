@@ -62,7 +62,7 @@ impl WindowCtx<'_> {
     /// (background-flagged nodes excepted).
     pub(super) fn toggle_workbench(&mut self) {
         // Clear the omnibar suggestions dropdown so it doesn't hang over the tiles.
-        self.view.runner.update(Chrome::close_suggestions);
+        self.view.chrome_update(Chrome::close_suggestions);
         if self.workbench_open() {
             self.close_workbench();
             self.view.request_redraw();
@@ -114,7 +114,7 @@ impl WindowCtx<'_> {
     /// Persists to the settings sidecar when the value actually changed (so an
     /// unrelated chrome click doesn't re-write the file).
     pub(super) fn sync_settings(&mut self) {
-        let cap = self.view.runner.state().settings.tab_cap;
+        let cap = self.view.chrome().settings.tab_cap;
         self.shared.content.constellation.set_cap(cap);
         if cap != self.shared.presentation.saved_tab_cap {
             self.shared.presentation.saved_tab_cap = cap;
@@ -295,7 +295,7 @@ impl WindowCtx<'_> {
     /// other panes make room, and the render positions the chrome overlay into it.
     /// (Comms pane.)
     pub(super) fn sync_comms_pane(&mut self) {
-        let open = self.view.runner.state().comms.is_open();
+        let open = self.view.chrome().comms.is_open();
         match (open, self.pane_of_content(&PaneContent::Comms)) {
             (true, None) => {
                 let id = PaneId(self.view.next_pane_id);

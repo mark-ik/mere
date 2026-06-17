@@ -263,7 +263,7 @@ impl Shell {
 
     fn agent_invoke_command(&mut self, cmd: Command) -> (bool, String, String) {
         let action_id = format!("command.{cmd:?}").to_ascii_lowercase();
-        self.ctx().view.runner.update(move |chrome| {
+        self.ctx().view.chrome_update(move |chrome| {
             chrome.run_command_and_close(cmd);
         });
         self.ctx().drain_pending_command();
@@ -292,8 +292,8 @@ impl Shell {
 
     fn agent_activate_focused_action(&mut self) -> (bool, String, String) {
         let action_id = "focus.activate".to_string();
-        if self.ctx().view.runner.state().palette_open {
-            self.ctx().view.runner.update(meerkat::Chrome::run_palette_selection);
+        if self.ctx().view.chrome().palette_open {
+            self.ctx().view.chrome_update(meerkat::Chrome::run_palette_selection);
             self.ctx().drain_pending_command();
             return (true, action_id, "palette selection activated".to_string());
         }
@@ -580,22 +580,22 @@ mod tests {
         assert!(omnibar.is_some(), "the omnibar input exists in the chrome DOM");
         wc.view.runner.set_focus(omnibar);
 
-        let committed = wc.view.runner.state().omnibar.text().to_string();
+        let committed = wc.view.chrome().omnibar.text().to_string();
         wc.handle_ime(Ime::Preedit("ni".to_string(), None));
-        assert_eq!(wc.view.runner.state().omnibar.preedit(), "ni", "preedit routed to the omnibar");
+        assert_eq!(wc.view.chrome().omnibar.preedit(), "ni", "preedit routed to the omnibar");
         assert_eq!(
-            wc.view.runner.state().omnibar.text().to_string(),
+            wc.view.chrome().omnibar.text().to_string(),
             committed,
             "preedit stays out of the committed buffer",
         );
 
         // 你好 — commit clears the preedit and inserts the composed text.
         wc.handle_ime(Ime::Commit("\u{4f60}\u{597d}".to_string()));
-        assert_eq!(wc.view.runner.state().omnibar.preedit(), "", "commit clears the preedit");
+        assert_eq!(wc.view.chrome().omnibar.preedit(), "", "commit clears the preedit");
         assert!(
-            wc.view.runner.state().omnibar.text().contains("\u{4f60}\u{597d}"),
+            wc.view.chrome().omnibar.text().contains("\u{4f60}\u{597d}"),
             "commit inserts the composed text into the omnibar, got {:?}",
-            wc.view.runner.state().omnibar.text(),
+            wc.view.chrome().omnibar.text(),
         );
     }
 
@@ -900,11 +900,11 @@ mod tests {
                 .input_under_class("toolbar")
                 .expect("the omnibar input exists in the chrome DOM");
             wc.view.runner.set_focus(Some(omnibar));
-            wc.view.runner.update(|c| {
+            wc.view.chrome_update(|c| {
                 c.omnibar = xilem_serval::TextInput::new(">ros");
                 c.refresh_suggestions();
             });
-            assert_eq!(wc.view.runner.state().omnibar.ghost(), "ter", "the ghost is shown");
+            assert_eq!(wc.view.chrome().omnibar.ghost(), "ter", "the ghost is shown");
             wc.on_key_pressed(&winit::keyboard::Key::Named(
                 winit::keyboard::NamedKey::ArrowRight,
             ));
@@ -966,7 +966,7 @@ mod tests {
             Some(omnibar),
             "Ctrl+L focused the omnibar"
         );
-        let state = wc.view.runner.state();
+        let state = wc.view.chrome();
         assert!(state.omnibar.has_selection(), "Ctrl+L selected the omnibar text");
         assert_eq!(
             state.omnibar.selected_text(),
@@ -1078,7 +1078,7 @@ mod tests {
             let mut wc = app.ctx();
             wc.open_context_menu_at(200.0, 300.0);
             assert!(wc.view.context_origin.is_some(), "the empty-space menu captured a cursor anchor");
-            wc.view.runner.update(|c| c.pick_context(meerkat::ContextAction::AddNode));
+            wc.view.chrome_update(|c| c.pick_context(meerkat::ContextAction::AddNode));
             wc.drain_pending_context();
         }
         assert_eq!(app.orrery().graph().nodes().count(), before + 1, "AddNode minted a node");
@@ -1095,7 +1095,7 @@ mod tests {
         let tiles_before = app.view().workbench.open_members().len();
         {
             let mut wc = app.ctx();
-            wc.view.runner.update(|c| c.pick_context(meerkat::ContextAction::AddTile));
+            wc.view.chrome_update(|c| c.pick_context(meerkat::ContextAction::AddTile));
             wc.drain_pending_context();
         }
         assert_eq!(app.orrery().graph().nodes().count(), nodes_before + 1, "NewTile minted a node");
@@ -1160,7 +1160,7 @@ mod tests {
                 .input_under_class("toolbar")
                 .expect("the omnibar input exists in the chrome DOM");
             wc.view.runner.set_focus(Some(omnibar));
-            wc.view.runner.update(|c| {
+            wc.view.chrome_update(|c| {
                 c.omnibar = xilem_serval::TextInput::new(">relate");
                 c.refresh_suggestions();
             });
@@ -1196,7 +1196,7 @@ mod tests {
                 .input_under_class("toolbar")
                 .expect("the omnibar input exists in the chrome DOM");
             wc.view.runner.set_focus(Some(omnibar));
-            wc.view.runner.update(|c| c.show_location(">roster"));
+            wc.view.chrome_update(|c| c.show_location(">roster"));
             wc.on_key_pressed(&winit::keyboard::Key::Named(
                 winit::keyboard::NamedKey::Enter,
             ));

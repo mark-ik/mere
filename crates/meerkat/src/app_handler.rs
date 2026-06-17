@@ -319,7 +319,7 @@ impl ApplicationHandler for Shell {
             latest_sync = Some(sync::to_indicator(&update.status, sync::LANE_LABEL));
         }
         if let Some(indicator) = latest_sync {
-            wc.view.runner.update(|c| c.sync = indicator.clone());
+            wc.view.chrome_update(|c| c.sync = indicator.clone());
             wc.view.request_redraw();
         }
         // Comms (P6c): the comms actor delivers conversation lists + threads here;
@@ -338,7 +338,7 @@ impl ApplicationHandler for Shell {
                         "succeeded",
                         Some("inbox".to_string()),
                     );
-                    wc.view.runner.update(|c| c.comms.set_inbox(inbox.clone()));
+                    wc.view.chrome_update(|c| c.comms.set_inbox(inbox.clone()));
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::Thread(id, messages) => {
@@ -352,7 +352,7 @@ impl ApplicationHandler for Shell {
                         "succeeded",
                         Some("thread".to_string()),
                     );
-                    wc.view.runner.update(|c| {
+                    wc.view.chrome_update(|c| {
                         if c.comms.selected() == Some(&id) {
                             c.comms.set_thread(messages.clone());
                         }
@@ -363,7 +363,7 @@ impl ApplicationHandler for Shell {
                     wc.shared.observability.record_actor("comms", "sent", None);
                     wc.shared.observability
                         .record_actor("comms", "succeeded", Some("sent".to_string()));
-                    wc.view.runner.update(|c| c.clear_comms_draft());
+                    wc.view.chrome_update(|c| c.clear_comms_draft());
                     comms_changed = true;
                 }
                 comms_host::CommsUpdate::SendOutcome(line) => {
@@ -396,7 +396,7 @@ impl ApplicationHandler for Shell {
                         "succeeded",
                         Some("identity".to_string()),
                     );
-                    wc.view.runner.update(|c| {
+                    wc.view.chrome_update(|c| {
                         c.comms
                             .set_identity(misfin_address.clone(), cabal_ticket.clone())
                     });

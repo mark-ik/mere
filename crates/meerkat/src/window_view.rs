@@ -287,6 +287,20 @@ pub(crate) struct WindowView {
 }
 
 impl WindowView {
+    /// The chrome view-state, read-only. Phase 1 insulation seam: call sites read the
+    /// chrome through this rather than `runner.state()` directly, so the runner's state
+    /// type can later widen from `Chrome` to a composed shell state without touching
+    /// them. (Unified document host — Phase 1.)
+    pub(crate) fn chrome(&self) -> &Chrome {
+        self.runner.state()
+    }
+
+    /// Mutate the chrome view-state; the runner re-renders and diffs the change. The
+    /// mutation counterpart to [`chrome`](Self::chrome), and the same insulation seam.
+    pub(crate) fn chrome_update(&mut self, f: impl FnOnce(&mut Chrome)) {
+        self.runner.update(f);
+    }
+
     /// Mint a window's view over a fresh pair of serval runners. Everything else
     /// starts at its rest value (empty caches, no in-progress gesture, the default
     /// 1024×600 surface); the caller overrides the view-session bits it restored

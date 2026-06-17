@@ -126,7 +126,7 @@ impl WindowCtx<'_> {
     fn comms_a11y_tree(&self, pane_id: PaneId) -> UxTree {
         let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "comms");
         let root = node_id_for_path(&root_path);
-        let comms = &self.view.runner.state().comms;
+        let comms = &self.view.chrome().comms;
         let mut nodes = Vec::new();
         let mut children = Vec::new();
 
@@ -172,7 +172,7 @@ impl WindowCtx<'_> {
         let draft_root = node_id_for_path(&format!("{root_path}/draft"));
         let mut draft = Node::new(Role::TextInput);
         draft.set_label("Draft");
-        draft.set_value(self.view.runner.state().comms_draft.text().to_string());
+        draft.set_value(self.view.chrome().comms_draft.text().to_string());
         nodes.push((draft_root, draft));
         children.push(draft_root);
 

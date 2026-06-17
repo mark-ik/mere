@@ -80,7 +80,7 @@ impl WindowCtx<'_> {
             FocusedField::CommsBody
         } else if focus == self.input_under_class("comms-compose") {
             FocusedField::CommsDraft
-        } else if self.view.runner.state().palette_open {
+        } else if self.view.chrome().palette_open {
             FocusedField::Palette
         } else {
             FocusedField::Omnibar
@@ -91,7 +91,7 @@ impl WindowCtx<'_> {
     /// A no-op when nothing is focused.
     fn set_focused_preedit(&mut self, text: String) {
         let Some(kind) = self.focused_field_kind() else { return };
-        self.view.runner.update(move |c| {
+        self.view.chrome_update(move |c| {
             let field = match kind {
                 FocusedField::Omnibar => &mut c.omnibar,
                 FocusedField::Palette => &mut c.palette_input,
