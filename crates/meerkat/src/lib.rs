@@ -310,6 +310,12 @@ pub enum ContextAction {
     /// stays `Copy`), or `""` for force-directed (gyre, the default). Drains like
     /// `ShellbarMove` without touching `context_set`. (Layout picker.)
     SetLayoutStrategy(&'static str),
+    /// Scope the focused orrery to the selection (plus its neighbors) — the "Isolate"
+    /// lens. Drains like `ShellbarMove` without touching `context_set`. (Curated orrery.)
+    IsolateSelection,
+    /// Drop the orrery's scope lens — show the whole graph again ("Show all"). Drains
+    /// like `ShellbarMove` without touching `context_set`. (Curated orrery.)
+    ShowAllNodes,
 }
 
 impl Chrome {

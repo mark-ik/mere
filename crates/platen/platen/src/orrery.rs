@@ -71,6 +71,18 @@ pub fn identity_arrangement(graph: &Graph) -> Arrangement {
     Arrangement::identity(graph.nodes().map(|(_, node)| node.id))
 }
 
+/// A curated arrangement of just `keys` (a subset of the graph) as `MemberIntent`s
+/// keyed by their member UUIDs, in graph order — the orrery's "scope" lens. Like
+/// [`identity_arrangement`] restricted to the given nodes; the same shape a
+/// `FormeRef::Stored` curated arrangement would take, so a scoped orrery and a
+/// curated bench are the same projection of different arrangements. (Curated orrery.)
+pub fn arrangement_of_keys(graph: &Graph, keys: &[NodeKey]) -> Arrangement {
+    let set: HashSet<NodeKey> = keys.iter().copied().collect();
+    Arrangement::identity(
+        graph.nodes().filter(|(k, _)| set.contains(k)).map(|(_, node)| node.id),
+    )
+}
+
 /// Build a [`Projection`] whose node SET comes from a forme [`Arrangement`]'s
 /// membership rather than the whole graph — the seam that makes the orrery a
 /// Cartography projection of an arrangement. Positions come from `position_of`

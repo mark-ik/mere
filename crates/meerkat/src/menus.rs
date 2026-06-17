@@ -40,6 +40,10 @@ impl WindowCtx<'_> {
                 ContextItem::new("Add node", ContextAction::AddNode),
                 ContextItem::new("Add field", ContextAction::AddField),
             ];
+            // "Show all" lifts an active scope lens (back to the whole graph). (Curated orrery.)
+            if self.orrery().is_scoped() {
+                items.push(ContextItem::new("Show all", ContextAction::ShowAllNodes));
+            }
             // Layout is a pane-level choice, so it rides the empty-canvas menu. (Layout picker.)
             items.extend(self.layout_picker_items());
             if multi_graph {
@@ -70,6 +74,9 @@ impl WindowCtx<'_> {
             items.push(ContextItem::new("Add tag\u{2026}", ContextAction::AddTag));
             items
         };
+        // Isolate the selection into the orrery's scope lens (a curated subgraph). A
+        // pane-level lens, offered on any selection. (Curated orrery.)
+        items.push(ContextItem::new("Isolate", ContextAction::IsolateSelection));
         if multi_graph {
             items.push(close_item());
         }
@@ -247,6 +254,19 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Isolate the selection into the orrery's scope lens (a curated subgraph), or
+        // lift it. A transient lens (keyed by NodeKey, not persisted). No member set.
+        // (Curated orrery.)
+        if let ContextAction::IsolateSelection = action {
+            self.orrery_mut().isolate_selection();
+            self.view.request_redraw();
+            return;
+        }
+        if let ContextAction::ShowAllNodes = action {
+            self.orrery_mut().clear_scope();
+            self.view.request_redraw();
+            return;
+        }
         // Relate the two selected nodes — no tile / member-set logic, like the
         // shellbar move above.
         if let ContextAction::Relate = action {
@@ -382,7 +402,9 @@ impl WindowCtx<'_> {
             | ContextAction::AddTag
             | ContextAction::OpenLinkNewTab
             | ContextAction::CopyLink
-            | ContextAction::SetLayoutStrategy(_) => {
+            | ContextAction::SetLayoutStrategy(_)
+            | ContextAction::IsolateSelection
+            | ContextAction::ShowAllNodes => {
                 unreachable!("handled above")
             }
         }

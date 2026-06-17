@@ -74,16 +74,27 @@ impl Orrery {
             .collect();
         // On-screen nodes (cull against the world-space viewport) become DOM
         // children; the rest demote to underlay rects, so no node double-draws.
-        let on_screen: HashSet<NodeKey> =
+        let mut on_screen: HashSet<NodeKey> =
             self.view.cull_aabb(self.world_viewport()).into_iter().collect();
+        // The scope lens (curated orrery): when set, render only the scoped nodes —
+        // filter the on-screen DOM set here, project the underlay through a curated
+        // arrangement of just the scope (below), and hide non-scoped DOM nodes (the
+        // gnode loop). `None` shows the whole graph. (Curated orrery.)
+        let scoped: Option<HashSet<NodeKey>> =
+            self.scope.as_ref().map(|s| s.iter().copied().collect());
+        if let Some(sc) = &scoped {
+            on_screen.retain(|k| sc.contains(k));
+        }
 
-        // Route the underlay through the orrery's read-through Identity arrangement,
-        // so the orrery renders as a Cartography projection of a forme arrangement —
-        // the same arrangement contract the workbench's Tree projection consumes (the
-        // spine's "two projections of one arrangement"). Byte-identical to the
-        // whole-graph path for Identity; the seam a curated / compare arrangement
-        // would later drive an orrery-shaped projection through.
-        let arrangement = identity_arrangement(&self.graph);
+        // Route the underlay through the orrery's forme arrangement — the full
+        // read-through Identity arrangement, or a curated arrangement of just the
+        // scope. Either way the orrery renders as a Cartography projection of an
+        // arrangement (the spine's "two projections of one arrangement"); a scoped
+        // arrangement is exactly the shape a stored/compare arrangement would take.
+        let arrangement = match &self.scope {
+            Some(keys) => platen::orrery::arrangement_of_keys(&self.graph, keys),
+            None => identity_arrangement(&self.graph),
+        };
         let mut underlay = orrery_paint_list_demoted_from_arrangement(
             &self.graph,
             &arrangement,
@@ -139,6 +150,12 @@ impl Orrery {
         let gnodes: Vec<(NodeKey, DomNodeId)> =
             self.gnode_of.iter().map(|(&k, &g)| (k, g)).collect();
         for (key, gnode) in gnodes {
+            // Scope lens: hide a non-scoped node's DOM child (the underlay already
+            // excludes it), so a scoped orrery shows only its subset. (Curated orrery.)
+            if scoped.as_ref().is_some_and(|sc| !sc.contains(&key)) {
+                set_style(&mut self.node_dom, gnode, "display: none;");
+                continue;
+            }
             let pos = positions.get(&key).copied().unwrap_or_default();
             set_style(
                 &mut self.node_dom,

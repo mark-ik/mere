@@ -183,6 +183,10 @@ pub struct Orrery {
     /// frame **after** the physics snapshot (so they win over gyre regardless of the
     /// off-thread actor's timing). `None` under force-directed. (Layout picker.)
     strategy_positions: Option<Vec<(NodeKey, PortablePoint)>>,
+    /// The pane's "scope" lens: when `Some`, the orrery renders only these nodes (a
+    /// curated subset), projecting through a curated forme arrangement instead of the
+    /// full Identity one. `None` shows the whole graph. (Curated orrery.)
+    scope: Option<Vec<NodeKey>>,
 }
 
 impl Default for Orrery {
@@ -311,6 +315,7 @@ impl Orrery {
             view_h: 600,
             active_strategy: None,
             strategy_positions: None,
+            scope: None,
         }
     }
 
@@ -935,6 +940,32 @@ impl Orrery {
             self.view.set_position(key, Point2D::new(p.x, p.y));
         }
         self.strategy_positions = Some(positions);
+    }
+
+    /// Whether a scope lens is active (the orrery is showing a curated subset, not the
+    /// whole graph). The host offers "Show all" when this is true. (Curated orrery.)
+    pub fn is_scoped(&self) -> bool {
+        self.scope.is_some()
+    }
+
+    /// Focus the orrery on the current selection: scope it to the selected nodes plus
+    /// their immediate (undirected) neighbors, so the selection shows as its own
+    /// neighborhood projected through a curated arrangement. A no-op with no
+    /// selection. (Curated orrery.)
+    pub fn isolate_selection(&mut self) {
+        if self.selected.is_empty() {
+            return;
+        }
+        let mut scope: HashSet<NodeKey> = self.selected.clone();
+        for &key in &self.selected {
+            scope.extend(self.graph.neighbors_undirected(key));
+        }
+        self.scope = Some(scope.into_iter().collect());
+    }
+
+    /// Drop the scope lens — show the whole graph again. (Curated orrery.)
+    pub fn clear_scope(&mut self) {
+        self.scope = None;
     }
 
     /// Zoom by `factor`, keeping the world point under `anchor` (screen px) fixed.

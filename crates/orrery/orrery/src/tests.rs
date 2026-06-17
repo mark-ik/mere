@@ -394,6 +394,31 @@ fn layout_strategy_overrides_node_positions_until_reverted() {
 }
 
 #[test]
+fn isolate_selection_scopes_the_orrery() {
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    graph.add_node("https://b.example".to_string(), PortablePoint::new(50.0, 0.0));
+    let mut orrery = Orrery::with_graph(graph);
+    assert!(!orrery.is_scoped(), "the whole graph shows by default");
+
+    // No selection: isolate is a no-op.
+    orrery.isolate_selection();
+    assert!(!orrery.is_scoped(), "isolating with no selection does nothing");
+
+    // With a selection, isolate scopes the orrery to (at least) the selected node.
+    orrery.selected.insert(a);
+    orrery.isolate_selection();
+    assert!(orrery.is_scoped(), "isolating a selection scopes the orrery");
+    assert!(
+        orrery.scope.as_ref().unwrap().contains(&a),
+        "the scope includes the selected node",
+    );
+
+    orrery.clear_scope();
+    assert!(!orrery.is_scoped(), "show all clears the scope");
+}
+
+#[test]
 fn park_physics_halts_an_in_progress_settle() {
     let mut orrery = Orrery::with_sample_graph();
     assert!(orrery.is_settling(), "the sample graph settles its initial spiral");
