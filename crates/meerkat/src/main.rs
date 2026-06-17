@@ -1027,6 +1027,12 @@ impl Shell {
         let present_members: HashSet<forme::GraphMemberId> =
             orrery.graph().nodes().map(|(_, node)| node.id).collect();
         view.workbench = session_ops::load_workbench(&session_dir, &present_members);
+        // Restore the orrery's settled layout from the cartography sidecar at boot,
+        // overriding the graph's load-time seed (the live layout is never committed to
+        // graph.json). (Position sidecar.)
+        if let Some(geom) = session_ops::load_cartography(&session_dir, &present_members) {
+            orrery.seed_cartography(geom.iter());
+        }
         // Pool every graph a restored pane resolves to, not just the active one, so a
         // second graph-pane (persisted from a prior run) loads instead of leaving a
         // blank pane the user can't dismiss. Each cold-loads its graph from its

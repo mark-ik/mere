@@ -24,6 +24,8 @@
 //! is the semantic + re-projection truth; this is the layout refinement over the
 //! arrangement's default flat projection ([`crate::project_tree`]).
 
+use std::collections::HashSet;
+
 use forme::GraphMemberId;
 use pelt_core::tile::SplitAxis;
 use serde::{Deserialize, Serialize};
@@ -154,13 +156,84 @@ impl TreeGeometry {
     }
 }
 
+/// The geometry of the **Cartography** projection (the orrery): each member's world
+/// position, member-keyed. The cartography counterpart of [`TreeGeometry`] for the
+/// Tree projection — "canonical world positions (cartography)" per the composition
+/// spine (§9), keyed `(FormeRef::Identity(GraphId), ProjectionKind::Cartography)` and
+/// persisted beside the session graph. Positions are *world* coordinates (the
+/// semantic geometry), not pixels, so they render responsively at any zoom.
+///
+/// This is the authoritative store of the orrery's *settled* layout: the live
+/// force-directed positions live in the gyre read model and were never written back
+/// to the kernel graph, so without this sidecar a session's settled layout is lost on
+/// reload (graph.json carries only the load-time seed).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct CartographyGeometry {
+    positions: Vec<(GraphMemberId, (f32, f32))>,
+}
+
+impl CartographyGeometry {
+    /// Collect a member-keyed position set (e.g. the orrery's live node positions).
+    pub fn from_positions(
+        positions: impl IntoIterator<Item = (GraphMemberId, (f32, f32))>,
+    ) -> Self {
+        Self { positions: positions.into_iter().collect() }
+    }
+
+    /// The `(member, (x, y))` pairs, in insertion order.
+    pub fn iter(&self) -> impl Iterator<Item = (GraphMemberId, (f32, f32))> + '_ {
+        self.positions.iter().copied()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.positions.is_empty()
+    }
+
+    /// The members carrying a position.
+    pub fn members(&self) -> Vec<GraphMemberId> {
+        self.positions.iter().map(|(m, _)| *m).collect()
+    }
+
+    /// Serialize to JSON for session persistence (the host writes it beside the graph).
+    pub fn to_persisted_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(self)
+    }
+
+    /// Rebuild from persisted JSON, dropping any member the live graph no longer has
+    /// (`present`) so a deleted node's stale position is reconciled away. `None` on a
+    /// parse error — the host falls back to the graph's own seed.
+    pub fn from_persisted_json(json: &str, present: &HashSet<GraphMemberId>) -> Option<Self> {
+        let mut geom: Self = serde_json::from_str(json).ok()?;
+        geom.positions.retain(|(member, _)| present.contains(member));
+        Some(geom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
     use uuid::Uuid;
 
     fn m(n: u128) -> GraphMemberId {
         Uuid::from_u128(n)
+    }
+
+    #[test]
+    fn cartography_geometry_round_trips_and_prunes_absent_members() {
+        let geom = CartographyGeometry::from_positions([
+            (m(1), (10.0, 20.0)),
+            (m(2), (30.0, 40.0)),
+            (m(3), (50.0, 60.0)),
+        ]);
+        let json = geom.to_persisted_json().unwrap();
+        // Member 2 was deleted from the graph since the save.
+        let present: HashSet<GraphMemberId> = [m(1), m(3)].into_iter().collect();
+        let back = CartographyGeometry::from_persisted_json(&json, &present).unwrap();
+        assert_eq!(back.members(), vec![m(1), m(3)], "the absent member is pruned");
+        let by_member: std::collections::HashMap<_, _> = back.iter().collect();
+        assert_eq!(by_member[&m(1)], (10.0, 20.0));
+        assert_eq!(by_member[&m(3)], (50.0, 60.0));
     }
 
     #[test]

@@ -100,7 +100,7 @@ pub use cartography_scene::{
     project_with, step_with,
 };
 pub use document_scene::build_document_scene;
-pub use projection_geometry::{Axis, TreeBranch, TreeGeometry};
+pub use projection_geometry::{Axis, CartographyGeometry, TreeBranch, TreeGeometry};
 pub use tree_projection::{PlanSlot, ProjectionKind, TilePlan, WorkbenchPlan, project_tree};
 pub use workbench::{SlotView, Workbench};
 

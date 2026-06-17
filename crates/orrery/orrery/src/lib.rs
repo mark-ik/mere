@@ -731,6 +731,41 @@ impl Orrery {
         (nodes, edges)
     }
 
+    /// The Cartography projection geometry: each member's current world position,
+    /// member-keyed — the orrery's settled layout, for the host to persist as the
+    /// cartography sidecar (the counterpart of the workbench's `TreeGeometry`). Reads
+    /// the live gyre positions, so it captures whatever is shown (force-directed or a
+    /// picked layout strategy). (Position sidecar.)
+    pub fn cartography_geometry(&self) -> platen::CartographyGeometry {
+        platen::CartographyGeometry::from_positions(
+            self.view
+                .positions()
+                .filter_map(|(key, p)| self.graph.get_node(key).map(|node| (node.id, (p.x, p.y)))),
+        )
+    }
+
+    /// Seed node positions from a persisted cartography sidecar, overriding the graph's
+    /// load-time seed so a reloaded session shows its settled layout rather than
+    /// re-scrambling. Members absent from the sidecar keep their existing seed (a node
+    /// added since the last save still shows); physics halts so the restored layout
+    /// holds until the user nudges it. (Position sidecar.)
+    pub fn seed_cartography(&mut self, positions: impl IntoIterator<Item = (uuid::Uuid, (f32, f32))>) {
+        let resolved: Vec<(NodeKey, Point2D<f32>)> = positions
+            .into_iter()
+            .filter_map(|(id, (x, y))| {
+                self.graph.get_node_by_id(id).map(|(key, _)| (key, Point2D::new(x, y)))
+            })
+            .collect();
+        if resolved.is_empty() {
+            return;
+        }
+        for &(key, pos) in &resolved {
+            self.view.set_position(key, pos);
+        }
+        self.physics.seed(resolved);
+        self.physics.halt();
+    }
+
     /// Theme the orrery's surfaces: the content-surface `backdrop` and the `edge`
     /// stroke color, as straight `[r, g, b, a]` (0..1). The host pushes these from
     /// the active theme so the graph re-themes with the chrome. Node *state* colors

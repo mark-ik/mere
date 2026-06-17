@@ -48,6 +48,33 @@ pub(crate) fn load_workbench(
         .unwrap_or_else(platen::Workbench::new)
 }
 
+/// Filename for the cartography position sidecar (beside `graph.json`): the orrery's
+/// settled node positions, member-keyed (the Cartography projection geometry, the
+/// counterpart of `workbench.json`'s TreeGeometry). The live force-directed layout is
+/// never committed to the kernel graph, so this is what makes a session's settled
+/// layout durable across a restart. (Position sidecar.)
+const CARTOGRAPHY_FILE: &str = "cartography.json";
+
+/// Kill-switch for restoring persisted orrery positions on load. On any miss the host
+/// falls back to the graph's own load-time seed (the prior behavior). (Position sidecar.)
+const RESTORE_CARTOGRAPHY: bool = true;
+
+/// Load the persisted cartography positions from `session_dir`, pruned to `present`
+/// (the loaded graph's members). `None` when the feature is off, the file is absent,
+/// or the JSON fails to parse — the orrery then keeps its graph-seeded layout. Shared
+/// by the session-switch and boot restore paths. (Position sidecar.)
+pub(crate) fn load_cartography(
+    session_dir: &std::path::Path,
+    present: &std::collections::HashSet<forme::GraphMemberId>,
+) -> Option<platen::CartographyGeometry> {
+    if !RESTORE_CARTOGRAPHY {
+        return None;
+    }
+    std::fs::read_to_string(session_dir.join(CARTOGRAPHY_FILE))
+        .ok()
+        .and_then(|json| platen::CartographyGeometry::from_persisted_json(json.as_str(), present))
+}
+
 impl WindowCtx<'_> {
     /// The session a `graph_id` belongs to: its [`SessionId`] and storage dir,
     /// resolved by the graph (manifests are keyed by session but each carries its
@@ -138,6 +165,18 @@ impl WindowCtx<'_> {
                 }
             }
             Err(err) => tracing::warn!(%err, "failed to serialize the workbench tiling"),
+        }
+        // The orrery's settled layout: persist the live node positions as the
+        // cartography sidecar (the live force-directed layout is never committed to
+        // the kernel graph, so this is what survives a restart). Best-effort. (Position sidecar.)
+        match self.orrery().cartography_geometry().to_persisted_json() {
+            Ok(json) => {
+                let path = session_dir.join(CARTOGRAPHY_FILE);
+                if let Err(err) = std::fs::write(&path, json) {
+                    tracing::warn!(%err, path = ?path, "failed to persist the cartography positions");
+                }
+            }
+            Err(err) => tracing::warn!(%err, "failed to serialize the cartography positions"),
         }
         // Record the save in this session's manifest (advances `updated_at`, the
         // switcher's recency key) and flush the registry. (Multi-graph MG1.)
@@ -455,6 +494,14 @@ impl super::Shell {
         // Restore this graph's persisted tiling instead of wiping to an empty
         // workbench (the split shape / tabs / active tab now survive a restart). (A3.)
         ctx.view.workbench = ctx.restore_workbench(&session_dir);
+        // Restore the orrery's settled layout from the cartography sidecar, overriding
+        // the graph's load-time seed so the spatial view comes back as it was left
+        // rather than re-scrambling. (Position sidecar.)
+        let present: std::collections::HashSet<forme::GraphMemberId> =
+            ctx.orrery().graph().nodes().map(|(_, node)| node.id).collect();
+        if let Some(geom) = load_cartography(&session_dir, &present) {
+            ctx.orrery_mut().seed_cartography(geom.iter());
+        }
         ctx.view.maximized_pane = None;
         ctx.view.active_content = super::ContentPane::Orrery;
         ctx.shared.session.session_dir = session_dir;

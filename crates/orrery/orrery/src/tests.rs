@@ -419,6 +419,36 @@ fn isolate_selection_scopes_the_orrery() {
 }
 
 #[test]
+fn cartography_geometry_captures_live_positions() {
+    let mut g = Graph::new();
+    let a = g.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut orrery = Orrery::with_graph(g);
+    let a_id = orrery.graph().get_node(a).unwrap().id;
+    orrery.view.set_position(a, euclid::default::Point2D::new(111.0, 222.0));
+    let geom = orrery.cartography_geometry();
+    let by_member: std::collections::HashMap<_, _> = geom.iter().collect();
+    assert_eq!(
+        by_member.get(&a_id).copied(),
+        Some((111.0, 222.0)),
+        "the accessor captures the live node position",
+    );
+}
+
+#[test]
+fn seed_cartography_overrides_node_positions() {
+    let mut g = Graph::new();
+    let a = g.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut orrery = Orrery::with_graph(g);
+    let a_id = orrery.graph().get_node(a).unwrap().id;
+    orrery.seed_cartography([(a_id, (321.0, 654.0))]);
+    let pos = orrery.view.position_of(a).expect("a position");
+    assert!(
+        (pos.x - 321.0).abs() < 0.01 && (pos.y - 654.0).abs() < 0.01,
+        "seed_cartography overrides the load-time seed, got {pos:?}",
+    );
+}
+
+#[test]
 fn park_physics_halts_an_in_progress_settle() {
     let mut orrery = Orrery::with_sample_graph();
     assert!(orrery.is_settling(), "the sample graph settles its initial spiral");
