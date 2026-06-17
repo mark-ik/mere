@@ -44,6 +44,12 @@ impl WindowCtx<'_> {
             if self.orrery().is_scoped() {
                 items.push(ContextItem::new("Show all", ContextAction::ShowAllNodes));
             }
+            // Mirror the workbench's open tiles into the orrery — the same arrangement as
+            // both a tiled workbench and a spatial map. Offered when tiles are open.
+            // (Curated orrery — workbench mirror.)
+            if !self.view.workbench.open_members().is_empty() {
+                items.push(ContextItem::new("Mirror tiles", ContextAction::MirrorTiles));
+            }
             // Layout is a pane-level choice, so it rides the empty-canvas menu. (Layout picker.)
             items.extend(self.layout_picker_items());
             if multi_graph {
@@ -267,6 +273,14 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Mirror the workbench's open tiles into the orrery's scope (a snapshot of the
+        // current tiles). No member set. (Curated orrery — workbench mirror.)
+        if let ContextAction::MirrorTiles = action {
+            let members = self.view.workbench.open_members();
+            self.orrery_mut().scope_to_members(members);
+            self.view.request_redraw();
+            return;
+        }
         // Relate the two selected nodes — no tile / member-set logic, like the
         // shellbar move above.
         if let ContextAction::Relate = action {
@@ -404,7 +418,8 @@ impl WindowCtx<'_> {
             | ContextAction::CopyLink
             | ContextAction::SetLayoutStrategy(_)
             | ContextAction::IsolateSelection
-            | ContextAction::ShowAllNodes => {
+            | ContextAction::ShowAllNodes
+            | ContextAction::MirrorTiles => {
                 unreachable!("handled above")
             }
         }

@@ -316,6 +316,10 @@ pub enum ContextAction {
     /// Drop the orrery's scope lens — show the whole graph again ("Show all"). Drains
     /// like `ShellbarMove` without touching `context_set`. (Curated orrery.)
     ShowAllNodes,
+    /// Scope the orrery to the workbench's open tiles — the same arrangement rendered
+    /// as both a tiled workbench and a spatial map. Drains like `ShellbarMove` without
+    /// touching `context_set`. (Curated orrery — workbench mirror.)
+    MirrorTiles,
 }
 
 impl Chrome {

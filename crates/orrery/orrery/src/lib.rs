@@ -1005,6 +1005,19 @@ impl Orrery {
         self.scope = Some(scope.into_iter().collect());
     }
 
+    /// Scope the orrery to a host-supplied member set (by UUID), e.g. the workbench's
+    /// open tiles, so the *same* arrangement renders as both a tiled workbench and a
+    /// spatial map (the spine's "two projections of one arrangement"). Members absent
+    /// from the graph are skipped; an empty set clears the lens (shows the whole
+    /// graph). (Curated orrery — workbench mirror.)
+    pub fn scope_to_members(&mut self, members: impl IntoIterator<Item = uuid::Uuid>) {
+        let keys: Vec<NodeKey> = members
+            .into_iter()
+            .filter_map(|id| self.graph.get_node_by_id(id).map(|(key, _)| key))
+            .collect();
+        self.scope = (!keys.is_empty()).then_some(keys);
+    }
+
     /// Drop the scope lens — show the whole graph again. (Curated orrery.)
     pub fn clear_scope(&mut self) {
         self.scope = None;

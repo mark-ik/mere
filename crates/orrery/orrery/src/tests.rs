@@ -419,6 +419,23 @@ fn isolate_selection_scopes_the_orrery() {
 }
 
 #[test]
+fn scope_to_members_scopes_to_the_given_set() {
+    let mut g = Graph::new();
+    let a = g.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    g.add_node("https://b.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut orrery = Orrery::with_graph(g);
+    let a_id = orrery.graph().get_node(a).unwrap().id;
+    assert!(!orrery.is_scoped(), "the whole graph by default");
+
+    orrery.scope_to_members([a_id]);
+    assert!(orrery.is_scoped(), "scoping to a member set (the workbench tiles) scopes the orrery");
+    assert!(orrery.scope.as_ref().unwrap().contains(&a), "the scope holds the member's key");
+
+    orrery.scope_to_members(std::iter::empty());
+    assert!(!orrery.is_scoped(), "an empty member set shows the whole graph");
+}
+
+#[test]
 fn cartography_geometry_captures_live_positions() {
     let mut g = Graph::new();
     let a = g.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
