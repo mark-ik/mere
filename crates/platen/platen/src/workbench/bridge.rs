@@ -90,10 +90,26 @@ impl Workbench {
         Workbench { mode: ProjectionKind::Tree, root }
     }
 
+    /// The A4 invariant: the live `Pane` tree holds nothing the canonical
+    /// `(Arrangement, geometry)` pair cannot reproduce, i.e.
+    /// `from_arrangement(to_arrangement(self))` rebuilds an identical split tree. This
+    /// is what lets the Pane tree be a pure *derived working cache* over the canonical
+    /// pair (the workbench half of "two projections of one arrangement"). Fuzz-proven
+    /// over random gesture sequences (see the property test) and asserted on every
+    /// persist in debug builds.
+    pub fn canonical_roundtrips(&self) -> bool {
+        let (arrangement, geometry) = self.to_arrangement();
+        Workbench::from_arrangement(&arrangement, geometry.as_ref()).root == self.root
+    }
+
     /// Serialize this workbench's canonical `(Arrangement, geometry)` pair to JSON for
     /// session persistence. An empty workbench still round-trips (a `None` geometry).
     /// The host writes the string beside the session graph.
     pub fn to_persisted_json(&self) -> Result<String, serde_json::Error> {
+        debug_assert!(
+            self.canonical_roundtrips(),
+            "workbench Pane tree is not canonical-derivable from its (Arrangement, geometry) pair",
+        );
         let (arrangement, geometry) = self.to_arrangement();
         serde_json::to_string(&PersistedWorkbench { arrangement, geometry })
     }
@@ -231,6 +247,21 @@ mod tests {
     #[test]
     fn lone_stack_round_trips() {
         assert_round_trips(&tiled(Pane::Stack(Stack { members: vec![m(1), m(2)], active: 1 })));
+    }
+
+    #[test]
+    fn canonical_roundtrips_reports_the_invariant() {
+        let wb = tiled(Pane::Split {
+            axis: SplitAxis::Row,
+            children: vec![
+                Branch { fraction: 0.4, pane: Pane::leaf(m(1)) },
+                Branch {
+                    fraction: 0.6,
+                    pane: Pane::Stack(Stack { members: vec![m(2), m(3)], active: 1 }),
+                },
+            ],
+        });
+        assert!(wb.canonical_roundtrips(), "a tree built from valid mutators is canonical-derivable");
     }
 
     #[test]
