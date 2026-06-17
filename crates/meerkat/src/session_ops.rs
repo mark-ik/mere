@@ -140,6 +140,7 @@ impl WindowCtx<'_> {
             camera: Some(super::camera_to_snapshot(self.orrery().camera())),
             focus: self.orrery().focused_url().map(str::to_string),
             strategy: self.orrery().layout_strategy().map(str::to_string),
+            mirror_tiles: self.view.mirror_tiles,
             ..Default::default()
         };
         if let Err(err) =
@@ -491,6 +492,9 @@ impl super::Shell {
         }
         // Restore the pane's layout strategy (None = force-directed). (Layout picker.)
         ctx.orrery_mut().set_layout_strategy(restored_view.as_ref().and_then(|v| v.strategy.clone()));
+        // Restore live workbench-mirror mode; its scope re-derives from the open tiles
+        // through the render loop, so the flag is all that needs to come back. (Mirror.)
+        ctx.view.mirror_tiles = restored_view.as_ref().is_some_and(|v| v.mirror_tiles);
         // Re-point only the panes that were on the outgoing graph, so a second
         // graph-pane pinned to a different graph survives the switch. (Pane-as-unit.)
         ctx.view.frame_layout.retag_graph_bound_from(old_gid, target_graph);

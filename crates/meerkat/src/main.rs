@@ -1027,6 +1027,9 @@ impl Shell {
         let present_members: HashSet<forme::GraphMemberId> =
             orrery.graph().nodes().map(|(_, node)| node.id).collect();
         view.workbench = session_ops::load_workbench(&session_dir, &present_members);
+        // Restore live workbench-mirror mode at boot; the render loop re-scopes the
+        // orrery to the just-restored open tiles. (Workbench mirror.)
+        view.mirror_tiles = restored_view.as_ref().is_some_and(|v| v.mirror_tiles);
         // Restore the orrery's settled layout from the cartography sidecar at boot,
         // overriding the graph's load-time seed (the live layout is never committed to
         // graph.json). (Position sidecar.)

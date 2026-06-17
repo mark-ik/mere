@@ -134,6 +134,11 @@ pub struct ViewIntent {
     /// persisted (analytic layouts re-derive from the node set). (Layout picker.)
     #[serde(default)]
     pub strategy: Option<String>,
+    /// Whether the orrery pane is in live workbench-mirror mode: scoped each frame to
+    /// the workbench's open tiles. Restored on load (the scope itself re-derives from
+    /// the open tiles, never persisted). `false` by default. (Workbench mirror.)
+    #[serde(default)]
+    pub mirror_tiles: bool,
 }
 
 impl ViewIntent {

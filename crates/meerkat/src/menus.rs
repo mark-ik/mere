@@ -282,8 +282,9 @@ impl WindowCtx<'_> {
             return;
         }
         // Toggle the live workbench mirror. When on, the render loop re-scopes the
-        // orrery to the open tiles each frame; turning it off lifts the lens. No member
-        // set. (Curated orrery — workbench mirror.)
+        // orrery to the open tiles each frame; turning it off lifts the lens. Persisted
+        // per pane via view-intent (like the layout strategy), so the mode survives a
+        // reload. No member set. (Curated orrery — workbench mirror.)
         if let ContextAction::MirrorTiles = action {
             self.view.mirror_tiles = !self.view.mirror_tiles;
             if self.view.mirror_tiles {
@@ -292,6 +293,7 @@ impl WindowCtx<'_> {
             } else {
                 self.orrery_mut().clear_scope();
             }
+            self.save_session();
             self.view.request_redraw();
             return;
         }
