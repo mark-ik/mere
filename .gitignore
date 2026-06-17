@@ -55,3 +55,6 @@ mere-sessions/
 # Local tooling cache (semantic index / scratch db). Multi-MB binary cache,
 # not source — never commit.
 .sem/
+
+# Local cargo path overrides (serval/netrender local working copies) - local-dev only
+.cargo/

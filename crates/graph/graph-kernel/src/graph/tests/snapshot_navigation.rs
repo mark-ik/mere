@@ -29,8 +29,6 @@ fn persisted_node(node_id: Uuid, url: &str) -> crate::persistence::PersistedNode
         url: url.to_string(),
         cached_host: None,
         title: "Node".to_string(),
-        position_x: 0.0,
-        position_y: 0.0,
         tags: vec![],
         tag_presentation: NodeTagPresentationState::default(),
         import_provenance: vec![],

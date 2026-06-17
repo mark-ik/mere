@@ -10,9 +10,10 @@
 //! Factored out of `frame_ops.rs` to keep files under the 600-LOC ceiling.
 
 use frame::{GraphId, SessionId};
+use kernel::geometry::PortablePoint;
 use kernel::graph::Graph;
 use session_runtime::{
-    SwitcherThumbnailOptions, ViewIntent, build_switcher_thumbnail, frame_layout_store,
+    SwitcherThumbnailOptions, ViewIntent, build_switcher_thumbnail_with, frame_layout_store,
     manifest::GraphSessionManifest, session_graph_store, view_intent_store,
 };
 
@@ -191,7 +192,9 @@ impl WindowCtx<'_> {
             height: SWITCHER_THUMB_H,
             ..SwitcherThumbnailOptions::default()
         };
-        let thumb = build_switcher_thumbnail(self.orrery().graph(), opts);
+        let orrery = self.orrery();
+        let thumb =
+            build_switcher_thumbnail_with(orrery.graph(), |k| orrery.node_position(k), opts);
         self.shared.session.session_thumbnails.insert(session_id, thumb);
     }
 
@@ -290,7 +293,7 @@ impl WindowCtx<'_> {
             let (thumb, label) = if let Some(orrery) = pooled {
                 let g = orrery.graph();
                 let label = display_name.unwrap_or_else(|| derive_session_label(g));
-                (build_switcher_thumbnail(g, opts), label)
+                (build_switcher_thumbnail_with(g, |k| orrery.node_position(k), opts), label)
             } else {
                 let dir = self.shared.session.mere_root
                     .join("sessions")
@@ -300,7 +303,23 @@ impl WindowCtx<'_> {
                     .flatten()
                     .unwrap_or_else(Graph::new);
                 let label = display_name.unwrap_or_else(|| derive_session_label(&graph));
-                (build_switcher_thumbnail(&graph, opts), label)
+                // Positions are no longer in graph.json; draw the cold thumbnail from
+                // the session's cartography sidecar (origin without one). (Position gut.)
+                let present: std::collections::HashSet<forme::GraphMemberId> =
+                    graph.nodes().map(|(_, n)| n.id).collect();
+                let positions: std::collections::HashMap<forme::GraphMemberId, (f32, f32)> =
+                    load_cartography(&dir, &present).map(|g| g.iter().collect()).unwrap_or_default();
+                let thumb = build_switcher_thumbnail_with(
+                    &graph,
+                    |k| {
+                        graph
+                            .get_node(k)
+                            .and_then(|n| positions.get(&n.id))
+                            .map(|&(x, y)| PortablePoint::new(x, y))
+                    },
+                    opts,
+                );
+                (thumb, label)
             };
             self.shared.session.session_thumbnails.insert(id, thumb);
             self.shared.session.session_labels.insert(id, label);

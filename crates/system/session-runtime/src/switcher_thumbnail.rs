@@ -16,7 +16,7 @@
 //! live orrery share one palette story.
 
 use kernel::geometry::PortablePoint;
-use kernel::graph::Graph;
+use kernel::graph::{Graph, NodeKey};
 
 /// Caller config for [`build_switcher_thumbnail`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -91,6 +91,18 @@ pub fn build_switcher_thumbnail(
     graph: &Graph,
     options: SwitcherThumbnailOptions,
 ) -> SwitcherThumbnail {
+    build_switcher_thumbnail_with(graph, |key| graph.node_projected_position(key), options)
+}
+
+/// [`build_switcher_thumbnail`] with an explicit position source, so the host can
+/// draw a thumbnail from the cartography sidecar (or the live orrery) rather than
+/// the graph, now that node positions are no longer graph truth. A node with no
+/// position (`position_of` returns `None`) lands at the origin. (Position gut.)
+pub fn build_switcher_thumbnail_with(
+    graph: &Graph,
+    position_of: impl Fn(NodeKey) -> Option<PortablePoint>,
+    options: SwitcherThumbnailOptions,
+) -> SwitcherThumbnail {
     let mut thumbnail = SwitcherThumbnail {
         width: options.width,
         height: options.height,
@@ -104,7 +116,7 @@ pub fn build_switcher_thumbnail(
     // intent.
     let raw: Vec<(_, PortablePoint)> = graph
         .nodes()
-        .map(|(key, node)| (key, node.projected_position()))
+        .map(|(key, _node)| (key, position_of(key).unwrap_or_default()))
         .collect();
     let total = raw.len();
     if total == 0 {

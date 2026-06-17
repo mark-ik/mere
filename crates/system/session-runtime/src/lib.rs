@@ -76,7 +76,7 @@ pub use session_service_runner::{
 };
 pub use switcher_thumbnail::{
     SwitcherThumbnail, SwitcherThumbnailOptions, ThumbnailEdge, ThumbnailNode,
-    build_switcher_thumbnail,
+    build_switcher_thumbnail, build_switcher_thumbnail_with,
 };
 pub use settings_store::{PersistedSettings, SETTINGS_FILENAME, ShellbarEdge};
 pub use tearout::{PaneDragPayload, TileDragPayload};

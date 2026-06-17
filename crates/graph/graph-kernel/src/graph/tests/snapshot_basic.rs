@@ -105,12 +105,13 @@ fn test_snapshot_roundtrip() {
 
     let (_, ra) = restored.get_node_by_url("https://a.com").unwrap();
     assert_eq!(ra.title, "Site A");
-    assert_eq!(ra.position.x, 10.0);
-    assert_eq!(ra.position.y, 20.0);
+    // Positions are no longer graph truth (they live in the cartography sidecar), so a
+    // restored node seeds at the origin until the sidecar overrides it. (Position gut.)
+    assert_eq!(ra.position, Point2D::new(0.0, 0.0));
 
     let (_, rb) = restored.get_node_by_url("https://b.com").unwrap();
     assert!(rb.is_pinned);
-    assert_eq!(rb.position.x, 30.0);
+    assert_eq!(rb.position, Point2D::new(0.0, 0.0));
 }
 
 #[test]
@@ -270,8 +271,6 @@ fn test_snapshot_edge_with_missing_url_is_dropped() {
             url: "https://a.com".to_string(),
             cached_host: None,
             title: String::new(),
-            position_x: 0.0,
-            position_y: 0.0,
             tags: vec![],
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: vec![],
@@ -331,8 +330,6 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 url: "https://same.com".to_string(),
                 cached_host: None,
                 title: "First".to_string(),
-                position_x: 0.0,
-                position_y: 0.0,
                 tags: vec![],
                 tag_presentation: NodeTagPresentationState::default(),
                 import_provenance: vec![],
@@ -356,8 +353,6 @@ fn test_snapshot_duplicate_urls_last_wins() {
                 url: "https://same.com".to_string(),
                 cached_host: None,
                 title: "Second".to_string(),
-                position_x: 100.0,
-                position_y: 100.0,
                 tags: vec![],
                 tag_presentation: NodeTagPresentationState::default(),
                 import_provenance: vec![],

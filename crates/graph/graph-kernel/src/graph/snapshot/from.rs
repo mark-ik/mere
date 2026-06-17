@@ -45,11 +45,10 @@ impl Graph {
                     from_address.to_string()
                 }
             };
-            let key = graph.add_node_with_id(
-                node_id,
-                node_url,
-                Point2D::new(pnode.position_x, pnode.position_y),
-            );
+            // Positions are no longer graph truth; they live in the cartography
+            // sidecar (the Cartography projection's geometry). Seed at the origin and
+            // let the sidecar override on load. (Position gut.)
+            let key = graph.add_node_with_id(node_id, node_url, Point2D::new(0.0, 0.0));
             let mut restore_url_from_session: Option<String> = None;
             if let Some(node) = graph.inner.node_weight_mut(key) {
                 node.title = pnode.title.clone();

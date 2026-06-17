@@ -744,6 +744,13 @@ impl Orrery {
         )
     }
 
+    /// One node's current world position (the live gyre position), so the host can
+    /// draw a switcher thumbnail from the orrery rather than the now position-free
+    /// graph. `None` for a node the view has not placed. (Position gut.)
+    pub fn node_position(&self, key: NodeKey) -> Option<PortablePoint> {
+        self.view.position_of(key).map(|p| PortablePoint::new(p.x, p.y))
+    }
+
     /// Seed node positions from a persisted cartography sidecar, overriding the graph's
     /// load-time seed so a reloaded session shows its settled layout rather than
     /// re-scrambling. Members absent from the sidecar keep their existing seed (a node

@@ -126,10 +126,8 @@ fn test_projected_position_is_the_single_node_position() {
     assert!(graph.set_node_projected_position(key, Point2D::new(150.0, 250.0)));
     assert_eq!(graph.node_projected_position(key), Some(Point2D::new(150.0, 250.0)));
     assert_eq!(graph.projected_centroid(), Some(Point2D::new(150.0, 250.0)));
-
-    let snapshot = graph.to_snapshot();
-    assert_eq!(snapshot.nodes[0].position_x, 150.0);
-    assert_eq!(snapshot.nodes[0].position_y, 250.0);
+    // Positions are no longer serialized to graph.json (they live in the cartography
+    // sidecar), so the snapshot carries no position fields. (Position gut.)
 }
 
 #[test]

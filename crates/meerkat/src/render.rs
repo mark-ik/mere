@@ -881,6 +881,7 @@ impl WindowCtx<'_> {
                                 m.bounds,
                                 m.corner_radius,
                                 m.blur_radius_px,
+                                m.invert,
                             );
                         }
                         let (tex, view) =

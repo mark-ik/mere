@@ -31,8 +31,6 @@ impl Graph {
                 node_id: node.id.to_string(),
                 cached_host: node.cached_host.clone(),
                 title: node.title.clone(),
-                position_x: node.position.x,
-                position_y: node.position.y,
                 tags: {
                     let mut tags = node.tags.iter().cloned().collect::<Vec<_>>();
                     tags.sort();
