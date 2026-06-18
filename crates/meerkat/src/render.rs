@@ -301,10 +301,64 @@ impl WindowCtx<'_> {
                 dom.set_attribute(node, attr, &style);
             }
         }
+        // Color the orrery's nodes by activation state (green open / red closed /
+        // blue new) so the graph shows at a glance what's live. (Visible in
+        // Cartography; the orrery is hidden in the tiled view.)
+        let states = self.node_states();
+        self.pane_orrery_mut(orrery_gid).set_node_states(states);
+        // Shape each node by its content type (square document / rounded menu /
+        // circle feed), the same per-node-hint path as the color states.
+        let shapes = self.node_shapes();
+        self.pane_orrery_mut(orrery_gid).set_node_shapes(shapes);
+
+        // The orrery always composites its own scene into its leaf (kept in sync,
+        // centered once). The tiled workbench, when its pane is open, composites a
+        // separate scene into its own leaf — the two coexist now, no longer toggled.
+        self.pane_orrery_mut(orrery_gid).resize(orrery_w, orrery_h);
+        // The focused orrery renders its on-screen nodes as DOM cards in the shell (the
+        // snapshot below), so drop its in-scene gnode layer. (Orrery-as-element.)
+        self.pane_orrery_mut(orrery_gid).set_render_as_cards(true);
+        if !self.view.centered {
+            self.pane_orrery_mut(orrery_gid).recenter();
+            self.view.centered = true;
+        } else if !self.view.healed && self.pane_orrery(orrery_gid).has_nodes() {
+            // One-shot self-heal: a restored camera that frames nothing (a
+            // degenerate saved pan/zoom) snaps back to the graph. Gated on
+            // has_nodes() so it waits for the async session load — firing against
+            // the still-empty graph would spend the one shot while graph_visible()
+            // is trivially true, leaving the restored degenerate camera in place
+            // once the nodes actually arrive. Checked once, so it never fights an
+            // intentional pan into empty space.
+            self.view.healed = true;
+            if !self.pane_orrery(orrery_gid).graph_visible() {
+                self.pane_orrery_mut(orrery_gid).recenter();
+            }
+        }
+        // Live workbench mirror: re-scope the focused orrery to the workbench's open
+        // tiles each frame, so the spatial map tracks the tile set as it changes (the
+        // two surfaces stay in lockstep). (Curated orrery — workbench mirror.)
+        if self.view.mirror_tiles {
+            let members = self.view.workbench.open_members();
+            self.pane_orrery_mut(orrery_gid).scope_to_members(members);
+        }
+        // Drive the pane's active layout strategy (if any): compute its node positions
+        // through platen's cartography dispatch and push them in; the orrery overlays
+        // them on the physics snapshot each frame. No-op under force-directed. (Layout picker.)
+        if let Some(id) = self.pane_orrery(orrery_gid).layout_strategy().map(str::to_string) {
+            // Focus-driven strategies (radial) center on the pane's single selection;
+            // passing it each frame lets radial re-center live as the selection moves.
+            // The graph-only strategies ignore it. (Layout picker.)
+            let pane = self.pane_orrery(orrery_gid);
+            let positions =
+                platen::project_orrery_strategy(&id, pane.graph(), pane.focused_key(), orrery_w, orrery_h);
+            self.pane_orrery_mut(orrery_gid).apply_strategy_positions(&positions);
+        }
+        let (orrery_scene, orrery_redraw) = self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
+
         // Orrery-as-element (i-2): snapshot the focused orrery's nodes through its
         // camera into the shell state, so the orrery element renders a DOM card per
-        // node. One-frame position lag (the orrery advances at frame() further down);
-        // cards and the scene align once the layout settles. (Phase 2.)
+        // node. The update + frame() above ran this frame, so the snapshot reads
+        // this-frame positions/colors/scope and the cards align with the scene. (Phase 2.)
         let orrery_render = {
             let orrery = self.pane_orrery(orrery_gid);
             let cam = orrery.camera();
@@ -362,59 +416,10 @@ impl WindowCtx<'_> {
         );
         chrome_us = chrome_t.elapsed().as_micros();
 
-        // Color the orrery's nodes by activation state (green open / red closed /
-        // blue new) so the graph shows at a glance what's live. (Visible in
-        // Cartography; the orrery is hidden in the tiled view.)
-        let states = self.node_states();
-        self.pane_orrery_mut(orrery_gid).set_node_states(states);
-        // Shape each node by its content type (square document / rounded menu /
-        // circle feed), the same per-node-hint path as the color states.
-        let shapes = self.node_shapes();
-        self.pane_orrery_mut(orrery_gid).set_node_shapes(shapes);
-
-        // The orrery always composites its own scene into its leaf (kept in sync,
-        // centered once). The tiled workbench, when its pane is open, composites a
-        // separate scene into its own leaf — the two coexist now, no longer toggled.
-        self.pane_orrery_mut(orrery_gid).resize(orrery_w, orrery_h);
-        // The focused orrery renders its on-screen nodes as DOM cards in the shell (the
-        // snapshot above), so drop its in-scene gnode layer. (Orrery-as-element.)
-        self.pane_orrery_mut(orrery_gid).set_render_as_cards(true);
-        if !self.view.centered {
-            self.pane_orrery_mut(orrery_gid).recenter();
-            self.view.centered = true;
-        } else if !self.view.healed && self.pane_orrery(orrery_gid).has_nodes() {
-            // One-shot self-heal: a restored camera that frames nothing (a
-            // degenerate saved pan/zoom) snaps back to the graph. Gated on
-            // has_nodes() so it waits for the async session load — firing against
-            // the still-empty graph would spend the one shot while graph_visible()
-            // is trivially true, leaving the restored degenerate camera in place
-            // once the nodes actually arrive. Checked once, so it never fights an
-            // intentional pan into empty space.
-            self.view.healed = true;
-            if !self.pane_orrery(orrery_gid).graph_visible() {
-                self.pane_orrery_mut(orrery_gid).recenter();
-            }
-        }
-        // Live workbench mirror: re-scope the focused orrery to the workbench's open
-        // tiles each frame, so the spatial map tracks the tile set as it changes (the
-        // two surfaces stay in lockstep). (Curated orrery — workbench mirror.)
-        if self.view.mirror_tiles {
-            let members = self.view.workbench.open_members();
-            self.pane_orrery_mut(orrery_gid).scope_to_members(members);
-        }
-        // Drive the pane's active layout strategy (if any): compute its node positions
-        // through platen's cartography dispatch and push them in; the orrery overlays
-        // them on the physics snapshot each frame. No-op under force-directed. (Layout picker.)
-        if let Some(id) = self.pane_orrery(orrery_gid).layout_strategy().map(str::to_string) {
-            // Focus-driven strategies (radial) center on the pane's single selection;
-            // passing it each frame lets radial re-center live as the selection moves.
-            // The graph-only strategies ignore it. (Layout picker.)
-            let pane = self.pane_orrery(orrery_gid);
-            let positions =
-                platen::project_orrery_strategy(&id, pane.graph(), pane.focused_key(), orrery_w, orrery_h);
-            self.pane_orrery_mut(orrery_gid).apply_strategy_positions(&positions);
-        }
-        let (orrery_scene, orrery_redraw) = self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
+        // The orrery's per-frame update (node state/shape, resize, recenter, mirror,
+        // strategy) and the node-card snapshot now run *above* the chrome render, so the
+        // cards read this-frame positions/colors and align with the scene (no one-frame
+        // lag). See the "Orrery-as-element" block before the snapshot.
         // P2 per-pane render: a second graph-pane (Shift+click a switcher tile)
         // drives its own pooled orrery into its own leaf, beside the focused one,
         // so two graphs show at once. Node coloring + the focused-node card stay
