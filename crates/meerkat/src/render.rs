@@ -9,6 +9,7 @@ use forme::GraphMemberId;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
 use netrender::external_texture::ExternalTexturePlacement;
+use image::ImageEncoder;
 use crate::serval_render::TextCursor;
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
@@ -28,6 +29,36 @@ use super::{
 use meerkat::ShellbarPaneStates;
 use crate::pane_session::PaneSession;
 use crate::window_view::{OrreryCard, OrreryRender};
+
+/// The node's favicon RGBA (straight-alpha RGBA8) encoded as a `data:image/png;base64,`
+/// URI, or `None` if it can't be encoded. The orrery card carries it as a leading
+/// `<img>` that serval decodes. PNG (not BMP) keeps alpha and stays compact. (Phase 2.)
+fn favicon_data_uri(rgba: &[u8], w: u32, h: u32) -> Option<String> {
+    if w == 0 || h == 0 || rgba.len() < (w as usize) * (h as usize) * 4 {
+        return None;
+    }
+    let mut png = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut png)
+        .write_image(rgba, w, h, image::ExtendedColorType::Rgba8)
+        .ok()?;
+    Some(format!("data:image/png;base64,{}", base64_encode(&png)))
+}
+
+/// Minimal standard base64 (no line breaks), for the favicon data URI. (Phase 2.)
+fn base64_encode(data: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for c in data.chunks(3) {
+        let n = ((c[0] as u32) << 16)
+            | ((c.get(1).copied().unwrap_or(0) as u32) << 8)
+            | (c.get(2).copied().unwrap_or(0) as u32);
+        out.push(A[((n >> 18) & 63) as usize] as char);
+        out.push(A[((n >> 12) & 63) as usize] as char);
+        out.push(if c.len() > 1 { A[((n >> 6) & 63) as usize] as char } else { '=' });
+        out.push(if c.len() > 2 { A[(n & 63) as usize] as char } else { '=' });
+    }
+    out
+}
 
 impl WindowCtx<'_> {
     /// The toolbar-band height (px), measuring + caching it on first use. The
@@ -289,6 +320,9 @@ impl WindowCtx<'_> {
                         x: w.x * cam.zoom + cam.offset.0,
                         y: w.y * cam.zoom + cam.offset.1,
                         color: orrery.node_color(key).to_string(),
+                        favicon: node.favicon_rgba.as_ref().and_then(|rgba| {
+                            favicon_data_uri(rgba, node.favicon_width, node.favicon_height)
+                        }),
                     })
                 })
                 .collect();

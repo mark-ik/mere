@@ -297,6 +297,9 @@ pub(crate) struct OrreryCard {
     pub(crate) y: f32,
     /// The node's render color (hex), from `Orrery::node_color` (state + selection).
     pub(crate) color: String,
+    /// The node's favicon as a `data:image/bmp;base64,...` URI, or `None`. The card
+    /// renders it as a leading `<img>` (serval decodes the data URI). (Phase 2.)
+    pub(crate) favicon: Option<String>,
 }
 
 /// The focused orrery's render snapshot: the pane rect the element sits at and the
@@ -352,20 +355,36 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
         .cards
         .iter()
         .map(|c| {
-            Box::new(
-                el::<_, ShellState, ()>("div", c.label.clone())
-                    .attr("class", "node-card")
-                    .attr(
-                        "style",
-                        format!(
-                            "position:absolute;transform:translate({}px,{}px);\
-                             background-color:{};color:#fff;padding:2px 6px;border-radius:4px;\
-                             font-size:11px;font-weight:500;white-space:nowrap;\
-                             box-shadow:0 1px 3px rgba(0,0,0,0.45)",
-                            c.x, c.y, c.color
+            let style = format!(
+                "position:absolute;transform:translate({}px,{}px);\
+                 background-color:{};color:#fff;padding:2px 6px;border-radius:4px;\
+                 font-size:11px;font-weight:500;white-space:nowrap;\
+                 box-shadow:0 1px 3px rgba(0,0,0,0.45)",
+                c.x, c.y, c.color
+            );
+            // A favicon, when the node has one, renders as a leading <img> (serval
+            // decodes the data URI); otherwise the chip is just the label. (Phase 2.)
+            match &c.favicon {
+                Some(uri) => Box::new(
+                    el::<_, ShellState, ()>(
+                        "div",
+                        (
+                            el::<_, ShellState, ()>("img", ()).attr("src", uri.clone()).attr(
+                                "style",
+                                "width:13px;height:13px;vertical-align:-2px;margin-right:4px",
+                            ),
+                            el::<_, ShellState, ()>("span", c.label.clone()),
                         ),
-                    ),
-            ) as ShellView
+                    )
+                    .attr("class", "node-card")
+                    .attr("style", style),
+                ) as ShellView,
+                None => Box::new(
+                    el::<_, ShellState, ()>("div", c.label.clone())
+                        .attr("class", "node-card")
+                        .attr("style", style),
+                ) as ShellView,
+            }
         })
         .collect();
     let [x0, y0, x1, y1] = render.rect;
