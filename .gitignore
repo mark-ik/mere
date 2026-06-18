@@ -3,6 +3,12 @@
 # — `crates/probes/` is a separate workspace whose target/ is multi-GB.
 target/
 
+# Don't commit Cargo.lock (any workspace, any depth). A committed lock pins git
+# deps to dev-history commits and crates.io deps to specific releases, which go
+# stale as we develop. Tracking branch tips / latest matching releases keeps the
+# dependency landscape current rather than expiring on a pin.
+Cargo.lock
+
 # Probes are throwaway experiments in a separate workspace. Ignore probe content
 # so it never clutters git status or lands in a `git add -A` (the multi-GB
 # p2panda / willow clones live here). Already-committed probes stay tracked;
