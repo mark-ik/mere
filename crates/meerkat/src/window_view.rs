@@ -97,10 +97,8 @@ pub(crate) struct WindowView {
     /// The chrome theme last applied to `pelt_shell` (via `set_theme`), so the tile
     /// theme is rebuilt only when the active theme actually changes, not every frame.
     pub(crate) pelt_theme: Option<register_theme::chrome::ChromeTheme>,
-    /// The roster pane as a view-driven bundle (runner + cached layout + sheet): a
-    /// `roster_view` over its rows, dispatching row clicks through the DOM instead of
-    /// a rect cache. (Window composition P2 companion — list-pane view-ification.)
-    pub(crate) roster_pane: crate::roster_view::RosterPane,
+    // The roster is folded into the shell runner now (ShellState.roster); no separate pane.
+    // (Unified document host Phase 1.)
 
     /// Each switcher row's on-screen rect this frame: a click switches to it.
     pub(crate) session_row_rects: Vec<(SessionId, [f32; 4])>,
@@ -525,7 +523,6 @@ impl WindowView {
             workbench,
             pelt_shell: None,
             pelt_theme: None,
-            roster_pane: crate::roster_view::RosterPane::new(),
             session_row_rects: Default::default(),
             session_close_rects: Default::default(),
             session_add_rect: Default::default(),

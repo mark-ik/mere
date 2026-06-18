@@ -29,7 +29,9 @@ use crate::view_pane::ViewPane;
 /// The erased view the roster logic produces (mirrors `ChromeView`).
 pub type RosterView = Box<dyn AnyView<RosterState, (), ServalCtx, ServalElement>>;
 
-/// Logic alias for the runner: roster state → roster view tree.
+/// Logic alias for the runner: roster state → roster view tree. (Used by the test-only
+/// `RosterPane` harness now that the roster is folded into the shell runner.)
+#[cfg(test)]
 pub type RosterLogic = fn(&RosterState) -> RosterView;
 
 /// What a roster row-click queues for the shell to apply. The shell drains these
@@ -207,10 +209,16 @@ pub fn roster_view(state: &RosterState) -> RosterView {
 /// roster-specific scroll (its `.roster` container), row-member a11y bounds, and
 /// selection draining. The shell sets the rows, frames, hit-tests, dispatches
 /// clicks, and drains the queued selections — no rect cache, no per-frame DOM.
+///
+/// The roster is folded into the shell runner now (the host drives `roster_view` through a
+/// lens on `ShellState`); this bundle is retained only as the tests' render + dispatch
+/// harness. (Unified document host Phase 1.)
+#[cfg(test)]
 pub struct RosterPane {
     pane: ViewPane<RosterState, RosterLogic, RosterView>,
 }
 
+#[cfg(test)]
 impl RosterPane {
     pub fn new() -> Self {
         Self {
@@ -260,35 +268,6 @@ impl RosterPane {
         self.pane.hit_test(x, y, &scrolls)
     }
 
-    /// Window-space bounds of each row, keyed by member, for the a11y projection —
-    /// the rect cache's replacement, read straight off the cached layout. `origin` is
-    /// the pane's window rect `[x0,y0,x1,y1]`; rows offscreen are dropped, partials
-    /// clipped to the pane.
-    pub fn row_bounds(&self, origin: [f32; 4], scroll: f32) -> Vec<(GraphMemberId, [f32; 4])> {
-        let Some(frags) = self.pane.fragments() else { return Vec::new() };
-        let dom = self.pane.dom();
-        let dom = dom.borrow();
-        let root = dom.document();
-        let mut nodes = crate::all_with_class(&dom, root, "roster-row");
-        nodes.extend(crate::all_with_class(&dom, root, "roster-row-selected"));
-        let mut out = Vec::new();
-        for node in nodes {
-            if let (Some(member), Some(l)) = (crate::member_attr(&dom, node), frags.rect_of(node)) {
-                let x0 = origin[0] + l.location.x;
-                let y0 = origin[1] + l.location.y - scroll;
-                let x1 = x0 + l.size.width;
-                let y1 = y0 + l.size.height;
-                if x1 > origin[0] && x0 < origin[2] && y1 > origin[1] && y0 < origin[3] {
-                    out.push((
-                        member,
-                        [x0.max(origin[0]), y0.max(origin[1]), x1.min(origin[2]), y1.min(origin[3])],
-                    ));
-                }
-            }
-        }
-        out
-    }
-
     /// Dispatch a click that hit `node`, firing its `on_click` (which queues a
     /// `Select`); the shell then [`take_intents`](Self::take_intents).
     pub fn dispatch_click(&mut self, node: NodeId, event: PointerClick) {
@@ -321,6 +300,7 @@ impl RosterPane {
     }
 }
 
+#[cfg(test)]
 impl Default for RosterPane {
     fn default() -> Self {
         Self::new()

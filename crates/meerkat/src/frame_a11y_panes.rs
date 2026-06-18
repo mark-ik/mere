@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use accesskit::{Action, Node, NodeId as AccessNodeId, Role};
 use forme::GraphMemberId;
 use frame::{PaneContent, PaneId};
+use layout_dom_api::LayoutDom;
 use uxtree::{UxTree, node_id_for_path};
 
 use super::frame_a11y::rect;
@@ -49,18 +50,30 @@ impl WindowCtx<'_> {
     ) -> UxTree {
         let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "roster");
         let root = node_id_for_path(&root_path);
-        // Row bounds come off the roster pane's cached layout (the rect-cache
-        // replacement), keyed by member. (P2 companion — list-pane view-ification.)
-        let row_bounds: HashMap<GraphMemberId, [f32; 4]> = self
-            .roster_leaf_rect()
-            .map(|rrect| {
-                self.view
-                    .roster_pane
-                    .row_bounds(rrect, self.view.roster_scroll)
-            })
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
+        // The roster is folded into the shell document, so its row geometry comes off the
+        // shell session's cached layout (keyed by member), the rect-cache replacement now
+        // sourced from the one shell layout rather than a separate roster pane. (Phase 1.)
+        let row_bounds: HashMap<GraphMemberId, [f32; 4]> = {
+            let mut map = HashMap::new();
+            if let Some(session) = self.view.chrome_session.as_ref() {
+                let frags = session.fragments();
+                let dom = self.view.dom.borrow();
+                let root = dom.document();
+                let mut rows = crate::all_with_class(&dom, root, "roster-row");
+                rows.extend(crate::all_with_class(&dom, root, "roster-row-selected"));
+                let scroll = self.view.roster_scroll;
+                for node in rows {
+                    if let (Some(member), Some(l)) =
+                        (crate::member_attr(&dom, node), frags.rect_of(node))
+                    {
+                        let x0 = l.location.x;
+                        let y0 = l.location.y - scroll;
+                        map.insert(member, [x0, y0, x0 + l.size.width, y0 + l.size.height]);
+                    }
+                }
+            }
+            map
+        };
         let mut nodes = Vec::new();
         let mut children = Vec::new();
         for row in self.roster_rows() {

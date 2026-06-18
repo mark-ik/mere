@@ -23,8 +23,8 @@ use frame::{PaneContent, SessionId};
 use session_runtime::SwitcherThumbnail;
 
 use super::{
-    CARD_BG, FALLBACK_TOOLBAR_H, WindowCtx, all_with_class, first_with_class, frame_view, shellbar,
-    measure_class_bottom, member_attr,
+    CARD_BG, FALLBACK_TOOLBAR_H, WindowCtx, first_with_class, frame_view, shellbar,
+    measure_class_bottom,
 };
 use meerkat::ShellbarPaneStates;
 use crate::pane_session::PaneSession;
@@ -427,6 +427,15 @@ impl WindowCtx<'_> {
             self.view.set_roster(rows, field_rows, roster_rect);
         } else if self.view.roster_open() {
             self.view.set_roster(Vec::new(), Vec::new(), None);
+        }
+        // The roster scrolls its own `.roster` container; add its offset to the shell
+        // ScrollOffsets so the one render scrolls it (chrome_click mirrors this for the
+        // hit-test). (Phase 1.)
+        if roster_rect.is_some() {
+            let dom = self.view.dom.borrow();
+            if let Some(node) = first_with_class(&dom, dom.document(), "roster") {
+                chrome_scroll.insert(node, (0.0, self.view.roster_scroll));
+            }
         }
         let roster_css = crate::roster::roster_sheet(&self.shared.presentation.chrome_theme);
         let chrome_sheet: Vec<&str> = self

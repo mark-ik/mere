@@ -688,7 +688,15 @@ impl WindowCtx<'_> {
     /// suggestion / palette rows). A row / backdrop click that closes the palette
     /// restores focus so the caret doesn't dangle on the removed field.
     pub(super) fn chrome_click(&mut self, x: f32, y: f32) {
-        let offsets = ScrollOffsets::<NodeId>::default();
+        let mut offsets = ScrollOffsets::<NodeId>::default();
+        // The roster (folded into the shell document) scrolls its own container; mirror the
+        // render's scroll offset so the hit-test lands on the visible row. (Phase 1.)
+        {
+            let dom = self.view.dom.borrow();
+            if let Some(node) = crate::first_with_class(&dom, dom.document(), "roster") {
+                offsets.insert(node, (0.0, self.view.roster_scroll));
+            }
+        }
         let sheet = self.shared.presentation.chrome_sheet_refs();
         let hit = {
             let dom = self.view.dom.borrow();
