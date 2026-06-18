@@ -417,7 +417,25 @@ impl WindowCtx<'_> {
         if &orrery_render != self.view.orrery_render() {
             self.view.set_orrery(orrery_render);
         }
-        let chrome_sheet = self.shared.presentation.chrome_sheet_refs();
+        // Fold the roster pane into the shell document: snapshot its rect + rows into the
+        // shell state before the one render lays the document out, so the roster renders,
+        // hit-tests, and projects a11y through the shell runner (its CSS rides the shell
+        // stylesheet below). Replaces the separate RosterPane frame + composite. (Phase 1.)
+        if roster_rect.is_some() {
+            let rows = self.roster_rows();
+            let field_rows = self.roster_field_rows();
+            self.view.set_roster(rows, field_rows, roster_rect);
+        } else if self.view.roster_open() {
+            self.view.set_roster(Vec::new(), Vec::new(), None);
+        }
+        let roster_css = crate::roster::roster_sheet(&self.shared.presentation.chrome_theme);
+        let chrome_sheet: Vec<&str> = self
+            .shared
+            .presentation
+            .chrome_sheet_refs()
+            .into_iter()
+            .chain(roster_css.iter().map(String::as_str))
+            .collect();
         let chrome_t = Instant::now();
         // C3 (cheap-path): render the chrome through its persistent
         // `IncrementalLayout` session — the session drains this frame's mutations,
@@ -1438,37 +1456,9 @@ impl WindowCtx<'_> {
                 ExternalTexturePlacement::new([x0, y0, x0 + gw, y0 + gh]),
             );
         }
-        // The roster pane renders through its view-driven `RosterPane` bundle: set the
-        // rows, clamp the stored scroll to the last frame's content height, frame, and
-        // composite. Row clicks dispatch through the runner DOM and the a11y projection
-        // reads bounds off the same cached layout, so there is no rect cache.
-        // (Window composition P2 companion — list-pane view-ification.)
-        if let Some(rrect) = roster_rect {
-            let rw = (rrect[2] - rrect[0]).round().max(1.0) as u32;
-            let rh = (rrect[3] - rrect[1]).round().max(1.0) as u32;
-            let rows = self.roster_rows();
-            let field_rows = self.roster_field_rows();
-            self.view.roster_pane.set_rows(&self.shared.presentation.chrome_theme, rows, field_rows);
-            let max_scroll = self.view.roster_pane.max_scroll();
-            self.view.roster_scroll = self.view.roster_scroll.clamp(0.0, max_scroll);
-            let scene = self.view.roster_pane.frame(rw, rh, self.view.roster_scroll);
-            let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
-            let clear = wgpu::Color {
-                r: pb[0] as f64 / 255.0,
-                g: pb[1] as f64 / 255.0,
-                b: pb[2] as f64 / 255.0,
-                a: 1.0,
-            };
-            let (_t, view) = core.rasterize(&scene, rw, rh, ColorLoad::Clear(clear));
-            core.renderer().compose_external_texture(
-                &view,
-                &target_view,
-                format,
-                w,
-                h,
-                ExternalTexturePlacement::new(rrect),
-            );
-        }
+        // The roster pane is folded into the shell document now: its rect + rows were
+        // snapshotted into the shell state above (before the chrome render), so the one
+        // render lays it out and the one hit-test routes its clicks. (Phase 1.)
         // The apparatus pane renders through its view-driven `ListPane`: build the
         // items (theme buttons + host diagnostics), set them on the pane, frame, and
         // composite. Theme-button clicks dispatch through the runner DOM, so there is

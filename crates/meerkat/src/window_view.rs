@@ -474,6 +474,36 @@ impl WindowView {
         &self.runner.state().orrery
     }
 
+    /// Fold the roster pane into the shell document: replace its rows + window rect (or
+    /// `None` to close it). The runner re-renders, diffing the roster subtree into the one
+    /// shell DOM, so it lays out, hit-tests, and projects a11y with the chrome. (Phase 1.)
+    pub(crate) fn set_roster(
+        &mut self,
+        rows: Vec<crate::roster::RosterRow>,
+        field_rows: Vec<crate::roster::FieldRow>,
+        rect: Option<[f32; 4]>,
+    ) {
+        self.runner.update(|s| {
+            s.roster.rows = rows;
+            s.roster.field_rows = field_rows;
+            s.roster_rect = rect;
+        });
+    }
+
+    /// Whether the roster subtree is currently in the shell document (the pane is open),
+    /// so the host can skip the per-frame `set_roster` while it stays closed. (Phase 1.)
+    pub(crate) fn roster_open(&self) -> bool {
+        self.runner.state().roster_rect.is_some()
+    }
+
+    /// Drain the selections / field intents the roster's row handlers queued through the
+    /// shell runner's dispatch, for the host to apply. (Phase 1.)
+    pub(crate) fn take_roster_intents(&mut self) -> Vec<crate::roster_view::RosterIntent> {
+        let mut out = Vec::new();
+        self.runner.update(|s| out = std::mem::take(&mut s.roster.pending));
+        out
+    }
+
     /// Mint a window's view over a fresh pair of serval runners. Everything else
     /// starts at its rest value (empty caches, no in-progress gesture, the default
     /// 1024×600 surface); the caller overrides the view-session bits it restored

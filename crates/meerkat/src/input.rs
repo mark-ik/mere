@@ -202,77 +202,14 @@ impl WindowCtx<'_> {
                             return;
                         }
                     }
-                    // The roster pane consumes the press: a left click focuses the
-                    // clicked node's row (shared selection with the orrery). (F1.)
+                    // The roster pane is part of the shell document now: a left press in
+                    // its rect routes through the shell hit-test + dispatch (chrome_click),
+                    // which fires the hit row's on_click; chrome_activate then drains the
+                    // queued intents (drain_roster_intents). (Phase 1.)
                     if let Some(rrect) = self.roster_leaf_rect() {
                         if x >= rrect[0] && x < rrect[2] && y >= rrect[1] && y < rrect[3] {
                             if button == MouseButton::Left {
-                                // Route through the roster runner: hit-test its DOM,
-                                // dispatch the click (the row handler queues a Select),
-                                // then apply each queued selection. (P2 companion.)
-                                let local = (x - rrect[0], y - rrect[1]);
-                                if let Some(node) = self.view.roster_pane.hit_test(
-                                    local.0,
-                                    local.1,
-                                    self.view.roster_scroll,
-                                ) {
-                                    self.view
-                                        .roster_pane
-                                        .dispatch_click(node, PointerClick::at(local));
-                                    // Shift makes a roster click additive (build a
-                                    // multi-selection); without it, the click replaces
-                                    // the selection. The click event carries no
-                                    // modifier, so the host decides from its live
-                                    // modifier state (as the canvas does). This applies
-                                    // to edge rows too: a plain edge click traverses to
-                                    // the other endpoint, Shift+edge additively selects
-                                    // it — Shift = additive everywhere in the roster.
-                                    let additive = self.view.modifiers.shift;
-                                    for intent in self.view.roster_pane.take_intents() {
-                                        match intent {
-                                            crate::roster_view::RosterIntent::Select(member) => {
-                                                if additive {
-                                                    self.orrery_mut().toggle_select_member(member);
-                                                    self.view.request_redraw();
-                                                } else if let Some(url) = self
-                                                    .orrery()
-                                                    .graph()
-                                                    .get_node_by_id(member)
-                                                    .map(|(_, n)| n.url().to_string())
-                                                {
-                                                    self.orrery_mut().select_by_url(&url);
-                                                    self.view.request_redraw();
-                                                }
-                                            }
-                                            crate::roster_view::RosterIntent::SelectField(id) => {
-                                                // Click a field row: center the canvas on it.
-                                                if self.orrery_mut().center_on_field(id) {
-                                                    self.view.request_redraw();
-                                                }
-                                            }
-                                            crate::roster_view::RosterIntent::ToggleFieldVisibility(id) => {
-                                                // The field row's hide/show toggle.
-                                                self.orrery_mut().toggle_field_visible(id);
-                                                self.view.request_redraw();
-                                            }
-                                            crate::roster_view::RosterIntent::AdjustFieldStrength(id, delta) => {
-                                                // − / + the field's coupling strength,
-                                                // clamped to a sane range. Strength is
-                                                // graph truth, so persist on a change.
-                                                // (Field regions — strength tuning.)
-                                                if let Some(current) = self.orrery().field_strength(id) {
-                                                    let next = (current + delta).clamp(1000.0, 20000.0);
-                                                    if (next - current).abs() > f32::EPSILON
-                                                        && self.orrery_mut().set_field_strength(id, next)
-                                                    {
-                                                        self.save_session();
-                                                        self.view.request_redraw();
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                self.chrome_click(x, y);
                             }
                             return;
                         }
@@ -782,12 +719,63 @@ impl WindowCtx<'_> {
         self.drain_pending_context();
         self.drain_history_step();
         self.drain_physics_toggle();
+        self.drain_roster_intents();
         self.sync_settings();
         self.sync_orrery();
         if palette_was_open && !self.view.chrome().palette_open {
             self.focus_after_palette_close();
         }
         self.view.request_redraw();
+    }
+
+    /// Apply the roster-row intents the shell runner's dispatch queued. The roster is
+    /// folded into the shell document, so its row clicks arrive through `chrome_click` ->
+    /// `chrome_activate`; this drains + applies them (Shift = additive selection).
+    /// Replaces the old roster-pane branch in `on_mouse_input`. (Phase 1.)
+    pub(super) fn drain_roster_intents(&mut self) {
+        let intents = self.view.take_roster_intents();
+        if intents.is_empty() {
+            return;
+        }
+        let additive = self.view.modifiers.shift;
+        for intent in intents {
+            match intent {
+                crate::roster_view::RosterIntent::Select(member) => {
+                    if additive {
+                        self.orrery_mut().toggle_select_member(member);
+                        self.view.request_redraw();
+                    } else if let Some(url) = self
+                        .orrery()
+                        .graph()
+                        .get_node_by_id(member)
+                        .map(|(_, n)| n.url().to_string())
+                    {
+                        self.orrery_mut().select_by_url(&url);
+                        self.view.request_redraw();
+                    }
+                }
+                crate::roster_view::RosterIntent::SelectField(id) => {
+                    if self.orrery_mut().center_on_field(id) {
+                        self.view.request_redraw();
+                    }
+                }
+                crate::roster_view::RosterIntent::ToggleFieldVisibility(id) => {
+                    self.orrery_mut().toggle_field_visible(id);
+                    self.view.request_redraw();
+                }
+                crate::roster_view::RosterIntent::AdjustFieldStrength(id, delta) => {
+                    if let Some(current) = self.orrery().field_strength(id) {
+                        let next = (current + delta).clamp(1000.0, 20000.0);
+                        if (next - current).abs() > f32::EPSILON
+                            && self.orrery_mut().set_field_strength(id, next)
+                        {
+                            self.save_session();
+                            self.view.request_redraw();
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Route a left press in the workbench pane into the host-authoritative pelt shell:
