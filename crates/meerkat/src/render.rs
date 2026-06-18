@@ -283,7 +283,9 @@ impl WindowCtx<'_> {
                 .filter_map(|(key, node)| {
                     let w = orrery.node_position(key)?;
                     Some(OrreryCard {
-                        label: node.title.clone(),
+                        // Short label: the last path segment of the title/URL (the wiki
+                        // article name), not the whole URL. Styling/color is (iii).
+                        label: node.title.rsplit('/').next().unwrap_or_default().to_string(),
                         x: w.x * cam.zoom + cam.offset.0,
                         y: w.y * cam.zoom + cam.offset.1,
                     })

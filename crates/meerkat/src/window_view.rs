@@ -353,7 +353,11 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
                     .attr("class", "node-card")
                     .attr(
                         "style",
-                        format!("position:absolute;transform:translate({}px,{}px)", c.x, c.y),
+                        format!(
+                            "position:absolute;transform:translate({}px,{}px);\
+                             font-size:11px;white-space:nowrap;color:#dde",
+                            c.x, c.y
+                        ),
                     ),
             ) as ShellView
         })
