@@ -27,6 +27,7 @@ use super::{
 };
 use meerkat::ShellbarPaneStates;
 use crate::pane_session::PaneSession;
+use crate::window_view::OrreryCard;
 
 impl WindowCtx<'_> {
     /// The toolbar-band height (px), measuring + caching it on first use. The
@@ -269,6 +270,27 @@ impl WindowCtx<'_> {
                 dom.set_attribute(node, attr, &style);
             }
         }
+        // Orrery-as-element (i-2): snapshot the focused orrery's nodes through its
+        // camera into the shell state, so the orrery element renders a DOM card per
+        // node. One-frame position lag (the orrery advances at frame() further down);
+        // cards and the scene align once the layout settles. (Phase 2.)
+        let orrery_cards: Vec<OrreryCard> = {
+            let orrery = self.pane_orrery(orrery_gid);
+            let cam = orrery.camera();
+            orrery
+                .graph()
+                .nodes()
+                .filter_map(|(key, node)| {
+                    let w = orrery.node_position(key)?;
+                    Some(OrreryCard {
+                        label: node.title.clone(),
+                        x: w.x * cam.zoom + cam.offset.0,
+                        y: w.y * cam.zoom + cam.offset.1,
+                    })
+                })
+                .collect()
+        };
+        self.view.set_orrery(orrery_cards);
         let chrome_sheet = self.shared.presentation.chrome_sheet_refs();
         let chrome_t = Instant::now();
         // C3 (cheap-path): render the chrome through its persistent
