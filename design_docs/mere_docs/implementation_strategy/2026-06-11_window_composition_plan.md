@@ -10,6 +10,11 @@ source for the leaf/branch/fork gesture model; this plan is the architecture tho
 operations rest on once a window can own its own orrery.
 **Code**: `crates/meerkat/`, `crates/orrery/`, `crates/forme/`, `crates/system/session-runtime/`.
 
+**Spine**: per the [interaction model spine](../technical_architecture/2026-06-18_interaction_model_spine.md),
+this plan owns the **interact** stage at the host level: the one input spine + one focus authority
+(the P2-companion) and the external-texture-element-that-bears-input bridge, over the shell-root
+document unified-document-host Phase 1 consolidates.
+
 ---
 
 ## The reframe (2026-06-11, with Mark)

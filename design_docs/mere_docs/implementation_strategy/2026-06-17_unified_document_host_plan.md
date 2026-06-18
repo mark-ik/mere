@@ -1,12 +1,22 @@
 # Unified Document Host Plan
 
-Status: **planned**. A code-verified argument that `xilem_serval`'s role in
+Status: **partially shipped**. The orrery-as-element slice landed (Progress, 2026-06-18);
+Phase 1's document consolidation and Phase 2's custom-layout-element / hit-test / focus /
+scene-teardown remain, and a cross-plan consolidation pass (with the node-representation and
+field plans) is underway. A code-verified argument that `xilem_serval`'s role in
 meerkat should grow from "reactive toolkit for the chrome strip" to "host of the
 whole document shell", plus the staged path to get there and the one product
 decision it turns on.
 
 Sibling/converging docs:
 
+- [interaction_model_spine](../technical_architecture/2026-06-18_interaction_model_spine.md), the
+  parent spine: the one fetch→render→represent→arrange→interact→semantic pipeline over the
+  definitely-support formats. This plan is its **document-shell host layer**. Per the spine's
+  ownership map it does not own node forms or the LOD machine (node-representation), scene-wide or
+  localized arrangement (node-representation / field-regions), or the input spine and
+  external-texture-input bridge (window-composition); it owns Phase 1 (one shell-root document)
+  and Phase 2 (the custom-layout `<orrery>` element and the DOM-vs-gyre two-hit-test).
 - [window_composition_plan](2026-06-11_window_composition_plan.md) — orrery
   (authority) vs panes (views); this plan is the rendering-engine half of that
   same reshape (one document vs many).
@@ -164,6 +174,23 @@ migration, not a re-wire: meerkat composites a pelt `TileShell` today, and
 `platen-view` does not exist yet (only `platen/lib.rs` + README). So the step is
 net-new `platen-view` plus retiring pelt for tile chrome.
 
+Payoff, semantic surface (Path A only): once node cards are DOM, the rendered
+orrery becomes machine-legible to outside consumers (assistive tech, semantic-web
+tools, agents), riding the same DOM that gives the Phase 1 a11y tree. The flow
+stays one-way and kernel-sourced: emit the already-shipped
+[`linked_data::to_jsonld`](../../../crates/graph/linked-data/src/lib.rs) output as
+an inline `<script type="application/ld+json">` during projection (per card or per
+document), rather than re-extracting the view as a source. The orrery DOM is a
+lossy, viewport-dependent projection (only materialized nodes), so the kernel
+stays the authority and the complete export; the view only broadcasts. Prefer the
+script block over RDFa/microdata attributes (directly parseable, host paints stay
+presentational); reserve element-level RDFa for when a tool must grab a specific
+sub-element (a `schema:name` span). This complements the shipped JSON-LD I/O
+(`linked-data` crate, `Command::ExportGraph` / `>export_graph`, plus `from_html`
+foreign-page ingest; [linked-data ingest/export plan](2026-05-22_linked_data_ingest_export_plan.md)),
+it does not replace it, and it is an affordance riding the node-cards-as-DOM
+done-condition rather than a hard Phase 2 requirement.
+
 ## Path B alternative — formalize the surface compositor
 
 Only if Path B is chosen for the canvas. Phase 1 still ships; then:
@@ -295,3 +322,50 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   runner to the pane's own lensed sub-state. Confirms the host-side shell container with
   heterogeneous cross-pane lensing and no engine change. The remaining Phase 1 work is the
   state / render / input rewiring of the live panes, not a mechanism unknown.
+- **2026-06-17 (semantic-surface payoff)** — Added a Path A payoff bullet to Phase 2 after
+  verifying the JSON-LD claim against code: contrary to the prompting note, JSON-LD I/O is
+  already shipped and kernel-sourced (`linked-data` crate: `to_jsonld` / `to_jsonld_compact`
+  export, `from_jsonld` / `from_html` ingest, bundled schema.org / Dublin Core /
+  ActivityStreams `@context` assets), and wired as `Command::ExportGraph` (`>export_graph`,
+  meerkat/src/export.rs, "Lane 0 sidequest #1"). Only `Semantic` edges export as RDF;
+  `predicate_iri()` (edge_data.rs:94) maps recognized `SemanticSubKind` → canonical IRI,
+  with the `predicate: Option<String>` field carrying round-trip identity. So Path A does
+  not unlock JSON-LD (already exists from the kernel); it unlocks the *view* as a one-way
+  semantic broadcast surface, emitted from that same kernel export. No code written.
+- **2026-06-18 (node_quads landed)** — Refactored the `linked-data` export onto a single
+  canonical kernel-to-RDF projection, `pub fn node_quads(graph, key, node) -> Vec<oxrdf::Quad>`
+  (lib.rs), reusing the existing `node_id` / `edge_predicates` helpers; `node_object`
+  (expanded) and `compact_node_object` (compacted) now render from the quads instead of each
+  walking the graph, and `insert_types` is retired. `oxrdf 0.3` was already a direct dep, so no
+  new dependency. 21/21 lib tests green including the expanded + compact goldens and both
+  ingest round-trips. One intentional refinement: the quad model validates IRIs, so a malformed
+  predicate / subject is now skipped rather than emitted as invalid JSON-LD (no test exercised
+  it). `node_quads` is `pub` so the Oxigraph `>sparql` cut consumes it directly. This is the
+  substrate the Phase 2 semantic-surface payoff and the Oxigraph query direction both build on.
+  The note's origin plan (`linked_data_ingest_export_plan`) is archived/completed, so this lands
+  here. Follow-on (not done): a shared `mapping` module so export (`node_quads`) and ingest
+  (already on `oxrdf` quads) meet at one set of decisions, retiring `ingest.rs`'s duplicate
+  `RDF_TYPE`.
+- **2026-06-18 (the shipped slice recorded; the plan was behind the code, rule-9 gap closed).**
+  A narrow slice of both phases landed across this and the prior session, unrecorded until now.
+  **Phase 1, mechanism not consolidation.** `WindowView.runner` is a
+  `ServalAppRunner<ShellState, ShellLogic, ShellView>` with `ShellState { chrome, orrery }`
+  (window_view.rs:318); chrome is lensed and the orrery is a sibling element under one shell
+  root; ~118 chrome sites migrated behind accessors. But roster / apparatus / steward /
+  inspector stay separate `RosterPane`/`ListPane` runners (window_view.rs:102/113/117/118), so
+  done-conditions 1-4 (panes in the shell root, one focus ring, one a11y tree, Y-band collapse)
+  are **unmet**: the document-unification core is untouched. **Phase 2, cards only.** The orrery
+  snapshots on-screen nodes through the camera into `OrreryRender` and draws transform-positioned
+  DOM card chips in the shell document (RepaintOnly; `set_render_as_cards` suppresses the gnode
+  layer), done-condition 2. Not met: a real serval custom-layout `<orrery>` element (it is a
+  host-positioned `<div>`, cond 1), the two-hit-test split (input stays winit→gyre, cards
+  pointer-transparent, cond 3), focusable card DOM in the ring (cond 4), scene/edge teardown
+  (cond 5). **Fix-up pass:** card label = page-title-or-URL-slug + ellipsis (`1c564ab`), off-pane
+  card cull (`2c6ddb8`), snapshot/frame reorder killing the one-frame lag (`2f5141a`), favicon
+  PNG data-URI (`745682a`, not yet painting, no `ImagePlane` in the chrome render). Drag confirmed
+  intact (winit-driven, bypasses DOM). **Net: the visible orrery-as-element slice is done and
+  polished; Phase 1's consolidation and Phase 2's element / hit-test / focus / scene-teardown
+  remain.** A cross-plan consolidation pass (with the
+  [node-representation + arrangement plan](2026-06-18_node_representation_arrangement_plan.md) and
+  the [scriptable field regions plan](2026-06-13_scriptable_field_regions_plan.md); reduce the
+  drift; formalize the supported-format interaction model) is refactoring this plan.

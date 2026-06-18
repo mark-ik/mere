@@ -7,6 +7,12 @@ layout (how the contained nodes arrange). The third graph element beside nodes
 and edges, but a *rule-bearing* one: place a region, write its rules, and the
 graph within it behaves accordingly.
 
+**Spine**: per the [interaction model spine](../technical_architecture/2026-06-18_interaction_model_spine.md),
+this plan owns the **localized / scripted arrangement** half of the *arrange* stage (the
+scene-wide arrangement choice is the node-representation plan's), plus the placed rule region
+(forces, edge-visibility) and its rhai surface. Field regions are already moveable + resizable
+(Progress, `7445e70`).
+
 This is the "field" the user means — not a node attribute, a **spatial rule
 region**. It unifies three subsystems that already exist separately (forces via
 couplings, edge visibility via projection, layout via arrangements) under one

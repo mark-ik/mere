@@ -69,9 +69,9 @@ pub use gemtext::{ENGINE_ID as ENGINE_GEMTEXT, GemtextEngine};
 pub use gopher::{ENGINE_ID as ENGINE_GOPHER, GopherEngine};
 pub use guppy::{ENGINE_ID as ENGINE_GUPPY, GuppyEngine};
 pub use knot::{ENGINE_ID as ENGINE_KNOT, KnotEngine};
-// Experimental djot-bodied knot engine (design doc §10). Not in `engines()` —
-// it shares the `text/x-knot` content-type with `KnotEngine`, so route to it
-// explicitly by engine id.
+// The djot-bodied knot engine (design doc §10). Registered in `engines()` below; it shares the
+// `text/x-knot` content-type with `KnotEngine`, and routing resolves that content-type to this
+// djot engine as the default knot grammar.
 pub use knot::djot::{DjotKnotEngine, ENGINE_ID as ENGINE_KNOT_DJOT};
 pub use markdown::{ENGINE_ID as ENGINE_MARKDOWN, MarkdownEngine};
 pub use misfin::{ENGINE_ID as ENGINE_MISFIN, MisfinEngine};
