@@ -31,6 +31,7 @@ use xilem_serval::{AnyView, Modifiers, ServalAppRunner, ServalCtx, ServalElement
 
 use super::{CachedTile, ContentPane, ResizeDrag};
 use crate::pane_session::PaneSession;
+use crate::roster_view::{roster_view, RosterState, RosterView};
 
 /// What a window *is*, which selects its chrome template (and, from MW6, its camera
 /// ownership). The **primary** owns the orrery + the shellbar/switcher chrome and
@@ -320,6 +321,12 @@ pub(crate) struct ShellState {
     /// The focused orrery's render snapshot (rect + cards), refreshed each frame. Empty
     /// until the host wires the snapshot. (Orrery-as-element — Phase 2.)
     pub(crate) orrery: OrreryRender,
+    /// The roster pane's view state, folded into the shell document so its rows render,
+    /// hit-test, and project a11y through the one shell runner. (Phase 1, pane consolidation.)
+    pub(crate) roster: RosterState,
+    /// The roster's window rect `[x0,y0,x1,y1]`, `Some` while the pane is open; the shell
+    /// view positions the roster subtree there. `None` keeps it out of the document.
+    pub(crate) roster_rect: Option<[f32; 4]>,
 }
 
 /// The erased shell root view, like [`ChromeView`] but over [`ShellState`].
@@ -339,8 +346,28 @@ fn shell_view(s: &ShellState) -> ShellView {
     let make_chrome: fn(&mut Chrome) -> ChromeView = |c: &mut Chrome| chrome_view(c);
     let to_chrome: fn(&mut ShellState) -> &mut Chrome = |s: &mut ShellState| &mut s.chrome;
     let chrome = lens(make_chrome, to_chrome);
+    // The roster pane, when open, is a positioned subtree of the shell document: its view
+    // is lensed onto `ShellState.roster`, so the one shell runner renders it, hit-tests it,
+    // and dispatches its row clicks. `None` keeps the document identical to before the fold.
+    // (Phase 1.)
+    let roster = s.roster_rect.map(|[x0, y0, x1, y1]| {
+        let make_roster: fn(&mut RosterState) -> RosterView = |r: &mut RosterState| roster_view(r);
+        let to_roster: fn(&mut ShellState) -> &mut RosterState = |s: &mut ShellState| &mut s.roster;
+        Box::new(
+            el::<_, ShellState, ()>("div", lens(make_roster, to_roster))
+                .attr("class", "roster-pane")
+                .attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:{x0}px;top:{y0}px;width:{}px;height:{}px;overflow:hidden",
+                        x1 - x0,
+                        y1 - y0
+                    ),
+                ),
+        ) as ShellView
+    });
     Box::new(
-        el::<_, ShellState, ()>("shell", (chrome, orrery_element(&s.orrery)))
+        el::<_, ShellState, ()>("shell", (chrome, orrery_element(&s.orrery), roster))
             .attr("style", "position:relative;width:100%;height:100%"),
     )
 }
@@ -412,6 +439,8 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
         ShellState {
             chrome,
             orrery: OrreryRender { rect: [0.0; 4], cards: Vec::new() },
+            roster: RosterState::default(),
+            roster_rect: None,
         },
     )
 }
