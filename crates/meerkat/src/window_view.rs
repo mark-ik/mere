@@ -290,6 +290,7 @@ pub(crate) struct WindowView {
 /// transform (gyre's world position). The host snapshots the focused orrery into a
 /// `Vec<OrreryCard>` each frame, and the orrery element renders one card per entry.
 /// (Orrery-as-element — Phase 2.)
+#[derive(PartialEq)]
 pub(crate) struct OrreryCard {
     pub(crate) label: String,
     pub(crate) x: f32,
@@ -301,6 +302,7 @@ pub(crate) struct OrreryCard {
 /// The focused orrery's render snapshot: the pane rect the element sits at and the
 /// node cards (each at its camera-mapped pane-local position). The host rebuilds it
 /// each frame so the cards track gyre and the element tracks the pane. (Phase 2.)
+#[derive(PartialEq)]
 pub(crate) struct OrreryRender {
     /// The orrery pane rect `[x0, y0, x1, y1]` (left, top, right, bottom) in viewport px.
     pub(crate) rect: [f32; 4],
@@ -357,8 +359,9 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
                         "style",
                         format!(
                             "position:absolute;transform:translate({}px,{}px);\
-                             background-color:{};color:#fff;padding:1px 5px;border-radius:3px;\
-                             font-size:11px;white-space:nowrap",
+                             background-color:{};color:#fff;padding:2px 6px;border-radius:4px;\
+                             font-size:11px;font-weight:500;white-space:nowrap;\
+                             box-shadow:0 1px 3px rgba(0,0,0,0.45)",
                             c.x, c.y, c.color
                         ),
                     ),
@@ -414,6 +417,13 @@ impl WindowView {
     /// (Orrery-as-element — Phase 2.)
     pub(crate) fn set_orrery(&mut self, render: OrreryRender) {
         self.runner.update(|s| s.orrery = render);
+    }
+
+    /// The orrery render snapshot currently in the shell state, so the host can skip
+    /// the rebuild when a fresh snapshot is identical (a settled orrery costs no
+    /// per-frame view re-run). (Orrery-as-element — Phase 2.)
+    pub(crate) fn orrery_render(&self) -> &OrreryRender {
+        &self.runner.state().orrery
     }
 
     /// Mint a window's view over a fresh pair of serval runners. Everything else

@@ -294,7 +294,12 @@ impl WindowCtx<'_> {
                 .collect();
             OrreryRender { rect: orrery_rect, cards }
         };
-        self.view.set_orrery(orrery_render);
+        // Only rebuild the shell view when the snapshot actually changed: a settled
+        // orrery (no motion, selection, or camera change) produces an identical snapshot
+        // each frame, so this skips the per-frame view re-run + diff entirely. (Perf.)
+        if &orrery_render != self.view.orrery_render() {
+            self.view.set_orrery(orrery_render);
+        }
         let chrome_sheet = self.shared.presentation.chrome_sheet_refs();
         let chrome_t = Instant::now();
         // C3 (cheap-path): render the chrome through its persistent

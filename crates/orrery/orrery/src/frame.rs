@@ -147,8 +147,15 @@ impl Orrery {
                 self.camera.offset.0, self.camera.offset.1, self.camera.zoom
             ),
         );
-        let gnodes: Vec<(NodeKey, DomNodeId)> =
-            self.gnode_of.iter().map(|(&k, &g)| (k, g)).collect();
+        // When the host renders these nodes as DOM cards (orrery-as-element) the gnode
+        // layer is dropped below, so skip the per-gnode transform/class updates: an empty
+        // set makes the loop a no-op, the costliest part of the frame on a big graph.
+        // (Phase 2 — perf / cleaning.)
+        let gnodes: Vec<(NodeKey, DomNodeId)> = if self.render_as_cards {
+            Vec::new()
+        } else {
+            self.gnode_of.iter().map(|(&k, &g)| (k, g)).collect()
+        };
         for (key, gnode) in gnodes {
             // Scope lens: hide a non-scoped node's DOM child (the underlay already
             // excludes it), so a scoped orrery shows only its subset. (Curated orrery.)
