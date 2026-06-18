@@ -606,9 +606,9 @@ mod tests {
         let app = test_app();
         let leaf = app.build_window_view();
         assert_eq!(leaf.kind, crate::window_view::WindowKind::Leaf);
-        assert!(leaf.runner.state().slim, "a leaf's chrome is slim");
+        assert!(leaf.runner.state().chrome.slim, "a leaf's chrome is slim");
         assert_eq!(app.view().kind, crate::window_view::WindowKind::Primary);
-        assert!(!app.view().runner.state().slim, "the primary's chrome is full");
+        assert!(!app.view().runner.state().chrome.slim, "the primary's chrome is full");
     }
 
     #[test]
@@ -879,11 +879,11 @@ mod tests {
             wc.view.runner.set_focus(Some(omnibar));
             wc.view
                 .runner
-                .update(|c| c.omnibar = xilem_serval::TextInput::new("hello world"));
+                .update(|c| c.chrome.omnibar = xilem_serval::TextInput::new("hello world"));
             wc.view.modifiers.ctrl = true;
             wc.on_key_pressed(&winit::keyboard::Key::Character("a".into()));
         }
-        let state = app.view().runner.state();
+        let state = &app.view().runner.state().chrome;
         assert!(state.omnibar.has_selection(), "Ctrl+A selected the omnibar text");
         assert_eq!(state.omnibar.selected_text(), "hello world");
     }
@@ -910,7 +910,7 @@ mod tests {
             ));
         }
         assert_eq!(
-            app.view().runner.state().omnibar.text(),
+            app.view().runner.state().chrome.omnibar.text(),
             ">roster",
             "Right arrow accepted the ghost into the buffer"
         );
@@ -957,7 +957,7 @@ mod tests {
         // Seed the bar with a shown location and put the caret at its end (focused).
         wc.view
             .runner
-            .update(|c| c.omnibar = xilem_serval::TextInput::new("gemini://shown.example/"));
+            .update(|c| c.chrome.omnibar = xilem_serval::TextInput::new("gemini://shown.example/"));
         wc.view.runner.set_focus(None);
         wc.view.modifiers.ctrl = true;
         wc.on_key_pressed(&winit::keyboard::Key::Character("l".into()));
@@ -1169,9 +1169,9 @@ mod tests {
             ));
         }
         assert!(
-            app.view().runner.state().omnibar.text().contains("two nodes"),
+            app.view().runner.state().chrome.omnibar.text().contains("two nodes"),
             "the bar reports the no-op, got {:?}",
-            app.view().runner.state().omnibar.text()
+            app.view().runner.state().chrome.omnibar.text()
         );
     }
 
@@ -1188,7 +1188,7 @@ mod tests {
         };
         let mut app = test_app();
         assert!(!has_roster(&app), "no roster pane before the command");
-        let entries_before = app.view().runner.state().history.entries().len();
+        let entries_before = app.view().runner.state().chrome.history.entries().len();
 
         {
             let mut wc = app.ctx();
@@ -1207,7 +1207,7 @@ mod tests {
             "the `>roster` command toggled the roster pane through the host drain"
         );
         assert_eq!(
-            app.view().runner.state().history.entries().len(),
+            app.view().runner.state().chrome.history.entries().len(),
             entries_before,
             "a command runs without navigating (no new history entry)"
         );
@@ -1215,9 +1215,9 @@ mod tests {
         // pure action restores the location), never stranded behind a command that
         // already ran.
         assert!(
-            !app.view().runner.state().omnibar.text().starts_with('>'),
+            !app.view().runner.state().chrome.omnibar.text().starts_with('>'),
             "the omnibar no longer shows the run command, got {:?}",
-            app.view().runner.state().omnibar.text()
+            app.view().runner.state().chrome.omnibar.text()
         );
     }
 
