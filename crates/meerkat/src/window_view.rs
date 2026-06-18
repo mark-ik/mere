@@ -296,14 +296,23 @@ pub(crate) struct OrreryCard {
     pub(crate) y: f32,
 }
 
+/// The focused orrery's render snapshot: the pane rect the element sits at and the
+/// node cards (each at its camera-mapped pane-local position). The host rebuilds it
+/// each frame so the cards track gyre and the element tracks the pane. (Phase 2.)
+pub(crate) struct OrreryRender {
+    /// The orrery pane rect `[x0, y0, x1, y1]` (left, top, right, bottom) in viewport px.
+    pub(crate) rect: [f32; 4],
+    pub(crate) cards: Vec<OrreryCard>,
+}
+
 /// The window shell's composed view-state: the chrome plus the orrery-as-element's
-/// node cards (and later the document panes), all one document under one runner.
+/// render snapshot (and later the document panes), all one document under one runner.
 /// (Unified document host.)
 pub(crate) struct ShellState {
     pub(crate) chrome: Chrome,
-    /// The focused orrery's node cards, snapshotted from gyre each frame. Empty until
-    /// the host wires the snapshot. (Orrery-as-element — Phase 2.)
-    pub(crate) orrery: Vec<OrreryCard>,
+    /// The focused orrery's render snapshot (rect + cards), refreshed each frame. Empty
+    /// until the host wires the snapshot. (Orrery-as-element — Phase 2.)
+    pub(crate) orrery: OrreryRender,
 }
 
 /// The erased shell root view, like [`ChromeView`] but over [`ShellState`].
@@ -334,8 +343,9 @@ fn shell_view(s: &ShellState) -> ShellView {
 /// paint and hit-test where the transform puts them). Empty until the host snapshots
 /// the focused orrery; the underlay (edges + demoted dots) joins in (ii). The rect is a
 /// placeholder until the frame tree drives the container layout (iii). (Phase 2.)
-fn orrery_element(cards: &[OrreryCard]) -> ShellView {
-    let card_views: Vec<ShellView> = cards
+fn orrery_element(render: &OrreryRender) -> ShellView {
+    let card_views: Vec<ShellView> = render
+        .cards
         .iter()
         .map(|c| {
             Box::new(
@@ -348,10 +358,18 @@ fn orrery_element(cards: &[OrreryCard]) -> ShellView {
             ) as ShellView
         })
         .collect();
+    let [x0, y0, x1, y1] = render.rect;
     Box::new(
         el::<_, ShellState, ()>("div", card_views)
             .attr("class", "orrery")
-            .attr("style", "position:absolute;left:0;top:48px;width:60%;height:90%"),
+            .attr(
+                "style",
+                format!(
+                    "position:absolute;left:{x0}px;top:{y0}px;width:{}px;height:{}px;overflow:hidden",
+                    x1 - x0,
+                    y1 - y0
+                ),
+            ),
     )
 }
 
@@ -362,7 +380,10 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
     ServalAppRunner::new(
         dom,
         shell_view as ShellLogic,
-        ShellState { chrome, orrery: Vec::new() },
+        ShellState {
+            chrome,
+            orrery: OrreryRender { rect: [0.0; 4], cards: Vec::new() },
+        },
     )
 }
 
@@ -384,8 +405,8 @@ impl WindowView {
     /// Replace the orrery element's node cards with a fresh gyre snapshot. The runner
     /// re-renders, re-placing the cards by their transforms on the RepaintOnly path.
     /// (Orrery-as-element — Phase 2.)
-    pub(crate) fn set_orrery(&mut self, cards: Vec<OrreryCard>) {
-        self.runner.update(|s| s.orrery = cards);
+    pub(crate) fn set_orrery(&mut self, render: OrreryRender) {
+        self.runner.update(|s| s.orrery = render);
     }
 
     /// Mint a window's view over a fresh pair of serval runners. Everything else
