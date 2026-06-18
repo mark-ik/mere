@@ -377,10 +377,29 @@ impl WindowCtx<'_> {
                     if !(0.0..=pw).contains(&x) || !(0.0..=ph).contains(&y) {
                         return None;
                     }
+                    // Label: a real page title once the node has loaded one; otherwise the
+                    // URL's last path segment (the readable slug, e.g. a wiki article name),
+                    // which previews the eventual title and keeps same-site nodes distinct.
+                    // node.title is seeded to the URL until a load completes, so a URL-shaped
+                    // title is the un-loaded case. (node_display_label would collapse these to
+                    // the bare host.) Capped with an ellipsis for the compact on-canvas card.
+                    const CARD_LABEL_CAP: usize = 24;
+                    let raw = node.title.trim_end_matches('/');
+                    let base = if raw.contains("://") {
+                        match raw.rsplit('/').next() {
+                            Some(slug) if !slug.is_empty() => slug,
+                            _ => raw,
+                        }
+                    } else {
+                        raw
+                    };
+                    let label = if base.chars().count() <= CARD_LABEL_CAP {
+                        base.to_string()
+                    } else {
+                        base.chars().take(CARD_LABEL_CAP - 1).chain(['\u{2026}']).collect()
+                    };
                     Some(OrreryCard {
-                        // Short label: the last path segment of the title/URL (the wiki
-                        // article name), not the whole URL.
-                        label: node.title.rsplit('/').next().unwrap_or_default().to_string(),
+                        label,
                         x,
                         y,
                         color: orrery.node_color(key).to_string(),
