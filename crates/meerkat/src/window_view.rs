@@ -294,6 +294,8 @@ pub(crate) struct OrreryCard {
     pub(crate) label: String,
     pub(crate) x: f32,
     pub(crate) y: f32,
+    /// The node's render color (hex), from `Orrery::node_color` (state + selection).
+    pub(crate) color: String,
 }
 
 /// The focused orrery's render snapshot: the pane rect the element sits at and the
@@ -355,8 +357,9 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
                         "style",
                         format!(
                             "position:absolute;transform:translate({}px,{}px);\
-                             font-size:11px;white-space:nowrap;color:#dde",
-                            c.x, c.y
+                             background-color:{};color:#fff;padding:1px 5px;border-radius:3px;\
+                             font-size:11px;white-space:nowrap",
+                            c.x, c.y, c.color
                         ),
                     ),
             ) as ShellView

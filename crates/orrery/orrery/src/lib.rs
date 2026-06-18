@@ -187,6 +187,11 @@ pub struct Orrery {
     /// curated subset), projecting through a curated forme arrangement instead of the
     /// full Identity one. `None` shows the whole graph. (Curated orrery.)
     scope: Option<Vec<NodeKey>>,
+    /// When set, the scene omits the on-screen gnode + favicon layers: the host renders
+    /// those nodes as DOM cards in the shell document instead (the focused orrery only;
+    /// secondary panes keep their gnodes). Edges + demoted dots stay as the underlay.
+    /// (Orrery-as-element — Phase 2.)
+    render_as_cards: bool,
 }
 
 impl Default for Orrery {
@@ -316,6 +321,7 @@ impl Orrery {
             active_strategy: None,
             strategy_positions: None,
             scope: None,
+            render_as_cards: false,
         }
     }
 
@@ -760,6 +766,29 @@ impl Orrery {
     /// graph. `None` for a node the view has not placed. (Position gut.)
     pub fn node_position(&self, key: NodeKey) -> Option<PortablePoint> {
         self.view.position_of(key).map(|p| PortablePoint::new(p.x, p.y))
+    }
+
+    /// A node's render color, matching the on-screen tile's class palette: orange when
+    /// selected, else green open / red closed / blue idle. The host colors the orrery
+    /// element's DOM node-cards with it so they carry node identity without the gnode
+    /// layer. (Orrery-as-element — Phase 2.)
+    pub fn node_color(&self, key: NodeKey) -> &'static str {
+        if self.selected.contains(&key) {
+            return "#f7a440";
+        }
+        match self.node_states.get(&key) {
+            Some(NodeState::Open) => "#5fb878",
+            Some(NodeState::Closed) => "#cc5a54",
+            _ => "#5a8fc8",
+        }
+    }
+
+    /// Render the on-screen nodes as host DOM cards instead of in-scene gnodes: the
+    /// next [`frame`](Orrery::frame) drops the gnode + favicon layers, keeping edges +
+    /// demoted dots as the underlay. The host sets this on the focused orrery (whose
+    /// cards it snapshots) and leaves it off on secondary panes. (Orrery-as-element.)
+    pub fn set_render_as_cards(&mut self, on: bool) {
+        self.render_as_cards = on;
     }
 
     /// Seed node positions from a persisted cartography sidecar, overriding the graph's

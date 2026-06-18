@@ -243,18 +243,23 @@ impl Orrery {
         let mut layers = vec![
             CompositeLayer::commands_only(&bg_cmds),
             CompositeLayer::commands_only(underlay.commands()),
-            CompositeLayer {
+        ];
+        // The on-screen gnode + favicon layers, unless the host renders these nodes as
+        // DOM cards in the shell document (orrery-as-element); then only edges + demoted
+        // dots remain as the underlay. (Orrery-as-element — Phase 2.)
+        if !self.render_as_cards {
+            layers.push(CompositeLayer {
                 commands: nodes_plist.commands(),
                 fonts: nodes_plist.fonts(),
                 images: nodes_plist.images(),
-            },
-        ];
-        if !favicon_cmds.is_empty() {
-            layers.push(CompositeLayer {
-                commands: &favicon_cmds,
-                fonts: &[],
-                images: &favicon_images,
             });
+            if !favicon_cmds.is_empty() {
+                layers.push(CompositeLayer {
+                    commands: &favicon_cmds,
+                    fonts: &[],
+                    images: &favicon_images,
+                });
+            }
         }
         if let Some(cmds) = marquee_cmds.as_ref() {
             layers.push(CompositeLayer::commands_only(cmds));

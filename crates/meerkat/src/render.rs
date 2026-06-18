@@ -284,10 +284,11 @@ impl WindowCtx<'_> {
                     let w = orrery.node_position(key)?;
                     Some(OrreryCard {
                         // Short label: the last path segment of the title/URL (the wiki
-                        // article name), not the whole URL. Styling/color is (iii).
+                        // article name), not the whole URL.
                         label: node.title.rsplit('/').next().unwrap_or_default().to_string(),
                         x: w.x * cam.zoom + cam.offset.0,
                         y: w.y * cam.zoom + cam.offset.1,
+                        color: orrery.node_color(key).to_string(),
                     })
                 })
                 .collect();
@@ -326,6 +327,9 @@ impl WindowCtx<'_> {
         // centered once). The tiled workbench, when its pane is open, composites a
         // separate scene into its own leaf — the two coexist now, no longer toggled.
         self.pane_orrery_mut(orrery_gid).resize(orrery_w, orrery_h);
+        // The focused orrery renders its on-screen nodes as DOM cards in the shell (the
+        // snapshot above), so drop its in-scene gnode layer. (Orrery-as-element.)
+        self.pane_orrery_mut(orrery_gid).set_render_as_cards(true);
         if !self.view.centered {
             self.pane_orrery_mut(orrery_gid).recenter();
             self.view.centered = true;
@@ -375,6 +379,7 @@ impl WindowCtx<'_> {
                 let sh = (l.rect[3] - l.rect[1]).round().max(1.0) as u32;
                 let orrery = self.pane_orrery_mut(l.graph_id);
                 orrery.resize(sw, sh);
+                orrery.set_render_as_cards(false); // secondary panes keep their gnodes
                 if !orrery.graph_visible() {
                     orrery.recenter();
                 }
