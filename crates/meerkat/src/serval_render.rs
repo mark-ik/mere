@@ -20,6 +20,7 @@
 //! [`scene_from_session`] over a retained or fresh [`IncrementalLayout`], the
 //! equivalence the C3 parity fixture proved.
 
+use std::collections::HashMap;
 use std::hash::Hash;
 
 use layout_dom_api::LayoutDom;
@@ -105,7 +106,7 @@ fn paint_list_from_session(
         }
     }
 
-    push_scrollbars(&mut plist, session.fragments(), scroll);
+    push_scrollbars(&mut plist, dom, session.fragments(), scroll);
     plist
 }
 
@@ -178,14 +179,49 @@ pub(crate) fn hit_test_node(
     IncrementalLayout::new(dom, stylesheets, width as f32, height as f32).hit_test(dom, x, y, scroll)
 }
 
+/// Accumulate each laid-out node's absolute origin into `out`, walking from `node`
+/// whose parent sits at `parent_origin`. Taffy fragment locations are parent-
+/// relative, so absolute coords require summing the chain — mirrors the a11y
+/// tree's bounds accumulation (`serval_a11y::build`). Shared with the roster a11y
+/// row bounds, which face the same nested-pane offset.
+pub(crate) fn accumulate_origins(
+    dom: &ScriptedDom,
+    fragments: &FragmentPlane<NodeId>,
+    node: NodeId,
+    parent_origin: (f32, f32),
+    out: &mut HashMap<NodeId, (f32, f32)>,
+) {
+    let origin = match fragments.rect_of(node) {
+        Some(l) => (parent_origin.0 + l.location.x, parent_origin.1 + l.location.y),
+        None => parent_origin,
+    };
+    out.insert(node, origin);
+    for child in dom.dom_children(node) {
+        accumulate_origins(dom, fragments, child, origin, out);
+    }
+}
+
 /// Append a scrollbar thumb onto `plist` for each scrolled container: a bar on the
 /// box's right edge, height ∝ visible/content, position ∝ offset/scrollable.
-/// Absolute coords (top-level container ≈ absolute).
+///
+/// The thumb is placed at the container's **absolute** origin. Taffy locations are
+/// parent-relative, so a single `rect_of` is only ≈ absolute for a top-level
+/// container; a scroll container nested in a positioned ancestor (the roster pane,
+/// the command palette) would otherwise land at `container_width` from the
+/// document's left edge (left-aligned). We accumulate origins down the tree once,
+/// the same parent + location sum the a11y tree does. (Nested scroll containers
+/// are not offset by an ancestor's scroll here; the host's panes are single-level.)
 fn push_scrollbars(
     plist: &mut ServalPaintList,
+    dom: &ScriptedDom,
     fragments: &FragmentPlane<NodeId>,
     scroll_offsets: &ScrollOffsets<NodeId>,
 ) {
+    if scroll_offsets.is_empty() {
+        return;
+    }
+    let mut origins: HashMap<NodeId, (f32, f32)> = HashMap::new();
+    accumulate_origins(dom, fragments, dom.document(), (0.0, 0.0), &mut origins);
     for (&node, &(_ox, oy)) in scroll_offsets {
         let Some(r) = fragments.rect_of(node) else { continue };
         let inner_h =
@@ -195,9 +231,10 @@ fn push_scrollbars(
         if scrollable <= 0.5 {
             continue;
         }
+        let Some(&(abs_x, abs_y)) = origins.get(&node) else { continue };
         let thumb_h = (r.size.height * (inner_h / content_h)).max(24.0);
-        let thumb_y = r.location.y + (oy / scrollable) * (r.size.height - thumb_h);
-        let thumb_x = r.location.x + r.size.width - SCROLLBAR_WIDTH;
+        let thumb_y = abs_y + (oy / scrollable) * (r.size.height - thumb_h);
+        let thumb_x = abs_x + r.size.width - SCROLLBAR_WIDTH;
         plist.push_fill(thumb_x, thumb_y, SCROLLBAR_WIDTH, thumb_h, SCROLLBAR_COLOR);
     }
 }

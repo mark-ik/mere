@@ -59,15 +59,22 @@ impl WindowCtx<'_> {
                 let frags = session.fragments();
                 let dom = self.view.dom.borrow();
                 let root = dom.document();
+                // Taffy fragment locations are parent-relative; the roster rows sit
+                // inside the positioned roster pane, so their absolute bounds need the
+                // ancestor offsets summed in (the same accumulation the scrollbar
+                // overlay uses), not the bare `location`. (Phase 1.)
+                let mut origins = HashMap::new();
+                crate::serval_render::accumulate_origins(&dom, frags, root, (0.0, 0.0), &mut origins);
                 let mut rows = crate::all_with_class(&dom, root, "roster-row");
                 rows.extend(crate::all_with_class(&dom, root, "roster-row-selected"));
                 let scroll = self.view.roster_scroll;
                 for node in rows {
-                    if let (Some(member), Some(l)) =
-                        (crate::member_attr(&dom, node), frags.rect_of(node))
-                    {
-                        let x0 = l.location.x;
-                        let y0 = l.location.y - scroll;
+                    if let (Some(member), Some(l), Some(&(x0, abs_y))) = (
+                        crate::member_attr(&dom, node),
+                        frags.rect_of(node),
+                        origins.get(&node),
+                    ) {
+                        let y0 = abs_y - scroll;
                         map.insert(member, [x0, y0, x0 + l.size.width, y0 + l.size.height]);
                     }
                 }
