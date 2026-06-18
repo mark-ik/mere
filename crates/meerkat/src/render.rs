@@ -308,17 +308,27 @@ impl WindowCtx<'_> {
         let orrery_render = {
             let orrery = self.pane_orrery(orrery_gid);
             let cam = orrery.camera();
+            // The focused pane box, for culling cards to it: serval does not clip
+            // transformed overflow, so an off-screen node would otherwise escape the
+            // orrery element up into the chrome (the toolbar-escape we saw).
+            let (pw, ph) = (orrery_rect[2] - orrery_rect[0], orrery_rect[3] - orrery_rect[1]);
             let cards = orrery
                 .graph()
                 .nodes()
                 .filter_map(|(key, node)| {
                     let w = orrery.node_position(key)?;
+                    let x = w.x * cam.zoom + cam.offset.0;
+                    let y = w.y * cam.zoom + cam.offset.1;
+                    // Off-pane nodes ride the underlay demote-dots, not a card.
+                    if !(0.0..=pw).contains(&x) || !(0.0..=ph).contains(&y) {
+                        return None;
+                    }
                     Some(OrreryCard {
                         // Short label: the last path segment of the title/URL (the wiki
                         // article name), not the whole URL.
                         label: node.title.rsplit('/').next().unwrap_or_default().to_string(),
-                        x: w.x * cam.zoom + cam.offset.0,
-                        y: w.y * cam.zoom + cam.offset.1,
+                        x,
+                        y,
                         color: orrery.node_color(key).to_string(),
                         favicon: node.favicon_rgba.as_ref().and_then(|rgba| {
                             favicon_data_uri(rgba, node.favicon_width, node.favicon_height)
