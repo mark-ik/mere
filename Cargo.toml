@@ -193,5 +193,5 @@ all = "warn"
 # Mirrors serval's own patch (serval docs/2026-05-20_stylo_taffy_adoption_plan.md);
 # touches only the new serval-layout transitive dep (mere's crates don't use stylo).
 [patch.crates-io]
-stylo = { git = "https://github.com/servo/stylo", rev = "572ecba2d1600e7c3d490586692a209faf703baa" }
-stylo_atoms = { git = "https://github.com/servo/stylo", rev = "572ecba2d1600e7c3d490586692a209faf703baa" }
+stylo = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f188830bea261e72b2006fd73" }
+stylo_atoms = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f188830bea261e72b2006fd73" }
