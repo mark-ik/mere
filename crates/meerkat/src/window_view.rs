@@ -28,8 +28,8 @@ use serval_scripted_dom::ScriptedDom;
 use serval_winit_host::WindowSurface;
 use winit::window::CursorIcon;
 use xilem_serval::{
-    AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, el, external_texture,
-    focusable, lens, on_click,
+    AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, WheelEvent, el,
+    external_texture, focusable, lens, on_click, on_wheel,
 };
 
 use super::{CachedTile, ContentPane, ResizeDrag};
@@ -328,6 +328,10 @@ pub(crate) struct ShellState {
     /// URLs queued by orrery card clicks (the two-hit-test's DOM half): a card press dispatches
     /// here through the shell hit-test, and the host drains + selects them. (Phase 2.)
     pub(crate) orrery_card_selects: Vec<String>,
+    /// The most recent orrery wheel delta (device px), queued by the orrery pane element's
+    /// `on_wheel` when the host dispatches a wheel there, and drained by the host into gyre's
+    /// pan / Ctrl-zoom. Routes the orrery wheel through the document. (cond 5 input bridge.)
+    pub(crate) orrery_wheel: Option<(f32, f32)>,
 }
 
 /// Index into [`ShellState::panes`] / `pane_rects` for the four folded list panes; the
@@ -492,7 +496,11 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
     );
     let mut children: Vec<ShellView> = vec![scene];
     children.extend(card_views);
-    Box::new(
+    // The orrery pane element bears the wheel: a wheel the host dispatches here queues its delta
+    // for the host to drain into gyre's pan / Ctrl-zoom, routing the orrery wheel through the
+    // document (the form wheel.rs intends). The cards / scene under it have no wheel handler, so
+    // the runner's ancestor walk resolves any orrery wheel to this element. (cond 5 input bridge.)
+    Box::new(on_wheel(
         el::<_, ShellState, ()>("div", children)
             .attr("class", "orrery")
             .attr(
@@ -503,7 +511,8 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
                     y1 - y0
                 ),
             ),
-    )
+        |s: &mut ShellState, w: WheelEvent| s.orrery_wheel = Some(w.delta),
+    ))
 }
 
 /// Build a window's shell runner over `dom`, seeded with `chrome`. The host view
@@ -521,6 +530,7 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             panes: std::array::from_fn(|_| ListPaneState::default()),
             pane_rects: [None; 4],
             orrery_card_selects: Vec::new(),
+            orrery_wheel: None,
         },
     )
 }
@@ -559,6 +569,14 @@ impl WindowView {
     pub(crate) fn take_orrery_card_selects(&mut self) -> Vec<String> {
         let mut out = Vec::new();
         self.runner.update(|s| out = std::mem::take(&mut s.orrery_card_selects));
+        out
+    }
+
+    /// Drain the most recent orrery wheel delta the pane element's `on_wheel` queued (device px),
+    /// for the host to apply to gyre's pan / Ctrl-zoom. (cond 5 input bridge.)
+    pub(crate) fn take_orrery_wheel(&mut self) -> Option<(f32, f32)> {
+        let mut out = None;
+        self.runner.update(|s| out = s.orrery_wheel.take());
         out
     }
 

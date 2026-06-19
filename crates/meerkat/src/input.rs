@@ -749,6 +749,40 @@ impl WindowCtx<'_> {
         }
     }
 
+    /// Route an orrery-area wheel through the document: dispatch it to the orrery pane element
+    /// (the runner resolves the wheel target by walking ancestors from the hit node, so a wheel
+    /// over a card or the scene resolves to the orrery element), whose `on_wheel` queues the
+    /// delta; then drain it into gyre's pan / Ctrl-zoom. Returns whether gyre consumed it. The
+    /// host complement of the orrery pane element's `on_wheel`. (cond 5 input bridge.)
+    pub(super) fn orrery_wheel_through_document(
+        &mut self,
+        gid: frame::GraphId,
+        cx: f32,
+        cy: f32,
+        dx: f32,
+        dy: f32,
+    ) -> bool {
+        let target = {
+            let dom = self.view.dom.borrow();
+            let offsets = ScrollOffsets::<NodeId>::default();
+            self.view
+                .chrome_session
+                .as_ref()
+                .and_then(|s| s.hit_test(&dom, cx, cy, &offsets))
+                .and_then(|hit| self.view.runner.wheel_target(hit))
+        };
+        if let Some(node) = target {
+            // The orrery element's handler reads only `delta`; `local` / `size` are unused here.
+            let event =
+                xilem_serval::WheelEvent { delta: (dx, dy), local: (0.0, 0.0), size: (0.0, 0.0) };
+            self.view.runner.dispatch_wheel(node, event);
+        }
+        match self.view.take_orrery_wheel() {
+            Some((wdx, wdy)) => self.pane_orrery_mut(gid).wheel(wdx, wdy),
+            None => false,
+        }
+    }
+
     /// Apply the activation keys the folded list panes' button handlers queued. The
     /// apparatus + trail panes are in the shell document, so their button clicks arrive
     /// through `chrome_click` -> `chrome_activate`; this drains + routes them (apparatus:

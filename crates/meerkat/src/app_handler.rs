@@ -583,12 +583,13 @@ impl ApplicationHandler for Shell {
                     *offset = (*offset - dy).clamp(0.0, max);
                     wc.view.request_redraw();
                 } else if let Some((gid, _)) = wc.orrery_pane_at(cx, cy) {
-                    // Pan / Ctrl-zoom the Orrery pane under the cursor (per-pane: a
-                    // second graph-pane navigates independently). A cursor over the
-                    // workbench / a utility pane resolves to no Orrery leaf, so the
-                    // wheel does nothing there. (Window composition P2 — per-pane input.)
+                    // Pan / Ctrl-zoom the Orrery pane under the cursor, routed through the document:
+                    // the wheel dispatches to the orrery pane element's `on_wheel` (which queues its
+                    // delta), then drains into gyre. A cursor over the workbench / a utility pane
+                    // resolves to no Orrery leaf, so the wheel does nothing there. (cond 5 input
+                    // bridge; per-pane: a second graph-pane navigates independently.)
                     let th = wc.toolbar_height() as f32;
-                    if cy >= th && wc.pane_orrery_mut(gid).wheel(dx, dy) {
+                    if cy >= th && wc.orrery_wheel_through_document(gid, cx, cy, dx, dy) {
                         wc.view.request_redraw();
                     }
                 }
