@@ -30,6 +30,7 @@ use winit::window::CursorIcon;
 use xilem_serval::{AnyView, Modifiers, ServalAppRunner, ServalCtx, ServalElement, el, lens};
 
 use super::{CachedTile, ContentPane, ResizeDrag};
+use crate::list_pane::{list_pane_view, ListPaneState, ListView, PaneItem};
 use crate::pane_session::PaneSession;
 use crate::roster_view::{roster_view, RosterState, RosterView};
 
@@ -106,17 +107,6 @@ pub(crate) struct WindowView {
     pub(crate) session_close_rects: Vec<(SessionId, [f32; 4])>,
     /// The "+" new-graph tile rect this frame, if the switcher is shown.
     pub(crate) session_add_rect: Option<[f32; 4]>,
-    /// The apparatus pane as a view-driven [`ListPane`](crate::list_pane::ListPane)
-    /// (settings + host diagnostics): theme buttons dispatch through the runner DOM
-    /// and the host drains the clicked id, so there is no theme-button rect cache.
-    pub(crate) apparatus_pane: crate::list_pane::ListPane,
-    /// The steward + inspector utility panes as view-driven [`ListPane`]s
-    /// (display-only): the host sets their rows each frame and frames them. Separate
-    /// bundles so both can be open at once without sharing one cached layout.
-    pub(crate) steward_pane: crate::list_pane::ListPane,
-    pub(crate) inspector_pane: crate::list_pane::ListPane,
-    /// The trail pane (nav history + recent + removed), a view-driven list pane.
-    pub(crate) trail_pane: crate::list_pane::ListPane,
     /// Each gloss minimap node's rect this frame (node id): a press focuses it.
     pub(crate) gloss_node_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Each gloss "recent" row's rect this frame (node id): a press focuses it.
@@ -325,7 +315,42 @@ pub(crate) struct ShellState {
     /// The roster's window rect `[x0,y0,x1,y1]`, `Some` while the pane is open; the shell
     /// view positions the roster subtree there. `None` keeps it out of the document.
     pub(crate) roster_rect: Option<[f32; 4]>,
+    /// The four generic list panes (apparatus, steward, inspector, trail), folded into the
+    /// shell document like the roster: indexed by [`ShellListPane`], each rendered as a
+    /// lensed `list_pane_view` subtree when its matching rect is `Some`. (Phase 1, step 2.)
+    pub(crate) panes: [ListPaneState; 4],
+    pub(crate) pane_rects: [Option<[f32; 4]>; 4],
 }
+
+/// Index into [`ShellState::panes`] / `pane_rects` for the four folded list panes; the
+/// order is the array order and [`idx`](Self::idx) is the array index. (Phase 1, step 2.)
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ShellListPane {
+    Apparatus,
+    Steward,
+    Inspector,
+    Trail,
+}
+
+impl ShellListPane {
+    pub(crate) fn idx(self) -> usize {
+        self as usize
+    }
+}
+
+/// The positioned-wrapper CSS class for each [`ShellListPane`], by array index — the
+/// outer `position:absolute` div that holds the lensed `list_pane_view`. (Phase 1.)
+const PANE_WRAPPER_CLASS: [&str; 4] =
+    ["apparatus-pane", "steward-pane", "inspector-pane", "trail-pane"];
+
+/// Constant-index field accessors into [`ShellState::panes`], one per list pane, so each
+/// lensed subtree targets its own slot. Non-capturing, so they coerce to `fn`. (Phase 1.)
+const PANE_TO: [fn(&mut ShellState) -> &mut ListPaneState; 4] = [
+    |s| &mut s.panes[0],
+    |s| &mut s.panes[1],
+    |s| &mut s.panes[2],
+    |s| &mut s.panes[3],
+];
 
 /// The erased shell root view, like [`ChromeView`] but over [`ShellState`].
 pub(crate) type ShellView = Box<dyn AnyView<ShellState, (), ServalCtx, ServalElement>>;
@@ -364,9 +389,34 @@ fn shell_view(s: &ShellState) -> ShellView {
                 ),
         ) as ShellView
     });
+    // The four list panes (apparatus / steward / inspector / trail), each a positioned
+    // subtree of the shell document when open: its inner `list_pane_view` is lensed onto
+    // the matching `panes` slot, so the one shell runner lays it out, scrolls it, and
+    // dispatches its button clicks. `None` rects keep the document unchanged. (Phase 1.)
+    let list_pane = |i: usize| -> Option<ShellView> {
+        s.pane_rects[i].map(|[x0, y0, x1, y1]| {
+            let make: fn(&mut ListPaneState) -> ListView = |st| list_pane_view(st);
+            Box::new(
+                el::<_, ShellState, ()>("div", lens(make, PANE_TO[i]))
+                    .attr("class", PANE_WRAPPER_CLASS[i])
+                    .attr(
+                        "style",
+                        format!(
+                            "position:absolute;left:{x0}px;top:{y0}px;width:{}px;height:{}px;overflow:hidden",
+                            x1 - x0,
+                            y1 - y0
+                        ),
+                    ),
+            ) as ShellView
+        })
+    };
+    let list_panes = (list_pane(0), list_pane(1), list_pane(2), list_pane(3));
     Box::new(
-        el::<_, ShellState, ()>("shell", (chrome, orrery_element(&s.orrery), roster))
-            .attr("style", "position:relative;width:100%;height:100%"),
+        el::<_, ShellState, ()>(
+            "shell",
+            (chrome, orrery_element(&s.orrery), roster, list_panes),
+        )
+        .attr("style", "position:relative;width:100%;height:100%"),
     )
 }
 
@@ -439,6 +489,8 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             orrery: OrreryRender { rect: [0.0; 4], cards: Vec::new() },
             roster: RosterState::default(),
             roster_rect: None,
+            panes: std::array::from_fn(|_| ListPaneState::default()),
+            pane_rects: [None; 4],
         },
     )
 }
@@ -502,6 +554,42 @@ impl WindowView {
         out
     }
 
+    /// Fold a list pane (apparatus / steward / inspector / trail) into the shell document:
+    /// set its root class + items + window rect (or `None` to close it). The runner
+    /// re-renders, diffing the pane subtree into the one shell DOM so it lays out, scrolls,
+    /// and dispatches button clicks with the chrome. (Phase 1, step 2.)
+    pub(crate) fn set_list_pane(
+        &mut self,
+        which: ShellListPane,
+        root_class: &str,
+        items: Vec<PaneItem>,
+        rect: Option<[f32; 4]>,
+    ) {
+        let i = which.idx();
+        let root_class = root_class.to_string();
+        self.runner.update(|s| {
+            s.panes[i].root_class = root_class;
+            s.panes[i].items = items;
+            s.pane_rects[i] = rect;
+        });
+    }
+
+    /// Whether a list pane's subtree is currently in the shell document (the pane is open),
+    /// so the host can skip the per-frame `set_list_pane` while it stays closed. (Phase 1.)
+    pub(crate) fn list_pane_open(&self, which: ShellListPane) -> bool {
+        self.runner.state().pane_rects[which.idx()].is_some()
+    }
+
+    /// Drain the activation keys a list pane's button handlers queued through the shell
+    /// runner's dispatch, for the host to apply (theme / engine / physics / recover).
+    /// (Phase 1, step 2.)
+    pub(crate) fn take_list_pane_activations(&mut self, which: ShellListPane) -> Vec<String> {
+        let i = which.idx();
+        let mut out = Vec::new();
+        self.runner.update(|s| out = std::mem::take(&mut s.panes[i].pending));
+        out
+    }
+
     /// Mint a window's view over a fresh pair of serval runners. Everything else
     /// starts at its rest value (empty caches, no in-progress gesture, the default
     /// 1024×600 surface); the caller overrides the view-session bits it restored
@@ -526,10 +614,6 @@ impl WindowView {
             session_row_rects: Default::default(),
             session_close_rects: Default::default(),
             session_add_rect: Default::default(),
-            apparatus_pane: crate::list_pane::ListPane::new(),
-            steward_pane: crate::list_pane::ListPane::new(),
-            inspector_pane: crate::list_pane::ListPane::new(),
-            trail_pane: crate::list_pane::ListPane::new(),
             gloss_node_rects: Default::default(),
             gloss_recent_rects: Default::default(),
             tile_rects: Default::default(),

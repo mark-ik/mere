@@ -24,6 +24,9 @@ use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, el, on_click
 use kernel::graph::FieldId;
 
 use crate::roster::{roster_sheet, EdgeDir, FieldRow, RosterRow};
+// `view_pane` is test-gated (its `ViewPane` base backs only the `RosterPane` test
+// harness now), so this import rides the same gate. (Phase 1, step 2.)
+#[cfg(test)]
 use crate::view_pane::ViewPane;
 
 /// The erased view the roster logic produces (mirrors `ChromeView`).

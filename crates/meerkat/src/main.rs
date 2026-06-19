@@ -97,6 +97,10 @@ mod pane_session;
 mod render;
 mod roster;
 mod roster_view;
+// `ViewPane` is the shared base for the `RosterPane` / `ListPane` test harnesses only;
+// every product pane now folds into the shell document, so the module is test-gated.
+// (Phase 1, step 2.)
+#[cfg(test)]
 mod view_pane;
 mod scrying_host;
 mod serval_a11y;

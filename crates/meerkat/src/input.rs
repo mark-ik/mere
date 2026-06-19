@@ -214,60 +214,23 @@ impl WindowCtx<'_> {
                             return;
                         }
                     }
-                    // The apparatus pane consumes the press: a left click routes
-                    // through the apparatus runner — hit-test its DOM, dispatch the
-                    // click (a theme button queues its id), then switch to each
-                    // drained theme id. (Apparatus; P2 companion.)
+                    // The apparatus + trail panes are in the shell document now: a left
+                    // press in either's rect routes through the shell hit-test + dispatch
+                    // (chrome_click), firing a hit button's on_click; chrome_activate then
+                    // drains the queued activations (drain_list_pane_activations) — apparatus
+                    // theme / engine / physics, trail recover. (Phase 1, step 2.)
                     if let Some(arect) = self.apparatus_leaf_rect() {
                         if x >= arect[0] && x < arect[2] && y >= arect[1] && y < arect[3] {
                             if button == MouseButton::Left {
-                                let local = (x - arect[0], y - arect[1]);
-                                if let Some(node) =
-                                    self.view.apparatus_pane.hit_test(local.0, local.1, self.view.apparatus_scroll)
-                                {
-                                    self.view
-                                        .apparatus_pane
-                                        .dispatch_click(node, PointerClick::at(local));
-                                    // An apparatus button key routes by prefix: the
-                                    // Physics −/+ step the damping; `engine:toggle:<id>`
-                                    // flips an engine's activation; anything else is a
-                                    // theme id. (Physics / engine-picker settings.)
-                                    for key in self.view.apparatus_pane.take_activations() {
-                                        match key.as_str() {
-                                            "phys:damping:down" => self.adjust_physics_damping(-0.5),
-                                            "phys:damping:up" => self.adjust_physics_damping(0.5),
-                                            k if k.starts_with("engine:toggle:") => {
-                                                self.toggle_engine(&k["engine:toggle:".len()..]);
-                                            }
-                                            _ => self.set_theme(&key),
-                                        }
-                                    }
-                                }
+                                self.chrome_click(x, y);
                             }
                             return;
                         }
                     }
-                    // The trail pane consumes the press: a left click on a Removed row
-                    // queues `recover:<node_id>`; re-mint that tombstone back into the
-                    // graph. (Recover-deleted-node; Lane 0.)
                     if let Some(trect) = self.trail_leaf_rect() {
                         if x >= trect[0] && x < trect[2] && y >= trect[1] && y < trect[3] {
                             if button == MouseButton::Left {
-                                let local = (x - trect[0], y - trect[1]);
-                                if let Some(node) = self
-                                    .view
-                                    .trail_pane
-                                    .hit_test(local.0, local.1, self.view.trail_scroll)
-                                {
-                                    self.view
-                                        .trail_pane
-                                        .dispatch_click(node, PointerClick::at(local));
-                                    for key in self.view.trail_pane.take_activations() {
-                                        if let Some(id) = key.strip_prefix("recover:") {
-                                            self.recover_deleted_node(id);
-                                        }
-                                    }
-                                }
+                                self.chrome_click(x, y);
                             }
                             return;
                         }
@@ -689,12 +652,21 @@ impl WindowCtx<'_> {
     /// restores focus so the caret doesn't dangle on the removed field.
     pub(super) fn chrome_click(&mut self, x: f32, y: f32) {
         let mut offsets = ScrollOffsets::<NodeId>::default();
-        // The roster (folded into the shell document) scrolls its own container; mirror the
-        // render's scroll offset so the hit-test lands on the visible row. (Phase 1.)
+        // The roster + the four folded list panes scroll their own inner containers; mirror
+        // the render's scroll offsets so the hit-test lands on the visible row. (Phase 1.)
         {
             let dom = self.view.dom.borrow();
-            if let Some(node) = crate::first_with_class(&dom, dom.document(), "roster") {
-                offsets.insert(node, (0.0, self.view.roster_scroll));
+            let root = dom.document();
+            for (class, scroll) in [
+                ("roster", self.view.roster_scroll),
+                ("apparatus", self.view.apparatus_scroll),
+                ("steward", self.view.steward_scroll),
+                ("inspector", self.view.inspector_scroll),
+                ("trail", self.view.trail_scroll),
+            ] {
+                if let Some(node) = crate::first_with_class(&dom, root, class) {
+                    offsets.insert(node, (0.0, scroll));
+                }
             }
         }
         let sheet = self.shared.presentation.chrome_sheet_refs();
@@ -728,12 +700,38 @@ impl WindowCtx<'_> {
         self.drain_history_step();
         self.drain_physics_toggle();
         self.drain_roster_intents();
+        self.drain_list_pane_activations();
         self.sync_settings();
         self.sync_orrery();
         if palette_was_open && !self.view.chrome().palette_open {
             self.focus_after_palette_close();
         }
         self.view.request_redraw();
+    }
+
+    /// Apply the activation keys the folded list panes' button handlers queued. The
+    /// apparatus + trail panes are in the shell document, so their button clicks arrive
+    /// through `chrome_click` -> `chrome_activate`; this drains + routes them (apparatus:
+    /// theme / engine / physics; trail: recover a removed node). The display-only inspector
+    /// + steward panes queue nothing. Replaces the old per-pane branches in
+    /// `on_mouse_input`. (Phase 1, step 2.)
+    pub(super) fn drain_list_pane_activations(&mut self) {
+        use crate::window_view::ShellListPane::{Apparatus, Trail};
+        for key in self.view.take_list_pane_activations(Apparatus) {
+            match key.as_str() {
+                "phys:damping:down" => self.adjust_physics_damping(-0.5),
+                "phys:damping:up" => self.adjust_physics_damping(0.5),
+                k if k.starts_with("engine:toggle:") => {
+                    self.toggle_engine(&k["engine:toggle:".len()..]);
+                }
+                _ => self.set_theme(&key),
+            }
+        }
+        for key in self.view.take_list_pane_activations(Trail) {
+            if let Some(id) = key.strip_prefix("recover:") {
+                self.recover_deleted_node(id);
+            }
+        }
     }
 
     /// Apply the roster-row intents the shell runner's dispatch queued. The roster is

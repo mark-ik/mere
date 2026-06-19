@@ -12,12 +12,19 @@
 //!
 //! (Window composition P2 companion — list-pane view-ification.)
 
-use layout_dom_api::LayoutDom;
-use netrender::Scene;
-use serval_layout::ScrollOffsets;
-use serval_scripted_dom::NodeId;
 use xilem_serval::{el, on_click, AnyView, PointerClick, ServalCtx, ServalElement};
 
+// The `ListPane` bundle is a #[cfg(test)] harness now that the four list panes fold into
+// the shell document; its DOM / layout imports come along under the gate. (Phase 1, step 2.)
+#[cfg(test)]
+use layout_dom_api::LayoutDom;
+#[cfg(test)]
+use netrender::Scene;
+#[cfg(test)]
+use serval_layout::ScrollOffsets;
+#[cfg(test)]
+use serval_scripted_dom::NodeId;
+#[cfg(test)]
 use crate::view_pane::ViewPane;
 
 /// One row of a list pane: a div with `class` and `text`. When `key` is `Some`,
@@ -53,7 +60,8 @@ pub struct ListPaneState {
 /// The erased view a list pane produces.
 pub type ListView = Box<dyn AnyView<ListPaneState, (), ServalCtx, ServalElement>>;
 
-/// Logic alias for the runner.
+/// Logic alias for the runner (the `ListPane` test harness only). (Phase 1, step 2.)
+#[cfg(test)]
 pub type ListLogic = fn(&ListPaneState) -> ListView;
 
 /// Render a list pane: the root container with one classed div per item, a
@@ -82,6 +90,7 @@ pub fn list_pane_view(state: &ListPaneState) -> ListView {
 /// scrolls its root container when the item list overflows (the same vertical
 /// scroll as the roster) and carries no a11y row bounds (its a11y is a skeleton),
 /// so the surface is set / frame / hit_test / dispatch / drain plus the scroll.
+#[cfg(test)]
 pub struct ListPane {
     pane: ViewPane<ListPaneState, ListLogic, ListView>,
     /// The root container's class (set each frame), so [`scroll_offsets`](Self::scroll_offsets)
@@ -89,6 +98,7 @@ pub struct ListPane {
     root_class: String,
 }
 
+#[cfg(test)]
 impl ListPane {
     pub fn new() -> Self {
         Self {
@@ -164,6 +174,7 @@ impl ListPane {
     }
 }
 
+#[cfg(test)]
 impl Default for ListPane {
     fn default() -> Self {
         Self::new()

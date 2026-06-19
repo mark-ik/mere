@@ -92,6 +92,51 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
+    /// Snapshot the four folded list panes into the shell document for this frame: build
+    /// each open pane's items and set its slot (closing a pane that just went away). The
+    /// per-frame call before the shell render, the ListPane analogue of `set_roster` —
+    /// each inner root takes a unique-id class (`apparatus`, `utility-pane steward`, …) so
+    /// the shared `.utility-pane` styling still applies while `has_class` finds each pane
+    /// distinctly for scroll + hit-test. (Phase 1, step 2.)
+    fn snapshot_list_panes(&mut self, rects: [Option<[f32; 4]>; 4]) {
+        use crate::window_view::ShellListPane::{Apparatus, Inspector, Steward, Trail};
+        // Apparatus: theme + engine + physics buttons over the host observability rows.
+        if let Some(rect) = rects[0] {
+            let themes = self.theme_options();
+            let engines = self.engine_rows();
+            let damping = self.physics_damping();
+            let system_rows = self.apparatus_system_rows();
+            let obs = self.apparatus_observability();
+            let items =
+                crate::apparatus::apparatus_items(&themes, &engines, damping, &system_rows, &obs);
+            self.view.set_list_pane(Apparatus, "apparatus", items, Some(rect));
+        } else if self.view.list_pane_open(Apparatus) {
+            self.view.set_list_pane(Apparatus, "apparatus", Vec::new(), None);
+        }
+        // Steward + Inspector: display-only `label: value` rows under a unique utility root.
+        if let Some(rect) = rects[1] {
+            let rows = self.utility_pane_rows(&PaneContent::Steward);
+            let items = crate::utility_panes::utility_pane_items(&PaneContent::Steward, &rows);
+            self.view.set_list_pane(Steward, "utility-pane steward", items, Some(rect));
+        } else if self.view.list_pane_open(Steward) {
+            self.view.set_list_pane(Steward, "utility-pane steward", Vec::new(), None);
+        }
+        if let Some(rect) = rects[2] {
+            let rows = self.utility_pane_rows(&PaneContent::Inspector);
+            let items = crate::utility_panes::utility_pane_items(&PaneContent::Inspector, &rows);
+            self.view.set_list_pane(Inspector, "utility-pane inspector", items, Some(rect));
+        } else if self.view.list_pane_open(Inspector) {
+            self.view.set_list_pane(Inspector, "utility-pane inspector", Vec::new(), None);
+        }
+        // Trail: its own sectioned items (history / recent / removed); a Removed row recovers.
+        if let Some(rect) = rects[3] {
+            let items = self.trail_items();
+            self.view.set_list_pane(Trail, "utility-pane trail", items, Some(rect));
+        } else if self.view.list_pane_open(Trail) {
+            self.view.set_list_pane(Trail, "utility-pane trail", Vec::new(), None);
+        }
+    }
+
     /// Render the two authorities and present them. The orrery content root fills
     /// everything below the toolbar; the chrome root is rendered over the full
     /// window with a *transparent* clear, so its toolbar band and any open
@@ -189,6 +234,14 @@ impl WindowCtx<'_> {
             .iter()
             .find(|l| matches!(l.content, PaneContent::Comms))
             .map(|l| l.rect);
+        // The four folded list panes' rects, in `ShellListPane` order (apparatus, steward,
+        // inspector, trail), for the per-frame snapshot into the shell document. (Phase 1.)
+        let list_pane_rects: [Option<[f32; 4]>; 4] = [
+            leaves.iter().find(|l| matches!(l.content, PaneContent::Apparatus)).map(|l| l.rect),
+            leaves.iter().find(|l| matches!(l.content, PaneContent::Steward)).map(|l| l.rect),
+            leaves.iter().find(|l| matches!(l.content, PaneContent::Inspector)).map(|l| l.rect),
+            leaves.iter().find(|l| matches!(l.content, PaneContent::Trail)).map(|l| l.rect),
+        ];
         let dividers = frame_view::divider_rects(&self.view.frame_layout, band, self.view.maximized_pane);
         let orrery_w = (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32;
         let orrery_h = (orrery_rect[3] - orrery_rect[1]).round().max(1.0) as u32;
@@ -428,6 +481,11 @@ impl WindowCtx<'_> {
         } else if self.view.roster_open() {
             self.view.set_roster(Vec::new(), Vec::new(), None);
         }
+        // Fold the four list panes (apparatus / steward / inspector / trail) into the same
+        // shell document: snapshot each open pane's items + rect into its slot before the
+        // render lays the document out. Replaces the separate ListPane frames + composites.
+        // (Phase 1, step 2.)
+        self.snapshot_list_panes(list_pane_rects);
         // The roster scrolls its own `.roster` container; add its offset to the shell
         // ScrollOffsets so the one render scrolls it (chrome_click mirrors this for the
         // hit-test). (Phase 1.)
@@ -437,13 +495,37 @@ impl WindowCtx<'_> {
                 chrome_scroll.insert(node, (0.0, self.view.roster_scroll));
             }
         }
+        // Each open list pane scrolls its own inner root (`.apparatus` / `.steward` /
+        // `.inspector` / `.trail`, the unique-id class); add its offset to the shell
+        // ScrollOffsets so the one render scrolls it (chrome_click mirrors this). (Phase 1.)
+        {
+            let dom = self.view.dom.borrow();
+            let root = dom.document();
+            for (class, scroll) in [
+                ("apparatus", self.view.apparatus_scroll),
+                ("steward", self.view.steward_scroll),
+                ("inspector", self.view.inspector_scroll),
+                ("trail", self.view.trail_scroll),
+            ] {
+                if let Some(node) = first_with_class(&dom, root, class) {
+                    chrome_scroll.insert(node, (0.0, scroll));
+                }
+            }
+        }
         let roster_css = crate::roster::roster_sheet(&self.shared.presentation.chrome_theme);
+        // The folded list panes' CSS rides the shell stylesheet too; rules are inert when
+        // no matching pane element is in the document, so they can be unconditional. The
+        // apparatus root is `.apparatus`, the others `.utility-pane`. (Phase 1, step 2.)
+        let apparatus_css = crate::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
+        let utility_css = crate::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
         let chrome_sheet: Vec<&str> = self
             .shared
             .presentation
             .chrome_sheet_refs()
             .into_iter()
             .chain(roster_css.iter().map(String::as_str))
+            .chain(apparatus_css.iter().map(String::as_str))
+            .chain(utility_css.iter().map(String::as_str))
             .collect();
         let chrome_t = Instant::now();
         // C3 (cheap-path): render the chrome through its persistent
@@ -875,12 +957,6 @@ impl WindowCtx<'_> {
         // Back/forward enabled-state tracks the focused node's own history.
         self.sync_nav_buttons();
         self.drain_portable_diagnostics();
-
-        let apparatus_data = if self.apparatus_leaf_rect().is_some() {
-            Some((self.apparatus_system_rows(), self.apparatus_observability()))
-        } else {
-            None
-        };
 
         // The shared core (rasterize / compose) + this window's surface (acquire /
         // format); both checked present at the method entry. (MW3: one device, N surfaces.)
@@ -1468,96 +1544,11 @@ impl WindowCtx<'_> {
         // The roster pane is folded into the shell document now: its rect + rows were
         // snapshotted into the shell state above (before the chrome render), so the one
         // render lays it out and the one hit-test routes its clicks. (Phase 1.)
-        // The apparatus pane renders through its view-driven `ListPane`: build the
-        // items (theme buttons + host diagnostics), set them on the pane, frame, and
-        // composite. Theme-button clicks dispatch through the runner DOM, so there is
-        // no button rect cache. (Apparatus; window composition P2 companion.)
-        if let Some(arect) = self.apparatus_leaf_rect() {
-            let aw = (arect[2] - arect[0]).round().max(1.0) as u32;
-            let ah = (arect[3] - arect[1]).round().max(1.0) as u32;
-            let themes = self.theme_options();
-            let engines = self.engine_rows();
-            let (system_rows, observability) = apparatus_data
-                .as_ref()
-                .expect("apparatus data was prepared when the pane was open");
-            let items = super::apparatus::apparatus_items(
-                &themes,
-                &engines,
-                self.physics_damping(),
-                system_rows,
-                observability,
-            );
-            let sheet = super::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
-            self.view.apparatus_pane.set(sheet, "apparatus", items);
-            let max_scroll = self.view.apparatus_pane.max_scroll();
-            self.view.apparatus_scroll = self.view.apparatus_scroll.clamp(0.0, max_scroll);
-            let scene = self.view.apparatus_pane.frame(aw, ah, self.view.apparatus_scroll);
-            let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
-            let clear = wgpu::Color {
-                r: pb[0] as f64 / 255.0,
-                g: pb[1] as f64 / 255.0,
-                b: pb[2] as f64 / 255.0,
-                a: 1.0,
-            };
-            let (_t, view) = core.rasterize(&scene, aw, ah, ColorLoad::Clear(clear));
-            core.renderer().compose_external_texture(
-                &view,
-                &target_view,
-                format,
-                w,
-                h,
-                ExternalTexturePlacement::new(arect),
-            );
-        }
-        // The steward + inspector utility panes render through their view-driven
-        // `ListPane`s (display-only): set the rows as inert items, frame, composite.
-        // Each content type has its own bundle, so both can be open at once without
-        // thrashing one cached layout. (Window composition P2 companion.)
-        for leaf in self.laid_leaves().into_iter().filter(|leaf| {
-            matches!(
-                leaf.content,
-                PaneContent::Inspector | PaneContent::Steward | PaneContent::Trail
-            )
-        }) {
-            let rect = leaf.rect;
-            let pw = (rect[2] - rect[0]).round().max(1.0) as u32;
-            let ph = (rect[3] - rect[1]).round().max(1.0) as u32;
-            // The trail pane builds its own sectioned items (history / recent /
-            // removed); the others are key:value rows from `utility_pane_rows`.
-            let items = if matches!(leaf.content, PaneContent::Trail) {
-                self.trail_items()
-            } else {
-                let rows = self.utility_pane_rows(&leaf.content);
-                super::utility_panes::utility_pane_items(&leaf.content, &rows)
-            };
-            let sheet = super::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
-            let pb = self.shared.presentation.chrome_theme.panel_bg.to_array();
-            let (pane, scroll) = match &leaf.content {
-                PaneContent::Inspector => (&mut self.view.inspector_pane, &mut self.view.inspector_scroll),
-                PaneContent::Steward => (&mut self.view.steward_pane, &mut self.view.steward_scroll),
-                PaneContent::Trail => (&mut self.view.trail_pane, &mut self.view.trail_scroll),
-                _ => continue,
-            };
-            pane.set(sheet, "utility-pane", items);
-            let max_scroll = pane.max_scroll();
-            *scroll = scroll.clamp(0.0, max_scroll);
-            let scene = pane.frame(pw, ph, *scroll);
-            let clear = wgpu::Color {
-                r: pb[0] as f64 / 255.0,
-                g: pb[1] as f64 / 255.0,
-                b: pb[2] as f64 / 255.0,
-                a: 1.0,
-            };
-            let (_t, view) = core.rasterize(&scene, pw, ph, ColorLoad::Clear(clear));
-            core.renderer().compose_external_texture(
-                &view,
-                &target_view,
-                format,
-                w,
-                h,
-                ExternalTexturePlacement::new(rect),
-            );
-        }
+        // The apparatus / steward / inspector / trail panes are folded into the shell
+        // document now (like the roster): their items + rects were snapshotted into the
+        // shell state before the chrome render, so the one render lays them out, scrolls
+        // them, and routes their clicks. Replaces the per-pane ListPane frame + composite.
+        // (Phase 1, step 2.)
         // The gloss pane (the Navigator): a whole-graph minimap swatch on top, the
         // recently-visited nodes listed below. Both carry node hit-rects for
         // click-to-focus; recent is the `SharedNavigationMemory` projection. (Gloss.)
