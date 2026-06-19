@@ -238,6 +238,49 @@ Remaining Phase 2: cond 5 (retire the standalone orrery `Scene`); the card a11y 
 to become actionable (currently inert divs in the one a11y tree); the z-order follow-up (node
 labels paint over the command palette).
 
+### Overlay interim landed (2026-06-19): the focus ring tracks transform-positioned cards
+
+The cards paint at their fragment slot plus a paint-only `transform: translate(gyre.x, gyre.y)`,
+so a focus ring positioned from fragments drew at the orrery container origin, not on the card.
+Fixed by giving the paint-side overlays the transform-awareness the hit-test already has: serval
+gained `IncrementalLayout::accumulated_translate(node)` (the sum of transform translates root to
+node, the paint-side complement to `walk_for_hit`; serval `a2d91ddc`), and `push_focus_ring` adds
+it (mere `7181206`). This is the stopgap that holds the visible behavior correct until cond 1; the
+same primitive can fix the card a11y bounds (which are still at the pre-transform slot).
+
+### cond 1 design (2026-06-19): the custom-layout orrery element, Mechanism A
+
+cond 1 is the structural form behind the interim: the cards' real positions live in the layout
+fragments, supplied by gyre, so every consumer (overlays, a11y bounds, future text selection,
+hit-test) reads correct geometry with no transform special-casing.
+
+**Mechanism B (absolute `left`/`top`) is rejected.** Setting each card's `left`/`top` from gyre
+and letting taffy flow them would put the positions in the fragments, but a `left`/`top` change is
+layout-tier: every physics frame would relayout, the "orrery freeze" the transform / RepaintOnly
+path was built to avoid (regression guard, serval `incremental.rs:1232`). B reintroduces it.
+
+**Mechanism A (custom-layout concern) is the form.** Three serval-layout pieces:
+
+1. A custom-layout mode for the orrery element, recognized by a marker attribute the way
+   external-texture is recognized by `external_texture_key_of` (not a new CSS `display`): its
+   children are measured to their natural size by taffy, then placed at host-supplied per-node
+   positions rather than flowed.
+2. A per-child position concern: a `child-node -> (x, y)` map the host supplies into layout each
+   frame, analogous to the external-texture key / scroll offsets but per child.
+3. A position-only incremental path: when only the position concern changes (DOM, styles, child
+   sizes unchanged), update the children's fragment locations without re-measuring, so a gyre
+   frame stays cheap. This is the layout-side analog of the RepaintOnly transform path, and the
+   piece that keeps A as cheap as the transform it replaces; without it A is just B.
+
+**Host migration (meerkat).** `orrery_element` marks the container custom-layout and drops the
+per-card `transform: translate`; `render.rs` feeds gyre's per-node positions into the concern each
+frame instead of into transforms. `accumulated_translate` then returns 0 for the cards (their
+fragments carry the real positions) so the interim ring fix becomes a harmless no-op.
+
+**Scope.** A real multi-subsystem serval feature (box-tree layout mode + concern plumbing + a new
+incremental damage class / path), not a tail change. It warrants its own focused effort; the
+interim ring fix holds the visible behavior correct until then.
+
 Tiles follow-on (either path): workbench tab/divider chrome and content cards.
 The composition spine's working-principles say `platen-view` realizes formes as
 serval flex DOM, the natural vehicle for tile chrome, with `<external-texture>` for
