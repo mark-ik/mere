@@ -205,7 +205,8 @@ mod windows_pool {
     use forme::GraphMemberId;
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use scrying::native_frame::{
-        HostWgpuContext, ImportOptions, ImportedTexture, TextureImporter, WgpuTextureImporter,
+        Dx12FenceSynchronizer, HostWgpuContext, ImportOptions, ImportedTexture, TextureImporter,
+        WgpuTextureImporter,
     };
     use scrying::{
         FocusReason, KeyEventKind, KeyModifierFlags, KeyboardInput, MouseEventKind, MouseInput,
@@ -228,6 +229,14 @@ mod windows_pool {
         /// `WINDOW_ALREADY_COMPOSED`, so producers attach to this via
         /// `new_attached` rather than each making its own. (Multi-tile scry.)
         composition_root: Option<Arc<PlatformCompositionRoot>>,
+        /// The shared D3D12 fence's NT handle, taken from the importer's
+        /// `Dx12FenceSynchronizer` and handed to each producer (`with_fence_shared_handle`)
+        /// so it signals the fence after every `CopyResource` and `import_frame` waits
+        /// on it — explicit GPU sync in place of the default implicit ordering. `None`
+        /// when the host device is not D3D12 (the importer then keeps the implicit
+        /// synchronizer). Valid for the pool's life: the synchronizer (in `importer`)
+        /// owns the handle and closes it on drop, after every tile producer is gone.
+        fence_handle: Option<*mut core::ffi::c_void>,
     }
 
     struct Tile {
@@ -362,9 +371,26 @@ mod windows_pool {
             if self.failed.contains_key(&member) {
                 return;
             }
-            let importer = self.importer.get_or_insert_with(|| {
-                WgpuTextureImporter::new(HostWgpuContext::new(device.clone(), queue.clone()))
-            });
+            if self.importer.is_none() {
+                let host = HostWgpuContext::new(device.clone(), queue.clone());
+                // Prefer an explicit shared D3D12 fence: the synchronizer owns the
+                // fence, each producer signals it after `CopyResource` (via the
+                // `with_fence_shared_handle` wired in `build_producer`), and
+                // `import_frame` waits on it. Falls back to the default implicit
+                // synchronizer when the host wgpu device is not D3D12.
+                match Dx12FenceSynchronizer::new(&host) {
+                    Ok(sync) => {
+                        self.fence_handle = Some(sync.shared_handle().0);
+                        self.importer =
+                            Some(WgpuTextureImporter::with_synchronizer(host, Box::new(sync)));
+                    }
+                    Err(err) => {
+                        tracing::debug!(?err, "explicit D3D12 fence unavailable; implicit sync");
+                        self.importer = Some(WgpuTextureImporter::new(host));
+                    }
+                }
+            }
+            let importer = self.importer.as_ref().expect("importer set above");
 
             if !self.tiles.contains_key(&member) {
                 // Create the one per-HWND composition target on first spawn, then
@@ -380,7 +406,16 @@ mod windows_pool {
                         }
                     },
                 };
-                match spawn(&root, member, url, width, height, origin, session_dir) {
+                match spawn(
+                    &root,
+                    member,
+                    url,
+                    width,
+                    height,
+                    origin,
+                    session_dir,
+                    self.fence_handle,
+                ) {
                     Ok(tile) => {
                         self.tiles.insert(member, tile);
                     }
@@ -507,8 +542,10 @@ mod windows_pool {
         height: u32,
         origin: (f32, f32),
         session_dir: &Path,
+        fence_handle: Option<*mut core::ffi::c_void>,
     ) -> Result<Tile, String> {
-        let producer = build_producer(root, member, width, height, origin, session_dir)?;
+        let producer =
+            build_producer(root, member, width, height, origin, session_dir, fence_handle)?;
         let mut tile = Tile {
             producer,
             imported: None,
@@ -530,6 +567,7 @@ mod windows_pool {
         height: u32,
         origin: (f32, f32),
         session_dir: &Path,
+        fence_handle: Option<*mut core::ffi::c_void>,
     ) -> Result<PlatformWebSurfaceProducer, String> {
         // Attach this pane to the shared per-HWND target at its tile origin. A
         // per-pane profile folder (keyed by member) keeps each tile's WebView2
@@ -540,8 +578,15 @@ mod windows_pool {
         let profile = session_dir
             .join("scrying")
             .join(format!("pane-{:032x}", member.as_u128()));
-        let config = PlatformWebSurfaceConfig::new(dpi::PhysicalSize::new(width, height), profile)
-            .with_offset(origin.0, origin.1);
+        let mut config =
+            PlatformWebSurfaceConfig::new(dpi::PhysicalSize::new(width, height), profile)
+                .with_offset(origin.0, origin.1);
+        // Explicit-fence sync: the producer opens this shared fence and signals it
+        // after each `CopyResource`; the importer's `Dx12FenceSynchronizer` waits on
+        // the per-frame value. `None` (non-D3D12 host) leaves the implicit path.
+        if let Some(handle) = fence_handle {
+            config = config.with_fence_shared_handle(handle);
+        }
         #[allow(unsafe_code)]
         unsafe { PlatformWebSurfaceProducer::new_attached(root, config) }
             .map_err(|err| format!("WebView2 attach: {err}"))
