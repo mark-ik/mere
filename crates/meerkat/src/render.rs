@@ -287,6 +287,27 @@ impl WindowCtx<'_> {
                     let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
                     dom.set_attribute(node, attr, &format!("overflow: scroll; max-height: {max_h}px;"));
                 }
+                // Centre the palette over the orrery area, not the full window, so it does
+                // not overlap the side panes: the overlay's flex centring is shifted by the
+                // orrery rect's insets (which already shrink when a pane opens), and the panel
+                // is capped to the orrery width for a narrow canvas. (Phase 1, step 3.)
+                let pad_left = orrery_rect[0].max(0.0);
+                let pad_right = (w as f32 - orrery_rect[2]).max(0.0);
+                let panel_max = (orrery_rect[2] - orrery_rect[0] - 40.0).max(120.0);
+                if let Some(node) = first_with_class(&dom, root, "palette-overlay") {
+                    let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
+                    dom.set_attribute(
+                        node,
+                        attr,
+                        &format!(
+                            "display: flex; justify-content: center; padding: 56px {pad_right}px 0 {pad_left}px;"
+                        ),
+                    );
+                }
+                if let Some(node) = first_with_class(&dom, root, "palette") {
+                    let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
+                    dom.set_attribute(node, attr, &format!("max-width: {panel_max}px;"));
+                }
             }
             // Follow the selection: centre the active row in the bounded viewport,
             // from the prior frame's layout (one-frame lag, like the roster clamp).
