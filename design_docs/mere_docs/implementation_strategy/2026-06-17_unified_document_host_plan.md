@@ -166,10 +166,11 @@ seam. The new engine work is an element whose DOM children are placed by host /
 only replaced elements (`<external-texture>`, output-only), so this is a new element
 kind, scoped in serval's plan.
 
-### Phase 2 design pass (2026-06-19): the engine gap is the transform-aware hit-test
+### Phase 2 design pass (2026-06-19): no engine gate, Phase 2 is host-side
 
-Reading the engine (`serval-layout/box_tree.rs`, `incremental.rs`, the `<external-texture>`
-wiring) against the current `orrery_element` narrows the engine work sharply and questions cond 1.
+Reading the engine (`serval-layout/box_tree.rs`, `incremental.rs`, `serval_lane.rs`, the
+`<external-texture>` wiring) against the current `orrery_element` removes Phase 2's engine gate and
+questions cond 1.
 
 - **`<external-texture>` is not the template.** It is a *replaced leaf* (`box_tree.rs:145`):
   the box lays out like `<img>` and paint emits a `DrawExternalTexture` blit, output-only, no
@@ -179,33 +180,33 @@ wiring) against the current `orrery_element` narrows the engine work sharply and
   whose children are `position:absolute; transform:translate(gyre.x, gyre.y)`. serval lays them
   out and the `translate` shifts only the **paint** (the verified `RepaintOnly` transform path),
   not the box geometry.
-- **The real gap is a transform-blind hit-test.** `IncrementalLayout::hit_test` (`incremental.rs:182`)
-  resolves a point through `ServalLaneView::hit_test`, which reads the **fragment plane**. The
-  fragments hold laid-out (pre-transform) box geometry; the `translate` that moves each card to
-  its gyre position is paint-only and absent there. So a point over a painted card resolves to
-  wherever the card's untransformed box sits, not to the card. That is exactly why the cards are
-  pointer-transparent and the orrery routes input winit -> gyre instead (cond 3 unmet).
-- **Leaner path: cond 3/4 unlock from a transform-aware hit-test alone, no cond 1.** If
-  `ServalLaneView::hit_test` composes each box's resolved paint `transform` into the point test
-  (the paint already knows the translate), the existing host-positioned cards become hit-testable
-  where they paint. The two-hit-test is then: a DOM-card hit dispatches in the document (the host
-  owns the `point -> NodeId` half, `runner.rs:222-223`); a miss (empty canvas, node body, edge)
-  delegates to gyre's `QueryPipeline`. cond 4 follows by wrapping the card view in `focusable`
-  (the Phase 1 ring mechanism); cond 5 reduces the standalone orrery `Scene` + bespoke pointer
-  routing to the scene-underlay paint plus the gyre query.
+- **The engine hit-test is already transform-aware (correcting an earlier draft of this entry).**
+  `IncrementalLayout::hit_test` (`incremental.rs:182`) resolves a point through
+  `ServalLaneView::hit_test`, whose `walk_for_hit` (`serval_lane.rs:398-417`) reads each node's
+  `transform` from its cascaded values, conjugates it at the box origin, and inverse-maps the
+  incoming point into the node's pre-transform space before the box test, the exact inverse of
+  `paint_emit::walk`. It also honours `pointer-events: none`. So a point over a painted card *does*
+  resolve to the card; the transform-aware hit-test the gate named already exists.
+- **So the gap is entirely host-side: the orrery never runs the shell hit-test.** The cards are
+  pointer-transparent not because the engine cannot reach them but because an orrery-area press
+  routes straight to gyre (winit -> gyre), skipping the document hit-test. Route it through the
+  shell hit-test first (the `chrome_click` path the folded panes already use, which rides the
+  transform-aware `walk_for_hit`): a DOM-card hit dispatches in the document (the host owns the
+  `point -> NodeId` half, `runner.rs:222-223`), a miss (empty canvas, node body, edge) falls to
+  gyre's `QueryPipeline`. cond 4 follows by wrapping the card view in `focusable` (the Phase 1 ring
+  mechanism); cond 5 reduces the standalone orrery `Scene` + bespoke pointer routing to the
+  scene-underlay paint plus the gyre query.
 - **cond 1 (a real custom-layout `<orrery>` element) is cleanliness, not a payoff gate.** It moves
   per-frame card placement from the host into an engine element that calls gyre; the semantic +
   interactive payoff lands without it on the host-positioned div. Recommend deferring cond 1,
   revisiting only if host-driven transform-setting becomes a perf or correctness problem.
 
-**Engine asks (serval), in leverage order:**
-
-1. **Transform-aware hit-test** (the whole unlock for cond 3/4). `ServalLaneView::hit_test`
-   composes a box's resolved paint `transform` into the point test, and inverse-transforms the
-   local point so inline refinement still works, so transform-positioned children are reachable.
-   The G1 runway item the unified gate already names; this pass confirms it is the *entire* engine
-   gap for the interactive payoff, not a new element kind.
-2. *(deferred)* a custom-layout element kind for cond 1, only if host placement must move engine-side.
+**Engine asks (serval): none.** The transform-aware hit-test is already in the engine
+(`walk_for_hit`), so Phase 2 lost its engine gate. cond 1 (a custom-layout element kind) stays
+deferred and is not needed for the payoff. (This corrects the committed first draft of this entry,
+which named a transform-aware hit-test as the engine ask; reading `serval_lane.rs` to write that
+change showed it already done. DOC_POLICY 9: the implementation-as-probe loop caught it before any
+engine code was written.)
 
 **Meerkat consumer asks (this plan), after the engine hit-test lands:**
 
