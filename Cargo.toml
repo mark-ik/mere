@@ -195,3 +195,12 @@ all = "warn"
 [patch.crates-io]
 stylo = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f188830bea261e72b2006fd73" }
 stylo_atoms = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f188830bea261e72b2006fd73" }
+# serval-layout requires taffy =0.11.0-experimental-cache-fix.3 (serval's vendored
+# float-layout fork, not on crates.io). serval patches it in its own workspace; mere
+# does not inherit that, so redirect taffy to the fork from the owned serval repo by
+# BRANCH, never a rev (owned forks track branches). A fresh checkout anywhere resolves
+# it from git; a local serval checkout is picked up by the gitignored
+# `.cargo/config.toml` override, which lists serval's component/port dirs but NOT
+# support/patches/taffy, so it never collides with this patch. No local paths live in
+# this committed manifest, so it compiles anywhere.
+taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
