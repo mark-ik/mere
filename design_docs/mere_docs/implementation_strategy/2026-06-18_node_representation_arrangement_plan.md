@@ -341,3 +341,28 @@ it is the default of a setting, not a baked constant.
   per-node `Representation` hook. Closing the image-decode gap is the first step: it makes card
   favicons paint *and* unblocks the static textured face. It is a serval-side change (the
   session's emit path), consumed by meerkat across the git dep.
+- 2026-06-19: **Node-vs-card model sharpened (with Mark); collider + menu fixes landed, headed-verified.**
+  The node and the card are strictly separate. The **node** is the physical object rendered AT its
+  gyre collider (draggable; what physics pins and edges connect to). The **card** is an ephemeral
+  content preview anchored to it (a snapshot of the last visit as primary content; favicon + shape
+  are only the un-visited fallback). The card is not a node-representation form and never the drag
+  handle, so the earlier option (a) framing (make the card act as the node) was wrong; the node is
+  grabbed through gyre directly. Stage 2 (in-orrery live view) is dropped: clicking a node opens it
+  in pelt, the orrery card stays a static snapshot.
+  Landed this session (uncommitted, mixed with concurrent work; verified by a headed drive):
+  - **Node on its collider.** The body had been rendering at an absolute box's static-flow position,
+    beside the collider (a "void" I had been decorating around); `left:0;top:0` anchors it to the
+    orrery element origin so the transform lands it on the collider. A headed drag confirms the body
+    now grabs and moves the node (edges connect to the body).
+  - **Press routes to gyre (cond-3 removed).** A left orrery press reaches gyre directly; its
+    `CLICK_SLOP` splits a click (select) from a drag (move). No card-as-handle, no `chrome_click`
+    interception of the node press.
+  - **Menu over node cards.** The shell document reordered to `(orrery, panes, chrome)` so the
+    chrome and its overlays paint + hit-test over the node cards (the nodes had occluded the menu
+    and stolen its clicks).
+  - **Card favicons paint.** Closed the chrome image-decode gap serval-side (serval-layout
+    `IncrementalLayout` caches a decoded `ImagePlane`, refreshed at full layout); the favicon-as-face
+    cue renders now.
+  The menu-vs-host-composited-surfaces precedence (scry System WebViews drawn over the menu) is a
+  separate native-compositing issue, split out into
+  [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md).

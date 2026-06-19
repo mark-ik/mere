@@ -433,7 +433,14 @@ fn shell_view(s: &ShellState) -> ShellView {
     Box::new(
         el::<_, ShellState, ()>(
             "shell",
-            (chrome, orrery_element(&s.orrery), roster, list_panes),
+            // Document order is paint + hit-test order in the one shell scene: the orrery
+            // nodes and the folded panes come first (the content), then the chrome LAST so
+            // its modal overlays (context menu, palette, find, settings) paint over the node
+            // cards and win the hit-test, instead of the node DOM (formerly later in the
+            // document) occluding the menu and stealing its clicks. The toolbar is in normal
+            // flow and the content roots are `position:absolute`, so their geometry is
+            // unchanged by the reorder; only the z-order is.
+            (orrery_element(&s.orrery), roster, list_panes, chrome),
         )
         .attr("style", "position:relative;width:100%;height:100%"),
     )
@@ -452,45 +459,55 @@ pub(crate) const ORRERY_SCENE_KEY: u64 = 0xF0F0_0000_0000_0001;
 /// (the two-hit-test's DOM half). The object anatomy mirrors the in-scene gnode the
 /// secondary panes still draw. (Node representation P0.)
 fn node_card_view(c: &OrreryCard) -> ShellView {
-    // The face footprint (px), matching the gnode's 36px square + gyre's NODE_HALF collider.
+    // The face footprint (px): a fixed square, matching the in-scene gnode + gyre's
+    // NODE_HALF collider. The `.node-card` element IS the face + hit target (not a nested
+    // flex item, which serval collapsed to nothing — only the label rendered).
     const FACE: f32 = 36.0;
     let half = FACE / 2.0;
-    // Center the face on the node's world position (the snapshot gives the center).
+    // Top-left at the node's world position minus half, the same `pos - NODE_HALF` the
+    // in-scene gnode uses, so the square centers on the node.
     let (cx, cy) = (c.x - half, c.y - half);
-    // Selection: a ring + a slight scale-lift about the face center (so the world grab
-    // point stays put), distinct from the focus ring; else a base depth shadow.
-    let (face_shadow, face_lift) = if c.selected {
-        ("box-shadow:0 0 0 2px #ffffff,0 2px 7px rgba(0,0,0,0.55);", "transform:scale(1.14);")
+    // Selection: a bright ring around the face, distinct from the blue focus ring; else a
+    // base depth shadow. (A slight scale-lift is a follow-up, once a composite
+    // translate+scale transform is confirmed to render.)
+    let ring = if c.selected {
+        "box-shadow:0 0 0 2px #ffffff,0 2px 8px rgba(0,0,0,0.55);"
     } else {
-        ("box-shadow:0 1px 3px rgba(0,0,0,0.45);", "")
+        "box-shadow:0 1px 3px rgba(0,0,0,0.45);"
     };
+    // The node body: a fixed colored square rendered AT the gyre collider's screen position.
+    // `left:0;top:0` anchors it to the orrery element's origin so the transform places it
+    // exactly there, not offset by an absolute box's static-flow position (the cause of the
+    // collider-vs-visual gap — the press hit the bare collider beside the visual). This IS the
+    // node object the collider is pinned to and the drag grabs; the label and (later) the
+    // content-preview card anchor to it. Shaped square / rounded / circle by content type.
     let face_style = format!(
-        "width:{FACE}px;height:{FACE}px;flex:none;box-sizing:border-box;\
-         background-color:{};border-radius:{};overflow:hidden;{face_shadow}{face_lift}",
+        "position:absolute;left:0;top:0;transform:translate({cx}px,{cy}px);width:{FACE}px;\
+         height:{FACE}px;box-sizing:border-box;background-color:{};border-radius:{};{ring}",
         c.color, c.radius
     );
-    // The favicon fills the face (clipped to the silhouette by overflow + radius), painted
-    // over the state color; transparency shows the color through.
+    // The favicon fills the face (absolutely positioned over the state color, shaped to
+    // match); transparency shows the color through.
     let favicon = c.favicon.as_ref().map(|uri| {
-        el::<_, ShellState, ()>("img", ())
-            .attr("src", uri.clone())
-            .attr("style", "width:100%;height:100%;display:block")
+        el::<_, ShellState, ()>("img", ()).attr("src", uri.clone()).attr(
+            "style",
+            format!(
+                "position:absolute;left:0;top:0;width:{FACE}px;height:{FACE}px;border-radius:{};display:block",
+                c.radius
+            ),
+        )
     });
-    let face = el::<_, ShellState, ()>("div", favicon)
-        .attr("class", "node-face")
-        .attr("style", face_style);
+    // The label rides beside the square (absolutely positioned, overflowing it), like the
+    // gnode caption at left:42px, so a long name reads in full on the dark canvas.
     let label = el::<_, ShellState, ()>("span", c.label.clone()).attr(
         "style",
-        "margin-left:6px;color:#d8deea;font-size:14px;font-weight:500;white-space:nowrap",
+        "position:absolute;left:42px;top:9px;white-space:nowrap;color:#d8deea;font-size:14px;font-weight:500",
     );
     let url = c.url.clone();
     Box::new(focusable(on_click(
-        el::<_, ShellState, ()>("div", (face, label))
+        el::<_, ShellState, ()>("div", (favicon, label))
             .attr("class", "node-card")
-            .attr(
-                "style",
-                format!("position:absolute;transform:translate({cx}px,{cy}px);display:flex;align-items:center"),
-            ),
+            .attr("style", face_style),
         move |s: &mut ShellState, _: PointerClick| s.orrery_card_selects.push(url.clone()),
     )))
 }

@@ -345,15 +345,14 @@ impl WindowCtx<'_> {
                         if let Some((gid, _)) = self.orrery_pane_at(x, y) {
                             self.focus_pane_graph(gid);
                         }
-                        // The two-hit-test (cond 3): a left press over an orrery node-card
-                        // dispatches in the shell document, where the card's on_click selects +
-                        // focuses its node (riding serval's transform-aware hit-test). A press
-                        // anywhere else in the orrery falls through to gyre's pan / select /
-                        // drag below. (Phase 2.)
-                        if button == MouseButton::Left && self.point_over_orrery_card(x, y) {
-                            self.chrome_click(x, y);
-                            return;
-                        }
+                        // A left press on a node glyph routes to gyre like any other node
+                        // press (no special-casing): gyre arms a drag on the node under the
+                        // cursor, and its CLICK_SLOP splits a click (select the node) from a drag
+                        // (move it) in `pointer_up`. The node is a physical object in the orrery;
+                        // selection still shows on the glyph through `node_selected`. This is the
+                        // node-as-object MVP model (a click will later open the node's content in
+                        // pelt); it supersedes the cond-3 DOM-select-on-press, which forced the
+                        // drag off the glyph onto the bare collider. (Node representation.)
                         if button == MouseButton::Right {
                             self.open_context_menu_at(x, y);
                         } else if let Some(b) = orrery_button {
