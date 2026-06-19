@@ -281,6 +281,30 @@ fragments carry the real positions) so the interim ring fix becomes a harmless n
 incremental damage class / path), not a tail change. It warrants its own focused effort; the
 interim ring fix holds the visible behavior correct until then.
 
+### cond 5 landed (2026-06-19): the orrery scene is a document element, the standalone Scene retired
+
+cond 5 ("retire the standalone orrery `Scene`") is done via the external-texture-element path, in three
+commits, using serval's existing `<external-texture>` machinery (no new element kind):
+
+- **The scene is a document `<external-texture>` element** (mere `73af79e`): `orrery_element`'s first
+  child is `external_texture(ORRERY_SCENE_KEY, ...)`, the underlay beneath the DOM cards. The host
+  rasterizes the gyre scene to a texture as before; the element places it in the document.
+- **The orrery wheel routes through the document** (mere `894b5dc`, verified): `orrery_element` bears
+  `on_wheel`; a wheel over the orrery dispatches to it (the runner's `wheel_target` ancestor walk
+  resolves a wheel over a card or the scene to the orrery element), its handler queues the delta, and
+  the host drains it to `gyre.wheel`. The pane element bears input, the form `wheel.rs` and the
+  window-composition plan name. This is also serval ask #3's first consumer.
+- **The compose is document-driven** (mere `571c38e`, verified): the host enumerates the chrome
+  document's `<external-texture>` elements (`external_texture_placements`, from the chrome session's
+  layout) and composites each registered texture at its laid-out rect, resolved by key. The orrery
+  scene's compose moved off the hardcoded `orrery_rect` onto its element's placement; the standalone
+  host composite is retired.
+
+The mechanism generalizes: a secondary orrery, the workbench, or a scrying surface becomes a document
+external-texture element by emitting the view + registering its texture under a key, and the placement +
+compose + `on_wheel` input come for free. The remaining host composites (secondaries, workbench, content
+cards) migrate onto this path as they become document elements.
+
 Tiles follow-on (either path): workbench tab/divider chrome and content cards.
 The composition spine's working-principles say `platen-view` realizes formes as
 serval flex DOM, the natural vehicle for tile chrome, with `<external-texture>` for
