@@ -6,7 +6,7 @@ multi-graph with a window-scoped pane layout (near-Model-B): the shellbar
 switcher creates / switches / closes / **renames** graphs (labelled tiles), and
 switching keeps the panes while re-sourcing the graph-bound ones. MG6's **far-B
 (different-graph leaves coexisting) and multi-window tear-out are now delivered /
-owned by the [window composition plan](2026-06-11_window_composition_plan.md)** (its
+owned by the [tearout_composability_plan](2026-06-19_tearout_composability_plan.md)** (its
 P1 explicitly converges far-B / MG6, and `OpenGraphBeside` summons a second Orrery
 pane, `session_ops.rs:470`). What remains uniquely here: the **persona chip** (gated
 on multi-persona) and **per-session engine-profile escalation** (manifest field
@@ -113,7 +113,7 @@ Near-B is reached: all graph-bound leaves follow one active graph (they read the
 ### MG6 — later
 
 > **Reconciled 2026-06-15:** the first two items moved to the
-> [window composition plan](2026-06-11_window_composition_plan.md) (which supersedes
+> [window composition plan (archived)](../../archive_docs/2026-06-19_completed_plans/2026-06-11_window_composition_plan.md) (which supersedes
 > MW4–MW6 and delivers far-B in P1/P2 plus `OpenGraphBeside`). Only the persona chip
 > and the engine-profile escalation are still owned here.
 

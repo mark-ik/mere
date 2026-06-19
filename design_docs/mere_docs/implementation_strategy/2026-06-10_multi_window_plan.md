@@ -4,7 +4,7 @@
 **Status**: MW1–MW3 **done** (the per-window reshape, the `WindowId` registry,
 one-device/N-surfaces, spawn/close, slim leaf chrome — see Progress). **MW4–MW6 are
 superseded** by the
-[window composition plan](2026-06-11_window_composition_plan.md), which reframes the
+[window composition plan (archived)](../../archive_docs/2026-06-19_completed_plans/2026-06-11_window_composition_plan.md), which reframes the
 second window as **orrery (authority) vs panes (views that resolve to an orrery by
 `graph_id`)** and pools the orrery off `Shell` by `GraphId` (the MW6 "IOU", brought
 forward and converged with far-B) after finding the shared constellation is UUID-keyed

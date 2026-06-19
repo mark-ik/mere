@@ -17,7 +17,7 @@ Sibling/converging docs:
   localized arrangement (node-representation / field-regions), or the input spine and
   external-texture-input bridge (window-composition); it owns Phase 1 (one shell-root document)
   and Phase 2 (the custom-layout `<orrery>` element and the DOM-vs-gyre two-hit-test).
-- [window_composition_plan](2026-06-11_window_composition_plan.md) — orrery
+- [tearout_composability_plan](2026-06-19_tearout_composability_plan.md) (continuing the archived window-composition plan) — orrery
   (authority) vs panes (views); this plan is the rendering-engine half of that
   same reshape (one document vs many).
 - [host_wiring_grabbag_plan](2026-06-11_host_wiring_grabbag_plan.md) — G1

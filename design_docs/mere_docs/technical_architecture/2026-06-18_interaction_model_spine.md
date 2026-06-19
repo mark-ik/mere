@@ -109,7 +109,7 @@ testing the cursor against ~15 per-frame rect caches in `WindowView`, with no fa
 and `default_prevented()` never read. The model's job here is to **lift the orrery's contract up to
 the host**: one input spine (top-down dispatch with fall-through), one focus authority, geometry
 from the laid-out tree rather than re-derived rect caches.
-**Owner: [window-composition plan](../implementation_strategy/2026-06-11_window_composition_plan.md)**,
+**Owner: [tearout_composability_plan](../implementation_strategy/2026-06-19_tearout_composability_plan.md)** (continuing the archived window-composition plan),
 the one input spine + one focus authority (its P2-companion), over the shell-root document that
 unified-document-host Phase 1 consolidates.
 
@@ -141,16 +141,33 @@ The drift was five seams each claimed by two or three plans. The cut:
 
 ## Serval asks the model pulls (prioritized)
 
-1. **Custom-layout `<orrery>` element** with transform-positioned DOM children: the hard gate for
-   Phase 2 Path A; cross-repo (serval / xilem-serval). Transform-only motion already verified
-   `RepaintOnly`.
-2. **Transform-aware hit-test** in the host path: the DOM half of the two-hit-test; pairs with 1.
-3. **External-texture element that bears input**: the content / scrying / textured-body bridge;
-   distinct from 1. Unblocks the content-pane input spine and the textured-body node form.
-4. **Image-decode in the chrome / shell `IncrementalLayout` render path**: the chrome passes no
-   `ImagePlane`, so favicon `<img>` data-URIs encode but never paint.
-5. **Key-dispatch unification through serval `dispatch_key`**: so Enter / Space activation and the
-   omnibar's Enter stop being hand-intercepted; the input spine's keyboard order.
+Revised 2026-06-19 against the
+[unified-document-host](../implementation_strategy/2026-06-17_unified_document_host_plan.md) Phase 2
+design pass: reading the engine showed the transform-aware hit-test already exists, so the first two
+asks are not engine work, and Phase 2a then landed the host wiring (orrery cards select + focus
+through the shell hit-test). The live engine asks are now image-decode and the
+external-texture-input bridge.
+
+1. **Custom-layout `<orrery>` element** with transform-positioned DOM children: deferred, not a
+   gate. The node-cards already work as host-positioned `position:absolute` DOM in the shell
+   document; a real `<orrery>` element only moves per-frame card placement from the host into the
+   engine. Revisit only if host-driven transform-setting becomes a perf or correctness problem.
+   (unified-document-host Phase 2, cond 1.)
+2. **Transform-aware hit-test**: done in the engine. `IncrementalLayout::hit_test` →
+   `ServalLaneView::walk_for_hit` (`serval-layout/serval_lane.rs:398-417`) inverse-maps the point
+   through each node's `transform` and honours `pointer-events: none`. The host routes an
+   orrery press through the shell hit-test first, a card hit dispatching in the document and a miss
+   falling to `gyre` (`input.rs` `point_over_orrery_card`).
+3. **External-texture element that bears input**: open. The content / scrying / textured-body
+   bridge; `<external-texture>` is output-only today. Unblocks the content-pane input spine and the
+   textured-body node form.
+4. **Image-decode in the chrome / shell `IncrementalLayout` render path**: open. The session path
+   passes an empty `ImagePlane` (`serval-layout/incremental.rs:738`, "Empty image planes, matching
+   the scripted layout path"), so favicon `<img>` data-URIs paint nowhere on this lane, even though
+   serval-layout decodes `data:` URIs inline when handed a populated plane.
+5. **Key-dispatch unification through serval `dispatch_key`**: partly landed. Tab / Shift+Tab
+   traversal and Enter / Space activation over the focusable set now ride `dispatch_key` (Phase 1
+   cond 2); the residual is the omnibar's Enter, still hand-intercepted.
 
 ## Sequencing (tie the threads)
 

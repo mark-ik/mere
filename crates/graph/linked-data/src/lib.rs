@@ -31,11 +31,17 @@
 
 use kernel::graph::{Graph, Node, NodeKey, SemanticData, predicate_iri, sub_kind_from_iri};
 use kernel::types::ClassificationScheme;
+use oxrdf::{GraphName, Literal, NamedNode, Quad, Term};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeMap;
 
 /// JSON-LD ingest (Phase 2): `application/ld+json` → a graph contribution.
 pub mod ingest;
+
+/// SPARQL query over the graph via an in-memory Oxigraph store (the `query`
+/// feature). Consumes [`node_quads`] as its projection.
+#[cfg(feature = "query")]
+pub mod query;
 
 pub use ingest::{
     ContextCache, EdgeContribution, GraphContribution, IngestError, NodeContribution, from_html,
@@ -49,6 +55,8 @@ pub use ingest::{ApplyOutcome, apply_contribution};
 pub(crate) const SCHEMA_NAME: &str = "https://schema.org/name";
 /// `schema:keywords` — the curated mapping target for a node's tags.
 pub(crate) const SCHEMA_KEYWORDS: &str = "https://schema.org/keywords";
+/// `rdf:type` — the predicate JSON-LD `@type` expands to.
+pub(crate) const RDF_TYPE: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
 /// Export the whole graph as expanded JSON-LD: a [`Value::Array`] of node
 /// objects, one per graph node, in node-insertion order. Deterministic (tags and
@@ -94,49 +102,75 @@ fn edge_predicates(semantic: &SemanticData) -> Vec<String> {
     }
 }
 
-/// Insert an `@type` array — the node's `rdf:type` classification IRIs (what
-/// ingest writes from JSON-LD `@type`), sorted — when present. Shared by the
-/// expanded and compacted exports.
-fn insert_types(obj: &mut Map<String, Value>, node: &Node) {
-    let mut types: Vec<String> = node
-        .classifications
-        .iter()
-        .filter(|c| matches!(&c.scheme, ClassificationScheme::Custom(s) if s == "rdf:type"))
-        .map(|c| c.value.clone())
-        .collect();
-    types.sort();
-    types.dedup();
-    if !types.is_empty() {
-        obj.insert(
-            "@type".to_string(),
-            Value::Array(types.into_iter().map(Value::String).collect()),
-        );
+/// Push a quad `subject —predicate→ object` in the default graph, skipping it
+/// when `predicate` is not a valid IRI.
+fn push_quad(quads: &mut Vec<Quad>, subject: &NamedNode, predicate: &str, object: Term) {
+    if let Ok(predicate) = NamedNode::new(predicate) {
+        quads.push(Quad::new(
+            subject.clone(),
+            predicate,
+            object,
+            GraphName::DefaultGraph,
+        ));
     }
 }
 
-fn node_object(graph: &Graph, key: NodeKey, node: &Node) -> Value {
-    let url = node.primary_address().as_url_str();
-    let mut obj = Map::new();
-    obj.insert("@id".to_string(), Value::String(node_id(node)));
-    insert_types(&mut obj, node);
+/// The RDF quads for one node: its `@id` subject carrying `rdf:type`, the curated
+/// literals (`schema:name` / `schema:keywords`), the recognized and raw
+/// `Semantic` edges, and the open literal properties, all in the default graph.
+///
+/// This is the single kernel-to-RDF projection. The expanded and compacted
+/// JSON-LD shapers both render from it (and a triple store can ingest it
+/// directly), so the mapping decisions live here once: `@id` skolemization, the
+/// title-equals-URL skip, and which edges and literals are emitted. A quad with a
+/// malformed subject or predicate IRI is skipped (the abstract model validates
+/// IRIs, where the old string path would have emitted invalid JSON-LD).
+pub fn node_quads(graph: &Graph, key: NodeKey, node: &Node) -> Vec<Quad> {
+    let mut quads = Vec::new();
+    let Ok(subject) = NamedNode::new(node_id(node)) else {
+        return quads;
+    };
+
+    // `rdf:type` from the node's `rdf:type` classifications, sorted + deduped.
+    let mut types: Vec<&str> = node
+        .classifications
+        .iter()
+        .filter(|c| matches!(&c.scheme, ClassificationScheme::Custom(s) if s == "rdf:type"))
+        .map(|c| c.value.as_str())
+        .collect();
+    types.sort_unstable();
+    types.dedup();
+    for ty in types {
+        if let Ok(ty) = NamedNode::new(ty) {
+            push_quad(&mut quads, &subject, RDF_TYPE, ty.into());
+        }
+    }
 
     // Curated literals. Skip a title that is only the URL fallback (`add_node`
-    // seeds `title = url` for an untitled node) — that is not a real name.
+    // seeds `title = url` for an untitled node), which is not a real name.
+    let url = node.primary_address().as_url_str();
     if !node.title.is_empty() && node.title != url {
-        obj.insert(SCHEMA_NAME.to_string(), json!([{ "@value": node.title }]));
+        push_quad(
+            &mut quads,
+            &subject,
+            SCHEMA_NAME,
+            Literal::new_simple_literal(node.title.as_str()).into(),
+        );
     }
-    if !node.tags.is_empty() {
-        let mut tags: Vec<&str> = node.tags.iter().map(String::as_str).collect();
-        tags.sort_unstable();
-        obj.insert(
-            SCHEMA_KEYWORDS.to_string(),
-            Value::Array(tags.into_iter().map(|t| json!({ "@value": t })).collect()),
+    let mut tags: Vec<&str> = node.tags.iter().map(String::as_str).collect();
+    tags.sort_unstable();
+    for tag in tags {
+        push_quad(
+            &mut quads,
+            &subject,
+            SCHEMA_KEYWORDS,
+            Literal::new_simple_literal(tag).into(),
         );
     }
 
-    // Semantic edges → predicate IRIs → target `@id`s. Grouped by predicate and
-    // sorted (keys via `BTreeMap`, targets explicitly) for a stable document.
-    let mut by_predicate: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    // Semantic edges -> predicate IRIs -> target `@id`s, sorted by (predicate,
+    // target) for a stable document.
+    let mut edges: Vec<(String, String)> = Vec::new();
     for target in graph.out_neighbors(key) {
         let Some(edge_key) = graph.find_edge_key(key, target) else {
             continue;
@@ -149,22 +183,17 @@ fn node_object(graph: &Graph, key: NodeKey, node: &Node) -> Value {
         };
         let target_id = node_id(target_node);
         for predicate in edge_predicates(semantic) {
-            by_predicate
-                .entry(predicate)
-                .or_default()
-                .push(target_id.clone());
+            edges.push((predicate, target_id.clone()));
         }
     }
-    for (predicate, mut targets) in by_predicate {
-        targets.sort_unstable();
-        obj.insert(
-            predicate,
-            Value::Array(targets.into_iter().map(|id| json!({ "@id": id })).collect()),
-        );
+    edges.sort();
+    for (predicate, target_id) in edges {
+        if let Ok(target) = NamedNode::new(target_id) {
+            push_quad(&mut quads, &subject, &predicate, target.into());
+        }
     }
 
-    // Open literal properties → `@value` entries, merged into the predicate's
-    // array (expanded values are always arrays).
+    // Open literal properties, sorted by (predicate, value).
     let mut props: Vec<(&str, &str)> = node
         .properties
         .iter()
@@ -172,11 +201,54 @@ fn node_object(graph: &Graph, key: NodeKey, node: &Node) -> Value {
         .collect();
     props.sort_unstable();
     for (predicate, value) in props {
-        obj.entry(predicate.to_string())
-            .or_insert_with(|| Value::Array(Vec::new()))
-            .as_array_mut()
-            .expect("expanded predicate value is an array")
-            .push(json!({ "@value": value }));
+        push_quad(
+            &mut quads,
+            &subject,
+            predicate,
+            Literal::new_simple_literal(value).into(),
+        );
+    }
+
+    quads
+}
+
+fn node_object(graph: &Graph, key: NodeKey, node: &Node) -> Value {
+    let mut obj = Map::new();
+    obj.insert("@id".to_string(), Value::String(node_id(node)));
+
+    // Render the node's quads as expanded JSON-LD: `@type` collects the `rdf:type`
+    // objects; every other predicate is an array of `{@id}` / `{@value}` entries,
+    // grouped and key-sorted (`BTreeMap`) for a stable document. The quads already
+    // arrive in a deterministic order, so per-predicate entry order is stable.
+    let mut types: Vec<String> = Vec::new();
+    let mut by_predicate: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+    for quad in node_quads(graph, key, node) {
+        let predicate = quad.predicate.as_str();
+        if predicate == RDF_TYPE {
+            if let Term::NamedNode(object) = &quad.object {
+                types.push(object.as_str().to_string());
+            }
+            continue;
+        }
+        let entry = match &quad.object {
+            Term::NamedNode(object) => json!({ "@id": object.as_str() }),
+            Term::Literal(object) => json!({ "@value": object.value() }),
+            _ => continue,
+        };
+        by_predicate
+            .entry(predicate.to_string())
+            .or_default()
+            .push(entry);
+    }
+
+    if !types.is_empty() {
+        obj.insert(
+            "@type".to_string(),
+            Value::Array(types.into_iter().map(Value::String).collect()),
+        );
+    }
+    for (predicate, values) in by_predicate {
+        obj.insert(predicate, Value::Array(values));
     }
 
     Value::Object(obj)
@@ -210,81 +282,88 @@ fn compact_node_object(
     node: &Node,
     context: &mut Map<String, Value>,
 ) -> Value {
-    let url = node.primary_address().as_url_str();
     let mut obj = Map::new();
     obj.insert("@id".to_string(), Value::String(node_id(node)));
-    insert_types(&mut obj, node);
 
-    if !node.title.is_empty() && node.title != url {
+    // Render the node's quads as compacted JSON-LD. `@type` collects the
+    // `rdf:type` objects; the curated literals become the `name` (scalar) and
+    // `keywords` (array) short terms; a recognized relation becomes a short term
+    // registered in the inline context; a raw predicate keeps its full IRI as the
+    // key. Edge and open-property values collapse to a scalar when single.
+    let mut types: Vec<String> = Vec::new();
+    let mut name: Option<String> = None;
+    let mut keywords: Vec<String> = Vec::new();
+    let mut by_key: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+
+    for quad in node_quads(graph, key, node) {
+        let predicate = quad.predicate.as_str();
+        if predicate == RDF_TYPE {
+            if let Term::NamedNode(object) = &quad.object {
+                types.push(object.as_str().to_string());
+            }
+            continue;
+        }
+        if predicate == SCHEMA_NAME {
+            if let Term::Literal(object) = &quad.object {
+                name = Some(object.value().to_string());
+            }
+            continue;
+        }
+        if predicate == SCHEMA_KEYWORDS {
+            if let Term::Literal(object) = &quad.object {
+                keywords.push(object.value().to_string());
+            }
+            continue;
+        }
+        let (emit_key, value) = match &quad.object {
+            Term::NamedNode(object) => {
+                let emit_key = if sub_kind_from_iri(predicate).is_some() {
+                    let term = term_for(predicate).to_string();
+                    context
+                        .entry(term.clone())
+                        .or_insert_with(|| json!(predicate));
+                    term
+                } else {
+                    predicate.to_string()
+                };
+                (emit_key, json!({ "@id": object.as_str() }))
+            }
+            Term::Literal(object) => {
+                (predicate.to_string(), Value::String(object.value().to_string()))
+            }
+            _ => continue,
+        };
+        by_key.entry(emit_key).or_default().push(value);
+    }
+
+    if !types.is_empty() {
+        obj.insert(
+            "@type".to_string(),
+            Value::Array(types.into_iter().map(Value::String).collect()),
+        );
+    }
+    if let Some(name) = name {
         context
             .entry("name".to_string())
             .or_insert_with(|| json!(SCHEMA_NAME));
-        obj.insert("name".to_string(), json!(node.title));
+        obj.insert("name".to_string(), Value::String(name));
     }
-    if !node.tags.is_empty() {
+    if !keywords.is_empty() {
         context
             .entry("keywords".to_string())
             .or_insert_with(|| json!(SCHEMA_KEYWORDS));
-        let mut tags: Vec<&str> = node.tags.iter().map(String::as_str).collect();
-        tags.sort_unstable();
-        obj.insert("keywords".to_string(), json!(tags));
+        obj.insert(
+            "keywords".to_string(),
+            Value::Array(keywords.into_iter().map(Value::String).collect()),
+        );
     }
-
-    // Group targets by the key we emit: a short term for a recognized predicate
-    // (registered in the inline context), the full IRI for a raw one.
-    let mut by_key: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for target in graph.out_neighbors(key) {
-        let Some(edge_key) = graph.find_edge_key(key, target) else {
-            continue;
-        };
-        let Some(semantic) = graph.get_edge(edge_key).and_then(|p| p.semantic_data()) else {
-            continue;
-        };
-        let Some(target_node) = graph.get_node(target) else {
-            continue;
-        };
-        let target_id = node_id(target_node);
-        for predicate in edge_predicates(semantic) {
-            let emit_key = if sub_kind_from_iri(&predicate).is_some() {
-                let term = term_for(&predicate).to_string();
-                context
-                    .entry(term.clone())
-                    .or_insert_with(|| json!(predicate));
-                term
-            } else {
-                predicate
-            };
-            by_key.entry(emit_key).or_default().push(target_id.clone());
-        }
-    }
-    for (emit_key, mut targets) in by_key {
-        targets.sort_unstable();
-        let refs: Vec<Value> = targets.into_iter().map(|id| json!({ "@id": id })).collect();
-        let value = if refs.len() == 1 {
-            refs.into_iter().next().expect("length checked")
+    for (emit_key, mut values) in by_key {
+        let value = if values.len() == 1 {
+            values.pop().expect("length checked")
         } else {
-            Value::Array(refs)
+            Value::Array(values)
         };
         obj.insert(emit_key, value);
-    }
-
-    // Open literal properties: a full-IRI key → literal value (scalar, or array
-    // for repeats). Not short-termed — the open tail stays explicit.
-    let mut props: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for property in &node.properties {
-        props
-            .entry(property.predicate.clone())
-            .or_default()
-            .push(property.value.clone());
-    }
-    for (predicate, mut values) in props {
-        values.sort();
-        let value = if values.len() == 1 {
-            Value::String(values.into_iter().next().expect("length checked"))
-        } else {
-            Value::Array(values.into_iter().map(Value::String).collect())
-        };
-        obj.insert(predicate, value);
     }
 
     Value::Object(obj)
@@ -481,5 +560,28 @@ mod tests {
             predicate: "https://schema.org/citation".into(),
             object: "https://c.test/".into(),
         }));
+    }
+
+    #[cfg(feature = "query")]
+    #[test]
+    fn sparql_selects_a_literal_and_an_edge_over_node_quads() {
+        let graph = seed();
+
+        // A curated literal: A's schema:name.
+        let names = crate::query::sparql(
+            &graph,
+            "SELECT ?name WHERE { <https://a.test/> <https://schema.org/name> ?name }",
+        )
+        .expect("name query");
+        assert_eq!(names.variables, vec!["name".to_string()]);
+        assert_eq!(names.rows, vec![vec![Some("Article A".to_string())]]);
+
+        // A recognized semantic edge: A cites B (canonical Mere IRI).
+        let cites = crate::query::sparql(
+            &graph,
+            "SELECT ?t WHERE { <https://a.test/> <https://mere.computer/ns/rel#cites> ?t }",
+        )
+        .expect("edge query");
+        assert_eq!(cites.rows, vec![vec![Some("https://b.test/".to_string())]]);
     }
 }

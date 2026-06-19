@@ -19,23 +19,27 @@
 //! egui and iced ones), so it renders those types as serval DOM and routes
 //! mutations back through the runner. Only the *rendering* is new.
 //!
-//! ## Separate roots
+//! ## Shell document vs content roots
 //!
-//! From the first commit the **chrome-root** (this view tree, diffed by
-//! `xilem_serval` from app state) and each **content-root** (mutated by its
-//! engine / script) are distinct document authorities; neither sees the other's
-//! tree (flip plan, Phase 3 + Standing constraints).
+//! The **shell document** (this crate's view tree: chrome plus the folded panes
+//! and orrery node-cards, diffed by `xilem_serval` from app state) and each
+//! **content-root** (a fetched page mutated by its engine, or the orrery graph
+//! scene) stay distinct document authorities; neither sees the other's tree (flip
+//! plan, Phase 3 + Standing constraints). Unified-document-host Phase 1 folded the
+//! panes into the one shell document; the content surfaces stay separate roots.
 //!
 //! ## Status
 //!
-//! The toolbar renders from a reused [`chrome::toolbar::ToolbarState`] into a
-//! serval `ScriptedDom` via [`ServalAppRunner`], on screen, with an editable
-//! omnibar ([`TextInput`] lensed into the view). Submitting (Enter) and the
-//! back / forward buttons drive a real linear [`History`](nav::History): the
-//! omnibar text is classified and resolved to a URL, pushed onto the stack, and
-//! mirrored back into the toolbar (location text, `can_go_*` flags). The current
-//! history entry — [`Chrome::content_location`] — is what the **content-root**
-//! slice (next) will load into a separate document authority.
+//! The chrome renders from the reused [`chrome`] view-models into a serval
+//! `ScriptedDom` via [`ServalAppRunner`]: toolbar, an editable omnibar
+//! ([`TextInput`] lensed into the view), command palette, find bar, settings,
+//! comms pane, shellbar, and context menu are all `xilem_serval` views. The
+//! omnibar drives a real linear [`History`](nav::History) (text classified and
+//! resolved to a URL, `can_go_*` mirrored back into the toolbar), and
+//! [`Chrome::content_location`] is the entry a content-root loads. The bin
+//! (`main.rs`) folds the roster, the four list panes, and the orrery's node-cards
+//! into that same document under one runner: unified-document-host Phase 1 is
+//! complete (one document, one focus ring, one a11y tree).
 
 use chrome::command_palette::{CommandPaletteSession, SearchPaletteScope};
 use chrome::omnibar::OmnibarMatch;

@@ -87,6 +87,11 @@ pub struct ShellOutcome {
     /// selected pair (the kind-qualified edge-creation form). `None` for the
     /// default `relate()`, which rides the `AssertEdge` command path.
     pub relation_kind: Option<String>,
+    /// A SPARQL query passed to `sparql("…")` — the host runs it over the focused
+    /// graph and echoes the result (`linked_data::query`). `None` when no
+    /// `sparql(…)` call was made. Recorded, not run here: the shell snapshot has
+    /// only node URLs, not the full RDF graph.
+    pub sparql_query: Option<String>,
     /// A compile / runtime error message, if the script failed. Commands called
     /// before a mid-script failure are still present in `commands`.
     pub error: Option<String>,
@@ -111,6 +116,7 @@ impl CommandShell {
     pub fn eval(&self, source: &str, ctx: &ShellContext) -> ShellOutcome {
         let commands: Rc<RefCell<Vec<Command>>> = Rc::new(RefCell::new(Vec::new()));
         let relation_kind: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let sparql_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let snapshot = Rc::new(ctx.clone());
         let mut engine = script_rhai::base_engine();
 
@@ -161,21 +167,33 @@ impl CommandShell {
             *rk.borrow_mut() = Some(kind.to_string());
         });
 
+        // `sparql("SELECT …")` — record the query for the host to run over the
+        // focused graph and echo the result. Mirrors `relate("…")`: an arg-bearing
+        // binding that records into the outcome rather than mutating, since the
+        // shell snapshot has only node URLs, not the full RDF graph.
+        let sq = sparql_query.clone();
+        engine.register_fn("sparql", move |query: &str| {
+            *sq.borrow_mut() = Some(query.to_string());
+        });
+
         engine.set_max_operations(OP_BUDGET);
         let result = engine.eval::<Dynamic>(&desugar(source));
         let commands = commands.borrow().clone();
         let relation_kind = relation_kind.borrow().clone();
+        let sparql_query = sparql_query.borrow().clone();
         match result {
             Ok(value) => ShellOutcome {
                 text: stringify(value),
                 commands,
                 relation_kind,
+                sparql_query,
                 error: None,
             },
             Err(err) => ShellOutcome {
                 text: String::new(),
                 commands,
                 relation_kind,
+                sparql_query,
                 error: Some(err.to_string()),
             },
         }
@@ -202,6 +220,7 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
         .iter()
         .map(|c| c.verb())
         .chain(QUERIES.iter().copied())
+        .chain(std::iter::once("sparql"))
         .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
 }
 
@@ -335,6 +354,21 @@ mod tests {
         assert_eq!(kinded.relation_kind.as_deref(), Some("cites"));
         assert!(kinded.commands.is_empty());
         assert!(kinded.error.is_none());
+    }
+
+    #[test]
+    fn sparql_records_the_query_for_the_host_to_run() {
+        // The arg-bearing form records the query string; the host runs it (the
+        // snapshot has no RDF graph). It emits no command and is not an error.
+        let out = CommandShell::new().eval(r#"sparql("SELECT ?s WHERE { ?s ?p ?o }")"#, &ctx());
+        assert_eq!(
+            out.sparql_query.as_deref(),
+            Some("SELECT ?s WHERE { ?s ?p ?o }")
+        );
+        assert!(out.commands.is_empty());
+        assert!(out.error.is_none());
+        // `complete` ghosts the verb so a user discovers it.
+        assert_eq!(complete("spa"), Some("sparql"));
     }
 
     #[test]

@@ -12,20 +12,31 @@
 //! paint_list_render directly, so this file is the window + present +
 //! input-dispatch harness, not a second engine.
 //!
-//! ## Two roots, one window
+//! ## One shell document, one window
 //!
-//! The window composites **two authorities**: the chrome root (the reused toolbar
-//! / omnibar, diffed by the runner) in a top band, and the content root — an
-//! [`Orrery`], the graph's spatial presentation — filling the rest. The chrome
-//! runs through serval into a `Scene`; the orrery produces its own composited
-//! `Scene` from the graph + physics. Each is rasterized and composited at its
-//! band, neither root seeing the other's tree. Input routes by region: the chrome
-//! band hit-tests the chrome root, the content band drives the orrery (pan / zoom
-//! / drag / select), and keyboard modifiers feed both.
+//! The window draws one **shell document**: a single `ScriptedDom` under one
+//! [`ServalAppRunner`], holding the chrome (toolbar, omnibar, palette, overlays),
+//! the folded panes (roster, apparatus, steward, inspector, trail) as lensed
+//! subtrees, and the orrery's node-card chips as transform-positioned DOM. That
+//! document runs through serval-layout into one chrome `Scene`. Around and beneath
+//! it the host composites separate surfaces that are not serval documents: the
+//! orrery graph scene ([`Orrery`]'s own `Scene` of gnodes / edges / physics from
+//! `gyre`), the pelt workbench tile surface, and the focused node's content card.
+//! Each rasterizes to its own texture and composites back to front: the orrery
+//! scene underneath, the chrome on top. The capability-separation discipline holds
+//! (neither the shell document nor a content surface sees the other's tree).
 //!
-//! The orrery is the graph-rooted content surface (modular integration plan, S1).
-//! Next (S2): navigating a location adds a node and projects its media as a tile,
-//! so the omnibar drives the graph rather than a synthesized page.
+//! Input routes top-down through the shell hit-test first: a press resolves
+//! against the one document (chrome control, folded-pane row, or orrery card), and
+//! an orrery-area miss falls through to `gyre`'s pan / zoom / drag / select.
+//! Keyboard goes through the runner's `dispatch_key` (Tab traversal, Enter / Space
+//! activation) for focusables, then to the graph handler. This is the
+//! unified-document-host shape (Phase 1 complete); it replaced the earlier
+//! two-root, route-by-Y-band composition.
+//!
+//! The orrery-as-element work lives in the unified-document-host plan: Phase 2a
+//! landed (node cards select + focus through the shell hit-test); retiring the
+//! standalone orrery `Scene` into a scene underlay (cond 5) remains.
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};

@@ -21,7 +21,7 @@ Sibling / converging docs:
   Unified-document-host owns the DOM-materialization mechanism its card/tile forms ride;
   field-regions owns localized/scripted arrangement; window-composition owns the
   external-texture-input bridge the textured-body form rides (P2).
-- [window_composition_plan](2026-06-11_window_composition_plan.md) — orrery (authority) vs
+- [tearout_composability_plan](2026-06-19_tearout_composability_plan.md) (continuing the archived window-composition plan) — orrery (authority) vs
   panes (views); this plan is the *node-rendering* layer inside the orrery the pool holds.
 - [unified_document_host_plan](2026-06-17_unified_document_host_plan.md) — the DOM/document
   half; the DOM representation forms (tile, card) are its node materialization, and its
@@ -72,9 +72,13 @@ scripting). Both layers user-customizable. The card is one citizen, not the mand
 
 The same node-truth, rendered as any of an open set of forms. Forms that carry semantics emit
 serval DOM (so the a11y / JSON-LD legibility holds); forms that carry liveliness emit a
-texture or scene primitive. Every form rides the same gyre rapier body, so drag and physics
-work regardless of form (the collider is the hit-target; the visual is decoupled from the
-body but co-located at its position).
+texture or scene primitive. Every form rides the same gyre rapier body, and the **face is the
+collider**: a node's hit-target is its face geometry (a square today; an arbitrary polygon or
+custom shape later, via parry's convex / compound shapes), not a generic box around it.
+`NODE_HALF`'s fixed half-extent generalizes to a per-node parry shape that both size and shape
+drive. The label is co-located at the body's position but sits outside the collider, so it
+never enters the hit-test or the physics; gyre's `QueryPipeline` already picks by collider, so
+face-as-hitbox follows once the collider tracks the face.
 
 The open set (initial):
 
@@ -232,12 +236,31 @@ selectable per node, and the default mapping is content-type driven.
 
 ### P2 — Textured-body and scripted forms
 
-Add the GPU/texture forms on the rapier body via the external-texture element view (the
-window-composition P2-companion bridge). The textured-body carries an arbitrary texture; the
-scripted form is the scene-decoration / scripting hook.
+Split in two (code-verified 2026-06-19): only one half needs the external-texture **input**
+bridge, and the DOM route for the other half needs the chrome image-decode gap closed first.
 
-Done when a node can be a textured body (e.g. a content thumbnail or custom image) on its
-physics body, draggable like any other form.
+- **P2-static — a non-interactive textured face (the achievable half).** A node whose face
+  shows an arbitrary texture (thumbnail, favicon, custom image), draggable and selectable like
+  any other form. It does **not** need the input bridge: winit drag handles the grab (it
+  bypasses the DOM, so it wins as long as the face rects stay out of `content_rects`), and
+  select rides the document hit-test (a click resolves to the face element; mapping that node
+  back to its URL is the host step the card path already uses). You select and drag the *node*,
+  not click *into* the texture. The real prerequisites are (1) P1's per-node `Representation`
+  hook to slot the form (today it is a binary per-pane flag), and (2) for the `<img>` data-URI
+  route, the **chrome image-decode gap**: the shell `IncrementalLayout` emits with an empty
+  `ImagePlane`, so `<img>` data-URIs decode nowhere and never paint (the same gap that keeps
+  card favicons invisible). Closing it makes the favicons *and* the static texture appear. (The
+  `<external-texture>` route avoids that gap but asks the host to register a wgpu texture per
+  node.) Done when a node can be a textured body on its physics body, draggable and selectable,
+  the face driving the collider (P0/P5), and the texture painting.
+- **P2-interactive — live texture content (gated on the input bridge).** A node whose texture is
+  itself interactive: a live page as a body, the compat WebView node, a canvas you draw on. This
+  needs the `<external-texture>` element to **bear input** (forward a hit, in texture-local
+  coords, to the producer behind it), the external-texture-input bridge owned by the
+  tearout-composability plan (the window-composition continuation). Blocked until that lands.
+
+The scripted form (scene-decoration / scripting hook) shares the field-regions rhai substrate and
+sequences after P2-static.
 
 ### P3 — Arrangement: the scene-wide + persistence delta (mostly cross-plan)
 
@@ -251,26 +274,36 @@ Localized + scripted arrangement defers to the
 Done when a scene's arrangement persists and re-applies on reopen, holds as nodes/edges arrive,
 stays draggable, and is user-selectable per scene.
 
-## Open questions / aesthetic calls
+## Decisions (2026-06-19, with Mark)
 
-These are Mark's design calls; the configurability rule says expose them as settings rather
-than bake one default.
+The seven open calls below, resolved. The configurability rule holds: where a default is named,
+it is the default of a setting, not a baked constant.
 
-1. **Footprint** — the literal 36px tile + nameplate-beside, or a hybrid (square favicon face
-   with an inline label) that stays compact in dense graphs? The main aesthetic call for P0.
-2. **Selection emphasis** — ring vs glow vs scale-lift vs a combination; if scale, scale about
-   center so the visual center stays on the world grab point.
-3. **Shape vocabulary** — `NodeShape` is only Square/Rounded/Circle (a first cut); many kinds
-   (image, note, feed-item) collapse to Square today. Widen content-type → shape, or ship the
-   3-shape set for P0?
-4. **Label cap** — 24 chars for the on-canvas card (the roster carries a fuller label, so the
-   canvas reads terser by design). Confirm.
-5. **Size-by-importance** — map degree / weight to footprint (bigger = more connected)? A
-   net-new affordance; per the configurability rule, opt-in.
-6. **Representation defaults** — the content-type → form mapping, and the per-scene override
-   surface. Where the user picks a node's form.
-7. **Arrangement defaults + surface** — the per-scene arrangement picker, and which arrangements
-   ship first beyond force-directed/radial.
+1. **Footprint, face = body.** A fixed-footprint object, not a text-hugging pill, and the face
+   *is* the collider (see Representation). Square today; arbitrary polygon / custom shape later.
+   The label is variable and LOD-driven (beside when sparse, hidden when dense / zoomed out, gone
+   at the underlay-dot LOD), co-located but outside the body.
+2. **Selection, three channels.** Hover, selection, and focus read at once because each owns a
+   channel: hover a faint brighten, selection a ring + slight scale-lift (scaled about center so
+   the world grab point stays put), focus its own ring. Selection leaves *color* free for
+   activation state, resolving the recolor collision.
+3. **Shape, data not hardcoded.** Ship the 3-shape set (Square / Rounded / Circle) for P0, but
+   route content-type to shape through a lens, not a match arm. The same rule extends to **edge
+   styles and field styling**: one styling lens (the NODE_SHEET pattern widened to edges + fields),
+   not three hardcoded paths.
+4. **Label, terse and width-driven.** Keep the canvas terser than the roster; ellipsize to the
+   face width at the current zoom rather than a fixed char count; expose label density (off /
+   terse / full) as a setting.
+5. **Size-by-importance, opt-in, drives the collider.** Map a metric (degree first, pluggable to
+   centrality / recency) to footprint, log-scaled and clamped, opt-in. Size drives the parry
+   collider, not just the visual, so physics and picture stay in sync.
+6. **Representation surface, the scene pane.** Scene-wide defaults (content-type to form, plus
+   arrangement and edge/field styling) live in a **scene pane**: a folded pane in the shell
+   document, alongside roster / apparatus. Per-node overrides stay on the node context menu; the
+   scene pane owns the defaults.
+7. **Arrangement surface, the scene pane; semantic next.** Force-directed (default) + radial +
+   grid cover the everyday; wire **semantic** (group-by-relation) next, then timeline / kanban.
+   The per-scene picker lives in the scene pane and persists per scene (the P3 delta).
 
 ## Progress
 
@@ -296,3 +329,15 @@ than bake one default.
     Note: the chrome's `IncrementalLayout` path passes no `ImagePlane`, so the `<img>` is not
     yet decoded/painted in the shell render — wiring image-decode into that path is the
     follow-up to make the icons appear (the encoding is in place).
+- 2026-06-19: **Open questions resolved (with Mark); P2 split + first implementation step set.**
+  All seven design calls decided (see Decisions). Refinements folded in: the face is the collider
+  (parry geometry, `NODE_HALF` to a per-node shape, label outside the body); hover / selection /
+  focus are three channels; styling is data across node shape + edge style + field style (one
+  lens); the scene pane is the home for scene-wide representation + arrangement + styling defaults,
+  per-node overrides on the context menu. P2 split into P2-static (textured face, the achievable
+  half) and P2-interactive (needs the external-texture input bridge). Scoping the implementation
+  surfaced that P2-static as a DOM citizen is gated not on the input bridge but on the **chrome
+  image-decode gap** (the shell `IncrementalLayout` emits an empty `ImagePlane`) and on P1's
+  per-node `Representation` hook. Closing the image-decode gap is the first step: it makes card
+  favicons paint *and* unblocks the static textured face. It is a serval-side change (the
+  session's emit path), consumed by meerkat across the git dep.

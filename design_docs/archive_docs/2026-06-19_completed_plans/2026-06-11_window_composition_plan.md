@@ -1,7 +1,21 @@
 # Window Composition Plan — pooled orrery authorities, pane resolution, cross-graph composability
 
 **Date**: 2026-06-11
-**Status**: Planning. Supersedes the [multi-window plan](2026-06-10_multi_window_plan.md)'s
+**Status**: **Complete — archived 2026-06-19.** The enabling move shipped; the rest
+shipped elsewhere or spun out. **Banked:** P1 (pooled orrery authorities) is done and
+load-bearing (pool + `orrery_lru` + `MAX_POOLED_ORRERIES` + `reap_graph` + park/unload
++ Steward live-count, all code-verified); OQ2 resolved; the `frame_ops` split landed
+(505 LOC across nine modules); the P2 load-bearing half shipped (the ctx borrows the
+pool, render draws multiple orreries, `OpenGraphBeside` summons a second graph pane,
+per-pane render + wheel/hover). **Migrated:** the P2 per-pane *input* tail (per-pane
+focus / nav / save) into the
+[unified_document_host_plan](../../mere_docs/implementation_strategy/2026-06-17_unified_document_host_plan.md)
+(one shell document + shell hit-test). **Spun out:** P3-P5 + the deferred per-pane
+camera + OQ3-OQ5 to
+[tearout_composability_plan](../../mere_docs/implementation_strategy/2026-06-19_tearout_composability_plan.md).
+Original planning text preserved below as the historical record.
+
+**Historical status:** Planning. Supersedes the [multi-window plan](2026-06-10_multi_window_plan.md)'s
 **MW4–MW6** (leaf tear-out / branch+fork / orrery-split). MW1–MW3 (the per-window
 reshape: `WindowCtx` seam, `WindowId` registry, one-device/N-surfaces, spawn/close,
 slim leaf chrome) are done and stand; this plan builds on them. The
@@ -213,6 +227,9 @@ on-screen verify.
 
 ### P2 — Panes resolve everywhere (render / input / nav)
 
+**Status (2026-06-19): load-bearing half shipped; the per-pane *input* tail migrated
+to the unified-document-host plan (shell document + shell hit-test).**
+
 Every render, hit-test, and navigation path operates on the *pane's* resolved orrery, not
 a window-global one. A window's panes may resolve to different graphs (graph A's workbench
 beside graph B's gloss). The MW3 `{Primary, Leaf}` marker + `is_slim` fold away: the
@@ -290,6 +307,8 @@ surface) gets written down at pelt V6.
 
 ### P3 — Cross-window pane resolution (the leaf, done right)
 
+**Status (2026-06-19): unstarted; spun out to the tear-out + composability plan (C3).**
+
 A pane in window B that resolves to an orrery whose spatial view lives in window A. A
 torn-out workbench tile is a `Workbench` pane in a new window resolving to the donor's
 orrery (same graph), with no `Orrery` pane of its own. **Independently navigable** (its
@@ -303,6 +322,8 @@ the donor's in the pool).
 
 ### P4 — Cross-graph composability (re-point / copy a pane, with provenance)
 
+**Status (2026-06-19): unstarted; spun out to the tear-out + composability plan (C4).**
+
 Move or copy a tile/node across orreries. Copy mints a node in the destination orrery via
 the cross-graph rekey (tear-out brief §7.5) and records a **provenance edge** (origin:
 source node) + lineage. Move re-points the binding. Surfaced as a drag between two panes
@@ -314,6 +335,8 @@ its binding (move).
 
 ### P5 — The tear-out gesture model (leaf / branch / fork + toast)
 
+**Status (2026-06-19): unstarted; spun out to the tear-out + composability plan (C5).**
+
 Implement the [tear-out brief](../research/2026-05-11_tearout_operations_brief.md) on top
 of P1–P4: drag = leaf (a `Workbench` pane resolving to the donor's orrery), Shift+drag =
 branch (donor's orrery, new `GraphletId`), Ctrl/Cmd+Shift+drag = fork (a fresh orrery via
@@ -324,6 +347,8 @@ Done when all three operations run from the gesture model with the brief's ident
 semantics, and the toast escalates a leaf in place.
 
 ### Deferred — per-pane camera (two spatial views of one graph)
+
+**Status (2026-06-19): still deferred; carried to the tear-out + composability plan.**
 
 Pull the camera out of `Orrery` into the `Orrery` *pane*, so two `Orrery` panes of the
 same graph (in one split, or across windows) hold distinct cameras. Not needed by P1–P5

@@ -39,6 +39,33 @@ fn relation_kind_from_str(s: &str) -> SemanticSubKind {
     }
 }
 
+/// Compact one-line rendering of SPARQL rows for the omnibar echo: the row count,
+/// then up to five rows as `var=val, …` joined by ` | `, with a trailing `…` when
+/// truncated. (A first cut; a results pane is the follow-on.)
+fn format_sparql_rows(rows: &linked_data::query::QueryRows) -> String {
+    const MAX_ROWS: usize = 5;
+    let rendered: Vec<String> = rows
+        .rows
+        .iter()
+        .take(MAX_ROWS)
+        .map(|row| {
+            rows.variables
+                .iter()
+                .zip(row)
+                .map(|(var, cell)| format!("{var}={}", cell.as_deref().unwrap_or("")))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .collect();
+    let more = if rows.rows.len() > MAX_ROWS { " …" } else { "" };
+    format!(
+        "{} result(s): {}{}",
+        rows.rows.len(),
+        rendered.join(" | "),
+        more
+    )
+}
+
 impl WindowCtx<'_> {
     /// Execute a pending "connect to peer" request the chrome queued (S5.1): take
     /// the ticket the verb captured from the address bar and drive the sync actor.
@@ -170,6 +197,11 @@ impl WindowCtx<'_> {
                 note = Some("Select exactly two nodes to relate".to_string());
             }
         }
+        // A `sparql("…")` call runs over the focused graph and echoes the result.
+        // Read-only: an ephemeral in-memory store, the kernel stays the authority.
+        if let Some(query) = &outcome.sparql_query {
+            note = Some(self.run_sparql_query(query));
+        }
         let (severity, echo) = match &outcome.error {
             Some(err) => (Severity::Warn, format!("error: {err}")),
             None => (Severity::Info, outcome.text.clone()),
@@ -190,6 +222,17 @@ impl WindowCtx<'_> {
             .unwrap_or_else(|| self.current_focus_url().unwrap_or_default());
         self.view.chrome_update(move |c| c.show_location(&shown));
         self.view.request_redraw();
+    }
+
+    /// Run a `>sparql("…")` query over the focused graph and format a one-line
+    /// result for the omnibar echo. Read-only (builds an ephemeral in-memory
+    /// store via `linked_data::query`; the kernel stays the authority).
+    fn run_sparql_query(&self, query: &str) -> String {
+        match linked_data::query::sparql(self.orrery().graph(), query) {
+            Err(err) => format!("SPARQL error: {err}"),
+            Ok(rows) if rows.rows.is_empty() => "0 results".to_string(),
+            Ok(rows) => format_sparql_rows(&rows),
+        }
     }
 
     /// A read-only snapshot of host state the command shell may query: the

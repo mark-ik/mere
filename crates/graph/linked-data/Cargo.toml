@@ -19,9 +19,14 @@ default = ["bundled-contexts"]
 # `@context` resolves offline via `ContextCache::full()`. Disable for a slimmer
 # binary — `full()` then equals `minimal()`. See `assets/NOTICE` for licensing.
 bundled-contexts = []
+# SPARQL query over the graph via an in-memory Oxigraph store (no RocksDB, so it
+# stays wasm-viable). Off by default: base linked-data stays slim, only consumers
+# that want SPARQL pull Oxigraph.
+query = ["dep:oxigraph"]
 
 [dependencies]
 kernel.workspace = true
 serde_json.workspace = true
 oxjsonld = "0.2"
 oxrdf = "0.3"
+oxigraph = { version = "0.5", default-features = false, optional = true }

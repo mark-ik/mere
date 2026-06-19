@@ -112,7 +112,9 @@ script-rhai = { workspace = true }
 # remote `@context`s resolved offline against the bundled full pack (schema.org /
 # ActivityStreams / Dublin Core). The merge rides `Orrery::ingest_graph`.
 kernel = { workspace = true }
-linked-data = { workspace = true }
+# `query` enables the `>sparql("…")` omnibar verb (an in-memory Oxigraph store
+# over the focused graph; no RocksDB, so the wasm target stays viable).
+linked-data = { workspace = true, features = ["query"] }
 
 # The actor-kernel runtime: the !Send host-kernel boundary + the Send actor
 # harness. meerkat's I/O subsystems (fetch, ...) are expressed as armillary
