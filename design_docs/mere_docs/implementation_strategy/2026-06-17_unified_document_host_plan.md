@@ -219,6 +219,25 @@ engine code was written.)
 - Retire the standalone orrery `Scene` + bespoke pointer branch once the gyre query is the sole
   scene-geometry hit path (cond 5).
 
+### Phase 2a landed (2026-06-19): cards select + focus through the shell hit-test (cond 3/4)
+
+Wired host-side, no engine work (commit dd0500d). `OrreryCard` carries its node URL; the card view
+is `focusable(on_click(...))` queuing a select; `point_over_orrery_card` (riding the shell
+hit-test) gates a left orrery press into `chrome_click` on a card hit, else falls through to
+gyre's pan / select / drag. Selects drain in `drain_chrome_intents`, so the keyboard path
+(Enter/Space on a focused card, via `dispatch_key`) selects too, and `dispatch_click`'s
+click-to-focus rings the clicked card (cond 4). Compiles, 94 tests pass. **Pending: visual
+confirm** (a card press selects + rings; an empty-canvas press still pans).
+
+This pass also needed a taffy patch mirror (commit 302a3ac): serval main adopted experimental
+float-layout taffy through a vendored fork (`support/patches/taffy`) it patches in, which mere did
+not inherit, so serval-layout would not compile against the published taffy. mere now mirrors that
+patch the way it mirrors serval's stylo patch.
+
+Remaining Phase 2: cond 5 (retire the standalone orrery `Scene`); the card a11y nodes still need
+to become actionable (currently inert divs in the one a11y tree); the z-order follow-up (node
+labels paint over the command palette).
+
 Tiles follow-on (either path): workbench tab/divider chrome and content cards.
 The composition spine's working-principles say `platen-view` realizes formes as
 serval flex DOM, the natural vehicle for tile chrome, with `<external-texture>` for
