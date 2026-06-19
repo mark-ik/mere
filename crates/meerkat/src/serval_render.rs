@@ -43,6 +43,10 @@ const SELECTION_COLOR: ColorF = ColorF { r: 0.42, g: 0.62, b: 0.98, a: 0.55 };
 const SCROLLBAR_COLOR: ColorF = ColorF { r: 0.30, g: 0.30, b: 0.36, a: 0.65 };
 /// Scrollbar thumb width, device px.
 const SCROLLBAR_WIDTH: f32 = 8.0;
+/// Focus-ring colour (the accent blue, drawn as a thin outline on the focused element).
+const FOCUS_RING_COLOR: ColorF = ColorF { r: 0.42, g: 0.62, b: 0.98, a: 0.95 };
+/// Focus-ring outline thickness, device px.
+const FOCUS_RING_WIDTH: f32 = 2.0;
 
 /// What to paint for a focused text field's cursor: the element, the caret's byte
 /// offset, and an optional selected byte range. Byte offsets (the layer works in
@@ -84,6 +88,9 @@ fn paint_list_from_session(
 ) -> ServalPaintList {
     let mut plist =
         session.emit_paint_list(dom, scroll, DeviceIntSize::new(width as i32, height as i32));
+    // The cursor's node is `runner.focus()` (the host builds it from there), so the focus
+    // ring below reads it without a separate focus parameter threaded through.
+    let focus_node = cursor.as_ref().map(|c| c.node);
 
     if let Some(c) = cursor {
         if let Some((start, end)) = c.selection {
@@ -107,6 +114,7 @@ fn paint_list_from_session(
     }
 
     push_scrollbars(&mut plist, dom, session.fragments(), scroll);
+    push_focus_ring(&mut plist, dom, session.fragments(), scroll, focus_node);
     plist
 }
 
@@ -237,4 +245,54 @@ fn push_scrollbars(
         let thumb_x = abs_x + r.size.width - SCROLLBAR_WIDTH;
         plist.push_fill(thumb_x, thumb_y, SCROLLBAR_WIDTH, thumb_h, SCROLLBAR_COLOR);
     }
+}
+
+/// Accumulate each laid-out node's **painted** origin: parent-relative taffy locations
+/// summed, with each scroll container's offset applied to its descendants (the way paint
+/// shifts scrolled content), so an overlay lands where an element actually renders. Distinct
+/// from [`accumulate_origins`], which is unscrolled (the scrollbar thumb sits at the
+/// container's own, unscrolled, edge). (Phase 1, step 3c.)
+fn accumulate_painted_origins(
+    dom: &ScriptedDom,
+    fragments: &FragmentPlane<NodeId>,
+    scroll: &HashMap<NodeId, (f32, f32)>,
+    node: NodeId,
+    parent_origin: (f32, f32),
+    out: &mut HashMap<NodeId, (f32, f32)>,
+) {
+    let origin = match fragments.rect_of(node) {
+        Some(l) => (parent_origin.0 + l.location.x, parent_origin.1 + l.location.y),
+        None => parent_origin,
+    };
+    out.insert(node, origin);
+    let (sx, sy) = scroll.get(&node).copied().unwrap_or((0.0, 0.0));
+    let child_origin = (origin.0 - sx, origin.1 - sy);
+    for child in dom.dom_children(node) {
+        accumulate_painted_origins(dom, fragments, scroll, child, child_origin, out);
+    }
+}
+
+/// Draw a focus ring (a thin outline) on the focused node at its painted bounds. The host
+/// builds the cursor from `runner.focus()`, so this rings whatever is focused, chrome control
+/// or folded-pane row/button (the engine leaves `:focus` styling to the host). No-op with
+/// nothing focused or no laid-out box. (Phase 1, step 3c.)
+fn push_focus_ring(
+    plist: &mut ServalPaintList,
+    dom: &ScriptedDom,
+    fragments: &FragmentPlane<NodeId>,
+    scroll_offsets: &ScrollOffsets<NodeId>,
+    focus: Option<NodeId>,
+) {
+    let Some(node) = focus else { return };
+    let Some(r) = fragments.rect_of(node) else { return };
+    let scroll: HashMap<NodeId, (f32, f32)> =
+        scroll_offsets.into_iter().map(|(n, o)| (*n, *o)).collect();
+    let mut origins: HashMap<NodeId, (f32, f32)> = HashMap::new();
+    accumulate_painted_origins(dom, fragments, &scroll, dom.document(), (0.0, 0.0), &mut origins);
+    let Some(&(x, y)) = origins.get(&node) else { return };
+    let (w, h, t) = (r.size.width, r.size.height, FOCUS_RING_WIDTH);
+    plist.push_fill(x, y, w, t, FOCUS_RING_COLOR);
+    plist.push_fill(x, y + h - t, w, t, FOCUS_RING_COLOR);
+    plist.push_fill(x, y, t, h, FOCUS_RING_COLOR);
+    plist.push_fill(x + w - t, y, t, h, FOCUS_RING_COLOR);
 }

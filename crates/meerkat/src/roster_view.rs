@@ -19,7 +19,7 @@ use netrender::Scene;
 use register_theme::chrome::ChromeTheme;
 use serval_layout::ScrollOffsets;
 use serval_scripted_dom::NodeId;
-use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, el, on_click};
+use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, el, focusable, on_click};
 
 use kernel::graph::FieldId;
 
@@ -140,13 +140,15 @@ pub fn roster_view(state: &RosterState) -> RosterView {
 
         let class = if row.selected { "roster-row-selected" } else { "roster-row" };
         let member = row.member;
-        children.push(Box::new(on_click(
+        // `focusable` puts the row in the Tab order; Enter/Space activates it (the runner
+        // synthesizes a click that fires this `on_click`, queuing the select). (Phase 1, 3c.)
+        children.push(Box::new(focusable(on_click(
             el::<_, RosterState, ()>("div", entry)
                 .attr("class", class)
                 // The a11y projection reads row bounds off the laid-out DOM by member.
                 .attr("data-member", member.to_string()),
             move |st: &mut RosterState, _: PointerClick| st.pending.push(RosterIntent::Select(member)),
-        )));
+        ))));
     }
 
     // The "Fields" section after the nodes: one row per field region — its name and
@@ -196,12 +198,12 @@ pub fn roster_view(state: &RosterState) -> RosterView {
                 Box::new(toggle),
             ];
             let class = if fr.hidden { "roster-field roster-field-hidden" } else { "roster-field" };
-            children.push(Box::new(on_click(
+            children.push(Box::new(focusable(on_click(
                 el::<_, RosterState, ()>("div", entry).attr("class", class),
                 move |st: &mut RosterState, _: PointerClick| {
                     st.pending.push(RosterIntent::SelectField(id));
                 },
-            )));
+            ))));
         }
     }
 

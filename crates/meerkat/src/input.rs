@@ -683,6 +683,19 @@ impl WindowCtx<'_> {
     pub(super) fn chrome_activate(&mut self, node: NodeId, at: (f32, f32)) {
         let palette_was_open = self.view.chrome().palette_open;
         self.view.runner.dispatch_click(node, PointerClick::at(at));
+        self.drain_chrome_intents();
+        if palette_was_open && !self.view.chrome().palette_open {
+            self.focus_after_palette_close();
+        }
+        self.view.request_redraw();
+    }
+
+    /// Drain + apply every intent the chrome and folded-pane handlers may have queued, then
+    /// sync the derived state. The shared tail of a pointer activation
+    /// ([`chrome_activate`](Self::chrome_activate)) and a keyboard activation (Enter/Space
+    /// routed through `dispatch_key` in [`on_key_pressed`](Self::on_key_pressed)), so focus +
+    /// Enter fires the same effect a click does. (Phase 1, step 3c.)
+    fn drain_chrome_intents(&mut self) {
         self.drain_pending_connect();
         self.drain_pending_command();
         self.drain_comms_intent();
@@ -693,10 +706,6 @@ impl WindowCtx<'_> {
         self.drain_list_pane_activations();
         self.sync_settings();
         self.sync_orrery();
-        if palette_was_open && !self.view.chrome().palette_open {
-            self.focus_after_palette_close();
-        }
-        self.view.request_redraw();
     }
 
     /// Apply the activation keys the folded list panes' button handlers queued. The
@@ -1167,9 +1176,24 @@ impl WindowCtx<'_> {
             self.on_comms_key(key);
         } else if self.omnibar_focused() {
             self.on_omnibar_key(key);
+        } else if self.view.runner.focus().is_some()
+            || matches!(key, WinitKey::Named(WinitNamedKey::Tab))
+        {
+            // A non-field focusable holds focus (a pane button/row reached via Tab), or Tab
+            // starts the traversal from nothing: route to the runner, which applies the
+            // keyboard defaults (Tab/Shift+Tab traversal, Enter/Space activation) over the
+            // focusable set, so focus moves on through the chrome and folded panes and the
+            // focused control activates. (Phase 1, step 3c.)
+            if let Some(key_event) = key_event_from_winit(key, self.view.modifiers) {
+                self.view.runner.dispatch_key(key_event);
+                // Enter/Space synthesizes a click on the focused control, queuing its intent
+                // the same way a pointer click does, so drain + apply it. (Phase 1, step 3c.)
+                self.drain_chrome_intents();
+                self.view.request_redraw();
+            }
         } else {
-            // No chrome field holds the caret: graph-level keys act on the
-            // selection in the orrery.
+            // No chrome field or focusable element holds focus: graph-level keys act on
+            // the orrery selection.
             self.on_graph_key(key);
         }
     }
