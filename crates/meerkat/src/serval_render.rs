@@ -55,6 +55,10 @@ pub(crate) struct TextCursor {
     pub node: NodeId,
     pub caret: usize,
     pub selection: Option<(usize, usize)>,
+    /// Whether the focused node is a text-editable field (an `<input>`). The caret +
+    /// selection paint only when true; the focus ring (from `node`) paints regardless, so a
+    /// focused button or orrery card rings without a spurious editing caret. (Phase 2a follow-up.)
+    pub editable: bool,
 }
 
 /// An [`IncrementalLayout`] session → `netrender::Scene`: the chrome / workbench
@@ -92,7 +96,10 @@ fn paint_list_from_session(
     // ring below reads it without a separate focus parameter threaded through.
     let focus_node = cursor.as_ref().map(|c| c.node);
 
-    if let Some(c) = cursor {
+    // Caret + selection are text-field overlays: paint them only for editable focus. The
+    // focus ring below still reads `focus_node`, so a focused button / orrery card rings
+    // without a spurious editing caret. (Phase 2a follow-up.)
+    if let Some(c) = cursor.filter(|c| c.editable) {
         if let Some((start, end)) = c.selection {
             let rects = session.selection_rects(dom, c.node, start, end);
             let highlight = session

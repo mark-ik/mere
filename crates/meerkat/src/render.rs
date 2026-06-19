@@ -267,6 +267,7 @@ impl WindowCtx<'_> {
                 node,
                 caret: field.caret_byte_in_render(),
                 selection,
+                editable: self.is_text_input(node),
             }
         });
         let scroll = ScrollOffsets::<NodeId>::default();

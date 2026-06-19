@@ -1544,6 +1544,14 @@ impl WindowCtx<'_> {
 
     /// The text field whose caret the host paints, by the focused DOM `node`: a
     /// comms compose / new-message field, the palette query, else the omnibar.
+    /// Whether `node` is a text-editable field (an `<input>`: the omnibar, palette query, find
+    /// bar, comms fields). The caret + selection overlay paints only for these; a focused button
+    /// or orrery card (focusable since Phase 1 / 2a) rings but shows no editing caret. (Phase 2a.)
+    pub(super) fn is_text_input(&self, node: NodeId) -> bool {
+        let dom = self.view.dom.borrow();
+        dom.element_name(node).map(|q| q.local.as_ref()) == Some("input")
+    }
+
     pub(super) fn caret_field(&self, node: NodeId) -> &xilem_serval::TextInput {
         let focus = Some(node);
         let c = self.view.chrome();
