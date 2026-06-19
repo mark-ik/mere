@@ -121,7 +121,7 @@ fn paint_list_from_session(
     }
 
     push_scrollbars(&mut plist, dom, session.fragments(), scroll);
-    push_focus_ring(&mut plist, dom, session.fragments(), scroll, focus_node);
+    push_focus_ring(&mut plist, session, dom, scroll, focus_node);
     plist
 }
 
@@ -285,18 +285,24 @@ fn accumulate_painted_origins(
 /// nothing focused or no laid-out box. (Phase 1, step 3c.)
 fn push_focus_ring(
     plist: &mut ServalPaintList,
+    session: &IncrementalLayout<NodeId>,
     dom: &ScriptedDom,
-    fragments: &FragmentPlane<NodeId>,
     scroll_offsets: &ScrollOffsets<NodeId>,
     focus: Option<NodeId>,
 ) {
     let Some(node) = focus else { return };
+    let fragments = session.fragments();
     let Some(r) = fragments.rect_of(node) else { return };
     let scroll: HashMap<NodeId, (f32, f32)> =
         scroll_offsets.into_iter().map(|(n, o)| (*n, *o)).collect();
     let mut origins: HashMap<NodeId, (f32, f32)> = HashMap::new();
     accumulate_painted_origins(dom, fragments, &scroll, dom.document(), (0.0, 0.0), &mut origins);
     let Some(&(x, y)) = origins.get(&node) else { return };
+    // A transform-positioned element (an orrery card) paints at its fragment slot plus its
+    // accumulated CSS transform, which the fragments omit; add it so the ring tracks the card
+    // where it paints, not at its pre-transform origin. Zero for untransformed chrome. (cond 1 interim.)
+    let (tx, ty) = session.accumulated_translate(dom, node);
+    let (x, y) = (x + tx, y + ty);
     let (w, h, t) = (r.size.width, r.size.height, FOCUS_RING_WIDTH);
     plist.push_fill(x, y, w, t, FOCUS_RING_COLOR);
     plist.push_fill(x, y + h - t, w, t, FOCUS_RING_COLOR);
