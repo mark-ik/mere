@@ -195,12 +195,3 @@ all = "warn"
 [patch.crates-io]
 stylo = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f188830bea261e72b2006fd73" }
 stylo_atoms = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f188830bea261e72b2006fd73" }
-# serval-layout (serval main, since the experimental float-layout adoption) uses taffy's float
-# API (InlineFloatBand, inline_exclusion_bands, FlexboxItemStyle::order) from serval's vendored
-# taffy fork (support/patches/taffy — the `find_content_slot` float fix atop
-# 0.11.0-experimental-cache-fix.3). serval patches it in; mere doesn't inherit that patch, so the
-# published crates.io taffy of that version lacks the symbols and serval-layout won't compile.
-# Mirror serval's patch by sourcing the same fork from the serval repo (reuses the existing
-# serval checkout). Only the =0.11.0-experimental-cache-fix.3 requirement is redirected; the
-# 0.10.1 users are unaffected. Follows the stylo mirror above.
-taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
