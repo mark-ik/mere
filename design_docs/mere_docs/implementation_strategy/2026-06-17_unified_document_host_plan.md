@@ -1,8 +1,9 @@
 # Unified Document Host Plan
 
 Status: **partially shipped**. The orrery-as-element slice landed (Progress, 2026-06-18);
-Phase 1's document consolidation and Phase 2's custom-layout-element / hit-test / focus /
-scene-teardown remain, and a cross-plan consolidation pass (with the node-representation and
+Phase 1's document consolidation is 3 of 4 done-conditions (panes-in-root, Y-band collapse, one
+a11y tree done; one focus ring remains, Progress 2026-06-19); Phase 2's custom-layout-element /
+hit-test / focus / scene-teardown remain, and a cross-plan consolidation pass (with the node-representation and
 field plans) is underway. A code-verified argument that `xilem_serval`'s role in
 meerkat should grow from "reactive toolkit for the chrome strip" to "host of the
 whole document shell", plus the staged path to get there and the one product
@@ -369,3 +370,26 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   [node-representation + arrangement plan](2026-06-18_node_representation_arrangement_plan.md) and
   the [scriptable field regions plan](2026-06-13_scriptable_field_regions_plan.md); reduce the
   drift; formalize the supported-format interaction model) is refactoring this plan.
+
+- **2026-06-18/19 (Phase 1 document consolidation, 3 of 4 done-conditions).** The load-bearing
+  panes now live in the one shell document under the single `WindowView.runner`. The roster folded
+  first (state into `ShellState`, a lensed positioned subtree, `chrome_click` routing, drained
+  intents; `RosterPane` retired to `#[cfg(test)]`), then the four list panes the same way: a
+  `[ListPaneState; 4]` plus four lensed `list_pane_view` subtrees, multi-classed inner roots
+  (`"utility-pane steward"`, so `has_class` finds each for scroll + hit-test while the shared
+  `.utility-pane` styling still applies), `snapshot_list_panes` before the chrome render, button
+  activations through `drain_list_pane_activations`; `ListPane` / `ViewPane` retired to
+  `#[cfg(test)]` (`9598a91`). **Cond 1 (panes in the shell root): met.** Two more fell out of the
+  consolidation. **Cond 4 (Y-band collapse): met.** The per-pane content-band branches collapsed to
+  one `chrome_routed_leaf_at` then `chrome_click` (`6cbc6d7`). **Cond 3 (one a11y tree): met.** The
+  chrome walk skips all five folded-pane wrappers, each projecting once through its frame-tree, the
+  list panes gaining a rich `list_pane_a11y_tree` (actionable buttons routed to their DOM nodes,
+  labels, bounds) so they could leave the chrome walk (`4626863`, `5943157`). **Cond 2 (one focus
+  ring): the remaining Phase 1 work, net-new.** No Tab navigation or focus-ring render exists today
+  (Tab is only the omnibar ghost-accept). Adjacent fixes this pass: scrollbar and folded a11y
+  bounds at absolute coords (taffy locations are parent-relative, so a single fragment rect is only
+  the offset within its parent; `208ac13`), the command palette centred over the orrery rect's
+  insets so it clears the side panes (`4cda3a3`), and the cross-repo stylo dep unblocked (mere's
+  `[patch.crates-io]` synced to serval main's `8bde0e96`, the lock advanced to serval main
+  `39cb5b86`; `fdead82`). Open follow-ups: orrery node labels stack over the palette (z-order;
+  chrome should layer above the `orrery_element`), and scroll is laggy (re-rasterize-on-scroll).
