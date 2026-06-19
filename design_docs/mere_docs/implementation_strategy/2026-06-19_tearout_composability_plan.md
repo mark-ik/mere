@@ -4,16 +4,13 @@
 **Status**: Planned. The live continuation of the now-completed, archived
 [window_composition_plan](../../archive_docs/2026-06-19_completed_plans/2026-06-11_window_composition_plan.md).
 That plan's enabling move (P1, the pooled orrery authorities) is **banked and
-load-bearing**; its P2 per-pane *input* tail **migrated into the
-[unified_document_host_plan](2026-06-17_unified_document_host_plan.md)** (the one
-shell document + shell hit-test). This plan owns what remains of the host
-**interact** stage: the per-pane focus/active-session decoupling, the
-external-texture-input bridge (now narrowed to genuinely external content), and the
-tear-out + cross-graph composability gestures. **It rides the unified document model**
-(one shell document, shell hit-test, DOM node-cards, orrery-as-element; Path A), so its
-phases are sequenced *after* unified Phase 2, and several shrink from "build input
-plumbing" to "consume the shell hit-test" (see Relationship to the unified document
-model).
+load-bearing**, and **C1 (the per-pane focus / active-session decoupling) shipped
+2026-06-14** as the pane-as-unit refactor (see C1). This plan owns what remains of the
+host **interact** stage: the external-texture-input bridge (narrowed to genuinely
+external content) and the tear-out + cross-graph composability gestures. **The later
+phases ride the unified document model** (one shell document, shell hit-test, DOM
+node-cards, orrery-as-element; Path A) and are sequenced *after* unified Phase 2 (see
+Relationship to the unified document model).
 **Code**: `crates/meerkat/`, `crates/orrery/`, `crates/forme/`, `crates/shell/frame/`.
 
 Cross-refs:
@@ -49,8 +46,11 @@ Code-checked against the tree, not the prior log:
   render + wheel/hover live.
 - **frame_ops split**: 505 LOC across nine modules (the old 2.7k-LOC ceiling risk is
   closed).
-- **Partial focus/session decoupling**: `session_for_graph` (session_ops.rs:86),
-  `retag_graph_bound_from` (scoped switch, layout.rs:261), `dedupe_graph_panes`.
+- **C1 focus/session decoupling — done** (pane-as-unit 1/5-5/5, commits
+  `9876110`..`7f6671d`, 2026-06-14): `focus_pane_graph` (lightweight focus-follows-click,
+  session_ops.rs:111), per-pane `save_session`, scoped switch re-point
+  (`retag_graph_bound_from`, layout.rs:261), display/binding off the focused pane,
+  `session_for_graph` (session_ops.rs:86). Regression test added 2026-06-19.
 
 ## Relationship to the unified document model
 
@@ -64,39 +64,52 @@ substrate under this plan, mostly in its favor:
   The resolution key is unchanged (a pane resolves to a pooled orrery by `graph_id`);
   the substrate is DOM, and "which pane is under the cursor" is answered by the shell
   hit-test, not hand-summed rects.
-- **C1 and C2 are largely *delivered*, not built.** Phase 2a (landed) routes orrery
-  presses through the shell hit-test; Path A makes node-cards DOM. See each phase.
-- **Sequencing dependency.** C1/C2 ride unified Phase 2 (partly shipped); sequence this
-  plan after it, not parallel.
+- **C1 is done; C2 is narrowed.** C1 (focus/session decoupling) shipped as the
+  pane-as-unit refactor using meerkat's own `orrery_pane_at` leaf hit-test (not the
+  shell hit-test); Path A's DOM node-cards narrow C2. See each phase.
+- **Sequencing dependency.** C2-C5 ride unified Phase 2 (partly shipped); sequence the
+  later phases after it. (C1 shipped already, on meerkat's own hit-test.)
 - **Contingent on Path A.** The above assumes Path A (DOM node-cards), which Phase 2a
   landed on. Under Path B (orrery stays a scene-surface compositor), C2's bridge would
-  expand to the orrery itself and C1's hit-test convergence would weaken.
+  expand to the orrery itself.
 - **Open integration point between the two plans: N orrery elements.** Unified Phase 2
-  makes *the* orrery one `<orrery>`-style element. C1's side-by-side graph panes need
-  that generalized to **one orrery element per visible graph pane**, each resolving to
-  its pooled orrery and taking input via the shell hit-test. Neither plan owns this
-  yet; it is where C1 meets unified Phase 2.
+  makes *the* orrery one `<orrery>`-style element. Today the side-by-side graph panes
+  work on meerkat's leaf-rect hit-test (`orrery_pane_at`); when the orrery becomes a DOM
+  element, that must generalize to **one orrery element per visible graph pane**, each
+  resolving to its pooled orrery and taking input via the shell hit-test. Neither plan
+  owns that migration yet.
 
-## C1 — Per-pane focus / active-session decoupling (the P2 input tail)
+## C1 — Per-pane focus / active-session decoupling — DONE (2026-06-14)
 
-The remaining gap: there is **no `focused_pane`** (focus is still the window-level
-`focused_graph`, session_ops.rs:460-462), and a session switch still clears the
-runtime caches (`pages` / `scrying` / `textures`, session_ops.rs:505-513), which is
-wrong for pinned panes coexisting. Build: a per-window `focused_pane` (which pane has
-input focus); per-pane pointer dispatch (click the pane at the cursor sets
-`focused_pane`; nav / save resolve through its `graph_id` via `session_for_graph`);
-stop clearing graph-coexisting caches on a focus change (only on a real session
-swap). **The hard part is delivered by the unified model:** Phase 2a (landed) already
-routes an orrery press through the shell hit-test, so "which pane / orrery element is
-under the cursor" (the old multi-orrery soft-spot) falls out of the shell hit-test
-rather than bespoke routing. What is left here is the `focused_pane` state, session
-resolution via `session_for_graph`, and not clearing caches on focus changes.
-**Integration point:** this needs the unified `<orrery>` element generalized to one
-instance per visible graph pane (see Relationship to the unified document model). Spec:
-the archived plan's 2026-06-14 five-increment scoping note (increments 2/4/5 remain).
+**Shipped as the pane-as-unit refactor** (commits `9876110`..`7f6671d`, the 1/5-5/5
+series + scoping doc `1916f73`). The audit that scoped this plan was stale: it grepped
+for a `focused_pane` field that was never the chosen design. The realized design keys
+focus on **`focused_graph` + `focus_pane_graph`**, not a separate field:
 
-Done when: clicking a second graph-pane (an `OpenGraphBeside` pane) navigates and
-saves it independently, with no re-point of the first pane and no cache clobber.
+- `focus_pane_graph(graph_id)` (session_ops.rs:111) is the lightweight focus-follows-
+  click: it sets `focused_graph` and re-keys `active_session_id` / `session_dir` to that
+  graph's session, and does **not** reload the graph, clear caches, or re-point the frame
+  layout (unlike `switch_session`).
+- Wired into the orrery press via `orrery_pane_at` (pane_geom.rs:23, the Orrery leaf
+  under the cursor), so a press on a second graph-pane focuses it and the pointer /
+  context menu / selection then act on it (input.rs:345).
+- `save_session` resolves the focused pane's session (1/5); the switch path re-points
+  only the outgoing graph's panes via `retag_graph_bound_from` (3/5); display / binding
+  re-key off the focused pane (4/5); a second graph-pane reloads on restart.
+
+Verified 2026-06-19: meerkat builds, 64 lib / 94 bin tests green, plus a new regression
+test `focus_pane_graph_moves_focus_without_a_switch_or_clobber` (agent_harness.rs) that
+locks the contract (focus + active-session re-key; both graphs stay pooled — no reload,
+no clobber).
+
+Note vs the unified model: this was done with meerkat's own `orrery_pane_at` leaf-rect
+hit-test, *complementary to* (not dependent on) the unified shell hit-test. When the
+orrery fully becomes a DOM element (unified Phase 2 cond 1), focus-follows-click migrates
+onto the shell hit-test (the N-orrery-elements integration point above).
+
+Done: clicking a second graph-pane navigates + saves it independently, with no re-point
+of the first pane and no cache clobber. Verified by the regression test + the
+pane-as-unit series.
 
 ## C2 — External-texture-input bridge (the P2-companion lynchpin)
 
@@ -184,3 +197,9 @@ than as a separate extraction.
   C2 to genuinely external content (node-card interactivity is delivered by unified
   Path A); recorded the N-orrery-elements integration point, the Path A contingency,
   and the sequencing dependency; noted the deferred camera as eased by orrery-as-element.
+- **2026-06-19** — **C1 verified already done** and regression-tested. Doing C1 surfaced
+  that it shipped 2026-06-14 as the pane-as-unit 1/5-5/5 series (`focus_pane_graph` +
+  `focused_graph`, not a `focused_pane` field — the audit grepped the wrong symbol).
+  meerkat builds + tests green; added
+  `focus_pane_graph_moves_focus_without_a_switch_or_clobber`. Reframed C1 to DONE; the
+  live forward scope is now C2-C5 + the deferred camera.

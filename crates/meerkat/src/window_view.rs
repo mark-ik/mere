@@ -289,10 +289,17 @@ pub(crate) struct OrreryCard {
     pub(crate) url: String,
     pub(crate) x: f32,
     pub(crate) y: f32,
-    /// The node's render color (hex), from `Orrery::node_color` (state + selection).
+    /// The node's activation-state color (hex), from `Orrery::node_state_color` (no
+    /// selection override — selection shows as a ring + lift on the face instead).
     pub(crate) color: String,
-    /// The node's favicon as a `data:image/bmp;base64,...` URI, or `None`. The card
-    /// renders it as a leading `<img>` (serval decodes the data URI). (Phase 2.)
+    /// Whether the node is selected: the face gets a ring + slight scale-lift, distinct
+    /// from the focus ring, so selection leaves the color channel free. (P0 selection.)
+    pub(crate) selected: bool,
+    /// The face's `border-radius` for the node's content-type silhouette (square
+    /// document / rounded menu `9px` / circle feed `50%`). (P0 shape.)
+    pub(crate) radius: &'static str,
+    /// The node's favicon as a `data:` image URI, or `None`. It fills the card face
+    /// (painted over the state color, clipped to the silhouette). (P0 favicon-as-face.)
     pub(crate) favicon: Option<String>,
 }
 
@@ -438,53 +445,63 @@ fn shell_view(s: &ShellState) -> ShellView {
 /// (the external-texture-element compose). (cond 5.)
 pub(crate) const ORRERY_SCENE_KEY: u64 = 0xF0F0_0000_0000_0001;
 
+/// One orrery node card: a fixed-footprint square "face" carrying the node's
+/// activation-state color (and favicon, when present) shaped by content type, with the
+/// label beside it. Selection rings + lifts the face, distinct from the focus ring the
+/// `focusable` wrapper draws; the card click-selects its node through the shell hit-test
+/// (the two-hit-test's DOM half). The object anatomy mirrors the in-scene gnode the
+/// secondary panes still draw. (Node representation P0.)
+fn node_card_view(c: &OrreryCard) -> ShellView {
+    // The face footprint (px), matching the gnode's 36px square + gyre's NODE_HALF collider.
+    const FACE: f32 = 36.0;
+    let half = FACE / 2.0;
+    // Center the face on the node's world position (the snapshot gives the center).
+    let (cx, cy) = (c.x - half, c.y - half);
+    // Selection: a ring + a slight scale-lift about the face center (so the world grab
+    // point stays put), distinct from the focus ring; else a base depth shadow.
+    let (face_shadow, face_lift) = if c.selected {
+        ("box-shadow:0 0 0 2px #ffffff,0 2px 7px rgba(0,0,0,0.55);", "transform:scale(1.14);")
+    } else {
+        ("box-shadow:0 1px 3px rgba(0,0,0,0.45);", "")
+    };
+    let face_style = format!(
+        "width:{FACE}px;height:{FACE}px;flex:none;box-sizing:border-box;\
+         background-color:{};border-radius:{};overflow:hidden;{face_shadow}{face_lift}",
+        c.color, c.radius
+    );
+    // The favicon fills the face (clipped to the silhouette by overflow + radius), painted
+    // over the state color; transparency shows the color through.
+    let favicon = c.favicon.as_ref().map(|uri| {
+        el::<_, ShellState, ()>("img", ())
+            .attr("src", uri.clone())
+            .attr("style", "width:100%;height:100%;display:block")
+    });
+    let face = el::<_, ShellState, ()>("div", favicon)
+        .attr("class", "node-face")
+        .attr("style", face_style);
+    let label = el::<_, ShellState, ()>("span", c.label.clone()).attr(
+        "style",
+        "margin-left:6px;color:#d8deea;font-size:14px;font-weight:500;white-space:nowrap",
+    );
+    let url = c.url.clone();
+    Box::new(focusable(on_click(
+        el::<_, ShellState, ()>("div", (face, label))
+            .attr("class", "node-card")
+            .attr(
+                "style",
+                format!("position:absolute;transform:translate({cx}px,{cy}px);display:flex;align-items:center"),
+            ),
+        move |s: &mut ShellState, _: PointerClick| s.orrery_card_selects.push(url.clone()),
+    )))
+}
+
 /// The orrery element: a positioned container whose node cards are `position:absolute`
 /// + `transform: translate(...)` DOM placed by gyre's world positions (the cards both
 /// paint and hit-test where the transform puts them). Empty until the host snapshots
 /// the focused orrery; the underlay (edges + demoted dots) joins in (ii). The rect is a
 /// placeholder until the frame tree drives the container layout (iii). (Phase 2.)
 fn orrery_element(render: &OrreryRender) -> ShellView {
-    let card_views: Vec<ShellView> = render
-        .cards
-        .iter()
-        .map(|c| {
-            let style = format!(
-                "position:absolute;transform:translate({}px,{}px);\
-                 background-color:{};color:#fff;padding:2px 6px;border-radius:4px;\
-                 font-size:11px;font-weight:500;white-space:nowrap;\
-                 box-shadow:0 1px 3px rgba(0,0,0,0.45)",
-                c.x, c.y, c.color
-            );
-            // A favicon, when the node has one, renders as a leading <img> (serval decodes the
-            // data URI); otherwise the chip is just the label. The card is `focusable` (joins
-            // the Phase 1 ring + Tab order, cond 4) and click-selects its node through the shell
-            // hit-test (the two-hit-test's DOM half, cond 3). (Phase 2.)
-            let url = c.url.clone();
-            match &c.favicon {
-                Some(uri) => Box::new(focusable(on_click(
-                    el::<_, ShellState, ()>(
-                        "div",
-                        (
-                            el::<_, ShellState, ()>("img", ()).attr("src", uri.clone()).attr(
-                                "style",
-                                "width:13px;height:13px;vertical-align:-2px;margin-right:4px",
-                            ),
-                            el::<_, ShellState, ()>("span", c.label.clone()),
-                        ),
-                    )
-                    .attr("class", "node-card")
-                    .attr("style", style),
-                    move |s: &mut ShellState, _: PointerClick| s.orrery_card_selects.push(url.clone()),
-                ))) as ShellView,
-                None => Box::new(focusable(on_click(
-                    el::<_, ShellState, ()>("div", c.label.clone())
-                        .attr("class", "node-card")
-                        .attr("style", style),
-                    move |s: &mut ShellState, _: PointerClick| s.orrery_card_selects.push(url.clone()),
-                ))) as ShellView,
-            }
-        })
-        .collect();
+    let card_views: Vec<ShellView> = render.cards.iter().map(node_card_view).collect();
     let [x0, y0, x1, y1] = render.rect;
     let (pw, ph) = ((x1 - x0).max(1.0), (y1 - y0).max(1.0));
     // The orrery scene (gyre edges / backdrop / demoted dots), which the host rasterizes to a

@@ -527,6 +527,36 @@ mod tests {
     }
 
     #[test]
+    fn focus_pane_graph_moves_focus_without_a_switch_or_clobber() {
+        // C1 (pane-as-unit): focus-follows-click is a *pointer* move, not a session
+        // switch. It re-keys the focused graph + active session so nav and save follow
+        // the clicked pane, but leaves both graphs live in the pool — no reload, no
+        // cache clear, no frame re-point (unlike `switch_session`). (Tear-out C1.)
+        let mut app = test_app();
+        let a_session = app.shared.session.active_session_id;
+        let a_graph = app.view().focused_graph;
+
+        // A second graph, switched to: focus is now on B, A parked but still pooled.
+        let b_session = app.create_session();
+        let b_graph = app.view().focused_graph;
+        assert_ne!(a_graph, b_graph, "the second session is its own graph");
+        assert_eq!(app.shared.session.active_session_id, b_session);
+
+        // Focus the first graph's pane — the lightweight focus-follows-click path.
+        app.ctx().focus_pane_graph(a_graph);
+
+        assert_eq!(app.view().focused_graph, a_graph, "focus moved to the clicked pane's graph");
+        assert_eq!(
+            app.shared.session.active_session_id, a_session,
+            "active session re-keyed to the focused pane, so nav + save target it"
+        );
+        assert!(
+            app.orreries.contains_key(&a_graph) && app.orreries.contains_key(&b_graph),
+            "both graphs stay live in the pool — focus is a pointer, not a reload or a clobber"
+        );
+    }
+
+    #[test]
     fn steward_surfaces_the_live_graph_count() {
         let mut app = test_app();
         app.create_session(); // seed + the new graph = 2 live in the pool

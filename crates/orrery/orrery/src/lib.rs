@@ -783,6 +783,30 @@ impl Orrery {
         }
     }
 
+    /// A node's activation-state color WITHOUT the selection override — green open /
+    /// red closed / blue idle. The card form colors its face with this and shows
+    /// selection as a ring + lift instead, so the color channel stays free to carry
+    /// activation state. The in-scene tile path still uses [`node_color`](Self::node_color).
+    pub fn node_state_color(&self, key: NodeKey) -> &'static str {
+        match self.node_states.get(&key) {
+            Some(NodeState::Open) => "#5fb878",
+            Some(NodeState::Closed) => "#cc5a54",
+            _ => "#5a8fc8",
+        }
+    }
+
+    /// Whether `key` is in the current selection set, so a node's representation can show
+    /// selection through geometry (a ring + lift) rather than recoloring its face.
+    pub fn node_selected(&self, key: NodeKey) -> bool {
+        self.selected.contains(&key)
+    }
+
+    /// A node's content-type silhouette (square document / rounded menu / circle feed),
+    /// for the card form to shape its face. `Square` (the default) for an unmapped node.
+    pub fn node_shape(&self, key: NodeKey) -> NodeShape {
+        self.node_shapes.get(&key).copied().unwrap_or_default()
+    }
+
     /// Render the on-screen nodes as host DOM cards instead of in-scene gnodes: the
     /// next [`frame`](Orrery::frame) drops the gnode + favicon layers, keeping edges +
     /// demoted dots as the underlay. The host sets this on the focused orrery (whose
