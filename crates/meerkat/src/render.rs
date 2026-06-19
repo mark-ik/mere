@@ -8,7 +8,7 @@
 use forme::GraphMemberId;
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use netrender::ColorLoad;
-use netrender::external_texture::ExternalTexturePlacement;
+use netrender::external_texture::{ExternalTexturePlacement, SourceAlpha};
 use image::ImageEncoder;
 use crate::serval_render::TextCursor;
 use serval_layout::ScrollOffsets;
@@ -1403,7 +1403,10 @@ impl WindowCtx<'_> {
                     format,
                     w,
                     h,
-                    ExternalTexturePlacement::new(*dest),
+                    // The imported WebView texture (WebView2 composition capture)
+                    // is premultiplied-alpha; blend it as such so transparent
+                    // regions composite correctly (opaque pages are unaffected).
+                    ExternalTexturePlacement::new(*dest).with_alpha(SourceAlpha::Premultiplied),
                 );
             }
         }
