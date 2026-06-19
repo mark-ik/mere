@@ -474,6 +474,7 @@ impl WindowCtx<'_> {
                     };
                     Some(OrreryCard {
                         label,
+                        url: node.url().to_string(),
                         x,
                         y,
                         color: orrery.node_color(key).to_string(),

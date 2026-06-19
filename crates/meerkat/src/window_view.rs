@@ -27,7 +27,10 @@ use platen::Workbench;
 use serval_scripted_dom::ScriptedDom;
 use serval_winit_host::WindowSurface;
 use winit::window::CursorIcon;
-use xilem_serval::{AnyView, Modifiers, ServalAppRunner, ServalCtx, ServalElement, el, lens};
+use xilem_serval::{
+    AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, el, focusable,
+    lens, on_click,
+};
 
 use super::{CachedTile, ContentPane, ResizeDrag};
 use crate::list_pane::{list_pane_view, ListPaneState, ListView, PaneItem};
@@ -282,6 +285,8 @@ pub(crate) struct WindowView {
 #[derive(PartialEq)]
 pub(crate) struct OrreryCard {
     pub(crate) label: String,
+    /// The node's URL, so a card click selects it (the two-hit-test's DOM half). (Phase 2.)
+    pub(crate) url: String,
     pub(crate) x: f32,
     pub(crate) y: f32,
     /// The node's render color (hex), from `Orrery::node_color` (state + selection).
@@ -320,6 +325,9 @@ pub(crate) struct ShellState {
     /// lensed `list_pane_view` subtree when its matching rect is `Some`. (Phase 1, step 2.)
     pub(crate) panes: [ListPaneState; 4],
     pub(crate) pane_rects: [Option<[f32; 4]>; 4],
+    /// URLs queued by orrery card clicks (the two-hit-test's DOM half): a card press dispatches
+    /// here through the shell hit-test, and the host drains + selects them. (Phase 2.)
+    pub(crate) orrery_card_selects: Vec<String>,
 }
 
 /// Index into [`ShellState::panes`] / `pane_rects` for the four folded list panes; the
@@ -437,10 +445,13 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
                  box-shadow:0 1px 3px rgba(0,0,0,0.45)",
                 c.x, c.y, c.color
             );
-            // A favicon, when the node has one, renders as a leading <img> (serval
-            // decodes the data URI); otherwise the chip is just the label. (Phase 2.)
+            // A favicon, when the node has one, renders as a leading <img> (serval decodes the
+            // data URI); otherwise the chip is just the label. The card is `focusable` (joins
+            // the Phase 1 ring + Tab order, cond 4) and click-selects its node through the shell
+            // hit-test (the two-hit-test's DOM half, cond 3). (Phase 2.)
+            let url = c.url.clone();
             match &c.favicon {
-                Some(uri) => Box::new(
+                Some(uri) => Box::new(focusable(on_click(
                     el::<_, ShellState, ()>(
                         "div",
                         (
@@ -453,12 +464,14 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
                     )
                     .attr("class", "node-card")
                     .attr("style", style),
-                ) as ShellView,
-                None => Box::new(
+                    move |s: &mut ShellState, _: PointerClick| s.orrery_card_selects.push(url.clone()),
+                ))) as ShellView,
+                None => Box::new(focusable(on_click(
                     el::<_, ShellState, ()>("div", c.label.clone())
                         .attr("class", "node-card")
                         .attr("style", style),
-                ) as ShellView,
+                    move |s: &mut ShellState, _: PointerClick| s.orrery_card_selects.push(url.clone()),
+                ))) as ShellView,
             }
         })
         .collect();
@@ -491,6 +504,7 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             roster_rect: None,
             panes: std::array::from_fn(|_| ListPaneState::default()),
             pane_rects: [None; 4],
+            orrery_card_selects: Vec::new(),
         },
     )
 }
@@ -522,6 +536,14 @@ impl WindowView {
     /// per-frame view re-run). (Orrery-as-element — Phase 2.)
     pub(crate) fn orrery_render(&self) -> &OrreryRender {
         &self.runner.state().orrery
+    }
+
+    /// Drain the URLs the orrery card click handlers queued through the shell runner's
+    /// dispatch (the two-hit-test's DOM half), for the host to select. (Phase 2.)
+    pub(crate) fn take_orrery_card_selects(&mut self) -> Vec<String> {
+        let mut out = Vec::new();
+        self.runner.update(|s| out = std::mem::take(&mut s.orrery_card_selects));
+        out
     }
 
     /// Fold the roster pane into the shell document: replace its rows + window rect (or

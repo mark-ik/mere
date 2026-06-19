@@ -345,6 +345,15 @@ impl WindowCtx<'_> {
                         if let Some((gid, _)) = self.orrery_pane_at(x, y) {
                             self.focus_pane_graph(gid);
                         }
+                        // The two-hit-test (cond 3): a left press over an orrery node-card
+                        // dispatches in the shell document, where the card's on_click selects +
+                        // focuses its node (riding serval's transform-aware hit-test). A press
+                        // anywhere else in the orrery falls through to gyre's pan / select /
+                        // drag below. (Phase 2.)
+                        if button == MouseButton::Left && self.point_over_orrery_card(x, y) {
+                            self.chrome_click(x, y);
+                            return;
+                        }
                         if button == MouseButton::Right {
                             self.open_context_menu_at(x, y);
                         } else if let Some(b) = orrery_button {
@@ -704,8 +713,40 @@ impl WindowCtx<'_> {
         self.drain_physics_toggle();
         self.drain_roster_intents();
         self.drain_list_pane_activations();
+        self.drain_orrery_card_selects();
         self.sync_settings();
         self.sync_orrery();
+    }
+
+    /// Apply the node selections the orrery card click handlers queued through the shell
+    /// runner's dispatch (the two-hit-test's DOM half). A card press routes here through
+    /// `chrome_click` -> `chrome_activate`, and Enter/Space on a focused card routes here
+    /// through `dispatch_key`; both select the card's node. (Phase 2.)
+    pub(super) fn drain_orrery_card_selects(&mut self) {
+        for url in self.view.take_orrery_card_selects() {
+            self.orrery_mut().select_by_url(&url);
+        }
+    }
+
+    /// Whether `(x, y)` lands on an orrery node-card in the shell document. The cards are
+    /// `position:absolute; transform:translate(...)`, so this rides the shell hit-test
+    /// (serval's transform-aware `walk_for_hit`) and walks the hit node's ancestors for the
+    /// card class. The two-hit-test's gate: `true` routes the press through `chrome_click`
+    /// (the card selects + focuses its node), `false` falls through to gyre. (Phase 2.)
+    fn point_over_orrery_card(&self, x: f32, y: f32) -> bool {
+        let Some(session) = self.view.chrome_session.as_ref() else { return false };
+        let dom = self.view.dom.borrow();
+        let offsets = ScrollOffsets::<NodeId>::default();
+        let Some(mut node) = session.hit_test(&dom, x, y, &offsets) else { return false };
+        loop {
+            if crate::has_class(&dom, node, "node-card") {
+                return true;
+            }
+            match dom.parent(node) {
+                Some(parent) => node = parent,
+                None => return false,
+            }
+        }
     }
 
     /// Apply the activation keys the folded list panes' button handlers queued. The
