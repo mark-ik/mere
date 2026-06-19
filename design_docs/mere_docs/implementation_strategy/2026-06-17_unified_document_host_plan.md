@@ -1,9 +1,8 @@
 # Unified Document Host Plan
 
 Status: **partially shipped**. The orrery-as-element slice landed (Progress, 2026-06-18);
-Phase 1's document consolidation is 3 of 4 done-conditions (panes-in-root, Y-band collapse, one
-a11y tree done; one focus ring remains, Progress 2026-06-19); Phase 2's custom-layout-element /
-hit-test / focus / scene-teardown remain, and a cross-plan consolidation pass (with the node-representation and
+Phase 1's document consolidation is complete (all 4 done-conditions, Progress 2026-06-19); Phase
+2's custom-layout-element / hit-test / focus / scene-teardown remain, and a cross-plan consolidation pass (with the node-representation and
 field plans) is underway. A code-verified argument that `xilem_serval`'s role in
 meerkat should grow from "reactive toolkit for the chrome strip" to "host of the
 whole document shell", plus the staged path to get there and the one product
@@ -393,3 +392,18 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   `[patch.crates-io]` synced to serval main's `8bde0e96`, the lock advanced to serval main
   `39cb5b86`; `fdead82`). Open follow-ups: orrery node labels stack over the palette (z-order;
   chrome should layer above the `orrery_element`), and scroll is laggy (re-rasterize-on-scroll).
+
+- **2026-06-19 (Phase 1 complete, cond 2: one focus ring).** Focus ring + Tab order landed
+  (`56f0e34`), the last done-condition. The engine already provides Tab traversal
+  (`focus_traverse`) and Enter/Space activation over its focusable set, so the gaps were narrow:
+  the folded-pane controls were `on_click`-only (not focusable) and nothing rendered a ring.
+  Wrapped the roster rows + list-pane buttons in `focusable` (Tab order); routed keys to the
+  runner's `dispatch_key` when a non-field focusable holds focus, so Tab continues past the
+  chrome into the panes (it previously fell to the graph key handler and stalled); drew a
+  scroll-aware focus-ring outline off the cursor's node (which the host builds from
+  `runner.focus()`); and drained Enter/Space's synthesized-click intent so the focused control
+  fires (`drain_chrome_intents`, shared with `chrome_activate`). Verified: Tab cycles omnibar to
+  theme to engine buttons with the ring tracking each step, Enter on "Light" switches the theme.
+  **Phase 1's document consolidation is done (all 4 done-conditions).** Phase 2 (the
+  custom-layout `<orrery>` element, the two-hit-test split, scene / edge teardown) remains; the
+  open follow-ups are the labels-over-palette z-order and the laggy scroll.
