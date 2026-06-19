@@ -432,16 +432,18 @@ fn shell_view(s: &ShellState) -> ShellView {
     )
 }
 
+/// The external-texture key for the orrery scene underlay: a reserved high value, disjoint from the
+/// workbench's per-member UUID-low-64 keys. The host rasterizes the gyre scene under it and
+/// composites it at the element's laid-out rect, which `render.rs` enumerates from the document
+/// (the external-texture-element compose). (cond 5.)
+pub(crate) const ORRERY_SCENE_KEY: u64 = 0xF0F0_0000_0000_0001;
+
 /// The orrery element: a positioned container whose node cards are `position:absolute`
 /// + `transform: translate(...)` DOM placed by gyre's world positions (the cards both
 /// paint and hit-test where the transform puts them). Empty until the host snapshots
 /// the focused orrery; the underlay (edges + demoted dots) joins in (ii). The rect is a
 /// placeholder until the frame tree drives the container layout (iii). (Phase 2.)
 fn orrery_element(render: &OrreryRender) -> ShellView {
-    // The external-texture key for the orrery scene underlay (a reserved high value, disjoint from
-    // the workbench's per-member UUID-low-64 keys). The host rasterizes the gyre scene and
-    // composites it at this element's laid-out rect. (cond 5.)
-    const ORRERY_SCENE_KEY: u64 = 0xF0F0_0000_0000_0001;
     let card_views: Vec<ShellView> = render
         .cards
         .iter()

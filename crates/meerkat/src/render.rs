@@ -92,6 +92,40 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
+    /// Enumerate the chrome document's `<external-texture>` elements as `(key, [x0, y0, x1, y1])`
+    /// in viewport px, from the chrome session's retained layout. The host composites each
+    /// element's registered texture (resolved by `key`) at its laid-out rect, so an external
+    /// surface's placement comes from the document, not a hardcoded host rect. The
+    /// external-texture-element compose. (cond 5.)
+    fn external_texture_placements(&self) -> Vec<(u64, [f32; 4])> {
+        let Some(session) = self.view.chrome_session.as_ref() else {
+            return Vec::new();
+        };
+        let dom = self.view.dom.borrow();
+        let fragments = session.fragments();
+        let mut origins = std::collections::HashMap::new();
+        crate::serval_render::accumulate_origins(&dom, fragments, dom.document(), (0.0, 0.0), &mut origins);
+        let mut out = Vec::new();
+        let mut stack = vec![dom.document()];
+        while let Some(node) = stack.pop() {
+            if dom.element_name(node).map(|q| q.local.as_ref()) == Some("external-texture") {
+                if let (Some(&(x, y)), Some(rect)) = (origins.get(&node), fragments.rect_of(node)) {
+                    if let Some(key) = dom
+                        .attributes(node)
+                        .find(|a| a.name.local.as_ref() == "key")
+                        .and_then(|a| a.value.parse::<u64>().ok())
+                    {
+                        out.push((key, [x, y, x + rect.size.width, y + rect.size.height]));
+                    }
+                }
+            }
+            for child in dom.dom_children(node) {
+                stack.push(child);
+            }
+        }
+        out
+    }
+
     /// Snapshot the four folded list panes into the shell document for this frame: build
     /// each open pane's items and set its slot (closing a pane that just went away). The
     /// per-frame call before the shell render, the ListPane analogue of `set_roster` —
@@ -478,7 +512,15 @@ impl WindowCtx<'_> {
                         url: node.url().to_string(),
                         x,
                         y,
-                        color: orrery.node_color(key).to_string(),
+                        // State color only; selection shows as a ring + lift on the card face.
+                        color: orrery.node_state_color(key).to_string(),
+                        selected: orrery.node_selected(key),
+                        // Content-type silhouette as the face's border-radius.
+                        radius: match orrery.node_shape(key) {
+                            orrery::NodeShape::Square => "0",
+                            orrery::NodeShape::Rounded => "9px",
+                            orrery::NodeShape::Circle => "50%",
+                        },
                         favicon: node.favicon_rgba.as_ref().and_then(|rgba| {
                             favicon_data_uri(rgba, node.favicon_width, node.favicon_height)
                         }),
@@ -566,6 +608,10 @@ impl WindowCtx<'_> {
             &chrome_scroll,
         );
         chrome_us = chrome_t.elapsed().as_micros();
+        // The chrome document's `<external-texture>` elements + their laid-out rects, enumerated
+        // now that the chrome session has been laid out, composited at the compositor pass below
+        // so each external surface's placement comes from the document. (cond 5.)
+        let external_texture_placements = self.external_texture_placements();
 
         // The orrery's per-frame update (node state/shape, resize, recenter, mirror,
         // strategy) and the node-card snapshot now run *above* the chrome render, so the
@@ -1185,14 +1231,26 @@ impl WindowCtx<'_> {
         // viewport is the full surface). Then each content card floats over it, and
         // the transparent-cleared chrome composites over the whole window — toolbar
         // + dropdown on top, the rest letting the content through.
-        core.renderer().compose_external_texture(
-            &orrery_view,
-            &target_view,
-            format,
-            w,
-            h,
-            ExternalTexturePlacement::new(orrery_rect),
-        );
+        // Composite each chrome-document `<external-texture>` element's registered texture at its
+        // laid-out rect: the placement comes from the document, not a hardcoded host rect. The
+        // orrery scene is the first such element (its key is `ORRERY_SCENE_KEY`); secondaries /
+        // workbench / scrying join as they become document elements and register their views. (cond 5.)
+        for &(key, rect) in &external_texture_placements {
+            let view = match key {
+                crate::window_view::ORRERY_SCENE_KEY => Some(&orrery_view),
+                _ => None,
+            };
+            if let Some(view) = view {
+                core.renderer().compose_external_texture(
+                    view,
+                    &target_view,
+                    format,
+                    w,
+                    h,
+                    ExternalTexturePlacement::new(rect),
+                );
+            }
+        }
         // Composite each secondary graph-pane's orrery into its own leaf. (Window
         // composition P2 — two graphs side by side.)
         for (_tex, view, rect) in &secondary_textures {
