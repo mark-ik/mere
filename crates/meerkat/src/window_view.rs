@@ -28,8 +28,8 @@ use serval_scripted_dom::ScriptedDom;
 use serval_winit_host::WindowSurface;
 use winit::window::CursorIcon;
 use xilem_serval::{
-    AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, el, focusable,
-    lens, on_click,
+    AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, el, external_texture,
+    focusable, lens, on_click,
 };
 
 use super::{CachedTile, ContentPane, ResizeDrag};
@@ -434,6 +434,10 @@ fn shell_view(s: &ShellState) -> ShellView {
 /// the focused orrery; the underlay (edges + demoted dots) joins in (ii). The rect is a
 /// placeholder until the frame tree drives the container layout (iii). (Phase 2.)
 fn orrery_element(render: &OrreryRender) -> ShellView {
+    // The external-texture key for the orrery scene underlay (a reserved high value, disjoint from
+    // the workbench's per-member UUID-low-64 keys). The host rasterizes the gyre scene and
+    // composites it at this element's laid-out rect. (cond 5.)
+    const ORRERY_SCENE_KEY: u64 = 0xF0F0_0000_0000_0001;
     let card_views: Vec<ShellView> = render
         .cards
         .iter()
@@ -476,8 +480,20 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
         })
         .collect();
     let [x0, y0, x1, y1] = render.rect;
+    let (pw, ph) = ((x1 - x0).max(1.0), (y1 - y0).max(1.0));
+    // The orrery scene (gyre edges / backdrop / demoted dots), which the host rasterizes to a
+    // texture, sits as an `<external-texture>` underlay in the document so its placement comes from
+    // layout and the cards stack over it via the DOM. First child = painted first = under the
+    // cards. (cond 5: the scene becomes a document element, not a standalone host composite.)
+    let scene: ShellView = Box::new(
+        external_texture::<ShellState, ()>(ORRERY_SCENE_KEY, pw as u32, ph as u32)
+            .attr("class", "orrery-scene")
+            .attr("style", format!("position:absolute;left:0;top:0;width:{pw}px;height:{ph}px")),
+    );
+    let mut children: Vec<ShellView> = vec![scene];
+    children.extend(card_views);
     Box::new(
-        el::<_, ShellState, ()>("div", card_views)
+        el::<_, ShellState, ()>("div", children)
             .attr("class", "orrery")
             .attr(
                 "style",
