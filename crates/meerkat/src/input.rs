@@ -202,38 +202,18 @@ impl WindowCtx<'_> {
                             return;
                         }
                     }
-                    // The roster pane is part of the shell document now: a left press in
-                    // its rect routes through the shell hit-test + dispatch (chrome_click),
-                    // which fires the hit row's on_click; chrome_activate then drains the
-                    // queued intents (drain_roster_intents). (Phase 1.)
-                    if let Some(rrect) = self.roster_leaf_rect() {
-                        if x >= rrect[0] && x < rrect[2] && y >= rrect[1] && y < rrect[3] {
-                            if button == MouseButton::Left {
-                                self.chrome_click(x, y);
-                            }
-                            return;
+                    // Every folded pane (roster, the four list panes, comms) lives in the one
+                    // shell document, so a left press in any of them routes through the single
+                    // shell hit-test + dispatch (chrome_click); chrome_activate then drains
+                    // whatever the hit row/button queued (roster selections, apparatus theme /
+                    // engine / physics, trail recover, comms). The gloss is the one pane with
+                    // bespoke handling (it focuses minimap nodes itself), so it stays its own
+                    // branch below. (Phase 1, step 3 — Y-band collapse.)
+                    if self.chrome_routed_leaf_at(x, y) {
+                        if button == MouseButton::Left {
+                            self.chrome_click(x, y);
                         }
-                    }
-                    // The apparatus + trail panes are in the shell document now: a left
-                    // press in either's rect routes through the shell hit-test + dispatch
-                    // (chrome_click), firing a hit button's on_click; chrome_activate then
-                    // drains the queued activations (drain_list_pane_activations) — apparatus
-                    // theme / engine / physics, trail recover. (Phase 1, step 2.)
-                    if let Some(arect) = self.apparatus_leaf_rect() {
-                        if x >= arect[0] && x < arect[2] && y >= arect[1] && y < arect[3] {
-                            if button == MouseButton::Left {
-                                self.chrome_click(x, y);
-                            }
-                            return;
-                        }
-                    }
-                    if let Some(trect) = self.trail_leaf_rect() {
-                        if x >= trect[0] && x < trect[2] && y >= trect[1] && y < trect[3] {
-                            if button == MouseButton::Left {
-                                self.chrome_click(x, y);
-                            }
-                            return;
-                        }
+                        return;
                     }
                     // The gloss pane consumes the press: a left click on a minimap
                     // node focuses it (shared selection with the orrery). (Gloss.)
@@ -253,17 +233,6 @@ impl WindowCtx<'_> {
                                         self.view.request_redraw();
                                     }
                                 }
-                            }
-                            return;
-                        }
-                    }
-                    // The comms pane is chrome-rendered into its leaf, so route a
-                    // press there to the chrome — its hit-test fires the comms close
-                    // X, conversation rows, and compose-field focus. (Comms pane.)
-                    if let Some(cr) = self.comms_leaf_rect() {
-                        if x >= cr[0] && x < cr[2] && y >= cr[1] && y < cr[3] {
-                            if button == MouseButton::Left {
-                                self.chrome_click(x, y);
                             }
                             return;
                         }
@@ -645,6 +614,27 @@ impl WindowCtx<'_> {
             .iter()
             .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
             .map(|(m, _)| *m)
+    }
+
+    /// Whether `(x, y)` falls in a folded pane that routes its clicks through the shell
+    /// hit-test (`chrome_click`): the roster, the four list panes, and comms — every pane in
+    /// the shell document except the gloss (which focuses minimap nodes itself). The single
+    /// content-band check that replaced the per-pane rect branches. (Phase 1, step 3.)
+    fn chrome_routed_leaf_at(&self, x: f32, y: f32) -> bool {
+        self.laid_leaves().iter().any(|leaf| {
+            matches!(
+                leaf.content,
+                PaneContent::Roster
+                    | PaneContent::Apparatus
+                    | PaneContent::Steward
+                    | PaneContent::Inspector
+                    | PaneContent::Trail
+                    | PaneContent::Comms
+            ) && x >= leaf.rect[0]
+                && x < leaf.rect[2]
+                && y >= leaf.rect[1]
+                && y < leaf.rect[3]
+        })
     }
 
     /// Hit-test the chrome root at `(x, y)` and dispatch the click (buttons +

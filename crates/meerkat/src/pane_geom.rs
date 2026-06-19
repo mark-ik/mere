@@ -95,14 +95,6 @@ impl WindowCtx<'_> {
             .map(|l| l.rect)
     }
 
-    /// The comms pane's screen rect, if the comms pane is open. (Comms pane.)
-    pub(super) fn comms_leaf_rect(&self) -> Option<[f32; 4]> {
-        self.laid_leaves()
-            .into_iter()
-            .find(|l| matches!(l.content, PaneContent::Comms))
-            .map(|l| l.rect)
-    }
-
     /// The roster pane's screen rect, if the roster is open.
     pub(super) fn roster_leaf_rect(&self) -> Option<[f32; 4]> {
         self.laid_leaves()
@@ -162,22 +154,6 @@ impl WindowCtx<'_> {
             .iter_leaves()
             .find(|(_, c, _)| **c == *content)
             .map(|(id, _, _)| id)
-    }
-
-    /// The apparatus pane's screen rect, if open.
-    pub(super) fn apparatus_leaf_rect(&self) -> Option<[f32; 4]> {
-        self.laid_leaves()
-            .into_iter()
-            .find(|l| matches!(l.content, PaneContent::Apparatus))
-            .map(|l| l.rect)
-    }
-
-    /// The trail pane's screen rect, if open.
-    pub(super) fn trail_leaf_rect(&self) -> Option<[f32; 4]> {
-        self.laid_leaves()
-            .into_iter()
-            .find(|l| matches!(l.content, PaneContent::Trail))
-            .map(|l| l.rect)
     }
 
     /// The frame divider gutter under window point `(x, y)`, as its split path +
