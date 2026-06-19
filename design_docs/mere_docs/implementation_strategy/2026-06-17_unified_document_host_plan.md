@@ -166,6 +166,58 @@ seam. The new engine work is an element whose DOM children are placed by host /
 only replaced elements (`<external-texture>`, output-only), so this is a new element
 kind, scoped in serval's plan.
 
+### Phase 2 design pass (2026-06-19): the engine gap is the transform-aware hit-test
+
+Reading the engine (`serval-layout/box_tree.rs`, `incremental.rs`, the `<external-texture>`
+wiring) against the current `orrery_element` narrows the engine work sharply and questions cond 1.
+
+- **`<external-texture>` is not the template.** It is a *replaced leaf* (`box_tree.rs:145`):
+  the box lays out like `<img>` and paint emits a `DrawExternalTexture` blit, output-only, no
+  children. The orrery cards are a *container's* children, so none of that machinery applies. A
+  true custom-layout element (cond 1) is net-new, not an extension of the replaced path.
+- **The cards are already DOM and paint correctly (cond 2 done).** `orrery_element` is a `<div>`
+  whose children are `position:absolute; transform:translate(gyre.x, gyre.y)`. serval lays them
+  out and the `translate` shifts only the **paint** (the verified `RepaintOnly` transform path),
+  not the box geometry.
+- **The real gap is a transform-blind hit-test.** `IncrementalLayout::hit_test` (`incremental.rs:182`)
+  resolves a point through `ServalLaneView::hit_test`, which reads the **fragment plane**. The
+  fragments hold laid-out (pre-transform) box geometry; the `translate` that moves each card to
+  its gyre position is paint-only and absent there. So a point over a painted card resolves to
+  wherever the card's untransformed box sits, not to the card. That is exactly why the cards are
+  pointer-transparent and the orrery routes input winit -> gyre instead (cond 3 unmet).
+- **Leaner path: cond 3/4 unlock from a transform-aware hit-test alone, no cond 1.** If
+  `ServalLaneView::hit_test` composes each box's resolved paint `transform` into the point test
+  (the paint already knows the translate), the existing host-positioned cards become hit-testable
+  where they paint. The two-hit-test is then: a DOM-card hit dispatches in the document (the host
+  owns the `point -> NodeId` half, `runner.rs:222-223`); a miss (empty canvas, node body, edge)
+  delegates to gyre's `QueryPipeline`. cond 4 follows by wrapping the card view in `focusable`
+  (the Phase 1 ring mechanism); cond 5 reduces the standalone orrery `Scene` + bespoke pointer
+  routing to the scene-underlay paint plus the gyre query.
+- **cond 1 (a real custom-layout `<orrery>` element) is cleanliness, not a payoff gate.** It moves
+  per-frame card placement from the host into an engine element that calls gyre; the semantic +
+  interactive payoff lands without it on the host-positioned div. Recommend deferring cond 1,
+  revisiting only if host-driven transform-setting becomes a perf or correctness problem.
+
+**Engine asks (serval), in leverage order:**
+
+1. **Transform-aware hit-test** (the whole unlock for cond 3/4). `ServalLaneView::hit_test`
+   composes a box's resolved paint `transform` into the point test, and inverse-transforms the
+   local point so inline refinement still works, so transform-positioned children are reachable.
+   The G1 runway item the unified gate already names; this pass confirms it is the *entire* engine
+   gap for the interactive payoff, not a new element kind.
+2. *(deferred)* a custom-layout element kind for cond 1, only if host placement must move engine-side.
+
+**Meerkat consumer asks (this plan), after the engine hit-test lands:**
+
+- An orrery-area press routes through the shell hit-test first; a DOM-card hit dispatches in the
+  document, a miss falls to the existing winit -> gyre path. The 3a Y-band collapse already
+  centralized this, so it is one branch.
+- Wrap the node-card view in `focusable` (cards join the ring + Tab order, cond 4) and make the
+  card a11y nodes actionable (they are already in the one a11y tree as inert divs, like the roster
+  rows were before 3b).
+- Retire the standalone orrery `Scene` + bespoke pointer branch once the gyre query is the sole
+  scene-geometry hit path (cond 5).
+
 Tiles follow-on (either path): workbench tab/divider chrome and content cards.
 The composition spine's working-principles say `platen-view` realizes formes as
 serval flex DOM, the natural vehicle for tile chrome, with `<external-texture>` for
