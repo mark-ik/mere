@@ -79,16 +79,25 @@ fn chrome_direct_text(dom: &ScriptedDom, node: NodeId) -> String {
     name
 }
 
-/// Whether `node` is the roster pane's wrapper (CSS class `roster-pane`). The roster
-/// folds into the shell document, but the frame tree's `roster_a11y_tree` already projects
-/// its rows with actionable ListItem roles, select routes, and bounds, so the chrome walk
-/// skips this subtree to avoid doubling the roster as inert divs. The four list panes are
-/// *not* skipped: their frame-tree a11y is a skeleton, so the chrome walk is their only
-/// item-level source. (Phase 1, step 3b.)
-fn is_roster_wrapper(dom: &ScriptedDom, node: NodeId) -> bool {
+/// The CSS classes of the shell document's folded-pane wrappers — the positioned subtrees
+/// (roster + the four list panes) the frame tree now projects with rich, actionable a11y
+/// (`roster_a11y_tree` / `list_pane_a11y_tree`). The chrome walk skips these so each pane
+/// appears once in the stitched tree, via its frame-tree projection, not doubled as inert
+/// divs here. (Phase 1, step 3b.)
+const FOLDED_PANE_WRAPPERS: &[&str] = &[
+    "roster-pane",
+    "apparatus-pane",
+    "steward-pane",
+    "inspector-pane",
+    "trail-pane",
+];
+
+/// Whether `node` is a folded-pane wrapper the chrome walk should skip (the frame tree owns
+/// its a11y). (Phase 1, step 3b.)
+fn is_folded_pane(dom: &ScriptedDom, node: NodeId) -> bool {
     dom.attributes(node).any(|attr| {
         attr.name.local.as_ref() == "class"
-            && attr.value.split_whitespace().any(|c| c == "roster-pane")
+            && attr.value.split_whitespace().any(|c| FOLDED_PANE_WRAPPERS.contains(&c))
     })
 }
 
@@ -146,7 +155,7 @@ fn build(
 
     let mut children = Vec::new();
     for child in dom.dom_children(node) {
-        if dom.kind(child) == NodeKind::Element && !is_roster_wrapper(dom, child) {
+        if dom.kind(child) == NodeKind::Element && !is_folded_pane(dom, child) {
             children.push(build(dom, fragments, child, origin, out, actionable));
         }
     }

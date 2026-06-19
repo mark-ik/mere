@@ -13,7 +13,8 @@ use std::collections::HashMap;
 use accesskit::{Action, Node, NodeId as AccessNodeId, Role};
 use forme::GraphMemberId;
 use frame::{PaneContent, PaneId};
-use layout_dom_api::LayoutDom;
+use layout_dom_api::{LayoutDom, NodeKind};
+use serval_scripted_dom::NodeId;
 use uxtree::{UxTree, node_id_for_path};
 
 use super::frame_a11y::rect;
@@ -26,18 +27,47 @@ impl WindowCtx<'_> {
         pane_id: PaneId,
         action_routes: &mut HashMap<AccessNodeId, A11yHostAction>,
     ) -> UxTree {
+        use crate::window_view::ShellListPane;
         match content {
             PaneContent::Orrery => mere_orrery::project_graph(self.orrery().graph()),
             PaneContent::Workbench => workbench_domain::project_workbench(&self.view.workbench),
-            PaneContent::Apparatus | PaneContent::System => apparatus_domain::project_skeleton(),
+            PaneContent::Apparatus => self.list_pane_a11y_tree(
+                ShellListPane::Apparatus,
+                "apparatus",
+                self.view.apparatus_scroll,
+                "Apparatus",
+                pane_id,
+                action_routes,
+            ),
             PaneContent::Roster => self.roster_a11y_tree(pane_id, action_routes),
             PaneContent::Gloss => self.gloss_a11y_tree(pane_id),
             PaneContent::Comms => self.comms_a11y_tree(pane_id),
-            PaneContent::Inspector
-            | PaneContent::Trail
-            | PaneContent::Steward
-            | PaneContent::Tile(_)
-            | PaneContent::Custom(_) => {
+            PaneContent::Steward => self.list_pane_a11y_tree(
+                ShellListPane::Steward,
+                "steward",
+                self.view.steward_scroll,
+                "Steward",
+                pane_id,
+                action_routes,
+            ),
+            PaneContent::Inspector => self.list_pane_a11y_tree(
+                ShellListPane::Inspector,
+                "inspector",
+                self.view.inspector_scroll,
+                "Inspector",
+                pane_id,
+                action_routes,
+            ),
+            PaneContent::Trail => self.list_pane_a11y_tree(
+                ShellListPane::Trail,
+                "trail",
+                self.view.trail_scroll,
+                "Trail",
+                pane_id,
+                action_routes,
+            ),
+            // System is not folded into the shell document, so it keeps the skeleton.
+            PaneContent::System | PaneContent::Tile(_) | PaneContent::Custom(_) => {
                 generic_pane_content_tree(&self.view.frame_layout, pane_id, content)
             }
         }
@@ -104,6 +134,80 @@ impl WindowCtx<'_> {
         }
         let mut root_node = Node::new(Role::List);
         root_node.set_label("Roster");
+        root_node.set_children(children);
+        nodes.push((root, root_node));
+        UxTree { root, nodes }
+    }
+
+    /// The a11y subtree for a folded list pane (apparatus / steward / inspector / trail):
+    /// its `ListPaneState` items as nodes. A button item (one carrying an activation key)
+    /// becomes an actionable `Button` routed to its DOM node, so a screen reader fires the
+    /// same click that drains its activation; a text item becomes a `Label`. Geometry + the
+    /// dispatch targets come off the shell session's cached layout (the items are the inner
+    /// root's element children, in order; taffy locations are parent-relative, so absolute
+    /// bounds accumulate ancestor origins, then subtract the pane's scroll). With this rich
+    /// projection the chrome walk skips the pane's subtree, so it appears once. (Phase 1, 3b.)
+    fn list_pane_a11y_tree(
+        &self,
+        which: crate::window_view::ShellListPane,
+        inner_class: &str,
+        scroll: f32,
+        label: &str,
+        pane_id: PaneId,
+        action_routes: &mut HashMap<AccessNodeId, A11yHostAction>,
+    ) -> UxTree {
+        let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, inner_class);
+        let root = node_id_for_path(&root_path);
+        // The item nodes (the inner root's element children, document order) paired with
+        // their absolute bounds, for per-item geometry + the button dispatch target.
+        let item_geom: Vec<(NodeId, Option<[f32; 4]>)> = {
+            let mut out = Vec::new();
+            if let Some(session) = self.view.chrome_session.as_ref() {
+                let frags = session.fragments();
+                let dom = self.view.dom.borrow();
+                let droot = dom.document();
+                let mut origins = HashMap::new();
+                crate::serval_render::accumulate_origins(&dom, frags, droot, (0.0, 0.0), &mut origins);
+                if let Some(inner) = crate::first_with_class(&dom, droot, inner_class) {
+                    for child in dom.dom_children(inner) {
+                        if dom.kind(child) == NodeKind::Element {
+                            let bounds = frags.rect_of(child).zip(origins.get(&child)).map(
+                                |(l, &(x0, abs_y))| {
+                                    let y0 = abs_y - scroll;
+                                    [x0, y0, x0 + l.size.width, y0 + l.size.height]
+                                },
+                            );
+                            out.push((child, bounds));
+                        }
+                    }
+                }
+            }
+            out
+        };
+        let items = &self.view.runner.state().panes[which.idx()].items;
+        let mut nodes = Vec::new();
+        let mut children = Vec::new();
+        for (i, item) in items.iter().enumerate() {
+            let id = node_id_for_path(&format!("{root_path}/item/{i}"));
+            let mut node = if item.key.is_some() {
+                let mut n = Node::new(Role::Button);
+                n.add_action(Action::Click);
+                if let Some((dom_node, _)) = item_geom.get(i) {
+                    action_routes.insert(id, A11yHostAction::ChromeNode(*dom_node));
+                }
+                n
+            } else {
+                Node::new(Role::Label)
+            };
+            node.set_label(item.text.clone());
+            if let Some(Some(b)) = item_geom.get(i).map(|(_, b)| *b) {
+                node.set_bounds(rect(b));
+            }
+            nodes.push((id, node));
+            children.push(id);
+        }
+        let mut root_node = Node::new(Role::List);
+        root_node.set_label(label.to_string());
         root_node.set_children(children);
         nodes.push((root, root_node));
         UxTree { root, nodes }
