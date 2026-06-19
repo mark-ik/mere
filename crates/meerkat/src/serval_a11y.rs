@@ -79,6 +79,19 @@ fn chrome_direct_text(dom: &ScriptedDom, node: NodeId) -> String {
     name
 }
 
+/// Whether `node` is the roster pane's wrapper (CSS class `roster-pane`). The roster
+/// folds into the shell document, but the frame tree's `roster_a11y_tree` already projects
+/// its rows with actionable ListItem roles, select routes, and bounds, so the chrome walk
+/// skips this subtree to avoid doubling the roster as inert divs. The four list panes are
+/// *not* skipped: their frame-tree a11y is a skeleton, so the chrome walk is their only
+/// item-level source. (Phase 1, step 3b.)
+fn is_roster_wrapper(dom: &ScriptedDom, node: NodeId) -> bool {
+    dom.attributes(node).any(|attr| {
+        attr.name.local.as_ref() == "class"
+            && attr.value.split_whitespace().any(|c| c == "roster-pane")
+    })
+}
+
 /// Build the a11y node for `node` (whose parent sits at `parent_origin` in
 /// absolute coords), append it + its element descendants to `out`, record it in
 /// `actionable` if it advertises a host action, and return its id. Bounds
@@ -133,7 +146,7 @@ fn build(
 
     let mut children = Vec::new();
     for child in dom.dom_children(node) {
-        if dom.kind(child) == NodeKind::Element {
+        if dom.kind(child) == NodeKind::Element && !is_roster_wrapper(dom, child) {
             children.push(build(dom, fragments, child, origin, out, actionable));
         }
     }
