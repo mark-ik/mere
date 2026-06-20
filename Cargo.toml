@@ -204,3 +204,13 @@ stylo_atoms = { git = "https://github.com/servo/stylo", rev = "8bde0e96db888b7f1
 # support/patches/taffy, so it never collides with this patch. No local paths live in
 # this committed manifest, so it compiles anywhere.
 taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+
+# ipc-channel: in-process fork. Mere/serval run single-process (serval as a
+# library, not servo's multiprocess constellation), so ipc-channel's OS transport
+# (named pipes / unix sockets / mach ports) is vestigial. The fork defaults to its
+# built-in force-inprocess backend and makes the OS deps optional, which drops the
+# windows 0.61 pin. That pin (held only by ipc-channel) is what let gpu-allocator's
+# loose windows range latch onto 0.61.3 while wgpu-hal forces 0.62.2, breaking the
+# dx12 suballocator. With it gone, gpu-allocator unifies on windows 0.62. Owned
+# fork tracked by branch, never a rev (mirrors the taffy patch above).
+ipc-channel = { git = "https://github.com/mark-ik/ipc-channel", branch = "main" }
