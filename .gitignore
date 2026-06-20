@@ -43,9 +43,11 @@ flamegraph.svg
 perf.data*
 
 # Test / debug log directories (project convention: logs go here, not
-# alongside source)
+# alongside source). No leading slash so the rule catches these dirs at any
+# depth (e.g. crates/*/.cargo-check-logs/), not just the repo root.
 logs/
 .test-logs/
+.cargo-check-logs/
 
 # Locally-downloaded model weights (e.g. all-MiniLM-L6-v2 fetched via
 # `huggingface_hub.snapshot_download` for intelligence-embeddings BERT
