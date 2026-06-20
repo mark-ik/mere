@@ -394,6 +394,38 @@ fn layout_strategy_overrides_node_positions_until_reverted() {
 }
 
 #[test]
+fn node_representation_defaults_to_tile_and_takes_a_per_node_override() {
+    let mut graph = Graph::new();
+    graph.add_node("https://one.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut orrery = Orrery::with_graph(graph);
+    let (key, id) = {
+        let (key, node) = orrery.graph().get_node_by_url("https://one.example").unwrap();
+        (key, node.id)
+    };
+    assert_eq!(
+        orrery.node_representation(key),
+        Representation::Tile,
+        "the content-type default is Tile, so the look is unchanged from before P1",
+    );
+
+    // A per-node override is the user's form choice; it wins over the default.
+    orrery.set_node_representation(id, Representation::Shape);
+    assert_eq!(
+        orrery.node_representation(key),
+        Representation::Shape,
+        "the per-node override wins over the content-type default",
+    );
+
+    // Clearing the override reverts the node to the content-type default.
+    orrery.clear_node_representation(id);
+    assert_eq!(
+        orrery.node_representation(key),
+        Representation::Tile,
+        "clearing the override reverts to the default",
+    );
+}
+
+#[test]
 fn isolate_selection_scopes_the_orrery() {
     let mut graph = Graph::new();
     let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));

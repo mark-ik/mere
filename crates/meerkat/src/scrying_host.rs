@@ -203,7 +203,6 @@ mod windows_pool {
     use std::sync::Arc;
 
     use forme::GraphMemberId;
-    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     use scrying::native_frame::{
         Dx12FenceSynchronizer, HostWgpuContext, ImportOptions, ImportedTexture, TextureImporter,
         WgpuTextureImporter,
@@ -361,7 +360,7 @@ mod windows_pool {
             url: &str,
             width: u32,
             height: u32,
-            origin: (f32, f32),
+            _origin: (f32, f32),
             window: &Arc<winit::window::Window>,
             device: &wgpu::Device,
             queue: &wgpu::Queue,
@@ -412,7 +411,6 @@ mod windows_pool {
                     url,
                     width,
                     height,
-                    origin,
                     session_dir,
                     self.fence_handle,
                 ) {
@@ -434,12 +432,11 @@ mod windows_pool {
                     Err(err) => tile.last_error = Some(format!("resize: {err}")),
                 }
             }
-            // Visual hosting: park the WebView's HWND-parented composition visual at the
-            // card's screen origin so it displays in place (the scrying demo's model).
-            // Capture-into-texture only renders while the visual is on-screen (DWM culls
-            // an off-screen visual), so meerkat shows the visual directly instead.
-            // Re-set every frame so it follows the card as the orrery pans / zooms.
-            let _ = tile.producer.set_offset(origin.0, origin.1);
+            // No visual hosting on meerkat's window: the composition lives on
+            // scrying's off-screen host (capture-only). meerkat composites the
+            // captured texture under the chrome (render.rs:1398) and forwards input
+            // by API, so the visual is never parked on-screen and never occludes the
+            // chrome. (P2 off-window host; the per-frame `set_offset` chase is gone.)
             if tile.shown_url.as_deref() != Some(url) {
                 // Non-blocking navigation: the blocking trait method pumps a
                 // wait loop on the UI thread (plan X2 owns the full nav story).
@@ -515,23 +512,24 @@ mod windows_pool {
         vk
     }
 
-    /// Create the one `DesktopWindowTarget` for this window's HWND. Called once per
-    /// pool (the result is cached); a second call on the same HWND would fail.
+    /// Create the capture-only composition root on scrying's private off-screen
+    /// host window, NOT meerkat's visible window. The WebView visual then lives
+    /// off-screen and is never composited over meerkat's swapchain, so the chrome
+    /// and its overlays (menu, palette) always win. Both orrery cards and pelt
+    /// tiles consume only the WGC-captured texture (render.rs:1398); input is
+    /// forwarded by API (CDP keyboard / IME, `SendMouseInput`), so no on-window
+    /// visual is needed. Called once per pool (cached). `size` only anchors the
+    /// host (capture is per-visual, size-independent), so the window's current
+    /// inner size is a fine bound. (P2 off-window host.)
     fn build_composition_root(
         window: &Arc<winit::window::Window>,
     ) -> Result<Arc<PlatformCompositionRoot>, String> {
-        let handle = window
-            .window_handle()
-            .map_err(|err| format!("window handle: {err}"))?;
-        let RawWindowHandle::Win32(win32) = handle.as_raw() else {
-            return Err("not a Win32 window".to_string());
-        };
-        let hwnd = win32.hwnd.get() as *mut std::ffi::c_void;
-        // Safety: `hwnd` is the live meerkat top-level window, which outlives the
-        // pool (the pool is dropped with `Shell` before the window closes).
-        #[allow(unsafe_code)]
-        unsafe { PlatformCompositionRoot::new(hwnd) }
-            .map_err(|err| format!("composition root: {err}"))
+        let inner = window.inner_size();
+        PlatformCompositionRoot::new_offscreen(dpi::PhysicalSize::new(
+            inner.width.max(1),
+            inner.height.max(1),
+        ))
+        .map_err(|err| format!("composition root: {err}"))
     }
 
     fn spawn(
@@ -540,12 +538,10 @@ mod windows_pool {
         url: &str,
         width: u32,
         height: u32,
-        origin: (f32, f32),
         session_dir: &Path,
         fence_handle: Option<*mut core::ffi::c_void>,
     ) -> Result<Tile, String> {
-        let producer =
-            build_producer(root, member, width, height, origin, session_dir, fence_handle)?;
+        let producer = build_producer(root, member, width, height, session_dir, fence_handle)?;
         let mut tile = Tile {
             producer,
             imported: None,
@@ -565,11 +561,11 @@ mod windows_pool {
         member: GraphMemberId,
         width: u32,
         height: u32,
-        origin: (f32, f32),
         session_dir: &Path,
         fence_handle: Option<*mut core::ffi::c_void>,
     ) -> Result<PlatformWebSurfaceProducer, String> {
-        // Attach this pane to the shared per-HWND target at its tile origin. A
+        // Attach this pane to the shared off-screen host target at offset (0,0)
+        // (see `with_offset` below). A
         // per-pane profile folder (keyed by member) keeps each tile's WebView2
         // environment on its own user-data dir — the proven multi-pane shape, one
         // environment per folder. A shared cookie jar across tiles is a later
@@ -580,7 +576,10 @@ mod windows_pool {
             .join(format!("pane-{:032x}", member.as_u128()));
         let mut config =
             PlatformWebSurfaceConfig::new(dpi::PhysicalSize::new(width, height), profile)
-                .with_offset(origin.0, origin.1);
+                // Pane offset (0,0) on the off-screen host: capture is per-visual
+                // and the texture is composited at the tile rect by render.rs, so
+                // the on-host position only needs to keep the visual rendered.
+                .with_offset(0.0, 0.0);
         // Explicit-fence sync: the producer opens this shared fence and signals it
         // after each `CopyResource`; the importer's `Dx12FenceSynchronizer` waits on
         // the per-frame value. `None` (non-D3D12 host) leaves the implicit path.

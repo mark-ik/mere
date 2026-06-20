@@ -524,6 +524,7 @@ impl WindowCtx<'_> {
                         favicon: node.favicon_rgba.as_ref().and_then(|rgba| {
                             favicon_data_uri(rgba, node.favicon_width, node.favicon_height)
                         }),
+                        representation: orrery.node_representation(key),
                     })
                 })
                 .collect();

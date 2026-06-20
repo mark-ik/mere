@@ -13,6 +13,7 @@
 use forme::GraphMemberId;
 use kernel::graph::SemanticSubKind;
 use meerkat::{Chrome, ContextAction, ContextItem};
+use orrery::Representation;
 use session_runtime::ShellbarEdge;
 
 use super::WindowCtx;
@@ -72,6 +73,7 @@ impl WindowCtx<'_> {
             // <engine>"), so the user can flip this node's engine. (Phase 3.)
             let mut items = vec![ContextItem::new("Open tile", ContextAction::OpenSplits)];
             items.extend(self.engine_picker_items(set[0]));
+            items.extend(self.representation_picker_items(set[0]));
             items.push(ContextItem::new("Add tag\u{2026}", ContextAction::AddTag));
             items
         } else {
@@ -173,6 +175,38 @@ impl WindowCtx<'_> {
             }
         }
         items
+    }
+
+    /// The representation rows for a single selected node: "Show as tile" (the favicon +
+    /// caption chip) and "Show as shape" (the bare content-typed face), with the node's
+    /// current form ✓-marked. A per-node override (Decision 6: per-node form lives on the
+    /// node context menu); the scene-wide default stays content-type driven, so a node
+    /// without an override is `Tile`. (Node representation P1.)
+    fn representation_picker_items(&self, member: GraphMemberId) -> Vec<ContextItem> {
+        let current = {
+            let orrery = self.orrery();
+            orrery
+                .graph()
+                .get_node_by_id(member)
+                .map(|(key, _)| orrery.node_representation(key))
+        };
+        let mark = |label: &str, on: bool| {
+            if on {
+                format!("{label}  \u{2713}") // ✓ marks the node's current form
+            } else {
+                label.to_string()
+            }
+        };
+        vec![
+            ContextItem::new(
+                mark("Show as tile", current == Some(Representation::Tile)),
+                ContextAction::SetRepresentation("tile"),
+            ),
+            ContextItem::new(
+                mark("Show as shape", current == Some(Representation::Shape)),
+                ContextAction::SetRepresentation("shape"),
+            ),
+        ]
     }
 
     /// The layout-strategy rows for the focused orrery pane: "Force-directed" (the
@@ -406,6 +440,21 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Set the per-node representation (the form picker): override each context node's
+        // presentation form. Applies to the context set like the engine pins; the next
+        // frame's snapshot reads the override through `node_representation`. The override
+        // is held on the orrery (not yet persisted — a follow-up). (Node representation P1.)
+        if let ContextAction::SetRepresentation(id) = action {
+            let rep = match id {
+                "shape" => Representation::Shape,
+                _ => Representation::Tile,
+            };
+            for member in std::mem::take(&mut self.view.context_set) {
+                self.orrery_mut().set_node_representation(member, rep);
+            }
+            self.view.request_redraw();
+            return;
+        }
         // Browser link flow: open the right-clicked link as a new tab, or copy it.
         // Reads `context_link` (source member + resolved url); no node set involved.
         if let ContextAction::OpenLinkNewTab = action {
@@ -448,6 +497,7 @@ impl WindowCtx<'_> {
             | ContextAction::CloseGraphPane
             | ContextAction::PinEngine(_)
             | ContextAction::AutoEngine
+            | ContextAction::SetRepresentation(_)
             | ContextAction::AddTag
             | ContextAction::OpenLinkNewTab
             | ContextAction::CopyLink

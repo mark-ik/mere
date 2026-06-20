@@ -45,7 +45,7 @@ use build::{build_pool_dom, build_simulation, dark_scene_style, dedup_edges, sam
 use paint_list_api::ColorF;
 
 mod types;
-pub use types::{CameraView, NodeShape, NodeState, PointerButton};
+pub use types::{CameraView, NodeShape, NodeState, PointerButton, Representation};
 
 mod input;
 mod frame;
@@ -162,6 +162,10 @@ pub struct Orrery {
     /// Per-node content silhouette the host pushes for node shaping. Resolved to
     /// `NodeKey` on set; a node absent here draws as `Square` (the default).
     node_shapes: HashMap<NodeKey, NodeShape>,
+    /// Per-node presentation overrides (the user's per-node form choice). A node
+    /// absent here takes the content-type default, so this holds only explicit
+    /// overrides, never the whole graph. (Node representation P1.)
+    node_representations: HashMap<NodeKey, Representation>,
     /// `Some(press_origin)` (screen px) while a left-drag marquee on empty space
     /// is in progress.
     marquee: Option<(f32, f32)>,
@@ -256,6 +260,7 @@ impl Orrery {
         self.hidden_fields.clear();
         self.node_states.clear();
         self.node_shapes.clear();
+        self.node_representations.clear();
         self.drag = None;
         self.field_drag = None;
         self.marquee = None;
@@ -313,6 +318,7 @@ impl Orrery {
             hidden_fields: HashSet::new(),
             node_states: HashMap::new(),
             node_shapes: HashMap::new(),
+            node_representations: HashMap::new(),
             marquee: None,
             ctrl: false,
             shift: false,
@@ -807,6 +813,22 @@ impl Orrery {
         self.node_shapes.get(&key).copied().unwrap_or_default()
     }
 
+    /// A node's presentation form: a per-node override if the user set one (via
+    /// [`set_node_representation`](Self::set_node_representation)), otherwise the
+    /// content-type default. Keyed off the silhouette ([`node_shape`](Self::node_shape),
+    /// the content-type proxy), the default is uniform [`Tile`](Representation::Tile)
+    /// today, so the visible default is unchanged from before P1; the `match` below is
+    /// the single seam the scene pane (Decision 6) diversifies (content-type to form).
+    /// (Node representation P1.)
+    pub fn node_representation(&self, key: NodeKey) -> Representation {
+        if let Some(&rep) = self.node_representations.get(&key) {
+            return rep;
+        }
+        match self.node_shape(key) {
+            NodeShape::Square | NodeShape::Rounded | NodeShape::Circle => Representation::Tile,
+        }
+    }
+
     /// Render the on-screen nodes as host DOM cards instead of in-scene gnodes: the
     /// next [`frame`](Orrery::frame) drops the gnode + favicon layers, keeping edges +
     /// demoted dots as the underlay. The host sets this on the focused orrery (whose
@@ -855,6 +877,26 @@ impl Orrery {
             .into_iter()
             .filter_map(|(id, shape)| self.graph.get_node_by_id(id).map(|(key, _)| (key, shape)))
             .collect();
+    }
+
+    /// Override a single node's presentation form (the user's per-node choice, e.g.
+    /// from the node context menu), keyed by node UUID and resolved to its `NodeKey`.
+    /// Wins over the content-type default until [`clear_node_representation`] reverts
+    /// it; a no-op for an unknown id. The override is held on the orrery (rebuilt with
+    /// it); persisting it across a reload is a follow-up (it joins the cartography
+    /// sidecar / the scene-pane defaults). (Node representation P1.)
+    pub fn set_node_representation(&mut self, id: uuid::Uuid, representation: Representation) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            self.node_representations.insert(key, representation);
+        }
+    }
+
+    /// Clear a node's per-node presentation override, reverting it to the content-type
+    /// default. Keyed by node UUID; a no-op for an unknown id. (Node representation P1.)
+    pub fn clear_node_representation(&mut self, id: uuid::Uuid) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            self.node_representations.remove(&key);
+        }
     }
 
     /// The URL of the single focused (selected) node, if exactly one node is

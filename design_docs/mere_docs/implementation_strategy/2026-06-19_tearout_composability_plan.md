@@ -67,8 +67,10 @@ substrate under this plan, mostly in its favor:
 - **C1 is done; C2 is narrowed.** C1 (focus/session decoupling) shipped as the
   pane-as-unit refactor using meerkat's own `orrery_pane_at` leaf hit-test (not the
   shell hit-test); Path A's DOM node-cards narrow C2. See each phase.
-- **Sequencing dependency.** C2-C5 ride unified Phase 2 (partly shipped); sequence the
-  later phases after it. (C1 shipped already, on meerkat's own hit-test.)
+- **Sequencing dependency.** Only **C2** and **C5's drag-gesture UI** ride unified Phase 2;
+  **C3** (multi-window leaf-shaping) and **C4** (kernel cross-graph copy + provenance) are
+  largely *independent* of it and buildable on the existing multi-window + kernel substrate.
+  (C1 shipped already, on meerkat's own hit-test.)
 - **Contingent on Path A.** The above assumes Path A (DOM node-cards), which Phase 2a
   landed on. Under Path B (orrery stays a scene-surface compositor), C2's bridge would
   expand to the orrery itself.
@@ -113,20 +115,46 @@ pane-as-unit series.
 
 ## C2 — External-texture-input bridge (the P2-companion lynchpin)
 
-**Narrowed by the unified model.** Path A makes node-cards DOM subtrees that already
-take input through the shell hit-test (Phase 2a), so the bridge is *no longer needed
-for node cards*. It is needed only for **genuinely external content**: scrying /
-WebView tiles and mixed pelt-surface content, which stay `<external-texture>` blits.
-The remaining work is the external-texture *element that bears input* (an
-`<external-texture>` that takes `on_wheel` / pointer cancellation + layout-derived
-placement, not the output-only replaced leaf it is today). Lives in serval
-(xilem-serval / serval-scripted-dom), **coordinated with the serval/pelt agent, not
-solo**; it is the unified plan's "tiles follow-on" (`platen-view` + `<external-texture>`,
-pelt V6). Unblocks the host-wiring G1.1 / G1.3 callers for external tiles. (In-graph
-DOM node-card interactivity, the old G1.2 framing, is delivered by unified Phase 2.)
+**Narrowed twice.** (1) The unified model: node interactivity is delivered by the
+orrery's `gyre` hit path (the cond-3/4 reversal: the node is grabbed through `gyre`, the
+card is an inert snapshot), so the bridge is *not* needed for node cards. (2) The
+scry-compositing determination (2026-06-19): **scrying / WebView tiles do NOT use this
+bridge**. They are genuinely-external native composition visuals captured to a texture
+and composited under the chrome with input forwarded by API / CDP, owned by the
+[native-surface-compositing plan](2026-06-19_native_surface_compositing_plan.md)
+(revision 2). The bridge's remaining scope is the narrower **serval-rendered
+textured-body**: serval content composited as a texture (the
+[node-representation](2026-06-18_node_representation_arrangement_plan.md) P2 textured-body)
+whose input must relay back into *that serval content's own hit-test*, not a foreign WebView.
 
-Done when: an external content tile (scrying / WebView) is an input-bearing element in
-the pane DOM taking `on_wheel` + placement from layout, with a live G1 caller.
+**The serval mechanism already exists — no engine ask remains (verified 2026-06-19).**
+serval's `on_wheel` (xilem-serval/wheel.rs) and `on_pointer` (with `prevent_default` =
+pointer cancellation, pointer.rs) are composable wrappers over an `external_texture`
+element (tags.rs:74) that the engine lays out (placement from layout). The
+`<external-texture>` leaf stays output-only by design; you make it input-bearing by
+*wrapping* it in `on_wheel` / `on_pointer`, not by changing the leaf. **cond 5 already
+does exactly this for the orrery**: window_view.rs:528-551 seats the scene as an
+`external_texture` underlay and wraps the orrery pane in `on_wheel`, routing the wheel
+through the document into gyre. So the earlier "build an input-bearing external-texture
+element / not the output-only leaf it is today" framing is retired — the primitives are in
+serval and demonstrated end-to-end.
+
+What is left is **consumer-side and gated on the textured-body form, which does not exist
+yet** (representation is still the binary `render_as_cards`, orrery lib.rs:194; node-rep is
+at P0). When that form lands (node-representation P2), render it as
+`on_wheel(on_pointer(external_texture(...)))` and relay the events into the inner serval
+content's hit-test — the one new wrinkle vs the orrery, which relays to gyre. That also
+satisfies the host-wiring G1.1 / G1.3 callers. (In-graph DOM node-card interactivity, the
+old G1.2 framing, is delivered by unified Phase 2 / the orrery `gyre` hit path.)
+
+**Status: no work now.** No consumer exists (no textured-body form) and the serval
+mechanism is already in place, so C2 is neither blocked-on-serval nor a serval engine
+build — it unblocks when node-representation P2 ships the textured-body form, and is then a
+thin consumer wiring. (Scry / WebView input is out of scope here, see
+native-surface-compositing.)
+
+Done when: a serval-rendered textured-body tile (once that form exists) takes `on_wheel` /
+`on_pointer` and relays into the inner serval hit-test, with placement from layout.
 
 ## C3 — Cross-window pane resolution (the leaf)
 
@@ -139,6 +167,15 @@ propagate because it resolves to the *same* orrery (leaf semantics, tear-out bri
 Done when: a torn `Workbench`-pane window shows a shared node's live tile, navigates
 on its own, propagates edits to the donor, and instantiates no orrery of its own.
 
+Substrate (audited 2026-06-19): multi-window spawn + the window registry exist
+(`SpawnWindow` / `spawn_window`, app_handler.rs:746), but `spawn_window` makes a
+**full-chrome** window today ("v0 is a full-chrome window; MW3 step 4 makes it a slim
+workbench-only leaf"). So C3 is (a) leaf-shaping: spawn a `WindowKind::Leaf` (slim chrome,
+a `Workbench` pane bound to the donor's `graph_id`, no `Orrery` pane), plus (b) two
+inherited MW3 prerequisites for a *usable* leaf — **step 5** (the `user_event` actor
+fan-out, so the leaf gets live actor-driven updates, not just spawn-time state) and **step
+6** (a per-window AccessKit bridge; secondaries have none yet).
+
 ## C4 — Cross-graph composability (re-point / copy a pane, with provenance)
 
 Move or copy a tile/node across orreries. Copy mints a node in the destination orrery
@@ -149,6 +186,15 @@ between two panes resolving to different orreries (and a palette/command form).
 Done when: a tile dragged from a pane on graph A into a pane on graph B produces a
 node in B with provenance + lineage back to A, source left intact (copy) or releasing
 its binding (move).
+
+Substrate (audited 2026-06-19): the **Provenance edge family exists**
+(`EdgeFamily::Provenance` + `ProvenanceSubKind`, edge_taxonomy.rs:185, persisted), but its
+sub-kinds are all content-transformation (`ClippedFrom` / `ExcerptedFrom` /
+`SummarizedFrom` / …) with **no plain copied-from**, and there is **no cross-graph
+copy/rekey primitive** in the kernel (no copy / import / rekey / graft fn). So C4's core is
+two kernel pieces, both buildable now: add a `CopiedFrom` (or `DuplicatedFrom`)
+`ProvenanceSubKind`, and build the cross-graph copy that mints a node in B from A's content
++ records that provenance + node-lineage.
 
 ## C5 — The tear-out gesture model (leaf / branch / fork + toast)
 
@@ -173,10 +219,11 @@ than as a separate extraction.
 
 ## Open questions (carried from window-composition)
 
-- **OQ-A (was OQ3) — provenance edge direction + family.** Confirm the existing
-  provenance edge family carries "copied-from across graphs" cleanly, or whether copy
-  wants a distinct sub-kind (C4). Check before building, per the consumer-pull rule.
-  (Ties to the per-statement-edge + projection-profile work in
+- **OQ-A (was OQ3) — provenance edge for cross-graph copy. RESOLVED 2026-06-19.** The
+  `Provenance` edge family + `ProvenanceSubKind` exist and persist, but the sub-kinds are
+  all content-transformation (`ClippedFrom` / `ExcerptedFrom` / …) with no plain copy, so a
+  cross-graph copy wants a **new `CopiedFrom` (or `DuplicatedFrom`) `ProvenanceSubKind`**,
+  recorded by the C4 rekey. (Ties to the per-statement-edge + projection-profile work in
   [petgraph_rdf_plan](2026-06-18_petgraph_rdf_plan.md): a cross-graph copy is exactly a
   provenance statement.)
 - **OQ-B (was OQ4) — move vs copy default.** A cross-graph drag defaults to which?
@@ -203,3 +250,31 @@ than as a separate extraction.
   meerkat builds + tests green; added
   `focus_pane_graph_moves_focus_without_a_switch_or_clobber`. Reframed C1 to DONE; the
   live forward scope is now C2-C5 + the deferred camera.
+- **2026-06-19** — **C2 checked against the code: nothing to implement now; doc
+  corrected.** The serval input-bearing-external-texture mechanism already exists
+  (`on_wheel` / `on_pointer`+`prevent_default` compose over `external_texture`) and cond 5
+  demonstrated it end-to-end (the orrery scene is an `external_texture` underlay with the
+  wheel routed through the document into gyre, window_view.rs:528-551). C2's consumer (a
+  serval-rendered textured-body) does not exist (representation is still binary
+  `render_as_cards`; node-rep at P0). So C2 has no serval engine ask and no work until
+  node-representation P2 ships the textured-body form; reframed C2 from "build the bridge"
+  to "thin consumer wiring, gated on the form."
+- **2026-06-19** — **Full audit vs the code; live phases re-grounded.** C3: multi-window
+  spawn + registry exist, but `spawn_window` makes a full-chrome window, not a leaf, so C3 =
+  leaf-shaping + the inherited MW3 step-5 (`user_event` fan-out) + step-6 (secondary a11y).
+  C4: the `Provenance` edge family exists but has no copied-from sub-kind, and there is no
+  cross-graph rekey primitive (OQ-A resolved: add `CopiedFrom`, build the rekey — both
+  kernel-level, buildable now). Corrected the sequencing claim (C3/C4 are independent of
+  unified Phase 2; only C2 + C5's gesture UI ride it). **Most-pressing order:** (1) C4 core
+  (rekey + `CopiedFrom`); (2) C3 usable leaf (leaf-shape + step-5 fan-out); (3) C5 gesture
+  model; (4) the N-orrery-elements seam; (5) the OQ-B/OQ-C behaviour decisions. C2 (gated)
+  and the deferred camera (eased) are not in the top five.
+- **2026-06-19**: **C2 narrowed to exclude scry** (cross-plan consolidation + the
+  scry-compositing determination). The determination chose native-surface-compositing
+  revision 2 (off-window host HWND + capture-to-texture + API/CDP input) over the
+  composition-tree / external-texture-element direction, so scrying / WebView tiles do
+  **not** flow through this bridge; its remaining consumer is the serval-rendered
+  textured-body (node-representation P2), and scry input is owned by
+  native-surface-compositing. Also corrected the stale "node-cards take input via the
+  shell hit-test" framing (the cond-3/4 reversal routes node interactivity through
+  `gyre`). Doc reconciliation only, no code change.

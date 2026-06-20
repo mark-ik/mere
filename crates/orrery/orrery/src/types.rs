@@ -54,3 +54,22 @@ pub enum NodeShape {
     /// A feed (RSS / Atom / JSON feed) — a circle (a "stream").
     Circle,
 }
+
+/// A node's presentation form: the *sprite* the orrery draws for it, independent of the
+/// node's truth (content, identity, edges stay authoritative in the kernel). The host
+/// resolves a default per content type and pushes per-node overrides via
+/// [`Orrery::set_node_representation`]; a node without an override takes the content-type
+/// default ([`Orrery::node_representation`]). The card preview is a *separate* layer over
+/// the node, not a representation form, so it is absent here. This is the initial set;
+/// `TexturedBody` (P2-static) and `Scripted` (the field-regions hook) join as their
+/// texture / script paths land. (Node representation P1.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Representation {
+    /// The gnode "physical chip": a content-typed colored face carrying the favicon,
+    /// with the caption beside it. The default, and what every node showed before P1.
+    #[default]
+    Tile,
+    /// Bare geometry: the colored, content-typed face alone, no favicon or caption.
+    /// Minimal and cheap, for a dense graph or a node with nothing to texture.
+    Shape,
+}

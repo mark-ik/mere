@@ -23,6 +23,7 @@ use std::time::Instant;
 use forme::GraphMemberId;
 use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
 use meerkat::{Chrome, ChromeView, chrome_view};
+use orrery::Representation;
 use platen::Workbench;
 use serval_scripted_dom::ScriptedDom;
 use serval_winit_host::WindowSurface;
@@ -301,6 +302,9 @@ pub(crate) struct OrreryCard {
     /// The node's favicon as a `data:` image URI, or `None`. It fills the card face
     /// (painted over the state color, clipped to the silhouette). (P0 favicon-as-face.)
     pub(crate) favicon: Option<String>,
+    /// The node's presentation form, from `Orrery::node_representation`: `Tile` draws
+    /// the favicon + caption chip; `Shape` draws the bare content-typed face. (P1.)
+    pub(crate) representation: Representation,
 }
 
 /// The focused orrery's render snapshot: the pane rect the element sits at and the
@@ -463,46 +467,66 @@ fn node_card_view(c: &OrreryCard) -> ShellView {
     // NODE_HALF collider. The `.node-card` element IS the face + hit target (not a nested
     // flex item, which serval collapsed to nothing — only the label rendered).
     const FACE: f32 = 36.0;
-    let half = FACE / 2.0;
-    // Top-left at the node's world position minus half, the same `pos - NODE_HALF` the
-    // in-scene gnode uses, so the square centers on the node.
+    // Selection lifts the node: its face grows slightly and stays centered on the gyre
+    // collider, so the world grab point does not move (Decision 2 — the selection channel is
+    // a ring plus a slight lift, leaving the color channel free for activation state). The
+    // lift grows width/height and recenters the translate rather than applying a CSS scale,
+    // so it needs no transform-origin support; the gyre collider stays `NODE_HALF`, so the
+    // lift is visual emphasis only and the hit target is unchanged.
+    const LIFT: f32 = 4.0;
+    let size = if c.selected { FACE + LIFT } else { FACE };
+    let half = size / 2.0;
+    // Top-left at the node's world position minus half (of the lifted size), the same
+    // `pos - NODE_HALF` centering the in-scene gnode uses, so the square stays centered on
+    // the node as it lifts.
     let (cx, cy) = (c.x - half, c.y - half);
-    // Selection: a bright ring around the face, distinct from the blue focus ring; else a
-    // base depth shadow. (A slight scale-lift is a follow-up, once a composite
-    // translate+scale transform is confirmed to render.)
+    // Selection: a bright ring + deeper shadow around the lifted face, distinct from the
+    // blue focus ring the `focusable` wrapper draws; else a base depth shadow.
     let ring = if c.selected {
-        "box-shadow:0 0 0 2px #ffffff,0 2px 8px rgba(0,0,0,0.55);"
+        "box-shadow:0 0 0 2px #ffffff,0 3px 10px rgba(0,0,0,0.6);"
     } else {
         "box-shadow:0 1px 3px rgba(0,0,0,0.45);"
     };
-    // The node body: a fixed colored square rendered AT the gyre collider's screen position.
+    // The node body: a colored square rendered AT the gyre collider's screen position.
     // `left:0;top:0` anchors it to the orrery element's origin so the transform places it
     // exactly there, not offset by an absolute box's static-flow position (the cause of the
     // collider-vs-visual gap — the press hit the bare collider beside the visual). This IS the
     // node object the collider is pinned to and the drag grabs; the label and (later) the
     // content-preview card anchor to it. Shaped square / rounded / circle by content type.
     let face_style = format!(
-        "position:absolute;left:0;top:0;transform:translate({cx}px,{cy}px);width:{FACE}px;\
-         height:{FACE}px;box-sizing:border-box;background-color:{};border-radius:{};{ring}",
+        "position:absolute;left:0;top:0;transform:translate({cx}px,{cy}px);width:{size}px;\
+         height:{size}px;box-sizing:border-box;background-color:{};border-radius:{};{ring}",
         c.color, c.radius
     );
+    // Representation (P1): `Shape` is the bare content-typed face (no favicon, no
+    // caption), for dense graphs or a node with nothing to texture; `Tile` (the default)
+    // textures the favicon on the face and sets the caption beside it. Both share the
+    // same face, collider, and selection ring above, so only these two children differ.
+    let chrome = !matches!(c.representation, Representation::Shape);
     // The favicon fills the face (absolutely positioned over the state color, shaped to
-    // match); transparency shows the color through.
-    let favicon = c.favicon.as_ref().map(|uri| {
-        el::<_, ShellState, ()>("img", ()).attr("src", uri.clone()).attr(
+    // match); transparency shows the color through. Absent on a `Shape`.
+    let favicon = chrome
+        .then(|| {
+            c.favicon.as_ref().map(|uri| {
+                el::<_, ShellState, ()>("img", ()).attr("src", uri.clone()).attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:0;top:0;width:{size}px;height:{size}px;border-radius:{};display:block",
+                        c.radius
+                    ),
+                )
+            })
+        })
+        .flatten();
+    // The label rides beside the square (absolutely positioned, overflowing it), like the
+    // gnode caption at left:42px, so a long name reads in full on the dark canvas. Absent
+    // on a `Shape`, which is the caption-less bare face.
+    let label = chrome.then(|| {
+        el::<_, ShellState, ()>("span", c.label.clone()).attr(
             "style",
-            format!(
-                "position:absolute;left:0;top:0;width:{FACE}px;height:{FACE}px;border-radius:{};display:block",
-                c.radius
-            ),
+            "position:absolute;left:42px;top:9px;white-space:nowrap;color:#d8deea;font-size:14px;font-weight:500",
         )
     });
-    // The label rides beside the square (absolutely positioned, overflowing it), like the
-    // gnode caption at left:42px, so a long name reads in full on the dark canvas.
-    let label = el::<_, ShellState, ()>("span", c.label.clone()).attr(
-        "style",
-        "position:absolute;left:42px;top:9px;white-space:nowrap;color:#d8deea;font-size:14px;font-weight:500",
-    );
     let url = c.url.clone();
     Box::new(focusable(on_click(
         el::<_, ShellState, ()>("div", (favicon, label))

@@ -149,10 +149,13 @@ pelt-desktop = { git = "https://github.com/mark-ik/serval.git", branch = "main",
 
 # Off-UI-thread fetch (S2.2b): netfetcher's async WHATWG Fetch runs on a tokio
 # worker pool; results are delivered back to the winit loop over a channel + an
-# EventLoopProxy wake. `url` builds the request; netfetcher is the sibling repo,
-# path-dep'd like netrender. Network I/O is the host's job — engines stay
-# byte-consuming and never link netfetcher.
-netfetcher = { path = "../../../netfetcher" }
+# EventLoopProxy wake. `url` builds the request. netfetcher is a sibling repo
+# consumed one-way; a **git dep** (not a path dep) like netrender / errand, so any
+# machine pulls just mere and Cargo fetches it from GitHub — no `../../../netfetcher`
+# layout to replicate. A local checkout is picked up via the gitignored
+# `.cargo/config.toml` `paths` override. Network I/O is the host's job — engines
+# stay byte-consuming and never link netfetcher.
+netfetcher = { git = "https://github.com/mark-ik/netfetcher.git", branch = "main" }
 # Small-web (smolweb) transport: gemini / gopher / finger / spartan / nex / guppy
 # / titan, routed by scheme. A standalone, crates.io-only sibling crate consumed
 # one-way; a **git dep** (not a path dep) so any machine pulls just mere and Cargo
@@ -227,8 +230,11 @@ accesskit_windows = { workspace = true }
 # The compatibility-view tile (scrying tile plan X1): the WebView2 composition
 # producer + the native-frame wgpu importer. A standalone sibling repo consumed
 # one-way, like netrender; the host builds the producer (it owns the HWND,
-# device, and profile dir the engine seam says the engine can't fabricate).
-scrying = { path = "../../../wgpu-scry/scrying" }
+# device, and profile dir the engine seam says the engine can't fabricate). A
+# **git dep** (not a path dep) so a bare clone builds without the `../../../wgpu-scry`
+# sibling layout; a local checkout is picked up via the gitignored
+# `.cargo/config.toml` `paths` override.
+scrying = { git = "https://github.com/mark-ik/wgpu-scry.git", branch = "main" }
 dpi = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]

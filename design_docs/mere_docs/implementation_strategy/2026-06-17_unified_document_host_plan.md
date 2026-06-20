@@ -1,15 +1,40 @@
 # Unified Document Host Plan
 
-Status: **partially shipped**. The orrery-as-element slice landed (Progress, 2026-06-18);
-Phase 1's document consolidation is complete (all 4 done-conditions, Progress 2026-06-19); Phase
-2's custom-layout-element / hit-test / focus / scene-teardown remain, and a cross-plan consolidation pass (with the node-representation and
-field plans) is underway. A code-verified argument that `xilem_serval`'s role in
-meerkat should grow from "reactive toolkit for the chrome strip" to "host of the
-whole document shell", plus the staged path to get there and the one product
-decision it turns on.
+Status (reconciled 2026-06-19 cross-plan consolidation). Phase 1's document consolidation is
+**done** (all 4 done-conditions). Phase 2 cond 3/4/5 **landed host-side**, **but** the
+card-as-node-hit-target mechanism (cond 3/4) was subsequently **reversed** by the
+[node-representation-arrangement plan](2026-06-18_node_representation_arrangement_plan.md)
+(2026-06-19): the node is now grabbed **through `gyre` directly** (`CLICK_SLOP` splits select vs
+drag), and the card is a **static snapshot content-preview** that is **never** the drag handle and
+**not** a representation form. cond 5 (the orrery **scene** as a document `<external-texture>`
+element, standalone `Scene` retired) is **done**. The custom-layout `<orrery>` element (cond 1) is
+**deferred**, not a gate: the interim transform-aware ring holds and the cards work as
+host-positioned DOM.
+
+The remaining **surface migration** does **not** mean "every host-composited surface becomes a
+document external-texture element". Surfaces split **by nature** (the four-way layering owned by the
+[native-surface-compositing plan](2026-06-19_native_surface_compositing_plan.md)): serval-rendered
+content → a real DOM subtree; genuinely-external content (scrying = a system WebView2 visual) → a
+**native composition visual below the chrome**, *not* a document element; dormant surfaces → a
+snapshot texture; the orrery gyre **scene** → a texture is correct. The earlier blanket recipe is
+superseded for the scry case (see "Surface migration" and C2 below). A cross-plan consolidation pass
+(with the node-representation and native-surface-compositing plans) reconciled this plan 2026-06-19.
 
 Sibling/converging docs:
 
+- [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md) — owns the layer
+  below the shell document: scry = a native composition visual on an off-window host HWND, under the
+  chrome; dormant = a snapshot texture; these are **NOT** document external-texture elements. Its
+  by-nature layering (C2) **supersedes this plan's blanket external-texture-migration recipe for
+  genuinely-external content**.
+- [node_representation_arrangement_plan](2026-06-18_node_representation_arrangement_plan.md) — owns
+  the **sprite/representation layer** (the card is **one** sprite); this plan owns the
+  **node-as-container-in-the-document** (the a11y / automation spine), **not**
+  node-content-as-document. Its 2026-06-19 entry **reversed** this plan's cond-3/4
+  card-as-hit-target mechanism (press routes to `gyre`; the card is a static snapshot).
+- [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
+  — the **owner of the performance strategy** (C3 bake-vs-live, C4 per-lane ceilings).
+  Cross-reference; do not restate.
 - [interaction_model_spine](../technical_architecture/2026-06-18_interaction_model_spine.md), the
   parent spine: the one fetch→render→represent→arrange→interact→semantic pipeline over the
   definitely-support formats. This plan is its **document-shell host layer**. Per the spine's
@@ -43,6 +68,26 @@ Sibling/converging docs:
 
 ---
 
+## Goals: three, not one
+
+This plan is framed around three goals, not just "one engine renders chrome + content":
+
+1. **Unify the host** — chrome + GUI + node-as-container content in one document.
+2. **Leverage xilem to reach gpui-level baseline performance** — framed as **two per-lane
+   ceilings**, not a single ceiling: the **first-party / PWA (app) lane** can parallelize the cold
+   cascade via an SAB-threaded parallel cascade, but the **open-web-browsing lane cannot**
+   (COOP/COEP `require-corp` is incompatible with arbitrary third-party content; Safari lacks
+   `credentialless`). This plan **cross-references**
+   [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
+   for the strategy and **does not restate it** — honoring its confidence levels
+   (parallel-cascade-on-wasm is unproven / borrowed; the wasm build is worktree-only, not mainline).
+3. **Make the browser diagnosable, accessible, and automatable** — one tree to instrument, one a11y
+   tree, one DOM to drive. This is the **semantic-surface / machine-legibility payoff**, and it is a
+   **core goal**, not a Path-A side effect (see Payoff section below, where the old "(Path A only)"
+   gating is struck).
+
+---
+
 ## The thesis: a bigger role for `xilem_serval`
 
 `xilem_serval` is a third `xilem_core` backend (beside `xilem`→Masonry and
@@ -71,20 +116,25 @@ point of the bet.
 Phase 1 is correct under either answer and should start regardless. Phase 2
 turns on one product question that is the architect's to make:
 
-- **Path A (recommended target).** Orrery node content gets document semantics
-  (a11y, CSS, text selection, in-tree focus) by materializing node cards as DOM
-  subtrees inside a canvas element; `gyre` owns geometry. Matches
-  two_natured_kernel §4 and the archived eval §6. More engine work, full payoff.
+- **Path A (recommended target).** The **node as a container** lives in the document and so rides
+  the host spine (a11y, CSS, text selection, in-tree focus, tab order, automation); `gyre` owns
+  geometry. The unification reaches the node **as a container** but **does not fix its look**: the
+  "card" is **one possible sprite** (others: a recursively-split pane, an 8-bit character with
+  facets as dialog choices, a block in a growing crystal), not the node itself, and the
+  sprite/representation layer is owned by the
+  [node-representation-arrangement plan](2026-06-18_node_representation_arrangement_plan.md) (C1).
+  Matches two_natured_kernel §4 and the archived eval §6. More engine work, full payoff.
 - **Path B (fallback).** The orrery stays a scene-surface composited beside the
   document because a free-form physics scene is genuinely not a document. Then
   formalize the host as a principled surface compositor with one shared input
   router and focus arbiter, instead of ad-hoc Y-band branches. Less engine work,
   concedes one-engine-for-everything for the canvas.
 
-The two_natured brief points at a hybrid that maps onto Path A: node *content* is
-content-authoritative (DOM), node *positions* are experience-derived (`gyre`).
-Lean Path A, sequenced after Phase 1, gated on serval custom-layout-element
-support.
+The two_natured brief points at a hybrid that maps onto Path A: the node **container** rides the
+document spine (a11y / tab / focus / automation), node **positions** are experience-derived
+(`gyre`), and the node's **look** is a free sprite the node-representation plan owns (the card is
+one sprite, never the node's truth). Lean Path A, sequenced after Phase 1, gated on serval
+custom-layout-element support.
 
 ---
 
@@ -143,17 +193,35 @@ Done conditions:
 - A serval element (an `<orrery>` custom-layout element, or a generalization of
   the replaced-element path) whose box the engine lays out and whose interior the
   host paints as a scene underlay.
-- Node cards materialize as DOM subtrees inside the element (content-authoritative),
-  positioned by `gyre` output via per-node transforms, with transform-only motion
-  staying on the `RepaintOnly` path (the verified prerequisite, see Findings).
-- Pointer and keyboard input reach the element through serval's hit-test; the
-  element runs the two-hit-test split: node-content hits resolve in the DOM,
-  scene-geometry hits (empty canvas, node bodies, edges) resolve via `gyre`'s
-  `QueryPipeline`.
-- A focused node card is a focusable DOM node, so orrery focus joins the Phase 1
-  ring.
+- The node-as-container materializes as a DOM subtree inside the element (so it rides the a11y /
+  tab / focus / automation spine), positioned by `gyre` output via per-node transforms, with
+  transform-only motion staying on the `RepaintOnly` path (a transform-only-motion fact, see
+  Findings; **not** a per-frame-perf justification — see the bake-vs-live note below). The card the
+  subtree carries is **one sprite**, not the node; the sprite/representation layer is owned by the
+  [node-representation-arrangement plan](2026-06-18_node_representation_arrangement_plan.md) (C1).
+- Pointer and keyboard input reach the element through serval's hit-test. **REVERSED 2026-06-19**
+  (per the [node-representation-arrangement plan](2026-06-18_node_representation_arrangement_plan.md)):
+  the earlier two-hit-test split (DOM-card hit vs `gyre` hit) was **abandoned**. The card is **no
+  longer the node's hit-target**; a press over the orrery routes to **`gyre` directly**
+  (`CLICK_SLOP` splits select vs drag), and the card is a static snapshot content-preview that is
+  never the drag handle. Keyboard / focus still ride the document spine via the focusable node
+  container.
+- The **node container** is a focusable DOM node, so orrery focus joins the Phase 1 ring. (The
+  card sprite it carries is a static snapshot, not the focus target — the container is.)
 - The standalone orrery `netrender::Scene` and its bespoke pointer routing in
   `input.rs` reduce to the scene-underlay paint plus the `gyre` query.
+
+**Bake-vs-live note (C3, owner =
+[cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
+§4(b); cross-ref only, do not restate).** The `RepaintOnly` classification above is a
+**transform-only-motion fact** (transform-only motion does not relayout), and that claim is true.
+It is **not** a per-frame-perf justification, and "baking to a texture" is **not** a per-frame-perf
+win: baking is the **GPU rasterize** step and does **not** avoid the **CPU layout** (you must lay
+out to rasterize). serval already has `IncrementalLayout` (repaint-only vs relayout, restyle
+damage); the per-frame cost is solved by **incremental layout + layerized compositing**, not by
+baking everything. A snapshot texture is justified by **DORMANCY / MEMORY** (you cannot hold N live
+layout sessions in RAM for N previews = the suspended-tab model), not by per-frame performance; the
+**active / focused surface stays LIVE the engine way** (cold layout once, incremental thereafter).
 
 Gated on: the Path A/B decision, and a serval **custom-layout element with
 transform-positioned DOM children**. The input machinery is not the gap: serval
@@ -250,9 +318,13 @@ same primitive can fix the card a11y bounds (which are still at the pre-transfor
 
 ### cond 1 design (2026-06-19): the custom-layout orrery element, Mechanism A
 
-cond 1 is the structural form behind the interim: the cards' real positions live in the layout
-fragments, supplied by gyre, so every consumer (overlays, a11y bounds, future text selection,
-hit-test) reads correct geometry with no transform special-casing.
+cond 1 is the structural form behind the interim: each **node body / sprite's** real position lives
+in the layout fragments, supplied by gyre, so every consumer (overlays, a11y bounds, future text
+selection, hit-test) reads correct geometry with no transform special-casing. (Re-scoped
+2026-06-19: this rationale is about the **node body / sprite geometry**, not the retired
+DOM-card-as-node-hit-target model — per the node-representation reversal the card is not the node's
+hit-target; the geometry that must be correct is the node container's / sprite's, whatever sprite is
+shown.)
 
 **Mechanism B (absolute `left`/`top`) is rejected.** Setting each card's `left`/`top` from gyre
 and letting taffy flow them would put the positions in the fragments, but a `left`/`top` change is
@@ -300,10 +372,26 @@ commits, using serval's existing `<external-texture>` machinery (no new element 
   scene's compose moved off the hardcoded `orrery_rect` onto its element's placement; the standalone
   host composite is retired.
 
-The mechanism generalizes: a secondary orrery, the workbench, or a scrying surface becomes a document
-external-texture element by emitting the view + registering its texture under a key, and the placement +
-compose + `on_wheel` input come for free. The remaining host composites (secondaries, workbench, content
-cards) migrate onto this path as they become document elements.
+**Surface migration — corrected per C2 (2026-06-19; owner =
+[native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md)).** The
+external-texture-element mechanism above is correct for the orrery **scene** specifically — a
+rendered *field*, not a document, so a texture is the right shape (C2 case (d)). It does **not**
+generalize to "every host-composited surface becomes a document external-texture element". Surfaces
+split **by nature** (the four-way layering owned by the native-surface-compositing plan):
+
+- **(a) serval-rendered content** (a secondary orrery's chrome, the workbench tile chrome, content
+  the engine lays out) → a **real DOM subtree** in the shell document (rides a11y, find-in-page,
+  selection, true scroll), not a texture.
+- **(b) genuinely-external content** (scrying = a system WebView2 visual) → a **native composition
+  visual** composited **below the chrome**, **NOT** a document external-texture element. This is the
+  case the old blanket recipe got wrong.
+- **(c) dormant surfaces** → a **snapshot texture** (the suspended-tab model; justified by dormancy
+  / memory, not per-frame perf — see the bake-vs-live note above).
+- **(d) the orrery gyre scene** → a texture is correct (what cond 5 landed above).
+
+A secondary orrery's *scene* rides path (d); its node chrome rides path (a); a scrying surface rides
+path (b). The remaining host composites migrate onto whichever path matches their nature, not all
+onto the document-element path. Cross-reference the native-surface-compositing plan for the layering.
 
 Tiles follow-on (either path): workbench tab/divider chrome and content cards.
 The composition spine's working-principles say `platen-view` realizes formes as
@@ -313,7 +401,9 @@ migration, not a re-wire: meerkat composites a pelt `TileShell` today, and
 `platen-view` does not exist yet (only `platen/lib.rs` + README). So the step is
 net-new `platen-view` plus retiring pelt for tile chrome.
 
-Payoff, semantic surface (Path A only): once node cards are DOM, the rendered
+Payoff, semantic surface (CORE GOAL 3 — diagnosable / accessible / automatable; see "Goals"
+above). This is **not** a Path-A side effect: it is a core goal of the plan. Once the
+node-as-container rides the document (carrying whatever sprite — the card is one), the rendered
 orrery becomes machine-legible to outside consumers (assistive tech, semantic-web
 tools, agents), riding the same DOM that gives the Phase 1 a11y tree. The flow
 stays one-way and kernel-sourced: emit the already-shipped
@@ -327,8 +417,9 @@ presentational); reserve element-level RDFa for when a tool must grab a specific
 sub-element (a `schema:name` span). This complements the shipped JSON-LD I/O
 (`linked-data` crate, `Command::ExportGraph` / `>export_graph`, plus `from_html`
 foreign-page ingest; [linked-data ingest/export plan](2026-05-22_linked_data_ingest_export_plan.md)),
-it does not replace it, and it is an affordance riding the node-cards-as-DOM
-done-condition rather than a hard Phase 2 requirement.
+it does not replace it, and it is an affordance riding the node-as-container-in-the-document
+done-condition (the container rides the spine; the card is one sprite) rather than a hard Phase 2
+requirement.
 
 ## Path B alternative — formalize the surface compositor
 
@@ -371,11 +462,15 @@ targeted reads:
   host to composite; the view is `xilem_serval::external_texture(key, w, h)`
   (`xilem-serval/src/tags.rs:74`). It carries no input, so the orrery cannot be
   expressed as one today.
-- **The perf prerequisite for an in-document orrery is met.** The host cheap-path
+- **The motion prerequisite for an in-document orrery is met.** The host cheap-path
   work confirmed transform-only motion classifies as `RepaintOnly`, not relayout,
-  which is the condition for 60fps physics on DOM-backed node cards (archived in
+  which is the condition for 60fps physics on DOM-backed node sprites (archived in
   [`archive_docs/2026-06-15_completed_plans/`](../../archive_docs/2026-06-15_completed_plans/),
-  host_cheap_path).
+  host_cheap_path). This is a **transform-only-motion fact**, not a bake-as-perf-win claim: the
+  per-frame cost is solved by incremental layout + layerized compositing; the active surface stays
+  live the engine way; a snapshot texture is a dormancy / memory decision (C3 bake-vs-live, owner =
+  [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
+  §4(b); cross-ref only).
 - **One document via a shell root, not sibling roots.** serval roots layout at a
   single document element (`build_box_tree`'s first-element-child rule, "no synthetic
   wrapper", box_tree.rs:282-318); independent roots are expressed with `SubtreeView`
@@ -412,12 +507,15 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   rather than CSS flow (transform-only motion already verified `RepaintOnly`), plus
   **transform-aware hit-test** in the host (already a G1 composition-runway item). Scope
   that, not input routing, in serval's plan.
-- **`gyre` two-hit-test: the primitive exists; only the boundary is unwritten.** `gyre`
-  already exposes scene-geometry picking: `Simulation::hit_test(point) -> Option<NodeKey>`
-  over rapier's `QueryPipeline` (every node is a collider) (orrery/gyre/lib.rs:351-358,
-  query.rs). What remains is the written DOM-vs-`gyre` boundary: card-subtree hits resolve
-  in the DOM, node-body / edge / empty-canvas hits resolve via `gyre`.
-  cartography_aether_layout_seam is the starting point.
+- **`gyre` two-hit-test: RESOLVED the other way (2026-06-19).** The DOM-vs-`gyre` boundary was
+  written, but it **collapsed toward `gyre`, not toward a card/`gyre` split**: per the
+  [node-representation-arrangement plan](2026-06-18_node_representation_arrangement_plan.md)
+  reversal, the **card is not the node's hit-target**; an orrery press routes to `gyre` directly
+  (`CLICK_SLOP` splits select vs drag), and the card is a static snapshot content-preview. The
+  `gyre` picking primitive (`Simulation::hit_test(point) -> Option<NodeKey>` over rapier's
+  `QueryPipeline`, orrery/gyre/lib.rs:351-358) is the live path; the earlier "card-subtree hits
+  resolve in the DOM" half is retired. cartography_aether_layout_seam remains the geometry
+  reference.
 - **Tiles live path: confirmed a migration.** The workbench composites a pelt `TileShell`
   today (render.rs), and `platen-view` (formes as serval flex DOM) does not exist yet (only
   `platen/lib.rs` + README). So Phase 2's tiles step is net-new `platen-view` tile chrome
@@ -546,3 +644,45 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   **Phase 1's document consolidation is done (all 4 done-conditions).** Phase 2 (the
   custom-layout `<orrery>` element, the two-hit-test split, scene / edge teardown) remains; the
   open follow-ups are the labels-over-palette z-order and the laggy scroll.
+
+- **2026-06-19 (cross-plan consolidation, this plan reconciled against its siblings).** A
+  three-plan reconciliation pass (this plan + the
+  [node-representation-arrangement plan](2026-06-18_node_representation_arrangement_plan.md) + the
+  [native-surface-compositing plan](2026-06-19_native_surface_compositing_plan.md), aligned to the
+  [cross-platform parallelism research doc](../research/2026-06-19_cross_platform_parallelism_strategy.md))
+  folded its decisions into this plan. **No prior progress entry was edited** (DOC_POLICY 8/9); this
+  entry records what reconciles the older "Phase 2 ... remains" line above with the updated Status
+  header — the older line was true when written; this entry states what changed since. Edits made:
+  - **Reconciled phase state in the Status header:** Phase 1 done (4/4); Phase 2 cond 3/4/5 landed
+    host-side, but cond 3/4 (the card-as-node-hit-target two-hit-test) was **reversed** by the
+    node-representation plan (press routes to `gyre` directly via `CLICK_SLOP`; the card is a static
+    snapshot content-preview, never the drag handle, not a representation form); cond 5 (the orrery
+    **scene** as a document `<external-texture>`, standalone `Scene` retired) is done; cond 1
+    (custom-layout `<orrery>` element) deferred. Struck "and verified" (the body records cond 3/4 as
+    "Pending: visual confirm"). Removed the orphaned verbless thesis-abstract fragment.
+  - **Absorbed the cond-3/4 reversal** into the Phase 2 done-conditions, the gyre-two-hit-test open
+    question (which **collapsed toward `gyre`**, not toward a card/`gyre` split), and the cond-1
+    rationale (re-scoped to **node body / sprite geometry**, not the retired DOM-card-as-node model).
+    node-representation is the canonical record of the reversal.
+  - **Added the three-goals frame** (unify the host; reach gpui-level baseline perf as **two
+    per-lane ceilings**; diagnosable / accessible / automatable) and **promoted the
+    semantic-surface payoff from a "(Path A only)" side effect to core goal 3**.
+  - **Corrected the surface-migration recipe (C2):** surfaces split **by nature** — serval content →
+    DOM subtree; genuinely-external scry → a native composition visual below the chrome (**not** a
+    document element); dormant → snapshot texture; the orrery gyre **scene** → texture (correct,
+    cond 5). The blanket "every surface → document external-texture element" recipe is superseded for
+    the scry case; cross-referenced the native-surface-compositing plan (the C2 owner). The cond-5
+    factual record (orrery scene on `<external-texture>`) is retained; only its generalization to
+    scrying was wrong.
+  - **Added the bake-vs-live correction (C3)** at every RepaintOnly / texture-as-perf site: baking is
+    the GPU rasterize step and does not avoid CPU layout; serval already has `IncrementalLayout`; the
+    snapshot texture is a **dormancy / memory** decision, not a per-frame-perf win; the active surface
+    stays live the engine way. RepaintOnly kept correct as a transform-only-motion fact.
+  - **Reframed node-card-as-document language (C1)** to the node-as-container / free-sprite framing
+    (the card is **one** sprite, not the node's truth); the sprite/representation layer is owned by
+    the node-representation plan, this plan owns the node-as-container (the a11y / automation spine).
+  - **Added three sibling cross-references:** native-surface-compositing (C2 owner of the layer below
+    the document), node-representation-arrangement (C1 owner of the sprite layer + the cond-3/4
+    reversal), and the parallelism research doc (C3/C4 owner of the performance strategy;
+    cross-reference only, do not restate; honor its confidence levels). No DOC_README change is
+    triggered (edit-in-place; no doc added or moved; relative links only).

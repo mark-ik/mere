@@ -12,6 +12,9 @@ path = "src/lib.rs"
 
 [dependencies]
 inker.workspace = true
-scrying = { path = "../../../../../wgpu-scry/scrying" }
+# Sibling repo consumed one-way; a **git dep** (not a path dep) so a bare clone
+# builds without the `wgpu-scry` sibling layout. A local checkout is picked up via
+# the gitignored `.cargo/config.toml` `paths` override.
+scrying = { git = "https://github.com/mark-ik/wgpu-scry.git", branch = "main" }
 dpi.workspace = true
 tracing.workspace = true
