@@ -44,6 +44,61 @@ fn favicon_data_uri(rgba: &[u8], w: u32, h: u32) -> Option<String> {
     Some(format!("data:image/png;base64,{}", base64_encode(&png)))
 }
 
+/// Read an `Rgba8Unorm` texture back to tightly-packed CPU RGBA bytes (width*height*4),
+/// stripping wgpu's per-row alignment padding. Blocks until the copy + map complete, so
+/// it is only used off the hot path — once per url for a snapshot card preview, then
+/// cached. Mirrors netrender_device's test-only `read_rgba8_texture`. (Layering fix.)
+fn read_texture_rgba(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    target: &wgpu::Texture,
+    width: u32,
+    height: u32,
+) -> Vec<u8> {
+    let row_bytes = width * 4;
+    let padded = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("snapshot readback"),
+        size: padded as u64 * height as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder =
+        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("snapshot readback") });
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture: target,
+            mip_level: 0,
+            origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buffer,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(padded),
+                rows_per_image: Some(height),
+            },
+        },
+        wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+    );
+    queue.submit([encoder.finish()]);
+    let slice = buffer.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |r| {
+        let _ = tx.send(r);
+    });
+    device.poll(wgpu::PollType::wait_indefinitely()).expect("readback poll");
+    rx.recv().expect("readback map sender").expect("readback map");
+    let mapped = slice.get_mapped_range();
+    let mut out = Vec::with_capacity((row_bytes * height) as usize);
+    for row in 0..height as usize {
+        let src = row * padded as usize;
+        out.extend_from_slice(&mapped[src..src + row_bytes as usize]);
+    }
+    out
+}
+
 /// Minimal standard base64 (no line breaks), for the favicon data URI. (Phase 2.)
 fn base64_encode(data: &[u8]) -> String {
     const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -169,6 +224,41 @@ impl WindowCtx<'_> {
         } else if self.view.list_pane_open(Trail) {
             self.view.set_list_pane(Trail, "utility-pane trail", Vec::new(), None);
         }
+    }
+
+    /// The focused node's content-card descriptor for the shell document: its rect (local
+    /// to the orrery element) and kind. A visited node gets a snapshot preview (the host
+    /// fills its external-texture from the url-cached scene); an unvisited node gets a
+    /// dashed placeholder. `None` when no node is focused, or the focused node is an open
+    /// workbench tile (the tile is the view; a card would contend for its content actor).
+    /// The card is placed *after* the node cards in document order, so it paints over them
+    /// while the chrome overlays still paint over it. (Layering fix — card over nodes.)
+    fn compute_focus_card(
+        &self,
+        orrery_rect: [f32; 4],
+        workbench_rect: Option<[f32; 4]>,
+    ) -> Option<crate::window_view::FocusCard> {
+        use crate::window_view::{FocusCard, FocusCardKind};
+        let member = self.focused_member().filter(|m| {
+            workbench_rect.is_none() || !self.view.workbench.open_members().contains(m)
+        })?;
+        // The node's pane-local screen position (same camera the node cards use).
+        let (nx, ny) = self.orrery().focused_node_screen()?;
+        let (pw, ph) = (orrery_rect[2] - orrery_rect[0], orrery_rect[3] - orrery_rect[1]);
+        let local = [0.0, 0.0, pw, ph];
+        let (kind, cw, ch) = if self.orrery().member_visited(member) {
+            // The preview image is built host-side once per url (the readback below) and
+            // cached; `None` here renders a placeholder until that lands. (Layering fix.)
+            let data_uri = self
+                .orrery()
+                .focused_url()
+                .and_then(|u| self.view.snapshot_data_uris.get(u).cloned());
+            (FocusCardKind::Snapshot { data_uri }, super::card::SNAP_W, super::card::SNAP_H)
+        } else {
+            (FocusCardKind::Unvisited, super::card::UNVIS_W, super::card::UNVIS_H)
+        };
+        let (x0, y0, x1, y1, _, _) = super::card::anchored_card_rect(nx, ny, cw, ch, local)?;
+        Some(FocusCard { rect: [x0, y0, x1, y1], kind })
     }
 
     /// Render the two authorities and present them. The orrery content root fills
@@ -468,7 +558,7 @@ impl WindowCtx<'_> {
         // camera into the shell state, so the orrery element renders a DOM card per
         // node. The update + frame() above ran this frame, so the snapshot reads
         // this-frame positions/colors/scope and the cards align with the scene. (Phase 2.)
-        let orrery_render = {
+        let orrery_cards = {
             let orrery = self.pane_orrery(orrery_gid);
             let cam = orrery.camera();
             // The focused pane box, for culling cards to it: serval does not clip
@@ -528,8 +618,12 @@ impl WindowCtx<'_> {
                     })
                 })
                 .collect();
-            OrreryRender { rect: orrery_rect, cards }
+            cards
         };
+        // The focused node's content card (snapshot / unvisited placeholder), placed after
+        // the node cards in document order so it paints over them. (Layering fix.)
+        let focus_card = self.compute_focus_card(orrery_rect, workbench_rect);
+        let orrery_render = OrreryRender { rect: orrery_rect, cards: orrery_cards, focus_card };
         // Only rebuild the shell view when the snapshot actually changed: a settled
         // orrery (no motion, selection, or camera change) produces an identical snapshot
         // each frame, so this skips the per-frame view re-run + diff entirely. (Perf.)
@@ -884,17 +978,21 @@ impl WindowCtx<'_> {
                 // "Last visit" snapshot: a small fixed-size card, rendered host-side
                 // from the durable cache / synthesis below (no actor), so it survives
                 // a restart. Composited uniform-scaled into a scrollable thumbnail.
-                const SNAP_W: u32 = 200;
-                const SNAP_H: u32 = 260;
                 let rect = node
                     .and_then(|(nx, ny)| {
-                        super::card::anchored_card_rect(nx, ny, SNAP_W, SNAP_H, orrery_rect)
+                        super::card::anchored_card_rect(
+                            nx,
+                            ny,
+                            super::card::SNAP_W,
+                            super::card::SNAP_H,
+                            orrery_rect,
+                        )
                     })
                     .or_else(|| super::card::card_rect(orrery_rect));
                 if let Some((x0, y0, x1, y1, _, _)) = rect {
                     // Render the snapshot scene from cache / synthesis once per url;
-                    // `None` means its texture is already cached (composited below).
-                    let built = if self.view.snapshot_textures.contains_key(&url) {
+                    // `None` means its data-URI image is already cached (encoded below).
+                    let built = if self.view.snapshot_data_uris.contains_key(&url) {
                         None
                     } else {
                         const RENDER_W: u32 = 300;
@@ -929,11 +1027,15 @@ impl WindowCtx<'_> {
                 // placeholder, anchored like the other cards. Double-clicking it
                 // opens the node in a pelt (workbench) tile (same as a snapshot).
                 // Composited on its own path below (no constellation scene).
-                const UNVIS_W: u32 = 200;
-                const UNVIS_H: u32 = 120;
                 unvisited_card = node
                     .and_then(|(nx, ny)| {
-                        super::card::anchored_card_rect(nx, ny, UNVIS_W, UNVIS_H, orrery_rect)
+                        super::card::anchored_card_rect(
+                            nx,
+                            ny,
+                            super::card::UNVIS_W,
+                            super::card::UNVIS_H,
+                            orrery_rect,
+                        )
                     })
                     .map(|(x0, y0, x1, y1, _, _)| (member, [x0, y0, x1, y1]));
             }
@@ -1183,13 +1285,9 @@ impl WindowCtx<'_> {
         // orrery scene is the first such element (its key is `ORRERY_SCENE_KEY`); secondaries /
         // workbench / scrying join as they become document elements and register their views. (cond 5.)
         for &(key, rect) in &external_texture_placements {
-            let view = match key {
-                crate::window_view::ORRERY_SCENE_KEY => Some(&orrery_view),
-                _ => None,
-            };
-            if let Some(view) = view {
+            if key == crate::window_view::ORRERY_SCENE_KEY {
                 core.renderer().compose_external_texture(
-                    view,
+                    &orrery_view,
                     &target_view,
                     format,
                     w,
@@ -1361,46 +1459,21 @@ impl WindowCtx<'_> {
         // The "last visit" snapshot card: rasterize the host-rendered scene once
         // per url (cached), then composite uniform-scaled into the small dest with
         // the same vertical-scroll UV window as the other cards.
-        if let Some((member, url, rect, built)) = snapshot_card {
-            if let Some((scene, content_h)) = built {
-                // The snapshot scene is one top band (capped at PREVIEW_BAND_PX by
-                // render_content_scene), so cap the texture to match — a tall dormant
-                // page previews its head rather than failing as one over-tall texture.
-                let tex_h = content_h.max(1).min(crate::card::PREVIEW_BAND_PX);
-                let (tex, view) = core.rasterize(&scene, 300, tex_h, ColorLoad::Clear(CARD_BG));
-                self.view.snapshot_textures.insert(
-                    url.clone(),
-                    super::CachedTile {
-                        version: 0,
-                        size: (300, tex_h),
-                        tex,
-                        view,
-                    },
-                );
-            }
-            if let Some(cached) = self.view.snapshot_textures.get(&url) {
-                let tex_w = cached.size.0 as f32;
-                let tex_h = cached.size.1 as f32;
-                let dest_w = (rect[2] - rect[0]).max(1.0);
-                let dest_h = (rect[3] - rect[1]).max(1.0);
-                let visible_h = dest_h * tex_w / dest_w;
-                let max_scroll = (tex_h - visible_h).max(0.0);
-                let scroll = self
-                    .view
-                    .scroll
-                    .get(&member)
-                    .copied()
-                    .unwrap_or(0.0)
-                    .clamp(0.0, max_scroll);
-                let uv = [0.0, scroll / tex_h, 1.0, (scroll + visible_h) / tex_h];
-                core.renderer().compose_external_texture(
-                    &cached.view,
-                    &target_view,
-                    format,
-                    w,
-                    h,
-                    ExternalTexturePlacement::new(rect).with_uv(uv),
-                );
+        if let Some((_, url, _, built)) = snapshot_card {
+            if let Some((scene, _content_h)) = built {
+                // Render the page's top peek, read it back, and encode a PNG data-URI for the
+                // snapshot card's chrome `<img>`. The card shows only its top band, so a fixed
+                // peek size suffices (the `<img>` scales it to the card). Once per url — the
+                // readback blocks, so it is gated on the data-uri cache miss above. The image
+                // is opaque chrome DOM after the node cards, so it paints over them and under
+                // the overlays — the layering an external-texture could not give. (Layering fix.)
+                const PEEK_W: u32 = 300;
+                const PEEK_H: u32 = 390;
+                let (tex, _view) = core.rasterize(&scene, PEEK_W, PEEK_H, ColorLoad::Clear(CARD_BG));
+                let rgba = read_texture_rgba(core.device(), core.queue(), &tex, PEEK_W, PEEK_H);
+                if let Some(uri) = favicon_data_uri(&rgba, PEEK_W, PEEK_H) {
+                    self.view.snapshot_data_uris.insert(url.clone(), uri);
+                }
             }
         }
         // Tile decorations (workbench pane): a "Reloading…" placeholder over a tile
@@ -1455,32 +1528,10 @@ impl WindowCtx<'_> {
                 );
             }
         }
-        // The unvisited placeholder card: rasterize its (static) scene once per
-        // size and composite it at the anchored rect.
-        if let Some((_, rect)) = unvisited_card {
-            let uw = (rect[2] - rect[0]).round().max(1.0) as u32;
-            let uh = (rect[3] - rect[1]).round().max(1.0) as u32;
-            if self.view.unvisited_tex.as_ref().map(|c| c.size) != Some((uw, uh)) {
-                let scene = super::card::unvisited_card_scene(uw, uh);
-                let (tex, view) = core.rasterize(&scene, uw, uh, ColorLoad::Clear(CARD_BG));
-                self.view.unvisited_tex = Some(super::CachedTile {
-                    version: 0,
-                    size: (uw, uh),
-                    tex,
-                    view,
-                });
-            }
-            if let Some(cached) = &self.view.unvisited_tex {
-                core.renderer().compose_external_texture(
-                    &cached.view,
-                    &target_view,
-                    format,
-                    w,
-                    h,
-                    ExternalTexturePlacement::new(rect),
-                );
-            }
-        }
+        // The unvisited placeholder card now renders as a pure-DOM shell element (a dashed
+        // "double-click to load" card, document-ordered over the node cards), so there is no
+        // host composite for it; `unvisited_card` survives only as a `content_rects` entry so
+        // a double-click over it still opens the node in a pelt tile. (Layering fix.)
         // Frame dividers: fill each split gutter with a dark seam (so the gutter is
         // not stale pixels and reads as a divider). (Frame tree, F1.)
         if !dividers.is_empty() {

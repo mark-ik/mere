@@ -142,10 +142,10 @@ pub(crate) struct WindowView {
     /// its band). The composite UV-windows within `[band_y, band_y + tex_h]`; absent
     /// (or 0) for HTML-lane / full textures. (Retained-text / tiled render.)
     pub(crate) tile_bands: HashMap<GraphMemberId, f32>,
-    /// Cached rasterized "unvisited" placeholder card.
-    pub(crate) unvisited_tex: Option<CachedTile>,
-    /// Cached rasterized snapshot textures, keyed by URL (the node's last-visit look).
-    pub(crate) snapshot_textures: HashMap<String, CachedTile>,
+    /// The focused node's "last visit" snapshot preview as a PNG data-URI, keyed by URL.
+    /// Built once per url by a blocking readback + encode, then rendered as a chrome `<img>`
+    /// in the snapshot card (over the node cards). (Layering fix — card over nodes.)
+    pub(crate) snapshot_data_uris: HashMap<String, String>,
     /// Cached rasterized window-control strip (min / max / close).
     pub(crate) window_controls_tex: Option<CachedTile>,
     /// A small solid texture filling the frame-divider gutters between split panes.
@@ -307,6 +307,37 @@ pub(crate) struct OrreryRender {
     /// The orrery pane rect `[x0, y0, x1, y1]` (left, top, right, bottom) in viewport px.
     pub(crate) rect: [f32; 4],
     pub(crate) cards: Vec<OrreryCard>,
+    /// The focused node's content card (snapshot or unvisited placeholder), placed
+    /// *after* the node cards in document order so it paints over them — the spatial
+    /// map's nodes sit under the focused content, and the chrome's overlays still paint
+    /// over the card (shell order: orrery before chrome). `None` when no node is focused
+    /// or the focused node is itself an open tile. (Layering fix — card over nodes.)
+    pub(crate) focus_card: Option<FocusCard>,
+}
+
+/// The focused node's content card in the shell document: a positioned element placed
+/// after the node cards so document order paints it over them. A `Snapshot` carries a PNG
+/// data-URI `<img>` of the page's top peek (built host-side, cached per url); an
+/// `Unvisited` is a pure-DOM dashed placeholder. (Layering fix — card over nodes.)
+#[derive(PartialEq)]
+pub(crate) struct FocusCard {
+    /// The card rect `[x0, y0, x1, y1]` local to the orrery element origin.
+    pub(crate) rect: [f32; 4],
+    pub(crate) kind: FocusCardKind,
+}
+
+#[derive(PartialEq)]
+pub(crate) enum FocusCardKind {
+    /// A visited node's "last visit" preview: the page's top peek rendered to a PNG
+    /// data-URI image, placed as a chrome DOM `<img>` after the node cards (so it paints
+    /// over them and under the overlays — like the favicons already do). An
+    /// external-texture cannot serve here: textures composite in the content layer below
+    /// the chrome, and the transparent hole does not erase the opaque node cards behind it.
+    /// `None` until the host's once-per-url readback + encode has run (a one-frame
+    /// placeholder). (Layering fix — card over nodes.)
+    Snapshot { data_uri: Option<String> },
+    /// A never-visited node: a static dashed "double-click to load" placeholder.
+    Unvisited,
 }
 
 /// The window shell's composed view-state: the chrome plus the orrery-as-element's
@@ -548,6 +579,13 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
     );
     let mut children: Vec<ShellView> = vec![scene];
     children.extend(card_views);
+    // The focused node's content card paints LAST among the orrery's children, so it sits
+    // over the node cards (the spatial map's nodes are under the focused content). The
+    // chrome (and its overlays) still paints over it, since the orrery element precedes the
+    // chrome in the shell document. (Layering fix — card over nodes.)
+    if let Some(fc) = &render.focus_card {
+        children.push(focus_card_view(fc));
+    }
     // The orrery pane element bears the wheel: a wheel the host dispatches here queues its delta
     // for the host to drain into gyre's pan / Ctrl-zoom, routing the orrery wheel through the
     // document (the form wheel.rs intends). The cards / scene under it have no wheel handler, so
@@ -567,6 +605,62 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
     ))
 }
 
+/// The focused node's content card: a positioned element over the orrery node cards. A
+/// `Snapshot` is a framed card holding a PNG data-URI `<img>` of the page's top peek (the
+/// host builds + caches it per url); an `Unvisited` is a dashed "double-click to load"
+/// placeholder (double-click is host-handled via `content_rects`, so the element needs no
+/// click handler). The card is opaque chrome DOM after the node cards, so document order
+/// paints it over them and under the chrome overlays. (Layering fix — card over nodes.)
+fn focus_card_view(fc: &FocusCard) -> ShellView {
+    let [x0, y0, x1, y1] = fc.rect;
+    let (w, h) = ((x1 - x0).max(1.0), (y1 - y0).max(1.0));
+    match &fc.kind {
+        FocusCardKind::Snapshot { data_uri } => {
+            // The preview is a PNG data-URI <img> (like the favicons), so it is opaque chrome
+            // DOM after the node cards: document order paints it over them. Until the host's
+            // first readback lands, a plain light card stands in. (Layering fix.)
+            let inner: ShellView = match data_uri {
+                Some(uri) => Box::new(el::<_, ShellState, ()>("img", ()).attr("src", uri.clone()).attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:0;top:0;width:{w}px;height:{h}px;\
+                         border-radius:8px;display:block"
+                    ),
+                )),
+                None => Box::new(el::<_, ShellState, ()>("div", ()).attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:0;top:0;width:{w}px;height:{h}px;\
+                         border-radius:8px;background:#f3f4f6"
+                    ),
+                )),
+            };
+            Box::new(
+                el::<_, ShellState, ()>("div", vec![inner]).attr("class", "snapshot-card").attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:{x0}px;top:{y0}px;width:{w}px;height:{h}px;\
+                         overflow:hidden;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.55)"
+                    ),
+                ),
+            )
+        }
+        FocusCardKind::Unvisited => Box::new(
+            el::<_, ShellState, ()>("div", "Double-click to load".to_string())
+                .attr("class", "unvisited-card")
+                .attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:{x0}px;top:{y0}px;width:{w}px;height:{h}px;\
+                         box-sizing:border-box;display:flex;align-items:center;justify-content:center;\
+                         border:1px dashed #5a6478;border-radius:8px;color:#8b94a6;font-size:13px;\
+                         background:rgba(28,32,40,0.88)"
+                    ),
+                ),
+        ),
+    }
+}
+
 /// Build a window's shell runner over `dom`, seeded with `chrome`. The host view
 /// constructor and `main`'s window builders use this instead of a bare chrome runner.
 /// (Unified document host — Phase 1.)
@@ -576,7 +670,7 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
         shell_view as ShellLogic,
         ShellState {
             chrome,
-            orrery: OrreryRender { rect: [0.0; 4], cards: Vec::new() },
+            orrery: OrreryRender { rect: [0.0; 4], cards: Vec::new(), focus_card: None },
             roster: RosterState::default(),
             roster_rect: None,
             panes: std::array::from_fn(|_| ListPaneState::default()),
@@ -731,8 +825,7 @@ impl WindowView {
             find_gen: 0,
             tile_textures: Default::default(),
             tile_bands: Default::default(),
-            unvisited_tex: Default::default(),
-            snapshot_textures: Default::default(),
+            snapshot_data_uris: Default::default(),
             window_controls_tex: Default::default(),
             divider_tex: Default::default(),
             scroll: Default::default(),

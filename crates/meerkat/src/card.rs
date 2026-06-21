@@ -480,6 +480,15 @@ pub fn find_content(
 /// [`CARD_MARGIN`]). Returns `(x0, y0, x1, y1, w, h)` — window-space corners for
 /// the composite plus the pixel size to rasterize at — or `None` when the band
 /// is too small to host a readable card.
+/// The focused-node snapshot card footprint (px): a small fixed thumbnail anchored beside
+/// the node. Shared by the shell element placement (`compute_focus_card`) and the host
+/// texture build, so the element and its content agree on size. (Layering fix.)
+pub(crate) const SNAP_W: u32 = 200;
+pub(crate) const SNAP_H: u32 = 260;
+/// The never-visited placeholder card footprint (px).
+pub(crate) const UNVIS_W: u32 = 200;
+pub(crate) const UNVIS_H: u32 = 120;
+
 pub fn card_rect(band: [f32; 4]) -> Option<(f32, f32, f32, f32, u32, u32)> {
     let [bx0, by0, bx1, by1] = band;
     let bw = bx1 - bx0;
@@ -546,39 +555,10 @@ pub fn anchored_card_rect(
     ))
 }
 
-/// The placeholder card for a focused node that has no snapshot yet (never
-/// visited this session): a dashed outline framing a "Double-click to load"
-/// hint. Double-clicking it opens the node in a pelt (workbench) tile, same as a
-/// snapshot. Static, so the host rasterizes it once and caches it.
-/// (Card system #3.)
-pub fn unvisited_card_scene(w: u32, h: u32) -> Scene {
-    let doc = document("mere://unvisited", vec![paragraph("Double-click to load")]);
-    let mut laid = layout_document(
-        &doc,
-        Viewport::new(w as f32, h as f32),
-        &StyleConfig::default(),
-    );
-    // Frame the whole card (not just the text extent) so the dashed border fits.
-    laid.packet.viewport = Viewport::new(w as f32, h as f32);
-    let mut scene = scene_from_packet(&laid.packet, &laid.fonts, &card_vocabulary());
-    scene.push_stroke_decorated(
-        2.0,
-        2.0,
-        w as f32 - 2.0,
-        h as f32 - 2.0,
-        [0.58, 0.61, 0.69, 0.75],
-        1.5,
-        netrender::SceneStrokeCap::default(),
-        netrender::SceneStrokeJoin::default(),
-        vec![6.0, 4.0],
-    );
-    scene
-}
-
 /// The placeholder for a tile whose actor is recovering from a crash (respawned,
 /// not yet re-rendered): a centered "Reloading…" hint, shown until the respawned
-/// actor delivers a scene whose texture covers it. Mirrors [`unvisited_card_scene`]
-/// (the same doc → layout → scene path) but carries no dashed border — it is a
+/// actor delivers a scene whose texture covers it. The same doc → layout → scene
+/// path as the cards, but carries no dashed border — it is a
 /// transient status, not an affordance. (Workbench tile decoration, re-applied on the
 /// pelt surface path.)
 pub fn recovering_card_scene(w: u32, h: u32) -> Scene {

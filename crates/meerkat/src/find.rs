@@ -64,7 +64,6 @@ impl WindowCtx<'_> {
             .view
             .tile_textures
             .get(&member)
-            .or_else(|| self.view.snapshot_textures.get(&url))
             .map(|c| c.size.0)
             .or_else(|| dest.map(|r| (r[2] - r[0]).round().max(1.0) as u32))
             .unwrap_or(300);

@@ -584,3 +584,24 @@ it is the default of a setting, not a baked constant.
   card**; content opens in pelt. **P4 complete.** (The scry compat node now renders live in a pelt
   tile via the off-window WebView2 capture — the DX12-backend + cache-flush fixes for that live in
   the [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md) territory.)
+- 2026-06-21: **Orrery card-over-nodes layering fixed — the focused card is now chrome DOM over
+  the node cards.** Mark caught the orrery node cards painting *over* the focused node's snapshot
+  card. Root finding (code- + runtime-verified): the orrery renders its nodes as **chrome DOM cards**
+  (`set_render_as_cards`), but the snapshot card was a host-composited **texture in the content layer
+  below the chrome**, so the node cards always won. The deeper constraint: meerkat's
+  `<external-texture>` mechanism composites in the content layer *under* the one chrome texture, and a
+  transparent texture-hole does **not** erase the opaque node cards painted behind it (proven: a white
+  card `background` survived in the chrome and covered the snapshot) — so a page **texture** can never
+  sit "over the node cards, under the overlays" within the single chrome texture. The first attempt
+  (snapshot as an `<external-texture>` shell element) hit exactly this wall. Fix (the chosen "content
+  as shell elements" direction, adapted): the focused card is a positioned **shell DOM element placed
+  after the node cards** in document order, so document order paints it over them and under the chrome
+  overlays. The **unvisited** card is pure DOM (a dashed placeholder). The **snapshot** card is a PNG
+  **data-URI `<img>`** (the same trick the favicons use) of the page's top peek, built host-side once
+  per url by a blocking GPU readback + encode (`read_texture_rgba` → `favicon_data_uri`, cached in
+  `snapshot_data_uris`); the live scroll-peek became a static top-peek. Verified the snapshot renders
+  over the other node cards (scry-shots/du-iana, du-workbench); the **split** workbench tile never
+  overlapped (the rep-01 full-band-overlay was a transient layout state). Retired the old
+  host-composited snapshot/unvisited textures, the `snapshot_textures` / `unvisited_tex` caches, and
+  `unvisited_card_scene`. The "a texture can't paint over chrome DOM" finding belongs to the
+  [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md).

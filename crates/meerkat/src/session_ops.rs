@@ -508,7 +508,7 @@ impl super::Shell {
         ctx.view.scrying_rects.clear();
         ctx.shared.content.pages.clear();
         ctx.view.tile_textures.clear();
-        ctx.view.snapshot_textures.clear();
+        ctx.view.snapshot_data_uris.clear();
         ctx.view.scroll.clear();
         ctx.view.focused_tile = None;
         ctx.view.shown_location = None;
