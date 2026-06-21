@@ -687,4 +687,9 @@ it is the default of a setting, not a baked constant.
   both meerkat load sites (boot + session switch) call it after `seed_cartography`. Three tests lock
   it: the geometry round-trip + prune, the pre-sizing back-compat load, and an orrery
   export→re-apply round-trip (the override + flag survive onto a fresh orrery). platen 75 / orrery 42
-  green, meerkat builds. **P0 now has one item left: the interactive resize handle (1).**
+  green, meerkat builds. **Headed-verified end-to-end** (scry-shots/pers-01): toggled size-by-degree
+  in the running app (the degree-2 node grew), closed the window cleanly, and the written
+  `cartography.json` carried `"size_by_degree":true`; relaunching read it back clean (zero boot errors)
+  via the new load path. (A clean screenshot of the reloaded size was blocked by a harness window-maximize
+  DPI quirk, not the feature — the saved file + clean reload + the round-trip test establish the cycle.)
+  **P0 now has one item left: the interactive resize handle (1).**
