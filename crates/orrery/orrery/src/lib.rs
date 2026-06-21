@@ -166,6 +166,13 @@ pub struct Orrery {
     /// absent here takes the content-type default, so this holds only explicit
     /// overrides, never the whole graph. (Node representation P1.)
     node_representations: HashMap<NodeKey, Representation>,
+    /// Per-node face footprint overrides (px). A node absent here takes size-by-degree
+    /// (when on) or the uniform default, so this holds only explicit resizes. (P0 resize.)
+    node_sizes: HashMap<NodeKey, f32>,
+    /// Scene toggle: when on, a node's face grows with its undirected degree (capped),
+    /// so the spatial map reads connection weight at a glance. Default off (uniform).
+    /// (P0 resize — size-by-degree.)
+    size_by_degree: bool,
     /// `Some(press_origin)` (screen px) while a left-drag marquee on empty space
     /// is in progress.
     marquee: Option<(f32, f32)>,
@@ -261,6 +268,7 @@ impl Orrery {
         self.node_states.clear();
         self.node_shapes.clear();
         self.node_representations.clear();
+        self.node_sizes.clear();
         self.drag = None;
         self.field_drag = None;
         self.marquee = None;
@@ -319,6 +327,8 @@ impl Orrery {
             node_states: HashMap::new(),
             node_shapes: HashMap::new(),
             node_representations: HashMap::new(),
+            node_sizes: HashMap::new(),
+            size_by_degree: false,
             marquee: None,
             ctrl: false,
             shift: false,
@@ -897,6 +907,50 @@ impl Orrery {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
             self.node_representations.remove(&key);
         }
+    }
+
+    /// A node's face footprint (px): a per-node override if set, else size-by-degree
+    /// (the face grows with the node's undirected degree, capped) when that mode is on,
+    /// else the uniform default. The card applies the selection lift on top, and uses the
+    /// same value to center the face on the gyre collider. (P0 resize.)
+    pub fn node_size(&self, key: NodeKey) -> f32 {
+        const DEFAULT: f32 = 36.0;
+        if let Some(&s) = self.node_sizes.get(&key) {
+            return s;
+        }
+        if self.size_by_degree {
+            let degree = self.graph.neighbors_undirected(key).count();
+            return (DEFAULT + 8.0 * degree as f32).min(88.0);
+        }
+        DEFAULT
+    }
+
+    /// Override a single node's face footprint (px), keyed by node UUID; clamped to a sane
+    /// range. Wins over size-by-degree / the default until [`clear_node_size`]; a no-op for
+    /// an unknown id. (P0 resize.)
+    pub fn set_node_size(&mut self, id: uuid::Uuid, size: f32) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            self.node_sizes.insert(key, size.clamp(16.0, 160.0));
+        }
+    }
+
+    /// Clear a node's footprint override, reverting it to size-by-degree / the default.
+    /// Keyed by node UUID; a no-op for an unknown id. (P0 resize.)
+    pub fn clear_node_size(&mut self, id: uuid::Uuid) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            self.node_sizes.remove(&key);
+        }
+    }
+
+    /// Toggle size-by-degree: when on, node faces grow with their undirected degree. A
+    /// scene-level presentation choice (the user's opt-in, off by default). (P0 resize.)
+    pub fn set_size_by_degree(&mut self, on: bool) {
+        self.size_by_degree = on;
+    }
+
+    /// Whether size-by-degree is on. (P0 resize.)
+    pub fn size_by_degree(&self) -> bool {
+        self.size_by_degree
     }
 
     /// The URL of the single focused (selected) node, if exactly one node is

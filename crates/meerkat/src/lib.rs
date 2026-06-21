@@ -314,6 +314,10 @@ pub enum ContextAction {
     /// stays `Copy`), or `""` for force-directed (gyre, the default). Drains like
     /// `ShellbarMove` without touching `context_set`. (Layout picker.)
     SetLayoutStrategy(&'static str),
+    /// Toggle the focused orrery pane's size-by-degree mode (node faces grow with their
+    /// undirected degree). A scene-level presentation choice; drains like `SetLayoutStrategy`
+    /// without touching `context_set`. (Node representation P0 — resize.)
+    ToggleSizeByDegree,
     /// Override the context node(s)' presentation form — the per-node representation
     /// picker ("Show as tile / shape"). The id is a representation key (`&'static str`,
     /// so `ContextAction` stays `Copy`): `"tile"` or `"shape"`. Applies to the context

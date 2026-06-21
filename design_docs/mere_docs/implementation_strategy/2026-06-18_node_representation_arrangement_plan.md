@@ -617,3 +617,17 @@ it is the default of a setting, not a baked constant.
   cursor brightens, the others unchanged. **P0's open channels are now hover (done) + the resizable
   footprint (a per-node `size` on `OrreryCard` + size-by-degree opt-in + a resize handle; the face
   driving the gyre collider is the P5 tie-in) — the remaining P0 slice.**
+- 2026-06-21: **P0 resize — size field + size-by-degree (the clean half landed).** Added a per-node
+  face footprint: `Orrery::node_size(key)` resolves a per-node override (`node_sizes` map) > size-by-
+  degree (face grows with undirected `neighbors_undirected` count, `36 + 8·degree`, capped 88) > the
+  uniform 36 default; with `set_node_size` / `clear_node_size` / `set_size_by_degree`. `OrreryCard`
+  gained a `size` field; `node_card_view` sizes the face from it (centered on the collider) and
+  scales the caption offset + the hover hit-box half with it. Size-by-degree is a scene toggle in the
+  node context menu (`ContextAction::ToggleSizeByDegree`, mirroring "Radial layout"), **off by
+  default** (configurability rule). Headed-verified (scry-shots/rsz-00 vs rsz-02): with it on, the
+  degree-2 hub grows largest and the degree-1 leaves grow less. **Deferred — the resize design calls:
+  (1) the interactive resize handle + drag (a new drag mode, handle kept out of `content_rects` so it
+  never steals the gyre grab); (2) per-node size persistence (joins the cartography sidecar; the
+  toggle + overrides are in-memory today); (3) the face driving the gyre collider (P5 — today the
+  collider stays `NODE_HALF`, so a much-larger face grabs from its center, and edges attach at the
+  collider, not the visual edge).**

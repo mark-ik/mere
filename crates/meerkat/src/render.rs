@@ -600,6 +600,10 @@ impl WindowCtx<'_> {
                     } else {
                         base.chars().take(CARD_LABEL_CAP - 1).chain(['\u{2026}']).collect()
                     };
+                    // The node's footprint (per-node override / size-by-degree / default),
+                    // used both as the card's face size and as the hover hit-box half. (P0.)
+                    let node_size = orrery.node_size(key);
+                    let face_half = node_size / 2.0;
                     Some(OrreryCard {
                         label,
                         url: node.url().to_string(),
@@ -608,14 +612,13 @@ impl WindowCtx<'_> {
                         // State color only; selection shows as a ring + lift on the card face.
                         color: orrery.node_state_color(key).to_string(),
                         selected: orrery.node_selected(key),
-                        // Hover: the cursor over this node's face box (window px, the same
-                        // ~NODE_HALF footprint the face uses). (P0 hover.)
+                        // Hover: the cursor over this node's face box (window px). (P0 hover.)
                         hovered: {
-                            const FACE_HALF: f32 = 18.0;
                             let (wx, wy) = (orrery_rect[0] + x, orrery_rect[1] + y);
-                            (hover_cursor.0 - wx).abs() <= FACE_HALF
-                                && (hover_cursor.1 - wy).abs() <= FACE_HALF
+                            (hover_cursor.0 - wx).abs() <= face_half
+                                && (hover_cursor.1 - wy).abs() <= face_half
                         },
+                        size: node_size,
                         // Content-type silhouette as the face's border-radius.
                         radius: match orrery.node_shape(key) {
                             orrery::NodeShape::Square => "0",

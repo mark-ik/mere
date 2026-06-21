@@ -292,6 +292,10 @@ pub(crate) struct OrreryCard {
     /// (a wash overlay), the hover channel from Decision 2 — distinct from selection
     /// (ring + lift) and focus (the focusable ring). (P0 hover.)
     pub(crate) hovered: bool,
+    /// The node's face footprint (px) before the selection lift, from `Orrery::node_size`
+    /// (per-node override / size-by-degree / the uniform default). The card centers the
+    /// face on the gyre collider at this size. (P0 resize.)
+    pub(crate) size: f32,
     /// The face's `border-radius` for the node's content-type silhouette (square
     /// document / rounded menu `9px` / circle feed `50%`). (P0 shape.)
     pub(crate) radius: &'static str,
@@ -490,10 +494,11 @@ pub(crate) const ORRERY_SCENE_KEY: u64 = 0xF0F0_0000_0000_0001;
 /// (the two-hit-test's DOM half). The object anatomy mirrors the in-scene gnode the
 /// secondary panes still draw. (Node representation P0.)
 fn node_card_view(c: &OrreryCard) -> ShellView {
-    // The face footprint (px): a fixed square, matching the in-scene gnode + gyre's
-    // NODE_HALF collider. The `.node-card` element IS the face + hit target (not a nested
-    // flex item, which serval collapsed to nothing — only the label rendered).
-    const FACE: f32 = 36.0;
+    // The face footprint (px): per-node, from `Orrery::node_size` (default 36 = the in-scene
+    // gnode + gyre's NODE_HALF collider; size-by-degree / a per-node override raise it). The
+    // `.node-card` element IS the face + hit target (not a nested flex item, which serval
+    // collapsed to nothing — only the label rendered).
+    let face = c.size;
     // Selection lifts the node: its face grows slightly and stays centered on the gyre
     // collider, so the world grab point does not move (Decision 2 — the selection channel is
     // a ring plus a slight lift, leaving the color channel free for activation state). The
@@ -501,7 +506,7 @@ fn node_card_view(c: &OrreryCard) -> ShellView {
     // so it needs no transform-origin support; the gyre collider stays `NODE_HALF`, so the
     // lift is visual emphasis only and the hit target is unchanged.
     const LIFT: f32 = 4.0;
-    let size = if c.selected { FACE + LIFT } else { FACE };
+    let size = if c.selected { face + LIFT } else { face };
     let half = size / 2.0;
     // Top-left at the node's world position minus half (of the lifted size), the same
     // `pos - NODE_HALF` centering the in-scene gnode uses, so the square stays centered on
@@ -551,7 +556,13 @@ fn node_card_view(c: &OrreryCard) -> ShellView {
     let label = chrome.then(|| {
         el::<_, ShellState, ()>("span", c.label.clone()).attr(
             "style",
-            "position:absolute;left:42px;top:9px;white-space:nowrap;color:#d8deea;font-size:14px;font-weight:500",
+            // Beside the face (gap 6) and vertically centered on it, so the caption tracks
+            // the footprint as the node resizes. (P0 resize.)
+            format!(
+                "position:absolute;left:{}px;top:{}px;white-space:nowrap;color:#d8deea;font-size:14px;font-weight:500",
+                size + 6.0,
+                (size / 2.0 - 8.0).max(0.0)
+            ),
         )
     });
     // Hover (Decision 2): a faint white wash over the face, painted last (after the favicon)

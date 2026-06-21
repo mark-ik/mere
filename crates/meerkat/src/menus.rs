@@ -108,6 +108,15 @@ impl WindowCtx<'_> {
                 },
             ));
         }
+        // Size by degree: a scene toggle — node faces grow with their undirected degree, so
+        // the spatial map reads connection weight at a glance. ✓ when on. (P0 resize.)
+        {
+            let on = self.orrery().size_by_degree();
+            items.push(ContextItem::new(
+                if on { "Size by degree  \u{2713}" } else { "Size by degree" },
+                ContextAction::ToggleSizeByDegree,
+            ));
+        }
         // Isolate the selection into the orrery's scope lens (a curated subgraph). A
         // pane-level lens, offered on any selection. (Curated orrery.)
         items.push(ContextItem::new("Isolate", ContextAction::IsolateSelection));
@@ -319,6 +328,15 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Toggle the focused orrery pane's size-by-degree mode (a scene presentation choice,
+        // in-memory for now — persisting it joins the cartography sidecar). No member set —
+        // return before the orrery-tile logic. (P0 resize.)
+        if let ContextAction::ToggleSizeByDegree = action {
+            let on = self.orrery().size_by_degree();
+            self.orrery_mut().set_size_by_degree(!on);
+            self.view.request_redraw();
+            return;
+        }
         // Isolate the selection into the orrery's scope lens (a curated subgraph), or
         // lift it. A transient lens (keyed by NodeKey, not persisted). No member set.
         // (Curated orrery.)
@@ -502,6 +520,7 @@ impl WindowCtx<'_> {
             | ContextAction::OpenLinkNewTab
             | ContextAction::CopyLink
             | ContextAction::SetLayoutStrategy(_)
+            | ContextAction::ToggleSizeByDegree
             | ContextAction::IsolateSelection
             | ContextAction::ShowAllNodes
             | ContextAction::MirrorTiles => {
