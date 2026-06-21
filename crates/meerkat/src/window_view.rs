@@ -595,8 +595,12 @@ fn orrery_element(render: &OrreryRender) -> ShellView {
             .attr("class", "orrery")
             .attr(
                 "style",
+                // z-index:0 makes the orrery the base layer of the shell z-stack: a
+                // stacking context that *contains* its node/focus cards, so they paint
+                // within it and never hoist to compete with the chrome (z-index:10, above).
+                // (Shell z-stack — card under chrome.)
                 format!(
-                    "position:absolute;left:{x0}px;top:{y0}px;width:{}px;height:{}px;overflow:hidden",
+                    "position:absolute;left:{x0}px;top:{y0}px;width:{}px;height:{}px;overflow:hidden;z-index:0",
                     x1 - x0,
                     y1 - y0
                 ),

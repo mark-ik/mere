@@ -1,10 +1,16 @@
 # Native Surface Compositing Plan: overlays above embedded WebView surfaces
 
 **Date**: 2026-06-19
-**Status**: Planning (direction set with Mark; no code yet). How meerkat's chrome, and its
-modal overlays especially (context menu, palette, find, settings), composites above embedded
-native surfaces (scrying System WebViews) and the host-composited content layers, so an overlay
-is never occluded by content.
+**Status**: P2 **verified** (off-window composition host; capture liveness confirmed in-app
+2026-06-21 — a scry tile renders **and scrolls** live off-window on DX12, and the speculative
+`CalculateNativeWinOcclusion`-disable proved unnecessary and was dropped). P1 implemented with a
+**corrected model** (the snapshot orrery card is a chrome-DOM data-URI `<img>`, **not** an
+under-chrome texture — a texture cannot paint over the chrome's own node cards; see finding 6,
+Shell z-stack). P3 (pelt live tile) renders + scrolls + takes input; its menu-over-tile
+done-condition follows from the z-stack. How meerkat's chrome, and its modal overlays especially
+(context menu, palette, find, settings, omnibar dropdown), composites above embedded native
+surfaces (scrying System WebViews) and the host-composited content layers, so an overlay is never
+occluded by content.
 **Code**: `crates/meerkat/` (render.rs compositing + present, scrying_host.rs), `wgpu-scry/scrying`
 (the WebView2 producer).
 
@@ -65,7 +71,9 @@ lost in that region.
    **above** meerkat's whole swapchain. Since meerkat renders the entire chrome, including the menu,
    *into* that swapchain, the menu is structurally beneath the scry visual regardless of the
    internal compose order. The `texture_view` composite at render.rs:1398 exists, but the live
-   visual sits over it.
+   visual sits over it. **(P2 has since removed this on-screen parking: the `set_offset` block is
+   gone (scrying_host.rs:439 now records its removal) and the composition lives on an off-window
+   host, so only the render.rs:1398 texture remains, under the chrome.)**
 
 3. **The on-top visual is a card-format artifact, not a requirement.** The visual is shown directly
    ("the scrying demo's model") for two card reasons: (a) a card floats, pans, and zooms, so the
@@ -90,14 +98,35 @@ lost in that region.
    `MoveFocus`, and **keyboard / text / IME via CDP** (`Input.dispatchKeyEvent` / `insertText` /
    `imeSetComposition`); the capability string is literally "keyboard/text uses WebView2 CDP Input on
    the pure visual-hosted path" (input.rs:205-231). meerkat already drives all three
-   (scrying_host.rs:319-355: `forward_key` -> `send_keyboard_input`, `focus_tile` -> `move_focus`,
-   `forward_mouse` -> `send_mouse_input`). CDP input is a protocol call into the WebContent process;
+   (scrying_host.rs:288-355: `forward_mouse` -> `send_mouse_input`, `forward_key` ->
+   `send_keyboard_input`, `focus_tile` -> `move_focus`). CDP input is a protocol call into the WebContent process;
    it works regardless of HWND visibility or focus (`--cdp-input-test` PASSes "under no-overlay
    composition"). The `--composition-focus-hwnd-test` keyboard timeout was specific to the
    `SendInput` / posted-`WM_*` path (OS focus chain), which scrying documents as a dead route and
    does not use. **Therefore an off-window-hosted live tile keeps full keyboard / IME**: the host
    captures its own winit keys and forwards them by API to whichever tile its focus model selects.
    IME placement is host-owned (`set_ime_cursor_area` from the WebView's reported caret geometry).
+
+6. **The shell z-stack was implicit (a flow-vs-positioned accident), now explicit (2026-06-21).**
+   Finding 1's "the chrome is on top" holds for the chrome *texture* vs the content *textures*, but
+   it did **not** hold *inside* the one shell document. The orrery node/content cards are
+   `position:absolute` + `transform` (each its own stacking context — CSS paint step "positioned"),
+   while normal-flow chrome content — the omnibar **suggestions dropdown**, and latently the
+   palette / find / settings flex overlays — paints at the earlier "in-flow block" step, so it lands
+   **under** the cards regardless of the chrome being document-last. The context menu escaped this
+   only because the host sets `position:absolute` on it inline. Serval implements real CSS stacking
+   (`serval-layout` `paint_stacking` tests: `negative_z_index_paints_behind_in_flow`,
+   `z_index_is_scoped_to_its_stacking_context`), so z-index is the clean lever. Fix:
+   `.orrery { z-index:0 }` (the base layer — a stacking context that *contains* its node/focus cards
+   so they cannot hoist) and `.chrome { position:relative; z-index:10 }` (the top layer) — so
+   **every** chrome surface paints over the orrery cards and wins their hit-test, in normal flow or
+   positioned, with no per-element patching. The canonical shell z-stack, bottom→top: orrery scene
+   (external-texture underlay) → node cards → focused content card (snapshot/unvisited) → side panes
+   (roster, lists, comms) → chrome (toolbar, omnibar dropdown, context menu, palette, find, settings,
+   shellbar). Verified: the omnibar dropdown and the context menu both paint over a node card
+   (scry-shots/zs-03, zs-04). This is the comprehensive resolution of the in-document z-order that
+   unified-document-host started piecemeal (document-order, chrome-last) — the z-stack makes it a
+   model, not a per-element accident.
 
 ## Scope / layering
 
@@ -131,10 +160,16 @@ z-ordering, no transparency contract, no composition-tree present, and no per-fr
 chase. The chrome and its overlays win structurally: the swapchain is the only thing on meerkat's
 visible window.
 
-- **Static snapshot (the orrery card):** a captured **texture**, composited under the chrome at the
-  existing render.rs:1398 path, captured once and frozen (no ongoing pump). This is the compositing
-  half of the node-rep decision (orrery card = snapshot of the last visit; the live view moves to
-  pelt). The snapshot is a **DORMANCY / MEMORY** decision (you cannot hold N live layout sessions in
+- **Static snapshot (the orrery card):** **[model corrected 2026-06-21.]** Originally specified as a
+  captured **texture** composited under the chrome at render.rs:1398. That is **wrong for the orrery
+  card specifically**: the orrery renders its nodes as chrome **DOM** cards, and a texture under the
+  chrome can never paint over them (finding 6). The snapshot card is instead a chrome-DOM **data-URI
+  `<img>`** of the page's top peek (the favicon trick), placed after the node cards in the orrery
+  element so document order + the z-stack put it over the nodes and under the chrome overlays. Built
+  host-side once per url by a blocking GPU readback of the rendered scene → PNG/base64, cached.
+  Still captured once and frozen (no ongoing pump); still the compositing half of the node-rep
+  decision (orrery card = snapshot of the last visit; the live view moves to pelt). The snapshot is
+  a **DORMANCY / MEMORY** decision (you cannot hold N live layout sessions in
   RAM for N previews — the suspended-tab model), **NOT** a per-frame-perf win; the focused/live
   surface stays live the engine way. Owner of that reasoning:
   [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
@@ -152,26 +187,41 @@ orrery never hosts a live visual again. It is also cheaper: no per-frame reposit
 ## The present-path change
 
 Meerkat keeps presenting a bare wgpu swapchain. The change is on the *producer* side, not the
-present side: scrying's `CompositionRoot` stops binding its `DesktopWindowTarget` to meerkat's
-visible HWND (scrying_host.rs:524-533) and binds instead to a dedicated off-window host HWND. DWM
-composites that host's tree onto the (off-screen) host, never over meerkat's window, while WGC keeps
-capturing the visual. Meerkat composites only the imported textures, all under the chrome, and
-forwards input by API (finding 5). There is no native input-sink window and no OS-focus dependency.
+present side, and is **implemented (P2)**: scrying gained `CompositionRoot::new_offscreen`
+(webview2_composition_producer/setup.rs), which creates a private off-screen top-level host window
+and binds the `DesktopWindowTarget` there instead of to a consumer HWND. meerkat's
+`build_composition_root` (scrying_host.rs:524) now calls it instead of binding to the visible HWND,
+and the per-frame `set_offset` chase is gone. DWM composites that host's tree onto the (off-screen)
+host, never over meerkat's window, while WGC keeps capturing the visual. Meerkat composites only the
+imported textures, all under the chrome, and forwards input by API (finding 5). There is no native
+input-sink window and no OS-focus dependency.
 
 ## Phases
 
 Done-conditions, not dates.
 
-- **P1, snapshot-texture orrery card.** The orrery card composites only the captured texture (no
-  live visual in the orrery); capture once and freeze; retire the per-frame visual hosting for an
-  orrery-pegged scry. Done when a menu over an orrery card is over it.
-- **P2, off-window composition host.** Move scrying's `CompositionRoot` off meerkat's visible HWND
-  onto a dedicated off-screen host HWND; everything composites under the chrome via the
-  render.rs:1398 texture path. Done when the chrome and its overlays sit above all embedded native
-  content with the visual no longer parented to the visible window.
-- **P3, pelt live-WebView hosting.** Host the live System WebView as a pelt tile captured from the
-  off-window host; per-tile, no offset chase; input forwarded by API (finding 5). Done when a System
-  WebView lives in a tile, takes mouse + keyboard + IME, and a menu draws over it.
+- **P1, snapshot orrery card. [IMPLEMENTED 2026-06-21.]** The orrery card is a static snapshot of the
+  last visit (no live visual in the orrery), retiring the per-frame visual hosting for an
+  orrery-pegged scry. **Model corrected** from "captured texture under the chrome" to a chrome-DOM
+  data-URI `<img>` (finding 6 + the Static-snapshot bullet): a texture under the chrome cannot paint
+  over the orrery's own chrome-DOM node cards. The done-condition (a menu over an orrery card is over
+  it) holds by the z-stack — the card sits in the orrery (z-index:0), the menu in the chrome
+  (z-index:10).
+- **P2, off-window composition host. [VERIFIED 2026-06-21.]** scrying gained
+  `CompositionRoot::new_offscreen` (a private off-screen host window owns the `DesktopWindowTarget`);
+  meerkat's `build_composition_root` calls it, the per-frame `set_offset` is removed, the threaded
+  `origin` dropped, pane offset is (0,0). Everything composites under the chrome via the
+  render.rs:1398 texture path. **In-app verified**: a scry tile (`>compat_view` on a focused node)
+  renders and **scrolls** live from the off-window host, on DX12, with no on-window visual. The
+  speculative `CalculateNativeWinOcclusion`-disable was tested and proved **unnecessary** (the
+  off-screen page paints + WGC captures it live without it) and was dropped — the load-bearing pieces
+  are the DX12 backend (meerkat main.rs forces `WGPU_BACKEND=dx12`) and the off-window host.
+- **P3, pelt live-WebView hosting. [LARGELY DONE 2026-06-21.]** Host the live System WebView as a pelt
+  tile captured from the off-window host; per-tile, no offset chase; input forwarded by API
+  (finding 5). Verified: a System WebView lives in a pelt tile, renders, **scrolls**, and takes mouse
+  + wheel input. The menu-over-tile half of the done-condition holds by the z-stack (the tile is a
+  content texture under the chrome; the menu is in the chrome at z-index:10). Remaining: an explicit
+  keyboard / IME exercise + the multi-tile IME validation below.
 
 The earlier "P3 keyboard spike" is dropped. It rested on the false premise that keyboard must flow
 through the OS focus chain (`SendInput`); finding 5 shows scrying forwards keyboard / IME by CDP,
@@ -183,10 +233,11 @@ spike.
 What remains for pelt is confirming two things scrying already built the mechanism for, not closing
 a design hole:
 
-- **Off-screen capture liveness.** Confirm WGC keeps producing frames from a visual on an off-screen
-  host window continuously. DWM can throttle a minimized / fully hidden window, so the host top-level
-  window must be present and merely positioned off-screen (DWM still composites non-minimized windows
-  at any position), not minimized or `SW_HIDE`. Watch WebView2 page-visibility throttling too.
+- **Off-screen capture liveness. [RESOLVED 2026-06-21.]** Confirmed in-app: WGC keeps producing live
+  frames from the off-screen host's visual — a scry tile rendered and **scrolled** live (DuckDuckGo,
+  responding to wheel input). The host is a present top-level window merely positioned off-screen
+  (`SW_SHOWNOACTIVATE`, not minimized / `SW_HIDE`), and WebView2 page-visibility throttling did not
+  bite even **without** the `CalculateNativeWinOcclusion`-disable (which was therefore dropped).
 - **Multi-tile IME.** scrying proved the host-owned IME bridge single-pane (CJK Pinyin + emoji,
   2026-05-12) but lists multi-pane IME as wired-but-unexercised. With several pelt tiles, validate
   IME routes to the focus-model-selected tile only.
@@ -255,3 +306,41 @@ a design hole:
   node-representation's compat-WebView-node (P2-interactive) to this plan's API-forwarding path,
   distinct from the serval-hit-relay textured-DOM-body case. No prior progress entry edited; no doc
   added or moved.
+- 2026-06-19 (P2 implemented): off-window composition host built. **scrying:**
+  `CompositionRoot::new_offscreen(size)` (webview2_composition_producer/setup.rs) creates a private
+  top-level tool window parked off-screen (`SW_SHOWNOACTIVATE`, `WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE`)
+  and binds the `DesktopWindowTarget` there; `new` / `new_offscreen` refactored over a shared `build`;
+  `OwnedHostWindow` destroys the window on drop. **meerkat** (scrying_host.rs): `build_composition_root`
+  now calls `new_offscreen` (was binding to the visible HWND), the per-frame `set_offset` chase is
+  removed, the threaded `origin` dropped, pane offset is (0,0); input wiring (`forward_*` / `focus_tile`)
+  unchanged. `cargo check -p scrying` and `-p meerkat` both green (the meerkat build needed a fresh
+  `Cargo.lock` regen to clear an unrelated `windows` 0.61/0.62 wgpu-hal skew in the shared lock; not a
+  source issue). Remaining: in-app verification (capture liveness + occlusion + input), then P1 and P3.
+  Doc synced this pass: Status, finding 2 (parking removed), present-path, P2 phase, finding-5 line
+  refs.
+- 2026-06-21 (P1+P2 verified, P3 largely done, shell z-stack — the comprehensive layering pass Mark
+  asked for). Three threads landed this session:
+  (1) **P2 verified in-app.** A scry tile (`>compat_view` on a focused node) renders **and scrolls**
+  live from the off-window host, on DX12. The blocker that had made it blank earlier was a backend
+  mismatch (meerkat ran Vulkan; the WebView2 shared-texture import is DX12-only) — fixed by forcing
+  `WGPU_BACKEND=dx12` in meerkat's `main()`. The speculative `CalculateNativeWinOcclusion`-disable in
+  wgpu-scry was tested by reverting it: the page still painted + captured live, so it is **unnecessary
+  and was dropped**. Off-screen capture-liveness validation item resolved.
+  (2) **P1 model corrected + implemented.** The plan specified the orrery snapshot card as a captured
+  texture under the chrome. Implementing it surfaced a hard wall (finding 6): the orrery renders its
+  nodes as chrome **DOM** cards, and a texture composited under the chrome can never paint over them
+  (a transparent external-texture hole does not erase the opaque node cards behind it). The snapshot
+  card is now a chrome-DOM **data-URI `<img>`** of the page's top peek (favicon trick), built once per
+  url by a blocking GPU readback → PNG/base64, placed after the node cards in the orrery element.
+  Headed-verified over the node cards (scry-shots/du-iana). Committed in meerkat (`a9c66a4`).
+  (3) **Shell z-stack made explicit (finding 6).** Tracing the "omnibar dropdown renders under the
+  node" bug showed the in-document z-order was an implicit flow-vs-positioned accident: normal-flow
+  chrome content painted under the `transform`-stacked node cards. Fixed with two CSS rules —
+  `.orrery { z-index:0 }` (base layer) and `.chrome { position:relative; z-index:10 }` (top layer) —
+  so every chrome surface (dropdown, menu, palette, find, settings, shellbar) paints over the orrery
+  cards by one model, not per-element. Headed-verified the omnibar dropdown and the context menu both
+  over a node card (scry-shots/zs-03, zs-04). This is the canonical resolution of the in-document
+  z-order unified-document-host started piecemeal. meerkat changes (main.rs `.chrome` rule, window_view
+  `.orrery` z-index) pending commit. **wgpu-scry's off-window-host `setup.rs` (load-bearing for the
+  committed meerkat scry path) + its `Cargo.toml` remain uncommitted in that repo — Mark to commit +
+  push.**
