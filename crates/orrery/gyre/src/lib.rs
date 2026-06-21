@@ -216,6 +216,40 @@ impl Simulation {
         }
     }
 
+    /// Resize the collider (hit-target + hard-collision geometry) of each listed node
+    /// to a ball of the given radius, so a node grown in the view — size-by-degree or a
+    /// per-node footprint — collides and picks at its true face size rather than the
+    /// uniform default (Decision 5: size drives the collider, so physics and picture stay
+    /// in sync). Bodies keep their position and velocity; only the shape changes, and the
+    /// spatial index is refreshed so the next pick / cull / force query sees the new sizes.
+    /// Mass is left at the spawn value — it is the face geometry, not the inertia, that
+    /// tracks size. Nodes without a body are skipped. (P0/P5 collider.)
+    pub fn set_node_radii(&mut self, radii: impl IntoIterator<Item = (NodeKey, f32)>) {
+        let mut changed = false;
+        for (node, radius) in radii {
+            let Some(&body_handle) = self.bodies_by_node.get(&node) else {
+                continue;
+            };
+            // Copy the handles out so the immutable body borrow ends before the
+            // mutable collider borrow (distinct fields, but the borrow checker needs
+            // the split made explicit).
+            let collider_handles: Vec<ColliderHandle> = self
+                .bodies
+                .get(body_handle)
+                .map(|body| body.colliders().to_vec())
+                .unwrap_or_default();
+            for handle in collider_handles {
+                if let Some(collider) = self.colliders.get_mut(handle) {
+                    collider.set_shape(SharedShape::ball(radius));
+                    changed = true;
+                }
+            }
+        }
+        if changed {
+            self.query_pipeline.update(&self.colliders);
+        }
+    }
+
     /// Register a force. Forces apply in registration order on every
     /// tick.
     pub fn add_force<F: Force + 'static>(&mut self, force: F) {

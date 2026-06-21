@@ -654,3 +654,25 @@ fn selected_members_reflects_the_selection() {
     let a_id = orrery.graph().get_node(a).unwrap().id;
     assert_eq!(orrery.selected_members(), vec![a_id]);
 }
+
+#[test]
+fn node_size_drives_the_pick_radius() {
+    // Decision 5: a node sized in the view picks (and collides) at its true face,
+    // not the uniform default — so a grown node is grabbable across its whole face.
+    let mut orrery = Orrery::new();
+    let id = orrery.add_node_at((0.0, 0.0), "mere://big");
+    let (key, _) = orrery.graph().get_node_by_id(id).unwrap();
+    let center = orrery.view.position_of(key).expect("the new node has a position");
+
+    // 30px from the center misses at the default 36px footprint (radius 18)...
+    let probe = euclid::default::Point2D::new(center.x + 30.0, center.y);
+    assert!(orrery.view.hit_test(probe).is_none(), "default footprint shouldn't reach 30px out");
+
+    // ...but an 80px face (radius 40) reaches it.
+    orrery.set_node_size(id, 80.0);
+    assert_eq!(orrery.view.hit_test(probe), Some(key), "the grown face grabs from 30px out");
+
+    // Clearing the override reverts the pick radius to the default.
+    orrery.clear_node_size(id);
+    assert!(orrery.view.hit_test(probe).is_none(), "cleared footprint reverts to the default");
+}

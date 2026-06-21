@@ -58,6 +58,8 @@ pub(crate) enum PhysicsCommand {
     SetCouplingForces(Vec<CouplingForce>),
     /// Set the linear damping (the "inertia" physics setting) on new + live bodies.
     SetLinearDamping(f32),
+    /// Resize node colliders to per-node face sizes (see [`Simulation::set_node_radii`]).
+    SetNodeRadii(Vec<(NodeKey, f32)>),
 }
 
 /// One layout the actor produced: the positions plus whether it is still
@@ -171,6 +173,17 @@ impl Physics {
             Physics::Inline(p) => p.sim.set_linear_damping(damping),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetLinearDamping(damping));
+            }
+        }
+    }
+
+    /// Resize node colliders so each picks/collides at its true face size (the
+    /// host pushes every node's `node_size / 2`). (P0/P5 collider — Decision 5.)
+    pub fn set_node_radii(&mut self, radii: Vec<(NodeKey, f32)>) {
+        match self {
+            Physics::Inline(p) => p.sim.set_node_radii(radii),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::SetNodeRadii(radii));
             }
         }
     }
@@ -350,6 +363,7 @@ fn apply(
         PhysicsCommand::SetDragging(d) => *dragging = d,
         PhysicsCommand::SetCouplingForces(forces) => sim.set_coupling_forces(forces),
         PhysicsCommand::SetLinearDamping(damping) => sim.set_linear_damping(damping),
+        PhysicsCommand::SetNodeRadii(radii) => sim.set_node_radii(radii),
     }
 }
 

@@ -68,6 +68,11 @@ pub struct LayoutView {
     positions: HashMap<NodeKey, Point2D<f32>>,
     edges: Vec<(NodeKey, NodeKey)>,
     radius: f32,
+    /// Per-node radius overrides (a node sized away from the uniform default by
+    /// size-by-degree or a per-node footprint). A node absent here picks/culls at
+    /// `radius`. Set wholesale by the host from each node's `node_size / 2`, so the
+    /// grab and the picture stay in sync. (Decision 5 — size drives the collider.)
+    radii: HashMap<NodeKey, f32>,
 }
 
 impl Default for LayoutView {
@@ -79,17 +84,43 @@ impl Default for LayoutView {
 impl LayoutView {
     /// An empty view (no nodes, no edges), using the default node radius.
     pub fn new() -> Self {
-        Self { positions: HashMap::new(), edges: Vec::new(), radius: NODE_BODY_RADIUS }
+        Self {
+            positions: HashMap::new(),
+            edges: Vec::new(),
+            radius: NODE_BODY_RADIUS,
+            radii: HashMap::new(),
+        }
     }
 
     /// Build a view directly from parts — positions, edge topology, and the node
-    /// radius the picks/cull use.
+    /// radius the picks/cull use. No per-node radius overrides (every node picks at
+    /// `radius`); the host sets those via [`set_radii`](LayoutView::set_radii).
     pub fn from_parts(
         positions: impl IntoIterator<Item = (NodeKey, Point2D<f32>)>,
         edges: impl IntoIterator<Item = (NodeKey, NodeKey)>,
         radius: f32,
     ) -> Self {
-        Self { positions: positions.into_iter().collect(), edges: edges.into_iter().collect(), radius }
+        Self {
+            positions: positions.into_iter().collect(),
+            edges: edges.into_iter().collect(),
+            radius,
+            radii: HashMap::new(),
+        }
+    }
+
+    /// The pick/cull radius of a node: its per-node override if set, else the
+    /// uniform default. (Decision 5 — size drives the collider.)
+    fn radius_of(&self, node: NodeKey) -> f32 {
+        self.radii.get(&node).copied().unwrap_or(self.radius)
+    }
+
+    /// Replace the per-node radius overrides wholesale (the host pushes each node's
+    /// `node_size / 2` after a size knob moves or the graph changes structurally).
+    /// Nodes absent from `radii` revert to the uniform default, so passing the
+    /// current node set prunes stale entries for free.
+    pub fn set_radii(&mut self, radii: impl IntoIterator<Item = (NodeKey, f32)>) {
+        self.radii.clear();
+        self.radii.extend(radii);
     }
 
     /// Replace the positions from a snapshot (the actor's per-tick output).
@@ -139,11 +170,11 @@ impl LayoutView {
     /// [`radius`]: LayoutView::radius
     /// [`Simulation::hit_test`]: crate::Simulation::hit_test
     pub fn hit_test(&self, point: Point2D<f32>) -> Option<NodeKey> {
-        let r2 = self.radius * self.radius;
         let mut best: Option<(NodeKey, f32)> = None;
         for (&node, &center) in &self.positions {
+            let r = self.radius_of(node);
             let d2 = (point - center).square_length();
-            if d2 <= r2 && best.map_or(true, |(_, bd)| d2 < bd) {
+            if d2 <= r * r && best.map_or(true, |(_, bd)| d2 < bd) {
                 best = Some((node, d2));
             }
         }
@@ -156,9 +187,11 @@ impl LayoutView {
     ///
     /// [`Simulation::cull_aabb`]: crate::Simulation::cull_aabb
     pub fn cull_aabb(&self, region: Box2D<f32>) -> Vec<NodeKey> {
-        let grown = region.inflate(self.radius, self.radius);
         self.positions()
-            .filter(|(_, center)| grown.contains(*center))
+            .filter(|(node, center)| {
+                let r = self.radius_of(*node);
+                region.inflate(r, r).contains(*center)
+            })
             .map(|(node, _)| node)
             .collect()
     }
@@ -334,5 +367,33 @@ mod tests {
         // ...and a later snapshot replaces it (the actor caught up).
         view.apply_snapshot(&snapshot);
         assert!((view.position_of(a).unwrap() - Point2D::new(0.0, 0.0)).length() < 0.5);
+    }
+
+    #[test]
+    fn per_node_radius_grows_the_pick_and_cull() {
+        let (sim, a, b) = sim_with_edge(); // a@(0,0), b@(100,0)
+        let mut view = sim.view();
+
+        // A point 40px from a's center misses at the default radius (18)...
+        let near_a = Point2D::new(40.0, 0.0);
+        assert!(view.hit_test(near_a).is_none());
+
+        // ...but grow a to radius 60 and the same point now grabs it.
+        view.set_radii([(a, 60.0)]);
+        assert_eq!(view.hit_test(near_a), Some(a));
+        // b, left at the default, is unaffected — a point 30px off b (and well clear of
+        // grown a) still misses.
+        assert!(view.hit_test(Point2D::new(100.0, 30.0)).is_none());
+
+        // Cull grows with the radius too: a tight window that excludes a's center's
+        // default circle still catches it once a is large enough to reach in.
+        let window = Box2D::new(Point2D::new(45.0, -10.0), Point2D::new(55.0, 10.0));
+        assert!(view.cull_aabb(window).contains(&a));
+
+        // Clearing a's override (the new set names only b) reverts a to the default:
+        // a point 40px straight up off a misses again (and grown b, off on the x-axis,
+        // can't reach it).
+        view.set_radii([(b, 60.0)]);
+        assert!(view.hit_test(Point2D::new(0.0, 40.0)).is_none());
     }
 }

@@ -630,4 +630,27 @@ it is the default of a setting, not a baked constant.
   never steals the gyre grab); (2) per-node size persistence (joins the cartography sidecar; the
   toggle + overrides are in-memory today); (3) the face driving the gyre collider (P5 — today the
   collider stays `NODE_HALF`, so a much-larger face grabs from its center, and edges attach at the
-  collider, not the visual edge).**
+  collider, not the visual edge).** [(3) landed 2026-06-21 for pick + physics — see the entry below;
+  only the edge-trim-at-face-edge cosmetic remains.]
+- 2026-06-21: **The face now drives the gyre collider (Decision 5 — pick + physics in sync).** The
+  per-node `node_size` was cosmetic: a grown node still grabbed from a fixed 18px center and collided
+  at the uniform ball, so the picture said "big" while physics said "small." Closed both gaps. The
+  host-side pick model (`gyre::LayoutView`, which the orrery's drag/select hit-test reads — *not* the
+  rapier index) gained a per-node radius map (`set_radii`, `radius_of`): `hit_test` and `cull_aabb`
+  now use each node's own radius, defaulting to the uniform `NODE_BODY_RADIUS` for un-sized nodes. The
+  rapier world (`gyre::Simulation::set_node_radii`) resizes each body's ball collider via
+  `set_shape(SharedShape::ball(r))` + a `query_pipeline` refresh, so hard-collision separation and the
+  force neighbor-queries scale with the face (mass left at the spawn value — geometry, not inertia,
+  tracks size). The plumbing mirrors `set_linear_damping`: a `PhysicsCommand::SetNodeRadii` for the
+  off-thread actor, a direct call inline. The orrery owns the truth: `push_node_radii` pushes every
+  node's `node_size / 2` to both the view and the bodies, called from `reconcile_derived` (degree-based
+  sizes shift on topology change, and new bodies need seeding) and from each size knob
+  (`set_node_size` / `clear_node_size` / `set_size_by_degree`) via `resettle_for_size`, which also
+  kicks a gentle `SIZE_RESETTLE_TICKS` (90, ~1.5s) burst so neighbors ease away from a grown node on an
+  idle graph. Default-preserving: with uniform sizes every radius is 18, so the pushed set is a no-op
+  and the look is unchanged. Two tests lock it: `gyre::view` (a grown node's pick + cull reach
+  out, an un-sized neighbor unaffected) and `orrery` (`set_node_size` grows the pick radius,
+  `clear_node_size` reverts). Build green, no new warnings. **Remaining from deferred-(3):** edges
+  still attach at the collider center, not the visual face edge — a meerkat render-geometry trim
+  (shorten each edge segment by the endpoint's radius), cosmetic and independent of the physics.
+  Still open from P0: the interactive resize handle (1) and per-node size persistence (2).

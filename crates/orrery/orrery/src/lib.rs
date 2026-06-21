@@ -56,6 +56,9 @@ use physics::Physics;
 
 /// Force-directed settle length (frames) after a (re)seed, ~6s at 60fps.
 const SETTLE_TICKS: u32 = 360;
+/// A gentle re-separation burst (~1.5s at 60fps) after node colliders resize, so
+/// neighbors ease away from a grown node without a full re-layout. (P0/P5 collider.)
+const SIZE_RESETTLE_TICKS: u32 = 90;
 /// Per-tick timestep handed to the gyre simulation.
 const TICK_DT: f32 = 1.0 / 60.0;
 /// Pixels per wheel line-notch (the host scales `LineDelta` by this before
@@ -413,6 +416,34 @@ impl Orrery {
         self.stage_node = stage_node;
         self.node_layout = None;
         self.resync_view_to_graph();
+        // Degree-based sizes shift when the topology changes, so re-push radii (also
+        // seeds them for newly-spawned bodies). No re-settle here: the structural
+        // change's own settle covers it.
+        self.push_node_radii();
+    }
+
+    /// Push every node's collider/pick radius (`node_size / 2`) to the read-model view
+    /// and the physics bodies, so a node sized in the view — size-by-degree or a per-node
+    /// footprint — picks and collides at its true face (Decision 5). A no-op visually when
+    /// every node is the uniform default. Does not settle; callers that change a size knob
+    /// follow with [`resettle_for_size`](Self::resettle_for_size) so neighbors re-separate.
+    /// (P0/P5 collider.)
+    fn push_node_radii(&mut self) {
+        let radii: Vec<(NodeKey, f32)> = self
+            .graph
+            .nodes()
+            .map(|(key, _)| (key, self.node_size(key) / 2.0))
+            .collect();
+        self.view.set_radii(radii.iter().copied());
+        self.physics.set_node_radii(radii);
+    }
+
+    /// Re-push radii and kick a gentle re-separation burst — the response to a size knob
+    /// (a per-node footprint, the size-by-degree toggle) moving on an otherwise idle graph,
+    /// so grown nodes actually push their neighbors apart. (P0/P5 collider.)
+    fn resettle_for_size(&mut self) {
+        self.push_node_radii();
+        self.physics.settle(SIZE_RESETTLE_TICKS);
     }
 
     /// Make the read model's node set match the graph after a structural change,
@@ -931,6 +962,7 @@ impl Orrery {
     pub fn set_node_size(&mut self, id: uuid::Uuid, size: f32) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
             self.node_sizes.insert(key, size.clamp(16.0, 160.0));
+            self.resettle_for_size();
         }
     }
 
@@ -939,6 +971,7 @@ impl Orrery {
     pub fn clear_node_size(&mut self, id: uuid::Uuid) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
             self.node_sizes.remove(&key);
+            self.resettle_for_size();
         }
     }
 
@@ -946,6 +979,7 @@ impl Orrery {
     /// scene-level presentation choice (the user's opt-in, off by default). (P0 resize.)
     pub fn set_size_by_degree(&mut self, on: bool) {
         self.size_by_degree = on;
+        self.resettle_for_size();
     }
 
     /// Whether size-by-degree is on. (P0 resize.)
