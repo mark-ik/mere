@@ -1,0 +1,562 @@
+# DocumentScript Substrate Plan
+
+**Status:** planned / decision-pending. Architecture proposal + sequenced build-out.
+Codebase-grounded; external upstream facts (Component Model, WASI 0.3, WasmGC)
+verified against primary sources 2026-06-20 at the confidence levels stated.
+**Date:** 2026-06-21.
+**Scope:** a capability-scoped, typed, cross-language contract for what a *script*
+or *extension* is allowed to mean in Mere, carried over the WebAssembly Component
+Model, sitting **above** serval's JS-engine `ScriptEngine` rather than replacing
+it.
+
+The realistic dream is not "every language becomes interchangeable behind
+`eval(source)`." It is: every language can implement the same typed,
+capability-scoped application contract, with Wasm providing isolation,
+portability, ownership, and scheduling. The missing invention is therefore not
+universal execution (Wasm largely supplies that) but a good capability-oriented
+definition of what a document script is *permitted to do*.
+
+Related: [actor_constellation_plan](2026-06-03_actor_constellation_plan.md) (the
+host kernel + actor boundary this rides on; the deferred "capability / wasm-component
+isolation" seam this fills), [protocol_architecture_plan](2026-05-05_protocol_architecture_plan.md)
+(the deferred Extism/Wasmtime/Boa scripting-host probe this supersedes),
+[cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
+(the no-JIT browser policy + the PWA-vs-open-web lane fork this inherits),
+[polyglot_block_resolver_plan](../../nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md)
+(the native-only wasm-block kind that wants this contract). Serval side:
+`script-engine-api/lib.rs`, `script-runtime-api/fetch.rs`,
+`docs/2026-05-20_serval_script_engine_plan.md`, `docs/2026-05-25_js_execution_strategy.md`.
+
+---
+
+## 1. The decision in one line, and where the boundary sits
+
+Keep the JS-engine `ScriptEngine` trait for what it is good at (driving Nova
+native / Boa wasm over reflectored DOM access), and add a **higher
+`DocumentScript` boundary** expressed as a WIT world. A script is an actor that
+consumes an event stream and issues mutations against a document revision; no
+language-native value crosses the boundary; network, clocks, storage, layout and
+rendering are separately granted capabilities.
+
+The load-bearing structural claim, which the rest of the plan depends on:
+
+> **The reflector model is not superseded. It is demoted to the *innards* of one
+> particular interpreter component: the `html-document` one.**
+
+`script-engine-api/lib.rs` is JS-value-shaped to the bone (`Self::Value`,
+reflector identity, `pump_microtasks`, `settle_host_promise`, `set_function`
+over bare `fn` pointers, per-target Nova/Boa selection). That is correct for what
+it is, and it is the wrong shape for a cross-language WIT interface. The WIT
+boundary is **coarse, async, command/event**; the reflector boundary is **fine,
+synchronous, in-process**. They nest rather than compete (§3). (Confidence: high
+on the trait shape; verified in source 2026-06-20.)
+
+---
+
+## 2. Findings
+
+### 2.1 Current reality (verified 2026-06-20)
+
+| Layer | Status | Confidence |
+|---|---|---|
+| Portable sandboxed execution | Mature core Wasm | high |
+| Typed cross-language ABI (Component Model / WIT) | Developer Preview | high |
+| Async, futures, streams, cancellation, backpressure | **Shipped in WASI 0.3.0, 2026-06-11** (nine days before this doc) | high |
+| Managed-language runtime (WasmGC) | Ships in V8 / SpiderMonkey / JSC; does **not** cross the component boundary | high |
+| Browser/system capabilities | Fragmentary; the host defines most | high |
+| Native browser Component Model | Does not exist; CM 1.0 is **gated on two native browser engines, neither committed**; interim path is an AOT polyfill (jco transpile → core wasm + JS glue) | high |
+| Universal document-script contract | Does not exist; this is the part Mere must design | high |
+
+The single most recently moved fact: **WASI 0.3.0 with native async shipped
+2026-06-11.** Async functions, `stream<T>`, `future<T>`, cooperative
+cancellation, and counter-based backpressure are in the Component Model now.
+Concurrency.md confirms both hard claims: it names the multi-language mapping
+intent (C#/JS/Python/Rust/Swift async, Kotlin/C++ coroutines, Go/Java green
+threads, host threads) and states the async model "composes with but doesn't
+actually depend on" the core stack-switching proposal (it can be polyfilled via
+JSPI). So Rune-style async is exactly the sort of runtime the 0.3 ABI is built to
+accommodate, rather than an argument against Wasm. (Confidence: high; primary
+source `WebAssembly/component-model` Concurrency.md.)
+
+### 2.2 The critical limitation: WIT is not a universal object model
+
+WIT exchanges copied records, variants, lists, strings, resources, futures and
+streams. It cannot transparently exchange arbitrary language object graphs,
+language-native closures, GC pointers, exceptions with identical semantics,
+shared mutable language heaps, or cross-language cyclic garbage. Choices.md is
+explicit (direct quotes, verified): the model "assumes no global inter-component
+garbage or cycle collector"; resources "require explicit acyclic ownership
+through handles" with destructors "called deterministically"; and it "assumes
+that Just-In-Time compilation is not available at runtime." (Confidence: high on
+the prohibitions as design intent; medium that the negative list is a single
+verbatim enumeration. It is inferred from the resource + linking model, not one
+bullet list.)
+
+This is why **WasmGC does not solve Nova/Python/Rune interoperability.** WasmGC
+improves how a managed language represents *its own* heap inside one component;
+the component boundary still consists of values and resource handles. It rules
+out the fantasy where every language shares one DOM object graph, which is the
+same conclusion the two-heap reflector finding reached from the other direction
+(the DOM and the JS heap are two arenas bridged by reflectors, never one heap).
+
+### 2.3 Codebase grounding (what exists, what is deferred)
+
+- **Absent as a top-level idea.** Neither serval/docs nor mere/design_docs frames
+  the Component Model as a cross-language script substrate today. It is not ruled
+  out; it is simply not in the architectural conversation. (Confidence: high; full
+  design-corpus sweep 2026-06-20.)
+- **The deferred seam is named.** [actor_constellation_plan](2026-06-03_actor_constellation_plan.md)
+  lists "capability / wasm-component isolation" as a *future plugin seam, not a
+  near-term primitive*, and descopes the in-process wasmtime sandbox (P5) on the
+  grounds that it "would require compiling the entire serval + Nova content engine
+  to wasm32." **That reasoning does not touch this proposal:** we confine the
+  *script/extension*, not the *engine*. The host engine stays native and supplies
+  the imports; the thing compiled to wasm is a Rune runtime or a Rust extension,
+  which is small. (This holds for the app/extension lane. For `html-document` the
+  script *is* the engine, so the descoped cost returns; the escape is overbroad as
+  written. See §10.1.)
+- **The Extism gesture.** [protocol_architecture_plan:650](2026-05-05_protocol_architecture_plan.md)
+  named Extism as "the right shape for a plugin model, typed host calls, defined
+  boundaries," then deferred with "don't pre-commit before knowing the capability
+  surface." `DocumentScript` is the principled Component-Model successor to that
+  probe.
+- **The deferred-fetch seam already fits.** `script-runtime-api/fetch.rs:86-118`
+  carries the async shape (`start() -> Option<FetchOutcome>` returns `None` to
+  leave the promise pending; `cancel(id)` for abort; `request_chunk(id)` for lazy
+  streaming) and calls itself "the actor-mailbox seam." Only the file header still
+  describes the synchronous default. This is the right shape for a `network`
+  capability with an async `fetch` and a `stream<u8>` body.
+- **The scripting map is Rust + JS** (2026-06-10): Rune and Rhai were dropped, on
+  the axis of *first-party language placement* (async is JS's home turf). The
+  reopen trigger written down is "a Rune 1.0 with a sandbox warranty." See §9.
+
+---
+
+## 3. The two integration kinds, and the coarse/fine impedance
+
+You need both shapes, and the second is where the reflector model lives.
+
+**Compiled component.** Rust, C#, Swift, Go, or a future Rune-to-wasm compiler
+produces a component implementing `document-script` directly. Cleanest isolation,
+smallest semantic impedance. This is the app/extension lane's native form.
+
+**Interpreter component.** A runtime (Nova, Piccolo, Rune, Rhai, Python) is
+packaged as a component; source or bytecode arrives as data; the adapter
+translates the WIT document world into that language's native objects. Rune
+support therefore does not require a Rune-to-wasm compiler: compile the runtime,
+or keep it native initially, and make its adapter implement the same
+`DocumentScript` behavior.
+
+**The impedance to state plainly.** The contract is a coarse async command/event
+boundary (apply `list<mutation>` against a revision; consume an `event` stream;
+`inspect` a copied `document-view`). Legacy web JS expects fine-grained
+synchronous DOM access with interleaved reads after writes, and synchronous
+forced layout (`getBoundingClientRect`, `getComputedStyle`, `offsetWidth`). You
+cannot run that against an async `apply`. So you do not:
+
+> The `html-document` profile is an **interpreter component that carries Nova plus
+> a full DOM shim**, services synchronous reads from its *local* mirror, mutates
+> that mirror in place, and crosses the WIT boundary only at flush and inspect
+> points.
+
+That is the Servo model (script owns a DOM; layout is reached by message) recast
+as a component boundary, and it is exactly the existing `serval-scripted-dom` +
+reflector machinery, now scoped as the innards of one component instead of the
+top-level architecture. It also classifies the profiles cleanly: `tree-document`
+and `document-core` scripts can speak the contract directly; `html-document`
+always needs the interpreter-component wrapper because of synchronous layout.
+(Corrected by review: legacy web JS stays the existing *native* `Runtime<Nova/Boa>`
+lane, not a Wasm component, and leaves P0/P1. See §10.1.) The
+forced-reflow wall is a **feature for the app lane** (it eliminates layout
+thrashing by construction) and a **hard wall for legacy**, which is precisely why
+legacy lives inside the wrapper. (Confidence: high on the architectural
+necessity; the cost of the per-interaction boundary is unquantified, §7.)
+
+---
+
+## 4. Profiles, not fake universality
+
+Formats and protocols select profiles; adapters compose compatible versions. A
+Gemtext script must not automatically receive an HTML DOM. Define small worlds
+and let the format pick:
+
+- `document-core` (observe + mutate a generic tree, events, lifecycle)
+- `tree-document` (typed node tree without HTML layout semantics)
+- `html-document` (the interpreter-component wrapper of §3)
+- `layout-query` (measurement; **async by design**, so it cannot reintroduce
+  synchronous forced reflow)
+- `canvas`
+- `peer-messaging` (murm / moot capability, granted, not ambient)
+- `persistent-storage` (eidetic / OPFS, granted, scoped)
+
+Avoid one giant "browser" interface. The capability-gate catalogue
+([capability_gate_catalogue_brief](../research/2026-05-14_capability_gate_catalogue_brief.md))
+is the natural home for which profile a given origin/format/extension is granted.
+
+---
+
+## 5. The WIT vocabulary sketch
+
+**Illustrative-signature-only** (shape, not compile-ready; exact syntax will move
+with the spec):
+
+```wit
+package mere:script@0.1.0;
+
+interface document {
+    resource session {
+        events: func() -> stream<event>;
+        apply: async func(expected-revision: u64, changes: list<mutation>)
+            -> result<u64, document-error>;
+        inspect: func(query: document-query) -> result<document-view, document-error>;
+    }
+}
+
+interface network {
+    fetch: async func(request: request) -> result<response, network-error>;
+    resource response { body: func() -> stream<u8>; }
+}
+
+world document-script {
+    import document;
+    import network;
+    import clock;
+    import log;
+    export run: async func(session: own<document.session>) -> result<_, script-error>;
+}
+```
+
+The shape that matters: a script is an actor over an event stream; mutations are
+commands against a revision (optimistic-concurrency `expected-revision`); network
+/ clock / storage / layout are separately granted; backpressure and cancellation
+are in the protocol; the host keeps document, origin, protocol and security
+authority. `inspect` is synchronous but returns a *copied snapshot*, which is the
+seam an interpreter component refreshes its local mirror through.
+
+---
+
+## 6. What must be built (phases, native-first)
+
+The viable first target is **native Mere using a component runtime, a Mere-owned
+WIT world, and native adapters for engines that cannot yet live in wasm** (Nova
+stays native while Memory64 / Nova portability mature; Memory64 is not a
+prerequisite). Later, the same contract becomes the browser/polyfill and
+remote-component boundary.
+
+- **P0 — decision + probe (start here).** Settle the Wasmtime-on-native
+  dependency call (§7.3) and the descope reconsideration (§9). Stand up a minimal
+  `document-core` world + a direct-Rust component proving the contract end to end
+  (events in, mutations out, one capability granted), independent of any
+  interpreter. Decision-gating; no host wiring yet.
+- **P1 — the versioned WIT vocabulary.** `document-core` observe/mutate/events,
+  `network` (over the `fetch.rs` deferred seam), `clock`, `log`, `lifecycle`.
+  Small worlds, versioned; avoid the giant browser interface.
+- **P2 — component host actor.** One armillary actor owning each script instance:
+  mailbox delivery, cancellation, quotas, deterministic teardown. Components need
+  not be `Send`; parallelism is across instances. Maps onto the existing
+  "one `!Send` content actor per origin."
+- **P3 — resource + GC discipline.** Generational resource handles, explicit drop,
+  weak cross-runtime references, no mutual strong ownership across collectors
+  (the Component Model gives no cross-component cycle collector, so this is on us).
+- **P4 — resource controls.** Fuel / epoch interruption, memory limits, task
+  limits, stream backpressure, bandwidth/storage quotas, deadline cancellation.
+  Wasm isolation without quotas is incomplete isolation. (The JS `Budget` /
+  `Steps` guard in `script-engine-api` is the in-component analogue, not a
+  substitute.)
+- **P5 — language adapters + conformance.** Three intentionally different
+  implementations against one suite (events / mutation / fetch / cancellation /
+  teardown): Rune (async orchestration), Nova (dynamic GC + browser-like
+  scripting via the §3 wrapper), and a direct-Rust component (proves the contract
+  independent of any interpreter).
+- **P6 — tooling.** Component packaging, signatures, source maps, cross-component
+  traces, WIT version adapters, runtime sharing, debugging, live upgrade. Package
+  management and live upgrade are out of scope for the Component Model standard,
+  so Mere must own them; do not wait for the standard to supply them.
+
+---
+
+## 7. Costs the proposal under-weights
+
+1. **Per-instance runtime multiplication.** (Confidence: high it is real; medium
+   on magnitude.) Each interpreter component carries its whole runtime (Nova is
+   megabytes). One per origin/frame/extension multiplies that. "Runtime sharing"
+   is a first-order sizing question for anything with many frames, not just a
+   tooling line item.
+2. **The per-interaction serialization tax.** (Confidence: high it is real;
+   unquantified.) `apply(list<mutation>)` and `events: stream<event>` copy through
+   the canonical ABI on every interaction. Same family as the per-frame
+   scene-serialization cost the [parallelism strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
+   flagged and left unmeasured. Streams remove the single-giant-copy case; a
+   chatty extension still pays per call. Measure before assuming the boundary is
+   free.
+3. **Wasmtime-on-native is an unmade dependency decision.** (Confidence: high.)
+   "Native first using a component runtime" means embedding Wasmtime, which puts a
+   Cranelift JIT *in the native process*. The no-JIT policy is browser-only, so
+   this is permitted, but it is a heavy dependency (codegen backend, compile
+   times, binary size) the corpus has taken no position on. Note the honest value
+   split: on native the component runtime buys the *typed capability contract* and
+   *cross-language uniformity* first, and in-process confinement second; raw
+   failure/memory isolation between actors already exists via the actor boundary
+   and (for hostile content) OS subprocesses. The big isolation win lands later,
+   in the browser/remote lane. Wasmtime supports `wasm32-wasip2` stably today;
+   P3/async host support is recent and was still marked experimental as of the
+   2026-03 releases, so pin against the post-0.3.0 point release.
+4. **The synchronous-forced-layout wall** (§3) is not a detail. It is the reason
+   `html-document` cannot be a thin adapter and must carry a DOM mirror.
+
+---
+
+## 8. What not to wait for
+
+Do not gate this on: every language targeting Wasm directly; native browser
+Component Model support; WasmGC becoming "complete"; parallel shared-memory
+threads; WASI defining a browser or document model (it will not, by charter); or
+Nova-in-wasm. WASI itself is still phased (filesystem / sockets / HTTP / CLI in
+implementation, messaging / key-value earlier), so the host defines most
+capabilities regardless. The native-first target depends on none of these.
+
+---
+
+## 9. Open decisions and triggers
+
+- **Wasmtime-on-native dependency call** (P0 gate, §7.3). Accept Cranelift in the
+  native process for the contract + uniformity payoff, or defer until the
+  untrusted-extension use-case is concrete.
+- **The P5-descope reconsideration.** [actor_constellation_plan](2026-06-03_actor_constellation_plan.md)
+  framed isolation as binary: semi-trusted in-process, or hostile to an
+  OS-subprocess. The Component Model is the **missing third option**: in-process
+  capability confinement of genuinely untrusted extensions. An actor boundary
+  gives crash isolation, but a malicious *native* actor can do whatever its code
+  does; a malicious *component* can do only what its imports grant. This is the
+  strongest argument for the proposal and the gap the plan said it had no answer
+  for. (Confidence: high that it is a genuine new capability, not a reframing.)
+- **Rune reopen, on a different axis.** Reintroducing Rune as a P5 adapter trips
+  the written reopen trigger ("a Rune 1.0 with a sandbox warranty"), because Wasm
+  isolation *is* that warranty. Before leaning on it, note the axis shift: Rune
+  was dropped as a *first-party language placement*; it returns here as *one
+  extension adapter among several*. Different question, legitimately reopened; do
+  not conflate the two or it reads as relitigating the placement call.
+
+---
+
+## 10. Before P0: review corrections (2026-06-21)
+
+Two independent reviews, both codebase-verified. They converge on a restructuring
+and barely overlap, so this is the consolidated punch list P0 must clear. Where a
+finding corrects an earlier section, that section now carries an inline pointer.
+
+### 10.1 Legacy web JS is its own native lane (corrects §2.3, §3, §6 P5)
+
+The largest correction. `html-document` should not be a Wasm interpreter component,
+and it leaves P0 and P1.
+
+Verified in source (`script-runtime-api/lib.rs`): serval's live runtime already
+runs the model §3 treats as the hard case, and it is not a component.
+
+- The runtime owns `dom: ScriptedDom` (L80) and never lays out (L67, L73, L99).
+- `getComputedStyle` is a **synchronous host seam**, `ComputedStyleHandler` over the
+  host's `IncrementalLayout` (L98-103): the host lays out, the seam reads it back
+  synchronously during the run.
+- The execution model is already turn-based (L62-70, the `viewport_scroll` comment):
+  the host syncs layout state *in* before the run, the script runs to completion,
+  the host reconciles *out* after. A mid-run read of a value just written sees the
+  unreconciled value, "the script/layout split's one fidelity gap."
+
+So serval does not do true synchronous forced reflow. It does synchronous reads of
+the previous frame's layout and accepts a documented fidelity gap. The §3 premise
+("you cannot run that against an async apply") is true for genuine forced reflow,
+which serval never does, so the bar the existing native lane already clears is lower
+than §3 implies.
+
+Consequence for §2.3: the actor-plan P5 descope ("compiling the entire serval +
+Nova content engine to wasm32") does touch this proposal for `html-document`.
+Legacy-with-synchronous-layout *is* the engine, so wrapping it as a component
+reintroduces that cost. "We confine the script, not the engine" holds only where the
+script is not itself the engine.
+
+The honest lane split:
+
+- **Mere-native extension / app scripts.** Direct Wasm components over the coarse
+  `DocumentScript` contract. The real P0/P1 target.
+- **Legacy web JS.** The existing native `Runtime<Nova/Boa>` plus reflectors and the
+  sync host seams, implementing a Rust counterpart to the contract, not a component.
+  A peer lane, not a subordinate profile.
+- **Wasm interpreter components.** Later, only for runtimes that genuinely compile to
+  wasm and whose document/layout needs fit inside the boundary.
+
+Action: drop `html-document` from P0/P1 and record it as a separate later
+compatibility track. Conformance later demonstrates whether the lanes can share more
+than vocabulary.
+
+### 10.2 Make the outer contract per-turn; keep run() optional (refines §5)
+
+The WIT export `run: async func(session)` puts the script in charge of its own loop.
+The engine is already per-turn (§10.1): snapshot in, run to completion, reconcile
+out, metered by `pump(budget)`. An export shaped like
+`handle-event(event, expected-revision) -> list<mutation>` keeps ordering, metering,
+cancellation, and paint-commit points under the host, and matches what the engine
+does today. Make per-turn the default; offer long-running `run(stream)` as an
+optional service profile for scripts that need their own loop.
+
+### 10.3 Write the transaction contract, do not gesture at it (extends §5)
+
+Optimistic concurrency needs more than `expected-revision`:
+
+- `inspect` returns the revision its snapshot was taken at, so a later `apply` can
+  cite it.
+- Events carry their source revision.
+- `apply` rejection returns the *current* revision in the error, so the script can
+  rebase rather than just learn "conflict."
+- Mutation batches are atomic against the cited revision, with a declared size limit.
+- **Stable node identity across the copied snapshot.** Define how a node named in an
+  `inspect` result is referenced by a later `mutation`, since the snapshot is a value
+  copy with no shared handle. This is the seam an interpreter mirror refreshes
+  through, and it is currently undefined.
+
+### 10.4 Capability granting: the mechanism, not just the catalogue (extends §4)
+
+The world imports `document` / `network` / `clock` / `log` as a fixed set. A grant
+has to become a linking decision: a denied capability is either an import bound to an
+always-erroring stub, or an unlinked import (the component fails to instantiate).
+Pick one, and define how a script discovers what it holds. This is the headline
+native payoff (§7.3: the runtime buys the typed capability contract first), so it
+cannot stay a forward-reference to the capability-gate catalogue.
+
+### 10.5 Runtime sharing vs per-origin capability are in tension (connects §7.1)
+
+For an interpreter component, untrusted code runs inside the component, sharing its
+linear memory and its granted imports, so confinement is at *component* granularity,
+not *script* granularity. The §7.1 mitigation (share one runtime across origins to
+amortize the megabytes) collapses the per-origin capability boundary those origins
+then share. Per-origin runtime keeps the boundary and pays the §7.1 cost; shared
+runtime saves the cost and loses the boundary. P0 needs a position, because this
+bounds how much the "third isolation option" (§9) delivers for the interpreter lane.
+
+### 10.6 Profile evolution vs frozen compiled components (extends §6 P6)
+
+The compiled-component lane is the cleanest (§3) and therefore the most brittle: a
+`mere:script@0.2.0` that changes a `mutation` variant breaks every third-party
+compiled artifact. For a contract whose point is third-party extensibility, profile
+evolution without orphaning installed components is plausibly the dominant long-term
+cost. It is currently one P6 bullet ("WIT version adapters") and needs a real
+position: adapter shims, deprecation windows, or a frozen core profile that only
+grows.
+
+### 10.7 Smaller corrections
+
+- **AOT, not only JIT** (corrects §7.3, §9). "Native means a Cranelift JIT in the
+  process" is too binary. Precompiled `.cwasm` artifacts plus a no-codegen runtime
+  (Wasmtime's Pulley, already noted in [actor_constellation_plan](2026-06-03_actor_constellation_plan.md))
+  keep the compiler at build time and embed only the executor. Add this as a third
+  option in the §9 decision.
+- **Trim "remote-component boundary"** (corrects §6, §8). The Component Model gives
+  shared vocabulary, not distributed-failure semantics (Goals.md is explicit it does
+  not solve distributed computing). Remote execution needs its own identity,
+  transport, retry, resumption, and partial-failure protocol. WIT can name the types;
+  it does not supply the protocol.
+- **Rune's warranty is partial** (refines §9). Wasm confines memory and removes
+  ambient authority. It does not establish interpreter maturity, determinism, or
+  tenant isolation inside a shared runtime, all of which the corpus already flags
+  ([actor_constellation_plan](2026-06-03_actor_constellation_plan.md):66-71: Rune
+  self-labels its sandbox "no warranty" at 0.x; determinism documented by neither).
+  Reopen Rune as a contained experiment, not a warranted one.
+- **Define "script instance"** (refines §6 P2). The actor model is one content actor
+  per origin / agent cluster ([actor_constellation_plan](2026-06-03_actor_constellation_plan.md):51),
+  and an origin hosts many scripts. "One armillary actor per script instance" would
+  multiply actors past that. Use one execution-host actor per origin (or trust
+  principal) that schedules several component instances locally.
+
+### 10.8 Split P0 itself
+
+- **Name the first consumer.** The concrete one is the polyglot wasm-block
+  ([polyglot_block_resolver_plan](../../nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md)
+  P3): "text in, blocks out, no ambient capability." That is far narrower than
+  `document-core`'s document-session world. Start P0 from the text-to-blocks shape
+  and grow toward document-session, rather than building the rich profile first.
+- **Split the runtime probe.** A synchronous contract / ownership probe on a released
+  Wasmtime, and a separately pinned async / future / stream probe. Promote async only
+  after cancellation, backpressure, fuel, and teardown work end to end. Verified
+  2026-06-21 against primary sources: the latest *released* Wasmtime is **45.0.2**
+  (2026-06-15), whose component-model async is self-described "*very* incomplete" in
+  `config.rs` (`wasm_component_model_async` and the stackful / more-builtins variants).
+  WASI 0.3.0 with Component Model Async *enabled by default* is slated for **Wasmtime
+  46, not yet released**. So no released runtime ships default WASI 0.3 today: the sync
+  probe runs on 45.0.2 now; the async probe either waits for 46 or rides 45's flagged,
+  incomplete path. This empirically grounds the split (and tempers §7.3's "pin against
+  the post-0.3.0 point release", which assumes a released default that does not exist
+  yet).
+
+---
+
+## Progress
+
+- **2026-06-21.** Plan created from a session synthesis. External standards
+  verified against primary sources (component-model Concurrency.md / Choices.md /
+  Goals.md, WASI Proposals.md + releases, gc MVP.md, Wasmtime releases): WASI
+  0.3.0 async shipped 2026-06-11; CM is Developer Preview, CM 1.0 gated on two
+  uncommitted browser engines; WasmGC ships in all three engines but does not
+  cross the component boundary; Choices.md confirms no cross-component cycle
+  collector + acyclic resource ownership + no runtime-JIT primitive. Codebase
+  grounding verified in source: `script-engine-api/lib.rs` is JS-shaped;
+  `fetch.rs:86-118` already carries the deferred async seam; the Component-Model
+  substrate idea is absent from the corpus; the actor-constellation "wasm-component
+  isolation" seam is deferred and its P5 descope reasoning targets the engine, not
+  the script. No code written. P0 is a decision gate.
+- **2026-06-21 (review pass).** Two independent codebase-verified reviews folded into
+  §10 as the "Before P0" punch list. Headline correction: `html-document` leaves
+  P0/P1 and legacy web JS becomes a separate native lane, not a Wasm component.
+  Grounded by `script-runtime-api/lib.rs` (L62-70, L80, L98-103): serval's runtime
+  already runs legacy turn-based (snapshot in / reconcile out) with a synchronous
+  `ComputedStyleHandler` seam and a documented fidelity gap, and never does true
+  forced reflow; so §2.3's "the P5 descope does not touch this" is overbroad for the
+  legacy lane (there the script *is* the engine). Also folded: per-turn outer
+  contract over `run(stream)`; a real transaction contract (revision on inspect /
+  events, conflict revision in errors, batch atomicity, stable node identity across
+  the copy); capability-grant linking mechanics; the runtime-sharing vs per-origin
+  capability tension; profile-version brittleness of compiled components; AOT as a
+  third option vs Cranelift-or-defer; trim "remote-component boundary"; Rune's
+  warranty is partial (isolation only, not maturity/determinism); define "script
+  instance" against the per-origin actor model; and split P0 into a sync probe + a
+  pinned async probe, started from the polyglot wasm-block consumer. Inline pointers
+  added at §2.3 and §3. No code written.
+- **2026-06-21 (upstream verification).** The external facts (previously verified
+  2026-06-20, re-checked against primary sources) all hold:
+  - **WASI 0.3.0 shipped 2026-06-11.** Confirmed: WASI GitHub release `v0.3.0` and the
+    Bytecode Alliance "WASI 0.3 Launched" article (June 11, 2026).
+  - **Async / cancellation / backpressure are in the Component Model.** Confirmed in
+    `component-model` Concurrency.md: `subtask.cancel` (cooperative cancellation),
+    `backpressure.inc` / `backpressure.dec` (counter-based backpressure), the async ABI
+    "doesn't actually depend on the Core WebAssembly stack-switching proposal" and "can
+    be polyfilled in browsers via JSPI." So §2.1's "counter-based backpressure" and the
+    "Rune-style async is accommodated" argument stand verbatim.
+  - **CM 1.0 is gated on two browser engines, neither committed.** Confirmed near-verbatim
+    in "The Road to Component Model 1.0": "can't formally reach 1.0 without native
+    implementation in at least two browser engines"; Mozilla + Chrome are "paying
+    attention" but "these aren't commitments."
+  - **WasmGC ships in all three engines** (Chrome 119, Firefox 120, Safari 18.2; baseline
+    Dec 2024); the no-cross-boundary point is a canonical-ABI design fact, unchanged.
+  - **One correction folded into §10.8:** the latest *released* Wasmtime is 45.0.2
+    (2026-06-15) with component async self-described "*very* incomplete" in `config.rs`;
+    WASI 0.3 *by default* lands in the unreleased Wasmtime 46. So §7.3's "pin against the
+    post-0.3.0 point release" was optimistic, which is exactly why the §10.8 sync/async
+    probe split is the right shape. Both the plan's and the source review's upstream
+    claims check out.
+
+## Key grounding files
+
+- serval: `components/script-engine-api/lib.rs` (the JS-shaped trait),
+  `components/script-runtime-api/fetch.rs:86-118` (the deferred fetch seam),
+  `docs/2026-05-20_serval_script_engine_plan.md` (reflector model + per-target
+  backend selection), `docs/2026-05-25_js_execution_strategy.md` (no-JIT, weval),
+  `docs/2026-06-11_gc_arena_dom_plan.md` (the owned DOM store + mark-sweep).
+- mere: [actor_constellation_plan](2026-06-03_actor_constellation_plan.md)
+  (the actor boundary + deferred plugin seam + P5 descope + Rune reopen trigger),
+  [protocol_architecture_plan](2026-05-05_protocol_architecture_plan.md) (Extism
+  gesture), [cross_platform_parallelism_strategy](../research/2026-06-19_cross_platform_parallelism_strategy.md)
+  (no-JIT policy + lane fork), [capability_gate_catalogue_brief](../research/2026-05-14_capability_gate_catalogue_brief.md)
+  (profile granting), [polyglot_block_resolver_plan](../../nematic_docs/implementation_strategy/2026-06-13_polyglot_block_resolver_plan.md)
+  (native-only wasm-block kind).
+- external (verified 2026-06-20): `WebAssembly/component-model` design/mvp/Concurrency.md
+  + design/high-level/Choices.md + Goals.md; `WebAssembly/WASI` docs/Proposals.md
+  + releases (v0.3.0); `WebAssembly/gc` proposals/gc/MVP.md;
+  bytecodealliance Road-to-Component-Model-1.0 + jco docs.
