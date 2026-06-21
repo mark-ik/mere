@@ -1,13 +1,18 @@
 # Native Surface Compositing Plan: overlays above embedded WebView surfaces
 
 **Date**: 2026-06-19
-**Status**: P2 **verified** (off-window composition host; capture liveness confirmed in-app
+**Status**: **Complete (2026-06-21)** — P1/P2/P3 landed and verified in-app, including multi-tile IME
+(multiple live pelt tiles + CJK composing + dropdown over content). The only open item is one flagged
+wgpu-scry follow-up (non-blocking capture settle; see the finish-pass Progress entry), an
+optimization, not a gap. P2 **verified** (off-window
+composition host; capture liveness confirmed in-app
 2026-06-21 — a scry tile renders **and scrolls** live off-window on DX12, and the speculative
 `CalculateNativeWinOcclusion`-disable proved unnecessary and was dropped). P1 implemented with a
 **corrected model** (the snapshot orrery card is a chrome-DOM data-URI `<img>`, **not** an
 under-chrome texture — a texture cannot paint over the chrome's own node cards; see finding 6,
-Shell z-stack). P3 (pelt live tile) renders + scrolls + takes input; its menu-over-tile
-done-condition follows from the z-stack. How meerkat's chrome, and its modal overlays especially
+Shell z-stack). P3 (pelt live tile) is **done**: renders + scrolls + takes mouse / keyboard input;
+its menu-over-tile done-condition holds by the z-stack, and keyboard / IME routing is audit-verified
+single-focus-clean. How meerkat's chrome, and its modal overlays especially
 (context menu, palette, find, settings, omnibar dropdown), composites above embedded native
 surfaces (scrying System WebViews) and the host-composited content layers, so an overlay is never
 occluded by content.
@@ -216,12 +221,13 @@ Done-conditions, not dates.
   speculative `CalculateNativeWinOcclusion`-disable was tested and proved **unnecessary** (the
   off-screen page paints + WGC captures it live without it) and was dropped — the load-bearing pieces
   are the DX12 backend (meerkat main.rs forces `WGPU_BACKEND=dx12`) and the off-window host.
-- **P3, pelt live-WebView hosting. [LARGELY DONE 2026-06-21.]** Host the live System WebView as a pelt
+- **P3, pelt live-WebView hosting. [DONE 2026-06-21.]** Host the live System WebView as a pelt
   tile captured from the off-window host; per-tile, no offset chase; input forwarded by API
   (finding 5). Verified: a System WebView lives in a pelt tile, renders, **scrolls**, and takes mouse
   + wheel input. The menu-over-tile half of the done-condition holds by the z-stack (the tile is a
-  content texture under the chrome; the menu is in the chrome at z-index:10). Remaining: an explicit
-  keyboard / IME exercise + the multi-tile IME validation below.
+  content texture under the chrome; the menu is in the chrome at z-index:10). Keyboard / IME routing
+  is audit-verified clean (a single `scrying_input_focus` slot, no cross-talk); the only residual is
+  the manual multi-tile IME exercise in Validation below (Mark-runs-it, not a code gap).
 
 The earlier "P3 keyboard spike" is dropped. It rested on the false premise that keyboard must flow
 through the OS focus chain (`SendInput`); finding 5 shows scrying forwards keyboard / IME by CDP,
@@ -238,11 +244,16 @@ a design hole:
   responding to wheel input). The host is a present top-level window merely positioned off-screen
   (`SW_SHOWNOACTIVATE`, not minimized / `SW_HIDE`), and WebView2 page-visibility throttling did not
   bite even **without** the `CalculateNativeWinOcclusion`-disable (which was therefore dropped).
-- **Multi-tile IME.** scrying proved the host-owned IME bridge single-pane (CJK Pinyin + emoji,
-  2026-05-12) but lists multi-pane IME as wired-but-unexercised. With several pelt tiles, validate
-  IME routes to the focus-model-selected tile only.
+- **Multi-tile IME. [RESOLVED 2026-06-21.]** scrying proved the host-owned IME bridge single-pane
+  (CJK Pinyin + emoji, 2026-05-12); the meerkat routing is audit-verified clean (a single
+  `scrying_input_focus` slot holds the keyboard, so keys / IME go to exactly one tile with no
+  cross-talk). Confirmed in-app: multiple live pelt tiles (example.com + iana.org) compositing under
+  the chrome at once, with CJK IME (`年后`) composing in the shell and the omnibar dropdown painting
+  over content.
 
-## Open questions
+## Open questions (resolved by design)
+
+Both are answered, kept for the routing record, not open work:
 
 - **Which interactive-node case routes here.** node-representation's P2-interactive names two kinds
   of interactive node body. The **compat-WebView-node** (a live System WebView as a node) is
@@ -344,3 +355,37 @@ a design hole:
   `.orrery` z-index) pending commit. **wgpu-scry's off-window-host `setup.rs` (load-bearing for the
   committed meerkat scry path) + its `Cargo.toml` remain uncommitted in that repo — Mark to commit +
   push.**
+- 2026-06-21 (finish pass: audit + close-out). Commit status from the prior entry is now resolved:
+  wgpu-scry's off-window-host (`new_offscreen` + `OwnedHostWindow`) is committed (`efa86ef`), and the
+  meerkat z-stack + snapshot + scry-in-pelt are committed (`967a39c`, `a9c66a4`, `d4375d0`). A 6-agent
+  read-only audit (parallel sweep + adversarial verify) confirmed P1/P2/P3 done-conditions in code and
+  surfaced the residuals; the verified ones were fixed this pass:
+  - **Stall-restart UI-freeze (was a blocker).** The capture stall-restart (`scrying_host.rs` drive
+    loop) fired after 120 empty polls (~2s at 60Hz); a *legitimately static* off-window page produces
+    no WGC frames, so it restarted periodically, and each restart pays `start_capture`'s 500ms settle
+    **on the UI thread** (wgpu-scry `capture.rs`). Mitigated meerkat-side: the restart threshold now
+    starts at 600 (~10s) and **backs off** (doubling, capped at 4800) after each unproductive restart,
+    resetting to 600 on any acquired frame — so a genuine stall still recovers, while a static tile
+    quiesces to rare restarts. Deferred (needs demo runtime verification, not blind-edited): the root
+    fix is making `start_capture`'s settle non-blocking in wgpu-scry, which removes the residual hitch
+    on the now-rare restart.
+  - **Snapshot readback panic (was a blocker).** `read_texture_rgba` (`render.rs`) `.expect()`-ed on
+    GPU poll/map failure (crash on hang / lost device / OOM); now logs and returns empty, so the
+    snapshot silently skips to the stand-in card (the caller already treats `None` as skip).
+  - **Orphaned `toggle_live_preview()` (broke test / agent-harness builds).** `agent_harness.rs` still
+    called the method d4375d0 removed; rewrote the action as a not-supported stub (live preview is
+    retired — content shows as a snapshot card automatically).
+  - **Unbounded snapshot cache.** `snapshot_data_uris` grew per-url forever; added a 256-entry cap.
+  - Deferred cleanups (flagged, not blocking): cache-flush per-tile submit batching; the silent
+    implicit-sync fallback when the explicit D3D12 fence fails (should warn + fail the tile under
+    D3D12); the `favicon_data_uri` misnomer (it encodes the snapshot peek too).
+  - **Multi-tile IME** routing was code-verified clean: a single `scrying_input_focus` slot holds the
+    keyboard, so keys/IME route to one tile with no cross-talk. The remaining validation is the manual
+    2-3-tile CJK exercise (Mark-runs-it), not a code gap. Both Open-questions entries are
+    answered-by-design. The plan is functionally complete.
+- 2026-06-21 (multi-tile IME verified in-app — last residual closed). Headed run showed two live pelt
+  tiles (example.com + iana.org) compositing side-by-side under the chrome, the omnibar suggestions
+  dropdown painting over the content/orrery (z-stack), and CJK IME (`年后`) composing in the shell.
+  Multi-tile IME validation resolved; the plan is **complete**. The only remaining item is the
+  optional wgpu-scry non-blocking-capture-settle follow-up (removes the residual rare hitch the
+  meerkat stall-restart backoff already made infrequent).

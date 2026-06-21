@@ -88,8 +88,17 @@ fn read_texture_rgba(
     slice.map_async(wgpu::MapMode::Read, move |r| {
         let _ = tx.send(r);
     });
-    device.poll(wgpu::PollType::wait_indefinitely()).expect("readback poll");
-    rx.recv().expect("readback map sender").expect("readback map");
+    // A snapshot readback failing (GPU hang / lost device / OOM) must not crash the
+    // app: the caller treats an empty result as "skip the snapshot" (favicon_data_uri
+    // returns None on a short slice, then the plain stand-in card shows). (Layering fix.)
+    if device.poll(wgpu::PollType::wait_indefinitely()).is_err() {
+        tracing::warn!("snapshot readback poll failed; skipping snapshot");
+        return Vec::new();
+    }
+    if !matches!(rx.recv(), Ok(Ok(()))) {
+        tracing::warn!("snapshot readback map failed; skipping snapshot");
+        return Vec::new();
+    }
     let mapped = slice.get_mapped_range();
     let mut out = Vec::with_capacity((row_bytes * height) as usize);
     for row in 0..height as usize {
@@ -1486,6 +1495,13 @@ impl WindowCtx<'_> {
                 let (tex, _view) = core.rasterize(&scene, PEEK_W, PEEK_H, ColorLoad::Clear(CARD_BG));
                 let rgba = read_texture_rgba(core.device(), core.queue(), &tex, PEEK_W, PEEK_H);
                 if let Some(uri) = favicon_data_uri(&rgba, PEEK_W, PEEK_H) {
+                    // Bound the per-url snapshot cache: each entry is a base64 PNG peek
+                    // (tens of KB), so without a cap it grows unbounded over a long
+                    // session. Crude but bounded: drop the cache when it gets large; the
+                    // few visible cards re-encode once on a later frame. (Cache cap.)
+                    if self.view.snapshot_data_uris.len() >= 256 {
+                        self.view.snapshot_data_uris.clear();
+                    }
                     self.view.snapshot_data_uris.insert(url.clone(), uri);
                 }
             }

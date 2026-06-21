@@ -260,6 +260,12 @@ mod windows_pool {
         empty_polls: u32,
         /// Total `try_acquire_frame` calls, for the stall-restart log context.
         total_polls: u64,
+        /// Empty-poll count that triggers a capture restart. Starts at 600 (~10s at
+        /// 60Hz) and doubles (capped) after each restart that did not bring frames
+        /// back, so a *legitimately static* off-window page (which correctly produces
+        /// no WGC frames) quiesces instead of restarting every ~2s and paying
+        /// `start_capture`'s settle each time. Reset to 600 on any acquired frame.
+        stall_threshold: u32,
     }
 
     impl Pool {
@@ -463,6 +469,7 @@ mod windows_pool {
             match tile.producer.try_acquire_frame() {
                 Ok(Some(full)) => {
                     tile.empty_polls = 0;
+                    tile.stall_threshold = 600;
                     if full.resource_is_new {
                         if let WebSurfaceFrame::Native(native) = &full.frame {
                             match importer.import_frame(native, &ImportOptions::default()) {
@@ -497,14 +504,19 @@ mod windows_pool {
                     // into the allocation already behind `tile.imported`.
                 }
                 Ok(None) => {
-                    // WGC from an off-window host can stall; after ~1s of empty redraws
-                    // tear down + restart the capture session (the demo's recovery) so a
-                    // fresh session re-delivers frames.
+                    // No new WGC frame this redraw. A *genuine* off-window stall (a dead
+                    // session) needs `force_restart_capture` to recover; a *legitimately
+                    // static* page also produces no frames but must NOT thrash restarts,
+                    // because each restart pays `start_capture`'s settle on the UI thread.
+                    // So restart only on a long empty run, then back the threshold off
+                    // (doubling, capped): a recovering stall resets it on its next frame
+                    // (Ok(Some) above), while a truly static tile quiesces to rare restarts.
                     tile.empty_polls = tile.empty_polls.saturating_add(1);
-                    if tile.empty_polls >= 120 {
-                        tracing::warn!(%member, polls = tile.total_polls, "scrying capture stalled; restarting session");
+                    if tile.empty_polls >= tile.stall_threshold {
+                        tracing::warn!(%member, polls = tile.total_polls, threshold = tile.stall_threshold, "scrying capture stalled; restarting session");
                         tile.producer.force_restart_capture();
                         tile.empty_polls = 0;
+                        tile.stall_threshold = tile.stall_threshold.saturating_mul(2).min(4800);
                     }
                 }
                 Err(err) => tile.last_error = Some(format!("acquire: {err}")),
@@ -616,6 +628,7 @@ mod windows_pool {
             last_error: None,
             empty_polls: 0,
             total_polls: 0,
+            stall_threshold: 600,
         };
         match tile.producer.load_url(url) {
             Ok(()) => tile.shown_url = Some(url.to_string()),
