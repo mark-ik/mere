@@ -654,3 +654,17 @@ it is the default of a setting, not a baked constant.
   still attach at the collider center, not the visual face edge — a meerkat render-geometry trim
   (shorten each edge segment by the endpoint's radius), cosmetic and independent of the physics.
   Still open from P0: the interactive resize handle (1) and per-node size persistence (2).
+- 2026-06-21: **Edge-trim landed — straight edges meet the face, not the center (deferred-(3) closed).**
+  The `scene_paint` underlay drew each straight edge from node center to node center, so a sized node
+  had its edges plunge across its whole face. Now `paint_projection_filtered` trims a straight edge to
+  each endpoint's drawn radius (`trim_to_faces`: pull the near end in by `r_a`, the far end by `r_b`;
+  fall back to center-to-center when the faces overlap, so the stroke never reverses). Radius is read
+  from `PositionedNode.radius` — the field that already sizes the demoted node rect, so edge and rect
+  share one source. The orrery feeds it the real size: `orrery_paint_list_demoted_from_arrangement`
+  gained a `radius_of` closure and stamps every projection node's radius, with frame.rs passing
+  `node_size / 2`. Routed-path edges are untouched (explicit geometry). Universal + default-preserving:
+  every underlay (any orrery consumer) now trims, and an un-sized node trims to the 18px default, which
+  is where its face already is — only sized nodes visibly change. A `trim_to_faces` test locks the
+  pull-to-radius + overlap-fallback; the existing edge tests (count/order) still pass; platen 73 /
+  orrery 41 green, meerkat builds. **deferred-(3) is now fully closed** (pick + physics + edge-trim).
+  Still open from P0: the interactive resize handle (1) and per-node size persistence (2).

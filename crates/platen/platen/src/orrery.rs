@@ -291,12 +291,13 @@ where
 /// arrangement"). For an Identity arrangement the output is byte-identical to
 /// `orrery_paint_list_demoted`; a curated arrangement would show only its members.
 /// Edges, positions, demotion, and visual overlays are otherwise unchanged.
-pub fn orrery_paint_list_demoted_from_arrangement<F, G, V>(
+pub fn orrery_paint_list_demoted_from_arrangement<F, G, V, R>(
     graph: &Graph,
     arrangement: &Arrangement,
     position_of: F,
     is_demoted: G,
     edge_visible: V,
+    radius_of: R,
     viewport: DeviceIntSize,
     camera: Camera,
     style: &ScenePaintStyle,
@@ -306,9 +307,10 @@ where
     F: Fn(NodeKey) -> Option<PortablePoint>,
     G: Fn(NodeKey) -> bool,
     V: Fn(&RelationView) -> bool,
+    R: Fn(NodeKey) -> Option<f32>,
 {
     let keys = arrangement_keys(graph, arrangement);
-    let projection = project_keys(
+    let mut projection = project_keys(
         graph,
         &keys,
         |k| position_of(k).or_else(|| graph.node_projected_position(k)),
@@ -316,6 +318,14 @@ where
         "orrery.live",
         false,
     );
+    // Carry each node's face radius into the projection so straight edges trim to the
+    // face (not the center) and a demoted node's underlay rect draws at its true size.
+    // A node the host gives no radius keeps the style default. (Node-rep Decision 5.)
+    for node in &mut projection.nodes {
+        if let Some(r) = radius_of(node.node) {
+            node.radius = r;
+        }
+    }
     let mut list =
         paint_projection_filtered(&projection, viewport, camera, style, generation, is_demoted);
     list.splice_world_overlays(visual_overlays(graph, &projection, style));

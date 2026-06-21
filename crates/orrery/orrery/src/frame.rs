@@ -106,6 +106,10 @@ impl Orrery {
                     if rel.from <= rel.to { (rel.from, rel.to) } else { (rel.to, rel.from) };
                 !self.hidden_edges.contains(&pair)
             },
+            // Each node's face radius (node_size / 2) so straight edges trim to the
+            // face and demoted underlay rects draw at the node's true size. (Node-rep
+            // Decision 5 — size drives the face geometry.)
+            |k| Some(self.node_size(k) / 2.0),
             viewport,
             self.camera,
             &self.style,

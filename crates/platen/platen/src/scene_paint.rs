@@ -165,14 +165,28 @@ pub fn paint_projection_filtered(
         .iter()
         .map(|n| (n.node, n.position))
         .collect();
+    // Each node's drawn radius (its own, or the style default for an un-sized node) —
+    // used to trim a straight edge so it meets the face, not the center.
+    let node_radius: HashMap<NodeKey, f32> = projection
+        .nodes
+        .iter()
+        .map(|n| (n.node, if n.radius > 0.0 { n.radius } else { style.default_node_radius }))
+        .collect();
+    let radius_of = |key: &NodeKey| node_radius.get(key).copied().unwrap_or(style.default_node_radius);
 
     // Edges first (painted under the nodes).
     for edge in &projection.edges {
         let polyline: Vec<LayoutPoint> = if edge.path.len() >= 2 {
+            // A routed path is explicit — paint it as given, no face trim.
             edge.path.iter().map(|p| pt(*p)).collect()
         } else {
             match (node_pos.get(&edge.from), node_pos.get(&edge.to)) {
-                (Some(&a), Some(&b)) => vec![pt(a), pt(b)],
+                // A straight edge stops at each endpoint's face (radius) rather than
+                // plunging to its center, so a sized node looks connected at its
+                // visual edge. (Node-rep Decision 5 — face geometry.)
+                (Some(&a), Some(&b)) => {
+                    trim_to_faces(a, b, radius_of(&edge.from), radius_of(&edge.to))
+                },
                 _ => continue,
             }
         };
@@ -220,6 +234,25 @@ pub fn paint_projection_filtered(
         viewport,
         generation,
     }
+}
+
+/// A straight segment `a`–`b` shortened so each end stops at the node's face — `a`
+/// pulled in by `ra`, `b` by `rb` — instead of meeting at the centers. When the
+/// centers are closer than the two radii (overlapping / touching faces, so there is
+/// no clean gap to draw into) the segment falls back to center-to-center, which is no
+/// worse than the un-trimmed line and avoids a reversed stroke. (Node-rep Decision 5.)
+fn trim_to_faces(a: PortablePoint, b: PortablePoint, ra: f32, rb: f32) -> Vec<LayoutPoint> {
+    let dx = b.x - a.x;
+    let dy = b.y - a.y;
+    let dist = (dx * dx + dy * dy).sqrt();
+    if dist <= ra + rb + 1.0 {
+        return vec![pt(a), pt(b)];
+    }
+    let (ux, uy) = (dx / dist, dy / dist);
+    vec![
+        LayoutPoint::new(a.x + ux * ra, a.y + uy * ra),
+        LayoutPoint::new(b.x - ux * rb, b.y - uy * rb),
+    ]
 }
 
 /// Axis-aligned bounds of a non-empty polyline.
@@ -328,5 +361,22 @@ mod tests {
             0,
         );
         assert_eq!(list.commands().len(), 2);
+    }
+
+    #[test]
+    fn trim_to_faces_pulls_endpoints_to_the_radii() {
+        let a = PortablePoint::new(0.0, 0.0);
+        let b = PortablePoint::new(100.0, 0.0);
+        // a's face at r=10, b's at r=18 → the stroke runs 10..82 along the x-axis.
+        let seg = trim_to_faces(a, b, 10.0, 18.0);
+        assert_eq!(seg.len(), 2);
+        assert!((seg[0].x - 10.0).abs() < 1e-4 && seg[0].y.abs() < 1e-4, "near end at a's face");
+        assert!((seg[1].x - 82.0).abs() < 1e-4 && seg[1].y.abs() < 1e-4, "far end at b's face");
+
+        // Faces that overlap (radii exceed the gap) fall back to center-to-center so
+        // the stroke never reverses.
+        let seg = trim_to_faces(a, b, 60.0, 60.0);
+        assert!((seg[0].x - 0.0).abs() < 1e-4, "fallback keeps a's center");
+        assert!((seg[1].x - 100.0).abs() < 1e-4, "fallback keeps b's center");
     }
 }
