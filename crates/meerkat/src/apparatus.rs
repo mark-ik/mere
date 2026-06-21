@@ -72,6 +72,52 @@ pub fn apparatus_sheet(c: &ChromeTheme) -> Vec<String> {
     ]
 }
 
+/// The Theme section's controls: one clickable button per option, its theme id the
+/// activation key the host drains to switch the theme. Shared by the apparatus pane and the
+/// settings lane's `pelt/appearance` page, so both stay one source of truth. (Settings lane.)
+pub fn theme_section_items(themes: &[ThemeOption]) -> Vec<PaneItem> {
+    themes
+        .iter()
+        .map(|theme| {
+            let class = if theme.active { "app-btn-active" } else { "app-btn" };
+            PaneItem::button(class, theme.name.clone(), theme.id.clone())
+        })
+        .collect()
+}
+
+/// The Engines section's controls: one toggle per present engine, the id riding the key as
+/// `engine:toggle:<id>` (clicking flips its activation). Shared by the apparatus pane and the
+/// settings lane's `pelt/engines` page. (Settings lane.)
+pub fn engine_section_items(engines: &[EngineRow]) -> Vec<PaneItem> {
+    engines
+        .iter()
+        .map(|engine| {
+            let class = if engine.active { "app-btn-active" } else { "app-btn" };
+            let label = format!("{}  —  {}", engine.name, if engine.active { "active" } else { "off" });
+            PaneItem::button(class, label, format!("engine:toggle:{}", engine.id))
+        })
+        .collect()
+}
+
+/// The Physics section's controls: the node-damping readout plus the − / + step buttons
+/// (`phys:damping:down` / `:up`). Shared by the apparatus pane and the settings lane's
+/// `pelt/physics` page. (Settings lane.)
+pub fn physics_section_items(physics_damping: f32) -> Vec<PaneItem> {
+    vec![
+        PaneItem::text("app-row", format!("Node damping (inertia): {physics_damping:.1}")),
+        PaneItem::button(
+            "app-btn",
+            "− less damping (more drift)".to_string(),
+            "phys:damping:down".to_string(),
+        ),
+        PaneItem::button(
+            "app-btn",
+            "+ more damping (settle sooner)".to_string(),
+            "phys:damping:up".to_string(),
+        ),
+    ]
+}
+
 /// Build the apparatus pane's item list: a Theme section (one clickable button per
 /// option, its theme id the activation key) plus the host observability sections as
 /// display rows. The [`ListPane`](crate::list_pane::ListPane) renders these and
@@ -87,44 +133,13 @@ pub fn apparatus_items(
     let mut items = Vec::new();
 
     items.push(PaneItem::text("app-title", "Theme"));
-    for theme in themes {
-        let class = if theme.active { "app-btn-active" } else { "app-btn" };
-        items.push(PaneItem::button(class, theme.name.clone(), theme.id.clone()));
-    }
+    items.extend(theme_section_items(themes));
 
-    // Engines: each present engine as a toggle. An active engine highlights (like the
-    // active theme); clicking flips its activation — a deactivated engine is never
-    // routed to and spawns no actors. The id rides the key as `engine:toggle:<id>`.
-    // (engine-picker Phase 2.)
     items.push(PaneItem::text("app-title", "Engines"));
-    for engine in engines {
-        let class = if engine.active { "app-btn-active" } else { "app-btn" };
-        let label = format!(
-            "{}  —  {}",
-            engine.name,
-            if engine.active { "active" } else { "off" }
-        );
-        items.push(PaneItem::button(class, label, format!("engine:toggle:{}", engine.id)));
-    }
+    items.extend(engine_section_items(engines));
 
-    // Physics: the orrery's node damping (the "inertia" tunable). Lower keeps more
-    // drift after a settle; higher rests sooner. − / + step it; the host applies the
-    // change to every live graph and persists it. (Physics settings.)
     items.push(PaneItem::text("app-title", "Physics"));
-    items.push(PaneItem::text(
-        "app-row",
-        format!("Node damping (inertia): {physics_damping:.1}"),
-    ));
-    items.push(PaneItem::button(
-        "app-btn",
-        "− less damping (more drift)".to_string(),
-        "phys:damping:down".to_string(),
-    ));
-    items.push(PaneItem::button(
-        "app-btn",
-        "+ more damping (settle sooner)".to_string(),
-        "phys:damping:up".to_string(),
-    ));
+    items.extend(physics_section_items(physics_damping));
 
     items.push(PaneItem::text("app-title", "Overview"));
     for (label, value) in system_rows {
