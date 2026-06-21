@@ -37,7 +37,71 @@ different fractions:
 instrument serval-layout to split the 100 ms into cascade / box-tree / shaping /
 fragment phases on the 578 KB page, native release. Until that breakdown exists,
 "parallelism owns the cold cost" is a hypothesis, not a result.
-(Confidence: high that the breakdown is needed; we have not produced it.)
+
+### Step 0 result (2026-06-21) — measured on synthetic AND real pages
+
+Instrumented `layout_via_box_tree` with env-gated phase timers and built a
+breakdown harness (`serval/components/serval-layout/examples/phase_timing.rs`;
+`SERVAL_LAYOUT_TIMING=1`, native release, fresh `TextMeasureCtx` per pass = a true
+cold first paint). Two pages, shares of **cold paint (cascade + layout)**:
+
+| Phase | Real 1.2 MB (Wikipedia, 16 author sheets) | Synthetic 539 KB (1 trivial sheet) |
+|---|---|---|
+| **cascade** | **~30 ms (~32%)** | ~4 ms (~5%) |
+| box-tree build | ~8 ms (~9%) | ~4.5 ms (~6%) |
+| **inline shaping** | **~45 ms (~48%)** | ~70 ms (~82% of layout) |
+| taffy compute | ~6 ms (~6%) | ~8 ms (~10% of layout) |
+| fragment readback | ~4 ms (~4%) | ~0.8 ms (~1% of layout) |
+| **cold paint (cascade+layout)** | **~93 ms** | ~80 ms |
+| one-time: parse / font | ~28 / ~1.5 ms | ~9 / ~2 ms |
+
+**The real page corrected the synthetic-only conclusion — this is why §0 demanded a
+real page.** The first pass (synthetic, trivial CSS) put cascade at ~5% and shaping
+at ~82%, which read as "parallel cascade is the wrong lever." The real page refutes
+that: with real author CSS (16 sheets, complex selectors) **cascade is ~32% of cold
+paint**, because the synthetic under-weighted it ~6x precisely by having trivial CSS.
+Corrected reading:
+
+- **Shaping is the single largest phase (~48% real)** and is *already* parallelized
+  (Rayon pre-pass, native). It degrades to serial on web without the SAB shim, so
+  keeping shaping parallel on web is lever #1.
+- **Cascade is a strong second (~32% real), and is still serial.** Parallelizing it
+  (lever (c): the `Cell`→atomic fix + Stylo parallel mode, native-first) attacks a
+  real ~32% — **worthwhile; the synthetic-only dismissal of lever (c) is retracted.**
+- Cascade cost scales with author-CSS complexity (the synthetic lacked it); shaping
+  cost scales with text volume (the synthetic over-had it). Real pages sit between.
+
+**Shaping parallel vs serial (real page, the web-without-SAB penalty).** Forcing the
+shaping pre-pass serial (`SERVAL_SHAPE_SERIAL`, all other phases unchanged): parallel
+**~46 ms** vs serial **~61 ms** — a **1.32x** speedup, ~15 ms saved. So the Rayon
+pre-pass buys only ~1.3x on this page (sublinear: the merge is single-threaded, the
+font-context clone is per worker, per-leaf work is uneven). This is **well below the
+[borrowed] 2-3.5x** §4 cites — that figure stays unverified for our stack, and the one
+phase we *can* measure parallel comes in at 1.3x. Lane consequences: the open-web lane
+(no SAB) pays the full serial ~61 ms shaping (~+16% on cold paint); the PWA lane can
+reclaim ~15 ms via the SAB shim. Net SAB headroom on the PWA lane ≈ shaping ~15 ms +
+some fraction of the still-serial ~30 ms cascade; **off-main-thread (lever a) remains
+the bigger, universal web win** — it removes freeze regardless of the cold ms, and
+needs no SAB.
+
+**Cascade drill-down (real page, de-risking lever (c); serval commit 95622930).** Split
+the ~32 ms cascade (`cascade.rs`): traverse_dom (selector match + cascade + computed-value
+apply) ~25.7 ms (~80%), serial setup (Stylist build + snapshot/context wiring) ~5.8 ms
+(~18%), marker + rule-tree GC ~0.8 ms. The dominant traverse_dom is exactly the slice
+Stylo parallelizes (Rayon pool / parallel mode); the serial floor parallelism cannot
+touch is only ~6.5 ms. So **parallel cascade is well-targeted, not Amdahl-trapped** — its
+ceiling is parallelizing ~26 ms against a ~6.5 ms floor. The open unknown is the *actual*
+Stylo-parallel-traversal speedup in our stack (the borrowed 2-3.5x is unverified; the one
+parallel phase we measured, shaping, hit only 1.32x). Measuring it needs the `Cell`→atomic
+fix + ThreadSanitizer on Fedora (the scope doc forbids the Windows box), so it stays the
+next native-first step, not done here.
+
+Method notes: images are not decoded (empty `ImagePlane`), so replaced-element
+sizing is approximate; shaping is the *post-parallelism* native number (serial on
+web would be higher — the next thing to measure for the web lane). Single Windows
+laptop; the relative split is the deliverable, not the absolute ms. (Confidence:
+high that cascade and shaping are both first-order and shaping is the largest;
+medium on exact percentages — they move with page composition.)
 
 ---
 
@@ -327,8 +391,17 @@ measured in serval/wasm.
 **(c) SAB Worker-pool Rayon for parallel cascade/shaping — THE unexploited lever, HARD-GATED**
 - *Payoff:* attacks the cold cost *itself*. **[borrowed]** 2–3.5x on the parallel
   fraction — **native Quantum-CSS provenance, never demonstrated under
-  wasm-bindgen-rayon by anyone, and bounded by the unmeasured cascade-vs-box-tree
-  split (§0).** Do not cite as bankable.
+  wasm-bindgen-rayon by anyone.** **Scoped by the §0 result (2026-06-21, synthetic +
+  real): on a real page cascade is ~32% of cold paint (the synthetic's ~5% was an
+  artifact of trivial CSS), so parallel cascade IS worthwhile. But shaping is larger
+  (~48%) and already parallel on native, going serial on web without the SAB shim.
+  So this lever has two real targets: keep shaping parallel on web (#1), and
+  parallelize the still-serial cascade native-first (#2). Both attack first-order
+  fractions.** The cascade drill-down (serval 95622930) confirms the cascade is
+  well-targeted: traverse_dom (the Stylo-parallelizable slice) is ~80% of the ~32 ms
+  cascade with only a ~6.5 ms serial floor, so parallel cascade is not Amdahl-trapped.
+  Do not cite the magnitude as bankable (the Stylo-parallel speedup is unmeasured; the
+  one parallel phase we measured, shaping, hit 1.32x).
 - *Cost:* **highest, and forked.** COOP/COEP cross-origin isolation (a
   deployment/hosting constraint — see §5, **PWA-only**), nightly + `-Zbuild-std`,
   async pool init, main-thread-no-block, two artifacts. Plus the cascade
@@ -418,7 +491,7 @@ the **app lane**, not the browser lane.
 
 | Unknown / risk | Confidence | De-risking step |
 |---|---|---|
-| **Cold-cost phase breakdown** (cascade vs box-tree vs shaping) | We have **not** measured it | Instrument serval-layout on the 578 KB page, native release. **Prerequisite** for the whole parallel-cascade thesis — bounds the achievable win (§0). |
+| **Cold-cost phase breakdown** (cascade vs box-tree vs shaping) | **Measured 2026-06-21, synthetic + real (§0 result)** — real page: cascade ~32%, shaping ~48%, build ~9% of cold paint | **Done** (`examples/phase_timing.rs`). Both cascade and shaping are first-order; shaping is largest (already parallel native), cascade ~32% (still serial — lever (c) is worthwhile). Shaping parallel-vs-serial measured at 1.32x (~15 ms, web-without-SAB penalty), below the borrowed 2-3.5x. Cascade drilled: traverse_dom is ~80% of cascade (the Stylo-parallelizable slice), ~6.5 ms serial floor — lever (c) well-targeted, magnitude pending a Stylo-parallel measurement on Fedora. |
 | **Stylo parallel cascade actually *running* in wasm** | Low — compiles (servo/stylo work landed) but **no one has tested it runs**; Blitz (closest sibling: stylo+taffy+parley+vello) ships Stylo **single-threaded on web** | (1) Land `Cell`→atomic, prove parallel cascade **native** on Fedora + ThreadSanitizer. (2) Only then a minimal `wasm-bindgen-rayon` harness driving `traverse_dom(Some(&pool))` in a Worker, and measure. Research-grade. |
 | **Off-main-thread scene-serialization cost on web** | Medium — real, unquantified | Add `Serialize/Deserialize` to the `ContentUpdate` DTOs; measure per-frame structured-clone of a representative `Scene` across `postMessage`. Decides whether off-main-thread is "free" on web. |
 | **`max_inter_stage_shader_variables: 28` vs baseline 16** | High it's a real blocker | Probe `request_device` on a baseline WebGPU adapter (Chrome/Firefox/Safari-26); **determine whether 28 is vello's requirement** (if so it travels through `with_external` too); add a downlevel path or gate the limit. |

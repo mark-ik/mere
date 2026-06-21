@@ -1,6 +1,9 @@
 # DocumentScript Substrate Plan
 
-**Status:** planned / decision-pending. Architecture proposal + sequenced build-out.
+**Status:** accepted (direction) 2026-06-21; **P0 sync probe green** (built same day,
+`crates/probes/document-script-p0/`). Mark: go, betting on the future. The §9 open
+decisions are resolved (see §9 head); §10 is the binding scope. Architecture proposal +
+sequenced build-out.
 Codebase-grounded; external upstream facts (Component Model, WASI 0.3, WasmGC)
 verified against primary sources 2026-06-20 at the confidence levels stated.
 **Date:** 2026-06-21.
@@ -247,7 +250,12 @@ remote-component boundary.
   dependency call (§7.3) and the descope reconsideration (§9). Stand up a minimal
   `document-core` world + a direct-Rust component proving the contract end to end
   (events in, mutations out, one capability granted), independent of any
-  interpreter. Decision-gating; no host wiring yet.
+  interpreter. Decision-gating; no host wiring yet. **Done 2026-06-21:**
+  `crates/probes/document-script-p0/` — a direct-Rust `document-core` guest
+  component driven by a Wasmtime 45 host, green end to end (per-turn
+  `handle-event`, both mutation variants, both typed-error variants incl.
+  `revision-conflict(u64)`, the `log` capability called from the guest with only
+  WASI + `log` linked). Findings folded into the Progress log and README.
 - **P1 — the versioned WIT vocabulary.** `document-core` observe/mutate/events,
   `network` (over the `fetch.rs` deferred seam), `clock`, `log`, `lifecycle`.
   Small worlds, versioned; avoid the giant browser interface.
@@ -318,6 +326,28 @@ capabilities regardless. The native-first target depends on none of these.
 ---
 
 ## 9. Open decisions and triggers
+
+**Decision (2026-06-21, Mark): accepted, betting on the future.** All three below are
+resolved *go*, scoped by §10. The bullets stand as the rationale.
+
+1. **Wasmtime-on-native: accept** the component runtime in the native process for the
+   typed-capability + cross-language-uniformity payoff. Prefer AOT (`.cwasm` +
+   no-codegen executor, e.g. Pulley) over an in-process Cranelift JIT where it fits
+   (§10.7), so the compiler stays a build-time concern.
+2. **The P5-descope third option: accept** in-process capability confinement of
+   untrusted *extensions / scripts* via the Component Model. Legacy web content keeps
+   the actor-boundary + OS-subprocess answer; it is not wrapped as a component (§10.1).
+   The new sandbox covers mods, extensions, and native / interpreter scripts, not
+   arbitrary hostile web pages in-process.
+3. **Rune: reopened** as one P5 adapter, not a first-party language placement, with the
+   sandbox warranty read as isolation-only (Wasm gives memory + ambient-authority
+   confinement, not maturity / determinism / tenant isolation; §10.7).
+
+Scope note carried from §2.1 / §10: this is a concurrency + capability + sandboxing
+substrate (parallel *across* instances, async *within* one), not an in-script
+shared-memory parallelism model (deferred, §8). Native payoff lands now; the
+browser/web lane is the deliberate future bet (AOT polyfill; native browser CM is gated
+on two uncommitted engines).
 
 - **Wasmtime-on-native dependency call** (P0 gate, §7.3). Accept Cranelift in the
   native process for the contract + uniformity payoff, or defer until the
@@ -410,8 +440,22 @@ Optimistic concurrency needs more than `expected-revision`:
 - Mutation batches are atomic against the cited revision, with a declared size limit.
 - **Stable node identity across the copied snapshot.** Define how a node named in an
   `inspect` result is referenced by a later `mutation`, since the snapshot is a value
-  copy with no shared handle. This is the seam an interpreter mirror refreshes
-  through, and it is currently undefined.
+  copy with no shared handle. This is the seam an interpreter mirror refreshes through.
+
+**Resolved (2026-06-21), node identity.** Opaque host-assigned `node-id` (u64) is the
+canonical identity for mutation targeting and cross-turn references: stable across content
+edits and moves, unambiguous, capability-scoped (the host mints ids only for in-scope
+nodes, so a script cannot forge an out-of-scope reference), and a match for serval's
+existing `NodeId` (`ReflectorData = u64`). Content-hash is **rejected as the identity** (it
+collides on identical-content nodes, and changes under the very edit being made, Merkle-
+propagating to ancestors) but **kept as a per-node change-detection token** in the snapshot
+(a script's mirror compares it to skip unchanged subtrees; aligns with the content-addressed
+sync substrate). Positional ops use **id-relative anchors** (parent / sibling node-ids), the
+robust form of "paths" with no index-shift fragility. Implemented + verified in the probe:
+the snapshot carries `revision` + per-node `id` + `content-hash`; mutations are id-targeted
+(`set-text` / `remove` / `insert-before` / `append-child`); the host applies batches
+atomically against `expected-revision`, rejecting a stale revision with the current one and
+an unknown id before any change lands.
 
 ### 10.4 Capability granting: the mechanism, not just the catalogue (extends §4)
 
@@ -541,6 +585,55 @@ grows.
     post-0.3.0 point release" was optimistic, which is exactly why the §10.8 sync/async
     probe split is the right shape. Both the plan's and the source review's upstream
     claims check out.
+- **2026-06-21 (decision: go).** Mark accepted the direction ("betting on the future").
+  §9's three open decisions resolved *go* (Wasmtime-on-native accepted, AOT-preferred;
+  the CM third-isolation option accepted for the extension/script lane; Rune reopened as
+  an adapter). Binding scope is §10: legacy web JS stays a native lane, P0 starts from
+  the polyglot wasm-block (text-to-blocks direct-Rust component) and grows toward
+  document-session, runtime probe split into sync (on 45.0.2) + async (46-gated). Status
+  flipped to accepted. Next: P0 scoping. Still no code written (P0 is a probe gate).
+- **2026-06-21 (P0 sync probe — green).** Built `crates/probes/document-script-p0/`: a
+  WIT `document-core` world (`mere:script@0.1.0`), a direct-Rust guest component, and a
+  Wasmtime 45.0.2 host runner. Runs end to end: host-driven per-turn `handle-event`,
+  `set-text`/`append` events producing `replace-all`/`append` mutations applied to host
+  state with the revision advancing, and both typed-error variants
+  (`revision-conflict(u64)`, `refused(string)`) round-tripping. The guest calls its one
+  granted `log` capability; only WASI + `log` are linked. Validates the §10.2 per-turn
+  shape, the §10.3 typed-error/revision shape, and the §10.4 capability seam on a real
+  Component Model boundary, on the released runtime (§10.8 sync probe). Findings:
+  - **Toolchain (for §10.8):** wasmtime 45.0.2 requires rustc >= 1.93.0; the workspace
+    default is 1.92.0. Adopting wasmtime in the workspace proper means an MSRV bump. The
+    probe pins 1.93.0 locally via `rust-toolchain.toml` (probe adapts to the skew).
+  - **Capability minimality is a build-mode cost (for §10.4):** a `std` guest on the
+    wasip2 target imports the entire WASI world, so the host must grant WASI to
+    instantiate at all. A deny-by-default component (only the application capability)
+    needs a `no_std` build plus a hand-supplied allocator and mem/alloc-error intrinsics
+    (hit the `env::memcmp` / alloc-error-handler wall mid-probe; deferred). A grant model
+    cannot assume the app's import set is minimal by default.
+  - **The enforcement point is real:** instantiation *failed* when an imported interface
+    was not linked (observed first-hand with `wasi:io/error` before WASI was granted).
+    "Unimported means unreachable" is the live runtime mechanism behind §9's third
+    isolation option, not just an aspiration.
+  - **wasmtime 45 API shape (so P1 host wiring does not re-derive):** the
+    `HasData`/`HasSelf<T>` pattern for `add_to_linker`; `WasiView::ctx() -> WasiCtxView`
+    carries ctx + table (no separate `IoView`); `wasmtime_wasi::p2::add_to_linker_sync`.
+  - Not covered (later): async (Wasmtime 46), host-side conflict detection in a real
+    `apply()` seam (P1), stable node identity across the copied snapshot, the
+    interpreter-component lane, the `no_std` minimal-cap guest.
+- **2026-06-21 (P1 slice — §10.3 transaction contract, green).** Grew the probe's WIT
+  world from P0's `replace-all`/`append` to the §10.3 transaction contract and verified it
+  end to end (`crates/probes/document-script-p0/`). The snapshot (`document-view`) carries
+  its `revision` + per-node opaque `node-id` + `content-hash`; mutations are id-targeted
+  (`set-text` / `remove` / `insert-before` / `append-child`) with id-relative anchors; the
+  host owns the document, mints ids, and applies each batch atomically against
+  `expected-revision`. The run demonstrates: editing a node by id (reading its content-hash),
+  append/insert by id-anchor, subtree remove, the revision advancing 0→4, a stale revision
+  rejected with the current one (conflict), an unknown id rejected before any change lands
+  (atomic precheck), and a guest-side refusal. Node-identity decision recorded in §10.3
+  (opaque ids canonical; content-hash = change-detection token, not identity; id-relative
+  anchors, not index paths). Mere-side changes uncommitted. Remaining for P1: a real
+  `inspect` import (on-demand mid-turn pull) + `lifecycle`, a batch size limit, the
+  `network` seam over `fetch.rs`, and WIT versioning.
 
 ## Key grounding files
 
