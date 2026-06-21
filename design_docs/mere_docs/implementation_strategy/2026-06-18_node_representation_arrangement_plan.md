@@ -668,3 +668,8 @@ it is the default of a setting, not a baked constant.
   pull-to-radius + overlap-fallback; the existing edge tests (count/order) still pass; platen 73 /
   orrery 41 green, meerkat builds. **deferred-(3) is now fully closed** (pick + physics + edge-trim).
   Still open from P0: the interactive resize handle (1) and per-node size persistence (2).
+  **Headed-verified** (scry-shots/coll-00 default vs coll-06 sized): meerkat runs clean (zero errors
+  in the log); with size-by-degree toggled on for a 3-node graph, the degree-2 hub renders visibly
+  larger and its two edges meet its **face** (the top edge lands on the bigger card's corner, the
+  globe edge leaves its right side), not the center — grow + trim are in sync, and the resettle left
+  the layout stable (no jumpiness).
