@@ -558,6 +558,9 @@ impl WindowCtx<'_> {
         // camera into the shell state, so the orrery element renders a DOM card per
         // node. The update + frame() above ran this frame, so the snapshot reads
         // this-frame positions/colors/scope and the cards align with the scene. (Phase 2.)
+        // The cursor (window px) for the per-card hover test below, copied out so the card
+        // closure does not re-borrow self while `orrery` is held. (P0 hover.)
+        let hover_cursor = self.view.cursor;
         let orrery_cards = {
             let orrery = self.pane_orrery(orrery_gid);
             let cam = orrery.camera();
@@ -605,6 +608,14 @@ impl WindowCtx<'_> {
                         // State color only; selection shows as a ring + lift on the card face.
                         color: orrery.node_state_color(key).to_string(),
                         selected: orrery.node_selected(key),
+                        // Hover: the cursor over this node's face box (window px, the same
+                        // ~NODE_HALF footprint the face uses). (P0 hover.)
+                        hovered: {
+                            const FACE_HALF: f32 = 18.0;
+                            let (wx, wy) = (orrery_rect[0] + x, orrery_rect[1] + y);
+                            (hover_cursor.0 - wx).abs() <= FACE_HALF
+                                && (hover_cursor.1 - wy).abs() <= FACE_HALF
+                        },
                         // Content-type silhouette as the face's border-radius.
                         radius: match orrery.node_shape(key) {
                             orrery::NodeShape::Square => "0",

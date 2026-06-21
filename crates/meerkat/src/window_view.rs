@@ -288,6 +288,10 @@ pub(crate) struct OrreryCard {
     /// Whether the node is selected: the face gets a ring + slight scale-lift, distinct
     /// from the focus ring, so selection leaves the color channel free. (P0 selection.)
     pub(crate) selected: bool,
+    /// Whether the cursor is over the node this frame: the face gets a faint brighten
+    /// (a wash overlay), the hover channel from Decision 2 — distinct from selection
+    /// (ring + lift) and focus (the focusable ring). (P0 hover.)
+    pub(crate) hovered: bool,
     /// The face's `border-radius` for the node's content-type silhouette (square
     /// document / rounded menu `9px` / circle feed `50%`). (P0 shape.)
     pub(crate) radius: &'static str,
@@ -550,9 +554,23 @@ fn node_card_view(c: &OrreryCard) -> ShellView {
             "position:absolute;left:42px;top:9px;white-space:nowrap;color:#d8deea;font-size:14px;font-weight:500",
         )
     });
+    // Hover (Decision 2): a faint white wash over the face, painted last (after the favicon)
+    // so it brightens the whole silhouette. Sized to the face box (left:0..size), so the
+    // beside-face label keeps full contrast; `pointer-events:none` keeps it off the grab.
+    // (P0 hover.)
+    let wash = c.hovered.then(|| {
+        el::<_, ShellState, ()>("div", ()).attr(
+            "style",
+            format!(
+                "position:absolute;left:0;top:0;width:{size}px;height:{size}px;border-radius:{};\
+                 background-color:rgba(255,255,255,0.16);pointer-events:none",
+                c.radius
+            ),
+        )
+    });
     let url = c.url.clone();
     Box::new(focusable(on_click(
-        el::<_, ShellState, ()>("div", (favicon, label))
+        el::<_, ShellState, ()>("div", (favicon, label, wash))
             .attr("class", "node-card")
             .attr("style", face_style),
         move |s: &mut ShellState, _: PointerClick| s.orrery_card_selects.push(url.clone()),

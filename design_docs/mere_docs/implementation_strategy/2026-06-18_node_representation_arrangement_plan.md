@@ -605,3 +605,15 @@ it is the default of a setting, not a baked constant.
   host-composited snapshot/unvisited textures, the `snapshot_textures` / `unvisited_tex` caches, and
   `unvisited_card_scene`. The "a texture can't paint over chrome DOM" finding belongs to the
   [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md).
+- 2026-06-21: **P0 hover landed (Decision 2's faint brighten).** The host computes per node card,
+  in the OrreryRender loop, whether the cursor (`self.view.cursor`, window px) is over the node's
+  face box (~`NODE_HALF`), and `node_card_view` paints a faint white wash
+  (`rgba(255,255,255,0.16)`, `pointer-events:none`) over the face when hovered — sized to the face
+  so the beside-face label keeps full contrast, painted after the favicon so it brightens the whole
+  silhouette. Distinct from selection (ring + lift) and focus (the focusable ring). The cursor-move
+  handler now redraws on any orrery move so the wash tracks the cursor; the OrreryRender diff still
+  gates the shell re-render to actual hover changes (a redraw-gate optimization via a host-side
+  hit-test is a noted follow-up). Headed-verified (scry-shots/hov-00 vs hov-01): the node under the
+  cursor brightens, the others unchanged. **P0's open channels are now hover (done) + the resizable
+  footprint (a per-node `size` on `OrreryCard` + size-by-degree opt-in + a resize handle; the face
+  driving the gyre collider is the P5 tie-in) — the remaining P0 slice.**

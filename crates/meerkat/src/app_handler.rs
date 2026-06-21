@@ -495,9 +495,12 @@ impl ApplicationHandler for Shell {
                     // current so a wheel-zoom there pivots on the right point. (Window
                     // composition P2 — per-pane input.)
                     let (ox, oy) = (wc.view.cursor.0 - rect[0], wc.view.cursor.1 - rect[1]);
-                    if wc.pane_orrery_mut(gid).cursor_moved(ox, oy) {
-                        wc.view.request_redraw();
-                    }
+                    // Run the field-hover update, then always redraw on an orrery move so the
+                    // per-node hover wash tracks the cursor: the render loop recomputes which
+                    // card the cursor is over, and the OrreryRender diff still gates the shell
+                    // re-render to actual hover changes. (P0 hover.)
+                    wc.pane_orrery_mut(gid).cursor_moved(ox, oy);
+                    wc.view.request_redraw();
                 }
             }
             WindowEvent::CursorLeft { .. } => {
