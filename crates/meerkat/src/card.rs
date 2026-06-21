@@ -546,32 +546,9 @@ pub fn anchored_card_rect(
     ))
 }
 
-/// Edge length (px) of a live card's close (X) button.
-pub const CLOSE_BTN: f32 = 22.0;
-/// Inset (px) of the close button from the card's top-right corner.
-pub const CLOSE_BTN_INSET: f32 = 6.0;
-
-/// A standalone `size`x`size` close (X) button scene: a translucent dark backing
-/// with a light "x" stroked across it. The host rasterizes this once and
-/// composites it at a live card's top-right corner; a click in that rect reaps
-/// the live preview. (Card system: in-card X close.)
-pub fn close_button_scene(size: u32) -> Scene {
-    let s = size as f32;
-    let mut scene = Scene::new(size, size);
-    // Translucent dark backing (premultiplied RGBA: black premultiplies to 0).
-    scene.push_rect(0.0, 0.0, s, s, [0.0, 0.0, 0.0, 0.55]);
-    // The "x": two diagonals inset from the edges.
-    let pad = s * 0.3;
-    let mut path = netrender::ScenePath::new();
-    path.move_to(pad, pad).line_to(s - pad, s - pad);
-    path.move_to(s - pad, pad).line_to(pad, s - pad);
-    scene.push_shape_stroked(path, [0.92, 0.93, 0.97, 1.0], (s * 0.09).max(1.6));
-    scene
-}
-
 /// The placeholder card for a focused node that has no snapshot yet (never
 /// visited this session): a dashed outline framing a "Double-click to load"
-/// hint. Double-clicking it promotes the node to a live preview, same as a
+/// hint. Double-clicking it opens the node in a pelt (workbench) tile, same as a
 /// snapshot. Static, so the host rasterizes it once and caches it.
 /// (Card system #3.)
 pub fn unvisited_card_scene(w: u32, h: u32) -> Scene {

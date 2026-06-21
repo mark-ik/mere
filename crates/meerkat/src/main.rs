@@ -1599,6 +1599,18 @@ fn fetched_from(stored: session_runtime::content_store::StoredContent) -> fetch:
 }
 
 fn main() {
+    // The scrying compatibility tiles import a WebView2 D3D11 shared texture, which the
+    // host wgpu device can only do on **D3D12** (the NT-handle interop is DX12-only). wgpu
+    // on Windows otherwise picks Vulkan, where the import fails with "backend mismatch:
+    // expected Dx12, found non-Dx12" and the tile stays blank — so pin the backend to DX12
+    // before any wgpu instance is built. An explicit `WGPU_BACKEND` (e.g. for debugging)
+    // still wins. (Scrying tile plan; scry-in-pelt.)
+    #[cfg(target_os = "windows")]
+    if std::env::var_os("WGPU_BACKEND").is_none() {
+        // SAFETY: the first statement in `main`, before any thread or wgpu instance
+        // exists, so there is no concurrent environment access.
+        unsafe { std::env::set_var("WGPU_BACKEND", "dx12") };
+    }
     let (diagnostics_tx, diagnostics_rx) = mpsc::channel();
     install_global_sender(diagnostics_tx.clone());
     let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()

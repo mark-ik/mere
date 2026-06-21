@@ -236,6 +236,12 @@ mod windows_pool {
         /// synchronizer). Valid for the pool's life: the synchronizer (in `importer`)
         /// owns the handle and closes it on drop, after every tile producer is gone.
         fence_handle: Option<*mut core::ffi::c_void>,
+        /// A 1x1 throwaway buffer for the per-frame cache-flush copy (see `drive`).
+        /// Created once on the first import. The producer overwrites each tile's shared
+        /// texture in place (`resource_is_new == false` after the first frame), so the
+        /// host must force a D3D12 state-transition barrier on it every frame or D3D12
+        /// keeps sampling the cached first frame forever. (Mirrors demo-win's renderer.)
+        cache_flush_buffer: Option<wgpu::Buffer>,
     }
 
     struct Tile {
@@ -247,6 +253,13 @@ mod windows_pool {
         shown_url: Option<String>,
         size: (u32, u32),
         last_error: Option<String>,
+        /// Consecutive redraws where `try_acquire_frame` returned no frame. WGC
+        /// capture from an off-window host can stall; after a run of empties the
+        /// capture session is torn down + restarted (`force_restart_capture`), the
+        /// demo's recovery for a stalled session. Reset on any acquired frame.
+        empty_polls: u32,
+        /// Total `try_acquire_frame` calls, for the stall-restart log context.
+        total_polls: u64,
     }
 
     impl Pool {
@@ -446,8 +459,10 @@ mod windows_pool {
                 }
             }
 
+            tile.total_polls = tile.total_polls.saturating_add(1);
             match tile.producer.try_acquire_frame() {
                 Ok(Some(full)) => {
+                    tile.empty_polls = 0;
                     if full.resource_is_new {
                         if let WebSurfaceFrame::Native(native) = &full.frame {
                             match importer.import_frame(native, &ImportOptions::default()) {
@@ -459,6 +474,7 @@ mod windows_pool {
                                     tile.last_error = None;
                                 }
                                 Err(err) => {
+                                    tracing::warn!(%member, %err, "scry import FAILED");
                                     tile.last_error = Some(format!("frame import: {err}"));
                                 }
                             }
@@ -480,8 +496,58 @@ mod windows_pool {
                     // resource_is_new == false: the producer copied the new frame
                     // into the allocation already behind `tile.imported`.
                 }
-                Ok(None) => {} // no new frame this redraw; keep sampling the last one
+                Ok(None) => {
+                    // WGC from an off-window host can stall; after ~1s of empty redraws
+                    // tear down + restart the capture session (the demo's recovery) so a
+                    // fresh session re-delivers frames.
+                    tile.empty_polls = tile.empty_polls.saturating_add(1);
+                    if tile.empty_polls >= 120 {
+                        tracing::warn!(%member, polls = tile.total_polls, "scrying capture stalled; restarting session");
+                        tile.producer.force_restart_capture();
+                        tile.empty_polls = 0;
+                    }
+                }
                 Err(err) => tile.last_error = Some(format!("acquire: {err}")),
+            }
+
+            // Cache-flush. The producer overwrites the tile's shared texture in place
+            // every frame (`resource_is_new == false` after the first import), so with no
+            // state transition on it each frame D3D12 keeps sampling the cached *first*
+            // frame forever — captured before the off-window page had painted, hence a
+            // blank tile. A throwaway 1x1 `copy_texture_to_buffer` forces a
+            // SHADER_RESOURCE -> COPY_SRC -> SHADER_RESOURCE barrier that flushes the
+            // cache, so the composite samples the live frame. (Mirrors demo-win's
+            // renderer.rs; the off-window capture composites blank without it.)
+            let flush_buf = self.cache_flush_buffer.get_or_insert_with(|| {
+                device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("scrying cache-flush"),
+                    size: wgpu::COPY_BYTES_PER_ROW_ALIGNMENT as u64,
+                    usage: wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                })
+            });
+            if let Some((imported, _)) = self.tiles.get(&member).and_then(|t| t.imported.as_ref()) {
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("scrying cache-flush"),
+                });
+                encoder.copy_texture_to_buffer(
+                    wgpu::TexelCopyTextureInfo {
+                        texture: &imported.texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::TexelCopyBufferInfo {
+                        buffer: flush_buf,
+                        layout: wgpu::TexelCopyBufferLayout {
+                            offset: 0,
+                            bytes_per_row: Some(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT),
+                            rows_per_image: Some(1),
+                        },
+                    },
+                    wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+                );
+                queue.submit(std::iter::once(encoder.finish()));
             }
         }
     }
@@ -548,6 +614,8 @@ mod windows_pool {
             shown_url: None,
             size: (width, height),
             last_error: None,
+            empty_polls: 0,
+            total_polls: 0,
         };
         match tile.producer.load_url(url) {
             Ok(()) => tile.shown_url = Some(url.to_string()),

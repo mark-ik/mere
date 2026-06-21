@@ -767,7 +767,6 @@ impl WindowCtx<'_> {
             [f32; 4],
             Option<(netrender::Scene, u32)>,
         )> = None;
-        let mut live_card: Option<(GraphMemberId, [f32; 4])> = None;
         // Every compat-pinned surface shown this frame, as (member, window rect):
         // each open compat tile in Tree, plus the focused compat card in Cartography.
         // The panes share one per-HWND composition target (scry's `new_attached`), so
@@ -869,11 +868,11 @@ impl WindowCtx<'_> {
             card_member,
             self.orrery().focused_url().map(str::to_string),
         ) {
-            // Float the card next to the focused node (fall back to the fixed
-            // top-right rect when the node's screen pos is unknown). A live preview
-            // is a medium card the actor renders into; a snapshot is a shorter
-            // peek at the retained scene, no actor. A node with neither (never
-            // visited this session) shows no card yet. (Card system P2/P3.)
+            // The orrery's static card next to the focused node (fall back to the
+            // fixed top-right rect when the node's screen pos is unknown): a visited
+            // node shows its "last visit" snapshot (a short peek at the retained
+            // scene, no actor), an un-visited node a "double-click to load"
+            // placeholder. The live-preview card is retired — content opens in pelt.
             // The orrery reports the node in its own (leaf-local) viewport; offset
             // by the orrery leaf's origin for window coords, and anchor the card
             // within the orrery leaf rect (so it stays in the orrery pane when split).
@@ -881,60 +880,7 @@ impl WindowCtx<'_> {
                 .orrery()
                 .focused_node_screen()
                 .map(|(nx, ny)| (orrery_rect[0] + nx, orrery_rect[1] + ny));
-            if self.view.live_previews.contains(&member) {
-                const LIVE_W: u32 = 300;
-                const LIVE_H: u32 = 400;
-                let rect = node
-                    .and_then(|(nx, ny)| {
-                        super::card::anchored_card_rect(nx, ny, LIVE_W, LIVE_H, orrery_rect)
-                    })
-                    .or_else(|| super::card::card_rect(orrery_rect));
-                if let Some((x0, y0, x1, y1, cw, ch)) = rect {
-                    if self.is_surface_tier(member, &url) {
-                        // Surface-tier (compatibility view): the system WebView
-                        // renders this node; drive the UI-thread scrying pool (spawn /
-                        // resize / navigate + non-blocking frame import)
-                        // instead of a content actor. When the node is already
-                        // shown as a workbench tile its WebView fills the tile,
-                        // so don't also float a card for it (skip when it's in
-                        // `scrying_surfaces` already).
-                        let already_tiled =
-                            scrying_surfaces.iter().any(|(m, _)| *m == member);
-                        if !already_tiled {
-                            if let (Some(window), Some(core)) =
-                                (self.view.window.as_ref(), self.render_core)
-                            {
-                                let window = window.clone();
-                                let device = core.device().clone();
-                                let queue = core.queue().clone();
-                                let session_dir = self.shared.session.session_dir.clone();
-                                self.view.scrying.drive(
-                                    member,
-                                    &url,
-                                    cw,
-                                    ch,
-                                    (x0, y0),
-                                    &window,
-                                    &device,
-                                    &queue,
-                                    &session_dir,
-                                );
-                            }
-                            scrying_surfaces.push((member, [x0, y0, x1, y1]));
-                            live_card = Some((member, [x0, y0, x1, y1]));
-                            // The WebView paints on its own schedule; keep frames
-                            // coming while the card is visible.
-                            self.view.request_redraw();
-                        }
-                    } else {
-                        self.ensure_content(&url);
-                        let state = self.shared.content.pages.get(&url).cloned();
-                        self.shared.content.constellation.drive(member, &url, state, cw, ch);
-                        cards.push((member, [x0, y0, x1, y1], (cw, ch)));
-                        live_card = Some((member, [x0, y0, x1, y1]));
-                    }
-                }
-            } else if self.orrery().member_visited(member) {
+            if self.orrery().member_visited(member) {
                 // "Last visit" snapshot: a small fixed-size card, rendered host-side
                 // from the durable cache / synthesis below (no actor), so it survives
                 // a restart. Composited uniform-scaled into a scrollable thumbnail.
@@ -981,8 +927,8 @@ impl WindowCtx<'_> {
             } else {
                 // Never visited this session: a small dashed "Double-click to load"
                 // placeholder, anchored like the other cards. Double-clicking it
-                // promotes to a live preview (same as a snapshot). Composited on its
-                // own path below (no constellation scene).
+                // opens the node in a pelt (workbench) tile (same as a snapshot).
+                // Composited on its own path below (no constellation scene).
                 const UNVIS_W: u32 = 200;
                 const UNVIS_H: u32 = 120;
                 unvisited_card = node
@@ -1412,48 +1358,6 @@ impl WindowCtx<'_> {
             }
         }
         self.view.scrying_rects = scrying_surfaces;
-        // Live cards carry a close (X) button at their top-right corner. Rasterize
-        // the shared button texture once, composite it on each live card, and
-        // record its rect so a press there reaps the live preview. (Card system.)
-        // The X sits on the orrery's live-preview card only (`live_card`); tiles in
-        // the workbench pane have their own tab close, so the button never lands on
-        // a tile even when the same node is both previewed and tiled.
-        self.view.close_button_rects.clear();
-        if let Some((member, dest)) = live_card {
-            let btn = super::card::CLOSE_BTN;
-            let inset = super::card::CLOSE_BTN_INSET;
-            let size = btn.round().max(1.0) as u32;
-            if self.view.close_button_tex.as_ref().map(|c| c.size) != Some((size, size)) {
-                let scene = super::card::close_button_scene(size);
-                let (tex, view) = core.rasterize(
-                    &scene,
-                    size,
-                    size,
-                    ColorLoad::Clear(wgpu::Color::TRANSPARENT),
-                );
-                self.view.close_button_tex = Some(super::CachedTile {
-                    version: 0,
-                    size: (size, size),
-                    tex,
-                    view,
-                });
-            }
-            if let Some(cached) = &self.view.close_button_tex {
-                let bx1 = dest[2] - inset;
-                let bx0 = bx1 - btn;
-                let by0 = dest[1] + inset;
-                let by1 = by0 + btn;
-                core.renderer().compose_external_texture(
-                    &cached.view,
-                    &target_view,
-                    format,
-                    w,
-                    h,
-                    ExternalTexturePlacement::new([bx0, by0, bx1, by1]),
-                );
-                self.view.close_button_rects.push((member, [bx0, by0, bx1, by1]));
-            }
-        }
         // The "last visit" snapshot card: rasterize the host-rendered scene once
         // per url (cached), then composite uniform-scaled into the small dest with
         // the same vertical-scroll UV window as the other cards.

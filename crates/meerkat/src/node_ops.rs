@@ -28,7 +28,6 @@ impl WindowCtx<'_> {
         // removing it (the deleted-nodes log; the Trail pane's "Removed" section).
         let tombstone = self.focused_tombstone();
         if let Some(member) = self.orrery_mut().remove_focused() {
-            self.view.live_previews.remove(&member);
             self.shared.content.constellation.reap(member);
             // Record the deletion in private memory. fjall resolves synchronously,
             // so this does not stall the UI.
@@ -102,9 +101,11 @@ impl WindowCtx<'_> {
 
     /// Toggle the focused node's compatibility view: render it through the
     /// system WebView (the scrying pool) instead of a content actor. Pinning
-    /// also opens the live card so the WebView is visible immediately; the
-    /// node's actor (if any) is reaped since the WebView replaces it.
-    /// (Scrying tile plan, X1; session-local pin — the durable `compat_mode`
+    /// opens the node as a **pelt tile** so the WebView shows immediately: the
+    /// workbench surface-tier path drives the off-window WebView and composites
+    /// its captured texture at the tile rect (no floating live card, no on-window
+    /// DWM visual). The node's actor (if any) is reaped since the WebView replaces
+    /// it. (Scrying tile plan, X1; session-local pin — the durable `compat_mode`
     /// node field takes over in X3.)
     pub(super) fn toggle_focus_compat(&mut self) {
         // Target what's in focus in the active mode: the focused tile in Tree, the
@@ -128,8 +129,14 @@ impl WindowCtx<'_> {
             true
         };
         if on {
-            self.view.live_previews.insert(member);
+            // The system WebView renders this node, so reap any serval actor, then open
+            // it as a pelt tile: the workbench surface-tier path drives the off-window
+            // WebView and composites its captured texture at the tile rect — no floating
+            // live card, no on-window DWM visual. (Scry-in-pelt.)
             self.shared.content.constellation.reap(member);
+            self.open_workbench();
+            self.view.workbench.open_tile(member);
+            self.view.focused_tile = Some(member);
         } else if self.view.scrying_input_focus == Some(member) {
             self.view.scrying_input_focus = None; // unpinned the tile that held the keyboard
         }
@@ -164,9 +171,9 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
-    /// Stop the focused live operation. In Cartography this demotes a live
-    /// preview; in Tree it closes the focused tile because a visible tile is, by
-    /// definition, still a needed operation and would otherwise respawn.
+    /// Stop the focused live operation: reap its content actor. In Tree it also
+    /// closes the focused tile, because a visible tile is, by definition, still a
+    /// needed operation and would otherwise respawn.
     pub(super) fn stop_focused_operation(&mut self) {
         let Some(member) = self.focused_member() else {
             self.shared.observability.record_diagnostic(
@@ -184,15 +191,14 @@ impl WindowCtx<'_> {
                 self.view.focused_tile = self.view.workbench.open_members().first().copied();
             }
         }
-        self.view.live_previews.remove(&member);
         self.shared.content.constellation.reap(member);
         self.shared.observability
             .record_actor("content", "stopped", Some(member.to_string()));
         self.view.request_redraw();
     }
 
-    /// Keep the focused operation alive in the background. If the node is dormant,
-    /// promote it to a live preview first so the actor exists to pin.
+    /// Keep the focused operation alive in the background. Opens the node as a pelt
+    /// (workbench) tile so a real actor exists to pin, then marks it background.
     pub(super) fn pin_focused_operation(&mut self) {
         let Some(member) = self.focused_member() else {
             self.shared.observability.record_diagnostic(
@@ -205,7 +211,11 @@ impl WindowCtx<'_> {
         if let Some(url) = self.current_focus_url() {
             self.ensure_content(&url);
         }
-        self.view.live_previews.insert(member);
+        // Open the node as a pelt tile so a real surface/actor exists to background-pin
+        // (the live-preview promotion is retired). (Node-rep P4.)
+        self.open_workbench();
+        self.view.workbench.open_tile(member);
+        self.view.focused_tile = Some(member);
         let gid = self.view.focused_graph;
         let needed: Vec<_> = self.needed_members().into_iter().map(|m| (m, gid)).collect();
         self.shared.content.constellation.reconcile(&needed);
@@ -220,10 +230,10 @@ impl WindowCtx<'_> {
     /// tiles, in Cartography just the focused node (if any). The constellation
     /// reconciles its actor pool to this.
     pub(super) fn needed_members(&self) -> Vec<GraphMemberId> {
-        // The orrery and the workbench coexist, so the active set is the union: the
-        // orrery's live-preview cards plus (when the workbench pane is open) every
-        // open tile across every slot. A node showing in both counts once.
-        let mut needed: Vec<GraphMemberId> = self.view.live_previews.iter().copied().collect();
+        // The active set is the open workbench tiles (the orrery keeps no live actor;
+        // its focused-node snapshot renders host-side from the durable cache). When the
+        // workbench pane is open, every open tile across every slot.
+        let mut needed: Vec<GraphMemberId> = Vec::new();
         if self.workbench_open() {
             for member in self.view.workbench.open_members() {
                 if !needed.contains(&member) {
@@ -232,23 +242,6 @@ impl WindowCtx<'_> {
             }
         }
         needed
-    }
-
-    /// Double-click on the focused node toggles its **live preview**: promote the
-    /// static "last visit" snapshot card to a live actor card, or demote it back.
-    /// The live set drives [`needed_members`](Self::needed_members) in Cartography,
-    /// so promoting spawns the actor next frame and demoting reaps it (its last
-    /// scene is kept as the node's snapshot). (Card system P2/P3.)
-    pub(super) fn toggle_live_preview(&mut self) {
-        let Some(member) = self.focused_member() else {
-            return;
-        };
-        if self.view.live_previews.remove(&member) {
-            self.shared.content.constellation.reap(member); // demote: actor down, scene -> snapshot
-        } else {
-            self.view.live_previews.insert(member);
-        }
-        self.view.request_redraw();
     }
 
     /// The per-node activation state for the orrery's node coloring. A node with

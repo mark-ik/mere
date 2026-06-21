@@ -237,16 +237,6 @@ impl WindowCtx<'_> {
                             return;
                         }
                     }
-                    // A press on a live card's close (X) button reaps that preview
-                    // (its last scene is kept as the node's snapshot).
-                    if button == MouseButton::Left {
-                        if let Some(member) = self.close_button_at(x, y) {
-                            self.view.live_previews.remove(&member);
-                            self.shared.content.constellation.reap(member);
-                            self.view.request_redraw();
-                            return;
-                        }
-                    }
                     // The shellbar strip: right-click opens the move menu. (Shellbar F2.2.)
                     let sb = super::shellbar::shellbar_rect(
                         self.shared.presentation.shellbar_edge,
@@ -477,9 +467,10 @@ impl WindowCtx<'_> {
                     self.view.last_left_release = Some((now, (x, y)));
                     if double {
                         self.view.last_left_release = None; // don't chain a triple-click
-                        if over_card {
-                            self.toggle_live_preview();
-                        } else if !self.orrery().selected_members().is_empty() {
+                        // Double-click opens the node in pelt (a workbench tile), on a node
+                        // or its snapshot card, replacing the retired promote-to-live-preview.
+                        // (Node-rep P4.)
+                        if over_card || !self.orrery().selected_members().is_empty() {
                             self.toggle_workbench();
                         }
                     }
@@ -613,15 +604,6 @@ impl WindowCtx<'_> {
             }
             WindowControl::Close => self.view.pending_exit = true,
         }
-    }
-
-    /// The live card whose close (X) button contains window point `(x, y)`, if
-    /// any — its composited rect from the last frame.
-    fn close_button_at(&self, x: f32, y: f32) -> Option<GraphMemberId> {
-        self.view.close_button_rects
-            .iter()
-            .find(|(_, r)| x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3])
-            .map(|(m, _)| *m)
     }
 
     /// Whether `(x, y)` falls in a folded pane that routes its clicks through the shell

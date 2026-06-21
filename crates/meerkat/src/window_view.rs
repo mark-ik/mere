@@ -15,7 +15,7 @@
 //! move here first. (Multi-window plan MW1.)
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Instant;
@@ -121,9 +121,6 @@ pub(crate) struct WindowView {
     /// Each composited card/tile's on-screen content rect this frame (member):
     /// routes a wheel over a card to its scroll rather than the orrery.
     pub(crate) content_rects: Vec<(GraphMemberId, [f32; 4])>,
-    /// Each live card's close-button rect this frame (member): a press reaps that
-    /// live preview.
-    pub(crate) close_button_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Find-in-page match rects for `find_member`, computed host-side (no actor
     /// round-trip) against the focused page's cached body — full-document px
     /// (`[x0,y0,x1,y1]`), one inner `Vec` per match. The overlay maps these like the
@@ -145,8 +142,6 @@ pub(crate) struct WindowView {
     /// its band). The composite UV-windows within `[band_y, band_y + tex_h]`; absent
     /// (or 0) for HTML-lane / full textures. (Retained-text / tiled render.)
     pub(crate) tile_bands: HashMap<GraphMemberId, f32>,
-    /// Cached rasterized close (×) button texture, shared across live cards.
-    pub(crate) close_button_tex: Option<CachedTile>,
     /// Cached rasterized "unvisited" placeholder card.
     pub(crate) unvisited_tex: Option<CachedTile>,
     /// Cached rasterized snapshot textures, keyed by URL (the node's last-visit look).
@@ -222,9 +217,6 @@ pub(crate) struct WindowView {
     /// The tile in focus in this window's tiled view (the last activated / opened
     /// member), so the omnibar can show its URL. `None` outside Tree / with no tiles.
     pub(crate) focused_tile: Option<GraphMemberId>,
-    /// Nodes promoted to a *live* preview card in this window (double-clicked up from
-    /// their snapshot). Drives `needed_members` in Cartography.
-    pub(crate) live_previews: HashSet<GraphMemberId>,
 
     // ── Frame: this window's pane arrangement + its companions. ──────────────────
     /// The content region's split tree of resizable panes (window-scoped, MG5).
@@ -734,13 +726,11 @@ impl WindowView {
             gloss_recent_rects: Default::default(),
             tile_rects: Default::default(),
             content_rects: Default::default(),
-            close_button_rects: Default::default(),
             find_matches: Default::default(),
             find_member: None,
             find_gen: 0,
             tile_textures: Default::default(),
             tile_bands: Default::default(),
-            close_button_tex: Default::default(),
             unvisited_tex: Default::default(),
             snapshot_textures: Default::default(),
             window_controls_tex: Default::default(),
@@ -768,7 +758,6 @@ impl WindowView {
             content_location: Default::default(),
             shown_location: Default::default(),
             focused_tile: Default::default(),
-            live_previews: Default::default(),
             frame_layout: Default::default(),
             next_pane_id: Default::default(),
             mirror_tiles: false,

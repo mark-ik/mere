@@ -73,11 +73,10 @@ impl WindowCtx<'_> {
                     self.view.workbench.open_tile(new_member);
                 }
                 self.view.focused_tile = Some(new_member);
-            } else {
-                // Cartography: opening a node is deliberate — show it as a live
-                // card straight away (passive focus shows only the snapshot).
-                self.view.live_previews.insert(new_member);
             }
+            // Cartography: the new node is focused and shows its snapshot; opening it
+            // live is the pelt path (double-click), not an in-orrery live card.
+            // (Node-rep P4: live preview retired.)
             self.ensure_content(&loc);
             self.view.content_location = loc;
             self.save_session();
@@ -96,14 +95,9 @@ impl WindowCtx<'_> {
                 self.orrery_mut().visit(&loc);
             }
         }
-        // Navigating is deliberate: with the orrery active, show the target as a
-        // live card (passive focus shows only the snapshot). With the workbench
-        // active the node already tiled, so no card.
-        if !self.workbench_active() {
-            if let Some(member) = self.focused_member() {
-                self.view.live_previews.insert(member);
-            }
-        }
+        // Navigating focuses the target; the orrery shows its snapshot. Opening it live
+        // is the pelt path (double-click a node or its card), not an in-orrery live card.
+        // (Node-rep P4: live preview retired.)
         self.ensure_content(&loc);
         self.view.content_location = loc;
         self.save_session();

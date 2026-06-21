@@ -553,3 +553,34 @@ it is the default of a setting, not a baked constant.
   the node in a pelt tile, remove the live card, keep the snapshot, with the snapshot's scene
   deposit moving to the pelt tile's close. Touches Mark's `card.rs`, so implementation is
   coordination-gated.
+- 2026-06-20: **P4 core landed + headed-verified (live preview off the everyday gestures).**
+  Re-pointed navigate and double-click so the orrery no longer shows a live card on normal use:
+  nav / click focuses a node and shows its snapshot (dropped the two `nav_sync` `live_previews.insert`,
+  76-80 / 99-106), and double-click on a node or its card opens it in pelt via `toggle_workbench`
+  (input.rs:478; removed the orphaned `toggle_live_preview`). Headed-verified: double-clicking a node
+  opens it as a workbench tile (content in pelt), with no floating live card or X, and the orrery
+  shows the nodes unoccluded (scry-shots/p4-02). **Remaining teardown** (gated on coordination with
+  the scrying work, since the live card / X are shared with the scry surface-tier path): the
+  `live_previews` set (window_view.rs:227) + the live render branch (render.rs:884-934) + the X
+  (render.rs:1418, input.rs:244) + the compat / pin inserts (node_ops.rs:131/208) + routing the
+  compat / scry surface-tier card to a pelt tile + card.rs's live-card view. After teardown,
+  `needed_members` (node_ops.rs:222) reduces to the workbench tiles.
+- 2026-06-20: **P4 teardown landed + headed-verified — the live-preview card is fully retired.**
+  The scry-in-pelt work cleared the "coordinate with the scrying work" gate, so the remaining
+  teardown shipped. An ultracode workflow (4 parallel readers + an adversarial synthesis) mapped +
+  risk-verified it; the headline finding: the snapshot-survival risk is **SAFE** — the orrery
+  snapshot renders from the durable content cache (`load_cached` → `content_store`, filled by
+  `save_cached` on every fetch), NOT the live-preview demote, so the plan's "tile close must deposit
+  the snapshot" worry was wrong about the code and no such wiring was needed (independently
+  re-verified). 16 edits across render / input / card / node_ops / session_ops / window_view:
+  removed the live-card render arm (focused-node card is snapshot + unvisited only), the X close
+  button (render block + input handler + `close_button_at` helper + card.rs `close_button_scene` /
+  `CLOSE_BTN*`), the `live_previews` set + the now-dead `close_button_rects` / `close_button_tex`
+  fields + the unused `HashSet` import; `needed_members` reduced to the workbench tiles.
+  `pin_focused_operation` was **re-pointed** to open a pelt tile (keeping `set_background`), not
+  deleted — it is a live command + agent action. Build green, zero warnings; a grep confirms zero
+  `live_previews` / `close_button` / `live_card` references remain. Headed-verified (scry-shots/
+  td-02): a focused visited node shows its static snapshot card with **no X and no floating live
+  card**; content opens in pelt. **P4 complete.** (The scry compat node now renders live in a pelt
+  tile via the off-window WebView2 capture — the DX12-backend + cache-flush fixes for that live in
+  the [native_surface_compositing_plan](2026-06-19_native_surface_compositing_plan.md) territory.)
