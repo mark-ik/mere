@@ -806,6 +806,15 @@ impl Orrery {
                 .positions()
                 .filter_map(|(key, p)| self.graph.get_node(key).map(|node| (node.id, (p.x, p.y)))),
         )
+        // Persist the deliberate per-node size overrides + the size-by-degree scene flag
+        // alongside the positions, so a sized graph re-opens sized. Only explicit overrides
+        // travel; degree-derived sizes recompute from the flag. (Node-rep — size persistence.)
+        .with_sizes(
+            self.node_sizes
+                .iter()
+                .filter_map(|(&key, &size)| self.graph.get_node(key).map(|node| (node.id, size))),
+        )
+        .with_size_by_degree(self.size_by_degree)
     }
 
     /// One node's current world position (the live gyre position), so the host can
@@ -898,6 +907,25 @@ impl Orrery {
         }
         self.physics.seed(resolved);
         self.physics.halt();
+    }
+
+    /// Restore the per-node size overrides + the size-by-degree scene flag from a persisted
+    /// cartography sidecar (the sizing counterpart of [`seed_cartography`]). Pushes the
+    /// resulting collider/pick radii to the view + bodies but does **not** settle, so the
+    /// restored layout holds (the position seed already halted physics). Sizes are clamped
+    /// like [`set_node_size`]; an unknown member id is skipped. (Node-rep — size persistence.)
+    pub fn apply_cartography_sizing(
+        &mut self,
+        sizes: impl IntoIterator<Item = (uuid::Uuid, f32)>,
+        size_by_degree: bool,
+    ) {
+        self.size_by_degree = size_by_degree;
+        for (id, size) in sizes {
+            if let Some((key, _)) = self.graph.get_node_by_id(id) {
+                self.node_sizes.insert(key, size.clamp(16.0, 160.0));
+            }
+        }
+        self.push_node_radii();
     }
 
     /// Theme the orrery's surfaces: the content-surface `backdrop` and the `edge`

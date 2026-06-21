@@ -170,6 +170,16 @@ impl TreeGeometry {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct CartographyGeometry {
     positions: Vec<(GraphMemberId, (f32, f32))>,
+    /// Per-member face-size overrides (px) — the sizing counterpart of the positions, for
+    /// members the user sized explicitly. A member absent here falls back to size-by-degree
+    /// or the default at render time, so only deliberate overrides persist. Serde-defaulted,
+    /// so a pre-sizing sidecar still loads. (Node-rep — size persistence.)
+    #[serde(default)]
+    sizes: Vec<(GraphMemberId, f32)>,
+    /// Whether the scene's size-by-degree mode (faces grow with undirected degree) was on at
+    /// save time. Serde-defaulted to `false`. (Node-rep — size persistence.)
+    #[serde(default)]
+    size_by_degree: bool,
 }
 
 impl CartographyGeometry {
@@ -177,12 +187,35 @@ impl CartographyGeometry {
     pub fn from_positions(
         positions: impl IntoIterator<Item = (GraphMemberId, (f32, f32))>,
     ) -> Self {
-        Self { positions: positions.into_iter().collect() }
+        Self { positions: positions.into_iter().collect(), ..Self::default() }
+    }
+
+    /// Attach per-member size overrides (chainable after [`from_positions`]).
+    /// (Node-rep — size persistence.)
+    pub fn with_sizes(mut self, sizes: impl IntoIterator<Item = (GraphMemberId, f32)>) -> Self {
+        self.sizes = sizes.into_iter().collect();
+        self
+    }
+
+    /// Set the scene's size-by-degree flag (chainable). (Node-rep — size persistence.)
+    pub fn with_size_by_degree(mut self, on: bool) -> Self {
+        self.size_by_degree = on;
+        self
     }
 
     /// The `(member, (x, y))` pairs, in insertion order.
     pub fn iter(&self) -> impl Iterator<Item = (GraphMemberId, (f32, f32))> + '_ {
         self.positions.iter().copied()
+    }
+
+    /// The `(member, size)` overrides, in insertion order. (Node-rep — size persistence.)
+    pub fn size_iter(&self) -> impl Iterator<Item = (GraphMemberId, f32)> + '_ {
+        self.sizes.iter().copied()
+    }
+
+    /// Whether size-by-degree was on at save time. (Node-rep — size persistence.)
+    pub fn size_by_degree(&self) -> bool {
+        self.size_by_degree
     }
 
     pub fn is_empty(&self) -> bool {
@@ -200,11 +233,12 @@ impl CartographyGeometry {
     }
 
     /// Rebuild from persisted JSON, dropping any member the live graph no longer has
-    /// (`present`) so a deleted node's stale position is reconciled away. `None` on a
-    /// parse error — the host falls back to the graph's own seed.
+    /// (`present`) so a deleted node's stale position (or size) is reconciled away. `None`
+    /// on a parse error — the host falls back to the graph's own seed.
     pub fn from_persisted_json(json: &str, present: &HashSet<GraphMemberId>) -> Option<Self> {
         let mut geom: Self = serde_json::from_str(json).ok()?;
         geom.positions.retain(|(member, _)| present.contains(member));
+        geom.sizes.retain(|(member, _)| present.contains(member));
         Some(geom)
     }
 }
@@ -234,6 +268,32 @@ mod tests {
         let by_member: std::collections::HashMap<_, _> = back.iter().collect();
         assert_eq!(by_member[&m(1)], (10.0, 20.0));
         assert_eq!(by_member[&m(3)], (50.0, 60.0));
+    }
+
+    #[test]
+    fn cartography_sizes_and_flag_round_trip_and_prune() {
+        let geom = CartographyGeometry::from_positions([(m(1), (10.0, 20.0)), (m(2), (30.0, 40.0))])
+            .with_sizes([(m(1), 72.0), (m(2), 48.0)])
+            .with_size_by_degree(true);
+        let json = geom.to_persisted_json().unwrap();
+        // Member 2 deleted since the save — its size prunes alongside its position.
+        let present: HashSet<GraphMemberId> = [m(1)].into_iter().collect();
+        let back = CartographyGeometry::from_persisted_json(&json, &present).unwrap();
+        assert!(back.size_by_degree(), "the scene flag survives");
+        let sizes: std::collections::HashMap<_, _> = back.size_iter().collect();
+        assert_eq!(sizes.get(&m(1)), Some(&72.0), "the kept member's size survives");
+        assert_eq!(sizes.get(&m(2)), None, "the absent member's size is pruned");
+    }
+
+    #[test]
+    fn cartography_loads_a_pre_sizing_sidecar() {
+        // A sidecar written before sizes existed (positions only) still deserializes.
+        let json = r#"{"positions":[["00000000-0000-0000-0000-000000000001",[1.0,2.0]]]}"#;
+        let present: HashSet<GraphMemberId> = [m(1)].into_iter().collect();
+        let back = CartographyGeometry::from_persisted_json(json, &present).unwrap();
+        assert_eq!(back.members(), vec![m(1)]);
+        assert_eq!(back.size_iter().count(), 0, "no sizes default to empty");
+        assert!(!back.size_by_degree(), "the flag defaults to off");
     }
 
     #[test]

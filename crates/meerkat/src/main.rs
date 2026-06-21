@@ -109,6 +109,7 @@ mod render;
 mod roster;
 mod roster_view;
 mod settings_lane;
+mod settings_pane_view;
 // `ViewPane` is the shared base for the `RosterPane` / `ListPane` test harnesses only;
 // every product pane now folds into the shell document, so the module is test-gated.
 // (Phase 1, step 2.)
@@ -1059,6 +1060,8 @@ impl Shell {
         // graph.json). (Position sidecar.)
         if let Some(geom) = session_ops::load_cartography(&session_dir, &present_members) {
             orrery.seed_cartography(geom.iter());
+            // Restore the per-node sizes + size-by-degree alongside the positions. (Node-rep.)
+            orrery.apply_cartography_sizing(geom.size_iter(), geom.size_by_degree());
         }
         // Pool every graph a restored pane resolves to, not just the active one, so a
         // second graph-pane (persisted from a prior run) loads instead of leaving a

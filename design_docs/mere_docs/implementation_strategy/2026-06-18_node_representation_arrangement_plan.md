@@ -673,3 +673,18 @@ it is the default of a setting, not a baked constant.
   larger and its two edges meet its **face** (the top edge lands on the bigger card's corner, the
   globe edge leaves its right side), not the center — grow + trim are in sync, and the resettle left
   the layout stable (no jumpiness).
+- 2026-06-21: **Per-node size persistence landed (P0 item 2) — a sized graph re-opens sized.** The
+  size overrides + the size-by-degree flag were in-memory, lost on reload. They now ride the
+  **cartography sidecar** (the proven path the orrery's settled positions already persist through, so
+  no new file or save trigger). `CartographyGeometry` gained a serde-defaulted `sizes`
+  (`Vec<(member, f32)>`, the deliberate per-node overrides only) and `size_by_degree` bool, with
+  `with_sizes` / `with_size_by_degree` builders + `size_iter` / `size_by_degree` accessors;
+  `from_persisted_json` prunes a deleted member's size alongside its position, and the serde defaults
+  load a pre-sizing sidecar unchanged. The orrery exports them in `cartography_geometry` (only explicit
+  overrides travel — degree-derived sizes recompute from the flag, so adding a neighbor still regrows a
+  size-by-degree node) and restores them in a new `apply_cartography_sizing` (clamps like
+  `set_node_size`, pushes radii via `push_node_radii` with **no settle** so the restored layout holds);
+  both meerkat load sites (boot + session switch) call it after `seed_cartography`. Three tests lock
+  it: the geometry round-trip + prune, the pre-sizing back-compat load, and an orrery
+  export→re-apply round-trip (the override + flag survive onto a fresh orrery). platen 75 / orrery 42
+  green, meerkat builds. **P0 now has one item left: the interactive resize handle (1).**

@@ -484,6 +484,30 @@ fn cartography_geometry_captures_live_positions() {
 }
 
 #[test]
+fn cartography_sizing_round_trips_through_the_sidecar() {
+    // A sized graph re-opens sized: the override + the scene flag survive an export and a
+    // re-apply onto a fresh orrery over the same node id (a reload). (Node-rep — persistence.)
+    let a_id = uuid::Uuid::from_u128(0xa);
+    let mut g = Graph::new();
+    g.add_node_with_id(a_id, "https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut orrery = Orrery::with_graph(g);
+    orrery.set_node_size(a_id, 80.0);
+    orrery.set_size_by_degree(true);
+
+    let geom = orrery.cartography_geometry();
+    assert!(geom.size_by_degree(), "the export carries the scene flag");
+
+    // Re-apply onto a fresh orrery whose graph carries the same node id (the reload).
+    let mut g2 = Graph::new();
+    g2.add_node_with_id(a_id, "https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut reloaded = Orrery::with_graph(g2);
+    reloaded.apply_cartography_sizing(geom.size_iter(), geom.size_by_degree());
+    let (key, _) = reloaded.graph().get_node_by_id(a_id).unwrap();
+    assert_eq!(reloaded.node_size(key), 80.0, "the per-node override is restored");
+    assert!(reloaded.size_by_degree(), "the size-by-degree flag is restored");
+}
+
+#[test]
 fn seed_cartography_overrides_node_positions() {
     let mut g = Graph::new();
     let a = g.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));

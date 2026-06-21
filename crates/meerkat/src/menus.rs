@@ -328,9 +328,9 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
-        // Toggle the focused orrery pane's size-by-degree mode (a scene presentation choice,
-        // in-memory for now — persisting it joins the cartography sidecar). No member set —
-        // return before the orrery-tile logic. (P0 resize.)
+        // Toggle the focused orrery pane's size-by-degree mode (a scene presentation choice;
+        // it + per-node overrides persist in the cartography sidecar). No member set — return
+        // before the orrery-tile logic. (P0 resize.)
         if let ContextAction::ToggleSizeByDegree = action {
             let on = self.orrery().size_by_degree();
             self.orrery_mut().set_size_by_degree(!on);

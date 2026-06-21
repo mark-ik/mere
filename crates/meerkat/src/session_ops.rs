@@ -523,6 +523,8 @@ impl super::Shell {
             ctx.orrery().graph().nodes().map(|(_, node)| node.id).collect();
         if let Some(geom) = load_cartography(&session_dir, &present) {
             ctx.orrery_mut().seed_cartography(geom.iter());
+            // Restore the per-node sizes + size-by-degree alongside the positions. (Node-rep.)
+            ctx.orrery_mut().apply_cartography_sizing(geom.size_iter(), geom.size_by_degree());
         }
         ctx.view.maximized_pane = None;
         ctx.view.active_content = super::ContentPane::Orrery;
