@@ -102,8 +102,8 @@ them a first-class, scoped, customizable surface:
   `<img>`) or `Unvisited`. Adding `ObjectCard` as a third kind reuses the anchoring + the
   paint-over-nodes layering.
 - **Widget-1's logic is built + tested.** `orrery::SIZE_TIERS` (`[24,36,56,84,120]`),
-  `node_size_tier(key)` (the nearest notch), and `step_node_size_tier(id, delta)` (step + snap
-  + clamp, returns the new tier) landed with a unit test. `set_node_size` already drives the
+  `node_size_tier(key)` (the nearest notch), and `step_node_size_tier(id, delta)` (step, snap,
+  clamp; returns the new tier) landed with a unit test. `set_node_size` already drives the
   collider and persists, so a tier step is durable and physical for free.
 - **The click-drain pattern.** A chrome control is `on_click(el, move |s, _| s.<vec>.push(key))`;
   the host drains the vec (`take_orrery_card_selects`, the list-pane / settings-pane takes) and
@@ -120,3 +120,17 @@ them a first-class, scoped, customizable surface:
   type-scoped per-object action card (this doc). The resize tier model (`SIZE_TIERS`,
   `node_size_tier`, `step_node_size_tier`) is built + unit-tested as widget 1's logic. Building
   the minimal frame (P0) next.
+- 2026-06-21: **P0 landed + headed-verified — widget 1 in the frame.** A "Resize" single-node
+  context action sets `view.object_card` to the focused member; `compute_focus_card` then returns
+  a new `FocusCardKind::ObjectCard { tier }` in the focus slot in place of the snapshot, and
+  `focus_card_view` renders the size widget `Size  −  ●●●○○  +` (five notch dots filled to the
+  tier). The − / + buttons `on_click`-queue a `node_size_steps` delta on `ShellState`; a new
+  `drain_object_card` applies it via `step_node_size_tier` and drops the card once focus moves off
+  its member. Headed verify (scry-shots/oc2-02) confirmed the card renders + the + steps the tier
+  (the node grows, a notch fills), and surfaced two routing bugs, both fixed: (a) the two-hit-test
+  gate only routed *node-card* clicks to the chrome, so the card's buttons fell through to gyre and
+  never fired — the gate now matches the `object-card` class too; (b) a double-tap on + launched the
+  node in pelt (the double-click-to-open gesture fires whenever a node is selected, always true
+  while the card is open) — a new `point_over_object_card` check skips the pelt-open over the card.
+  **P0 done.** Next (P1): generalize the single hardcoded widget into a real widget list, add more
+  node widgets (representation / engine / color / pin).
