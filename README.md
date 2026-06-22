@@ -233,8 +233,8 @@ Crate versions are pinned at `0.0.1` and binaries are `publish = false`.
       <sub>The same graph under a different layout (L-system) and the Sunset theme.</sub>
     </td>
     <td width="50%">
-      <img src="assets/screenshots/harmony.png" alt="Color-harmony controls driving a custom theme"><br>
-      <sub>Building a custom theme: harmony controls (Triadic) drive the whole palette.</sub>
+      <img src="assets/screenshots/history.png" alt="A page rendered as a card, with a recent list and history mini-map in the side panel"><br>
+      <sub>A recent-pages list and a history mini-map track your navigation lineage beside the graph.</sub>
     </td>
   </tr>
 </table>
