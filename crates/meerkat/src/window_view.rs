@@ -356,10 +356,23 @@ pub(crate) enum FocusCardKind {
     Snapshot { data_uri: Option<String> },
     /// A never-visited node: a static dashed "double-click to load" placeholder.
     Unvisited,
-    /// The per-object action card, summoned in place of the preview by a context action.
-    /// P0 carries one widget: the size-tier stepper (`−  ●●●○○  +`), `tier` filling the
-    /// notches; `−` / `+` queue a `node_size_steps` step. (Object card — P0.)
-    ObjectCard { tier: usize },
+    /// The per-object action card, summoned in place of the preview by a context action: an
+    /// ordered list of setting widgets for the selected object's type. Each widget's controls
+    /// queue a `node_card_keys` activation the host drains. (Object card — P1.)
+    ObjectCard { widgets: Vec<CardWidget> },
+}
+
+/// One setting widget on the object card: a control bound to one per-object setting. The
+/// node preset (P1) carries the size-tier stepper + the representation toggle; more widgets
+/// (engine, color, pin) and per-type presets join as the card generalizes. (Object card — P1.)
+#[derive(PartialEq)]
+pub(crate) enum CardWidget {
+    /// Size-tier stepper rendered as five notch dots filled to `tier`, with − / + buttons
+    /// (`size:down` / `size:up`). (Object card — P1.)
+    SizeTier { tier: usize },
+    /// Representation toggle: a Tile | Shape segmented control, `is_tile` marking the active
+    /// one (`rep:tile` / `rep:shape`). (Object card — P1.)
+    Representation { is_tile: bool },
 }
 
 /// The window shell's composed view-state: the chrome plus the orrery-as-element's
@@ -392,9 +405,10 @@ pub(crate) struct ShellState {
     /// variable-length + two-column (index spine + page body), one entry per open
     /// `settings://` node. Empty keeps the subtree out of the document. (Settings lane P1.)
     pub(crate) settings: SettingsPanesState,
-    /// Size-tier steps (`-1` / `+1`) queued by the object card's `−` / `+` buttons; the
-    /// host drains them into `step_node_size_tier` for the card's member. (Object card — P0.)
-    pub(crate) node_size_steps: Vec<i32>,
+    /// Activation keys queued by the object card's widget controls (`size:up` / `size:down`,
+    /// `rep:tile` / `rep:shape`, …); the host drains + dispatches them for the card's member.
+    /// (Object card — P1.)
+    pub(crate) node_card_keys: Vec<String>,
 }
 
 /// Index into [`ShellState::panes`] / `pane_rects` for the four folded list panes; the
@@ -725,10 +739,38 @@ fn focus_card_view(fc: &FocusCard) -> ShellView {
                     ),
                 ),
         ),
-        // The object card's first widget: a size-tier stepper. Five notch dots filled to
-        // the current tier (the slider-with-five-notches look), stepped by − / + buttons
-        // (the discrete path — no drag), each queuing a `node_size_steps` delta. (Object card — P0.)
-        FocusCardKind::ObjectCard { tier } => {
+        // The per-object action card: a column of setting-widget rows (P1: size + form). The
+        // container `object-card` class is the click-routing + double-click-suppress gate's key.
+        // (Object card — P1.)
+        FocusCardKind::ObjectCard { widgets } => {
+            let rows: Vec<ShellView> = widgets.iter().map(object_card_widget_row).collect();
+            Box::new(
+                el::<_, ShellState, ()>("div", rows).attr("class", "object-card").attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:{x0}px;top:{y0}px;width:{w}px;height:{h}px;\
+                         box-sizing:border-box;padding:10px 12px;border-radius:8px;display:flex;\
+                         flex-direction:column;gap:10px;background:rgba(28,32,40,0.96);\
+                         box-shadow:0 6px 24px rgba(0,0,0,0.55)"
+                    ),
+                ),
+            )
+        }
+    }
+}
+
+/// Render one object-card widget as a labeled row (a caption over its control). Each control
+/// queues a `node_card_keys` activation the host drains + dispatches. (Object card — P1.)
+fn object_card_widget_row(widget: &CardWidget) -> ShellView {
+    let labeled = |caption: &str, control: ShellView| -> ShellView {
+        let title: ShellView = Box::new(
+            el::<_, ShellState, ()>("div", caption.to_string())
+                .attr("style", "color:#8b94a6;font-size:11px;margin-bottom:5px"),
+        );
+        Box::new(el::<_, ShellState, ()>("div", vec![title, control]))
+    };
+    match widget {
+        CardWidget::SizeTier { tier } => {
             let dots: String = (0..orrery::SIZE_TIERS.len())
                 .map(|i| if i <= *tier { '\u{25CF}' } else { '\u{25CB}' })
                 .collect();
@@ -737,36 +779,45 @@ fn focus_card_view(fc: &FocusCard) -> ShellView {
                        cursor:pointer;user-select:none";
             let minus: ShellView = Box::new(on_click(
                 el::<_, ShellState, ()>("div", "\u{2212}".to_string()).attr("style", btn),
-                move |s: &mut ShellState, _: PointerClick| s.node_size_steps.push(-1),
+                move |s: &mut ShellState, _: PointerClick| s.node_card_keys.push("size:down".to_string()),
             ));
             let plus: ShellView = Box::new(on_click(
                 el::<_, ShellState, ()>("div", "+".to_string()).attr("style", btn),
-                move |s: &mut ShellState, _: PointerClick| s.node_size_steps.push(1),
+                move |s: &mut ShellState, _: PointerClick| s.node_card_keys.push("size:up".to_string()),
             ));
-            let notches: ShellView = Box::new(el::<_, ShellState, ()>("span", dots).attr(
-                "style",
-                "color:#9aa4b8;font-size:15px;letter-spacing:5px",
+            let notches: ShellView = Box::new(
+                el::<_, ShellState, ()>("span", dots)
+                    .attr("style", "color:#9aa4b8;font-size:15px;letter-spacing:5px"),
+            );
+            let row: ShellView = Box::new(
+                el::<_, ShellState, ()>("div", vec![minus, notches, plus])
+                    .attr("style", "display:flex;align-items:center;justify-content:space-between"),
+            );
+            labeled("Size", row)
+        }
+        CardWidget::Representation { is_tile } => {
+            let seg = |active: bool| -> String {
+                let (bg, fg) = if active { ("#3a4150", "#ffffff") } else { ("#2a2f3a", "#9aa4b8") };
+                format!(
+                    "flex:1;height:30px;display:flex;align-items:center;justify-content:center;\
+                     background:{bg};color:{fg};font-size:13px;cursor:pointer;user-select:none"
+                )
+            };
+            let tile_btn: ShellView = Box::new(on_click(
+                el::<_, ShellState, ()>("div", "Tile".to_string())
+                    .attr("style", format!("{};border-radius:6px 0 0 6px", seg(*is_tile))),
+                move |s: &mut ShellState, _: PointerClick| s.node_card_keys.push("rep:tile".to_string()),
+            ));
+            let shape_btn: ShellView = Box::new(on_click(
+                el::<_, ShellState, ()>("div", "Shape".to_string())
+                    .attr("style", format!("{};border-radius:0 6px 6px 0", seg(!*is_tile))),
+                move |s: &mut ShellState, _: PointerClick| s.node_card_keys.push("rep:shape".to_string()),
             ));
             let row: ShellView = Box::new(
-                el::<_, ShellState, ()>("div", vec![minus, notches, plus]).attr(
-                    "style",
-                    "display:flex;align-items:center;justify-content:space-between",
-                ),
+                el::<_, ShellState, ()>("div", vec![tile_btn, shape_btn])
+                    .attr("style", "display:flex;gap:2px"),
             );
-            let title: ShellView = Box::new(
-                el::<_, ShellState, ()>("div", "Size".to_string())
-                    .attr("style", "color:#8b94a6;font-size:11px;margin-bottom:7px"),
-            );
-            Box::new(
-                el::<_, ShellState, ()>("div", vec![title, row]).attr("class", "object-card").attr(
-                    "style",
-                    format!(
-                        "position:absolute;left:{x0}px;top:{y0}px;width:{w}px;height:{h}px;\
-                         box-sizing:border-box;padding:9px 12px;border-radius:8px;\
-                         background:rgba(28,32,40,0.96);box-shadow:0 6px 24px rgba(0,0,0,0.55)"
-                    ),
-                ),
-            )
+            labeled("Form", row)
         }
     }
 }
@@ -788,7 +839,7 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             orrery_card_selects: Vec::new(),
             orrery_wheel: None,
             settings: SettingsPanesState::default(),
-            node_size_steps: Vec::new(),
+            node_card_keys: Vec::new(),
         },
     )
 }
@@ -830,11 +881,11 @@ impl WindowView {
         out
     }
 
-    /// Drain the size-tier steps the object card's `−` / `+` buttons queued, for the host
-    /// to apply to its member via `step_node_size_tier`. (Object card — P0.)
-    pub(crate) fn take_node_size_steps(&mut self) -> Vec<i32> {
+    /// Drain the activation keys the object card's widget controls queued, for the host to
+    /// dispatch to its member. (Object card — P1.)
+    pub(crate) fn take_node_card_keys(&mut self) -> Vec<String> {
         let mut out = Vec::new();
-        self.runner.update(|s| out = std::mem::take(&mut s.node_size_steps));
+        self.runner.update(|s| out = std::mem::take(&mut s.node_card_keys));
         out
     }
 

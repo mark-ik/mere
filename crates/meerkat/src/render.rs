@@ -255,11 +255,24 @@ impl WindowCtx<'_> {
         let local = [0.0, 0.0, pw, ph];
         let (kind, cw, ch) = if self.view.object_card == Some(member) {
             // The object card replaces the preview when summoned (the context action set the
-            // card's member). P0 carries the size-tier widget; `tier` fills its notches.
-            // (Object card — P0.)
-            let tier =
-                self.orrery().focused_key().map(|k| self.orrery().node_size_tier(k)).unwrap_or(1);
-            (FocusCardKind::ObjectCard { tier }, super::card::OBJCARD_W, super::card::OBJCARD_H)
+            // card's member). The node preset (P1): the size-tier stepper + the representation
+            // toggle, resolved from the node's current settings. (Object card — P1.)
+            use crate::window_view::CardWidget;
+            let widgets = self
+                .orrery()
+                .focused_key()
+                .map(|k| {
+                    vec![
+                        CardWidget::SizeTier { tier: self.orrery().node_size_tier(k) },
+                        CardWidget::Representation {
+                            is_tile: self.orrery().node_representation(k)
+                                == orrery::Representation::Tile,
+                        },
+                    ]
+                })
+                .unwrap_or_default();
+            let ch = super::card::object_card_height(widgets.len());
+            (FocusCardKind::ObjectCard { widgets }, super::card::OBJCARD_W, ch)
         } else if self.orrery().member_visited(member) {
             // The preview image is built host-side once per url (the readback below) and
             // cached; `None` here renders a placeholder until that lands. (Layering fix.)

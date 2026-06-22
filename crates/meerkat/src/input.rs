@@ -718,18 +718,32 @@ impl WindowCtx<'_> {
     }
 
     /// Reconcile the object card: drop it once the focus moves off its member (a new or
-    /// cleared selection), and apply the size-tier steps its − / + buttons queued. (Object
-    /// card — P0.)
+    /// cleared selection), and dispatch the activation keys its widget controls queued.
+    /// (Object card — P1.)
     fn drain_object_card(&mut self) {
-        let steps = self.view.take_node_size_steps();
+        let keys = self.view.take_node_card_keys();
         if self.view.object_card.is_some() && self.view.object_card != self.focused_member() {
             self.view.object_card = None;
             self.view.request_redraw();
         }
         if let Some(member) = self.view.object_card {
-            if !steps.is_empty() {
-                for delta in steps {
-                    self.orrery_mut().step_node_size_tier(member, delta);
+            if !keys.is_empty() {
+                for key in keys {
+                    match key.as_str() {
+                        "size:up" => {
+                            self.orrery_mut().step_node_size_tier(member, 1);
+                        }
+                        "size:down" => {
+                            self.orrery_mut().step_node_size_tier(member, -1);
+                        }
+                        "rep:tile" => self
+                            .orrery_mut()
+                            .set_node_representation(member, orrery::Representation::Tile),
+                        "rep:shape" => self
+                            .orrery_mut()
+                            .set_node_representation(member, orrery::Representation::Shape),
+                        _ => {}
+                    }
                 }
                 self.view.request_redraw();
             }

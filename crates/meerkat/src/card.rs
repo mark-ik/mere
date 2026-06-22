@@ -488,10 +488,14 @@ pub(crate) const SNAP_H: u32 = 260;
 /// The never-visited placeholder card footprint (px).
 pub(crate) const UNVIS_W: u32 = 200;
 pub(crate) const UNVIS_H: u32 = 120;
-/// The object card footprint (px) — a short, wide control card (P0: the size-tier row).
-/// (Object card — P0.)
+/// The object card width (px) — a narrow control card. Its height grows with the widget
+/// count via [`object_card_height`]. (Object card — P1.)
 pub(crate) const OBJCARD_W: u32 = 200;
-pub(crate) const OBJCARD_H: u32 = 72;
+/// The object card height (px) for `n` widget rows: the container padding plus a labeled
+/// control row each. (Object card — P1.)
+pub(crate) fn object_card_height(n: usize) -> u32 {
+    22 + n as u32 * 52
+}
 
 pub fn card_rect(band: [f32; 4]) -> Option<(f32, f32, f32, f32, u32, u32)> {
     let [bx0, by0, bx1, by1] = band;
