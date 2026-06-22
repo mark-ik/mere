@@ -6,6 +6,10 @@ sit side by side in the same canvas, connected by user-created and inferred
 relationships. The graph (the *orrery*) is the root surface; everything else
 (tiles, panes, content cards) is a projection of it.
 
+<p align="center">
+  <img src="assets/media/mere-demo.gif" alt="Mere: navigating a spatial graph of visited pages, each node a place you have been" width="900">
+</p>
+
 This repository is a Cargo workspace of 53 member crates organized by concern.
 (That count is the `[workspace] members` list; the `probes` directory in
 `[workspace.exclude]` is not a member and is not counted.)
@@ -35,6 +39,31 @@ The durable architecture is a composition spine: graph truth (`kernel`) is
 arranged by `forme`, projected into a presentation plan by `platen`, realized as
 surfaces, and backed per-surface by a content engine selected by `inker`. The
 host (`meerkat`) renders the result and composites it.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="assets/screenshots/graph-and-page.png" alt="The orrery graph on the left, a web page rendered in a tile on the right"><br>
+      <sub>Graph and page side by side: the orrery on the left, an HTML node rendered as a tile on the right.</sub>
+    </td>
+    <td width="50%">
+      <img src="assets/screenshots/html-page.png" alt="A full web page rendered inside a tile"><br>
+      <sub>The HTML lane (serval). A full web page rendered in a tile.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="assets/screenshots/graph-canvas.png" alt="The force-directed orrery graph with linked nodes"><br>
+      <sub>The orrery. Every place you visit becomes a node; edges are the relationships between them.</sub>
+    </td>
+    <td width="50%">
+      <img src="assets/screenshots/theming.png" alt="Appearance settings with live color-harmony controls"><br>
+      <sub>Configurable appearance. Live color-harmony themes recolor the whole shell.</sub>
+    </td>
+  </tr>
+</table>
 
 ## Toolchain
 

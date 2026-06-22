@@ -44,3 +44,7 @@
 *.kojo merge=weave
 *.mill merge=weave
 *.dart merge=weave
+
+# README / marketing media. Treat as binary so git never line-merges or
+# attempts a text diff on screenshots and the demo gif.
+assets/** binary
