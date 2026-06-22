@@ -214,6 +214,31 @@ the unified-document-host work are in progress or partially wired. Several desig
 docs note capabilities that exist in code but are not yet on the live host path.
 Crate versions are pinned at `0.0.1` and binaries are `publish = false`.
 
+## More screenshots
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="assets/screenshots/web-page.png" alt="A full HTML page rendered in a tile"><br>
+      <sub>The web lane: a full HTML page rendered in a tile by the serval engine.</sub>
+    </td>
+    <td width="50%">
+      <img src="assets/screenshots/graph-favicons.png" alt="A fuller orrery graph with per-site favicons on the nodes"><br>
+      <sub>The graph fills out as you browse; nodes carry their site's favicon.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="assets/screenshots/layout-lsystem.png" alt="The same graph under an L-system layout in the Sunset theme"><br>
+      <sub>The same graph under a different layout (L-system) and the Sunset theme.</sub>
+    </td>
+    <td width="50%">
+      <img src="assets/screenshots/harmony.png" alt="Color-harmony controls driving a custom theme"><br>
+      <sub>Building a custom theme: harmony controls (Triadic) drive the whole palette.</sub>
+    </td>
+  </tr>
+</table>
+
 ## License
 
 Mozilla Public License 2.0. See `LICENSE-MPL`.
