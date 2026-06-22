@@ -6,9 +6,18 @@ sit side by side in the same canvas, connected by user-created and inferred
 relationships. The graph (the *orrery*) is the root surface; everything else
 (tiles, panes, content cards) is a projection of it.
 
-<p align="center">
-  <img src="assets/media/mere-demo.gif" alt="Mere: navigating a spatial graph of visited pages, each node a place you have been" width="900">
-</p>
+<table>
+  <tr>
+    <td width="50%">
+      <img src="assets/media/demo-1.gif" alt="Switching the orrery between layout strategies"><br>
+      <sub>Switch the orrery between layout strategies: force-directed, grid, Penrose, L-system, kanban, timeline.</sub>
+    </td>
+    <td width="50%">
+      <img src="assets/media/demo-2.gif" alt="Recoloring the shell with palette and color-harmony controls"><br>
+      <sub>Recolor the whole shell with palette and live color-harmony controls.</sub>
+    </td>
+  </tr>
+</table>
 
 This repository is a Cargo workspace of 53 member crates organized by concern.
 (That count is the `[workspace] members` list; the `probes` directory in
@@ -235,6 +244,19 @@ Crate versions are pinned at `0.0.1` and binaries are `publish = false`.
     <td width="50%">
       <img src="assets/screenshots/history.png" alt="A page rendered as a card, with a recent list and history mini-map in the side panel"><br>
       <sub>A recent-pages list and a history mini-map track your navigation lineage beside the graph.</sub>
+    </td>
+  </tr>
+</table>
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="assets/media/demo-3.gif" alt="Inspecting a node in the inspector panel"><br>
+      <sub>Inspect any node: identity, provenance, and fetch and parse state.</sub>
+    </td>
+    <td width="50%">
+      <img src="assets/media/demo-4.gif" alt="The command menu listing every action"><br>
+      <sub>Every action lives in one command menu: relate nodes, export JSON-LD, open a selection in splits, and more.</sub>
     </td>
   </tr>
 </table>
