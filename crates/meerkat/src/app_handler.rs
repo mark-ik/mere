@@ -550,6 +550,20 @@ impl ApplicationHandler for Shell {
                     wc.view.request_redraw();
                     return;
                 }
+                // A wheel over an open settings tile scrolls its body (the
+                // `.settings-pane-body` container); serval clips + draws the thumb,
+                // and the offset feeds the shell ScrollOffsets + the hit-test. Render
+                // clamps it to the content extent. (Menu / pane scroll.)
+                if wc
+                    .view
+                    .settings_rects
+                    .iter()
+                    .any(|(_, r)| cx >= r[0] && cx < r[2] && cy >= r[1] && cy < r[3])
+                {
+                    wc.view.settings_scroll = (wc.view.settings_scroll - dy).max(0.0);
+                    wc.view.request_redraw();
+                    return;
+                }
                 // A wheel over a scrollable utility pane (inspector / steward /
                 // apparatus) scrolls that pane rather than panning the orrery
                 // underneath. Render clamps each to its live content extent.

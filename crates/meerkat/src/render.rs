@@ -986,7 +986,8 @@ impl WindowCtx<'_> {
                 }
                 self.ensure_content(&url);
                 let state = self.shared.content.pages.get(&url).cloned();
-                self.shared.content.constellation.drive(member, &url, state, cw, ch);
+                let palette = self.shared.presentation.document_palette;
+                self.shared.content.constellation.drive(member, &url, state, cw, ch, palette);
                 cards.push((member, content, (cw, ch)));
             }
             self.view.tile_rects = slot_rects;
@@ -996,6 +997,17 @@ impl WindowCtx<'_> {
         } else {
             self.view.tile_rects.clear(); // no tile drag targets when the pane is closed
             self.snapshot_settings_panes(Vec::new()); // no settings tiles with the pane closed
+        }
+        // An open settings tile scrolls its `.settings-pane-body`; add the offset to the
+        // shell ScrollOffsets now that the pane is in the document, so the one render scrolls
+        // it + serval draws the thumb (chrome_click mirrors this for the hit-test). Settings
+        // panes are folded after the list panes, so this insertion is here, not above. (Menu
+        // / pane scroll.)
+        if self.view.settings_panes_open() {
+            let dom = self.view.dom.borrow();
+            if let Some(node) = first_with_class(&dom, dom.document(), "settings-pane-body") {
+                chrome_scroll.insert(node, (0.0, self.view.settings_scroll));
+            }
         }
 
         // Build the chrome (shell document) scene now that every folded pane — roster, the
@@ -1097,6 +1109,7 @@ impl WindowCtx<'_> {
                             &loader,
                             RENDER_W,
                             RENDER_H,
+                            self.shared.presentation.document_palette,
                         );
                         Some((scene, content_height))
                     };
@@ -1260,6 +1273,11 @@ impl WindowCtx<'_> {
             // arbitrary band of a flat scene, so the actor re-emits the band it is
             // told); the document lane windows host-side (the host lowers any band of
             // the retained packet itself). Branch on which lane this node is.
+            // The themed content-card background + document palette (P3); both Copy
+            // reads of `presentation`, used by the rasterize clear + the document
+            // lane's lower_window below.
+            let card_bg = crate::chrome_to_wgpu(self.shared.presentation.chrome_theme.surface_bg);
+            let doc_palette = self.shared.presentation.document_palette;
             if self.shared.content.constellation.scene(*member).is_some() {
                 // HTML lane. Ask the actor for the band centred on the scroll — a
                 // culled re-emit, so only the band's ops are encoded (the whole dense
@@ -1307,7 +1325,7 @@ impl WindowCtx<'_> {
                             );
                         }
                         let (tex, view) =
-                            core.rasterize(scene, *cw, band_px, ColorLoad::Clear(CARD_BG));
+                            core.rasterize(scene, *cw, band_px, ColorLoad::Clear(card_bg));
                         self.view.tile_textures.insert(
                             *member,
                             super::CachedTile { version, size: (*cw, band_px), tex, view },
@@ -1339,11 +1357,11 @@ impl WindowCtx<'_> {
                         .constellation
                         .packet(*member)
                         .map(|(packet, fonts)| {
-                            crate::card::lower_window(packet, fonts, new_band_y, band_h)
+                            crate::card::lower_window(packet, fonts, new_band_y, band_h, doc_palette)
                         });
                     if let Some(scene) = doc_scene {
                         let (tex, view) =
-                            core.rasterize(&scene, *cw, band_px, ColorLoad::Clear(CARD_BG));
+                            core.rasterize(&scene, *cw, band_px, ColorLoad::Clear(card_bg));
                         self.view.tile_textures.insert(
                             *member,
                             super::CachedTile { version, size: (*cw, band_px), tex, view },
@@ -1592,8 +1610,10 @@ impl WindowCtx<'_> {
             if *recovering {
                 let rw = (rect[2] - rect[0]).round().max(1.0) as u32;
                 let rh = (rect[3] - rect[1]).round().max(1.0) as u32;
-                let scene = super::card::recovering_card_scene(rw, rh);
-                let (_t, view) = core.rasterize(&scene, rw, rh, ColorLoad::Clear(CARD_BG));
+                let card_bg = crate::chrome_to_wgpu(self.shared.presentation.chrome_theme.surface_bg);
+                let scene =
+                    super::card::recovering_card_scene(rw, rh, self.shared.presentation.document_palette);
+                let (_t, view) = core.rasterize(&scene, rw, rh, ColorLoad::Clear(card_bg));
                 core.renderer().compose_external_texture(
                     &view,
                     &target_view,

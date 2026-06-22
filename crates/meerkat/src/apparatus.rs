@@ -69,6 +69,14 @@ pub fn apparatus_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.muted_text),
             rgb(c.surface_bg)
         ),
+        // Segmented sliders (theme editor): a label over a flex strip of cells.
+        ".app-slider-row { display: block; margin: 4px 0 2px 0; }".to_string(),
+        format!(
+            ".app-slider-label {{ font-size: 12px; color: {}; padding: 2px 4px; }}",
+            rgb(c.muted_text)
+        ),
+        ".app-slider-track { display: flex; height: 18px; gap: 1px; }".to_string(),
+        ".app-seg { height: 18px; }".to_string(),
     ]
 }
 

@@ -168,6 +168,10 @@ pub(crate) struct WindowView {
     pub(crate) steward_scroll: f32,
     pub(crate) apparatus_scroll: f32,
     pub(crate) trail_scroll: f32,
+    /// Open settings tile(s) body scroll offset (device px), applied to the
+    /// `.settings-pane-body` scroll container so serval clips + scrolls + draws
+    /// the thumb. Clamped to content extent by the render. (Menu/pane scroll.)
+    pub(crate) settings_scroll: f32,
     /// The last left-button release (time + window pos), for double-click detection.
     pub(crate) last_left_release: Option<(Instant, (f32, f32))>,
     /// Whether a left-button gesture inside the workbench pane is in flight (press →
@@ -1043,6 +1047,7 @@ impl WindowView {
             steward_scroll: Default::default(),
             apparatus_scroll: Default::default(),
             trail_scroll: Default::default(),
+            settings_scroll: Default::default(),
             last_left_release: Default::default(),
             workbench_gesture: false,
             frame_divider_drag: Default::default(),

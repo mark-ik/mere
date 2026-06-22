@@ -666,6 +666,7 @@ impl WindowCtx<'_> {
                 ("steward", self.view.steward_scroll),
                 ("inspector", self.view.inspector_scroll),
                 ("trail", self.view.trail_scroll),
+                ("settings-pane-body", self.view.settings_scroll),
             ] {
                 if let Some(node) = crate::first_with_class(&dom, root, class) {
                     offsets.insert(node, (0.0, scroll));
@@ -893,8 +894,36 @@ impl WindowCtx<'_> {
             k if k.starts_with("engine:toggle:") => {
                 self.toggle_engine(&k["engine:toggle:".len()..]);
             }
+            // Theme editor (T5): fork / remove / mode-toggle / per-seed HSL nudge.
+            // These must precede the theme-id fallback so they aren't read as ids.
+            "theme:fork" => self.fork_active_theme(),
+            "theme:remove" => self.remove_active_user_theme(),
+            "theme:mode" => self.toggle_active_theme_mode(),
+            k if k.starts_with("theme:harmony:") => {
+                self.set_active_harmony(&k["theme:harmony:".len()..]);
+            }
+            k if k.starts_with("theme:seed:") => {
+                self.adjust_seed_from_key(&k["theme:seed:".len()..]);
+            }
             _ => self.set_theme(key),
         }
+    }
+
+    /// Parse a `theme:seed:<seed>:<h|s|l>:<i>:<count>` slider-cell key and set
+    /// that channel to the fraction `i/count` on the active user theme.
+    fn adjust_seed_from_key(&mut self, rest: &str) {
+        let parts: Vec<&str> = rest.split(':').collect();
+        let [seed, channel, i, count] = parts[..] else {
+            return;
+        };
+        let (Ok(i), Ok(count)) = (i.parse::<f64>(), count.parse::<f64>()) else {
+            return;
+        };
+        if count <= 0.0 {
+            return;
+        }
+        let ch = channel.chars().next().unwrap_or(' ');
+        self.set_active_seed_channel(seed, ch, i / count);
     }
 
     /// Apply the roster-row intents the shell runner's dispatch queued. The roster is

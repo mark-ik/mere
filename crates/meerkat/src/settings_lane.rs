@@ -70,6 +70,7 @@ impl WindowCtx<'_> {
             // retired settings overlay), so global look-and-feel lives on one page. (P2.)
             "appearance" => {
                 let mut items = theme_section_items(&self.theme_options());
+                items.extend(self.theme_editor_items());
                 items.push(PaneItem::text("app-title", "Tabs"));
                 items.extend(tab_cap_items(self.view.chrome().settings.tab_cap));
                 ("Appearance", items)
@@ -80,6 +81,114 @@ impl WindowCtx<'_> {
             _ => return None,
         };
         Some(SettingsPage { title: title.to_string(), items })
+    }
+
+    /// The theme-editor controls under the theme picker on the Appearance page:
+    /// a fork action always, and for the active **user** theme the seed editor
+    /// (mode toggle + per-seed HSL steppers) + remove. Built-ins are read-only,
+    /// so editing one is a fork. The steppers drain `theme:fork` / `theme:mode` /
+    /// `theme:seed:<seed>:<h|s|l>:<down|up>` / `theme:remove`. (Seed-palette T5.)
+    fn theme_editor_items(&self) -> Vec<PaneItem> {
+        let mut items = vec![PaneItem::text("app-title", "Customize")];
+        items.push(PaneItem::button(
+            "app-btn",
+            "+ New custom (fork current)".to_string(),
+            "theme:fork".to_string(),
+        ));
+
+        let active = self.shared.presentation.active_theme_id.clone();
+        let Some(def) = self.shared.presentation.theme.theme_def(&active) else {
+            return items;
+        };
+        if def.source != register_theme::theme::ThemeSource::User {
+            items.push(PaneItem::text(
+                "app-row-muted",
+                "Fork a built-in to edit its seed colours.".to_string(),
+            ));
+            return items;
+        }
+
+        let mode = if def.seeds.dark { "Dark" } else { "Light" };
+        items.push(PaneItem::button(
+            "app-btn",
+            format!("Mode: {mode}  (toggle)"),
+            "theme:mode".to_string(),
+        ));
+
+        // Harmony: how the accents relate to the base. `Custom` keeps each accent
+        // independent; `Lock current` + the presets tie the secondary/tertiary hue
+        // to the primary, so editing the base rotates the whole triad and its
+        // derived activity accents stay coordinated. (Seed-palette harmony.)
+        use register_theme::theme::Harmony;
+        let locked = matches!(def.harmony, Harmony::Locked { .. });
+        let near = |a: f32, b: f32| (a - b).abs() < 0.5;
+        let active = |want: &str| match def.harmony {
+            Harmony::Custom => want == "custom",
+            Harmony::Locked { secondary_deg: s, tertiary_deg: t } => match want {
+                "triadic" => near(s, 120.0) && near(t, 240.0),
+                "analogous" => near(s, 30.0) && near(t, -30.0),
+                "complementary" => near(s, 180.0) && near(t, 150.0),
+                "mono" => near(s, 0.0) && near(t, 0.0),
+                "lock" => ![(120.0, 240.0), (30.0, -30.0), (180.0, 150.0), (0.0, 0.0)]
+                    .iter()
+                    .any(|&(ps, pt)| near(s, ps) && near(t, pt)),
+                _ => false,
+            },
+        };
+        items.push(PaneItem::text("app-title", "Harmony".to_string()));
+        for (key, lbl) in [
+            ("custom", "Custom"),
+            ("lock", "Lock current"),
+            ("triadic", "Triadic"),
+            ("analogous", "Analogous"),
+            ("complementary", "Complementary"),
+            ("mono", "Monochrome"),
+        ] {
+            let cls = if active(key) { "app-btn-active" } else { "app-btn" };
+            items.push(PaneItem::button(cls, lbl.to_string(), format!("theme:harmony:{key}")));
+        }
+
+        // The hex label shows the *effective* (harmony-applied) colour so it
+        // matches what renders; the sliders read the *stored* seed, since that is
+        // what they edit (the hue slider is hidden for hue-locked accents anyway).
+        // (Seed-palette harmony.)
+        let eff = register_theme::seed::harmonized_seeds(def);
+        for (seed, label) in [
+            ("primary", "Primary"),
+            ("secondary", "Secondary"),
+            ("tertiary", "Tertiary"),
+            ("neutral", "Neutral"),
+        ] {
+            let (stored, shown) = match seed {
+                "primary" => (def.seeds.primary, eff.primary),
+                "secondary" => (def.seeds.secondary, eff.secondary),
+                "tertiary" => (def.seeds.tertiary, eff.tertiary),
+                _ => (def.seeds.neutral, eff.neutral),
+            };
+            let (h, s, l) = tincture::color_to_hsl(stored);
+            items.push(PaneItem::text(
+                "app-row",
+                format!("{label}: {}", tincture::color_to_hex(shown)),
+            ));
+            // When the triad is locked, the accents' hue is derived from the
+            // primary, so their hue slider is replaced by a hint. Saturation +
+            // lightness stay per-accent. (Seed-palette harmony.)
+            let accent = seed == "secondary" || seed == "tertiary";
+            if locked && accent {
+                items.push(PaneItem::text("app-row-muted", "Hue follows primary".to_string()));
+            } else {
+                items.push(PaneItem::slider("Hue", format!("theme:seed:{seed}:h"), (h / 360.0) as f32, 24, true));
+            }
+            items.push(PaneItem::slider("Saturation", format!("theme:seed:{seed}:s"), s as f32, 16, false));
+            items.push(PaneItem::slider("Lightness", format!("theme:seed:{seed}:l"), l as f32, 16, false));
+        }
+
+        items.push(PaneItem::button(
+            "app-btn",
+            "Remove this theme".to_string(),
+            "theme:remove".to_string(),
+        ));
+        items
     }
 
     /// The `pelt/orrery` page: the focused orrery's scene presentation settings — the layout

@@ -122,6 +122,8 @@ mod session_ops;
 mod shellbar;
 mod switcher;
 mod tags;
+mod theme_edit;
+mod theme_store;
 mod text;
 mod titlebar;
 mod tracing_layer;
@@ -407,11 +409,21 @@ fn tile_sheet(c: &ChromeTheme) -> String {
         let s = |v: u8| (v as f32 * f).round().clamp(0.0, 255.0) as u8;
         format!("rgb({}, {}, {})", s(r), s(g), s(b))
     };
+    // A glyph/text resting on a fill picks near-white or near-black by WCAG
+    // contrast, so it stays legible whatever hue the fill becomes. The active
+    // tab's close × sits on the (theme-accented) active-tab background, so it is
+    // contrast-picked rather than a fixed muted tone. (Readable-on-accent.)
+    let on = |bg: Color32| {
+        let [r, g, b, _] = bg.to_array();
+        let o = tincture::best_on(tincture::Srgb::rgb(r, g, b));
+        format!("rgb({}, {}, {})", o.r, o.g, o.b)
+    };
     format!(
         ".tile-tabbar {{ background: {tabbar}; }} \
          .tile-tab {{ color: {tab_text}; background: {tab_bg}; }} \
          .tile-tab.active {{ color: {active_text}; background: {active_bg}; }} \
          .tile-close {{ color: {close}; }} \
+         .tile-tab.active .tile-close {{ color: {active_close}; }} \
          .tile-content {{ background: {content}; }} \
          .tile-divider {{ background: {divider}; }} \
          .tile-ghost {{ color: {active_text}; background: {active_bg}; border: 1px solid {ghost_border}; }}",
@@ -421,6 +433,7 @@ fn tile_sheet(c: &ChromeTheme) -> String {
         active_text = rgb(c.strong_text),
         active_bg = rgb(c.active_bg),
         close = rgb(c.muted_text),
+        active_close = on(c.active_bg),
         content = rgb(c.toolbar_bg),
         divider = darken(c.toolbar_bg, 0.5),
         ghost_border = rgb(c.muted_text),
@@ -597,6 +610,11 @@ struct Presentation {
     /// adjusted in the apparatus pane and persisted. The host owns the value and
     /// pushes it to each orrery via `set_physics_damping`. (Physics settings.)
     physics_damping: f32,
+    /// The active theme's document-lane palette (content cards: smolweb /
+    /// markdown / feed text). Threaded into content actors so baked glyph colors
+    /// follow the theme; also read by the host for rule / image colors at lower
+    /// time. Rebuilt on theme switch. (Document theming, P3.)
+    document_palette: document_canvas::ColorVocabulary,
 }
 
 impl Presentation {
@@ -944,6 +962,15 @@ impl Shell {
         // from them (theming pass). A runtime theme switch (settings / apparatus)
         // rebuilds this from the registry; today it opens on the default theme.
         let mut theme = ThemeRegistry::default();
+        // Load user / mod theme files (`<mere_root>/themes/*.json`) so a saved
+        // active user theme resolves and they appear in the picker. A malformed
+        // file is skipped + logged, never fatal. (Seed-palette themes T3/T4.)
+        for def in theme_store::load_user_themes(&mere_root) {
+            let id = def.id.clone();
+            if let Err(e) = theme.add_user_theme(def) {
+                tracing::warn!(theme = %id, error = %e, "skipping invalid user theme");
+            }
+        }
         // Honor the saved theme (falls back to the registry default), and keep the
         // registry so the apparatus pane can switch at runtime. (Theme switcher.)
         let active_theme_id = saved_settings
@@ -957,6 +984,8 @@ impl Shell {
         // Theme the orrery's backdrop + edges from the same resolved theme. (A2.)
         let (orrery_backdrop, orrery_edge) = orrery_palette(&resolution.tokens);
         orrery.set_palette(orrery_backdrop, orrery_edge);
+        // The document-lane palette for content cards, from the same theme. (P3.)
+        let document_palette = document_palette(&resolution.tokens);
         // The content region opens as a single graph pane (orrery / tiled
         // workbench); summoning the roster splits it. (Frame tree, F1.)
         let active_graph = manifests
@@ -1103,6 +1132,7 @@ impl Shell {
                     saved_tab_cap: saved_settings.tab_cap,
                     shellbar_edge: saved_settings.shellbar_edge,
                     physics_damping: saved_settings.physics_damping,
+                    document_palette,
                 },
                 comms_handle,
                 sync_handle,
@@ -1521,6 +1551,58 @@ fn orrery_palette(tokens: &register_theme::theme::ThemeTokenSet) -> ([f32; 4], [
         0.85,
     ];
     (backdrop, edge)
+}
+
+/// Straight RGBA (0..1) for a chrome `Color32` — the format the document
+/// [`document_canvas::ColorVocabulary`] + paint list consume.
+fn vocab_color(c: register_theme::theme::Color32) -> [f32; 4] {
+    [
+        c.r() as f32 / 255.0,
+        c.g() as f32 / 255.0,
+        c.b() as f32 / 255.0,
+        c.a() as f32 / 255.0,
+    ]
+}
+
+/// The document-lane color palette for the focused-content card, derived from
+/// the active theme: the chrome text tiers (`body` / `strong` / `muted`) plus
+/// the theme accent for links, so smolweb / markdown / feed cards re-theme with
+/// the shell instead of a fixed light-on-dark palette. Code has no dedicated
+/// token — it takes `body_text` and leans on the monospace font for the
+/// distinction. (Document theming, P3.)
+fn document_palette(
+    tokens: &register_theme::theme::ThemeTokenSet,
+) -> document_canvas::ColorVocabulary {
+    let ch = &tokens.chrome;
+    let (ar, ag, ab) = tokens.theme_data.accent_rgb;
+    let muted = ch.muted_text;
+    let muted_rgb = [
+        muted.r() as f32 / 255.0,
+        muted.g() as f32 / 255.0,
+        muted.b() as f32 / 255.0,
+    ];
+    document_canvas::ColorVocabulary {
+        body_text: vocab_color(ch.body_text),
+        heading_text: vocab_color(ch.strong_text),
+        link_text: [ar as f32 / 255.0, ag as f32 / 255.0, ab as f32 / 255.0, 1.0],
+        code_text: vocab_color(ch.body_text),
+        badge_text: vocab_color(ch.muted_text),
+        rule: vocab_color(ch.muted_text),
+        placeholder_text: [muted_rgb[0], muted_rgb[1], muted_rgb[2], 0.12],
+        placeholder_image: [muted_rgb[0], muted_rgb[1], muted_rgb[2], 0.20],
+    }
+}
+
+/// A `wgpu::Color` (opaque) for a chrome `Color32` — the host-cleared content
+/// card background, taken from the theme's floated-panel surface so the card
+/// reads as a raised surface in every theme. (Document theming, P3.)
+fn chrome_to_wgpu(c: register_theme::theme::Color32) -> wgpu::Color {
+    wgpu::Color {
+        r: c.r() as f64 / 255.0,
+        g: c.g() as f64 / 255.0,
+        b: c.b() as f64 / 255.0,
+        a: 1.0,
+    }
 }
 
 /// The first element with local tag `local` in pre-order under `id`.

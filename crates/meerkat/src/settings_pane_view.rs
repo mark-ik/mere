@@ -21,7 +21,7 @@
 use forme::GraphMemberId;
 use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, el, focusable, on_click};
 
-use crate::list_pane::PaneItem;
+use crate::list_pane::{PaneItem, SliderSpec};
 
 /// The erased view the settings-panes logic produces (mirrors `RosterView`).
 pub type SettingsPanesView = Box<dyn AnyView<SettingsPanesState, (), ServalCtx, ServalElement>>;
@@ -140,6 +140,9 @@ fn pane_view(pane: &SettingsPane, panel_bg: &str) -> SettingsPanesView {
 /// clickable button that queues `(member, key)` for the host to apply — the settings
 /// twin of `list_pane`'s item view.
 fn item_view(member: GraphMemberId, item: &PaneItem) -> SettingsPanesView {
+    if let Some(spec) = &item.slider {
+        return slider_view(member, &item.text, spec);
+    }
     let div = el::<_, SettingsPanesState, ()>("div", item.text.clone()).attr("class", item.class.clone());
     match &item.key {
         Some(key) => {
@@ -150,6 +153,44 @@ fn item_view(member: GraphMemberId, item: &PaneItem) -> SettingsPanesView {
         }
         None => Box::new(div),
     }
+}
+
+/// A segmented slider: a label over a flex strip of `count` clickable cells.
+/// Cell `i` queues `"<prefix>:<i>:<count>"` (the host sets the channel to
+/// `i/count`). A hue track colours each cell by its hue (a rainbow picker) and
+/// outlines the selected one; a magnitude track fills cells up to `value`.
+fn slider_view(member: GraphMemberId, label: &str, spec: &SliderSpec) -> SettingsPanesView {
+    let label_div = el::<_, SettingsPanesState, ()>("div", label.to_string()).attr("class", "app-slider-label");
+    let count = spec.count.max(1);
+    let selected = ((spec.value * count as f32).round() as usize).min(count - 1);
+    let cells: Vec<SettingsPanesView> = (0..count)
+        .map(|i| {
+            let key = format!("{}:{}:{}", spec.key_prefix, i, count);
+            let style = if spec.hue_track {
+                let c = tincture::color_from_hsl(i as f64 / count as f64 * 360.0, 0.7, 0.5);
+                let sel = if i == selected { "outline:2px solid #ffffff;outline-offset:-2px;" } else { "" };
+                format!("flex:1;background-color:#{:02X}{:02X}{:02X};{sel}", c.r, c.g, c.b)
+            } else {
+                let fill = if i <= selected { "rgba(255,255,255,0.55)" } else { "rgba(255,255,255,0.12)" };
+                let sel = if i == selected { "outline:2px solid #ffffff;outline-offset:-2px;" } else { "" };
+                format!("flex:1;background-color:{fill};{sel}")
+            };
+            let cell = el::<_, SettingsPanesState, ()>("div", String::new())
+                .attr("class", "app-seg")
+                .attr("style", style);
+            Box::new(on_click(cell, move |s: &mut SettingsPanesState, _: PointerClick| {
+                s.pending_keys.push((member, key.clone()))
+            })) as SettingsPanesView
+        })
+        .collect();
+    let track = el::<_, SettingsPanesState, ()>("div", cells).attr("class", "app-slider-track");
+    Box::new(
+        el::<_, SettingsPanesState, ()>(
+            "div",
+            vec![Box::new(label_div) as SettingsPanesView, Box::new(track) as SettingsPanesView],
+        )
+        .attr("class", "app-slider-row"),
+    )
 }
 
 #[cfg(test)]

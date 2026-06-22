@@ -224,6 +224,12 @@ wgpu = { version = "29", default-features = false, features = ["std", "wgsl"] }
 arboard = "3"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+# User / mod theme files (serde ThemeDef JSON in <mere_root>/themes/).
+serde_json = { workspace = true }
+# Seed colour manipulation for the in-app theme editor (HSL nudges on seeds).
+tincture = { workspace = true }
+# Unique ids for forked user themes.
+uuid = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 accesskit_windows = { workspace = true }

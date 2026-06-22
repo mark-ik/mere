@@ -13,7 +13,7 @@ use orrery::Orrery;
 use session_runtime::{PersistedSettings, settings_store};
 
 use super::observability::ObservabilitySnapshot;
-use super::{GRAPH_PANE, WindowCtx, apparatus, fetch, frame_view};
+use super::{GRAPH_PANE, WindowCtx, fetch, frame_view};
 
 impl WindowCtx<'_> {
     /// Make the focused node's content available. A network address already in
@@ -375,50 +375,6 @@ impl WindowCtx<'_> {
             if opened { "opened" } else { "closed" }
         ));
         self.view.request_redraw();
-    }
-
-    /// Switch the active theme: re-resolve from the registry, rebuild the chrome
-    /// CSS + tokens, drop the host-drawn caches so they re-rasterize with the new
-    /// palette, persist the choice, and redraw. (Theme switcher; the orrery's own
-    /// palette is themed in A2.)
-    pub(super) fn set_theme(&mut self, theme_id: &str) {
-        let resolution = self.shared.presentation.theme.set_active_theme(theme_id);
-        self.shared.presentation.active_theme_id = resolution.resolved_id;
-        self.shared.presentation.chrome_theme = resolution.tokens.chrome;
-        self.shared.presentation.chrome_sheet = crate::chrome_sheet(&self.shared.presentation.chrome_theme);
-        // Re-theme the orrery's backdrop + edges to match. (A2.)
-        let (backdrop, edge) = crate::orrery_palette(&resolution.tokens);
-        self.orrery_mut().set_palette(backdrop, edge);
-        self.view.window_controls_tex = None;
-        self.view.divider_tex = None;
-        self.persist_settings();
-        self.shared.observability
-            .record_theme_activated(&self.shared.presentation.active_theme_id);
-        self.view.request_redraw();
-    }
-
-    /// The registered themes as apparatus options (id + display name + active),
-    /// from the known theme ids. (The registry doesn't list themes yet.)
-    pub(super) fn theme_options(&self) -> Vec<apparatus::ThemeOption> {
-        use register_theme::theme::{
-            THEME_ID_DARK, THEME_ID_DEFAULT, THEME_ID_HIGH_CONTRAST, THEME_ID_LIGHT,
-        };
-        [
-            THEME_ID_DEFAULT,
-            THEME_ID_LIGHT,
-            THEME_ID_DARK,
-            THEME_ID_HIGH_CONTRAST,
-        ]
-        .iter()
-        .map(|id| {
-            let res = self.shared.presentation.theme.resolve_theme(Some(id));
-            apparatus::ThemeOption {
-                active: res.resolved_id == self.shared.presentation.active_theme_id,
-                id: res.resolved_id,
-                name: res.tokens.display_name,
-            }
-        })
-        .collect()
     }
 
     /// Read-only system rows for the apparatus Overview section.

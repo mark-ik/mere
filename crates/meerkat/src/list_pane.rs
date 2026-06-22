@@ -27,24 +27,63 @@ use serval_scripted_dom::NodeId;
 #[cfg(test)]
 use crate::view_pane::ViewPane;
 
+/// A segmented slider control: a horizontal strip of `count` clickable cells.
+/// Clicking cell `i` queues `"<key_prefix>:<i>:<count>"`, which the host maps to
+/// the fraction `i/count`. `value` (0..1) marks the current position; a
+/// `hue_track` strip colours each cell by its hue (a rainbow picker), else the
+/// cells fill up to `value`. (Settings lane theme editor.)
+pub struct SliderSpec {
+    pub key_prefix: String,
+    pub value: f32,
+    pub count: usize,
+    pub hue_track: bool,
+}
+
 /// One row of a list pane: a div with `class` and `text`. When `key` is `Some`,
 /// the div is clickable and a click queues that key as an activation (a theme id,
 /// a row id, …) for the shell to act on; `None` is a plain display row / title.
+/// When `slider` is `Some`, the row is a [`SliderSpec`] segmented track (the
+/// `text` becomes its label); settings panes render it, other list panes show
+/// the label.
 pub struct PaneItem {
     pub class: String,
     pub text: String,
     pub key: Option<String>,
+    pub slider: Option<SliderSpec>,
 }
 
 impl PaneItem {
     /// A non-interactive classed text row (a title or a display row).
     pub fn text(class: impl Into<String>, text: impl Into<String>) -> Self {
-        Self { class: class.into(), text: text.into(), key: None }
+        Self { class: class.into(), text: text.into(), key: None, slider: None }
     }
 
     /// A clickable button row whose click queues `key`.
     pub fn button(class: impl Into<String>, text: impl Into<String>, key: impl Into<String>) -> Self {
-        Self { class: class.into(), text: text.into(), key: Some(key.into()) }
+        Self { class: class.into(), text: text.into(), key: Some(key.into()), slider: None }
+    }
+
+    /// A segmented slider row: a `label` plus a `count`-cell track keyed by
+    /// `key_prefix`, the current `value` (0..1) marked. `hue_track` renders a
+    /// rainbow strip.
+    pub fn slider(
+        label: impl Into<String>,
+        key_prefix: impl Into<String>,
+        value: f32,
+        count: usize,
+        hue_track: bool,
+    ) -> Self {
+        Self {
+            class: "app-slider-row".to_string(),
+            text: label.into(),
+            key: None,
+            slider: Some(SliderSpec {
+                key_prefix: key_prefix.into(),
+                value,
+                count,
+                hue_track,
+            }),
+        }
     }
 }
 
