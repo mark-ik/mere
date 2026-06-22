@@ -6,6 +6,11 @@ sit side by side in the same canvas, connected by user-created and inferred
 relationships. The graph (the *orrery*) is the root surface; everything else
 (tiles, panes, content cards) is a projection of it.
 
+<p align="center">
+  <img src="assets/media/mere-demo.gif" alt="The orrery as a live force-directed graph, nodes settling under physics" width="900"><br>
+  <sub>The orrery is a live force-directed graph; nodes settle under physics as you browse.</sub>
+</p>
+
 <table>
   <tr>
     <td width="50%">
