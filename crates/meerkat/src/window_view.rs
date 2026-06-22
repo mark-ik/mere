@@ -354,9 +354,9 @@ pub(crate) enum FocusCardKind {
     /// over them and under the overlays — like the favicons already do). An
     /// external-texture cannot serve here: textures composite in the content layer below
     /// the chrome, and the transparent hole does not erase the opaque node cards behind it.
-    /// `None` until the host's once-per-url readback + encode has run (a one-frame
-    /// placeholder). (Layering fix — card over nodes.)
-    Snapshot { data_uri: Option<String> },
+    /// Only built once the host's once-per-url readback + encode has cached the image, so
+    /// there is no empty placeholder while it builds. (Layering fix; no placeholder flash.)
+    Snapshot { data_uri: String },
     /// A never-visited node: a static dashed "double-click to load" placeholder.
     Unvisited,
     /// The per-object action card, summoned in place of the preview by a context action: an
@@ -701,24 +701,17 @@ fn focus_card_view(fc: &FocusCard) -> ShellView {
     match &fc.kind {
         FocusCardKind::Snapshot { data_uri } => {
             // The preview is a PNG data-URI <img> (like the favicons), so it is opaque chrome
-            // DOM after the node cards: document order paints it over them. Until the host's
-            // first readback lands, a plain light card stands in. (Layering fix.)
-            let inner: ShellView = match data_uri {
-                Some(uri) => Box::new(el::<_, ShellState, ()>("img", ()).attr("src", uri.clone()).attr(
+            // DOM after the node cards: document order paints it over them. Only the cached
+            // image renders — there is no placeholder while it builds. (Layering fix.)
+            let inner: ShellView = Box::new(
+                el::<_, ShellState, ()>("img", ()).attr("src", data_uri.clone()).attr(
                     "style",
                     format!(
                         "position:absolute;left:0;top:0;width:{w}px;height:{h}px;\
                          border-radius:8px;display:block"
                     ),
-                )),
-                None => Box::new(el::<_, ShellState, ()>("div", ()).attr(
-                    "style",
-                    format!(
-                        "position:absolute;left:0;top:0;width:{w}px;height:{h}px;\
-                         border-radius:8px;background:#f3f4f6"
-                    ),
-                )),
-            };
+                ),
+            );
             Box::new(
                 el::<_, ShellState, ()>("div", vec![inner]).attr("class", "snapshot-card").attr(
                     "style",

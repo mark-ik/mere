@@ -274,12 +274,15 @@ impl WindowCtx<'_> {
             let ch = super::card::object_card_height(widgets.len());
             (FocusCardKind::ObjectCard { widgets }, super::card::OBJCARD_W, ch)
         } else if self.orrery().member_visited(member) {
-            // The preview image is built host-side once per url (the readback below) and
-            // cached; `None` here renders a placeholder until that lands. (Layering fix.)
+            // Show only the *cached* snapshot image — no placeholder while it is still
+            // building. A fresh focus otherwise flashed an empty card (and claimed a hit-rect
+            // over the node, making the double-click-to-open flaky). `None` → no focus card
+            // this frame; the readback below still builds + caches it for the next focus.
+            // (Snapshot — no placeholder flash.)
             let data_uri = self
                 .orrery()
                 .focused_url()
-                .and_then(|u| self.view.snapshot_data_uris.get(u).cloned());
+                .and_then(|u| self.view.snapshot_data_uris.get(u).cloned())?;
             (FocusCardKind::Snapshot { data_uri }, super::card::SNAP_W, super::card::SNAP_H)
         } else {
             (FocusCardKind::Unvisited, super::card::UNVIS_W, super::card::UNVIS_H)
@@ -1138,8 +1141,14 @@ impl WindowCtx<'_> {
         if let Some((member, rect)) = unvisited_card {
             self.view.content_rects.push((member, rect));
         }
-        if let Some((member, _, rect, _)) = &snapshot_card {
-            self.view.content_rects.push((*member, *rect));
+        if let Some((member, _, rect, built)) = &snapshot_card {
+            // Claim the card's hit-rect only once its snapshot is cached + shown (`built` is
+            // `None` = already cached). While it is still building there is no visible card,
+            // so its rect must not intercept clicks on the node beneath it — that phantom
+            // rect was making the first double-click-to-open flaky. (Snapshot — no phantom rect.)
+            if built.is_none() {
+                self.view.content_rects.push((*member, *rect));
+            }
         }
         for (member, rect) in &scrying_surfaces {
             self.view.content_rects.push((*member, *rect));
