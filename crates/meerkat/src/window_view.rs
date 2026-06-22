@@ -739,19 +739,24 @@ fn focus_card_view(fc: &FocusCard) -> ShellView {
                     ),
                 ),
         ),
-        // The per-object action card: a column of setting-widget rows (P1: size + form). The
-        // container `object-card` class is the click-routing + double-click-suppress gate's key.
-        // (Object card — P1.)
+        // The per-object action card: the widgets' (caption, control) rows flattened as direct
+        // children of `object-card`, block-stacked exactly like the P0 single widget did (no
+        // flex container, no per-widget wrapper) so the controls' clicks route + fire. The
+        // `object-card` class is the click-routing + double-click-suppress gate's key. (P1.)
         FocusCardKind::ObjectCard { widgets } => {
-            let rows: Vec<ShellView> = widgets.iter().map(object_card_widget_row).collect();
+            let mut children: Vec<ShellView> = Vec::with_capacity(widgets.len() * 2);
+            for widget in widgets {
+                let (caption, control) = object_card_widget_row(widget);
+                children.push(caption);
+                children.push(control);
+            }
             Box::new(
-                el::<_, ShellState, ()>("div", rows).attr("class", "object-card").attr(
+                el::<_, ShellState, ()>("div", children).attr("class", "object-card").attr(
                     "style",
                     format!(
                         "position:absolute;left:{x0}px;top:{y0}px;width:{w}px;height:{h}px;\
-                         box-sizing:border-box;padding:10px 12px;border-radius:8px;display:flex;\
-                         flex-direction:column;gap:10px;background:rgba(28,32,40,0.96);\
-                         box-shadow:0 6px 24px rgba(0,0,0,0.55)"
+                         box-sizing:border-box;padding:9px 12px;border-radius:8px;\
+                         background:rgba(28,32,40,0.96);box-shadow:0 6px 24px rgba(0,0,0,0.55)"
                     ),
                 ),
             )
@@ -759,18 +764,16 @@ fn focus_card_view(fc: &FocusCard) -> ShellView {
     }
 }
 
-/// Render one object-card widget as a labeled row (a caption over its control). Each control
-/// queues a `node_card_keys` activation the host drains + dispatches. (Object card — P1.)
-fn object_card_widget_row(widget: &CardWidget) -> ShellView {
-    let labeled = |caption: &str, control: ShellView| -> ShellView {
-        let title: ShellView = Box::new(
-            el::<_, ShellState, ()>("div", caption.to_string())
-                .attr("style", "color:#8b94a6;font-size:11px;margin-bottom:5px"),
-        );
-        Box::new(el::<_, ShellState, ()>("div", vec![title, control]))
-    };
+/// Render one object-card widget as a `(caption, control)` pair the card stacks as direct
+/// children. Each control queues a `node_card_keys` activation the host drains + dispatches.
+/// (Object card — P1.)
+fn object_card_widget_row(widget: &CardWidget) -> (ShellView, ShellView) {
     match widget {
         CardWidget::SizeTier { tier } => {
+            let title: ShellView = Box::new(
+                el::<_, ShellState, ()>("div", "Size".to_string())
+                    .attr("style", "color:#8b94a6;font-size:11px;margin-bottom:5px"),
+            );
             let dots: String = (0..orrery::SIZE_TIERS.len())
                 .map(|i| if i <= *tier { '\u{25CF}' } else { '\u{25CB}' })
                 .collect();
@@ -790,12 +793,18 @@ fn object_card_widget_row(widget: &CardWidget) -> ShellView {
                     .attr("style", "color:#9aa4b8;font-size:15px;letter-spacing:5px"),
             );
             let row: ShellView = Box::new(
-                el::<_, ShellState, ()>("div", vec![minus, notches, plus])
-                    .attr("style", "display:flex;align-items:center;justify-content:space-between"),
+                el::<_, ShellState, ()>("div", vec![minus, notches, plus]).attr(
+                    "style",
+                    "display:flex;align-items:center;justify-content:space-between;margin-bottom:11px",
+                ),
             );
-            labeled("Size", row)
+            (title, row)
         }
         CardWidget::Representation { is_tile } => {
+            let title: ShellView = Box::new(
+                el::<_, ShellState, ()>("div", "Form".to_string())
+                    .attr("style", "color:#8b94a6;font-size:11px;margin-bottom:5px"),
+            );
             let seg = |active: bool| -> String {
                 let (bg, fg) = if active { ("#3a4150", "#ffffff") } else { ("#2a2f3a", "#9aa4b8") };
                 format!(
@@ -817,7 +826,7 @@ fn object_card_widget_row(widget: &CardWidget) -> ShellView {
                 el::<_, ShellState, ()>("div", vec![tile_btn, shape_btn])
                     .attr("style", "display:flex;gap:2px"),
             );
-            labeled("Form", row)
+            (title, row)
         }
     }
 }
