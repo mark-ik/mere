@@ -31,9 +31,11 @@
 //! single dispatch surface, but until graph-canvas's existing direct-
 //! render path is fully retired they coexist.
 
+use std::collections::HashMap;
+
 use cartography::{
-    FormFactor, IntelligenceSignals, LayoutStrategy, ProjectionDimension, ProjectionRequest,
-    StreamingLayoutStrategy, TargetSize, ViewIntent,
+    AxisValue, FormFactor, IntelligenceSignals, LayoutStrategy, ProjectionDimension,
+    ProjectionRequest, StreamingLayoutStrategy, TargetSize, ViewIntent,
 };
 use kernel::geometry::PortablePoint;
 use kernel::graph::{Graph, NodeKey};
@@ -152,7 +154,19 @@ pub const ORRERY_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
     ("grid.default", "Grid"),
     ("penrose.default", "Penrose"),
     ("lsystem.default", "L-system"),
+    // Axis-driven, now dispatched: the host axes are graph-derived first-pass — kanban groups
+    // by URL host, timeline orders by node-creation order. The signals layer will enrich these
+    // (content-type / community columns, real timestamps). (Arrangements — kanban/timeline.)
+    ("kanban.default", "Kanban (by site)"),
+    ("timeline.default", "Timeline (by order)"),
 ];
+
+/// The URL's host/authority — the substring between `://` and the next `/` (or end), else the
+/// whole string. The kanban categorical axis groups nodes by this. (Arrangements — kanban.)
+fn url_host(url: &str) -> String {
+    let after_scheme = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
+    after_scheme.split(['/', '?', '#']).next().unwrap_or(after_scheme).to_string()
+}
 
 /// Compute an orrery layout strategy's node positions: dispatch `id` to its
 /// cartography adapter and project against `graph` at viewport `(width, height)`,
@@ -169,7 +183,8 @@ pub fn project_orrery_strategy(
     height: u32,
 ) -> Vec<(NodeKey, PortablePoint)> {
     use arrangements::adapters::{
-        GridAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter, RadialAdapter,
+        GridAdapter, KanbanAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter,
+        RadialAdapter, TimelineAdapter,
     };
     let signals = IntelligenceSignals::default();
     let options = CartographySceneOptions::canvas_pixels(width, height);
@@ -180,6 +195,32 @@ pub fn project_orrery_strategy(
         "grid.default" => project_with(graph, &signals, &options, &GridAdapter::default()),
         "penrose.default" => project_with(graph, &signals, &options, &PenroseAdapter::default()),
         "lsystem.default" => project_with(graph, &signals, &options, &LSystemAdapter::default()),
+        // Axis-driven: the host derives the per-node axis (graph-only first pass) and threads it on
+        // the intent, since `axis_values` lives on `ViewIntent`, not `CartographySceneOptions`.
+        // Kanban groups by URL host (a categorical column per site). (Arrangements — kanban.)
+        "kanban.default" => {
+            let axis = graph
+                .nodes()
+                .map(|(key, node)| (key, AxisValue::Categorical(url_host(node.url()))))
+                .collect::<HashMap<_, _>>();
+            let mut intent = options.to_view_intent();
+            intent.axis_values = Some(axis);
+            KanbanAdapter::default()
+                .project(&ProjectionRequest { graph, signals: &signals, intent })
+        }
+        // Timeline orders nodes along the horizontal axis by creation order (their enumeration
+        // index) — a stand-in until a real per-node timestamp is plumbed. (Arrangements — timeline.)
+        "timeline.default" => {
+            let axis = graph
+                .nodes()
+                .enumerate()
+                .map(|(i, (key, _node))| (key, AxisValue::Numeric(i as f64)))
+                .collect::<HashMap<_, _>>();
+            let mut intent = options.to_view_intent();
+            intent.axis_values = Some(axis);
+            TimelineAdapter::default()
+                .project(&ProjectionRequest { graph, signals: &signals, intent })
+        }
         // Focus-driven: centers on `focus` (the pane's selection), BFS rings outward.
         // Without a focus there is no layout to compute, so leave the orrery as-is.
         "radial.default" => {
