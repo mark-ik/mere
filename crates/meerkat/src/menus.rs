@@ -345,6 +345,20 @@ impl WindowCtx<'_> {
     /// Run a pending context-menu action the chrome captured: open the menu's
     /// member set as splits or as one stack, switching into the tiled (Tree)
     /// projection first if needed.
+    /// Apply a context action invoked from the **command palette**: the palette has no menu
+    /// working set, so seed `context_set` from the live selection, clear the cursor anchor,
+    /// and move the queued action into `pending_context` for [`drain_pending_context`]
+    /// (called right after this) to run over the selection. (Command registry P2.)
+    pub(super) fn drain_palette_context_action(&mut self) {
+        let Some(action) = self.view.chrome().pending_palette_action else {
+            return;
+        };
+        self.view.chrome_update(|c| c.pending_palette_action = None);
+        self.view.context_set = self.selection_working_set();
+        self.view.context_origin = None;
+        self.view.chrome_update(move |c| c.pending_context = Some(action));
+    }
+
     pub(super) fn drain_pending_context(&mut self) {
         let Some(action) = self.view.chrome().pending_context else {
             return;

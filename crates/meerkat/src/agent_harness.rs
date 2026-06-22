@@ -11,7 +11,8 @@
 #![allow(dead_code)]
 
 use frame::PaneContent;
-use meerkat::command::Command;
+use meerkat::ContextAction;
+use meerkat::command::{Command, context_action_from_id, context_action_palette_label};
 
 use super::observability::{A11ySnapshot, ObservabilitySnapshot, Severity};
 use super::{Shell, ContentPane};
@@ -74,6 +75,10 @@ pub(crate) enum AgentAction {
     OpenPane(AgentPane),
     TogglePane(AgentPane),
     InvokeCommand(Command),
+    /// Invoke any registry action by its stable id — a command verb (`"workbench"`) or a
+    /// context-action id (`"add_node"`). The one by-id seam automation + agents use, the
+    /// same id space the palette and (later) the configurable menu address. (Registry P3.)
+    Invoke(String),
     SelectNodeByUrl(String),
     SetTheme(String),
     ActivateFocusedAction,
@@ -111,6 +116,7 @@ impl Shell {
             AgentAction::OpenPane(pane) => self.agent_open_pane(pane),
             AgentAction::TogglePane(pane) => self.agent_toggle_pane(pane),
             AgentAction::InvokeCommand(cmd) => self.agent_invoke_command(cmd),
+            AgentAction::Invoke(id) => self.agent_invoke(&id),
             AgentAction::SelectNodeByUrl(url) => self.agent_select_node_by_url(&url),
             AgentAction::SetTheme(theme_id) => self.agent_set_theme(&theme_id),
             AgentAction::ActivateFocusedAction => self.agent_activate_focused_action(),
@@ -271,6 +277,34 @@ impl Shell {
         self.ctx().sync_comms_pane();
         self.ctx().sync_settings();
         (true, action_id, cmd.label().to_string())
+    }
+
+    /// Invoke any registry action by its stable id: a command verb routes to
+    /// [`agent_invoke_command`](Self::agent_invoke_command), a context-action id to
+    /// [`agent_invoke_context`](Self::agent_invoke_context). The agent's view of the one
+    /// registry seam — the same ids the palette + menu config use. (Registry P3.)
+    fn agent_invoke(&mut self, id: &str) -> (bool, String, String) {
+        if let Some(cmd) = Command::from_id(id) {
+            self.agent_invoke_command(cmd)
+        } else if let Some(action) = context_action_from_id(id) {
+            self.agent_invoke_context(action)
+        } else {
+            (false, format!("invoke.{id}"), format!("unknown registry id: {id}"))
+        }
+    }
+
+    /// Apply a context action against the live selection — the agent counterpart of the
+    /// palette's context path: seed `context_set` from the selection, queue the action, and
+    /// run the existing context drain (the same applier the menu uses). (Registry P3.)
+    fn agent_invoke_context(&mut self, action: ContextAction) -> (bool, String, String) {
+        let action_id = format!("context.{action:?}").to_ascii_lowercase();
+        let detail = context_action_palette_label(action).unwrap_or_default().to_string();
+        let set = self.ctx().selection_working_set();
+        self.ctx().view.context_set = set;
+        self.ctx().view.context_origin = None;
+        self.ctx().view.chrome_update(move |c| c.pick_context(action));
+        self.ctx().drain_pending_context();
+        (true, action_id, detail)
     }
 
     fn agent_select_node_by_url(&mut self, url: &str) -> (bool, String, String) {
@@ -1142,6 +1176,28 @@ mod tests {
         assert!(app.ctx().workbench_open(), "the workbench pane is open");
         assert!(app.view().workbench.is_tiled(), "in the tiled (Tree) projection");
         assert!(app.view().focused_tile.is_some(), "the new tile is focused");
+    }
+
+    #[test]
+    fn agent_invoke_by_id_runs_commands_and_context_actions() {
+        // The one by-id seam: an agent invokes any registry action by its stable id — a
+        // command verb or a context-action id — the same id space the palette uses. (P3.)
+        let mut app = test_app();
+        // A command id routes through the command path.
+        let step = app.apply_agent_action(AgentAction::Invoke("workbench".into()));
+        assert!(step.result.applied, "a command id (workbench) invokes");
+        // A context-action id applies to the graph: `add_node` mints a node by id.
+        let before = app.orrery().graph().nodes().count();
+        let step = app.apply_agent_action(AgentAction::Invoke("add_node".into()));
+        assert!(step.result.applied, "a context-action id (add_node) invokes");
+        assert_eq!(
+            app.orrery().graph().nodes().count(),
+            before + 1,
+            "add_node minted a node, invoked purely by id",
+        );
+        // An unknown id is reported, not applied (no panic, no silent success).
+        let step = app.apply_agent_action(AgentAction::Invoke("not_a_real_id".into()));
+        assert!(!step.result.applied, "an unknown registry id is not applied");
     }
 
     #[test]

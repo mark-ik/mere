@@ -186,6 +186,29 @@ fn enter_navigates_highlighted_suggestion() {
     assert!(runner.state().suggest.is_empty(), "navigation closes the dropdown");
 }
 
+/// The command palette lists context actions alongside commands (registry P2), and
+/// running a context palette item records it in `pending_palette_action` for the host to
+/// apply to the current selection (and closes the palette).
+#[test]
+fn palette_runs_a_context_action_into_the_pending_slot() {
+    use crate::command::PaletteItem;
+    let mut runner = runner("mere://welcome");
+    runner.update(Chrome::open_palette);
+    let item = runner
+        .state()
+        .palette_items()
+        .into_iter()
+        .find(|i| matches!(i, PaletteItem::Context(ContextAction::ShowAllNodes)))
+        .expect("Show all nodes is a palette item");
+    runner.update(|c| c.run_palette_item_and_close(item));
+    assert_eq!(
+        runner.state().pending_palette_action,
+        Some(ContextAction::ShowAllNodes),
+        "the palette records the context action for the host to apply",
+    );
+    assert!(!runner.state().palette_open, "running the item closes the palette");
+}
+
 /// Toggling opens then closes the palette (the Ctrl+K path).
 #[test]
 fn palette_toggles_open_and_closed() {
@@ -196,9 +219,8 @@ fn palette_toggles_open_and_closed() {
     assert!(!runner.state().palette_open);
 }
 
-/// An open palette renders its panel and one row per filtered command
-/// (all three at an empty query) — the reused session driving meerkat's
-/// command set into the DOM.
+/// An open palette renders its panel and one row per filtered palette item — every
+/// command plus the palette-exposed context actions (registry P2), at an empty query.
 #[test]
 fn palette_open_renders_rows() {
     let mut runner = runner("mere://welcome");
@@ -209,8 +231,8 @@ fn palette_open_renders_rows() {
     assert_eq!(count_class(&dom, root, "palette"), 1, "the panel");
     assert_eq!(
         count_class(&dom, root, "cmd-row"),
-        Command::ALL.len(),
-        "one row per command (chrome verbs + pane toggles + node/edge ops + Relate / Unrelate)",
+        Command::ALL.len() + crate::command::PALETTE_CONTEXT_ACTIONS.len(),
+        "one row per palette item (commands + the palette-exposed context actions)",
     );
 }
 
@@ -249,8 +271,9 @@ fn palette_filters_and_runs_command() {
 fn palette_step_wraps() {
     let mut runner = runner("mere://welcome");
     runner.update(Chrome::open_palette);
+    let count = runner.state().palette_items().len();
     runner.update(|c| c.step_palette(-1));
-    assert_eq!(runner.state().palette.selected_index, Some(Command::ALL.len() - 1), "up from none → last");
+    assert_eq!(runner.state().palette.selected_index, Some(count - 1), "up from none → last");
     runner.update(|c| c.step_palette(1));
     assert_eq!(runner.state().palette.selected_index, Some(0), "wrap to first");
 }

@@ -55,7 +55,7 @@ pub mod shell_eval;
 pub mod suggest;
 pub mod sync_indicator;
 
-use command::Command;
+use command::{Command, PaletteItem};
 use nav::History;
 pub use sync_indicator::SyncIndicator;
 
@@ -130,6 +130,12 @@ pub struct Chrome {
     /// A context-menu action a row captured, for the host to run over the menu's
     /// member set.
     pub pending_context: Option<ContextAction>,
+    /// A context action invoked from the **command palette** (not the menu), for the host
+    /// to apply to the *current selection*: the host seeds `context_set` from the live
+    /// selection, moves this into `pending_context`, and drains it. Separate from
+    /// `pending_context` because the menu path already seeds `context_set` itself, whereas
+    /// the palette path has no menu working set. (Command registry P2.)
+    pub pending_palette_action: Option<ContextAction>,
     /// The URL the content root currently shows. The host drives it: an omnibar
     /// submit sets the typed target (then `sync_orrery` navigates the focused node
     /// to it); a back/forward step sets the revealed page. Decoupled from
@@ -377,6 +383,7 @@ impl Chrome {
             settings: Settings::default(),
             context_menu: None,
             pending_context: None,
+            pending_palette_action: None,
             comms: CommsPane::new(),
             comms_draft: TextInput::new(""),
             comms_intent: None,
@@ -528,6 +535,13 @@ impl Chrome {
         command::filter(self.palette_input.text())
     }
 
+    /// The palette's unified items for the current query — commands plus the
+    /// palette-exposed context actions. The registry-driven list the palette renders,
+    /// steps, and runs (P2: "every action in the palette"). (Command registry P2.)
+    pub fn palette_items(&self) -> Vec<PaletteItem> {
+        command::palette_items(self.palette_input.text())
+    }
+
     /// Mirror the edited palette buffer into the reused session query and reset
     /// the selection (the filtered list just changed). Called after each edit.
     pub fn sync_palette_query(&mut self) {
@@ -536,20 +550,37 @@ impl Chrome {
     }
 
     /// Move the palette selection by `delta`, wrapping within the filtered
-    /// commands — the reused [`CommandPaletteSession::step_selection`] cursor.
+    /// items — the reused [`CommandPaletteSession::step_selection`] cursor.
     pub fn step_palette(&mut self, delta: isize) {
-        let count = self.palette_commands().len();
+        let count = self.palette_items().len();
         self.palette.step_selection(delta, count);
     }
 
-    /// Run the highlighted palette command (or the first, if none is
-    /// highlighted) and close. A no-op close when nothing matches.
+    /// Run the highlighted palette item (or the first, if none is highlighted) and
+    /// close. A no-op close when nothing matches.
     pub fn run_palette_selection(&mut self) {
-        let cmds = self.palette_commands();
+        let items = self.palette_items();
         let pick = self.palette.selected_index.unwrap_or(0);
-        if let Some(&cmd) = cmds.get(pick) {
-            self.run_command(cmd);
+        if let Some(&item) = items.get(pick) {
+            self.run_palette_item(item);
         }
+        self.close_palette();
+    }
+
+    /// Dispatch a palette item by kind: a command runs through `run_command`; a context
+    /// action is recorded for the host to apply to the current selection (the host seeds
+    /// `context_set` + drains it). (Command registry P2.)
+    fn run_palette_item(&mut self, item: PaletteItem) {
+        match item {
+            PaletteItem::Command(cmd) => self.run_command(cmd),
+            PaletteItem::Context(action) => self.pending_palette_action = Some(action),
+        }
+    }
+
+    /// Run a clicked palette item and close the palette (the click counterpart to
+    /// [`run_palette_selection`](Self::run_palette_selection)). (Command registry P2.)
+    pub fn run_palette_item_and_close(&mut self, item: PaletteItem) {
+        self.run_palette_item(item);
         self.close_palette();
     }
 

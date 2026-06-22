@@ -532,6 +532,97 @@ grows.
 
 ---
 
+## 11. P2 design — the component host actor (proposed 2026-06-22, pending §11.7)
+
+A read-only design pass (6-reader workflow) verified against armillary, the meerkat
+content actor, serval's scripted-DOM, `register-mod-loader`, and `kernel::permissions`.
+The probe's WIT + host logic transplant nearly 1:1; the only genuinely new code is the
+serval-backed imports, a lifecycle/quota wrapper, and the linker policy.
+
+### 11.1 Placement (decision, pending confirm)
+
+A new leaf crate `crates/script/document-host` (sibling to `crates/script/rhai`),
+consumed by `meerkat` via a thin `meerkat::script` wiring module (~80 LOC). **Extend
+`register-mod-loader` by *implementing* its `WasmModRuntime` DI trait, not by editing
+it** — that crate is deliberately runtime-free (the trait exists precisely so wasmtime
+stays host-side). Do not bury Wasmtime in meerkat (`content.rs` is ~455 LOC against the
+600 ceiling, and the capability boundary deserves headless testability). Module split,
+each < 600 LOC: `engine` / `host` / `imports/{inspect,apply,log}` / `instance` /
+`linker` / `runtime` (the mod-loader bridge) / `dom_view` (the only serval-coupled file).
+Deps one-way: `document-host` → {serval-scripted-dom, register-mod-loader, kernel,
+wasmtime}; `meerkat` → `document-host`.
+
+### 11.2 Shape on armillary
+
+Not a new actor: a `!Send` subsystem built inside the content actor's existing
+`spawn_on` run closure (`content.rs:176`), beside the serval registry + ResourceStore.
+The `Engine` is shared process-wide (`Arc<Engine>`, Send+Sync, passed in like the other
+build args); the `Store<ScriptHost>` + component instance are built on the thread, so the
+`!Send` state never crosses. Mailbox: new `ContentCommand::{AttachScript, DeliverEvent,
+DetachScript}` arms in the existing `recv` loop; results via a new `ContentUpdate` arm.
+Cancellation: epoch interruption (one shared watchdog tick + a per-turn deadline; works
+on sync calls, no async). Quotas: `StoreLimits` caps linear memory; batch size enforced
+host-side in `apply` → `refused` (no WIT change). Teardown: `deactivate` + drop the
+instance when the actor's channel closes (deterministic, no separate cleanup path).
+
+### 11.3 Wiring to the live ScriptedDom
+
+`inspect` → walk the live DOM, emit view-nodes with `id = NodeId.raw()` (literally the
+WIT `node-id`; `ReflectorData = u64`), a **shallow** content-hash (kind+attrs+text+
+child-count, not a Merkle subtree hash), `revision` = the host counter; `subtree` scopes
+the walk. `apply` → expected-revision check → atomic `is_live` precheck (`unknown-node`)
+→ quota check → ordered `LayoutDomMut` calls (`set_text`/`remove`/`insert_before`/
+`append_child`) → bump revision → drain mutations into serval-layout's incremental
+scheduler → re-render. **Revision counter lives host-side (`ScriptHost`), not in
+`ScriptedDom`** (serval has none today; keep it render-state-free) and MUST be bumped by
+*all* actor writers (script apply, Resource arrival, Retheme), or a stale batch won't
+conflict correctly. `log` → the actor's tracing span. Async `network`: a separate
+import-gated `fetch` interface, unlinked under Wasmtime 45, additive later — ships
+nothing now.
+
+### 11.4 Capability grants
+
+`kernel::permissions::resolve_permission` (five-scope narrowing) is the input; a
+profile→imports table in `document-host::linker` decides which imports get linked. Per
+import: Allow → `add_to_linker`; Deny → omit (unlinked, instantiation fails — the secure
+default the probe proves); Prompt → resolve before instantiation. Posture: unlinked-by-
+default for the trust boundary, an always-erroring stub only for manifest-declared
+*optional* imports. A tiny always-linked `caps.granted()` import gives the script
+discovery. `register-mod-loader`'s `ModManifest.capabilities` feeds profile selection.
+
+### 11.5 Build implications
+
+Wasmtime 45 → rustc ≥ 1.93; adopting `document-host` into the workspace forces a 1.93
+MSRV bump (meerkat pins 1.92). AOT preferred: compile trusted bundled components to
+`.cwasm` at build time, load via `Component::deserialize` with codegen disabled (keeps
+the Cranelift compile off the actor hot path); `.cwasm` is a per-target build artifact,
+never committed; JIT stays for untrusted. Size: share one `Engine` across origins
+(amortize the megabytes), per-origin `Store`+`Linker` (preserve the boundary). The
+shipped `document-core` guest should be `no_std` (only `log` + `document-host` imports,
+no WASI floor — the probe's std+WASI is a probe artifact).
+
+### 11.6 Phased build order
+
+P2.0 crate skeleton + transplant the probe host (still `Doc`-backed; the 8-turn driver
+passes as a crate test) → P2.1 swap `Doc` for `ScriptedDom` (`dom_view` + inspect/apply)
+→ P2.2 engine config (epoch + StoreLimits; trap a loop/mem-bomb) → P2.3 linker policy
+(profile table + permissions mapping + `caps.granted`) → P2.4 `WasmModRuntime` bridge →
+P2.5 actor wiring in meerkat (ContentCommand arms + `ScriptInstance` on `Content`) → P2.6
+AOT path. Each headless-testable; async `fetch` deferred (land the WIT stub, leave
+unlinked).
+
+### 11.7 Open decisions
+
+1. **MSRV** — bump workspace to 1.93 (rec) vs keep `document-host` standalone like the probe.
+2. **Denied-cap behavior** — unlinked default + opt-in stub for *optional* imports (rec) vs uniform.
+3. **Placement** — confirm new leaf crate + `meerkat::script` + extend mod-loader via its trait (rec).
+4. **Revision home** — host-side `ScriptHost` + all-writers-bump (rec) vs a field on `ScriptedDom`.
+5. **AOT trust scope** — P2 ships bundled first-party only, defer untrusted (rec) vs JIT/AOT-cache untrusted now.
+6. **Cancellation values** (epoch tick, deadline, mem cap, max batch) — fixed constants in P2 (rec) vs permission-scoped now.
+7. **Async re-entry shape** (shapes the WIT *now*) — per-turn-with-suspension (async store, WT46) vs network-as-separate-event (stays sync, more awkward script API).
+
+---
+
 ## Progress
 
 - **2026-06-21.** Plan created from a session synthesis. External standards
@@ -644,6 +735,17 @@ grows.
   does not advance the revision, with the prior transaction-contract behavior intact. The
   architecturally-interesting sync P1 work is now done; P1's remainder is a batch size
   limit and the async `network` seam (gated on Wasmtime 46). Mere-side uncommitted.
+- **2026-06-22 (P2 design pass — proposed, pending decisions).** Ran a read-only 6-reader
+  workflow over armillary, the meerkat content actor, serval's scripted-DOM,
+  `register-mod-loader`, and `kernel::permissions`; synthesized §11 (the component host
+  actor design). Headline: a new leaf crate `crates/script/document-host` consumed by
+  meerkat via a thin `meerkat::script` module, extending `register-mod-loader` through its
+  `WasmModRuntime` DI trait (not editing it); the host is a `!Send` subsystem inside the
+  per-origin content actor's `spawn_on` closure (not a new actor); imports wire to the live
+  `ScriptedDom` (`id = NodeId.raw()`, a host-side revision counter bumped by all writers,
+  shallow content-hash); grants link/omit imports via `kernel::permissions`; one shared
+  `Engine` + per-origin `Store`; AOT-preferred; MSRV bump to 1.93. The probe transplants
+  ~1:1. No code written; 7 open decisions in §11.7 await Mark before P2.0.
 
 ## Key grounding files
 

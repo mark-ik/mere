@@ -250,15 +250,115 @@ pub fn command_entries() -> Vec<CommandEntry> {
         .collect()
 }
 
+/// Whether `label` matches the palette `query` (case-insensitive, whitespace-trimmed
+/// substring; an empty query matches everything). The one match rule the palette uses
+/// for every registry entry — commands and context actions alike. (Command registry.)
+pub fn label_matches(label: &str, query: &str) -> bool {
+    let needle = query.trim().to_lowercase();
+    needle.is_empty() || label.to_lowercase().contains(&needle)
+}
+
 /// The commands whose label contains `query` (case-insensitive, whitespace
 /// trimmed). An empty query returns every command in [`Command::ALL`] order.
 pub fn filter(query: &str) -> Vec<Command> {
-    let needle = query.trim().to_lowercase();
     Command::ALL
         .iter()
         .copied()
-        .filter(|cmd| needle.is_empty() || cmd.label().to_lowercase().contains(&needle))
+        .filter(|cmd| label_matches(cmd.label(), query))
         .collect()
+}
+
+/// An item the command palette lists and runs: a global [`Command`], or a
+/// [`ContextAction`](crate::ContextAction) applied to the current selection. The palette
+/// is the unified registry surface (P2: "every action in the palette"), so both kinds
+/// appear; each dispatches through its own apply path (a command via `run_command`, a
+/// context action via the host's context drain over the live selection). (Command registry P2.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PaletteItem {
+    Command(Command),
+    Context(crate::ContextAction),
+}
+
+impl PaletteItem {
+    /// The row label, from the underlying command / context action. (Command registry P2.)
+    pub fn label(self) -> &'static str {
+        match self {
+            PaletteItem::Command(cmd) => cmd.label(),
+            PaletteItem::Context(action) => context_action_palette_label(action).unwrap_or(""),
+        }
+    }
+}
+
+/// The context actions exposed in the command palette, each with its palette label. An
+/// **opt-in list** (not an exhaustive match), so a new `ContextAction` is simply not in
+/// the palette until added here — no compile break for in-flight variants, and the
+/// selection-only gestures stay deliberate. Parameterized pickers (engine / representation /
+/// layout) and link/field-contextual actions are deferred (they get picker treatment / live
+/// on settings pages); `Relate` + `CloseGraphPane` are omitted as they already have palette
+/// `Command`s (`AssertEdge` / `CloseGraphPane`). Applicability filtering (gray-out without a
+/// selection) is P3; for now a selection-only action invoked with no selection no-ops through
+/// the existing context drain. (Command registry P2.)
+/// Each tuple is `(action, id, label)`: the **stable id** is the registry handle (the
+/// context-action analogue of a [`Command::verb`]), unique across the whole registry, by
+/// which an agent / script / a menu config names the action; the label is the palette row.
+pub const PALETTE_CONTEXT_ACTIONS: &[(crate::ContextAction, &str, &str)] = {
+    use crate::ContextAction::*;
+    &[
+        (AddNode, "add_node", "Add node"),
+        (AddTile, "add_tile", "Add tile"),
+        (AddField, "add_field", "Add field"),
+        (AddSession, "add_session", "Add graph session"),
+        (OpenSplits, "open_splits", "Open selection in splits"),
+        (Stack, "open_stack", "Open selection in a stack"),
+        (AddTag, "add_tag", "Add tag to selection"),
+        (ResizeNode, "resize_node", "Resize node (object card)"),
+        (ToggleSizeByDegree, "size_by_degree", "Toggle size by degree"),
+        (IsolateSelection, "isolate", "Isolate selection"),
+        (ShowAllNodes, "show_all", "Show all nodes"),
+        (MirrorTiles, "mirror_tiles", "Mirror open tiles"),
+    ]
+};
+
+/// The palette label for a context action, or `None` if it is not palette-exposed. (P2.)
+pub fn context_action_palette_label(action: crate::ContextAction) -> Option<&'static str> {
+    PALETTE_CONTEXT_ACTIONS
+        .iter()
+        .find(|(a, _, _)| *a == action)
+        .map(|(_, _, label)| *label)
+}
+
+/// The stable registry id for a palette-exposed context action, or `None`. The
+/// context-action half of the registry's id space (`Command::verb` is the command half),
+/// by which an agent / script / menu config addresses it. (Command registry P3.)
+pub fn context_action_id(action: crate::ContextAction) -> Option<&'static str> {
+    PALETTE_CONTEXT_ACTIONS
+        .iter()
+        .find(|(a, _, _)| *a == action)
+        .map(|(_, id, _)| *id)
+}
+
+/// Resolve a context action from its registry id — the reverse of [`context_action_id`],
+/// the context-action analogue of [`Command::from_id`]. Together they let any surface
+/// (agent, script, a11y, menu config) invoke any registry action by one id space. (P3.)
+pub fn context_action_from_id(id: &str) -> Option<crate::ContextAction> {
+    PALETTE_CONTEXT_ACTIONS
+        .iter()
+        .find(|(_, i, _)| *i == id)
+        .map(|(a, _, _)| *a)
+}
+
+/// The palette's unified item list for `query`: the matching commands (in `ALL` order)
+/// followed by the matching palette context actions. The single registry-driven source
+/// the palette renders, steps, and runs. (Command registry P2.)
+pub fn palette_items(query: &str) -> Vec<PaletteItem> {
+    let mut items: Vec<PaletteItem> =
+        filter(query).into_iter().map(PaletteItem::Command).collect();
+    for &(action, _id, label) in PALETTE_CONTEXT_ACTIONS {
+        if label_matches(label, query) {
+            items.push(PaletteItem::Context(action));
+        }
+    }
+    items
 }
 
 #[cfg(test)]
@@ -335,6 +435,53 @@ mod tests {
             // every catalog id resolves back to its command (the registry round-trip).
             assert_eq!(Command::from_id(entry.id), Some(cmd));
         }
+    }
+
+    #[test]
+    fn palette_items_unify_commands_and_context_actions() {
+        let all = palette_items("");
+        assert_eq!(
+            all.iter().filter(|i| matches!(i, PaletteItem::Command(_))).count(),
+            Command::ALL.len(),
+            "every command is a palette item",
+        );
+        assert_eq!(
+            all.iter().filter(|i| matches!(i, PaletteItem::Context(_))).count(),
+            PALETTE_CONTEXT_ACTIONS.len(),
+            "every palette-exposed context action is a palette item",
+        );
+        // A query filters context-action labels too, and every returned item matches it.
+        let isolate = palette_items("isolate");
+        assert!(
+            isolate
+                .iter()
+                .any(|i| matches!(i, PaletteItem::Context(crate::ContextAction::IsolateSelection))),
+            "the Isolate context action filters in",
+        );
+        assert!(isolate.iter().all(|i| label_matches(i.label(), "isolate")));
+        // The catalog round-trips a palette-exposed action and excludes a deferred one.
+        assert_eq!(
+            context_action_palette_label(crate::ContextAction::ShowAllNodes),
+            Some("Show all nodes"),
+        );
+        assert_eq!(context_action_palette_label(crate::ContextAction::CloseGraphPane), None);
+    }
+
+    #[test]
+    fn registry_ids_are_unique_across_commands_and_context_actions() {
+        // The registry is one id space: every command verb and every context-action id is
+        // unique, and each context-action id round-trips. This is what lets an agent / script /
+        // menu config name any action by one id namespace. (Command registry P3.)
+        let mut seen = std::collections::HashSet::new();
+        for cmd in Command::ALL {
+            assert!(seen.insert(cmd.verb()), "duplicate registry id: {}", cmd.verb());
+        }
+        for &(action, id, _) in PALETTE_CONTEXT_ACTIONS {
+            assert!(seen.insert(id), "context-action id collides with the registry: {id}");
+            assert_eq!(context_action_from_id(id), Some(action), "{id} must round-trip");
+            assert_eq!(context_action_id(action), Some(id));
+        }
+        assert_eq!(context_action_from_id("not_an_action"), None);
     }
 
     #[test]

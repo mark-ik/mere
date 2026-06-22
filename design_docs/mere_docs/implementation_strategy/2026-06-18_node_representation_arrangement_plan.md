@@ -693,3 +693,34 @@ it is the default of a setting, not a baked constant.
   via the new load path. (A clean screenshot of the reloaded size was blocked by a harness window-maximize
   DPI quirk, not the feature — the saved file + clean reload + the round-trip test establish the cycle.)
   **P0 now has one item left: the interactive resize handle (1).**
+- 2026-06-22: **P0 + P1 effectively complete (via the object card); the frontier + next steps scoped.**
+  Status reconciliation after the object-card work (see
+  [object_card_plan](2026-06-21_object_card_plan.md)):
+  - **P0 done.** The last open item, the interactive resize handle, was **superseded** by Mark's
+    iOS-style call: a per-node size is set by stepping discrete tiers in the object card's size widget
+    (`SIZE_TIERS`, `−  ●●●○○  +`), not a drag handle. That widget plus the landed collider / edge-trim /
+    size-persistence / hover / selection-lift close P0. Residual cosmetic: anchor the object card clear
+    of the node face (tracked in the object-card plan, not here).
+  - **P1 done.** Per-node `Representation` (Tile / Shape) is implemented and now **user-reachable** via
+    the object card's Form widget (`set_node_representation`), beside the context-menu picker; a node's
+    form is a per-node property defaulted by content-type. `TexturedBody` / `Scripted` stay for P2.
+  - **The frontier is P2 (the sprite/texture representation) and P3 (arrangement).** The representation
+    half is well-advanced (size, shape, tile); the arrangement half is barely wired (adapters written,
+    mostly undispatched). Ranked next slices:
+    1. **Decision 7 — wire one dormant arrangement (kanban by content-type).** Lowest effort, opens a new
+       dimension: derive a graph-categorical axis (content-type / classification per node), plumb it
+       host → platen as `ViewIntent::axis_values`, dispatch the written `kanban` adapter into the pickable
+       set. (timeline-by-timestamp is the same shape; `semantic_edge_weight` / `semantic_embedding` stay
+       gated on their unplumbed affinity / embedding signals.) Advances the less-developed half by exposing
+       already-built code.
+    2. **P2-static — a per-node custom image face (`Representation::Sprite`).** The node-editor probe's
+       first slice ([node_editor_customization_probe](../research/2026-06-21_node_editor_customization_probe.md)):
+       a node face textured from an imported bitmap (the `image` crate on-ramp → a PNG data-URI `<img>`,
+       the favicon/snapshot path), picked/imported via an object-card "Face" widget. The collider stays the
+       sized ball; the sprite-alpha hull collider (probe step 2) defers. The "alive graph" thesis made
+       concrete.
+    3. **P3 — scene-wide arrangement persistence.** The per-scene arrangement choice persists + re-applies
+       on reopen (joins the view-intent / cartography sidecar, like size persistence), so a graph re-opens
+       in its arrangement. Low-moderate once an arrangement is pickable (slice 1).
+  Recommendation: **slice 1 (kanban) first** — lowest effort, highest leverage (arrangement is the gap),
+  and it sets up slice 3. Slice 2 (sprite) is the visual continuation when focus returns to representation.

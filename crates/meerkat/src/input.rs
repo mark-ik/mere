@@ -56,6 +56,15 @@ fn member_at_path(
     }
 }
 
+/// Parse a `<i>:<count>` slider cell into the fraction `i/count` — the position a
+/// click on cell `i` of a `count`-cell track maps to. `None` on a malformed key.
+fn slider_cell_fraction(s: &str) -> Option<f64> {
+    let (i, count) = s.split_once(':')?;
+    let i: f64 = i.parse().ok()?;
+    let count: f64 = count.parse().ok()?;
+    (count > 0.0).then_some(i / count)
+}
+
 impl WindowCtx<'_> {
     /// Route a mouse button press/release by region. A left press in the chrome
     /// band (toolbar + any open dropdown) hit-tests + dispatches the chrome; any
@@ -713,6 +722,7 @@ impl WindowCtx<'_> {
         self.drain_pending_connect();
         self.drain_pending_command();
         self.drain_comms_intent();
+        self.drain_palette_context_action();
         self.drain_pending_context();
         self.drain_history_step();
         self.drain_physics_toggle();
@@ -905,7 +915,36 @@ impl WindowCtx<'_> {
             k if k.starts_with("theme:seed:") => {
                 self.adjust_seed_from_key(&k["theme:seed:".len()..]);
             }
+            // Document typography (the `pelt/reading` page): text size / line
+            // spacing sliders, link-arrows toggle, font choice, reset.
+            k if k.starts_with("doc:") => {
+                self.apply_doc_style_key(&k["doc:".len()..]);
+            }
             _ => self.set_theme(key),
+        }
+    }
+
+    /// Route a `doc:*` typography key from the `pelt/reading` page: `size` /
+    /// `linespacing` carry a `<i>:<count>` slider cell (fraction `i/count`);
+    /// `bodyfont` / `monofont` carry a family name; `arrows` / `reset` are bare.
+    fn apply_doc_style_key(&mut self, rest: &str) {
+        let (head, tail) = rest.split_once(':').unwrap_or((rest, ""));
+        match head {
+            "size" => {
+                if let Some(f) = slider_cell_fraction(tail) {
+                    self.set_doc_text_size(f);
+                }
+            }
+            "linespacing" => {
+                if let Some(f) = slider_cell_fraction(tail) {
+                    self.set_doc_line_spacing(f);
+                }
+            }
+            "arrows" => self.toggle_doc_link_arrows(),
+            "bodyfont" => self.set_doc_body_font(tail),
+            "monofont" => self.set_doc_mono_font(tail),
+            "reset" => self.reset_doc_style(),
+            _ => {}
         }
     }
 
@@ -1614,6 +1653,11 @@ impl WindowCtx<'_> {
                 self.drain_pending_connect();
                 self.drain_pending_command();
                 self.drain_comms_intent();
+                // A palette-invoked context action applies to the live selection (registry P2):
+                // seed `context_set` from it, then drain the context action — the same pair
+                // `drain_chrome_intents` runs for the click path.
+                self.drain_palette_context_action();
+                self.drain_pending_context();
                 self.drain_history_step();
                 self.drain_physics_toggle();
                 self.sync_orrery();

@@ -1,9 +1,13 @@
 # Command registry → palette + persona-configurable context menu
 
 **Date**: 2026-06-21
-**Status**: Planning. Captures Mark's direction from the settings-lane P2b menu-de-dup decision
-(2026-06-21): *full de-dup of the context menu, but every action becomes a command in the palette,
-and the context menu is a user-curated subset of commands persisted as persona profile config.*
+**Status**: In progress. P1 (registry foundation: `from_id` + the `command_entries` catalog) +
+P2 first pass (every action in the palette: `PaletteItem` + the `PALETTE_CONTEXT_ACTIONS` catalog,
+the palette unified + headed-verified) landed 2026-06-21. Next: P2-rest (parameterized 1-of-N
+pickers), then P3 (agent/a11y/diagnostics one-seam), P4 (configurable menu), P5 (persona persist).
+Captures Mark's direction from the settings-lane P2b menu-de-dup decision: *full de-dup of the
+context menu, but every action becomes a command in the palette, and the context menu is a
+user-curated subset of commands persisted as persona profile config.*
 **Code**: `crates/meerkat/` (`command.rs` = `Command`; `lib.rs` = `ContextAction`; the palette in
 `views.rs` + `lib.rs`; the context menu in `menus.rs`; drains in `command_drain.rs` + `menus.rs`),
 `crates/persona/identity` (`PersonaId`), the persona settings location.
@@ -40,9 +44,12 @@ VS Code command-palette model. Every action *and every setting* is listed there 
 so one source of truth feeds the palette, the context menu, keybindings, **and** the scripting /
 automation layer. Making the UI customizable (the context-menu case) and making scripting powerful +
 consistent are the *same* work: expose every command + setting as an addressable, listable entry,
-and the UI surfaces and the scripts both just consume that list. (The scripting consumer is
-engine-agnostic; the current scripting map is JS / Nova-Boa, not Rhai — see the browser/PWA scripting
-note. The registry must not bake in a specific engine.)
+and the UI surfaces and the scripts both just consume that list. (Engine note, code-verified: the
+live automation lane is the **rhai** omnibar `>`-shell — `shell_eval.rs` / `script_rhai` — and it
+**already registers one binding per `Command` verb** from `Command::ALL`, so the seam is partly
+realized today. Separately, web-content scripting is the JS / Nova-Boa lane. The registry stays
+engine-agnostic — it must not bake in a specific engine — but "rhai" is correct for the omnibar
+automation lane, which is the existing proof-of-concept consumer of the catalog.)
 
 One **command registry**: every user action — and every setting — is a registry entry with
 
@@ -128,7 +135,17 @@ The leverage is the reason to pay the registry's up-front cost rather than the t
   representation pickers, isolate / show-all, relate, tags) palette-invokable registry commands.
   Parameterized actions (layout strategy, engine pick, representation) become either a small set of
   concrete commands or a command that opens a picker — decide per action. Done when there is no
-  action reachable only from the context menu.
+  action reachable only from the context menu. **Status: first pass done + headed-verified
+  (2026-06-21).** Added `PaletteItem { Command | Context }` + the opt-in `PALETTE_CONTEXT_ACTIONS`
+  catalog (`command.rs`); the palette lists/steps/runs the unified list (`palette_items`), and a
+  palette-invoked context action records `pending_palette_action`, which the host drains by seeding
+  `context_set` from the live selection then running the existing context drain (the same applier the
+  menu + agent harness use). Verified live: the gestures/toggles (Add node/tile/field/session, Isolate,
+  Show all, Size-by-degree, Mirror, Add tag, Open in splits/stack, Resize) show + filter in the
+  palette, and "Add node" minted a node. **Deferred to P2-rest:** the parameterized 1-of-N pickers
+  (layout / engine pick / representation) — they need the picker-opening invoke (decision: 1-of-N
+  opens a chooser), and engine/representation are also heading to the `node:` facets provider; plus
+  applicability filtering (gray-out without a selection), which is P3.
 - **P3 — One seam: route the agent harness + a11y + diagnostics through the registry.** Fold
   `AgentAction` into "invoke command id (+ arg)" (generalizing the existing `InvokeCommand`), so
   automation + agents drive the same seam (Mark, 2026-06-21: "we would want automation and agents to
@@ -136,6 +153,16 @@ The leverage is the reason to pay the registry's up-front cost rather than the t
   (replacing the ad-hoc `action_routes`). Emit a ux-event `(surface, command id, arg)` on every
   invoke. Add a completeness probe: every menu entry + every a11y action resolves to a registry id.
   Done when palette / menu / agent / a11y / script all invoke by id and diagnostics audits by id.
+  **Status: agent-by-id seam done (2026-06-21).** Context actions now have stable registry ids
+  (`PALETTE_CONTEXT_ACTIONS` carries `(action, id, label)`; `context_action_id` / `context_action_from_id`,
+  unique across the whole id space — proven by a test), so the registry is one id namespace
+  (command verbs + context ids). `AgentAction::Invoke(String)` resolves a command id (`Command::from_id`)
+  or a context-action id (`context_action_from_id`) and applies it (a command via the command path, a
+  context action seeded against the live selection), so an agent reaches *every* registry action by the
+  same ids the palette uses. **Remaining for P3:** a11y default-actions → command id (the chrome
+  buttons already route clicks via DOM, so this is mainly the orrery/pane a11y `action_routes`); the
+  diagnostics audit-on-invoke (a ux-event at the host apply points; the agent harness already emits one);
+  and the completeness probe.
 - **P4 — Configurable context menu.** Render the menu from a config (an ordered list of command ids)
   filtered by applicability for the current selection, instead of the hardcoded `menus.rs`
   builders. Ship a default config equal to today's menu minus the de-dup'd scene toggles. Edit
@@ -160,6 +187,48 @@ The leverage is the reason to pay the registry's up-front cost rather than the t
 3. ~~Menu-config UI.~~ **Resolved (Mark, 2026-06-21): `pelt/menu` settings page (checkbox list) for
    the first pass.** A future inline editor (a command-palette-fueled mini search bar to add/remove)
    is wanted too, likely in addition to the page — folded into P4.
+
+## Progress (P3 — one seam)
+
+- 2026-06-21: **Agent-by-id seam landed.** Gave context actions stable registry ids
+  (`PALETTE_CONTEXT_ACTIONS` → `(action, id, label)`; `context_action_id` /
+  `context_action_from_id`), so commands (`verb`) + context actions share one id space, proven
+  unique + round-tripping by `registry_ids_are_unique_across_commands_and_context_actions`. Added
+  `AgentAction::Invoke(String)` → `agent_invoke(id)`: a command id routes through the command path,
+  a context-action id is applied against the live selection (the agent counterpart of the palette
+  context path — seed `context_set`, `pick_context`, drain). Test
+  `agent_invoke_by_id_runs_commands_and_context_actions`: `Invoke("workbench")` runs, `Invoke("add_node")`
+  mints a node purely by id, an unknown id is reported-not-applied. meerkat green (lib 69, bin 101).
+  This is the "automation + agents use the same seam" win: an agent now reaches every registry action
+  by the same ids the palette uses. a11y route-by-id + the diagnostics audit + the completeness probe
+  remain for P3.
+
+## Progress (P2 — every action in the palette)
+
+- 2026-06-21: **P2 first pass landed + headed-verified.** The command palette is now the unified
+  registry surface for commands **and** context actions. Pieces:
+  - `command.rs`: `PaletteItem { Command(Command) | Context(ContextAction) }` + `label()`; the opt-in
+    `PALETTE_CONTEXT_ACTIONS` catalog (`(ContextAction, label)` pairs — an opt-in list, not an
+    exhaustive match, so a new variant Mark adds never breaks the build) + `context_action_palette_label`;
+    `palette_items(query)` (matching commands, then matching palette context actions); `label_matches`
+    extracted as the one shared match rule.
+  - `lib.rs`: `Chrome::palette_items`, `pending_palette_action`, `run_palette_item` (dispatch by kind:
+    command → `run_command`; context → record `pending_palette_action`), `run_palette_item_and_close`;
+    `step_palette`/`run_palette_selection` now over `palette_items`. `views.rs`: the palette renders +
+    dispatches the unified items.
+  - `menus.rs`: `drain_palette_context_action` seeds `context_set` from the live selection + moves the
+    action into `pending_context`; `input.rs`: it runs right before `drain_pending_context` in both the
+    click path (`drain_chrome_intents`) and the **keyboard Enter** path (`on_palette_key`).
+  - **Bug found by headed verify + fixed:** the palette's Enter handler drains a *manual subset*, not
+    `drain_chrome_intents`, so the first run minted nothing (the palette context action's
+    `pending_palette_action` never drained on the keyboard path). Added the two context drains to
+    `on_palette_key`; re-verified that "Add node" via the palette mints a node. (Unit tests covered the
+    palette→`pending_palette_action` step and the catalog, but not the keyboard drain wiring — the live
+    run caught it.)
+  - Tests: `palette_items_unify_commands_and_context_actions` (command.rs) +
+    `palette_runs_a_context_action_into_the_pending_slot` (tests.rs); updated the two count-based palette
+    tests for the unified list. meerkat green (lib 68, bin 100). Coexists cleanly with Mark's concurrent
+    seed-palette theme editor + Reading settings page (both live in the same verified build).
 
 ## Progress
 
@@ -192,3 +261,19 @@ The leverage is the reason to pay the registry's up-front cost rather than the t
   palette + the agent harness explicitly through `from_id`/the catalog and add a host-side
   `invoke(id, arg)`, then fold `ContextAction` into the catalog (P2) — those touch `lib.rs` /
   `views.rs` / `menus.rs`, so they wait until the object-card edits there settle (or his go-ahead).
+- 2026-06-21: **Code audit of the existing consumers — the Command-side seam is more realized than
+  assumed, and a plan correction.** (1) The omnibar `>`-shell (`shell_eval.rs`) is the live **rhai**
+  automation lane (`script_rhai`), and it **already registers one binding per `Command` verb** from
+  `Command::ALL` (shell_eval.rs:127-132) — so the live automation lane already consumes the catalog;
+  "scripting uses the same seam" is already true here. Corrected the plan/DOC_README, which had wrongly
+  said "Rhai dropped" for this lane (rhai is the omnibar/knot lane; JS/Nova-Boa is the separate
+  web-content lane; the registry stays engine-agnostic). (2) The agent harness already records a
+  diagnostic per action (`apply_agent_action` → `record_diagnostic("meerkat.agent.action_applied")`)
+  — the audit-by-invoke piece is partly present. **Conclusion:** the **Command-side** registry is
+  effectively complete (catalog `command_entries` + `from_id` + the palette via `Command::ALL` + the
+  omnibar rhai verbs + the agent harness + per-action diagnostics). The remaining phases all act on
+  the *other* surfaces and Mark's live files: P2 (`ContextAction` → catalog, with the toggles-flat /
+  1-of-N-picker treatment, in `lib.rs`/`menus.rs`/the palette), P3 (a11y route-by-id + completeness
+  probe), P4 (configurable menu), P5 (persona persist). P2 is a real multi-step build (entries +
+  picker invoke + palette listing + applies), best taken as a focused run, not a marathon-tail
+  half-build; queued for when the object-card edits settle or on Mark's go.

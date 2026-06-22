@@ -212,18 +212,18 @@ fn palette_overlay(c: &Chrome) -> ChromeView {
     let input = lens(make, to_input);
 
     let rows: Vec<ChromeView> = c
-        .palette_commands()
+        .palette_items()
         .into_iter()
         .enumerate()
-        .map(|(i, cmd)| {
+        .map(|(i, item)| {
             let class = if c.palette.selected_index == Some(i) {
                 "cmd-row-active"
             } else {
                 "cmd-row"
             };
             let row = on_click(
-                el::<_, Chrome, ()>("div", cmd.label()).attr("class", class),
-                move |c: &mut Chrome, _: PointerClick| c.run_command_and_close(cmd),
+                el::<_, Chrome, ()>("div", item.label()).attr("class", class),
+                move |c: &mut Chrome, _: PointerClick| c.run_palette_item_and_close(item),
             );
             Box::new(row) as ChromeView
         })
