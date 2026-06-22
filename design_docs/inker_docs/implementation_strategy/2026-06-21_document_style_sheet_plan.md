@@ -1,6 +1,14 @@
 # Document Style Sheet Plan
 
-**Status:** planning 2026-06-21. Codebase-grounded against
+**Status:** **P0–P4 complete 2026-06-22.** The engine half (per-role sheet,
+glyph-level colour, link adornment, per-role wrap, live theme sourcing) is built,
+tested, and headed-verified. **P5 (customization surface) is reframed:** its
+colour/theme half shipped as the
+[seed_palette_theme_system_plan](../../mere_docs/implementation_strategy/2026-06-22_seed_palette_theme_system_plan.md)
+(T0–T5 + harmony, complete); its remaining unique part — a **document-typography**
+surface (font-per-role pickers, size/scale, line-height, link-adornment toggle,
+optional per-engine override) — is the lone open item, spun out as a follow-on
+(see Progress, no consumer pressure yet). Codebase-grounded against
 `crates/inker/document-canvas/` as it stands today.
 **Scope:** promote `document-canvas`'s flat `StyleConfig` into a per-role
 **`DocumentStyleSheet`** so every document-engine output (smolweb, markdown,
@@ -222,15 +230,73 @@ per-moot) in this plan even while the first cut is narrow.
   document-canvas 39 (default) / 42 (netrender), platen 75, meerkat
   `cargo check` clean. Byte-identical confirmed by the unchanged layout/paint
   geometry assertions still passing.
-- **P2 — color emission.** Grow `GlyphRun.color` + the brush color; wire
-  `ColorToken` → run color; land link color + the `⇒`/`⇗` adornment. Closes
-  §2.2(2).
-- **P3 — theme sourcing.** `ThemeResolver` from `register-theme`; documents
-  re-theme with the shell. Closes §2.2(3).
-- **P4 — per-role wrap + spacing.** `WrapPolicy::NoWrap` for `Code`/`Preformatted`
-  (renderer h-scrolls); per-role spacing/indent honored.
-- **P5 — customization surface.** Serde the sheet; settings-lane `pelt`
-  appearance page; optional per-engine override map.
+- **P2 — color emission. (color half done 2026-06-22; adornment remaining.)**
+  `GlyphRun` now carries `color`; `TextBaseStyle` carries the role base color;
+  `layout_text_block` computes per-run color by brush role (link → `LinkText`,
+  inline code → `CodeText`, else base) using parley's existing brush-boundary
+  run segmentation; `paint_list` lowers `run.color` instead of a flat
+  `body_text`. Closes §2.2(2). **Meerkat correctness:** text color now comes
+  from the sheet, so meerkat builds `card_sheet()` (= built-in typography +
+  `card_vocabulary()`); this lights up the per-role heading/link/code/badge
+  colors Mark already defined but that were dead (paint_list only read
+  `body_text` before) — a visible improvement (links go white → blue on the
+  dark card), bulk body text unchanged. **P2b done 2026-06-22:** the `⇒`/`⇗`
+  link adornment landed as a `LinkAdornment` sheet option (default
+  `SchemeArrow`, matching the Geopard reference; configurable to `None`). `⇒`
+  (U+21D2, plus a space) prefixes in-protocol / relative links, `⇗` (U+21D7)
+  links that leave the document's protocol; classification derives the base
+  scheme from the
+  document's own address, so it is host-agnostic. The prefix is injected during
+  inline flattening, styled + byte-ranged as part of the link (link-colored,
+  inside the hit region). Only the document lane is affected (HTML keeps its CSS).
+- **P3 — theme sourcing. (done 2026-06-22.)** Documents re-theme with the shell.
+  Closes §2.2(3). **Approach (code-verified):** document-canvas stays
+  theme-agnostic (it already takes a resolved `ColorVocabulary` via the sheet —
+  P1/P2). The host owns the mapping. Crucial finding: document text color is
+  **baked into the packet inside the content actor** (`content.rs`, which has no
+  theme), and the card **background** (`CARD_BG`) is cleared in `render.rs` (which
+  does) — and the two are coupled (theme the bg without the text and light-theme
+  text goes invisible). So P3 spans ~6 files:
+  1. `main.rs`: `document_palette(tokens) -> ColorVocabulary` +
+     `card_background(tokens) -> wgpu::Color` from `ThemeTokenSet` (mirrors
+     `orrery_palette`); map `chrome.body_text`→body, `chrome.strong_text`→heading,
+     `theme_data.accent_rgb`→link, `chrome.muted_text`→badge/placeholder/rule,
+     `chrome.surface_bg`→card bg. **Open: code_text** has no dedicated token —
+     default to `chrome.body_text` (monospace font carries the distinction).
+     Store both on `shared.presentation`; set at startup + on theme change.
+  2. `content.rs`: `Content` gains `palette: ColorVocabulary`; `Show` carries it;
+     new `Retheme { palette }` updates + re-renders (live theme switch).
+  3. `card.rs`: `card_sheet` / `render_content` / `render_content_scene` /
+     `recovering_card_scene` / `lower_window` take the palette; retire the
+     hardcoded `card_vocabulary()`.
+  4. `render.rs`: rasterize `Clear` uses the themed card bg; `lower_window` passes
+     the palette.
+  5. `frame_ops.rs`: theme change recomputes the palette + bg and broadcasts
+     `Retheme` to content actors.
+  6. command-dispatch site: `Show` stamps the current palette.
+- **P4 — per-role wrap. (done 2026-06-22.)** Threaded `WrapPolicy` from the
+  resolved role through `TextBaseStyle` into `layout_text_block`: `NoWrap` calls
+  `break_all_lines(None)` so the block lays out on its natural width and
+  overflows (for the host to scroll); `Wrap` constrains to the content width.
+  Default sheet stays `Wrap` for every role (no behavior change; `NoWrap` becomes
+  usable when the host adds horizontal scroll for document cards). Per-role
+  spacing was already honored (P1). Test: `nowrap_role_overflows_instead_of_wrapping`
+  (dc 47 / 50 netrender). Per-role *indent* (vs the single `indent_per_level`
+  global) deferred — no consumer yet.
+- **P5 — customization surface. (reframed; colour half shipped, typography half
+  spun out 2026-06-22.)** The sheet is already `Serialize`/`Deserialize` (P0). The
+  **colour/theme** half — sourcing document colours from a user-editable,
+  mod-authorable palette — shipped in full as the
+  [seed_palette_theme_system_plan](../../mere_docs/implementation_strategy/2026-06-22_seed_palette_theme_system_plan.md)
+  (seeds → `ThemeTokenSet`, user themes, theme files, the `pelt` appearance
+  editor with sliders + accent harmony); documents consume it via the P3
+  `document_palette` seam unchanged, so "customizable like Geopard" is met for
+  colour. The **typography** half remains: a `pelt` section exposing
+  per-role font / size-scale / line-height pickers, the link-adornment toggle,
+  and an optional per-engine override map, backed by a persisted
+  `DocumentStyleSheet` (today meerkat uses a fixed `card_sheet()`). No consumer
+  pressure yet; spun out as a focused follow-on rather than built at the tail of
+  this plan. Track here until it gets its own plan.
 
 ---
 
@@ -309,3 +375,96 @@ per-moot) in this plan even while the first cut is narrow.
   meerkat binary could not be relinked during validation (the running app holds
   a lock on `meerkat.exe`); `cargo check` is the clean substitute and the
   compile is proven.
+- **2026-06-22 (P2 — color half, green).** Threaded per-run color end to end.
+  `GlyphRun.color` + `TextBaseStyle.color` added; `text_base_from` carries the
+  resolved role color; `layout_text_block` gained `link_color` / `code_color`
+  params and picks per run from the brush (`brush.link` → link, else
+  `brush.monospace` → code, else `base.color`) — parley already splits runs at
+  brush boundaries, so a link / inline-code span is its own colored run with no
+  extra geometry work; `render_flattened_with_spacing` sources the two inline
+  colors via the now-public `DocumentStyleSheet::token_color`. `paint_list`'s
+  `DrawText` lowers `run.color`. Two tests added: `glyph_runs_carry_per_role_colors`
+  (layout — heading/body/link/code runs carry their token colors) and
+  `draw_text_carries_per_run_role_color` (paint_list — the lowering preserves
+  it and the roles differ). **Meerkat:** added `card_sheet()` (built-in
+  typography + `card_vocabulary()`); the three `layout_document` sites
+  (`layout_document_content` live, `render_card_scene` + `recovering_card_scene`
+  test/decoration) use it; the per-band `lower_window` inherits the baked colors
+  automatically and still passes `card_vocabulary()` for rule/image. Net
+  behavior change to verify visually: card links/code/badges/headings now paint
+  their distinct card-palette colors instead of all body_text (links white →
+  blue); bulk body text unchanged. All green: document-canvas 41 / 44
+  (netrender), platen 75, meerkat `cargo check` clean.
+- **2026-06-22 (P2 — headed verify).** Built + drove meerkat (scry-shots
+  harness, `drive-stylep2.ps1`); captured the `mere://welcome` document-lane
+  card (`stylep2-11-recent.png`). Confirms: (1) no regression — card text is
+  light-on-dark and readable, so sourcing text color from the sheet did not
+  flip it to invisible black (the main risk of routing color through
+  `card_sheet`); (2) per-role color is live — the "Mere" heading renders
+  brighter (`heading_text`) than the grey body (`body_text`), where pre-P2 both
+  were the same `body_text` grey. HTML-lane cards (iana / example.com) render
+  via their own CSS, unaffected. The welcome card carries no links, so the
+  white→blue link color is not in the shot; it is covered by the
+  `glyph_runs_carry_per_role_colors` unit test.
+- **2026-06-22 (P2b — link adornment, green).** Added the `LinkAdornment` sheet
+  option (`None` | `SchemeArrow`; default `SchemeArrow`) +
+  `DocumentStyleSheet.link_adornment`, re-exported from the crate root.
+  `prefix_for(url, base_scheme)` returns the in-protocol (U+21D2) or external
+  (U+21D7) arrow + space; `url_scheme` + `link_is_external` classify against the
+  document's base scheme. `flatten_inline` / `flatten_into` gained `adornment` +
+  `base_scheme` params; the prefix is pushed into the flattened text with the
+  link's `InlineStyle` and included in the link byte range, so it inherits link
+  color + the hit region. `layout_document` derives the base scheme from
+  `document.address`; `DocumentLayouter` carries it. Five flatten tests added
+  (`text.rs`): none / in-protocol / external / relative + prefix-carries-link-style.
+  All green: document-canvas 46 / 49 (netrender), platen 75, meerkat
+  `cargo check` clean. Visual check deferred: arrows show on document-lane
+  links, but a link-bearing document card was finicky to reach in the headed run
+  (welcome has none; reachable cards were the HTML lane); covered by the flatten
+  unit tests. **P2 complete.**
+- **2026-06-22 (P3 — theme sourcing, full incl. live retheme, green).** Wired
+  the document palette + card background to the active theme across 6 files.
+  `main.rs`: `document_palette(tokens)` (chrome `body`/`strong`/`muted` + accent
+  → the `ColorVocabulary`; code = body, monospace carries it) + `vocab_color` +
+  `chrome_to_wgpu`; `Presentation.document_palette` set at startup. `ColorVocabulary`
+  gained `Copy` so it threads by value. `content.rs`: `Content.palette`, `Show`
+  carries it, new `Retheme { palette, viewport_gen }` re-bakes live. `card.rs`:
+  `card_sheet` / `render_content` / `render_content_scene` / `recovering_card_scene`
+  / `lower_window` take the palette; `card_vocabulary()` kept only as the test
+  default. `constellation.rs`: `drive` stamps the palette on `Show`; new
+  `retheme(palette)` broadcasts to active actors with a bumped viewport gen (so
+  the re-baked packet clears the generation gate → `scene_version` bumps →
+  re-rasterize). `render.rs`: card-clear uses `chrome_to_wgpu(surface_bg)`;
+  `lower_window` / `render_content_scene` / `recovering_card_scene` / `drive`
+  pass the palette. `frame_ops.rs::set_theme`: recompute palette + broadcast
+  `retheme`. **Gap found + fixed via the headed run:** the apparatus pane showed
+  *Active actors: 0* — the focus-card **snapshots** (cached data-URIs) have no
+  live actor to re-bake, so `set_theme` now also clears `snapshot_data_uris`
+  (they rebuild themed on next focus). All green: document-canvas 46 / 49
+  (netrender), platen 75, meerkat 164 (incl. the theme-switch agent-harness
+  test). Headed verify: the `mere://welcome` card renders correctly with the
+  theme-derived palette at startup (`p3-01-welcome-dark.png`), no regression.
+  Not visually captured: the live dark→light flip on switch — the theme switcher
+  lives in the pelt settings lane (a dedicated tile arm, not a URL-nav focus
+  card) and was impractical to drive blind; the live-retheme chain is covered by
+  the `retheme` broadcast + `Retheme` handler + version-bump logic + the snapshot
+  clear. **P3 complete; document style sheet P0–P3 done.**
+- **2026-06-22 (P4 — per-role wrap, green).** `WrapPolicy` now threads through
+  `TextBaseStyle` into `layout_text_block` (`NoWrap` → `break_all_lines(None)`,
+  natural width + overflow; `Wrap` constrains to content width). Default stays
+  `Wrap` everywhere (no behavior change). Test added; dc 47 / 50 (netrender).
+  **P4 complete.** P5 reframed by Mark into a bigger initiative: a
+  primary/secondary/tertiary **seed-palette** extensible theme system
+  (Woodshed/Zed-grade, mod-authorable) — spun to its own plan since it spans
+  `register-theme` (chrome + orrery + documents), not just the document sheet.
+  The document sheet consumes its output via the P3 `document_palette` seam
+  unchanged.
+- **2026-06-22 (plan closeout).** P0–P4 done, tested, and headed-verified; the
+  engine is complete. P5 reframed: the colour/theme customization shipped in full
+  as the seed-palette plan (T0–T5 + accent harmony + the `pelt` appearance editor
+  + the readable-on-accent pass), which documents already consume via
+  `document_palette`. The one genuine remainder is the **document-typography**
+  customization surface (per-role font / size / line-height pickers, link-
+  adornment toggle, per-engine override over a persisted `DocumentStyleSheet`);
+  it has no consumer pressure and is spun out as a follow-on (own plan when
+  pursued), not built here. **This plan is complete for its engine scope.**
