@@ -36,6 +36,9 @@ pub struct TextBaseStyle {
     pub italic: bool,
     pub monospace: bool,
     pub line_height_ratio: f32,
+    /// Premultiplied RGBA (0..=1) for the block's text. Inline links + code
+    /// override it per-run inside [`layout_text_block`].
+    pub color: [f32; 4],
 }
 
 impl Default for TextBaseStyle {
@@ -47,6 +50,7 @@ impl Default for TextBaseStyle {
             italic: false,
             monospace: false,
             line_height_ratio: 1.4,
+            color: [0.0, 0.0, 0.0, 1.0],
         }
     }
 }
@@ -164,6 +168,8 @@ pub fn layout_text_block(
     env: &mut LayoutEnvironment,
     flattened: &Flattened,
     base: &TextBaseStyle,
+    link_color: [f32; 4],
+    code_color: [f32; 4],
     available_width: f32,
     origin: Point,
     fonts: &mut FontInterner,
@@ -268,15 +274,29 @@ pub fn layout_text_block(
                 TextStyle::Normal
             };
 
+            // Per-run color by brush role: links and inline code carry their
+            // own token colors; everything else paints in the block's base
+            // color. parley already segments runs at brush boundaries, so a
+            // link / inline-code span is its own run here.
+            let brush = parley_run.style().brush;
+            let run_color = if brush.link {
+                link_color
+            } else if brush.monospace {
+                code_color
+            } else {
+                base.color
+            };
+
             glyph_runs.push(GlyphRun {
                 origin: run_origin,
                 font_size,
                 font_face,
-                font_family: family_label_from_brush(parley_run.style().brush, base),
+                font_family: family_label_from_brush(brush, base),
                 font_weight: weight_value,
                 font_style,
                 glyphs,
                 baseline_y: baseline_in_line,
+                color: run_color,
             });
         }
 

@@ -2,62 +2,15 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-//! Style configuration for document layout.
+//! Color + inline-style primitives for document layout.
 //!
-//! [`StyleConfig`] is the user-tunable knobs for typography + spacing.
-//! Default values are sensible for body documents at 14px base size.
+//! [`ColorVocabulary`] is the theme palette downstream renderers read;
+//! [`InlineStyle`] is the per-span brush parley layout carries. The
+//! per-role typography + spacing knobs live in
+//! [`DocumentStyleSheet`](crate::style_sheet::DocumentStyleSheet), which
+//! resolves [`ColorVocabulary`] entries via its color tokens.
 
 use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct StyleConfig {
-    /// Body text font size (px).
-    pub body_font_size: f32,
-    /// Heading font sizes for levels 1..6 (index 0 = h1, …, index 5 = h6).
-    pub heading_sizes: [f32; 6],
-    /// Line-height multiplier (e.g. 1.4 = 140% of font size).
-    pub line_height_ratio: f32,
-    /// Vertical space (px) between paragraphs and other body blocks.
-    pub paragraph_spacing: f32,
-    /// Vertical space (px) above each heading.
-    pub heading_spacing_above: f32,
-    /// Vertical space (px) below each heading.
-    pub heading_spacing_below: f32,
-    /// Horizontal indent (px) per nesting level for quotes / lists.
-    pub indent_per_level: f32,
-    /// Horizontal padding (px) inside the viewport.
-    pub horizontal_padding: f32,
-    /// Vertical padding (px) at the top + bottom of the viewport.
-    pub vertical_padding: f32,
-    /// Body font family name (resolved by the host's font system).
-    pub body_font_family: String,
-    /// Monospace font family name for code blocks + inline code.
-    pub mono_font_family: String,
-    /// Color vocabulary for downstream renderers. v1 of the netrender
-    /// backend reads these for placeholder + rule colors; future glyph
-    /// emission reads `body_text` / `heading_text` / `link_text` /
-    /// `code_text` / `badge_text` for per-block-kind text color.
-    pub colors: ColorVocabulary,
-}
-
-impl Default for StyleConfig {
-    fn default() -> Self {
-        Self {
-            body_font_size: 14.0,
-            heading_sizes: [28.0, 22.0, 18.0, 16.0, 14.0, 12.0],
-            line_height_ratio: 1.4,
-            paragraph_spacing: 12.0,
-            heading_spacing_above: 16.0,
-            heading_spacing_below: 8.0,
-            indent_per_level: 24.0,
-            horizontal_padding: 16.0,
-            vertical_padding: 16.0,
-            body_font_family: "system-ui".to_string(),
-            mono_font_family: "monospace".to_string(),
-            colors: ColorVocabulary::default(),
-        }
-    }
-}
 
 /// Theme primitives used by downstream renderers. All colors are
 /// premultiplied RGBA in 0..=1 space (the format `netrender::Scene`
@@ -96,19 +49,6 @@ impl Default for ColorVocabulary {
             placeholder_text: [0.05, 0.05, 0.08, 0.10],
             placeholder_image: [0.50, 0.50, 0.60, 0.20],
         }
-    }
-}
-
-impl StyleConfig {
-    /// Font size for a heading at `level` (1..=6). Levels above 6 clamp
-    /// to h6.
-    pub fn heading_size(&self, level: u8) -> f32 {
-        let idx = level.clamp(1, 6) as usize - 1;
-        self.heading_sizes[idx]
-    }
-
-    pub fn line_height(&self, font_size: f32) -> f32 {
-        font_size * self.line_height_ratio
     }
 }
 

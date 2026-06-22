@@ -118,28 +118,16 @@ pub fn physics_section_items(physics_damping: f32) -> Vec<PaneItem> {
     ]
 }
 
-/// Build the apparatus pane's item list: a Theme section (one clickable button per
-/// option, its theme id the activation key) plus the host observability sections as
-/// display rows. The [`ListPane`](crate::list_pane::ListPane) renders these and
-/// drains a clicked button's id; the host switches the theme to it. The section
-/// structure mirrors the old `build_apparatus_dom`.
+/// Build the apparatus pane's item list: the host observability sections as display rows.
+/// The interactive settings sections (Theme / Engines / Physics) moved to the pelt settings
+/// lane (`pelt/appearance` / `pelt/engines` / `pelt/physics`, via the shared section builders
+/// above), so the apparatus is read-only diagnostics now. The [`ListPane`](crate::list_pane::ListPane)
+/// renders these display rows. (Settings lane P2 — apparatus settings retired.)
 pub fn apparatus_items(
-    themes: &[ThemeOption],
-    engines: &[EngineRow],
-    physics_damping: f32,
     system_rows: &[(String, String)],
     obs: &ObservabilitySnapshot,
 ) -> Vec<PaneItem> {
     let mut items = Vec::new();
-
-    items.push(PaneItem::text("app-title", "Theme"));
-    items.extend(theme_section_items(themes));
-
-    items.push(PaneItem::text("app-title", "Engines"));
-    items.extend(engine_section_items(engines));
-
-    items.push(PaneItem::text("app-title", "Physics"));
-    items.extend(physics_section_items(physics_damping));
 
     items.push(PaneItem::text("app-title", "Overview"));
     for (label, value) in system_rows {

@@ -634,6 +634,16 @@ grows.
   anchors, not index paths). Mere-side changes uncommitted. Remaining for P1: a real
   `inspect` import (on-demand mid-turn pull) + `lifecycle`, a batch size limit, the
   `network` seam over `fetch.rs`, and WIT versioning.
+- **2026-06-21 (P1 slice — inspect import + lifecycle, green).** Added the §5 `inspect`
+  seam as a host import (`document-host.inspect(query) -> document-view`): the guest now
+  pulls the snapshot on demand mid-turn (a re-entrant call back into the host) instead of
+  receiving it as a param, and can scope the pull (`document-query::subtree(node-id)`) to
+  copy less than the whole document (the §7.2 per-interaction cost lever). Added
+  `activate` / `deactivate` lifecycle exports the host calls around the event loop.
+  Verified end to end: per-turn on-demand pull, a scoped subtree query, a no-op turn that
+  does not advance the revision, with the prior transaction-contract behavior intact. The
+  architecturally-interesting sync P1 work is now done; P1's remainder is a batch size
+  limit and the async `network` seam (gated on Wasmtime 46). Mere-side uncommitted.
 
 ## Key grounding files
 

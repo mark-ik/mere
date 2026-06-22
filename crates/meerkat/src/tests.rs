@@ -255,27 +255,28 @@ fn palette_step_wraps() {
     assert_eq!(runner.state().palette.selected_index, Some(0), "wrap to first");
 }
 
-/// The settings overlay opens, renders its panel + the cap controls, and the
-/// − / + buttons edit the tab cap (the host applies + persists it).
+/// The active-tab cap edits within bounds. The overlay that used to host it was retired
+/// into the `pelt/appearance` page (Settings lane P2); the cap controls there drain
+/// `tiles:cap:up` / `tiles:cap:down` to these same `inc_tab_cap` / `dec_tab_cap` methods.
 #[test]
-fn settings_overlay_opens_and_edits_the_tab_cap() {
+fn tab_cap_edits_within_bounds() {
     let mut runner = runner("mere://welcome");
-    runner.update(Chrome::open_settings);
-    assert!(runner.state().settings_open, "the overlay opens");
-    {
-        let dom = runner.dom();
-        let dom = dom.borrow();
-        assert_eq!(count_class(&dom, runner.root(), "settings"), 1, "the panel renders");
-        assert_eq!(count_class(&dom, runner.root(), "set-btn"), 3, "− / + cap buttons + close ×");
-    }
     let before = runner.state().settings.tab_cap;
     runner.update(Chrome::inc_tab_cap);
     assert_eq!(runner.state().settings.tab_cap, before + 1, "+ raises the cap");
     runner.update(Chrome::dec_tab_cap);
     runner.update(Chrome::dec_tab_cap);
     assert_eq!(runner.state().settings.tab_cap, before - 1, "- lowers it");
-    runner.update(Chrome::close_settings);
-    assert!(!runner.state().settings_open, "and it closes");
+    // Lower bound: the cap never drops below 1.
+    for _ in 0..200 {
+        runner.update(Chrome::dec_tab_cap);
+    }
+    assert_eq!(runner.state().settings.tab_cap, 1, "cap floors at 1");
+    // Upper bound: the cap never exceeds 64.
+    for _ in 0..200 {
+        runner.update(Chrome::inc_tab_cap);
+    }
+    assert_eq!(runner.state().settings.tab_cap, 64, "cap ceils at 64");
 }
 
 /// The context menu renders a row per item, and a row click captures its action

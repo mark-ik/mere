@@ -38,7 +38,7 @@ pub fn scene_from_packet(
 mod tests {
     use super::*;
     use crate::layout::layout_document;
-    use crate::style::StyleConfig;
+    use crate::style_sheet::DocumentStyleSheet;
     use crate::types::Viewport;
     use inker::{
         DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
@@ -59,7 +59,7 @@ mod tests {
 
     fn scene_for(blocks: Vec<DocumentBlock>) -> Scene {
         let laid =
-            layout_document(&doc(blocks), Viewport::new(640.0, 480.0), &StyleConfig::default());
+            layout_document(&doc(blocks), Viewport::new(640.0, 480.0), &DocumentStyleSheet::default());
         scene_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default())
     }
 
@@ -87,7 +87,7 @@ mod tests {
     #[test]
     fn viewport_rounds_to_u32() {
         let laid =
-            layout_document(&doc(vec![]), Viewport::new(640.4, 480.6), &StyleConfig::default());
+            layout_document(&doc(vec![]), Viewport::new(640.4, 480.6), &DocumentStyleSheet::default());
         let scene = scene_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default());
         assert_eq!(scene.viewport_width, 640);
         assert_eq!(scene.viewport_height, 481);

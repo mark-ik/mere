@@ -136,6 +136,11 @@ pub struct GlyphRun {
     pub glyphs: Vec<PositionedGlyph>,
     /// Y of the baseline relative to `origin.y`.
     pub baseline_y: f32,
+    /// Premultiplied RGBA (0..=1) the run's glyphs paint in, resolved from
+    /// the style sheet's color token for this block / inline role (body,
+    /// heading, link, code, badge). The renderer paints the glyphs in this
+    /// color; it is not re-derived downstream.
+    pub color: [f32; 4],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -344,6 +349,7 @@ mod window_tests {
                     font_style: TextStyle::Normal,
                     glyphs: Vec::new(),
                     baseline_y: 12.0,
+                    color: [0.0, 0.0, 0.0, 1.0],
                 }],
             },
         }

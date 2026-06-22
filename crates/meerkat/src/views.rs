@@ -157,9 +157,6 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     if c.find_open {
         children.push(find_bar(c));
     }
-    if c.settings_open {
-        children.push(settings_overlay(c));
-    }
     if c.comms.is_open() {
         children.push(comms_pane(c));
     }
@@ -203,35 +200,6 @@ fn context_menu_view(menu: &ContextMenu) -> ChromeView {
             format!("position: absolute; left: {}px; top: {}px;", menu.x, menu.y),
         );
     Box::new(panel)
-}
-
-/// The settings overlay: a centered panel of controls (just the active-tab cap
-/// for now — a value flanked by − / + buttons). Clicking the backdrop closes it;
-/// the buttons edit [`Chrome::settings`], which the host applies + persists.
-/// Rendered into the chrome root, composited over the content like the palette.
-fn settings_overlay(c: &Chrome) -> ChromeView {
-    let dec = on_click(
-        el::<_, Chrome, ()>("button", "\u{2212}").attr("class", "set-btn"),
-        |c: &mut Chrome, _: PointerClick| c.dec_tab_cap(),
-    );
-    let value = el::<_, Chrome, ()>("div", format!("Active tab cap: {}", c.settings.tab_cap))
-        .attr("class", "set-value");
-    let inc = on_click(
-        el::<_, Chrome, ()>("button", "+").attr("class", "set-btn"),
-        |c: &mut Chrome, _: PointerClick| c.inc_tab_cap(),
-    );
-    let cap_row = el::<_, Chrome, ()>("div", (dec, value, inc)).attr("class", "set-row");
-    let title_text = el::<_, Chrome, ()>("div", "Settings").attr("class", "set-title-text");
-    let close_x = on_click(
-        el::<_, Chrome, ()>("button", "\u{00d7}").attr("class", "set-btn"),
-        |c: &mut Chrome, _: PointerClick| c.close_settings(),
-    );
-    let title = el::<_, Chrome, ()>("div", (title_text, close_x)).attr("class", "set-title");
-    let panel = el::<_, Chrome, ()>("div", (title, cap_row)).attr("class", "settings");
-    // No backdrop-close: a click inside the panel must not bubble to a close, so
-    // the overlay is just a centering container — close via the × button or Escape.
-    let overlay = el::<_, Chrome, ()>("div", panel).attr("class", "settings-overlay");
-    Box::new(overlay)
 }
 
 /// The command-palette overlay: a centered panel with the query field and the

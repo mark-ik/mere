@@ -245,36 +245,6 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             ".find-count {{ font-size: 14px; color: {}; padding: 6px 8px; }}",
             rgb(c.muted_text)
         ),
-        // Settings overlay: a centered panel (like the palette) with rows of controls.
-        ".settings-overlay { display: flex; justify-content: center; padding-top: 56px; }"
-            .to_string(),
-        format!(
-            ".settings {{ width: 380px; background-color: {}; padding: 14px; }}",
-            rgb(c.surface_bg)
-        ),
-        format!(
-            ".set-title {{ display: flex; background-color: {}; padding: 4px 4px 12px 4px; }}",
-            rgb(c.surface_bg)
-        ),
-        format!(
-            ".set-title-text {{ font-size: 20px; color: {}; background-color: {}; flex-grow: 1; padding: 4px 8px; }}",
-            rgb(c.strong_text),
-            rgb(c.surface_bg)
-        ),
-        format!(
-            ".set-row {{ display: flex; background-color: {}; padding: 6px 8px; }}",
-            rgb(c.surface_bg)
-        ),
-        format!(
-            ".set-value {{ font-size: 18px; color: {}; background-color: {}; padding: 8px 14px; flex-grow: 1; }}",
-            rgb(c.body_text),
-            rgb(c.surface_bg)
-        ),
-        format!(
-            ".set-btn {{ font-size: 20px; color: {}; background-color: {}; padding: 6px 16px; margin: 0 4px; }}",
-            rgb(c.control_text),
-            rgb(c.control_bg)
-        ),
         // Right-click context menu: a small panel of action rows floated at the cursor.
         format!(
             ".context-menu {{ background-color: {}; padding: 4px; }}",

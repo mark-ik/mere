@@ -27,7 +27,7 @@ fn viewport() -> Viewport {
 
 #[test]
 fn empty_document_lays_out_to_empty_block_list() {
-    let packet = layout_document(&doc(vec![]), viewport(), &StyleConfig::default()).packet;
+    let packet = layout_document(&doc(vec![]), viewport(), &DocumentStyleSheet::default()).packet;
     assert!(packet.blocks.is_empty());
     assert!(packet.interactions.is_empty());
     assert_eq!(packet.viewport.width, 640.0);
@@ -40,7 +40,7 @@ fn single_paragraph_produces_one_text_block() {
             spans: vec![InlineSpan::Text("Hello, world.".into())],
         }]),
         viewport(),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     )
     .packet;
     assert_eq!(packet.blocks.len(), 1);
@@ -54,7 +54,7 @@ fn single_paragraph_produces_one_text_block() {
 
 #[test]
 fn heading_is_taller_than_paragraph() {
-    let style = StyleConfig::default();
+    let style = DocumentStyleSheet::default();
     let packet = layout_document(
         &doc(vec![
             DocumentBlock::Heading {
@@ -96,7 +96,7 @@ fn paragraph_with_link_emits_interaction_region() {
             ],
         }]),
         viewport(),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     )
     .packet;
     assert_eq!(packet.interactions.len(), 1);
@@ -123,7 +123,7 @@ fn list_emits_group_block_with_children() {
             ],
         }]),
         viewport(),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     )
     .packet;
     let RenderedBlockKind::Group { children } = &packet.blocks[0].kind else {
@@ -134,7 +134,7 @@ fn list_emits_group_block_with_children() {
 
 #[test]
 fn quote_emits_group_block_with_indented_children() {
-    let style = StyleConfig::default();
+    let style = DocumentStyleSheet::default();
     let packet = layout_document(
         &doc(vec![DocumentBlock::Quote {
             blocks: vec![DocumentBlock::Paragraph {
@@ -162,7 +162,7 @@ fn rule_emits_rule_block() {
     let packet = layout_document(
         &doc(vec![DocumentBlock::Rule]),
         viewport(),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     )
     .packet;
     assert!(matches!(packet.blocks[0].kind, RenderedBlockKind::Rule));
@@ -176,7 +176,7 @@ fn image_emits_image_block_with_url_and_alt() {
             alt: "a picture".into(),
         }]),
         viewport(),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     )
     .packet;
     let RenderedBlockKind::Image { url, alt } = &packet.blocks[0].kind else {
@@ -197,7 +197,7 @@ fn feed_entry_composes_into_group_with_h2_summary_link() {
             source_url: None,
         }]),
         viewport(),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     )
     .packet;
     let RenderedBlockKind::Group { children } = &packet.blocks[0].kind else {
@@ -220,7 +220,7 @@ fn metadata_row_lays_out_label_and_value() {
             value: "alice".into(),
         }]),
         viewport(),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     )
     .packet;
     assert_eq!(packet.blocks.len(), 1);
@@ -232,7 +232,7 @@ fn metadata_row_lays_out_label_and_value() {
 
 #[test]
 fn content_bounds_grow_with_blocks() {
-    let style = StyleConfig::default();
+    let style = DocumentStyleSheet::default();
     let single = layout_document(
         &doc(vec![DocumentBlock::Paragraph {
             spans: vec![InlineSpan::Text("one".into())],
@@ -275,7 +275,7 @@ fn document_dedups_shared_face() {
             },
         ]),
         viewport(),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     );
     assert_eq!(laid.fonts.len(), 1, "shared body face should intern once");
     let faces: Vec<_> = laid
@@ -302,7 +302,7 @@ fn text_populates_font_sidecar() {
             spans: vec![InlineSpan::Text("hello".into())],
         }]),
         viewport(),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     );
     assert!(!laid.fonts.is_empty(), "text should populate the font sidecar");
     for block in &laid.packet.blocks {

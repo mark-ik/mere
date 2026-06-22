@@ -202,7 +202,7 @@ impl<'a> Builder<'a> {
             placement: CommonPlacement::new(layout_rect(glyph_run_bounds(run))),
             font_instance,
             font_size: run.font_size,
-            color: colorf(self.colors.body_text),
+            color: colorf(run.color),
             glyphs,
             options: TextOptions::default(),
         }));
@@ -265,7 +265,7 @@ mod tests {
     use super::*;
     use crate::font_table::FontTable;
     use crate::layout::layout_document;
-    use crate::style::StyleConfig;
+    use crate::style_sheet::DocumentStyleSheet;
     use crate::types::Viewport;
     use inker::{
         DocumentBlock, DocumentProvenance, DocumentTrustState, EngineDocument, InlineSpan,
@@ -288,7 +288,7 @@ mod tests {
     /// font sidecar (so tests can assert shipped faces came from parley).
     fn list_for(blocks: Vec<DocumentBlock>) -> (InkerPaintList, FontTable) {
         let laid =
-            layout_document(&doc(blocks), Viewport::new(640.0, 480.0), &StyleConfig::default());
+            layout_document(&doc(blocks), Viewport::new(640.0, 480.0), &DocumentStyleSheet::default());
         let list = paint_list_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default());
         (list, laid.fonts)
     }
@@ -365,7 +365,7 @@ mod tests {
                 },
             ]),
             Viewport::new(640.0, 480.0),
-            &StyleConfig::default(),
+            &DocumentStyleSheet::default(),
         );
         let list = paint_list_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default());
 
@@ -414,7 +414,7 @@ mod tests {
         let laid = layout_document(
             &doc(vec![DocumentBlock::Rule]),
             Viewport::new(640.0, 480.0),
-            &StyleConfig::default(),
+            &DocumentStyleSheet::default(),
         );
         let list = paint_list_from_packet(&laid.packet, &laid.fonts, &colors);
         let line = list
@@ -474,7 +474,7 @@ mod tests {
     #[test]
     fn viewport_rounds_to_device_int_size() {
         let laid =
-            layout_document(&doc(vec![]), Viewport::new(640.4, 480.6), &StyleConfig::default());
+            layout_document(&doc(vec![]), Viewport::new(640.4, 480.6), &DocumentStyleSheet::default());
         let list = paint_list_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default());
         assert_eq!(list.viewport().width, 640);
         assert_eq!(list.viewport().height, 481);

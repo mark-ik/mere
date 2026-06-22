@@ -39,17 +39,17 @@ pub enum Command {
     HideSelectedEdge,
     /// Reveal every hidden edge (host action).
     ShowAllEdges,
-    /// Open the settings overlay. A chrome-level action (opens the panel right
-    /// there, like toggling the palette), not a host intent.
+    /// Open the settings lane (the consolidated config surface) as a workbench tile, at
+    /// the appearance page. A host action, drained by the host. (Settings lane P1.)
     OpenSettings,
     /// Toggle the docked comms pane (conversations: misfin mail + murm cabals). A
-    /// chrome-level action, like opening settings.
+    /// chrome-level action, like toggling the palette.
     ToggleComms,
     /// Toggle the roster pane (graph manifest: nodes/edges/fields) (host action).
     ToggleRoster,
     /// Toggle the gloss / Navigator pane (host action).
     ToggleGloss,
-    /// Toggle the apparatus pane (host diagnostics + settings) (host action).
+    /// Toggle the apparatus pane (host diagnostics; settings moved to the pelt lane) (host action).
     ToggleApparatus,
     /// Toggle the selected-object inspector pane (host action).
     ToggleInspector,
@@ -177,6 +177,16 @@ impl Command {
         }
     }
 
+    /// Resolve a command from its stable id (its [`verb`](Self::verb)) — the reverse
+    /// lookup that lets a caller addressing a command **by id** (a script, an agent, an
+    /// a11y action route) get back the typed command to run. `None` for an unknown id.
+    /// This is the command-registry seam: every surface (palette, omnibar `>`-shell,
+    /// agent harness, accessibility, scripting) can name a command by the same id and
+    /// resolve it here. (Command registry P1.)
+    pub fn from_id(id: &str) -> Option<Command> {
+        Command::ALL.into_iter().find(|cmd| cmd.verb() == id)
+    }
+
     /// The user-facing label shown in the palette and matched against the query.
     pub fn label(self) -> &'static str {
         match self {
@@ -193,7 +203,7 @@ impl Command {
             Command::ToggleComms => "Comms (conversations)",
             Command::ToggleRoster => "Roster (graph manifest)",
             Command::ToggleGloss => "Gloss (navigator / map)",
-            Command::ToggleApparatus => "Apparatus (diagnostics + settings)",
+            Command::ToggleApparatus => "Apparatus (diagnostics)",
             Command::ToggleInspector => "Inspector (selected object)",
             Command::ToggleTrail => "Trail (history + recent + removed)",
             Command::ToggleSteward => "Steward (live operations)",
@@ -207,6 +217,37 @@ impl Command {
             Command::ExportGraph => "Export graph (JSON-LD)",
         }
     }
+}
+
+/// One entry in the command registry's catalog: a command's stable **id** (its
+/// [`verb`](Command::verb)), its display **label**, and whether it is a **host action**
+/// (a coarse applicability hint — host actions act on the graph / workbench / actors, so
+/// they generally want a live target, whereas the chrome verbs always apply). Pure data
+/// (no host dependency), so the catalog stays trivially listable by any consumer — the
+/// palette, an agent / script enumerating what it can do, an a11y projection, a
+/// diagnostics completeness check. The host-side *applies* predicate (needs-selection,
+/// needs-2-nodes, …) and the *invoke* effect layer over this; they live with the host.
+/// (Command registry P1.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CommandEntry {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub host_action: bool,
+}
+
+/// The command registry's catalog: every command as a [`CommandEntry`], in
+/// [`Command::ALL`] order. The single listable source the palette renders, an agent /
+/// script enumerates, and a diagnostics probe checks for completeness against. (Command
+/// registry P1.)
+pub fn command_entries() -> Vec<CommandEntry> {
+    Command::ALL
+        .into_iter()
+        .map(|cmd| CommandEntry {
+            id: cmd.verb(),
+            label: cmd.label(),
+            host_action: cmd.is_host_action(),
+        })
+        .collect()
 }
 
 /// The commands whose label contains `query` (case-insensitive, whitespace
@@ -268,6 +309,32 @@ mod tests {
         // "Unrelate", so filter on the distinct token.
         assert_eq!(filter("unrelate"), vec![Command::RetractEdge]);
         assert!(filter("Relate selected").contains(&Command::AssertEdge));
+    }
+
+    #[test]
+    fn from_id_round_trips_every_verb() {
+        // The registry seam: every command resolves from its own id, and an unknown id
+        // resolves to nothing. This is what lets a script / agent / a11y route name a
+        // command by id and get the typed command back.
+        for cmd in Command::ALL {
+            assert_eq!(Command::from_id(cmd.verb()), Some(cmd), "{cmd:?} must round-trip");
+        }
+        assert_eq!(Command::from_id("not_a_command"), None);
+        assert_eq!(Command::from_id(""), None);
+    }
+
+    #[test]
+    fn command_entries_catalog_covers_all_with_unique_ids() {
+        let entries = command_entries();
+        assert_eq!(entries.len(), Command::ALL.len(), "the catalog lists every command");
+        // ids are the verbs (already proven unique + identifier-safe), in ALL order.
+        for (entry, cmd) in entries.iter().zip(Command::ALL) {
+            assert_eq!(entry.id, cmd.verb());
+            assert_eq!(entry.label, cmd.label());
+            assert_eq!(entry.host_action, cmd.is_host_action());
+            // every catalog id resolves back to its command (the registry round-trip).
+            assert_eq!(Command::from_id(entry.id), Some(cmd));
+        }
     }
 
     #[test]

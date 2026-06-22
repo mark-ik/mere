@@ -147,13 +147,15 @@ impl WindowCtx<'_> {
             Command::ExportGraph => {
                 note = Some(self.export_graph_jsonld());
             }
-            // History / connect / settings / comms verbs run in the chrome; never
-            // queued here as host intents.
+            // Settings opens the pelt settings lane as a workbench tile (the consolidated
+            // config surface), defaulting to the appearance page. (Settings lane P1.)
+            Command::OpenSettings => self.open_settings_tile("pelt/appearance"),
+            // History / connect / comms verbs run in the chrome; never queued here as host
+            // intents.
             Command::Back
             | Command::Forward
             | Command::Home
             | Command::ConnectPeer
-            | Command::OpenSettings
             | Command::ToggleComms => {}
         }
         note

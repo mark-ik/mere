@@ -37,6 +37,7 @@ pub mod font_table;
 pub mod layout;
 pub mod paint_list;
 pub mod style;
+pub mod style_sheet;
 pub mod text;
 pub mod types;
 
@@ -52,7 +53,11 @@ pub use font::{FontResolver, NoFontResolver};
 pub use font_table::FontTable;
 pub use paint_list::{paint_list_from_packet, InkerPaintList};
 pub use layout::{layout_document, LaidOutDocument};
-pub use style::{ColorVocabulary, InlineStyle, StyleConfig};
+pub use style::{ColorVocabulary, InlineStyle};
+pub use style_sheet::{
+    BlockRole, BlockStyle, ColorToken, DocumentStyleSheet, FontChoice, HeadingStyle,
+    ResolvedBlockStyle, RoleStyles, SizeSpec, WrapPolicy,
+};
 pub use types::{
     DocumentRenderPacket, FontFaceId, GlyphRun, InteractionKind, InteractionRegion, Point,
     PositionedGlyph, Rect, RenderedBlock, RenderedBlockKind, Size, TextStyle, Viewport,

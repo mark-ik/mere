@@ -12,7 +12,7 @@
 use inker::{DocumentBlock, EngineDocument, InlineSpan};
 
 use crate::font_table::{FontInterner, FontTable};
-use crate::style::StyleConfig;
+use crate::style_sheet::{BlockRole, ColorToken, DocumentStyleSheet, ResolvedBlockStyle};
 use crate::text::{
     Flattened, LaidOutText, LayoutEnvironment, TextBaseStyle, flatten_inline, layout_text_block,
 };
@@ -41,7 +41,7 @@ pub struct LaidOutDocument {
 pub fn layout_document(
     document: &EngineDocument,
     viewport: Viewport,
-    style: &StyleConfig,
+    style: &DocumentStyleSheet,
 ) -> LaidOutDocument {
     let mut env = LayoutEnvironment::new();
     let mut layouter = DocumentLayouter::new(viewport, style, &mut env);
@@ -53,9 +53,24 @@ pub fn layout_document(
     layouter.finish()
 }
 
+/// Build the parley block base from a resolved role style. Carries the role's
+/// base text `color`; the `wrap` field is consumed from P4 onward (no-wrap code
+/// blocks).
+fn text_base_from(resolved: &ResolvedBlockStyle) -> TextBaseStyle {
+    TextBaseStyle {
+        font_size: resolved.font_size,
+        font_family: resolved.font_family.clone(),
+        bold: resolved.bold,
+        italic: resolved.italic,
+        monospace: resolved.monospace,
+        line_height_ratio: resolved.line_height_ratio,
+        color: resolved.color,
+    }
+}
+
 struct DocumentLayouter<'a> {
     viewport: Viewport,
-    style: &'a StyleConfig,
+    style: &'a DocumentStyleSheet,
     env: &'a mut LayoutEnvironment,
     cursor_y: f32,
     blocks: Vec<RenderedBlock>,
@@ -67,7 +82,7 @@ struct DocumentLayouter<'a> {
 }
 
 impl<'a> DocumentLayouter<'a> {
-    fn new(viewport: Viewport, style: &'a StyleConfig, env: &'a mut LayoutEnvironment) -> Self {
+    fn new(viewport: Viewport, style: &'a DocumentStyleSheet, env: &'a mut LayoutEnvironment) -> Self {
         Self {
             viewport,
             style,
@@ -108,20 +123,16 @@ impl<'a> DocumentLayouter<'a> {
             DocumentBlock::Heading { level, spans } => {
                 Some(self.render_heading(source_index, indent_level, *level, spans))
             }
-            DocumentBlock::Paragraph { spans } => Some(self.render_paragraph(
-                source_index,
-                indent_level,
-                spans,
-                TextBaseStyle {
-                    font_size: self.style.body_font_size,
-                    font_family: self.style.body_font_family.clone(),
-                    bold: false,
-                    italic: false,
-                    monospace: false,
-                    line_height_ratio: self.style.line_height_ratio,
-                },
-                self.style.paragraph_spacing,
-            )),
+            DocumentBlock::Paragraph { spans } => {
+                let resolved = self.style.resolve(BlockRole::Body);
+                Some(self.render_paragraph(
+                    source_index,
+                    indent_level,
+                    spans,
+                    text_base_from(&resolved),
+                    resolved.spacing_below,
+                ))
+            }
             DocumentBlock::CodeBlock { text, .. } => {
                 Some(self.render_code_block(source_index, indent_level, text))
             }
@@ -186,18 +197,16 @@ impl<'a> DocumentLayouter<'a> {
         level: u8,
         spans: &[InlineSpan],
     ) -> RenderedBlock {
-        let font_size = self.style.heading_size(level);
-        let above = self.style.heading_spacing_above;
-        let below = self.style.heading_spacing_below;
-        let base = TextBaseStyle {
-            font_size,
-            font_family: self.style.body_font_family.clone(),
-            bold: true,
-            italic: false,
-            monospace: false,
-            line_height_ratio: self.style.line_height_ratio,
-        };
-        self.render_text_block_with_spacing(source_index, indent_level, spans, base, above, below)
+        let resolved = self.style.resolve(BlockRole::Heading(level));
+        let base = text_base_from(&resolved);
+        self.render_text_block_with_spacing(
+            source_index,
+            indent_level,
+            spans,
+            base,
+            resolved.spacing_above,
+            resolved.spacing_below,
+        )
     }
 
     fn render_paragraph(
@@ -252,11 +261,24 @@ impl<'a> DocumentLayouter<'a> {
             self.cursor_y + spacing_above,
         );
         let available = self.available_width(indent_level);
+        // Inline link + code colors are sheet-global (any block can contain
+        // them); the block's base color rides on `base`.
+        let link_color = self.style.token_color(ColorToken::LinkText);
+        let code_color = self.style.token_color(ColorToken::CodeText);
         let LaidOutText {
             glyph_runs,
             total_size,
             mut interactions,
-        } = layout_text_block(self.env, flattened, &base, available, origin, &mut self.fonts);
+        } = layout_text_block(
+            self.env,
+            flattened,
+            &base,
+            link_color,
+            code_color,
+            available,
+            origin,
+            &mut self.fonts,
+        );
 
         self.interactions.append(&mut interactions);
 
@@ -278,22 +300,16 @@ impl<'a> DocumentLayouter<'a> {
         indent_level: u32,
         text: &str,
     ) -> RenderedBlock {
-        let base = TextBaseStyle {
-            font_size: self.style.body_font_size,
-            font_family: self.style.mono_font_family.clone(),
-            bold: false,
-            italic: false,
-            monospace: true,
-            line_height_ratio: self.style.line_height_ratio,
-        };
+        let resolved = self.style.resolve(BlockRole::Code);
+        let base = text_base_from(&resolved);
         let spans = vec![InlineSpan::Text(text.to_string())];
         self.render_text_block_with_spacing(
             source_index,
             indent_level,
             &spans,
             base,
-            0.0,
-            self.style.paragraph_spacing,
+            resolved.spacing_above,
+            resolved.spacing_below,
         )
     }
 
@@ -386,7 +402,7 @@ impl<'a> DocumentLayouter<'a> {
             origin,
             Size::new(
                 self.available_width(indent_level),
-                height + self.style.paragraph_spacing,
+                height + self.style.block_spacing(),
             ),
         );
         RenderedBlock {
@@ -402,7 +418,7 @@ impl<'a> DocumentLayouter<'a> {
             origin,
             Size::new(
                 self.available_width(indent_level),
-                self.style.paragraph_spacing,
+                self.style.block_spacing(),
             ),
         );
         RenderedBlock {
@@ -510,21 +526,15 @@ impl<'a> DocumentLayouter<'a> {
             InlineSpan::Strong(vec![InlineSpan::Text(format!("{label}: "))]),
             InlineSpan::Text(value.to_string()),
         ];
-        let base = TextBaseStyle {
-            font_size: self.style.body_font_size,
-            font_family: self.style.body_font_family.clone(),
-            bold: false,
-            italic: false,
-            monospace: false,
-            line_height_ratio: self.style.line_height_ratio,
-        };
+        let resolved = self.style.resolve(BlockRole::Metadata);
+        let base = text_base_from(&resolved);
         self.render_text_block_with_spacing(
             source_index,
             indent_level,
             &spans,
             base,
-            0.0,
-            self.style.paragraph_spacing * 0.5,
+            resolved.spacing_above,
+            resolved.spacing_below,
         )
     }
 
@@ -539,21 +549,15 @@ impl<'a> DocumentLayouter<'a> {
         let spans = vec![InlineSpan::Emphasis(vec![InlineSpan::Text(
             text.to_string(),
         )])];
-        let base = TextBaseStyle {
-            font_size: self.style.body_font_size * 0.85,
-            font_family: self.style.body_font_family.clone(),
-            bold: false,
-            italic: true,
-            monospace: false,
-            line_height_ratio: self.style.line_height_ratio,
-        };
+        let resolved = self.style.resolve(BlockRole::Badge);
+        let base = text_base_from(&resolved);
         self.render_text_block_with_spacing(
             source_index,
             indent_level,
             &spans,
             base,
-            0.0,
-            self.style.paragraph_spacing * 0.5,
+            resolved.spacing_above,
+            resolved.spacing_below,
         )
     }
 

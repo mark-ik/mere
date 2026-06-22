@@ -14,7 +14,7 @@
 //! canvas swatch is bound to a frame pane, without growing layout logic
 //! of its own.
 
-use document_canvas::{LaidOutDocument, StyleConfig, Viewport, layout_document};
+use document_canvas::{LaidOutDocument, DocumentStyleSheet, Viewport, layout_document};
 use inker::EngineDocument;
 
 /// Lay out a document for a single frame pane.
@@ -22,7 +22,7 @@ use inker::EngineDocument;
 /// `viewport` is the pane's available content rectangle (already accounting
 /// for chrome / scroll-bar reservation if any). `style` is supplied by the
 /// host so users can tune typography per workspace; pass
-/// `StyleConfig::default()` for the built-in defaults.
+/// `DocumentStyleSheet::default()` for the built-in defaults.
 ///
 /// Returns a [`LaidOutDocument`]: the portable render packet plus the
 /// font sidecar carrying the faces parley shaped against (the host needs
@@ -30,7 +30,7 @@ use inker::EngineDocument;
 pub fn build_document_scene(
     document: &EngineDocument,
     viewport: Viewport,
-    style: &StyleConfig,
+    style: &DocumentStyleSheet,
 ) -> LaidOutDocument {
     layout_document(document, viewport, style)
 }
@@ -59,7 +59,7 @@ mod tests {
         let packet = build_document_scene(
             &doc(vec![]),
             Viewport::new(640.0, 480.0),
-            &StyleConfig::default(),
+            &DocumentStyleSheet::default(),
         )
         .packet;
         assert!(packet.blocks.is_empty());
@@ -73,7 +73,7 @@ mod tests {
                 spans: vec![InlineSpan::Text("Hello, platen.".into())],
             }]),
             Viewport::new(640.0, 480.0),
-            &StyleConfig::default(),
+            &DocumentStyleSheet::default(),
         )
         .packet;
         assert_eq!(packet.blocks.len(), 1);
@@ -95,7 +95,7 @@ mod tests {
                 }],
             }]),
             Viewport::new(640.0, 480.0),
-            &StyleConfig::default(),
+            &DocumentStyleSheet::default(),
         )
         .packet;
         assert_eq!(packet.interactions.len(), 1);
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn viewport_width_constrains_content_bounds() {
-        let style = StyleConfig::default();
+        let style = DocumentStyleSheet::default();
         let narrow = build_document_scene(
             &doc(vec![DocumentBlock::Paragraph {
                 spans: vec![InlineSpan::Text(

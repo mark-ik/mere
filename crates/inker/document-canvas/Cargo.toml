@@ -35,3 +35,7 @@ netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main",
 # PaintCmd → netrender::Scene lowering. Behind the `netrender` feature
 # (pulls netrender transitively), same as the scene backend.
 paint_list_render = { git = "https://github.com/mark-ik/netrender.git", branch = "main", optional = true }
+
+[dev-dependencies]
+# Serde round-trip test for the document style sheet (config-shaped).
+serde_json.workspace = true

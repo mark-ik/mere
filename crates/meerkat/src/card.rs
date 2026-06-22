@@ -15,7 +15,7 @@
 
 use document_canvas::netrender_backend::scene_from_packet;
 use document_canvas::{
-    ColorVocabulary, DocumentRenderPacket, FontTable, StyleConfig, Viewport, layout_document,
+    ColorVocabulary, DocumentRenderPacket, FontTable, DocumentStyleSheet, Viewport, layout_document,
 };
 // Used only by the `#[cfg(test)]` link-lowering helper + tests; the live path queries
 // `DocumentRenderPacket::link_at` directly. (Phase 2 query API.)
@@ -148,7 +148,7 @@ fn render_card_scene(doc: &EngineDocument, w: u32, h: u32) -> (Scene, u32, Vec<L
     let mut laid = layout_document(
         doc,
         Viewport::new(w as f32, h as f32),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     );
     let content_height = laid.packet.content_bounds.size.height.ceil().max(1.0);
     // The document-canvas lane lays out hit-testable link regions (content-local px,
@@ -214,6 +214,19 @@ fn card_vocabulary() -> ColorVocabulary {
     }
 }
 
+/// The document style sheet for the card's synthesized + nematic lanes: the
+/// built-in typography with the light-on-dark [`card_vocabulary`] palette, so
+/// per-role text colors (heading / link / code / badge) resolve against the
+/// dark `CARD_BG` rather than the default near-black-on-light. Layout bakes
+/// these colors onto each glyph run, so the per-band [`lower_window`] lowering
+/// carries them automatically.
+fn card_sheet() -> DocumentStyleSheet {
+    DocumentStyleSheet {
+        colors: card_vocabulary(),
+        ..DocumentStyleSheet::default()
+    }
+}
+
 /// A node's rendered content, forked by lane. The document lane (gemtext, feeds,
 /// synthesized cards: most smolweb content) ships the **retained packet** the host
 /// windows and lowers a band of at a time, so a tall page is not baked into one
@@ -274,7 +287,7 @@ pub fn render_content(
 /// packet, its font sidecar, and the full content height (px); link hit-testing reads
 /// the packet's interactions directly (see [`DocumentRenderPacket::link_at`]).
 fn layout_document_content(doc: &EngineDocument, w: u32, h: u32) -> RenderedContent {
-    let laid = layout_document(doc, Viewport::new(w as f32, h as f32), &StyleConfig::default());
+    let laid = layout_document(doc, Viewport::new(w as f32, h as f32), &DocumentStyleSheet::default());
     let content_height = laid.packet.content_bounds.size.height.ceil().max(1.0) as u32;
     // Link hit-testing reads the retained packet's interactions directly (the host
     // queries `DocumentRenderPacket::link_at`), so the document lane no longer ships a
@@ -574,7 +587,7 @@ pub fn recovering_card_scene(w: u32, h: u32) -> Scene {
     let mut laid = layout_document(
         &doc,
         Viewport::new(w as f32, h as f32),
-        &StyleConfig::default(),
+        &DocumentStyleSheet::default(),
     );
     laid.packet.viewport = Viewport::new(w as f32, h as f32);
     scene_from_packet(&laid.packet, &laid.fonts, &card_vocabulary())
