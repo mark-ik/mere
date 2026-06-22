@@ -1,0 +1,21 @@
+# A deliberately-misbehaving document-core guest for the P2.2 cancellation/quota
+# probe: it runs forever ("loop") or allocates without bound ("grow") so the host
+# can prove epoch interruption and StoreLimits contain it. Not shipped.
+[workspace]
+
+[package]
+name = "document-core-guest-bomb"
+version = "0.0.1"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.58"
+
+[profile.release]
+opt-level = "s"
+strip = true

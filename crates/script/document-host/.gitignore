@@ -1,4 +1,5 @@
 /target
 /guest/target
+/guest-bomb/target
 # Lockfiles float (mere convention: builds resolve fresh).
 Cargo.lock

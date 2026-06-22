@@ -1,6 +1,7 @@
-//! P2.0 verification: the proven 8-turn driver runs against the real
-//! `document-host` library (Doc-backed), loading the built `document-core` guest
-//! component. Mirrors the probe's end-to-end run, now as a crate test.
+//! P2.1b verification: the 8-turn driver runs the DOM-shaped guest end to end
+//! against the `document-host` library backed by a live serval `ScriptedDom`
+//! (seeded `<body><p>Intro</p><p>Second</p></body>`), asserting the DOM mutates
+//! and the conflict / unknown-node / declined paths fire.
 //!
 //! Build the guest first:
 //!   cd guest && cargo build --target wasm32-wasip2 --release
@@ -9,7 +10,7 @@
 use std::path::PathBuf;
 
 #[tokio::test(flavor = "current_thread")]
-async fn eight_turns_drive_the_document() {
+async fn eight_turns_drive_the_live_dom() {
     let wasm = std::env::var("DOC_HOST_GUEST_WASM").unwrap_or_else(|_| {
         "guest/target/wasm32-wasip2/release/document_core_guest.wasm".to_string()
     });
@@ -22,8 +23,8 @@ async fn eight_turns_drive_the_document() {
 
     let turns = [
         ("set", "Edited intro via node-id."),
-        ("append", "Appended under root's id."),
-        ("insert", "Inserted before a sibling id."),
+        ("append", ""),
+        ("insert", ""),
         ("subtree", ""),
         ("remove", ""),
         ("stale", ""),
@@ -34,8 +35,6 @@ async fn eight_turns_drive_the_document() {
     let log = document_host::run_turns(&path, &turns).await.expect("run_turns");
     let joined = log.outcomes.join("\n");
 
-    // Outcomes per turn: four applied id-targeted mutations, a no-op scoped
-    // inspect, then the conflict / unknown-node / declined paths.
     assert!(log.outcomes[0].starts_with("set: applied"), "{joined}");
     assert!(log.outcomes[1].starts_with("append: applied"), "{joined}");
     assert!(log.outcomes[2].starts_with("insert: applied"), "{joined}");
@@ -47,18 +46,13 @@ async fn eight_turns_drive_the_document() {
 
     assert_eq!(log.final_revision, 4, "exactly four mutations applied\n{joined}");
 
-    // Final tree: root + three paragraphs. Node 3 (appended) was removed; node 4
-    // (inserted) sits before node 1 (edited); node 2 unchanged.
-    let shape: Vec<(String, String)> =
-        log.final_rows.iter().map(|(_, k, t)| (k.clone(), t.clone())).collect();
-    assert_eq!(
-        shape,
-        vec![
-            ("root".to_string(), String::new()),
-            ("paragraph".to_string(), "Inserted before a sibling id.".to_string()),
-            ("paragraph".to_string(), "Edited intro via node-id.".to_string()),
-            ("paragraph".to_string(), "Second paragraph.".to_string()),
-        ],
-        "final document tree mismatch\noutcomes:\n{joined}"
+    // Final DOM: <body> has three <p> children (two appended/inserted, one of the
+    // originals removed), and the first text node now carries the edited text.
+    let p_count = log.final_rows.iter().filter(|(_, k, _)| k == "p").count();
+    assert_eq!(p_count, 3, "expected 3 <p> elements\nrows: {:?}", log.final_rows);
+    assert!(
+        log.final_rows.iter().any(|(_, k, t)| k == "#text" && t == "Edited intro via node-id."),
+        "the edited text should be live in a #text node\nrows: {:?}",
+        log.final_rows
     );
 }

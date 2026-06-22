@@ -802,10 +802,25 @@ same `call_async` without suspending, and `fetch` slots in when wired.
   validated by `is_live` (no host id-map needed), against a host-side revision (serval tracks
   none). Three lib unit tests pass: snapshot projects the tree + ids/text round-trip; the
   subtree query scopes the view; apply mutates and enforces revision-conflict (carrying current)
-  + unknown-node (nothing applied, rev unchanged). **Scoped:** the wasm guest still runs over the
-  in-memory `Doc` (P2.0 `eight_turns`); marrying the guest to `dom_view` (`ScriptHost` backed by
-  `ScriptedDom`) is the small remaining unification. Mere-side uncommitted; folds into the
-  workspace + MSRV bump at P2.5.
+  + unknown-node (nothing applied, rev unchanged). The P2.0/P2.1 state (Doc-backed lib +
+  dom_view) is committed as `5825c17`.
+- **2026-06-22 (P2.1b — wasm guest over the live ScriptedDom, green; P2.1 complete).** Swapped
+  `ScriptHost` onto a live `ScriptedDom` (in-memory `Doc` retired): `inspect` → `dom_view`, the
+  host applies returned batches via `dom_view::apply` against the live DOM + host revision. The
+  guest is now DOM-shaped (operates on tag-named elements + `#text` nodes). End-to-end test
+  `eight_turns_drive_the_live_dom` green: the wasm guest pulls the seeded `<body><p>…</p>` DOM,
+  edits a `#text` by id, appends/inserts `<p>` by id-anchor, removes, and the conflict /
+  unknown-node / declined paths fire; final DOM = 3 `<p>` with the edited `#text` live (rev 0→4).
+  This is the key integration proof: a sandboxed wasm component mutating serval's real DOM through
+  the capability-scoped contract. P2.1b uncommitted (changes on top of 5825c17).
+- **2026-06-22 (P2.2 — cancellation + quotas, green).** Added epoch interruption + `StoreLimits`
+  to the host (`run_guarded` returning a `Guarded` outcome) and a misbehaving `guest-bomb` crate.
+  Three guard tests pass: an infinite loop is **epoch-cancelled** (a watchdog thread bumps the
+  engine epoch; `set_epoch_deadline` traps the turn's fiber), an unbounded allocation is denied by
+  the `StoreLimits` **memory cap**, and a benign turn completes — the host thread survives every
+  case. Proves §11.2's "Wasm isolation without quotas is incomplete isolation." `run_turns` stays
+  unguarded (unlimited); `run_guarded` is the bounded path that P2.5 will use per-origin. The
+  cancellation-value knobs (epoch tick, deadline, mem cap) are fixed constants for P2 per §11.7-6.
 
 ## Key grounding files
 
