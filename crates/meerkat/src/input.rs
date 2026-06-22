@@ -1159,6 +1159,16 @@ impl WindowCtx<'_> {
             self.close_context_menu();
             return;
         }
+        // Escape closes an open object card (after a menu, which eats Escape first). A
+        // click-away already closes it: an empty-canvas click clears the selection, and the
+        // card drops once focus leaves its member. (Object card — explicit close.)
+        if self.view.object_card.is_some()
+            && matches!(key, WinitKey::Named(WinitNamedKey::Escape))
+        {
+            self.view.object_card = None;
+            self.view.request_redraw();
+            return;
+        }
         // F2 renames the focused pane's session (the switcher's keyboard rename
         // affordance; right-clicking a tile renames that one). (Host text path;
         // pane-as-unit — the focused pane's session, not a global active one.)
