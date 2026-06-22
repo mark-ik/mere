@@ -317,3 +317,87 @@ fn text_populates_font_sidecar() {
         }
     }
 }
+
+#[test]
+fn nowrap_role_overflows_instead_of_wrapping() {
+    let long = "a long single line of body text that would otherwise wrap across many lines";
+    let make = || {
+        doc(vec![DocumentBlock::Paragraph {
+            spans: vec![InlineSpan::Text(long.into())],
+        }])
+    };
+    let narrow = Viewport::new(160.0, 800.0);
+
+    // Wrap (default): the block is constrained to the content width and wraps tall.
+    let wrapped = layout_document(&make(), narrow, &DocumentStyleSheet::default()).packet;
+
+    // NoWrap: the body role lays out on its natural width, overflowing on one line.
+    let mut sheet = DocumentStyleSheet::default();
+    sheet.roles.body.wrap = crate::WrapPolicy::NoWrap;
+    let unwrapped = layout_document(&make(), narrow, &sheet).packet;
+
+    let wrapped_b = &wrapped.blocks[0].bounds.size;
+    let unwrapped_b = &unwrapped.blocks[0].bounds.size;
+    assert!(
+        unwrapped_b.width > wrapped_b.width,
+        "NoWrap block should be wider than Wrap: {} vs {}",
+        unwrapped_b.width,
+        wrapped_b.width
+    );
+    assert!(
+        unwrapped_b.width > narrow.width,
+        "NoWrap block overflows the viewport width for the host to scroll: {} vs {}",
+        unwrapped_b.width,
+        narrow.width
+    );
+    assert!(
+        unwrapped_b.height < wrapped_b.height,
+        "NoWrap is one line, so shorter than the wrapped block"
+    );
+}
+
+#[test]
+fn glyph_runs_carry_per_role_colors() {
+    // Each run is colored by its block / inline role: a heading in
+    // heading_text, body in body_text, a link in link_text, inline code in
+    // code_text. parley segments the paragraph into separate runs at the
+    // brush boundaries, so the link + code sub-runs get their own color.
+    let palette = DocumentStyleSheet::default().colors;
+    let packet = layout_document(
+        &doc(vec![
+            DocumentBlock::Heading {
+                level: 1,
+                spans: vec![InlineSpan::Text("Title".into())],
+            },
+            DocumentBlock::Paragraph {
+                spans: vec![
+                    InlineSpan::Text("see ".into()),
+                    InlineSpan::Link {
+                        url: "https://x.test/".into(),
+                        title: None,
+                        spans: vec![InlineSpan::Text("link".into())],
+                        predicate: None,
+                    },
+                    InlineSpan::Text(" or ".into()),
+                    InlineSpan::Code("snippet".into()),
+                ],
+            },
+        ]),
+        viewport(),
+        &DocumentStyleSheet::default(),
+    )
+    .packet;
+    let colors: Vec<[f32; 4]> = packet
+        .blocks
+        .iter()
+        .filter_map(|b| match &b.kind {
+            RenderedBlockKind::Text { glyph_runs } => Some(glyph_runs.iter().map(|r| r.color)),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert!(colors.contains(&palette.heading_text), "heading run uses heading_text");
+    assert!(colors.contains(&palette.body_text), "body run uses body_text");
+    assert!(colors.contains(&palette.link_text), "link run uses link_text");
+    assert!(colors.contains(&palette.code_text), "inline code run uses code_text");
+}

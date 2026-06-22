@@ -55,7 +55,7 @@ pub use paint_list::{paint_list_from_packet, InkerPaintList};
 pub use layout::{layout_document, LaidOutDocument};
 pub use style::{ColorVocabulary, InlineStyle};
 pub use style_sheet::{
-    BlockRole, BlockStyle, ColorToken, DocumentStyleSheet, FontChoice, HeadingStyle,
+    BlockRole, BlockStyle, ColorToken, DocumentStyleSheet, FontChoice, HeadingStyle, LinkAdornment,
     ResolvedBlockStyle, RoleStyles, SizeSpec, WrapPolicy,
 };
 pub use types::{

@@ -66,6 +66,60 @@ pub enum ColorToken {
     Rule,
 }
 
+/// How to adorn inline links. `SchemeArrow` is the Geopard-style prefix: an
+/// arrow chosen by whether the link leaves the document's own protocol. The
+/// prefix renders as part of the link (link-colored, inside the hit region).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LinkAdornment {
+    /// No prefix; the link text renders as-is.
+    None,
+    /// `⇒ ` (U+21D2) for in-protocol / relative links, `⇗ ` (U+21D7) for
+    /// links that leave the document's protocol.
+    SchemeArrow,
+}
+
+impl LinkAdornment {
+    /// The prefix string for a link, or `None` if no adornment applies.
+    pub fn prefix_for(self, url: &str, base_scheme: Option<&str>) -> Option<&'static str> {
+        match self {
+            LinkAdornment::None => None,
+            LinkAdornment::SchemeArrow => Some(if link_is_external(url, base_scheme) {
+                "\u{21d7} " // ⇗ leaves the document's protocol
+            } else {
+                "\u{21d2} " // ⇒ stays in-protocol (or relative)
+            }),
+        }
+    }
+}
+
+/// The scheme of a URL — the part before the first `:`, if it is a valid
+/// scheme. Relative URLs (no scheme) return `None`. Used to derive a
+/// document's base scheme from its address and to classify its links.
+pub fn url_scheme(url: &str) -> Option<&str> {
+    let idx = url.find(':')?;
+    let scheme = &url[..idx];
+    let valid_start = scheme.chars().next().is_some_and(|c| c.is_ascii_alphabetic());
+    let valid_rest = scheme
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-'));
+    if valid_start && valid_rest {
+        Some(scheme)
+    } else {
+        None
+    }
+}
+
+/// Whether a link leaves the document's protocol. Relative and same-scheme
+/// links are in-protocol; a different scheme is external. With no known base
+/// scheme, an absolute link is treated as external.
+fn link_is_external(url: &str, base_scheme: Option<&str>) -> bool {
+    match (url_scheme(url), base_scheme) {
+        (None, _) => false,
+        (Some(s), Some(b)) => !s.eq_ignore_ascii_case(b),
+        (Some(_), None) => true,
+    }
+}
+
 /// Which role to resolve. Carries the heading level inline, since heading
 /// size is intrinsically per-level.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -135,8 +189,9 @@ pub struct ResolvedBlockStyle {
     /// Premultiplied RGBA in 0..=1 (the `netrender::Scene` format). The
     /// block's base text color; the layout pass bakes it onto each glyph run.
     pub color: [f32; 4],
-    /// Wrap policy. Consumed from P4 onward (no-wrap code blocks); the default
-    /// sheet wraps every role.
+    /// Wrap policy: `Wrap` constrains the block to the content width; `NoWrap`
+    /// lays it out on its natural width and overflows for the host to scroll
+    /// (e.g. code blocks). The default sheet wraps every role.
     pub wrap: WrapPolicy,
 }
 
@@ -163,6 +218,8 @@ pub struct DocumentStyleSheet {
     pub vertical_padding: f32,
     /// Palette the [`ColorToken`]s resolve against.
     pub colors: ColorVocabulary,
+    /// How inline links are adorned (the `⇒` / `⇗` scheme arrows).
+    pub link_adornment: LinkAdornment,
     /// Per-role style descriptors.
     pub roles: RoleStyles,
 }
@@ -270,6 +327,7 @@ impl Default for DocumentStyleSheet {
             horizontal_padding: 16.0,
             vertical_padding: 16.0,
             colors: ColorVocabulary::default(),
+            link_adornment: LinkAdornment::SchemeArrow,
             roles: RoleStyles {
                 body: BlockStyle {
                     family: FontChoice::InheritBody,

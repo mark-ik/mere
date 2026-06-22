@@ -429,6 +429,45 @@ mod tests {
     }
 
     #[test]
+    fn draw_text_carries_per_run_role_color() {
+        // Text color now rides on each glyph run (baked from the sheet at
+        // layout), not a single ColorVocabulary lookup: a heading lowers in
+        // heading_text, a paragraph in body_text.
+        let palette = DocumentStyleSheet::default().colors;
+        let laid = layout_document(
+            &doc(vec![
+                DocumentBlock::Heading {
+                    level: 1,
+                    spans: vec![InlineSpan::Text("Title".into())],
+                },
+                DocumentBlock::Paragraph {
+                    spans: vec![InlineSpan::Text("body".into())],
+                },
+            ]),
+            Viewport::new(640.0, 480.0),
+            &DocumentStyleSheet::default(),
+        );
+        let list = paint_list_from_packet(&laid.packet, &laid.fonts, &ColorVocabulary::default());
+        let text_colors: Vec<_> = list
+            .commands()
+            .iter()
+            .filter_map(|c| match c {
+                PaintCmd::DrawText(t) => Some(t.color),
+                _ => None,
+            })
+            .collect();
+        assert_ne!(palette.heading_text, palette.body_text, "roles must differ");
+        assert!(
+            text_colors.contains(&colorf(palette.heading_text)),
+            "heading DrawText paints in heading_text"
+        );
+        assert!(
+            text_colors.contains(&colorf(palette.body_text)),
+            "body DrawText paints in body_text"
+        );
+    }
+
+    #[test]
     fn group_recurses_into_children() {
         // Each list item is a paragraph → real text now (not a placeholder
         // rect), so at least two DrawText commands.

@@ -23,6 +23,7 @@ use parley::{
 
 use crate::font_table::FontInterner;
 use crate::style::InlineStyle;
+use crate::style_sheet::{LinkAdornment, WrapPolicy};
 use crate::types::{
     GlyphRun, InteractionKind, InteractionRegion, Point, PositionedGlyph, Rect, Size, TextStyle,
 };
@@ -39,6 +40,10 @@ pub struct TextBaseStyle {
     /// Premultiplied RGBA (0..=1) for the block's text. Inline links + code
     /// override it per-run inside [`layout_text_block`].
     pub color: [f32; 4],
+    /// Whether the block wraps to the available width (`Wrap`) or lays out on
+    /// its natural width and overflows for the host to scroll (`NoWrap`, e.g.
+    /// code blocks).
+    pub wrap: WrapPolicy,
 }
 
 impl Default for TextBaseStyle {
@@ -51,15 +56,25 @@ impl Default for TextBaseStyle {
             monospace: false,
             line_height_ratio: 1.4,
             color: [0.0, 0.0, 0.0, 1.0],
+            wrap: WrapPolicy::Wrap,
         }
     }
 }
 
 /// Flatten a span tree into a single text string plus ranged styles plus
 /// link annotations. Returned ranges are byte offsets into the text string.
-pub fn flatten_inline(spans: &[InlineSpan]) -> Flattened {
+///
+/// `adornment` + `base_scheme` drive the per-link prefix glyph (the `⇒` / `⇗`
+/// scheme arrows): when adornment applies, the prefix is prepended to the
+/// link's display text, styled as part of the link and covered by its byte
+/// range (so it colors + hit-tests as the link).
+pub fn flatten_inline(
+    spans: &[InlineSpan],
+    adornment: LinkAdornment,
+    base_scheme: Option<&str>,
+) -> Flattened {
     let mut out = Flattened::default();
-    flatten_into(spans, InlineStyle::NORMAL, &mut out);
+    flatten_into(spans, InlineStyle::NORMAL, adornment, base_scheme, &mut out);
     out
 }
 
@@ -74,7 +89,13 @@ pub struct Flattened {
     pub links: Vec<(Range<usize>, String)>,
 }
 
-fn flatten_into(spans: &[InlineSpan], inherited: InlineStyle, out: &mut Flattened) {
+fn flatten_into(
+    spans: &[InlineSpan],
+    inherited: InlineStyle,
+    adornment: LinkAdornment,
+    base_scheme: Option<&str>,
+    out: &mut Flattened,
+) {
     for span in spans {
         match span {
             InlineSpan::Text(t) => {
@@ -94,16 +115,22 @@ fn flatten_into(spans: &[InlineSpan], inherited: InlineStyle, out: &mut Flattene
                 }
             }
             InlineSpan::Emphasis(inner) => {
-                flatten_into(inner, inherited.with_italic(), out);
+                flatten_into(inner, inherited.with_italic(), adornment, base_scheme, out);
             }
             InlineSpan::Strong(inner) => {
-                flatten_into(inner, inherited.with_bold(), out);
+                flatten_into(inner, inherited.with_bold(), adornment, base_scheme, out);
             }
             InlineSpan::Link {
                 url, spans: inner, ..
             } => {
                 let link_start = out.text.len();
-                flatten_into(inner, inherited.with_link(), out);
+                // Scheme-arrow prefix, styled + ranged as part of the link.
+                if let Some(prefix) = adornment.prefix_for(url, base_scheme) {
+                    let p_start = out.text.len();
+                    out.text.push_str(prefix);
+                    out.styles.push((p_start..out.text.len(), inherited.with_link()));
+                }
+                flatten_into(inner, inherited.with_link(), adornment, base_scheme, out);
                 let link_end = out.text.len();
                 if link_start < link_end {
                     out.links.push((link_start..link_end, url.clone()));
@@ -224,7 +251,14 @@ pub fn layout_text_block(
     }
 
     let mut layout = builder.build(&flattened.text);
-    layout.break_all_lines(Some(available_width));
+    // `NoWrap` roles (e.g. code blocks) lay out on their natural width and
+    // overflow horizontally for the host to scroll; `Wrap` constrains to the
+    // available content width. Explicit line breaks are kept either way.
+    let wrap_width = match base.wrap {
+        WrapPolicy::Wrap => Some(available_width),
+        WrapPolicy::NoWrap => None,
+    };
+    layout.break_all_lines(wrap_width);
     layout.align(Alignment::Start, AlignmentOptions::default());
 
     // Walk lines, accumulating Y positions ourselves (parley gives us
@@ -364,5 +398,58 @@ fn family_label_from_brush(brush: InlineStyle, base: &TextBaseStyle) -> String {
         "monospace".to_string()
     } else {
         base.font_family.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn link(url: &str) -> InlineSpan {
+        InlineSpan::Link {
+            url: url.into(),
+            title: None,
+            spans: vec![InlineSpan::Text("label".into())],
+            predicate: None,
+        }
+    }
+
+    #[test]
+    fn no_adornment_leaves_link_text_unprefixed() {
+        let f = flatten_inline(&[link("gemini://x/")], LinkAdornment::None, Some("gemini"));
+        assert_eq!(f.text, "label");
+        assert_eq!(f.links.len(), 1);
+        assert_eq!(f.links[0].0, 0..5);
+    }
+
+    #[test]
+    fn in_protocol_link_gets_rightwards_double_arrow() {
+        let f = flatten_inline(&[link("gemini://x/")], LinkAdornment::SchemeArrow, Some("gemini"));
+        assert!(f.text.starts_with("\u{21d2} "), "got {:?}", f.text);
+        // The arrow is part of the link: the link byte range covers the whole
+        // "⇒ label" string.
+        assert_eq!(f.links.len(), 1);
+        assert_eq!(&f.text[f.links[0].0.clone()], f.text.as_str());
+    }
+
+    #[test]
+    fn external_link_gets_northeast_double_arrow() {
+        let f = flatten_inline(&[link("https://x/")], LinkAdornment::SchemeArrow, Some("gemini"));
+        assert!(f.text.starts_with("\u{21d7} "), "got {:?}", f.text);
+    }
+
+    #[test]
+    fn relative_link_is_in_protocol() {
+        let f = flatten_inline(&[link("/page")], LinkAdornment::SchemeArrow, Some("gemini"));
+        assert!(f.text.starts_with("\u{21d2} "), "got {:?}", f.text);
+    }
+
+    #[test]
+    fn adornment_prefix_carries_link_style() {
+        let f = flatten_inline(&[link("https://x/")], LinkAdornment::SchemeArrow, Some("gemini"));
+        // Every style range over the link (the arrow prefix + the label) is a
+        // link, and one of them begins at byte 0 (the prefix).
+        assert!(f.styles.iter().all(|(_, s)| s.link), "all link-styled");
+        assert!(f.styles.iter().any(|(r, _)| r.start == 0), "prefix styled from 0");
     }
 }

@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 /// light themes; callers tune for their host. Per-style brushes
 /// (link-text, code-text, etc.) are stored separately so a single field
 /// change re-themes one block kind.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ColorVocabulary {
     pub body_text: [f32; 4],
     pub heading_text: [f32; 4],

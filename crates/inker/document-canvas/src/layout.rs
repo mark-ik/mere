@@ -44,7 +44,10 @@ pub fn layout_document(
     style: &DocumentStyleSheet,
 ) -> LaidOutDocument {
     let mut env = LayoutEnvironment::new();
-    let mut layouter = DocumentLayouter::new(viewport, style, &mut env);
+    // The document's own scheme classifies its links as in-protocol vs
+    // external for the `⇒` / `⇗` adornment.
+    let base_scheme = crate::style_sheet::url_scheme(&document.address).map(str::to_string);
+    let mut layouter = DocumentLayouter::new(viewport, style, &mut env, base_scheme);
 
     for (idx, block) in document.blocks.iter().enumerate() {
         layouter.lay_out_block(block, idx, 0);
@@ -53,9 +56,8 @@ pub fn layout_document(
     layouter.finish()
 }
 
-/// Build the parley block base from a resolved role style. Carries the role's
-/// base text `color`; the `wrap` field is consumed from P4 onward (no-wrap code
-/// blocks).
+/// Build the parley block base from a resolved role style: the role's
+/// typography, base text `color`, and `wrap` policy.
 fn text_base_from(resolved: &ResolvedBlockStyle) -> TextBaseStyle {
     TextBaseStyle {
         font_size: resolved.font_size,
@@ -65,6 +67,7 @@ fn text_base_from(resolved: &ResolvedBlockStyle) -> TextBaseStyle {
         monospace: resolved.monospace,
         line_height_ratio: resolved.line_height_ratio,
         color: resolved.color,
+        wrap: resolved.wrap,
     }
 }
 
@@ -79,10 +82,18 @@ struct DocumentLayouter<'a> {
     /// Interns parley's chosen face per run; sealed into the
     /// [`LaidOutDocument`]'s [`FontTable`] sidecar at `finish`.
     fonts: FontInterner,
+    /// The document's own URL scheme, for classifying links (in-protocol vs
+    /// external) when adorning them. `None` for schemeless addresses.
+    base_scheme: Option<String>,
 }
 
 impl<'a> DocumentLayouter<'a> {
-    fn new(viewport: Viewport, style: &'a DocumentStyleSheet, env: &'a mut LayoutEnvironment) -> Self {
+    fn new(
+        viewport: Viewport,
+        style: &'a DocumentStyleSheet,
+        env: &'a mut LayoutEnvironment,
+        base_scheme: Option<String>,
+    ) -> Self {
         Self {
             viewport,
             style,
@@ -92,6 +103,7 @@ impl<'a> DocumentLayouter<'a> {
             interactions: Vec::new(),
             max_x: 0.0,
             fonts: FontInterner::new(),
+            base_scheme,
         }
     }
 
@@ -236,7 +248,8 @@ impl<'a> DocumentLayouter<'a> {
         spacing_above: f32,
         spacing_below: f32,
     ) -> RenderedBlock {
-        let flattened = flatten_inline(spans);
+        let flattened =
+            flatten_inline(spans, self.style.link_adornment, self.base_scheme.as_deref());
         self.render_flattened_with_spacing(
             source_index,
             indent_level,
