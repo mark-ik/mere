@@ -14,11 +14,11 @@ relationships. The graph (the *orrery*) is the root surface; everything else
 <table>
   <tr>
     <td width="50%">
-      <img src="assets/media/demo-1.gif" alt="Switching the orrery between layout strategies"><br>
+      <video src="assets/media/demo-1.mp4" autoplay loop muted playsinline width="100%"></video><br>
       <sub>Switch the orrery between layout strategies: force-directed, grid, Penrose, L-system, kanban, timeline.</sub>
     </td>
     <td width="50%">
-      <img src="assets/media/demo-2.gif" alt="Recoloring the shell with palette and color-harmony controls"><br>
+      <video src="assets/media/demo-2.mp4" autoplay loop muted playsinline width="100%"></video><br>
       <sub>Recolor the whole shell with palette and live color-harmony controls.</sub>
     </td>
   </tr>
@@ -256,11 +256,11 @@ Crate versions are pinned at `0.0.1` and binaries are `publish = false`.
 <table>
   <tr>
     <td width="50%">
-      <img src="assets/media/demo-3.gif" alt="Inspecting a node in the inspector panel"><br>
+      <video src="assets/media/demo-3.mp4" autoplay loop muted playsinline width="100%"></video><br>
       <sub>Inspect any node: identity, provenance, and fetch and parse state.</sub>
     </td>
     <td width="50%">
-      <img src="assets/media/demo-4.gif" alt="The command menu listing every action"><br>
+      <video src="assets/media/demo-4.mp4" autoplay loop muted playsinline width="100%"></video><br>
       <sub>Every action lives in one command menu: relate nodes, export JSON-LD, open a selection in splits, and more.</sub>
     </td>
   </tr>
