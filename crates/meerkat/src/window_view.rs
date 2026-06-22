@@ -37,6 +37,7 @@ use super::{CachedTile, ContentPane, ResizeDrag};
 use crate::list_pane::{list_pane_view, ListPaneState, ListView, PaneItem};
 use crate::pane_session::PaneSession;
 use crate::roster_view::{roster_view, RosterState, RosterView};
+use crate::settings_pane_view::{settings_panes_view, SettingsPane, SettingsPanesState, SettingsPanesView};
 
 /// What a window *is*, which selects its chrome template (and, from MW6, its camera
 /// ownership). The **primary** owns the orrery + the shellbar/switcher chrome and
@@ -121,6 +122,10 @@ pub(crate) struct WindowView {
     /// Each composited card/tile's on-screen content rect this frame (member):
     /// routes a wheel over a card to its scroll rather than the orrery.
     pub(crate) content_rects: Vec<(GraphMemberId, [f32; 4])>,
+    /// Each open settings tile's body rect this frame (member): a left press here routes to
+    /// the shell document (the settings pane's spine + controls), not the workbench surface
+    /// underneath. Set by the per-frame settings snapshot. (Settings lane P1.)
+    pub(crate) settings_rects: Vec<(GraphMemberId, [f32; 4])>,
     /// Find-in-page match rects for `find_member`, computed host-side (no actor
     /// round-trip) against the focused page's cached body — full-document px
     /// (`[x0,y0,x1,y1]`), one inner `Vec` per match. The overlay maps these like the
@@ -192,6 +197,11 @@ pub(crate) struct WindowView {
     /// url)`. Set when the menu opens over a tile / card link; consumed by the
     /// open-in-new-tab / copy-link actions. (Browser link flow.)
     pub(crate) context_link: Option<(GraphMemberId, String)>,
+    /// The member whose **object card** is open in the focus slot, if any: a context
+    /// action ("Resize") summons a light per-object action card in place of the snapshot
+    /// preview, and it stays until Esc / a new selection clears it. P0 carries one widget
+    /// (the size-tier stepper). (Object card — P0.)
+    pub(crate) object_card: Option<GraphMemberId>,
     /// In-progress session rename: the target session + its edit buffer. `Some` while
     /// the switcher label is being typed (F2 / right-click a tile).
     pub(crate) renaming: Option<(SessionId, String)>,
@@ -346,6 +356,10 @@ pub(crate) enum FocusCardKind {
     Snapshot { data_uri: Option<String> },
     /// A never-visited node: a static dashed "double-click to load" placeholder.
     Unvisited,
+    /// The per-object action card, summoned in place of the preview by a context action.
+    /// P0 carries one widget: the size-tier stepper (`−  ●●●○○  +`), `tier` filling the
+    /// notches; `−` / `+` queue a `node_size_steps` step. (Object card — P0.)
+    ObjectCard { tier: usize },
 }
 
 /// The window shell's composed view-state: the chrome plus the orrery-as-element's
@@ -374,6 +388,13 @@ pub(crate) struct ShellState {
     /// `on_wheel` when the host dispatches a wheel there, and drained by the host into gyre's
     /// pan / Ctrl-zoom. Routes the orrery wheel through the document. (cond 5 input bridge.)
     pub(crate) orrery_wheel: Option<(f32, f32)>,
+    /// The open settings tiles, folded into the shell document like the list panes but
+    /// variable-length + two-column (index spine + page body), one entry per open
+    /// `settings://` node. Empty keeps the subtree out of the document. (Settings lane P1.)
+    pub(crate) settings: SettingsPanesState,
+    /// Size-tier steps (`-1` / `+1`) queued by the object card's `−` / `+` buttons; the
+    /// host drains them into `step_node_size_tier` for the card's member. (Object card — P0.)
+    pub(crate) node_size_steps: Vec<i32>,
 }
 
 /// Index into [`ShellState::panes`] / `pane_rects` for the four folded list panes; the
@@ -465,6 +486,17 @@ fn shell_view(s: &ShellState) -> ShellView {
         })
     };
     let list_panes = (list_pane(0), list_pane(1), list_pane(2), list_pane(3));
+    // The settings tiles (variable count), folded in as one lensed subtree that emits one
+    // absolutely positioned two-column pane (index spine + page body) per open `settings://`
+    // tile. Absent when none are open, so the document is identical before any settings tile.
+    // (Settings lane P1.)
+    let settings = (!s.settings.panes.is_empty()).then(|| {
+        let make: fn(&mut SettingsPanesState) -> SettingsPanesView =
+            |s: &mut SettingsPanesState| settings_panes_view(s);
+        let to: fn(&mut ShellState) -> &mut SettingsPanesState = |s: &mut ShellState| &mut s.settings;
+        Box::new(el::<_, ShellState, ()>("div", lens(make, to)).attr("class", "settings-panes-host"))
+            as ShellView
+    });
     Box::new(
         el::<_, ShellState, ()>(
             "shell",
@@ -474,8 +506,10 @@ fn shell_view(s: &ShellState) -> ShellView {
             // cards and win the hit-test, instead of the node DOM (formerly later in the
             // document) occluding the menu and stealing its clicks. The toolbar is in normal
             // flow and the content roots are `position:absolute`, so their geometry is
-            // unchanged by the reorder; only the z-order is.
-            (orrery_element(&s.orrery), roster, list_panes, chrome),
+            // unchanged by the reorder; only the z-order is. The settings panes sit with the
+            // other folded content (before the chrome), painting over the workbench composite
+            // at their tile rects while the chrome overlays still win above them.
+            (orrery_element(&s.orrery), roster, list_panes, settings, chrome),
         )
         .attr("style", "position:relative;width:100%;height:100%"),
     )
@@ -691,6 +725,49 @@ fn focus_card_view(fc: &FocusCard) -> ShellView {
                     ),
                 ),
         ),
+        // The object card's first widget: a size-tier stepper. Five notch dots filled to
+        // the current tier (the slider-with-five-notches look), stepped by − / + buttons
+        // (the discrete path — no drag), each queuing a `node_size_steps` delta. (Object card — P0.)
+        FocusCardKind::ObjectCard { tier } => {
+            let dots: String = (0..orrery::SIZE_TIERS.len())
+                .map(|i| if i <= *tier { '\u{25CF}' } else { '\u{25CB}' })
+                .collect();
+            let btn = "width:30px;height:30px;display:flex;align-items:center;justify-content:center;\
+                       border-radius:6px;background:#2a2f3a;color:#d8deea;font-size:20px;font-weight:600;\
+                       cursor:pointer;user-select:none";
+            let minus: ShellView = Box::new(on_click(
+                el::<_, ShellState, ()>("div", "\u{2212}".to_string()).attr("style", btn),
+                move |s: &mut ShellState, _: PointerClick| s.node_size_steps.push(-1),
+            ));
+            let plus: ShellView = Box::new(on_click(
+                el::<_, ShellState, ()>("div", "+".to_string()).attr("style", btn),
+                move |s: &mut ShellState, _: PointerClick| s.node_size_steps.push(1),
+            ));
+            let notches: ShellView = Box::new(el::<_, ShellState, ()>("span", dots).attr(
+                "style",
+                "color:#9aa4b8;font-size:15px;letter-spacing:5px",
+            ));
+            let row: ShellView = Box::new(
+                el::<_, ShellState, ()>("div", vec![minus, notches, plus]).attr(
+                    "style",
+                    "display:flex;align-items:center;justify-content:space-between",
+                ),
+            );
+            let title: ShellView = Box::new(
+                el::<_, ShellState, ()>("div", "Size".to_string())
+                    .attr("style", "color:#8b94a6;font-size:11px;margin-bottom:7px"),
+            );
+            Box::new(
+                el::<_, ShellState, ()>("div", vec![title, row]).attr("class", "object-card").attr(
+                    "style",
+                    format!(
+                        "position:absolute;left:{x0}px;top:{y0}px;width:{w}px;height:{h}px;\
+                         box-sizing:border-box;padding:9px 12px;border-radius:8px;\
+                         background:rgba(28,32,40,0.96);box-shadow:0 6px 24px rgba(0,0,0,0.55)"
+                    ),
+                ),
+            )
+        }
     }
 }
 
@@ -710,6 +787,8 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             pane_rects: [None; 4],
             orrery_card_selects: Vec::new(),
             orrery_wheel: None,
+            settings: SettingsPanesState::default(),
+            node_size_steps: Vec::new(),
         },
     )
 }
@@ -748,6 +827,14 @@ impl WindowView {
     pub(crate) fn take_orrery_card_selects(&mut self) -> Vec<String> {
         let mut out = Vec::new();
         self.runner.update(|s| out = std::mem::take(&mut s.orrery_card_selects));
+        out
+    }
+
+    /// Drain the size-tier steps the object card's `−` / `+` buttons queued, for the host
+    /// to apply to its member via `step_node_size_tier`. (Object card — P0.)
+    pub(crate) fn take_node_size_steps(&mut self) -> Vec<i32> {
+        let mut out = Vec::new();
+        self.runner.update(|s| out = std::mem::take(&mut s.node_size_steps));
         out
     }
 
@@ -825,6 +912,38 @@ impl WindowView {
         out
     }
 
+    /// Replace the open settings tiles' rendered state (one [`SettingsPane`] per open
+    /// `settings://` tile) + the panel background, folding them into the shell document.
+    /// Empty `panes` keeps the subtree out. (Settings lane P1.)
+    pub(crate) fn set_settings_panes(&mut self, panes: Vec<SettingsPane>, panel_bg: String) {
+        self.runner.update(|s| {
+            s.settings.panes = panes;
+            s.settings.panel_bg = panel_bg;
+        });
+    }
+
+    /// Whether any settings tile subtree is currently in the shell document, so the host
+    /// can skip the per-frame `set_settings_panes` while none are open. (Settings lane P1.)
+    pub(crate) fn settings_panes_open(&self) -> bool {
+        !self.runner.state().settings.panes.is_empty()
+    }
+
+    /// Drain the `(member, key)` page-control activations the settings panes queued, for the
+    /// host to apply like an apparatus activation (theme / engine / physics). (Settings lane P1.)
+    pub(crate) fn take_settings_pane_keys(&mut self) -> Vec<(GraphMemberId, String)> {
+        let mut out = Vec::new();
+        self.runner.update(|s| out = std::mem::take(&mut s.settings.pending_keys));
+        out
+    }
+
+    /// Drain the `(member, url)` spine navigations the settings panes queued, for the host
+    /// to retarget that settings tile's node to the chosen page. (Settings lane P1.)
+    pub(crate) fn take_settings_pane_nav(&mut self) -> Vec<(GraphMemberId, String)> {
+        let mut out = Vec::new();
+        self.runner.update(|s| out = std::mem::take(&mut s.settings.pending_nav));
+        out
+    }
+
     /// Mint a window's view over a fresh pair of serval runners. Everything else
     /// starts at its rest value (empty caches, no in-progress gesture, the default
     /// 1024×600 surface); the caller overrides the view-session bits it restored
@@ -853,6 +972,7 @@ impl WindowView {
             gloss_recent_rects: Default::default(),
             tile_rects: Default::default(),
             content_rects: Default::default(),
+            settings_rects: Default::default(),
             find_matches: Default::default(),
             find_member: None,
             find_gen: 0,
@@ -877,6 +997,7 @@ impl WindowView {
             context_set: Default::default(),
             context_origin: Default::default(),
             context_link: Default::default(),
+            object_card: Default::default(),
             renaming: Default::default(),
             tagging: Default::default(),
             centered: Default::default(),

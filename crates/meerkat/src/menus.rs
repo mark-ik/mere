@@ -74,6 +74,8 @@ impl WindowCtx<'_> {
             let mut items = vec![ContextItem::new("Open tile", ContextAction::OpenSplits)];
             items.extend(self.engine_picker_items(set[0]));
             items.extend(self.representation_picker_items(set[0]));
+            // Summon the object card (P0: the size-tier stepper) in the focus slot. (Object card.)
+            items.push(ContextItem::new("Resize", ContextAction::ResizeNode));
             items.push(ContextItem::new("Add tag\u{2026}", ContextAction::AddTag));
             items
         } else {
@@ -254,6 +256,38 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
+    /// Set the focused orrery's layout strategy (`""` reverts to force-directed); persisted
+    /// per pane. Shared by the empty-canvas layout picker, the radial toggle, and the
+    /// `pelt/orrery` settings page. (Settings lane P2b.)
+    pub(super) fn set_orrery_layout(&mut self, id: &str) {
+        self.orrery_mut().set_layout_strategy((!id.is_empty()).then(|| id.to_string()));
+        self.save_session();
+        self.view.request_redraw();
+    }
+
+    /// Toggle the focused orrery's size-by-degree mode (persisted in the cartography
+    /// sidecar). Shared by the selection menu and the `pelt/orrery` page. (Settings lane P2b.)
+    pub(super) fn toggle_orrery_size_by_degree(&mut self) {
+        let on = self.orrery().size_by_degree();
+        self.orrery_mut().set_size_by_degree(!on);
+        self.view.request_redraw();
+    }
+
+    /// Toggle the live workbench mirror: scope the focused orrery to the open tiles (on) or
+    /// lift the lens (off); persisted per pane. Shared by the menu and the `pelt/orrery`
+    /// page. (Settings lane P2b.)
+    pub(super) fn toggle_mirror_tiles(&mut self) {
+        self.view.mirror_tiles = !self.view.mirror_tiles;
+        if self.view.mirror_tiles {
+            let members = self.view.workbench.open_members();
+            self.orrery_mut().scope_to_members(members);
+        } else {
+            self.orrery_mut().clear_scope();
+        }
+        self.save_session();
+        self.view.request_redraw();
+    }
+
     /// Open `url` (a clicked link) as a new tab linked from `origin`. When `origin`
     /// is itself a tile, the new tab stacks into its slot in the **background** — the
     /// source tab stays active, the browser convention — so middle / Ctrl / right-click
@@ -323,17 +357,21 @@ impl WindowCtx<'_> {
         // id reverts to force-directed (gyre); persisted per pane via view-intent on
         // save_session. No member set — return before the orrery-tile logic below.
         if let ContextAction::SetLayoutStrategy(id) = action {
-            self.orrery_mut().set_layout_strategy((!id.is_empty()).then(|| id.to_string()));
-            self.save_session();
-            self.view.request_redraw();
+            self.set_orrery_layout(id);
             return;
         }
         // Toggle the focused orrery pane's size-by-degree mode (a scene presentation choice;
         // it + per-node overrides persist in the cartography sidecar). No member set — return
         // before the orrery-tile logic. (P0 resize.)
         if let ContextAction::ToggleSizeByDegree = action {
-            let on = self.orrery().size_by_degree();
-            self.orrery_mut().set_size_by_degree(!on);
+            self.toggle_orrery_size_by_degree();
+            return;
+        }
+        // Summon the object card for the single focused node — it renders in the focus slot
+        // in place of the snapshot preview until the focus moves off it. No member set —
+        // return before the orrery-tile logic. (Object card — P0.)
+        if let ContextAction::ResizeNode = action {
+            self.view.object_card = self.focused_member();
             self.view.request_redraw();
             return;
         }
@@ -357,15 +395,7 @@ impl WindowCtx<'_> {
         // per pane via view-intent (like the layout strategy), so the mode survives a
         // reload. No member set. (Curated orrery — workbench mirror.)
         if let ContextAction::MirrorTiles = action {
-            self.view.mirror_tiles = !self.view.mirror_tiles;
-            if self.view.mirror_tiles {
-                let members = self.view.workbench.open_members();
-                self.orrery_mut().scope_to_members(members);
-            } else {
-                self.orrery_mut().clear_scope();
-            }
-            self.save_session();
-            self.view.request_redraw();
+            self.toggle_mirror_tiles();
             return;
         }
         // Relate the two selected nodes — no tile / member-set logic, like the
@@ -521,6 +551,7 @@ impl WindowCtx<'_> {
             | ContextAction::CopyLink
             | ContextAction::SetLayoutStrategy(_)
             | ContextAction::ToggleSizeByDegree
+            | ContextAction::ResizeNode
             | ContextAction::IsolateSelection
             | ContextAction::ShowAllNodes
             | ContextAction::MirrorTiles => {

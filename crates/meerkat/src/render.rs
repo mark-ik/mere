@@ -200,13 +200,11 @@ impl WindowCtx<'_> {
         use crate::window_view::ShellListPane::{Apparatus, Inspector, Steward, Trail};
         // Apparatus: theme + engine + physics buttons over the host observability rows.
         if let Some(rect) = rects[0] {
-            let themes = self.theme_options();
-            let engines = self.engine_rows();
-            let damping = self.physics_damping();
+            // The apparatus is read-only diagnostics now; its settings sections moved to the
+            // pelt settings lane (Settings lane P2).
             let system_rows = self.apparatus_system_rows();
             let obs = self.apparatus_observability();
-            let items =
-                crate::apparatus::apparatus_items(&themes, &engines, damping, &system_rows, &obs);
+            let items = crate::apparatus::apparatus_items(&system_rows, &obs);
             self.view.set_list_pane(Apparatus, "apparatus", items, Some(rect));
         } else if self.view.list_pane_open(Apparatus) {
             self.view.set_list_pane(Apparatus, "apparatus", Vec::new(), None);
@@ -255,7 +253,14 @@ impl WindowCtx<'_> {
         let (nx, ny) = self.orrery().focused_node_screen()?;
         let (pw, ph) = (orrery_rect[2] - orrery_rect[0], orrery_rect[3] - orrery_rect[1]);
         let local = [0.0, 0.0, pw, ph];
-        let (kind, cw, ch) = if self.orrery().member_visited(member) {
+        let (kind, cw, ch) = if self.view.object_card == Some(member) {
+            // The object card replaces the preview when summoned (the context action set the
+            // card's member). P0 carries the size-tier widget; `tier` fills its notches.
+            // (Object card — P0.)
+            let tier =
+                self.orrery().focused_key().map(|k| self.orrery().node_size_tier(k)).unwrap_or(1);
+            (FocusCardKind::ObjectCard { tier }, super::card::OBJCARD_W, super::card::OBJCARD_H)
+        } else if self.orrery().member_visited(member) {
             // The preview image is built host-side once per url (the readback below) and
             // cached; `None` here renders a placeholder until that lands. (Layering fix.)
             let data_uri = self
@@ -581,6 +586,12 @@ impl WindowCtx<'_> {
                 .graph()
                 .nodes()
                 .filter_map(|(key, node)| {
+                    // Settings tiles are ephemeral `settings://` nodes that live only as
+                    // workbench tiles; keep them off the spatial map so they don't clutter
+                    // it (the lane is the config surface, not a graph node). (Settings lane P1.)
+                    if node.url().starts_with("settings://") {
+                        return None;
+                    }
                     let w = orrery.node_position(key)?;
                     let x = w.x * cam.zoom + cam.offset.0;
                     let y = w.y * cam.zoom + cam.offset.1;
@@ -701,35 +712,12 @@ impl WindowCtx<'_> {
         // apparatus root is `.apparatus`, the others `.utility-pane`. (Phase 1, step 2.)
         let apparatus_css = crate::apparatus::apparatus_sheet(&self.shared.presentation.chrome_theme);
         let utility_css = crate::utility_panes::utility_pane_sheet(&self.shared.presentation.chrome_theme);
-        let chrome_sheet: Vec<&str> = self
-            .shared
-            .presentation
-            .chrome_sheet_refs()
-            .into_iter()
-            .chain(roster_css.iter().map(String::as_str))
-            .chain(apparatus_css.iter().map(String::as_str))
-            .chain(utility_css.iter().map(String::as_str))
-            .collect();
-        let chrome_t = Instant::now();
-        // C3 (cheap-path): render the chrome through its persistent
-        // `IncrementalLayout` session — the session drains this frame's mutations,
-        // rebuilds only on a structural / resize / theme frame, and otherwise
-        // restyles incrementally (RepaintOnly, no relayout). Same Scene for a given
-        // DOM as the old per-frame `scene_from_scripted_dom`.
-        let chrome_scene = PaneSession::scene(
-            &mut self.view.chrome_session,
-            &self.view.dom,
-            &chrome_sheet,
-            w,
-            h,
-            cursor,
-            &chrome_scroll,
-        );
-        chrome_us = chrome_t.elapsed().as_micros();
-        // The chrome document's `<external-texture>` elements + their laid-out rects, enumerated
-        // now that the chrome session has been laid out, composited at the compositor pass below
-        // so each external surface's placement comes from the document. (cond 5.)
-        let external_texture_placements = self.external_texture_placements();
+        // The chrome (shell document) scene is built **after** the workbench block below,
+        // not here: the folded settings panes are positioned at the workbench's tile rects,
+        // which are only known once the tile surface has laid out. Rendering the shell after
+        // `snapshot_settings_panes` lets a spine page-switch land this frame instead of one
+        // frame late. `roster_css` / `apparatus_css` / `utility_css` are owned, so they stay
+        // here and feed the deferred `chrome_sheet`. (Settings lane P1.)
 
         // The orrery's per-frame update (node state/shape, resize, recenter, mirror,
         // strategy) and the node-card snapshot now run *above* the chrome render, so the
@@ -789,7 +777,13 @@ impl WindowCtx<'_> {
                 .open_members()
                 .iter()
                 .filter_map(|&m| {
-                    self.orrery().graph().get_node_by_id(m).map(|(_, n)| (m, n.url().to_string()))
+                    self.orrery().graph().get_node_by_id(m).map(|(_, n)| {
+                        let url = n.url();
+                        // A settings tile shows a friendly page title, not its `settings://` url.
+                        let title = crate::settings_lane::settings_tab_title(url)
+                            .unwrap_or_else(|| url.to_string());
+                        (m, title)
+                    })
                 })
                 .collect();
             // Each tab is tinted to match its graph node, so a tab reads as its node:
@@ -919,6 +913,10 @@ impl WindowCtx<'_> {
                     .collect()
             };
             let mut slot_rects = Vec::with_capacity(placements.len());
+            // Settings tiles recorded this frame: `(member, ref, body rect)`, resolved
+            // through the provider seam into the shell document's settings panes after the
+            // loop. They drive no content actor and composite no texture. (Settings lane P1.)
+            let mut settings_tiles: Vec<(GraphMemberId, String, [f32; 4])> = Vec::new();
             for (member, content, slot) in placements {
                 slot_rects.push((member, slot));
                 let Some(url) = self
@@ -929,6 +927,13 @@ impl WindowCtx<'_> {
                 else {
                     continue;
                 };
+                // A settings tile (`settings://<ns>/<page>`) renders through the shell
+                // document's settings pane, not a content actor: record its ref + body rect
+                // and skip the actor / card / texture paths below. (Settings lane P1.)
+                if let Some(reference) = url.strip_prefix("settings://") {
+                    settings_tiles.push((member, reference.to_string(), content));
+                    continue;
+                }
                 let cw = (content[2] - content[0]).round().max(1.0) as u32;
                 let ch = (content[3] - content[1]).round().max(1.0) as u32;
                 if self.is_surface_tier(member, &url) {
@@ -969,9 +974,45 @@ impl WindowCtx<'_> {
                 cards.push((member, content, (cw, ch)));
             }
             self.view.tile_rects = slot_rects;
+            // Fold the recorded settings tiles into the shell document (or clear them) for
+            // this frame's render. (Settings lane P1.)
+            self.snapshot_settings_panes(settings_tiles);
         } else {
             self.view.tile_rects.clear(); // no tile drag targets when the pane is closed
+            self.snapshot_settings_panes(Vec::new()); // no settings tiles with the pane closed
         }
+
+        // Build the chrome (shell document) scene now that every folded pane — roster, the
+        // list panes, and the settings panes (positioned at this frame's tile rects) — is set,
+        // so the one shell render reflects them this frame (no page-switch lag). Moved down
+        // from above the workbench block for the settings panes' sake. (Settings lane P1.)
+        let chrome_sheet: Vec<&str> = self
+            .shared
+            .presentation
+            .chrome_sheet_refs()
+            .into_iter()
+            .chain(roster_css.iter().map(String::as_str))
+            .chain(apparatus_css.iter().map(String::as_str))
+            .chain(utility_css.iter().map(String::as_str))
+            .collect();
+        let chrome_t = Instant::now();
+        // C3 (cheap-path): render the chrome through its persistent `IncrementalLayout`
+        // session — drains this frame's mutations, rebuilds only on a structural / resize /
+        // theme frame, else restyles incrementally (RepaintOnly, no relayout).
+        let chrome_scene = PaneSession::scene(
+            &mut self.view.chrome_session,
+            &self.view.dom,
+            &chrome_sheet,
+            w,
+            h,
+            cursor,
+            &chrome_scroll,
+        );
+        chrome_us = chrome_t.elapsed().as_micros();
+        // The chrome document's `<external-texture>` elements + their laid-out rects, enumerated
+        // now that the chrome session has been laid out, composited at the compositor pass below
+        // so each external surface's placement comes from the document. (cond 5.)
+        let external_texture_placements = self.external_texture_placements();
         // The orrery's focused-node card, alongside any workbench pane — but not when
         // the focused node is itself an open tile. The tile is the view; a second card
         // would drive the node's one content actor at a different viewport size and

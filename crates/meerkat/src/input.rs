@@ -209,7 +209,10 @@ impl WindowCtx<'_> {
                     // engine / physics, trail recover, comms). The gloss is the one pane with
                     // bespoke handling (it focuses minimap nodes itself), so it stays its own
                     // branch below. (Phase 1, step 3 — Y-band collapse.)
-                    if self.chrome_routed_leaf_at(x, y) {
+                    // A settings tile's body lives in the shell document too (it paints over
+                    // the workbench composite at the tile rect), so a press there routes to the
+                    // same shell hit-test + dispatch as the folded panes. (Settings lane P1.)
+                    if self.chrome_routed_leaf_at(x, y) || self.settings_pane_at(x, y) {
                         if button == MouseButton::Left {
                             self.chrome_click(x, y);
                         }
@@ -627,6 +630,16 @@ impl WindowCtx<'_> {
         })
     }
 
+    /// Whether `(x, y)` is inside an open settings tile's body rect — a press there routes to
+    /// the shell document (the settings pane's spine + controls) rather than the workbench
+    /// surface underneath it. (Settings lane P1.)
+    fn settings_pane_at(&self, x: f32, y: f32) -> bool {
+        self.view
+            .settings_rects
+            .iter()
+            .any(|(_, r)| x >= r[0] && x < r[2] && y >= r[1] && y < r[3])
+    }
+
     /// Hit-test the chrome root at `(x, y)` and dispatch the click (buttons +
     /// suggestion / palette rows). A row / backdrop click that closes the palette
     /// restores focus so the caret doesn't dangle on the removed field.
@@ -695,8 +708,28 @@ impl WindowCtx<'_> {
         self.drain_roster_intents();
         self.drain_list_pane_activations();
         self.drain_orrery_card_selects();
+        self.drain_object_card();
         self.sync_settings();
         self.sync_orrery();
+    }
+
+    /// Reconcile the object card: drop it once the focus moves off its member (a new or
+    /// cleared selection), and apply the size-tier steps its − / + buttons queued. (Object
+    /// card — P0.)
+    fn drain_object_card(&mut self) {
+        let steps = self.view.take_node_size_steps();
+        if self.view.object_card.is_some() && self.view.object_card != self.focused_member() {
+            self.view.object_card = None;
+            self.view.request_redraw();
+        }
+        if let Some(member) = self.view.object_card {
+            if !steps.is_empty() {
+                for delta in steps {
+                    self.orrery_mut().step_node_size_tier(member, delta);
+                }
+                self.view.request_redraw();
+            }
+        }
     }
 
     /// Apply the node selections the orrery card click handlers queued through the shell
@@ -773,19 +806,48 @@ impl WindowCtx<'_> {
     pub(super) fn drain_list_pane_activations(&mut self) {
         use crate::window_view::ShellListPane::{Apparatus, Trail};
         for key in self.view.take_list_pane_activations(Apparatus) {
-            match key.as_str() {
-                "phys:damping:down" => self.adjust_physics_damping(-0.5),
-                "phys:damping:up" => self.adjust_physics_damping(0.5),
-                k if k.starts_with("engine:toggle:") => {
-                    self.toggle_engine(&k["engine:toggle:".len()..]);
-                }
-                _ => self.set_theme(&key),
-            }
+            self.apply_pelt_activation(&key);
         }
         for key in self.view.take_list_pane_activations(Trail) {
             if let Some(id) = key.strip_prefix("recover:") {
                 self.recover_deleted_node(id);
             }
+        }
+        // The settings tiles' `pelt/*` pages carry the same control keys as the apparatus, so
+        // a page control drives the host identically; a spine entry navigates the tile's node
+        // to the chosen page (`navigate_member` retargets its url, which the next frame's
+        // settings dispatch re-resolves). (Settings lane P1.)
+        for (_member, key) in self.view.take_settings_pane_keys() {
+            self.apply_pelt_activation(&key);
+        }
+        for (member, url) in self.view.take_settings_pane_nav() {
+            self.orrery_mut().navigate_member(member, &url);
+            self.view.request_redraw();
+        }
+    }
+
+    /// Apply a `pelt` settings activation key (a theme id, `engine:toggle:<id>`, or a
+    /// `phys:damping:*` step). Shared by the apparatus pane and the settings lane's `pelt/*`
+    /// pages, so a control drives the host the same wherever it is shown. (Settings lane P1.)
+    fn apply_pelt_activation(&mut self, key: &str) {
+        match key {
+            "phys:damping:down" => self.adjust_physics_damping(-0.5),
+            "phys:damping:up" => self.adjust_physics_damping(0.5),
+            // The active-tab cap (migrated from the settings overlay): edit the chrome cap;
+            // the per-frame `sync_settings` applies it to the actor pool + persists. (P2.)
+            "tiles:cap:down" => self.view.chrome_update(Chrome::dec_tab_cap),
+            "tiles:cap:up" => self.view.chrome_update(Chrome::inc_tab_cap),
+            // The `pelt/orrery` scene toggles, driving the same methods the context menu does
+            // (so the page and the menu stay one source of truth). (Settings lane P2b.)
+            "orrery:sizebydegree" => self.toggle_orrery_size_by_degree(),
+            "orrery:mirror" => self.toggle_mirror_tiles(),
+            k if k.starts_with("orrery:layout:") => {
+                self.set_orrery_layout(&k["orrery:layout:".len()..]);
+            }
+            k if k.starts_with("engine:toggle:") => {
+                self.toggle_engine(&k["engine:toggle:".len()..]);
+            }
+            _ => self.set_theme(key),
         }
     }
 
@@ -1057,15 +1119,6 @@ impl WindowCtx<'_> {
         if matches!(key, WinitKey::Named(WinitNamedKey::F2)) {
             if let Some((id, _)) = self.session_for_graph(self.view.focused_graph) {
                 self.start_rename(id);
-            }
-            return;
-        }
-        // While the settings overlay is open, Escape closes it and other keys are
-        // swallowed (clicks on its controls go through the chrome path).
-        if self.view.chrome().settings_open {
-            if matches!(key, WinitKey::Named(WinitNamedKey::Escape)) {
-                self.view.chrome_update(Chrome::close_settings);
-                self.view.request_redraw();
             }
             return;
         }

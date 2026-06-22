@@ -124,8 +124,6 @@ pub struct Chrome {
     /// User settings the chrome renders + edits (the settings overlay). The host
     /// applies them (e.g. the tab cap to the actor pool) and persists them.
     pub settings: Settings,
-    /// Whether the settings overlay is open.
-    pub settings_open: bool,
     /// The open right-click context menu (host-populated from the selection), or
     /// `None` when no menu is showing.
     pub context_menu: Option<ContextMenu>,
@@ -323,6 +321,10 @@ pub enum ContextAction {
     /// so `ContextAction` stays `Copy`): `"tile"` or `"shape"`. Applies to the context
     /// set like the engine pins. (Node representation P1.)
     SetRepresentation(&'static str),
+    /// Summon the object card for the single selected node — a light per-object action
+    /// card (P0: the size-tier stepper) in the focus slot, in place of the snapshot preview.
+    /// Drains by setting `view.object_card`; no member set consumed. (Object card — P0.)
+    ResizeNode,
     /// Scope the focused orrery to the selection (plus its neighbors) — the "Isolate"
     /// lens. Drains like `ShellbarMove` without touching `context_set`. (Curated orrery.)
     IsolateSelection,
@@ -369,7 +371,6 @@ impl Chrome {
             pending_connect: None,
             pending_command: None,
             settings: Settings::default(),
-            settings_open: false,
             context_menu: None,
             pending_context: None,
             comms: CommsPane::new(),
@@ -573,12 +574,13 @@ impl Chrome {
                 // the sync actor). The ticket is whatever is in the address bar.
                 self.pending_connect = Some(self.omnibar.text().trim().to_string());
             }
-            // A chrome-level action: open the settings overlay right here (no host
-            // intent needed, like toggling the palette).
-            Command::OpenSettings => self.open_settings(),
-            // Chrome-level too: toggle the docked comms pane in place.
+            // Chrome-level: toggle the docked comms pane in place.
             Command::ToggleComms => self.toggle_comms(),
-            Command::ToggleWorkbench
+            // Settings now opens as a workbench tile (the pelt settings lane), so it is a
+            // host action like the other pane toggles, not the chrome overlay it was in P0.
+            // (Settings lane P1.)
+            Command::OpenSettings
+            | Command::ToggleWorkbench
             | Command::ToggleRoster
             | Command::ToggleGloss
             | Command::ToggleApparatus
@@ -630,20 +632,8 @@ impl Chrome {
         std::mem::take(&mut self.physics_toggle)
     }
 
-    /// Open the settings overlay (closing the palette + suggestions dropdown).
-    pub fn open_settings(&mut self) {
-        self.settings_open = true;
-        self.close_palette();
-        self.close_suggestions();
-    }
-
-    /// Close the settings overlay.
-    pub fn close_settings(&mut self) {
-        self.settings_open = false;
-    }
-
-    /// Raise the active-tab cap by one (bounded, so the overlay can't set an
-    /// absurd value). The host applies + persists the change.
+    /// Raise the active-tab cap by one (bounded, so it can't reach an absurd value).
+    /// Driven by the `pelt/appearance` page's cap control; the host applies + persists it.
     pub fn inc_tab_cap(&mut self) {
         self.settings.tab_cap = (self.settings.tab_cap + 1).min(64);
     }

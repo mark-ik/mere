@@ -488,6 +488,10 @@ pub(crate) const SNAP_H: u32 = 260;
 /// The never-visited placeholder card footprint (px).
 pub(crate) const UNVIS_W: u32 = 200;
 pub(crate) const UNVIS_H: u32 = 120;
+/// The object card footprint (px) — a short, wide control card (P0: the size-tier row).
+/// (Object card — P0.)
+pub(crate) const OBJCARD_W: u32 = 200;
+pub(crate) const OBJCARD_H: u32 = 72;
 
 pub fn card_rect(band: [f32; 4]) -> Option<(f32, f32, f32, f32, u32, u32)> {
     let [bx0, by0, bx1, by1] = band;
