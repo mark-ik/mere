@@ -602,12 +602,10 @@ impl WindowCtx<'_> {
                 .graph()
                 .nodes()
                 .filter_map(|(key, node)| {
-                    // Settings tiles are ephemeral `settings://` nodes that live only as
-                    // workbench tiles; keep them off the spatial map so they don't clutter
-                    // it (the lane is the config surface, not a graph node). (Settings lane P1.)
-                    if node.url().starts_with("settings://") {
-                        return None;
-                    }
+                    // Settings nodes render as normal nodes addressing their page (Mark,
+                    // 2026-06-22): a `settings://` node is a first-class, visible graph node you
+                    // can see / open / relate, not an invisible tile-only member. Opening it
+                    // routes to the settings page like any node. (Settings lane — visible nodes.)
                     let w = orrery.node_position(key)?;
                     let x = w.x * cam.zoom + cam.offset.0;
                     let y = w.y * cam.zoom + cam.offset.1;
