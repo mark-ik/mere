@@ -286,6 +286,10 @@ pub enum ContextAction {
     /// happens inside `Orrery::add_field_at`. From the add-pill (no anchor) it
     /// places at the orrery view center. (Field regions P0.)
     AddField,
+    /// Delete the field under the right-click (retire it; the kernel keeps its definition).
+    /// The target field is stored in `context_field`; drains without touching `context_set`.
+    /// (Field regions — delete.)
+    DeleteField,
     /// Close the focused graph (Orrery) pane — offered only when more than one
     /// graph pane is open. Drains like `ShellbarMove` without touching
     /// `context_set`. (Window composition — pane-as-unit.)

@@ -202,6 +202,9 @@ pub(crate) struct WindowView {
     /// preview, and it stays until Esc / a new selection clears it. P0 carries one widget
     /// (the size-tier stepper). (Object card — P0.)
     pub(crate) object_card: Option<GraphMemberId>,
+    /// The field a right-click landed on, stored when the context menu offers "Delete field"
+    /// so the drain knows which to retire. (Field regions — delete.)
+    pub(crate) context_field: Option<kernel::graph::FieldId>,
     /// In-progress session rename: the target session + its edit buffer. `Some` while
     /// the switcher label is being typed (F2 / right-click a tile).
     pub(crate) renaming: Option<(SessionId, String)>,
@@ -1058,6 +1061,7 @@ impl WindowView {
             context_origin: Default::default(),
             context_link: Default::default(),
             object_card: Default::default(),
+            context_field: Default::default(),
             renaming: Default::default(),
             tagging: Default::default(),
             centered: Default::default(),

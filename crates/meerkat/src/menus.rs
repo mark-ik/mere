@@ -35,12 +35,19 @@ impl WindowCtx<'_> {
             // node" at the cursor. Remember the content-band cursor point so AddNode
             // mints the node under it; leave context_set empty (no member set). A
             // node-hit-test for true spatial emptiness is a refinement.
-            self.view.context_origin = Some(self.orrery_point(x, y));
+            let (ofx, ofy) = self.orrery_point(x, y);
+            self.view.context_origin = Some((ofx, ofy));
             self.view.context_set.clear();
+            // A right-click that lands inside a field's box offers to delete it; the target
+            // is stored for the drain. (Field regions — delete.)
+            self.view.context_field = self.orrery().field_at_screen(ofx, ofy);
             let mut items = vec![
                 ContextItem::new("Add node", ContextAction::AddNode),
                 ContextItem::new("Add field", ContextAction::AddField),
             ];
+            if self.view.context_field.is_some() {
+                items.push(ContextItem::new("Delete field", ContextAction::DeleteField));
+            }
             // "Show all" lifts an active scope lens (back to the whole graph). (Curated orrery.)
             if self.orrery().is_scoped() {
                 items.push(ContextItem::new("Show all", ContextAction::ShowAllNodes));
@@ -375,6 +382,16 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Delete the right-clicked field (retire it; the kernel keeps the definition). The
+        // target was stored when the menu opened. No member set. (Field regions — delete.)
+        if let ContextAction::DeleteField = action {
+            if let Some(fid) = self.view.context_field.take() {
+                self.orrery_mut().delete_field(fid);
+                self.save_session();
+                self.view.request_redraw();
+            }
+            return;
+        }
         // Isolate the selection into the orrery's scope lens (a curated subgraph), or
         // lift it. A transient lens (keyed by NodeKey, not persisted). No member set.
         // (Curated orrery.)
@@ -542,6 +559,7 @@ impl WindowCtx<'_> {
             | ContextAction::AddTile
             | ContextAction::AddSession
             | ContextAction::AddField
+            | ContextAction::DeleteField
             | ContextAction::CloseGraphPane
             | ContextAction::PinEngine(_)
             | ContextAction::AutoEngine

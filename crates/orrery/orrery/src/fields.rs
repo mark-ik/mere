@@ -52,9 +52,38 @@ impl Orrery {
         let forces: Vec<CouplingForce> = self
             .graph
             .couplings()
-            .filter_map(|c| CouplingForce::from_coupling(c, &self.graph))
+            .filter_map(|c| {
+                // A retired (deleted) field exerts no force, so its well drops when the
+                // field is deleted — `from_coupling` resolves a field by id regardless of
+                // lifecycle, so the active check is the orrery's job. (Field regions — delete.)
+                if !self.graph.field(c.field).is_some_and(|f| f.is_active()) {
+                    return None;
+                }
+                CouplingForce::from_coupling(c, &self.graph)
+            })
             .collect();
         self.physics.set_coupling_forces(forces);
+    }
+
+    /// The field whose `Region` extent contains the orrery-local screen point, if any — the
+    /// host's right-click field hit-test for the "Delete field" menu. (Field regions — delete.)
+    pub fn field_at_screen(&self, sx: f32, sy: f32) -> Option<FieldId> {
+        self.field_at_world(self.screen_to_world((sx, sy)))
+    }
+
+    /// Delete a field: retire it (the kernel keeps the definition for history / federation)
+    /// and rebuild the coupling forces so its well drops, clearing it from the hover + hidden
+    /// sets and settling the nodes it no longer pulls. The host's "Delete field" context
+    /// action. (Field regions — delete.)
+    pub fn delete_field(&mut self, id: FieldId) {
+        if self.graph.retire_field(id) {
+            if self.active_field == Some(id) {
+                self.active_field = None;
+            }
+            self.hidden_fields.remove(&id);
+            self.rebuild_coupling_forces();
+            self.physics.settle(crate::SETTLE_TICKS / 3);
+        }
     }
 
     /// The active (hovered) field whose extent box should draw, if any. Read by the
