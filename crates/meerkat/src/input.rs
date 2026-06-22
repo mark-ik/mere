@@ -472,8 +472,12 @@ impl WindowCtx<'_> {
                         self.view.last_left_release = None; // don't chain a triple-click
                         // Double-click opens the node in pelt (a workbench tile), on a node
                         // or its snapshot card, replacing the retired promote-to-live-preview.
-                        // (Node-rep P4.)
-                        if over_card || !self.orrery().selected_members().is_empty() {
+                        // (Node-rep P4.) But the object card's − / + are tier steps, not a
+                        // node-open: a double-tap on + must step twice, never launch pelt.
+                        // (Object card P0.)
+                        if !self.point_over_object_card(x, y)
+                            && (over_card || !self.orrery().selected_members().is_empty())
+                        {
                             self.toggle_workbench();
                         }
                     }
@@ -742,18 +746,40 @@ impl WindowCtx<'_> {
         }
     }
 
-    /// Whether `(x, y)` lands on an orrery node-card in the shell document. The cards are
-    /// `position:absolute; transform:translate(...)`, so this rides the shell hit-test
-    /// (serval's transform-aware `walk_for_hit`) and walks the hit node's ancestors for the
-    /// card class. The two-hit-test's gate: `true` routes the press through `chrome_click`
-    /// (the card selects + focuses its node), `false` falls through to gyre. (Phase 2.)
+    /// Whether `(x, y)` lands on an orrery node-card **or the object card** in the shell
+    /// document. The cards are `position:absolute; transform:translate(...)`, so this rides
+    /// the shell hit-test (serval's transform-aware `walk_for_hit`) and walks the hit node's
+    /// ancestors for the card class. The two-hit-test's gate: `true` routes the press through
+    /// `chrome_click` (a node-card selects its node; the object card's − / + buttons fire
+    /// their `on_click`), `false` falls through to gyre. (Phase 2; object card P0.)
     fn point_over_orrery_card(&self, x: f32, y: f32) -> bool {
         let Some(session) = self.view.chrome_session.as_ref() else { return false };
         let dom = self.view.dom.borrow();
         let offsets = ScrollOffsets::<NodeId>::default();
         let Some(mut node) = session.hit_test(&dom, x, y, &offsets) else { return false };
         loop {
-            if crate::has_class(&dom, node, "node-card") {
+            if crate::has_class(&dom, node, "node-card")
+                || crate::has_class(&dom, node, "object-card")
+            {
+                return true;
+            }
+            match dom.parent(node) {
+                Some(parent) => node = parent,
+                None => return false,
+            }
+        }
+    }
+
+    /// Whether `(x, y)` lands on the **object card** specifically (not a node-card), so the
+    /// double-click-to-open-in-pelt gesture can skip it — its − / + are tier steps, and a
+    /// double-tap on + must step twice, never launch the node in pelt. (Object card P0.)
+    fn point_over_object_card(&self, x: f32, y: f32) -> bool {
+        let Some(session) = self.view.chrome_session.as_ref() else { return false };
+        let dom = self.view.dom.borrow();
+        let offsets = ScrollOffsets::<NodeId>::default();
+        let Some(mut node) = session.hit_test(&dom, x, y, &offsets) else { return false };
+        loop {
+            if crate::has_class(&dom, node, "object-card") {
                 return true;
             }
             match dom.parent(node) {
