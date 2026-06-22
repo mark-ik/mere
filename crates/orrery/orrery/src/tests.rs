@@ -680,6 +680,25 @@ fn selected_members_reflects_the_selection() {
 }
 
 #[test]
+fn size_tiers_step_snap_and_clamp() {
+    // The on-graph size editor steps a node through the five presets. (Node-rep — size tiers.)
+    let a_id = uuid::Uuid::from_u128(0xb);
+    let mut g = Graph::new();
+    g.add_node_with_id(a_id, "https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut orrery = Orrery::with_graph(g);
+    let (key, _) = orrery.graph().get_node_by_id(a_id).unwrap();
+
+    // The default size (36) reads as tier 1, the second notch.
+    assert_eq!(orrery.node_size_tier(key), 1);
+    // Step up to tier 2 — the override snaps onto the ladder at that preset.
+    assert_eq!(orrery.step_node_size_tier(a_id, 1), 2);
+    assert_eq!(orrery.node_size(key), crate::SIZE_TIERS[2]);
+    // Step down past the bottom clamps at tier 0 (no underflow).
+    assert_eq!(orrery.step_node_size_tier(a_id, -5), 0);
+    assert_eq!(orrery.node_size(key), crate::SIZE_TIERS[0]);
+}
+
+#[test]
 fn node_size_drives_the_pick_radius() {
     // Decision 5: a node sized in the view picks (and collides) at its true face,
     // not the uniform default — so a grown node is grabbable across its whole face.

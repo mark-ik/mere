@@ -59,6 +59,11 @@ const SETTLE_TICKS: u32 = 360;
 /// A gentle re-separation burst (~1.5s at 60fps) after node colliders resize, so
 /// neighbors ease away from a grown node without a full re-layout. (P0/P5 collider.)
 const SIZE_RESETTLE_TICKS: u32 = 90;
+/// The five face-size presets (px) the on-graph size editor steps between — the notch
+/// points of the snapshot-card resize control. The default (36) is tier 1 (0-indexed), so
+/// an un-sized node reads as the second notch; the ends span dense-small to big-hub, inside
+/// the `set_node_size` 16..160 clamp. (Node-rep — size tiers.)
+pub const SIZE_TIERS: [f32; 5] = [24.0, 36.0, 56.0, 84.0, 120.0];
 /// Per-tick timestep handed to the gyre simulation.
 const TICK_DT: f32 = 1.0 / 60.0;
 /// Pixels per wheel line-notch (the host scales `LineDelta` by this before
@@ -1013,6 +1018,33 @@ impl Orrery {
     /// Whether size-by-degree is on. (P0 resize.)
     pub fn size_by_degree(&self) -> bool {
         self.size_by_degree
+    }
+
+    /// The size-tier index (0..[`SIZE_TIERS`]`.len()`) nearest a node's current resolved
+    /// size — where the resize control's filled notches stop. A size-by-degree or default
+    /// size snaps to its nearest tier for display. (Node-rep — size tiers.)
+    pub fn node_size_tier(&self, key: NodeKey) -> usize {
+        let size = self.node_size(key);
+        SIZE_TIERS
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| (**a - size).abs().total_cmp(&(**b - size).abs()))
+            .map(|(i, _)| i)
+            .unwrap_or(1)
+    }
+
+    /// Step a node's size by `delta` tiers (−1 / +1) from its current nearest tier, set the
+    /// per-node override to that preset, and return the new tier index. The first step snaps
+    /// a size-by-degree / default size onto the tier ladder. Keyed by node UUID; returns the
+    /// unchanged nearest tier for an unknown id. (Node-rep — size tiers.)
+    pub fn step_node_size_tier(&mut self, id: uuid::Uuid, delta: i32) -> usize {
+        let Some((key, _)) = self.graph.get_node_by_id(id) else {
+            return 1;
+        };
+        let current = self.node_size_tier(key) as i32;
+        let next = (current + delta).clamp(0, SIZE_TIERS.len() as i32 - 1) as usize;
+        self.set_node_size(id, SIZE_TIERS[next]);
+        next
     }
 
     /// The URL of the single focused (selected) node, if exactly one node is
