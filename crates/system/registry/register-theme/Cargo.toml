@@ -9,6 +9,12 @@ kernel.workspace = true
 register-lens = { path = "../register-lens" }
 serde = { workspace = true }
 log = "0.4.29"
+# Seed-palette derivation: a few seed colours -> the full ThemeTokenSet.
+tincture.workspace = true
+
+[dev-dependencies]
+# Theme-def serde round-trip test (theme files are serde ThemeDefs).
+serde_json.workspace = true
 
 [lib]
 path = "src/lib.rs"

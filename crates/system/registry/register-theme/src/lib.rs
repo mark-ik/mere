@@ -33,4 +33,5 @@
 
 pub mod chrome;
 pub mod edge_style;
+pub mod seed;
 pub mod theme;

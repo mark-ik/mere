@@ -28,6 +28,7 @@ use crate::edge_style::{
 use register_lens::{
     THEME_ID_DARK as LEGACY_THEME_ID_DARK, THEME_ID_DEFAULT as LEGACY_THEME_ID_DEFAULT, ThemeData,
 };
+use tincture::Seeds;
 
 /// Color tokens for graph-node chrome (badges, pinned fill, rings, default stroke).
 ///
@@ -137,8 +138,60 @@ pub struct ThemeResolution {
     pub tokens: ThemeTokenSet,
 }
 
+/// Where a theme came from.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum ThemeSource {
+    /// A code-defined built-in. Immutable in place; editing forks a user copy.
+    BuiltIn,
+    /// A user-authored theme (created in-app, or loaded from a theme file).
+    #[default]
+    User,
+}
+
+/// How the secondary + tertiary accents relate to the primary. `Custom` keeps
+/// them independent (each its own seed); `Locked` ties their **hue** to the
+/// primary by a fixed offset in degrees (keeping each accent's own saturation +
+/// lightness), so editing the base rotates the whole triad and the derived
+/// activity accents stay coordinated. Presets (triadic / analogous / …) are
+/// just `Locked` with a known offset pair; "lock current" captures the triad's
+/// present hue gaps. (Seed-palette harmony.)
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Harmony {
+    #[default]
+    Custom,
+    Locked { secondary_deg: f32, tertiary_deg: f32 },
+}
+
+/// A theme's authored definition: its seeds + name + mode. The full
+/// [`ThemeTokenSet`] is *derived* from this (see `crate::seed::derive_from_def`).
+/// User themes persist as this (a theme file / settings entry); built-ins carry
+/// it too, so editing one can fork a user copy from its seeds.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ThemeDef {
+    pub id: String,
+    pub name: String,
+    /// Defaults to `User` so a loaded theme file is a user theme without
+    /// needing the field.
+    #[serde(default)]
+    pub source: ThemeSource,
+    pub seeds: Seeds,
+    /// High-contrast derivation mode (forced extremes + max-contrast text).
+    #[serde(default)]
+    pub high_contrast: bool,
+    /// How the accents relate to the primary (default `Custom` = independent).
+    #[serde(default)]
+    pub harmony: Harmony,
+}
+
 pub struct ThemeRegistry {
+    /// Derived, resolvable token sets (built-ins + user themes), keyed by
+    /// lowercased id.
     themes: HashMap<String, ThemeTokenSet>,
+    /// The authored def behind each theme — enables listing, forking, and
+    /// re-deriving after an edit.
+    defs: HashMap<String, ThemeDef>,
+    /// Listing order: built-ins first (registration order), then user themes.
+    order: Vec<String>,
     active: String,
     fallback_id: String,
 }
@@ -147,39 +200,104 @@ impl Default for ThemeRegistry {
     fn default() -> Self {
         let mut registry = Self {
             themes: HashMap::new(),
+            defs: HashMap::new(),
+            order: Vec::new(),
             active: THEME_ID_DEFAULT.to_string(),
             fallback_id: THEME_ID_DEFAULT.to_string(),
         };
-        registry
-            .register_theme(default_theme_tokens())
-            .expect("default theme must be valid");
-        registry
-            .register_theme(light_theme_tokens())
-            .expect("light theme must be valid");
-        registry
-            .register_theme(dark_theme_tokens())
-            .expect("dark theme must be valid");
-        registry
-            .register_theme(high_contrast_theme_tokens())
-            .expect("high-contrast theme must be valid");
+        for def in crate::seed::builtin_defs() {
+            let id = def.id.clone();
+            registry
+                .insert_def(def)
+                .unwrap_or_else(|e| panic!("built-in theme {id} must be valid: {e}"));
+        }
         registry
     }
 }
 
 impl ThemeRegistry {
-    pub fn register_theme(&mut self, tokens: ThemeTokenSet) -> Result<(), String> {
+    /// Derive + validate a def, then register it (or replace an existing entry
+    /// of the same id, preserving its order slot).
+    fn insert_def(&mut self, def: ThemeDef) -> Result<(), String> {
+        let tokens = crate::seed::derive_from_def(&def);
         validate_theme_tokens(&tokens)?;
-        self.themes
-            .insert(tokens.theme_id.to_ascii_lowercase(), tokens);
+        let key = def.id.trim().to_ascii_lowercase();
+        if !self.defs.contains_key(&key) {
+            self.order.push(key.clone());
+        }
+        self.themes.insert(key.clone(), tokens);
+        self.defs.insert(key, def);
         Ok(())
     }
 
-    pub fn unregister_theme(&mut self, theme_id: &str) -> bool {
-        let normalized = theme_id.trim().to_ascii_lowercase();
-        if normalized == self.fallback_id {
+    /// Add (or replace) a user theme from its def. Forces `source = User` and
+    /// validates the derived tokens (a malformed seed set is rejected, not
+    /// registered).
+    pub fn add_user_theme(&mut self, mut def: ThemeDef) -> Result<(), String> {
+        def.source = ThemeSource::User;
+        self.insert_def(def)
+    }
+
+    /// Remove a user theme by id. Built-ins + the fallback can't be removed.
+    /// Returns whether anything was removed.
+    pub fn remove_user_theme(&mut self, theme_id: &str) -> bool {
+        let key = theme_id.trim().to_ascii_lowercase();
+        if key == self.fallback_id {
             return false;
         }
-        self.themes.remove(&normalized).is_some()
+        if !matches!(self.defs.get(&key).map(|d| d.source), Some(ThemeSource::User)) {
+            return false;
+        }
+        self.defs.remove(&key);
+        self.themes.remove(&key);
+        self.order.retain(|k| k != &key);
+        true
+    }
+
+    /// Rename a user theme in place. Built-ins can't be renamed (fork instead).
+    pub fn rename_user_theme(&mut self, theme_id: &str, name: &str) -> bool {
+        let key = theme_id.trim().to_ascii_lowercase();
+        match self.defs.get_mut(&key) {
+            Some(d) if d.source == ThemeSource::User => {
+                d.name = name.to_string();
+                if let Some(tokens) = self.themes.get_mut(&key) {
+                    tokens.display_name = name.to_string();
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Fork any theme (built-in or user) into a new **user** theme seeded from
+    /// the source's seeds. The non-destructive "edit a built-in" path. Returns
+    /// the new def, or `None` if `source_id` is unknown / the new id collides.
+    pub fn fork(&mut self, source_id: &str, new_id: &str, new_name: &str) -> Option<ThemeDef> {
+        let src = self.defs.get(&source_id.trim().to_ascii_lowercase())?.clone();
+        let new_key = new_id.trim().to_ascii_lowercase();
+        if self.defs.contains_key(&new_key) {
+            return None;
+        }
+        let def = ThemeDef {
+            id: new_id.to_string(),
+            name: new_name.to_string(),
+            source: ThemeSource::User,
+            seeds: src.seeds,
+            high_contrast: src.high_contrast,
+            harmony: src.harmony,
+        };
+        self.add_user_theme(def.clone()).ok()?;
+        Some(def)
+    }
+
+    /// All themes in listing order (built-ins first, then user).
+    pub fn list(&self) -> Vec<&ThemeDef> {
+        self.order.iter().filter_map(|k| self.defs.get(k)).collect()
+    }
+
+    /// The authored def for a theme id (for editing / export).
+    pub fn theme_def(&self, theme_id: &str) -> Option<&ThemeDef> {
+        self.defs.get(&theme_id.trim().to_ascii_lowercase())
     }
 
     pub fn resolve_theme(&self, theme_id: Option<&str>) -> ThemeResolution {
@@ -191,7 +309,7 @@ impl ThemeRegistry {
             .themes
             .get(&self.fallback_id)
             .cloned()
-            .unwrap_or_else(default_theme_tokens);
+            .unwrap_or_else(crate::seed::default_token_set);
 
         if requested.is_empty() {
             return ThemeResolution {
@@ -317,282 +435,6 @@ fn to_linear_component(component: u8) -> f32 {
         value / 12.92
     } else {
         ((value + 0.055) / 1.055).powf(2.4)
-    }
-}
-
-fn default_theme_tokens() -> ThemeTokenSet {
-    ThemeTokenSet {
-        theme_id: THEME_ID_DEFAULT.to_string(),
-        display_name: "Default".to_string(),
-        theme_data: ThemeData {
-            background_rgb: (20, 20, 25),
-            accent_rgb: (80, 220, 255),
-            font_scale: 1.0,
-            stroke_width: 1.0,
-        },
-        accessibility: default_theme_accessibility(),
-        theme_contract: default_theme_contract(),
-        edge_tokens: ThemeEdgeTokens::default_theme(),
-        command_notice: Color32::from_rgb(234, 200, 145),
-        radial_disabled_text: Color32::from_rgb(165, 172, 178),
-        radial_hub_fill: Color32::from_rgb(28, 32, 36),
-        radial_hub_stroke: Color32::from_rgb(90, 110, 125),
-        radial_hub_text: Color32::from_rgb(210, 230, 245),
-        radial_domain_active_fill: Color32::from_rgb(70, 130, 170),
-        radial_domain_idle_fill: Color32::from_rgb(50, 66, 80),
-        radial_command_active_fill: Color32::from_rgb(80, 170, 215),
-        radial_command_hover_fill: Color32::from_rgb(64, 82, 98),
-        radial_command_disabled_fill: Color32::from_rgb(42, 48, 54),
-        radial_command_text: Color32::from_rgb(230, 240, 248),
-        radial_chrome_text: Color32::from_rgb(170, 190, 205),
-        radial_warning_text: Color32::from_rgb(234, 200, 145),
-        hover_label_background: Color32::from_rgba_unmultiplied(22, 28, 34, 235),
-        hover_label_stroke: Color32::from_rgb(88, 110, 126),
-        hover_label_text: Color32::from_rgb(220, 236, 248),
-        graph_node_search_match: Color32::from_rgb(95, 220, 130),
-        graph_node_search_match_active: Color32::from_rgb(140, 255, 140),
-        graph_node_hover: Color32::from_rgb(255, 150, 80),
-        graph_node_selection: Color32::from_rgb(255, 200, 100),
-        graph_node_focus_ring: Color32::from_rgb(120, 200, 255),
-        graph_node_hover_ring: Color32::from_rgba_unmultiplied(180, 180, 190, 180),
-        graph_node_chrome: GraphNodeChromeTheme {
-            workspace_badge_background: Color32::from_rgba_unmultiplied(20, 30, 46, 224),
-            workspace_badge_text: Color32::from_gray(245),
-            semantic_badge_background: Color32::from_rgba_unmultiplied(34, 44, 64, 224),
-            semantic_badge_text: Color32::from_gray(245),
-            semantic_badge_overflow_background: Color32::from_rgba_unmultiplied(24, 24, 24, 216),
-            semantic_badge_orbit_background: Color32::from_rgba_unmultiplied(20, 28, 42, 230),
-            pinned_fill: Color32::WHITE,
-            pinned_stroke: Color32::from_gray(40),
-            clip_ring: Color32::from_rgb(170, 210, 255),
-            default_stroke: Color32::from_gray(90),
-        },
-        chrome: ChromeTheme::mere_dark(),
-        status_success: Color32::from_rgb(90, 200, 120),
-        status_warning: Color32::from_rgb(210, 175, 70),
-        status_error: Color32::from_rgb(180, 60, 60),
-        status_neutral: Color32::from_rgb(140, 145, 150),
-        workbench_panel_background: Color32::from_rgb(20, 20, 25),
-        selection_highlight_background: Color32::from_rgb(255, 230, 0),
-        selection_highlight_text: Color32::WHITE,
-        selection_highlight_stroke: Color32::BLACK,
-        semantic_origin_manual: Color32::from_rgb(120, 170, 255),
-        semantic_origin_semantic: Color32::from_rgb(76, 175, 80),
-        semantic_origin_anchor: Color32::from_rgb(255, 167, 38),
-    }
-}
-
-fn light_theme_tokens() -> ThemeTokenSet {
-    ThemeTokenSet {
-        theme_id: THEME_ID_LIGHT.to_string(),
-        display_name: "Light".to_string(),
-        theme_data: ThemeData {
-            // A soft paper, a touch below pure white so the graph canvas isn't
-            // glaring and gray edges read against it.
-            background_rgb: (226, 230, 236),
-            accent_rgb: (54, 120, 212),
-            font_scale: 1.0,
-            stroke_width: 1.0,
-        },
-        accessibility: default_theme_accessibility(),
-        theme_contract: default_theme_contract(),
-        edge_tokens: ThemeEdgeTokens::light_theme(),
-        command_notice: Color32::from_rgb(144, 96, 22),
-        radial_disabled_text: Color32::from_rgb(92, 98, 108),
-        radial_hub_fill: Color32::from_rgb(248, 250, 252),
-        radial_hub_stroke: Color32::from_rgb(176, 186, 198),
-        radial_hub_text: Color32::from_rgb(26, 36, 48),
-        radial_domain_active_fill: Color32::from_rgb(98, 152, 226),
-        radial_domain_idle_fill: Color32::from_rgb(226, 232, 239),
-        radial_command_active_fill: Color32::from_rgb(90, 150, 220),
-        radial_command_hover_fill: Color32::from_rgb(214, 222, 232),
-        radial_command_disabled_fill: Color32::from_rgb(236, 240, 244),
-        radial_command_text: Color32::from_rgb(28, 36, 48),
-        radial_chrome_text: Color32::from_rgb(92, 102, 118),
-        radial_warning_text: Color32::from_rgb(144, 96, 22),
-        hover_label_background: Color32::from_rgba_unmultiplied(250, 252, 255, 244),
-        hover_label_stroke: Color32::from_rgb(178, 188, 202),
-        hover_label_text: Color32::from_rgb(28, 36, 46),
-        graph_node_search_match: Color32::from_rgb(50, 170, 94),
-        graph_node_search_match_active: Color32::from_rgb(38, 146, 80),
-        graph_node_hover: Color32::from_rgb(214, 120, 52),
-        graph_node_selection: Color32::from_rgb(214, 160, 56),
-        graph_node_focus_ring: Color32::from_rgb(54, 120, 212),
-        graph_node_hover_ring: Color32::from_rgba_unmultiplied(152, 160, 172, 164),
-        graph_node_chrome: GraphNodeChromeTheme {
-            workspace_badge_background: Color32::from_rgba_unmultiplied(232, 238, 246, 236),
-            workspace_badge_text: Color32::from_rgb(32, 40, 52),
-            semantic_badge_background: Color32::from_rgba_unmultiplied(220, 228, 238, 236),
-            semantic_badge_text: Color32::from_rgb(38, 46, 58),
-            semantic_badge_overflow_background: Color32::from_rgba_unmultiplied(204, 212, 224, 232),
-            semantic_badge_orbit_background: Color32::from_rgba_unmultiplied(238, 242, 248, 240),
-            pinned_fill: Color32::from_rgb(255, 255, 255),
-            pinned_stroke: Color32::from_rgb(110, 122, 136),
-            clip_ring: Color32::from_rgb(92, 146, 214),
-            default_stroke: Color32::from_rgb(132, 144, 158),
-        },
-        chrome: ChromeTheme::mere_light(),
-        status_success: Color32::from_rgb(46, 140, 86),
-        status_warning: Color32::from_rgb(160, 120, 32),
-        status_error: Color32::from_rgb(170, 62, 62),
-        status_neutral: Color32::from_rgb(120, 124, 130),
-        workbench_panel_background: Color32::from_rgb(245, 246, 250),
-        selection_highlight_background: Color32::from_rgb(255, 216, 48),
-        selection_highlight_text: Color32::from_rgb(24, 28, 34),
-        selection_highlight_stroke: Color32::from_rgb(48, 52, 60),
-        semantic_origin_manual: Color32::from_rgb(90, 150, 220),
-        semantic_origin_semantic: Color32::from_rgb(50, 150, 86),
-        semantic_origin_anchor: Color32::from_rgb(214, 130, 36),
-    }
-}
-
-fn dark_theme_tokens() -> ThemeTokenSet {
-    ThemeTokenSet {
-        theme_id: THEME_ID_DARK.to_string(),
-        display_name: "Dark".to_string(),
-        theme_data: ThemeData {
-            // Pulled toward black so Dark reads as dark, not gray — distinct from
-            // the Default slate and a step above High Contrast's pure black.
-            background_rgb: (8, 9, 13),
-            accent_rgb: (110, 170, 255),
-            font_scale: 1.0,
-            stroke_width: 1.0,
-        },
-        accessibility: default_theme_accessibility(),
-        theme_contract: default_theme_contract(),
-        edge_tokens: ThemeEdgeTokens::dark_theme(),
-        command_notice: Color32::from_rgb(240, 214, 164),
-        radial_disabled_text: Color32::from_rgb(176, 182, 190),
-        radial_hub_fill: Color32::from_rgb(20, 24, 30),
-        radial_hub_stroke: Color32::from_rgb(92, 116, 138),
-        radial_hub_text: Color32::from_rgb(220, 234, 250),
-        radial_domain_active_fill: Color32::from_rgb(86, 140, 186),
-        radial_domain_idle_fill: Color32::from_rgb(44, 56, 72),
-        radial_command_active_fill: Color32::from_rgb(94, 166, 224),
-        radial_command_hover_fill: Color32::from_rgb(58, 74, 92),
-        radial_command_disabled_fill: Color32::from_rgb(34, 40, 48),
-        radial_command_text: Color32::from_rgb(232, 240, 248),
-        radial_chrome_text: Color32::from_rgb(184, 198, 214),
-        radial_warning_text: Color32::from_rgb(240, 214, 164),
-        hover_label_background: Color32::from_rgba_unmultiplied(16, 20, 28, 240),
-        hover_label_stroke: Color32::from_rgb(86, 110, 136),
-        hover_label_text: Color32::from_rgb(226, 236, 248),
-        graph_node_search_match: Color32::from_rgb(112, 214, 158),
-        graph_node_search_match_active: Color32::from_rgb(162, 245, 188),
-        graph_node_hover: Color32::from_rgb(255, 166, 104),
-        graph_node_selection: Color32::from_rgb(255, 214, 134),
-        graph_node_focus_ring: Color32::from_rgb(140, 182, 255),
-        graph_node_hover_ring: Color32::from_rgba_unmultiplied(170, 176, 194, 190),
-        graph_node_chrome: GraphNodeChromeTheme {
-            workspace_badge_background: Color32::from_rgba_unmultiplied(26, 36, 50, 228),
-            workspace_badge_text: Color32::from_rgb(242, 246, 250),
-            semantic_badge_background: Color32::from_rgba_unmultiplied(38, 48, 66, 228),
-            semantic_badge_text: Color32::from_rgb(242, 246, 250),
-            semantic_badge_overflow_background: Color32::from_rgba_unmultiplied(28, 32, 40, 220),
-            semantic_badge_orbit_background: Color32::from_rgba_unmultiplied(22, 30, 44, 234),
-            pinned_fill: Color32::from_rgb(255, 255, 255),
-            pinned_stroke: Color32::from_rgb(56, 66, 82),
-            clip_ring: Color32::from_rgb(156, 198, 255),
-            default_stroke: Color32::from_rgb(104, 116, 132),
-        },
-        chrome: ChromeTheme::mere_darker(),
-        status_success: Color32::from_rgb(110, 216, 146),
-        status_warning: Color32::from_rgb(232, 188, 84),
-        status_error: Color32::from_rgb(220, 102, 102),
-        status_neutral: Color32::from_rgb(150, 156, 168),
-        workbench_panel_background: Color32::from_rgb(20, 20, 25),
-        selection_highlight_background: Color32::from_rgb(255, 230, 64),
-        selection_highlight_text: Color32::WHITE,
-        selection_highlight_stroke: Color32::BLACK,
-        semantic_origin_manual: Color32::from_rgb(138, 186, 255),
-        semantic_origin_semantic: Color32::from_rgb(98, 198, 112),
-        semantic_origin_anchor: Color32::from_rgb(255, 182, 84),
-    }
-}
-
-fn high_contrast_theme_tokens() -> ThemeTokenSet {
-    ThemeTokenSet {
-        theme_id: THEME_ID_HIGH_CONTRAST.to_string(),
-        display_name: "High Contrast".to_string(),
-        theme_data: ThemeData {
-            background_rgb: (0, 0, 0),
-            accent_rgb: (255, 230, 0),
-            font_scale: 1.1,
-            stroke_width: 1.5,
-        },
-        accessibility: ThemeAccessibilitySupport {
-            supports_monochrome: true,
-            supports_high_contrast: true,
-            default_edge_mode: EdgeAccessibilityMode::ColorAndPattern,
-        },
-        theme_contract: ThemeContract {
-            min_family_luminance_delta: 4.0,
-            require_non_color_family_distinction: true,
-            require_monochrome_preservation: true,
-        },
-        edge_tokens: ThemeEdgeTokens::high_contrast_theme(),
-        command_notice: Color32::from_rgb(255, 230, 0),
-        radial_disabled_text: Color32::from_rgb(255, 255, 255),
-        radial_hub_fill: Color32::from_rgb(0, 0, 0),
-        radial_hub_stroke: Color32::from_rgb(255, 255, 255),
-        radial_hub_text: Color32::from_rgb(255, 255, 255),
-        radial_domain_active_fill: Color32::from_rgb(255, 230, 0),
-        radial_domain_idle_fill: Color32::from_rgb(0, 0, 0),
-        radial_command_active_fill: Color32::from_rgb(255, 230, 0),
-        radial_command_hover_fill: Color32::from_rgb(40, 40, 40),
-        radial_command_disabled_fill: Color32::from_rgb(0, 0, 0),
-        radial_command_text: Color32::from_rgb(255, 255, 255),
-        radial_chrome_text: Color32::from_rgb(255, 255, 255),
-        radial_warning_text: Color32::from_rgb(255, 230, 0),
-        hover_label_background: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
-        hover_label_stroke: Color32::from_rgb(255, 255, 255),
-        hover_label_text: Color32::from_rgb(255, 255, 255),
-        graph_node_search_match: Color32::from_rgb(0, 255, 170),
-        graph_node_search_match_active: Color32::from_rgb(255, 255, 255),
-        graph_node_hover: Color32::from_rgb(255, 128, 0),
-        graph_node_selection: Color32::from_rgb(255, 230, 0),
-        graph_node_focus_ring: Color32::from_rgb(255, 255, 255),
-        graph_node_hover_ring: Color32::from_rgba_unmultiplied(255, 255, 255, 196),
-        graph_node_chrome: GraphNodeChromeTheme {
-            workspace_badge_background: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
-            workspace_badge_text: Color32::from_rgb(255, 255, 255),
-            semantic_badge_background: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
-            semantic_badge_text: Color32::from_rgb(255, 255, 255),
-            semantic_badge_overflow_background: Color32::from_rgba_unmultiplied(255, 255, 255, 255),
-            semantic_badge_orbit_background: Color32::from_rgba_unmultiplied(0, 0, 0, 255),
-            pinned_fill: Color32::from_rgb(255, 230, 0),
-            pinned_stroke: Color32::from_rgb(255, 255, 255),
-            clip_ring: Color32::from_rgb(255, 255, 255),
-            default_stroke: Color32::from_rgb(255, 255, 255),
-        },
-        chrome: ChromeTheme::high_contrast(),
-        status_success: Color32::from_rgb(0, 255, 170),
-        status_warning: Color32::from_rgb(255, 230, 0),
-        status_error: Color32::from_rgb(255, 64, 64),
-        status_neutral: Color32::from_rgb(220, 220, 230),
-        workbench_panel_background: Color32::BLACK,
-        selection_highlight_background: Color32::from_rgb(255, 230, 0),
-        selection_highlight_text: Color32::BLACK,
-        selection_highlight_stroke: Color32::WHITE,
-        semantic_origin_manual: Color32::from_rgb(0, 255, 255),
-        semantic_origin_semantic: Color32::from_rgb(0, 255, 170),
-        semantic_origin_anchor: Color32::from_rgb(255, 230, 0),
-    }
-}
-
-fn default_theme_accessibility() -> ThemeAccessibilitySupport {
-    ThemeAccessibilitySupport {
-        supports_monochrome: true,
-        supports_high_contrast: true,
-        default_edge_mode: EdgeAccessibilityMode::ColorAndPattern,
-    }
-}
-
-fn default_theme_contract() -> ThemeContract {
-    ThemeContract {
-        min_family_luminance_delta: 4.0,
-        require_non_color_family_distinction: true,
-        require_monochrome_preservation: true,
     }
 }
 
