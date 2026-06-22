@@ -42,6 +42,7 @@ pub(crate) fn settings_index(namespace: &str) -> Vec<SettingsPageRef> {
     match namespace {
         "pelt" => vec![
             SettingsPageRef { id: "appearance", title: "Appearance" },
+            SettingsPageRef { id: "reading", title: "Reading" },
             SettingsPageRef { id: "engines", title: "Engines" },
             SettingsPageRef { id: "physics", title: "Physics" },
             SettingsPageRef { id: "orrery", title: "Orrery" },
@@ -75,6 +76,7 @@ impl WindowCtx<'_> {
                 items.extend(tab_cap_items(self.view.chrome().settings.tab_cap));
                 ("Appearance", items)
             }
+            "reading" => ("Reading", self.reading_settings_items()),
             "engines" => ("Engines", engine_section_items(&self.engine_rows())),
             "physics" => ("Physics", physics_section_items(self.physics_damping())),
             "orrery" => ("Orrery", self.orrery_settings_items()),
@@ -188,6 +190,56 @@ impl WindowCtx<'_> {
             "Remove this theme".to_string(),
             "theme:remove".to_string(),
         ));
+        items
+    }
+
+    /// The `pelt/reading` page: document typography — base text size + line
+    /// spacing sliders, the `⇒`/`⇗` link-arrows toggle, a curated body / code
+    /// font choice, and a reset. The controls drain `doc:size:<i>:<count>` /
+    /// `doc:linespacing:<i>:<count>` / `doc:arrows` / `doc:bodyfont:<name>` /
+    /// `doc:monofont:<name>` / `doc:reset` to the [`crate::doc_style`] edit
+    /// methods. Colours stay theme-owned (the Appearance page). (Typography.)
+    fn reading_settings_items(&self) -> Vec<PaneItem> {
+        let s = &self.shared.presentation.document_sheet;
+        let mut items = vec![PaneItem::text("app-title", "Document text".to_string())];
+
+        items.push(PaneItem::text("app-row", format!("Text size: {:.0} px", s.body_font_size)));
+        let size_frac = ((s.body_font_size - 10.0) / (24.0 - 10.0)).clamp(0.0, 1.0);
+        items.push(PaneItem::slider("Size", "doc:size".to_string(), size_frac, 14, false));
+        items.push(PaneItem::text(
+            "app-row",
+            format!("Line spacing: {:.0}%", s.line_height_ratio * 100.0),
+        ));
+        let spacing_frac = ((s.line_height_ratio - 1.0) / (2.0 - 1.0)).clamp(0.0, 1.0);
+        items.push(PaneItem::slider("Spacing", "doc:linespacing".to_string(), spacing_frac, 10, false));
+
+        let arrows_on = matches!(s.link_adornment, document_canvas::LinkAdornment::SchemeArrow);
+        items.push(PaneItem::button(
+            if arrows_on { "app-btn-active" } else { "app-btn" },
+            format!("Link arrows: {}", if arrows_on { "on" } else { "off" }),
+            "doc:arrows".to_string(),
+        ));
+
+        items.push(PaneItem::text("app-title", "Body font".to_string()));
+        for name in crate::doc_style::BODY_FONTS {
+            let active = s.body_font_family == *name;
+            items.push(PaneItem::button(
+                if active { "app-btn-active" } else { "app-btn" },
+                name.to_string(),
+                format!("doc:bodyfont:{name}"),
+            ));
+        }
+        items.push(PaneItem::text("app-title", "Code font".to_string()));
+        for name in crate::doc_style::MONO_FONTS {
+            let active = s.mono_font_family == *name;
+            items.push(PaneItem::button(
+                if active { "app-btn-active" } else { "app-btn" },
+                name.to_string(),
+                format!("doc:monofont:{name}"),
+            ));
+        }
+
+        items.push(PaneItem::button("app-btn", "Reset to defaults".to_string(), "doc:reset".to_string()));
         items
     }
 

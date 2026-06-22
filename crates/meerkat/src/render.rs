@@ -986,8 +986,8 @@ impl WindowCtx<'_> {
                 }
                 self.ensure_content(&url);
                 let state = self.shared.content.pages.get(&url).cloned();
-                let palette = self.shared.presentation.document_palette;
-                self.shared.content.constellation.drive(member, &url, state, cw, ch, palette);
+                let sheet = self.shared.presentation.document_sheet_composed();
+                self.shared.content.constellation.drive(member, &url, state, cw, ch, sheet);
                 cards.push((member, content, (cw, ch)));
             }
             self.view.tile_rects = slot_rects;
@@ -1109,7 +1109,7 @@ impl WindowCtx<'_> {
                             &loader,
                             RENDER_W,
                             RENDER_H,
-                            self.shared.presentation.document_palette,
+                            &self.shared.presentation.document_sheet_composed(),
                         );
                         Some((scene, content_height))
                     };

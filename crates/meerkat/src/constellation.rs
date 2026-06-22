@@ -27,7 +27,7 @@ use std::sync::mpsc::{Receiver, TryRecvError};
 use armillary::{ActorHandle, Generations, Pool, Wake};
 use forme::GraphMemberId;
 use frame::GraphId;
-use document_canvas::{ColorVocabulary, DocumentRenderPacket, FontTable};
+use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
 use linked_data::GraphContribution;
 use netrender::Scene;
 
@@ -328,7 +328,7 @@ impl Constellation {
         state: Option<ContentState>,
         cw: u32,
         ch: u32,
-        palette: ColorVocabulary,
+        sheet: DocumentStyleSheet,
     ) {
         let tag = ContentState::tag(state.as_ref());
         self.touch_clock += 1;
@@ -365,7 +365,7 @@ impl Constellation {
                 viewport: (cw, ch),
                 nav: activation.gens.nav,
                 viewport_gen: activation.gens.viewport,
-                palette,
+                sheet,
             });
         }
         // Both a Show and a Resize re-anchor the actor's band to the top, so the
@@ -375,16 +375,16 @@ impl Constellation {
         activation.shown = Some(key);
     }
 
-    /// Re-render every active document with a new theme palette (a live theme
-    /// switch). Each content actor re-bakes its packet's glyph colors; a bumped
-    /// viewport generation makes the re-render clear the generation gate so the
-    /// new packet is accepted. The HTML/serval lane ignores the palette (it
-    /// themes through its own CSS). (Document theming, P3.)
-    pub fn retheme(&mut self, palette: ColorVocabulary) {
+    /// Re-render every active document with a new composed style sheet (a live
+    /// theme or typography change). Each content actor re-lays its document; a
+    /// bumped viewport generation makes the re-render clear the generation gate so
+    /// the new packet is accepted. The HTML/serval lane ignores the sheet (it
+    /// themes through its own CSS). (Document theming P3; typography surface D1.)
+    pub fn retheme(&mut self, sheet: DocumentStyleSheet) {
         for activation in self.active.values_mut() {
             activation.gens.viewport.bump();
             activation.handle.command(ContentCommand::Retheme {
-                palette,
+                sheet: sheet.clone(),
                 viewport_gen: activation.gens.viewport,
             });
         }
@@ -824,7 +824,7 @@ mod tests {
     fn respawn_replays_the_tab_and_caps_the_storm() {
         let mut c = Constellation::new(noop_wake());
         c.reconcile(&[(m(1), g())]);
-        c.drive(m(1), "mere://welcome", None, 100, 100, ColorVocabulary::default()); // gives it a `shown` state
+        c.drive(m(1), "mere://welcome", None, 100, 100, DocumentStyleSheet::default()); // gives it a `shown` state
         assert!(c.active.get(&m(1)).unwrap().shown.is_some());
         // A respawn replaces the actor and clears `shown` so the next drive re-Shows.
         assert!(c.respawn(m(1)));

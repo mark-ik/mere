@@ -72,6 +72,7 @@ use winit::window::{ResizeDirection, WindowId};
 use xilem_serval::ServalAppRunner;
 
 mod card;
+mod doc_style;
 mod comms_host;
 mod constellation;
 mod content;
@@ -615,6 +616,12 @@ struct Presentation {
     /// follow the theme; also read by the host for rule / image colors at lower
     /// time. Rebuilt on theme switch. (Document theming, P3.)
     document_palette: document_canvas::ColorVocabulary,
+    /// The user's document **typography** (base size, line spacing, fonts, link
+    /// adornment). Composed with `document_palette` into the sheet the content
+    /// actors lay out with; edited in the `pelt/reading` page and persisted.
+    /// Its own `colors` field is ignored (the palette overwrites it at compose
+    /// time). (Document typography surface.)
+    document_sheet: document_canvas::DocumentStyleSheet,
 }
 
 impl Presentation {
@@ -624,6 +631,17 @@ impl Presentation {
     /// window's chrome renders from the same sheet. (MW2 (c).)
     fn chrome_sheet_refs(&self) -> Vec<&str> {
         self.chrome_sheet.iter().map(String::as_str).collect()
+    }
+
+    /// The composed document style sheet the content actors lay out with: the
+    /// user's typography with the active theme's document colours overlaid. The
+    /// one place typography ⊕ palette meet; `drive` / `set_theme` / the snapshot
+    /// path all send this. (Document typography surface.)
+    fn document_sheet_composed(&self) -> document_canvas::DocumentStyleSheet {
+        document_canvas::DocumentStyleSheet {
+            colors: self.document_palette,
+            ..self.document_sheet.clone()
+        }
     }
 }
 
@@ -986,6 +1004,13 @@ impl Shell {
         orrery.set_palette(orrery_backdrop, orrery_edge);
         // The document-lane palette for content cards, from the same theme. (P3.)
         let document_palette = document_palette(&resolution.tokens);
+        // The user's persisted document typography (embedded JSON in settings),
+        // or the built-in look. Composed with the palette per render. (Typography.)
+        let document_sheet = saved_settings
+            .document_typography
+            .as_ref()
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
         // The content region opens as a single graph pane (orrery / tiled
         // workbench); summoning the roster splits it. (Frame tree, F1.)
         let active_graph = manifests
@@ -1133,6 +1158,7 @@ impl Shell {
                     shellbar_edge: saved_settings.shellbar_edge,
                     physics_damping: saved_settings.physics_damping,
                     document_palette,
+                    document_sheet,
                 },
                 comms_handle,
                 sync_handle,

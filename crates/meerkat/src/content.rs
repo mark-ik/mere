@@ -22,7 +22,7 @@
 use std::cell::RefCell;
 
 use armillary::{ActorHandle, Emitter, NavGeneration, Pool, ViewportGeneration, Wake, spawn_on};
-use document_canvas::{ColorVocabulary, DocumentRenderPacket, FontTable};
+use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
 use inker::{EngineRegistry, EngineRoutePolicy};
 use linked_data::GraphContribution;
 use netrender::Scene;
@@ -44,20 +44,23 @@ pub enum ContentCommand {
         viewport: (u32, u32),
         nav: NavGeneration,
         viewport_gen: ViewportGeneration,
-        /// The document-lane text palette (theme-derived); baked into the
-        /// packet's glyph colors. (Document theming, P3.)
-        palette: ColorVocabulary,
+        /// The composed document style sheet — user typography (size, line
+        /// spacing, fonts, link adornment) with theme-derived colours; the actor
+        /// lays the document out with it, baking the colours onto each glyph run.
+        /// (Document theming P3; typography surface D1.)
+        sheet: DocumentStyleSheet,
     },
     /// Re-render the current document at a new size.
     Resize {
         viewport: (u32, u32),
         viewport_gen: ViewportGeneration,
     },
-    /// Re-render the current document with a new theme palette — a live theme
-    /// switch, without a navigation or resize. Carries a bumped `viewport_gen`
-    /// so the re-rendered packet clears the generation gate. (Document theming, P3.)
+    /// Re-render the current document with a new style sheet — a live theme or
+    /// typography change, without a navigation or resize. Carries a bumped
+    /// `viewport_gen` so the re-rendered packet clears the generation gate.
+    /// (Document theming P3; typography surface D1.)
     Retheme {
-        palette: ColorVocabulary,
+        sheet: DocumentStyleSheet,
         viewport_gen: ViewportGeneration,
     },
     /// A subresource the kernel fetched on the actor's behalf has arrived: cache
@@ -151,9 +154,10 @@ struct Content {
     /// holds the layout). Ignored by the document lane (the host windows its packet).
     band_y: u32,
     band_h: u32,
-    /// The document-lane text palette (theme-derived). Kept across renders so a
-    /// Resize / Scroll / Resource re-render reuses it; a `Retheme` swaps it.
-    palette: ColorVocabulary,
+    /// The composed document style sheet (user typography + theme-derived
+    /// colours). Kept across renders so a Resize / Scroll / Resource re-render
+    /// reuses it; a `Retheme` swaps it. (Document theming P3; typography D1.)
+    sheet: DocumentStyleSheet,
 }
 
 /// Spawn a content actor on its own thread (armillary harness). It builds the
@@ -193,7 +197,7 @@ pub fn spawn_content(
                     viewport,
                     nav,
                     viewport_gen,
-                    palette,
+                    sheet,
                 } => {
                     // Harvest the document's linked data once, on load (Ready only).
                     // Off by default: auto-ingesting every page's embedded JSON-LD/RDFa
@@ -221,7 +225,7 @@ pub fn spawn_content(
                         viewport_gen,
                         band_y: 0,
                         band_h: viewport.1,
-                        palette,
+                        sheet,
                     };
                     render(&content, &store, &registry, &policy, &out);
                     current = Some(content);
@@ -238,11 +242,11 @@ pub fn spawn_content(
                     }
                 }
                 ContentCommand::Retheme {
-                    palette,
+                    sheet,
                     viewport_gen,
                 } => {
                     if let Some(content) = current.as_mut() {
-                        content.palette = palette;
+                        content.sheet = sheet;
                         // A bumped gen so the re-baked packet clears the generation gate.
                         content.viewport_gen = viewport_gen;
                         render(content, &store, &registry, &policy, &out);
@@ -321,7 +325,7 @@ fn render(
             h,
             content.band_y,
             content.band_h,
-            content.palette,
+            &content.sheet,
         )
     };
     match rendered {
@@ -390,7 +394,7 @@ mod tests {
             viewport: (420, 360),
             nav: NavGeneration::default(),
             viewport_gen: ViewportGeneration::default(),
-            palette: ColorVocabulary::default(),
+            sheet: DocumentStyleSheet::default(),
         }
     }
 

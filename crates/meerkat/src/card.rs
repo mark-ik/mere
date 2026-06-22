@@ -266,9 +266,10 @@ pub fn render_content(
     // host windows its retained packet). (HTML scroll.)
     band_y: u32,
     band_h: u32,
-    // The document-lane text palette (theme-derived); the HTML/serval lane ignores it
-    // (it themes through HTML_SHEET + the page's CSS). (Document theming, P3.)
-    colors: ColorVocabulary,
+    // The composed document style sheet (user typography + theme-derived colours);
+    // the document lane lays out with it, the HTML/serval lane ignores it (it themes
+    // through HTML_SHEET + the page's CSS). (Document theming P3; typography D1.)
+    sheet: &DocumentStyleSheet,
 ) -> RenderedContent {
     if let Some(ContentState::Ready(fetched)) = state {
         let engine_id = route_document_engine(url, fetched.content_type.as_deref(), registry, policy);
@@ -278,10 +279,10 @@ pub fn render_content(
             return RenderedContent::Html { scene, content_height, links, masks };
         }
         if let Some(doc) = dispatch_document(url, fetched, &engine_id, registry) {
-            return layout_document_content(&doc, w, h, colors);
+            return layout_document_content(&doc, w, h, sheet);
         }
     }
-    layout_document_content(&content_document(url, state), w, h, colors)
+    layout_document_content(&content_document(url, state), w, h, sheet)
 }
 
 /// Lay out a document-lane doc into its retained packet (no lowering). The host
@@ -293,9 +294,9 @@ fn layout_document_content(
     doc: &EngineDocument,
     w: u32,
     h: u32,
-    colors: ColorVocabulary,
+    sheet: &DocumentStyleSheet,
 ) -> RenderedContent {
-    let laid = layout_document(doc, Viewport::new(w as f32, h as f32), &card_sheet(colors));
+    let laid = layout_document(doc, Viewport::new(w as f32, h as f32), sheet);
     let content_height = laid.packet.content_bounds.size.height.ceil().max(1.0) as u32;
     // Link hit-testing reads the retained packet's interactions directly (the host
     // queries `DocumentRenderPacket::link_at`), so the document lane no longer ships a
@@ -358,10 +359,10 @@ pub fn render_content_scene(
     loader: &impl ImageLoader,
     w: u32,
     h: u32,
-    colors: ColorVocabulary,
+    sheet: &DocumentStyleSheet,
 ) -> (Scene, u32, Vec<LinkHit>) {
     // The snapshot/preview shows the page top: band_y = 0, one viewport tall.
-    match render_content(url, state, registry, policy, loader, w, h, 0, h, colors) {
+    match render_content(url, state, registry, policy, loader, w, h, 0, h, sheet) {
         RenderedContent::Html {
             scene,
             content_height,
@@ -374,7 +375,7 @@ pub fn render_content_scene(
             content_height,
         } => {
             let band = content_height.min(PREVIEW_BAND_PX) as f32;
-            (lower_window(&packet, &fonts, 0.0, band, colors), content_height, Vec::new())
+            (lower_window(&packet, &fonts, 0.0, band, sheet.colors), content_height, Vec::new())
         }
     }
 }
@@ -782,7 +783,7 @@ mod tests {
             360,
             0,
             360,
-            card_vocabulary(),
+            &card_sheet(card_vocabulary()),
         ) else {
             panic!("text/html routes to the serval HTML lane");
         };
@@ -826,7 +827,7 @@ mod tests {
             360,
             0,
             360,
-            card_vocabulary(),
+            &card_sheet(card_vocabulary()),
         ) else {
             panic!("text/html routes to the serval HTML lane");
         };
@@ -856,7 +857,7 @@ mod tests {
             &NoImageLoader,
             420,
             360,
-            card_vocabulary(),
+            &card_sheet(card_vocabulary()),
         );
         assert!(
             glyph_runs(&scene) >= 1,
@@ -887,7 +888,7 @@ mod tests {
             360,
             0,
             360,
-            card_vocabulary(),
+            &card_sheet(card_vocabulary()),
         ) else {
             panic!("markdown routes to the document lane");
         };
@@ -923,7 +924,7 @@ mod tests {
             &NoImageLoader,
             420,
             360,
-            card_vocabulary(),
+            &card_sheet(card_vocabulary()),
         );
         assert!(
             glyph_runs(&scene) >= 1,
@@ -953,7 +954,7 @@ mod tests {
             360,
             0,
             360,
-            card_vocabulary(),
+            &card_sheet(card_vocabulary()),
         ) else {
             panic!("text/html routes to the serval HTML lane");
         };
@@ -986,7 +987,7 @@ mod tests {
             &NoImageLoader,
             420,
             360,
-            card_vocabulary(),
+            &card_sheet(card_vocabulary()),
         );
         assert_eq!(
             glyph_runs(&scene),
@@ -1007,7 +1008,7 @@ mod tests {
             &NoImageLoader,
             420,
             360,
-            card_vocabulary(),
+            &card_sheet(card_vocabulary()),
         );
         assert!(
             glyph_runs(&scene) >= 1,
@@ -1047,7 +1048,7 @@ mod tests {
             &loader,
             420,
             360,
-            card_vocabulary(),
+            &card_sheet(card_vocabulary()),
         );
         assert_eq!(
             glyph_runs(&scene),

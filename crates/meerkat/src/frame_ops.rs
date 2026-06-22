@@ -131,6 +131,12 @@ impl WindowCtx<'_> {
             shellbar_edge: self.shared.presentation.shellbar_edge,
             physics_damping: self.shared.presentation.physics_damping,
             disabled_engines: self.shared.content.engine_activation.global_disabled_vec(),
+            // The document typography as embedded JSON; `None` keeps the file
+            // clean when it is still the built-in look. (Typography surface.)
+            document_typography: (self.shared.presentation.document_sheet
+                != document_canvas::DocumentStyleSheet::default())
+            .then(|| serde_json::to_value(&self.shared.presentation.document_sheet).ok())
+            .flatten(),
         };
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");

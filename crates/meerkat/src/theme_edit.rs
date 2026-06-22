@@ -25,11 +25,12 @@ impl WindowCtx<'_> {
         let (backdrop, edge) = crate::orrery_palette(&resolution.tokens);
         self.orrery_mut().set_palette(backdrop, edge);
         // Re-theme the document lane: rebuild the content-card palette and
-        // broadcast it to the live content actors so already-open cards re-bake
-        // their glyph colors (and re-rasterize on the new background). (P3.)
-        let doc_palette = crate::document_palette(&resolution.tokens);
-        self.shared.presentation.document_palette = doc_palette;
-        self.shared.content.constellation.retheme(doc_palette);
+        // broadcast the composed sheet (new colours + the user's typography) to the
+        // live content actors so already-open cards re-lay + re-bake their glyph
+        // colors (and re-rasterize on the new background). (P3; typography D2.)
+        self.shared.presentation.document_palette = crate::document_palette(&resolution.tokens);
+        let sheet = self.shared.presentation.document_sheet_composed();
+        self.shared.content.constellation.retheme(sheet);
         // Focus-card snapshots are cached data-URIs rendered through the old
         // palette (no live actor to re-bake them); drop them so the next focus
         // rebuilds each through `render_content_scene` with the new theme. (P3.)

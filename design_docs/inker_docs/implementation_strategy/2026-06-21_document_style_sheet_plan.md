@@ -6,9 +6,10 @@ tested, and headed-verified. **P5 (customization surface) is reframed:** its
 colour/theme half shipped as the
 [seed_palette_theme_system_plan](../../mere_docs/implementation_strategy/2026-06-22_seed_palette_theme_system_plan.md)
 (T0–T5 + harmony, complete); its remaining unique part — a **document-typography**
-surface (font-per-role pickers, size/scale, line-height, link-adornment toggle,
-optional per-engine override) — is the lone open item, spun out as a follow-on
-(see Progress, no consumer pressure yet). Codebase-grounded against
+surface (font pickers, size/scale, line-height, link-adornment toggle, optional
+per-engine override) — spun out and **built** as the
+[document_typography_surface_plan](2026-06-22_document_typography_surface_plan.md)
+(D1–D3 shipped 2026-06-22; D4 per-role/per-engine deferred). Codebase-grounded against
 `crates/inker/document-canvas/` as it stands today.
 **Scope:** promote `document-canvas`'s flat `StyleConfig` into a per-role
 **`DocumentStyleSheet`** so every document-engine output (smolweb, markdown,
