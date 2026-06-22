@@ -1,0 +1,38 @@
+# DocumentScript component host (P2). The native side of the document-core WIT
+# world: owns a Wasmtime engine + per-instance Store, backs the inspect/apply/log
+# imports, and drives per-turn handle-event.
+#
+# Standalone for now (its own `[workspace]` + 1.93 toolchain pin) so it does not
+# pull the mere workspace onto rustc 1.93 before P2.5 folds it in. At P2.5 the
+# `[workspace]` table is removed, the crate joins `mere`'s members, and the
+# workspace MSRV bumps to 1.93 (decided, plan §11.7-1).
+[workspace]
+
+[package]
+name = "document-host"
+version = "0.0.1"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# Stock wasmtime 45 (default features: component-model + async always-on). Async
+# exports are invoked via call_async on a fiber so a future sync `fetch` import
+# can suspend a turn without blocking (plan §11.7-7); P2.0 has no fetch yet.
+wasmtime = "45"
+wasmtime-wasi = "45"
+# P2.1: back inspect/apply on serval's live scripted DOM. Path deps to the local
+# serval while document-host is standalone; at P2.5 fold-in these become the same
+# git dep meerkat uses (`github.com/mark-ik/serval`, branch main). serval-scripted-dom
+# is light (markup5ever + layout-dom-api + serval-static-dom) — no stylo/taffy, so no
+# patches needed here.
+serval-scripted-dom = { path = "../../../../serval/components/serval-scripted-dom" }
+layout_dom_api = { package = "layout-dom-api", path = "../../../../serval/components/shared/layout-dom" }
+
+[dev-dependencies]
+# Drives the async export calls in the test. The lib itself stays executor-neutral
+# (it returns the wasmtime futures); only the test picks tokio.
+tokio = { version = "1", features = ["rt", "macros"] }

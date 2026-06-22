@@ -1,0 +1,24 @@
+# The shipped document-core guest (transplanted from the P0/P1 probe). Standalone
+# (own `[workspace]` + the parent's 1.93 pin via inheritance is not automatic, so
+# build with the 1.93 toolchain). Built to wasm32-wasip2; the host test loads the
+# resulting component.
+[workspace]
+
+[package]
+name = "document-core-guest"
+version = "0.0.1"
+edition = "2021"
+license = "MPL-2.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# std build: on wasip2 this also imports the WASI world, so the host grants the
+# WASI floor. A no_std minimal-cap guest is a later tightening (plan §10.4).
+wit-bindgen = "0.58"
+
+[profile.release]
+opt-level = "s"
+strip = true

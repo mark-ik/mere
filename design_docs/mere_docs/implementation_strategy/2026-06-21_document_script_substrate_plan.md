@@ -576,9 +576,14 @@ the walk. `apply` → expected-revision check → atomic `is_live` precheck (`un
 scheduler → re-render. **Revision counter lives host-side (`ScriptHost`), not in
 `ScriptedDom`** (serval has none today; keep it render-state-free) and MUST be bumped by
 *all* actor writers (script apply, Resource arrival, Retheme), or a stale batch won't
-conflict correctly. `log` → the actor's tracing span. Async `network`: a separate
-import-gated `fetch` interface, unlinked under Wasmtime 45, additive later — ships
-nothing now.
+conflict correctly. `log` → the actor's tracing span. `network`: a SYNC-signature
+`fetch: func(request) -> result<response, error>` implemented host-side as an `async fn`
+over the existing fetch actor / `fetch.rs` seam; turns run via `call_async`, so a script's
+plain `fetch()` suspends the turn's fiber during I/O without blocking the executor (fiber
+async, proven on stock WT45 — §11.7 #7; not the "very incomplete" component-model-async,
+not 46-gated). The same `call_async` invocation serves the sync `document-core` turns (they
+just never suspend), so one mechanism covers both. Deferred only by sequencing, not by
+runtime maturity.
 
 ### 11.4 Capability grants
 
@@ -608,18 +613,37 @@ passes as a crate test) → P2.1 swap `Doc` for `ScriptedDom` (`dom_view` + insp
 → P2.2 engine config (epoch + StoreLimits; trap a loop/mem-bomb) → P2.3 linker policy
 (profile table + permissions mapping + `caps.granted`) → P2.4 `WasmModRuntime` bridge →
 P2.5 actor wiring in meerkat (ContentCommand arms + `ScriptInstance` on `Content`) → P2.6
-AOT path. Each headless-testable; async `fetch` deferred (land the WIT stub, leave
-unlinked).
+AOT path. Each headless-testable. `fetch` (fiber-async, sync WIT signature; §11.7 #7) is a
+later P2 step, not 46-gated: it needs turns invoked via `call_async`, so P2 should use the
+async bindgen (`imports`/`exports: { default: async }`) from P2.0 — sync turns run via the
+same `call_async` without suspending, and `fetch` slots in when wired.
 
-### 11.7 Open decisions
+### 11.7 Decisions (resolved 2026-06-22 where marked)
 
-1. **MSRV** — bump workspace to 1.93 (rec) vs keep `document-host` standalone like the probe.
-2. **Denied-cap behavior** — unlinked default + opt-in stub for *optional* imports (rec) vs uniform.
-3. **Placement** — confirm new leaf crate + `meerkat::script` + extend mod-loader via its trait (rec).
-4. **Revision home** — host-side `ScriptHost` + all-writers-bump (rec) vs a field on `ScriptedDom`.
-5. **AOT trust scope** — P2 ships bundled first-party only, defer untrusted (rec) vs JIT/AOT-cache untrusted now.
-6. **Cancellation values** (epoch tick, deadline, mem cap, max batch) — fixed constants in P2 (rec) vs permission-scoped now.
-7. **Async re-entry shape** (shapes the WIT *now*) — per-turn-with-suspension (async store, WT46) vs network-as-separate-event (stays sync, more awkward script API).
+1. **MSRV** — **RESOLVED: bump workspace to 1.93** (Mark). Timing coordinated to avoid
+   breaking active in-workspace builds: `document-host` comes up standalone-excluded with
+   its own 1.93 pin first (like the probe); the workspace bump + fold-in lands with the
+   meerkat wiring (P2.5) at a stopping point.
+2. **Denied-cap behavior** — proceeding on rec: unlinked default + opt-in stub for
+   *optional* imports.
+3. **Placement** — **RESOLVED: new leaf crate `crates/script/document-host` + thin
+   `meerkat::script`, extending `register-mod-loader` via its `WasmModRuntime` trait** (Mark).
+4. **Revision home** — proceeding on rec: host-side `ScriptHost`, bumped by all actor writers.
+5. **AOT trust scope** — proceeding on rec: P2 ships bundled first-party only; defer untrusted.
+6. **Cancellation values** — proceeding on rec: fixed constants in P2.
+7. **Async re-entry shape** — **RESOLVED 2026-06-22 by empirical probe: fiber async,
+   suspension *in addition to* sync.** WT45's component-model-async (Model B: WIT
+   `async func`, streams, concurrent tasks) is genuinely "very incomplete" (feature-gated,
+   self-described) and **not needed**. The mature **fiber-async** path (Model A) works on
+   *stock* WT45 — proven in `crates/probes/wasmtime-async-p1`: a SYNC-signature
+   `fetch: func(request) -> result<response, error>` implemented as a host `async fn`, with
+   turns invoked via `call_async`, so the script's plain `fetch()` suspends the turn's fiber
+   during real I/O while the executor stays live. The guest writes no async coloring; the host
+   thread is not blocked. This supersedes the earlier separate-event-vs-suspension dichotomy:
+   synchronous-looking for scripts AND non-blocking, today, no incomplete feature, no
+   compromise. (`Config::async_support` is a deprecated no-op — async is always on;
+   `Engine::default()` suffices. Still needs rustc 1.93 for WT45, so the §11.7-1 MSRV bump
+   stands.)
 
 ---
 
@@ -746,6 +770,42 @@ unlinked).
   shallow content-hash); grants link/omit imports via `kernel::permissions`; one shared
   `Engine` + per-origin `Store`; AOT-preferred; MSRV bump to 1.93. The probe transplants
   ~1:1. No code written; 7 open decisions in §11.7 await Mark before P2.0.
+- **2026-06-22 (async maturity probe — fiber suspension works on WT45).** Mark authorized
+  the 1.93 MSRV bump and asked how incomplete WT45 async really is. Determined empirically
+  (`crates/probes/wasmtime-async-p1`, gitignored): WT45's *component-model-async* (Model B —
+  WIT `async func`, streams, concurrent tasks) is feature-gated + self-described "very
+  incomplete" and unneeded; the mature *fiber-async* path (Model A) works on **stock WT45**.
+  Built a sync-WIT `fetch` import implemented as a host `async fn` (awaiting a real
+  `tokio::time::sleep`) and an export invoked via `call_async`: the run shows the host
+  parking ("pending → resolving") and the fiber resuming with the value, guest code fully
+  un-coloured. So suspension is doable *in addition to* sync, today, no compromise (resolves
+  §11.7 #7). `Config::async_support` is a deprecated no-op; `Engine::default()` suffices.
+  Network capability redesigned in §11.3 to the fiber model. MSRV bump still required (WT45 →
+  rustc 1.93).
+- **2026-06-22 (P2.0 — green).** Created `crates/script/document-host` (standalone for now:
+  own `[workspace]` + 1.93 pin, so the mere workspace is undisturbed until P2.5). Transplanted
+  the probe's WIT + guest + host into a real **library**: `Doc`-backed, the full §10.3 contract
+  (id-targeted mutations, atomic revision-checked apply, `inspect` import, `activate`/
+  `deactivate` lifecycle), with exports invoked via `call_async` (`exports: { default: async }`)
+  — the fiber foundation for the future suspending `fetch` (§11.7-7), no suspension yet. The
+  8-turn driver passes as a crate test (`tests/eight_turns.rs`): four id-targeted mutations
+  applied (rev 0→4), a scoped subtree no-op, and the conflict / unknown-node / declined paths,
+  with the final tree asserted. Mere-side uncommitted; document-host folds into the workspace +
+  the MSRV bump at P2.5. Next: P2.1 (swap `Doc` → serval `ScriptedDom` behind the same imports).
+- **2026-06-22 (P2.1 — dom_view over live ScriptedDom, green).** Added `src/dom_view.rs`: the
+  serval-coupled adapter backing `inspect`/`apply` on a live `serval-scripted-dom::ScriptedDom`
+  (path-depped from local serval — light: markup5ever + layout-dom-api + serval-static-dom, no
+  stylo/taffy, no patches). `snapshot` projects the HTML DOM into document-core view-nodes
+  (elements → tag-named, text nodes → `#text`; the document-core view *is* the DOM tree, §11.3);
+  `apply` maps id-targeted mutations to `LayoutDomMut` (`set_text`/`remove`/`insert_before`/
+  `append_child`), with node identity round-tripped via `opaque_id`/`NodeId::from_raw` and
+  validated by `is_live` (no host id-map needed), against a host-side revision (serval tracks
+  none). Three lib unit tests pass: snapshot projects the tree + ids/text round-trip; the
+  subtree query scopes the view; apply mutates and enforces revision-conflict (carrying current)
+  + unknown-node (nothing applied, rev unchanged). **Scoped:** the wasm guest still runs over the
+  in-memory `Doc` (P2.0 `eight_turns`); marrying the guest to `dom_view` (`ScriptHost` backed by
+  `ScriptedDom`) is the small remaining unification. Mere-side uncommitted; folds into the
+  workspace + MSRV bump at P2.5.
 
 ## Key grounding files
 

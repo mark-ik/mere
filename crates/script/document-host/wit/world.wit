@@ -1,0 +1,113 @@
+package mere:script@0.1.0;
+
+/// One granted capability. The guest can log and nothing else unless other
+/// interfaces are imported into its world. Unimported means unreachable,
+/// enforced at instantiation (§10.4).
+interface log {
+    log: func(message: string);
+}
+
+/// The document vocabulary the script and host exchange. Values are copied across
+/// the boundary; no language-native object graph crosses it (§2.2).
+interface document {
+    /// Opaque, host-assigned, stable node identity (§10.3): survives content edits
+    /// and moves, unambiguous, capability-scoped (the host mints ids), and a match
+    /// for serval's `NodeId` (`ReflectorData = u64`).
+    type node-id = u64;
+
+    record block {
+        kind: string,
+        text: string,
+    }
+
+    /// One node in a flat document-view (the tree is reconstructed from `parent`;
+    /// WIT value types are not recursive).
+    record view-node {
+        id: node-id,
+        parent: option<node-id>,
+        kind: string,
+        text: string,
+        /// Change-detection token, not an address: a mirror compares it to skip
+        /// unchanged nodes. Shallow hash, not a Merkle subtree hash.
+        content-hash: u64,
+    }
+
+    /// A copied snapshot at a revision (§10.3).
+    record document-view {
+        revision: u64,
+        nodes: list<view-node>,
+    }
+
+    /// What slice of the document a script pulls; `subtree` copies less than the
+    /// whole document (§7.2).
+    variant document-query {
+        whole-document,
+        subtree(node-id),
+    }
+
+    record event {
+        kind: string,
+        payload: string,
+    }
+
+    record set-text-args {
+        node: node-id,
+        text: string,
+    }
+    record insert-args {
+        reference: node-id,
+        new: block,
+    }
+    record append-args {
+        parent: node-id,
+        new: block,
+    }
+
+    /// Id-targeted mutations (§10.3); positional ops use id-relative anchors, not
+    /// index paths.
+    variant mutation {
+        set-text(set-text-args),
+        remove(node-id),
+        insert-before(insert-args),
+        append-child(append-args),
+    }
+
+    /// A batch applied atomically against `expected-revision` (optimistic
+    /// concurrency).
+    record apply-batch {
+        expected-revision: u64,
+        changes: list<mutation>,
+    }
+
+    variant turn-error {
+        /// expected-revision != current; carries the current revision to rebase.
+        revision-conflict(u64),
+        /// A mutation referenced an unknown / out-of-scope id; reported before any
+        /// change applies (atomicity).
+        unknown-node(node-id),
+        /// The script declined or could not handle the event.
+        refused(string),
+    }
+}
+
+/// The host capability the script calls back into mid-turn: pull a (scoped) copied
+/// snapshot on demand (the §5 inspect seam). The returned view is a value copy.
+interface document-host {
+    use document.{document-view, document-query};
+    inspect: func(query: document-query) -> document-view;
+}
+
+/// Per-turn outer contract (§10.2): the host delivers an event; the script pulls
+/// the snapshot it needs via `inspect` and returns an atomic, revision-checked
+/// batch. `activate`/`deactivate` are the lifecycle (§6 P1). Funcs are sync in the
+/// WIT; the host invokes them via `call_async` so a future sync `fetch` import can
+/// suspend a turn's fiber without blocking (plan §11.7-7).
+world document-core {
+    import log;
+    import document-host;
+    use document.{event, apply-batch, turn-error};
+
+    export activate: func();
+    export handle-event: func(ev: event) -> result<apply-batch, turn-error>;
+    export deactivate: func();
+}

@@ -1,0 +1,4 @@
+# Wasmtime 45 needs rustc >= 1.93. Pin locally while document-host is standalone;
+# at P2.5 this folds into the workspace MSRV bump (plan §11.7-1) and is removed.
+[toolchain]
+channel = "1.93.0"
