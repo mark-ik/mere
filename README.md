@@ -49,18 +49,18 @@ host (`meerkat`) renders the result and composites it.
       <sub>Graph and page side by side: the orrery on the left, an HTML node rendered as a tile on the right.</sub>
     </td>
     <td width="50%">
-      <img src="assets/screenshots/html-page.png" alt="A full web page rendered inside a tile"><br>
-      <sub>The HTML lane (serval). A full web page rendered in a tile.</sub>
+      <img src="assets/screenshots/welcome.png" alt="The welcome card open beside the graph that builds up as you browse"><br>
+      <sub>Open Mere on the welcome card; your graph builds up behind it as you browse.</sub>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="assets/screenshots/graph-canvas.png" alt="The force-directed orrery graph with linked nodes"><br>
-      <sub>The orrery. Every place you visit becomes a node; edges are the relationships between them.</sub>
+      <img src="assets/screenshots/layouts.png" alt="The orrery settings panel listing deterministic layout strategies"><br>
+      <sub>Arrange the orrery with deterministic layouts: force-directed, grid, Penrose, L-system, kanban by site, timeline by order.</sub>
     </td>
     <td width="50%">
-      <img src="assets/screenshots/theming.png" alt="Appearance settings with live color-harmony controls"><br>
-      <sub>Configurable appearance. Live color-harmony themes recolor the whole shell.</sub>
+      <img src="assets/screenshots/theming.png" alt="Appearance settings with a palette picker and color-harmony controls"><br>
+      <sub>Theme the whole shell. Pick a palette or build your own with color-harmony controls (here, Sunset).</sub>
     </td>
   </tr>
 </table>
