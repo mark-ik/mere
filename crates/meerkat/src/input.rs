@@ -1702,6 +1702,33 @@ impl WindowCtx<'_> {
                 self.view.chrome_update(Chrome::close_context_menu);
                 self.view.request_redraw();
             }
+            // Typing searches the menu (the cursor palette): edit its query buffer and rebuild the
+            // rows. Backspace deletes; Space (a named key) inserts a space. (Searchable context menu S1.)
+            WinitKey::Named(WinitNamedKey::Backspace) => {
+                self.view.chrome_update(|c| {
+                    if let Some(menu) = &mut c.context_menu {
+                        menu.query.pop();
+                    }
+                });
+                self.rebuild_context_menu();
+            }
+            WinitKey::Named(WinitNamedKey::Space) => {
+                self.view.chrome_update(|c| {
+                    if let Some(menu) = &mut c.context_menu {
+                        menu.query.push(' ');
+                    }
+                });
+                self.rebuild_context_menu();
+            }
+            WinitKey::Character(s) => {
+                let s = s.to_string();
+                self.view.chrome_update(move |c| {
+                    if let Some(menu) = &mut c.context_menu {
+                        menu.query.push_str(&s);
+                    }
+                });
+                self.rebuild_context_menu();
+            }
             _ => {}
         }
     }

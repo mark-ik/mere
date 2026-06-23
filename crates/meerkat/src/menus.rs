@@ -25,35 +25,40 @@ impl WindowCtx<'_> {
     /// single-member set offers one "open tile"; a larger set offers splits vs a
     /// stack. The host remembers the set; the chrome renders the rows.
     pub(super) fn open_context_menu_at(&mut self, x: f32, y: f32) {
-        let multi_graph = self.has_multiple_graph_panes();
         let set = self.selection_working_set();
-        let len = set.len();
         // Empty-canvas menus mint at the cursor: record the anchor (so "Add node" lands under
         // it) and any field box under the point (so "Delete field" can target it). A selection
         // menu never mints at the cursor, so it just clears the stale anchor.
         if set.is_empty() {
             let (ofx, ofy) = self.orrery_point(x, y);
             self.view.context_origin = Some((ofx, ofy));
-            self.view.context_set.clear();
             self.view.context_field = self.orrery().field_at_screen(ofx, ofy);
         } else {
             self.view.context_origin = None;
         }
+        // The working member set drives applicability; set it before building so the curated rows
+        // resolve against it. The menu opens with an empty query (curated rows; typing searches).
+        self.view.context_set = set;
+        let items = self.build_curated_menu_items();
+        self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
+        self.view.request_redraw();
+    }
 
-        // 1. The persona-curated command list (command registry P4): each configured registry id,
-        //    resolved to a row and filtered by its applicability (+ any dynamic condition) for this
-        //    selection. One ordered list drives the canvas / single-node / multi-node menus.
+    /// The curated context-menu rows (the cursor palette's zero-query view): the persona's pinned
+    /// commands resolved against the working set, plus the dynamic rows (delete field + layout
+    /// submenu on the empty canvas, the single-focus radial toggle, the close-pane foot). Reads the
+    /// working set from `context_set`, so callers set it first. (Command registry P4 / S1.)
+    fn build_curated_menu_items(&self) -> Vec<ContextItem> {
+        let len = self.view.context_set.len();
+        // 1. The persona-curated command list: each configured registry id, resolved + applicability-
+        //    filtered for this selection. One ordered list drives the canvas / single / multi menus.
         let mut items = Vec::new();
         for id in self.menu_actions() {
             if let Some(item) = self.resolve_menu_item(&id, len) {
                 items.push(item);
             }
         }
-
-        // 2. Dynamic / parameterized rows that aren't flat catalog gestures, appended in place:
-        //    a "Delete field" target + the layout-strategy submenu on the empty canvas; the
-        //    single-focus radial toggle on a selection; the "Close graph view" foot when a second
-        //    graph pane is open.
+        // 2. Dynamic / parameterized rows that aren't flat catalog gestures.
         if len == 0 {
             if self.view.context_field.is_some() {
                 items.push(ContextItem::new("Delete field", ContextAction::DeleteField));
@@ -72,12 +77,59 @@ impl WindowCtx<'_> {
                 },
             ));
         }
-        if multi_graph {
+        if self.has_multiple_graph_panes() {
             items.push(ContextItem::new("Close graph view", ContextAction::CloseGraphPane));
         }
+        items
+    }
 
-        self.view.context_set = set;
-        self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
+    /// The search results for a non-empty menu query (the cursor palette): every registry command +
+    /// context action matching `query`, mapped to runnable rows. Searching is intentful, so results
+    /// are not applicability-filtered; a searched command runs in the current context (a graceful
+    /// no-op if it does not apply). (Searchable context menu S1.)
+    fn search_menu_items(&self, query: &str) -> Vec<ContextItem> {
+        use meerkat::command::{PaletteItem, context_action_id, context_action_palette_label};
+        let pinned = |id: &str| self.shared.presentation.menu_actions.iter().any(|a| a == id);
+        meerkat::command::palette_items(query)
+            .into_iter()
+            .filter_map(|item| match item {
+                PaletteItem::Command(cmd) => Some(ContextItem::searchable(
+                    cmd.label(),
+                    ContextAction::RunCommand(cmd.verb()),
+                    cmd.verb(),
+                    pinned(cmd.verb()),
+                )),
+                // Catalog context actions always have an id (they came from the catalog).
+                PaletteItem::Context(action) => context_action_id(action).map(|id| {
+                    ContextItem::searchable(
+                        context_action_palette_label(action).unwrap_or_default(),
+                        action,
+                        id,
+                        pinned(id),
+                    )
+                }),
+            })
+            .collect()
+    }
+
+    /// Rebuild the open menu's rows from its current query: the curated rows when empty, the search
+    /// results otherwise. Resets the highlight (the list changed). Called on each query edit.
+    /// (Searchable context menu S1.)
+    pub(super) fn rebuild_context_menu(&mut self) {
+        let Some(query) = self.view.chrome().context_menu.as_ref().map(|m| m.query.clone()) else {
+            return;
+        };
+        let items = if query.trim().is_empty() {
+            self.build_curated_menu_items()
+        } else {
+            self.search_menu_items(&query)
+        };
+        self.view.chrome_update(move |c| {
+            if let Some(menu) = &mut c.context_menu {
+                menu.items = items;
+                menu.selected = None;
+            }
+        });
         self.view.request_redraw();
     }
 

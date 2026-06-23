@@ -181,23 +181,28 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
 /// cursor (abs-positioned in window coords). Each row captures its
 /// [`ContextAction`] for the host. Rendered in the chrome root over everything.
 fn context_menu_view(menu: &ContextMenu) -> ChromeView {
-    let rows: Vec<ChromeView> = menu
-        .items
-        .iter()
-        .enumerate()
-        .map(|(i, item)| {
-            let action = item.action;
-            // The keyboard-highlighted row carries a distinct class (like the palette's
-            // `cmd-row-active`), which the render pass also uses to scroll it into view.
-            let class = if menu.selected == Some(i) { "context-item-active" } else { "context-item" };
-            let row = on_click(
-                el::<_, Chrome, ()>("div", item.label.clone()).attr("class", class),
-                move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
-            );
-            Box::new(row) as ChromeView
-        })
-        .collect();
-    let panel = el::<_, Chrome, ()>("div", rows)
+    // The search field (the cursor palette): shows the typed query, or a placeholder when empty.
+    // Display-only — the open menu owns the keyboard, so `on_context_menu_key` edits the query.
+    let (search_text, search_class) = if menu.query.is_empty() {
+        ("Search commands\u{2026}".to_string(), "context-search-empty")
+    } else {
+        (menu.query.clone(), "context-search")
+    };
+    let search = el::<_, Chrome, ()>("div", search_text).attr("class", search_class);
+
+    let mut children: Vec<ChromeView> = vec![Box::new(search) as ChromeView];
+    children.extend(menu.items.iter().enumerate().map(|(i, item)| {
+        let action = item.action;
+        // The keyboard-highlighted row carries a distinct class (like the palette's
+        // `cmd-row-active`), which the render pass also uses to scroll it into view.
+        let class = if menu.selected == Some(i) { "context-item-active" } else { "context-item" };
+        let row = on_click(
+            el::<_, Chrome, ()>("div", item.label.clone()).attr("class", class),
+            move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
+        );
+        Box::new(row) as ChromeView
+    }));
+    let panel = el::<_, Chrome, ()>("div", children)
         .attr("class", "context-menu")
         .attr(
             "style",

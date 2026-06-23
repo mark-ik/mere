@@ -248,13 +248,29 @@ pub struct ContextMenu {
     /// into the menu. `Enter` runs it; the render pass scrolls it into view. Mirrors the
     /// command palette's `selected_index`. (Context-menu keyboard nav.)
     pub selected: Option<usize>,
+    /// The search query typed into the menu (the cursor palette). Empty -> the curated rows
+    /// (pins / suggestions); non-empty -> the registry filtered by it. Edited by
+    /// `on_context_menu_key`, which rebuilds `items` from it. (Searchable context menu S1.)
+    pub query: String,
 }
 
-/// One row of a [`ContextMenu`]: its label + the action it runs.
+/// The pin affordance on a context-menu row (the cursor palette's search results): the registry
+/// `id` to pin / unpin and whether it is currently in the curated menu. `None` on curated rows
+/// (they are already the menu); `Some` on searched rows, where it renders a pin toggle.
+/// (Searchable context menu S2.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PinSpec {
+    pub id: &'static str,
+    pub pinned: bool,
+}
+
+/// One row of a [`ContextMenu`]: its label + the action it runs, plus an optional pin toggle.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContextItem {
     pub label: String,
     pub action: ContextAction,
+    /// The pin toggle for a search result, or `None` for a plain (curated) row.
+    pub pin: Option<PinSpec>,
 }
 
 impl ContextItem {
@@ -263,6 +279,22 @@ impl ContextItem {
         Self {
             label: label.into(),
             action,
+            pin: None,
+        }
+    }
+
+    /// A search-result row: `label` runs `action`, and a pin toggle pins / unpins `pin_id` (already
+    /// in the curated menu when `pinned`). (Searchable context menu S2.)
+    pub fn searchable(
+        label: impl Into<String>,
+        action: ContextAction,
+        pin_id: &'static str,
+        pinned: bool,
+    ) -> Self {
+        Self {
+            label: label.into(),
+            action,
+            pin: Some(PinSpec { id: pin_id, pinned }),
         }
     }
 }
@@ -358,6 +390,11 @@ pub enum ContextAction {
     /// context actions. The verb is `&'static` (from `Command::verb`), so this stays `Copy`.
     /// Drains by dispatching to the host's command runner. (Command registry P4.)
     RunCommand(&'static str),
+    /// Pin / unpin a registry command (by verb / id) to the persona's curated context menu — the
+    /// pin toggle on a search result (the cursor palette). Unlike the other actions it does **not**
+    /// close the menu (you can pin several in a row); the host toggles `menu_actions`, persists, and
+    /// rebuilds the open menu. (Searchable context menu S2.)
+    PinToMenu(&'static str),
 }
 
 impl Chrome {
@@ -704,7 +741,7 @@ impl Chrome {
     /// `items` (closing the suggestions dropdown so it can't overlap).
     pub fn open_context_menu(&mut self, x: f32, y: f32, items: Vec<ContextItem>) {
         self.close_suggestions();
-        self.context_menu = Some(ContextMenu { x, y, items, selected: None });
+        self.context_menu = Some(ContextMenu { x, y, items, selected: None, query: String::new() });
     }
 
     /// Move the context-menu keyboard highlight by `delta`, wrapping within the rows — the
@@ -769,6 +806,13 @@ impl Chrome {
     pub fn pick_context(&mut self, action: ContextAction) {
         self.pending_context = Some(action);
         self.close_context_menu();
+    }
+
+    /// Capture a pin toggle from a search result **without** closing the menu — the host pins /
+    /// unpins `id`, persists, and rebuilds the open menu, so several can be pinned in a row.
+    /// (Searchable context menu S2.)
+    pub fn pin_from_menu(&mut self, id: &'static str) {
+        self.pending_context = Some(ContextAction::PinToMenu(id));
     }
 
     /// Take the pending context-menu action, if any.

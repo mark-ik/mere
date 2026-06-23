@@ -268,6 +268,18 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.strong_text),
             rgb(c.active_bg)
         ),
+        // The context menu's search field (the cursor palette): an input-styled row at the top.
+        // `-empty` dims the placeholder. Typing edits it (the menu owns the keyboard).
+        format!(
+            ".context-search {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 18px; }}",
+            rgb(c.field_text),
+            rgb(c.field_bg)
+        ),
+        format!(
+            ".context-search-empty {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 18px; }}",
+            rgb(c.muted_text),
+            rgb(c.field_bg)
+        ),
         // Comms pane: an absolutely-positioned panel whose geometry the host sets
         // inline each frame from the Comms frame leaf's rect (so it splits beside
         // the orrery like the other panes, rather than floating docked).

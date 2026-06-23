@@ -247,14 +247,64 @@ What it reuses (most of it already exists):
 - The palette's `TextInput` + `text_field_typed` is the search-field widget to embed at the top of the
   context-menu card.
 
-The one genuinely new piece: **focus**. The menu must grab the caret on open so typing lands in its
-field (today the menu opens without a focused field). That plus the empty-vs-query branch in the menu
-builder + rendering the field are the work. Effort: medium. Open questions for Mark: always-on (the
-field is subtle, empty query = just the curated rows) vs a per-persona toggle; and whether a searched
-row offers "run" only or "run / pin to menu".
+**Resolved (Mark, 2026-06-23):**
 
-Recommendation: this is worth doing and likely higher value than B2 (drag). Sequence it after B1 (done);
-do B2 only if drag specifically matters once reorder-by-buttons is in hand.
+- **No special toggle.** The menu is always searchable; there is no per-persona on/off setting.
+  Persona-scoping of the curated set happens through the editor or by pinning, not a toggle.
+- **Pin from search.** A searched command can be pinned (added to `menu_actions`); the curated pins
+  are the zero-query rows. **Nothing pinned -> the menu is just the mini bar** (the search field), which
+  falls out for free (empty `menu_actions` -> no curated rows).
+- **Auto-suggest the 3-6 most-frequent commands for the target context** (Mark's idea, agreed). When the
+  query is empty, surface a short "Suggested" section so an unconfigured menu is immediately useful.
+
+Keyboard "focus" is **not** a separate problem: an open menu already owns the keyboard (the
+`on_context_menu_key` route), so search is "route printable keys to a menu query buffer + rebuild the
+rows," exactly the palette's `other`-key branch. The work is the query buffer on `ContextMenu`, the
+rebuild (empty -> curated/suggested, non-empty -> `palette_items(query)` mapped to rows), and rendering
+the field.
+
+### Auto-suggest design (frequency)
+
+- **Counts.** A per-command invocation count, recorded at the **existing** `meerkat.command.invoked`
+  hook (already fired for every command + context action in `drain_pending_command` /
+  `drain_pending_context`). One increment point, so palette / menu / agent invocations all feed it.
+- **Keying — v1 global, ranked by applicability.** Keep a flat `command_usage: id -> count`; at suggest
+  time, take the commands **applicable** to the target context (`registry_scope(id).applies(len)`), rank
+  by count, drop already-pinned, take the top 3-6. This yields "your most-used commands that apply here"
+  without a context-keyed map. Per-context-keyed counts (canvas-frequent vs selection-frequent) are a
+  refinement.
+- **Persistence — persona-scoped.** Add `command_usage` to `PersonaSettings` beside `menu_actions`.
+  Persist on a debounce / interval (or on close) rather than every invocation, to avoid a write per
+  click.
+- **Recency.** Pure frequency entrenches old habits; an exponential-decay or recent-window score
+  surfaces newly-relevant commands. Note as a refinement; v1 is raw counts.
+- **Display.** Empty-query menu = `[Suggested (3-6)]` then `[Pins]` (skip Suggested for any id already
+  pinned). With no pins, Suggested is the menu body beside the search field.
+
+### Phasing
+
+- **S1 — core searchable menu.** Query buffer + field + rebuild (empty -> curated pins, typing ->
+  `palette_items` mapped to rows, run on Enter/click). Reuses the built nav + scroll. Unit-testable.
+- **S2 — pin from search.** A searched row offers pin -> `toggle_menu_action` (add) so it joins the pins.
+- **S3 — frequency auto-suggest.** Usage counts at the invocation hook, persona-persisted; the
+  "Suggested" section.
+
+Recommendation: build S1 first (foundational, agreed, bounded), then S2, then S3. Higher value than
+B2 (drag); do B2 only if button-reorder proves insufficient.
+
+### S1 — core searchable menu. BUILT + verified (2026-06-23)
+
+`ContextMenu` gained a `query` buffer; `open_context_menu_at` was split so `build_curated_menu_items`
+produces the zero-query rows and `rebuild_context_menu` swaps in `search_menu_items(query)` (the
+registry via `palette_items`, mapped to runnable rows: `Command` -> `RunCommand(verb)`, context action
+-> the action) as the query changes. `on_context_menu_key` now edits the query on `Character` /
+`Backspace` / `Space` and rebuilds; the already-built arrow-nav + scroll + Enter-runs carry over. A
+search field renders at the top of the card (`.context-search` / `-empty` placeholder); the open menu
+already owns the keyboard, so no separate focus wiring was needed. Verified live
+(`scry-shots/sf-1..3`): right-click shows "Search commands…" above the curated rows; typing "set"
+filters to Settings + Node settings (focused) + Node settings (selected); clicking a result runs it
+(same `RunCommand` dispatch proven at menuf-7). meerkat green (lib 72, bin 104). **S2 (pin from
+search) + S3 (frequency auto-suggest) remain.**
 
 ## Open decisions (for Mark)
 
