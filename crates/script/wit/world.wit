@@ -29,6 +29,9 @@ interface net {
     }
     record response {
         status: u32,
+        /// The response media type (e.g. `text/html`, `application/json`), if the
+        /// transport reported one, so a script can branch on what it got back.
+        content-type: option<string>,
         body: string,
     }
     fetch: func(req: request) -> result<response, string>;

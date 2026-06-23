@@ -17,7 +17,7 @@ use serval_scripted_dom::{NodeId, ScriptedDom};
 struct EchoFetcher;
 impl NetFetcher for EchoFetcher {
     fn fetch(&self, url: &str) -> Result<NetResponse, String> {
-        Ok(NetResponse { status: 200, body: format!("fetched:{url}") })
+        Ok(NetResponse { status: 200, content_type: Some("text/plain".into()), body: format!("fetched:{url}") })
     }
 }
 

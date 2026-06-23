@@ -358,3 +358,13 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   the live page → re-renders.** Known follow-ons (small): `NetResponse` carries only status 200 +
   body (the `Fetched` shape drops the exact 2xx code + content-type — a richer response is a WIT
   enhancement); true non-blocking fiber suspension.
+- **2026-06-23 (UX tail 1/3 — richer `net.response`: content-type, green).** Added
+  `content-type: option<string>` to the WIT `net::response`; `NetResponse` (document-host) and the
+  guest bindings carry it; `ContentNetFetcher` passes through `Fetched.content_type` (the transport
+  already decodes it — http via the `content-type` header, smolweb via the scheme's fixed media
+  type), so a script can now branch on what it got back. Both guests rebuilt (wasm32-wasip2); the
+  fetch test's `EchoFetcher` returns `text/plain` through the seam. document-host 19 + meerkat 73/115
+  green. **Exact 2xx status deferred:** `fetch.rs::Fetched` carries no status (it's the success
+  shape; non-2xx is an `Err`), so `status` stays 200 — carrying the real code needs a `Fetched.status`
+  field (a tiny `fetch.rs` add, left to coordinate since it's Mark's file). Next UX tails: mod-manifest
+  auto-attach (origin bindings from installed mods); settings-lane permission/binding UI.

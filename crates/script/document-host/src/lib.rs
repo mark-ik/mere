@@ -84,6 +84,8 @@ fn seed_dom() -> ScriptedDom {
 /// `net::response`, so an embedder need not name the generated type).
 pub struct NetResponse {
     pub status: u32,
+    /// The response media type, if the backend reported one (mirrors WIT `content-type`).
+    pub content_type: Option<String>,
     pub body: String,
 }
 
@@ -147,7 +149,11 @@ impl crate::mere::script::net::Host for ScriptHost {
         // fiber resumes with the result. No backend configured = an error to the guest.
         let fetcher = self.fetcher.as_ref().ok_or_else(|| "net backend not configured".to_string())?;
         let resp = fetcher.fetch(&req.url)?;
-        Ok(crate::mere::script::net::Response { status: resp.status, body: resp.body })
+        Ok(crate::mere::script::net::Response {
+            status: resp.status,
+            content_type: resp.content_type,
+            body: resp.body,
+        })
     }
 }
 

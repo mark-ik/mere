@@ -53,7 +53,7 @@ impl ContentNetFetcher {
 impl NetFetcher for ContentNetFetcher {
     fn fetch(&self, url: &str) -> Result<NetResponse, String> {
         let fetched = self.rt.block_on(crate::fetch::fetch_page(url))?;
-        Ok(NetResponse { status: 200, body: fetched.body })
+        Ok(NetResponse { status: 200, content_type: fetched.content_type, body: fetched.body })
     }
 }
 
