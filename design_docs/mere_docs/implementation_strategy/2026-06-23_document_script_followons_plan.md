@@ -264,4 +264,18 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   files mine this round: `script_bindings_store.rs`, session-runtime `lib.rs`, `content/script.rs`,
   `constellation.rs`, `main.rs`). **Deferred**: a settings-lane UI to edit bindings; re-push on
   bindings-file change (today pushed once at startup); the mod-manifest "installed extension" form.
-  Next: follow-on #3 (script-path render refinements).
+  Next: follow-on #3 (script-path render refinements). *(Committed cleanly in the next commit.)*
+- **2026-06-23 (follow-on #3 — script-path render refinements, landed; cleanly mine).** The scripted
+  (`ScriptInstance`) lane now matches the static lane's completeness. `ScriptInstance::relayout(loader,
+  w, h)` re-lays-out the current (script-mutated) DOM with the page sheets. `content.rs`: extracted the
+  subresource-`Wanted` tail into `emit_fresh_wanted`, added `relayout_script` (re-lay-out + ship
+  wants), and now (a) **Resize** re-lays-out the script at the new viewport, (b) **Resource**
+  re-lays-out so a newly-arrived subresource decodes, (c) `attach_script` / `deliver_event` ship the
+  subresources their layout build/rebuild wants (so a scripted page — and a script that adds an
+  `<img>` — gets its subresources fetched, closing the loop the early-return render branch left open).
+  All in `content.rs` + `content/script.rs` (**cleanly mine**). Compile-verified (the content files
+  built clean; the build was red only on Mark's dirty `gyre/Cargo.toml` geometry-dep change breaking
+  render.rs — uncommitted, not in HEAD, so #3 commits against a green HEAD). No new unit test (it is
+  render-path wiring; the unit-testable pieces — mirror / grant / binding matching — are already
+  covered). **Deferred**: a Retheme path for scripts (the serval lane themes via its own CSS, so
+  unchanged). Next: follow-on #4 (P2.6 AOT, then fiber-async `fetch`).

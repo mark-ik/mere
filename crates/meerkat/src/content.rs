@@ -299,6 +299,9 @@ pub fn spawn_content(
                         content.viewport_gen = viewport_gen;
                         content.band_y = 0; // a resize relays out; re-anchor the band
                         content.html = None; // the viewport changed; rebuild the retained layout
+                        // The scripted lane re-lays-out its own retained layout at the
+                        // new viewport (the static lane rebuilds lazily in render). (#3.)
+                        relayout_script(content, &store, &out, viewport.0, viewport.1);
                         render(content, &store, &registry, &policy, &out);
                     }
                 }
@@ -317,6 +320,10 @@ pub fn spawn_content(
                     store.borrow_mut().insert(url, bytes);
                     if let Some(content) = current.as_mut() {
                         content.html = None; // a subresource arrived; rebuild so images decode
+                        // The scripted lane re-lays-out so the newly-arrived bytes decode
+                        // into its retained layout too (same viewport). (#3.)
+                        let (w, h) = content.viewport;
+                        relayout_script(content, &store, &out, w, h);
                         render(content, &store, &registry, &policy, &out);
                     }
                 }
@@ -373,6 +380,7 @@ pub fn spawn_content(
                             &store,
                             &registry,
                             &policy,
+                            &out,
                         );
                         out.emit(ContentUpdate::ScriptOutcome { nav: content.nav, outcome });
                         // Render from the script's DOM once attached.
@@ -389,7 +397,7 @@ pub fn spawn_content(
                     if let Some(content) = current.as_mut() {
                         if content.script.is_some() {
                             content.viewport_gen = viewport_gen;
-                            let outcome = deliver_event(content, &kind, &payload, &store);
+                            let outcome = deliver_event(content, &kind, &payload, &store, &out);
                             out.emit(ContentUpdate::ScriptOutcome { nav: content.nav, outcome });
                             render(content, &store, &registry, &policy, &out);
                         }
@@ -427,6 +435,7 @@ fn attach_script(
     store: &RefCell<ResourceStore>,
     registry: &EngineRegistry,
     policy: &EngineRoutePolicy,
+    out: &Emitter<ContentUpdate>,
 ) -> String {
     if !is_serval_html_lane(&content.url, content.state.as_ref(), registry, policy) {
         return "not an HTML/serval page (no mirrorable DOM)".to_string();
@@ -439,14 +448,19 @@ fn attach_script(
         _ => return "no Ready HTML body".to_string(),
     };
     let wanted = RefCell::new(Vec::new());
-    let loader = ResourceLoader::new(store, &url, &wanted);
-    match ScriptInstance::attach(component_path, &body, &loader, w, h, grant, Quota::default()) {
-        Ok(inst) => {
-            content.script = Some(inst);
-            "attached".to_string()
+    let outcome = {
+        let loader = ResourceLoader::new(store, &url, &wanted);
+        match ScriptInstance::attach(component_path, &body, &loader, w, h, grant, Quota::default()) {
+            Ok(inst) => {
+                content.script = Some(inst);
+                "attached".to_string()
+            }
+            Err(e) => format!("attach failed: {e}"),
         }
-        Err(e) => format!("attach failed: {e}"),
-    }
+    };
+    // Ship the subresources the mirrored page's first layout wants (#3).
+    emit_fresh_wanted(content.nav, wanted, store, out);
+    outcome
 }
 
 /// Deliver one event to the attached script (P2.5c). The script's batch is applied to
@@ -456,17 +470,24 @@ fn deliver_event(
     kind: &str,
     payload: &str,
     store: &RefCell<ResourceStore>,
+    out: &Emitter<ContentUpdate>,
 ) -> String {
     let url = content.url.clone();
     let wanted = RefCell::new(Vec::new());
-    let loader = ResourceLoader::new(store, &url, &wanted);
-    let Some(inst) = content.script.as_mut() else {
-        return "no script attached".to_string();
+    let outcome = {
+        let loader = ResourceLoader::new(store, &url, &wanted);
+        let Some(inst) = content.script.as_mut() else {
+            return "no script attached".to_string();
+        };
+        match inst.deliver(kind, payload, &loader) {
+            Ok(outcome) => format!("{outcome:?}"),
+            Err(e) => format!("turn error: {e}"),
+        }
     };
-    match inst.deliver(kind, payload, &loader) {
-        Ok(outcome) => format!("{outcome:?}"),
-        Err(e) => format!("turn error: {e}"),
-    }
+    // A script mutation may have re-laid-out (new nodes / images) and wanted new
+    // subresources; ship them. (#3.)
+    emit_fresh_wanted(content.nav, wanted, store, out);
+    outcome
 }
 
 /// Build the retained serval-lane [`ContentLayout`] into `content.html` if this is the
@@ -604,19 +625,48 @@ fn render(
             }),
         }
     }
-    // Ship only never-requested subresources, so a re-render before the bytes
-    // arrive does not re-request them (the store dedups).
+    emit_fresh_wanted(content.nav, wanted, store, out);
+}
+
+/// Ship only never-requested subresources, so a re-render before the bytes arrive
+/// does not re-request them (the store dedups). Shared by the static render path and
+/// the scripted layout builds (attach / deliver / relayout). (Follow-on #3.)
+fn emit_fresh_wanted(
+    nav: NavGeneration,
+    wanted: RefCell<Vec<String>>,
+    store: &RefCell<ResourceStore>,
+    out: &Emitter<ContentUpdate>,
+) {
     let fresh: Vec<String> = wanted
         .into_inner()
         .into_iter()
         .filter(|url| store.borrow_mut().request(url.clone()))
         .collect();
     if !fresh.is_empty() {
-        out.emit(ContentUpdate::Wanted {
-            nav: content.nav,
-            urls: fresh,
-        });
+        out.emit(ContentUpdate::Wanted { nav, urls: fresh });
     }
+}
+
+/// Re-lay-out the attached script's page at `(w, h)` and ship any newly-wanted
+/// subresources — a resize (new viewport) or a newly-arrived subresource (re-decode).
+/// No-op without an attached script. (Follow-on #3.)
+fn relayout_script(
+    content: &mut Content,
+    store: &RefCell<ResourceStore>,
+    out: &Emitter<ContentUpdate>,
+    w: u32,
+    h: u32,
+) {
+    if content.script.is_none() {
+        return;
+    }
+    let url = content.url.clone();
+    let wanted = RefCell::new(Vec::new());
+    {
+        let loader = ResourceLoader::new(store, &url, &wanted);
+        content.script.as_mut().expect("checked is_some").relayout(&loader, w, h);
+    }
+    emit_fresh_wanted(content.nav, wanted, store, out);
 }
 
 #[cfg(test)]

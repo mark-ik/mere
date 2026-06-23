@@ -267,6 +267,15 @@ impl ScriptInstance {
         Ok(outcome)
     }
 
+    /// Re-lay-out the current (script-mutated) DOM at `(w, h)` with the page's
+    /// sheets — a resize, or a re-decode after a newly-arrived subresource. The
+    /// loader records any newly-wanted subresources for the caller to ship.
+    /// (Follow-on #3.)
+    pub(crate) fn relayout(&mut self, loader: &impl ImageLoader, w: u32, h: u32) {
+        self.viewport = (w, h);
+        self.layout = lay_out_with(self.script.dom(), &self.sheets, loader, w, h);
+    }
+
     /// The live (script-mutated) page DOM, for rendering.
     pub(crate) fn dom(&self) -> &ScriptedDom {
         self.script.dom()
