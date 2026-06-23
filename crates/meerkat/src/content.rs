@@ -39,8 +39,9 @@ use crate::serval_render::scene_from_content_band;
 
 pub(crate) mod script;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use document_host::{Grant, Quota};
+use document_host::{Grant, NetFetcher, Quota};
 use kernel::permissions::ResolvedPermission;
 use script::ScriptInstance;
 
@@ -249,6 +250,9 @@ pub fn spawn_content(
         let policy = EngineRoutePolicy::default();
         let store = RefCell::new(ResourceStore::default());
         let mut current: Option<Content> = None;
+        // The `net.fetch` backend, built lazily on first script attach (so unscripted
+        // tiles never spin up a fetch runtime) and reused across attaches. (net loop.)
+        let mut net_fetcher: Option<Arc<dyn NetFetcher>> = None;
 
         while let Ok(command) = commands.recv() {
             match command {
@@ -377,10 +381,20 @@ pub fn spawn_content(
                         content.viewport_gen = viewport_gen;
                         // Map the host-resolved permissions to the link grant (§11.4).
                         let grant = script::grant_from_resolved(log, document, net);
+                        // Build the `net.fetch` backend lazily on first attach (a
+                        // current-thread tokio runtime), reused thereafter. A failure
+                        // leaves `net` unbacked (a `net.fetch` call then errors). (net loop.)
+                        if net_fetcher.is_none() {
+                            net_fetcher = script::ContentNetFetcher::new()
+                                .map(|f| Arc::new(f) as Arc<dyn NetFetcher>)
+                                .map_err(|e| tracing::warn!(%e, "content net fetcher unavailable"))
+                                .ok();
+                        }
                         let outcome = attach_script(
                             content,
                             &component_path,
                             &grant,
+                            net_fetcher.clone(),
                             &store,
                             &registry,
                             &policy,
@@ -432,10 +446,12 @@ pub fn spawn_content(
 /// human-readable outcome for the `ScriptOutcome` update. A `grant` that denies a
 /// capability the component requires makes instantiation fail (reported as "attach
 /// failed") — the runtime-enforced capability boundary.
+#[allow(clippy::too_many_arguments)]
 fn attach_script(
     content: &mut Content,
     component_path: &Path,
     grant: &Grant,
+    fetcher: Option<Arc<dyn NetFetcher>>,
     store: &RefCell<ResourceStore>,
     registry: &EngineRegistry,
     policy: &EngineRoutePolicy,
@@ -454,7 +470,16 @@ fn attach_script(
     let wanted = RefCell::new(Vec::new());
     let outcome = {
         let loader = ResourceLoader::new(store, &url, &wanted);
-        match ScriptInstance::attach(component_path, &body, &loader, w, h, grant, Quota::default()) {
+        match ScriptInstance::attach(
+            component_path,
+            &body,
+            &loader,
+            w,
+            h,
+            grant,
+            Quota::default(),
+            fetcher,
+        ) {
             Ok(inst) => {
                 content.script = Some(inst);
                 "attached".to_string()

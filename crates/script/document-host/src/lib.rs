@@ -80,12 +80,33 @@ fn seed_dom() -> ScriptedDom {
     dom
 }
 
+/// A response from [`NetFetcher::fetch`] (a clean public mirror of the WIT
+/// `net::response`, so an embedder need not name the generated type).
+pub struct NetResponse {
+    pub status: u32,
+    pub body: String,
+}
+
+/// The host's network backend for `net.fetch` (§11.7-7). document-host stays
+/// dependency-light (no netfetcher/errand), so the embedder injects a concrete
+/// fetcher at [`DocumentScript::attach`]. `fetch` is **blocking**: it runs inside
+/// the guest's `net.fetch` host call on the turn's fiber, and the (sync) content
+/// actor drives the fiber via `pollster`, so the impl blocks that actor thread for
+/// the I/O (e.g. `block_on` over netfetcher/errand) and returns a ready result.
+/// `Err` surfaces to the guest as `result::err`.
+pub trait NetFetcher: Send + Sync {
+    fn fetch(&self, url: &str) -> Result<NetResponse, String>;
+}
+
 /// The per-instance store data: the live DOM + its host-side revision, the WASI
 /// floor the std guest needs, and a sink capturing the guest's `log` output.
 pub struct ScriptHost {
     dom: ScriptedDom,
     revision: u64,
     logs: Vec<String>,
+    /// The injected network backend for `net.fetch` (§11.7-7). `None` = no backend
+    /// (a `net.fetch` call returns an error); set by [`DocumentScript::attach`].
+    fetcher: Option<std::sync::Arc<dyn NetFetcher>>,
     /// The granted application-capability interface names this instance can see via
     /// the always-linked `caps.granted()` import (§11.4). Authoritative copy is the
     /// `Grant`; this is what the script is told it has.
@@ -121,10 +142,12 @@ impl crate::mere::script::net::Host for ScriptHost {
         &mut self,
         req: crate::mere::script::net::Request,
     ) -> Result<crate::mere::script::net::Response, String> {
-        // Stub: echo the requested URL. The fiber-async *path* is exercised (an async
-        // host import invoked on the turn's fiber); real suspension on I/O is proven
-        // by `crates/probes/wasmtime-async-p1` and lands with the content-actor backend.
-        Ok(crate::mere::script::net::Response { status: 200, body: format!("fetched:{}", req.url) })
+        // Call the injected backend (netfetcher/errand, supplied by the content actor).
+        // Blocking on the turn's fiber: the host thread parks for the I/O, then the
+        // fiber resumes with the result. No backend configured = an error to the guest.
+        let fetcher = self.fetcher.as_ref().ok_or_else(|| "net backend not configured".to_string())?;
+        let resp = fetcher.fetch(&req.url)?;
+        Ok(crate::mere::script::net::Response { status: resp.status, body: resp.body })
     }
 }
 
@@ -188,6 +211,7 @@ fn new_host(dom: ScriptedDom, granted: Vec<String>, limits: StoreLimits) -> Scri
         revision: 0,
         logs: Vec::new(),
         granted,
+        fetcher: None,
         wasi: WasiCtxBuilder::new().build(),
         table: ResourceTable::new(),
         limits,
@@ -563,11 +587,14 @@ impl DocumentScript {
         dom: ScriptedDom,
         grant: &Grant,
         quota: Quota,
+        fetcher: Option<std::sync::Arc<dyn NetFetcher>>,
     ) -> wasmtime::Result<Self> {
         let engine = guarded_engine()?;
         let limits = StoreLimitsBuilder::new().memory_size(quota.mem_bytes).build();
         let (mut store, bindings) =
             pollster::block_on(build_instance(&engine, component_path, dom, grant, limits))?;
+        // The network backend for `net.fetch` (None = unconfigured -> fetch errors).
+        store.data_mut().fetcher = fetcher;
         store.set_epoch_deadline(quota.epoch_deadline_ticks);
         let engine = store.engine().clone();
         let activate = bindings.call_activate(&mut store);

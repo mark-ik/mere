@@ -16,8 +16,9 @@
 //! `LayoutDom`, so the mirror + the same sheets reproduce the static render.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use document_host::{CapPermission, DocumentScript, Grant, Quota, TurnOutcome};
+use document_host::{CapPermission, DocumentScript, Grant, NetFetcher, NetResponse, Quota, TurnOutcome};
 use session_runtime::settings_store::ScriptPermissionPrefs;
 use kernel::permissions::{
     resolve_permission, Permission, ResolvedPermission, ScopedPermission, SettingScope,
@@ -30,6 +31,31 @@ use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_static_dom::StaticDocument;
 
 use crate::card::HTML_SHEET;
+
+/// The content actor's real `net.fetch` backend (§11.7-7). Holds a current-thread
+/// tokio runtime and `block_on`s the shared [`crate::fetch::fetch_page`] routing
+/// (http/https via netfetcher, smolweb via errand) — a *blocking* fetch on the actor
+/// thread while the wasm fiber is parked. Built lazily per content actor on first
+/// script attach (so unscripted tiles pay nothing). `status` is 200 on success (the
+/// `Fetched` shape carries only the 2xx body; the exact status + content-type are a
+/// richer-response follow-on, and true non-blocking suspension is a later step).
+pub(crate) struct ContentNetFetcher {
+    rt: tokio::runtime::Runtime,
+}
+
+impl ContentNetFetcher {
+    pub(crate) fn new() -> std::io::Result<Self> {
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+        Ok(Self { rt })
+    }
+}
+
+impl NetFetcher for ContentNetFetcher {
+    fn fetch(&self, url: &str) -> Result<NetResponse, String> {
+        let fetched = self.rt.block_on(crate::fetch::fetch_page(url))?;
+        Ok(NetResponse { status: 200, body: fetched.body })
+    }
+}
 
 /// Map a kernel-resolved permission to a document-host capability permission. The
 /// kernel's narrowing rule (`resolve_permission`) runs host-side; this only
@@ -261,12 +287,13 @@ impl ScriptInstance {
         h: u32,
         grant: &Grant,
         quota: Quota,
+        fetcher: Option<Arc<dyn NetFetcher>>,
     ) -> Result<Self, String> {
         let static_doc = StaticDocument::parse(body);
         let sheets = page_sheets(&static_doc, loader);
         let scripted = mirror_to_scripted_dom(&static_doc);
         let layout = lay_out_with(&scripted, &sheets, loader, w, h);
-        let script = DocumentScript::attach(component_path, scripted, grant, quota)
+        let script = DocumentScript::attach(component_path, scripted, grant, quota, fetcher)
             .map_err(|e| e.to_string())?;
         Ok(Self { script, layout, sheets, viewport: (w, h) })
     }

@@ -6,10 +6,20 @@
 //! here the focus is the external-DOM round trip.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use document_host::{DocumentScript, Grant, Quota, TurnOutcome};
+use document_host::{DocumentScript, Grant, NetFetcher, NetResponse, Quota, TurnOutcome};
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use serval_scripted_dom::{NodeId, ScriptedDom};
+
+/// A stub network backend for the fetch test: echoes the requested URL (the real
+/// backend, netfetcher/errand, lives in the meerkat content actor).
+struct EchoFetcher;
+impl NetFetcher for EchoFetcher {
+    fn fetch(&self, url: &str) -> Result<NetResponse, String> {
+        Ok(NetResponse { status: 200, body: format!("fetched:{url}") })
+    }
+}
 
 fn doc_wasm() -> PathBuf {
     let p = std::env::var("DOC_HOST_GUEST_WASM").unwrap_or_else(|_| {
@@ -51,7 +61,7 @@ fn script_mutates_a_caller_provided_dom_and_reads_back() {
     assert_eq!(body_count_before, 1, "body starts with one <p>");
 
     let mut script =
-        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), Quota::default())
+        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), Quota::default(), None)
             .expect("attach should succeed under the full grant");
     assert_eq!(script.revision(), 0);
 
@@ -97,7 +107,7 @@ fn precompiled_cwasm_attaches_and_drives_without_codegen() {
     std::fs::write(&path, &cwasm).expect("write cwasm");
 
     let (dom, _body, t1) = page();
-    let mut script = DocumentScript::attach(&path, dom, &Grant::allow_all(), Quota::default())
+    let mut script = DocumentScript::attach(&path, dom, &Grant::allow_all(), Quota::default(), None)
         .expect("attach from a precompiled .cwasm");
     assert_eq!(
         script.deliver_event("set", "Edited via AOT").expect("turn"),
@@ -115,13 +125,15 @@ fn a_granted_script_fetches_through_the_async_net_import() {
     // writes into the DOM. `net` is granted via `allow_all`; without it the guest —
     // which imports `net` — would fail to instantiate.
     let (dom, _body, t1) = page();
-    let mut script = DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), Quota::default())
-        .expect("attach with net granted");
+    let fetcher: Arc<dyn NetFetcher> = Arc::new(EchoFetcher);
+    let mut script =
+        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), Quota::default(), Some(fetcher))
+            .expect("attach with net granted");
     let out = script.deliver_event("fetch", "https://example.com/x").expect("fetch turn");
     assert_eq!(out, TurnOutcome::Applied(1));
     assert_eq!(
         text_of(script.dom(), t1).as_deref(),
         Some("fetched:https://example.com/x"),
-        "the async fetch response landed in the live DOM",
+        "the injected fetcher's response landed in the live DOM",
     );
 }

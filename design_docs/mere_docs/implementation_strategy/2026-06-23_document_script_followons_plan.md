@@ -338,3 +338,23 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   netfetcher (http) / errand (smolweb) backend is a cross-runtime piece (document-host's
   `net::Host::fetch` must call a host-injected fetcher; the content actor supplies it; fiber ↔ tokio)
   — the next focused step if a script should fetch *real* content.
+- **2026-06-23 (real `net.fetch` backend — the loop fully closed, green).** Replaced the stub.
+  **document-host:** a `NetFetcher` trait (`fetch(&self, url) -> Result<NetResponse, String>`,
+  `Send + Sync`) + `NetResponse { status, body }`; `ScriptHost` holds an injected
+  `Option<Arc<dyn NetFetcher>>`; `net::Host::fetch` calls it (None = "net backend not configured");
+  `DocumentScript::attach` takes the fetcher and sets it on the store. document-host stays
+  dependency-light (no netfetcher/errand). **meerkat:** `ContentNetFetcher` (a per-content-actor
+  **current-thread tokio runtime**) impls `NetFetcher` by `block_on`-ing the shared
+  `crate::fetch::fetch_page` (http/https → netfetcher, smolweb → errand — the same routing the page
+  fetch uses); built **lazily on first attach** (unscripted tiles pay nothing) and threaded through
+  `attach_script` → `ScriptInstance::attach` → `DocumentScript::attach`. **Blocking model:** the
+  content actor thread parks for the fetch while the wasm fiber is suspended (fine — per-tile actor;
+  the UI thread is separate); true non-blocking suspension is a later optimization. `fetch.rs`
+  exposed `fetch_page` as `pub(crate)` (committed by Mark concurrently). Tests: the document-host
+  fetch test now injects an `EchoFetcher` through the real seam (the stub moved into the test);
+  document-host 19 green, meerkat 73 lib + 111 bin green. The live-network path itself isn't
+  unit-tested (it would hit the network); it's manual/integration. **DocumentScript end to end: a
+  user grants `net` → a script attaches → calls `fetch(url)` → real http/smolweb content lands in
+  the live page → re-renders.** Known follow-ons (small): `NetResponse` carries only status 200 +
+  body (the `Fetched` shape drops the exact 2xx code + content-type — a richer response is a WIT
+  enhancement); true non-blocking fiber suspension.
