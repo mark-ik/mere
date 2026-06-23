@@ -304,7 +304,7 @@ impl Physics {
     /// Whether the layout is still moving (settle in progress or a node dragged).
     pub fn is_settling(&self) -> bool {
         match self {
-            Physics::Inline(p) => p.ticks_remaining > 0 || p.dragging,
+            Physics::Inline(p) => p.ticks_remaining > 0 || p.dragging || p.sim.scene_perpetual(),
             Physics::Actor(p) => p.settling,
         }
     }
@@ -318,7 +318,7 @@ impl Physics {
     pub fn advance_frame(&mut self, view: &mut LayoutView) -> bool {
         match self {
             Physics::Inline(p) => {
-                if p.ticks_remaining > 0 || p.dragging {
+                if p.ticks_remaining > 0 || p.dragging || p.sim.scene_perpetual() {
                     p.sim.tick(TICK_DT);
                     if p.ticks_remaining > 0 {
                         p.ticks_remaining -= 1;
@@ -326,7 +326,7 @@ impl Physics {
                 }
                 p.generation = p.generation.wrapping_add(1);
                 view.apply_snapshot(&p.sim.snapshot(p.generation));
-                p.ticks_remaining > 0 || p.dragging
+                p.ticks_remaining > 0 || p.dragging || p.sim.scene_perpetual()
             },
             Physics::Actor(p) => {
                 let mut latest = None;
@@ -365,8 +365,9 @@ fn run(
 
     loop {
         // Idle: block for the next command so the thread parks. A closed channel
-        // (the host dropped the handle) ends the actor.
-        if ticks_remaining == 0 && !dragging {
+        // (the host dropped the handle) ends the actor. A perpetual scene (a drifting
+        // backdrop) is never idle, so the actor keeps ticking instead of parking.
+        if ticks_remaining == 0 && !dragging && !sim.scene_perpetual() {
             match commands.recv() {
                 Ok(cmd) => apply(&mut sim, cmd, &mut ticks_remaining, &mut dragging),
                 Err(_) => return,
@@ -387,14 +388,15 @@ fn run(
                 },
             }
         }
-        // Step while there is work; emit the new layout and pace the next step.
-        if ticks_remaining > 0 || dragging {
+        // Step while there is work (a settle, a drag, or a perpetual scene); emit the new
+        // layout and pace the next step.
+        if ticks_remaining > 0 || dragging || sim.scene_perpetual() {
             sim.tick(TICK_DT);
             if ticks_remaining > 0 {
                 ticks_remaining -= 1;
             }
             generation = generation.wrapping_add(1);
-            let settling = ticks_remaining > 0 || dragging;
+            let settling = ticks_remaining > 0 || dragging || sim.scene_perpetual();
             out.emit(PhysicsUpdate { snapshot: sim.snapshot(generation), settling });
             std::thread::sleep(pacing);
         }

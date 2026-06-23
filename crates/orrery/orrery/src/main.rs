@@ -252,10 +252,32 @@ impl ApplicationHandler for App {
                             self.orrery.set_nodes_tangible(self.nodes_tangible);
                             self.request_redraw();
                         },
-                        // `1` loads the demo interactive scene (drop bowl); `0` clears it
-                        // back to bare space (Physics scenes P3).
+                        // `1`-`6` load the declarative scene catalog (drop bowl, pyramid,
+                        // dominoes, Galton board, funnel, drift); `0` clears back to bare
+                        // space. Press `t` to make the graph tangible and knock them around.
+                        // (Physics scenes P3/P4a.)
                         WinitKey::Character(s) if s.as_str() == "1" => {
                             self.orrery.load_demo_scene();
+                            self.request_redraw();
+                        },
+                        WinitKey::Character(s) if s.as_str() == "2" => {
+                            self.orrery.load_scene(orrery::pyramid_scene());
+                            self.request_redraw();
+                        },
+                        WinitKey::Character(s) if s.as_str() == "3" => {
+                            self.orrery.load_scene(orrery::domino_scene());
+                            self.request_redraw();
+                        },
+                        WinitKey::Character(s) if s.as_str() == "4" => {
+                            self.orrery.load_scene(orrery::galton_scene());
+                            self.request_redraw();
+                        },
+                        WinitKey::Character(s) if s.as_str() == "5" => {
+                            self.orrery.load_scene(orrery::funnel_scene());
+                            self.request_redraw();
+                        },
+                        WinitKey::Character(s) if s.as_str() == "6" => {
+                            self.orrery.load_scene(orrery::drift_scene());
                             self.request_redraw();
                         },
                         WinitKey::Character(s) if s.as_str() == "0" => {

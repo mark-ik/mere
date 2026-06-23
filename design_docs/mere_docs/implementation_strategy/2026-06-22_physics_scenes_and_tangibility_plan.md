@@ -168,13 +168,31 @@ scene picker (registry command). Apply the body cap + pause-when-idle.
 Done when a user picks an interactive scene, it loads as data, the graph can knock its bodies around
 when tangible, and the cap / idle-pause hold.
 
-### P4 — Liquid (salva)
+### P4 — Richer scenes: catalog now, extensions next, own fluid later
 
-Integrate salva2d's fluids pipeline with the existing rapier `Simulation` (two-way coupling), behind
-its own opt-in with a particle cap on the actor. One liquid scene (a pool or fountain) the graph can
-stir when tangible.
+A workflow investigation (2026-06-23) reframed the original "liquid (salva)" rung. salva is out: it
+lags rapier badly (it needs rapier 0.23 while gyre is now on 0.33), so adopting it would re-pin rapier
+backward. So liquid means our own small SPH. And the cheapest richness is declarative scenes, which
+subsumes "import the easy ones" and "make from the JS demos" into one thing: a `fn -> SceneSpec`. P4 is
+therefore a sequence.
 
-Done when a liquid scene simulates and couples to bodies + nodes within the frame budget, off-thread.
+**P4a, declarative scene catalog (done).** A library of ready-made scenes in `gyre::scenes`, plus a
+`perpetual` flag on `SceneSpec` and the keep-ticking rider so a backdrop that never settles keeps the
+actor ticking instead of parking at rest.
+
+**P4b, scene-spec extensions.** The highest unlock-per-effort: wire the already-owned but currently
+dead `ImpulseJointSet` into `load_scene` so `SceneSpec` can express joints (Newton's cradle, rope
+bridge, the rotating drum, ragdolls, spring-mesh cloth), plus a one-line per-body `gravity_scale`
+(buoyancy, mixed falling/floating). A shape-aware scene paint pass belongs here too: square and hull
+scene bodies currently paint as round orbs, so the pyramid and domino read poorly.
+
+**P4c, own-SPH fluid (the big rock).** Position-Based Fluids (PBF), our own `gyre::fluid` module,
+unconditionally stable at the 1/60s tick with no salva dep. A particle pool with uniform-grid
+neighbours, two-way coupling gated by the same tangibility lever, painted as soft metaballs behind the
+graph. Four sub-phases: settling pool, render, coupling, emitter/drain.
+
+Done (the rung as a whole) when a liquid scene simulates and couples within the actor budget; P4a and
+P4b land first as the cheap richness.
 
 ### P5 — Ambient separate-sim backdrop
 
@@ -282,3 +300,24 @@ within budget.
   floor behind an unperturbed graph. **Follow-ons**: joints (to transplant the drum / card-house
   scenes), a serde scene-file format (shareable scenes, not just code), the meerkat scene-picker
   command, then P4 liquid (salva) and P5 the ambient separate-sim backdrop.
+- 2026-06-23: **rapier 0.22 to 0.33 migration (committed `e01a6f4`).** Bumped gyre (the workspace's
+  only rapier consumer) to upstream-current rapier, unblocking own-SPH fluid on a modern base and
+  settling the salva question (salva caps at rapier 0.23, so it is out). rapier 0.33 moved to glam
+  vectors, added `InteractionTestMode` to `InteractionGroups::new`, and made the `QueryPipeline`
+  ephemeral, so `hit_test` / `cull_aabb` now read live body positions (matching the `LayoutView` the
+  orrery picks from) and `NodeExclusion` went all-pairs. 34 gyre + 44 orrery tests green; headed
+  re-verified (drop-bowl still falls and piles).
+- 2026-06-23: **P4a complete, declarative scene catalog + keep-ticking rider; headed-verified.** Five
+  new scenes join `drop_bowl` in a new `gyre::scenes` module (kept out of the over-ceiling `lib.rs`):
+  `pyramid_scene` (topple-able stack), `domino_scene` (nudged cascade), `galton_scene` (Plinko
+  peg-field bell curve), `funnel_scene` (hourglass pour), and `drift_scene` (perpetual gravity-free
+  orbs). All port demo-gallery mechanics (matter.js / planck.js / box2d) to today's `SceneSpec`, no new
+  dep. A `perpetual: bool` on `SceneSpec` (plus `Simulation::scene_perpetual` and
+  `PERPETUAL_SCENE_DAMPING`) drives the keep-ticking rider: the physics actor and the inline path keep
+  ticking instead of parking once a perpetual scene is live, so the drift never freezes. The bin loads
+  them on keys `1`-`6` (`0` clears); `Orrery::load_scene(SceneSpec)` plus the re-exported catalog are
+  the host seam. gyre 36 + orrery 44 green; headed-verified (scry-shots/p4a-*): pyramid stacks, galton
+  scatters and piles, and the two drift frames differ (perpetual motion confirmed). **Follow-ons**:
+  P4b joints + `gravity_scale` + a shape-aware scene paint pass (square/hull bodies paint as round orbs
+  today, so pyramid/domino read poorly); drift orbs slowly disperse without a centering force (a P4b
+  force-field item); then P4c own-PBF fluid.

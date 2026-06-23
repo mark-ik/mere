@@ -34,6 +34,12 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use euclid::default::{Box2D, Point2D};
 use gyre::{LayoutSnapshot, LayoutView};
+/// The declarative scene catalog, re-exported so hosts (and the standalone bin) can load
+/// a scene by name without depending on `gyre` directly. (Physics scenes P4a.)
+pub use gyre::{
+    SceneSpec, domino_scene, drift_scene, drop_bowl_scene, funnel_scene, galton_scene,
+    pyramid_scene,
+};
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
 use platen::scene_paint::{Camera, ScenePaintStyle};
@@ -1206,13 +1212,20 @@ impl Orrery {
         self.physics.set_nodes_tangible(tangible);
     }
 
-    /// Load the demo "drop bowl" interactive scene (a bumpy fixed floor + dynamic balls
-    /// falling under gravity) into the world, then kick a settle so it falls and piles.
-    /// The graph is intangible to it by default ([`set_nodes_tangible`] makes it
-    /// interactive). (Physics scenes P3.)
-    pub fn load_demo_scene(&mut self) {
-        self.physics.load_scene(gyre::drop_bowl_scene());
+    /// Load a declarative [`SceneSpec`] into the world (clearing any prior scene), then kick
+    /// a settle so it falls / arranges into place. A perpetual scene (a drift) then keeps
+    /// ticking on its own. The graph is intangible to the scene by default
+    /// ([`set_nodes_tangible`] makes it interactive). Pair with the re-exported catalog
+    /// constructors ([`pyramid_scene`], [`domino_scene`], ...). (Physics scenes P4a.)
+    pub fn load_scene(&mut self, spec: SceneSpec) {
+        self.physics.load_scene(spec);
         self.settle_physics(SETTLE_TICKS);
+    }
+
+    /// Load the demo "drop bowl" interactive scene (a bumpy fixed floor + dynamic balls
+    /// falling under gravity). (Physics scenes P3.)
+    pub fn load_demo_scene(&mut self) {
+        self.load_scene(drop_bowl_scene());
     }
 
     /// Remove every scene body (the living backdrop / loaded scene). (Physics scenes P3.)

@@ -62,6 +62,14 @@ pub use barnes_hut::{BarnesHutConfig, BarnesHutRepulsion, repulsion_forces};
 pub mod coupling_force;
 pub use coupling_force::CouplingForce;
 
+/// The declarative scene library: ready-made [`SceneSpec`]s the orrery loads behind the
+/// graph (drop-bowl, pyramid, dominoes, Galton board, funnel, drift). Data, not engine
+/// code; the growing catalog lives here to keep `lib.rs` under the size ceiling.
+pub mod scenes;
+pub use scenes::{
+    domino_scene, drift_scene, drop_bowl_scene, funnel_scene, galton_scene, pyramid_scene,
+};
+
 /// Scene-geometry queries for the orrery canvas: edge geometry, edge picking,
 /// and marquee rect-select (node point-pick + cull live on `Simulation`
 /// directly). Split out to keep `lib.rs` under the per-file size ceiling.
@@ -154,6 +162,11 @@ const DEFAULT_ANGULAR_DAMPING: f32 = 4.0;
 /// coasts a long while rather than settling quickly. (Physics scenes P1.)
 const SCENE_DAMPING: f32 = 0.3;
 
+/// Linear damping for the dynamic bodies of a *perpetual* scene (a drifting backdrop):
+/// near-zero so the motion coasts for minutes rather than bleeding to rest under the
+/// heavier [`SCENE_DAMPING`] that lets a settling scene come to rest. (Physics scenes P4a.)
+const PERPETUAL_SCENE_DAMPING: f32 = 0.01;
+
 /// Upper bound on bodies a single [`SceneSpec`] loads, so a runaway scene can't swamp
 /// the physics actor's per-tick budget. (Physics scenes P3.)
 const SCENE_BODY_CAP: usize = 200;
@@ -217,35 +230,12 @@ pub struct SceneSpec {
     pub gravity: (f32, f32),
     /// Whether the graph collides with the scene on load (the tangibility default).
     pub default_tangible: bool,
-}
-
-/// A transplanted demo scene: a bumpy fixed floor (a row of big fixed balls) with a
-/// handful of dynamic balls falling onto it under gravity and piling up. The
-/// "interactive scene" proof — data-defined, and the graph can knock the balls around
-/// once made tangible. (Physics scenes P3.)
-pub fn drop_bowl_scene() -> SceneSpec {
-    let mut bodies = Vec::new();
-    // The bumpy fixed floor.
-    for i in 0..5 {
-        bodies.push(SceneBodySpec {
-            collider: NodeCollider::Ball { radius: 60.0 },
-            position: (-280.0 + i as f32 * 140.0, 340.0),
-            velocity: (0.0, 0.0),
-            body_type: SceneBodyType::Fixed,
-            restitution: 0.4,
-        });
-    }
-    // Dynamic balls dropped from above the graph.
-    for i in 0..8 {
-        bodies.push(SceneBodySpec {
-            collider: NodeCollider::Ball { radius: 22.0 },
-            position: (-210.0 + i as f32 * 60.0, -260.0 - (i % 3) as f32 * 40.0),
-            velocity: (0.0, 0.0),
-            body_type: SceneBodyType::Dynamic,
-            restitution: 0.5,
-        });
-    }
-    SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false }
+    /// Whether the scene is meant to stay in motion forever (a drifting / bouncing living
+    /// backdrop) rather than settle to rest. When set, the physics actor keeps ticking
+    /// instead of parking once at rest, and the scene's dynamic bodies take
+    /// [`PERPETUAL_SCENE_DAMPING`] so their motion coasts instead of bleeding away.
+    /// Settling scenes (a pile, a topple, a pour) leave this `false`.
+    pub perpetual: bool,
 }
 
 /// A pluggable force-applier. Forces read the body store and apply
@@ -310,6 +300,10 @@ pub struct Simulation {
     scene_bodies: HashMap<SceneBodyId, (RigidBodyHandle, f32)>,
     /// Monotonic id source for [`scene_bodies`](Self::scene_bodies).
     next_scene_id: u64,
+    /// Whether the loaded scene wants to keep moving forever (a perpetual backdrop) rather
+    /// than settle — the physics actor reads this via [`Self::scene_perpetual`] to keep
+    /// ticking instead of parking at rest. Reset by [`Self::clear_scene`]. (Physics scenes P4a.)
+    scene_perpetual: bool,
 }
 
 impl Default for Simulation {
@@ -347,6 +341,7 @@ impl Simulation {
             linear_damping: DEFAULT_LINEAR_DAMPING,
             scene_bodies: HashMap::new(),
             next_scene_id: 0,
+            scene_perpetual: false,
         }
     }
 
@@ -694,6 +689,7 @@ impl Simulation {
             );
         }
         self.scene_bodies.clear();
+        self.scene_perpetual = false;
     }
 
     /// Iterate the live `(id, position, paint radius)` of every scene body — the host's
@@ -710,6 +706,13 @@ impl Simulation {
     /// Number of scene bodies in the world. (Physics scenes P1.)
     pub fn scene_body_count(&self) -> usize {
         self.scene_bodies.len()
+    }
+
+    /// Whether the loaded scene wants to keep moving forever (a perpetual backdrop) rather
+    /// than settle. The physics actor reads this to keep ticking instead of parking at rest;
+    /// `false` once the scene is cleared. (Physics scenes P4a.)
+    pub fn scene_perpetual(&self) -> bool {
+        self.scene_perpetual
     }
 
     /// Make a single node tangible (it collides with scene bodies) or intangible (it
@@ -764,6 +767,9 @@ impl Simulation {
     pub fn load_scene(&mut self, spec: &SceneSpec) {
         self.clear_scene();
         self.set_gravity(spec.gravity);
+        // Perpetual backdrops coast (near-zero damping); settling scenes use the heavier
+        // SCENE_DAMPING so they come to rest. (Physics scenes P4a.)
+        let damping = if spec.perpetual { PERPETUAL_SCENE_DAMPING } else { SCENE_DAMPING };
         for b in spec.bodies.iter().take(SCENE_BODY_CAP) {
             let builder = match b.body_type {
                 SceneBodyType::Fixed => RigidBodyBuilder::fixed(),
@@ -772,7 +778,7 @@ impl Simulation {
             let body = builder
                 .translation(Vector::new(b.position.0, b.position.1))
                 .linvel(Vector::new(b.velocity.0, b.velocity.1))
-                .linear_damping(SCENE_DAMPING)
+                .linear_damping(damping)
                 .angular_damping(DEFAULT_ANGULAR_DAMPING)
                 .build();
             let handle = self.bodies.insert(body);
@@ -795,6 +801,7 @@ impl Simulation {
             self.scene_bodies.insert(id, (handle, radius));
         }
         self.set_nodes_tangible(spec.default_tangible);
+        self.scene_perpetual = spec.perpetual;
     }
 
     /// Advance the simulation by `dt` seconds. Walks every registered
