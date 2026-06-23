@@ -1,0 +1,16 @@
+[package]
+name = "verso"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The Mere browser's compatibility-view flip orchestrator: pairs a FlipDonor with a FlipReceiver, masks the carry to the layers both support (degrade, never block), and runs the one-hop forward/back choreography. Engine-agnostic; depends only on verso-api so it never drags an engine or GPU layer in."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# verso-api only, on purpose: the carrier pairs abstract donor/receiver traits and
+# never names a concrete engine, so it stays free of Servo / CEF / the GPU layer.
+verso-api = { workspace = true }

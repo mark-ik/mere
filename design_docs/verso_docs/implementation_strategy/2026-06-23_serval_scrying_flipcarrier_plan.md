@@ -216,5 +216,16 @@ same page, same session, same place — never the same running program.
   setters — those live in the script runtime / netfetcher / compositor, not the DOM,
   so the crate depends only on `serval-scripted-dom` + `verso-api` (no runtime, no GPU
   layer). `donates()` advertises FORM|DOM always plus the fed host layers. 3 tests
-  green. Next: `verso-scry` (FlipReceiver/FlipBack) + the `verso` carrier, which land
-  together with the host wiring over the existing `engine_pins` pin-switch (§1, §6.5).
+  green.
+- **2026-06-23 (phase 4, carrier)**: minted `crates/verso` — the engine-agnostic
+  orchestrator (`verso-api` only, no engine). `flip_forward(donor, receiver)` masks
+  the captured state to `donates() ∩ receives()` and presents a `Carry::Forward`;
+  `flip_back(source, primary)` masks the `BackState` to the primary's appetite and
+  presents a `Carry::Back`, declining (returns `false`) when the primary can't
+  re-root (no NAV). `forward_carried` previews the crossing layers for the host.
+  Degrade-never-block and one-hop are both encoded in the signatures (forward takes a
+  `FlipDonor`, back takes a `FlipBack`); 4 tests green. The non-host-coupled half of
+  verso is now done (`verso-api` + `verso-serval` + `verso`). The single remaining
+  chunk is host-coupled: `verso-scry` (FlipReceiver/FlipBack over the WebView2 producer
+  and the host frame loop) and the meerkat `ScryingHost` hook that fires the carrier on
+  the `engine_pins` serval→`scrying.web` transition (§1, §6.5).
