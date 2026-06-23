@@ -603,6 +603,21 @@ nothing to configure); Plan 9 is the **architecture** (per-process namespaces, t
 deeper lesson over remote-CPU). Compute adds placement, cancellation, determinism,
 verification, and thermal/battery policy, so Syncthing is the feel, not the design.
 
+**Native-tier arbitrary compute: Wasmtime-fuel (added 2026-06-23).** The one residual
+the code-vs-data split leaves is a stranger's arbitrary *compute code*, not just data.
+Native-tier, it is closed by requiring that code compiled to wasm and run under
+**Wasmtime with fuel metering**, never a raw native binary. This is native-helper-only
+(Wasmtime is a JIT, out of the browser tab under the no-JIT rule), and it pays twice.
+A deterministic wasm profile (fuel-metered scheduling, canonical NaN, relaxed-SIMD off)
+earns the re-run-to-a-hash determinism that T0 / N-of-M settlement needs, which retires
+the host-side-discipline determinism caveat above for the native tier. And fuel + epoch
+interruption (plus the wasm stack-switching proposal) give a concrete
+**checkpointable-slice** primitive for the §4 "checkpointable (snapshot and resume
+elsewhere)" class and for block-boundary recovery in rung-4 sharding (§6). Browser nodes
+keep their own Burn-wgpu kernels plus declarative/JS logic; only native helpers offer the
+wasm-compute lane. This is the rare lever (arbitrary untrusted compute), not the
+backbone, the same shelf as rung-4 sharding.
+
 ---
 
 ## 9. Sharing, permissions, and where the economy engages
@@ -684,26 +699,65 @@ Every number is a setting with a sane default, never a hardcode:
 - **Correlated multi-moot exit** (the tessera-slash residual): cheat every moot you
   hold standing in at once. Per-moot rep + one-hop concords bound each moot's
   exposure but do not eliminate it. A small agent-based sim could quantify the
-  (audit-rate, future-value, fork-cost) -> cheating-rate surface.
+  (audit-rate, future-value, fork-cost) -> cheating-rate surface. **POLICY SET
+  (2026-06-23):** do not chase elimination. Full elimination needs global trust, which
+  breaks the non-ownable valve. Bound it instead: per-moot `min(requested, trust)` caps
+  each moot's exposure; any job whose stake exceeds the actor's per-moot future-value
+  bond escalates to T2/T3 regardless of rep (escrow / replication / proofs, not
+  standing); the unreplaceable-pseudonym fork-debt stops cheap re-entry after. The sim
+  only tunes the stake-to-escalation threshold, it does not gate the design.
 - **One credit unit, cash-permeable at the edges:** stress-test that
   tessera-unbuyable + spend-bounded-by-rep holds under an adversary who buys up
-  credits and floods funded bounties. Plus the unit's name.
+  credits and floods funded bounties. Plus the unit's name. **PARTLY DECIDED
+  (2026-06-23):** the valve holds by construction under the two existing invariants
+  (no credit-to-tessera conversion; spend bounded by `min(requested, trust)`). Add a
+  lane-separation rule: commons-reciprocity and funded-bounty are physically separate
+  ledger lanes, so a funded-bounty flood cannot crowd out commons lending or touch
+  governance (tessera-only). A funded flood is market-rate payment for real work, the
+  lane behaving correctly; the sim is calibration, not a blocker. **The unit's name
+  stays open (Mark's call).**
 - **Cross-tier clearing vs non-transitive trust:** the one-hop concord's Sybil and
-  collusion properties across federated moots are unproven.
+  collusion properties across federated moots are unproven. **DECIDED (2026-06-23):**
+  one-hop stays the hard ceiling (never transitive); CautiousImport stays the default
+  composition; concord edges require **mutual ratification** (both moots sign) so a
+  Sybil cannot unilaterally concord itself into trust. Two-real-moots collusion is
+  bounded by the correlated-exit exposure rule above, not eliminated; the Sybil /
+  collusion surface still wants the sim.
 - **Tournament vs first-valid** for non-deterministic open bounties (quality vs
-  wasted compute), and the lease/heartbeat cadence for claimed tasks.
+  wasted compute), and the lease/heartbeat cadence for claimed tasks. **DECIDED
+  (2026-06-23):** asker-picked per bounty, defaulted by determinism and stakes.
+  Deterministic/cacheable goes first-valid-hash-wins (default, zero waste);
+  non-deterministic but cheaply verifiable goes first-valid + verifier;
+  quality-critical goes opt-in tournament-in-a-window (escrow N×, waste accepted
+  deliberately). Lease/heartbeat default `min(deadline/10, 30s)`, reassign after 2
+  missed heartbeats. Belongs in the §11 configurable menu.
 - **When is sharding worth the latency** (the LAN-vs-WAN crossover), and KV-cache
-  placement + mid-inference recovery when a device drops a token in.
-- **Outer-ring isolation. Largely RESOLVED (2026-06-04, see §8):** untrusted *logic*
-  runs in the Rhai sandbox (deterministic, browser-safe, capability-scoped), and ML
-  jobs run the worker's own Burn kernels on namespace-bounded untrusted *data*, so no
-  untrusted code runs there. The residual is only running a stranger's arbitrary
-  *native binary* (subprocess or container, native-only), plus tuning Rhai's
-  operation and time limits.
+  placement + mid-inference recovery when a device drops a token in. **POLICY SET
+  (2026-06-23):** sharding is async + fast-link only, never across the WAN trust edge
+  for interactive use. An async over-budget model uses the milestone-9 block-holder
+  chain, each block-holder a **checkpointable slice** (§8 Wasmtime-fuel) so a dropped
+  block re-dispatches from the last block boundary. The exact LAN/WAN crossover ms
+  stays a measurement behind milestones 8-9.
+- **Outer-ring isolation. RESOLVED (2026-06-23, supersedes the 2026-06-04 entry):**
+  untrusted *logic* runs in the declarative-policy evaluator (Rust, operation-budgeted)
+  plus trusted JS orchestration (wall-clock-bounded worker) per the 2026-06-10 scripting
+  correction (Rhai/Rune dropped), and ML jobs run the worker's own Burn kernels on
+  namespace-bounded untrusted *data*, so no untrusted code runs on the numeric path.
+  The residual (a stranger's arbitrary *compute code*) is closed native-tier by
+  requiring it compiled to wasm and run under **Wasmtime-fuel** (§8), never a raw native
+  binary; browser nodes do not offer that lane. This also earns determinism (T0 /
+  N-of-M) and a checkpointable-slice primitive in one move. The earlier "tune Rhai's
+  operation/time limits" residual is obsolete.
 - **How light the bounty coordinator can be at ~100 nodes** while validating
   against cheating and reassigning dropped workers; and whether Petals/exo/cake fit
   an ad-hoc bounty model or assume a persistent overlay, with real throughput over
   consumer internet. (Both deprioritized across the research passes; still open.)
+  **DECIDED in principle (2026-06-23):** the coordinator stays BOINC-minimal (a work-list
+  with claim/heartbeat/deliver, reassign on lapse, validate by content-address plus an
+  optional quorum re-run), a projection of the event DAG, and a rotatable / bankable role (the
+  communal-tiers anti-burnout property). Petals/exo/cake assume a persistent overlay, so
+  they are reference-technique for the rung-4 async-shard case only, never the backbone.
+  The ~100-node throughput number stays a measurement, deferred until real traffic.
 - **How far the moot geist closes the gap. RESOLVED (2026-06-04, see §6):** the
   style-vs-reasoning line is real and quantified (restyling recovers ~100% of style,
   ~53-62% of reasoning); a LoRA geist carries translation's style side and
@@ -929,3 +983,24 @@ the killed claims below must not be asserted.
   needs sandboxing, and Rhai handles it including in-browser), tied the toolkit
   thesis to Rhai-scripted strategies in §0, and largely resolved the outer-ring
   isolation open question.
+
+### 2026-06-23
+
+- Scoped and decided the remaining §12 open questions in one pass (with Mark).
+  Settlement mode: asker-picked, determinism/stakes default, heartbeat
+  `min(deadline/10, 30s)` with a 2-miss reassign. Correlated multi-moot exit: bound,
+  do not eliminate (per-moot exposure cap, stake-triggered T2/T3 escalation,
+  fork-debt). Credit-flood/valve: lane separation (commons vs funded), name still
+  open. Cross-tier clearing: one-hop hard ceiling, CautiousImport, mutually-ratified
+  concord edges. Sharding crossover: async and fast-link only, block-boundary
+  checkpoint recovery. Bounty coordinator: BOINC-minimal DAG-projection rotatable
+  role; exo/cake are rung-4 reference only. Communal training: off the milestone path,
+  the LCZero data/eval loop is the communal-model story. Three stay empirical with the
+  policy bracketed (correlated-exit sim, credit-flood sim, ~100-node throughput,
+  LAN/WAN crossover). No code.
+- Added §8 "Native-tier arbitrary compute: Wasmtime-fuel": the last code-vs-data
+  residual (a stranger's arbitrary compute code) is closed native-tier by wasm under
+  Wasmtime-fuel, which also retires the §8 host-side determinism caveat for the native
+  tier and supplies the checkpointable-slice primitive the §4 checkpoint classes and
+  rung-4 recovery wanted. De-Rhai'd the outer-ring-isolation open question (Rhai/Rune
+  dropped per the 2026-06-10 correction; logic layer is declarative-Rust plus JS).

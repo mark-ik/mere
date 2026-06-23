@@ -139,7 +139,7 @@ The mechanics brief's rings map onto the in-product tiers; t3/t4 are where
 the new design lives.
 
 - **Personal (orrery, t0/t1).** Your own devices as one substrate: scheduling
-  + namespace, owner reclamation absolute, no economy (mechanics §1/§8,
+  and namespace, owner reclamation absolute, no economy (mechanics §1/§8,
   milestone 1). The supply unit of everything above is "a household's idle
   compute."
 - **Kith/kin.** Capability grants, no economy: the family pool, the friend
@@ -228,17 +228,32 @@ The timebanking literature's failure modes, read against compute:
 - **Retention without toxicity**: leaderboards drove SETI volunteers to buy
   GPUs, which is the volume bug in social form. Per-moot standings shaped by
   reliability (like tessera itself) probably avoid the arms race; watch for
-  it when the standings UI lands.
+  it when the standings UI lands. **DECIDED (2026-06-23):** per-moot standings only,
+  rendered from the real ledger, reliability-shaped (sub-linear in volume, capped,
+  decaying) like tessera. No global volume leaderboard, since global volume boards are
+  what drove the SETI GPU arms race. Watch the standings UI in practice.
 - **Surge absorption**: what does a coalition need *in advance* to absorb an
   F@h-2020-scale influx (newcomer T0 on-ramp throughput, bootstrap seeding,
   moderation), and does the newcomer on-ramp (mechanics §9) scale to a
-  million arrivals?
+  million arrivals? **POLICY SET (2026-06-23):** the contribute-first on-ramp
+  (permissionless seeding plus T0 self-judging bounties, no prior standing) is the
+  surge mechanism: supply-side and self-verifying, so a million self-verifying T0
+  newcomers need no per-newcomer trust bootstrap. A coalition pre-provisions T0-queue
+  capacity and moderation, not trust machinery. The million-arrival load-test stays
+  empirical.
 - **Petals swarm health in 2026 is unverified** from public sources; the
   public swarm's liveness is itself a data point about retention without
   community. The mechanics brief already treats Petals as a portable
-  reference (MIT), not a dependency; keep it that way.
+  reference (MIT), not a dependency; keep it that way. **NON-BLOCKING (2026-06-23):**
+  changes no decision. We run our own swarm with community retention, which is the
+  point; the liveness datapoint is evidence for "retention needs community," nothing to
+  action.
 - **Device-class normalization** for the time-bank preset (is one
   phone-hour one workstation-hour? a constitution choice; name the default).
+  **DECIDED (2026-06-23):** default to coarse device-class buckets (phone / laptop /
+  workstation / GPU-server) with published multipliers, market-cleared at the edges,
+  per-moot pinnable. Flat device-hour equals device-hour is not the default, since it
+  lets weak hardware farm credit.
 
 ## Sources
 
