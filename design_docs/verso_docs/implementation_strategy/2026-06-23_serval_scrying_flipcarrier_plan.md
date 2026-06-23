@@ -1,11 +1,15 @@
 # Serval ↔ Scrying FlipCarrier — first-flip plan
 
 **Date**: 2026-06-23
-**Status**: Design resolved; `verso-api` minted (2026-06-23). Capability verified;
-forward carrier, flip-back, and crate layering decided. P4 (the scry tile) shipped
-2026-06-15 via the ad-hoc `compat_pins` path; the remaining gate before the live
-flip is the **inker picker** (charter step 2: fold `compat_pins` into
-`inker::routing` + the user-facing per-node picker).
+**Status**: Design resolved; `verso-api` + serval donor primitives shipped (2026-06-23).
+Both charter prerequisites are **done** (verified in code 2026-06-23): P4 (the scry
+tile) and the inker picker (the engine-picker plan's Phases 0-3 — `engine_pins`
+routing through `EngineRoutePolicy`, `is_surface_engine`, the apparatus engine
+manager, and the per-node picker) both shipped 2026-06-15. **Verso is unblocked.**
+The picker already flips a node to `scrying.web` as a *stateless* engine-switch (a
+fresh WebView); verso is the state-carry layer that turns that switch into a flip.
+Next: the carrier + the `verso-serval`/`verso-scry` adapters, hooking the existing
+`engine_pins` pin-switch in the ScryingHost.
 **Extends**: [compatibility-view charter](../technical_architecture/2026-06-10_compatibility_view_charter.md)
 (§3 the charter, §7.3 "mint verso at the first flip").
 
@@ -30,6 +34,19 @@ engine pair, both directions.
 - **Downloads already exist** (`with_download_dir`, the Download* events). Out of
   scope for the flip; it means the broader scry capability layer is host-side
   consumption, not new engine work.
+- **The receiver is multi-frame, not a sync one-shot** (verified 2026-06-23): the
+  `WebSurfaceProducer` trait's `navigate` blocks (timeout-bounded), so the flip must
+  use the non-blocking concrete path — `set_cookie` + `load_url`, then the host frame
+  loop polls `poll_navigation_event` for `NavigationFinished { success }`, then
+  `execute_script_with_result` restores scroll/forms. Consequence: `FlipReceiver` is
+  two-phase (begin → restore-on-load), and `verso-scry`'s impl couples to the host
+  frame loop and the concrete (WebView2) producer (`inner_mut`). It is **not** a
+  standalone crate buildable in isolation — it lands with the carrier + host wiring.
+  That host wiring is no longer gated: the inker picker shipped 2026-06-15, so the
+  serval→`scrying.web` pin-switch already exists; `verso-scry` lands over it whenever
+  the carrier does. Flip-back's reads are likewise host-tracked: URL
+  from nav-event tracking, scroll via `execute_script`, cookies need a read path
+  (`set_cookie` is write-only today).
 
 ### Serval (glass-box donor): state reachable, export API missing
 
@@ -160,9 +177,12 @@ primary→secondary (compat view) and secondary→primary (flip-back). One hop.
 4. **`verso`** — the `ServalToScrying` carrier + flip choreography + registry. Lean,
    well under the 600-LOC ceiling (the engines do the heavy lifting).
 5. **Host wiring** — meerkat/pelt build the carrier from the variant's adapters; the
-   tile texture cross-fade. P4 (the scry tile) shipped 2026-06-15; this wires the
-   flip *trigger* over it (currently the ad-hoc `compat_pins` path; the inker picker
-   folds it into routing).
+   tile texture cross-fade. Both prerequisites shipped 2026-06-15: P4 (the scry tile)
+   and the inker picker, which folded the old ad-hoc `compat_pins` path into routing
+   (`engine_pins` through `EngineRoutePolicy`). So the flip *trigger* already exists —
+   pinning a node to `scrying.web` flips it *statelessly* today; this phase intercepts
+   that `engine_pins` serval→`scrying.web` transition to capture the donor and inject
+   into the receiver, turning the switch into a flip.
 6. **Flip-back** lands alongside forward (same carrier, the `Back` direction).
 
 ## 7. Inherited invariants (charter)
@@ -179,8 +199,22 @@ same page, same session, same place — never the same running program.
   as `verso-api` + per-engine `verso-*` adapters + a `verso` orchestrator
   (host-wired, feature-gated); texture swap rides the capture cadence after
   `NavigationFinished`. Designed the flip-back re-root path + `BackState`.
-- **2026-06-23 (impl)**: corrected the P4 status (X1+ shipped 2026-06-15; the gate
-  before the live flip is now the inker picker, not P4). Minted `crates/verso-api`
+- **2026-06-23 (impl)**: corrected the status — *both* charter prerequisites shipped
+  2026-06-15 (P4's X1+ scry tile, and the inker picker's `engine_pins` routing), so
+  the live flip is unblocked, not picker-gated. Minted `crates/verso-api`
   — `PortableViewState`/`BackState`/`LayerSet` + `FlipDonor`/`FlipBack`/`FlipReceiver`,
-  engine-agnostic with zero deps; `cargo test -p verso-api` green. Next: serval
-  export accessors (phase 1), then the `verso-serval`/`verso-scry` adapters (phase 3).
+  engine-agnostic with zero deps; `cargo test -p verso-api` green.
+- **2026-06-23 (phase 1)**: serval-side donor DOM extraction landed and tested —
+  `ScriptedDom::outer_html`/`inner_html` via html5ever's serializer (no hand-rolled
+  escaping; serval-scripted-dom `fdac70f2b10`) and `form_values` keyed by name/id
+  (`3a35b5cc4aa`). The remaining phase-1 url/scroll are host-side and belong with the
+  `verso-serval` adapter.
+- **2026-06-23 (phase 3, donor)**: minted `crates/verso-serval` — `ServalDonor`, the
+  serval `FlipDonor`. Fills the FORM + DOM layers itself from the scripted DOM
+  (`form_values` / `outer_html` over `LayoutDom::document`) and takes the NAV
+  (url+scroll), SESSION (cookies), and VISUAL (frame) layers host-fed via `with_*`
+  setters — those live in the script runtime / netfetcher / compositor, not the DOM,
+  so the crate depends only on `serval-scripted-dom` + `verso-api` (no runtime, no GPU
+  layer). `donates()` advertises FORM|DOM always plus the fed host layers. 3 tests
+  green. Next: `verso-scry` (FlipReceiver/FlipBack) + the `verso` carrier, which land
+  together with the host wiring over the existing `engine_pins` pin-switch (§1, §6.5).

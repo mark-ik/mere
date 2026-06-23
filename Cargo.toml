@@ -33,6 +33,7 @@ members = [
     "crates/inker/engines/nematic",
     "crates/inker/engines/scrying-engine",
     "crates/verso-api",
+    "crates/verso-serval",
     "crates/forme/forme",
     "crates/forme/uxtree",
     "crates/platen/domain/apparatus",
