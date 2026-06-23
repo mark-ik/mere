@@ -1199,6 +1199,13 @@ impl Orrery {
         );
     }
 
+    /// Set every node's tangibility to the scene bodies: `true` lets the graph collide with
+    /// the scene (push it / be pushed), `false` (the default) passes through. The scene-wide
+    /// tangibility lever; applies to the current nodes. (Physics scenes P2.)
+    pub fn set_nodes_tangible(&mut self, tangible: bool) {
+        self.physics.set_nodes_tangible(tangible);
+    }
+
     /// The size-tier index (0..[`SIZE_TIERS`]`.len()`) nearest a node's current resolved
     /// size — where the resize control's filled notches stop. A size-by-degree or default
     /// size snaps to its nearest tier for display. (Node-rep — size tiers.)

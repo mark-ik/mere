@@ -42,6 +42,8 @@ struct App {
     host: Option<SurfaceHost>,
     width: u32,
     height: u32,
+    /// Whether the graph collides with the backdrop scene bodies (toggled by `t`).
+    nodes_tangible: bool,
 }
 
 impl App {
@@ -56,6 +58,7 @@ impl App {
             host: None,
             width: 1024,
             height: 600,
+            nodes_tangible: false,
         }
     }
 
@@ -240,6 +243,13 @@ impl ApplicationHandler for App {
                         WinitKey::Character(s) if s.as_str() == "h" => {
                             let on = !self.orrery.height_by_degree();
                             self.orrery.set_height_by_degree(on);
+                            self.request_redraw();
+                        },
+                        // `t` toggles scene tangibility: the graph collides with the
+                        // backdrop bodies vs passing through them (Physics scenes P2).
+                        WinitKey::Character(s) if s.as_str() == "t" => {
+                            self.nodes_tangible = !self.nodes_tangible;
+                            self.orrery.set_nodes_tangible(self.nodes_tangible);
                             self.request_redraw();
                         },
                         _ => {},

@@ -63,6 +63,9 @@ pub(crate) enum PhysicsCommand {
     /// Add a non-graph scene-decoration body (shape, world position, drift velocity).
     /// (Physics scenes P1.)
     AddSceneBody(NodeCollider, Point2D<f32>, (f32, f32)),
+    /// Set every node's tangibility (collide with scene bodies, or pass through).
+    /// (Physics scenes P2.)
+    SetNodesTangible(bool),
 }
 
 /// One layout the actor produced: the positions plus whether it is still
@@ -207,6 +210,16 @@ impl Physics {
             }
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::AddSceneBody(collider, position, velocity));
+            }
+        }
+    }
+
+    /// Set every node's tangibility to the scene (the scene-wide lever). (Physics scenes P2.)
+    pub fn set_nodes_tangible(&mut self, tangible: bool) {
+        match self {
+            Physics::Inline(p) => p.sim.set_nodes_tangible(tangible),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::SetNodesTangible(tangible));
             }
         }
     }
@@ -390,6 +403,7 @@ fn apply(
         PhysicsCommand::AddSceneBody(collider, position, velocity) => {
             sim.add_scene_body(collider, position, velocity);
         }
+        PhysicsCommand::SetNodesTangible(tangible) => sim.set_nodes_tangible(tangible),
     }
 }
 

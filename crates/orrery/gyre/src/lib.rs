@@ -704,6 +704,48 @@ impl Simulation {
         self.scene_bodies.len()
     }
 
+    /// Make a single node tangible (it collides with scene bodies) or intangible (it
+    /// passes through), by re-masking its collider's filter. Node-node collision is
+    /// unaffected. A no-op for an unknown node. (Physics scenes P2 — tangibility lever.)
+    pub fn set_node_tangibility(&mut self, node: NodeKey, tangible: bool) {
+        let Some(&body_handle) = self.bodies_by_node.get(&node) else {
+            return;
+        };
+        self.remask_node(body_handle, tangible);
+        self.query_pipeline.update(&self.colliders);
+    }
+
+    /// Set every node's tangibility at once (the scene-wide lever): `true` lets the graph
+    /// collide with scene bodies, `false` (the default) passes through. Node-node collision
+    /// is unaffected either way. (Physics scenes P2.)
+    pub fn set_nodes_tangible(&mut self, tangible: bool) {
+        let handles: Vec<RigidBodyHandle> = self.bodies_by_node.values().copied().collect();
+        for handle in handles {
+            self.remask_node(handle, tangible);
+        }
+        self.query_pipeline.update(&self.colliders);
+    }
+
+    /// Re-mask one node body's collider(s) to the intangible (`NODE`) or tangible
+    /// (`NODE | SCENE`) filter. (Physics scenes P2.)
+    fn remask_node(&mut self, body_handle: RigidBodyHandle, tangible: bool) {
+        let groups = if tangible {
+            InteractionGroups::new(NODE_GROUP, NODE_GROUP | SCENE_GROUP)
+        } else {
+            node_groups()
+        };
+        let collider_handles: Vec<ColliderHandle> = self
+            .bodies
+            .get(body_handle)
+            .map(|b| b.colliders().to_vec())
+            .unwrap_or_default();
+        for ch in collider_handles {
+            if let Some(c) = self.colliders.get_mut(ch) {
+                c.set_collision_groups(groups);
+            }
+        }
+    }
+
     /// Advance the simulation by `dt` seconds. Walks every registered
     /// [`Force`] first (so forces accumulate), then steps the world.
     /// Position writeback to the graph is a separate call —
@@ -887,5 +929,36 @@ mod scene_tests {
         assert_eq!(sim.scene_body_count(), 0);
         assert_eq!(sim.body_count(), 1);
         sim.remove_scene_body(id);
+    }
+
+    #[test]
+    fn node_tangibility_toggles_scene_collision() {
+        let mut sim = Simulation::new();
+        let node = NodeKey::new(0);
+        sim.sync_nodes([(node, Point2D::new(0.0, 0.0))]);
+        sim.add_scene_body(
+            NodeCollider::Ball { radius: NODE_BODY_RADIUS },
+            Point2D::new(5.0, 0.0),
+            (0.0, 0.0),
+        );
+
+        // Intangible (default): the overlapping scene body never pushes the node.
+        for _ in 0..60 {
+            sim.tick(1.0 / 60.0);
+        }
+        let intangible = sim.position_of(node).expect("node has a position");
+        assert!(intangible.x.abs() < 1.0, "intangible: node not pushed (was {intangible:?})");
+
+        // Flip the node tangible: now the overlapping scene body's hard collision shoves it
+        // off the origin (away from the body at +x, so toward -x).
+        sim.set_nodes_tangible(true);
+        for _ in 0..60 {
+            sim.tick(1.0 / 60.0);
+        }
+        let tangible = sim.position_of(node).expect("node has a position");
+        assert!(
+            tangible.x < -1.0,
+            "tangible: the scene body pushed the node off the origin (was {tangible:?})",
+        );
     }
 }
