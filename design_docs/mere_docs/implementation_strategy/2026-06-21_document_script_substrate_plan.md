@@ -647,6 +647,51 @@ same `call_async` without suspending, and `fetch` slots in when wired.
    `Engine::default()` suffices. Still needs rustc 1.93 for WT45, so the §11.7-1 MSRV bump
    stands.)
 
+### 11.8 P2.5 content-actor gate + the slice-#1 convergence (found 2026-06-22)
+
+Reading the content actor for P2.5 surfaced a gate the earlier design did not see, and a
+strong convergence with already-prioritized work.
+
+**The gate.** A DocumentScript mutates a serval **`ScriptedDom`** (the `document` import's
+inspect/apply). But the content actor does **not** hold one: `card.rs` renders by
+`StaticDocument::parse(body)` **fresh every call** (`card.rs:448` render, `:494` find) — an
+immutable, re-parsed-each-render DOM. So "a script mutates the page and it re-renders" is not
+wireable as-is; it needs the content actor to hold a **retained, mutable** page DOM. This is
+exactly the unified-document-model question Mark flagged.
+
+**The convergence (the useful part).** Giving the content actor a retained `ScriptedDom` is
+*also* unified-document-host **pressing slice #1** ("retain an `IncrementalLayout` session in
+the content actor" — the web lane re-runs `run_cascade` from scratch on every scroll band /
+find keystroke / subresource), which Mark already put on the do-list ("do 2, 3, 1, 4"). And
+the pieces exist: `scene_from_layout_dom<D, L>` is **generic over `LayoutDom`**
+(`serval_render.rs:131`), `ScriptedDom` implements `LayoutDom` and is the script target, and
+`IncrementalLayout` is generic and already drives the chrome panes. So one architectural move
+— content lane on a retained `ScriptedDom` + `IncrementalLayout` (built from the fetched HTML
+via the existing `set_inner_html` path) — pays **three** ways: fixes slice #1's per-frame
+cascade cost, enables DocumentScript inspect/apply on the live page with an incremental
+re-render on apply, and moves the content lane onto the ScriptedDom the unified-document plan
+wants everywhere.
+
+**Options for completing P2.5's content-actor half:**
+
+1. **Converge with slice #1 (recommended).** Switch the content lane to a retained
+   `ScriptedDom` + `IncrementalLayout`; then `ScriptInstance` on `Content` drives the
+   document-host over *that* DOM, `apply` triggers an incremental re-render. One move, three
+   payoffs; aligned with Mark's slice priority and the unified-document direction. Largest, but
+   it is work already on the roadmap.
+2. **Minimal wiring.** `ScriptInstance` + the `ContentCommand`/`ContentUpdate` arms + the
+   `meerkat::script` grant adapter, with the script operating on a `ScriptedDom` built once at
+   attach (mutations reported, **not** re-rendered — loop open). Proves the plumbing per-origin
+   + grant-gated; reworked when slice #1 lands.
+3. **Adapter only now.** Land just `meerkat::script` (the `kernel::permissions` → `Grant`
+   adapter; the §11.4 remainder) and defer all content-actor wiring. Note: this gives meerkat
+   the wasmtime dep ahead of a caller (a ~90s cold-build tax on the main binary).
+
+The `meerkat::script` permissions→`Grant` adapter is the same small, correct piece under all
+three (maps `Permission` Inherit/Allow/Prompt/Deny → `CapPermission`, fail-closed on
+Inherit→Deny; assembles a `Grant` per resolved capability). It is unblocked; the content-actor
+DOM model is the decision.
+
 ---
 
 ## Progress
@@ -878,6 +923,18 @@ same `call_async` without suspending, and `fetch` slots in when wired.
   host's `wit/`, so both were rebuilt; no separate guest WIT to keep in sync.) §11.4 now complete
   except the `kernel::permissions`→`Grant` adapter, which lands with P2.5 in the content actor (so
   document-host stays graph-kernel-free).
+- **2026-06-22 (P2.5 started — content-actor gate found, surfaced for decision).** Reading the
+  content actor against P2.5 found the script-mutates-page loop is **gated**: the content lane
+  renders `StaticDocument::parse(body)` fresh every call (`card.rs:448`/`:494`), an immutable
+  re-parsed DOM, while a DocumentScript mutates a `ScriptedDom`. The fix (retain a mutable
+  `ScriptedDom` + `IncrementalLayout` in the content actor) **converges with unified-document-host
+  pressing slice #1** (already on Mark's do-list) and the pieces exist (`scene_from_layout_dom` is
+  generic over `LayoutDom`; `ScriptedDom` is both the script target and a `LayoutDom`;
+  `IncrementalLayout` is generic and drives the chrome panes). Recorded the gate + the three
+  completion options + the (unblocked) `meerkat::script` permissions→`Grant` adapter in §11.8;
+  surfaced to Mark for the document-model direction before wiring the content actor. No content-actor
+  code written this pass (would prejudge the document model + tax meerkat's build with wasmtime ahead
+  of a caller).
 
 ## Key grounding files
 
