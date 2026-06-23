@@ -115,11 +115,64 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
    faithfully instead of being guessed from the URL. The trait default derives a lossy
    record from `cookies_for` for jars that don't override it. This is also the
    serialization form thread 4's durable store will persist.
-6. **Script ↔ substrate + storage areas** *(future)* — serval `document.cookie` /
-   Cookie Store API on the shared jar; durable + partitioned `localStorage` /
-   `sessionStorage` / IndexedDB per the Storage Standard.
-7. **Flip-back SESSION** *(future)* — read the WebView jar (`request_all_cookies`)
-   into the substrate on flip-back (§5 of the flipcarrier plan).
+6. **Script ↔ substrate + storage areas**
+   - **6a. `document.cookie` ↔ the jar** — *engine seam done 2026-06-23* (serval
+     `3cf326a`): a `CookieProvider` host seam (mirroring `ComputedStyleHandler` /
+     `FetchHandler`) plus a `document.cookie` accessor; `get_cookies` returns the
+     document's script-visible cookies, `set_cookie` records one assignment. Tested on
+     boa + nova. **Remaining (meerkat wiring, scoped below):** impl `CookieProvider`
+     over the session jar and set it on the content actor's serval runtime; persist
+     JS-set cookies. *Blocked on meerkat being green (a concurrent refactor is mid-land).*
+   - **6b. Durable storage areas** — *future*: durable, persona+origin-partitioned
+     `localStorage` (serval's is in-memory today), `sessionStorage` (per-session, not
+     durable), and IndexedDB (a much larger spec) per the WHATWG Storage Standard.
+7. **Flip-back SESSION** *(future, scoped below)* — read the WebView jar
+   (`request_all_cookies`) into the substrate on flip-back.
+
+## Scoping the remaining work
+
+### 6a — meerkat `CookieProvider` wiring
+
+The serval seam exists; meerkat supplies the implementation:
+
+- A `CookieProvider` over `(document_url, session_jar())`. `get_cookies` =
+  `jar.records_for(url, SameSiteContext::same_site())`, **filtered to `!http_only`**
+  (script must not see HttpOnly cookies), rendered `n=v; n=v`. `set_cookie` =
+  `jar.set_cookie(url, header)` + arm `COOKIES_DIRTY`.
+- Set it via `runtime.set_cookie_provider(...)` where the content actor already calls
+  `set_base_url` / `set_fetch_handler` (locate that serval-glue site).
+- **Persist trigger gap**: today the durable write fires after a *page fetch*. A
+  JS-set cookie happens in the content actor off the fetch lifecycle, so move the
+  (dirty-gated, cheap) `persist_cookies` call to fire on each host event-loop drain, so
+  both HTTP and JS cookie changes flush on the next drain.
+- **Known gap**: netfetcher's `set_cookie` is source-agnostic, so a script *could* set
+  an HttpOnly cookie (the spec forbids it). The real fix is a `CookieSource` arg on
+  `set_cookie` (a netfetcher refinement); low-priority.
+
+### 7 — flip-back SESSION
+
+Gated on flip-back (scry→serval) existing (flipcarrier §5, unbuilt). Once it does, the
+bounded work is: `verso-scry`'s `FlipBack::extract` reads the WebView's cookies
+(scrying's `request_all_cookies`) into `BackState.cookies` (already a field), and
+serval's `FlipReceiver` applies them to `session_jar()` (`jar.set_cookie` per cookie)
+before re-fetching. Net: a login made *inside* the compat-view WebView comes home to
+serval. No new session-store surface; it rides the jar + the existing `BackState`.
+
+### Multi-persona
+
+v0 is the single `default_persona`; the durable layer already keys by persona
+(`cookies/<persona>`), so persistence is ready. v1 multi-persona needs the **in-memory**
+jar to follow the active persona:
+
+- Replace the single process `session_jar()` with a per-persona registry
+  (`HashMap<PersonaId, Arc<InMemoryCookieJar>>`), selected per request/flip.
+- Thread the request's persona to the fetch worker (it currently reads one global jar):
+  carry it on `FetchCommand`, or have the worker read a host-published "active persona".
+- Persist/load are already per-persona; document.cookie + the flip already route through
+  `session_jar`, so they select by persona for free once the registry lands.
+- The hard isolation (one persona's session never touches another's) is the default,
+  exactly as required; a deliberate cross-persona use (use persona B's saved login here)
+  would be an explicit, authenticated bridge, never automatic — out of scope here.
 
 ## Progress
 
@@ -147,6 +200,16 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
   written through after each page fetch in the `FetchUpdate::Page` handler) and
   restores it on startup (`fetch::load_cookies`, right after the store opens). **A
   login now survives an app restart**; the key is persona-partitioned (v0 single
-  default persona, but already partitioned). `cargo check -p meerkat` green. Next:
-  thread 6 (serval `document.cookie` ↔ the jar + durable storage areas), thread 7
-  (flip-back SESSION), and the deferred CHIPS / live persona-switch swap.
+  default persona, but already partitioned). `cargo check -p meerkat` green.
+- **2026-06-23 (thread 4 refinement — incremental)**: the persist is now per-cookie,
+  not whole-jar. Each cookie is its own blob under `cookies/<persona>/<hex(domain,path,
+  name)>`; a persisted-shadow diff writes only the cookies that changed and deletes
+  blobs for cookies that are gone, so one `Set-Cookie` writes one small blob.
+  `load_cookies` enumerates the persona prefix and seeds the shadow. (mere `6bbe6f4`.)
+- **2026-06-23 (thread 6a engine seam)**: serval gained `document.cookie` via a
+  `CookieProvider` host seam mirroring `ComputedStyleHandler` (serval `3cf326a`; native
+  `__cookieGet`/`__cookieSet` sinks + a `Document.prototype.cookie` accessor; tested on
+  boa + nova). The meerkat wiring (impl over the jar + persist-on-drain) is scoped above
+  and waits on meerkat being green (a concurrent refactor is mid-land). Also scoped:
+  flip-back SESSION (thread 7) and multi-persona. Next executable when meerkat is green:
+  the 6a meerkat wiring; then thread 6b (durable storage areas).
