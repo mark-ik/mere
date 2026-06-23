@@ -485,6 +485,43 @@ impl WindowCtx<'_> {
                 }
             }
         }
+        // The context menu follows its keyboard selection like the palette: bound the panel to the
+        // window so a tall menu (the layout submenu) can't spill past the bottom edge, and scroll
+        // the highlighted row into view. (Context-menu keyboard nav.)
+        if let Some((mx, my)) = self.view.chrome().context_menu.as_ref().map(|m| (m.x, m.y)) {
+            let max_h = (h as f32 - my - 16.0).max(120.0);
+            {
+                let mut dom = self.view.dom.borrow_mut();
+                let root = dom.document();
+                if let Some(node) = first_with_class(&dom, root, "context-menu") {
+                    let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
+                    dom.set_attribute(
+                        node,
+                        attr,
+                        &format!(
+                            "position: absolute; left: {mx}px; top: {my}px; overflow: scroll; max-height: {max_h}px;"
+                        ),
+                    );
+                }
+            }
+            if let Some(session) = &self.view.chrome_session {
+                let frags = session.fragments();
+                let dom = self.view.dom.borrow();
+                let root = dom.document();
+                if let (Some(list), Some(active)) = (
+                    first_with_class(&dom, root, "context-menu"),
+                    first_with_class(&dom, root, "context-item-active"),
+                ) {
+                    if let (Some(lr), Some(ar)) = (frags.rect_of(list), frags.rect_of(active)) {
+                        let viewport_h = lr.size.height;
+                        let content_h = lr.content_size.height;
+                        let target = (ar.location.y + ar.size.height / 2.0 - viewport_h / 2.0)
+                            .clamp(0.0, (content_h - viewport_h).max(0.0));
+                        chrome_scroll.insert(list, (0.0, target));
+                    }
+                }
+            }
+        }
         // Position the shellbar strip at its docked edge. The flex-direction
         // follows the edge so buttons stack vertically (Left/Right) or
         // horizontally (Top/Bottom). (Shellbar F2.1.)

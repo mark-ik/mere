@@ -147,13 +147,12 @@ impl WindowCtx<'_> {
     /// store (`personas/<id>/settings/ui.json`). v0 uses the single default persona; v1 threads
     /// the active one. A failure is logged, not fatal.
     pub(super) fn persist_menu_actions(&self) {
-        let persona = session_runtime::PersonaId::default_persona();
         let settings = session_runtime::PersonaSettings {
             menu_actions: Some(self.shared.presentation.menu_actions.clone()),
         };
         if let Err(err) = session_runtime::save_persona_settings(
             &self.shared.session.mere_root,
-            persona,
+            self.shared.session.active_persona,
             &settings,
         ) {
             tracing::warn!(%err, "failed to persist persona menu settings");
@@ -172,6 +171,28 @@ impl WindowCtx<'_> {
         }
         self.persist_menu_actions();
         self.view.request_redraw();
+    }
+
+    /// Move a context-menu command one place up or down in the order (the `pelt/menu` ▲ / ▼
+    /// controls, command registry P4) by swapping it with its neighbor, then persist. A no-op at
+    /// the ends or for an id not in the menu.
+    pub(super) fn move_menu_action(&mut self, id: &str, up: bool) {
+        let actions = &mut self.shared.presentation.menu_actions;
+        let Some(pos) = actions.iter().position(|a| a == id) else {
+            return;
+        };
+        let swap = if up {
+            pos.checked_sub(1)
+        } else if pos + 1 < actions.len() {
+            Some(pos + 1)
+        } else {
+            None
+        };
+        if let Some(swap) = swap {
+            actions.swap(pos, swap);
+            self.persist_menu_actions();
+            self.view.request_redraw();
+        }
     }
 
     /// Restore the context menu to the registry default order (command registry P4) and persist.

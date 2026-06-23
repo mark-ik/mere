@@ -278,6 +278,33 @@ fn palette_step_wraps() {
     assert_eq!(runner.state().palette.selected_index, Some(0), "wrap to first");
 }
 
+/// Context-menu keyboard nav wraps like the palette, and Enter runs the highlighted row,
+/// capturing its action and closing the menu. (Context-menu keyboard nav.)
+#[test]
+fn context_menu_keyboard_nav_wraps_and_runs() {
+    use crate::{ContextAction, ContextItem};
+    let mut runner = runner("mere://welcome");
+    runner.update(|c| {
+        c.open_context_menu(
+            10.0,
+            10.0,
+            vec![
+                ContextItem::new("A", ContextAction::AddNode),
+                ContextItem::new("B", ContextAction::AddField),
+            ],
+        )
+    });
+    // None → last on a step up, then wrap forward to first.
+    runner.update(|c| c.step_context_menu(-1));
+    assert_eq!(runner.state().context_menu.as_ref().unwrap().selected, Some(1), "up from none → last");
+    runner.update(|c| c.step_context_menu(1));
+    assert_eq!(runner.state().context_menu.as_ref().unwrap().selected, Some(0), "wrap to first");
+    // Enter runs the highlighted row: its action becomes pending and the menu closes.
+    runner.update(Chrome::run_context_selection);
+    assert!(runner.state().context_menu.is_none(), "running closes the menu");
+    assert_eq!(runner.state().pending_context, Some(ContextAction::AddNode));
+}
+
 /// The active-tab cap edits within bounds. The overlay that used to host it was retired
 /// into the `pelt/appearance` page (Settings lane P2); the cap controls there drain
 /// `tiles:cap:up` / `tiles:cap:down` to these same `inc_tab_cap` / `dec_tab_cap` methods.

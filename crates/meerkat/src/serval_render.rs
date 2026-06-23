@@ -168,6 +168,35 @@ where
     (tdl.scene, tdl.box_shadow_masks, content_height, links)
 }
 
+/// The retained-layout twin of [`scene_from_layout_dom`]: emit one band off a pre-built
+/// [`serval_layout::ContentLayout`] (cascade once, emit many) and lower it to a
+/// `netrender::Scene`. The content actor holds the layout across scroll bands / find
+/// keystrokes so a re-band does not re-cascade. `height` is the layout viewport height (for
+/// the content-height report). (Slice 1, content-lane incremental.)
+pub(crate) fn scene_from_content_band<D>(
+    layout: &serval_layout::ContentLayout<D::NodeId>,
+    dom: &D,
+    height: u32,
+    band_y: u32,
+    band_h: u32,
+    scroll: &ScrollOffsets<D::NodeId>,
+) -> (Scene, Vec<paint_list_render::BoxShadowMaskRequest>, u32, Vec<(String, [f32; 4])>)
+where
+    D: LayoutDom,
+    D::NodeId: Copy + Eq + Hash + Send + Sync + 'static,
+{
+    use paint_list_api::PaintList;
+    let (list, scroll_range, links) = layout.emit_band(dom, band_y, band_h, scroll);
+    let tdl = paint_list_render::translate_paint_cmd_stream(
+        list.viewport(),
+        list.commands(),
+        list.fonts(),
+        list.images(),
+    );
+    let content_height = (height as f32 + scroll_range.1).ceil().max(1.0) as u32;
+    (tdl.scene, tdl.box_shadow_masks, content_height, links)
+}
+
 /// Cascade + lay out `dom` and return its per-node fragment plane (no paint). The
 /// measure-only path (chrome band measure, roster scroll clamp).
 pub(crate) fn fragments_from_scripted_dom(

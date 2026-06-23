@@ -39,28 +39,56 @@ pub struct SliderSpec {
     pub hue_track: bool,
 }
 
+/// A reorder control: a row's ▲ / ▼ buttons, each queuing a key that moves the row up or
+/// down in its list. Rendered inline beside the row label (the label itself keeps its own
+/// `key`, e.g. remove-from-menu). Settings panes render the buttons; other list panes ignore
+/// them and show the label as a plain row. (Command registry P4 — menu reorder.)
+pub struct ReorderSpec {
+    pub up_key: String,
+    pub down_key: String,
+}
+
 /// One row of a list pane: a div with `class` and `text`. When `key` is `Some`,
 /// the div is clickable and a click queues that key as an activation (a theme id,
 /// a row id, …) for the shell to act on; `None` is a plain display row / title.
 /// When `slider` is `Some`, the row is a [`SliderSpec`] segmented track (the
 /// `text` becomes its label); settings panes render it, other list panes show
-/// the label.
+/// the label. When `reorder` is `Some`, the row gains inline ▲ / ▼ move buttons.
 pub struct PaneItem {
     pub class: String,
     pub text: String,
     pub key: Option<String>,
     pub slider: Option<SliderSpec>,
+    pub reorder: Option<ReorderSpec>,
 }
 
 impl PaneItem {
     /// A non-interactive classed text row (a title or a display row).
     pub fn text(class: impl Into<String>, text: impl Into<String>) -> Self {
-        Self { class: class.into(), text: text.into(), key: None, slider: None }
+        Self { class: class.into(), text: text.into(), key: None, slider: None, reorder: None }
     }
 
     /// A clickable button row whose click queues `key`.
     pub fn button(class: impl Into<String>, text: impl Into<String>, key: impl Into<String>) -> Self {
-        Self { class: class.into(), text: text.into(), key: Some(key.into()), slider: None }
+        Self { class: class.into(), text: text.into(), key: Some(key.into()), slider: None, reorder: None }
+    }
+
+    /// A reorderable button row: the label click queues `key` (e.g. remove), and inline ▲ / ▼
+    /// buttons queue `up_key` / `down_key` to move the row within its list. (Menu reorder.)
+    pub fn reorder_row(
+        class: impl Into<String>,
+        text: impl Into<String>,
+        key: impl Into<String>,
+        up_key: impl Into<String>,
+        down_key: impl Into<String>,
+    ) -> Self {
+        Self {
+            class: class.into(),
+            text: text.into(),
+            key: Some(key.into()),
+            slider: None,
+            reorder: Some(ReorderSpec { up_key: up_key.into(), down_key: down_key.into() }),
+        }
     }
 
     /// A segmented slider row: a `label` plus a `count`-cell track keyed by
@@ -83,6 +111,7 @@ impl PaneItem {
                 count,
                 hue_track,
             }),
+            reorder: None,
         }
     }
 }

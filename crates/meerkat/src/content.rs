@@ -27,9 +27,15 @@ use inker::{EngineRegistry, EngineRoutePolicy};
 use linked_data::GraphContribution;
 use netrender::Scene;
 
-use crate::card::{render_content, LinkHit, RenderedContent};
+use serval_layout::{ContentLayout, ScrollOffsets};
+use serval_static_dom::{StaticDocument, StaticNodeId};
+
+use crate::card::{
+    build_html_layout, is_serval_html_lane, render_content, LinkHit, RenderedContent,
+};
 use crate::fetch::ContentState;
 use crate::resources::{ResourceLoader, ResourceStore};
+use crate::serval_render::scene_from_content_band;
 
 /// A command from the kernel to a content actor.
 pub enum ContentCommand {
@@ -158,6 +164,15 @@ struct Content {
     /// colours). Kept across renders so a Resize / Scroll / Resource re-render
     /// reuses it; a `Retheme` swaps it. (Document theming P3; typography D1.)
     sheet: DocumentStyleSheet,
+    /// The retained HTML/serval-lane layout: the parsed document plus its cascaded
+    /// [`ContentLayout`], built ONCE and re-emitted per scroll band / find keystroke so a
+    /// re-band does not re-cascade (slice 1, the single biggest per-frame content cost).
+    /// `None` for the document / synthesized lanes (which keep their own retained packet),
+    /// and cleared by the arms that change the body / viewport / subresources (Show builds a
+    /// fresh `Content`; Resize / Resource set it back to `None`), so a present layout is
+    /// fresh. A `Retheme` keeps it (the serval lane themes through HTML_SHEET + the page CSS,
+    /// not the document sheet). Built lazily by [`ensure_html_layout`].
+    html: Option<(StaticDocument, ContentLayout<StaticNodeId>)>,
 }
 
 /// Spawn a content actor on its own thread (armillary harness). It builds the
@@ -217,7 +232,7 @@ pub fn spawn_content(
                     }
                     // A fresh navigation resets the band to the top, one viewport tall
                     // (the host requests a taller scroll band once it has the content).
-                    let content = Content {
+                    let mut content = Content {
                         url,
                         state,
                         viewport,
@@ -226,8 +241,9 @@ pub fn spawn_content(
                         band_y: 0,
                         band_h: viewport.1,
                         sheet,
+                        html: None,
                     };
-                    render(&content, &store, &registry, &policy, &out);
+                    render(&mut content, &store, &registry, &policy, &out);
                     current = Some(content);
                 }
                 ContentCommand::Resize {
@@ -238,6 +254,7 @@ pub fn spawn_content(
                         content.viewport = viewport;
                         content.viewport_gen = viewport_gen;
                         content.band_y = 0; // a resize relays out; re-anchor the band
+                        content.html = None; // the viewport changed; rebuild the retained layout
                         render(content, &store, &registry, &policy, &out);
                     }
                 }
@@ -254,7 +271,8 @@ pub fn spawn_content(
                 }
                 ContentCommand::Resource { url, bytes } => {
                     store.borrow_mut().insert(url, bytes);
-                    if let Some(content) = current.as_ref() {
+                    if let Some(content) = current.as_mut() {
+                        content.html = None; // a subresource arrived; rebuild so images decode
                         render(content, &store, &registry, &policy, &out);
                     }
                 }
@@ -274,22 +292,19 @@ pub fn spawn_content(
                     query,
                     viewport_gen,
                 } => {
-                    if let Some(content) = current.as_ref() {
+                    if let Some(content) = current.as_mut() {
+                        // Find off the retained serval layout (no re-cascade per keystroke). A
+                        // render runs before find in practice and builds the layout; if a find
+                        // lands first, `ensure_html_layout` builds it. Non-HTML lanes find
+                        // nothing here (their find rides the retained packet, a separate path).
                         let wanted = RefCell::new(Vec::new());
-                        let (w, h) = content.viewport;
-                        let matches = {
-                            let loader = ResourceLoader::new(&store, &content.url, &wanted);
-                            crate::card::find_content(
-                                &content.url,
-                                content.state.as_ref(),
-                                &registry,
-                                &policy,
-                                &loader,
-                                w,
-                                h,
-                                &query,
-                            )
-                        };
+                        let matches =
+                            if ensure_html_layout(content, &store, &registry, &policy, &wanted) {
+                                let (doc, layout) = content.html.as_ref().expect("ensured");
+                                layout.find(doc, &query)
+                            } else {
+                                Vec::new()
+                            };
                         out.emit(ContentUpdate::FindMatches {
                             nav: content.nav,
                             viewport_gen,
@@ -302,10 +317,39 @@ pub fn spawn_content(
     })
 }
 
+/// Build the retained serval-lane [`ContentLayout`] into `content.html` if this is the
+/// HTML/serval lane and the cache is empty (recording subresource wants through `wanted`),
+/// and return whether the HTML cache is now present. The arms clear `content.html` on a
+/// body / viewport / subresource change, so a present layout is fresh. (Slice 1.)
+fn ensure_html_layout(
+    content: &mut Content,
+    store: &RefCell<ResourceStore>,
+    registry: &EngineRegistry,
+    policy: &EngineRoutePolicy,
+    wanted: &RefCell<Vec<String>>,
+) -> bool {
+    if !is_serval_html_lane(&content.url, content.state.as_ref(), registry, policy) {
+        return false;
+    }
+    if content.html.is_none() {
+        let (w, h) = content.viewport;
+        let loader = ResourceLoader::new(store, &content.url, wanted);
+        let body = match &content.state {
+            Some(ContentState::Ready(fetched)) => &fetched.body,
+            // `is_serval_html_lane` above guarantees a Ready HTML body.
+            _ => unreachable!("is_serval_html_lane implies a Ready state"),
+        };
+        content.html = Some(build_html_layout(body, &loader, w, h));
+    }
+    true
+}
+
 /// Render `content` against the cached subresources, emitting the scene and any
-/// subresources the render newly wants.
+/// subresources the render newly wants. The HTML/serval lane rides the retained
+/// [`ContentLayout`] (cascade once, emit each band off it without re-cascading); the
+/// document / synthesized lanes take the one-shot [`render_content`] path.
 fn render(
-    content: &Content,
+    content: &mut Content,
     store: &RefCell<ResourceStore>,
     registry: &EngineRegistry,
     policy: &EngineRoutePolicy,
@@ -313,39 +357,17 @@ fn render(
 ) {
     let wanted = RefCell::new(Vec::new());
     let (w, h) = content.viewport;
-    let rendered = {
-        let loader = ResourceLoader::new(store, &content.url, &wanted);
-        render_content(
-            &content.url,
-            content.state.as_ref(),
-            registry,
-            policy,
-            &loader,
-            w,
-            h,
-            content.band_y,
-            content.band_h,
-            &content.sheet,
-        )
-    };
-    match rendered {
-        RenderedContent::Document {
-            packet,
-            fonts,
-            content_height,
-        } => out.emit(ContentUpdate::Document {
-            nav: content.nav,
-            viewport_gen: content.viewport_gen,
-            packet,
-            fonts,
-            content_height,
-        }),
-        RenderedContent::Html {
-            scene,
-            content_height,
-            links,
-            masks,
-        } => out.emit(ContentUpdate::Scene {
+    if ensure_html_layout(content, store, registry, policy, &wanted) {
+        // HTML/serval lane: emit this band off the retained layout, no re-cascade.
+        let (doc, layout) = content.html.as_ref().expect("ensure_html_layout returned true");
+        let scroll = ScrollOffsets::default();
+        let (scene, masks, content_height, link_rects) =
+            scene_from_content_band(layout, doc, h, content.band_y, content.band_h, &scroll);
+        let links = link_rects
+            .into_iter()
+            .map(|(url, rect)| LinkHit { rect, url })
+            .collect();
+        out.emit(ContentUpdate::Scene {
             nav: content.nav,
             viewport_gen: content.viewport_gen,
             scene,
@@ -356,7 +378,53 @@ fn render(
             // right offset and knows when to request the next band.
             band_y: content.band_y,
             band_h: content.band_h,
-        }),
+        });
+    } else {
+        // Document / synthesized lanes: the one-shot render_content path (the document lane
+        // keeps its own retained packet; a synthesized page is cheap).
+        let rendered = {
+            let loader = ResourceLoader::new(store, &content.url, &wanted);
+            render_content(
+                &content.url,
+                content.state.as_ref(),
+                registry,
+                policy,
+                &loader,
+                w,
+                h,
+                content.band_y,
+                content.band_h,
+                &content.sheet,
+            )
+        };
+        match rendered {
+            RenderedContent::Document {
+                packet,
+                fonts,
+                content_height,
+            } => out.emit(ContentUpdate::Document {
+                nav: content.nav,
+                viewport_gen: content.viewport_gen,
+                packet,
+                fonts,
+                content_height,
+            }),
+            RenderedContent::Html {
+                scene,
+                content_height,
+                links,
+                masks,
+            } => out.emit(ContentUpdate::Scene {
+                nav: content.nav,
+                viewport_gen: content.viewport_gen,
+                scene,
+                content_height,
+                masks,
+                links,
+                band_y: content.band_y,
+                band_h: content.band_h,
+            }),
+        }
     }
     // Ship only never-requested subresources, so a re-render before the bytes
     // arrive does not re-request them (the store dedups).

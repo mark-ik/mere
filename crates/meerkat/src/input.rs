@@ -891,9 +891,16 @@ impl WindowCtx<'_> {
             k if k.starts_with("doc:") => {
                 self.apply_doc_style_key(&k["doc:".len()..]);
             }
-            // The persona-configurable context menu (`pelt/menu`): add / remove a command from the
-            // menu, or reset to the registry default. Persists to the persona store. (Cmd reg P4.)
+            // The persona-configurable context menu (`pelt/menu`): add / remove a command, move it
+            // up / down in the order, or reset to the registry default. Persists to the persona
+            // store. (Command registry P4.)
             "menu:reset" => self.reset_menu_actions(),
+            k if k.starts_with("menu:move:") => {
+                let rest = &k["menu:move:".len()..];
+                if let Some((id, dir)) = rest.rsplit_once(':') {
+                    self.move_menu_action(id, dir == "up");
+                }
+            }
             k if k.starts_with("menu:toggle:") => {
                 self.toggle_menu_action(&k["menu:toggle:".len()..]);
             }
@@ -1373,6 +1380,11 @@ impl WindowCtx<'_> {
             self.on_palette_key(key);
             return;
         }
+        // An open context menu owns the keyboard (arrow nav + Enter/Escape), like the palette.
+        if self.view.chrome().context_menu.is_some() {
+            self.on_context_menu_key(key);
+            return;
+        }
         if self.view.chrome().find_open {
             self.on_find_key(key);
             return;
@@ -1661,6 +1673,36 @@ impl WindowCtx<'_> {
                     self.view.request_redraw();
                 }
             }
+        }
+    }
+
+    /// Keyboard navigation for the open context menu, mirroring the palette: Down / Up move the
+    /// highlight (wrapping), Enter runs the highlighted row (or the first when none is highlighted),
+    /// Escape closes. Other keys are swallowed so they don't leak to the canvas while the menu is
+    /// up. The chosen action is drained immediately, the same pair the click path runs. (Context-
+    /// menu keyboard nav.)
+    pub(super) fn on_context_menu_key(&mut self, key: &WinitKey) {
+        match key {
+            WinitKey::Named(WinitNamedKey::ArrowDown) => {
+                self.view.chrome_update(|c| c.step_context_menu(1));
+                self.view.request_redraw();
+            }
+            WinitKey::Named(WinitNamedKey::ArrowUp) => {
+                self.view.chrome_update(|c| c.step_context_menu(-1));
+                self.view.request_redraw();
+            }
+            WinitKey::Named(WinitNamedKey::Enter) => {
+                self.view.chrome_update(Chrome::run_context_selection);
+                self.drain_pending_context();
+                self.drain_pending_command();
+                self.sync_orrery();
+                self.view.request_redraw();
+            }
+            WinitKey::Named(WinitNamedKey::Escape) => {
+                self.view.chrome_update(Chrome::close_context_menu);
+                self.view.request_redraw();
+            }
+            _ => {}
         }
     }
 

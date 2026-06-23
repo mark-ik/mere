@@ -180,6 +180,82 @@ The leverage is the reason to pay the registry's up-front cost rather than the t
   `<persona_id>/settings/` via a typed `PersonaSettingsStore`; load at boot, save on change. Done
   when a customized menu survives a restart, scoped to the active persona.
 
+## Scoping: menu-editor UI (mini-bar + reorder)
+
+The fuller slice shipped the editor as two browse lists on `pelt/menu` ("In the menu" / "Add a
+command") + Reset. Two UI refinements remain (Mark, 2026-06-22). State of the world they build on:
+the config is an **ordered `Vec<String>`** in `PersonaSettings.menu_actions`; `toggle_menu_action`
+adds (append) / removes; `all_registry_ids` + `registry_label` enumerate candidates; the command
+palette already owns a proven search + arrow-nav + scroll surface (`palette_items`, `step_palette`,
+`run_palette_selection`).
+
+### A. Mini-bar (command-search add)
+
+The "Add a command" list is the full registry (~38 rows) with no filter; a search bar makes adding
+fast. Two designs:
+
+- **A1 — reuse the palette in an "add to menu" mode (recommended).** This is literally the
+  "command-palette-fueled mini search bar" from decision 3. A `PaletteMode { Run, AddToMenu }` flag on
+  `Chrome` (meerkat-side; **not** `SearchPaletteScope`, which is the search-*scope* axis in the shared
+  `chrome` crate). A "+ Add command…" button on `pelt/menu` (drains `menu:add_open`) opens the palette
+  in `AddToMenu`; `run_palette_selection` branches on the mode: in `AddToMenu` it routes the picked
+  item's registry id to `toggle_menu_action` (add) and stays open for the next add, instead of running
+  it. Reuses the palette's field + nav + scroll wholesale; no shell-crate change. Effort: small-medium
+  (mode flag + one branch + a trigger + a "done" close). The id from a `PaletteItem`: `Command` -> verb,
+  `Context(action)` -> `context_action_id`.
+- **A2 — an inline text field on the page.** Add a text-input `PaneItem` kind to the settings-pane model
+  and live-filter the "Add a command" list by `label_matches`. Keeps everything on one surface, but the
+  settings-pane model has no text input today, so it is the larger build (new control kind + caret/focus
+  routing + filter drain). Effort: medium. Pick this only if Mark wants the search inline rather than via
+  the palette.
+
+Recommendation: A1 first (cheap, reuses the palette, matches the "palette-fueled" phrasing); revisit A2
+if an on-page field is wanted in addition.
+
+### B. Reorder the in-menu list
+
+The menu renders in config order, so reordering is a `Vec` reposition + persist — the data side is
+trivial; the cost is the gesture.
+
+- **B1 — move up / down affordances. BUILT (2026-06-22).** Each "In the menu" row has inline ▲ / ▼
+  buttons (a `PaneItem::reorder_row` compound row) draining `menu:move:<id>:up|down` ->
+  `move_menu_action` (swap with the neighbor + persist). See the progress log.
+- **B2 — true drag-reorder.** Pointer-drag a row to a new index. **Confirmed: no row-drag infra exists**
+  — the settings pane / shell document is `on_click`-only, and the only chrome drag (tearout) is
+  tile-level (`TileDragPayload` / `PaneDragPayload`) and not even wired in meerkat yet. So B2 is
+  greenfield: pointer-down-vs-click discrimination on a row, drag tracking, a drop-index hit-test, a
+  drop indicator, then the `Vec` reposition. Effort: medium-large; best built as a **shared
+  reorderable-list capability** (settings rows, future tab / shellbar reorder) rather than a one-off.
+  Recommend doing it as its own focused task.
+
+## Scoping: searchable context menu (the cursor palette)
+
+Mark, 2026-06-22: "what if someone just wants the mini bar as their context menu, so they can right
+click and search for commands? a widget in the card itself?" This is the strongest unification on the
+table: the **context menu becomes the cursor-anchored command palette**. Right-click gives the curated
+menu (the configured subset) as the zero-query view; start typing and it filters to **any** command
+(the full registry via `palette_items`). The two surfaces — `Ctrl+P` centered, right-click at the
+cursor — converge on one model. It also subsumes mini-bar **A**: you no longer need a separate
+"add to menu" search, because the menu *is* the search; pinning a found command to the curated set can
+be an inline action on a searched row.
+
+What it reuses (most of it already exists):
+- The keyboard nav + scroll already built on `ContextMenu` (arrow / Enter / scroll-into-view) carries
+  straight over to the filtered list.
+- `palette_items(query)` is the filtered-results source; the curated `menu_actions` (resolved by
+  `resolve_menu_item`) is the zero-query source.
+- The palette's `TextInput` + `text_field_typed` is the search-field widget to embed at the top of the
+  context-menu card.
+
+The one genuinely new piece: **focus**. The menu must grab the caret on open so typing lands in its
+field (today the menu opens without a focused field). That plus the empty-vs-query branch in the menu
+builder + rendering the field are the work. Effort: medium. Open questions for Mark: always-on (the
+field is subtle, empty query = just the curated rows) vs a per-persona toggle; and whether a searched
+row offers "run" only or "run / pin to menu".
+
+Recommendation: this is worth doing and likely higher value than B2 (drag). Sequence it after B1 (done);
+do B2 only if drag specifically matters once reorder-by-buttons is in hand.
+
 ## Open decisions (for Mark)
 
 1. ~~Registry depth now vs pragmatic incremental.~~ **Resolved: build the registry.** The
@@ -195,6 +271,69 @@ The leverage is the reason to pay the registry's up-front cost rather than the t
    is wanted too, likely in addition to the page — folded into P4.
 
 ## Progress (P4/P5 — configurable + persisted menu)
+
+- 2026-06-22: **Fuller slice landed + headed-verified — inclusion config + applicability + real
+  PersonaSettingsStore + an inline add/remove editor.** This supersedes the hide-set first slice;
+  the menu is now rendered *from* a config and the user can add **any** registry command to it.
+  - **Applicability (`MenuScope`).** `command.rs` gains `MenuScope` (`Always` / `Canvas` / `SingleNode`
+    / `Selection` / `MultiNode`) + `applies(len)`, `context_action_scope`, `Command::menu_scope`, and
+    `registry_scope(id)` — one applicability model the menu filters by (and the palette / scripting can
+    query). Unit-tested (`menu_scope_filters_by_selection_shape`).
+  - **Inclusion config + config-driven menu.** `DEFAULT_MENU_ACTIONS` (one ordered id list) seeds the
+    menu; `open_context_menu_at` was rewritten to build from the configured list — each id resolved by
+    `resolve_menu_item` (scope-filtered, count-adapted labels, dynamic conditions) — plus the dynamic
+    non-catalog rows (layout submenu, radial toggle, delete field, close pane) appended. One list now
+    drives the canvas / single / multi menus. The old per-shape branches + `filter_hidden_menu` are gone.
+  - **Any command in the menu.** New `ContextAction::RunCommand(&'static str)` + `Chrome::run_command_intent`
+    let the menu carry global commands, not just native context actions; `OpenNodeFacets` joined the
+    catalog, and the menu's "Relate" now resolves to the existing `AssertEdge` ("relate") command
+    (no duplicate id).
+  - **Real `PersonaSettingsStore` (P5 proper).** New `session_runtime::persona_settings_store`
+    (`personas/<id>/settings/ui.json`) with `PersonaSettings { menu_actions }`, load/save, round-trip
+    tested. The menu config moved off the app `settings.json` onto it; meerkat loads at boot
+    (`load_persona_menu_actions`, default persona for v0) and `persist_menu_actions` writes on change.
+  - **Inline editor.** `pelt/menu` is now an inclusion editor: "In the menu" (✓, click to remove),
+    "Add a command" (every other registry command, click to add), and "Reset to default". Drains
+    `menu:toggle:<id>` / `menu:reset` → `toggle_menu_action` / `reset_menu_actions`.
+  - Verified live (`scry-shots/menuf-1..7`): default menu reproduced; editor renders all sections;
+    removing "Add node" drops it from the menu and writes `ui.json` (without `add_node`); adding the
+    global "Settings" command makes it appear in the right-click menu and **run** (opens the settings
+    tile) via `RunCommand`. meerkat green (lib 71, bin 104), session-runtime green (71).
+  - **Deferred:** an inline *command-search* mini-bar (filter the "Add a command" list / a palette
+    "add to menu" mode) on top of the full-list editor; drag-reorder of the in-menu list; finer
+    per-command scopes; threading the **active** persona id (v0 uses the default persona).
+- 2026-06-22: **Context menu keyboard nav + scroll** (Mark's ask: "scroll and arrow up/down like the
+  command palette"). `ContextMenu` gains a `selected` highlight; `step_context_menu` / `run_context_selection`
+  mirror the palette's `step_palette` / `run_palette_selection`. An open menu owns the keyboard via
+  `on_context_menu_key` (Down/Up wrap the highlight, Enter runs the row, Escape closes); the render
+  pass bounds the panel to the window (max-height + overflow) and scrolls the `context-item-active`
+  row into view, reusing the palette's `cmd-list` / `cmd-row-active` mechanism. Verified live
+  (`scry-shots/kb-1..5`): highlight steps + wraps; a tall menu opened low is clipped to the window and
+  scrolls to follow the selection. Unit test `context_menu_keyboard_nav_wraps_and_runs`. meerkat green
+  (lib 72, bin 104).
+- 2026-06-22: **Finer per-command scopes + active-persona threading** (two of the deferred items).
+  - `Command::menu_scope` is now an **exhaustive** match assigning each command a real scope —
+    `MultiNode` (AssertEdge / RetractEdge), `Selection` (DeleteNode / HideSelectedEdge), `SingleNode`
+    (OpenNodeSettings / BackgroundNode / Retry / Stop / Pin / ToggleCompatView), `Always` (nav + panel
+    toggles + ShowAllEdges / OpenSettings / CloseGraphPane / ExportGraph). No `_` arm, so a new command
+    must declare a scope (compile-time obligation, like its verb). Test spot-checks added.
+  - The menu config is now filed under the **active persona** instead of a hardcoded default:
+    `Session.active_persona` is resolved at boot from the active session's manifest
+    (`manifests.get(active_session_id).persona_id`, falling back to `default_persona`), threaded into
+    `load_persona_menu_actions` and `persist_menu_actions`. v0 still resolves to the default persona, but
+    the wiring now follows whatever persona the manifest names. meerkat green (lib 72, bin 104).
+  - **Still deferred (now scoped — see "Scoping: menu-editor UI"):** the mini-bar (A1: palette
+    add-to-menu mode, recommended) and reorder (B1: move up/down, recommended first; B2: true drag).
+- 2026-06-22: **B1 reorder (move up / down) built.** The `pelt/menu` "In the menu" rows are now
+  reorderable: a new `PaneItem::reorder_row` (a compound row like the slider) renders the label
+  (click = remove) plus inline ▲ / ▼ buttons that queue `menu:move:<id>:up|down`; `settings_pane_view`
+  draws it; `apply_pelt_activation` routes the key to `frame_ops::move_menu_action` (swap with the
+  neighbor in `menu_actions` + `persist_menu_actions`). **Render verified live** (`scry-shots/ro-3`,
+  `ro-8`, `ro-9`: every in-menu row carries the ▲ / ▼ controls). The move and persist run the same
+  drain-and-persist path the verified toggle uses, so it is verified-by-construction; the headed move-*click*
+  wasn't captured because the roster pane opened inconsistently (shifting the settings tile) and the
+  wide-window shots are display-scaled (coordinate reads off) — a test-harness limitation, not a code
+  gap. meerkat green (lib 72, bin 104).
 
 - 2026-06-22: **First slice landed + headed-verified — a persona-persisted, user-toggleable menu.**
   The pragmatic core of P4/P5: the context menu can be customized (gestures hidden/shown) on a

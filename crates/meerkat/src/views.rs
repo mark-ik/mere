@@ -184,10 +184,14 @@ fn context_menu_view(menu: &ContextMenu) -> ChromeView {
     let rows: Vec<ChromeView> = menu
         .items
         .iter()
-        .map(|item| {
+        .enumerate()
+        .map(|(i, item)| {
             let action = item.action;
+            // The keyboard-highlighted row carries a distinct class (like the palette's
+            // `cmd-row-active`), which the render pass also uses to scroll it into view.
+            let class = if menu.selected == Some(i) { "context-item-active" } else { "context-item" };
             let row = on_click(
-                el::<_, Chrome, ()>("div", item.label.clone()).attr("class", "context-item"),
+                el::<_, Chrome, ()>("div", item.label.clone()).attr("class", class),
                 move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
             );
             Box::new(row) as ChromeView

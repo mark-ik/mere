@@ -21,7 +21,8 @@
 use forme::GraphMemberId;
 use xilem_serval::{AnyView, PointerClick, ServalCtx, ServalElement, el, focusable, on_click};
 
-use crate::list_pane::{PaneItem, SliderSpec};
+use crate::list_pane::{PaneItem, ReorderSpec, SliderSpec};
+use crate::swatch::{swatch_view, SwatchSpec};
 
 /// The erased view the settings-panes logic produces (mirrors `RosterView`).
 pub type SettingsPanesView = Box<dyn AnyView<SettingsPanesState, (), ServalCtx, ServalElement>>;
@@ -48,6 +49,10 @@ pub struct SettingsPane {
     pub page_title: String,
     pub spine: Vec<SettingsSpineEntry>,
     pub items: Vec<PaneItem>,
+    /// An optional swatch rendered below the controls — the node-scoped shape editor on the
+    /// `appearance` page (a sprite + its editable collider hull). `None` on pages without one.
+    /// (Swatch — node shape editor.)
+    pub swatch: Option<SwatchSpec>,
 }
 
 /// The shell document's settings panes plus the intents their handlers queued. One
@@ -114,6 +119,11 @@ fn pane_view(pane: &SettingsPane, panel_bg: &str) -> SettingsPanesView {
     for item in &pane.items {
         body_children.push(item_view(member, item));
     }
+    // The node shape-editor swatch, below the representation controls (the appearance page).
+    // Rendered as DOM the chrome understands, not an opaque Scene. (Swatch — shape editor.)
+    if let Some(swatch) = &pane.swatch {
+        body_children.push(swatch_view(swatch));
+    }
     let body = el::<_, SettingsPanesState, ()>("div", body_children)
         .attr("class", "settings-pane-body")
         .attr(
@@ -143,6 +153,9 @@ fn item_view(member: GraphMemberId, item: &PaneItem) -> SettingsPanesView {
     if let Some(spec) = &item.slider {
         return slider_view(member, &item.text, spec);
     }
+    if let Some(spec) = &item.reorder {
+        return reorder_view(member, &item.class, &item.text, item.key.as_deref(), spec);
+    }
     let div = el::<_, SettingsPanesState, ()>("div", item.text.clone()).attr("class", item.class.clone());
     match &item.key {
         Some(key) => {
@@ -153,6 +166,45 @@ fn item_view(member: GraphMemberId, item: &PaneItem) -> SettingsPanesView {
         }
         None => Box::new(div),
     }
+}
+
+/// A reorderable row: the label (its own click queues `key`, e.g. remove-from-menu) flanked by
+/// inline ▲ / ▼ buttons that queue the move keys. A flex row so the label takes the width and the
+/// move buttons sit at the end. (Command registry P4 — menu reorder.)
+fn reorder_view(
+    member: GraphMemberId,
+    class: &str,
+    label: &str,
+    key: Option<&str>,
+    spec: &ReorderSpec,
+) -> SettingsPanesView {
+    let label_div = el::<_, SettingsPanesState, ()>("div", label.to_string())
+        .attr("class", class.to_string())
+        .attr("style", "flex:1;min-width:0;");
+    let label_el: SettingsPanesView = match key {
+        Some(k) => {
+            let k = k.to_string();
+            Box::new(focusable(on_click(label_div, move |s: &mut SettingsPanesState, _: PointerClick| {
+                s.pending_keys.push((member, k.clone()))
+            })))
+        }
+        None => Box::new(label_div),
+    };
+    let mk = |glyph: &str, move_key: String| -> SettingsPanesView {
+        let btn = el::<_, SettingsPanesState, ()>("div", glyph.to_string())
+            .attr("class", "app-btn")
+            .attr("style", "flex-shrink:0;padding:8px 10px;");
+        Box::new(focusable(on_click(btn, move |s: &mut SettingsPanesState, _: PointerClick| {
+            s.pending_keys.push((member, move_key.clone()))
+        })))
+    };
+    let up = mk("\u{25B2}", spec.up_key.clone());
+    let down = mk("\u{25BC}", spec.down_key.clone());
+    Box::new(
+        el::<_, SettingsPanesState, ()>("div", vec![label_el, up, down])
+            .attr("class", "app-reorder-row")
+            .attr("style", "display:flex;gap:4px;align-items:stretch;"),
+    )
 }
 
 /// A segmented slider: a label over a flex strip of `count` clickable cells.
@@ -256,6 +308,7 @@ mod tests {
                     SettingsSpineEntry { id: "engines".into(), title: "Engines".into(), active: false },
                 ],
                 items: Vec::new(),
+                swatch: None,
             }],
             panel_bg: "rgb(20, 20, 20)".into(),
             pending_keys: Vec::new(),
@@ -284,6 +337,7 @@ mod tests {
                 page_title: "Appearance".into(),
                 spine: Vec::new(),
                 items: vec![PaneItem::button("app-btn", "Dark", "theme.dark")],
+                swatch: None,
             }],
             panel_bg: "rgb(20, 20, 20)".into(),
             pending_keys: Vec::new(),

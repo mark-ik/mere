@@ -39,6 +39,9 @@ pub enum Command {
     HideSelectedEdge,
     /// Reveal every hidden edge (host action).
     ShowAllEdges,
+    /// Toggle the orrery's isometric (2.5D foreshortened-ground) projection on/off
+    /// (host action). The orrery owns the camera; the host drains this to flip it.
+    ToggleProjection,
     /// Open the settings lane (the consolidated config surface) as a workbench tile, at
     /// the appearance page. A host action, drained by the host. (Settings lane P1.)
     OpenSettings,
@@ -87,7 +90,7 @@ pub enum Command {
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 26] = [
+    pub const ALL: [Command; 27] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -100,6 +103,7 @@ impl Command {
         Command::BackgroundNode,
         Command::HideSelectedEdge,
         Command::ShowAllEdges,
+        Command::ToggleProjection,
         Command::OpenSettings,
         Command::OpenNodeSettings,
         Command::ToggleComms,
@@ -131,6 +135,7 @@ impl Command {
                 | Command::BackgroundNode
                 | Command::HideSelectedEdge
                 | Command::ShowAllEdges
+                | Command::ToggleProjection
                 | Command::ToggleInspector
                 | Command::ToggleTrail
                 | Command::ToggleSteward
@@ -152,14 +157,24 @@ impl Command {
     /// operating commands narrow to [`MenuScope::Selection`] so adding them to the menu
     /// doesn't clutter the empty-canvas case. Finer per-command scoping is a refinement.
     pub fn menu_scope(self) -> MenuScope {
+        use Command::*;
         match self {
-            // Edge verbs are pairwise — they want two or more selected nodes.
-            Command::AssertEdge | Command::RetractEdge => MenuScope::MultiNode,
-            Command::DeleteNode
-            | Command::BackgroundNode
-            | Command::HideSelectedEdge
-            | Command::OpenNodeSettings => MenuScope::Selection,
-            _ => MenuScope::Always,
+            // Pairwise edge gestures — two or more selected nodes define the edge.
+            AssertEdge | RetractEdge => MenuScope::MultiNode,
+            // Act on a selection of one or more: delete the selected node(s), hide the
+            // selected edge(s).
+            DeleteNode | HideSelectedEdge => MenuScope::Selection,
+            // Per-node gestures on the single focused node: its facets, its content
+            // operation, its background-keep flag, its compat-view engine override.
+            OpenNodeSettings | BackgroundNode | RetryFocusedContent | StopFocusedOperation
+            | PinFocusedOperation | ToggleCompatView => MenuScope::SingleNode,
+            // Navigation, app-level pane toggles, graph / pane ops, export — available in any
+            // context (they target the focused node or the whole graph, not the selection).
+            Back | Forward | Home | ConnectPeer | ToggleWorkbench | ToggleRoster | ToggleGloss
+            | ToggleApparatus | ToggleComms | ToggleInspector | ToggleTrail | ToggleSteward
+            | ShowAllEdges | ToggleProjection | OpenSettings | CloseGraphPane | ExportGraph => {
+                MenuScope::Always
+            }
         }
     }
 
@@ -191,6 +206,7 @@ impl Command {
             Command::BackgroundNode => "background_node",
             Command::HideSelectedEdge => "hide_edge",
             Command::ShowAllEdges => "show_all_edges",
+            Command::ToggleProjection => "projection",
             Command::RetryFocusedContent => "retry",
             Command::StopFocusedOperation => "stop",
             Command::PinFocusedOperation => "pin",
@@ -223,6 +239,7 @@ impl Command {
             Command::BackgroundNode => "Keep focused node active in background",
             Command::HideSelectedEdge => "Hide selected edge",
             Command::ShowAllEdges => "Show all edges",
+            Command::ToggleProjection => "Projection (toggle 2.5D isometric)",
             Command::OpenSettings => "Settings",
             Command::OpenNodeSettings => "Node settings (focused node)",
             Command::ToggleComms => "Comms (conversations)",
@@ -628,6 +645,10 @@ mod tests {
         assert_eq!(registry_scope("open_stack"), Some(MenuScope::MultiNode));
         assert_eq!(registry_scope("relate"), Some(MenuScope::MultiNode));
         assert_eq!(registry_scope("settings"), Some(MenuScope::Always));
+        // Finer per-command scopes: a selection op, a single-focus op, a global toggle.
+        assert_eq!(registry_scope("delete_node"), Some(MenuScope::Selection));
+        assert_eq!(registry_scope("node_settings"), Some(MenuScope::SingleNode));
+        assert_eq!(registry_scope("workbench"), Some(MenuScope::Always));
         assert_eq!(registry_scope("not_a_real_id"), None);
     }
 

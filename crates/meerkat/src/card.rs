@@ -30,7 +30,7 @@ use crate::serval_render::scene_from_layout_dom;
 use serval_layout::{
     ImageLoader, ScrollOffsets, inline_stylesheets, linked_stylesheets_with_loader,
 };
-use serval_static_dom::StaticDocument;
+use serval_static_dom::{StaticDocument, StaticNodeId};
 
 use crate::fetch::{ContentState, Fetched};
 
@@ -285,6 +285,23 @@ pub fn render_content(
     layout_document_content(&content_document(url, state), w, h, sheet)
 }
 
+/// Whether `(url, state)` routes to the serval HTML lane, so the content actor retains a
+/// [`serval_layout::ContentLayout`] for it (the document / synthesized lanes keep their own
+/// retained packet / one-shot path, so they do not). (Slice 1.)
+pub fn is_serval_html_lane(
+    url: &str,
+    state: Option<&ContentState>,
+    registry: &EngineRegistry,
+    policy: &EngineRoutePolicy,
+) -> bool {
+    matches!(
+        state,
+        Some(ContentState::Ready(fetched))
+            if route_document_engine(url, fetched.content_type.as_deref(), registry, policy)
+                == inker::routing::ENGINE_SERVAL_WEB
+    )
+}
+
 /// Lay out a document-lane doc into its retained packet (no lowering). The host
 /// windows + lowers a band of the packet per scroll, so the full content height is
 /// reachable without rasterizing the whole document into one texture. Returns the
@@ -465,6 +482,30 @@ fn html_scene(
         scene_from_layout_dom(&doc, &sheets, loader, w, h, band_y, band_h, &scroll);
     let links = link_rects.into_iter().map(|(url, rect)| LinkHit { rect, url }).collect();
     (scene, content_height, links, masks)
+}
+
+/// Parse + cascade + lay out a fetched HTML page ONCE into a retained
+/// [`serval_layout::ContentLayout`], so the content actor re-emits scroll bands / find
+/// rects off it without re-cascading per band / keystroke (slice 1). Mirrors
+/// [`html_scene`]'s parse + sheet assembly; the emit halves are
+/// [`crate::serval_render::scene_from_content_band`] and
+/// [`serval_layout::ContentLayout::find`]. Returns the parsed doc (the layout's planes are
+/// keyed by its node ids and the band / find emit walk it) alongside the layout. Subresource
+/// wants are recorded through `loader`, as in `html_scene`.
+pub fn build_html_layout(
+    body: &str,
+    loader: &impl ImageLoader,
+    w: u32,
+    h: u32,
+) -> (StaticDocument, serval_layout::ContentLayout<StaticNodeId>) {
+    let doc = StaticDocument::parse(body);
+    let inline = inline_stylesheets(&doc);
+    let linked = linked_stylesheets_with_loader(&doc, loader);
+    let mut sheets: Vec<&str> = HTML_SHEET.to_vec();
+    sheets.extend(inline.iter().map(String::as_str));
+    sheets.extend(linked.iter().map(String::as_str));
+    let layout = serval_layout::lay_out_content(&doc, &sheets, loader, w, h);
+    (doc, layout)
 }
 
 /// Find every occurrence of `query` in the focused node's HTML content, returning the

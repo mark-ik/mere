@@ -137,7 +137,11 @@ impl WindowCtx<'_> {
             tracing::warn!(%err, path = ?graph_file, "failed to persist the session graph");
         }
         let intent = ViewIntent {
-            camera: Some(super::camera_to_snapshot(self.orrery().camera())),
+            camera: Some(super::camera_to_snapshot(
+                self.orrery().camera(),
+                self.orrery().yaw(),
+                self.orrery().tilt(),
+            )),
             focus: self.orrery().focused_url().map(str::to_string),
             strategy: self.orrery().layout_strategy().map(str::to_string),
             mirror_tiles: self.view.mirror_tiles,
@@ -483,6 +487,9 @@ impl super::Shell {
         match restored_view.as_ref().and_then(|v| v.camera.as_ref()) {
             Some(snapshot) => {
                 ctx.orrery_mut().set_camera(super::snapshot_to_camera(snapshot));
+                let (yaw, tilt) = super::snapshot_yaw_tilt(snapshot);
+                ctx.orrery_mut().set_yaw(yaw);
+                ctx.orrery_mut().set_tilt(tilt);
                 ctx.view.centered = true;
             }
             None => ctx.view.centered = false,

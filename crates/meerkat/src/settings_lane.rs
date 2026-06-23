@@ -22,6 +22,7 @@ use crate::WindowCtx;
 use crate::apparatus::{engine_section_items, physics_section_items, theme_section_items};
 use crate::list_pane::PaneItem;
 use crate::settings_pane_view::{SettingsPane, SettingsSpineEntry};
+use crate::swatch::SwatchSpec;
 
 /// One entry in a provider's index spine: the ref-suffix id and the display title.
 pub(crate) struct SettingsPageRef {
@@ -110,14 +111,16 @@ impl WindowCtx<'_> {
                     .to_string(),
             ),
         ];
-        // In the menu, in order — click to remove.
+        // In the menu, in order — the label click removes; the ▲ / ▼ buttons reorder.
         items.push(PaneItem::text("app-title", "In the menu"));
         for id in in_menu {
             let label = meerkat::command::registry_label(id).unwrap_or(id.as_str());
-            items.push(PaneItem::button(
+            items.push(PaneItem::reorder_row(
                 "app-btn-active",
                 format!("{label}  \u{2713}"),
                 format!("menu:toggle:{id}"),
+                format!("menu:move:{id}:up"),
+                format!("menu:move:{id}:down"),
             ));
         }
         // Every other registry command — click to add.
@@ -355,6 +358,7 @@ impl WindowCtx<'_> {
                         active: p.id == active,
                     })
                     .collect();
+                let swatch = self.node_appearance_swatch(namespace, active);
                 Some(SettingsPane {
                     member,
                     rect,
@@ -362,11 +366,28 @@ impl WindowCtx<'_> {
                     page_title: page.title,
                     spine,
                     items: page.items,
+                    swatch,
                 })
             })
             .collect();
         let panel_bg = panel_bg_rgb(&self.shared.presentation.chrome_theme);
         self.view.set_settings_panes(panes, panel_bg);
+    }
+
+    /// Build the node shape-editor swatch for a `node:<id>/appearance` page: the subject node's
+    /// sprite face + its collider hull, for the swatch to render (and Stage B to edit). `None`
+    /// for any other page, an unknown id, or a node with no sprite (the editor is for sprite
+    /// faces). (Swatch — node shape editor.)
+    fn node_appearance_swatch(&self, namespace: &str, page: &str) -> Option<SwatchSpec> {
+        if page != "appearance" {
+            return None;
+        }
+        let subject: GraphMemberId = namespace.strip_prefix("node:")?.parse().ok()?;
+        let key = self.orrery().graph().get_node_by_id(subject).map(|(k, _)| k)?;
+        let sprite = self.orrery().node_sprite(key).map(str::to_string)?;
+        let hull =
+            self.orrery().node_sprite_hull(key).map(<[(f32, f32)]>::to_vec).unwrap_or_default();
+        Some(SwatchSpec { sprite: Some(sprite), hull })
     }
 
     /// Open a settings page as a workbench tile: mint (or reuse) its ephemeral `settings://`

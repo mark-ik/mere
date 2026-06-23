@@ -119,6 +119,11 @@ impl WindowCtx<'_> {
                     self.view.request_redraw();
                 }
             }
+            Command::ToggleProjection => {
+                let iso = !self.orrery_mut().is_isometric();
+                self.orrery_mut().set_isometric(iso);
+                self.view.request_redraw();
+            }
             Command::ToggleRoster => self.toggle_pane(PaneContent::Roster),
             Command::ToggleGloss => self.toggle_pane(PaneContent::Gloss),
             Command::ToggleApparatus => self.toggle_pane(PaneContent::Apparatus),

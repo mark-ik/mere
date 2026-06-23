@@ -113,6 +113,7 @@ mod settings_lane;
 mod settings_node;
 mod settings_pane_view;
 mod sprite_import;
+mod swatch;
 // `ViewPane` is the shared base for the `RosterPane` / `ListPane` test harnesses only;
 // every product pane now folds into the shell document, so the module is test-gated.
 // (Phase 1, step 2.)
@@ -259,6 +260,13 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             ".context-item {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 18px; }}",
             rgb(c.body_text),
             rgb(c.menu_bg)
+        ),
+        // The keyboard-highlighted context-menu row (arrow nav), matching the palette's
+        // `cmd-row-active` accent.
+        format!(
+            ".context-item-active {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 18px; }}",
+            rgb(c.strong_text),
+            rgb(c.active_bg)
         ),
         // Comms pane: an absolutely-positioned panel whose geometry the host sets
         // inline each frame from the Comms frame leaf's rect (so it splits beside
@@ -572,6 +580,10 @@ struct Session {
     /// The session whose graph + frame + views are loaded right now; its dir is
     /// `session_dir`. (Multi-graph MG1.)
     active_session_id: SessionId,
+    /// The active session's persona — the identity boundary its persona-scoped data
+    /// (engine UDFs, the configurable menu, future vaults) is filed under. v0 has one
+    /// default persona; threading the manifest's id keeps the wiring persona-ready.
+    active_persona: session_runtime::PersonaId,
     /// The active session's per-session data dir (`<mere_root>/sessions/<id>/`):
     /// holds `graph.json`, `frame.json`, and the `views/` sidecars. (Multi-graph.)
     session_dir: PathBuf,
@@ -868,9 +880,16 @@ impl Shell {
             .ok()
             .flatten()
             .unwrap_or_default();
+        // The active session's persona (v0: the single default persona) — the boundary its
+        // persona-scoped files are filed under. Resolved from the active manifest so the wiring
+        // is persona-ready when personas become user-managed.
+        let active_persona = manifests
+            .get(active_session_id)
+            .map(|m| m.persona_id)
+            .unwrap_or_else(session_runtime::PersonaId::default_persona);
         // The persona's curated context menu (command registry P4), resolved before `mere_root`
         // is moved into the session struct below.
-        let menu_actions = load_persona_menu_actions(&mere_root);
+        let menu_actions = load_persona_menu_actions(&mere_root, active_persona);
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = saved_settings.tab_cap;
         let runner = window_view::shell_runner(dom.clone(), chrome);
@@ -918,6 +937,9 @@ impl Shell {
         let restored_camera = restored_view.as_ref().and_then(|v| v.camera);
         if let Some(snapshot) = &restored_camera {
             orrery.set_camera(snapshot_to_camera(snapshot));
+            let (yaw, tilt) = snapshot_yaw_tilt(snapshot);
+            orrery.set_yaw(yaw);
+            orrery.set_tilt(tilt);
         }
         if let Some(url) = restored_view.as_ref().and_then(|v| v.focus.as_deref()) {
             orrery.select_by_url(url);
@@ -1157,6 +1179,7 @@ impl Shell {
                 session: Session {
                     manifests,
                     active_session_id,
+                    active_persona,
                     session_dir,
                     mere_root,
                     session_thumbnails: HashMap::new(),
@@ -1357,11 +1380,9 @@ fn default_mere_root() -> PathBuf {
         .join("mere")
 }
 
-/// The active persona's curated context menu (command registry P4), or the registry default
-/// when the persona has no saved curation (or the file is unreadable). v0 uses the single
-/// [`default_persona`](session_runtime::PersonaId::default_persona); v1 threads the active one.
-fn load_persona_menu_actions(mere_root: &Path) -> Vec<String> {
-    let persona = session_runtime::PersonaId::default_persona();
+/// The given persona's curated context menu (command registry P4), or the registry default
+/// when the persona has no saved curation (or the file is unreadable).
+fn load_persona_menu_actions(mere_root: &Path, persona: session_runtime::PersonaId) -> Vec<String> {
     session_runtime::load_persona_settings(mere_root, persona)
         .ok()
         .flatten()
@@ -1682,33 +1703,50 @@ fn has_class(dom: &ScriptedDom, id: NodeId, class: &str) -> bool {
     })
 }
 
-/// Map the orrery camera (pan + zoom) to a serialized [`CameraSnapshot`] — the
-/// kurbo `Affine` coefficient order `[a, b, c, d, e, f]`. The orrery camera is a
-/// pure scale + translate (no rotation / skew), so `a = d = zoom`, `b = c = 0`,
-/// and `(e, f)` is the offset.
-fn camera_to_snapshot(camera: CameraView) -> session_runtime::CameraSnapshot {
-    let zoom = camera.zoom as f64;
+/// Map the orrery camera to a serialized [`CameraSnapshot`] — the kurbo `Affine`
+/// coefficient order `[a, b, c, d, e, f]` (a point maps to `(a*x + c*y + e,
+/// b*x + d*y + f)`). The orrery camera is rotation(`yaw`) . non-uniform-scale(`zoom`,
+/// `tilt*zoom`) . translate(`offset`), which the six coefficients carry exactly; a
+/// top-down camera (`yaw 0`, `tilt 1`) reduces to `a = d = zoom, b = c = 0` (the prior
+/// form), so old snapshots load unchanged. (Isometric camera — persist yaw/tilt.)
+fn camera_to_snapshot(camera: CameraView, yaw: f32, tilt: f32) -> session_runtime::CameraSnapshot {
+    let (sn, cs) = (yaw.sin() as f64, yaw.cos() as f64);
+    let z = camera.zoom as f64;
+    let tz = (tilt * camera.zoom) as f64;
     session_runtime::CameraSnapshot {
         coefficients: [
-            zoom,
-            0.0,
-            0.0,
-            zoom,
+            cs * z,
+            sn * tz,
+            -sn * z,
+            cs * tz,
             camera.offset.0 as f64,
             camera.offset.1 as f64,
         ],
     }
 }
 
-/// The inverse of [`camera_to_snapshot`]: recover pan + zoom from the affine
-/// coefficients (scale from `a`, offset from `e` / `f`; rotation / skew are
-/// ignored, as the orrery never sets them).
+/// Recover pan + zoom from the affine coefficients: `offset` from `(e, f)`, `zoom`
+/// from the first row's magnitude (`sqrt(a^2 + c^2)`, which is `zoom` for the orrery's
+/// rotation+scale affine). The yaw/tilt half is [`snapshot_yaw_tilt`].
 fn snapshot_to_camera(snapshot: &session_runtime::CameraSnapshot) -> CameraView {
-    let c = snapshot.coefficients;
+    let m = snapshot.coefficients;
+    let zoom = (m[0] * m[0] + m[2] * m[2]).sqrt();
     CameraView {
-        offset: (c[4] as f32, c[5] as f32),
-        zoom: c[0] as f32,
+        offset: (m[4] as f32, m[5] as f32),
+        zoom: zoom as f32,
     }
+}
+
+/// Recover the isometric orbit (`yaw`, radians) and vertical foreshorten (`tilt`) from
+/// the affine coefficients: `yaw = atan2(-c, a)`, `tilt = |row2| / |row1|`. An old
+/// top-down snapshot (`b = c = 0`, `a = d = zoom`) yields `(0, 1)`. (Isometric camera.)
+fn snapshot_yaw_tilt(snapshot: &session_runtime::CameraSnapshot) -> (f32, f32) {
+    let m = snapshot.coefficients;
+    let row1 = (m[0] * m[0] + m[2] * m[2]).sqrt();
+    let row2 = (m[1] * m[1] + m[3] * m[3]).sqrt();
+    let yaw = (-m[2]).atan2(m[0]);
+    let tilt = if row1 > 1e-6 { row2 / row1 } else { 1.0 };
+    (yaw as f32, tilt as f32)
 }
 
 /// A durably-cached entry as a [`fetch::Fetched`], decoding the stored body as

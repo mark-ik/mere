@@ -244,6 +244,10 @@ pub struct ContextMenu {
     pub x: f32,
     pub y: f32,
     pub items: Vec<ContextItem>,
+    /// The keyboard-highlighted row (arrow-key navigation), or `None` until the user steps
+    /// into the menu. `Enter` runs it; the render pass scrolls it into view. Mirrors the
+    /// command palette's `selected_index`. (Context-menu keyboard nav.)
+    pub selected: Option<usize>,
 }
 
 /// One row of a [`ContextMenu`]: its label + the action it runs.
@@ -640,6 +644,7 @@ impl Chrome {
             | Command::BackgroundNode
             | Command::HideSelectedEdge
             | Command::ShowAllEdges
+            | Command::ToggleProjection
             | Command::ToggleInspector
             | Command::ToggleTrail
             | Command::ToggleSteward
@@ -699,7 +704,43 @@ impl Chrome {
     /// `items` (closing the suggestions dropdown so it can't overlap).
     pub fn open_context_menu(&mut self, x: f32, y: f32, items: Vec<ContextItem>) {
         self.close_suggestions();
-        self.context_menu = Some(ContextMenu { x, y, items });
+        self.context_menu = Some(ContextMenu { x, y, items, selected: None });
+    }
+
+    /// Move the context-menu keyboard highlight by `delta`, wrapping within the rows — the
+    /// menu's counterpart to [`step_palette`](Self::step_palette). `None` → first row on a step
+    /// down, last on a step up. (Context-menu keyboard nav.)
+    pub fn step_context_menu(&mut self, delta: isize) {
+        if let Some(menu) = &mut self.context_menu {
+            let count = menu.items.len();
+            if count == 0 {
+                return;
+            }
+            let next = match menu.selected {
+                None if delta < 0 => count - 1,
+                None => 0,
+                Some(cur) => {
+                    let n = count as isize;
+                    (((cur as isize + delta) % n + n) % n) as usize
+                }
+            };
+            menu.selected = Some(next);
+        }
+    }
+
+    /// Run the highlighted context-menu row (or the first, if none is highlighted) and close —
+    /// the keyboard `Enter` counterpart to a row click. A no-op close on an empty menu.
+    /// (Context-menu keyboard nav.)
+    pub fn run_context_selection(&mut self) {
+        let action = self.context_menu.as_ref().and_then(|menu| {
+            let pick = menu.selected.unwrap_or(0);
+            menu.items.get(pick).map(|item| item.action)
+        });
+        if let Some(action) = action {
+            self.pick_context(action);
+        } else {
+            self.close_context_menu();
+        }
     }
 
     /// Open the add-pill's menu at `(x, y)`: add a node, a tile, or a session. The
