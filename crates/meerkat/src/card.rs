@@ -49,7 +49,7 @@ use crate::fetch::{ContentState, Fetched};
 /// drop a page's own dark text onto a dark default). Dark mode themes Mere's
 /// *own* surfaces: the chrome, the orrery, and the synthesized / nematic card
 /// lanes (via [`card_vocabulary`]). Web content is rendered faithfully.
-const HTML_SHEET: &[&str] = &[
+pub(crate) const HTML_SHEET: &[&str] = &[
     "html, body, div, p, section, article, header, footer, nav, main, ul, ol, li, \
      blockquote, pre, table, tr, h1, h2, h3, h4, h5, h6 { display: block; }",
     "body { padding: 16px; background-color: rgb(250, 250, 252); color: rgb(22, 24, 32); }",

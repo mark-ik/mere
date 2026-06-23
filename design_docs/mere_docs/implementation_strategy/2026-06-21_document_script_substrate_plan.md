@@ -972,6 +972,23 @@ DOM model is the decision.
   apply->re-render (`content.rs`), with `Grant::allow_all` as the interim grant and the
   `kernel::permissions` -> `Grant` adapter (`meerkat::script`, needs `lib.rs`) following once Mark's
   `lib.rs` edits settle. `content.rs` / `card.rs` are clean now; `lib.rs` is dirty (his active edit).
+- **2026-06-23 (P2.5c landed: DocumentScript wired into the content actor, green).** The combined
+  move's last piece, all in a `content::script` submodule (avoids the dirty top-level `lib.rs`):
+  `mirror_to_scripted_dom` (a `LayoutDom` -> `LayoutDomMut` copy walk carrying elements + attributes +
+  text), and `ScriptInstance` (owns the `DocumentScript` + its `ContentLayout` + the page sheets;
+  re-lays-out on a script mutation). `Content` gains `script: Option<ScriptInstance>`; new
+  `AttachScript` / `DeliverEvent` / `DetachScript` commands + a `ScriptOutcome` update; the `render`
+  branch emits from the script's mutable `ScriptedDom` through the existing generic
+  `scene_from_content_band`, **superseding** the static path. **Hybrid preserved:** unscripted pages
+  keep the fast `StaticDocument` path untouched; only a script-attached page mirrors into a
+  `ScriptedDom`. No serval change. Interim `Grant::allow_all` (the `kernel::permissions` -> `Grant`
+  adapter is the one remaining tail). meerkat builds; **72 lib + 107 bin tests pass** including the new
+  `content::script` mirror test. Files: `content.rs` (+170), `content/script.rs` (new), `card.rs`
+  (`HTML_SHEET` -> `pub(crate)`), `constellation.rs` (the `ScriptOutcome` arm), `Cargo.toml`
+  (`document-host` dep, pulling wasmtime into the bin). Deferred refinements: Resize/Resource don't yet
+  re-lay-out the script layout; the script path doesn't re-request subresources; the wasm component
+  source is an `AttachScript` arg (no page->component association yet). Net: a DocumentScript can now
+  mutate a live page in the content actor and the tile re-renders, contained by epoch + StoreLimits.
 
 ## Key grounding files
 

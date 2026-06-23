@@ -715,6 +715,17 @@ impl Constellation {
                             }
                         }
                     }
+                    ContentUpdate::ScriptOutcome { nav, outcome } => {
+                        // A DocumentScript attach / turn / detach result (P2.5c). The
+                        // re-render rides a separate `Scene`; surface the text for
+                        // diagnostics (a script console rides this later). Dropped if the
+                        // node has navigated away.
+                        let current =
+                            self.active.get(&member).is_some_and(|a| a.gens.nav == nav);
+                        if current {
+                            tracing::debug!(outcome = %outcome, "document script outcome");
+                        }
+                    }
                 }
             }
         }

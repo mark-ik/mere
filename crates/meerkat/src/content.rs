@@ -37,6 +37,12 @@ use crate::fetch::ContentState;
 use crate::resources::{ResourceLoader, ResourceStore};
 use crate::serval_render::scene_from_content_band;
 
+mod script;
+use std::path::{Path, PathBuf};
+
+use document_host::{Grant, Quota};
+use script::ScriptInstance;
+
 /// A command from the kernel to a content actor.
 pub enum ContentCommand {
     /// Show `fetched` at `url` (a fresh navigation): harvest its linked data once,
@@ -86,6 +92,26 @@ pub enum ContentCommand {
     /// has no host-queryable packet. An empty query clears the matches. (Find-in-page.)
     Find {
         query: String,
+        viewport_gen: ViewportGeneration,
+    },
+    /// Attach a DocumentScript (a wasm `document-core` component) to this tile's page.
+    /// The page is mirrored into a mutable `ScriptedDom` the script can edit, and the
+    /// tile renders from it thereafter. HTML/serval lane only. (P2.5c, DocumentScript.)
+    AttachScript {
+        component_path: PathBuf,
+        viewport_gen: ViewportGeneration,
+    },
+    /// Deliver one event to the attached DocumentScript; the script's batch is applied
+    /// to the live `ScriptedDom` and the tile re-renders. No-op if no script is
+    /// attached. (P2.5c, DocumentScript.)
+    DeliverEvent {
+        kind: String,
+        payload: String,
+        viewport_gen: ViewportGeneration,
+    },
+    /// Detach the DocumentScript (runs its `deactivate`) and revert to the static page.
+    /// (P2.5c, DocumentScript.)
+    DetachScript {
         viewport_gen: ViewportGeneration,
     },
 }
@@ -145,6 +171,13 @@ pub enum ContentUpdate {
         viewport_gen: ViewportGeneration,
         matches: Vec<Vec<[f32; 4]>>,
     },
+    /// The result of a DocumentScript attach / turn / detach, for the host to surface
+    /// (diagnostics / a script console). The re-render rides the `Scene` update; this
+    /// is the textual outcome alongside it. (P2.5c, DocumentScript.)
+    ScriptOutcome {
+        nav: NavGeneration,
+        outcome: String,
+    },
 }
 
 /// The actor-thread-local current document.
@@ -173,6 +206,10 @@ struct Content {
     /// fresh. A `Retheme` keeps it (the serval lane themes through HTML_SHEET + the page CSS,
     /// not the document sheet). Built lazily by [`ensure_html_layout`].
     html: Option<(StaticDocument, ContentLayout<StaticNodeId>)>,
+    /// An attached DocumentScript (P2.5c). When present, the tile renders from the
+    /// script's mutable `ScriptedDom` (it supersedes the static `html` path), so the
+    /// script's edits are live; cleared on a fresh `Show` and by `DetachScript`.
+    script: Option<ScriptInstance>,
 }
 
 /// Spawn a content actor on its own thread (armillary harness). It builds the
@@ -242,6 +279,7 @@ pub fn spawn_content(
                         band_h: viewport.1,
                         sheet,
                         html: None,
+                        script: None,
                     };
                     render(&mut content, &store, &registry, &policy, &out);
                     current = Some(content);
@@ -312,9 +350,113 @@ pub fn spawn_content(
                         });
                     }
                 }
+                ContentCommand::AttachScript {
+                    component_path,
+                    viewport_gen,
+                } => {
+                    if let Some(content) = current.as_mut() {
+                        content.viewport_gen = viewport_gen;
+                        let outcome =
+                            attach_script(content, &component_path, &store, &registry, &policy);
+                        out.emit(ContentUpdate::ScriptOutcome { nav: content.nav, outcome });
+                        // Render from the script's DOM once attached.
+                        if content.script.is_some() {
+                            render(content, &store, &registry, &policy, &out);
+                        }
+                    }
+                }
+                ContentCommand::DeliverEvent {
+                    kind,
+                    payload,
+                    viewport_gen,
+                } => {
+                    if let Some(content) = current.as_mut() {
+                        if content.script.is_some() {
+                            content.viewport_gen = viewport_gen;
+                            let outcome = deliver_event(content, &kind, &payload, &store);
+                            out.emit(ContentUpdate::ScriptOutcome { nav: content.nav, outcome });
+                            render(content, &store, &registry, &policy, &out);
+                        }
+                    }
+                }
+                ContentCommand::DetachScript { viewport_gen } => {
+                    if let Some(content) = current.as_mut() {
+                        let outcome = match content.script.take() {
+                            Some(inst) => match inst.detach() {
+                                Ok(_) => "detached".to_string(),
+                                Err(e) => format!("detach error: {e}"),
+                            },
+                            None => "no script attached".to_string(),
+                        };
+                        content.html = None; // revert to the static page path
+                        content.viewport_gen = viewport_gen;
+                        out.emit(ContentUpdate::ScriptOutcome { nav: content.nav, outcome });
+                        render(content, &store, &registry, &policy, &out);
+                    }
+                }
             }
         }
     })
+}
+
+/// Mirror the current HTML page into a `ScriptedDom` and attach the DocumentScript at
+/// `component_path` over it (P2.5c). HTML/serval lane only; returns a human-readable
+/// outcome for the `ScriptOutcome` update. Uses `Grant::allow_all` for now — the
+/// `kernel::permissions` -> `Grant` adapter folds in next.
+fn attach_script(
+    content: &mut Content,
+    component_path: &Path,
+    store: &RefCell<ResourceStore>,
+    registry: &EngineRegistry,
+    policy: &EngineRoutePolicy,
+) -> String {
+    if !is_serval_html_lane(&content.url, content.state.as_ref(), registry, policy) {
+        return "not an HTML/serval page (no mirrorable DOM)".to_string();
+    }
+    let url = content.url.clone();
+    let (w, h) = content.viewport;
+    let body = match &content.state {
+        Some(ContentState::Ready(fetched)) => fetched.body.clone(),
+        // is_serval_html_lane above guarantees a Ready HTML body.
+        _ => return "no Ready HTML body".to_string(),
+    };
+    let wanted = RefCell::new(Vec::new());
+    let loader = ResourceLoader::new(store, &url, &wanted);
+    match ScriptInstance::attach(
+        component_path,
+        &body,
+        &loader,
+        w,
+        h,
+        &Grant::allow_all(),
+        Quota::default(),
+    ) {
+        Ok(inst) => {
+            content.script = Some(inst);
+            "attached".to_string()
+        }
+        Err(e) => format!("attach failed: {e}"),
+    }
+}
+
+/// Deliver one event to the attached script (P2.5c). The script's batch is applied to
+/// the live DOM and the layout re-laid-out on a change; returns the textual outcome.
+fn deliver_event(
+    content: &mut Content,
+    kind: &str,
+    payload: &str,
+    store: &RefCell<ResourceStore>,
+) -> String {
+    let url = content.url.clone();
+    let wanted = RefCell::new(Vec::new());
+    let loader = ResourceLoader::new(store, &url, &wanted);
+    let Some(inst) = content.script.as_mut() else {
+        return "no script attached".to_string();
+    };
+    match inst.deliver(kind, payload, &loader) {
+        Ok(outcome) => format!("{outcome:?}"),
+        Err(e) => format!("turn error: {e}"),
+    }
 }
 
 /// Build the retained serval-lane [`ContentLayout`] into `content.html` if this is the
@@ -355,8 +497,34 @@ fn render(
     policy: &EngineRoutePolicy,
     out: &Emitter<ContentUpdate>,
 ) {
-    let wanted = RefCell::new(Vec::new());
     let (w, h) = content.viewport;
+    // Scripted page (P2.5c): render from the script's mutable `ScriptedDom`, which
+    // supersedes the static `html` path so the script's edits are live. Emits one band
+    // off the script's retained layout, exactly like the static serval lane.
+    if let Some(inst) = content.script.as_ref() {
+        let scroll = ScrollOffsets::default();
+        let (scene, masks, content_height, link_rects) = scene_from_content_band(
+            inst.layout(),
+            inst.dom(),
+            h,
+            content.band_y,
+            content.band_h,
+            &scroll,
+        );
+        let links = link_rects.into_iter().map(|(url, rect)| LinkHit { rect, url }).collect();
+        out.emit(ContentUpdate::Scene {
+            nav: content.nav,
+            viewport_gen: content.viewport_gen,
+            scene,
+            content_height,
+            masks,
+            links,
+            band_y: content.band_y,
+            band_h: content.band_h,
+        });
+        return;
+    }
+    let wanted = RefCell::new(Vec::new());
     if ensure_html_layout(content, store, registry, policy, &wanted) {
         // HTML/serval lane: emit this band off the retained layout, no re-cascade.
         let (doc, layout) = content.html.as_ref().expect("ensure_html_layout returned true");

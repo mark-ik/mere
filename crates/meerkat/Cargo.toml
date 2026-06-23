@@ -108,6 +108,13 @@ document-canvas = { workspace = true, features = ["netrender"] }
 # binding-free). See the omnibar_command_shell_plan.
 script-rhai = { workspace = true }
 
+# The DocumentScript component host (P2.5c): a wasm `document-core` component
+# attached to a content tile mutates the page's mirrored `ScriptedDom` through a
+# capability-scoped contract, guarded by epoch + StoreLimits. The content actor
+# drives it via `meerkat::content::script`. Intra-workspace path dep (not yet in
+# [workspace.dependencies]); pulls wasmtime, hence the 1.93 toolchain.
+document-host = { path = "../script/document-host" }
+
 # The graph kernel (the `Graph` type) and the linked-data bridge: a fetched
 # JSON-LD document (or JSON-LD embedded in HTML) merges into the session graph,
 # remote `@context`s resolved offline against the bundled full pack (schema.org /
