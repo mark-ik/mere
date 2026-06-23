@@ -459,7 +459,11 @@ impl Simulation {
     /// fold into its [`LayoutView`]. Positions only; edges stay with the host's
     /// graph, so they need not cross the actor boundary every frame.
     pub fn snapshot(&self, generation: u64) -> LayoutSnapshot {
-        LayoutSnapshot { positions: self.positions().collect(), generation }
+        LayoutSnapshot {
+            positions: self.positions().collect(),
+            scene: self.scene_bodies().collect(),
+            generation,
+        }
     }
 
     /// Refresh the spatial query index so [`Self::hit_test`] and

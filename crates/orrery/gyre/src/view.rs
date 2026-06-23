@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use euclid::default::{Box2D, Point2D};
 use kernel::graph::NodeKey;
 
-use crate::NODE_BODY_RADIUS;
+use crate::{NODE_BODY_RADIUS, SceneBodyId};
 
 /// Result of [`LayoutView::rect_select`] (and [`Simulation::rect_select`]): the
 /// nodes and edges a marquee covers.
@@ -47,6 +47,10 @@ pub struct RectSelection {
 pub struct LayoutSnapshot {
     /// `(node, position)` for every body in the simulation.
     pub positions: Vec<(NodeKey, Point2D<f32>)>,
+    /// `(id, position, paint radius)` for every scene-decoration body (the living
+    /// backdrop), riding the same snapshot so it renders + drifts off-thread.
+    /// (Physics scenes P1.)
+    pub scene: Vec<(SceneBodyId, Point2D<f32>, f32)>,
     /// The generation this layout was produced at (monotonic on the actor).
     pub generation: u64,
 }
@@ -73,6 +77,9 @@ pub struct LayoutView {
     /// `radius`. Set wholesale by the host from each node's `node_size / 2`, so the
     /// grab and the picture stay in sync. (Decision 5 — size drives the collider.)
     radii: HashMap<NodeKey, f32>,
+    /// Scene-decoration bodies `(id, position, paint radius)`, refreshed from each
+    /// snapshot — the living backdrop the host paints behind the graph. (Physics scenes P1.)
+    scene: Vec<(SceneBodyId, Point2D<f32>, f32)>,
 }
 
 impl Default for LayoutView {
@@ -89,6 +96,7 @@ impl LayoutView {
             edges: Vec::new(),
             radius: NODE_BODY_RADIUS,
             radii: HashMap::new(),
+            scene: Vec::new(),
         }
     }
 
@@ -105,6 +113,7 @@ impl LayoutView {
             edges: edges.into_iter().collect(),
             radius,
             radii: HashMap::new(),
+            scene: Vec::new(),
         }
     }
 
@@ -128,6 +137,8 @@ impl LayoutView {
     pub fn apply_snapshot(&mut self, snapshot: &LayoutSnapshot) {
         self.positions.clear();
         self.positions.extend(snapshot.positions.iter().copied());
+        self.scene.clear();
+        self.scene.extend(snapshot.scene.iter().copied());
     }
 
     /// Replace the edge topology (after a structural graph change).
@@ -160,6 +171,12 @@ impl LayoutView {
     /// Iterate every `(node, position)` in the view. Order is unspecified.
     pub fn positions(&self) -> impl Iterator<Item = (NodeKey, Point2D<f32>)> + '_ {
         self.positions.iter().map(|(&k, &p)| (k, p))
+    }
+
+    /// Iterate every scene-decoration body `(id, position, paint radius)` — the host's
+    /// read for painting the living backdrop. (Physics scenes P1.)
+    pub fn scene_bodies(&self) -> impl Iterator<Item = (SceneBodyId, Point2D<f32>, f32)> + '_ {
+        self.scene.iter().copied()
     }
 
     /// Hit-test a world-space point: the node whose circle (center, [`radius`])

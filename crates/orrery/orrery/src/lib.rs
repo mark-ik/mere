@@ -516,7 +516,13 @@ impl Orrery {
                 (key, pos)
             })
             .collect();
-        self.view.apply_snapshot(&LayoutSnapshot { positions, generation: self.generation });
+        // A node-position-only refresh (no scene bodies here); the actor's per-tick
+        // snapshots carry the live scene. (Physics scenes P1.)
+        self.view.apply_snapshot(&LayoutSnapshot {
+            positions,
+            scene: Vec::new(),
+            generation: self.generation,
+        });
         self.view.set_edges(dedup_edges(&self.graph));
     }
 
@@ -1178,6 +1184,19 @@ impl Orrery {
     /// Whether height-by-degree is on. (Isometric camera P3.)
     pub fn height_by_degree(&self) -> bool {
         self.height_by_degree
+    }
+
+    /// Add a drifting scene-decoration body to the orrery's world — a "living backdrop"
+    /// element, intangible to the graph by default (it never perturbs the layout). A ball
+    /// of `radius` at world `position`, with an initial `velocity` (px/s). Best called
+    /// before [`offload_physics`](Self::offload_physics) so it rides onto the actor with
+    /// the rest of the world. (Physics scenes P1.)
+    pub fn add_scene_body(&mut self, position: (f32, f32), radius: f32, velocity: (f32, f32)) {
+        self.physics.add_scene_body(
+            gyre::NodeCollider::Ball { radius },
+            Point2D::new(position.0, position.1),
+            velocity,
+        );
     }
 
     /// The size-tier index (0..[`SIZE_TIERS`]`.len()`) nearest a node's current resolved

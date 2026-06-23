@@ -12,8 +12,9 @@ use layout_dom_api::LayoutDomMut;
 use kernel::graph::NodeKey;
 use netrender::Scene;
 use paint_list_api::{
-    AlphaType, ColorF, CommonPlacement, DeviceIntSize, IdNamespace, ImageItem, ImageKey,
-    ImageRendering, ImageResource, LayoutPoint, LayoutRect, PaintCmd, PaintList, RectItem,
+    AlphaType, ColorF, CommonPlacement, DeviceIntSize, ExtendMode, GradientStop, IdNamespace,
+    ImageItem, ImageKey, ImageRendering, ImageResource, LayoutPoint, LayoutRect, LayoutSize,
+    PaintCmd, PaintList, RadialGradientItem, RadialGradientPayload, RectItem,
 };
 use paint_list_render::{composite_paint_layers, CompositeLayer};
 use platen::orrery::{identity_arrangement, orrery_paint_list_demoted_from_arrangement};
@@ -293,13 +294,39 @@ impl Orrery {
         // A screen-space layer for the marquee rubber-band, when active.
         let marquee_cmds = self.marquee.map(|origin| marquee_rect_cmds(origin, self.cursor));
         // The orrery's own opaque backdrop is the bottom layer (so the surface is
-        // dark without depending on the host clear color); then the underlay edges
-        // + demoted rects, then the on-screen node DOM, then any marquee on top.
+        // dark without depending on the host clear color); then the living-backdrop
+        // scene orbs, then the underlay edges + demoted rects, then the on-screen node
+        // DOM, then any marquee on top.
         let bg_cmds = background_cmds(w, h, self.backdrop);
-        let mut layers = vec![
-            CompositeLayer::commands_only(&bg_cmds),
-            CompositeLayer::commands_only(underlay.commands()),
-        ];
+        // Living backdrop: drifting scene-decoration bodies as soft orbs behind the graph
+        // (under the edges), projected through the camera so they recline with the iso
+        // ground. (Physics scenes P1.)
+        let mut scene_cmds: Vec<PaintCmd> = Vec::new();
+        for (_, pos, radius) in self.view.scene_bodies() {
+            let (cx, cy) = self.camera.to_screen(PortablePoint::new(pos.x, pos.y));
+            let r = (radius * self.camera.zoom).max(1.0);
+            let rect =
+                LayoutRect::new(LayoutPoint::new(cx - r, cy - r), LayoutPoint::new(cx + r, cy + r));
+            scene_cmds.push(PaintCmd::DrawRadialGradient(RadialGradientItem {
+                placement: CommonPlacement::new(rect),
+                gradient: RadialGradientPayload {
+                    center: LayoutPoint::new(cx, cy),
+                    radius: LayoutSize::new(r, r),
+                    extend_mode: ExtendMode::Clamp,
+                    stops: vec![
+                        GradientStop { offset: 0.0, color: ColorF::new(0.42, 0.55, 0.85, 0.22) },
+                        GradientStop { offset: 1.0, color: ColorF::new(0.42, 0.55, 0.85, 0.0) },
+                    ],
+                },
+                tile_size: LayoutSize::new(2.0 * r, 2.0 * r),
+                tile_spacing: LayoutSize::zero(),
+            }));
+        }
+        let mut layers = vec![CompositeLayer::commands_only(&bg_cmds)];
+        if !scene_cmds.is_empty() {
+            layers.push(CompositeLayer::commands_only(&scene_cmds));
+        }
+        layers.push(CompositeLayer::commands_only(underlay.commands()));
         // The on-screen gnode + favicon layers, unless the host renders these nodes as
         // DOM cards in the shell document (orrery-as-element); then only edges + demoted
         // dots remain as the underlay. (Orrery-as-element — Phase 2.)

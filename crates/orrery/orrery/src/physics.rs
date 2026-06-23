@@ -60,6 +60,9 @@ pub(crate) enum PhysicsCommand {
     SetLinearDamping(f32),
     /// Reshape node colliders to per-node face shapes (see [`Simulation::set_node_colliders`]).
     SetNodeColliders(Vec<(NodeKey, NodeCollider)>),
+    /// Add a non-graph scene-decoration body (shape, world position, drift velocity).
+    /// (Physics scenes P1.)
+    AddSceneBody(NodeCollider, Point2D<f32>, (f32, f32)),
 }
 
 /// One layout the actor produced: the positions plus whether it is still
@@ -185,6 +188,25 @@ impl Physics {
             Physics::Inline(p) => p.sim.set_node_colliders(colliders),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetNodeColliders(colliders));
+            }
+        }
+    }
+
+    /// Add a non-graph scene-decoration body to the world — a drifting backdrop / scene
+    /// element, intangible to the graph by default. Inline (pre-offload) adds it
+    /// synchronously; once offloaded it rides a command. (Physics scenes P1.)
+    pub fn add_scene_body(
+        &mut self,
+        collider: NodeCollider,
+        position: Point2D<f32>,
+        velocity: (f32, f32),
+    ) {
+        match self {
+            Physics::Inline(p) => {
+                p.sim.add_scene_body(collider, position, velocity);
+            }
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::AddSceneBody(collider, position, velocity));
             }
         }
     }
@@ -365,6 +387,9 @@ fn apply(
         PhysicsCommand::SetCouplingForces(forces) => sim.set_coupling_forces(forces),
         PhysicsCommand::SetLinearDamping(damping) => sim.set_linear_damping(damping),
         PhysicsCommand::SetNodeColliders(colliders) => sim.set_node_colliders(colliders),
+        PhysicsCommand::AddSceneBody(collider, position, velocity) => {
+            sim.add_scene_body(collider, position, velocity);
+        }
     }
 }
 

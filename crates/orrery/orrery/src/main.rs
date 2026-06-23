@@ -128,6 +128,14 @@ impl ApplicationHandler for App {
         // thread, waking this loop through the proxy when a layout snapshot lands.
         // Done here (once — `resumed` early-returns if a window already exists) so
         // the settle animates from the first visible frame.
+        // A small living backdrop: a few drifting, intangible scene bodies behind the
+        // graph. Added before offload so they ride onto the physics actor with the rest
+        // of the world; they drift while the layout settles. (Physics scenes P1.)
+        self.orrery.add_scene_body((-320.0, -140.0), 46.0, (16.0, 10.0));
+        self.orrery.add_scene_body((280.0, 130.0), 64.0, (-13.0, 15.0));
+        self.orrery.add_scene_body((-140.0, 220.0), 30.0, (11.0, -17.0));
+        self.orrery.add_scene_body((200.0, -210.0), 38.0, (-9.0, -12.0));
+
         let proxy = self.proxy.clone();
         let physics_wake: armillary::Wake = Arc::new(move || {
             let _ = proxy.send_event(());
