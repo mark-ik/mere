@@ -220,13 +220,45 @@ trivial; the cost is the gesture.
 - **B1 — move up / down affordances. BUILT (2026-06-22).** Each "In the menu" row has inline ▲ / ▼
   buttons (a `PaneItem::reorder_row` compound row) draining `menu:move:<id>:up|down` ->
   `move_menu_action` (swap with the neighbor + persist). See the progress log.
-- **B2 — true drag-reorder.** Pointer-drag a row to a new index. **Confirmed: no row-drag infra exists**
-  — the settings pane / shell document is `on_click`-only, and the only chrome drag (tearout) is
-  tile-level (`TileDragPayload` / `PaneDragPayload`) and not even wired in meerkat yet. So B2 is
-  greenfield: pointer-down-vs-click discrimination on a row, drag tracking, a drop-index hit-test, a
-  drop indicator, then the `Vec` reposition. Effort: medium-large; best built as a **shared
-  reorderable-list capability** (settings rows, future tab / shellbar reorder) rather than a one-off.
-  Recommend doing it as its own focused task.
+- **B2 — true drag-reorder.** Pointer-drag a row to a new index. Scoped below.
+
+### B2 scope (2026-06-23)
+
+**Data side is free** — reuse B1: move the id in `menu_actions` + `persist_menu_actions` (a `Vec`
+reposition, not just a neighbor swap). All the cost is the **gesture**, and the shell DOM is
+`on_click`-only (the runner exposes `dispatch_click`, not pointer-down/move), so the drag must be
+**host-driven** off the chrome's raw pointer events — exactly how the orrery already drags nodes
+(`pointer_down -> dragging -> move -> up`) and how `resize_drag` / `titlebar_press` work in
+`input.rs`. The chrome already hit-tests the settings pane scroll-aware (`chrome_click` ->
+`chrome_session.hit_test`, mirroring the `settings-pane-body` scroll offset), so the same hit-test
+serves drag. Five pieces:
+
+1. **Mark the draggable row + its id.** `reorder_view` (settings_pane_view) tags the row container with
+   the registry id — a `data-reorder-id=<id>` attribute or a dedicated drag-handle element. On
+   pointer-down, hit-test -> walk to the row -> read the id + its current index. (A handle column also
+   keeps drag distinct from the row's existing click targets — label = remove, ▲/▼ = step.)
+2. **Drag state.** A host-side `MenuRowDrag { id, from: usize, cursor_y }` on the window/view (beside
+   `resize_drag`), armed on Pressed over a reorder row, promoted to a real drag only past a small
+   movement threshold (so a plain click still toggles / steps).
+3. **Drop target on move.** On `CursorMoved` while dragging, hit-test the cursor -> the row under it ->
+   its index -> the drop position; store it + redraw. Mirror the `settings-pane-body` scroll offset
+   (as `chrome_click` does) so a scrolled list lands right.
+4. **Drop indicator.** A render overlay (an insertion line between rows, or a highlight) computed from
+   the drag state + the settings-pane row rects (the session `fragments().rect_of`, the same source the
+   keyboard scroll-into-view pass uses).
+5. **Resolve on release.** On Released while dragging, reposition `id` from `from` to the drop index in
+   `menu_actions` + persist; clear the state. A sub-threshold release falls through to the normal click.
+
+**Effort:** medium-large. **Risks:** (a) click-vs-drag discrimination on rows that already click (a drag
+handle plus a movement threshold mitigates this); (b) drop-index hit-test and indicator over a *scrolled*
+list (reuse the existing scroll-offset mirroring); (c) auto-scroll when dragging near the list edges
+(refinement; skip in v1).
+
+**Recommendation:** build it as a **shared reorderable-list capability** — a host-side `data-reorder-id`
+drag helper + drop-index hit-test — so it serves the menu list now and future reorderable lists
+(workbench tabs, shellbar, roster) rather than a one-off. **But it is genuinely optional polish:** B1
+(▲/▼) already reorders, and the searchable menu + suggestions are the higher-value pieces and are in.
+Do B2 only if button-reorder proves insufficient in practice.
 
 ## Scoping: searchable context menu (the cursor palette)
 

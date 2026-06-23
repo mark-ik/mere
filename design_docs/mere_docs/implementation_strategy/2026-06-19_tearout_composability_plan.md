@@ -81,6 +81,38 @@ substrate under this plan, mostly in its favor:
   resolving to its pooled orrery and taking input via the shell hit-test. Neither plan
   owns that migration yet.
 
+## Window model (decided 2026-06-23, with Mark)
+
+A spawned window today is a `WindowKind::Leaf` (slim chrome) whose orrery pane resolves the
+active graph from the shared pool. **Audit finding:** the camera lives on the pooled
+`Orrery` (orrery lib.rs:132), not on the window, so two windows on the same graph **mirror**
+(one shared viewport); the per-window camera is the long-deferred "MW6" item.
+
+**Decision.** Keep the **co-window** as a first-class window in its own right, with the
+**torn tile** as a separate mode. This is *not* a drift into "window = graph": both are
+**pane-configurations of the canonical model** (orrery = authority pooled by `GraphId`;
+pane = view resolving by `graph_id`; window = a split of panes). A co-window is a window
+with an `Orrery` pane (its own viewport); a torn tile is a window with a `Workbench` pane on
+a torn node. They are configs, not divergent window kinds.
+
+**The one real drift to correct: the camera is on the wrong side of the authority/view
+line.** By the two-natured principle the pooled `Orrery` (authority) holds graph + physics +
+node positions; the camera/viewport is experience-derived **view** state and belongs to the
+**pane/window**. Moving it there is what makes a same-graph co-window a genuine independent
+viewport — two windows = two viewports over the *shared* gyre positions ("two windows into
+one document") rather than a mirror. It is the same payoff orrery-as-element gives for free
+(the camera becomes the element's transform), so it lands either by moving the camera onto
+the pane now or via the orrery-as-element / N-orrery-elements migration.
+
+Guardrails so this stays the right model:
+
+- **`WindowKind` is a chrome-template selector only** (slim vs full), never a graph/content
+  fork; all graph/content resolves through pane → pool.
+- **Dissolve "primary" into per-window capabilities** (save-its-panes-on-close, per-window
+  a11y, optional shellbar), per P2's intent, not a fixed app-lifecycle kind.
+- A **different-graph** window already works today (distinct pooled orrery + camera); only
+  the **same-graph** co-window mirrors until the camera moves.
+
 ## C1 — Per-pane focus / active-session decoupling — DONE (2026-06-14)
 
 **Shipped as the pane-as-unit refactor** (commits `9876110`..`7f6671d`, the 1/5-5/5
@@ -209,15 +241,17 @@ Spawn-on-drop with an in-donor drag ghost.
 Done when: all three operations run from the gesture model with the brief's identity
 semantics, and the toast escalates a leaf in place.
 
-## Deferred — per-pane camera (two spatial views of one graph)
+## Camera on the view, not the authority (promoted from deferred 2026-06-23)
 
-Pull the camera out of `Orrery` into the `Orrery` *pane*, so two `Orrery` panes of the
-same graph hold distinct cameras. Not needed by C1-C5 (those have at most one spatial
-view per graph). **Likely eased, possibly dissolved, by the unified model:** under
-orrery-as-element the camera is the element's transform/viewport, so two `<orrery>`
-elements over one pooled orrery hold distinct cameras naturally, without pulling the
-camera out of the `Orrery` struct. Revisit as part of the N-orrery-elements work rather
-than as a separate extraction.
+Move the camera out of the pooled `Orrery` (authority, orrery lib.rs:132) onto the
+**pane/window** (view), so two views of one graph hold distinct viewports over the *shared*
+gyre node positions. **Promoted from deferred to pressing** by the 2026-06-23 window-model
+decision: it is no longer "not needed by C1-C5" — a same-graph **co-window needs it**
+(without it the co-window is a mirror, see Window model). It is also the authority/view-line
+correction (the camera is experience-derived view state, currently misplaced on the
+authority). Lands either by moving the camera onto the pane now, or for free via
+orrery-as-element (the camera becomes the element's transform) / the N-orrery-elements work
+— pick the path when the co-window is built.
 
 ## Open questions (carried from window-composition)
 
@@ -291,3 +325,14 @@ than as a separate extraction.
   through the refactor (`focus_pane_graph` / `orrery_pane_at` / its test present).
   **Re-ranked:** (1) C4 core; (2) C3 tear-out content + step-5 fan-out; (3) C5 gestures;
   (4) N-orrery seam; (5) OQ-B/OQ-C.
+- **2026-06-23** — **Window-model decision (with Mark): co-window + torn-tile are
+  pane-configs; the camera moves to the view.** Audited the leaf-as-built: the camera lives
+  on the pooled `Orrery` (lib.rs:132), so a same-graph co-window mirrors. Verdict: not a
+  drift into "window = graph" — both the co-window (Orrery pane) and the torn tile (Workbench
+  pane) are configurations of the canonical orrery=authority / panes=views model. The one
+  real drift is the **camera sitting on the authority**; the fix is to move it onto the
+  pane/window (**promoted from deferred to pressing**). Guardrails recorded (`WindowKind`
+  chrome-only; "primary" dissolves into per-window capabilities). Added the **Window model**
+  section + reframed the camera section. Re-ranked: (1) C4 core; (2) **camera-to-the-view**
+  (makes the co-window real); (3) C3 torn-tile content + step-5 fan-out; (4) C5 gestures;
+  (5) the N-orrery seam (subsumes #2 if orrery-as-element is the chosen path).
