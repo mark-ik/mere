@@ -103,10 +103,12 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
    `partitioned`, so the interchange is lossless.
 4. **Durability + partitioning** *(future)* — an eidetic-backed `CookieStore`,
    partitioned by origin + top-level site + persona. Replaces the v1 process jar.
-5. **Lossless structured read** *(future)* — a structured cookie accessor on
-   netfetcher's `CookieStore` (today `cookies_for` returns `name=value` header
-   strings; the flip rebuilds attributes lossily from the URL). Needed so
-   `Secure`/`HttpOnly`/`SameSite`/`Domain` cross faithfully.
+5. **Lossless structured read** *(done 2026-06-23)* — `CookieStore::records_for`
+   returns structured `CookieRecord`s (the jar now also stores `HttpOnly`), so
+   `Secure` / `HttpOnly` / `SameSite` / `Domain` / `Path` / expiry cross the flip
+   faithfully instead of being guessed from the URL. The trait default derives a lossy
+   record from `cookies_for` for jars that don't override it. This is also the
+   serialization form thread 4's durable store will persist.
 6. **Script ↔ substrate + storage areas** *(future)* — serval `document.cookie` /
    Cookie Store API on the shared jar; durable + partitioned `localStorage` /
    `sessionStorage` / IndexedDB per the Storage Standard.
@@ -119,3 +121,16 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
   netfetcher's shareable-context intent, and the standards table. Confirmed the
   session model is mostly *already implemented* (netfetcher, RFC 6265bis) and the
   work is persistence + convergence, not a new build.
+- **2026-06-23 (threads 1-3)**: persistent shared jar (`fetch::session_jar`), flip
+  SESSION layer (`fetch::session_cookies_for`), standard-shaped `verso-api::Cookie`.
+  Sessions now persist across navigations; the flip carries the login. (Committed
+  `2fa18ad` in mere.)
+- **2026-06-23 (thread 5)**: lossless structured read. netfetcher gained
+  `CookieStore::records_for` + a stored `HttpOnly` (netfetcher `7c22a65`, owned fork —
+  *push pending: Git Credential Manager hung the push; needs a hand*). `session_jar`
+  builds `FetchContext`s through netfetcher's now-shared seam; `session_cookies_for`
+  reads `records_for` and maps each `CookieRecord` to a full `verso-api::Cookie`
+  (`Domain`/`Path`/`Secure`/`HttpOnly`/`SameSite`/expiry faithful; `Partitioned` still
+  untracked by the jar). `cargo check -p meerkat` green; netfetcher 9 cookie tests
+  green. Next: thread 4 (durable eidetic-backed + partitioned store), then thread 6
+  (serval `document.cookie` ↔ the jar + storage areas).

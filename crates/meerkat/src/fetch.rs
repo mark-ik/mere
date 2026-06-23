@@ -28,7 +28,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use armillary::{ActorHandle, Emitter, Wake, spawn};
-use netfetcher::{CookieStore, InMemoryCookieJar, SameSiteContext};
+use netfetcher::{CookieRecord, CookieStore, InMemoryCookieJar, SameSite, SameSiteContext};
 use tokio::runtime::Builder;
 
 /// The most redirects a smolweb fetch will follow before giving up.
@@ -275,6 +275,9 @@ impl CookieStore for SharedJar {
     fn cookies_for(&self, url: &url::Url, ctx: SameSiteContext) -> Vec<String> {
         self.0.cookies_for(url, ctx)
     }
+    fn records_for(&self, url: &url::Url, ctx: SameSiteContext) -> Vec<CookieRecord> {
+        self.0.records_for(url, ctx)
+    }
     fn set_cookie(&self, url: &url::Url, set_cookie_header: &str) {
         self.0.set_cookie(url, set_cookie_header);
     }
@@ -290,32 +293,38 @@ fn session_context() -> netfetcher::FetchContext {
 }
 
 /// The shared session's cookies for `url`, as portable records for a verso flip.
-/// Reads the jar's same-site cookies (a flip is a same-origin top-level navigation),
-/// then rebuilds each [`verso_api::Cookie`] from its `name=value` pair plus the URL.
-/// Lossy on `Secure` / `HttpOnly` / `SameSite` / exact `Domain` / `Path` until
-/// netfetcher exposes a structured read (native session store plan §5); enough to
-/// carry the live session into a compatibility-view WebView.
+/// Reads the jar's structured same-site cookies (a flip is a same-origin top-level
+/// navigation) and maps each to a [`verso_api::Cookie`], carrying `Domain` / `Path` /
+/// `Secure` / `HttpOnly` / `SameSite` / expiry faithfully (the lossless structured
+/// read, native session store plan §5). `Partitioned` is not tracked by the jar yet.
 pub fn session_cookies_for(url: &str) -> Vec<verso_api::Cookie> {
     let Ok(parsed) = url::Url::parse(url) else {
         return Vec::new();
     };
-    let domain = parsed.host_str().unwrap_or_default().to_string();
-    let secure = parsed.scheme() == "https";
     session_jar()
-        .cookies_for(&parsed, SameSiteContext::same_site())
+        .records_for(&parsed, SameSiteContext::same_site())
         .into_iter()
-        .filter_map(|pair| {
-            let (name, value) = pair.split_once('=')?;
-            Some(verso_api::Cookie {
-                name: name.to_string(),
-                value: value.to_string(),
-                domain: domain.clone(),
-                path: "/".to_string(),
-                secure,
-                ..Default::default()
-            })
+        .map(|r| verso_api::Cookie {
+            name: r.name,
+            value: r.value,
+            domain: r.domain,
+            path: r.path,
+            secure: r.secure,
+            http_only: r.http_only,
+            same_site: r.same_site.map(map_same_site),
+            expires: r.expires,
+            partitioned: false,
         })
         .collect()
+}
+
+/// netfetcher's `SameSite` (the `cookie` crate's) to verso's engine-agnostic one.
+fn map_same_site(same_site: SameSite) -> verso_api::SameSite {
+    match same_site {
+        SameSite::Strict => verso_api::SameSite::Strict,
+        SameSite::Lax => verso_api::SameSite::Lax,
+        SameSite::None => verso_api::SameSite::None,
+    }
 }
 
 /// Run one WHATWG-Fetch GET and collect the decoded body as text.
