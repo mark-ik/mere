@@ -1018,6 +1018,14 @@ impl Shell {
         // Seed the actor pool's deactivated-engine set so a globally-disabled
         // document engine renders the fallback off-thread too. (engine-picker Phase 1b.)
         constellation.set_disabled_engines(saved_settings.disabled_engines.iter().cloned().collect());
+        // Seed the installed DocumentScript origin bindings (§11.4 follow-on #2):
+        // resolved from `script-bindings.json` + the session script-permissions, so a
+        // fresh navigation to a bound origin auto-attaches its script (the App-default
+        // Allow narrowed by any session-scope opinion).
+        constellation.set_script_bindings(crate::content::script::load_resolved_bindings(
+            &mere_root,
+            &saved_settings.script_permissions,
+        ));
         // The p2p sync actor: an armillary actor whose run closure owns a tokio
         // runtime (built on its thread) that binds the transport + joins the tessera
         // demo moot, polling status back through the same wake shape as fetch/content.

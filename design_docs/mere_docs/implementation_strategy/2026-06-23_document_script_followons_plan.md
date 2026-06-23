@@ -247,3 +247,21 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   both carry his work. So only this plan doc separates. Resolution: Mark commits his command-registry
   work (sweeping my #1's `settings_store`/`frame_ops`/`command_drain` hunks), **or** authorizes a
   combined working-tree commit. #1 itself is **done + green**. Next: follow-on #2 (auto-attach).
+  *(Committed combined with Mark's command-registry work in `9824ef4`, authorized.)*
+- **2026-06-23 (follow-on #2 — auto-attach origin bindings, landed + green, committed cleanly).**
+  User-binding form (the recommended first cut). A dedicated **`session-runtime/script_bindings_store`**
+  (`script-bindings.json`, `ScriptBinding { origin, component_path }`, load/save, round-trip tested)
+  rather than a `PersistedSettings` field — keeps it cleanly mine + dodges the `frame_ops`/settings
+  co-edit churn, and it is better-scoped ("installed scripts" vs flat prefs). `content::script` gains
+  `ResolvedScriptBinding`, `origin_matches` (exact host or `*.`-suffix glob), `binding_for`, and
+  `load_resolved_bindings(mere_root, prefs)` (loads the file + resolves each against the session
+  permission policy from #1). `Constellation` gains a `script_bindings` field + `set_script_bindings`,
+  and **`drive`'s fresh-Show branch auto-attaches** the matched binding via the same `AttachScript` the
+  omnibar verb sends (tied to fresh-Show so re-navigation re-attaches, a steady frame does not). The
+  host push is **one block in `main.rs`** (next to `set_disabled_engines`): `set_script_bindings(
+  load_resolved_bindings(&mere_root, &saved_settings.script_permissions))`. 4 new tests (meerkat 111
+  bin: origin/binding matching; session-runtime 73: bindings round-trip). **Committed cleanly** (all
+  files mine this round: `script_bindings_store.rs`, session-runtime `lib.rs`, `content/script.rs`,
+  `constellation.rs`, `main.rs`). **Deferred**: a settings-lane UI to edit bindings; re-push on
+  bindings-file change (today pushed once at startup); the mod-manifest "installed extension" form.
+  Next: follow-on #3 (script-path render refinements).

@@ -15,9 +15,10 @@
 //! sheets separately and `lay_out_content`/`ContentLayout` are generic over
 //! `LayoutDom`, so the mirror + the same sheets reproduce the static render.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use document_host::{CapPermission, DocumentScript, Grant, Quota, TurnOutcome};
+use session_runtime::settings_store::ScriptPermissionPrefs;
 use kernel::permissions::{
     resolve_permission, Permission, ResolvedPermission, ScopedPermission, SettingScope,
 };
@@ -87,6 +88,70 @@ fn resolve_cap(session: Option<Permission>) -> ResolvedPermission {
 /// on a capability the component requires makes instantiation fail — the boundary.
 pub(crate) fn grant_from_resolved(log: ResolvedPermission, document: ResolvedPermission) -> Grant {
     Grant { log: cap_permission(log), document: cap_permission(document) }
+}
+
+/// A resolved auto-attach binding (follow-on #2): an origin pattern + the component
+/// to attach + the resolved capability permissions. The host resolves these once
+/// from `script-bindings.json` + the session permission policy and pushes them to
+/// the constellation; on a fresh navigation matching `origin`, the script
+/// auto-attaches via the same path the omnibar verb uses.
+#[derive(Clone, Debug)]
+pub(crate) struct ResolvedScriptBinding {
+    pub origin: String,
+    pub component_path: PathBuf,
+    pub log: ResolvedPermission,
+    pub document: ResolvedPermission,
+}
+
+/// The host portion of a URL (between `://` and the next `/` `?` `#`), without
+/// scheme / path / query / fragment. Userinfo + port stay attached (a first cut).
+fn host_of(url: &str) -> &str {
+    let after_scheme = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
+    after_scheme.split(['/', '?', '#']).next().unwrap_or("")
+}
+
+/// Whether `url`'s host matches `pattern` — an exact host (`example.com`) or a
+/// `*.`-prefixed suffix glob (`*.example.com`, matching the apex and any subdomain).
+pub(crate) fn origin_matches(url: &str, pattern: &str) -> bool {
+    let host = host_of(url);
+    match pattern.strip_prefix("*.") {
+        Some(suffix) => host == suffix || host.ends_with(&format!(".{suffix}")),
+        None => host == pattern,
+    }
+}
+
+/// The first binding whose origin matches `url` (the auto-attach lookup the
+/// constellation runs on a fresh navigation).
+pub(crate) fn binding_for<'a>(
+    url: &str,
+    bindings: &'a [ResolvedScriptBinding],
+) -> Option<&'a ResolvedScriptBinding> {
+    bindings.iter().find(|b| origin_matches(url, &b.origin))
+}
+
+/// Load the installed origin bindings from `<mere_root>/script-bindings.json` and
+/// resolve each against the session script-permission `prefs` (App-default Allow,
+/// narrowed by the session opinion), ready to push to the constellation via
+/// `set_script_bindings`. Absent file = no bindings.
+pub(crate) fn load_resolved_bindings(
+    mere_root: &Path,
+    prefs: &ScriptPermissionPrefs,
+) -> Vec<ResolvedScriptBinding> {
+    let bindings = session_runtime::script_bindings_store::load_script_bindings(mere_root)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    let policy = ScriptCapPolicy { log: prefs.log, document: prefs.document };
+    let (log, document) = resolve_attach_permissions(policy);
+    bindings
+        .into_iter()
+        .map(|b| ResolvedScriptBinding {
+            origin: b.origin,
+            component_path: PathBuf::from(b.component_path),
+            log,
+            document,
+        })
+        .collect()
 }
 
 /// Copy `src`'s whole document tree into a fresh mutable [`ScriptedDom`]: elements
@@ -285,5 +350,41 @@ mod tests {
         assert_eq!(document.effective, Permission::Deny);
         assert_eq!(document.decided_by, Some(SettingScope::Session));
         assert_eq!(grant_from_resolved(_log, document).document, CapPermission::Deny);
+    }
+
+    #[test]
+    fn origin_matching_handles_exact_host_and_suffix_glob() {
+        assert!(origin_matches("https://example.com/path", "example.com"));
+        assert!(!origin_matches("https://evil.com/", "example.com"));
+        // `*.` matches the apex and any subdomain, not an unrelated host.
+        assert!(origin_matches("https://en.wikipedia.org/wiki/X", "*.wikipedia.org"));
+        assert!(origin_matches("https://wikipedia.org/", "*.wikipedia.org"));
+        assert!(!origin_matches("https://notwikipedia.org/", "*.wikipedia.org"));
+        // Host extraction drops scheme / path / query / fragment (any scheme).
+        assert!(origin_matches("gemini://example.com/cap?q#f", "example.com"));
+    }
+
+    #[test]
+    fn binding_for_finds_the_matching_origin() {
+        let allow = ResolvedPermission { effective: Permission::Allow, decided_by: None };
+        let bindings = vec![
+            ResolvedScriptBinding {
+                origin: "example.com".into(),
+                component_path: PathBuf::from("a.wasm"),
+                log: allow,
+                document: allow,
+            },
+            ResolvedScriptBinding {
+                origin: "*.wikipedia.org".into(),
+                component_path: PathBuf::from("w.wasm"),
+                log: allow,
+                document: allow,
+            },
+        ];
+        assert_eq!(
+            binding_for("https://en.wikipedia.org/x", &bindings).map(|b| b.component_path.clone()),
+            Some(PathBuf::from("w.wasm")),
+        );
+        assert!(binding_for("https://other.net/", &bindings).is_none());
     }
 }

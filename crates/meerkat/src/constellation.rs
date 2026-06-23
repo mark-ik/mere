@@ -165,6 +165,11 @@ pub struct Constellation {
     /// flips it; actors snapshot it at spawn, like `disabled_engines`). (Linked-data
     /// ingest.)
     auto_ingest_linked_data: bool,
+    /// Installed DocumentScript origin bindings (§11.4 follow-on #2): on a fresh
+    /// navigation whose origin matches one, the actor auto-attaches that script over
+    /// the page. The host resolves these (origin + component + permissions) from
+    /// `script-bindings.json` and pushes them via [`set_script_bindings`](Self::set_script_bindings).
+    script_bindings: Vec<crate::content::script::ResolvedScriptBinding>,
 }
 
 /// What a [`Constellation::drain`] surfaced for the host to act on. Scenes are
@@ -197,6 +202,7 @@ impl Constellation {
             touch_clock: 0,
             disabled_engines: HashSet::new(),
             auto_ingest_linked_data: false,
+            script_bindings: Vec::new(),
         }
     }
 
@@ -219,6 +225,18 @@ impl Constellation {
     /// (engine-picker Phase 1b.)
     pub fn set_disabled_engines(&mut self, disabled: HashSet<String>) {
         self.disabled_engines = disabled;
+    }
+
+    /// Push the host's installed DocumentScript origin bindings (follow-on #2). On a
+    /// fresh navigation in [`drive`](Self::drive) whose origin matches one, the
+    /// actor is sent an `AttachScript` for that component — auto-attach via the same
+    /// path the omnibar `>attach-script` verb uses. The host rebuilds + re-pushes
+    /// these when the bindings file or the session script-permissions change.
+    pub fn set_script_bindings(
+        &mut self,
+        bindings: Vec<crate::content::script::ResolvedScriptBinding>,
+    ) {
+        self.script_bindings = bindings;
     }
 
     /// Whether `member` currently has a live actor.
@@ -369,6 +387,18 @@ impl Constellation {
                 viewport_gen: activation.gens.viewport,
                 sheet,
             });
+            // Auto-attach (follow-on #2): a fresh navigation whose origin matches an
+            // installed binding attaches that DocumentScript over the page, via the
+            // same `AttachScript` the omnibar verb sends. Tied to the fresh-Show path
+            // so re-navigation re-attaches (new page) but a steady frame does not.
+            if let Some(binding) = crate::content::script::binding_for(url, &self.script_bindings) {
+                activation.handle.command(ContentCommand::AttachScript {
+                    component_path: binding.component_path.clone(),
+                    log: binding.log,
+                    document: binding.document,
+                    viewport_gen: activation.gens.viewport,
+                });
+            }
         }
         // Both a Show and a Resize re-anchor the actor's band to the top, so the
         // last requested band is stale; clear it so the next `request_scroll` always
