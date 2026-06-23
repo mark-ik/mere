@@ -150,6 +150,39 @@ const DEFAULT_LINEAR_DAMPING: f32 = 2.5;
 /// spurious spin.
 const DEFAULT_ANGULAR_DAMPING: f32 = 4.0;
 
+/// Linear damping for scene-decoration bodies — low, so a drifting backdrop body
+/// coasts a long while rather than settling quickly. (Physics scenes P1.)
+const SCENE_DAMPING: f32 = 0.3;
+
+/// Collision groups that keep the graph and the scene from hard-colliding by
+/// default. Node colliders are in [`NODE_GROUP`] and collide only with other nodes
+/// (intangible to the scene); scene colliders are in [`SCENE_GROUP`] and collide
+/// with each other while *admitting* nodes — so a node opts into touching the scene
+/// by adding [`SCENE_GROUP`] to its own filter (the tangibility lever, P2). rapier's
+/// pairwise test needs both sides to admit the other, so the node's filter alone
+/// gates node-scene contact. (Physics scenes P1.)
+const NODE_GROUP: Group = Group::GROUP_1;
+const SCENE_GROUP: Group = Group::GROUP_2;
+
+/// Interaction groups for a node collider: member of [`NODE_GROUP`], colliding only
+/// with [`NODE_GROUP`] (intangible to the scene by default).
+fn node_groups() -> InteractionGroups {
+    InteractionGroups::new(NODE_GROUP, NODE_GROUP)
+}
+
+/// Interaction groups for a scene-decoration collider: member of [`SCENE_GROUP`],
+/// colliding with the scene and admitting nodes (a node still passes through unless
+/// its own filter opts in).
+fn scene_groups() -> InteractionGroups {
+    InteractionGroups::new(SCENE_GROUP, SCENE_GROUP | NODE_GROUP)
+}
+
+/// A stable, opaque handle to a scene-decoration body — a non-graph rapier body
+/// sharing the orrery's world, distinct from a [`NodeKey`]. Minted by
+/// [`Simulation::add_scene_body`]. (Physics scenes P1.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct SceneBodyId(u64);
+
 /// A pluggable force-applier. Forces read the body store and apply
 /// forces / impulses; gyre's tick walks every registered force
 /// before stepping the world.
@@ -212,6 +245,14 @@ pub struct Simulation {
     /// brings nodes to rest sooner. New bodies take this; [`set_linear_damping`]
     /// also re-applies it to the live ones. (Physics settings.)
     linear_damping: f32,
+    /// Non-graph scene-decoration bodies sharing this world (the "living backdrop" /
+    /// interactive scene), each stored as `(handle, paint radius)` keyed by a
+    /// [`SceneBodyId`]. They tick and collide like any body but carry no [`NodeKey`],
+    /// so the layout forces (which key off `bodies_by_node`) ignore them. (Physics
+    /// scenes P1.)
+    scene_bodies: HashMap<SceneBodyId, (RigidBodyHandle, f32)>,
+    /// Monotonic id source for [`scene_bodies`](Self::scene_bodies).
+    next_scene_id: u64,
 }
 
 impl Default for Simulation {
@@ -249,6 +290,8 @@ impl Simulation {
             forces: Vec::new(),
             coupling_forces: Vec::new(),
             linear_damping: DEFAULT_LINEAR_DAMPING,
+            scene_bodies: HashMap::new(),
+            next_scene_id: 0,
         }
     }
 
@@ -528,6 +571,7 @@ impl Simulation {
                 .density(NODE_BODY_DENSITY)
                 .restitution(0.0)
                 .friction(0.0)
+                .collision_groups(node_groups())
                 .build();
             self.colliders
                 .insert_with_parent(collider, handle, &mut self.bodies);
@@ -564,6 +608,96 @@ impl Simulation {
         if changed {
             self.query_pipeline.update(&self.colliders);
         }
+    }
+
+    /// Add a non-graph **scene body** to this world — a decoration / interactive-scene
+    /// element that ticks and collides like any body but carries no [`NodeKey`], so the
+    /// graph's layout forces ignore it and (by the default collision groups) nodes pass
+    /// through it. `collider` is its shape (the node shape vocabulary, reused),
+    /// `position` its world spawn, `velocity` an initial drift in px/s. Returns its
+    /// [`SceneBodyId`]. (Physics scenes P1.)
+    pub fn add_scene_body(
+        &mut self,
+        collider: NodeCollider,
+        position: Point2D<f32>,
+        velocity: (f32, f32),
+    ) -> SceneBodyId {
+        let body = RigidBodyBuilder::dynamic()
+            .translation(vector![position.x, position.y])
+            .linvel(vector![velocity.0, velocity.1])
+            .linear_damping(SCENE_DAMPING)
+            .angular_damping(DEFAULT_ANGULAR_DAMPING)
+            .build();
+        let handle = self.bodies.insert(body);
+        let shape = collider.to_shared_shape();
+        let c = ColliderBuilder::new(shape)
+            .density(NODE_BODY_DENSITY)
+            .restitution(0.6)
+            .friction(0.0)
+            .collision_groups(scene_groups())
+            .build();
+        self.colliders.insert_with_parent(c, handle, &mut self.bodies);
+        // A representative radius for the host's backdrop paint (the shape vocabulary's
+        // nominal half-extent); the collider itself keeps the true shape.
+        let radius = match &collider {
+            NodeCollider::Ball { radius } => *radius,
+            NodeCollider::Square { half } => *half,
+            NodeCollider::RoundedSquare { half, .. } => *half,
+            NodeCollider::Hull { fallback, .. } => *fallback,
+        };
+        let id = SceneBodyId(self.next_scene_id);
+        self.next_scene_id += 1;
+        self.scene_bodies.insert(id, (handle, radius));
+        self.query_pipeline.update(&self.colliders);
+        id
+    }
+
+    /// Remove a scene body. A no-op for an unknown id. (Physics scenes P1.)
+    pub fn remove_scene_body(&mut self, id: SceneBodyId) {
+        if let Some((handle, _)) = self.scene_bodies.remove(&id) {
+            self.bodies.remove(
+                handle,
+                &mut self.islands,
+                &mut self.colliders,
+                &mut self.impulse_joints,
+                &mut self.multibody_joints,
+                /* remove_attached_colliders */ true,
+            );
+            self.query_pipeline.update(&self.colliders);
+        }
+    }
+
+    /// Remove every scene body, leaving the graph untouched. (Physics scenes P1.)
+    pub fn clear_scene(&mut self) {
+        let handles: Vec<RigidBodyHandle> = self.scene_bodies.values().map(|(h, _)| *h).collect();
+        for handle in handles {
+            self.bodies.remove(
+                handle,
+                &mut self.islands,
+                &mut self.colliders,
+                &mut self.impulse_joints,
+                &mut self.multibody_joints,
+                true,
+            );
+        }
+        self.scene_bodies.clear();
+        self.query_pipeline.update(&self.colliders);
+    }
+
+    /// Iterate the live `(id, position, paint radius)` of every scene body — the host's
+    /// read for painting the backdrop. Reflects the last [`Self::tick`]; order is
+    /// unspecified. (Physics scenes P1.)
+    pub fn scene_bodies(&self) -> impl Iterator<Item = (SceneBodyId, Point2D<f32>, f32)> + '_ {
+        self.scene_bodies.iter().filter_map(|(&id, &(handle, radius))| {
+            self.bodies
+                .get(handle)
+                .map(|b| (id, Point2D::new(b.translation().x, b.translation().y), radius))
+        })
+    }
+
+    /// Number of scene bodies in the world. (Physics scenes P1.)
+    pub fn scene_body_count(&self) -> usize {
+        self.scene_bodies.len()
     }
 
     /// Advance the simulation by `dt` seconds. Walks every registered
@@ -709,3 +843,45 @@ const _: fn() = || {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod scene_tests {
+    use euclid::default::Point2D;
+    use kernel::graph::NodeKey;
+
+    use crate::{NODE_BODY_RADIUS, NodeCollider, Simulation};
+
+    #[test]
+    fn scene_body_is_intangible_to_nodes_and_ignored_by_forces() {
+        let mut sim = Simulation::new();
+        let node = NodeKey::new(0);
+        sim.sync_nodes([(node, Point2D::new(0.0, 0.0))]);
+        // A scene body overlapping the node (centers 5px apart, radii sum 36) — a hard
+        // collision would shove the node off the origin.
+        let id = sim.add_scene_body(
+            NodeCollider::Ball { radius: NODE_BODY_RADIUS },
+            Point2D::new(5.0, 0.0),
+            (0.0, 0.0),
+        );
+        assert_eq!(sim.scene_body_count(), 1);
+        assert_eq!(sim.body_count(), 1, "the scene body is not counted as a node");
+        assert_eq!(sim.scene_bodies().count(), 1);
+
+        // No forces registered, so the node only moves if the scene body collides with
+        // it. Under the default groups it is intangible: tick and the node stays put.
+        for _ in 0..60 {
+            sim.tick(1.0 / 60.0);
+        }
+        let p = sim.position_of(node).expect("node has a position");
+        assert!(
+            p.x.abs() < 1.0 && p.y.abs() < 1.0,
+            "an intangible scene body must not push the node off the origin (was {p:?})",
+        );
+
+        // Clearing the scene leaves the node untouched; a stale remove is a no-op.
+        sim.clear_scene();
+        assert_eq!(sim.scene_body_count(), 0);
+        assert_eq!(sim.body_count(), 1);
+        sim.remove_scene_body(id);
+    }
+}
