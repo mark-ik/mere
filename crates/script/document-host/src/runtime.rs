@@ -47,9 +47,9 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use register_mod_loader::{ModCapability, ModManifest, WasmModRuntime, WasmModSource};
-use wasmtime::{Engine, Store};
+use wasmtime::{Engine, Store, StoreLimits};
 
-use crate::{build_instance, DocumentCore, Grant, ScriptHost};
+use crate::{build_instance, seed_dom, DocumentCore, Grant, ScriptHost};
 
 /// One activated wasm mod: the live store + bindings, retained so `deactivate` can
 /// drive the teardown export before the store (and the instance it owns) is freed.
@@ -131,10 +131,17 @@ impl WasmModRuntime for DocumentScriptRuntime {
         // 3. Build the instance under the grant + run the `activate` lifecycle
         //    export. Instantiation itself fails if the component requires an import
         //    the grant omitted (the runtime-enforced capability boundary).
+        // Extension mods get a fresh seeded DOM (they are not page-attached) and are
+        // unguarded for P2.4 (the page-script guards live in `DocumentScript`).
         let grant = grant_for(manifest);
-        let (mut store, bindings) =
-            pollster::block_on(build_instance(&self.engine, &source.module_path, &grant))
-                .map_err(|e| format!("instantiate '{}': {e}", manifest.mod_id))?;
+        let (mut store, bindings) = pollster::block_on(build_instance(
+            &self.engine,
+            &source.module_path,
+            seed_dom(),
+            &grant,
+            StoreLimits::default(),
+        ))
+        .map_err(|e| format!("instantiate '{}': {e}", manifest.mod_id))?;
         pollster::block_on(bindings.call_activate(&mut store))
             .map_err(|e| format!("activate '{}': {e}", manifest.mod_id))?;
 

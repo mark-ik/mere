@@ -935,6 +935,24 @@ DOM model is the decision.
   surfaced to Mark for the document-model direction before wiring the content actor. No content-actor
   code written this pass (would prejudge the document model + tax meerkat's build with wasmtime ahead
   of a caller).
+- **2026-06-22 (P2.5 direction chosen: option 1 combined; P2.5a `DocumentScript` API, green).** Mark
+  chose option 1 (converge P2.5 with slice #1: content lane on a retained `ScriptedDom` +
+  `IncrementalLayout`, script over that DOM). P2.5a lands the foundation in document-host: a public
+  `DocumentScript` that drives a script over a **caller-provided** live `ScriptedDom` (not a seeded
+  one) — `attach(path, dom, grant, quota)` → `deliver_event(kind, payload) -> TurnOutcome` (applies
+  the batch to the live DOM) → `dom()`/`revision()` for the caller to render and gate re-renders →
+  `detach() -> ScriptedDom` (returns the script-mutated DOM). Every guest call runs **guarded** (epoch
+  deadline + `StoreLimits` mem cap, per-turn watchdog spun only during the call), so the per-origin
+  scripts the content actor will host are contained by construction; `Quota::default` carries the
+  §11.7-6 fixed constants (~64 MiB, ~1s). `TurnOutcome` (Applied/Conflict/UnknownNode/Refused) is a
+  clean semantic surface that leaks no WIT types. Refactor: `new_host` + `build_instance` now take the
+  DOM + `StoreLimits` (the turn drivers + the mod-loader bridge pass `seed_dom()` + default limits;
+  `DocumentScript` passes the page DOM + the cap). 1 new test (17 total): a script edits + appends to a
+  caller-built `<body><p>Hello</p></body>`, the caller reads the mutations back through `dom()`, the
+  conflict/unknown/declined paths surface as `TurnOutcome`s, and `detach` returns the mutated DOM. Next:
+  P2.5b (meerkat content lane on a retained `ScriptedDom` + `IncrementalLayout` — slice #1), then P2.5c
+  (`ScriptInstance` on `Content` + command/update arms + the `meerkat::script` grant adapter +
+  apply→re-render). Note: `lib.rs` is 497 LOC — split into the §11.1 modules before the next addition.
 
 ## Key grounding files
 
