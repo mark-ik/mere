@@ -19,6 +19,9 @@ use std::path::Path;
 /// Project / mutate a live serval `ScriptedDom` behind the WIT imports.
 pub mod dom_view;
 
+/// The `register-mod-loader` `WasmModRuntime` bridge (P2.4).
+pub mod runtime;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -343,18 +346,21 @@ fn link_with_grant(linker: &mut Linker<ScriptHost>, grant: &Grant) -> wasmtime::
     Ok(())
 }
 
-/// Try to instantiate (and `activate`) the component under `grant`. Succeeds only
-/// if every import the component *requires* is granted; a denied required
-/// capability makes instantiation fail — the capability boundary, enforced by the
-/// runtime, not by host convention. The seed DOM + granted names are wired so the
-/// guest (and a future `caps.granted()`) see exactly what was allowed.
-pub async fn instantiate_with_grant(component_path: &Path, grant: &Grant) -> wasmtime::Result<()> {
-    let engine = Engine::default();
-    let component = Component::from_file(&engine, component_path)?;
-    let mut linker = Linker::new(&engine);
+/// Build a `document-core` instance over a fresh seeded DOM on `engine`, linking
+/// exactly the granted imports (plus the WASI floor). Returns the live store +
+/// bindings **before** `activate` — the caller drives the lifecycle. Shared by
+/// [`instantiate_with_grant`] and the [`runtime`] mod-loader bridge. Fails if the
+/// component requires an import the grant omitted (the runtime-enforced boundary).
+pub(crate) async fn build_instance(
+    engine: &Engine,
+    component_path: &Path,
+    grant: &Grant,
+) -> wasmtime::Result<(Store<ScriptHost>, DocumentCore)> {
+    let component = Component::from_file(engine, component_path)?;
+    let mut linker = Linker::new(engine);
     link_with_grant(&mut linker, grant)?;
     let mut store = Store::new(
-        &engine,
+        engine,
         ScriptHost {
             dom: seed_dom(),
             revision: 0,
@@ -365,6 +371,17 @@ pub async fn instantiate_with_grant(component_path: &Path, grant: &Grant) -> was
         },
     );
     let bindings = DocumentCore::instantiate_async(&mut store, &component, &linker).await?;
+    Ok((store, bindings))
+}
+
+/// Try to instantiate (and `activate`) the component under `grant`. Succeeds only
+/// if every import the component *requires* is granted; a denied required
+/// capability makes instantiation fail — the capability boundary, enforced by the
+/// runtime, not by host convention. The seed DOM + granted names are wired so the
+/// guest (and a future `caps.granted()`) see exactly what was allowed.
+pub async fn instantiate_with_grant(component_path: &Path, grant: &Grant) -> wasmtime::Result<()> {
+    let engine = Engine::default();
+    let (mut store, bindings) = build_instance(&engine, component_path, grant).await?;
     bindings.call_activate(&mut store).await?;
     Ok(())
 }

@@ -27,6 +27,13 @@ wasmtime-wasi = "45"
 # serval-static-dom; no stylo/taffy, so the workspace patches do not touch it.
 serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 layout_dom_api = { package = "layout-dom-api", git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# The mod-loader DI seam (P2.4): we *implement* its `WasmModRuntime` trait, never
+# edit it (that crate stays runtime-free). Intra-workspace path dep, matching the
+# sibling register-* crates' own cross-references.
+register-mod-loader = { path = "../../system/registry/register-mod-loader" }
+# Drives the async `document-core` exports from the sync `WasmModRuntime` trait —
+# a minimal block_on with no global runtime, so the lib stays executor-neutral.
+pollster = "0.4"
 
 [dev-dependencies]
 # Drives the async export calls in the tests; the lib stays executor-neutral.

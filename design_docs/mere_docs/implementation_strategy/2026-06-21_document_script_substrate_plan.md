@@ -845,6 +845,25 @@ same `call_async` without suspending, and `fetch` slots in when wired.
   lives here, the resolution is input — §11.4). Remaining for §11.4: a `caps.granted()` discovery
   import (`granted_names` is its seam) — a small additive WIT step. (cargo notes a benign
   `[paths]`-override warning for the redirected serval crates.)
+- **2026-06-22 (P2.4 — the `register-mod-loader` `WasmModRuntime` bridge, green).** Added
+  `src/runtime.rs`: `DocumentScriptRuntime` *implements* `register-mod-loader`'s `WasmModRuntime`
+  DI trait (the crate is untouched — runtime stays host-side, §11.1). `activate` runs a host-policy
+  capability check (a runtime is built with the `ModCapability` set its surface will grant; a mod
+  asking for more is **refused before any instantiation**), maps the manifest to a `Grant` via the
+  P2.3 policy, builds the instance (refactored `build_instance` shared with `instantiate_with_grant`),
+  runs the `activate` export, and retains the live `Store` keyed by `mod_id`; `deactivate` runs the
+  teardown export and drops it. Two impedance mismatches bridged: **sync trait vs async exports** →
+  per-call `pollster::block_on` (executor-neutral, no global runtime); **`Send + Sync` trait vs the
+  per-mod store** → retain live `Store<ScriptHost>` behind a `Mutex` — which **compiles, proving
+  `ScriptHost` is `Send`** (serval's `ScriptedDom` is an id-keyed `HashMap`/`Vec` arena with
+  string-cache `QualName`s — no `Rc`/`RefCell`; this relaxes §11.2's conservative `!Send` assumption,
+  so the bridge needs no worker thread). 5 new tests green (15 total): activate→deactivate lifecycle,
+  denied-capability-refused-before-instantiation (proven by pointing a refused mod at a non-existent
+  path — the error is the policy refusal, not a load failure), within-policy admit, double-activate
+  refused, unknown-deactivate error. Deps added: `register-mod-loader` (intra-workspace path, sibling
+  convention) + `pollster`. Note: P2.4 activation uses a plain engine (no epoch/`StoreLimits`); wiring
+  the P2.2 guards into the mod-loader path is a small follow-on. Remaining before P2.5: the
+  `caps.granted()` discovery import (§11.4) + the `kernel::permissions` five-scope→`Grant` adapter.
 
 ## Key grounding files
 
