@@ -14,7 +14,7 @@ path = "src/lib.rs"
 # behavior (node exclusion, edge springs, themable moot fields) all
 # resolve through this simulation, so the dep lands as a foundational
 # layer alongside vello and petgraph rather than a feature bolt-on.
-rapier2d = "0.22"
+rapier2d = "0.33"
 kernel.workspace = true
 # Field algebra: gyre's CouplingForce evaluates aether fields (closed-form +
 # finite-difference gradients) to drive rapier bodies. One-way dep — aether is

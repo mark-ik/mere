@@ -23,20 +23,19 @@
 //! at Mere's world scale (1 unit ~= 1 px, node radius
 //! [`crate::NODE_BODY_RADIUS`]).
 
-use std::collections::HashMap;
-
-use kernel::graph::NodeKey;
 use rapier2d::prelude::*;
 
-use crate::{Force, ForceContext, collider_to_node};
+use crate::{Force, ForceContext};
 
 /// Pairwise repulsion that spreads nodes apart (the force-directed charge).
 ///
 /// Inverse-square falloff with a `min_distance` floor (no singularity at
 /// near-zero separation) and a `cutoff` beyond which a pair does not interact.
-/// Neighbors within `cutoff` are found through the spatial index (the
-/// `QueryPipeline` rapier maintains for collision), making the per-tick cost
-/// O(n * local) rather than an O(n^2) all-pairs scan.
+/// An all-pairs scan over the node bodies, summed once per side so the result is
+/// symmetric; at the orrery's scale (dozens–hundreds of nodes) the O(n^2) cost is
+/// negligible. (rapier's collision `QueryPipeline` went ephemeral in 0.33, so the
+/// spatial-index narrowing this once used was dropped — reinstate one, or the
+/// Barnes–Hut tree in this crate, only if a graph grows large enough to feel it.)
 #[derive(Clone, Copy, Debug)]
 pub struct NodeExclusion {
     /// Repulsion strength (force at unit distance, before the inverse-square).
@@ -63,51 +62,40 @@ impl Default for NodeExclusion {
 
 impl Force for NodeExclusion {
     fn apply(&self, ctx: &mut ForceContext<'_>, _dt: f32) {
-        // Snapshot every node's (key, handle, position) and an index by key,
-        // immutably, before touching forces.
-        let mut nodes: Vec<(NodeKey, RigidBodyHandle, Vector<Real>)> =
-            Vec::with_capacity(ctx.bodies_by_node.len());
-        for (&key, &handle) in ctx.bodies_by_node.iter() {
-            if let Some(body) = ctx.bodies.get(handle) {
-                nodes.push((key, handle, *body.translation()));
-            }
-        }
-        let index_of: HashMap<NodeKey, usize> =
-            nodes.iter().enumerate().map(|(i, n)| (n.0, i)).collect();
+        // Snapshot every node's (handle, position) immutably before touching forces.
+        let nodes: Vec<(RigidBodyHandle, Vector)> = ctx
+            .bodies_by_node
+            .values()
+            .filter_map(|&handle| ctx.bodies.get(handle).map(|b| (handle, b.translation())))
+            .collect();
 
-        // For each node, ask the spatial index for the nodes within `cutoff` and
-        // accumulate repulsion from just those — O(n * local) instead of the
-        // O(n^2) all-pairs scan. Each node's force comes from its own query, so a
-        // pair is handled once per side: symmetric, no double application.
-        let query = ctx.query_index;
-        let colliders = ctx.colliders;
-        let nodes_by_body = ctx.nodes_by_body;
-        let mut forces = vec![vector![0.0, 0.0]; nodes.len()];
+        // All-pairs inverse-square repulsion within `cutoff`. The rapier spatial
+        // index this once narrowed against went ephemeral in rapier 0.33, so the
+        // O(n^2) scan is the version-clean replacement; at the orrery's scale
+        // (dozens–hundreds of nodes) it is cheap, and each pair is summed once per
+        // side so the result stays symmetric. (Reinstate a spatial index — or the
+        // Barnes–Hut tree already in this crate — if a graph grows large enough to
+        // feel it.)
+        let cutoff2 = self.cutoff * self.cutoff;
+        let mut forces = vec![Vector::ZERO; nodes.len()];
         for i in 0..nodes.len() {
-            let pos_i = nodes[i].2;
-            let aabb = Aabb::new(
-                Point::new(pos_i.x - self.cutoff, pos_i.y - self.cutoff),
-                Point::new(pos_i.x + self.cutoff, pos_i.y + self.cutoff),
-            );
-            let mut force_i = vector![0.0, 0.0];
-            query.colliders_with_aabb_intersecting_aabb(&aabb, |handle| {
-                if let Some(node_j) = collider_to_node(colliders, nodes_by_body, *handle) {
-                    if let Some(&j) = index_of.get(&node_j) {
-                        if j != i {
-                            let delta = pos_i - nodes[j].2;
-                            let dist = delta.norm().max(self.min_distance);
-                            if dist <= self.cutoff {
-                                force_i += delta / dist * (self.strength / (dist * dist));
-                            }
-                        }
-                    }
+            let pos_i = nodes[i].1;
+            let mut force_i = Vector::ZERO;
+            for j in 0..nodes.len() {
+                if j == i {
+                    continue;
                 }
-                true
-            });
+                let delta = pos_i - nodes[j].1;
+                if delta.length_squared() > cutoff2 {
+                    continue;
+                }
+                let dist = delta.length().max(self.min_distance);
+                force_i += delta / dist * (self.strength / (dist * dist));
+            }
             forces[i] = force_i;
         }
 
-        for (idx, (_, handle, _)) in nodes.iter().enumerate() {
+        for (idx, (handle, _)) in nodes.iter().enumerate() {
             if let Some(body) = ctx.bodies.get_mut(*handle) {
                 body.add_force(forces[idx], true);
             }
@@ -147,13 +135,13 @@ impl Force for EdgeSpring {
                 continue; // endpoint without a body (stale edge / not yet synced)
             };
             let (Some(pa), Some(pb)) = (
-                ctx.bodies.get(ha).map(|x| *x.translation()),
-                ctx.bodies.get(hb).map(|x| *x.translation()),
+                ctx.bodies.get(ha).map(|x| x.translation()),
+                ctx.bodies.get(hb).map(|x| x.translation()),
             ) else {
                 continue;
             };
             let delta = pb - pa;
-            let dist = delta.norm();
+            let dist = delta.length();
             if dist < 1e-3 {
                 continue;
             }
@@ -191,7 +179,7 @@ impl Force for Boundary {
     fn apply(&self, ctx: &mut ForceContext<'_>, _dt: f32) {
         let handles: Vec<RigidBodyHandle> = ctx.bodies_by_node.values().copied().collect();
         for handle in handles {
-            let Some(pos) = ctx.bodies.get(handle).map(|b| *b.translation()) else {
+            let Some(pos) = ctx.bodies.get(handle).map(|b| b.translation()) else {
                 continue;
             };
             if let Some(body) = ctx.bodies.get_mut(handle) {

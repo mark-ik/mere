@@ -206,12 +206,12 @@ fn full_layout_settles_separated_and_bounded() {
     }
 }
 
-/// R1b spike, runtime-verified: rapier's `QueryPipeline` (the QBVH it maintains
-/// for collision anyway) resolves hit-test + cull correctly at orrery scale, so
-/// the canvas needs no *second* spatial index for scene-geometry queries. A
-/// ~1k-node grid; the index is the one rapier already keeps current.
+/// Hit-test + cull stay correct at orrery scale: a ~1k-node grid, pinpointing one
+/// node among ~1000 and a selective window cull. Position-based (over each body's
+/// live translation + radius) since rapier's `QueryPipeline` went ephemeral in
+/// 0.33 — this confirms the O(n) scan holds up at scale.
 #[test]
-fn query_pipeline_handles_orrery_scale() {
+fn node_queries_handle_orrery_scale() {
     let mut sim = Simulation::new();
     let mut g = Graph::new();
     // 32x32 grid, 60px apart (clear of the 36px contact range): ~1024 nodes.

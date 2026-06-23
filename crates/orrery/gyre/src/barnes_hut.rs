@@ -121,7 +121,7 @@ impl Force for BarnesHutRepulsion {
         let forces = repulsion_forces(&positions, self.config, 1.0, self.strength, self.min_distance);
         for (handle, f) in handles.iter().zip(forces) {
             if let Some(body) = ctx.bodies.get_mut(*handle) {
-                body.add_force(vector![f.x, f.y], true);
+                body.add_force(Vector::new(f.x, f.y), true);
             }
         }
     }

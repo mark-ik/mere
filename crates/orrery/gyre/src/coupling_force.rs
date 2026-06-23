@@ -139,7 +139,7 @@ impl Force for CouplingForce {
                 for (handle, x, y) in samples {
                     let (gx, gy) = grad_scalar(scalar, &self.registry, x, y, 0.0);
                     if let Some(body) = ctx.bodies.get_mut(handle) {
-                        let f = vector![sign * gx * self.strength, sign * gy * self.strength];
+                        let f = Vector::new(sign * gx * self.strength, sign * gy * self.strength);
                         body.add_force(f, true);
                     }
                 }
@@ -153,7 +153,7 @@ impl Force for CouplingForce {
                     if depth > 0.0 {
                         let (gx, gy) = grad_scalar(scalar, &self.registry, x, y, 0.0);
                         if let Some(body) = ctx.bodies.get_mut(handle) {
-                            let f = vector![gx, gy] * (self.strength * depth);
+                            let f = Vector::new(gx, gy) * (self.strength * depth);
                             body.add_force(f, true);
                         }
                     }
@@ -165,7 +165,7 @@ impl Force for CouplingForce {
                 for (handle, x, y) in samples {
                     if eval_scalar(scalar, &self.registry, x, y, 0.0) > 0.0 {
                         if let Some(body) = ctx.bodies.get_mut(handle) {
-                            let v = *body.linvel();
+                            let v = body.linvel();
                             body.set_linvel(v * *factor, true);
                         }
                     }
@@ -177,7 +177,7 @@ impl Force for CouplingForce {
                 for (handle, x, y) in samples {
                     let (vx, vy) = eval_vector(field, &self.registry, x, y, 0.0);
                     if let Some(body) = ctx.bodies.get_mut(handle) {
-                        body.set_linvel(vector![vx * self.strength, vy * self.strength], true);
+                        body.set_linvel(Vector::new(vx * self.strength, vy * self.strength), true);
                     }
                 }
             }
@@ -187,8 +187,8 @@ impl Force for CouplingForce {
                 for (handle, x, y) in samples {
                     let (vx, vy) = eval_vector(field, &self.registry, x, y, 0.0);
                     if let Some(body) = ctx.bodies.get_mut(handle) {
-                        let t = *body.translation();
-                        let next = t + vector![vx, vy] * (self.strength * dt);
+                        let t = body.translation();
+                        let next = t + Vector::new(vx, vy) * (self.strength * dt);
                         body.set_translation(next, true);
                     }
                 }

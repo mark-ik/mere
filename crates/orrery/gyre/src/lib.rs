@@ -25,7 +25,7 @@
 //! ## Forces
 //!
 //! - [`Simulation`] — owns the rapier world, a [`NodeKey`] ↔
-//!   [`RigidBodyHandle`] bimap, the query index (hit-test / cull), and the
+//!   [`RigidBodyHandle`] bimap, position-based hit-test / cull, and the
 //!   registered forces.
 //! - [`Simulation::sync_with_graph`] / [`Simulation::sync_edges`] — keep bodies
 //!   and edge topology in step with the graph. Idempotent.
@@ -123,7 +123,7 @@ impl NodeCollider {
                 if points.len() < 3 {
                     SharedShape::ball(fallback.max(1.0))
                 } else {
-                    let pts: Vec<Point<f32>> = points.iter().map(|&(x, y)| Point::new(x, y)).collect();
+                    let pts: Vec<Vector> = points.iter().map(|&(x, y)| Vector::new(x, y)).collect();
                     SharedShape::convex_hull(&pts)
                         .unwrap_or_else(|| SharedShape::ball(fallback.max(1.0)))
                 }
@@ -171,14 +171,14 @@ const SCENE_GROUP: Group = Group::GROUP_2;
 /// Interaction groups for a node collider: member of [`NODE_GROUP`], colliding only
 /// with [`NODE_GROUP`] (intangible to the scene by default).
 fn node_groups() -> InteractionGroups {
-    InteractionGroups::new(NODE_GROUP, NODE_GROUP)
+    InteractionGroups::new(NODE_GROUP, NODE_GROUP, InteractionTestMode::And)
 }
 
 /// Interaction groups for a scene-decoration collider: member of [`SCENE_GROUP`],
 /// colliding with the scene and admitting nodes (a node still passes through unless
 /// its own filter opts in).
 fn scene_groups() -> InteractionGroups {
-    InteractionGroups::new(SCENE_GROUP, SCENE_GROUP | NODE_GROUP)
+    InteractionGroups::new(SCENE_GROUP, SCENE_GROUP | NODE_GROUP, InteractionTestMode::And)
 }
 
 /// A stable, opaque handle to a scene-decoration body — a non-graph rapier body
@@ -267,16 +267,10 @@ pub struct ForceContext<'a> {
     pub colliders: &'a ColliderSet,
     pub joints: &'a mut ImpulseJointSet,
     pub bodies_by_node: &'a HashMap<NodeKey, RigidBodyHandle>,
-    pub nodes_by_body: &'a HashMap<RigidBodyHandle, NodeKey>,
     /// Topology the layout forces pull along (e.g. [`EdgeSpring`]). Node-key
     /// pairs, set via [`Simulation::sync_edges`]; gyre stays relation-taxonomy
     /// agnostic, so the caller decides which edge families feed the layout.
     pub edges: &'a [(NodeKey, NodeKey)],
-    /// The spatial index, for forces that find neighbors by region instead of
-    /// scanning all pairs (e.g. [`NodeExclusion`] cull-based repulsion). Current
-    /// as of the last [`Simulation::tick`] step or [`Simulation::sync_with_graph`]
-    /// (a tick's worth of staleness is harmless for soft forces).
-    pub query_index: &'a QueryPipeline,
 }
 
 /// One rapier world + bookkeeping. The host owns one of these per
@@ -284,7 +278,7 @@ pub struct ForceContext<'a> {
 pub struct Simulation {
     pipeline: PhysicsPipeline,
     parameters: IntegrationParameters,
-    gravity: Vector<Real>,
+    gravity: Vector,
     islands: IslandManager,
     broad_phase: DefaultBroadPhase,
     narrow_phase: NarrowPhase,
@@ -293,9 +287,7 @@ pub struct Simulation {
     impulse_joints: ImpulseJointSet,
     multibody_joints: MultibodyJointSet,
     ccd_solver: CCDSolver,
-    query_pipeline: QueryPipeline,
     bodies_by_node: HashMap<NodeKey, RigidBodyHandle>,
-    nodes_by_body: HashMap<RigidBodyHandle, NodeKey>,
     edges: Vec<(NodeKey, NodeKey)>,
     forces: Vec<Box<dyn Force>>,
     /// Field couplings as a separately-replaceable force list (built-in layout
@@ -339,7 +331,7 @@ impl Simulation {
             // No global gravity — forces supply directional forces
             // when they want them. A "gravity" force is just another
             // Force impl.
-            gravity: Vector::zeros(),
+            gravity: Vector::ZERO,
             islands: IslandManager::new(),
             broad_phase: DefaultBroadPhase::new(),
             narrow_phase: NarrowPhase::new(),
@@ -348,9 +340,7 @@ impl Simulation {
             impulse_joints: ImpulseJointSet::new(),
             multibody_joints: MultibodyJointSet::new(),
             ccd_solver: CCDSolver::new(),
-            query_pipeline: QueryPipeline::new(),
             bodies_by_node: HashMap::new(),
-            nodes_by_body: HashMap::new(),
             edges: Vec::new(),
             forces: Vec::new(),
             coupling_forces: Vec::new(),
@@ -377,14 +367,12 @@ impl Simulation {
 
     /// Resize **and reshape** each listed node's collider (hit-target + hard-collision
     /// geometry) to match its visible face — a ball, square, rounded square, or custom hull —
-    /// so a node collides and picks at its true face shape and size, not the uniform ball
+    /// so a node collides at its true face shape and size, not the uniform ball
     /// (Decision 5: the face IS the collider, so physics and picture stay in sync). Bodies
-    /// keep position and velocity; only the shape changes, and the spatial index is refreshed
-    /// so the next pick / cull / force query sees it. Mass is left at the spawn value — it is
+    /// keep position and velocity; only the shape changes. Mass is left at the spawn value — it is
     /// the face geometry, not the inertia, that tracks size. Nodes without a body are skipped.
     /// (P0/P5 collider; node-rep — collider matches shape.)
     pub fn set_node_colliders(&mut self, colliders: impl IntoIterator<Item = (NodeKey, NodeCollider)>) {
-        let mut changed = false;
         for (node, collider) in colliders {
             let Some(&body_handle) = self.bodies_by_node.get(&node) else {
                 continue;
@@ -401,12 +389,8 @@ impl Simulation {
             for handle in collider_handles {
                 if let Some(c) = self.colliders.get_mut(handle) {
                     c.set_shape(shape.clone());
-                    changed = true;
                 }
             }
-        }
-        if changed {
-            self.query_pipeline.update(&self.colliders);
         }
     }
 
@@ -473,8 +457,7 @@ impl Simulation {
     /// cartography projection's positioned nodes, so a real layout strategy
     /// (radial, astroid, a converged force-directed pass) becomes the physics
     /// starting point instead of the graph's stored positions. Resets each
-    /// seeded body's velocity so the settle starts clean, and refreshes the
-    /// query index since this moves bodies outside a tick. Nodes without a body
+    /// seeded body's velocity so the settle starts clean. Nodes without a body
     /// are skipped (seed after [`Self::sync_with_graph`]).
     ///
     /// Takes plain `(NodeKey, Point2D)` rather than a `cartography::Projection`
@@ -482,19 +465,14 @@ impl Simulation {
     /// projection layer above it. The caller maps `Projection.nodes` to these
     /// pairs (see the cartography-gyre layout seam doc).
     pub fn seed_positions(&mut self, positions: impl IntoIterator<Item = (NodeKey, Point2D<f32>)>) {
-        let mut touched = false;
         for (node, pos) in positions {
             let Some(&handle) = self.bodies_by_node.get(&node) else {
                 continue;
             };
             if let Some(body) = self.bodies.get_mut(handle) {
-                body.set_translation(vector![pos.x, pos.y], true);
-                body.set_linvel(vector![0.0, 0.0], true);
-                touched = true;
+                body.set_translation(Vector::new(pos.x, pos.y), true);
+                body.set_linvel(Vector::ZERO, true);
             }
-        }
-        if touched {
-            self.query_pipeline.update(&self.colliders);
         }
     }
 
@@ -531,63 +509,41 @@ impl Simulation {
         }
     }
 
-    /// Refresh the spatial query index so [`Self::hit_test`] and
-    /// [`Self::cull_aabb`] reflect the colliders' current positions.
-    /// [`Self::tick`] already updates the index each step; call this when
-    /// you've moved bodies outside a tick (a drag via [`Self::pin`], or a
-    /// fresh [`Self::sync_with_graph`] on a layout you don't intend to step).
-    pub fn refresh_spatial_index(&mut self) {
-        self.query_pipeline.update(&self.colliders);
-    }
+    /// Retained for call-site compatibility; a no-op now. [`Self::hit_test`] and
+    /// [`Self::cull_aabb`] read live body translations directly (the rapier
+    /// `QueryPipeline` went ephemeral in rapier 0.33), so there is no separate
+    /// index to refresh after moving bodies outside a tick.
+    pub fn refresh_spatial_index(&mut self) {}
 
-    /// Hit-test a world-space point: the node whose body collider contains it,
-    /// or `None`. Reads the index as of the last [`Self::tick`] /
-    /// [`Self::refresh_spatial_index`]. Node bodies are kept separated, so on
-    /// the rare overlap this returns one of the hits, not a defined "topmost".
+    /// Hit-test a world-space point: the node whose body lies within
+    /// [`NODE_BODY_RADIUS`] of it, or `None`. Reads live positions, so it always
+    /// reflects the most recent [`Self::tick`]. Node bodies are kept separated,
+    /// so on the rare overlap this returns one of the hits, not a defined
+    /// "topmost".
     ///
-    /// Because every node is already a rapier collider, this is the
-    /// `QueryPipeline` doing node picking for free — the orrery's canvas needs
-    /// no separate index for *node* hit-testing (adoption roadmap R1b spike).
+    /// Position-and-radius, matching the rapier-free [`LayoutView`] the orrery
+    /// actually picks from on the UI thread — the two stay consistent. (Restore
+    /// shape-accurate, collider-true picking in `LayoutView` if a non-ball node
+    /// face ever needs it; that is the live path, not this in-thread helper.)
     pub fn hit_test(&self, point: Point2D<f32>) -> Option<NodeKey> {
-        let colliders = &self.colliders;
-        let nodes_by_body = &self.nodes_by_body;
-        let p = Point::new(point.x, point.y);
-        let mut hit = None;
-        self.query_pipeline.intersections_with_point(
-            &self.bodies,
-            colliders,
-            &p,
-            QueryFilter::default(),
-            |handle| {
-                if let Some(node) = collider_to_node(colliders, nodes_by_body, handle) {
-                    hit = Some(node);
-                    return false; // stop at the first hit
-                }
-                true
-            },
-        );
-        hit
+        let r2 = NODE_BODY_RADIUS * NODE_BODY_RADIUS;
+        self.positions()
+            .find(|(_, p)| (*p - point).square_length() <= r2)
+            .map(|(node, _)| node)
     }
 
-    /// Frustum cull: every node whose body collider's Aabb intersects `region`
-    /// (world space). Reads the index as of the last tick / refresh. Order is
+    /// Frustum cull: every node whose body (center ± [`NODE_BODY_RADIUS`])
+    /// intersects `region` (world space). Reads live positions. Order is
     /// unspecified.
     pub fn cull_aabb(&self, region: Box2D<f32>) -> Vec<NodeKey> {
-        let colliders = &self.colliders;
-        let nodes_by_body = &self.nodes_by_body;
-        let aabb = Aabb::new(
-            Point::new(region.min.x, region.min.y),
-            Point::new(region.max.x, region.max.y),
-        );
-        let mut out = Vec::new();
-        self.query_pipeline
-            .colliders_with_aabb_intersecting_aabb(&aabb, |handle| {
-                if let Some(node) = collider_to_node(colliders, nodes_by_body, *handle) {
-                    out.push(node);
-                }
-                true // visit all
-            });
-        out
+        let r = NODE_BODY_RADIUS;
+        self.positions()
+            .filter(|(_, p)| {
+                Box2D::new(Point2D::new(p.x - r, p.y - r), Point2D::new(p.x + r, p.y + r))
+                    .intersects(&region)
+            })
+            .map(|(node, _)| node)
+            .collect()
     }
 
     /// Make the simulation match the graph: spawn a body for every
@@ -621,8 +577,6 @@ impl Simulation {
     /// boundary. [`Self::sync_with_graph`] is the in-thread convenience wrapper.
     /// Idempotent.
     pub fn sync_nodes(&mut self, nodes: impl IntoIterator<Item = (NodeKey, Point2D<f32>)>) {
-        let mut changed = false;
-
         // 1. Add bodies for new nodes (at the supplied position).
         let mut seen = std::collections::HashSet::with_capacity(self.bodies_by_node.len());
         for (key, position) in nodes {
@@ -631,7 +585,7 @@ impl Simulation {
                 continue;
             }
             let body = RigidBodyBuilder::dynamic()
-                .translation(vector![position.x, position.y])
+                .translation(Vector::new(position.x, position.y))
                 .linear_damping(self.linear_damping)
                 .angular_damping(DEFAULT_ANGULAR_DAMPING)
                 // Nodes never fall: scene gravity acts only on scene bodies, so the graph
@@ -648,8 +602,6 @@ impl Simulation {
             self.colliders
                 .insert_with_parent(collider, handle, &mut self.bodies);
             self.bodies_by_node.insert(key, handle);
-            self.nodes_by_body.insert(handle, key);
-            changed = true;
         }
 
         // 2. Remove bodies whose nodes are gone.
@@ -661,7 +613,6 @@ impl Simulation {
             .collect();
         for key in stale {
             if let Some(handle) = self.bodies_by_node.remove(&key) {
-                self.nodes_by_body.remove(&handle);
                 self.bodies.remove(
                     handle,
                     &mut self.islands,
@@ -670,15 +621,7 @@ impl Simulation {
                     &mut self.multibody_joints,
                     /* remove_attached_colliders */ true,
                 );
-                changed = true;
             }
-        }
-
-        // Keep the spatial index current with the new collider set, so
-        // cull-based forces (e.g. NodeExclusion) see the bodies on the very
-        // next tick rather than after the first step rebuilds the index.
-        if changed {
-            self.query_pipeline.update(&self.colliders);
         }
     }
 
@@ -695,8 +638,8 @@ impl Simulation {
         velocity: (f32, f32),
     ) -> SceneBodyId {
         let body = RigidBodyBuilder::dynamic()
-            .translation(vector![position.x, position.y])
-            .linvel(vector![velocity.0, velocity.1])
+            .translation(Vector::new(position.x, position.y))
+            .linvel(Vector::new(velocity.0, velocity.1))
             .linear_damping(SCENE_DAMPING)
             .angular_damping(DEFAULT_ANGULAR_DAMPING)
             .build();
@@ -720,7 +663,6 @@ impl Simulation {
         let id = SceneBodyId(self.next_scene_id);
         self.next_scene_id += 1;
         self.scene_bodies.insert(id, (handle, radius));
-        self.query_pipeline.update(&self.colliders);
         id
     }
 
@@ -735,7 +677,6 @@ impl Simulation {
                 &mut self.multibody_joints,
                 /* remove_attached_colliders */ true,
             );
-            self.query_pipeline.update(&self.colliders);
         }
     }
 
@@ -753,7 +694,6 @@ impl Simulation {
             );
         }
         self.scene_bodies.clear();
-        self.query_pipeline.update(&self.colliders);
     }
 
     /// Iterate the live `(id, position, paint radius)` of every scene body — the host's
@@ -780,7 +720,6 @@ impl Simulation {
             return;
         };
         self.remask_node(body_handle, tangible);
-        self.query_pipeline.update(&self.colliders);
     }
 
     /// Set every node's tangibility at once (the scene-wide lever): `true` lets the graph
@@ -791,14 +730,13 @@ impl Simulation {
         for handle in handles {
             self.remask_node(handle, tangible);
         }
-        self.query_pipeline.update(&self.colliders);
     }
 
     /// Re-mask one node body's collider(s) to the intangible (`NODE`) or tangible
     /// (`NODE | SCENE`) filter. (Physics scenes P2.)
     fn remask_node(&mut self, body_handle: RigidBodyHandle, tangible: bool) {
         let groups = if tangible {
-            InteractionGroups::new(NODE_GROUP, NODE_GROUP | SCENE_GROUP)
+            InteractionGroups::new(NODE_GROUP, NODE_GROUP | SCENE_GROUP, InteractionTestMode::And)
         } else {
             node_groups()
         };
@@ -817,7 +755,7 @@ impl Simulation {
     /// Set the world gravity (px/s^2). Node bodies carry `gravity_scale(0)`, so only
     /// scene bodies fall; the graph layout is unaffected. (Physics scenes P3.)
     pub fn set_gravity(&mut self, gravity: (f32, f32)) {
-        self.gravity = vector![gravity.0, gravity.1];
+        self.gravity = Vector::new(gravity.0, gravity.1);
     }
 
     /// Load a declarative [`SceneSpec`] into the world: clear any prior scene, set its
@@ -832,8 +770,8 @@ impl Simulation {
                 SceneBodyType::Dynamic => RigidBodyBuilder::dynamic(),
             };
             let body = builder
-                .translation(vector![b.position.0, b.position.1])
-                .linvel(vector![b.velocity.0, b.velocity.1])
+                .translation(Vector::new(b.position.0, b.position.1))
+                .linvel(Vector::new(b.velocity.0, b.velocity.1))
                 .linear_damping(SCENE_DAMPING)
                 .angular_damping(DEFAULT_ANGULAR_DAMPING)
                 .build();
@@ -857,7 +795,6 @@ impl Simulation {
             self.scene_bodies.insert(id, (handle, radius));
         }
         self.set_nodes_tangible(spec.default_tangible);
-        self.query_pipeline.update(&self.colliders);
     }
 
     /// Advance the simulation by `dt` seconds. Walks every registered
@@ -885,9 +822,7 @@ impl Simulation {
                 colliders: &self.colliders,
                 joints: &mut self.impulse_joints,
                 bodies_by_node: &self.bodies_by_node,
-                nodes_by_body: &self.nodes_by_body,
                 edges: &self.edges,
-                query_index: &self.query_pipeline,
             };
             for force in &self.forces {
                 force.apply(&mut ctx, dt);
@@ -901,7 +836,7 @@ impl Simulation {
         let physics_hooks = ();
         let event_handler = ();
         self.pipeline.step(
-            &self.gravity,
+            self.gravity,
             &self.parameters,
             &mut self.islands,
             &mut self.broad_phase,
@@ -911,7 +846,6 @@ impl Simulation {
             &mut self.impulse_joints,
             &mut self.multibody_joints,
             &mut self.ccd_solver,
-            Some(&mut self.query_pipeline),
             &physics_hooks,
             &event_handler,
         );
@@ -965,7 +899,7 @@ impl Simulation {
             return;
         };
         body.set_body_type(RigidBodyType::KinematicPositionBased, true);
-        body.set_next_kinematic_translation(vector![position.x, position.y]);
+        body.set_next_kinematic_translation(Vector::new(position.x, position.y));
     }
 
     pub fn unpin(&mut self, node: NodeKey) {
@@ -977,19 +911,6 @@ impl Simulation {
         };
         body.set_body_type(RigidBodyType::Dynamic, true);
     }
-}
-
-/// Map a collider back to the node it represents, via its parent rigid body.
-/// A free function (not a method) so the query callbacks can borrow the two
-/// forces they need without capturing the whole `Simulation`. `pub(crate)` so
-/// [`forces`] can reuse it for cull-based neighbor queries.
-pub(crate) fn collider_to_node(
-    colliders: &ColliderSet,
-    nodes_by_body: &HashMap<RigidBodyHandle, NodeKey>,
-    handle: ColliderHandle,
-) -> Option<NodeKey> {
-    let body = colliders.get(handle)?.parent()?;
-    nodes_by_body.get(&body).copied()
 }
 
 // The simulation must be `Send` so a host can build it on, and run its tick on,
