@@ -41,6 +41,7 @@ mod script;
 use std::path::{Path, PathBuf};
 
 use document_host::{Grant, Quota};
+use kernel::permissions::ResolvedPermission;
 use script::ScriptInstance;
 
 /// A command from the kernel to a content actor.
@@ -96,9 +97,14 @@ pub enum ContentCommand {
     },
     /// Attach a DocumentScript (a wasm `document-core` component) to this tile's page.
     /// The page is mirrored into a mutable `ScriptedDom` the script can edit, and the
-    /// tile renders from it thereafter. HTML/serval lane only. (P2.5c, DocumentScript.)
+    /// tile renders from it thereafter. HTML/serval lane only. `log` / `document` are
+    /// the host-resolved permissions for the two application capabilities (the host
+    /// runs the five-scope `resolve_permission`; the actor maps them to the link
+    /// grant). (P2.5c, DocumentScript; §11.4 permissions seam.)
     AttachScript {
         component_path: PathBuf,
+        log: ResolvedPermission,
+        document: ResolvedPermission,
         viewport_gen: ViewportGeneration,
     },
     /// Deliver one event to the attached DocumentScript; the script's batch is applied
@@ -352,12 +358,22 @@ pub fn spawn_content(
                 }
                 ContentCommand::AttachScript {
                     component_path,
+                    log,
+                    document,
                     viewport_gen,
                 } => {
                     if let Some(content) = current.as_mut() {
                         content.viewport_gen = viewport_gen;
-                        let outcome =
-                            attach_script(content, &component_path, &store, &registry, &policy);
+                        // Map the host-resolved permissions to the link grant (§11.4).
+                        let grant = script::grant_from_resolved(log, document);
+                        let outcome = attach_script(
+                            content,
+                            &component_path,
+                            &grant,
+                            &store,
+                            &registry,
+                            &policy,
+                        );
                         out.emit(ContentUpdate::ScriptOutcome { nav: content.nav, outcome });
                         // Render from the script's DOM once attached.
                         if content.script.is_some() {
@@ -400,12 +416,14 @@ pub fn spawn_content(
 }
 
 /// Mirror the current HTML page into a `ScriptedDom` and attach the DocumentScript at
-/// `component_path` over it (P2.5c). HTML/serval lane only; returns a human-readable
-/// outcome for the `ScriptOutcome` update. Uses `Grant::allow_all` for now — the
-/// `kernel::permissions` -> `Grant` adapter folds in next.
+/// `component_path` over it under `grant` (P2.5c). HTML/serval lane only; returns a
+/// human-readable outcome for the `ScriptOutcome` update. A `grant` that denies a
+/// capability the component requires makes instantiation fail (reported as "attach
+/// failed") — the runtime-enforced capability boundary.
 fn attach_script(
     content: &mut Content,
     component_path: &Path,
+    grant: &Grant,
     store: &RefCell<ResourceStore>,
     registry: &EngineRegistry,
     policy: &EngineRoutePolicy,
@@ -422,15 +440,7 @@ fn attach_script(
     };
     let wanted = RefCell::new(Vec::new());
     let loader = ResourceLoader::new(store, &url, &wanted);
-    match ScriptInstance::attach(
-        component_path,
-        &body,
-        &loader,
-        w,
-        h,
-        &Grant::allow_all(),
-        Quota::default(),
-    ) {
+    match ScriptInstance::attach(component_path, &body, &loader, w, h, grant, Quota::default()) {
         Ok(inst) => {
             content.script = Some(inst);
             "attached".to_string()

@@ -17,7 +17,8 @@
 
 use std::path::Path;
 
-use document_host::{DocumentScript, Grant, Quota, TurnOutcome};
+use document_host::{CapPermission, DocumentScript, Grant, Quota, TurnOutcome};
+use kernel::permissions::{Permission, ResolvedPermission};
 use layout_dom_api::{LayoutDom, LayoutDomMut, NodeKind};
 use serval_layout::{
     inline_stylesheets, lay_out_content, linked_stylesheets_with_loader, ContentLayout, ImageLoader,
@@ -26,6 +27,28 @@ use serval_scripted_dom::{NodeId, ScriptedDom};
 use serval_static_dom::StaticDocument;
 
 use crate::card::HTML_SHEET;
+
+/// Map a kernel-resolved permission to a document-host capability permission. The
+/// kernel's narrowing rule (`resolve_permission`) runs host-side; this only
+/// translates the effective opinion. `Inherit` cannot reach `effective` (resolution
+/// folds it into the default); it maps to `Deny` defensively (fail-closed).
+fn cap_permission(resolved: ResolvedPermission) -> CapPermission {
+    match resolved.effective {
+        Permission::Allow => CapPermission::Allow,
+        Permission::Prompt => CapPermission::Prompt,
+        Permission::Deny | Permission::Inherit => CapPermission::Deny,
+    }
+}
+
+/// Build a document-host [`Grant`] from the host-resolved permissions for the two
+/// application capabilities the `document-core` world exposes (`log`, `document`).
+/// The `kernel::permissions` -> `Grant` seam (§11.4): the grant *policy* lives in
+/// document-host, the five-scope *resolution* is the host's input (the content actor
+/// resolves the scope chain and passes the effective opinion in). A `Deny`/`Prompt`
+/// on a capability the component requires makes instantiation fail — the boundary.
+pub(crate) fn grant_from_resolved(log: ResolvedPermission, document: ResolvedPermission) -> Grant {
+    Grant { log: cap_permission(log), document: cap_permission(document) }
+}
 
 /// Copy `src`'s whole document tree into a fresh mutable [`ScriptedDom`]: elements
 /// with their attributes, and text nodes. Comments / doctype / processing
@@ -187,5 +210,24 @@ mod tests {
         );
         let text = dom.dom_children(p).next().expect("the <p> has a text child");
         assert_eq!(dom.text(text), Some("Hello"), "the text node is carried into the mirror");
+    }
+
+    #[test]
+    fn grant_maps_resolved_permissions() {
+        use kernel::permissions::SettingScope;
+        let allow = ResolvedPermission { effective: Permission::Allow, decided_by: None };
+        let deny =
+            ResolvedPermission { effective: Permission::Deny, decided_by: Some(SettingScope::Surface) };
+        let prompt = ResolvedPermission { effective: Permission::Prompt, decided_by: None };
+
+        let g = grant_from_resolved(allow, allow);
+        assert_eq!(g.log, CapPermission::Allow);
+        assert_eq!(g.document, CapPermission::Allow);
+
+        // A denied document capability maps to Deny -> the import is omitted, so a
+        // component that requires it fails to instantiate (the enforced boundary).
+        assert_eq!(grant_from_resolved(allow, deny).document, CapPermission::Deny);
+        // Prompt is preserved (P2 omits it conservatively, like Deny, at link time).
+        assert_eq!(grant_from_resolved(allow, prompt).document, CapPermission::Prompt);
     }
 }

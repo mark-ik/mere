@@ -989,6 +989,18 @@ DOM model is the decision.
   re-lay-out the script layout; the script path doesn't re-request subresources; the wasm component
   source is an `AttachScript` arg (no page->component association yet). Net: a DocumentScript can now
   mutate a live page in the content actor and the tile re-renders, contained by epoch + StoreLimits.
+- **2026-06-23 (P2.5 permissions adapter landed, green).** The last P2.5 tail: the
+  `kernel::permissions` -> `Grant` adapter now lives in `content::script` (`grant_from_resolved` +
+  `cap_permission`: `Permission` Allow/Prompt/Deny -> `CapPermission`, fail-closed on Inherit). The
+  five-scope `resolve_permission` narrowing runs host-side; `AttachScript` carries the host-resolved
+  `log` / `document` `ResolvedPermission`s, and the arm maps them to the link grant (replacing the
+  interim `Grant::allow_all`). A denied/prompted capability the component requires now fails
+  instantiation through the existing boundary. document-host stays graph-kernel-free (the adapter is in
+  meerkat, the resolution is the host's input — §11.4). 1 new test (109 bin): the resolved->grant
+  mapping. **P2.5 is complete** end to end: discover/grant (kernel permissions) -> mirror page ->
+  attach guarded script -> script mutates the live DOM -> tile re-renders. Remaining P2: the host-side
+  permission *resolution* wiring (an actual per-scope policy store + a script-attach trigger feeding
+  `AttachScript`), the deferred render refinements, P2.6 AOT, and the fiber-async `fetch` capability.
 
 ## Key grounding files
 
