@@ -248,14 +248,16 @@ impl WindowCtx<'_> {
                     let policy = crate::content::script::ScriptCapPolicy {
                         log: prefs.log,
                         document: prefs.document,
+                        net: prefs.net,
                     };
-                    let (log, document) =
+                    let (log, document, net) =
                         crate::content::script::resolve_attach_permissions(policy);
                     self.shared.content.constellation.attach_script(
                         member,
                         std::path::PathBuf::from(path),
                         log,
                         document,
+                        net,
                     );
                 }
                 None => note = Some("Focus a tile to attach a script to".to_string()),

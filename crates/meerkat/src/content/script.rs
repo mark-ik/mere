@@ -43,58 +43,69 @@ fn cap_permission(resolved: ResolvedPermission) -> CapPermission {
     }
 }
 
-/// The App-scope default for a script's capabilities: `Allow`. A user-typed
-/// `>attach-script` is permitted by default (narrower scopes may deny); `document`
-/// in particular must default to Allow, or the document-core guest — which requires
-/// it — could never instantiate.
+/// App-scope defaults. `log` / `document` default **Allow** (a user-typed
+/// `>attach-script` is permitted by default; `document` in particular must default
+/// Allow or the document-core guest — which requires it — could never instantiate).
+/// `net` (network egress) defaults **Deny**: it is powerful, so a narrower scope
+/// (session opinion or an origin binding) must *explicitly* grant it.
 const APP_DEFAULT: Permission = Permission::Allow;
+const NET_APP_DEFAULT: Permission = Permission::Deny;
 
-/// A per-capability **Session-scope** override for script capabilities (a future
-/// `settings.json` entry, §11.4). `None` on a capability = no opinion at this scope
-/// (`Inherit`), so the App default stands. Today the host passes the default (no
-/// override store yet); the narrowing path is exercised by tests.
+/// A per-capability **Session-scope** override for script capabilities (the
+/// `settings.json` `script_permissions` entry, §11.4). `None` on a capability = no
+/// opinion at this scope (`Inherit`), so the App default stands.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct ScriptCapPolicy {
     pub log: Option<Permission>,
     pub document: Option<Permission>,
+    pub net: Option<Permission>,
 }
 
 /// Resolve a script's per-capability permissions through the scope chain (App
-/// default + optional Session override) per the kernel narrowing rule, returning
-/// the effective `(log, document)` to carry in `AttachScript`. The host calls this;
-/// [`grant_from_resolved`] then maps the result to the link grant. This is the
-/// host-side half of the §11.4 permissions seam (document-host stays kernel-free).
+/// default + optional Session override) per the kernel narrowing rule, returning the
+/// effective `(log, document, net)` to carry in `AttachScript`. The host calls this;
+/// [`grant_from_resolved`] then maps the result to the link grant. The host-side half
+/// of the §11.4 permissions seam (document-host stays kernel-free).
 pub(crate) fn resolve_attach_permissions(
     session: ScriptCapPolicy,
-) -> (ResolvedPermission, ResolvedPermission) {
-    (resolve_cap(session.log), resolve_cap(session.document))
+) -> (ResolvedPermission, ResolvedPermission, ResolvedPermission) {
+    (
+        resolve_cap(session.log, APP_DEFAULT),
+        resolve_cap(session.document, APP_DEFAULT),
+        resolve_cap(session.net, NET_APP_DEFAULT),
+    )
 }
 
-/// Resolve one capability: an App-default opinion, narrowed by an optional
-/// Session-scope opinion (more scopes — Graph / Surface — join as their stores land).
-fn resolve_cap(session: Option<Permission>) -> ResolvedPermission {
-    let mut chain = vec![ScopedPermission::new(SettingScope::App, APP_DEFAULT)];
-    if let Some(p) = session {
-        chain.push(ScopedPermission::new(SettingScope::Session, p));
-    }
-    resolve_permission(&chain, APP_DEFAULT)
+/// Resolve one capability. `default` is the **silent baseline** (the App-wide value
+/// when no scope opines), passed as `resolve_permission`'s default rather than an
+/// explicit App-scope opinion — this is what lets a default-Deny capability (`net`)
+/// still be *granted* by a narrower scope. If the App level were an explicit `Deny`,
+/// the narrowing rule (max-restrictiveness) would make narrower `Allow`s powerless and
+/// `net` could never be granted. So: silent baseline = `default`; a Session-scope
+/// opinion (and later Graph / Surface) narrows or, against a Deny baseline, grants.
+fn resolve_cap(session: Option<Permission>, default: Permission) -> ResolvedPermission {
+    let chain: Vec<ScopedPermission> = match session {
+        Some(p) => vec![ScopedPermission::new(SettingScope::Session, p)],
+        None => Vec::new(),
+    };
+    resolve_permission(&chain, default)
 }
 
-/// Build a document-host [`Grant`] from the host-resolved permissions for the two
-/// application capabilities the `document-core` world exposes (`log`, `document`).
-/// The `kernel::permissions` -> `Grant` seam (§11.4): the grant *policy* lives in
-/// document-host, the five-scope *resolution* is the host's input (the content actor
-/// resolves the scope chain and passes the effective opinion in). A `Deny`/`Prompt`
-/// on a capability the component requires makes instantiation fail — the boundary.
-pub(crate) fn grant_from_resolved(log: ResolvedPermission, document: ResolvedPermission) -> Grant {
-    // `net` (network egress) defaults to denied for meerkat-attached scripts: it is
-    // powerful, and its per-scope resolution + an `AttachScript` `net` arm are a
-    // follow-on (§11.7-7 lands the capability in document-host; the host wiring to
-    // grant it is deferred). A script that imports `net` will fail to attach until then.
+/// Build a document-host [`Grant`] from the host-resolved permissions for the three
+/// application capabilities (`log`, `document`, `net`). The `kernel::permissions` ->
+/// `Grant` seam (§11.4): the grant *policy* lives in document-host, the five-scope
+/// *resolution* is the host's input. A `Deny`/`Prompt` on a capability the component
+/// *requires* makes instantiation fail — the boundary. (So a `net`-importing script
+/// attaches only where `net` resolved to Allow.)
+pub(crate) fn grant_from_resolved(
+    log: ResolvedPermission,
+    document: ResolvedPermission,
+    net: ResolvedPermission,
+) -> Grant {
     Grant {
         log: cap_permission(log),
         document: cap_permission(document),
-        net: CapPermission::Deny,
+        net: cap_permission(net),
     }
 }
 
@@ -109,6 +120,7 @@ pub(crate) struct ResolvedScriptBinding {
     pub component_path: PathBuf,
     pub log: ResolvedPermission,
     pub document: ResolvedPermission,
+    pub net: ResolvedPermission,
 }
 
 /// The host portion of a URL (between `://` and the next `/` `?` `#`), without
@@ -149,8 +161,8 @@ pub(crate) fn load_resolved_bindings(
         .ok()
         .flatten()
         .unwrap_or_default();
-    let policy = ScriptCapPolicy { log: prefs.log, document: prefs.document };
-    let (log, document) = resolve_attach_permissions(policy);
+    let policy = ScriptCapPolicy { log: prefs.log, document: prefs.document, net: prefs.net };
+    let (log, document, net) = resolve_attach_permissions(policy);
     bindings
         .into_iter()
         .map(|b| ResolvedScriptBinding {
@@ -158,6 +170,7 @@ pub(crate) fn load_resolved_bindings(
             component_path: PathBuf::from(b.component_path),
             log,
             document,
+            net,
         })
         .collect()
 }
@@ -341,32 +354,44 @@ mod tests {
             ResolvedPermission { effective: Permission::Deny, decided_by: Some(SettingScope::Surface) };
         let prompt = ResolvedPermission { effective: Permission::Prompt, decided_by: None };
 
-        let g = grant_from_resolved(allow, allow);
+        let g = grant_from_resolved(allow, allow, allow);
         assert_eq!(g.log, CapPermission::Allow);
         assert_eq!(g.document, CapPermission::Allow);
+        assert_eq!(g.net, CapPermission::Allow);
 
         // A denied document capability maps to Deny -> the import is omitted, so a
         // component that requires it fails to instantiate (the enforced boundary).
-        assert_eq!(grant_from_resolved(allow, deny).document, CapPermission::Deny);
+        assert_eq!(grant_from_resolved(allow, deny, allow).document, CapPermission::Deny);
         // Prompt is preserved (P2 omits it conservatively, like Deny, at link time).
-        assert_eq!(grant_from_resolved(allow, prompt).document, CapPermission::Prompt);
+        assert_eq!(grant_from_resolved(allow, prompt, allow).document, CapPermission::Prompt);
+        // net maps independently (a denied net omits the import).
+        assert_eq!(grant_from_resolved(allow, allow, deny).net, CapPermission::Deny);
     }
 
     #[test]
     fn attach_permissions_resolve_with_narrowing() {
-        // No Session override: the App default (Allow) stands for both caps.
-        let (log, document) = resolve_attach_permissions(ScriptCapPolicy::default());
+        // No Session override: log/document default Allow; net defaults Deny (powerful).
+        let (log, document, net) = resolve_attach_permissions(ScriptCapPolicy::default());
         assert_eq!(log.effective, Permission::Allow);
         assert_eq!(document.effective, Permission::Allow);
+        assert_eq!(net.effective, Permission::Deny, "net is denied unless granted");
 
-        // A Session-scope Deny on `document` narrows past the App Allow (the narrowing
-        // rule); the resulting grant omits the document import, so the guest fails to
-        // instantiate — a session-wide "no script may touch the page" switch.
-        let policy = ScriptCapPolicy { log: None, document: Some(Permission::Deny) };
-        let (_log, document) = resolve_attach_permissions(policy);
+        // A Session-scope Deny on `document` narrows past the Allow baseline (the
+        // narrowing rule); the grant then omits the document import — a session-wide
+        // "no script may touch the page" switch.
+        let policy = ScriptCapPolicy { document: Some(Permission::Deny), ..Default::default() };
+        let (_log, document, _net) = resolve_attach_permissions(policy);
         assert_eq!(document.effective, Permission::Deny);
         assert_eq!(document.decided_by, Some(SettingScope::Session));
-        assert_eq!(grant_from_resolved(_log, document).document, CapPermission::Deny);
+
+        // A Session-scope Allow on `net` GRANTS it over the Deny baseline — the
+        // loop-closing case: a user opts a script into network egress. (This is why
+        // the baseline is the resolve default, not an explicit App Deny — an App Deny
+        // could never be granted back by a narrower scope.)
+        let policy = ScriptCapPolicy { net: Some(Permission::Allow), ..Default::default() };
+        let (log, _doc, net) = resolve_attach_permissions(policy);
+        assert_eq!(net.effective, Permission::Allow, "a session grant flips net on");
+        assert_eq!(grant_from_resolved(log, _doc, net).net, CapPermission::Allow);
     }
 
     #[test]
@@ -390,12 +415,14 @@ mod tests {
                 component_path: PathBuf::from("a.wasm"),
                 log: allow,
                 document: allow,
+                net: allow,
             },
             ResolvedScriptBinding {
                 origin: "*.wikipedia.org".into(),
                 component_path: PathBuf::from("w.wasm"),
                 log: allow,
                 document: allow,
+                net: allow,
             },
         ];
         assert_eq!(

@@ -321,3 +321,20 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   `generate!` → `path: "../../wit"`; guests regenerated; `document-host` 19 tests green. One contract,
   now physically shared between the native Wasmtime host and the future browser jco path (no more
   contract buried in the native crate). Residual: keep both runtimes on one world (no browser fork).
+- **2026-06-23 (net-permission chain — "finish the loop", landed + green).** Threaded `net` through
+  the whole meerkat resolution path so a granted script can reach `net.fetch`. `ScriptCapPolicy` +
+  `ScriptPermissionPrefs` (`settings.json`) + `ResolvedScriptBinding` gain `net`;
+  `resolve_attach_permissions` returns `(log, document, net)`; `grant_from_resolved` takes `net`;
+  `AttachScript` + `Constellation::attach_script` + the `drive` auto-attach + `command_drain` all
+  carry it. **Key correctness fix:** `net` defaults **Deny**, but as the `resolve_permission`
+  *baseline default* (the silent App-wide value), **not** an explicit App-scope `Deny` — under the
+  narrowing rule (max-restrictiveness) an explicit App `Deny` could never be granted back, so a
+  default-deny-but-grantable cap *must* use the default param; a Session/binding `Allow` then flips
+  it on. `log`/`document` keep their Allow baseline (a Session `Deny` narrows). Tests updated +
+  added (the `net`-grant-flips-on case is the loop's whole point); meerkat 73 lib + 111 bin,
+  session-runtime 73, all green. **The permission loop is closed + enforced** (a `net`-importing
+  script attaches only where `net` resolved Allow). **Remaining (the one real gap left):** the
+  `net.fetch` **backend** is still document-host's stub (echoes the URL); wiring the real
+  netfetcher (http) / errand (smolweb) backend is a cross-runtime piece (document-host's
+  `net::Host::fetch` must call a host-injected fetcher; the content actor supplies it; fiber ↔ tokio)
+  — the next focused step if a script should fetch *real* content.

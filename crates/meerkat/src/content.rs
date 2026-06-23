@@ -98,13 +98,16 @@ pub enum ContentCommand {
     /// Attach a DocumentScript (a wasm `document-core` component) to this tile's page.
     /// The page is mirrored into a mutable `ScriptedDom` the script can edit, and the
     /// tile renders from it thereafter. HTML/serval lane only. `log` / `document` are
-    /// the host-resolved permissions for the two application capabilities (the host
-    /// runs the five-scope `resolve_permission`; the actor maps them to the link
-    /// grant). (P2.5c, DocumentScript; §11.4 permissions seam.)
+    /// the host-resolved permissions for the application capabilities (`log` /
+    /// `document` / `net`; the host runs the five-scope `resolve_permission`, the actor
+    /// maps them to the link grant). A script attaches only where the caps it imports
+    /// resolved to Allow (so `net` egress needs an explicit grant). (P2.5c +
+    /// net-permission loop; §11.4 permissions seam.)
     AttachScript {
         component_path: PathBuf,
         log: ResolvedPermission,
         document: ResolvedPermission,
+        net: ResolvedPermission,
         viewport_gen: ViewportGeneration,
     },
     /// Deliver one event to the attached DocumentScript; the script's batch is applied
@@ -367,12 +370,13 @@ pub fn spawn_content(
                     component_path,
                     log,
                     document,
+                    net,
                     viewport_gen,
                 } => {
                     if let Some(content) = current.as_mut() {
                         content.viewport_gen = viewport_gen;
                         // Map the host-resolved permissions to the link grant (§11.4).
-                        let grant = script::grant_from_resolved(log, document);
+                        let grant = script::grant_from_resolved(log, document, net);
                         let outcome = attach_script(
                             content,
                             &component_path,

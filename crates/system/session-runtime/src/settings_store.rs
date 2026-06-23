@@ -54,6 +54,10 @@ pub struct ScriptPermissionPrefs {
     pub log: Option<Permission>,
     #[serde(default)]
     pub document: Option<Permission>,
+    /// Network egress (`net.fetch`). Denied by default; set `Allow` to let scripts
+    /// fetch this session. `None` = no opinion (the default-deny baseline stands).
+    #[serde(default)]
+    pub net: Option<Permission>,
 }
 
 /// Persistable user settings. v0 carried the active-tab cap; `theme_id` joined
@@ -174,7 +178,7 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let dir = temp_session_dir("round-trip");
-        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()], document_typography: None, script_permissions: ScriptPermissionPrefs { log: None, document: Some(Permission::Deny) } };
+        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()], document_typography: None, script_permissions: ScriptPermissionPrefs { log: None, document: Some(Permission::Deny), net: Some(Permission::Allow) } };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir).unwrap().expect("settings file should be present");
         assert_eq!(restored, original);

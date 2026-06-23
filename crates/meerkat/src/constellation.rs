@@ -396,6 +396,7 @@ impl Constellation {
                     component_path: binding.component_path.clone(),
                     log: binding.log,
                     document: binding.document,
+                    net: binding.net,
                     viewport_gen: activation.gens.viewport,
                 });
             }
@@ -523,6 +524,7 @@ impl Constellation {
         component_path: PathBuf,
         log: ResolvedPermission,
         document: ResolvedPermission,
+        net: ResolvedPermission,
     ) {
         let Some(activation) = self.active.get(&member) else {
             return;
@@ -531,6 +533,7 @@ impl Constellation {
             component_path,
             log,
             document,
+            net,
             viewport_gen: activation.gens.viewport,
         });
     }
