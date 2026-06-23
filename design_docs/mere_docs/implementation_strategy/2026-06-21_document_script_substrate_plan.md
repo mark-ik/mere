@@ -953,6 +953,25 @@ DOM model is the decision.
   P2.5b (meerkat content lane on a retained `ScriptedDom` + `IncrementalLayout` — slice #1), then P2.5c
   (`ScriptInstance` on `Content` + command/update arms + the `meerkat::script` grant adapter +
   apply→re-render). Note: `lib.rs` is 497 LOC — split into the §11.1 modules before the next addition.
+- **2026-06-23 (P2.5b found already shipped by Mark; P2.5c approach settled).** Reading the content
+  actor for P2.5b: **slice #1 is already done** (Mark's concurrent work) — `Content` retains
+  `html: Option<(StaticDocument, ContentLayout<StaticNodeId>)>` (`content.rs:175`), built once via
+  `build_html_layout`, re-emitted per band via `scene_from_content_band`, find off the retained layout.
+  It uses **`StaticDocument`** (immutable), so the remaining combined-move piece is making the page DOM
+  **script-mutable**. Two serval facts settle the approach: (1) `ScriptedDom::set_inner_html` is
+  **fragment-only** (`serval-scripted-dom/lib.rs:643`), not a full-document parse — it drops
+  `<head>`/`<style>`/`<link>`; (2) `build_html_layout` already **extracts the stylesheets separately**
+  (`lay_out_content(&doc, &sheets, ...)`, `card.rs:495-508`), and `lay_out_content` / `ContentLayout` /
+  `scene_from_content_band` / `find` are **generic over `LayoutDom`**. So **no serval change is
+  needed**: keep `StaticDocument::parse` (fidelity + sheet extraction), and for a *scripted* page
+  mirror its tree into a `ScriptedDom` (a short LayoutDom -> LayoutDomMut copy walk), lay the
+  `ScriptedDom` out with the same extracted sheets, and let the script mutate it. **Hybrid
+  (recommended):** unscripted pages keep Mark's fast `StaticDocument` path untouched; only a
+  script-attached page takes the `ScriptedDom`-mirror path (script mutates -> re-lay-out -> re-emit).
+  P2.5c = the mirror builder (`card.rs`) + `ScriptInstance` on `Content` + Attach/Deliver/Detach arms +
+  apply->re-render (`content.rs`), with `Grant::allow_all` as the interim grant and the
+  `kernel::permissions` -> `Grant` adapter (`meerkat::script`, needs `lib.rs`) following once Mark's
+  `lib.rs` edits settle. `content.rs` / `card.rs` are clean now; `lib.rs` is dirty (his active edit).
 
 ## Key grounding files
 
