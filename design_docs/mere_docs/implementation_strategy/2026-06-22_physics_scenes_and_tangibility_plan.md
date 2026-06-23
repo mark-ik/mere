@@ -233,3 +233,19 @@ within budget.
   the full content menu with licenses (rapier examples2d transplant, salva, particular / nbody /
   particle-life / sandspiel, Matter.js reference). Scenes render in the iso camera plan's ground
   layer. No code yet.
+- 2026-06-23: **P1 substrate landed + tested (committed `5ad0bb8`); the paint + drifting-backdrop
+  demo is the next slice.** Added the gyre scene-body API (`add_scene_body` / `remove_scene_body` /
+  `clear_scene` / `scene_bodies` / `scene_body_count`, minting a `SceneBodyId`) plus NODE/SCENE
+  `collision_groups` — node colliders join `NODE`/filter-`NODE` (intangible to the scene by default);
+  scene colliders join `SCENE`/filter-`SCENE|NODE`, so a node opts into contact by adding `SCENE` to
+  its own filter (the P2 lever). **Correction to the plan + Grounding**: the layout forces do **not**
+  need a group-filter — `NodeExclusion` / `EdgeSpring` / `Boundary` already key off `bodies_by_node`
+  and skip any collider whose `collider_to_node` returns `None`, so scene bodies (no `NodeKey`) are
+  invisible to them automatically; only the collision groups (for hard-collision intangibility) were
+  required. A unit test (`scene_body_is_intangible_to_nodes_and_ignored_by_forces`) proves an
+  overlapping scene body never pushes a node and the scene clears cleanly; gyre 32 tests green, the
+  orrery builds on it. **Remaining P1 (next slice)**: the orrery **paint pass** — extend
+  `LayoutSnapshot` / `LayoutView` with scene positions so they ride the off-thread snapshot, paint
+  them as a layer under the graph underlay (`frame.rs`), and add a few drifting backdrop bodies in
+  the bin (added pre-offload, so no `PhysicsCommand` is needed) — then headed-verify the drift behind
+  an unperturbed graph. `gravity_scale(0)` for a gravity scene rides that slice / P2.
