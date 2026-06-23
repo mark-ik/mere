@@ -128,9 +128,14 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
      HTML through serval's **static layout**, no `BoaEngine`/`NovaEngine`/`Runtime`; the
      `ScriptInstance` in meerkat is mere's `mere:script` WIT, a different runtime). So
      this waits on the page-JS-execution lane, not just on a green build.
-   - **6b. Durable storage areas** — *future*: durable, persona+origin-partitioned
-     `localStorage` (serval's is in-memory today), `sessionStorage` (per-session, not
-     durable), and IndexedDB (a much larger spec) per the WHATWG Storage Standard.
+   - **6b. Durable storage areas** — *engine seam done 2026-06-23* (serval `3ed0ed0`):
+     a `StorageProvider` host seam (mirroring `CookieProvider`); when set, the
+     `localStorage` `__storage*` sinks route through it (the in-memory
+     `HostState.storage` stays the default for tests / WPT). The host backs it durably
+     and persona+origin-partitioned (e.g. eidetic write-through). Tested on boa + nova.
+     **Remaining (host impl, same page-JS gating as 6a):** a `StorageProvider` over
+     eidetic keyed by `(persona, origin)`, set on the page runtime. `sessionStorage`
+     (per-session, not durable) and IndexedDB (a much larger spec) are separate.
 7. **Flip-back SESSION** *(future, scoped below)* — read the WebView jar
    (`request_all_cookies`) into the substrate on flip-back.
 
@@ -229,3 +234,11 @@ jar to follow the active persona:
   flip-back SESSION (thread 7, awaits flip-back) and multi-persona (awaits v1). **The
   immediate-mere-payoff session work — threads 1-5 + the incremental refinement — is
   done: HTTP sessions persist, survive restart, and cross the flip.**
+- **2026-06-23 (thread 6b engine seam)**: serval gained a `StorageProvider` host seam
+  for durable `localStorage` (serval `3ed0ed0`; the `__storage*` sinks route through a
+  host provider when set, in-memory default otherwise; WHATWG `Storage` shape,
+  host-owned persistence + order; tested on boa + nova). Correct-ahead engine work: the
+  meerkat host impl (an eidetic-backed, `(persona, origin)`-partitioned provider) shares
+  6a's page-JS gating. With this, serval's cookie + localStorage stores are both
+  host-backable durably; `sessionStorage` / IndexedDB / the Cookie Store API remain
+  separate standards items.
