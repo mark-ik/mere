@@ -154,6 +154,10 @@ const DEFAULT_ANGULAR_DAMPING: f32 = 4.0;
 /// coasts a long while rather than settling quickly. (Physics scenes P1.)
 const SCENE_DAMPING: f32 = 0.3;
 
+/// Upper bound on bodies a single [`SceneSpec`] loads, so a runaway scene can't swamp
+/// the physics actor's per-tick budget. (Physics scenes P3.)
+const SCENE_BODY_CAP: usize = 200;
+
 /// Collision groups that keep the graph and the scene from hard-colliding by
 /// default. Node colliders are in [`NODE_GROUP`] and collide only with other nodes
 /// (intangible to the scene); scene colliders are in [`SCENE_GROUP`] and collide
@@ -182,6 +186,67 @@ fn scene_groups() -> InteractionGroups {
 /// [`Simulation::add_scene_body`]. (Physics scenes P1.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SceneBodyId(u64);
+
+/// Whether a scene body moves under forces / collision (`Dynamic`) or is immovable
+/// terrain (`Fixed`) — a floor, a wall, a peg. (Physics scenes P3.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SceneBodyType {
+    Dynamic,
+    Fixed,
+}
+
+/// One body in a declarative scene: its shape, world spawn, initial velocity, kind, and
+/// bounciness. Data, not code — a [`SceneSpec`] is a list of these. (Physics scenes P3.)
+#[derive(Clone, Debug)]
+pub struct SceneBodySpec {
+    pub collider: NodeCollider,
+    pub position: (f32, f32),
+    pub velocity: (f32, f32),
+    pub body_type: SceneBodyType,
+    pub restitution: f32,
+}
+
+/// A declarative physics scene the orrery's world can load: a set of bodies, the world
+/// gravity to apply, and whether the graph collides with it by default. Loading one
+/// ([`Simulation::load_scene`]) clears any prior scene. (Physics scenes P3.)
+#[derive(Clone, Debug)]
+pub struct SceneSpec {
+    pub bodies: Vec<SceneBodySpec>,
+    /// World gravity (px/s^2; `+y` is down at Mere's screen scale). `(0, 0)` for a
+    /// gravity-free scene (a drifting backdrop, a bouncing box).
+    pub gravity: (f32, f32),
+    /// Whether the graph collides with the scene on load (the tangibility default).
+    pub default_tangible: bool,
+}
+
+/// A transplanted demo scene: a bumpy fixed floor (a row of big fixed balls) with a
+/// handful of dynamic balls falling onto it under gravity and piling up. The
+/// "interactive scene" proof — data-defined, and the graph can knock the balls around
+/// once made tangible. (Physics scenes P3.)
+pub fn drop_bowl_scene() -> SceneSpec {
+    let mut bodies = Vec::new();
+    // The bumpy fixed floor.
+    for i in 0..5 {
+        bodies.push(SceneBodySpec {
+            collider: NodeCollider::Ball { radius: 60.0 },
+            position: (-280.0 + i as f32 * 140.0, 340.0),
+            velocity: (0.0, 0.0),
+            body_type: SceneBodyType::Fixed,
+            restitution: 0.4,
+        });
+    }
+    // Dynamic balls dropped from above the graph.
+    for i in 0..8 {
+        bodies.push(SceneBodySpec {
+            collider: NodeCollider::Ball { radius: 22.0 },
+            position: (-210.0 + i as f32 * 60.0, -260.0 - (i % 3) as f32 * 40.0),
+            velocity: (0.0, 0.0),
+            body_type: SceneBodyType::Dynamic,
+            restitution: 0.5,
+        });
+    }
+    SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false }
+}
 
 /// A pluggable force-applier. Forces read the body store and apply
 /// forces / impulses; gyre's tick walks every registered force
@@ -569,6 +634,9 @@ impl Simulation {
                 .translation(vector![position.x, position.y])
                 .linear_damping(self.linear_damping)
                 .angular_damping(DEFAULT_ANGULAR_DAMPING)
+                // Nodes never fall: scene gravity acts only on scene bodies, so the graph
+                // layout is unaffected by a gravity scene. (Physics scenes P3.)
+                .gravity_scale(0.0)
                 .build();
             let handle = self.bodies.insert(body);
             let collider = ColliderBuilder::ball(NODE_BODY_RADIUS)
@@ -744,6 +812,52 @@ impl Simulation {
                 c.set_collision_groups(groups);
             }
         }
+    }
+
+    /// Set the world gravity (px/s^2). Node bodies carry `gravity_scale(0)`, so only
+    /// scene bodies fall; the graph layout is unaffected. (Physics scenes P3.)
+    pub fn set_gravity(&mut self, gravity: (f32, f32)) {
+        self.gravity = vector![gravity.0, gravity.1];
+    }
+
+    /// Load a declarative [`SceneSpec`] into the world: clear any prior scene, set its
+    /// gravity, spawn its bodies (capped at [`SCENE_BODY_CAP`]), and apply its default
+    /// tangibility. (Physics scenes P3.)
+    pub fn load_scene(&mut self, spec: &SceneSpec) {
+        self.clear_scene();
+        self.set_gravity(spec.gravity);
+        for b in spec.bodies.iter().take(SCENE_BODY_CAP) {
+            let builder = match b.body_type {
+                SceneBodyType::Fixed => RigidBodyBuilder::fixed(),
+                SceneBodyType::Dynamic => RigidBodyBuilder::dynamic(),
+            };
+            let body = builder
+                .translation(vector![b.position.0, b.position.1])
+                .linvel(vector![b.velocity.0, b.velocity.1])
+                .linear_damping(SCENE_DAMPING)
+                .angular_damping(DEFAULT_ANGULAR_DAMPING)
+                .build();
+            let handle = self.bodies.insert(body);
+            let shape = b.collider.to_shared_shape();
+            let c = ColliderBuilder::new(shape)
+                .density(NODE_BODY_DENSITY)
+                .restitution(b.restitution)
+                .friction(0.3)
+                .collision_groups(scene_groups())
+                .build();
+            self.colliders.insert_with_parent(c, handle, &mut self.bodies);
+            let radius = match &b.collider {
+                NodeCollider::Ball { radius } => *radius,
+                NodeCollider::Square { half } => *half,
+                NodeCollider::RoundedSquare { half, .. } => *half,
+                NodeCollider::Hull { fallback, .. } => *fallback,
+            };
+            let id = SceneBodyId(self.next_scene_id);
+            self.next_scene_id += 1;
+            self.scene_bodies.insert(id, (handle, radius));
+        }
+        self.set_nodes_tangible(spec.default_tangible);
+        self.query_pipeline.update(&self.colliders);
     }
 
     /// Advance the simulation by `dt` seconds. Walks every registered
@@ -960,5 +1074,25 @@ mod scene_tests {
             tangible.x < -1.0,
             "tangible: the scene body pushed the node off the origin (was {tangible:?})",
         );
+    }
+
+    #[test]
+    fn load_scene_falls_under_gravity_while_nodes_float() {
+        let mut sim = Simulation::new();
+        let node = NodeKey::new(0);
+        sim.sync_nodes([(node, Point2D::new(0.0, 0.0))]);
+        sim.load_scene(&crate::drop_bowl_scene());
+        assert_eq!(sim.scene_body_count(), 13, "5 floor + 8 falling balls");
+
+        let min_before = sim.scene_bodies().map(|(_, p, _)| p.y).fold(f32::INFINITY, f32::min);
+        for _ in 0..60 {
+            sim.tick(1.0 / 60.0);
+        }
+        let min_after = sim.scene_bodies().map(|(_, p, _)| p.y).fold(f32::INFINITY, f32::min);
+        assert!(min_after > min_before + 5.0, "gravity pulled the falling balls down");
+
+        // The node carries gravity_scale(0), so scene gravity never drags the graph down.
+        let np = sim.position_of(node).expect("node has a position");
+        assert!(np.y.abs() < 5.0, "nodes float under scene gravity (was {np:?})");
     }
 }

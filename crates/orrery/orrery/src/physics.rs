@@ -26,7 +26,7 @@ use std::time::Duration;
 
 use armillary::{spawn, ActorHandle, Emitter, Wake};
 use euclid::default::Point2D;
-use gyre::{CouplingForce, LayoutSnapshot, LayoutView, NodeCollider, Simulation};
+use gyre::{CouplingForce, LayoutSnapshot, LayoutView, NodeCollider, SceneSpec, Simulation};
 use kernel::graph::NodeKey;
 
 use super::TICK_DT;
@@ -66,6 +66,10 @@ pub(crate) enum PhysicsCommand {
     /// Set every node's tangibility (collide with scene bodies, or pass through).
     /// (Physics scenes P2.)
     SetNodesTangible(bool),
+    /// Load a declarative scene (clears any prior scene). (Physics scenes P3.)
+    LoadScene(SceneSpec),
+    /// Remove every scene body. (Physics scenes P3.)
+    ClearScene,
 }
 
 /// One layout the actor produced: the positions plus whether it is still
@@ -220,6 +224,26 @@ impl Physics {
             Physics::Inline(p) => p.sim.set_nodes_tangible(tangible),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetNodesTangible(tangible));
+            }
+        }
+    }
+
+    /// Load a declarative scene into the world (clears any prior scene). (Physics scenes P3.)
+    pub fn load_scene(&mut self, spec: SceneSpec) {
+        match self {
+            Physics::Inline(p) => p.sim.load_scene(&spec),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::LoadScene(spec));
+            }
+        }
+    }
+
+    /// Remove every scene body. (Physics scenes P3.)
+    pub fn clear_scene(&mut self) {
+        match self {
+            Physics::Inline(p) => p.sim.clear_scene(),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::ClearScene);
             }
         }
     }
@@ -404,6 +428,8 @@ fn apply(
             sim.add_scene_body(collider, position, velocity);
         }
         PhysicsCommand::SetNodesTangible(tangible) => sim.set_nodes_tangible(tangible),
+        PhysicsCommand::LoadScene(spec) => sim.load_scene(&spec),
+        PhysicsCommand::ClearScene => sim.clear_scene(),
     }
 }
 

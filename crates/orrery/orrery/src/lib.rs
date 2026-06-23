@@ -1206,6 +1206,20 @@ impl Orrery {
         self.physics.set_nodes_tangible(tangible);
     }
 
+    /// Load the demo "drop bowl" interactive scene (a bumpy fixed floor + dynamic balls
+    /// falling under gravity) into the world, then kick a settle so it falls and piles.
+    /// The graph is intangible to it by default ([`set_nodes_tangible`] makes it
+    /// interactive). (Physics scenes P3.)
+    pub fn load_demo_scene(&mut self) {
+        self.physics.load_scene(gyre::drop_bowl_scene());
+        self.settle_physics(SETTLE_TICKS);
+    }
+
+    /// Remove every scene body (the living backdrop / loaded scene). (Physics scenes P3.)
+    pub fn clear_scene(&mut self) {
+        self.physics.clear_scene();
+    }
+
     /// The size-tier index (0..[`SIZE_TIERS`]`.len()`) nearest a node's current resolved
     /// size — where the resize control's filled notches stop. A size-by-degree or default
     /// size snaps to its nearest tier for display. (Node-rep — size tiers.)

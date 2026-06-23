@@ -252,6 +252,16 @@ impl ApplicationHandler for App {
                             self.orrery.set_nodes_tangible(self.nodes_tangible);
                             self.request_redraw();
                         },
+                        // `1` loads the demo interactive scene (drop bowl); `0` clears it
+                        // back to bare space (Physics scenes P3).
+                        WinitKey::Character(s) if s.as_str() == "1" => {
+                            self.orrery.load_demo_scene();
+                            self.request_redraw();
+                        },
+                        WinitKey::Character(s) if s.as_str() == "0" => {
+                            self.orrery.clear_scene();
+                            self.request_redraw();
+                        },
                         _ => {},
                     }
                 }
