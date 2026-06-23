@@ -24,9 +24,11 @@
 //! inline fetched media.
 
 use std::sync::mpsc::Receiver;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use armillary::{ActorHandle, Emitter, Wake, spawn};
+use netfetcher::{CookieStore, InMemoryCookieJar, SameSiteContext};
 use tokio::runtime::Builder;
 
 /// The most redirects a smolweb fetch will follow before giving up.
@@ -251,10 +253,75 @@ fn smolweb_content_type(url: &url::Url, response: &errand::Response) -> String {
     }
 }
 
+/// The process-wide HTTP cookie jar: one persistent RFC 6265bis session shared by
+/// every fetch, so a `Set-Cookie` on one page is still set on the next (logins
+/// survive navigation) and the verso flip can carry the session into a
+/// compatibility-view WebView. Without this each fetch built a throwaway jar, so no
+/// session ever persisted. v1 is a single unpartitioned jar; per-origin / per-persona
+/// partitioning + eidetic durability are later threads (the native session store
+/// plan). The jar is `Send + Sync` (a `Mutex` inside), so the fetch worker and the UI
+/// thread share the one `Arc`.
+pub fn session_jar() -> &'static Arc<InMemoryCookieJar> {
+    static JAR: OnceLock<Arc<InMemoryCookieJar>> = OnceLock::new();
+    JAR.get_or_init(|| Arc::new(InMemoryCookieJar::new()))
+}
+
+/// Adapts the `Arc`-shared [`session_jar`] to netfetcher's `CookieStore` seam, which
+/// takes an owned `Box<dyn CookieStore>` per context. Every per-fetch context's box
+/// holds a clone of the one `Arc`, so they all read and write the same jar.
+struct SharedJar(Arc<InMemoryCookieJar>);
+
+impl CookieStore for SharedJar {
+    fn cookies_for(&self, url: &url::Url, ctx: SameSiteContext) -> Vec<String> {
+        self.0.cookies_for(url, ctx)
+    }
+    fn set_cookie(&self, url: &url::Url, set_cookie_header: &str) {
+        self.0.set_cookie(url, set_cookie_header);
+    }
+}
+
+/// A `FetchContext` whose cookie jar is the shared [`session_jar`]; the other seams
+/// keep the permissive in-memory defaults for now. Built per fetch (cheap: the jar
+/// inside is shared by `Arc`), so cookies accumulate across navigations.
+fn session_context() -> netfetcher::FetchContext {
+    let mut cx = netfetcher::FetchContext::permissive();
+    cx.cookies = Box::new(SharedJar(session_jar().clone()));
+    cx
+}
+
+/// The shared session's cookies for `url`, as portable records for a verso flip.
+/// Reads the jar's same-site cookies (a flip is a same-origin top-level navigation),
+/// then rebuilds each [`verso_api::Cookie`] from its `name=value` pair plus the URL.
+/// Lossy on `Secure` / `HttpOnly` / `SameSite` / exact `Domain` / `Path` until
+/// netfetcher exposes a structured read (native session store plan §5); enough to
+/// carry the live session into a compatibility-view WebView.
+pub fn session_cookies_for(url: &str) -> Vec<verso_api::Cookie> {
+    let Ok(parsed) = url::Url::parse(url) else {
+        return Vec::new();
+    };
+    let domain = parsed.host_str().unwrap_or_default().to_string();
+    let secure = parsed.scheme() == "https";
+    session_jar()
+        .cookies_for(&parsed, SameSiteContext::same_site())
+        .into_iter()
+        .filter_map(|pair| {
+            let (name, value) = pair.split_once('=')?;
+            Some(verso_api::Cookie {
+                name: name.to_string(),
+                value: value.to_string(),
+                domain: domain.clone(),
+                path: "/".to_string(),
+                secure,
+                ..Default::default()
+            })
+        })
+        .collect()
+}
+
 /// Run one WHATWG-Fetch GET and collect the decoded body as text.
 async fn do_fetch(url: &str) -> Result<Fetched, String> {
     let parsed = url::Url::parse(url).map_err(|e| format!("bad URL: {e}"))?;
-    let cx = netfetcher::FetchContext::permissive();
+    let cx = session_context();
     let response = netfetcher::fetch(netfetcher::Request::get(parsed), &cx).await;
     if response.is_network_error() {
         return Err("network error".to_string());
@@ -280,7 +347,7 @@ async fn do_fetch(url: &str) -> Result<Fetched, String> {
 /// network / HTTP / read error. The subresource counterpart to [`do_fetch`].
 async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
     let parsed = url::Url::parse(url).ok()?;
-    let cx = netfetcher::FetchContext::permissive();
+    let cx = session_context();
     let response = netfetcher::fetch(netfetcher::Request::get(parsed), &cx).await;
     if response.is_network_error() || !(200..300).contains(&response.status) {
         return None;

@@ -241,7 +241,10 @@ mod windows_pool {
                 value: cookie.value.clone(),
                 domain: cookie.domain.clone(),
                 path: cookie.path.clone(),
-                expires_at: None, // session cookie; the flip carries the live session
+                // Carry the expiry when present; `None` = session cookie. (scrying's
+                // Cookie has no SameSite / Partitioned field, so those verso layers
+                // drop at this boundary; the WebView applies its own defaults.)
+                expires_at: cookie.expires,
                 is_secure: cookie.secure,
                 is_http_only: cookie.http_only,
             };

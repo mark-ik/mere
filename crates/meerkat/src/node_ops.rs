@@ -129,11 +129,12 @@ impl WindowCtx<'_> {
             true
         };
         if on {
-            // Capture the serval side's place and stage it as a flip, so the system
-            // WebView loads where the user was — same URL, same scroll — rather than
-            // blank at the top. This turns the stateless engine-switch into a verso
-            // flip. Cookies and forms degrade for now (no host-side cookie jar yet); the
-            // URL + scroll are what the host can reach synchronously. (Verso flip.)
+            // Capture the serval side's place + session and stage it as a flip, so the
+            // system WebView loads where the user was — same URL, same scroll, same
+            // login — rather than blank and signed-out. This turns the stateless
+            // engine-switch into a verso flip. Forms still degrade (they need the
+            // off-thread serval DOM); the SESSION cookies come from the shared jar.
+            // (Verso flip; native session store plan.)
             if let Some(url) = self
                 .orrery()
                 .graph()
@@ -141,11 +142,13 @@ impl WindowCtx<'_> {
                 .map(|(_, node)| node.url().to_string())
             {
                 let scroll_y = self.view.scroll.get(&member).copied().unwrap_or(0.0);
+                let cookies = super::fetch::session_cookies_for(&url);
                 self.view.scrying.begin_flip(
                     member,
                     verso_api::PortableViewState {
                         url: Some(url),
                         scroll: (0.0, scroll_y),
+                        cookies,
                         ..Default::default()
                     },
                 );

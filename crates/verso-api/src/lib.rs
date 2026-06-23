@@ -56,9 +56,20 @@ impl core::ops::BitOr for LayerSet {
     }
 }
 
-/// A cookie in engine-agnostic terms. Adapters convert to/from the engine's own
-/// cookie type.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// A cookie's `SameSite` attribute (RFC 6265bis). Carried so the gating semantics
+/// survive a flip; `None` means unspecified (engines default it to `Lax`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SameSite {
+    Strict,
+    Lax,
+    None,
+}
+
+/// A cookie in engine-agnostic terms, mirroring the RFC 6265bis record (the shape
+/// the [`cookie`](https://crates.io/crates/cookie) crate uses, which both Mere's
+/// netfetcher jar and Servo's net jar build on). Adapters convert to/from the
+/// engine's own cookie type; carrying the full record keeps a flip's session lossless.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Cookie {
     pub name: String,
     pub value: String,
@@ -66,6 +77,13 @@ pub struct Cookie {
     pub path: String,
     pub secure: bool,
     pub http_only: bool,
+    /// `SameSite` gating, or `None` when unspecified.
+    pub same_site: Option<SameSite>,
+    /// Absolute expiry in Unix seconds (the normalized form of `Expires` / `Max-Age`),
+    /// or `None` for a session cookie.
+    pub expires: Option<f64>,
+    /// `Partitioned` (CHIPS): the cookie is keyed to the top-level site.
+    pub partitioned: bool,
 }
 
 /// Form field values keyed by a stable selector. Best-effort across engines.

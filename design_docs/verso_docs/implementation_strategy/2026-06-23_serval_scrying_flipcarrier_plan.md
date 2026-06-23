@@ -250,3 +250,13 @@ same page, same session, same place — never the same running program.
   green. Remaining: cookie-jar wiring (the high-value SESSION layer), the full
   `verso-serval` donor capture (DOM/forms, needs the off-thread serval document), the
   visual cross-fade, and flip-back (§5).
+- **2026-06-23 (SESSION layer)**: the flip now carries the login, not just the place.
+  Root cause of the "no host-side cookie jar" gap: meerkat built a throwaway
+  `FetchContext` per fetch, so no session ever persisted. Fixed with a process-wide
+  shared jar (`fetch::session_jar`) injected into every fetch, and the trigger reads
+  `fetch::session_cookies_for(url)` into `PortableViewState.cookies`. Upgraded
+  `verso-api::Cookie` to the RFC 6265bis shape (`same_site` / `expires` / `partitioned`)
+  so the carry is lossless. Full model + the durable/partitioned/script-integration
+  follow-ons in the
+  [native session store plan](../../mere_docs/implementation_strategy/2026-06-23_native_session_store_plan.md).
+  **v1 now carries URL + scroll + SESSION**; FORM still degrades.
