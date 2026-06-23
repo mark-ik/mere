@@ -126,8 +126,8 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
   Sessions now persist across navigations; the flip carries the login. (Committed
   `2fa18ad` in mere.)
 - **2026-06-23 (thread 5)**: lossless structured read. netfetcher gained
-  `CookieStore::records_for` + a stored `HttpOnly` (netfetcher `7c22a65`, owned fork —
-  *push pending: Git Credential Manager hung the push; needs a hand*). `session_jar`
+  `CookieStore::records_for` + a stored `HttpOnly` (netfetcher `7c22a65`, owned fork,
+  pushed to `main`). `session_jar`
   builds `FetchContext`s through netfetcher's now-shared seam; `session_cookies_for`
   reads `records_for` and maps each `CookieRecord` to a full `verso-api::Cookie`
   (`Domain`/`Path`/`Secure`/`HttpOnly`/`SameSite`/expiry faithful; `Partitioned` still
