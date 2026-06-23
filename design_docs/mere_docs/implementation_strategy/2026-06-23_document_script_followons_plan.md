@@ -225,3 +225,25 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   order; outline what you need before compaction"). Captures the shipped substrate state, the four
   follow-ons with files/approach/gotchas/done-conditions, and the working discipline. Starting
   follow-on #1 (Session-override store). No follow-on code yet in this entry.
+- **2026-06-23 (follow-on #1 — Session-override store, landed).** `settings_store.rs` gains a
+  `ScriptPermissionPrefs { log, document: Option<Permission> }` (reusing `kernel::permissions::
+  Permission`, which session-runtime already deps + is serde-derived) and a `#[serde(default)]
+  script_permissions` field on `PersistedSettings`; round-trip tested (session-runtime: 71 green).
+  Wiring stayed in **clean files** (no main.rs/presentation cache): `command_drain` **loads
+  settings on demand at attach** (a rare explicit action) → maps to `ScriptCapPolicy` →
+  `resolve_attach_permissions`, so a session `document: Deny` now fails the attach at instantiation;
+  `frame_ops::persist_settings` **preserves** the on-disk `script_permissions` (loads it before the
+  save so the runtime-state reconstruction does not clobber it). My code compiles clean (verified:
+  the only build error is Mark's in-flight `PersonaSettings.command_usage`, an unrelated dirty-file
+  refactor; my paths compile against HEAD). **Deferred**: a settings-lane UI to edit the opinion;
+  Graph/Surface scopes (the chain omits them = Inherit).
+  **Commit: combined with Mark's command-registry work (interleaved).** The tree is now **green**
+  (Mark's `command_usage` / `record_command_usage` refactor landed; meerkat 73 lib + 109 bin +
+  session-runtime 71 all pass). But #1's code is **interleaved** with his command-registry work in the
+  same files and cannot be split by pathspec: `settings_store.rs` is cleanly mine, but its new
+  *required* `script_permissions` field forces `frame_ops.rs` (the `PersistedSettings` construction) to
+  commit with it — and `frame_ops.rs` (his `command_usage:` on the `PersonaSettings` construction +
+  `record_command_usage` method) and `command_drain.rs` (his `record_command_usage(cmd.verb())` call)
+  both carry his work. So only this plan doc separates. Resolution: Mark commits his command-registry
+  work (sweeping my #1's `settings_store`/`frame_ops`/`command_drain` hunks), **or** authorizes a
+  combined working-tree commit. #1 itself is **done + green**. Next: follow-on #2 (auto-attach).
