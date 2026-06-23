@@ -223,6 +223,9 @@ jar to follow the active persona:
   boa + nova). **Found** while scoping the meerkat wiring: meerkat doesn't run serval's
   JS runtime yet (static-layout render only), so `document.cookie` has no live consumer
   in meerkat — the wiring is gated on the page-JS-execution lane, not a green build (the
-  seam is ready for pelt/WPT and any future JS consumer). Also scoped: flip-back SESSION
-  (thread 7) and multi-persona. Next buildable now: thread 6b (durable storage areas,
-  which rides serval's existing in-memory `localStorage`, no JS-execution prerequisite).
+  seam is ready for pelt/WPT and any future JS consumer). The same gating applies to
+  thread 6b (durable `localStorage` is also JS-accessed), so all of thread 6 is
+  serval-engine work whose *meerkat* payoff awaits the page-JS lane. Also scoped:
+  flip-back SESSION (thread 7, awaits flip-back) and multi-persona (awaits v1). **The
+  immediate-mere-payoff session work — threads 1-5 + the incremental refinement — is
+  done: HTTP sessions persist, survive restart, and cross the flip.**
