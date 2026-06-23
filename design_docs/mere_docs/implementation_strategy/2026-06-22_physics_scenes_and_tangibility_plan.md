@@ -249,3 +249,36 @@ within budget.
   them as a layer under the graph underlay (`frame.rs`), and add a few drifting backdrop bodies in
   the bin (added pre-offload, so no `PhysicsCommand` is needed) — then headed-verify the drift behind
   an unperturbed graph. `gravity_scale(0)` for a gravity scene rides that slice / P2.
+- 2026-06-23: **P1 complete — the paint slice landed + headed-verified (committed `0f4569e`).** Scene
+  bodies ride the off-thread snapshot: `LayoutSnapshot` / `LayoutView` carry `(SceneBodyId, position,
+  radius)`, `Simulation::snapshot` emits them and `apply_snapshot` refreshes them, so the actor's
+  per-tick snapshot flows the drifting positions with no extra channel work (plus a
+  `PhysicsCommand::AddSceneBody` for post-offload adds). `frame.rs` paints each as a soft
+  radial-gradient orb behind the graph (a layer between the backdrop and the edge underlay),
+  projected through `Camera::to_screen` so it reclines with the iso ground. `Orrery::add_scene_body
+  (position, radius, velocity)` is the host seam; the bin seeds four drifting backdrop orbs.
+  Headed-verified (scry-shots/scene-00..02): the orbs render behind the graph, drift between frames,
+  graph unperturbed. **Known limitation**: the physics actor parks at rest, so the backdrop freezes
+  once the layout settles — a continuous-tick-while-scene mode (or a perpetual drift force) is a
+  follow-on, traded against the idle-CPU saving.
+- 2026-06-23: **P2 complete — the tangibility lever (committed `a5ff3c5`).** `set_node_tangibility`
+  (per node) and `set_nodes_tangible` (scene-wide) re-mask the node collider filter (`NODE`
+  intangible / `NODE|SCENE` tangible) via a `remask_node` helper; node-node collision is unaffected
+  either way. Routed through the orrery + `PhysicsCommand::SetNodesTangible`; the bin's `t` key flips
+  it. A unit test (`node_tangibility_toggles_scene_collision`) proves an overlapping scene body pushes
+  a tangible node but not an intangible one. The P1 groups made this a pure filter flip.
+  **Follow-ons**: a scene-wide toggle applies to the current nodes (new nodes spawn intangible —
+  re-apply on add); the meerkat `scene.tangibility` command + per-node menu toggle wait for the
+  command-registry pass.
+- 2026-06-23: **P3 complete — scenes as data + a gravity scene (committed `63c6313`); headed-verified.**
+  A declarative `SceneSpec` (bodies: shape / position / velocity / `SceneBodyType` Dynamic|Fixed /
+  restitution; world gravity; default tangibility) loads via `Simulation::load_scene` (clears any
+  prior scene, capped at `SCENE_BODY_CAP`). Nodes carry `gravity_scale(0)`, so scene gravity acts only
+  on scene bodies — the graph layout is untouched. A transplanted `drop_bowl_scene` (a bumpy fixed
+  floor + dynamic balls falling onto it) ships via `Orrery::load_demo_scene`; the bin's `1` / `0`
+  load / clear it (routed through `PhysicsCommand::LoadScene` / `ClearScene`). A unit test
+  (`load_scene_falls_under_gravity_while_nodes_float`) proves the balls fall while the node floats;
+  gyre 34 + orrery 44 green. Headed-verified (scry-shots/p3-00..01): the balls fall and pile on the
+  floor behind an unperturbed graph. **Follow-ons**: joints (to transplant the drum / card-house
+  scenes), a serde scene-file format (shareable scenes, not just code), the meerkat scene-picker
+  command, then P4 liquid (salva) and P5 the ambient separate-sim backdrop.
