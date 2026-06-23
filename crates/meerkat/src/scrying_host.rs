@@ -194,6 +194,18 @@ impl ScryingHost {
         #[cfg(not(target_os = "windows"))]
         let _ = member;
     }
+
+    /// Stage a compatibility-view flip for `member`: the place/session captured from
+    /// the serval side at the serval -> `scrying.web` pin. When this member's tile next
+    /// spawns, the pool sets the carried cookies and navigates (instead of a blank
+    /// load), then restores scroll / forms once the load completes (`verso-scry`'s
+    /// forward-inject). A no-op off Windows (no producer to drive). (Verso flip.)
+    pub fn begin_flip(&mut self, member: GraphMemberId, state: verso_api::PortableViewState) {
+        #[cfg(target_os = "windows")]
+        self.pool.begin_flip(member, state);
+        #[cfg(not(target_os = "windows"))]
+        let _ = (member, state);
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -208,12 +220,56 @@ mod windows_pool {
         WgpuTextureImporter,
     };
     use scrying::{
-        FocusReason, KeyEventKind, KeyModifierFlags, KeyboardInput, MouseEventKind, MouseInput,
-        MouseVirtualKeys, PlatformCompositionRoot, PlatformWebSurfaceConfig,
-        PlatformWebSurfaceProducer, WebSurfaceFrame,
+        Cookie as ScryCookie, FocusReason, KeyEventKind, KeyModifierFlags, KeyboardInput,
+        MouseEventKind, MouseInput, MouseVirtualKeys, NavigationEvent, PlatformCompositionRoot,
+        PlatformWebSurfaceConfig, PlatformWebSurfaceProducer, WebSurfaceFrame,
     };
+    use verso_scry::{NavSignal, ScryForward, ScrySurface};
 
     use super::{KeyMods, MouseBtn, MousePress};
+
+    /// The `verso-scry` `ScrySurface` seam over the concrete WebView2 producer: maps
+    /// verso's engine-agnostic `Cookie` to scrying's and runs the restore script
+    /// through the producer's blocking execute-script. This is where the platform
+    /// bridging lives, keeping `verso-scry` free of the `scrying` dep. (Verso flip.)
+    struct ProducerSurface<'a>(&'a mut PlatformWebSurfaceProducer);
+
+    impl ScrySurface for ProducerSurface<'_> {
+        fn set_cookie(&mut self, cookie: &verso_api::Cookie) -> Result<(), String> {
+            let scry = ScryCookie {
+                name: cookie.name.clone(),
+                value: cookie.value.clone(),
+                domain: cookie.domain.clone(),
+                path: cookie.path.clone(),
+                expires_at: None, // session cookie; the flip carries the live session
+                is_secure: cookie.secure,
+                is_http_only: cookie.http_only,
+            };
+            self.0.set_cookie(&scry).map_err(|err| err.to_string())
+        }
+
+        fn navigate(&mut self, url: &str) -> Result<(), String> {
+            self.0.load_url(url).map_err(|err| err.to_string())
+        }
+
+        fn run_script(&mut self, js: &str) -> Result<String, String> {
+            self.0
+                .execute_script_with_result(js, std::time::Duration::from_secs(3))
+                .map_err(|err| err.to_string())
+        }
+    }
+
+    /// Map a producer nav event to the signal the flip waits on (only the two it
+    /// cares about; the rest are dropped).
+    fn nav_signal(event: &NavigationEvent) -> Option<NavSignal> {
+        match event {
+            NavigationEvent::Completed { success, .. } => {
+                Some(NavSignal::Completed { success: *success })
+            }
+            NavigationEvent::Starting { .. } => Some(NavSignal::Started),
+            _ => None,
+        }
+    }
 
     #[derive(Default)]
     pub(super) struct Pool {
@@ -242,6 +298,11 @@ mod windows_pool {
         /// host must force a D3D12 state-transition barrier on it every frame or D3D12
         /// keeps sampling the cached first frame forever. (Mirrors demo-win's renderer.)
         cache_flush_buffer: Option<wgpu::Buffer>,
+        /// Compatibility-view flips staged by `begin_flip` (the serval -> `scrying.web`
+        /// pin), keyed by member, awaiting their tile's spawn. Drained in `drive`: the
+        /// flip sets cookies + navigates so the WebView loads carried, then becomes the
+        /// tile's live `flip` until its restore completes. (Verso flip.)
+        pending_flips: HashMap<GraphMemberId, ScryForward>,
     }
 
     struct Tile {
@@ -266,17 +327,36 @@ mod windows_pool {
         /// no WGC frames) quiesces instead of restarting every ~2s and paying
         /// `start_capture`'s settle each time. Reset to 600 on any acquired frame.
         stall_threshold: u32,
+        /// A live compatibility-view flip driving this tile: present from spawn (when a
+        /// `pending_flip` was staged) until its post-load restore completes, then
+        /// cleared. While `Some`, `drive` pumps nav events into it. (Verso flip.)
+        flip: Option<ScryForward>,
     }
 
     impl Pool {
         pub(super) fn reap(&mut self, member: GraphMemberId) {
             self.tiles.remove(&member);
             self.failed.remove(&member);
+            self.pending_flips.remove(&member);
+        }
+
+        /// Stage a forward flip for `member`. Its tile may not exist yet (the pin just
+        /// fired; the tile spawns on the next redraw), so the carry waits here and
+        /// `drive` attaches it on spawn. A flip with no URL is dropped — there is
+        /// nothing to navigate, so the plain blank load is the right behavior.
+        pub(super) fn begin_flip(&mut self, member: GraphMemberId, state: verso_api::PortableViewState) {
+            let flip = ScryForward::new(state);
+            if flip.has_target() {
+                self.pending_flips.insert(member, flip);
+            } else {
+                self.pending_flips.remove(&member);
+            }
         }
 
         pub(super) fn clear(&mut self) {
             self.tiles.clear();
             self.failed.clear();
+            self.pending_flips.clear();
         }
 
         /// Reap (drop the WebView for) every tile whose member is not in `keep`.
@@ -286,6 +366,7 @@ mod windows_pool {
         pub(super) fn retain(&mut self, keep: &std::collections::HashSet<GraphMemberId>) {
             self.tiles.retain(|member, _| keep.contains(member));
             self.failed.retain(|member, _| keep.contains(member));
+            self.pending_flips.retain(|member, _| keep.contains(member));
         }
 
         pub(super) fn texture_view(&self, member: GraphMemberId) -> Option<&wgpu::TextureView> {
@@ -410,6 +491,10 @@ mod windows_pool {
             }
             let importer = self.importer.as_ref().expect("importer set above");
 
+            // A staged flip owns the first navigation (cookies must be set before it),
+            // so the tile spawns without its usual blank load. (Verso flip.)
+            let has_pending_flip = self.pending_flips.contains_key(&member);
+
             if !self.tiles.contains_key(&member) {
                 // Create the one per-HWND composition target on first spawn, then
                 // attach every pane to it so any number of compat tiles coexist.
@@ -432,6 +517,7 @@ mod windows_pool {
                     height,
                     session_dir,
                     self.fence_handle,
+                    !has_pending_flip,
                 ) {
                     Ok(tile) => {
                         self.tiles.insert(member, tile);
@@ -443,6 +529,8 @@ mod windows_pool {
                     }
                 }
             }
+            // Taken before borrowing the tile (a disjoint field); attached below.
+            let pending_flip = self.pending_flips.remove(&member);
             let tile = self.tiles.get_mut(&member).expect("inserted above");
 
             if tile.size != (width, height) {
@@ -456,12 +544,48 @@ mod windows_pool {
             // captured texture under the chrome (render.rs:1398) and forwards input
             // by API, so the visual is never parked on-screen and never occludes the
             // chrome. (P2 off-window host; the per-frame `set_offset` chase is gone.)
-            if tile.shown_url.as_deref() != Some(url) {
+            if let Some(mut flip) = pending_flip {
+                // The flip drives the first navigation: set the carried cookies, then
+                // navigate, so the WebView loads already-authenticated (verso-scry's
+                // begin). It then lives on the tile until its post-load restore runs.
+                let mut surface = ProducerSurface(&mut tile.producer);
+                if let Err(err) = flip.begin(&mut surface) {
+                    tile.last_error = Some(format!("flip begin: {err}"));
+                }
+                // The flip owns the shown URL; the plain navigate below stays a no-op.
+                tile.shown_url = Some(url.to_string());
+                if !flip.is_done() {
+                    tile.flip = Some(flip);
+                }
+            } else if tile.shown_url.as_deref() != Some(url) {
                 // Non-blocking navigation: the blocking trait method pumps a
                 // wait loop on the UI thread (plan X2 owns the full nav story).
                 match tile.producer.load_url(url) {
                     Ok(()) => tile.shown_url = Some(url.to_string()),
                     Err(err) => tile.last_error = Some(format!("navigate: {err}")),
+                }
+            }
+
+            // Pump navigation events into a live flip until its restore completes. Poll
+            // first into a buffer (releasing the producer borrow), then feed the flip
+            // (which borrows the producer through `ProducerSurface` for the restore
+            // script). Disjoint tile fields, so both borrows coexist. (Verso flip.)
+            if tile.flip.is_some() {
+                let mut signals = Vec::new();
+                while let Some(event) = tile.producer.poll_navigation_event() {
+                    if let Some(sig) = nav_signal(&event) {
+                        signals.push(sig);
+                    }
+                }
+                if !signals.is_empty() {
+                    let mut surface = ProducerSurface(&mut tile.producer);
+                    let flip = tile.flip.as_mut().expect("checked is_some");
+                    for sig in signals {
+                        flip.on_nav(sig, &mut surface);
+                    }
+                }
+                if tile.flip.as_ref().is_some_and(|f| f.is_done()) {
+                    tile.flip = None;
                 }
             }
 
@@ -618,6 +742,7 @@ mod windows_pool {
         height: u32,
         session_dir: &Path,
         fence_handle: Option<*mut core::ffi::c_void>,
+        navigate_on_spawn: bool,
     ) -> Result<Tile, String> {
         let producer = build_producer(root, member, width, height, session_dir, fence_handle)?;
         let mut tile = Tile {
@@ -629,10 +754,15 @@ mod windows_pool {
             empty_polls: 0,
             total_polls: 0,
             stall_threshold: 600,
+            flip: None,
         };
-        match tile.producer.load_url(url) {
-            Ok(()) => tile.shown_url = Some(url.to_string()),
-            Err(err) => tile.last_error = Some(format!("navigate: {err}")),
+        // A staged flip sets cookies before its own navigate (`begin`), so skip the
+        // blank load here when one is pending; `drive` runs the flip immediately after.
+        if navigate_on_spawn {
+            match tile.producer.load_url(url) {
+                Ok(()) => tile.shown_url = Some(url.to_string()),
+                Err(err) => tile.last_error = Some(format!("navigate: {err}")),
+            }
         }
         Ok(tile)
     }

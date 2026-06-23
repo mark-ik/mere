@@ -1,0 +1,20 @@
+[package]
+name = "verso-scry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The scry (system-WebView) flip receiver for the Mere browser's compatibility view: the black-box secondary side of a serval -> scrying flip. A two-phase forward-inject state machine (set cookies + navigate, then restore scroll/forms on load) over a thin ScrySurface seam the host implements on its concrete WebView producer."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# verso-api only. The scry side is a black box reached through a handful of WebView
+# calls (set_cookie / navigate / run-script); rather than pull the heavy, Windows-only
+# `scrying` (WebView2) crate in here, the host implements the small `ScrySurface` seam
+# over its concrete producer and feeds nav signals. That keeps this crate light,
+# host-agnostic, and unit-testable (the §1 finding's gap), with the platform bridging
+# where the `scrying` dep already lives.
+verso-api = { workspace = true }

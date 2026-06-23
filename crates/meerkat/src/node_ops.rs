@@ -129,6 +129,27 @@ impl WindowCtx<'_> {
             true
         };
         if on {
+            // Capture the serval side's place and stage it as a flip, so the system
+            // WebView loads where the user was — same URL, same scroll — rather than
+            // blank at the top. This turns the stateless engine-switch into a verso
+            // flip. Cookies and forms degrade for now (no host-side cookie jar yet); the
+            // URL + scroll are what the host can reach synchronously. (Verso flip.)
+            if let Some(url) = self
+                .orrery()
+                .graph()
+                .get_node_by_id(member)
+                .map(|(_, node)| node.url().to_string())
+            {
+                let scroll_y = self.view.scroll.get(&member).copied().unwrap_or(0.0);
+                self.view.scrying.begin_flip(
+                    member,
+                    verso_api::PortableViewState {
+                        url: Some(url),
+                        scroll: (0.0, scroll_y),
+                        ..Default::default()
+                    },
+                );
+            }
             // The system WebView renders this node, so reap any serval actor, then open
             // it as a pelt tile: the workbench surface-tier path drives the off-window
             // WebView and composites its captured texture at the tile rect — no floating

@@ -229,3 +229,24 @@ same page, same session, same place — never the same running program.
   chunk is host-coupled: `verso-scry` (FlipReceiver/FlipBack over the WebView2 producer
   and the host frame loop) and the meerkat `ScryingHost` hook that fires the carrier on
   the `engine_pins` serval→`scrying.web` transition (§1, §6.5).
+- **2026-06-23 (phase 3+5, scry receiver + host wiring)**: the forward flip is live.
+  Minted `crates/verso-scry` — `ScryForward`, a two-phase forward-inject state machine
+  (set cookies → navigate → restore scroll/forms on `Completed`) over a thin
+  `ScrySurface` seam the host implements. **Refinement of §2**: rather than depend on
+  the heavy Windows-only `scrying` crate, `verso-scry` stays `verso-api`-only and the
+  host bridges its concrete producer to `ScrySurface`. That keeps it light, portable,
+  and *unit-testable* — closing the §1 "not testable in isolation" gap (6 tests green
+  with a mock surface). Added a const `LayerSet::union` to `verso-api` for the
+  adapter's `RECEIVES`. Host wiring in `meerkat::scrying_host`: a `ProducerSurface`
+  bridge (maps `verso-api::Cookie` → `scrying::Cookie`, runs the restore via
+  `execute_script_with_result`), a `pending_flips` map + per-tile `flip`, and the
+  `drive` loop now runs the flip's cookies-then-navigate on spawn (skipping the blank
+  load) and pumps `NavigationEvent::Completed` into the restore. The trigger is
+  `node_ops::toggle_focus_compat`: on the serval→`scrying.web` pin it stages a
+  `PortableViewState` (URL + scroll, host-reachable). **v1 carries URL + scroll** (same
+  page, same place — better than the stateless switch that loads blank at the top);
+  SESSION (cookies) and FORM degrade until a host-side cookie jar and a synchronous
+  serval-DOM read are wired (the donor's deeper layers). `cargo check -p meerkat`
+  green. Remaining: cookie-jar wiring (the high-value SESSION layer), the full
+  `verso-serval` donor capture (DOM/forms, needs the off-thread serval document), the
+  visual cross-fade, and flip-back (§5).

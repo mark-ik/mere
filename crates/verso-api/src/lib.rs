@@ -38,6 +38,11 @@ impl LayerSet {
     pub const fn intersect(self, other: Self) -> Self {
         Self(self.0 & other.0)
     }
+    /// Layers in either set. The const companion to [`intersect`](Self::intersect),
+    /// for building a fixed layer set (e.g. an adapter's `RECEIVES`) in a const.
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
     /// Is the set empty?
     pub const fn is_empty(self) -> bool {
         self.0 == 0

@@ -251,6 +251,14 @@ accesskit_windows = { workspace = true }
 scrying = { git = "https://github.com/mark-ik/wgpu-scry.git", branch = "main" }
 dpi = { workspace = true }
 
+# The verso compatibility-view flip: when a node is pinned serval -> scrying.web,
+# the host captures the donor's place/session (verso-api's PortableViewState) and the
+# scrying pool drives verso-scry's forward-inject state machine over its producer so
+# the WebView loads carried, not blank. verso-api is the engine-agnostic contract;
+# verso-scry is the black-box receiver (host implements its `ScrySurface` seam here).
+verso-api = { workspace = true }
+verso-scry = { workspace = true }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 accesskit_macos = { workspace = true }
 
