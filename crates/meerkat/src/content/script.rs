@@ -87,7 +87,15 @@ fn resolve_cap(session: Option<Permission>) -> ResolvedPermission {
 /// resolves the scope chain and passes the effective opinion in). A `Deny`/`Prompt`
 /// on a capability the component requires makes instantiation fail — the boundary.
 pub(crate) fn grant_from_resolved(log: ResolvedPermission, document: ResolvedPermission) -> Grant {
-    Grant { log: cap_permission(log), document: cap_permission(document) }
+    // `net` (network egress) defaults to denied for meerkat-attached scripts: it is
+    // powerful, and its per-scope resolution + an `AttachScript` `net` arm are a
+    // follow-on (§11.7-7 lands the capability in document-host; the host wiring to
+    // grant it is deferred). A script that imports `net` will fail to attach until then.
+    Grant {
+        log: cap_permission(log),
+        document: cap_permission(document),
+        net: CapPermission::Deny,
+    }
 }
 
 /// A resolved auto-attach binding (follow-on #2): an origin pattern + the component

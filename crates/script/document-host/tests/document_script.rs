@@ -107,3 +107,21 @@ fn precompiled_cwasm_attaches_and_drives_without_codegen() {
     let _ = script.detach();
     std::fs::remove_file(&path).ok();
 }
+
+#[test]
+fn a_granted_script_fetches_through_the_async_net_import() {
+    // §11.7-7 fiber-async: the guest calls `fetch` *synchronously*; the host's async
+    // `net.fetch` import (invoked on the turn's fiber) returns a response the guest
+    // writes into the DOM. `net` is granted via `allow_all`; without it the guest —
+    // which imports `net` — would fail to instantiate.
+    let (dom, _body, t1) = page();
+    let mut script = DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), Quota::default())
+        .expect("attach with net granted");
+    let out = script.deliver_event("fetch", "https://example.com/x").expect("fetch turn");
+    assert_eq!(out, TurnOutcome::Applied(1));
+    assert_eq!(
+        text_of(script.dom(), t1).as_deref(),
+        Some("fetched:https://example.com/x"),
+        "the async fetch response landed in the live DOM",
+    );
+}

@@ -17,6 +17,23 @@ interface caps {
     granted: func() -> list<string>;
 }
 
+/// Network capability (§11.7-7, fiber-async). A **sync-signature** `fetch` the host
+/// implements as an `async fn`: the guest calls it like a blocking call, but the host
+/// suspends the turn's fiber during the real I/O (turns run via `call_async`) — so a
+/// script reads a response straight-line, non-blocking, with no async colouring.
+/// Powerful (network egress): granted only with the `net` capability, which defaults
+/// to denied, so a script that imports `net` fails to instantiate unless granted.
+interface net {
+    record request {
+        url: string,
+    }
+    record response {
+        status: u32,
+        body: string,
+    }
+    fetch: func(req: request) -> result<response, string>;
+}
+
 /// The document vocabulary the script and host exchange. Values are copied across
 /// the boundary; no language-native object graph crosses it (§2.2).
 interface document {
@@ -115,6 +132,7 @@ interface document-host {
 world document-core {
     import log;
     import caps;
+    import net;
     import document-host;
     use document.{event, apply-batch, turn-error};
 

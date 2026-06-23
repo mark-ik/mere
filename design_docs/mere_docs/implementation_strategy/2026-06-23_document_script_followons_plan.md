@@ -279,3 +279,28 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   render-path wiring; the unit-testable pieces — mirror / grant / binding matching — are already
   covered). **Deferred**: a Retheme path for scripts (the serval lane themes via its own CSS, so
   unchanged). Next: follow-on #4 (P2.6 AOT, then fiber-async `fetch`).
+- **2026-06-23 (follow-on #4a — P2.6 AOT, landed + green; committed `6e95e42`).** `precompile_to_cwasm`
+  (Cranelift at build time → `.cwasm` bytes) + `load_component` (deserialize a `.cwasm`, no Cranelift,
+  else from_file a `.wasm`) keyed by extension, used by `build_instance` so `DocumentScript::attach(
+  <path.cwasm>)` is AOT transparently; `guarded_engine` (epoch config) shared by attach + precompile
+  so the artifact is config-compatible. `.cwasm` is trusted-first-party only (`deserialize` is unsafe)
+  + a per-target artifact (never committed). 1 test: precompile guest → attach from `.cwasm` → drive.
+- **2026-06-23 (follow-on #4b — fiber-async `net.fetch`, landed + green).** The substrate's network
+  capability. WIT: a `net` interface (`request`/`response`, `fetch: func(request) -> result<response,
+  string>`) imported into `document-core`. **bindgen `imports: { default: async }`** so the
+  sync-signature `fetch` is a host **`async fn`** — the guest calls it straight-line; the host suspends
+  the turn's fiber during I/O (turns already run via `call_async`), no async colouring guest-side
+  (§11.7-7). The three existing host imports became trivial `async fn`s. `net::Host::fetch` is a stub
+  (echoes the URL) — the **real backend (netfetcher/errand) is the content actor's wiring, deferred**;
+  the fiber-async *path* is exercised here and real-I/O suspension is proven by
+  `crates/probes/wasmtime-async-p1`. `Grant` gains `net` (defaults denied; `allow_all` grants it;
+  linked only when granted, so a `net`-importing guest fails to instantiate ungranted). The
+  document-core guest gained a `"fetch"` event (calls `fetch`, writes the body into the DOM); both
+  guests rebuilt. document-host **19 tests green** incl. `a_granted_script_fetches_through_the_async_net_import`
+  + the AOT test. meerkat: `grant_from_resolved` defaults `net: Deny` (one line; meerkat-attached
+  scripts can't fetch until the net-permission resolution + an `AttachScript` net arm land — a
+  follow-on). My meerkat change compiles clean (the build is red only on Mark's dirty gyre/physics
+  churn — `Point`/`Vec2`/`ForceContext`, unrelated, uncommitted; my files commit against HEAD).
+  **All four follow-ons done.** Remaining document-script work (beyond these four): the net-permission
+  resolution chain through meerkat (so a granted script can fetch), the mod-manifest "installed
+  extension" auto-attach form, and settings-lane UIs for permissions + bindings.

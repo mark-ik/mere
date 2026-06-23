@@ -16,6 +16,7 @@ use crate::mere::script::document::{
 };
 use crate::mere::script::document_host::inspect;
 use crate::mere::script::log::log;
+use crate::mere::script::net::{fetch, Request};
 
 struct Component;
 
@@ -61,6 +62,17 @@ impl Guest for Component {
                 let body =
                     first(&view, "body").ok_or_else(|| TurnError::Refused("no body".to_string()))?;
                 vec![Mutation::AppendChild(AppendArgs { parent: body.id, new: element("p") })]
+            }
+            // Fetch `payload` (a URL) and write the response body into the first text
+            // node. The guest calls `fetch` *synchronously*; the host suspends the
+            // turn's fiber for the I/O (§11.7-7). Needs the `net` grant, else the
+            // import is unlinked and the component fails to instantiate.
+            "fetch" => {
+                let t = first(&view, "#text")
+                    .ok_or_else(|| TurnError::Refused("no text node".to_string()))?;
+                let resp = fetch(&Request { url: payload })
+                    .map_err(|e| TurnError::Refused(format!("fetch failed: {e}")))?;
+                vec![Mutation::SetText(SetTextArgs { node: t.id, text: resp.body })]
             }
             // Insert a new <p> before the first <p> (id-relative anchor).
             "insert" => {

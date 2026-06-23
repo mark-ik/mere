@@ -37,7 +37,11 @@ async fn denying_document_capability_fails_instantiation() {
 
 #[test]
 fn granted_names_reflect_the_grant() {
-    assert_eq!(Grant::allow_all().granted_names().len(), 2);
+    // allow_all grants log + document-host + net (the three application capabilities).
+    let all = Grant::allow_all().granted_names();
+    assert_eq!(all.len(), 3);
+    assert!(all.contains(&"mere:script/net".to_string()));
+    // deny_document keeps only log (document + net denied).
     let denied = Grant::deny_document().granted_names();
     assert_eq!(denied, vec!["mere:script/log".to_string()]);
 }

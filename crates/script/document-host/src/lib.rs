@@ -35,9 +35,12 @@ use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 wasmtime::component::bindgen!({
     path: "wit",
     world: "document-core",
-    // Turns run on a fiber so a future sync `fetch` import can suspend them
-    // (plan §11.7-7). Host imports stay synchronous.
+    // Turns run on a fiber (`exports` async, invoked via `call_async`); host imports
+    // are async too so the sync-signature `net.fetch` can be implemented as a host
+    // `async fn` that suspends the turn's fiber during I/O without blocking the host
+    // thread (plan §11.7-7). The other imports don't await — `async fn` is free there.
     exports: { default: async },
+    imports: { default: async },
 });
 
 use crate::mere::script::document::DocumentView;
@@ -91,7 +94,7 @@ pub struct ScriptHost {
 }
 
 impl crate::mere::script::log::Host for ScriptHost {
-    fn log(&mut self, message: String) {
+    async fn log(&mut self, message: String) {
         self.logs.push(message);
     }
 }
@@ -100,15 +103,35 @@ impl crate::mere::script::log::Host for ScriptHost {
 /// names so a script can adapt to a partial grant. Read-only; the `Grant` is
 /// authoritative.
 impl crate::mere::script::caps::Host for ScriptHost {
-    fn granted(&mut self) -> Vec<String> {
+    async fn granted(&mut self) -> Vec<String> {
         self.granted.clone()
+    }
+}
+
+/// `net.fetch(request)` (§11.7-7): the fiber-async network capability. Sync-signature
+/// to the guest, `async fn` here — a real turn suspends the fiber during I/O while the
+/// host thread stays live. This is the substrate stub (a canned echo response); the
+/// real backend (netfetcher for http(s), errand for smolweb) is supplied by the
+/// content actor when it wires `net`. Linked only under the `net` grant.
+impl crate::mere::script::net::Host for ScriptHost {
+    async fn fetch(
+        &mut self,
+        req: crate::mere::script::net::Request,
+    ) -> Result<crate::mere::script::net::Response, String> {
+        // Stub: echo the requested URL. The fiber-async *path* is exercised (an async
+        // host import invoked on the turn's fiber); real suspension on I/O is proven
+        // by `crates/probes/wasmtime-async-p1` and lands with the content-actor backend.
+        Ok(crate::mere::script::net::Response { status: 200, body: format!("fetched:{}", req.url) })
     }
 }
 
 /// The `inspect` capability: the guest calls this back during a turn to pull a
 /// (scoped) copied snapshot of the live DOM. Only nodes in the view are nameable.
 impl crate::mere::script::document_host::Host for ScriptHost {
-    fn inspect(&mut self, query: crate::mere::script::document::DocumentQuery) -> DocumentView {
+    async fn inspect(
+        &mut self,
+        query: crate::mere::script::document::DocumentQuery,
+    ) -> DocumentView {
         use crate::mere::script::document::DocumentQuery;
         match query {
             DocumentQuery::WholeDocument => dom_view::snapshot(&self.dom, self.revision),
@@ -144,6 +167,7 @@ fn full_linker(engine: &Engine) -> wasmtime::Result<Linker<ScriptHost>> {
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     crate::mere::script::log::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(&mut linker, |s| s)?;
     crate::mere::script::caps::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(&mut linker, |s| s)?;
+    crate::mere::script::net::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(&mut linker, |s| s)?;
     crate::mere::script::document_host::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(
         &mut linker,
         |s| s,
@@ -323,21 +347,33 @@ pub enum CapPermission {
 pub struct Grant {
     pub log: CapPermission,
     pub document: CapPermission,
+    /// Network egress (`net.fetch`, §11.7-7). Powerful — defaults to denied
+    /// everywhere except an explicit grant; a script importing `net` fails to
+    /// instantiate unless this is `Allow`.
+    pub net: CapPermission,
 }
 
 impl Grant {
-    /// Everything the document-core world offers.
+    /// Everything the document-core world offers (including `net`).
     pub fn allow_all() -> Self {
-        Self { log: CapPermission::Allow, document: CapPermission::Allow }
+        Self {
+            log: CapPermission::Allow,
+            document: CapPermission::Allow,
+            net: CapPermission::Allow,
+        }
     }
 
-    /// `log` only — the inspect/apply document capability denied.
+    /// `log` only — the document (inspect/apply) and network capabilities denied.
     pub fn deny_document() -> Self {
-        Self { log: CapPermission::Allow, document: CapPermission::Deny }
+        Self {
+            log: CapPermission::Allow,
+            document: CapPermission::Deny,
+            net: CapPermission::Deny,
+        }
     }
 
-    /// The granted application-capability interface names (the seam a future
-    /// `caps.granted()` discovery import returns).
+    /// The granted application-capability interface names (the `caps.granted()`
+    /// discovery answer, §11.4).
     pub fn granted_names(&self) -> Vec<String> {
         let mut names = Vec::new();
         if self.log == CapPermission::Allow {
@@ -345,6 +381,9 @@ impl Grant {
         }
         if self.document == CapPermission::Allow {
             names.push("mere:script/document-host".to_string());
+        }
+        if self.net == CapPermission::Allow {
+            names.push("mere:script/net".to_string());
         }
         names
     }
@@ -366,6 +405,9 @@ fn link_with_grant(linker: &mut Linker<ScriptHost>, grant: &Grant) -> wasmtime::
             linker,
             |s| s,
         )?;
+    }
+    if grant.net == CapPermission::Allow {
+        crate::mere::script::net::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(linker, |s| s)?;
     }
     Ok(())
 }
