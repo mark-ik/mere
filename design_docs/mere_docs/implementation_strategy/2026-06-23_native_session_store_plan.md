@@ -120,9 +120,14 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
      `3cf326a`): a `CookieProvider` host seam (mirroring `ComputedStyleHandler` /
      `FetchHandler`) plus a `document.cookie` accessor; `get_cookies` returns the
      document's script-visible cookies, `set_cookie` records one assignment. Tested on
-     boa + nova. **Remaining (meerkat wiring, scoped below):** impl `CookieProvider`
-     over the session jar and set it on the content actor's serval runtime; persist
-     JS-set cookies. *Blocked on meerkat being green (a concurrent refactor is mid-land).*
+     boa + nova. The seam advances serval's web-engine completeness and is ready for
+     any consumer that runs serval's JS (pelt/WPT today; meerkat later). **Remaining
+     (meerkat wiring, scoped below):** impl `CookieProvider` over the session jar and
+     set it on the page's serval runtime — *gated on meerkat actually running serval's
+     JS runtime*, which it does not yet (verified 2026-06-23: meerkat renders fetched
+     HTML through serval's **static layout**, no `BoaEngine`/`NovaEngine`/`Runtime`; the
+     `ScriptInstance` in meerkat is mere's `mere:script` WIT, a different runtime). So
+     this waits on the page-JS-execution lane, not just on a green build.
    - **6b. Durable storage areas** — *future*: durable, persona+origin-partitioned
      `localStorage` (serval's is in-memory today), `sessionStorage` (per-session, not
      durable), and IndexedDB (a much larger spec) per the WHATWG Storage Standard.
@@ -133,7 +138,13 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
 
 ### 6a — meerkat `CookieProvider` wiring
 
-The serval seam exists; meerkat supplies the implementation:
+**Prerequisite (verified 2026-06-23):** meerkat does not run serval's JS runtime yet —
+fetched HTML renders through serval's static layout, with no `Runtime` /
+`BoaEngine` / `NovaEngine` instantiated. So `document.cookie` is never invoked in the
+live path; the wiring below applies once the page-JS-execution lane lands (or in any
+serval-JS consumer like pelt). The seam is built and tested; this is the consumer.
+
+When meerkat (or another host) runs serval's JS, it supplies the implementation:
 
 - A `CookieProvider` over `(document_url, session_jar())`. `get_cookies` =
   `jar.records_for(url, SameSiteContext::same_site())`, **filtered to `!http_only`**
@@ -209,7 +220,9 @@ jar to follow the active persona:
 - **2026-06-23 (thread 6a engine seam)**: serval gained `document.cookie` via a
   `CookieProvider` host seam mirroring `ComputedStyleHandler` (serval `3cf326a`; native
   `__cookieGet`/`__cookieSet` sinks + a `Document.prototype.cookie` accessor; tested on
-  boa + nova). The meerkat wiring (impl over the jar + persist-on-drain) is scoped above
-  and waits on meerkat being green (a concurrent refactor is mid-land). Also scoped:
-  flip-back SESSION (thread 7) and multi-persona. Next executable when meerkat is green:
-  the 6a meerkat wiring; then thread 6b (durable storage areas).
+  boa + nova). **Found** while scoping the meerkat wiring: meerkat doesn't run serval's
+  JS runtime yet (static-layout render only), so `document.cookie` has no live consumer
+  in meerkat — the wiring is gated on the page-JS-execution lane, not a green build (the
+  seam is ready for pelt/WPT and any future JS consumer). Also scoped: flip-back SESSION
+  (thread 7) and multi-persona. Next buildable now: thread 6b (durable storage areas,
+  which rides serval's existing in-memory `localStorage`, no JS-execution prerequisite).
