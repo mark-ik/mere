@@ -465,6 +465,13 @@ impl ApplicationHandler for Shell {
                     }
                     return;
                 }
+                // A swatch vertex drag in progress reshapes the node's collider hull from
+                // the move and routes nowhere else (the swatch owns the gesture). (Swatch —
+                // node shape editor, Stage B.)
+                if wc.view.swatch_drag.is_some() {
+                    wc.drag_swatch_vertex(wc.view.cursor.0, wc.view.cursor.1);
+                    return;
+                }
                 // Hint the resize edges: the borderless window has no OS frame, so
                 // the host sets the resize arrows on hover. (Custom titlebar.)
                 wc.update_hover_cursor();

@@ -229,6 +229,12 @@ impl WindowCtx<'_> {
                     // same shell hit-test + dispatch as the folded panes. (Settings lane P1.)
                     if self.chrome_routed_leaf_at(x, y) || self.settings_pane_at(x, y) {
                         if button == MouseButton::Left {
+                            // A press near a node swatch's hull vertex begins a vertex drag
+                            // (the shape editor); otherwise it's a normal pane interaction.
+                            // (Swatch — node shape editor, Stage B.)
+                            if self.try_begin_swatch_drag(x, y) {
+                                return;
+                            }
                             self.chrome_click(x, y);
                         }
                         return;
@@ -379,6 +385,17 @@ impl WindowCtx<'_> {
                 }
             }
             ElementState::Released => {
+                // End an in-progress swatch vertex drag before any other release routing. The
+                // collider was reshaped live on each move, so the release only clears the
+                // gesture — but it must clear FIRST: a release that lands on a scrying tile (or
+                // any other branch with its own early return) would otherwise leave the drag
+                // armed, and the next no-button move would keep reshaping the hull. Any button
+                // ends it (the drag is left-initiated and has no multi-button meaning).
+                // (Swatch — node shape editor, Stage B.)
+                if self.view.swatch_drag.take().is_some() {
+                    self.view.request_redraw();
+                    return;
+                }
                 // A release over the focused compatibility-view tile forwards into
                 // its WebView (button-up to complete a click). (Scrying X2.)
                 if let Some((member, lx, ly)) = self.scrying_at(x, y) {
@@ -789,6 +806,124 @@ impl WindowCtx<'_> {
                 None => return false,
             }
         }
+    }
+
+    /// Try to begin a swatch hull-vertex drag from a left press at `(x, y)`: if the press
+    /// landed inside a node swatch near one of its hull vertices, arm the drag and return
+    /// `true` (the caller consumes the press); otherwise `false` (it falls through to the
+    /// normal pane click). The swatch is DOM in the chrome document, so this reuses the
+    /// object-card press-gate pattern — hit-test the chrome session, walk up to the
+    /// `node-swatch` container — as the first binding of the general "handle press → drag →
+    /// mutate the scoped element" mechanism. (Swatch — node shape editor, Stage B.)
+    fn try_begin_swatch_drag(&mut self, x: f32, y: f32) -> bool {
+        let Some((subject, vertex, origin, edge)) = self.swatch_handle_at(x, y) else {
+            return false;
+        };
+        self.view.swatch_drag =
+            Some(crate::window_view::SwatchDrag { subject, vertex, origin, edge });
+        self.view.request_redraw();
+        true
+    }
+
+    /// Resolve a press at `(x, y)` to the node swatch hull vertex it grabs, if any: the subject
+    /// node, the vertex index, the swatch container's painted top-left (window px), and its
+    /// edge length. `None` when the press is outside a swatch or not within grab range of a
+    /// vertex. (Swatch — Stage B.)
+    fn swatch_handle_at(&self, x: f32, y: f32) -> Option<(uuid::Uuid, usize, (f32, f32), f32)> {
+        let session = self.view.chrome_session.as_ref()?;
+        let dom = self.view.dom.borrow();
+        // Mirror the render / chrome_click scroll offsets so the hit-test lands on the visible
+        // swatch (it sits inside the scrolled settings-pane-body).
+        let mut offsets = ScrollOffsets::<NodeId>::default();
+        let root = dom.document();
+        for (class, scroll) in [
+            ("roster", self.view.roster_scroll),
+            ("apparatus", self.view.apparatus_scroll),
+            ("steward", self.view.steward_scroll),
+            ("inspector", self.view.inspector_scroll),
+            ("trail", self.view.trail_scroll),
+            ("settings-pane-body", self.view.settings_scroll),
+        ] {
+            if let Some(node) = crate::first_with_class(&dom, root, class) {
+                offsets.insert(node, (0.0, scroll));
+            }
+        }
+        // Walk up from the hit node to the `node-swatch` container.
+        let mut node = session.hit_test(&dom, x, y, &offsets)?;
+        let container = loop {
+            if crate::has_class(&dom, node, "node-swatch") {
+                break node;
+            }
+            node = dom.parent(node)?;
+        };
+        // Whose hull this swatch edits (the container's `data-subject`), and its current hull.
+        let subject: uuid::Uuid = dom
+            .attributes(container)
+            .find(|a| a.name.local.as_ref() == "data-subject")
+            .and_then(|a| a.value.parse().ok())?;
+        let key = self.orrery().graph().get_node_by_id(subject).map(|(k, _)| k)?;
+        let hull = self.orrery().node_sprite_hull(key)?;
+        if hull.len() < 3 {
+            return None;
+        }
+        // The container's painted top-left: its absolute layout origin (Taffy locations are
+        // parent-relative, so sum the chain to the root) minus the body's scroll offset.
+        let frags = session.fragments();
+        let mut abs = (0.0_f32, 0.0_f32);
+        let mut n = container;
+        loop {
+            if let Some(l) = frags.rect_of(n) {
+                abs.0 += l.location.x;
+                abs.1 += l.location.y;
+            }
+            match dom.parent(n) {
+                Some(p) => n = p,
+                None => break,
+            }
+        }
+        let edge = crate::swatch::swatch_edge_px();
+        // `settings_scroll` is a single shared value (one active settings pane), matching the
+        // host's existing model — `chrome_click` keys the same scroll onto the first
+        // settings-pane-body. With two appearance panes open and the second scrolled, the
+        // second swatch's origin would be off by that scroll; a per-pane scroll is a later
+        // refinement, not a Stage-B concern.
+        let origin = (abs.0, abs.1 - self.view.settings_scroll);
+        // The press in the swatch's normalized face space, and the nearest hull vertex to it.
+        let nx = (x - origin.0) / edge - 0.5;
+        let ny = (y - origin.1) / edge - 0.5;
+        let (vertex, dist2) = hull
+            .iter()
+            .enumerate()
+            .map(|(i, &(vx, vy))| (i, (vx - nx).powi(2) + (vy - ny).powi(2)))
+            .min_by(|a, b| a.1.total_cmp(&b.1))?;
+        // Only grab when the press is genuinely near a vertex (~16px at the 220px edge); a press
+        // elsewhere in the swatch falls through to the pane. (Normalized grab radius.)
+        let grab = 16.0 / edge;
+        if dist2 > grab * grab {
+            return None;
+        }
+        Some((subject, vertex, origin, edge))
+    }
+
+    /// Advance an in-progress swatch vertex drag: map the cursor into the swatch's normalized
+    /// face space and rewrite the dragged hull vertex, which rebuilds the node's collider live
+    /// (`set_node_sprite_hull` pushes geometry). (Swatch — Stage B.)
+    pub(super) fn drag_swatch_vertex(&mut self, x: f32, y: f32) {
+        let Some(drag) = self.view.swatch_drag else { return };
+        let nx = ((x - drag.origin.0) / drag.edge - 0.5).clamp(-0.5, 0.5);
+        let ny = ((y - drag.origin.1) / drag.edge - 0.5).clamp(-0.5, 0.5);
+        let Some(key) = self.orrery().graph().get_node_by_id(drag.subject).map(|(k, _)| k) else {
+            return;
+        };
+        let Some(mut hull) = self.orrery().node_sprite_hull(key).map(<[(f32, f32)]>::to_vec) else {
+            return;
+        };
+        if drag.vertex >= hull.len() {
+            return;
+        }
+        hull[drag.vertex] = (nx, ny);
+        self.orrery_mut().set_node_sprite_hull(drag.subject, hull);
+        self.view.request_redraw();
     }
 
     /// Route an orrery-area wheel through the document: dispatch it to the orrery pane element

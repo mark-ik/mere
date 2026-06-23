@@ -60,6 +60,26 @@ impl WindowKind {
     }
 }
 
+/// An in-progress swatch hull-vertex drag — the node shape editor's edit gesture.
+/// The swatch is DOM in the chrome document, so the host hit-tests it and drives the
+/// drag from the cursor (serval has no native DOM pointer-drag), mirroring the orrery's
+/// node drag. The dragged vertex's new position is written into the node's collider
+/// hull on each move, which rebuilds the physics body live. (Swatch — Stage B; the
+/// first binding of the general "handle press → drag → mutate the scoped element".)
+#[derive(Clone, Copy)]
+pub(crate) struct SwatchDrag {
+    /// The graph node whose collider hull is being edited (carried on the swatch
+    /// container's `data-subject`).
+    pub(crate) subject: uuid::Uuid,
+    /// Which hull vertex the press grabbed.
+    pub(crate) vertex: usize,
+    /// The swatch container's painted top-left in window px, so a move maps the cursor
+    /// into the swatch's local space.
+    pub(crate) origin: (f32, f32),
+    /// The swatch's edge length in px, so the local point normalizes to face coords.
+    pub(crate) edge: f32,
+}
+
 /// State owned by a single window's view. Methods on `Shell` reach it through
 /// `self.view`; when the window registry lands (MW2) the render / input paths
 /// take `&mut WindowView` for the target window explicitly.
@@ -186,6 +206,10 @@ pub(crate) struct WindowView {
     pub(crate) resize_drag: Option<ResizeDrag>,
     /// An in-progress titlebar press (window point) before it becomes a window drag.
     pub(crate) titlebar_press: Option<(f32, f32)>,
+    /// An in-progress swatch hull-vertex drag (the node shape editor). `Some` while a
+    /// press that landed on a hull vertex is being dragged; the move reshapes the
+    /// collider, the release clears it. (Swatch — Stage B.)
+    pub(crate) swatch_drag: Option<SwatchDrag>,
     /// The cursor icon currently set on the window (tracked to set only on change).
     pub(crate) cursor_icon: CursorIcon,
     /// Set by the custom close control; the event handler exits the loop after the
@@ -1061,6 +1085,7 @@ impl WindowView {
             frame_divider_drag: Default::default(),
             resize_drag: Default::default(),
             titlebar_press: Default::default(),
+            swatch_drag: Default::default(),
             cursor_icon: Default::default(),
             pending_exit: Default::default(),
             context_set: Default::default(),

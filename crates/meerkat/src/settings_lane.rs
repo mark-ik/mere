@@ -387,7 +387,8 @@ impl WindowCtx<'_> {
         let sprite = self.orrery().node_sprite(key).map(str::to_string)?;
         let hull =
             self.orrery().node_sprite_hull(key).map(<[(f32, f32)]>::to_vec).unwrap_or_default();
-        Some(SwatchSpec { sprite: Some(sprite), hull })
+        // Carry the subject so the swatch's vertex drag knows whose hull to edit. (Stage B.)
+        Some(SwatchSpec { sprite: Some(sprite), hull, subject: Some(subject) })
     }
 
     /// Open a settings page as a workbench tile: mint (or reuse) its ephemeral `settings://`

@@ -8,9 +8,11 @@
 //! node facet pane, a menu, a djot script block, an orrery card).
 //!
 //! First embedding: a **single node** scoped swatch — the node's sprite face plus its editable
-//! collider hull — in the `node:<id>/appearance` facet pane (the shape editor). Stage A here is
-//! the read-only render (sprite + hull polygon + a dot per vertex); the vertex-drag editing
-//! (Stage B) routes through the shell hit-test, the object-card pattern. The view is concrete
+//! collider hull — in the `node:<id>/appearance` facet pane (the shape editor). Stage A is the
+//! read-only render (sprite + hull polygon + a dot per vertex); Stage B makes the vertex dots
+//! draggable — the host hit-tests the swatch through the chrome session (the object-card
+//! press-gate pattern), walks up to the `node-swatch` container, reads its `data-subject`, and
+//! drives the drag from the cursor (serval has no native DOM pointer-drag). The view is concrete
 //! over `SettingsPanesView` for this first embedder; generalizing over the host state is the
 //! reuse step when the menu / djot embeddings land. (Node-rep — sprite shape editor.)
 
@@ -24,6 +26,10 @@ use crate::settings_pane_view::{SettingsPanesState, SettingsPanesView};
 pub(crate) struct SwatchSpec {
     pub sprite: Option<String>,
     pub hull: Vec<(f32, f32)>,
+    /// The graph node this swatch is scoped to, when it is editable: emitted as the
+    /// container's `data-subject` so the host vertex-drag knows whose hull to rewrite.
+    /// `None` for a non-node or read-only swatch. (Swatch — Stage B.)
+    pub subject: Option<uuid::Uuid>,
 }
 
 /// The swatch's on-screen edge length (px) in the facet pane.
@@ -61,7 +67,10 @@ pub(crate) fn swatch_view(spec: &SwatchSpec) -> SettingsPanesView {
 
     if spec.hull.len() >= 3 {
         // The collider region: a translucent polygon clipped to the hull, so you see exactly
-        // what the physics body covers.
+        // what the physics body covers. Stage-B note: a vertex dragged inward makes the stored
+        // polygon concave — this clip-path follows it, but parry reconvexifies the collider, so
+        // the visual and the physics body diverge on a concave edit (expanding/convex edits stay
+        // in lockstep). Accepted for now; a convexity constraint or dual-shape draw comes later.
         let pts: Vec<String> = spec
             .hull
             .iter()
@@ -91,12 +100,20 @@ pub(crate) fn swatch_view(spec: &SwatchSpec) -> SettingsPanesView {
         }
     }
 
-    // The swatch container: a positioned, sized box the children layer inside.
-    Box::new(el::<_, SettingsPanesState, ()>("div", children).attr(
-        "style",
-        format!(
-            "position:relative;width:{SWATCH}px;height:{SWATCH}px;margin-top:8px;\
-             background-color:rgba(0,0,0,0.25);border-radius:6px"
-        ),
-    ))
+    // The swatch container: a positioned, sized box the children layer inside. The
+    // `node-swatch` class + `data-subject` let the host hit-test walk up to it and learn
+    // whose hull a vertex drag edits. (Swatch — Stage B.)
+    let mut container = el::<_, SettingsPanesState, ()>("div", children)
+        .attr("class", "node-swatch")
+        .attr(
+            "style",
+            format!(
+                "position:relative;width:{SWATCH}px;height:{SWATCH}px;margin-top:8px;\
+                 background-color:rgba(0,0,0,0.25);border-radius:6px"
+            ),
+        );
+    if let Some(subject) = spec.subject {
+        container = container.attr("data-subject", subject.to_string());
+    }
+    Box::new(container)
 }
