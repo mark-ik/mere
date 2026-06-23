@@ -54,6 +54,7 @@ members = [
     "crates/moot/mooting",
     "crates/mesh/mesh",
     "crates/script/rhai",
+    "crates/script/document-host",
 ]
 exclude = [
     "crates/probes",

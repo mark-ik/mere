@@ -620,10 +620,12 @@ same `call_async` without suspending, and `fetch` slots in when wired.
 
 ### 11.7 Decisions (resolved 2026-06-22 where marked)
 
-1. **MSRV** — **RESOLVED: bump workspace to 1.93** (Mark). Timing coordinated to avoid
-   breaking active in-workspace builds: `document-host` comes up standalone-excluded with
-   its own 1.93 pin first (like the probe); the workspace bump + fold-in lands with the
-   meerkat wiring (P2.5) at a stopping point.
+1. **MSRV** — **RESOLVED + DONE 2026-06-22: workspace bumped to 1.93, `document-host` folded
+   into the workspace.** `mere/rust-toolchain.toml` pins 1.93 (+ wasm32-wasip2);
+   `document-host` is a `members` entry with the git serval deps that unify with meerkat via
+   mere's `[paths]` override; all its tests pass in-workspace. The 6 crates still declaring
+   `rust-version = "1.92.0"` are harmless under the 1.93 toolchain (the effective MSRV is 1.93).
+   The meerkat-wiring half of P2.5 (the content-actor integration) still remains.
 2. **Denied-cap behavior** — proceeding on rec: unlinked default + opt-in stub for
    *optional* imports.
 3. **Placement** — **RESOLVED: new leaf crate `crates/script/document-host` + thin
@@ -821,6 +823,17 @@ same `call_async` without suspending, and `fetch` slots in when wired.
   case. Proves §11.2's "Wasm isolation without quotas is incomplete isolation." `run_turns` stays
   unguarded (unlimited); `run_guarded` is the bounded path that P2.5 will use per-origin. The
   cancellation-value knobs (epoch tick, deadline, mem cap) are fixed constants for P2 per §11.7-6.
+- **2026-06-22 (P2.5 fold-in — workspace MSRV bump + membership, green).** Added
+  `mere/rust-toolchain.toml` (channel 1.93 + wasm32-wasip2) and `crates/script/document-host` to
+  the workspace `members`; removed document-host's standalone `[workspace]` + per-crate toolchain
+  pin, and switched its serval deps from local-path to the **git dep meerkat uses** (they resolve
+  to the local serval via mere's `[paths]` override, so they unify — verified: `serval-scripted-dom`
+  / `layout-dom-api` compiled from the local checkout). `cargo build -p document-host` builds on
+  rustc 1.93 in-workspace; all 7 tests pass via `cargo test -p document-host`. Left the 6 crates'
+  `1.92` rust-version pins untouched (harmless under 1.93). Unblocks P2.3/P2.4 to depend on
+  `kernel::permissions` + `register-mod-loader` as siblings. Note: `document-host` is a default
+  member, so a bare `cargo build` / rust-analyzer over the workspace now also compiles wasmtime —
+  a `default-members` list can keep the bare build lean if that friction bites.
 
 ## Key grounding files
 
