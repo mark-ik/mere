@@ -72,38 +72,57 @@ later follow.
 
 ---
 
-## The crate: rename + repurpose `mere-orrery`
+## The crate: rename + relocate `mere-orrery` to `glossary`
 
 Slice 4 retired `project_graph`'s only caller, so the crate's stated role ("projects
 Graph into AccessKit nodes") is dead and its name (tied to the *orrery*, the spatial view)
-no longer fits a pure textual / statistical projection. The repurpose:
+no longer fits a pure textual / statistical projection. The repurpose (settled 2026-06-23
+with Mark):
 
-- **Role:** the pure-data `Graph -> consumable-view` projection backend. Houses
-  `outline_djot(&Graph) -> String`, `graph_metrics(&Graph) -> GraphMetrics`, and the natural
-  future home for other read-side textual projections (the Facet matrix's text form, export
-  digests). Stays `&Graph`-immutable, host-free, DOM-free; the host renders, the crate projects.
+- **Role:** the pure-data `Graph -> consumable-view` projection backend, the human-facing
+  *digest* sibling of `cartography` (spatial projection) and `linked-data` (machine
+  interchange / RDF). Houses `outline_djot(&Graph) -> String`,
+  `graph_metrics(&Graph) -> GraphMetrics`, and the natural future home for other read-side
+  textual projections (the Facet matrix's text form, export digests). Stays `&Graph`-immutable,
+  host-free, DOM-free; the host renders, the crate projects.
 - **Drop** the dead `project_graph` + its four tests (the a11y projection lives in meerkat's
   `orrery_a11y_tree` now).
-- **Name (open, Mark's call).** Lead candidate `graph-digest` (a digest = outline + metrics);
-  alternatives `graph-views`, `graph-projection` (accurate but overloads cartography /
-  `forme::ProjectionLens` / the graph-rooted "projection" model). Plain over soulful per the
-  domain-vocabulary rule; the aesthetic word list is reserved for product names.
-- **Location (open, Mark's call).** Lean: move from `crates/orrery/` to `crates/graph/`,
-  beside `linked-data` (both are `Graph -> external-representation` projections; the outline is
-  djot the way linked-data is RDF/JSON-LD). Staying under `crates/orrery/` keeps the spatial-view
-  grouping it no longer belongs to.
+- **Name: `glossary`.** A glossary is a structured human-readable list of terms with brief
+  entries, which is exactly an outline of the graph, and it carries an etymological resonance
+  with the *gloss* it feeds. (Caveat acknowledged: it must stay engine-neutral, also feeding
+  apparatus + export, not read as "the gloss's private crate".) `graph-projection` was rejected
+  to avoid overloading cartography / `forme::ProjectionLens` / the graph-rooted "projection" model.
+- **Location: `crates/graph/glossary/`,** beside `linked-data` + `node-lineage`, all children of
+  the graph supercrate. Moves out of `crates/orrery/` (the *spatial* view it no longer is).
+  **Considered and declined: folding `linked-data` into `glossary`** (Mark's question). The kinship
+  is real (both `Graph -> representation`), but the `crates/graph/` supercrate already expresses it
+  as siblings without a merge; linked-data is mature, RDF-dep-heavy, and the spine of two active
+  plans ([graph_query_layer](2026-06-18_graph_query_layer_plan.md), [petgraph_rdf](2026-06-18_petgraph_rdf_plan.md)),
+  so absorbing it would churn those plans, balloon glossary's dep tree, and stretch the name past
+  the human-digest role. Human digest (glossary) and machine interchange (linked-data) stay distinct
+  crates, same supercrate. Reversible if Mark later wants the merge.
 
 ---
 
 ## Design
 
 ### `outline_djot(&Graph) -> String`
-Walk `containment_edges()` filtered to `UrlPath` (then `Domain`) into a parent->children
-tree; emit djot, each node a nested bullet or heading carrying `[title](url)` (title, or the
-URL slug when unloaded, the label rule `frame_a11y_panes.rs:298-301` already uses). Flat list
-fallback when no containment tree exists (a fresh graph of unrelated tabs). Plain string
-emission, no nematic dependency (djot is plain text; the round-trip engine is the *renderer's*
-concern, not the projector's). Open: depth cap / breadth cap for a constrained pane vs a full
+**Nest by URL structure parsed from node addresses, not by containment edges** (settled
+2026-06-23). Code check: `ContainmentSubKind::UrlPath` exists in the taxonomy but **nothing
+on the live path auto-asserts it** (no node-creation hook draws a containment edge to a
+URL-parent; the only references are taxonomy / theming / persistence / a forme arrangement
+helper, none a populator), so reading `containment_edges()` would yield a mostly-flat tree
+for a real browsing graph. Since the outline is a *projection*, it computes its own hierarchy:
+parse each node's `primary_address()` into host + path segments and build the tree from the
+strings (`wikipedia.org` -> `/wiki` -> `/wiki/Foo`). Always available, deterministic, real
+depth, no edge-population dependency. **Overlay** explicit containment edges (user
+folders / collections) where they *do* exist; flat-list singletons / non-URL nodes. Each node
+is a nested bullet carrying `[title](url)` (title, or the URL slug when unloaded, the label rule
+`frame_a11y_panes.rs:298-301` already uses). Plain string emission, no nematic dependency (djot
+is plain text; the round-trip engine is the *renderer's* concern, not the projector's). The
+nesting axis is pluggable from P2 (semantic / arrangement / recency via `forme::ProjectionLens`);
+relation-driven outlines (the user's actual connections) live there, since they are sparse +
+not clean trees until the graph is densely related. Open: depth cap / breadth cap for a constrained pane vs a full
 document; nesting axis configurability (see P2).
 
 ### `graph_metrics(&Graph) -> GraphMetrics`
@@ -141,17 +160,17 @@ an ad-hoc list: the format *is* the editing + export path.
 
 ## Phases (cheapest-first; done-conditions, not dates)
 
-- **P0 — the projection crate.** Rename + relocate the crate (Mark picks name + home); drop
-  dead `project_graph` + tests; add `outline_djot` + `graph_metrics` + `GraphMetrics` behind
-  unit tests over a fixture graph (containment tree -> expected djot; counts / histogram /
+- **P0 — the projection crate.** Rename `mere-orrery` -> `glossary` at `crates/graph/glossary/`;
+  drop dead `project_graph` + tests; add `outline_djot` + `graph_metrics` + `GraphMetrics` behind
+  unit tests over a fixture graph (URL-parsed tree -> expected djot; counts / histogram /
   components exact). Pure data, fully testable with no host. Done: the crate builds, its tests
   pass, meerkat's now-live dep points at it.
 - **P1 — the gloss outline DOM section.** A third DOM section rendering the outline + metrics;
   rows route `SelectNodeByUrl` and carry node color / selection; three-way gloss auto-size.
   The first DOM gloss section. Done: opening the gloss shows the live outline + counts, clicking
   a row focuses the node, headed-verified.
-- **P2 — hierarchy + scope lens.** Make the nesting axis configurable (Containment default ->
-  Arrangement sub-kind / Semantic family, via `forme::ProjectionLens`) and the scope honor the
+- **P2 — hierarchy + scope lens.** Make the nesting axis configurable (URL-structure default ->
+  explicit-Containment overlay / Arrangement sub-kind / Semantic family, via `forme::ProjectionLens`) and the scope honor the
   gloss scope picker (full graph / active selection / graphlet). Folds into the gloss design's
   G3 form-factor/scope work. Done: the outline re-nests by a chosen edge family and re-scopes.
 - **P3 — signals-fed metrics.** When `intel/signals` ships (graph_signals P1-P3), the outline
@@ -167,10 +186,12 @@ an ad-hoc list: the format *is* the editing + export path.
 
 ## Open decisions
 
-1. **Crate name + location** (P0; Mark). `graph-digest` @ `crates/graph/` is the lean.
-2. **Outline nesting axis** (P0 default, P2 general). Containment/UrlPath for P0; which families
-   earn a lens, and whether outline-order is its own Arrangement sub-kind, is P2 + a
-   [projections-research](../research/2026-06-22_graph_projections_research.md) question.
+1. ~~**Crate name + location**~~ **Settled 2026-06-23:** `glossary` @ `crates/graph/glossary/`,
+   sibling to `linked-data` (merge of linked-data considered + declined; see The crate).
+2. ~~**Outline nesting axis** (P0 default)~~ **Settled 2026-06-23:** parsed URL structure for P0
+   (containment edges are not auto-populated, so reading them would be flat); pluggable in P2.
+   Open at P2: which families earn a lens, and whether outline-order is its own Arrangement
+   sub-kind, a [projections-research](../research/2026-06-22_graph_projections_research.md) question.
 3. **Depth / breadth caps** for the constrained pane vs the full export document.
 4. **Metrics surface split.** Which metrics live in the gloss readout vs apparatus diagnostics
    (the [system-diagnostics plan](2026-06-08_system_diagnostics_and_accessibility_plan.md) owns
@@ -206,5 +227,10 @@ an ad-hoc list: the format *is* the editing + export path.
   consumer-less, plus Mark's recognition that a graph outline + metrics is the gloss's
   third lens and the first notetaking feature. Grounded by a 5-agent code+doc sweep (gloss
   render path, signals layer, djot/knot lane, kernel graph model, projection contract);
-  findings above. No code yet; P0 is the first build step. Crate name + location left open for
-  Mark per the ask-before-dropping/renaming-deps rule.
+  findings above. No code yet; P0 is the first build step.
+- **2026-06-23 (decisions settled with Mark).** Crate = `glossary` at `crates/graph/glossary/`
+  (sibling to `linked-data`; merging linked-data in considered + declined). Nesting axis = parsed
+  URL structure for P0 — a code check found `UrlPath` containment edges are **not** auto-populated
+  on the live path, so reading them would yield a flat outline; the projection computes the host /
+  path tree from node addresses directly instead, overlaying explicit containment where present.
+  Relation-driven axes deferred to the P2 pluggable lens.

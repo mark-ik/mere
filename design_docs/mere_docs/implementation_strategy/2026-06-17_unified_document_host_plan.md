@@ -1,5 +1,12 @@
 # Unified Document Host Plan
 
+**CLOSED 2026-06-23 — core complete, Phase-2 tail spun out** (see the closing Progress entry for the
+thread map). Kept in place (not archived) as the still-current foundational record of the Phase-1
+consolidation + orrery-as-element architecture that active sibling plans cite. Remaining threads
+re-homed: cond 1 -> [orrery_custom_layout_element_plan](2026-06-23_orrery_custom_layout_element_plan.md);
+slice 5 -> [layout_phase_split_probe_plan](2026-06-23_layout_phase_split_probe_plan.md);
+secondary-orreries -> tearout; tiles -> composition spine.
+
 Status (reconciled 2026-06-19 cross-plan consolidation). Phase 1's document consolidation is
 **done** (all 4 done-conditions). Phase 2 cond 3/4/5 **landed host-side**, **but** the
 card-as-node-hit-target mechanism (cond 3/4) was subsequently **reversed** by the
@@ -807,3 +814,32 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
     ask-before-dropping-deps rule. Minor pre-existing dup the review surfaced (not slice 4's doing):
     `gloss_a11y_tree` also emits a `SelectNodeByUrl` Link per node, so with both panes open a node
     carries two routes under different ids, harmless (the bridge's `find_map` returns one).
+
+- **2026-06-23 (CLOSED — core complete, Phase-2 tail spun out).** Phase 1 (one document, one shell
+  root) is done 4/4 and the four pressing slices landed + verified. The plan's task-list is complete;
+  what remained is re-homed, so this plan is **closed**. It stays in place (not moved to
+  `archive_docs/`) because it is the **foundational, still-current record** of the Phase-1
+  consolidation + the orrery-as-element architecture that six active plans cite (the cond-3/4
+  reversal, the C2 surface-by-nature layering, Phase-1 done-conditions); "superseded checkpoint"
+  framing does not fit live architecture. Thread map:
+  - **cond 1 (custom-layout `<orrery>` element, Mechanism A)** -> spun out to
+    [orrery_custom_layout_element_plan](2026-06-23_orrery_custom_layout_element_plan.md) (parked /
+    deferred by design; the interim transform-aware ring + the slice-4 a11y bounds hold without it).
+  - **Slice 5 (cascade-vs-box-tree-vs-shaping phase-split probe)** -> spun out to
+    [layout_phase_split_probe_plan](2026-06-23_layout_phase_split_probe_plan.md) (the goal-2 perf
+    measurement gate, owned jointly with the parallelism research §0).
+  - **N-secondary-orreries / side-by-side panes** (`secondary_orreries`, render.rs:785/793, still
+    standalone Scenes via `set_render_as_cards(false)`) -> co-owned by the
+    [tearout composability plan](2026-06-19_tearout_composability_plan.md), gated on the
+    card-or-container decision. Not this plan's to drive alone.
+  - **Tiles -> `platen-view` migration** (workbench tile chrome) -> the composition-spine concern
+    ([mere_composition_spine](../technical_architecture/2026-05-21_mere_composition_spine.md);
+    net-new `platen-view`, retiring the pelt `TileShell` path).
+  - **Semantic-surface JSON-LD broadcast** (goal 3's further half: inline
+    `<script type="application/ld+json>` per card/document during projection) -> a small follow-on
+    affordance on the shipped `linked-data` export; slice 4 landed the a11y/DOM half (the orrery a11y
+    is now DOM-sourced + actionable). Unbuilt, not a hard requirement.
+  - **Orrery as a sighted-keyboard focus-stop with internal arrow-key node selection** -> a UX
+    follow-on in node-representation / interaction territory. Slice 2 removed the cards from the Tab
+    ring and slice 4 gave assistive tech actionable node selection via the a11y tree; the visual
+    keyboard ring stepping orrery nodes is not built.
