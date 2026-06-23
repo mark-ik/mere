@@ -218,6 +218,14 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   document-host stays kernel-free per §11.4).
 - The hybrid (StaticDocument unscripted / ScriptedDom-mirror scripted) means **two render paths** in
   `content.rs`; follow-on #3 must keep both correct.
+- **Cross-target (browser): one contract, two runtimes.** All of this is the **native** (Wasmtime)
+  runtime; the [browser-extension/companion plan](2026-06-23_browser_extension_companion_plan.md)
+  consumes the **same `mere:script` WIT** via **jco AOT** in the tab (no JIT). `document-host` is
+  native-only (deps wasmtime), so the browser is a separate runtime over the shared contract. The
+  `net.fetch` capability is the browser's "fetch outside the tab" seam (companion / browser `fetch()`
+  backend); the `kernel::permissions` → `Grant` model carries into the extension's consent. **Action
+  item that emerged:** the WIT (now in `document-host/wit/world.wit`) should move to a shared,
+  runtime-neutral home before the browser path, to avoid native/jco contract drift.
 
 ## Progress
 
