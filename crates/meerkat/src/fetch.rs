@@ -23,9 +23,10 @@
 //! Subresources stay http-only: smolweb documents reference links but do not
 //! inline fetched media.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use armillary::{ActorHandle, Emitter, Wake, spawn};
@@ -182,8 +183,10 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
 }
 
 /// Fetch a page, routing by scheme: smolweb schemes go through [`errand`], every
-/// other (http(s)) address through netfetcher's WHATWG Fetch.
-async fn fetch_page(url: &str) -> Result<Fetched, String> {
+/// other (http(s)) address through netfetcher's WHATWG Fetch. `pub(crate)` so the
+/// content actor's `net.fetch` backend ([`crate::content::script::ContentNetFetcher`])
+/// reuses the same routing (blocking on its own runtime) rather than re-implementing it.
+pub(crate) async fn fetch_page(url: &str) -> Result<Fetched, String> {
     match scheme_of(url).and_then(errand::Scheme::parse) {
         Some(scheme) => {
             tracing::info!(%url, ?scheme, "smolweb fetch");
@@ -296,8 +299,8 @@ static COOKIES_DIRTY: AtomicBool = AtomicBool::new(false);
 
 /// One persisted cookie. A serde mirror of netfetcher's `CookieRecord` (whose
 /// `same_site` is the `cookie` crate's enum, not directly serde-friendly), encoded as
-/// JSON under the persona's blob in the durable store.
-#[derive(Serialize, Deserialize)]
+/// JSON in its own per-cookie blob in the durable store.
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 struct PersistedCookie {
     name: String,
     value: String,
@@ -351,56 +354,135 @@ impl PersistedCookie {
     }
 }
 
-/// The durable-store blob key for `persona`'s cookies. Keyed by persona so one
-/// persona's session never bleeds into another (the native session store's hard
-/// partition); v0 is the single default persona, but the key is already partitioned.
-fn cookie_key(persona: PersonaId) -> String {
-    format!("cookies/{}", persona.0)
+/// A cookie's durable identity: `(domain, path, name)`, the RFC 6265 tuple that
+/// uniquely names a cookie. The unit of incremental persistence.
+type CookieKey = (String, String, String);
+
+/// A mirror of what is currently written to the durable store, per persona, so a
+/// persist writes only the cookies that *changed* (incremental) rather than the whole
+/// jar each time. Populated on [`load_cookies`] and kept in step by [`persist_cookies`].
+fn last_persisted() -> &'static Mutex<HashMap<CookieKey, PersistedCookie>> {
+    static LAST: OnceLock<Mutex<HashMap<CookieKey, PersistedCookie>>> = OnceLock::new();
+    LAST.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Persist the shared jar's cookies for `persona` to the durable `store`, but only
-/// when a cookie actually changed since the last persist (the dirty flag). Call after
-/// a fetch that may have set cookies; a cheap no-op otherwise. Runs the async store
-/// to completion on the calling (UI) thread, like the rest of meerkat's eidetic use.
+fn cookie_key_of(c: &PersistedCookie) -> CookieKey {
+    (c.domain.clone(), c.path.clone(), c.name.clone())
+}
+
+/// The durable-store blob key for one cookie under `persona`. Keyed by persona so one
+/// persona's session never bleeds into another (the native session store's hard
+/// partition; v0 is the single default persona, but the key already partitions), then
+/// by the hex-encoded `(domain, path, name)` identity (hex so a path's `/` can't
+/// collide with the key's own separators).
+fn cookie_blob_key(persona: PersonaId, key: &CookieKey) -> String {
+    let identity = format!("{}\u{0}{}\u{0}{}", key.0, key.1, key.2);
+    let hex: String = identity.bytes().map(|b| format!("{b:02x}")).collect();
+    format!("{}{hex}", cookie_prefix(persona))
+}
+
+fn cookie_prefix(persona: PersonaId) -> String {
+    format!("cookies/{}/", persona.0)
+}
+
+/// Persist the shared jar to the durable `store` for `persona`, writing only the
+/// cookies that changed since the last persist and deleting blobs for cookies that are
+/// gone (expired / cleared). Dirty-gated, so a fetch that set no cookies is a no-op.
+/// Each cookie is its own small blob, so one `Set-Cookie` writes one blob, not the
+/// whole jar. Runs the async store to completion on the calling (UI) thread, like the
+/// rest of meerkat's eidetic use.
 pub fn persist_cookies(store: &mut dyn Store, persona: PersonaId) {
     if !COOKIES_DIRTY.swap(false, Ordering::Relaxed) {
         return;
     }
-    let records: Vec<PersistedCookie> = session_jar()
+    let current: HashMap<CookieKey, PersistedCookie> = session_jar()
         .all_records()
         .into_iter()
         .map(PersistedCookie::from_record)
+        .map(|c| (cookie_key_of(&c), c))
         .collect();
-    let bytes = match serde_json::to_vec(&records) {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            tracing::warn!(%err, "cookie persist: serialize failed");
-            return;
-        }
+
+    let mut shadow = match last_persisted().lock() {
+        Ok(shadow) => shadow,
+        Err(_) => return,
     };
-    if let Err(err) = pollster::block_on(store.save_blob(&cookie_key(persona), &bytes)) {
-        tracing::warn!(%err, "cookie persist: save failed");
+    let mut any_failed = false;
+
+    // Writes: new or changed cookies only.
+    for (key, cookie) in &current {
+        if shadow.get(key) == Some(cookie) {
+            continue;
+        }
+        match serde_json::to_vec(cookie) {
+            Ok(bytes) => match pollster::block_on(store.save_blob(&cookie_blob_key(persona, key), &bytes)) {
+                Ok(()) => {
+                    shadow.insert(key.clone(), cookie.clone());
+                }
+                Err(err) => {
+                    tracing::warn!(%err, "cookie persist: save failed");
+                    any_failed = true;
+                }
+            },
+            Err(err) => {
+                tracing::warn!(%err, "cookie persist: serialize failed");
+                any_failed = true;
+            }
+        }
+    }
+
+    // Deletes: cookies that were persisted but are gone from the jar now.
+    let removed: Vec<CookieKey> = shadow.keys().filter(|k| !current.contains_key(*k)).cloned().collect();
+    for key in removed {
+        match pollster::block_on(store.delete_blob(&cookie_blob_key(persona, &key))) {
+            Ok(_) => {
+                shadow.remove(&key);
+            }
+            Err(err) => {
+                tracing::warn!(%err, "cookie persist: delete failed");
+                any_failed = true;
+            }
+        }
+    }
+
+    // A failed write/delete leaves the shadow out of step; re-arm so the next change
+    // retries it rather than the failure being silently dropped.
+    if any_failed {
+        COOKIES_DIRTY.store(true, Ordering::Relaxed);
     }
 }
 
 /// Load `persona`'s persisted cookies from the durable `store` into the shared jar at
-/// startup, so a login survives an app restart. A missing or unreadable blob leaves
-/// the jar empty (first run for this persona).
+/// startup, so a login survives an app restart, and seed the persisted-shadow so the
+/// first persist after load does not rewrite everything. A persona with no stored
+/// cookies (first run) leaves the jar empty.
 pub fn load_cookies(store: &mut dyn Store, persona: PersonaId) {
-    let bytes = match pollster::block_on(store.load_blob(&cookie_key(persona))) {
-        Ok(Some(bytes)) => bytes,
-        Ok(None) => return,
+    let keys = match pollster::block_on(store.iter_keys(&cookie_prefix(persona))) {
+        Ok(keys) => keys,
         Err(err) => {
-            tracing::warn!(%err, "cookie load: read failed");
+            tracing::warn!(%err, "cookie load: iter_keys failed");
             return;
         }
     };
-    match serde_json::from_slice::<Vec<PersistedCookie>>(&bytes) {
-        Ok(records) => {
-            session_jar().load_records(records.into_iter().map(PersistedCookie::into_record));
+    let mut records = Vec::with_capacity(keys.len());
+    let mut shadow = match last_persisted().lock() {
+        Ok(shadow) => shadow,
+        Err(_) => return,
+    };
+    for key in keys {
+        match pollster::block_on(store.load_blob(&key)) {
+            Ok(Some(bytes)) => match serde_json::from_slice::<PersistedCookie>(&bytes) {
+                Ok(cookie) => {
+                    shadow.insert(cookie_key_of(&cookie), cookie.clone());
+                    records.push(cookie.into_record());
+                }
+                Err(err) => tracing::warn!(%err, "cookie load: deserialize failed"),
+            },
+            Ok(None) => {}
+            Err(err) => tracing::warn!(%err, "cookie load: read failed"),
         }
-        Err(err) => tracing::warn!(%err, "cookie load: deserialize failed"),
     }
+    drop(shadow);
+    session_jar().load_records(records);
 }
 
 /// A `FetchContext` whose cookie jar is the shared [`session_jar`]; the other seams
