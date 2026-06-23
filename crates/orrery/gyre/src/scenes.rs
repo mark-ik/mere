@@ -252,11 +252,11 @@ mod tests {
         for _ in 0..600 {
             settle.tick(1.0 / 60.0);
         }
-        let a: Vec<_> = settle.scene_bodies().map(|(_, p, _)| p).collect();
+        let a: Vec<_> = settle.scene_bodies().map(|b| b.position).collect();
         for _ in 0..30 {
             settle.tick(1.0 / 60.0);
         }
-        let b: Vec<_> = settle.scene_bodies().map(|(_, p, _)| p).collect();
+        let b: Vec<_> = settle.scene_bodies().map(|b| b.position).collect();
         let settled_motion: f32 = a.iter().zip(&b).map(|(p, q)| (*p - *q).length()).sum();
         assert!(settled_motion < 5.0, "pyramid should be at rest (moved {settled_motion})");
 
@@ -266,11 +266,11 @@ mod tests {
         for _ in 0..600 {
             drift.tick(1.0 / 60.0);
         }
-        let a: Vec<_> = drift.scene_bodies().map(|(_, p, _)| p).collect();
+        let a: Vec<_> = drift.scene_bodies().map(|b| b.position).collect();
         for _ in 0..30 {
             drift.tick(1.0 / 60.0);
         }
-        let b: Vec<_> = drift.scene_bodies().map(|(_, p, _)| p).collect();
+        let b: Vec<_> = drift.scene_bodies().map(|b| b.position).collect();
         let drift_motion: f32 = a.iter().zip(&b).map(|(p, q)| (*p - *q).length()).sum();
         assert!(drift_motion > 5.0, "drift orbs should still be moving (moved {drift_motion})");
     }
@@ -285,7 +285,7 @@ mod tests {
         for _ in 0..300 {
             sim.tick(1.0 / 60.0);
         }
-        let max_y = sim.scene_bodies().map(|(_, p, _)| p.y).fold(f32::NEG_INFINITY, f32::max);
+        let max_y = sim.scene_bodies().map(|b| b.position.y).fold(f32::NEG_INFINITY, f32::max);
         assert!(
             max_y < 500.0,
             "rope joints should anchor the chain, not let it fall away (max_y {max_y})"

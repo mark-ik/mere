@@ -88,7 +88,7 @@ mod query;
 /// and hit-tests from, plus the [`LayoutSnapshot`] a physics actor emits to
 /// refresh it. The seam that lets the simulation run off the UI thread.
 mod view;
-pub use view::{LayoutSnapshot, LayoutView, RectSelection};
+pub use view::{LayoutSnapshot, LayoutView, RectSelection, SceneBodyView};
 
 /// Physical radius used for every node body's collider.
 ///
@@ -258,11 +258,11 @@ pub struct Simulation {
     /// also re-applies it to the live ones. (Physics settings.)
     linear_damping: f32,
     /// Non-graph scene-decoration bodies sharing this world (the "living backdrop" /
-    /// interactive scene), each stored as `(handle, paint radius)` keyed by a
-    /// [`SceneBodyId`]. They tick and collide like any body but carry no [`NodeKey`],
-    /// so the layout forces (which key off `bodies_by_node`) ignore them. (Physics
-    /// scenes P1.)
-    scene_bodies: HashMap<SceneBodyId, (RigidBodyHandle, f32)>,
+    /// interactive scene), each stored as `(handle, collider shape)` keyed by a
+    /// [`SceneBodyId`]. The shape rides along so the host can paint the true face (P4b).
+    /// They tick and collide like any body but carry no [`NodeKey`], so the layout forces
+    /// (which key off `bodies_by_node`) ignore them. (Physics scenes P1.)
+    scene_bodies: HashMap<SceneBodyId, (RigidBodyHandle, NodeCollider)>,
     /// Monotonic id source for [`scene_bodies`](Self::scene_bodies).
     next_scene_id: u64,
     /// Whether the loaded scene wants to keep moving forever (a perpetual backdrop) rather
@@ -612,17 +612,10 @@ impl Simulation {
             .collision_groups(scene_groups())
             .build();
         self.colliders.insert_with_parent(c, handle, &mut self.bodies);
-        // A representative radius for the host's backdrop paint (the shape vocabulary's
-        // nominal half-extent); the collider itself keeps the true shape.
-        let radius = match &collider {
-            NodeCollider::Ball { radius } => *radius,
-            NodeCollider::Square { half } => *half,
-            NodeCollider::RoundedSquare { half, .. } => *half,
-            NodeCollider::Hull { fallback, .. } => *fallback,
-        };
+        // Keep the collider shape alongside the handle for the host's shape-aware paint. (P4b.)
         let id = SceneBodyId(self.next_scene_id);
         self.next_scene_id += 1;
-        self.scene_bodies.insert(id, (handle, radius));
+        self.scene_bodies.insert(id, (handle, collider));
         id
     }
 
@@ -657,14 +650,20 @@ impl Simulation {
         self.scene_perpetual = false;
     }
 
-    /// Iterate the live `(id, position, paint radius)` of every scene body — the host's
-    /// read for painting the backdrop. Reflects the last [`Self::tick`]; order is
-    /// unspecified. (Physics scenes P1.)
-    pub fn scene_bodies(&self) -> impl Iterator<Item = (SceneBodyId, Point2D<f32>, f32)> + '_ {
-        self.scene_bodies.iter().filter_map(|(&id, &(handle, radius))| {
-            self.bodies
-                .get(handle)
-                .map(|b| (id, Point2D::new(b.translation().x, b.translation().y), radius))
+    /// Iterate every scene body as a paintable [`SceneBodyView`] (id, position, rotation, shape)
+    /// — the host's read for the shape-aware backdrop paint. Reflects the last [`Self::tick`];
+    /// order is unspecified. (Physics scenes P1 / P4b.)
+    pub fn scene_bodies(&self) -> impl Iterator<Item = SceneBodyView> + '_ {
+        self.scene_bodies.iter().filter_map(|(&id, (handle, collider))| {
+            self.bodies.get(*handle).map(|b| {
+                let t = b.translation();
+                SceneBodyView {
+                    id,
+                    position: Point2D::new(t.x, t.y),
+                    rotation: b.rotation().angle(),
+                    collider: collider.clone(),
+                }
+            })
         })
     }
 
@@ -761,15 +760,9 @@ impl Simulation {
                 .collision_groups(scene_groups())
                 .build();
             self.colliders.insert_with_parent(c, handle, &mut self.bodies);
-            let radius = match &b.collider {
-                NodeCollider::Ball { radius } => *radius,
-                NodeCollider::Square { half } => *half,
-                NodeCollider::RoundedSquare { half, .. } => *half,
-                NodeCollider::Hull { fallback, .. } => *fallback,
-            };
             let id = SceneBodyId(self.next_scene_id);
             self.next_scene_id += 1;
-            self.scene_bodies.insert(id, (handle, radius));
+            self.scene_bodies.insert(id, (handle, b.collider.clone()));
             handles.push(handle);
         }
         // Bind joints between the spawned bodies (by spec index). Out-of-range or capped-out
@@ -1030,11 +1023,11 @@ mod scene_tests {
         sim.load_scene(&crate::drop_bowl_scene());
         assert_eq!(sim.scene_body_count(), 13, "5 floor + 8 falling balls");
 
-        let min_before = sim.scene_bodies().map(|(_, p, _)| p.y).fold(f32::INFINITY, f32::min);
+        let min_before = sim.scene_bodies().map(|b| b.position.y).fold(f32::INFINITY, f32::min);
         for _ in 0..60 {
             sim.tick(1.0 / 60.0);
         }
-        let min_after = sim.scene_bodies().map(|(_, p, _)| p.y).fold(f32::INFINITY, f32::min);
+        let min_after = sim.scene_bodies().map(|b| b.position.y).fold(f32::INFINITY, f32::min);
         assert!(min_after > min_before + 5.0, "gravity pulled the falling balls down");
 
         // The node carries gravity_scale(0), so scene gravity never drags the graph down.

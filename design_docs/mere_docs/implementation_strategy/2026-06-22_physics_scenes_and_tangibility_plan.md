@@ -337,3 +337,16 @@ within budget.
   or polygon `PaintCmd`); until then square/hull scene bodies still paint as round orbs (balls, incl.
   the chain beads, read fine). Also pending: `lib.rs` is 1044 LOC (the `Simulation` core, over the 600
   ceiling pre-existing) — a `Simulation` decomposition is its own follow-on.
+- 2026-06-23: **P4b part 2 complete, shape-aware scene paint; headed-verified.** No new render
+  primitive was needed after all — netrender's `PaintCmd::DrawPath` (filled Bezier path) was already
+  there. Scene bodies now carry their collider shape + live rotation through the snapshot (a
+  `SceneBodyView { id, position, rotation, collider }` replaces the old `(id, pos, radius)` tuple on
+  `LayoutSnapshot` / `LayoutView`). `frame.rs` paints a ball as the soft radial-gradient orb (the calm
+  backdrop look, unchanged) and a square / rounded-square / hull as a filled polygon: each body-local
+  corner is rotated by the body's angle, translated to world, and projected per-corner through the
+  camera, so the shape reclines with the iso ground and shows its true orientation. gyre 37 + orrery 44
+  green; headed-verified (scry-shots/p4a-*): the pyramid reads as a stepped stack of square blocks and
+  the dominoes render as tilted bars (the cascade reads — upright on one end, fallen at angles on the
+  other). Ball scenes (galton, drift, chain) keep the orb look. **P4b done** bar the deferred
+  `Simulation` decomposition (`lib.rs` still over the 600 ceiling, pre-existing). Next rung: P4c
+  own-PBF fluid.

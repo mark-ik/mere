@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use euclid::default::{Box2D, Point2D};
 use kernel::graph::NodeKey;
 
-use crate::{NODE_BODY_RADIUS, SceneBodyId};
+use crate::{NODE_BODY_RADIUS, NodeCollider, SceneBodyId};
 
 /// Result of [`LayoutView::rect_select`] (and [`Simulation::rect_select`]): the
 /// nodes and edges a marquee covers.
@@ -38,6 +38,18 @@ pub struct RectSelection {
     pub edges: Vec<(NodeKey, NodeKey)>,
 }
 
+/// A scene-decoration body as the host paints it: its id, world position, rotation (radians),
+/// and collider shape — so the paint can match the true face (a rotated square, a hull polygon)
+/// rather than a uniform orb. (Physics scenes P4b — shape-aware paint.)
+#[derive(Clone, Debug, PartialEq)]
+pub struct SceneBodyView {
+    pub id: SceneBodyId,
+    pub position: Point2D<f32>,
+    /// Orientation in radians (the body's live rotation).
+    pub rotation: f32,
+    pub collider: NodeCollider,
+}
+
 /// The `Send` payload a physics actor emits each tick: every node's current
 /// position plus the producer generation it was computed at (so the host can
 /// drop a snapshot from a layout it has already moved past). Carries positions
@@ -47,10 +59,10 @@ pub struct RectSelection {
 pub struct LayoutSnapshot {
     /// `(node, position)` for every body in the simulation.
     pub positions: Vec<(NodeKey, Point2D<f32>)>,
-    /// `(id, position, paint radius)` for every scene-decoration body (the living
-    /// backdrop), riding the same snapshot so it renders + drifts off-thread.
-    /// (Physics scenes P1.)
-    pub scene: Vec<(SceneBodyId, Point2D<f32>, f32)>,
+    /// Every scene-decoration body (the living backdrop / loaded scene) as a paintable
+    /// [`SceneBodyView`] (id, position, rotation, shape), riding the same snapshot so it
+    /// renders + animates off-thread. (Physics scenes P1 / P4b.)
+    pub scene: Vec<SceneBodyView>,
     /// The generation this layout was produced at (monotonic on the actor).
     pub generation: u64,
 }
@@ -77,9 +89,9 @@ pub struct LayoutView {
     /// `radius`. Set wholesale by the host from each node's `node_size / 2`, so the
     /// grab and the picture stay in sync. (Decision 5 — size drives the collider.)
     radii: HashMap<NodeKey, f32>,
-    /// Scene-decoration bodies `(id, position, paint radius)`, refreshed from each
-    /// snapshot — the living backdrop the host paints behind the graph. (Physics scenes P1.)
-    scene: Vec<(SceneBodyId, Point2D<f32>, f32)>,
+    /// Scene-decoration bodies as paintable [`SceneBodyView`]s, refreshed from each snapshot —
+    /// the living backdrop the host paints behind the graph. (Physics scenes P1 / P4b.)
+    scene: Vec<SceneBodyView>,
 }
 
 impl Default for LayoutView {
@@ -138,7 +150,7 @@ impl LayoutView {
         self.positions.clear();
         self.positions.extend(snapshot.positions.iter().copied());
         self.scene.clear();
-        self.scene.extend(snapshot.scene.iter().copied());
+        self.scene.extend(snapshot.scene.iter().cloned());
     }
 
     /// Replace the edge topology (after a structural graph change).
@@ -173,10 +185,10 @@ impl LayoutView {
         self.positions.iter().map(|(&k, &p)| (k, p))
     }
 
-    /// Iterate every scene-decoration body `(id, position, paint radius)` — the host's
-    /// read for painting the living backdrop. (Physics scenes P1.)
-    pub fn scene_bodies(&self) -> impl Iterator<Item = (SceneBodyId, Point2D<f32>, f32)> + '_ {
-        self.scene.iter().copied()
+    /// Iterate every scene-decoration body as a paintable [`SceneBodyView`] — the host's read
+    /// for painting the living backdrop / loaded scene. (Physics scenes P1 / P4b.)
+    pub fn scene_bodies(&self) -> impl Iterator<Item = SceneBodyView> + '_ {
+        self.scene.iter().cloned()
     }
 
     /// Hit-test a world-space point: the node whose circle (center, [`radius`])

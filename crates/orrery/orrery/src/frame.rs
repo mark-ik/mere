@@ -10,11 +10,13 @@ use std::collections::{HashMap, HashSet};
 use kernel::geometry::PortablePoint;
 use layout_dom_api::LayoutDomMut;
 use kernel::graph::NodeKey;
+use gyre::NodeCollider;
 use netrender::Scene;
 use paint_list_api::{
     AlphaType, ColorF, CommonPlacement, DeviceIntSize, ExtendMode, GradientStop, IdNamespace,
     ImageItem, ImageKey, ImageRendering, ImageResource, LayoutPoint, LayoutRect, LayoutSize,
-    PaintCmd, PaintList, RadialGradientItem, RadialGradientPayload, RectItem,
+    PaintCmd, PaintList, PathCommand, PathData, PathItem, RadialGradientItem, RadialGradientPayload,
+    RectItem,
 };
 use paint_list_render::{composite_paint_layers, CompositeLayer};
 use platen::orrery::{identity_arrangement, orrery_paint_list_demoted_from_arrangement};
@@ -302,25 +304,75 @@ impl Orrery {
         // (under the edges), projected through the camera so they recline with the iso
         // ground. (Physics scenes P1.)
         let mut scene_cmds: Vec<PaintCmd> = Vec::new();
-        for (_, pos, radius) in self.view.scene_bodies() {
-            let (cx, cy) = self.camera.to_screen(PortablePoint::new(pos.x, pos.y));
-            let r = (radius * self.camera.zoom).max(1.0);
-            let rect =
-                LayoutRect::new(LayoutPoint::new(cx - r, cy - r), LayoutPoint::new(cx + r, cy + r));
-            scene_cmds.push(PaintCmd::DrawRadialGradient(RadialGradientItem {
-                placement: CommonPlacement::new(rect),
-                gradient: RadialGradientPayload {
-                    center: LayoutPoint::new(cx, cy),
-                    radius: LayoutSize::new(r, r),
-                    extend_mode: ExtendMode::Clamp,
-                    stops: vec![
-                        GradientStop { offset: 0.0, color: ColorF::new(0.42, 0.55, 0.85, 0.22) },
-                        GradientStop { offset: 1.0, color: ColorF::new(0.42, 0.55, 0.85, 0.0) },
-                    ],
-                },
-                tile_size: LayoutSize::new(2.0 * r, 2.0 * r),
-                tile_spacing: LayoutSize::zero(),
-            }));
+        for body in self.view.scene_bodies() {
+            // A ball (or a degenerate hull) paints as a soft radial-gradient orb — the calm
+            // backdrop look. A square / rounded-square / hull paints as a filled polygon of its
+            // (rotated) corners, projected per-corner through the camera so the shape reclines
+            // with the iso ground and shows the body's true orientation. (Physics scenes P4b.)
+            let polygon: Option<Vec<(f32, f32)>> = match &body.collider {
+                NodeCollider::Ball { .. } => None,
+                NodeCollider::Square { half } | NodeCollider::RoundedSquare { half, .. } => {
+                    Some(vec![(-half, -half), (*half, -half), (*half, *half), (-half, *half)])
+                }
+                NodeCollider::Hull { points, .. } if points.len() >= 3 => Some(points.clone()),
+                NodeCollider::Hull { .. } => None,
+            };
+            match polygon {
+                Some(corners) => {
+                    let (s, c) = body.rotation.sin_cos();
+                    let mut commands = Vec::with_capacity(corners.len() + 1);
+                    let (mut min_x, mut min_y, mut max_x, mut max_y) =
+                        (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+                    for (i, &(lx, ly)) in corners.iter().enumerate() {
+                        let wx = body.position.x + (lx * c - ly * s);
+                        let wy = body.position.y + (lx * s + ly * c);
+                        let (sx, sy) = self.camera.to_screen(PortablePoint::new(wx, wy));
+                        min_x = min_x.min(sx);
+                        min_y = min_y.min(sy);
+                        max_x = max_x.max(sx);
+                        max_y = max_y.max(sy);
+                        let p = LayoutPoint::new(sx, sy);
+                        commands.push(if i == 0 { PathCommand::MoveTo(p) } else { PathCommand::LineTo(p) });
+                    }
+                    commands.push(PathCommand::Close);
+                    scene_cmds.push(PaintCmd::DrawPath(PathItem {
+                        placement: CommonPlacement::new(LayoutRect::new(
+                            LayoutPoint::new(min_x, min_y),
+                            LayoutPoint::new(max_x, max_y),
+                        )),
+                        path: PathData { commands },
+                        fill: Some(ColorF::new(0.42, 0.55, 0.85, 0.5)),
+                        stroke: None,
+                    }));
+                }
+                None => {
+                    let radius = match &body.collider {
+                        NodeCollider::Ball { radius } => *radius,
+                        NodeCollider::Hull { fallback, .. } => *fallback,
+                        _ => continue,
+                    };
+                    let (cx, cy) = self.camera.to_screen(PortablePoint::new(body.position.x, body.position.y));
+                    let r = (radius * self.camera.zoom).max(1.0);
+                    let rect = LayoutRect::new(
+                        LayoutPoint::new(cx - r, cy - r),
+                        LayoutPoint::new(cx + r, cy + r),
+                    );
+                    scene_cmds.push(PaintCmd::DrawRadialGradient(RadialGradientItem {
+                        placement: CommonPlacement::new(rect),
+                        gradient: RadialGradientPayload {
+                            center: LayoutPoint::new(cx, cy),
+                            radius: LayoutSize::new(r, r),
+                            extend_mode: ExtendMode::Clamp,
+                            stops: vec![
+                                GradientStop { offset: 0.0, color: ColorF::new(0.42, 0.55, 0.85, 0.22) },
+                                GradientStop { offset: 1.0, color: ColorF::new(0.42, 0.55, 0.85, 0.0) },
+                            ],
+                        },
+                        tile_size: LayoutSize::new(2.0 * r, 2.0 * r),
+                        tile_spacing: LayoutSize::zero(),
+                    }));
+                }
+            }
         }
         let mut layers = vec![CompositeLayer::commands_only(&bg_cmds)];
         if !scene_cmds.is_empty() {
