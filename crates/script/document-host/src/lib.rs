@@ -80,6 +80,10 @@ pub struct ScriptHost {
     dom: ScriptedDom,
     revision: u64,
     logs: Vec<String>,
+    /// The granted application-capability interface names this instance can see via
+    /// the always-linked `caps.granted()` import (§11.4). Authoritative copy is the
+    /// `Grant`; this is what the script is told it has.
+    granted: Vec<String>,
     wasi: WasiCtx,
     table: ResourceTable,
     /// Resource quotas (P2.2). Default = unlimited (run_turns); run_guarded caps it.
@@ -89,6 +93,15 @@ pub struct ScriptHost {
 impl crate::mere::script::log::Host for ScriptHost {
     fn log(&mut self, message: String) {
         self.logs.push(message);
+    }
+}
+
+/// `caps.granted()` (§11.4): report the granted application-capability interface
+/// names so a script can adapt to a partial grant. Read-only; the `Grant` is
+/// authoritative.
+impl crate::mere::script::caps::Host for ScriptHost {
+    fn granted(&mut self) -> Vec<String> {
+        self.granted.clone()
     }
 }
 
@@ -122,6 +135,37 @@ pub struct TurnLog {
     pub final_revision: u64,
 }
 
+/// The full linker: WASI floor + every `mere:script` import (`log`, `caps`,
+/// `document-host`). Used by the unguarded/guarded turn drivers, which grant
+/// everything; the grant-policy path is [`link_with_grant`]. `caps` is always
+/// linked (it reports the grant, it is not a capability — §11.4).
+fn full_linker(engine: &Engine) -> wasmtime::Result<Linker<ScriptHost>> {
+    let mut linker = Linker::new(engine);
+    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
+    crate::mere::script::log::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(&mut linker, |s| s)?;
+    crate::mere::script::caps::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(&mut linker, |s| s)?;
+    crate::mere::script::document_host::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(
+        &mut linker,
+        |s| s,
+    )?;
+    Ok(linker)
+}
+
+/// Construct a per-instance [`ScriptHost`] over a fresh seeded DOM at revision 0,
+/// told it holds `granted` capabilities (the `caps.granted()` answer) and bounded
+/// by `limits`.
+fn new_host(granted: Vec<String>, limits: StoreLimits) -> ScriptHost {
+    ScriptHost {
+        dom: seed_dom(),
+        revision: 0,
+        logs: Vec::new(),
+        granted,
+        wasi: WasiCtxBuilder::new().build(),
+        table: ResourceTable::new(),
+        limits,
+    }
+}
+
 /// Instantiate the `document-core` component at `component_path` over a seeded
 /// live `ScriptedDom`, `activate` it, drive `(kind, payload)` turns applying each
 /// returned batch against the live DOM + revision, `deactivate`, and report.
@@ -130,25 +174,9 @@ pub async fn run_turns(component_path: &Path, turns: &[(&str, &str)]) -> wasmtim
     let engine = Engine::default();
     let component = Component::from_file(&engine, component_path)?;
 
-    let mut linker = Linker::new(&engine);
-    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
-    crate::mere::script::log::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(&mut linker, |s| s)?;
-    crate::mere::script::document_host::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(
-        &mut linker,
-        |s| s,
-    )?;
-
-    let mut store = Store::new(
-        &engine,
-        ScriptHost {
-            dom: seed_dom(),
-            revision: 0,
-            logs: Vec::new(),
-            wasi: WasiCtxBuilder::new().build(),
-            table: ResourceTable::new(),
-            limits: StoreLimits::default(),
-        },
-    );
+    let linker = full_linker(&engine)?;
+    let mut store =
+        Store::new(&engine, new_host(Grant::allow_all().granted_names(), StoreLimits::default()));
 
     let bindings = DocumentCore::instantiate_async(&mut store, &component, &linker).await?;
     bindings.call_activate(&mut store).await?;
@@ -228,24 +256,13 @@ pub async fn run_guarded(
     let engine = Arc::new(Engine::new(&config)?);
     let component = Component::from_file(&engine, component_path)?;
 
-    let mut linker = Linker::new(&engine);
-    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
-    crate::mere::script::log::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(&mut linker, |s| s)?;
-    crate::mere::script::document_host::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(
-        &mut linker,
-        |s| s,
-    )?;
-
+    let linker = full_linker(&engine)?;
     let mut store = Store::new(
         &engine,
-        ScriptHost {
-            dom: seed_dom(),
-            revision: 0,
-            logs: Vec::new(),
-            wasi: WasiCtxBuilder::new().build(),
-            table: ResourceTable::new(),
-            limits: StoreLimitsBuilder::new().memory_size(mem_bytes).build(),
-        },
+        new_host(
+            Grant::allow_all().granted_names(),
+            StoreLimitsBuilder::new().memory_size(mem_bytes).build(),
+        ),
     );
     store.limiter(|h| &mut h.limits);
     store.set_epoch_deadline(epoch_deadline_ticks);
@@ -334,6 +351,9 @@ impl Grant {
 /// Allow/Deny before instantiation by the caller; P2 omits it conservatively.)
 fn link_with_grant(linker: &mut Linker<ScriptHost>, grant: &Grant) -> wasmtime::Result<()> {
     wasmtime_wasi::p2::add_to_linker_async(linker)?;
+    // `caps` is always linked — it reports the grant, it is not itself a capability
+    // (§11.4), so even a maximally-denied instance can discover it has nothing.
+    crate::mere::script::caps::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(linker, |s| s)?;
     if grant.log == CapPermission::Allow {
         crate::mere::script::log::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(linker, |s| s)?;
     }
@@ -359,17 +379,7 @@ pub(crate) async fn build_instance(
     let component = Component::from_file(engine, component_path)?;
     let mut linker = Linker::new(engine);
     link_with_grant(&mut linker, grant)?;
-    let mut store = Store::new(
-        engine,
-        ScriptHost {
-            dom: seed_dom(),
-            revision: 0,
-            logs: Vec::new(),
-            wasi: WasiCtxBuilder::new().build(),
-            table: ResourceTable::new(),
-            limits: StoreLimits::default(),
-        },
-    );
+    let mut store = Store::new(engine, new_host(grant.granted_names(), StoreLimits::default()));
     let bindings = DocumentCore::instantiate_async(&mut store, &component, &linker).await?;
     Ok((store, bindings))
 }

@@ -10,6 +10,7 @@ wit_bindgen::generate!({
     world: "document-core",
 });
 
+use crate::mere::script::caps::granted;
 use crate::mere::script::document::{
     AppendArgs, Block, DocumentQuery, DocumentView, InsertArgs, Mutation, SetTextArgs, ViewNode,
 };
@@ -29,7 +30,10 @@ fn element(tag: &str) -> Block {
 
 impl Guest for Component {
     fn activate() {
-        log("guest: activated");
+        // Discover the grant (§11.4): a real script would skip ungranted features
+        // here rather than trap on an unlinked import. We just report it.
+        let caps = granted();
+        log(&format!("guest: activated; granted [{}]", caps.join(", ")));
     }
 
     fn deactivate() {

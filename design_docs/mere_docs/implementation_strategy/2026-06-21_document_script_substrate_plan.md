@@ -864,6 +864,20 @@ same `call_async` without suspending, and `fetch` slots in when wired.
   convention) + `pollster`. Note: P2.4 activation uses a plain engine (no epoch/`StoreLimits`); wiring
   the P2.2 guards into the mod-loader path is a small follow-on. Remaining before P2.5: the
   `caps.granted()` discovery import (§11.4) + the `kernel::permissions` five-scope→`Grant` adapter.
+- **2026-06-22 (§11.4 — the `caps.granted()` discovery import, green).** Added an always-linked
+  `caps` interface to the WIT (`granted: func() -> list<string>`) and imported it into the
+  `document-core` world. It is not a capability — it *reports* the grant (the `Grant::granted_names`
+  seam), so a script can adapt to a partial grant rather than trap on an unlinked import; linked
+  unconditionally (like the WASI floor), even under a maximally-denied grant. Host: `ScriptHost`
+  gains a `granted: Vec<String>`, a `caps::Host` impl returns it, and the construction/linker paths
+  were de-duplicated into `new_host` + `full_linker` helpers so every path sets `granted` and links
+  `caps` once (`build_instance` from `grant.granted_names()`; the turn drivers from `allow_all`). The
+  document-core guest now calls `granted()` in `activate` and logs the list. One new test (16 total):
+  the guest discovers both capabilities under the full grant — proving the import is linked and the
+  guest reads the host's real grant through it. (Single shared WIT: the guests `generate!` from the
+  host's `wit/`, so both were rebuilt; no separate guest WIT to keep in sync.) §11.4 now complete
+  except the `kernel::permissions`→`Grant` adapter, which lands with P2.5 in the content actor (so
+  document-host stays graph-kernel-free).
 
 ## Key grounding files
 

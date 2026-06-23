@@ -7,6 +7,16 @@ interface log {
     log: func(message: string);
 }
 
+/// Capability discovery (§11.4). Always linked, regardless of grant — it names no
+/// capability of its own, it only *reports* which application-capability interfaces
+/// the host granted this instance (the `Grant::granted_names` seam). With it a
+/// script can adapt to a partial grant (skip an ungranted feature) rather than
+/// trap on calling an unlinked import. The host's grant is authoritative; this is
+/// the script's read-only window onto it.
+interface caps {
+    granted: func() -> list<string>;
+}
+
 /// The document vocabulary the script and host exchange. Values are copied across
 /// the boundary; no language-native object graph crosses it (§2.2).
 interface document {
@@ -104,6 +114,7 @@ interface document-host {
 /// suspend a turn's fiber without blocking (plan §11.7-7).
 world document-core {
     import log;
+    import caps;
     import document-host;
     use document.{event, apply-batch, turn-error};
 
