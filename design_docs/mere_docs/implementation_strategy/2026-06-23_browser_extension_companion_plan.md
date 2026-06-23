@@ -15,7 +15,7 @@ portable, shareable orrery.
 - [`../../2026-06-21_substrate_parallelism_composition_brief.md`](../../2026-06-21_substrate_parallelism_composition_brief.md) — the web build budget (3 builds / 2 toolchains) and the jco AOT path for components in the browser.
 - [`2026-06-17_unified_document_host_plan.md`](2026-06-17_unified_document_host_plan.md) + [`2026-06-18_node_representation_arrangement_plan.md`](2026-06-18_node_representation_arrangement_plan.md) — the orrery-as-element work that built `render_as_cards`; this plan is its browser consumer.
 - [`2026-06-23_gloss_outline_lens_plan.md`](2026-06-23_gloss_outline_lens_plan.md) — renames `mere-orrery` to `glossary`; this plan must not collide (the browser orrery core is the `orrery` crate, never `mere-orrery`).
-- [`2026-06-21_document_script_substrate_plan.md`](2026-06-21_document_script_substrate_plan.md) + [`2026-06-23_document_script_followons_plan.md`](2026-06-23_document_script_followons_plan.md) — the DocumentScript substrate, now **shipped native** (P0→P2.5 + all four follow-ons): the `mere:script` WIT world (`log` / `caps` / `net` / `document-host`), a **Wasmtime** host (the `document-host` crate — it deps wasmtime, so it is **native-only**, does not compile to wasm), `.cwasm` AOT, the fiber-async `net.fetch`, and the `kernel::permissions` → `Grant` model. Untrusted in-browser extension scripting rides the **same WIT contract** via **jco AOT** (no JIT in the tab): one shared *contract*, a per-target *runtime*. See §2 (scripting) for the harmonization, and note the contract currently lives in `crates/script/document-host/wit/world.wit` — the browser path wants it as a shared artifact (Open risks).
+- [`2026-06-21_document_script_substrate_plan.md`](2026-06-21_document_script_substrate_plan.md) + [`2026-06-23_document_script_followons_plan.md`](2026-06-23_document_script_followons_plan.md) — the DocumentScript substrate, now **shipped native** (P0→P2.5 + all four follow-ons): the `mere:script` WIT world (`log` / `caps` / `net` / `document-host`), a **Wasmtime** host (the `document-host` crate — it deps wasmtime, so it is **native-only**, does not compile to wasm), `.cwasm` AOT, the fiber-async `net.fetch`, and the `kernel::permissions` → `Grant` model. Untrusted in-browser extension scripting rides the **same WIT contract** via **jco AOT** (no JIT in the tab): one shared *contract*, a per-target *runtime*. See §2 (scripting) for the harmonization. The contract lives at the shared, runtime-neutral `crates/script/wit/world.wit` (extracted out of the native crate 2026-06-23), so the browser jco path consumes the same world.
 - [`../research/2026-05-31_murm_p2p_landscape_brief.md`](../research/2026-05-31_murm_p2p_landscape_brief.md) — iroh + noq is native QUIC; the browser tab needs WebTransport or WebRTC, which motivates the companion split.
 - [`../research/2026-06-15_in_the_wings_and_browser_bar_audit.md`](../research/2026-06-15_in_the_wings_and_browser_bar_audit.md) — the dormant eidetic `BrowsingMemory` / `BrowsingTrace` (federation-faithful, zero live callers) this plan activates.
 - [`../research/2026-06-04_resource_coordination_brief.md`](../research/2026-06-04_resource_coordination_brief.md) — the contributor-capability tier (browser tab = light surface, native helper = heavy lifting) the companion split reuses.
@@ -268,12 +268,14 @@ cartography).
   landscape brief documents native QUIC only).
 - **BrowsingTrace wasm-portability**: the type is portable, but its storage and any
   segment machinery need a wasm subset over IndexedDB/OPFS.
-- **The `mere:script` WIT is not yet a shared contract**: it lives in
-  `crates/script/document-host/wit/world.wit` (consumed only by `document-host`'s `bindgen!`
-  plus the P0 probe). The browser **jco** path must consume the *same* WIT, so before browser
-  scripting it should move to (or be referenced from) a shared, runtime-neutral location — and
-  any browser-only divergence (e.g. a `net.fetch` backend contract) layered without forking the
-  world. A WIT drift between the native host and the jco path would silently split the contract.
+- **The `mere:script` WIT is now a shared contract** (extracted 2026-06-23): moved to
+  `crates/script/wit/world.wit` (a runtime-neutral dir, not inside the native `document-host`
+  crate); the native host (`bindgen!` `path: "../wit"`) and both guests (`generate!`
+  `path: "../../wit"`) consume it from there, so the browser **jco** path points at the same
+  dir. **Residual watch**, not a blocker: keep the native host and the jco bindings on the same
+  world (no browser-only fork — layer any browser divergence, e.g. a `net.fetch` backend contract,
+  without editing the shared world), or the contract silently splits. The stale probe copy at
+  `crates/probes/document-script-p0/wit/` is gitignored and not load-bearing.
 
 ## Progress
 
@@ -296,3 +298,9 @@ cartography).
   not a separate mechanism); added a Findings note + an Open risk (the WIT needs a shared,
   runtime-neutral home before the browser jco path, to avoid contract drift). No conflicts found;
   the harmonization is additive. No code.
+- **Extracted the shared WIT (acting on the harmonization's action item).** Moved
+  `mere:script` (`world.wit`) out of the native crate to `crates/script/wit/world.wit` — a
+  runtime-neutral home. Updated the native host `bindgen!` (`path: "../wit"`) and both guests'
+  `generate!` (`path: "../../wit"`); regenerated the guests; `cargo test -p document-host` green
+  (19 tests). The browser jco path now has a shared contract dir to point at. The Open risk drops
+  from "not yet shared" to a residual "keep native + jco on one world (no browser fork)".

@@ -33,7 +33,10 @@ use wasmtime::{Config, Engine, Store, StoreLimits, StoreLimitsBuilder};
 use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiCtxView, WasiView};
 
 wasmtime::component::bindgen!({
-    path: "wit",
+    // The shared, runtime-neutral `mere:script` contract (one WIT, two runtimes:
+    // this native Wasmtime host + the browser jco path). Lives at `crates/script/wit`,
+    // not inside this native crate, so the browser consumes the same world.
+    path: "../wit",
     world: "document-core",
     // Turns run on a fiber (`exports` async, invoked via `call_async`); host imports
     // are async too so the sync-signature `net.fetch` can be implemented as a host

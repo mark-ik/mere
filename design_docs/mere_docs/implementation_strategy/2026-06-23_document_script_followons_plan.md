@@ -223,9 +223,11 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   consumes the **same `mere:script` WIT** via **jco AOT** in the tab (no JIT). `document-host` is
   native-only (deps wasmtime), so the browser is a separate runtime over the shared contract. The
   `net.fetch` capability is the browser's "fetch outside the tab" seam (companion / browser `fetch()`
-  backend); the `kernel::permissions` → `Grant` model carries into the extension's consent. **Action
-  item that emerged:** the WIT (now in `document-host/wit/world.wit`) should move to a shared,
-  runtime-neutral home before the browser path, to avoid native/jco contract drift.
+  backend); the `kernel::permissions` → `Grant` model carries into the extension's consent.
+  **Done (2026-06-23):** the WIT was extracted to the shared, runtime-neutral
+  `crates/script/wit/world.wit` (out of the native `document-host` crate); the host `bindgen!`
+  (`../wit`) and both guests (`../../wit`) consume it from there, so the browser jco path points at
+  the same world. Residual watch: keep native + jco on one world (no browser-only fork).
 
 ## Progress
 
@@ -312,3 +314,10 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   **All four follow-ons done.** Remaining document-script work (beyond these four): the net-permission
   resolution chain through meerkat (so a granted script can fetch), the mod-manifest "installed
   extension" auto-attach form, and settings-lane UIs for permissions + bindings.
+- **2026-06-23 (shared WIT extraction — cross-target prep for the browser jco path).** Acting on the
+  harmonization with the [browser-extension/companion plan](2026-06-23_browser_extension_companion_plan.md):
+  moved `mere:script` (`world.wit`) out of the native `document-host` crate to the shared,
+  runtime-neutral `crates/script/wit/world.wit`. Host `bindgen!` → `path: "../wit"`; both guests'
+  `generate!` → `path: "../../wit"`; guests regenerated; `document-host` 19 tests green. One contract,
+  now physically shared between the native Wasmtime host and the future browser jco path (no more
+  contract buried in the native crate). Residual: keep both runtimes on one world (no browser fork).
