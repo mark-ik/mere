@@ -139,18 +139,18 @@ through the document into gyre. So the earlier "build an input-bearing external-
 element / not the output-only leaf it is today" framing is retired — the primitives are in
 serval and demonstrated end-to-end.
 
-What is left is **consumer-side and gated on the textured-body form, which does not exist
-yet** (representation is still the binary `render_as_cards`, orrery lib.rs:194; node-rep is
-at P0). When that form lands (node-representation P2), render it as
+What is left is **consumer-side and gated on a *live serval-rendered* textured-body form, which does not exist
+yet.** Node-rep now has a real `Representation` enum (`Tile` / `Shape` / `Sprite`,
+orrery/types.rs:67) with per-node overrides, but `Sprite` is a *static* PNG (no input relay
+needed) and no live serval-rendered form exists yet. When such a form lands, render it as
 `on_wheel(on_pointer(external_texture(...)))` and relay the events into the inner serval
 content's hit-test — the one new wrinkle vs the orrery, which relays to gyre. That also
 satisfies the host-wiring G1.1 / G1.3 callers. (In-graph DOM node-card interactivity, the
 old G1.2 framing, is delivered by unified Phase 2 / the orrery `gyre` hit path.)
 
-**Status: no work now.** No consumer exists (no textured-body form) and the serval
-mechanism is already in place, so C2 is neither blocked-on-serval nor a serval engine
-build — it unblocks when node-representation P2 ships the textured-body form, and is then a
-thin consumer wiring. (Scry / WebView input is out of scope here, see
+**Status: no work now.** The serval mechanism is in place and no consumer exists — the
+static `Sprite` form needs no input relay, and a *live* serval-rendered textured-body form
+is not built. C2 unblocks when that live form ships, and is then a thin consumer wiring. (Scry / WebView input is out of scope here, see
 native-surface-compositing.)
 
 Done when: a serval-rendered textured-body tile (once that form exists) takes `on_wheel` /
@@ -167,14 +167,16 @@ propagate because it resolves to the *same* orrery (leaf semantics, tear-out bri
 Done when: a torn `Workbench`-pane window shows a shared node's live tile, navigates
 on its own, propagates edits to the donor, and instantiates no orrery of its own.
 
-Substrate (audited 2026-06-19): multi-window spawn + the window registry exist
-(`SpawnWindow` / `spawn_window`, app_handler.rs:746), but `spawn_window` makes a
-**full-chrome** window today ("v0 is a full-chrome window; MW3 step 4 makes it a slim
-workbench-only leaf"). So C3 is (a) leaf-shaping: spawn a `WindowKind::Leaf` (slim chrome,
-a `Workbench` pane bound to the donor's `graph_id`, no `Orrery` pane), plus (b) two
-inherited MW3 prerequisites for a *usable* leaf — **step 5** (the `user_event` actor
-fan-out, so the leaf gets live actor-driven updates, not just spawn-time state) and **step
-6** (a per-window AccessKit bridge; secondaries have none yet).
+Substrate (re-audited 2026-06-23, HEAD bde8342): the **leaf window-kind landed** —
+`build_window_view` spawns a `WindowKind::Leaf` (slim chrome), bound to the active graph,
+tested (`a_spawned_window_is_a_slim_leaf`, agent_harness.rs:670). But the leaf opens a
+**single-orrery content frame on the shared graph** (main.rs:1358-1383), not a torn
+Workbench tile, and the `user_event` actor fan-out (MW3 step 5) is still deferred, so a
+secondary gets only spawn-time state. So C3's remaining work is (a) the tear-out *content*:
+a torn `Workbench` pane showing the dragged node's tile, with no `Orrery` pane (resolving to
+the donor's pooled orrery); and (b) **MW3 step 5** (the `user_event` fan-out, so the leaf
+updates live) plus **step 6** (per-window AccessKit; secondaries have none). The
+window-kind half is done; the torn-tile content + live updates are not.
 
 ## C4 — Cross-graph composability (re-point / copy a pane, with provenance)
 
@@ -278,3 +280,14 @@ than as a separate extraction.
   native-surface-compositing. Also corrected the stale "node-cards take input via the
   shell hit-test" framing (the cond-3/4 reversal routes node interactivity through
   `gyre`). Doc reconciliation only, no code change.
+- **2026-06-23** — **Re-audit at HEAD bde8342** (dozens of commits past the last pass; tree
+  mid-refactor on the command/menu registry, build state unverified). Deltas: C3's **leaf
+  window-kind landed** (slim leaf, tested) though it opens a single-orrery frame on the
+  shared graph, not a torn tile, and step-5 fan-out is still deferred — so the prior
+  "spawn = full-chrome" finding is stale. Node-rep replaced binary `render_as_cards` with a
+  `Representation` enum (Tile/Shape/Sprite); `Sprite` is a *static* PNG, so C2's *live*
+  serval-rendered consumer still does not exist (C2 verdict unchanged: no work).
+  native-surface-compositing finished. C4 (rekey + `CopiedFrom`) still unbuilt. C1 intact
+  through the refactor (`focus_pane_graph` / `orrery_pane_at` / its test present).
+  **Re-ranked:** (1) C4 core; (2) C3 tear-out content + step-5 fan-out; (3) C5 gestures;
+  (4) N-orrery seam; (5) OQ-B/OQ-C.

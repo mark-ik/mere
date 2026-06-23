@@ -1,10 +1,16 @@
 # Scrying Tile Plan (flip P4 / integration S6)
 
 **Date**: 2026-06-10
-**Status**: X1+ shipped 2026-06-15 (meerkat `0adca6e` single-tile, `06b6ac7`
-multi-tile) via the ad-hoc `compat_pins` path; folding it into `inker::routing`
-is the inker-picker plan's Phase 0. *(Status corrected 2026-06-23; the body
-below predates the implementation.)*
+**Status** (reconciled to code 2026-06-23): X1 shipped, X2 input core shipped
+(chrome round-trip still open), X3 multi-tile lifecycle shipped (durable
+`compat_mode` not yet the source of truth), X4 untouched (Windows-only).
+Shipped via a session-local `engine_pins` map + a host-concrete producer pool
+(`meerkat/src/scrying_host.rs`), **not** the `ScryingTileEngine` /
+`ProducerFactory` registry seam, which has zero meerkat consumers — the
+Findings below predicted this; folding the pin into `inker::routing` and the
+producer into the registry is the inker-picker plan's Phase 0. The phase bodies
+record original intent; the **Progress** log carries shipped reality and the
+two display-model pivots that postdate the 2026-06-11 entry.
 **Scope**: Land external web content in meerkat: a node routed to `scrying.web`
 renders through the system WebView (WebView2 first), its GPU frames imported
 into the host's wgpu device and composited at the tile/card rect via
@@ -41,11 +47,12 @@ the archived Masonry-era
   (or fence share-handle), per-platform composition plumbing
   (engine.rs:18-37). `SurfaceSpawnRequest` already carries
   `EngineProfileBinding { user_data_dir }` + optional `fence_handle`.
-- **inker routing** — `ENGINE_SCRYING_WEB = "scrying.web"`, opt-in per tile via
-  `EngineRouteRequest::pinned_engine` (routing.rs:11-24);
+- **inker routing** — `ENGINE_SCRYING_WEB = "scrying.web"` (routing.rs:40),
+  opt-in per tile via `EngineRouteRequest::pinned_engine` (routing.rs:116);
   `SurfaceContractMode::CompositedTexture`. graph-kernel's `Node` already
-  carries the per-node compatibility-mode toggle field (node.rs:120) — the
-  graph-truth hook for the pin.
+  carries the per-node compatibility-mode toggle field (node.rs:115), with a
+  `SetNodeCompatMode` delta and `set_node_compat_mode` accessor — the
+  graph-truth hook for the pin (still unused by the live path; see X3).
 - **netrender** — `compose_external_texture` / `ExternalTexturePlacement` with
   `scene_op_boundary` ordering, shipped and exercised by meerkat's ~12 actor-
   texture call sites in render.rs.
@@ -91,6 +98,16 @@ the session dir per the engine-profile-boundary plan), register
 `compose_external_texture`. Resize follows the card rect. **Done when** a
 real HTTPS site renders live inside a meerkat card on the Windows laptop.
 
+**Shipped as (2026-06-23 reconcile):** done-condition met, but *not* via the
+registry. The host pool (`meerkat/src/scrying_host.rs`) binds
+`PlatformWebSurfaceProducer` concretely and uses `try_acquire_frame`, because
+the type-erased `inker::SurfaceProducer` lane drops the handle-handoff metadata
+(Findings, below). `ScryingTileEngine` / `ProducerFactory` are therefore unbuilt-into:
+they compile and self-test but have no meerkat consumer. The pin is a
+session-local `engine_pins` map on `SharedState.content`, not `pinned_engine`
+through `inker::routing`. The display model also moved twice past this phase's
+"composite the imported texture at the card rect" sketch — see Progress.
+
 ### X2 — Input, navigation, chrome integration
 
 Forward mouse/pointer/keyboard/wheel to the producer when the pointer is over
@@ -104,6 +121,15 @@ cursor; focus hand-off via `move_focus` on click/Tab into the tile. **Done
 when** you can log into a real site in a scrying tile using only meerkat
 chrome.
 
+**Status (2026-06-23):** input core **done** and verified (mouse / wheel /
+keyboard / click-to-focus forward through `scrying_host`'s `forward_*` /
+`focus_tile`, wired in `input.rs` + `app_handler.rs`; you can log into a real
+site). Chrome round-trip **not built**: no `poll_navigation_event`,
+`poll_cursor_shape`, or producer-driven `go_back`/`go_forward`/`can_go_*` in
+meerkat (`can_go_*` is still host-driven from node history via `nav_sync.rs`).
+Navigation happens only by changing the node URL (`drive` calls `load_url` on
+URL change), so the WebView's own nav state does not flow back to the omnibar.
+
 ### X3 — Lifecycle + the pin surface
 
 `ScryingHost` reconcile semantics aligned with the constellation (warm on
@@ -115,12 +141,27 @@ as a later refinement). Tile teardown verified leak-free (producer drop +
 imported texture release). **Done when** pin/unpin per node works from the
 inspector or card chrome and a closed tile releases its WebView.
 
+**Status (2026-06-23):** lifecycle **mostly done** — pin/unpin works from the
+palette toggle and the engine picker (`menus.rs`, `settings_node.rs`), and a
+reap-on-deselect pass (`Pool::retain` against the surfaces shown this frame)
+releases WebViews that leave view. Constellation-grade warm-on-blur / LRU cap /
+storm-capped fault respawn are *not* ported (spawn failures are recorded once
+to suppress respawn; a capture-stall restart exists). The one open gap is the
+**source of truth**: the live path keys off the session-local `engine_pins`
+map (cleared on graph switch), while graph-kernel's durable `node.compat_mode`
+field is built and read by the inspector but does **not** yet drive scrying.
+Connecting it is the remaining X3 work.
+
 ### X4 — Other platforms
 
 macOS (WKWebView producer) and Linux (webkit6 or WPE, per the wgpu-scry
 parity matrix) factories behind `cfg(target_os)`. All four test machines can
 validate locally. **Done when** the X1 done-condition passes on iMac and one
 Linux box.
+
+**Status (2026-06-23):** not started. `scrying_host`'s pool is
+`cfg(target_os = "windows")`; off Windows `drive` is a one-time-warning no-op
+(`scrying X1 is Windows-only`). No macOS / Linux producer factories yet.
 
 ### Later (not this plan)
 
@@ -135,8 +176,11 @@ Linux box.
   additionally needs transform-aware hit-testing and the pointer propagation
   cell, both tracked in the
   [host cheap-path plan](../../archive_docs/2026-06-15_completed_plans/2026-06-10_host_cheap_path_plan.md) C6 *(archived)*. Not one PR.
-- Explicit fence sync (the scrying README's ~150-250-line wgpu-hal path) if
-  keyed-mutex/implicit sync shows artifacts under load.
+- ~~Explicit fence sync (the scrying README's ~150-250-line wgpu-hal path) if
+  keyed-mutex/implicit sync shows artifacts under load.~~ **Shipped early
+  (2026-06-15):** `Dx12FenceSynchronizer` is wired by default (host signals the
+  shared fence after each `CopyResource`, the importer waits on it), with the
+  implicit synchronizer as the non-D3D12 fallback. See Progress.
 - Frame-arrival wake instead of acquire-per-redraw (battery/perf refinement).
 - `content_generation` population for netrender's tile-cache keying once a
   sampling-source use appears (paint_list_api items.rs:332-339).
@@ -151,9 +195,10 @@ Linux box.
   network stack, cookie jar (`user_data_dir` profile), and cache; netfetcher/
   eidetic are not in the loop for scrying tiles. The verso charter's §5
   ceiling documents this; no sync between the worlds in this plan.
-- **Stale pointer to fix in passing**: scrying-engine's lib.rs cites
+- ~~**Stale pointer to fix in passing**: scrying-engine's lib.rs cites
   `2026-05-11_scrying_web_tile_plan.md` (archived, gpui-era); repoint to this
-  plan when X1 lands.
+  plan when X1 lands.~~ **Done 2026-06-23:** lib.rs now cites this plan and
+  notes the registry seam is currently bypassed by the host pool.
 - The compose path's ordered-interleave cost (full tail re-render per
   boundary crossing, netrender renderer/mod.rs) is acceptable at v1 tile
   counts; default topmost-overlay ordering is fine for the focused card.
@@ -269,3 +314,52 @@ Linux box.
       without deselecting.
     - **Scrollbars** want overlay / auto-hide (a WebView2 setting in scrying).
   - meerkat 44 lib + 65 bin green throughout.
+
+- **2026-06-23** — **Audit reconcile (read out of the code, not a contemporaneous
+  session log).** The work below postdates the 2026-06-11 entry and shipped by
+  the header's `0adca6e` (single-tile) / `06b6ac7` (multi-tile) landing; it is
+  reconstructed here from `meerkat/src/scrying_host.rs` + `render.rs` so the log
+  matches reality.
+  - **Second display-model pivot: visual-hosting → off-window capture (P2).** The
+    2026-06-11 "position the WebView visual at the card's screen origin each frame"
+    model was abandoned. The pool now builds a **capture-only off-screen
+    composition root** (`PlatformCompositionRoot::new_offscreen`); the WebView
+    visual lives off-screen and is never composited over meerkat's swapchain, and
+    the WGC-captured frame is imported and composited at the card rect by
+    `render.rs` (`scrying_surfaces` → `texture_view` → `compose_external_texture`).
+    Input is forwarded by API, so no on-window visual is needed. This is back to
+    X1's original "import + composite the texture" sketch, now actually delivering
+    pixels. **It moots the 06-11 "× is occluded" refinement** (nothing occludes the
+    chrome) and removes the per-frame `set_offset` origin chase.
+  - **Cache-flush barrier (new, undocumented in the plan until now).** Because the
+    producer overwrites the same shared allocation in place every frame
+    (`resource_is_new == false` after the first import), D3D12 keeps sampling the
+    cached first frame unless a state transition is forced on the texture each
+    frame. The pool issues a throwaway 1x1 `copy_texture_to_buffer` per frame to
+    force a `SHADER_RESOURCE → COPY_SRC → SHADER_RESOURCE` barrier. Without it the
+    off-window capture composites blank. (Mirrors demo-win's renderer.)
+  - **Multi-tile (resolves the 06-11 "one tile at a time").** One
+    `DesktopWindowTarget` per HWND is created once and shared; each pane attaches
+    via scrying's `new_attached` rather than building its own root (the second
+    `CreateDesktopWindowTarget` was what threw `WINDOW_ALREADY_COMPOSED`). Any
+    number of compat tiles now coexist. `Pool::retain(keep)` runs each frame before
+    drive and reaps every tile whose member is not a surface shown this frame
+    (reap-on-deselect), so a dropped tile cannot freeze at its last position. Per
+    pane gets its own `pane-{member}` profile folder.
+  - **Explicit D3D12 fence sync shipped early (was a "Later" item).** On a D3D12
+    host the pool builds a `Dx12FenceSynchronizer`, hands its shared NT handle to
+    each producer (`with_fence_shared_handle`) so the producer signals after each
+    `CopyResource`, and the importer waits on it. Falls back to the implicit
+    synchronizer when the host wgpu device is not D3D12.
+  - **Capture-stall recovery (new).** `try_acquire_frame` returning empty for a run
+    of redraws triggers `force_restart_capture`, with a backing-off threshold
+    (starts ~600 polls / ~10s, doubles to a cap) so a legitimately static off-window
+    page quiesces instead of thrashing restarts. Reset on any acquired frame.
+  - **Still open after this pass:** X2 chrome round-trip (nav events back to omnibar,
+    cursor-shape, producer back/forward); X3 durable `node.compat_mode` as source of
+    truth (live path is still session-local `engine_pins`); X4 (Windows-only); the
+    `ScryingTileEngine` / `ProducerFactory` registry fold-in (inker-picker Phase 0);
+    overlay/auto-hide scrollbars; frame-arrival wake.
+  - **Doc hygiene this session:** repointed scrying-engine's `lib.rs` doc comment
+    from the archived 2026-05-11 plan to this one (Constraints note cleared);
+    refreshed the `What already exists` line refs.

@@ -15,6 +15,7 @@ use kernel::graph::SemanticSubKind;
 use meerkat::CommsIntent;
 use meerkat::command::Command;
 use meerkat::shell_eval::{CommandShell, ShellContext};
+use session_runtime::settings_store;
 
 use super::observability::Severity;
 use super::{WindowCtx, comms_host, sync};
@@ -104,6 +105,8 @@ impl WindowCtx<'_> {
             Severity::Info,
             format!("{} ({})", cmd.verb(), cmd.label()),
         );
+        // Tally the invocation for the context menu's frequency auto-suggest. (Command registry S3.)
+        self.record_command_usage(cmd.verb());
         let mut note = None;
         match cmd {
             Command::ToggleWorkbench => self.toggle_workbench(),
@@ -231,8 +234,23 @@ impl WindowCtx<'_> {
         if let Some(path) = &outcome.attach_script {
             match self.focused_member() {
                 Some(member) => {
+                    // Session-scope script permissions, read on demand from settings.json
+                    // (attach is a rare explicit action, not a hot path). The App-scope
+                    // default Allow stands where unset; `resolve_attach_permissions` applies
+                    // the narrowing rule, then the actor maps the result to the link grant —
+                    // so a session `document: Deny` fails the attach at instantiation.
+                    // (Follow-on #1.)
+                    let prefs = settings_store::load_settings(&self.shared.session.mere_root)
+                        .ok()
+                        .flatten()
+                        .unwrap_or_default()
+                        .script_permissions;
+                    let policy = crate::content::script::ScriptCapPolicy {
+                        log: prefs.log,
+                        document: prefs.document,
+                    };
                     let (log, document) =
-                        crate::content::script::resolve_attach_permissions(Default::default());
+                        crate::content::script::resolve_attach_permissions(policy);
                     self.shared.content.constellation.attach_script(
                         member,
                         std::path::PathBuf::from(path),

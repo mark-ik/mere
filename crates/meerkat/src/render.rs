@@ -677,6 +677,7 @@ impl WindowCtx<'_> {
                     let node_size = orrery.node_size(key);
                     let face_half = node_size / 2.0;
                     Some(OrreryCard {
+                        member: node.id,
                         label,
                         x,
                         y,

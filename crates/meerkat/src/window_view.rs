@@ -294,6 +294,10 @@ pub(crate) struct WindowView {
 /// (Orrery-as-element — Phase 2.)
 #[derive(PartialEq)]
 pub(crate) struct OrreryCard {
+    /// The node's graph member id, stamped on the card div as `data-member` so the
+    /// orrery a11y projection can pair the laid-out card rect back to its graph node
+    /// (the same `data-member` scheme the roster + workbench placeholders use). (Slice 4.)
+    pub(crate) member: GraphMemberId,
     pub(crate) label: String,
     pub(crate) x: f32,
     pub(crate) y: f32,
@@ -651,6 +655,7 @@ fn node_card_view(c: &OrreryCard) -> ShellView {
     Box::new(
         el::<_, ShellState, ()>("div", (favicon, label, wash))
             .attr("class", "node-card")
+            .attr("data-member", c.member.to_string())
             .attr("style", face_style),
     )
 }

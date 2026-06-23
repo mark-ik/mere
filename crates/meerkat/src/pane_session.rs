@@ -154,6 +154,15 @@ impl PaneSession {
             .caret_rect(dom, node, byte, width)
             .map(|r| (r.x, r.y, r.width, r.height))
     }
+
+    /// The accumulated CSS `translate` of `node` (its own plus its ancestors'), which the
+    /// fragment plane omits. Added to a fragment origin, it lands a transform-positioned
+    /// element (an orrery node-card) where it actually paints — the same offset the focus
+    /// ring reads, so the orrery a11y rect tracks the painted card. Delegates to the
+    /// retained layout. (Slice 4.)
+    pub(crate) fn accumulated_translate(&self, dom: &ScriptedDom, node: NodeId) -> (f32, f32) {
+        self.layout.accumulated_translate(dom, node)
+    }
 }
 
 /// Whether the session's stored sheet set still matches the frame's resolved

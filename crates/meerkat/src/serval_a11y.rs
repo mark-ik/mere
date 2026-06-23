@@ -80,11 +80,13 @@ fn chrome_direct_text(dom: &ScriptedDom, node: NodeId) -> String {
 }
 
 /// The CSS classes of the shell document's folded-pane wrappers — the positioned subtrees
-/// (roster + the four list panes) the frame tree now projects with rich, actionable a11y
-/// (`roster_a11y_tree` / `list_pane_a11y_tree`). The chrome walk skips these so each pane
-/// appears once in the stitched tree, via its frame-tree projection, not doubled as inert
-/// divs here. (Phase 1, step 3b.)
+/// (the orrery + roster + the four list panes) the frame tree now projects with rich,
+/// actionable a11y (`orrery_a11y_tree` / `roster_a11y_tree` / `list_pane_a11y_tree`). The
+/// chrome walk skips these so each pane appears once in the stitched tree, via its frame-tree
+/// projection, not doubled as inert divs here (for the orrery, the bare `.node-card` divs the
+/// walk would otherwise emit as unlabeled containers). (Phase 1, step 3b; orrery: slice 4.)
 const FOLDED_PANE_WRAPPERS: &[&str] = &[
+    "orrery",
     "roster-pane",
     "apparatus-pane",
     "steward-pane",

@@ -87,7 +87,49 @@ fn sprite_hull(rgba: &[u8], w: u32, h: u32) -> Vec<(f32, f32)> {
         }
         sy += step;
     }
-    convex_hull(&pts)
+    // Simplify the convex hull so a *curved* sprite (a wifi fan, a rounded gamepad) yields a
+    // handful of draggable vertices, not the dozens its arc would otherwise produce.
+    simplify_hull(convex_hull(&pts), HULL_SIMPLIFY_TOL)
+}
+
+/// Max deviation (face-normalized units, `[-0.5, 0.5]` space) a hull vertex may sit from the
+/// line between its neighbors before it is dropped — ~2% of the face. (Node rep P2 — hull.)
+const HULL_SIMPLIFY_TOL: f32 = 0.02;
+
+/// Decimate a closed convex polygon: repeatedly drop the vertex closest to the line between its
+/// neighbors, until every remaining vertex deviates by more than `tol` (or only 4 remain). Turns
+/// the many near-collinear vertices a curve's hull produces into the few that actually shape it,
+/// so the swatch's drag handles stay manageable and the parry collider stays cheap.
+/// (Node rep P2 — sprite hull simplification.)
+fn simplify_hull(mut hull: Vec<(f32, f32)>, tol: f32) -> Vec<(f32, f32)> {
+    while hull.len() > 4 {
+        let n = hull.len();
+        let mut min_dev = f32::INFINITY;
+        let mut min_i = 0;
+        for i in 0..n {
+            let dev = perp_distance(hull[i], hull[(i + n - 1) % n], hull[(i + 1) % n]);
+            if dev < min_dev {
+                min_dev = dev;
+                min_i = i;
+            }
+        }
+        if min_dev > tol {
+            break;
+        }
+        hull.remove(min_i);
+    }
+    hull
+}
+
+/// Perpendicular distance from point `p` to the line through `a`–`b` (degenerate `a==b` falls
+/// back to the distance to `a`).
+fn perp_distance(p: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 1e-9 {
+        return ((p.0 - a.0).powi(2) + (p.1 - a.1).powi(2)).sqrt();
+    }
+    ((p.0 - a.0) * dy - (p.1 - a.1) * dx).abs() / len
 }
 
 /// Andrew's monotone-chain convex hull. Returns the hull vertices counter-clockwise, collinear
@@ -129,7 +171,31 @@ fn convex_hull(points: &[(f32, f32)]) -> Vec<(f32, f32)> {
 
 #[cfg(test)]
 mod tests {
-    use super::convex_hull;
+    use super::{convex_hull, simplify_hull};
+
+    #[test]
+    fn simplify_hull_drops_near_collinear_vertices() {
+        // A square with a near-collinear midpoint on each edge (deviating ~0.01) — the midpoints
+        // collapse, leaving the four real corners (a curved sprite's dozens behave the same way).
+        let hull = vec![
+            (-0.5, -0.5),
+            (0.0, -0.49),
+            (0.5, -0.5),
+            (0.49, 0.0),
+            (0.5, 0.5),
+            (0.0, 0.49),
+            (-0.5, 0.5),
+            (-0.49, 0.0),
+        ];
+        assert_eq!(simplify_hull(hull, 0.05).len(), 4, "near-collinear edge midpoints collapse");
+    }
+
+    #[test]
+    fn simplify_hull_keeps_small_hulls() {
+        // A triangle and a quad are already minimal — nothing is dropped (the floor is 4).
+        let tri = vec![(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)];
+        assert_eq!(simplify_hull(tri, 0.1).len(), 3);
+    }
 
     #[test]
     fn convex_hull_of_a_filled_square_is_four_corners() {

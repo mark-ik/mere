@@ -19,6 +19,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use kernel::permissions::Permission;
 use serde::{Deserialize, Serialize};
 
 /// Filename for the session-wide settings sidecar (sibling to `graph.json`).
@@ -39,6 +40,20 @@ pub enum ShellbarEdge {
     Right,
     Top,
     Bottom,
+}
+
+/// Per-capability **Session-scope** permission opinions for DocumentScripts
+/// (§11.4, the document-script substrate). `None` on a capability = no opinion at
+/// this scope, so the App default (`Allow`) stands; `Some(Deny)` makes a
+/// `>attach-script` fail at instantiation for that capability — a session-wide "no
+/// script may touch the page" switch. The host resolves these through
+/// [`kernel::permissions::resolve_permission`] (the narrowing rule) at attach time.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScriptPermissionPrefs {
+    #[serde(default)]
+    pub log: Option<Permission>,
+    #[serde(default)]
+    pub document: Option<Permission>,
 }
 
 /// Persistable user settings. v0 carried the active-tab cap; `theme_id` joined
@@ -73,6 +88,11 @@ pub struct PersistedSettings {
     /// (Document typography surface.)
     #[serde(default)]
     pub document_typography: Option<serde_json::Value>,
+    /// Session-scope DocumentScript capability permissions (§11.4). Default = no
+    /// opinion (the App-scope `Allow` default stands); set `document: Deny` to forbid
+    /// any attached script from mutating the page this session.
+    #[serde(default)]
+    pub script_permissions: ScriptPermissionPrefs,
 }
 
 /// The layout engine's tuned default linear damping (mirrors gyre's
@@ -90,6 +110,7 @@ impl Default for PersistedSettings {
             physics_damping: default_physics_damping(),
             disabled_engines: Vec::new(),
             document_typography: None,
+            script_permissions: ScriptPermissionPrefs::default(),
         }
     }
 }
@@ -153,10 +174,12 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let dir = temp_session_dir("round-trip");
-        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()], document_typography: None };
+        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()], document_typography: None, script_permissions: ScriptPermissionPrefs { log: None, document: Some(Permission::Deny) } };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir).unwrap().expect("settings file should be present");
         assert_eq!(restored, original);
+        // The script-permission opinion round-trips (the §11.4 session-scope switch).
+        assert_eq!(restored.script_permissions.document, Some(Permission::Deny));
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -179,8 +202,8 @@ mod tests {
     #[test]
     fn save_overwrites_atomically_with_no_tmp_left() {
         let dir = temp_session_dir("overwrite");
-        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None }).unwrap();
-        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default() }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default() }).unwrap();
         let restored = load_settings(&dir).unwrap().unwrap();
         assert_eq!(restored.tab_cap, 24);
         let tmp = settings_path(&dir).with_extension("json.tmp");

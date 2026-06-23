@@ -58,6 +58,12 @@ impl WindowCtx<'_> {
                 items.push(item);
             }
         }
+        // 1b. No applicable pins for this context -> offer the most-used applicable commands instead
+        //     (the frequency auto-suggest, S3). Each is a pinnable row, so a suggestion can be
+        //     promoted to a pin. "Nothing pinned -> the mini bar suggests for you."
+        if items.is_empty() {
+            items.extend(self.suggested_menu_items(len));
+        }
         // 2. Dynamic / parameterized rows that aren't flat catalog gestures.
         if len == 0 {
             if self.view.context_field.is_some() {
@@ -110,6 +116,52 @@ impl WindowCtx<'_> {
                 }),
             })
             .collect()
+    }
+
+    /// The auto-suggested rows for an empty-pin context (command registry S3): the most-used
+    /// commands that apply to this selection, not already pinned, top 6. Pinnable rows (a suggestion
+    /// can be promoted to a pin). Empty until commands have been run a few times.
+    fn suggested_menu_items(&self, len: usize) -> Vec<ContextItem> {
+        let usage = &self.shared.presentation.command_usage;
+        let pinned = |id: &str| self.shared.presentation.menu_actions.iter().any(|a| a == id);
+        let mut ranked: Vec<(&str, u32)> = usage.iter().map(|(id, n)| (id.as_str(), *n)).collect();
+        // Most-used first; ties broken by id so the order is stable frame to frame.
+        ranked.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+        ranked
+            .into_iter()
+            .filter(|(id, _)| {
+                !pinned(id) && meerkat::command::registry_scope(id).is_some_and(|s| s.applies(len))
+            })
+            .take(6)
+            .filter_map(|(id, _)| self.searchable_row_from_id(id))
+            .collect()
+    }
+
+    /// Resolve a registry id (a `Command` verb or a context-action id) to a pinnable search-result
+    /// row: the label runs it, the pin toggle pins / unpins it. `None` for an unknown id. Shared by
+    /// the suggestions (S3); search results build the same shape from `palette_items`. (Cursor palette.)
+    fn searchable_row_from_id(&self, id: &str) -> Option<ContextItem> {
+        use meerkat::command::{
+            Command, context_action_from_id, context_action_id, context_action_palette_label,
+        };
+        let pinned = self.shared.presentation.menu_actions.iter().any(|a| a == id);
+        if let Some(cmd) = Command::from_id(id) {
+            Some(ContextItem::searchable(
+                cmd.label(),
+                ContextAction::RunCommand(cmd.verb()),
+                cmd.verb(),
+                pinned,
+            ))
+        } else {
+            let action = context_action_from_id(id)?;
+            let cid = context_action_id(action)?;
+            Some(ContextItem::searchable(
+                context_action_palette_label(action).unwrap_or_default(),
+                action,
+                cid,
+                pinned,
+            ))
+        }
     }
 
     /// Rebuild the open menu's rows from its current query: the curated rows when empty, the search
@@ -358,6 +410,11 @@ impl WindowCtx<'_> {
             Severity::Info,
             invoked_id,
         );
+        // Tally cataloged context actions for the menu's frequency auto-suggest; skip the
+        // parameterized / non-catalog ones (no stable registry id to rank). (Command registry S3.)
+        if let Some(id) = meerkat::command::context_action_id(action) {
+            self.record_command_usage(id);
+        }
         // Open the node's facets settings tile (the per-node config's new home). No
         // member-set mutation — return before the orrery-tile logic below. (Settings lane P3.)
         if let ContextAction::OpenNodeFacets = action {
@@ -372,6 +429,13 @@ impl WindowCtx<'_> {
                 self.view.chrome_update(move |c| c.run_command_intent(cmd));
             }
             self.view.request_redraw();
+            return;
+        }
+        // Pin / unpin a searched command to the curated menu, keeping the menu open: toggle its
+        // membership (+ persist) and rebuild the rows so the pin state refreshes. (Searchable S2.)
+        if let ContextAction::PinToMenu(id) = action {
+            self.toggle_menu_action(id);
+            self.rebuild_context_menu();
             return;
         }
         // Shellbar move: redock the strip to the chosen edge and persist. No
@@ -598,7 +662,8 @@ impl WindowCtx<'_> {
             | ContextAction::ShowAllNodes
             | ContextAction::MirrorTiles
             | ContextAction::OpenNodeFacets
-            | ContextAction::RunCommand(_) => {
+            | ContextAction::RunCommand(_)
+            | ContextAction::PinToMenu(_) => {
                 unreachable!("handled above")
             }
         }

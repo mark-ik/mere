@@ -306,6 +306,34 @@ filters to Settings + Node settings (focused) + Node settings (selected); clicki
 (same `RunCommand` dispatch proven at menuf-7). meerkat green (lib 72, bin 104). **S2 (pin from
 search) + S3 (frequency auto-suggest) remain.**
 
+### S2 — pin from search. BUILT + verified (2026-06-23)
+
+Search-result rows carry a pin toggle: `PinSpec` + `ContextItem.pin` / `ContextItem::searchable`,
+`ContextAction::PinToMenu(&'static)` + `Chrome::pin_from_menu` (sets the pin intent **without** closing),
+`search_menu_items` tags each result with its registry id + current pin state, and the drain toggles
+`menu_actions` + rebuilds in place. The input layer was the catch: it closed the menu after *any* click
+— fixed to skip the close when the click was a `PinToMenu` (so several can be pinned in a row). views.rs
+renders an inline **+ / ✓** toggle (CSS `.context-pin` / `.context-pin-on`). Verified live
+(`scry-shots/pin-1..2`): searching "comms" shows the result with a + toggle; clicking it appends
+`"comms"` to `menu_actions` in `ui.json`. (A concurrent serval bump broke the workspace mid-build; once
+the serval-side fix landed it compiled clean.)
+
+### S3 — frequency auto-suggest. BUILT + verified (2026-06-23)
+
+`PersonaSettings` + `Presentation` gained `command_usage` (a `BTreeMap<id,count>`); `record_command_usage`
+increments at the **existing** `meerkat.command.invoked` hook (command_drain for host commands, menus for
+cataloged context actions) and persists. `build_curated_menu_items` shows `suggested_menu_items` — the
+top-6 most-used commands **applicable** to the selection, not already pinned, as pinnable rows — when no
+applicable pins exist ("nothing pinned -> the mini bar suggests for you"). Verified live: with
+`menu_actions: []` + seeded usage, the canvas menu listed Inspector / Workbench / Comms / Back / Settings
+/ Home ranked by count (7→2, the 1-count `roster` cut at top-6), each with a + toggle (`scry-shots/sg-1`);
+running `workbench` from the palette bumped its count 6→7 in `ui.json`. meerkat green (lib 73, bin 109),
+session-runtime 71.
+
+**Refinements deferred:** persist-usage debounce (v1 writes per invocation); per-context-keyed counts +
+recency decay; pinning a *suggestion* transitions the menu to "has pins" (suggestions then yield to
+pins), so "pin several" applies to the search-results mode, not the suggestions mode.
+
 ## Open decisions (for Mark)
 
 1. ~~Registry depth now vs pragmatic incremental.~~ **Resolved: build the registry.** The

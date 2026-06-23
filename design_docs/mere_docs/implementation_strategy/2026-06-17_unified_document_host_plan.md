@@ -424,7 +424,9 @@ requirement.
 ## Pressing slices (2026-06-19 code-verified audit)
 
 A code-verified audit (per-area plus adversarial cite-check) ranked the most pressing undone work.
-The five, in implementation order (Mark, 2026-06-21: do 2, 3, 1, 4; slice 5 is documented only):
+The five, in implementation order (Mark, 2026-06-21: do 2, 3, 1, 4; slice 5 is documented only).
+**Slices 1-4 landed 2026-06-23** (see the Progress entry of that date); slice 5 remains
+documented-only.
 
 1. **Retain an `IncrementalLayout` session in the content actor.** The web-content lane re-runs a
    full `run_cascade` plus layout from scratch on every scroll band, find keystroke, and subresource
@@ -768,3 +770,40 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
     palette re-centred over the orrery insets); verify with a headed run before striking.
   - **File-size ceiling:** `render.rs` (~1883), `input.rs` (~1732), `main.rs` (~1617) each ~3x the
     600-LOC mere ceiling, in the exact files these slices churn; split before adding.
+
+- **2026-06-23 (slices 2, 3, 1, 4 landed; slice 4 adversarially verified sound).** The four directed
+  slices implemented, meerkat green (179 tests) and serval-layout green (205) for the cross-repo cut:
+  - **Slices 2 + 3 (orrery focus ring + orphaned plumbing).** The node cards left the Tab ring (the
+    `focusable` wrapper + `on_click` select removed, window_view.rs); the dead two-path plumbing
+    (`point_over_orrery_card`, `OrreryCard.url`, `orrery_card_selects`/take/drain) deleted. The orrery
+    is one focusable container, gyre owns selection (the cond-2/4 reversal made real, retiring the
+    Phase-2a dead code the 2026-06-21 entry flagged).
+  - **Slice 1 (content-actor retained layout).** serval-layout gained `ContentLayout` +
+    `lay_out_content` + `emit_band` + `find`; the `paint_list_band_from_layout_dom` /
+    `find_text_rects_from_layout_dom` free functions became thin wrappers over it, behaviour-identical
+    (205 tests). The content actor retains one `ContentLayout` per page and re-emits scroll bands /
+    find off the cascade instead of re-running `run_cascade` each call (content.rs). The cross-repo
+    cut Mark approved; `cargo clean -p serval-layout` cleared a stale artifact from the multi-crate
+    path-override.
+  - **Slice 4 (orrery a11y from the document).** `orrery_a11y_tree` (frame_a11y_panes.rs) replaces the
+    `mere_orrery::project_graph` side-channel: each graph node is a `Role::Link` carrying its URL value
+    (so the existing `attach_link_actions` pass, frame_a11y.rs:298, makes it click/focus-actionable and
+    routes `SelectNodeByUrl`), with DOM-sourced bounds off the laid-out `.node-card` divs
+    (`accumulate_origins` + `accumulated_translate`, keyed by a new `data-member` stamp) so the a11y
+    rect tracks where the card paints, the offset the focus ring already applied but a11y did not.
+    `"orrery"` joined `FOLDED_PANE_WRAPPERS` so the chrome walk stops double-emitting the cards as bare
+    containers. Supporting: `OrreryCard.member` + `data-member`, `PaneSession::accumulated_translate`
+    delegate. A 3-agent adversarial review (bounds math, wrapper skip, regression) returned all-sound:
+    the unscrolled origin equals the painted origin for every card (no card ancestor is in the scroll
+    map, so it matches `push_focus_ring`'s formula byte-for-byte), the token-skip hits exactly
+    `.orrery` (`.orrery-scene` pruned as a descendant), the frame-leaf node + bounds survive the skip
+    (separate `attach_frame_bounds` path), and project_graph's behaviour is preserved (every node
+    listed incl. off-pane bound-less, label/value, empty-graph root-only). This is the cond-3 "one a11y
+    tree" correction the 2026-06-21 entry noted: the orrery a11y is now the shell document's projection,
+    not a graph side-channel. Unblocks goal 3 (accessible / automatable).
+  - **Residual: `mere-orrery` is now consumer-less.** `project_graph` has no caller anywhere; meerkat's
+    `mere-orrery` dependency (Cargo.toml) is dead (no lint flags it, build stays green). Left in place
+    pending Mark's call on the crate's fate (delete / keep scaffolded / repurpose) under the
+    ask-before-dropping-deps rule. Minor pre-existing dup the review surfaced (not slice 4's doing):
+    `gloss_a11y_tree` also emits a `SelectNodeByUrl` Link per node, so with both panes open a node
+    carries two routes under different ids, harmless (the bridge's `find_map` returns one).

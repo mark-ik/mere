@@ -29,7 +29,7 @@ impl WindowCtx<'_> {
     ) -> UxTree {
         use crate::window_view::ShellListPane;
         match content {
-            PaneContent::Orrery => mere_orrery::project_graph(self.orrery().graph()),
+            PaneContent::Orrery => self.orrery_a11y_tree(pane_id),
             PaneContent::Workbench => workbench_domain::project_workbench(&self.view.workbench),
             PaneContent::Apparatus => self.list_pane_a11y_tree(
                 ShellListPane::Apparatus,
@@ -134,6 +134,77 @@ impl WindowCtx<'_> {
         }
         let mut root_node = Node::new(Role::List);
         root_node.set_label("Roster");
+        root_node.set_children(children);
+        nodes.push((root, root_node));
+        UxTree { root, nodes }
+    }
+
+    /// The a11y subtree for the orrery pane: each graph node as a `Role::Link` carrying the
+    /// node's URL as its value, so the post-stitch `attach_link_actions` pass makes it
+    /// click/focus-actionable and routes it to `SelectNodeByUrl` (the select gyre's pointer
+    /// hit-test also drives). Bounds come off the shell document's laid-out `.node-card` divs:
+    /// each card's absolute origin (ancestor taffy offsets summed) plus its accumulated CSS
+    /// `translate` (gyre's world position, which the fragments omit — the same offset the focus
+    /// ring adds), keyed by the card's `data-member`, so the a11y rect tracks where the card
+    /// actually paints, not the graph-space coordinate the retired `project_graph` reported. A
+    /// node culled off-pane (riding the underlay demote-dots, no card) stays listed but
+    /// bound-less. With this rich projection the chrome walk skips the `.orrery` subtree, so each
+    /// node appears once. (Slice 4.)
+    fn orrery_a11y_tree(&self, pane_id: PaneId) -> UxTree {
+        let root_path = pane_content_root_path(&self.view.frame_layout, pane_id, "orrery");
+        let root = node_id_for_path(&root_path);
+        // Per-node card rect off the shell layout: each `.node-card` div's absolute origin plus
+        // its accumulated CSS translate, keyed by `data-member` (the same scheme the roster +
+        // workbench placeholders use). The cards are not in a scroll container (the orrery pans
+        // by the per-card transform, not DOM scroll), so the unscrolled `accumulate_origins`
+        // suffices, as it does for the roster rows. (Slice 4.)
+        let card_bounds: HashMap<GraphMemberId, [f32; 4]> = {
+            let mut map = HashMap::new();
+            if let Some(session) = self.view.chrome_session.as_ref() {
+                let frags = session.fragments();
+                let dom = self.view.dom.borrow();
+                let droot = dom.document();
+                let mut origins = HashMap::new();
+                crate::serval_render::accumulate_origins(&dom, frags, droot, (0.0, 0.0), &mut origins);
+                for node in crate::all_with_class(&dom, droot, "node-card") {
+                    if let (Some(member), Some(l), Some(&(ox, oy))) = (
+                        crate::member_attr(&dom, node),
+                        frags.rect_of(node),
+                        origins.get(&node),
+                    ) {
+                        let (tx, ty) = session.accumulated_translate(&dom, node);
+                        let (x0, y0) = (ox + tx, oy + ty);
+                        map.insert(member, [x0, y0, x0 + l.size.width, y0 + l.size.height]);
+                    }
+                }
+            }
+            map
+        };
+        let focused = self.orrery().focused_member();
+        let mut nodes = Vec::new();
+        let mut children = Vec::new();
+        for (_key, graph_node) in self.orrery().graph().nodes() {
+            let id = node_id_for_path(&format!("{root_path}/node/{}", graph_node.id));
+            let mut node = Node::new(Role::Link);
+            let url = graph_node.primary_address().as_url_str().to_string();
+            let label = if graph_node.title.is_empty() {
+                url.clone()
+            } else {
+                graph_node.title.clone()
+            };
+            node.set_label(label);
+            node.set_value(url);
+            if focused == Some(graph_node.id) {
+                node.set_description("focused");
+            }
+            if let Some(bounds) = card_bounds.get(&graph_node.id) {
+                node.set_bounds(rect(*bounds));
+            }
+            nodes.push((id, node));
+            children.push(id);
+        }
+        let mut root_node = Node::new(Role::Group);
+        root_node.set_label("Orrery");
         root_node.set_children(children);
         nodes.push((root, root_node));
         UxTree { root, nodes }

@@ -280,6 +280,17 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.muted_text),
             rgb(c.field_bg)
         ),
+        // The pin toggle on a search-result row: "+" to pin (muted), "✓" once pinned (accent).
+        format!(
+            ".context-pin {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 12px; }}",
+            rgb(c.muted_text),
+            rgb(c.menu_bg)
+        ),
+        format!(
+            ".context-pin-on {{ font-size: 16px; color: {}; background-color: {}; padding: 8px 12px; }}",
+            rgb(c.strong_text),
+            rgb(c.active_bg)
+        ),
         // Comms pane: an absolutely-positioned panel whose geometry the host sets
         // inline each frame from the Comms frame leaf's rect (so it splits beside
         // the orrery like the other panes, rather than floating docked).
@@ -653,6 +664,10 @@ struct Presentation {
     /// (or the registry default when unset), persisted on change; the menu builder resolves +
     /// applicability-filters each id for the current selection.
     menu_actions: Vec<String>,
+    /// How many times each registry command has run — the frequency behind the context menu's
+    /// auto-suggestions (command registry S3). Keyed by registry id; loaded from / persisted to
+    /// the persona settings store, incremented at the command-invocation hook.
+    command_usage: std::collections::BTreeMap<String, u32>,
 }
 
 impl Presentation {
@@ -899,9 +914,15 @@ impl Shell {
             .get(active_session_id)
             .map(|m| m.persona_id)
             .unwrap_or_else(session_runtime::PersonaId::default_persona);
-        // The persona's curated context menu (command registry P4), resolved before `mere_root`
-        // is moved into the session struct below.
-        let menu_actions = load_persona_menu_actions(&mere_root, active_persona);
+        // The persona's UI settings (command registry P4/S3): the curated context menu + the
+        // command-usage frequencies behind auto-suggest. Loaded before `mere_root` is moved into
+        // the session struct below.
+        let persona_ui = session_runtime::load_persona_settings(&mere_root, active_persona)
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        let menu_actions = persona_ui.menu_actions.unwrap_or_else(default_menu_actions);
+        let command_usage = persona_ui.command_usage;
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = saved_settings.tab_cap;
         let runner = window_view::shell_runner(dom.clone(), chrome);
@@ -1209,6 +1230,7 @@ impl Shell {
                     document_palette,
                     document_sheet,
                     menu_actions,
+                    command_usage,
                 },
                 comms_handle,
                 sync_handle,
@@ -1390,16 +1412,6 @@ fn default_mere_root() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("mere")
-}
-
-/// The given persona's curated context menu (command registry P4), or the registry default
-/// when the persona has no saved curation (or the file is unreadable).
-fn load_persona_menu_actions(mere_root: &Path, persona: session_runtime::PersonaId) -> Vec<String> {
-    session_runtime::load_persona_settings(mere_root, persona)
-        .ok()
-        .flatten()
-        .and_then(|s| s.menu_actions)
-        .unwrap_or_else(default_menu_actions)
 }
 
 /// The registry default context menu as owned strings (the seed when no persona curation

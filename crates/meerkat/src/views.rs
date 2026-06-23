@@ -196,11 +196,39 @@ fn context_menu_view(menu: &ContextMenu) -> ChromeView {
         // The keyboard-highlighted row carries a distinct class (like the palette's
         // `cmd-row-active`), which the render pass also uses to scroll it into view.
         let class = if menu.selected == Some(i) { "context-item-active" } else { "context-item" };
-        let row = on_click(
-            el::<_, Chrome, ()>("div", item.label.clone()).attr("class", class),
-            move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
-        );
-        Box::new(row) as ChromeView
+        match item.pin {
+            // A search result (cursor palette): the label runs it, an inline pin toggle pins /
+            // unpins it to the curated menu (a ✓ when already pinned). (Searchable context menu S2.)
+            Some(pin) => {
+                let label = on_click(
+                    el::<_, Chrome, ()>("div", item.label.clone())
+                        .attr("class", class)
+                        .attr("style", "flex:1;min-width:0;"),
+                    move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
+                );
+                let id = pin.id;
+                let (glyph, pin_class) =
+                    if pin.pinned { ("\u{2713}", "context-pin-on") } else { ("\u{002b}", "context-pin") };
+                let pin_btn = on_click(
+                    el::<_, Chrome, ()>("div", glyph).attr("class", pin_class),
+                    move |c: &mut Chrome, _: PointerClick| c.pin_from_menu(id),
+                );
+                let row = el::<_, Chrome, ()>(
+                    "div",
+                    vec![Box::new(label) as ChromeView, Box::new(pin_btn) as ChromeView],
+                )
+                .attr("class", "context-search-row")
+                .attr("style", "display: flex; gap: 4px; align-items: stretch;");
+                Box::new(row) as ChromeView
+            }
+            None => {
+                let row = on_click(
+                    el::<_, Chrome, ()>("div", item.label.clone()).attr("class", class),
+                    move |c: &mut Chrome, _: PointerClick| c.pick_context(action),
+                );
+                Box::new(row) as ChromeView
+            }
+        }
     }));
     let panel = el::<_, Chrome, ()>("div", children)
         .attr("class", "context-menu")

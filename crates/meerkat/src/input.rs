@@ -124,12 +124,18 @@ impl WindowCtx<'_> {
                 }
                 // A context menu swallows the next press: a left click on one of its
                 // rows runs that action (the chrome closes the menu); a click
-                // anywhere else just dismisses it.
+                // anywhere else just dismisses it. Exception: a pin toggle (the cursor
+                // palette's search results) keeps the menu open so several can be pinned
+                // in a row — the host rebuilds it in place. (Searchable context menu S2.)
                 if self.view.chrome().context_menu.is_some() {
                     if button == MouseButton::Left {
                         self.chrome_click(x, y);
                     }
-                    if self.view.chrome().context_menu.is_some() {
+                    let pinning = matches!(
+                        self.view.chrome().pending_context,
+                        Some(meerkat::ContextAction::PinToMenu(_))
+                    );
+                    if self.view.chrome().context_menu.is_some() && !pinning {
                         self.close_context_menu();
                     }
                     return;

@@ -71,7 +71,7 @@ pub(crate) fn swatch_view(spec: &SwatchSpec) -> SettingsPanesView {
             "style",
             format!(
                 "position:absolute;left:0;top:0;width:{SWATCH}px;height:{SWATCH}px;\
-                 background-color:rgba(120,170,255,0.28);clip-path:polygon({})",
+                 background-color:rgba(120,170,255,0.16);clip-path:polygon({})",
                 pts.join(", ")
             ),
         )));

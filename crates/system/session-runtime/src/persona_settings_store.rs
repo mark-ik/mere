@@ -38,6 +38,12 @@ pub struct PersonaSettings {
     /// is a registry id (a `Command` verb or a context-action id).
     #[serde(default)]
     pub menu_actions: Option<Vec<String>>,
+    /// How many times each registry command has been invoked — the frequency signal behind the
+    /// context menu's auto-suggestions (command registry S3). Keyed by registry id (a `Command`
+    /// verb or a context-action id), a `BTreeMap` for a deterministic on-disk order. Empty until
+    /// the first command runs.
+    #[serde(default)]
+    pub command_usage: std::collections::BTreeMap<String, u32>,
 }
 
 /// The `<data_root>/personas/<id>/settings/` directory for `persona`. Pure.
@@ -128,6 +134,9 @@ mod tests {
         let root = temp_data_root("round-trip");
         let original = PersonaSettings {
             menu_actions: Some(vec!["add_node".into(), "open_splits".into(), "settings".into()]),
+            command_usage: [("settings".to_string(), 4u32), ("back".to_string(), 9u32)]
+                .into_iter()
+                .collect(),
         };
         save_persona_settings(&root, fixture_persona(), &original).unwrap();
         let restored = load_persona_settings(&root, fixture_persona())

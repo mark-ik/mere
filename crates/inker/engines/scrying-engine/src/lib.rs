@@ -18,8 +18,11 @@
 //!   can't fabricate (parent HWND / NSView, wgpu device, fence handle) and
 //!   builds a concrete scrying producer per spawn.
 //!
-//! See `design_docs/mere_docs/implementation_strategy/2026-05-11_scrying_web_tile_plan.md`
-//! for the full integration plan.
+//! See `design_docs/mere_docs/implementation_strategy/2026-06-10_scrying_tile_plan.md`
+//! for the full integration plan. (Note: meerkat's shipped X1 host pool binds
+//! the platform producer concretely and does not currently route through this
+//! `SurfaceEngine` registry seam; folding it in is the inker engine-picker
+//! plan's Phase 0.)
 
 #![doc(html_root_url = "https://docs.rs/scrying-engine/0.0.1")]
 

@@ -125,6 +125,15 @@ impl WindowCtx<'_> {
     /// Write the current settings to the session's `settings.json` sidecar. A
     /// failure is logged, not fatal (the shell runs without persistence).
     pub(super) fn persist_settings(&self) {
+        // Preserve the on-disk DocumentScript permission opinion (§11.4): the host
+        // caches it nowhere — it is read on demand at attach and edited via the
+        // settings lane, not reconstructed from runtime state here — so this save
+        // path must not clobber it back to the default. (Follow-on #1.)
+        let script_permissions = settings_store::load_settings(&self.shared.session.mere_root)
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+            .script_permissions;
         let settings = PersistedSettings {
             tab_cap: self.shared.presentation.saved_tab_cap,
             theme_id: Some(self.shared.presentation.active_theme_id.clone()),
@@ -137,6 +146,7 @@ impl WindowCtx<'_> {
                 != document_canvas::DocumentStyleSheet::default())
             .then(|| serde_json::to_value(&self.shared.presentation.document_sheet).ok())
             .flatten(),
+            script_permissions,
         };
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");
@@ -149,6 +159,7 @@ impl WindowCtx<'_> {
     pub(super) fn persist_menu_actions(&self) {
         let settings = session_runtime::PersonaSettings {
             menu_actions: Some(self.shared.presentation.menu_actions.clone()),
+            command_usage: self.shared.presentation.command_usage.clone(),
         };
         if let Err(err) = session_runtime::save_persona_settings(
             &self.shared.session.mere_root,
@@ -157,6 +168,17 @@ impl WindowCtx<'_> {
         ) {
             tracing::warn!(%err, "failed to persist persona menu settings");
         }
+    }
+
+    /// Record one invocation of registry command `id` — the frequency signal behind the context
+    /// menu's auto-suggestions (command registry S3). Called at the command-invocation hook for
+    /// both host commands and cataloged context actions; persists the updated counts.
+    ///
+    /// v1 persists on every invocation (the file is tiny); a debounce / write-on-idle is the
+    /// refinement if the write rate ever matters.
+    pub(super) fn record_command_usage(&mut self, id: &str) {
+        *self.shared.presentation.command_usage.entry(id.to_string()).or_insert(0) += 1;
+        self.persist_menu_actions();
     }
 
     /// Toggle a registry command's membership in the context menu (the `pelt/menu` page, command

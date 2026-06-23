@@ -4,8 +4,10 @@
 **Status**: Design, from a Mark + Claude session. Supersedes the narrow gloss
 v0 (a document outline strip) by expanding gloss into the **Navigator**: the
 single configurable summary surface. G1/G2 seed landed (§7a). **2026-06-22:**
-added §2a — the swatch elevated to a portable, embeddable primitive (gloss is
+added §2a, the swatch elevated to a portable, embeddable primitive (gloss is
 one consumer), the half of the point beyond minimap / MRU / outline.
+**2026-06-23:** added §2b, the swatch resolved as the Navigator itself
+(scope-zoom, view/edit, a variant library), the node facet editor being variant #1.
 **Related**: [card system + staging plan](../implementation_strategy/2026-06-07_card_system_and_staging_plan.md) (§8 staging surfaces here), [pane UX pass](2026-05-11_pane_ux_design_pass_brief.md) (gloss as a Pane variant), `cartography` (swatch / minimap projections), `forme` (graphlets).
 
 ---
@@ -98,6 +100,62 @@ node swatch's sprite is a DOM `<img>`, decoded by the host like a favicon — th
 image primitive is *not* needed (netrender supports images, but it is the wrong layer here);
 (2) the existing Scene-based gloss minimap becomes a **candidate to migrate** onto the DOM
 swatch, so all swatches are chrome-understood, not just the new ones.
+
+---
+
+## 2b. The swatch is the Navigator: scope-zoom, view/edit, a variant library (Mark, 2026-06-23)
+
+§2a made the swatch a portable primitive; this resolves what it *is*. The swatch is the
+Navigator itself (one surface, re-scoped and re-formed, never split, the founding rule), now
+carrying an **edit layer**. A swatch is configured by **(scope, layout, lens, mode, filters)**;
+a "variant" is one point in that space, and the node facet editor is variant #1.
+
+**Two layers.** A swatch has a **view layer** (a scoped, filtered `cartography` projection
+rendered as chrome-understood DOM) and an optional **edit layer** (draggable handles whose drags
+mutate the scoped element through the host hit-test, the hull-vertex drag generalized). *Map* is
+the view layer alone; *editor* turns the edit layer on. They toggle in place.
+
+**Scope is a containment zoom:** node inside graphlet inside graph. You travel it two ways.
+*Vertical:* zoom out to the container, or down into a selected child (graph, then a graphlet,
+then a node). This adds **node at the floor** of §2's scope axis (the facet editor's scope).
+*Horizontal:* the existing "arrow between graphlets," now also between sibling nodes. What
+*edit* means follows the scope: a **node** edits its representation (hull, sprite, shape); a
+**graphlet** edits its membership, grouping rule, and local arrangement; the **graph** edits
+positions, edges, and arrangement. *Map* is the same projection with the edit layer off.
+
+**The variant library** (view/edit is orthogonal to all of these):
+
+- **Layout** — how the scope is arranged: minimap (landed), radial / volvelle, astroid (a
+  graphlet drawn as a tag-hub with members), timeline, kanban, spectral, outline / list (MRU,
+  members, TOC).
+- **Lens** — what is overlaid: content peek (a node's page snapshot, the card the host already
+  renders), signal heatmap (centrality / community / affinity from the signals layer), facet
+  view (tags / PMEST / metrics, the inspector), and the research surfaces (Trail, Claim map,
+  Provenance, Neighborhoods; see
+  [graph_projections_research](../research/2026-06-22_graph_projections_research.md)).
+- **Compositional** — diff / compare (two scopes side by side), sparkline (a node's or
+  graphlet's trend over time), and **stacked** (§3's compose, e.g. a tag-hub plus the
+  chronological view in one swatch).
+
+**Why the gloss wins from the whole family:**
+
+1. It is the one place you **switch variant**, re-scoping and re-forming in place (§2's
+   form-factor axis generalized to "any variant"), so it stays one surface.
+2. **One shared library, every embedder.** A variant the gloss shows is droppable in a facet
+   pane, a djot block, or a menu, and the node editor flows back as a gloss form. Build once.
+3. **It serves the orrery too.** Both ride `cartography`, so a variant is equally a gloss lens
+   and an orrery mode (the projections research splits them this way).
+4. The **MRU becomes "recent swatches":** re-summon a *configured* swatch (this scope, lens,
+   mode), not just a node.
+5. The **edit layer makes the gloss actionable:** mutate the graph from the Navigator, not only
+   read it.
+
+**Build consequence.** Build the swatch as one component configured by `(scope, layout, lens,
+mode, filters)`, with the gloss as the switcher over that space and the facet / djot / menu as
+fixed picks into it. The node facet shape editor (node scope, sprite + hull layout, edit mode)
+is the first rung; the gloss minimap (graph scope, minimap layout, view mode) is a second; the
+rest are presets of the same component. This is §2a's "standalone component," now with its
+parameter space named.
 
 ---
 
