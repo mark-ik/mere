@@ -86,3 +86,24 @@ fn script_mutates_a_caller_provided_dom_and_reads_back() {
     assert_eq!(dom.dom_children(body).count(), 2, "detached DOM keeps the appended <p>");
     assert_eq!(text_of(&dom, t1).as_deref(), Some("Edited via node-id"));
 }
+
+#[test]
+fn precompiled_cwasm_attaches_and_drives_without_codegen() {
+    // P2.6 AOT: compile the guest to a `.cwasm`, then attach from it (a `deserialize`
+    // load — no Cranelift on the hot path) and drive a turn. The precompiled path
+    // mutates the live DOM exactly like the JIT `.wasm` path.
+    let cwasm = document_host::precompile_to_cwasm(&doc_wasm()).expect("precompile to cwasm");
+    let path = std::env::temp_dir().join(format!("doc-core-aot-{}.cwasm", std::process::id()));
+    std::fs::write(&path, &cwasm).expect("write cwasm");
+
+    let (dom, _body, t1) = page();
+    let mut script = DocumentScript::attach(&path, dom, &Grant::allow_all(), Quota::default())
+        .expect("attach from a precompiled .cwasm");
+    assert_eq!(
+        script.deliver_event("set", "Edited via AOT").expect("turn"),
+        TurnOutcome::Applied(1),
+    );
+    assert_eq!(text_of(script.dom(), t1).as_deref(), Some("Edited via AOT"));
+    let _ = script.detach();
+    std::fs::remove_file(&path).ok();
+}

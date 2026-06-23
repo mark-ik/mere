@@ -376,6 +376,41 @@ fn link_with_grant(linker: &mut Linker<ScriptHost>, grant: &Grant) -> wasmtime::
 /// lifecycle. Shared by [`instantiate_with_grant`], the [`runtime`] mod-loader
 /// bridge, and [`DocumentScript`]. Fails if the component requires an import the
 /// grant omitted (the runtime-enforced boundary).
+/// The engine config the guarded [`DocumentScript`] paths use: epoch interruption
+/// on, so a runaway turn can be trapped. Shared by [`DocumentScript::attach`] and
+/// [`precompile_to_cwasm`] so an AOT `.cwasm` is config-compatible with the engine
+/// that loads it (`deserialize` checks the compile config matches).
+fn guarded_engine() -> wasmtime::Result<Engine> {
+    let mut config = Config::new();
+    config.epoch_interruption(true);
+    Engine::new(&config)
+}
+
+/// Load a `document-core` component: a precompiled `.cwasm` via `deserialize` (the
+/// P2.6 AOT path — no Cranelift on the hot path), else a `.wasm` via `from_file`
+/// (JIT). `.cwasm` is for trusted first-party bundled components only.
+fn load_component(engine: &Engine, path: &Path) -> wasmtime::Result<Component> {
+    if path.extension().and_then(|e| e.to_str()) == Some("cwasm") {
+        // SAFETY: a `.cwasm` is a trusted first-party build artifact produced by
+        // `precompile_to_cwasm` with a config-matching engine; `deserialize` loads
+        // precompiled machine code (no Cranelift). Never deserialize untrusted bytes.
+        unsafe { Component::deserialize_file(engine, path) }
+    } else {
+        Component::from_file(engine, path)
+    }
+}
+
+/// Ahead-of-time compile a `document-core` `.wasm` component to a `.cwasm` byte blob
+/// (P2.6): Cranelift runs *here* (build time), not at `attach`. Write the bytes to a
+/// `.cwasm` file and load it with [`DocumentScript::attach`], which `deserialize`s
+/// with codegen off. Trusted / first-party components only (`deserialize` trusts the
+/// bytes). The blob is a per-target build artifact — never commit it.
+pub fn precompile_to_cwasm(component_path: &Path) -> wasmtime::Result<Vec<u8>> {
+    let engine = guarded_engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    component.serialize()
+}
+
 pub(crate) async fn build_instance(
     engine: &Engine,
     component_path: &Path,
@@ -383,7 +418,7 @@ pub(crate) async fn build_instance(
     grant: &Grant,
     limits: StoreLimits,
 ) -> wasmtime::Result<(Store<ScriptHost>, DocumentCore)> {
-    let component = Component::from_file(engine, component_path)?;
+    let component = load_component(engine, component_path)?;
     let mut linker = Linker::new(engine);
     link_with_grant(&mut linker, grant)?;
     let mut store = Store::new(engine, new_host(dom, grant.granted_names(), limits));
@@ -484,9 +519,7 @@ impl DocumentScript {
         grant: &Grant,
         quota: Quota,
     ) -> wasmtime::Result<Self> {
-        let mut config = Config::new();
-        config.epoch_interruption(true);
-        let engine = Engine::new(&config)?;
+        let engine = guarded_engine()?;
         let limits = StoreLimitsBuilder::new().memory_size(quota.mem_bytes).build();
         let (mut store, bindings) =
             pollster::block_on(build_instance(&engine, component_path, dom, grant, limits))?;
