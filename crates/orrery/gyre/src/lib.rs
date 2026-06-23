@@ -67,7 +67,16 @@ pub use coupling_force::CouplingForce;
 /// code; the growing catalog lives here to keep `lib.rs` under the size ceiling.
 pub mod scenes;
 pub use scenes::{
-    domino_scene, drift_scene, drop_bowl_scene, funnel_scene, galton_scene, pyramid_scene,
+    chain_scene, domino_scene, drift_scene, drop_bowl_scene, funnel_scene, galton_scene,
+    pyramid_scene,
+};
+
+/// The declarative scene **format**: the data types a [`SceneSpec`] is built from (bodies,
+/// joints, world settings). Split from `lib.rs` because the format grows independently of the
+/// simulation core. (Physics scenes P4b.)
+mod scene_spec;
+pub use scene_spec::{
+    JointMotorSpec, SceneBodyId, SceneBodySpec, SceneBodyType, SceneJoint, SceneJointSpec, SceneSpec,
 };
 
 /// Scene-geometry queries for the orrery canvas: edge geometry, edge picking,
@@ -192,50 +201,6 @@ fn node_groups() -> InteractionGroups {
 /// its own filter opts in).
 fn scene_groups() -> InteractionGroups {
     InteractionGroups::new(SCENE_GROUP, SCENE_GROUP | NODE_GROUP, InteractionTestMode::And)
-}
-
-/// A stable, opaque handle to a scene-decoration body — a non-graph rapier body
-/// sharing the orrery's world, distinct from a [`NodeKey`]. Minted by
-/// [`Simulation::add_scene_body`]. (Physics scenes P1.)
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct SceneBodyId(u64);
-
-/// Whether a scene body moves under forces / collision (`Dynamic`) or is immovable
-/// terrain (`Fixed`) — a floor, a wall, a peg. (Physics scenes P3.)
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SceneBodyType {
-    Dynamic,
-    Fixed,
-}
-
-/// One body in a declarative scene: its shape, world spawn, initial velocity, kind, and
-/// bounciness. Data, not code — a [`SceneSpec`] is a list of these. (Physics scenes P3.)
-#[derive(Clone, Debug)]
-pub struct SceneBodySpec {
-    pub collider: NodeCollider,
-    pub position: (f32, f32),
-    pub velocity: (f32, f32),
-    pub body_type: SceneBodyType,
-    pub restitution: f32,
-}
-
-/// A declarative physics scene the orrery's world can load: a set of bodies, the world
-/// gravity to apply, and whether the graph collides with it by default. Loading one
-/// ([`Simulation::load_scene`]) clears any prior scene. (Physics scenes P3.)
-#[derive(Clone, Debug)]
-pub struct SceneSpec {
-    pub bodies: Vec<SceneBodySpec>,
-    /// World gravity (px/s^2; `+y` is down at Mere's screen scale). `(0, 0)` for a
-    /// gravity-free scene (a drifting backdrop, a bouncing box).
-    pub gravity: (f32, f32),
-    /// Whether the graph collides with the scene on load (the tangibility default).
-    pub default_tangible: bool,
-    /// Whether the scene is meant to stay in motion forever (a drifting / bouncing living
-    /// backdrop) rather than settle to rest. When set, the physics actor keeps ticking
-    /// instead of parking once at rest, and the scene's dynamic bodies take
-    /// [`PERPETUAL_SCENE_DAMPING`] so their motion coasts instead of bleeding away.
-    /// Settling scenes (a pile, a topple, a pour) leave this `false`.
-    pub perpetual: bool,
 }
 
 /// A pluggable force-applier. Forces read the body store and apply
@@ -762,14 +727,18 @@ impl Simulation {
     }
 
     /// Load a declarative [`SceneSpec`] into the world: clear any prior scene, set its
-    /// gravity, spawn its bodies (capped at [`SCENE_BODY_CAP`]), and apply its default
-    /// tangibility. (Physics scenes P3.)
+    /// gravity, spawn its bodies (capped at [`SCENE_BODY_CAP`]) with their per-body gravity
+    /// scale + initial rotation, bind its joints, and apply its default tangibility. (Physics
+    /// scenes P3 / P4b.)
     pub fn load_scene(&mut self, spec: &SceneSpec) {
         self.clear_scene();
         self.set_gravity(spec.gravity);
         // Perpetual backdrops coast (near-zero damping); settling scenes use the heavier
         // SCENE_DAMPING so they come to rest. (Physics scenes P4a.)
         let damping = if spec.perpetual { PERPETUAL_SCENE_DAMPING } else { SCENE_DAMPING };
+        // Spawn bodies, keeping their handles in spec order so joints reference them by index.
+        let mut handles: Vec<RigidBodyHandle> =
+            Vec::with_capacity(spec.bodies.len().min(SCENE_BODY_CAP));
         for b in spec.bodies.iter().take(SCENE_BODY_CAP) {
             let builder = match b.body_type {
                 SceneBodyType::Fixed => RigidBodyBuilder::fixed(),
@@ -777,9 +746,11 @@ impl Simulation {
             };
             let body = builder
                 .translation(Vector::new(b.position.0, b.position.1))
+                .rotation(b.rotation)
                 .linvel(Vector::new(b.velocity.0, b.velocity.1))
                 .linear_damping(damping)
                 .angular_damping(DEFAULT_ANGULAR_DAMPING)
+                .gravity_scale(b.gravity_scale)
                 .build();
             let handle = self.bodies.insert(body);
             let shape = b.collider.to_shared_shape();
@@ -799,9 +770,56 @@ impl Simulation {
             let id = SceneBodyId(self.next_scene_id);
             self.next_scene_id += 1;
             self.scene_bodies.insert(id, (handle, radius));
+            handles.push(handle);
+        }
+        // Bind joints between the spawned bodies (by spec index). Out-of-range or capped-out
+        // indices are skipped. rapier reaps these when the bodies are removed (clear_scene),
+        // so no separate joint bookkeeping is needed.
+        for j in &spec.joints {
+            let (Some(&a), Some(&b)) = (handles.get(j.body_a), handles.get(j.body_b)) else {
+                continue;
+            };
+            self.insert_scene_joint(a, b, &j.joint);
         }
         self.set_nodes_tangible(spec.default_tangible);
         self.scene_perpetual = spec.perpetual;
+    }
+
+    /// Build one [`SceneJoint`] and insert it into the impulse-joint set between two bodies.
+    /// Anchors are body-local points (world units). (Physics scenes P4b.)
+    fn insert_scene_joint(&mut self, a: RigidBodyHandle, b: RigidBodyHandle, joint: &SceneJoint) {
+        let v = |p: (f32, f32)| Vector::new(p.0, p.1);
+        match *joint {
+            SceneJoint::Fixed { anchor_a, anchor_b } => {
+                let jt = FixedJointBuilder::new()
+                    .local_anchor1(v(anchor_a))
+                    .local_anchor2(v(anchor_b))
+                    .build();
+                self.impulse_joints.insert(a, b, jt, true);
+            }
+            SceneJoint::Revolute { anchor_a, anchor_b, motor } => {
+                let mut builder =
+                    RevoluteJointBuilder::new().local_anchor1(v(anchor_a)).local_anchor2(v(anchor_b));
+                if let Some(m) = motor {
+                    builder = builder.motor_velocity(m.target_vel, m.factor);
+                }
+                self.impulse_joints.insert(a, b, builder.build(), true);
+            }
+            SceneJoint::Rope { anchor_a, anchor_b, length } => {
+                let jt = RopeJointBuilder::new(length)
+                    .local_anchor1(v(anchor_a))
+                    .local_anchor2(v(anchor_b))
+                    .build();
+                self.impulse_joints.insert(a, b, jt, true);
+            }
+            SceneJoint::Spring { anchor_a, anchor_b, rest_length, stiffness, damping } => {
+                let jt = SpringJointBuilder::new(rest_length, stiffness, damping)
+                    .local_anchor1(v(anchor_a))
+                    .local_anchor2(v(anchor_b))
+                    .build();
+                self.impulse_joints.insert(a, b, jt, true);
+            }
+        }
     }
 
     /// Advance the simulation by `dt` seconds. Walks every registered

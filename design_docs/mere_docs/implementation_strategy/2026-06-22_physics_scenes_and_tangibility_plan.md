@@ -321,3 +321,19 @@ within budget.
   P4b joints + `gravity_scale` + a shape-aware scene paint pass (square/hull bodies paint as round orbs
   today, so pyramid/domino read poorly); drift orbs slowly disperse without a centering force (a P4b
   force-field item); then P4c own-PBF fluid.
+- 2026-06-23: **P4b part 1 complete, joints + per-body `gravity_scale` / `rotation`; headed-verified.**
+  The scene format moved to its own `gyre::scene_spec` module (the format grows independently of the
+  `Simulation` core). `SceneBodySpec` gains `gravity_scale` (floats pegs / buoyant props, negative
+  rises) and `rotation` (place a tilted prop), with ergonomic `dynamic` / `fixed` + chaining builders.
+  The headline unlock: the already-owned-but-dead `ImpulseJointSet` is now wired — `SceneSpec` carries
+  `joints: Vec<SceneJointSpec>` (Fixed / Revolute-with-optional-motor / Rope / Spring, indexing bodies
+  by spawn order), and `load_scene` builds + inserts them via the rapier 0.33 joint builders (reaped
+  with their bodies, so no extra bookkeeping). A `chain_scene` (eight rope-linked balls hung from a
+  fixed anchor) is the proof + the demo, on bin key `7`. gyre 37 + orrery 44 green; headed-verified
+  (scry-shots/p4b-chain-*): the chain falls from horizontal and hangs as a connected vertical line of
+  links from the anchor (without joints the links would fall away). **Still pending in P4b**: the
+  shape-aware scene paint pass — the orrery paint API here is axis-aligned `RectItem` + radial gradients
+  only, so rotated squares / tipped dominoes / hull polygons need a new render primitive (a rotated-rect
+  or polygon `PaintCmd`); until then square/hull scene bodies still paint as round orbs (balls, incl.
+  the chain beads, read fine). Also pending: `lib.rs` is 1044 LOC (the `Simulation` core, over the 600
+  ceiling pre-existing) — a `Simulation` decomposition is its own follow-on.
