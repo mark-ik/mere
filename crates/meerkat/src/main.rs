@@ -930,7 +930,12 @@ impl Shell {
         // Durable content cache (S3.2c), shared (persona-scoped) under the mere root
         // so sessions don't re-fetch each other's pages; `None` disables caching.
         let store = match FjallStore::open(mere_root.join("content")) {
-            Ok(store) => Some(store),
+            Ok(mut store) => {
+                // Restore this persona's persisted HTTP session, so a login survives
+                // an app restart (native session store; durability thread).
+                fetch::load_cookies(&mut store, active_persona);
+                Some(store)
+            }
             Err(err) => {
                 tracing::warn!(%err, "content cache unavailable; running without it");
                 None

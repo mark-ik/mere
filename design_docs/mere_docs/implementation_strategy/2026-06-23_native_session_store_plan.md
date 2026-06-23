@@ -101,8 +101,14 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
    WebView before navigating. A logged-in serval page flips to a logged-in WebView.
 3. **Standard `verso-api::Cookie`** *(this session)* — add `same_site`, `expires`,
    `partitioned`, so the interchange is lossless.
-4. **Durability + partitioning** *(future)* — an eidetic-backed `CookieStore`,
-   partitioned by origin + top-level site + persona. Replaces the v1 process jar.
+4. **Durability + persona partitioning** *(done 2026-06-23)* — the shared jar is
+   persisted to eidetic (the existing `FjallStore`, JSON blob) keyed by persona
+   (`cookies/<persona>`), loaded on startup and written through on change. A login now
+   survives an app restart, and one persona's session never bleeds into another (the
+   hard partition; v0 is the single default persona, but the key already partitions).
+   Within-persona origin matching is the jar's existing RFC 6265 logic. *Deferred:*
+   live persona-switch jar-swap (not needed until v1 multi-persona), and top-level-site
+   partitioning (CHIPS / the `Partitioned` flag — an orthogonal web-privacy axis).
 5. **Lossless structured read** *(done 2026-06-23)* — `CookieStore::records_for`
    returns structured `CookieRecord`s (the jar now also stores `HttpOnly`), so
    `Secure` / `HttpOnly` / `SameSite` / `Domain` / `Path` / expiry cross the flip
@@ -132,5 +138,15 @@ One **Mere session substrate**, standard-shaped, consumed by every engine:
   reads `records_for` and maps each `CookieRecord` to a full `verso-api::Cookie`
   (`Domain`/`Path`/`Secure`/`HttpOnly`/`SameSite`/expiry faithful; `Partitioned` still
   untracked by the jar). `cargo check -p meerkat` green; netfetcher 9 cookie tests
-  green. Next: thread 4 (durable eidetic-backed + partitioned store), then thread 6
-  (serval `document.cookie` ↔ the jar + storage areas).
+  green.
+- **2026-06-23 (thread 4)**: durable, persona-keyed persistence. netfetcher gained
+  `InMemoryCookieJar::all_records` / `load_records` (the jar snapshot + restore;
+  netfetcher `514334c`, pushed; 11 cookie tests). meerkat persists the shared jar to
+  its existing eidetic `FjallStore`
+  as a JSON blob under `cookies/<persona>` (`fetch::persist_cookies`, dirty-gated,
+  written through after each page fetch in the `FetchUpdate::Page` handler) and
+  restores it on startup (`fetch::load_cookies`, right after the store opens). **A
+  login now survives an app restart**; the key is persona-partitioned (v0 single
+  default persona, but already partitioned). `cargo check -p meerkat` green. Next:
+  thread 6 (serval `document.cookie` ↔ the jar + durable storage areas), thread 7
+  (flip-back SESSION), and the deferred CHIPS / live persona-switch swap.

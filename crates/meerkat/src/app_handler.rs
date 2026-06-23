@@ -205,6 +205,12 @@ impl ApplicationHandler for Shell {
                     };
                     wc.shared.content.pages.insert(outcome.url, state);
                     card_changed = true;
+                    // The fetch may have set cookies; persist this persona's session
+                    // so a login survives a restart (dirty-gated, no-op when nothing
+                    // changed). (Native session store; durability thread.)
+                    if let Some(store) = wc.shared.content.store.as_mut() {
+                        fetch::persist_cookies(store, wc.shared.session.active_persona);
+                    }
                 }
                 // A subresource (page CSS / media): persist it (its content-type is
                 // unknown here) so the page's assets survive restart, then broadcast
