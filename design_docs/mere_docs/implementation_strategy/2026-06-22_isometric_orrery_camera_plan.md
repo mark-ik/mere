@@ -273,3 +273,20 @@ picking / dragging a raised node lands on the right node.
   because the WIP checkpoint committed `orrery/input.rs`. Left uncommitted. **Still deferred to the
   post-command-registry meerkat pass**: persistence (`CameraView`/`CameraSnapshot` yaw+tilt +
   save/restore), the `view.projection` command, and the in-app orbit gesture.
+- 2026-06-23: **Camera work committed (`715203a`); deferred meerkat tail landed (command +
+  persistence), build + 176 tests green; orbit gesture still deferred.** Committed the orrery/platen
+  camera work (P0-P3 + picking) with an explicit pathspec (Mark's "commit only my paths"; meerkat
+  untouched). Then, with meerkat compiling on Mark's refactor, the two free pieces went in (left in
+  his dirty meerkat for his own commit, since they intermix with the command-registry refactor):
+  (1) a **`ToggleProjection` command** (palette "Projection (toggle 2.5D isometric)" / `>projection`),
+  mirroring `ToggleRoster` across `command.rs` (enum / `ALL` / `is_host_action` / `menu_scope` /
+  `verb` / `label`), the `lib.rs` host-intent group, and a `command_drain` arm that flips
+  `orrery.set_isometric`; (2) yaw/tilt **persistence with no schema change** — `camera_to_snapshot` /
+  `snapshot_to_camera` now encode/decode the full camera into the existing six affine coefficients
+  (`a=cos*zoom, b=sin*tilt*zoom, c=-sin*zoom, d=cos*tilt*zoom`) plus a new `snapshot_yaw_tilt` decode;
+  an old top-down snapshot (`b=c=0, a=d=zoom`) reads back as `(yaw 0, tilt 1)` for free, so pre-iso
+  sessions load unchanged. Save (`session_ops`) passes `orrery.yaw()/tilt()`; both restores (boot
+  `main.rs` + session-switch `session_ops`) set them. **Still deferred**: the Alt+drag in-app orbit
+  gesture (involved `input.rs`; the command + the bin's q/e/[/] keys cover driving it). Headed
+  palette / reload spot-check is a quick confirm in the app (meerkat is Mark's in-flight, not
+  auto-driven).
