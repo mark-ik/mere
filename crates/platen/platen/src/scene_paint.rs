@@ -134,15 +134,24 @@ impl Camera {
         PortablePoint::new(px * c + py * s, -px * s + py * c)
     }
 
-    /// The affine the scene `PushTransform` carries for **ground-plane** paint
-    /// (edges, field regions, demoted dots), so they recline onto the floor while
-    /// node cards stay upright billboards via [`Camera::to_screen`]. Foreshortens
-    /// the vertical by `tilt`; at `tilt == 1` it is the plain
-    /// `scale(zoom).then(translate(offset))`. The `yaw` orbit (a Z-rotation) folds
-    /// in at P2, where the ground rotates under the billboards. (Isometric camera P1.)
+    /// The world->screen affine the scene `PushTransform` carries for **ground-plane**
+    /// paint (edges, field regions, demoted dots), so they recline onto the floor while
+    /// node cards stay upright billboards via [`Camera::to_screen`]. Built to match
+    /// `to_screen` exactly: rotate the ground by `yaw` (Z), foreshorten the vertical by
+    /// `tilt`, scale by `zoom`, translate by `offset`. Row-major, per euclid's
+    /// `transform_point2d` (`x' = x*m11 + y*m21 + m41`, `y' = x*m12 + y*m22 + m42`); at
+    /// `yaw 0` it reduces to `scale(zoom, tilt*zoom).then(translate(offset))`, and at
+    /// `(yaw 0, tilt 1)` to the plain top-down map. (Isometric camera P2 — yaw orbit.)
     pub fn ground_transform(&self) -> LayoutTransform {
-        LayoutTransform::scale(self.zoom, self.tilt * self.zoom, 1.0)
-            .then(&LayoutTransform::translation(self.offset.0, self.offset.1, 0.0))
+        let (s, c) = self.yaw.sin_cos();
+        let z = self.zoom;
+        let tz = self.tilt * self.zoom;
+        LayoutTransform::new(
+            c * z, s * tz, 0.0, 0.0,
+            -s * z, c * tz, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            self.offset.0, self.offset.1, 0.0, 1.0,
+        )
     }
 }
 
@@ -452,5 +461,23 @@ mod tests {
             (w.x - 10.0).abs() < 1e-4 && (w.y - 10.0).abs() < 1e-4,
             "to_world inverts to_screen under foreshorten"
         );
+    }
+
+    #[test]
+    fn ground_transform_matches_to_screen_under_yaw() {
+        // The ground affine must agree with `to_screen` (which positions the upright
+        // billboards) so edges meet the cards under an orbit. Verified at yaw != 0.
+        let cam = Camera { offset: (3.0, 5.0), zoom: 1.5, yaw: 0.6, tilt: 0.55 };
+        let t = cam.ground_transform();
+        for (x, y) in [(0.0_f32, 0.0_f32), (40.0, -20.0), (-15.0, 33.0)] {
+            let (sx, sy) = cam.to_screen(PortablePoint::new(x, y));
+            let p = t.transform_point2d(LayoutPoint::new(x, y)).expect("affine maps");
+            assert!(
+                (p.x - sx).abs() < 1e-3 && (p.y - sy).abs() < 1e-3,
+                "ground transform must match to_screen at ({x},{y}): ({},{}) vs ({sx},{sy})",
+                p.x,
+                p.y
+            );
+        }
     }
 }

@@ -210,6 +210,30 @@ impl ApplicationHandler for App {
                             self.orrery.set_isometric(on);
                             self.request_redraw();
                         },
+                        // `q` / `e` orbit the view (yaw); pair with `i` for the 2.5D orbit.
+                        WinitKey::Character(s) if s.as_str() == "q" => {
+                            self.orrery.orbit_by(-0.15);
+                            self.request_redraw();
+                        },
+                        WinitKey::Character(s) if s.as_str() == "e" => {
+                            self.orrery.orbit_by(0.15);
+                            self.request_redraw();
+                        },
+                        // `[` / `]` sweep the vertical foreshorten (tilt).
+                        WinitKey::Character(s) if s.as_str() == "[" => {
+                            self.orrery.set_tilt(self.orrery.tilt() - 0.05);
+                            self.request_redraw();
+                        },
+                        WinitKey::Character(s) if s.as_str() == "]" => {
+                            self.orrery.set_tilt(self.orrery.tilt() + 0.05);
+                            self.request_redraw();
+                        },
+                        // `h` toggles height-by-degree: hubs float above the ground (P3).
+                        WinitKey::Character(s) if s.as_str() == "h" => {
+                            let on = !self.orrery.height_by_degree();
+                            self.orrery.set_height_by_degree(on);
+                            self.request_redraw();
+                        },
                         _ => {},
                     }
                 }

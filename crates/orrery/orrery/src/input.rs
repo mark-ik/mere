@@ -104,9 +104,36 @@ impl Orrery {
         true
     }
 
+    /// The node under a screen-px cursor. Under the plain top-down projection this is
+    /// the exact world-space collider pick (`screen_to_world` -> gyre `hit_test`, which
+    /// respects each node's collider shape, including sprite hulls). Under the isometric
+    /// / fake-height projection the cards are upright billboards drawn off their ground
+    /// colliders, so instead test the cursor against each node's drawn billboard rect and
+    /// take the front-most (largest projected ground depth). (Isometric camera — picking.)
+    pub(crate) fn pick_at(&self, cursor: (f32, f32)) -> Option<NodeKey> {
+        if !(self.is_isometric() || self.height_by_degree()) {
+            return self.view.hit_test(self.screen_to_world(cursor));
+        }
+        let z = self.camera.zoom;
+        let (s, c) = self.camera.yaw.sin_cos();
+        let mut best: Option<(NodeKey, f32)> = None;
+        for (key, pos) in self.view.positions() {
+            let (ax, ay) = self.camera.to_screen(PortablePoint::new(pos.x, pos.y));
+            let lift = self.node_height(key) * z;
+            let half = self.node_size(key) * 0.5 * z;
+            if (cursor.0 - ax).abs() <= half && (cursor.1 - (ay - lift)).abs() <= half {
+                let depth = pos.x * s + pos.y * c;
+                if best.map_or(true, |(_, d)| depth >= d) {
+                    best = Some((key, depth));
+                }
+            }
+        }
+        best.map(|(k, _)| k)
+    }
+
     /// A pointer button pressed at screen px `(x, y)`. Middle begins a pan; left
-    /// grabs the node under the cursor (gyre node-pick) or, on empty space, begins
-    /// a marquee.
+    /// grabs the node under the cursor (via [`pick_at`](Self::pick_at), projection-aware)
+    /// or, on empty space, begins a marquee.
     pub fn pointer_down(&mut self, button: PointerButton, x: f32, y: f32) -> bool {
         self.cursor = (x, y);
         match button {
@@ -115,10 +142,9 @@ impl Orrery {
                 self.pan_velocity = (0.0, 0.0);
             },
             PointerButton::Left => {
-                let world = self.screen_to_world(self.cursor);
-                if let Some(node) = self.view.hit_test(world) {
+                if let Some(node) = self.pick_at(self.cursor) {
                     self.drag = Some(Drag { node, press: self.cursor, moved: false });
-                } else if self.begin_field_drag(world) {
+                } else if self.begin_field_drag(self.screen_to_world(self.cursor)) {
                     // Grabbed a field's box edge (move) or corner (resize) — the deep
                     // interior fell through, so no marquee starts. (Field regions.)
                 } else {
@@ -243,8 +269,7 @@ impl Orrery {
     /// node's sprite face). Mirrors the left-press hit-test; returns the member id.
     /// (Node representation P2 — sprite drop.)
     pub fn node_at_screen(&self, sx: f32, sy: f32) -> Option<uuid::Uuid> {
-        let world = self.screen_to_world((sx, sy));
-        self.view.hit_test(world).and_then(|key| self.graph.get_node(key).map(|n| n.id))
+        self.pick_at((sx, sy)).and_then(|key| self.graph.get_node(key).map(|n| n.id))
     }
 
     /// Re-mint a deleted node from its tombstone: open a fresh unlinked node on

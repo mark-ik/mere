@@ -13,7 +13,7 @@ use kernel::graph::NodeKey;
 use netrender::Scene;
 use paint_list_api::{
     AlphaType, ColorF, CommonPlacement, DeviceIntSize, IdNamespace, ImageItem, ImageKey,
-    ImageRendering, ImageResource, LayoutPoint, LayoutRect, PaintCmd, PaintList,
+    ImageRendering, ImageResource, LayoutPoint, LayoutRect, PaintCmd, PaintList, RectItem,
 };
 use paint_list_render::{composite_paint_layers, CompositeLayer};
 use platen::orrery::{identity_arrangement, orrery_paint_list_demoted_from_arrangement};
@@ -176,10 +176,26 @@ impl Orrery {
             let (ax, ay) = self.camera.to_screen(pos);
             let z = self.camera.zoom;
             let half = NODE_HALF * z;
+            // P3 fake height: raise the card above its ground anchor (a stem, drawn under
+            // the cards, drops back to the ground where the edges meet). Zero unless
+            // height-by-degree is on. (Isometric camera P3 — fake height.)
+            let lift = self.node_height(key) * z;
+            // Depth-sort front-to-back by the projected ground depth (the post-yaw
+            // "north" coordinate): a node lower on the reclined ground paints over one
+            // behind it. At top-down this is just `y`, and separated nodes rarely
+            // overlap, so it is a harmless no-op there. (Isometric camera P2 — depth.)
+            let (s, c) = self.camera.yaw.sin_cos();
+            let depth = (pos.x * s + pos.y * c).round() as i32;
             set_style(
                 &mut self.node_dom,
                 gnode,
-                &format!("transform: translate({}px, {}px) scale({});", ax - half, ay - half, z),
+                &format!(
+                    "transform: translate({}px, {}px) scale({}); z-index: {};",
+                    ax - half,
+                    (ay - lift) - half,
+                    z,
+                    depth
+                ),
             );
             // Selection wins (orange); otherwise color by activation state —
             // green open, red closed, blue idle (the default for an unset node).
@@ -253,6 +269,27 @@ impl Orrery {
             }));
         }
 
+        // P3 fake height: a stem from each raised node's ground anchor up to its floating
+        // card, so the card reads as standing above its ground spot (where its edges meet).
+        // Composited under the cards (before the gnode layer). Zero-height nodes contribute
+        // nothing, so this is empty until height-by-degree is on. (Isometric camera P3.)
+        let mut stem_cmds: Vec<PaintCmd> = Vec::new();
+        for &key in &on_screen {
+            let Some(pos) = positions.get(&key) else { continue };
+            let lift = self.node_height(key) * self.camera.zoom;
+            if lift < 0.5 {
+                continue;
+            }
+            let (gx, gy) = self.camera.to_screen(*pos);
+            stem_cmds.push(PaintCmd::DrawRect(RectItem {
+                placement: CommonPlacement::new(LayoutRect::new(
+                    LayoutPoint::new(gx - 1.0, gy - lift),
+                    LayoutPoint::new(gx + 1.0, gy),
+                )),
+                color: ColorF { r: 0.5, g: 0.55, b: 0.66, a: 0.5 },
+            }));
+        }
+
         // A screen-space layer for the marquee rubber-band, when active.
         let marquee_cmds = self.marquee.map(|origin| marquee_rect_cmds(origin, self.cursor));
         // The orrery's own opaque backdrop is the bottom layer (so the surface is
@@ -267,6 +304,10 @@ impl Orrery {
         // DOM cards in the shell document (orrery-as-element); then only edges + demoted
         // dots remain as the underlay. (Orrery-as-element — Phase 2.)
         if !self.render_as_cards {
+            // Height stems under the cards (P3): the floating card paints over its stem.
+            if !stem_cmds.is_empty() {
+                layers.push(CompositeLayer::commands_only(&stem_cmds));
+            }
             layers.push(CompositeLayer {
                 commands: nodes_plist.commands(),
                 fonts: nodes_plist.fonts(),

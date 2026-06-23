@@ -190,6 +190,10 @@ pub struct Orrery {
     /// so the spatial map reads connection weight at a glance. Default off (uniform).
     /// (P0 resize — size-by-degree.)
     size_by_degree: bool,
+    /// Scene toggle: when on, a node floats above the ground by its undirected degree
+    /// (hubs highest), with a stem to its ground anchor — the isometric "fake height".
+    /// Purely visual (the gyre body does not move). Default off. (Isometric camera P3.)
+    height_by_degree: bool,
     /// `Some(press_origin)` (screen px) while a left-drag marquee on empty space
     /// is in progress.
     marquee: Option<(f32, f32)>,
@@ -350,6 +354,7 @@ impl Orrery {
             node_sprites: HashMap::new(),
             node_sprite_hulls: HashMap::new(),
             size_by_degree: false,
+            height_by_degree: false,
             marquee: None,
             ctrl: false,
             shift: false,
@@ -1150,6 +1155,31 @@ impl Orrery {
         self.size_by_degree
     }
 
+    /// A node's render height (px above the ground plane) for the isometric float: `0`
+    /// (flat) unless height-by-degree is on, where a node rises with its undirected
+    /// degree (capped) so hubs stand tallest. Purely visual: it does not move the gyre
+    /// body. The card is raised in screen-y by this (times zoom) and a stem drops to its
+    /// ground anchor, where its edges meet. (Isometric camera P3 — fake height.)
+    pub fn node_height(&self, key: NodeKey) -> f32 {
+        if !self.height_by_degree {
+            return 0.0;
+        }
+        let degree = self.graph.neighbors_undirected(key).count();
+        (16.0 * degree as f32).min(80.0)
+    }
+
+    /// Toggle height-by-degree: when on, nodes float above the ground by their degree
+    /// (hubs highest), each with a stem to its ground anchor. Off by default; pairs with
+    /// the isometric tilt. (Isometric camera P3.)
+    pub fn set_height_by_degree(&mut self, on: bool) {
+        self.height_by_degree = on;
+    }
+
+    /// Whether height-by-degree is on. (Isometric camera P3.)
+    pub fn height_by_degree(&self) -> bool {
+        self.height_by_degree
+    }
+
     /// The size-tier index (0..[`SIZE_TIERS`]`.len()`) nearest a node's current resolved
     /// size — where the resize control's filled notches stop. A size-by-degree or default
     /// size snaps to its nearest tier for display. (Node-rep — size tiers.)
@@ -1335,6 +1365,35 @@ impl Orrery {
     /// Whether the isometric projection is active (the ground is foreshortened).
     pub fn is_isometric(&self) -> bool {
         self.camera.tilt < 1.0
+    }
+
+    /// Orbit the view by `d_radians` about the vertical (the free-cam yaw). The
+    /// ground rotates while the node cards stay upright billboards; pair with the
+    /// isometric `tilt` for the 2.5D orbit (at `tilt == 1` it spins the flat layout).
+    /// The host's orbit gesture / projection picker drives this. (Isometric camera P2.)
+    pub fn orbit_by(&mut self, d_radians: f32) {
+        self.camera.yaw += d_radians;
+    }
+
+    /// Set the orbit yaw (radians) directly. (Isometric camera P2.)
+    pub fn set_yaw(&mut self, yaw: f32) {
+        self.camera.yaw = yaw;
+    }
+
+    /// Set the vertical foreshorten directly, clamped to a sane `(0, 1]`. `1.0` is
+    /// top-down; lower reclines the ground further. (Isometric camera P2.)
+    pub fn set_tilt(&mut self, tilt: f32) {
+        self.camera.tilt = tilt.clamp(0.05, 1.0);
+    }
+
+    /// The current orbit yaw (radians), for a host control to display / persist.
+    pub fn yaw(&self) -> f32 {
+        self.camera.yaw
+    }
+
+    /// The current vertical foreshorten (`tilt`), for a host control to display / persist.
+    pub fn tilt(&self) -> f32 {
+        self.camera.tilt
     }
 
     /// The pane's active layout-strategy id, or `None` for force-directed (gyre).

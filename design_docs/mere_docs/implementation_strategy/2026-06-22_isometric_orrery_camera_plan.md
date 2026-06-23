@@ -228,4 +228,48 @@ picking / dragging a raised node lands on the right node.
   under tilt-only, vertical order is preserved); screen-space billboard picking (a click on the top
   of a tall card maps outside the foreshortened ground collider, so clicks near a node's base are
   most reliable; kept world-space pick via `to_world` to avoid editing Mark's in-flight `input.rs`).
-  **Remaining check**: headed pixel-verify via `cargo run -p orrery` then `i`. Left uncommitted.
+  **Headed-verified** (scry-shots/iso-00..02 via `drive-iso.ps1`): pressing `i` foreshortens the
+  ground (the graph reclines, compressing toward the camera's vertical center) while the node cards
+  stay upright squares (billboards, not sheared) and edges foreshorten along the floor; pressing `i`
+  again reverts to top-down. No render errors in the bin log. Left uncommitted.
+- 2026-06-22: **P2 core landed + headed-verified (free-cam yaw orbit); meerkat tail deferred.**
+  `ground_transform` now builds the full isometric affine via `LayoutTransform::new` (rotate `yaw` +
+  foreshorten `tilt` + scale + translate), constructed to match `to_screen` exactly so edges meet
+  the upright billboards under an orbit. A new `ground_transform_matches_to_screen_under_yaw` test
+  pins that equality (no `euclid` dep and no rotation-sign-convention risk, since the matrix is
+  derived straight from `to_screen`'s `cos`/`sin`). The orrery gained `orbit_by` / `set_yaw` /
+  `set_tilt` / `yaw` / `tilt`; the gnode billboards now carry a `z-index` depth from the projected
+  ground depth (post-yaw "north"), so an orbit paints front-to-back (stayed RepaintOnly, no relayout
+  warning in the log). The standalone bin gained free-cam keys (`q` / `e` orbit, `[` / `]` tilt; `i`
+  still toggles the iso preset). **Headed-verified** (scry-shots/iso2-00..02 via `drive-iso2.ps1`):
+  `i` foreshortens, `e`x6 rotates the ground under the upright cards with edges still meeting them;
+  no errors. orrery 44 + platen 80 green. **Deferred (Mark's in-flight files)**: persistence
+  (`CameraView` / `CameraSnapshot` yaw+tilt + the meerkat save/restore, so yaw/tilt reset to
+  top-down on reload for now), the `view.projection` registry command + the in-app orbit gesture
+  (meerkat), and screen-space billboard picking (orrery `input.rs`). Left uncommitted.
+- 2026-06-22: **P3 core landed + headed-verified (fake height: float + stems).** Added `node_height`
+  (0, else `16*degree` capped 80 when height-by-degree is on) + `set_height_by_degree` /
+  `height_by_degree`, mirroring size-by-degree (one struct field, purely visual — it does not move
+  the gyre body). `frame.rs` raises each billboard card by `height * zoom` in screen-y and draws a
+  stem (a thin translucent rect) from the card down to its ground anchor, composited under the cards;
+  the P2 `z-index` depth already orders them. The bin's `h` key toggles it. **Headed-verified**
+  (scry-shots/iso3-01 flat vs iso3-02 height via `drive-iso3.ps1`): with height on, cards float
+  above the ground on stems while edges meet at the stem bases (ground anchors), hubs riding taller
+  stems; composes with the iso tilt (P1-verified). orrery 44 + platen 80 green. **Deferred**:
+  per-node height overrides + a "selected / hovered raised" source (the object-card / meerkat
+  surface); a soft ground-shadow blob (stem-only for now); and height-aware picking (a floated card
+  maps above its ground collider, so picking targets the base — part of the meerkat / `input.rs`
+  screen-space-pick tail). Left uncommitted.
+- 2026-06-22: **Screen-space billboard picking landed (the orrery-side half of the deferred tail;
+  the meerkat-proper tail stays deferred per Mark, since command.rs is mid command-registry
+  refactor).** Added `Orrery::pick_at`: the exact world-space collider pick under top-down
+  (unchanged — shape-aware, including sprite hulls), switching to a screen-space billboard-rect pick
+  (front-most by projected ground depth) when iso / fake-height lift the cards off their ground
+  colliders. `pointer_down` (grab + select) and `node_at_screen` (sprite-drop) both route through it.
+  orrery 44 green; the top-down branch is the prior code, so no regression. **Headed**: the input
+  path is live under height (clicks register; an empty-gap click picks the nearest edge), but the
+  non-deterministic force-directed settle made blind automated clicks land on edges/gaps rather than
+  a targeted raised card, so precise click-on-card is an interactive spot-check. Doable cleanly
+  because the WIP checkpoint committed `orrery/input.rs`. Left uncommitted. **Still deferred to the
+  post-command-registry meerkat pass**: persistence (`CameraView`/`CameraSnapshot` yaw+tilt +
+  save/restore), the `view.projection` command, and the in-app orbit gesture.
