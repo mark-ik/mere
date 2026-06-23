@@ -127,7 +127,18 @@ do not gut the menu.
   info (the Inspector's selected-object view). Migrate the per-node context-menu config; the
   context menu keeps quick toggles + gestures. The hitbox axis (grow-the-collider, then
   sprite→collider) lands here. Done when a node's facets open as a settings tile and the
-  per-node context config is gone from the menu (toggles excepted).
+  per-node context config is gone from the menu (toggles excepted). **Status: first slice done +
+  headed-verified (2026-06-21).** The provider plugs into the existing settings-lane render arm:
+  `settings_index` / `settings_page` route the `node:<id>` namespace (prefix-matched, separate from
+  the `pelt` arms) to a new `settings_node.rs` module (`node_settings_page` parses the member id,
+  resolves the node, builds the page). The **info** page (read-only node facts) is built; the
+  spine lists only it for now. A `Command::OpenNodeSettings` (palette: "Node settings (focused
+  node)", verb `node_settings`) opens the focused node's facets tile via `open_settings_tile("node:
+  <uuid>/info")`. Verified live: selecting the globe node + running the command opened a
+  "Settings: Info" facets tile showing the node's Title/URL/Representation/Size. **Remaining:** the
+  **engine** page (migrate the engine-pin picker) + **appearance** page (representation/size/sprite),
+  which is where the command-registry plan's P2-rest engine/representation pickers land; then remove
+  the migrated per-node config from the context menu.
 - **P4 — Diagnostics split + `moot` provider.** The apparatus's observability sections move to a
   `pelt/diagnostics` page or a dedicated debug surface (read-only inspection is not config). The
   `moot:<id>` provider slots in for community/federation settings.
@@ -241,3 +252,49 @@ do not gut the menu.
   state (Size by degree ✓), and picking Phyllotaxis re-laid-out the orrery. **Open decision (held
   for Mark):** the menu still carries these toggles too, so it is now parallel with the page. The
   de-dup (which toggles leave the menu vs stay as quick gestures) is a graph-canvas UX call.
+- 2026-06-21: **P3 first slice — the `node:<id>` facets provider landed + headed-verified.** The
+  provider reuses the existing settings-lane render arm: `settings_index` + `settings_page` route the
+  `node:<id>` namespace (prefix-matched, additive arms separate from the `pelt` arms Mark is editing)
+  to a new `settings_node.rs` (`node_settings_page` parses the member uuid from `node:<uuid>`, resolves
+  the node in the focused graph, builds the page). Built the **info** page (read-only: Title / URL /
+  Representation / Size); the spine lists only it for now. Added `Command::OpenNodeSettings` (palette
+  "Node settings (focused node)", verb `node_settings`) → `open_settings_tile("node:<uuid>/info")` for
+  the focused node. meerkat green (lib 69, bin 101). Verified live (`scry-shots/nf-4`): selecting the
+  globe node + running the command opened a "Settings: Info" facets tile showing the node's facts
+  (Representation: Tile, Size: 52 px). Chosen as the next step (over the command-registry plan's
+  P2-rest pickers) because engine/representation are *per-node* facets whose home is exactly this
+  provider.
+- 2026-06-22: **P3 — engine + appearance facets pages landed + headed-verified.** Added the
+  **appearance** page (the representation picker: Show as tile / Show as shape) and the **engine**
+  page (the engine-pin picker: Auto + the pickable web engines, with a non-web note) to
+  `settings_node.rs`; `node_settings_index` now lists Info / Appearance / Engine. The page controls
+  drain `nodefacet:<id>:<action>` keys, applied by a new `apply_node_facet_key` directly to the
+  subject node — `engine_pins.insert`/`remove` and `set_node_representation`, the *same underlying
+  writes* the context-menu pickers use (no `&'static`/ContextAction round-trip). `input.rs` routes
+  `nodefacet:` keys there, pelt keys to `apply_pelt_activation`. meerkat green (lib 69, bin 101).
+  Verified live (`scry-shots/nf-13/15/16`): the facets spine shows Info / Appearance / Engine; the
+  Appearance page renders Show-as-tile/shape and registers clicks; the Engine page shows
+  "Auto (default routing)" active + the non-web note (correct for `mere://welcome`). The
+  representation/engine *application* reuses the menu's tested writes. This is also the home for the
+  command-registry plan's P2-rest engine/representation pickers. **Next:** the appearance page's
+  size/sprite controls + the sprite→hitbox axis (node-editor probe); then strip the migrated
+  per-node config (engine / representation pickers) from the context menu (toggles excepted).
+  **Housekeeping:** the headed driving accidentally minted a couple of stray nodes (`info`,
+  `appearance`) by typing into the omnibar before a field was focused — session cruft in the dev
+  session graph, harmless, deletable via the menu/Trail if it bothers.
+- 2026-06-22: **P3 — menu strip + appearance size control landed + headed-verified.** (1) **Menu
+  strip (de-dup):** removed the inline engine + representation pickers from the single-selection
+  context menu (deleted `engine_picker_items` / `representation_picker_items`) and replaced them with
+  a "Node settings…" entry → `ContextAction::OpenNodeFacets` → `open_node_facets` →
+  `open_settings_tile("node:<id>/info")`. The per-node config now lives only on the facets tile; the
+  menu keeps gestures (Open tile / Resize / Add tag) + the selection scene-toggles (radial / size-by-
+  degree / isolate). Verified live (`scry-shots/strip-2`): the selection menu shows "Node settings…"
+  with no engine/representation pickers. (2) **Appearance size control:** added a Size section to
+  `node:<id>/appearance` (readout + − / + tier steppers) draining `nodefacet:<id>:size:up|down` →
+  `step_node_size_tier`. Verified live (`scry-shots/size-2`): the Size section renders and the stepper
+  changes the node's size tier (readout updated to "24 px (tier 0)"). meerkat green (lib 69, bin 101).
+  **Note:** `ContextAction::PinEngine`/`AutoEngine`/`SetRepresentation` are now orphaned (the facets
+  apply directly via `engine_pins`/`set_node_representation`, and the `&'static` engine-id stops them
+  being reconstructed from a runtime key) — harmless dead variants, a follow-up cleanup can remove
+  them + their drain arms. **Remaining for P3:** the **sprite editor + sprite→hitbox axis** (the
+  node-editor probe — a big, still-unsettled feature; its own phase).

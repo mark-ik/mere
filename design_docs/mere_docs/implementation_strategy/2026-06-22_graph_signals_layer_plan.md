@@ -1,139 +1,162 @@
-# Graph Signals Layer Plan: one analysis layer feeding arrangements, encodings, and the gloss lens
+# Graph Signals Layer Plan: a producer layer feeding arrangements, encodings, and the gloss lens
 
-**Date**: 2026-06-22
+**Date**: 2026-06-22 (rev 2, critique incorporated)
 **Status**: Planning (with Mark). Phase A (kanban/timeline arrangements) landed; this plan is
-the backbone for the rest.
-**Code**: `crates/orrery/cartography` (the signals types), `crates/orrery/arrangements`
-(the adapters), `crates/orrery/gyre` (the coupling force), `crates/orrery/orrery` (recompute
-hook, encodings), `crates/meerkat/` (the gloss lens, the settings exposure), petgraph.
+the backbone for the rest. **Rev 2 corrects rev 1**, which collapsed producer lifecycle,
+layout, force physics, and rendering into one "missing layer" — those boundaries are drawn
+explicitly here.
+**Code**: `kernel` (truth + neutral queries), a new `intel/signals` (computation + cache +
+invalidation), `crates/orrery/cartography` (the snapshot contract), `crates/orrery/arrangements`
+(analytic layouts), `crates/orrery/gyre` (live forces), `crates/platen` (assembly), `meerkat`
+(lens config), `orrery`/gloss (consume projections + overlays).
 
-The orrery already *imports* petgraph's `astar` / `dijkstra` / `has_path_connecting` /
-`kosaraju_scc` and never uses them (the build warns), and `cartography::IntelligenceSignals`
-(clusters, affinity, bridges, importance, embeddings) exists as a type and is **never
-computed** (every adapter gets `::default()`). So we are not missing the machinery, we are
-missing the layer that *runs* it. Build that one layer and three features get richer at once:
-arrangements, visual encodings, and the gloss swatch.
+The thesis holds: **one signal snapshot feeding arrangements, encodings, and the gloss lens.**
+But the producer is a *lifecycle*, not a clock; affinity is a *force*, not a field; a spectral
+layout is an *arrangement*, not a signal; and the consumer plumbing is largely unbuilt. Rev 1's
+errors are corrected below, each verified against the code.
 
 Sibling / converging docs:
 
 - [node_representation_arrangement_plan](2026-06-18_node_representation_arrangement_plan.md):
-  the arrangement half of node-rep. This plan is the signal substrate its semantic arrangements
-  consume; Phase A (kanban/timeline) lives there, enriched here.
-- [object_card_plan](2026-06-21_object_card_plan.md): the per-object card surfaces per-node
-  config; the encodings here (size, color) are scene-wide defaults the card overrides per node.
+  the arrangement half of node-rep (Phase A = kanban/timeline lives there). **Decision 2 reserves
+  node face color for activation state** — the encoding collision below.
+- [graph_cluster_namespaces_brief](2026-05-10_graph_cluster_namespaces_brief.md): already states
+  recomputing community decomposition on every insertion is impractical — the cache below answers it.
 - [scriptable_field_regions_plan](2026-06-13_scriptable_field_regions_plan.md): gyre's
-  `CouplingForce` (the field-well mechanism) is the same seam the affinity coupling rides.
+  `CouplingForce` is a **field** mechanism (per-node field sample), *not* the pairwise affinity
+  force — the affinity force is new.
+- [document_script_substrate_plan](2026-06-21_document_script_substrate_plan.md): the
+  wasmtime-async lane is the **scriptable** path for user-authored analyses (below).
 
 ---
 
-## The thesis: a signals layer, recomputed on graph mutation, with three consumers
+## What actually exists (verified 2026-06-22, correcting rev 1)
 
-A **graph signals layer** computes analyses over the kernel graph and caches them, recomputing
-only when the graph changes (a new node / edge), never per frame. The analyses are cheap,
-graph-local, and host-side:
+- **The basic graph algorithms are live, not asleep.** `kernel::graph::query` uses `dijkstra`
+  (`hop_distances_from`), `astar` (`shortest_path`), `has_path_connecting` (`is_reachable`), and
+  `kosaraju_scc`. The unused-import warning is **stale duplicate imports in `graph/mod.rs`**, not
+  evidence the algorithms are unused. So path / reachability / SCC are done; the gap is the
+  **advanced** analyses with no producer: centrality beyond degree (betweenness / PageRank),
+  communities (Leiden / Louvain), articulation / bridges, pairwise affinity, embeddings.
+- **`cartography::IntelligenceSignals` is a snapshot contract, never produced.** Its README scopes
+  it to a *narrow snapshot* a strategy reads; every call site passes `::default()`. The missing
+  piece is a producer, and it should live **outside** cartography (cartography keeps the contract).
+- **`CouplingForce` is per-node field sampling.** It "evaluate[s] the field at each target node's
+  position and apply[s] the response" over a `FieldDefinition` (scalar/vector). It is **not** a
+  pairwise node-node attraction. Affinity needs a new gyre force.
+- **`project_orrery_strategy` discards everything but positions.** It returns
+  `projection.nodes.iter().map(|n| (n.node, n.position))`. No live path consumes
+  `Projection::overlays`, and the overlay vocabulary has no community-color / path-highlight kinds.
+  The gloss bypasses cartography entirely via `Orrery::minimap_geometry`. The consumer plumbing is
+  the bulk of the work, not an afterthought.
 
-- **Centrality / importance** — degree (have it), then betweenness / PageRank (petgraph or a
-  small impl). → `IntelligenceSignals::importance`.
-- **Communities** — Leiden / Louvain over the undirected graph. → `IntelligenceSignals::clusters`.
-- **Bridges / articulation** — structural cut nodes/edges (petgraph). → `IntelligenceSignals::bridges`.
-- **Affinity** — per-pair semantic weight (edge weight + shared tags + co-citation, first pass;
-  content similarity later). → `IntelligenceSignals::affinity`.
-- **Structural embedding** — a 2D layout from topology alone (spectral / Laplacian eigenmaps,
-  or node2vec), recomputed on change. → `IntelligenceSignals::embeddings`.
-- **Paths** — on demand (a selected pair) via `dijkstra` / `astar`. → a transient highlight.
+## Ownership (drawn explicitly — rev 1 blurred these)
 
-This layer feeds **three consumers**:
+- **`kernel`** — graph truth + neutral queries (the live path/SCC/reachability already here).
+- **`intel/signals` (new)** — signal *computation*, *invalidation*, *cache*, algorithm config.
+  Owns the lifecycle. Produces snapshots.
+- **`cartography::IntelligenceSignals`** — the narrow snapshot *contract* only (per its README).
+  A produced snapshot is handed to a `ProjectionRequest`.
+- **`platen`** — assembles `graph + signal snapshot + ViewIntent` into a `ProjectionRequest`.
+- **`arrangements` / `gyre`** — analytic layouts (incl. a new `SpectralLayout`) and live forces
+  (incl. a new affinity force).
+- **`meerkat`** — lens configuration + channel arbitration (which encoding owns color, etc.).
+- **`orrery` / gloss renderer** — consume the full `Projection` + overlays (not just positions).
 
-1. **Arrangements** (the layout dimension) — community → kanban-by-cluster columns; affinity →
-   the gyre coupling (below); structural embedding → `semantic_embedding`.
-2. **Encodings** (the visual dimension) — importance → node size (size-by-degree generalizes to
-   size-by-centrality); community → node color; bridge → a highlight; a path → a traced route.
-3. **The gloss swatch** (a configurable second lens) — surface the analysis (a community legend,
-   a centrality ranking, the active path) and let the swatch show any arrangement + encoding
-   scoped to a subgraph.
+## The signals + their lifecycle (a cache, not a clock)
 
-## The semantic arrangements, reframed as signal consumers
+A monolithic recompute-on-every-mutation is wrong: degree is cheap, betweenness / Leiden /
+spectral are not, and tags / traversal / topology / content invalidate for *different* reasons.
+A per-session **signals cache**:
 
-The two "dormant" semantic adapters stop being bespoke machinery once the signals layer exists:
+- **A source generation / fingerprint** stamped on every snapshot.
+- **Per-signal dirty bits**, invalidated by the relevant cause (topology vs tags vs content).
+- **Cheap signals synchronous** (degree, articulation on small graphs) — computed inline on read.
+- **Expensive signals debounced + backgrounded** (betweenness, Leiden, spectral) — never block a
+  frame; the UI uses the last good snapshot until a fresh one lands.
+- **Stale-result rejection**: a background result computed against an older generation is dropped.
+- **Stable keys for async**: `NodeKey` is snapshot-local, so a backgrounded result must be
+  generation-tagged or computed against stable UUIDs and rebound on arrival.
 
-- **`semantic_edge_weight` is an affinity coupling, not a streaming actor.** It reads
-  `IntelligenceSignals::affinity`. The affinity is a *signal* recomputed on graph mutation
-  (cheap, only on change), **not** per frame. The layout is then a **gyre coupling**: feed the
-  affinity in as an attraction force through gyre's existing `set_coupling_forces` seam (the same
-  one fields use), and gyre's running loop does the per-frame stepping. No second physics loop,
-  no actor. So in the settings menu it is a **toggle on force-directed** ("cluster by affinity"),
-  not a separate layout pick. The streaming `step` adapter and its `step_with` dispatch are
-  retired for this path.
-- **`semantic_embedding` uses a structural embedding first.** It places nodes at precomputed
-  `IntelligenceSignals::embeddings` coords. Produce those with a **structural** embedding
-  (spectral / node2vec over the graph) — graph-only, deterministic, no model, recompute on
-  change. A **content** embedding (a local text model via the Burn-wgpu / Candle ML lane → UMAP/PCA
-  to 2D) is a drop-in upgrade later: the adapter does not care which produced the coords.
+**Where "background" runs:** first pass = a native background thread / the armillary actor
+substrate (the same off-thread discipline gyre's physics uses). The **wasmtime-45 async** lane
+(being implemented now) is the *scriptable* path: a user-authored analysis as an async WASM
+component (a registered command per the command-registry plan) that the cache schedules like any
+other expensive signal. So the cache's "expensive/background" slot is extension-ready — native
+now, scriptable-async later — but neither is needed for the cheap first signals.
 
-## The gloss swatch as a configurable lens
+## Consumers
 
-The gloss minimap (`Orrery::minimap_geometry`) draws one fixed view. Make the swatch a real
-second lens, configurable on three axes, independent of the main orrery:
+1. **Arrangements** — community → kanban columns (replace Phase A's host-axis); the rest below.
+2. **Encodings** — importance → node size (generalize size-by-degree to a pluggable metric);
+   community → **a halo / ring, not face color** (face color is reserved for activation state,
+   node-rep Decision 2 — or an explicit mode that *replaces* activation color); bridge / path →
+   highlight. **This needs real plumbing**: `project_orrery_strategy` must stop discarding the
+   projection, the overlay vocabulary must gain community / path kinds, and the renderer must
+   consume them. Encoding *arbitration* (which signal owns which channel) is a meerkat concern.
+3. **The gloss swatch** — a configurable second lens that **consumes its own `ProjectionRequest` /
+   `Projection`** (not a parameterized `minimap_geometry`): its own arrangement + encoding + scope,
+   independent of the main orrery, to preview a lens before applying it.
 
-- **Arrangement** — force-directed / kanban / timeline / semantic, so the swatch is a
-  preview/compare (the spine's "two projections of one arrangement"): try a lens here before
-  applying it to the main view.
-- **Encoding** — color by community, size by centrality, highlight bridges / a path (the signals
-  layer surfaced).
-- **Scope** — whole graph / a neighborhood / the selected node's cluster.
+## The two semantic adapters, corrected
 
-The settings menu *sets* the main view's arrangement; the gloss *previews* arrangements +
-*surfaces* the analysis. It is the low-stakes home for the whole signals layer.
+- **`semantic_edge_weight` → a new gyre affinity force (not a coupling, not kept streaming
+  forever).** Affinity is recomputed on mutation (a signal, not per-frame). The layout is a **new
+  pairwise gyre force** (an `AffinitySpring` / weighted-edge attraction) applied by gyre's running
+  loop — `CouplingForce` cannot serve (it samples a field per node, not a pair). **Keep the
+  existing streaming adapter until the gyre force reaches parity**, then retire it. In the settings
+  menu this is a toggle on force-directed ("cluster by affinity").
+- **`SpectralLayout` is an arrangement; `semantic_embedding` stays content.** A 2D spectral /
+  topology projection *is a layout result*, so it belongs directly in `arrangements` as
+  `SpectralLayout` — feeding it through `IntelligenceSignals::embeddings` for `semantic_embedding`
+  to copy is a circular layer. Reserve `semantic_embedding` for **statistical / content** coords
+  from the `intel/embed` lane (a local text model later). node2vec is not inherently deterministic
+  or 2D without extra policy, so spectral (deterministic, directly 2D) is the first arrangement.
 
-## Phases (done-conditions, not dates)
+## Phases (revised sequence — boundaries first)
 
-- **P0 — Phase A arrangements (done).** kanban + timeline dispatched + pickable (graph-only axes
-  first pass). See the node-rep plan.
-- **P1 — The signals layer + recompute hook.** A host-side `GraphSignals` computed on graph
-  mutation (hook the orrery's `reconcile_derived` / the kernel mutation seam), caching an
-  `IntelligenceSignals`. Start with the cheap high-leverage two: **importance** (a centrality)
-  and **communities** (Leiden/Louvain). Wire `IntelligenceSignals` into `project_orrery_strategy`
-  (replace the `::default()`). Done when the strategies receive real signals.
-- **P2 — Encodings from signals.** Size-by-centrality (generalize size-by-degree to a pluggable
-  metric) + color-by-community, as scene toggles (per the node-rep Decision 5 / styling-lens).
-  Done when a node's size + color can be driven by a signal.
-- **P3 — Affinity coupling (`semantic_edge_weight`).** Derive affinity on mutation; feed it as a
-  gyre coupling; expose as a "cluster by affinity" toggle on force-directed. Done when affinity
-  visibly clusters and costs nothing per frame beyond gyre.
-- **P4 — Structural embedding (`semantic_embedding`).** A spectral / node2vec 2D embedding
-  recomputed on mutation → `embeddings`; dispatch the adapter. Done when the embedding lays the
-  graph out by topology. (Content embedding defers to the ML lane.)
-- **P5 — The gloss configurable lens.** The swatch gains arrangement + encoding + scope controls,
-  independent of the main orrery. Done when the gloss can show a different arrangement/encoding
-  than the main view.
+- **P0 — kanban / timeline (done, node-rep).** Host-derived axes, first pass.
+- **P1 — cheap signals + the cache contract.** `intel/signals` with the generation/dirty-bit cache,
+  degree + articulation computed synchronously, the snapshot handed to `project_orrery_strategy`
+  (replacing `::default()`). Done when a strategy receives a real (if cheap) snapshot.
+- **P2 — full `Projection` plumbing + encoding arbitration.** Stop discarding the projection; extend
+  the overlay vocabulary (community, path); the renderer consumes overlays; meerkat arbitrates the
+  channels (size by importance, community as a ring). Done when one cheap signal drives a visible
+  encoding end to end.
+- **P3 — background community analysis.** Leiden / Louvain on the background lane with debounce +
+  stale-rejection; community → kanban columns + the ring encoding. Done when community survives
+  mutation without a frame stall.
+- **P4 — the affinity force.** A new gyre pairwise force from the affinity signal; the streaming
+  adapter retired once it reaches parity. Done when affinity clusters at gyre's cost.
+- **P5 — spectral arrangement (+ content embedding later).** `SpectralLayout` in `arrangements`;
+  `semantic_embedding` reserved for the content lane. Done when spectral lays the graph by topology.
+- **P6 — the independent gloss projection.** Gloss builds its own `ProjectionRequest`; the swatch
+  gains arrangement + encoding + scope controls. Done when gloss shows a different lens than the
+  main view.
 
 ## Findings (code-verified 2026-06-22)
 
-- **petgraph algorithms are imported and unused.** meerkat imports `astar`, `dijkstra`,
-  `has_path_connecting`, `kosaraju_scc` (the build warns them unused) — the path/SCC primitives
-  are already a dependency, just not run.
-- **`IntelligenceSignals` is defined but never computed.** `cartography::IntelligenceSignals`
-  (`signals.rs`: clusters / affinity / bridges / importance / embeddings, with `AffinityScores`
-  pair lookups + `NodeEmbeddings` coord lookups) is real, but `project_orrery_strategy` and the
-  adapters all pass `::default()`. The signals layer is the missing producer.
-- **The coupling seam exists.** gyre's `CouplingForce` + `Simulation::set_coupling_forces` (used
-  by field regions, rebuilt on mutation via `rebuild_coupling_forces`) is exactly the seam the
-  affinity coupling rides — recompute-on-change, applied by the running loop. No new per-frame
-  path needed.
-- **The adapters split by integration, not difficulty.** kanban/timeline are one-shot
-  `LayoutStrategy::project` over `axis_values` (Phase A). `semantic_embedding` is one-shot over
-  `embeddings`. `semantic_edge_weight` is the only streaming one (`step` / `step_with`) — and the
-  reframe drops that path in favor of the coupling.
-- **The gloss draws one view.** `Orrery::minimap_geometry` returns positions + edges for the
-  swatch; it is not arrangement- or encoding-parameterized yet. P5 makes it a lens.
+- `kernel::graph::query` runs `dijkstra` / `astar` / `has_path_connecting` / `kosaraju_scc` live;
+  the unused warning is stale `graph/mod.rs` imports (`cargo check -p kernel` confirms).
+- `gyre::CouplingForce::apply` samples a `FieldDefinition` at each target node — field, not pair.
+- `platen::project_orrery_strategy` returns positions only; `Projection::overlays` has no consumer,
+  and the overlay vocabulary lacks community / path kinds.
+- `cartography/README` scopes `IntelligenceSignals` to a snapshot contract; producer belongs elsewhere.
+- node-rep Decision 2 reserves face color for activation state (the community-color collision).
+- the cluster-namespace brief already rejects recompute-on-every-insertion (the cache answers it).
 
 ## Progress
 
-- 2026-06-22: **Plan drafted (with Mark).** Came out of scoping the dormant arrangements: Mark
-  asked to wire them all, then pushed past the wiring into the embedding-model choice, the
-  streaming-vs-coupling question, surfacing petgraph, and the under-used gloss panel. The
-  unifying answer is one signals layer (recompute-on-mutation) feeding arrangements + encodings +
-  the gloss lens; the semantic arrangements become consumers (affinity = a gyre coupling, not a
-  streaming actor; embedding = structural now, content later). Phase A (kanban/timeline) landed in
-  the node-rep plan; this plan carries P1–P5. (Authored while the meerkat build was red on an
-  unrelated in-flight `palette`→`sheet` refactor, so no code landed here yet.)
+- 2026-06-22: **Rev 1 drafted, then corrected (rev 2) against an agent critique Mark relayed.** Rev 1
+  had the right unifying thesis but four real errors, each verified and fixed: (1) the premise
+  overstated the gap — path/SCC/reachability are live in `query.rs`; the real gap is advanced
+  analyses; (2) the recompute model was a monolithic clock — replaced with a per-signal cache
+  (generation + dirty bits + cheap-sync / expensive-background + stale-rejection + stable-key
+  rebinding); (3) affinity-as-`CouplingForce` was wrong (that samples a field per node) — it needs a
+  new gyre pairwise force, keeping the streaming adapter until parity; (4) spectral-as-embedding-signal
+  was circular — spectral is a `SpectralLayout` arrangement, `semantic_embedding` reserved for content
+  coords. Plus: the consumer plumbing (full `Projection` + overlays, gloss-via-`Projection`) is the
+  bulk of the work, and community color collides with activation color (use a ring). Ownership redrawn
+  (`intel/signals` owns the lifecycle; cartography keeps the contract). The wasmtime-45 async lane is
+  the scriptable-analysis path for the cache's background slot, not the first-pass native one. No code
+  landed (the meerkat build was red on an unrelated in-flight `palette`→`sheet` refactor).

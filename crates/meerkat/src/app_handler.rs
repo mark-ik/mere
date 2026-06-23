@@ -442,6 +442,9 @@ impl ApplicationHandler for Shell {
         match event {
             WindowEvent::Resized(size) => wc.resize(size.width, size.height),
             WindowEvent::Focused(focused) => wc.update_a11y_window_focus(focused),
+            // A dropped image file textures the node under it (else the focused node) as a
+            // custom sprite face. (Node representation P2 — sprite drop.)
+            WindowEvent::DroppedFile(path) => wc.import_sprite_from_file(&path),
             WindowEvent::CursorMoved { position, .. } => {
                 wc.view.cursor = (position.x as f32, position.y as f32);
                 // A manual window resize in progress: drive it from the move and

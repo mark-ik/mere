@@ -159,10 +159,16 @@ The leverage is the reason to pay the registry's up-front cost rather than the t
   (command verbs + context ids). `AgentAction::Invoke(String)` resolves a command id (`Command::from_id`)
   or a context-action id (`context_action_from_id`) and applies it (a command via the command path, a
   context action seeded against the live selection), so an agent reaches *every* registry action by the
-  same ids the palette uses. **Remaining for P3:** a11y default-actions → command id (the chrome
-  buttons already route clicks via DOM, so this is mainly the orrery/pane a11y `action_routes`); the
-  diagnostics audit-on-invoke (a ux-event at the host apply points; the agent harness already emits one);
-  and the completeness probe.
+  same ids the palette uses. **Diagnostics audit-on-invoke done + verified (2026-06-21):** every host
+  command (`drain_pending_command`) and context action (`drain_pending_context`) records a
+  `meerkat.command.invoked` diagnostic by its registry id through the one observability spine, so
+  palette / omnibar / menu / agent invocations all land in one audit log (the agent lane keeps its own
+  provenance line too). Verified deterministically — `agent_invoke_by_id_runs_commands_and_context_actions`
+  asserts the `add_node` invoke produces the audit diagnostic. **Remaining for P3:** a11y
+  command-by-id is effectively already covered (the chrome command buttons route a11y clicks through the
+  DOM `on_click`, firing the command); the **full** completeness probe ("every menu entry resolves to a
+  registry id") is gated on P4 (menu becomes registry-driven) — the partial probe (registry ids unique +
+  round-tripping) is in place.
 - **P4 — Configurable context menu.** Render the menu from a config (an ordered list of command ids)
   filtered by applicability for the current selection, instead of the hardcoded `menus.rs`
   builders. Ship a default config equal to today's menu minus the de-dup'd scene toggles. Edit
@@ -188,6 +194,36 @@ The leverage is the reason to pay the registry's up-front cost rather than the t
    the first pass.** A future inline editor (a command-palette-fueled mini search bar to add/remove)
    is wanted too, likely in addition to the page — folded into P4.
 
+## Progress (P4/P5 — configurable + persisted menu)
+
+- 2026-06-22: **First slice landed + headed-verified — a persona-persisted, user-toggleable menu.**
+  The pragmatic core of P4/P5: the context menu can be customized (gestures hidden/shown) on a
+  settings page, persisted, surviving restart.
+  - **Config + persistence (P5).** Added `hidden_menu_actions: Vec<String>` to `PersistedSettings`
+    (the `settings.json` sidecar at `<data_dir>/mere` — app-scoped today, which is the **default
+    persona's** settings until the `PersonaSettingsStore` lands, then it relocates to
+    `<persona_id>/settings/`). Loaded into `Presentation.hidden_menu_actions` (a `HashSet`) at boot,
+    written by `persist_settings`. Round-trip unit-tested in `session-runtime`.
+  - **Editor page (P4).** New `pelt/menu` settings page (`menu_settings_items`) lists every registry
+    gesture from `PALETTE_CONTEXT_ACTIONS` as a toggle row (✓ = shown), draining `menu:toggle:<id>`
+    → `toggle_menu_action` (flip the set + persist).
+  - **Menu filter (P4).** `filter_hidden_menu` drops any context-menu row whose `context_action_id`
+    is in the hidden set, applied at the canvas + selection menu build sites. Rows **without** a
+    registry id (Open tile, Node settings) are never filtered, so the menu can't be emptied of its
+    reason to exist.
+  - Verified live (`scry-shots/menu-1..4`): the page renders the 12 toggles; hiding "Add node"
+    drops its ✓ and removes it from the canvas menu (Add field stays); `settings.json` then carries
+    `hidden_menu_actions: ["add_node"]` (reset to `[]` after the run). meerkat green (lib 69, bin
+    101); session-runtime green (68).
+  - **Still open (the fuller P4):** this slice is **hide/show** of the menu's existing gestures. Mark's
+    "add *any* command to the menu" needs the **inclusion** model — the menu rendered *from* a config
+    list (add commands not in the default menu) + an **applicability** model (a configured command
+    only shows in the contexts it applies to: empty-canvas / single / multi / two-nodes). That, the
+    inline command-search editor (decision 3), and the real `PersonaSettingsStore` (P5 proper) are the
+    next slices. The menu-completeness probe (every menu action has a registry id) is closer now but
+    still gated on the inclusion rewrite, since the structural rows (Open tile, Node settings, Open
+    splits/stack, Relate) remain hardcoded.
+
 ## Progress (P3 — one seam)
 
 - 2026-06-21: **Agent-by-id seam landed.** Gave context actions stable registry ids
@@ -200,8 +236,15 @@ The leverage is the reason to pay the registry's up-front cost rather than the t
   `agent_invoke_by_id_runs_commands_and_context_actions`: `Invoke("workbench")` runs, `Invoke("add_node")`
   mints a node purely by id, an unknown id is reported-not-applied. meerkat green (lib 69, bin 101).
   This is the "automation + agents use the same seam" win: an agent now reaches every registry action
-  by the same ids the palette uses. a11y route-by-id + the diagnostics audit + the completeness probe
-  remain for P3.
+  by the same ids the palette uses.
+- 2026-06-21: **Diagnostics audit-on-invoke landed + verified.** Added a `meerkat.command.invoked`
+  diagnostic at the two host apply points — `drain_pending_command` (by `cmd.verb()`) and
+  `drain_pending_context` (by `context_action_id`, Debug fallback for the not-yet-cataloged
+  parameterized ones) — so every palette / omnibar / menu / agent invocation lands in one audit log
+  through the observability spine. Extended `agent_invoke_by_id_runs_commands_and_context_actions` to
+  assert the `add_node` invoke produces the audit diagnostic (deterministic verification, not just a
+  log line). meerkat green (lib 69, bin 101). P3 is substantially done: agent-by-id seam + audit; a11y
+  command invocation already rides the DOM `on_click`; the full menu-completeness probe waits on P4.
 
 ## Progress (P2 — every action in the palette)
 

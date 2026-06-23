@@ -728,7 +728,6 @@ impl WindowCtx<'_> {
         self.drain_physics_toggle();
         self.drain_roster_intents();
         self.drain_list_pane_activations();
-        self.drain_orrery_card_selects();
         self.drain_object_card();
         self.sync_settings();
         self.sync_orrery();
@@ -763,40 +762,6 @@ impl WindowCtx<'_> {
                     }
                 }
                 self.view.request_redraw();
-            }
-        }
-    }
-
-    /// Apply the node selections the orrery card click handlers queued through the shell
-    /// runner's dispatch (the two-hit-test's DOM half). A card press routes here through
-    /// `chrome_click` -> `chrome_activate`, and Enter/Space on a focused card routes here
-    /// through `dispatch_key`; both select the card's node. (Phase 2.)
-    pub(super) fn drain_orrery_card_selects(&mut self) {
-        for url in self.view.take_orrery_card_selects() {
-            self.orrery_mut().select_by_url(&url);
-        }
-    }
-
-    /// Whether `(x, y)` lands on an orrery node-card **or the object card** in the shell
-    /// document. The cards are `position:absolute; transform:translate(...)`, so this rides
-    /// the shell hit-test (serval's transform-aware `walk_for_hit`) and walks the hit node's
-    /// ancestors for the card class. The two-hit-test's gate: `true` routes the press through
-    /// `chrome_click` (a node-card selects its node; the object card's − / + buttons fire
-    /// their `on_click`), `false` falls through to gyre. (Phase 2; object card P0.)
-    fn point_over_orrery_card(&self, x: f32, y: f32) -> bool {
-        let Some(session) = self.view.chrome_session.as_ref() else { return false };
-        let dom = self.view.dom.borrow();
-        let offsets = ScrollOffsets::<NodeId>::default();
-        let Some(mut node) = session.hit_test(&dom, x, y, &offsets) else { return false };
-        loop {
-            if crate::has_class(&dom, node, "node-card")
-                || crate::has_class(&dom, node, "object-card")
-            {
-                return true;
-            }
-            match dom.parent(node) {
-                Some(parent) => node = parent,
-                None => return false,
             }
         }
     }
@@ -875,7 +840,13 @@ impl WindowCtx<'_> {
         // to the chosen page (`navigate_member` retargets its url, which the next frame's
         // settings dispatch re-resolves). (Settings lane P1.)
         for (_member, key) in self.view.take_settings_pane_keys() {
-            self.apply_pelt_activation(&key);
+            // `node:<id>` facets controls carry the subject node in the key; the rest are the
+            // pelt pages' shared keys (theme / engine toggle / physics / orrery). (Registry P3.)
+            if let Some(facet) = key.strip_prefix("nodefacet:") {
+                self.apply_node_facet_key(facet);
+            } else {
+                self.apply_pelt_activation(&key);
+            }
         }
         for (member, url) in self.view.take_settings_pane_nav() {
             self.orrery_mut().navigate_member(member, &url);
@@ -919,6 +890,12 @@ impl WindowCtx<'_> {
             // spacing sliders, link-arrows toggle, font choice, reset.
             k if k.starts_with("doc:") => {
                 self.apply_doc_style_key(&k["doc:".len()..]);
+            }
+            // The persona-configurable context menu (`pelt/menu`): add / remove a command from the
+            // menu, or reset to the registry default. Persists to the persona store. (Cmd reg P4.)
+            "menu:reset" => self.reset_menu_actions(),
+            k if k.starts_with("menu:toggle:") => {
+                self.toggle_menu_action(&k["menu:toggle:".len()..]);
             }
             _ => self.set_theme(key),
         }

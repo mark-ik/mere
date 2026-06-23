@@ -335,6 +335,18 @@ stays draggable, and is user-selectable per scene.
 
 ### P4 — Retire the Stage-2 live-preview card (node-open routes to pelt)
 
+**Status (2026-06-22): Done — verified in code.** `live_previews`, the `live_card` render
+branch, the X close button, and `toggle_live_preview` are all gone. The focused-node
+double-click routes through `toggle_workbench` (`open_workbench` + `open_tile` per selection +
+`focused_tile`), opening the node in a pelt tile (input.rs:489, "replacing the retired
+promote-to-live-preview"). The orrery keeps only the Stage-1 snapshot, rendered host-side from
+the **durable content cache** (`needed_members` reduces to the open workbench tiles, node_ops.rs:232,
+"the orrery keeps no live actor"). The "one non-mechanical part" (the snapshot deposit) was
+**obviated, not implemented as planned**: the snapshot renders on-demand from the durable cache
+(`render_content_scene` → readback → `snapshot_data_uris`, keyed per url), so there is nothing to
+deposit on tile-close — closing a tile leaves the snapshot current because it re-renders from the
+cache. The original scope below is retained for the record.
+
 The card model's **Stage 2** (the floating live-actor card in the orrery, promoted by
 double-click, carrying the X / tile buttons) is **dropped**: a node opens in a **pelt tile**,
 and the orrery keeps only the static **Stage-1 snapshot** (the peek without the X). This
@@ -724,3 +736,45 @@ it is the default of a setting, not a baked constant.
        in its arrangement. Low-moderate once an arrangement is pickable (slice 1).
   Recommendation: **slice 1 (kanban) first** — lowest effort, highest leverage (arrangement is the gap),
   and it sets up slice 3. Slice 2 (sprite) is the visual continuation when focus returns to representation.
+- 2026-06-22: **P2-static landed — `Representation::Sprite` (custom image faces) via drag-and-drop.**
+  Slice 2 of the scope above (slice 1, kanban / timeline, landed earlier the same day). A dropped image
+  file textures the node it lands on (else the focused node) as its face: a new `Representation::Sprite`
+  variant + a per-node `node_sprites` map on the orrery (`set_node_sprite` sets the face *and* the
+  representation in one step; picking Tile / Shape reverts it, `clear_node_representation` drops it), the
+  card renders the sprite cover-fit over the face (`window_view::node_card_view`, sharing the favicon
+  `<img>` path), and a `WindowEvent::DroppedFile` arm (`sprite_import.rs`) decodes the file (png / jpeg /
+  gif / bmp via the `image` crate), downscales it to a 256px face thumbnail, and encodes a PNG data-URI
+  (reusing the favicon encoder). The drop target is `Orrery::node_at_screen` (cursor → node) with the
+  focused node as the fallback. Unit-tested (`set_node_sprite_textures_the_face_and_sets_the_representation`);
+  builds green. The OS file-drop is an event the headed harness can't synthesize, so the gesture is
+  verified by hand. **Deferred:** sidecar persistence (sprites are in-memory for now), the sprite-alpha
+  hull collider (probe step 2 — the collider stays the sized ball), and in-scene sprite rendering on
+  secondary panes (cards only). Frontier now: slice 3 (scene-wide arrangement persistence) or sprite
+  persistence, whichever Mark wants next.
+- 2026-06-22: **Sprite persistence landed; scene-wide arrangement persistence found already complete.**
+  *Sprite persistence:* the custom faces now ride the cartography sidecar like sizes. `CartographyGeometry`
+  gained a serde-defaulted `sprites: Vec<(member, data-URI)>` (`with_sprites` / `sprite_iter`, pruned in
+  `from_persisted_json`); `Orrery::cartography_geometry` exports them and `apply_cartography_sprites`
+  restores them (via `set_node_sprite`, so the node re-opens at `Representation::Sprite`) at both load
+  sites (`main.rs` boot + `session_ops.rs` switch). The existing save path (`cartography_geometry()
+  .to_persisted_json()`) writes them with no change. Round-trip unit-tested (`cartography_sprites_round_
+  trip_and_prune`). A textured node now survives a restart (verify by hand: drop → close → reopen). The
+  data-URIs add sidecar bulk — fine for a handful; externalizing the blobs is a future optimization.
+  *Arrangement persistence (slice 3) was already done* — it shipped with the layout picker, not as a gap:
+  picking a strategy calls `set_layout_strategy` + `save_session`, writing `ViewIntent.strategy` to disk;
+  boot / session-switch restore it via `set_layout_strategy`; `project_orrery_strategy` re-applies it each
+  frame; and `view_intent_store` already has a passing disk round-trip test for `strategy`. Analytic
+  layouts (kanban / timeline) re-derive positions on load by design; force-directed keeps the persisted
+  positions. So node-rep's representation + arrangement persistence are both closed. Remaining node-rep
+  frontier: the sprite-alpha hull collider, in-scene (secondary-pane) sprites, and the P2-interactive /
+  scripted representation (gated on the input bridge).
+- 2026-06-22: **P4 found already done — the stale audit corrected (Mark caught it).** The 2026-06-20
+  P4 scope listed the Stage-2 live card as live; a code check shows it fully retired: `live_previews`,
+  the `live_card` render branch, the X button, and `toggle_live_preview` are gone; the double-click
+  routes to a pelt tile via `toggle_workbench`; the orrery keeps only the host-rendered Stage-1
+  snapshot; `needed_members` is the open tiles. The snapshot-deposit "non-mechanical part" was obviated
+  — the snapshot re-renders on-demand from the durable content cache, so there is no tile-close hook to
+  build. Marked done in the P4 section above. With P4 closed, the genuinely-open node-rep slices are all
+  either refinements (sprite hull collider, in-scene sprites, label-density / styling-lens of Decisions
+  3-4) or blocked / cross-plan (P2-interactive on the input bridge, the scripted form on the field-regions
+  substrate, the semantic arrangements on the graph-signals-layer plan).

@@ -68,8 +68,9 @@ netrender = { git = "https://github.com/mark-ik/netrender.git", branch = "main" 
 # Favicon PNG encoding for the orrery-as-element node cards: RGBA -> PNG bytes -> a
 # `data:` URI <img> the card carries (serval decodes it). Already resolved in the
 # workspace via serval's image decoder, so this only exposes the built crate to
-# encode; `png` feature only. (Orrery-as-element — Phase 2.)
-image = { version = "0.25", default-features = false, features = ["png"] }
+# encode (favicons + snapshot cards). The decode features (jpeg/gif/bmp on top of png)
+# back the drag-and-drop sprite import — a dropped image decoded to a face. (Phase 2 / P2 sprite.)
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"] }
 # Host text-into-scene path: parley shapes a single line; netrender_text lowers
 # the parley Layout into the same netrender::Scene the host draws rects into. Used
 # for the session-switcher tile labels (the textless-switcher deferral) and session

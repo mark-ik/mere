@@ -79,12 +79,21 @@ impl CanvasPaintList {
     }
 }
 
-/// World-to-view camera: a pan offset plus a uniform zoom, emitted as the
-/// scene's `PushTransform`. Steal-the-shape target for `understory_view2d`.
+/// World-to-view camera: pan, uniform zoom, plus an isometric orbit (`yaw`) and
+/// vertical foreshorten (`tilt`). The forward map is [`Camera::to_screen`], the
+/// inverse [`Camera::to_world`], and [`Camera::ground_transform`] is the affine the
+/// scene `PushTransform` carries for ground-plane paint. Plain top-down is the
+/// degenerate isometric at `yaw == 0.0`, `tilt == 1.0`, where the map reduces
+/// exactly to `screen = world * zoom + offset`. (Isometric camera P0.)
 #[derive(Clone, Copy, Debug)]
 pub struct Camera {
     pub offset: (f32, f32),
     pub zoom: f32,
+    /// Orbit angle about the vertical, radians. `0.0` is top-down.
+    pub yaw: f32,
+    /// Vertical foreshorten in `(0, 1]`. `1.0` is no foreshorten (top-down 2D); a
+    /// classic isometric squash is ~`0.55`.
+    pub tilt: f32,
 }
 
 impl Default for Camera {
@@ -92,7 +101,48 @@ impl Default for Camera {
         Self {
             offset: (0.0, 0.0),
             zoom: 1.0,
+            yaw: 0.0,
+            tilt: 1.0,
         }
+    }
+}
+
+impl Camera {
+    /// Project a world point to screen px. At `(yaw 0, tilt 1)` this is exactly
+    /// `world * zoom + offset`; otherwise it rotates the ground plane by `yaw`,
+    /// foreshortens the vertical by `tilt`, scales by `zoom`, and translates by
+    /// `offset`. (Isometric camera P0.)
+    pub fn to_screen(&self, world: PortablePoint) -> (f32, f32) {
+        let (s, c) = self.yaw.sin_cos();
+        let rx = world.x * c - world.y * s;
+        let ry = world.x * s + world.y * c;
+        (
+            rx * self.zoom + self.offset.0,
+            ry * self.tilt * self.zoom + self.offset.1,
+        )
+    }
+
+    /// The inverse of [`Camera::to_screen`]: a screen-px point back to world space.
+    /// At `(yaw 0, tilt 1)` this is `(screen - offset) / zoom`. (Isometric camera P0.)
+    pub fn to_world(&self, screen: (f32, f32)) -> PortablePoint {
+        let z = self.zoom.max(f32::EPSILON);
+        let t = self.tilt.max(f32::EPSILON);
+        let px = (screen.0 - self.offset.0) / z;
+        let py = (screen.1 - self.offset.1) / (z * t);
+        let (s, c) = self.yaw.sin_cos();
+        // Inverse rotation (rotate by -yaw).
+        PortablePoint::new(px * c + py * s, -px * s + py * c)
+    }
+
+    /// The affine the scene `PushTransform` carries for **ground-plane** paint
+    /// (edges, field regions, demoted dots), so they recline onto the floor while
+    /// node cards stay upright billboards via [`Camera::to_screen`]. Foreshortens
+    /// the vertical by `tilt`; at `tilt == 1` it is the plain
+    /// `scale(zoom).then(translate(offset))`. The `yaw` orbit (a Z-rotation) folds
+    /// in at P2, where the ground rotates under the billboards. (Isometric camera P1.)
+    pub fn ground_transform(&self) -> LayoutTransform {
+        LayoutTransform::scale(self.zoom, self.tilt * self.zoom, 1.0)
+            .then(&LayoutTransform::translation(self.offset.0, self.offset.1, 0.0))
     }
 }
 
@@ -152,8 +202,7 @@ pub fn paint_projection_filtered(
 ) -> CanvasPaintList {
     let mut commands = Vec::with_capacity(projection.edges.len() + projection.nodes.len() + 2);
 
-    let transform = LayoutTransform::scale(camera.zoom, camera.zoom, 1.0)
-        .then(&LayoutTransform::translation(camera.offset.0, camera.offset.1, 0.0));
+    let transform = camera.ground_transform();
     commands.push(PaintCmd::PushTransform(TransformSpec {
         origin: LayoutPoint::zero(),
         transform,
@@ -378,5 +427,30 @@ mod tests {
         let seg = trim_to_faces(a, b, 60.0, 60.0);
         assert!((seg[0].x - 0.0).abs() < 1e-4, "fallback keeps a's center");
         assert!((seg[1].x - 100.0).abs() < 1e-4, "fallback keeps b's center");
+    }
+
+    #[test]
+    fn camera_top_down_is_plain_scale_translate() {
+        let cam = Camera { offset: (10.0, 20.0), zoom: 2.0, yaw: 0.0, tilt: 1.0 };
+        assert_eq!(
+            cam.to_screen(PortablePoint::new(5.0, 7.0)),
+            (5.0 * 2.0 + 10.0, 7.0 * 2.0 + 20.0)
+        );
+        let w = cam.to_world((30.0, 40.0));
+        assert!((w.x - (30.0 - 10.0) / 2.0).abs() < 1e-4);
+        assert!((w.y - (40.0 - 20.0) / 2.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn camera_isometric_foreshortens_y_and_round_trips() {
+        let cam = Camera { offset: (0.0, 0.0), zoom: 1.0, yaw: 0.0, tilt: 0.5 };
+        let (sx, sy) = cam.to_screen(PortablePoint::new(10.0, 10.0));
+        assert!((sx - 10.0).abs() < 1e-4, "x is unaffected by tilt");
+        assert!((sy - 5.0).abs() < 1e-4, "y is foreshortened by tilt");
+        let w = cam.to_world((sx, sy));
+        assert!(
+            (w.x - 10.0).abs() < 1e-4 && (w.y - 10.0).abs() < 1e-4,
+            "to_world inverts to_screen under foreshorten"
+        );
     }
 }

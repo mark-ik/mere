@@ -196,12 +196,22 @@ impl ApplicationHandler for App {
                 }
             },
             WindowEvent::KeyboardInput { event, .. } => {
-                // Space re-seeds the central spiral and replays the settle.
-                if event.state == ElementState::Pressed
-                    && matches!(event.logical_key, WinitKey::Named(WinitNamedKey::Space))
-                    && self.orrery.reseed()
-                {
-                    self.request_redraw();
+                if event.state == ElementState::Pressed {
+                    match &event.logical_key {
+                        // Space re-seeds the central spiral and replays the settle.
+                        WinitKey::Named(WinitNamedKey::Space) => {
+                            if self.orrery.reseed() {
+                                self.request_redraw();
+                            }
+                        },
+                        // `i` toggles the isometric (2.5D foreshortened-ground) view.
+                        WinitKey::Character(s) if s.as_str() == "i" => {
+                            let on = !self.orrery.is_isometric();
+                            self.orrery.set_isometric(on);
+                            self.request_redraw();
+                        },
+                        _ => {},
+                    }
                 }
             },
             WindowEvent::RedrawRequested => self.render(),

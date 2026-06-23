@@ -143,6 +143,45 @@ impl WindowCtx<'_> {
         }
     }
 
+    /// Persist the persona's curated context menu (command registry P4) to the persona settings
+    /// store (`personas/<id>/settings/ui.json`). v0 uses the single default persona; v1 threads
+    /// the active one. A failure is logged, not fatal.
+    pub(super) fn persist_menu_actions(&self) {
+        let persona = session_runtime::PersonaId::default_persona();
+        let settings = session_runtime::PersonaSettings {
+            menu_actions: Some(self.shared.presentation.menu_actions.clone()),
+        };
+        if let Err(err) = session_runtime::save_persona_settings(
+            &self.shared.session.mere_root,
+            persona,
+            &settings,
+        ) {
+            tracing::warn!(%err, "failed to persist persona menu settings");
+        }
+    }
+
+    /// Toggle a registry command's membership in the context menu (the `pelt/menu` page, command
+    /// registry P4): present → removed, absent → appended. This is the "add any command / remove
+    /// a gesture" edit; it persists the new list to the persona store.
+    pub(super) fn toggle_menu_action(&mut self, id: &str) {
+        let actions = &mut self.shared.presentation.menu_actions;
+        if let Some(pos) = actions.iter().position(|a| a == id) {
+            actions.remove(pos);
+        } else {
+            actions.push(id.to_string());
+        }
+        self.persist_menu_actions();
+        self.view.request_redraw();
+    }
+
+    /// Restore the context menu to the registry default order (command registry P4) and persist.
+    pub(super) fn reset_menu_actions(&mut self) {
+        self.shared.presentation.menu_actions =
+            meerkat::command::DEFAULT_MENU_ACTIONS.iter().map(|s| s.to_string()).collect();
+        self.persist_menu_actions();
+        self.view.request_redraw();
+    }
+
     /// The current "inertia" physics setting (linear damping), for the apparatus
     /// readout. (Physics settings.)
     pub(super) fn physics_damping(&self) -> f32 {

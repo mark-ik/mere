@@ -57,6 +57,9 @@ pub mod session_service_runner;
 // Session-wide settings sidecar (settings.json). A flat JSON document beside
 // graph.json; the host loads it on launch and saves on change.
 pub mod settings_store;
+// Per-persona UI settings (`personas/<id>/settings/ui.json`) — persona-scoped config
+// distinct from the app-scoped settings_store; first field is the configurable menu.
+pub mod persona_settings_store;
 pub mod switcher_thumbnail;
 pub mod tearout;
 pub mod view_intent_store;
@@ -77,6 +80,10 @@ pub use session_service_runner::{
 pub use switcher_thumbnail::{
     SwitcherThumbnail, SwitcherThumbnailOptions, ThumbnailEdge, ThumbnailNode,
     build_switcher_thumbnail, build_switcher_thumbnail_with,
+};
+pub use persona_settings_store::{
+    PERSONA_SETTINGS_DIR, PERSONA_UI_FILENAME, PersonaSettings, load_persona_settings,
+    persona_settings_path, save_persona_settings,
 };
 pub use settings_store::{PersistedSettings, SETTINGS_FILENAME, ShellbarEdge};
 pub use tearout::{PaneDragPayload, TileDragPayload};

@@ -110,7 +110,9 @@ mod render;
 mod roster;
 mod roster_view;
 mod settings_lane;
+mod settings_node;
 mod settings_pane_view;
+mod sprite_import;
 // `ViewPane` is the shared base for the `RosterPane` / `ListPane` test harnesses only;
 // every product pane now folds into the shell document, so the module is test-gated.
 // (Phase 1, step 2.)
@@ -622,6 +624,11 @@ struct Presentation {
     /// Its own `colors` field is ignored (the palette overwrites it at compose
     /// time). (Document typography surface.)
     document_sheet: document_canvas::DocumentStyleSheet,
+    /// The persona-curated context-menu command list (command registry P4): the registry ids
+    /// shown in the right-click menu, in order. Loaded from the persona settings store at boot
+    /// (or the registry default when unset), persisted on change; the menu builder resolves +
+    /// applicability-filters each id for the current selection.
+    menu_actions: Vec<String>,
 }
 
 impl Presentation {
@@ -861,6 +868,9 @@ impl Shell {
             .ok()
             .flatten()
             .unwrap_or_default();
+        // The persona's curated context menu (command registry P4), resolved before `mere_root`
+        // is moved into the session struct below.
+        let menu_actions = load_persona_menu_actions(&mere_root);
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = saved_settings.tab_cap;
         let runner = window_view::shell_runner(dom.clone(), chrome);
@@ -1086,6 +1096,10 @@ impl Shell {
             orrery.seed_cartography(geom.iter());
             // Restore the per-node sizes + size-by-degree alongside the positions. (Node-rep.)
             orrery.apply_cartography_sizing(geom.size_iter(), geom.size_by_degree());
+            // Restore the custom sprite faces, so a textured node re-opens textured. (Node-rep.)
+            orrery.apply_cartography_sprites(geom.sprite_iter());
+            // ...and their collider hulls, so the traced-to-image collider survives too. (Node-rep.)
+            orrery.apply_cartography_sprite_hulls(geom.sprite_hull_iter());
         }
         // Pool every graph a restored pane resolves to, not just the active one, so a
         // second graph-pane (persisted from a prior run) loads instead of leaving a
@@ -1159,6 +1173,7 @@ impl Shell {
                     physics_damping: saved_settings.physics_damping,
                     document_palette,
                     document_sheet,
+                    menu_actions,
                 },
                 comms_handle,
                 sync_handle,
@@ -1340,6 +1355,24 @@ fn default_mere_root() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("mere")
+}
+
+/// The active persona's curated context menu (command registry P4), or the registry default
+/// when the persona has no saved curation (or the file is unreadable). v0 uses the single
+/// [`default_persona`](session_runtime::PersonaId::default_persona); v1 threads the active one.
+fn load_persona_menu_actions(mere_root: &Path) -> Vec<String> {
+    let persona = session_runtime::PersonaId::default_persona();
+    session_runtime::load_persona_settings(mere_root, persona)
+        .ok()
+        .flatten()
+        .and_then(|s| s.menu_actions)
+        .unwrap_or_else(default_menu_actions)
+}
+
+/// The registry default context menu as owned strings (the seed when no persona curation
+/// exists, and the target of "Reset to default"). (Command registry P4.)
+fn default_menu_actions() -> Vec<String> {
+    meerkat::command::DEFAULT_MENU_ACTIONS.iter().map(|s| s.to_string()).collect()
 }
 
 /// The default content frame: a single orrery pane filling the band, bound to the

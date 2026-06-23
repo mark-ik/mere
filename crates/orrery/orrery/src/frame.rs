@@ -143,13 +143,14 @@ impl Orrery {
             self.pool_w = w;
             self.pool_h = h;
         }
+        // The gnode pool is positioned as upright billboards (each gnode carries its
+        // own screen-space transform via `Camera::to_screen` below), so the `.stage`
+        // container is identity: the camera's foreshorten lives in each node's anchor,
+        // not a shear on the whole stage. (Isometric camera P1 — billboards.)
         set_style(
             &mut self.node_dom,
             self.stage_node,
-            &format!(
-                "transform: translate({}px, {}px) scale({});",
-                self.camera.offset.0, self.camera.offset.1, self.camera.zoom
-            ),
+            "transform: translate(0px, 0px) scale(1);",
         );
         // When the host renders these nodes as DOM cards (orrery-as-element) the gnode
         // layer is dropped below, so skip the per-gnode transform/class updates: an empty
@@ -168,10 +169,17 @@ impl Orrery {
                 continue;
             }
             let pos = positions.get(&key).copied().unwrap_or_default();
+            // Billboard: project the world center to its screen anchor and place the
+            // upright card centered there, scaled by zoom. At top-down (tilt 1) the
+            // anchor is exactly `pos*zoom + offset`, so the placement is unchanged.
+            // (Isometric camera P1 — billboards.)
+            let (ax, ay) = self.camera.to_screen(pos);
+            let z = self.camera.zoom;
+            let half = NODE_HALF * z;
             set_style(
                 &mut self.node_dom,
                 gnode,
-                &format!("transform: translate({}px, {}px);", pos.x - NODE_HALF, pos.y - NODE_HALF),
+                &format!("transform: translate({}px, {}px) scale({});", ax - half, ay - half, z),
             );
             // Selection wins (orange); otherwise color by activation state —
             // green open, red closed, blue idle (the default for an unset node).
@@ -205,14 +213,12 @@ impl Orrery {
 
         // Favicon layer: a textured quad over each on-screen tile that carries a
         // favicon. This layer is NOT under the `.stage` camera transform (it is a
-        // bare command list, not the serval DOM), so the camera is applied here:
-        // a world point maps to screen by `world * zoom + offset`. The favicon's
-        // `favicon_rgba` is already the `ImageResource` shape (RGBA8, straight alpha),
-        // so the host's existing rasterize uploads it with no GPU plumbing in the
-        // orrery. It draws above the colored tile square and below the marquee.
-        // (Favicon-on-tile.)
-        let (cam_ox, cam_oy, cam_z) =
-            (self.camera.offset.0, self.camera.offset.1, self.camera.zoom);
+        // bare command list, not the serval DOM), so the camera is applied here by
+        // projecting each corner through `Camera::to_screen` (at the default camera
+        // that is `world * zoom + offset`). The favicon's `favicon_rgba` is already
+        // the `ImageResource` shape (RGBA8, straight alpha), so the host's existing
+        // rasterize uploads it with no GPU plumbing in the orrery. It draws above the
+        // colored tile square and below the marquee. (Favicon-on-tile.)
         let mut favicon_cmds: Vec<PaintCmd> = Vec::new();
         let mut favicon_images: Vec<ImageResource> = Vec::new();
         for &key in &on_screen {
@@ -229,10 +235,12 @@ impl Orrery {
                 height: node.favicon_height,
                 data: rgba.clone(),
             });
-            let x0 = (pos.x - NODE_HALF) * cam_z + cam_ox;
-            let y0 = (pos.y - NODE_HALF) * cam_z + cam_oy;
-            let x1 = (pos.x + NODE_HALF) * cam_z + cam_ox;
-            let y1 = (pos.y + NODE_HALF) * cam_z + cam_oy;
+            // Billboard the favicon too: an upright screen-space square centered on the
+            // node's projected anchor (not two projected corners, which would foreshorten
+            // it with the ground). Matches the gnode card. (Isometric camera P1.)
+            let (cx, cy) = self.camera.to_screen(*pos);
+            let half = NODE_HALF * self.camera.zoom;
+            let (x0, y0, x1, y1) = (cx - half, cy - half, cx + half, cy + half);
             favicon_cmds.push(PaintCmd::DrawImage(ImageItem {
                 placement: CommonPlacement::new(LayoutRect::new(
                     LayoutPoint::new(x0, y0),

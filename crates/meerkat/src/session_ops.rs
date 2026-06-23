@@ -525,6 +525,10 @@ impl super::Shell {
             ctx.orrery_mut().seed_cartography(geom.iter());
             // Restore the per-node sizes + size-by-degree alongside the positions. (Node-rep.)
             ctx.orrery_mut().apply_cartography_sizing(geom.size_iter(), geom.size_by_degree());
+            // Restore the custom sprite faces, so a textured node re-opens textured. (Node-rep.)
+            ctx.orrery_mut().apply_cartography_sprites(geom.sprite_iter());
+            // ...and their collider hulls, so the traced-to-image collider survives too. (Node-rep.)
+            ctx.orrery_mut().apply_cartography_sprite_hulls(geom.sprite_hull_iter());
         }
         ctx.view.maximized_pane = None;
         ctx.view.active_content = super::ContentPane::Orrery;

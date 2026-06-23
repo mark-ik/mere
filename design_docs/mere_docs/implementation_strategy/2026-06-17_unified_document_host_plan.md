@@ -421,6 +421,64 @@ it does not replace it, and it is an affordance riding the node-as-container-in-
 done-condition (the container rides the spine; the card is one sprite) rather than a hard Phase 2
 requirement.
 
+## Pressing slices (2026-06-19 code-verified audit)
+
+A code-verified audit (per-area plus adversarial cite-check) ranked the most pressing undone work.
+The five, in implementation order (Mark, 2026-06-21: do 2, 3, 1, 4; slice 5 is documented only):
+
+1. **Retain an `IncrementalLayout` session in the content actor.** The web-content lane re-runs a
+   full `run_cascade` plus layout from scratch on every scroll band, find keystroke, and subresource
+   (`content.rs:228/240/252` reach `paint_list_band_from_layout_dom` / `find_text_rects_from_layout_dom`,
+   each calling `run_cascade` fresh, serval-layout/lib.rs:220/281). The chrome lane already has the
+   fix (`PaneSession`'s `IncrementalLayout`, pane_session.rs:47, with the
+   `Applied::Unchanged | RepaintOnly | Restyled` cheap path); the content actor holds raw `Content`
+   with no retained layout. Add a retained `IncrementalLayout` over the parsed `StaticDocument`,
+   apply incrementally on Scroll/Find/Resource, rebuild only on Show/Resize/structural change. No
+   serval engine change. Medium. The single biggest per-frame cost (goal 2, the perf ceiling).
+2. **Fix the orrery Tab order.** `collect_focusables` (runner.rs:781) is an unfiltered DOM pre-order
+   walk; the orrery element is first in document order (window_view.rs:443) and every card is
+   `focusable` (window_view.rs:507), so Tab from the omnibar cycles every on-screen card before
+   reaching a chrome control. cond-2 "one focus ring" is logged done but Phase 2 inverted it. Fix,
+   aligned with the node-as-container reversal: the orrery is ONE focusable container with
+   host-driven internal selection, not N focusable cards. Small-Medium. A live keyboard regression.
+3. **Retire the orphaned cond-3/4 card-as-hit-target plumbing.** The reversal routed presses to
+   `gyre` (input.rs:360) but left the old path shipping: `point_over_orrery_card` (input.rs:735) has
+   zero callers, `drain_orrery_card_selects` still runs every frame (input.rs:715), two parallel
+   select paths for one object. Delete `point_over_orrery_card`, `OrreryCard.url`,
+   `orrery_card_selects`/take/drain, and the `on_click` wrapper. Small; lands in the same edit as
+   slice 2.
+4. **Source the orrery a11y from the document card divs, not the parallel graph projection.** "One
+   a11y tree" (cond 3) holds only at the OS-handle level: the orrery a11y is
+   `mere_orrery::project_graph` (frame_a11y_panes.rs:32), a graph side-channel, not the shell DOM
+   that renders. Generalize the serval-side DOM a11y walk (the pattern chrome uses, `chrome_a11y_tree`,
+   frame_a11y.rs:130) to the orrery card subtree (actionable role plus `accumulated_translate`
+   bounds, the bounds the focus ring already gets at serval_render.rs:304 but a11y does not), then
+   retire `project_graph` for the orrery. Medium-Large. Unblocks core goal 3 (accessible /
+   automatable).
+5. **Build the Step-0 cascade-vs-box-tree-vs-shaping phase-split probe in serval-layout.** Absent
+   (no `Instant`/`bench` anywhere in the crate). The
+   [parallelism research doc](../research/2026-06-19_cross_platform_parallelism_strategy.md) §0 names
+   it the prerequisite for the whole parallel-cascade thesis: box-tree build is sequential, so it
+   caps the achievable win, and every parallelism decision is guesswork until the split is measured.
+   A native-release timing harness (cfg-gated out of wasm and the hot path) times each phase and
+   reports the split. Small-Medium, pure measurement.
+
+   **Wasmtime-async note (slice 5, per Mark).** The phase split also bounds the win for the
+   non-browser **wasmtime lane** the parallelism research doc parks (serval-on-Wasmtime / Spin for
+   server-side async/parallel layout, the SSR/edge lane), distinct from the browser's Web-Worker
+   path. WASI 0.3 async (shipped 2026-06-11) is its substrate today, wasi-threads later; the
+   wasmtime-async work is where async/parallel layout can run off the main thread server-side, and
+   slice 5's measurement is the same prerequisite for that lane. Unlike the browser lane it is not
+   COOP/COEP-gated (cross-ref the research doc, which keeps the browser SAB lane app-lane-only).
+
+The biggest **next-phase** item is deliberately NOT among the five: the **N-secondary-orreries /
+side-by-side panes** slice (`secondary_orreries: Vec<(netrender::Scene, ...)>`, render.rs:625, with
+`set_render_as_cards(false)` keeping secondary panes as standalone scenes composited beside the
+document, the architecture-2 multi-surface-compositor shape Phase 2 exists to kill). It is large,
+co-owned with the [tearout plan](2026-06-19_tearout_composability_plan.md), and gated on slice 2's
+"card or container is the node" decision. cond 1 (the custom-layout `<orrery>` element) stays
+deferred (a genuine multi-subsystem serval feature, see its design above).
+
 ## Path B alternative — formalize the surface compositor
 
 Only if Path B is chosen for the canvas. Phase 1 still ships; then:
@@ -686,3 +744,27 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
     reversal), and the parallelism research doc (C3/C4 owner of the performance strategy;
     cross-reference only, do not restate; honor its confidence levels). No DOC_README change is
     triggered (edit-in-place; no doc added or moved; relative links only).
+
+- **2026-06-21 (code-verified audit + the five pressing slices documented).** A 7-agent audit
+  (per-area code verification + adversarial cite-check) of this plan against the tree produced the
+  new **Pressing slices** section above (the five, with slice 5's wasmtime-async note). Mark
+  directed: implement 2, 3, 1, 4; document slice 5 only. The audit also surfaced doc-staleness this
+  entry records (corrected inline as each slice lands, or noted here):
+  - **cond 3 "one a11y tree" is overstated:** true only at the OS-handle level
+    (`build_a11y_projection` host-stitches a chrome DOM subtree + a per-pane frame_tree, and the
+    orrery is `mere_orrery::project_graph`, frame_a11y_panes.rs:32, not the shell DOM). Slice 4 fixes
+    the source.
+  - **The Phase-2a "landed" section** describes `point_over_orrery_card` gating a press into
+    `chrome_click` as live; it is dead code (zero callers, input.rs:735), superseded by the reversal
+    (the live press routes to `gyre`, input.rs:360). Slice 3 deletes it.
+  - **The scry open-question** reads as undecided; rev-2 is **landed** (off-window `new_offscreen`,
+    scrying_host.rs:528; the per-frame `set_offset` chase gone; input via API/CDP), owned by the
+    native-surface-compositing plan. Residual: scry still composites as a host texture-blit
+    (render.rs:1398) rather than a below-chrome native composition visual.
+  - **cond 1 / "one document" reads broader than the code:** four surfaces remain host-composited
+    beside the shell document (workbench `pelt_shell`, gloss, the comms pane, scrying); comms was
+    folded into the `chrome_routed_leaf_at` path but is not listed among the consolidated panes.
+  - **"labels-over-palette z-order"** listed as open appears resolved in code (chrome paints last;
+    palette re-centred over the orrery insets); verify with a headed run before striking.
+  - **File-size ceiling:** `render.rs` (~1883), `input.rs` (~1732), `main.rs` (~1617) each ~3x the
+    600-LOC mere ceiling, in the exact files these slices churn; split before adding.

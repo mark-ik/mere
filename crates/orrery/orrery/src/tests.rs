@@ -426,6 +426,31 @@ fn node_representation_defaults_to_tile_and_takes_a_per_node_override() {
 }
 
 #[test]
+fn set_node_sprite_textures_the_face_and_sets_the_representation() {
+    let mut graph = Graph::new();
+    graph.add_node("https://one.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut orrery = Orrery::with_graph(graph);
+    let (key, id) = {
+        let (key, node) = orrery.graph().get_node_by_url("https://one.example").unwrap();
+        (key, node.id)
+    };
+
+    // Dropping an image gives the node a sprite face and sets its representation to Sprite.
+    orrery.set_node_sprite(id, "data:image/png;base64,AAAA".to_string());
+    assert_eq!(orrery.node_sprite(key), Some("data:image/png;base64,AAAA"));
+    assert_eq!(
+        orrery.node_representation(key),
+        Representation::Sprite,
+        "a sprite node renders with the Sprite representation",
+    );
+
+    // Picking Tile / Shape drops the sprite (the picker reverts a sprite node).
+    orrery.set_node_representation(id, Representation::Tile);
+    assert_eq!(orrery.node_sprite(key), None, "picking Tile clears the sprite face");
+    assert_eq!(orrery.node_representation(key), Representation::Tile);
+}
+
+#[test]
 fn isolate_selection_scopes_the_orrery() {
     let mut graph = Graph::new();
     let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));

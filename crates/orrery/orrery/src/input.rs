@@ -238,6 +238,15 @@ impl Orrery {
         self.graph.get_node(key).map(|n| n.id).expect("a freshly minted node has an id")
     }
 
+    /// The node under a screen point (orrery-leaf-local px), if any — the host's hit-test
+    /// for routing a drop / gesture onto a node (e.g. dropping an image file to set that
+    /// node's sprite face). Mirrors the left-press hit-test; returns the member id.
+    /// (Node representation P2 — sprite drop.)
+    pub fn node_at_screen(&self, sx: f32, sy: f32) -> Option<uuid::Uuid> {
+        let world = self.screen_to_world((sx, sy));
+        self.view.hit_test(world).and_then(|key| self.graph.get_node(key).map(|n| n.id))
+    }
+
     /// Re-mint a deleted node from its tombstone: open a fresh unlinked node on
     /// `url`, then restore its title and tags (node truth that does not re-derive
     /// from a re-fetch). Returns the new node's id. (Recover-deleted-node, Lane 0.)

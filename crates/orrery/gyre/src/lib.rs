@@ -81,6 +81,57 @@ pub use view::{LayoutSnapshot, LayoutView, RectSelection};
 /// thing, this constant will get replaced by a per-node lookup.
 pub const NODE_BODY_RADIUS: f32 = 18.0;
 
+/// The collider shape the host wants for a node's physics body, so the hard-collision /
+/// hit geometry matches the node's *visible* face rather than a uniform ball. The host maps
+/// its own form vocabulary (orrery `NodeShape`, a custom sprite hull) onto this; gyre lowers
+/// each to a parry shape in [`Simulation::set_node_colliders`]. Sizes/points are in world
+/// units (the same space as positions). (Node-rep — collider matches shape.)
+#[derive(Clone, Debug, PartialEq)]
+pub enum NodeCollider {
+    /// A circle of `radius` — the default, and the circle content silhouette.
+    Ball { radius: f32 },
+    /// An axis-aligned square with half-extent `half` (a document face).
+    Square { half: f32 },
+    /// A square with rounded corners: total half-extent `half`, corners rounded by `border`
+    /// (a menu / rounded face).
+    RoundedSquare { half: f32, border: f32 },
+    /// A custom convex hull in body-local world units — the sprite's traced outline or a
+    /// hand-edited polygon. Falls back to a ball of `fallback` if the hull is degenerate
+    /// (fewer than 3 points / collinear). (Node-rep — sprite hull / shape editor.)
+    Hull { points: Vec<(f32, f32)>, fallback: f32 },
+}
+
+impl NodeCollider {
+    /// Lower to the parry shape rapier collides + queries with. Extents are clamped to a
+    /// positive minimum so a zero-size node still has a pickable body.
+    fn to_shared_shape(&self) -> SharedShape {
+        match self {
+            NodeCollider::Ball { radius } => SharedShape::ball(radius.max(1.0)),
+            NodeCollider::Square { half } => {
+                let h = half.max(1.0);
+                SharedShape::cuboid(h, h)
+            }
+            NodeCollider::RoundedSquare { half, border } => {
+                let b = border.clamp(0.1, half - 0.1).max(0.1);
+                let h = (half - b).max(1.0);
+                SharedShape::round_cuboid(h, h, b)
+            }
+            NodeCollider::Hull { points, fallback } => {
+                // parry's `convex_hull` *asserts* `len >= 2` (it panics, not returns `None`) and
+                // still yields nothing useful for a collinear set, so guard the degenerate cases
+                // to the ball fallback; a real polygon needs at least 3 points.
+                if points.len() < 3 {
+                    SharedShape::ball(fallback.max(1.0))
+                } else {
+                    let pts: Vec<Point<f32>> = points.iter().map(|&(x, y)| Point::new(x, y)).collect();
+                    SharedShape::convex_hull(&pts)
+                        .unwrap_or_else(|| SharedShape::ball(fallback.max(1.0)))
+                }
+            }
+        }
+    }
+}
+
 /// Density for node-body colliders, chosen so each node's mass is ~= 1.0
 /// (mass = density * pi * r^2 ~= 0.001 * pi * 18^2 ~= 1.0). The layout forces in
 /// [`forces`] are then intuitive accelerations rather than being swamped by the
@@ -216,17 +267,17 @@ impl Simulation {
         }
     }
 
-    /// Resize the collider (hit-target + hard-collision geometry) of each listed node
-    /// to a ball of the given radius, so a node grown in the view — size-by-degree or a
-    /// per-node footprint — collides and picks at its true face size rather than the
-    /// uniform default (Decision 5: size drives the collider, so physics and picture stay
-    /// in sync). Bodies keep their position and velocity; only the shape changes, and the
-    /// spatial index is refreshed so the next pick / cull / force query sees the new sizes.
-    /// Mass is left at the spawn value — it is the face geometry, not the inertia, that
-    /// tracks size. Nodes without a body are skipped. (P0/P5 collider.)
-    pub fn set_node_radii(&mut self, radii: impl IntoIterator<Item = (NodeKey, f32)>) {
+    /// Resize **and reshape** each listed node's collider (hit-target + hard-collision
+    /// geometry) to match its visible face — a ball, square, rounded square, or custom hull —
+    /// so a node collides and picks at its true face shape and size, not the uniform ball
+    /// (Decision 5: the face IS the collider, so physics and picture stay in sync). Bodies
+    /// keep position and velocity; only the shape changes, and the spatial index is refreshed
+    /// so the next pick / cull / force query sees it. Mass is left at the spawn value — it is
+    /// the face geometry, not the inertia, that tracks size. Nodes without a body are skipped.
+    /// (P0/P5 collider; node-rep — collider matches shape.)
+    pub fn set_node_colliders(&mut self, colliders: impl IntoIterator<Item = (NodeKey, NodeCollider)>) {
         let mut changed = false;
-        for (node, radius) in radii {
+        for (node, collider) in colliders {
             let Some(&body_handle) = self.bodies_by_node.get(&node) else {
                 continue;
             };
@@ -238,9 +289,10 @@ impl Simulation {
                 .get(body_handle)
                 .map(|body| body.colliders().to_vec())
                 .unwrap_or_default();
+            let shape = collider.to_shared_shape();
             for handle in collider_handles {
-                if let Some(collider) = self.colliders.get_mut(handle) {
-                    collider.set_shape(SharedShape::ball(radius));
+                if let Some(c) = self.colliders.get_mut(handle) {
+                    c.set_shape(shape.clone());
                     changed = true;
                 }
             }

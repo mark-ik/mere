@@ -46,7 +46,10 @@ pub(crate) fn settings_index(namespace: &str) -> Vec<SettingsPageRef> {
             SettingsPageRef { id: "engines", title: "Engines" },
             SettingsPageRef { id: "physics", title: "Physics" },
             SettingsPageRef { id: "orrery", title: "Orrery" },
+            SettingsPageRef { id: "menu", title: "Menu" },
         ],
+        // The `node:<id>` facets provider lists its own pages. (Settings lane P3.)
+        ns if ns.starts_with("node:") => crate::settings_node::node_settings_index(),
         _ => Vec::new(),
     }
 }
@@ -58,6 +61,8 @@ impl WindowCtx<'_> {
         let (namespace, page) = reference.split_once('/')?;
         match namespace {
             "pelt" => self.pelt_settings_page(page),
+            // The `node:<id>` facets provider (per-node config). (Settings lane P3.)
+            ns if ns.starts_with("node:") => self.node_settings_page(ns, page),
             _ => None,
         }
     }
@@ -80,9 +85,57 @@ impl WindowCtx<'_> {
             "engines" => ("Engines", engine_section_items(&self.engine_rows())),
             "physics" => ("Physics", physics_section_items(self.physics_damping())),
             "orrery" => ("Orrery", self.orrery_settings_items()),
+            "menu" => ("Menu", self.menu_settings_items()),
             _ => return None,
         };
         Some(SettingsPage { title: title.to_string(), items })
+    }
+
+    /// The `pelt/menu` page: the persona-configurable context menu editor (command registry P4).
+    /// The menu is an **inclusion** list — *any* registry command (a `Command` verb or a context
+    /// action) can be added to or removed from the right-click menu. Two sections: the commands
+    /// currently in the menu (in order, ✓, click to remove) and every other registry command
+    /// (click to add). A configured command still only renders where it **applies** (its
+    /// [`MenuScope`](meerkat::command::MenuScope)), so adding a selection action doesn't clutter
+    /// the empty-canvas menu. Each row drains `menu:toggle:<id>`; the list rides the persona
+    /// settings store. (Command registry P4.)
+    fn menu_settings_items(&self) -> Vec<PaneItem> {
+        let in_menu = &self.shared.presentation.menu_actions;
+        let mut items = vec![
+            PaneItem::text("app-title", "Context menu"),
+            PaneItem::text(
+                "app-row-muted",
+                "Choose which commands appear in the right-click menu. Each shows only where it \
+                 applies (a selection, the empty canvas)."
+                    .to_string(),
+            ),
+        ];
+        // In the menu, in order — click to remove.
+        items.push(PaneItem::text("app-title", "In the menu"));
+        for id in in_menu {
+            let label = meerkat::command::registry_label(id).unwrap_or(id.as_str());
+            items.push(PaneItem::button(
+                "app-btn-active",
+                format!("{label}  \u{2713}"),
+                format!("menu:toggle:{id}"),
+            ));
+        }
+        // Every other registry command — click to add.
+        items.push(PaneItem::text("app-title", "Add a command"));
+        for id in meerkat::command::all_registry_ids() {
+            if in_menu.iter().any(|a| a == id) {
+                continue;
+            }
+            let label = meerkat::command::registry_label(id).unwrap_or(id);
+            items.push(PaneItem::button("app-btn", label.to_string(), format!("menu:toggle:{id}")));
+        }
+        items.push(PaneItem::text("app-title", "Reset"));
+        items.push(PaneItem::button(
+            "app-btn",
+            "Reset to default menu".to_string(),
+            "menu:reset".to_string(),
+        ));
+        items
     }
 
     /// The theme-editor controls under the theme picker on the Appearance page:
@@ -321,11 +374,19 @@ impl WindowCtx<'_> {
     /// the per-frame settings dispatch then renders the page. (Settings lane P1.)
     pub(crate) fn open_settings_tile(&mut self, reference: &str) {
         let url = format!("settings://{reference}");
+        // A per-node facet page (`node:<id>/…`) hangs off the node it configures: link the
+        // settings node to that subject so the facets sit beside their node in the graph,
+        // not floating unlinked. Global pages (`pelt/…`) have no subject. (Settings lane — facet edge.)
+        let subject = reference
+            .strip_prefix("node:")
+            .and_then(|rest| rest.split('/').next())
+            .and_then(|id| uuid::Uuid::parse_str(id).ok());
         // Reuse the node for this exact page if it is already in the graph, so repeated
-        // `>settings` does not mint duplicate ephemeral nodes; else mint one.
+        // `>settings` does not mint duplicate ephemeral nodes; else mint one (linked to its
+        // subject for a facet page).
         let existing = self.orrery().graph().get_node_by_url(&url).map(|(_, n)| n.id);
         let member =
-            existing.unwrap_or_else(|| self.orrery_mut().open_member_as_new_node(None, &url));
+            existing.unwrap_or_else(|| self.orrery_mut().open_member_as_new_node(subject, &url));
         self.open_workbench();
         self.view.workbench.open_tile(member);
         self.view.focused_tile = Some(member);

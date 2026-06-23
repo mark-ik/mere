@@ -345,6 +345,15 @@ pub enum ContextAction {
     /// as both a tiled workbench and a spatial map. Drains like `ShellbarMove` without
     /// touching `context_set`. (Curated orrery — workbench mirror.)
     MirrorTiles,
+    /// Open the context node's facets settings tile (the `node:<id>` provider) — the menu's
+    /// pointer to the per-node config that used to be inlined as the engine / representation
+    /// pickers. Drains over the first `context_set` member. (Settings lane P3.)
+    OpenNodeFacets,
+    /// Run a global [`Command`](crate::command::Command) by its verb — the seam that lets the
+    /// configurable context menu carry *any* registry command, not just the menu's native
+    /// context actions. The verb is `&'static` (from `Command::verb`), so this stays `Copy`.
+    /// Drains by dispatching to the host's command runner. (Command registry P4.)
+    RunCommand(&'static str),
 }
 
 impl Chrome {
@@ -590,6 +599,13 @@ impl Chrome {
         self.close_palette();
     }
 
+    /// Run `cmd` as a menu / programmatic intent — the pub entry the configurable context menu's
+    /// [`RunCommand`](ContextAction::RunCommand) action drains through. No palette involvement.
+    /// (Command registry P4.)
+    pub fn run_command_intent(&mut self, cmd: Command) {
+        self.run_command(cmd);
+    }
+
     /// Apply a command to the chrome state.
     fn run_command(&mut self, cmd: Command) {
         match cmd {
@@ -615,6 +631,7 @@ impl Chrome {
             // host action like the other pane toggles, not the chrome overlay it was in P0.
             // (Settings lane P1.)
             Command::OpenSettings
+            | Command::OpenNodeSettings
             | Command::ToggleWorkbench
             | Command::ToggleRoster
             | Command::ToggleGloss

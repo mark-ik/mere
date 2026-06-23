@@ -96,6 +96,14 @@ impl WindowCtx<'_> {
             return None;
         };
         self.view.chrome_update(|c| c.pending_command = None);
+        // Audit every host command through the one observability spine, by its registry id
+        // (the same id the palette / agent / script address) — the "everything observable"
+        // half of the one seam. (Command registry P3.)
+        self.shared.observability.record_diagnostic(
+            "meerkat.command.invoked",
+            Severity::Info,
+            format!("{} ({})", cmd.verb(), cmd.label()),
+        );
         let mut note = None;
         match cmd {
             Command::ToggleWorkbench => self.toggle_workbench(),
@@ -150,6 +158,12 @@ impl WindowCtx<'_> {
             // Settings opens the pelt settings lane as a workbench tile (the consolidated
             // config surface), defaulting to the appearance page. (Settings lane P1.)
             Command::OpenSettings => self.open_settings_tile("pelt/appearance"),
+            // Node settings opens the focused node's facets tile (the `node:<id>` provider),
+            // at the info page. (Settings lane P3.)
+            Command::OpenNodeSettings => match self.focused_member() {
+                Some(member) => self.open_settings_tile(&format!("node:{member}/info")),
+                None => note = Some("Select a node to open its settings".to_string()),
+            },
             // History / connect / comms verbs run in the chrome; never queued here as host
             // intents.
             Command::Back

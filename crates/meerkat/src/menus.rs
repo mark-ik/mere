@@ -17,6 +17,7 @@ use orrery::Representation;
 use session_runtime::ShellbarEdge;
 
 use super::WindowCtx;
+use super::observability::Severity;
 
 impl WindowCtx<'_> {
     /// Open the right-click context menu over the current selection's working set,
@@ -24,92 +25,46 @@ impl WindowCtx<'_> {
     /// single-member set offers one "open tile"; a larger set offers splits vs a
     /// stack. The host remembers the set; the chrome renders the rows.
     pub(super) fn open_context_menu_at(&mut self, x: f32, y: f32) {
-        // "Close graph view" is offered whenever a second graph-pane is open, so it
-        // sits at the foot of the menu in either branch. (Pane-as-unit.)
         let multi_graph = self.has_multiple_graph_panes();
-        let close_item =
-            || ContextItem::new("Close graph view", ContextAction::CloseGraphPane);
         let set = self.selection_working_set();
+        let len = set.len();
+        // Empty-canvas menus mint at the cursor: record the anchor (so "Add node" lands under
+        // it) and any field box under the point (so "Delete field" can target it). A selection
+        // menu never mints at the cursor, so it just clears the stale anchor.
         if set.is_empty() {
-            // No selection (typically a right-click on empty canvas): offer "Add
-            // node" at the cursor. Remember the content-band cursor point so AddNode
-            // mints the node under it; leave context_set empty (no member set). A
-            // node-hit-test for true spatial emptiness is a refinement.
             let (ofx, ofy) = self.orrery_point(x, y);
             self.view.context_origin = Some((ofx, ofy));
             self.view.context_set.clear();
-            // A right-click that lands inside a field's box offers to delete it; the target
-            // is stored for the drain. (Field regions — delete.)
             self.view.context_field = self.orrery().field_at_screen(ofx, ofy);
-            let mut items = vec![
-                ContextItem::new("Add node", ContextAction::AddNode),
-                ContextItem::new("Add field", ContextAction::AddField),
-            ];
+        } else {
+            self.view.context_origin = None;
+        }
+
+        // 1. The persona-curated command list (command registry P4): each configured registry id,
+        //    resolved to a row and filtered by its applicability (+ any dynamic condition) for this
+        //    selection. One ordered list drives the canvas / single-node / multi-node menus.
+        let mut items = Vec::new();
+        for id in self.menu_actions() {
+            if let Some(item) = self.resolve_menu_item(&id, len) {
+                items.push(item);
+            }
+        }
+
+        // 2. Dynamic / parameterized rows that aren't flat catalog gestures, appended in place:
+        //    a "Delete field" target + the layout-strategy submenu on the empty canvas; the
+        //    single-focus radial toggle on a selection; the "Close graph view" foot when a second
+        //    graph pane is open.
+        if len == 0 {
             if self.view.context_field.is_some() {
                 items.push(ContextItem::new("Delete field", ContextAction::DeleteField));
             }
-            // "Show all" lifts an active scope lens (back to the whole graph). (Curated orrery.)
-            if self.orrery().is_scoped() {
-                items.push(ContextItem::new("Show all", ContextAction::ShowAllNodes));
-            }
-            // Mirror the workbench's open tiles into the orrery — the same arrangement as
-            // both a tiled workbench and a spatial map, tracked live. A toggle (✓ when
-            // on); offered when tiles are open or the mirror is already on so it can be
-            // turned off. (Curated orrery — workbench mirror.)
-            if self.view.mirror_tiles || !self.view.workbench.open_members().is_empty() {
-                let label = if self.view.mirror_tiles {
-                    "Mirror tiles  \u{2713}"
-                } else {
-                    "Mirror tiles"
-                };
-                items.push(ContextItem::new(label, ContextAction::MirrorTiles));
-            }
-            // Layout is a pane-level choice, so it rides the empty-canvas menu. (Layout picker.)
             items.extend(self.layout_picker_items());
-            if multi_graph {
-                items.push(close_item());
-            }
-            self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
-            self.view.request_redraw();
-            return;
-        }
-        // A selection-based menu never mints at the cursor; clear any stale anchor.
-        self.view.context_origin = None;
-        let mut items = if set.len() == 1 {
-            // Single node: "Open tile" plus the per-node engine picker ("Open in
-            // <engine>"), so the user can flip this node's engine. (Phase 3.)
-            let mut items = vec![ContextItem::new("Open tile", ContextAction::OpenSplits)];
-            items.extend(self.engine_picker_items(set[0]));
-            items.extend(self.representation_picker_items(set[0]));
-            // Summon the object card (P0: the size-tier stepper) in the focus slot. (Object card.)
-            items.push(ContextItem::new("Resize", ContextAction::ResizeNode));
-            items.push(ContextItem::new("Add tag\u{2026}", ContextAction::AddTag));
-            items
-        } else {
-            let mut items = vec![
-                ContextItem::new("Open in splits", ContextAction::OpenSplits),
-                ContextItem::new("Open in a stack", ContextAction::Stack),
-            ];
-            // Relate is pairwise — offer it only for exactly two selected nodes.
-            if set.len() == 2 {
-                items.push(ContextItem::new("Relate", ContextAction::Relate));
-            }
-            items.push(ContextItem::new("Add tag\u{2026}", ContextAction::AddTag));
-            items
-        };
-        // Radial layout: centers the orrery on a single selected node (BFS rings
-        // outward) and re-centers live as the selection moves. Focus-driven, so it
-        // rides the selection menu rather than the empty-canvas layout picker, and only
-        // for a single selection (a clean focus). A toggle — ✓ when active, picking it
-        // again reverts to force-directed. (Layout picker — radial.)
-        if self.orrery().focused_key().is_some() {
+        } else if self.orrery().focused_key().is_some() {
+            // Radial centers the orrery on the focused node (BFS rings) and re-centers live; a
+            // focus-driven toggle (✓ when active), so it rides the selection menu. (Layout — radial.)
             let radial_on = self.orrery().layout_strategy() == Some("radial.default");
             items.push(ContextItem::new(
-                if radial_on {
-                    "Radial layout  \u{2713}"
-                } else {
-                    "Radial layout"
-                },
+                if radial_on { "Radial layout  \u{2713}" } else { "Radial layout" },
                 if radial_on {
                     ContextAction::SetLayoutStrategy("")
                 } else {
@@ -117,115 +72,92 @@ impl WindowCtx<'_> {
                 },
             ));
         }
-        // Size by degree: a scene toggle — node faces grow with their undirected degree, so
-        // the spatial map reads connection weight at a glance. ✓ when on. (P0 resize.)
-        {
-            let on = self.orrery().size_by_degree();
-            items.push(ContextItem::new(
-                if on { "Size by degree  \u{2713}" } else { "Size by degree" },
-                ContextAction::ToggleSizeByDegree,
-            ));
-        }
-        // Isolate the selection into the orrery's scope lens (a curated subgraph). A
-        // pane-level lens, offered on any selection. (Curated orrery.)
-        items.push(ContextItem::new("Isolate", ContextAction::IsolateSelection));
         if multi_graph {
-            items.push(close_item());
+            items.push(ContextItem::new("Close graph view", ContextAction::CloseGraphPane));
         }
+
         self.view.context_set = set;
         self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
     }
 
-    /// The engine-picker rows for `member`: "Auto (default engine)" plus each
-    /// pickable web / surface engine that is available this session (present +
-    /// active), with the node's current choice ✓-marked. Routing prefers the picked
-    /// engine for the node. (engine-picker Phase 3.)
-    ///
-    /// The web/surface engines only render **web** content (http/https), so they are
-    /// offered only for web nodes — picking "System WebView" for a `gemini://` node
-    /// would route it to WebView2, which cannot load gemtext, and render blank. For a
-    /// non-web node the picker is empty unless a (stale) pin needs clearing, in which
-    /// case only "Auto" is offered to reset it.
-    fn engine_picker_items(&self, member: GraphMemberId) -> Vec<ContextItem> {
-        // The web-rendering alternatives a node can be flipped between. Smolweb
-        // protocols route to one engine each, so they are not offered here; the
-        // surface engines (system WebView, later weld / graft) are the compat path.
-        const PICKABLE: &[(&str, &str)] = &[
-            (inker::routing::ENGINE_SERVAL_WEB, "Serval (web)"),
-            (inker::routing::ENGINE_SCRYING_WEB, "System WebView"),
-        ];
-        let pin = self.shared.content.engine_pins.get(&member).map(String::as_str);
-        // Web nodes (http/https) can flip between the web engines; other schemes
-        // cannot render through them. Scheme resolved from the node's url (owned, to
-        // release the graph borrow).
-        let scheme = self
-            .orrery()
-            .graph()
-            .get_node_by_id(member)
-            .and_then(|(_, n)| inker::routing::address_scheme(n.url()).map(str::to_string));
-        let is_web = scheme
-            .as_deref()
-            .is_some_and(|s| s.eq_ignore_ascii_case("http") || s.eq_ignore_ascii_case("https"));
-        // Nothing to choose and no pin to clear → no picker rows for this node.
-        if !is_web && pin.is_none() {
-            return Vec::new();
-        }
-        let mark = |label: &str, on: bool| {
-            if on {
-                format!("{label}  \u{2713}") // ✓ marks the current choice
-            } else {
-                label.to_string()
-            }
-        };
-        let mut items = vec![ContextItem::new(
-            mark("Auto (default engine)", pin.is_none()),
-            ContextAction::AutoEngine,
-        )];
-        if is_web {
-            for &(id, name) in PICKABLE {
-                if self.engine_available(id) {
-                    items.push(ContextItem::new(
-                        mark(&format!("Open in {name}"), pin == Some(id)),
-                        ContextAction::PinEngine(id),
-                    ));
-                }
-            }
-        }
-        items
+    /// The persona-curated context-menu command list (command registry P4): the user's configured
+    /// order, or the registry default ([`DEFAULT_MENU_ACTIONS`](meerkat::command::DEFAULT_MENU_ACTIONS))
+    /// when unset. Owned (cloned) so the build loop can borrow `self` to resolve each id.
+    fn menu_actions(&self) -> Vec<String> {
+        self.shared.presentation.menu_actions.clone()
     }
 
-    /// The representation rows for a single selected node: "Show as tile" (the favicon +
-    /// caption chip) and "Show as shape" (the bare content-typed face), with the node's
-    /// current form ✓-marked. A per-node override (Decision 6: per-node form lives on the
-    /// node context menu); the scene-wide default stays content-type driven, so a node
-    /// without an override is `Tile`. (Node representation P1.)
-    fn representation_picker_items(&self, member: GraphMemberId) -> Vec<ContextItem> {
-        let current = {
-            let orrery = self.orrery();
-            orrery
-                .graph()
-                .get_node_by_id(member)
-                .map(|(key, _)| orrery.node_representation(key))
-        };
-        let mark = |label: &str, on: bool| {
-            if on {
-                format!("{label}  \u{2713}") // ✓ marks the node's current form
-            } else {
-                label.to_string()
-            }
-        };
-        vec![
-            ContextItem::new(
-                mark("Show as tile", current == Some(Representation::Tile)),
-                ContextAction::SetRepresentation("tile"),
-            ),
-            ContextItem::new(
-                mark("Show as shape", current == Some(Representation::Shape)),
-                ContextAction::SetRepresentation("shape"),
-            ),
-        ]
+    /// Resolve a configured registry `id` to a context-menu row for a selection of `len` members,
+    /// or `None` if it doesn't apply here (wrong selection shape, an unmet dynamic condition, or an
+    /// unknown id). Handles both the menu's native context actions and global commands (carried via
+    /// [`ContextAction::RunCommand`]). (Command registry P4.)
+    fn resolve_menu_item(&self, id: &str, len: usize) -> Option<ContextItem> {
+        if !meerkat::command::registry_scope(id)?.applies(len) {
+            return None;
+        }
+        if let Some(action) = meerkat::command::context_action_from_id(id) {
+            return self.resolve_context_action_item(action, len);
+        }
+        // A global command added to the menu: run it by verb.
+        let cmd = meerkat::command::Command::from_id(id)?;
+        Some(ContextItem::new(cmd.label(), ContextAction::RunCommand(cmd.verb())))
     }
+
+    /// Build the row for a native context action at this selection: its count-adapted, ✓-marked
+    /// label, or `None` when a dynamic condition isn't met (Relate needs exactly two, Show all a
+    /// scope lens, Mirror tiles open). (Command registry P4.)
+    fn resolve_context_action_item(&self, action: ContextAction, len: usize) -> Option<ContextItem> {
+        use ContextAction::*;
+        let item = match action {
+            OpenSplits => {
+                ContextItem::new(if len == 1 { "Open tile" } else { "Open in splits" }, OpenSplits)
+            }
+            Stack => ContextItem::new("Open in a stack", Stack),
+            AddTag => ContextItem::new("Add tag\u{2026}", AddTag),
+            ResizeNode => ContextItem::new("Resize", ResizeNode),
+            OpenNodeFacets => ContextItem::new("Node settings\u{2026}", OpenNodeFacets),
+            IsolateSelection => ContextItem::new("Isolate", IsolateSelection),
+            ToggleSizeByDegree => {
+                let on = self.orrery().size_by_degree();
+                ContextItem::new(
+                    if on { "Size by degree  \u{2713}" } else { "Size by degree" },
+                    ToggleSizeByDegree,
+                )
+            }
+            AddNode => ContextItem::new("Add node", AddNode),
+            AddField => ContextItem::new("Add field", AddField),
+            AddTile => ContextItem::new("Add tile", AddTile),
+            AddSession => ContextItem::new("Add graph session", AddSession),
+            ShowAllNodes => {
+                if !self.orrery().is_scoped() {
+                    return None; // only when a scope lens is active
+                }
+                ContextItem::new("Show all", ShowAllNodes)
+            }
+            MirrorTiles => {
+                if !self.view.mirror_tiles && self.view.workbench.open_members().is_empty() {
+                    return None; // only with tiles open (or already mirroring, to turn off)
+                }
+                ContextItem::new(
+                    if self.view.mirror_tiles { "Mirror tiles  \u{2713}" } else { "Mirror tiles" },
+                    MirrorTiles,
+                )
+            }
+            _ => return None,
+        };
+        Some(item)
+    }
+
+    /// Open the context node's facets settings tile (the `node:<id>` provider), at the
+    /// info page — the menu's pointer to the per-node config (engine pin / representation)
+    /// that used to be inlined here. Acts on the first selected member. (Settings lane P3.)
+    fn open_node_facets(&mut self) {
+        if let Some(&member) = self.view.context_set.first() {
+            self.open_settings_tile(&format!("node:{member}/info"));
+        }
+    }
+
 
     /// The layout-strategy rows for the focused orrery pane: "Force-directed" (the
     /// gyre default) plus each wired cartography strategy ([`platen::ORRERY_LAYOUT_STRATEGIES`]),
@@ -364,6 +296,32 @@ impl WindowCtx<'_> {
             return;
         };
         self.view.chrome_update(|c| c.pending_context = None);
+        // Audit the context action by its registry id (the Debug name for the not-yet-cataloged
+        // parameterized ones), through the same spine as host commands. (Command registry P3.)
+        let invoked_id = meerkat::command::context_action_id(action)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("{action:?}").to_ascii_lowercase());
+        self.shared.observability.record_diagnostic(
+            "meerkat.command.invoked",
+            Severity::Info,
+            invoked_id,
+        );
+        // Open the node's facets settings tile (the per-node config's new home). No
+        // member-set mutation — return before the orrery-tile logic below. (Settings lane P3.)
+        if let ContextAction::OpenNodeFacets = action {
+            self.open_node_facets();
+            self.view.request_redraw();
+            return;
+        }
+        // Run a global command carried into the menu by verb (command registry P4): enqueue it
+        // as a chrome command intent; the per-frame command drain executes it. No member set.
+        if let ContextAction::RunCommand(verb) = action {
+            if let Some(cmd) = meerkat::command::Command::from_id(verb) {
+                self.view.chrome_update(move |c| c.run_command_intent(cmd));
+            }
+            self.view.request_redraw();
+            return;
+        }
         // Shellbar move: redock the strip to the chosen edge and persist. No
         // member set involved — return before the orrery-tile logic below.
         if let ContextAction::ShellbarMove(edge) = action {
@@ -586,7 +544,9 @@ impl WindowCtx<'_> {
             | ContextAction::ResizeNode
             | ContextAction::IsolateSelection
             | ContextAction::ShowAllNodes
-            | ContextAction::MirrorTiles => {
+            | ContextAction::MirrorTiles
+            | ContextAction::OpenNodeFacets
+            | ContextAction::RunCommand(_) => {
                 unreachable!("handled above")
             }
         }

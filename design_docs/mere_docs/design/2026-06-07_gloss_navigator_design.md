@@ -3,7 +3,9 @@
 **Date**: 2026-06-07
 **Status**: Design, from a Mark + Claude session. Supersedes the narrow gloss
 v0 (a document outline strip) by expanding gloss into the **Navigator**: the
-single configurable summary surface. No code yet.
+single configurable summary surface. G1/G2 seed landed (§7a). **2026-06-22:**
+added §2a — the swatch elevated to a portable, embeddable primitive (gloss is
+one consumer), the half of the point beyond minimap / MRU / outline.
 **Related**: [card system + staging plan](../implementation_strategy/2026-06-07_card_system_and_staging_plan.md) (§8 staging surfaces here), [pane UX pass](2026-05-11_pane_ux_design_pass_brief.md) (gloss as a Pane variant), `cartography` (swatch / minimap projections), `forme` (graphlets).
 
 ---
@@ -53,6 +55,49 @@ The cells fall out:
 So gloss subsumes: document outline, content commentary, a graph minimap,
 graphlet swatches, and recent-groupings lists, all as scope × form-factor cells
 of one surface.
+
+---
+
+## 2a. The swatch is a portable primitive, not only a gloss cell (Mark, 2026-06-22)
+
+The swatch's reach is larger than the gloss pane, and that reach is **half the point of
+the gloss** (the other half being the minimap / MRU / document-outline cells above). A
+swatch is a **portable, embeddable representation of graph elements**: any element (a
+single node, a graphlet, the whole graph), **isolated**, with whatever conditions /
+filters / arrangement you put on it (§3's graphlet vocabulary), rendered as a
+self-contained `cartography` projection. The gloss is **one consumer**; the swatch is the
+reusable primitive.
+
+So a swatch embeds **anywhere a graph element wants representing**, not only in the
+Navigator:
+
+- **A node facet pane** — a swatch scoped to a *single node* (its sprite + an editable
+  collider hull is the first instance; see the node-representation plan's shape editor).
+  This extends §2's scope axis: the table deferred "active doc → swatch" to the orrery, but
+  a single node as a swatch is exactly this — scoped tighter than a graphlet.
+- **A menu** — a swatch as a live preview / pick target inside a command or context menu
+  (cross-ref the command-registry / configurable-menus plan).
+- **A djot note, as a script block** — a swatch embedded in authored prose the way a code
+  block is, so a note carries a live, scoped, filtered view of part of the graph (cross-ref
+  the polyglot block resolver plan).
+- **An orrery card** — the same swatch promoted onto the canvas as an invokable card
+  (invocation TBD — a context-menu action), the reuse Mark flagged for the shape editor.
+
+Architecture implication: the swatch wants to be a **standalone component** (a scope + a
+condition set + a form factor → a rendered, hit-testable projection), with the gloss pane,
+facet panes, menus, and djot blocks all as embedders rather than gloss owning it.
+
+**The swatch should render as document elements the chrome understands** — serval lays them
+out, themes them, hit-tests them, exposes them to accessibility — **not as an opaque
+`netrender::Scene` texture pasted into the DOM** (the gloss minimap's current form, Mark
+2026-06-22). An opaque element can't flow, theme, or be navigated *inside* the note / menu /
+pane that embeds it, which is the whole point of an embeddable swatch. So the `cartography`
+projection layer (§5) supplies the **geometry** (scope, filters, arrangement — the positions
+and the graphlet rules); the host renders that geometry as **DOM**. Two consequences: (1) a
+node swatch's sprite is a DOM `<img>`, decoded by the host like a favicon — the netrender
+image primitive is *not* needed (netrender supports images, but it is the wrong layer here);
+(2) the existing Scene-based gloss minimap becomes a **candidate to migrate** onto the DOM
+swatch, so all swatches are chrome-understood, not just the new ones.
 
 ---
 

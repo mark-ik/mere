@@ -1195,6 +1195,14 @@ mod tests {
             before + 1,
             "add_node minted a node, invoked purely by id",
         );
+        // The invoke is audited through the one observability spine (P3): a
+        // `meerkat.command.invoked` diagnostic carrying the registry id.
+        assert!(
+            step.observation.diagnostics.iter().any(|d| {
+                d.channel == "meerkat.command.invoked" && d.message.contains("add_node")
+            }),
+            "the invoke is audited by its registry id through the observability spine",
+        );
         // An unknown id is reported, not applied (no panic, no silent success).
         let step = app.apply_agent_action(AgentAction::Invoke("not_a_real_id".into()));
         assert!(!step.result.applied, "an unknown registry id is not applied");

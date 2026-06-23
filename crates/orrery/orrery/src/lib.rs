@@ -177,6 +177,15 @@ pub struct Orrery {
     /// Per-node face footprint overrides (px). A node absent here takes size-by-degree
     /// (when on) or the uniform default, so this holds only explicit resizes. (P0 resize.)
     node_sizes: HashMap<NodeKey, f32>,
+    /// Per-node custom sprite faces: the imported image as a PNG data-URI. A node here
+    /// renders with [`Representation::Sprite`] (set together via [`set_node_sprite`]);
+    /// absent means no sprite. Persisted in the cartography sidecar. (Node rep P2 — sprite.)
+    node_sprites: HashMap<NodeKey, String>,
+    /// Per-node sprite collider hulls: the sprite's opaque region as a convex polygon, in
+    /// face-normalized coords ([-0.5, 0.5], scaled to `node_size` at collider time). The host
+    /// traces it from the image at import; a sprite node with one collides at its hull rather
+    /// than its silhouette. Persisted beside the sprite. (Node rep P2 — sprite hull.)
+    node_sprite_hulls: HashMap<NodeKey, Vec<(f32, f32)>>,
     /// Scene toggle: when on, a node's face grows with its undirected degree (capped),
     /// so the spatial map reads connection weight at a glance. Default off (uniform).
     /// (P0 resize — size-by-degree.)
@@ -277,6 +286,8 @@ impl Orrery {
         self.node_shapes.clear();
         self.node_representations.clear();
         self.node_sizes.clear();
+        self.node_sprites.clear();
+        self.node_sprite_hulls.clear();
         self.drag = None;
         self.field_drag = None;
         self.marquee = None;
@@ -336,6 +347,8 @@ impl Orrery {
             node_shapes: HashMap::new(),
             node_representations: HashMap::new(),
             node_sizes: HashMap::new(),
+            node_sprites: HashMap::new(),
+            node_sprite_hulls: HashMap::new(),
             size_by_degree: false,
             marquee: None,
             ctrl: false,
@@ -424,7 +437,7 @@ impl Orrery {
         // Degree-based sizes shift when the topology changes, so re-push radii (also
         // seeds them for newly-spawned bodies). No re-settle here: the structural
         // change's own settle covers it.
-        self.push_node_radii();
+        self.push_node_geometry();
     }
 
     /// Push every node's collider/pick radius (`node_size / 2`) to the read-model view
@@ -433,21 +446,48 @@ impl Orrery {
     /// every node is the uniform default. Does not settle; callers that change a size knob
     /// follow with [`resettle_for_size`](Self::resettle_for_size) so neighbors re-separate.
     /// (P0/P5 collider.)
-    fn push_node_radii(&mut self) {
+    fn push_node_geometry(&mut self) {
         let radii: Vec<(NodeKey, f32)> = self
             .graph
             .nodes()
             .map(|(key, _)| (key, self.node_size(key) / 2.0))
             .collect();
         self.view.set_radii(radii.iter().copied());
-        self.physics.set_node_radii(radii);
+        // The physics collider matches the *shape*, not just the size: a square node collides
+        // square, a circle round (Decision 1 — the face is the collider). The view keeps the
+        // bounding radius above for the pick + edge-trim. (Node-rep — collider matches shape.)
+        let colliders: Vec<(NodeKey, gyre::NodeCollider)> =
+            self.graph.nodes().map(|(key, _)| (key, self.node_collider(key))).collect();
+        self.physics.set_node_colliders(colliders);
+    }
+
+    /// The collider shape for a node: a sprite node with a traced hull collides at that hull
+    /// (the opaque region, scaled from face-normalized coords to the current
+    /// [`node_size`](Self::node_size)); otherwise its content silhouette
+    /// ([`node_shape`](Self::node_shape)) at its footprint. So physics tracks the *picture*,
+    /// not just a bounding box. (Node-rep — collider matches shape / sprite hull.)
+    fn node_collider(&self, key: NodeKey) -> gyre::NodeCollider {
+        let size = self.node_size(key);
+        let half = size / 2.0;
+        // A sprite with a hull: scale the normalized polygon to the face and collide at it.
+        if matches!(self.node_representation(key), Representation::Sprite) {
+            if let Some(hull) = self.node_sprite_hulls.get(&key).filter(|h| h.len() >= 3) {
+                let points = hull.iter().map(|&(nx, ny)| (nx * size, ny * size)).collect();
+                return gyre::NodeCollider::Hull { points, fallback: half };
+            }
+        }
+        match self.node_shape(key) {
+            NodeShape::Circle => gyre::NodeCollider::Ball { radius: half },
+            NodeShape::Square => gyre::NodeCollider::Square { half },
+            NodeShape::Rounded => gyre::NodeCollider::RoundedSquare { half, border: half * 0.3 },
+        }
     }
 
     /// Re-push radii and kick a gentle re-separation burst — the response to a size knob
     /// (a per-node footprint, the size-by-degree toggle) moving on an otherwise idle graph,
     /// so grown nodes actually push their neighbors apart. (P0/P5 collider.)
     fn resettle_for_size(&mut self) {
-        self.push_node_radii();
+        self.push_node_geometry();
         self.physics.settle(SIZE_RESETTLE_TICKS);
     }
 
@@ -820,6 +860,16 @@ impl Orrery {
                 .filter_map(|(&key, &size)| self.graph.get_node(key).map(|node| (node.id, size))),
         )
         .with_size_by_degree(self.size_by_degree)
+        // Persist the custom sprite faces (the imported image as a data-URI) so a node textured
+        // with one re-opens textured, not reverted to its default face. (Node-rep — sprite persistence.)
+        .with_sprites(self.node_sprites.iter().filter_map(|(&key, uri)| {
+            self.graph.get_node(key).map(|node| (node.id, uri.clone()))
+        }))
+        // Persist each sprite's collider hull alongside it, so the traced-to-image collider
+        // survives a reload without re-decoding the image. (Node-rep — sprite hull persistence.)
+        .with_sprite_hulls(self.node_sprite_hulls.iter().filter_map(|(&key, hull)| {
+            self.graph.get_node(key).map(|node| (node.id, hull.clone()))
+        }))
     }
 
     /// One node's current world position (the live gyre position), so the host can
@@ -930,7 +980,35 @@ impl Orrery {
                 self.node_sizes.insert(key, size.clamp(16.0, 160.0));
             }
         }
-        self.push_node_radii();
+        self.push_node_geometry();
+    }
+
+    /// Restore the per-node sprite faces from a persisted cartography sidecar (the sprite
+    /// counterpart of [`apply_cartography_sizing`]). Each `(member, data-URI)` is applied via
+    /// [`set_node_sprite`], so the node re-opens textured and back at `Representation::Sprite`.
+    /// An unknown member id is skipped; does not settle. (Node-rep — sprite persistence.)
+    pub fn apply_cartography_sprites<'a>(
+        &mut self,
+        sprites: impl IntoIterator<Item = (uuid::Uuid, &'a str)>,
+    ) {
+        for (id, uri) in sprites {
+            self.set_node_sprite(id, uri.to_string());
+        }
+    }
+
+    /// Restore the per-node sprite collider hulls from a persisted cartography sidecar (the
+    /// companion of [`apply_cartography_sprites`] — call it after, once the sprites exist).
+    /// Each `(member, hull)` is set via [`set_node_sprite_hull`], so the node re-opens
+    /// colliding at its traced outline. An unknown member id is skipped; does not settle.
+    /// (Node-rep — sprite hull persistence.)
+    pub fn apply_cartography_sprite_hulls(
+        &mut self,
+        hulls: impl IntoIterator<Item = (uuid::Uuid, Vec<(f32, f32)>)>,
+    ) {
+        for (id, hull) in hulls {
+            self.set_node_sprite_hull(id, hull);
+        }
+        self.push_node_geometry();
     }
 
     /// Theme the orrery's surfaces: the content-surface `backdrop` and the `edge`
@@ -951,6 +1029,9 @@ impl Orrery {
             .into_iter()
             .filter_map(|(id, shape)| self.graph.get_node_by_id(id).map(|(key, _)| (key, shape)))
             .collect();
+        // The collider follows the silhouette, so a content-type shape change reshapes the
+        // physics body too, not just the drawn face. (Node-rep — collider matches shape.)
+        self.push_node_geometry();
     }
 
     /// Override a single node's presentation form (the user's per-node choice, e.g.
@@ -962,6 +1043,12 @@ impl Orrery {
     pub fn set_node_representation(&mut self, id: uuid::Uuid, representation: Representation) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
             self.node_representations.insert(key, representation);
+            // Picking Tile / Shape drops any sprite face (the picker reverts a sprite node);
+            // `set_node_sprite` is the only way back to `Sprite`. (Node-rep P2.)
+            if representation != Representation::Sprite {
+                self.node_sprites.remove(&key);
+                self.node_sprite_hulls.remove(&key);
+            }
         }
     }
 
@@ -970,7 +1057,50 @@ impl Orrery {
     pub fn clear_node_representation(&mut self, id: uuid::Uuid) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
             self.node_representations.remove(&key);
+            self.node_sprites.remove(&key);
+            self.node_sprite_hulls.remove(&key);
         }
+    }
+
+    /// Give a node a custom sprite face: store the imported image (a PNG data-URI) and set
+    /// its representation to [`Sprite`](Representation::Sprite) in one step. Keyed by node
+    /// UUID; a no-op for an unknown id. Held on the orrery and persisted in the cartography
+    /// sidecar. The host follows with [`set_node_sprite_hull`] for the collider; this backs
+    /// the drag-and-drop image import. (Node representation P2 — sprite.)
+    pub fn set_node_sprite(&mut self, id: uuid::Uuid, data_uri: String) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            self.node_sprites.insert(key, data_uri);
+            self.node_representations.insert(key, Representation::Sprite);
+        }
+    }
+
+    /// A node's custom sprite face (a PNG data-URI), if it has one. The card uses this as
+    /// the face image when [`node_representation`](Self::node_representation) is
+    /// [`Sprite`](Representation::Sprite). (Node representation P2 — sprite.)
+    pub fn node_sprite(&self, key: NodeKey) -> Option<&str> {
+        self.node_sprites.get(&key).map(String::as_str)
+    }
+
+    /// Set a node's sprite collider hull: the sprite's opaque region as a convex polygon in
+    /// face-normalized coords ([-0.5, 0.5], scaled to `node_size` when the collider is built).
+    /// The host traces it from the image at import. A hull of fewer than 3 points clears it
+    /// (the node falls back to its silhouette collider). Pushes the new geometry to physics.
+    /// Keyed by node UUID; a no-op for an unknown id. (Node representation P2 — sprite hull.)
+    pub fn set_node_sprite_hull(&mut self, id: uuid::Uuid, hull: Vec<(f32, f32)>) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            if hull.len() >= 3 {
+                self.node_sprite_hulls.insert(key, hull);
+            } else {
+                self.node_sprite_hulls.remove(&key);
+            }
+            self.push_node_geometry();
+        }
+    }
+
+    /// A node's sprite collider hull (face-normalized convex polygon), if it has one.
+    /// (Node representation P2 — sprite hull.)
+    pub fn node_sprite_hull(&self, key: NodeKey) -> Option<&[(f32, f32)]> {
+        self.node_sprite_hulls.get(&key).map(Vec::as_slice)
     }
 
     /// A node's face footprint (px): a per-node override if set, else size-by-degree
@@ -1069,9 +1199,7 @@ impl Orrery {
         }
         let key = *self.selected.iter().next()?;
         let world = self.view.position_of(key)?;
-        let (ox, oy) = self.camera.offset;
-        let z = self.camera.zoom;
-        Some((world.x * z + ox, world.y * z + oy))
+        Some(self.camera.to_screen(kernel::geometry::PortablePoint::new(world.x, world.y)))
     }
 
     /// The member id (node UUID) of the single focused node, if exactly one is
@@ -1193,6 +1321,22 @@ impl Orrery {
         self.camera.offset = view.offset;
     }
 
+    /// Toggle the isometric (foreshortened-ground) projection. `on` reclines the
+    /// ground by foreshortening the vertical, so the graph reads as a tilted floor
+    /// while the node cards stay upright billboards; `off` restores the plain
+    /// top-down view. The free-cam yaw orbit + persistence are P2. (Isometric camera P1.)
+    pub fn set_isometric(&mut self, on: bool) {
+        /// Vertical foreshorten for the isometric preset (a dimetric squash); becomes
+        /// a setting once the projection picker lands (P2).
+        const ISO_TILT: f32 = 0.55;
+        self.camera.tilt = if on { ISO_TILT } else { 1.0 };
+    }
+
+    /// Whether the isometric projection is active (the ground is foreshortened).
+    pub fn is_isometric(&self) -> bool {
+        self.camera.tilt < 1.0
+    }
+
     /// The pane's active layout-strategy id, or `None` for force-directed (gyre).
     /// The host persists this as view-intent and checkmarks it in the layout picker.
     pub fn layout_strategy(&self) -> Option<&str> {
@@ -1279,28 +1423,47 @@ impl Orrery {
 
     /// Zoom by `factor`, keeping the world point under `anchor` (screen px) fixed.
     fn zoom_at(&mut self, anchor: (f32, f32), factor: f32) {
-        let new_zoom = (self.camera.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
-        let applied = new_zoom / self.camera.zoom;
-        self.camera.offset.0 = anchor.0 - (anchor.0 - self.camera.offset.0) * applied;
-        self.camera.offset.1 = anchor.1 - (anchor.1 - self.camera.offset.1) * applied;
-        self.camera.zoom = new_zoom;
+        // Keep the world point currently under `anchor` fixed across the zoom: read it
+        // before, then shift `offset` so it lands back under `anchor` after. Correct for
+        // any projection (top-down or isometric), and identical to the old
+        // `world*zoom+offset` formula at the default camera. (Isometric camera P0.)
+        let world_under = self.camera.to_world(anchor);
+        self.camera.zoom = (self.camera.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
+        let landed = self.camera.to_screen(world_under);
+        self.camera.offset.0 += anchor.0 - landed.0;
+        self.camera.offset.1 += anchor.1 - landed.1;
     }
 
-    /// Map a screen-px point back to world space through the camera
-    /// (`world = (screen - offset) / zoom`).
-    fn screen_to_world(&self, (sx, sy): (f32, f32)) -> Point2D<f32> {
-        let (ox, oy) = self.camera.offset;
-        let z = self.camera.zoom.max(f32::EPSILON);
-        Point2D::new((sx - ox) / z, (sy - oy) / z)
+    /// Map a screen-px point back to world space through the camera projector
+    /// (the inverse of `Camera::to_screen`; at the default camera this is
+    /// `world = (screen - offset) / zoom`).
+    fn screen_to_world(&self, screen: (f32, f32)) -> Point2D<f32> {
+        let w = self.camera.to_world(screen);
+        Point2D::new(w.x, w.y)
     }
 
     /// The screen viewport mapped to world space — the region gyre culls against
     /// to decide which nodes are on screen.
     fn world_viewport(&self) -> Box2D<f32> {
-        Box2D::new(
+        // Bound all four screen corners in world space: under an isometric yaw the
+        // screen rectangle maps to a rotated world quad, so two corners under-cover.
+        // At the default top-down camera this is the same box as before. (Isometric P0.)
+        let (w, h) = (self.view_w as f32, self.view_h as f32);
+        let corners = [
             self.screen_to_world((0.0, 0.0)),
-            self.screen_to_world((self.view_w as f32, self.view_h as f32)),
-        )
+            self.screen_to_world((w, 0.0)),
+            self.screen_to_world((0.0, h)),
+            self.screen_to_world((w, h)),
+        ];
+        let mut min = corners[0];
+        let mut max = corners[0];
+        for p in &corners[1..] {
+            min.x = min.x.min(p.x);
+            min.y = min.y.min(p.y);
+            max.x = max.x.max(p.x);
+            max.y = max.y.max(p.y);
+        }
+        Box2D::new(min, max)
     }
 }
 

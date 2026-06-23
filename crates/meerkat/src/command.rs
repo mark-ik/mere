@@ -42,6 +42,9 @@ pub enum Command {
     /// Open the settings lane (the consolidated config surface) as a workbench tile, at
     /// the appearance page. A host action, drained by the host. (Settings lane P1.)
     OpenSettings,
+    /// Open the focused node's facets (the `node:<id>` settings provider) as a workbench
+    /// tile, at the info page. A host action. (Settings lane P3.)
+    OpenNodeSettings,
     /// Toggle the docked comms pane (conversations: misfin mail + murm cabals). A
     /// chrome-level action, like toggling the palette.
     ToggleComms,
@@ -84,7 +87,7 @@ pub enum Command {
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 25] = [
+    pub const ALL: [Command; 26] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -98,6 +101,7 @@ impl Command {
         Command::HideSelectedEdge,
         Command::ShowAllEdges,
         Command::OpenSettings,
+        Command::OpenNodeSettings,
         Command::ToggleComms,
         Command::ToggleInspector,
         Command::ToggleTrail,
@@ -118,7 +122,8 @@ impl Command {
     pub fn is_host_action(self) -> bool {
         matches!(
             self,
-            Command::ToggleWorkbench
+            Command::OpenNodeSettings
+                | Command::ToggleWorkbench
                 | Command::ToggleRoster
                 | Command::ToggleGloss
                 | Command::ToggleApparatus
@@ -138,6 +143,24 @@ impl Command {
                 | Command::CloseGraphPane
                 | Command::ExportGraph
         )
+    }
+
+    /// The selection context this command belongs to in a configurable menu (command
+    /// registry P4). Commands are global verbs that run in any context, so they default
+    /// to [`MenuScope::Always`]; the applicability that reproduces the current context
+    /// menu lives on the context actions ([`context_action_scope`]). A few selection-
+    /// operating commands narrow to [`MenuScope::Selection`] so adding them to the menu
+    /// doesn't clutter the empty-canvas case. Finer per-command scoping is a refinement.
+    pub fn menu_scope(self) -> MenuScope {
+        match self {
+            // Edge verbs are pairwise — they want two or more selected nodes.
+            Command::AssertEdge | Command::RetractEdge => MenuScope::MultiNode,
+            Command::DeleteNode
+            | Command::BackgroundNode
+            | Command::HideSelectedEdge
+            | Command::OpenNodeSettings => MenuScope::Selection,
+            _ => MenuScope::Always,
+        }
     }
 
     /// The omnibar command-shell token: the short identifier a `>`-expression
@@ -162,6 +185,7 @@ impl Command {
             Command::ToggleSteward => "steward",
             Command::ToggleComms => "comms",
             Command::OpenSettings => "settings",
+            Command::OpenNodeSettings => "node_settings",
             Command::ToggleCompatView => "compat_view",
             Command::DeleteNode => "delete_node",
             Command::BackgroundNode => "background_node",
@@ -200,6 +224,7 @@ impl Command {
             Command::HideSelectedEdge => "Hide selected edge",
             Command::ShowAllEdges => "Show all edges",
             Command::OpenSettings => "Settings",
+            Command::OpenNodeSettings => "Node settings (focused node)",
             Command::ToggleComms => "Comms (conversations)",
             Command::ToggleRoster => "Roster (graph manifest)",
             Command::ToggleGloss => "Gloss (navigator / map)",
@@ -301,6 +326,79 @@ impl PaletteItem {
 /// Each tuple is `(action, id, label)`: the **stable id** is the registry handle (the
 /// context-action analogue of a [`Command::verb`]), unique across the whole registry, by
 /// which an agent / script / a menu config names the action; the label is the palette row.
+/// Where a registry action belongs in a context menu — the selection shape it acts on.
+/// One model shared by the configurable menu (which filters its rows by it), the palette,
+/// and scripting / agents (which can ask whether an action applies before invoking it).
+/// (Command registry P4.)
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MenuScope {
+    /// Any context — global verbs (most [`Command`]s) and scene toggles.
+    Always,
+    /// The empty-canvas menu (no selection): "Add node", scene lenses.
+    Canvas,
+    /// Exactly one selected member (per-node gestures: Resize, Node settings).
+    SingleNode,
+    /// One or more selected members (Open tile / splits, Add tag, Isolate).
+    Selection,
+    /// Two or more selected members (Open in a stack, Relate).
+    MultiNode,
+}
+
+impl MenuScope {
+    /// Whether an action of this scope applies to a selection of `selection_len` members.
+    pub fn applies(self, selection_len: usize) -> bool {
+        match self {
+            MenuScope::Always => true,
+            MenuScope::Canvas => selection_len == 0,
+            MenuScope::SingleNode => selection_len == 1,
+            MenuScope::Selection => selection_len >= 1,
+            MenuScope::MultiNode => selection_len >= 2,
+        }
+    }
+}
+
+/// The [`MenuScope`] of a catalog context action — the selection shape its menu row
+/// belongs to. Reproduces the hand-written menu's per-shape placement. (Command registry P4.)
+pub fn context_action_scope(action: crate::ContextAction) -> MenuScope {
+    use crate::ContextAction::*;
+    match action {
+        AddNode | AddField | AddTile | AddSession | ShowAllNodes | MirrorTiles => MenuScope::Canvas,
+        OpenNodeFacets | ResizeNode => MenuScope::SingleNode,
+        OpenSplits | AddTag | IsolateSelection | ToggleSizeByDegree => MenuScope::Selection,
+        Stack | Relate => MenuScope::MultiNode,
+        _ => MenuScope::Always,
+    }
+}
+
+/// The [`MenuScope`] of any registry id (a [`Command`] verb or a context-action id), or
+/// `None` if the id is unknown. The one applicability lookup the menu builder uses to
+/// filter a configured id against the current selection. (Command registry P4.)
+pub fn registry_scope(id: &str) -> Option<MenuScope> {
+    if let Some(action) = context_action_from_id(id) {
+        Some(context_action_scope(action))
+    } else {
+        Command::from_id(id).map(Command::menu_scope)
+    }
+}
+
+/// The human label for any registry id (a [`Command`] verb or a context-action id), or `None`
+/// if unknown. The menu-config editor renders add / remove rows with it. (Command registry P4.)
+pub fn registry_label(id: &str) -> Option<&'static str> {
+    if let Some(action) = context_action_from_id(id) {
+        context_action_palette_label(action)
+    } else {
+        Command::from_id(id).map(Command::label)
+    }
+}
+
+/// Every registry id — [`Command`] verbs then context-action ids — for the menu-config editor's
+/// "add a command" list and any other full-registry enumeration. (Command registry P4.)
+pub fn all_registry_ids() -> Vec<&'static str> {
+    let mut ids: Vec<&'static str> = Command::ALL.iter().map(|c| c.verb()).collect();
+    ids.extend(PALETTE_CONTEXT_ACTIONS.iter().map(|(_, id, _)| *id));
+    ids
+}
+
 pub const PALETTE_CONTEXT_ACTIONS: &[(crate::ContextAction, &str, &str)] = {
     use crate::ContextAction::*;
     &[
@@ -316,8 +414,28 @@ pub const PALETTE_CONTEXT_ACTIONS: &[(crate::ContextAction, &str, &str)] = {
         (IsolateSelection, "isolate", "Isolate selection"),
         (ShowAllNodes, "show_all", "Show all nodes"),
         (MirrorTiles, "mirror_tiles", "Mirror open tiles"),
+        (OpenNodeFacets, "open_node_facets", "Node settings (selected node)"),
     ]
 };
+
+/// The default context-menu command order (command registry P4): the registry ids the menu
+/// shows out of the box, before the user curates it. Each is filtered by its [`registry_scope`]
+/// at render, so this one ordered list reproduces the canvas / single-node / multi-node menus.
+/// The user's curated list (persona-scoped) replaces this; resetting restores it.
+pub const DEFAULT_MENU_ACTIONS: &[&str] = &[
+    "add_node",         // canvas
+    "add_field",        // canvas
+    "open_splits",      // selection — "Open tile" (1) / "Open in splits" (2+)
+    "open_node_facets", // single — Node settings
+    "open_stack",       // multi — Open in a stack
+    "relate",           // multi — pairwise
+    "resize_node",      // single — Resize (object card)
+    "add_tag",          // selection
+    "size_by_degree",   // selection — scene toggle
+    "isolate",          // selection
+    "show_all",         // canvas — when a scope lens is active
+    "mirror_tiles",     // canvas — when tiles are open
+];
 
 /// The palette label for a context action, or `None` if it is not palette-exposed. (P2.)
 pub fn context_action_palette_label(action: crate::ContextAction) -> Option<&'static str> {
@@ -482,6 +600,35 @@ mod tests {
             assert_eq!(context_action_id(action), Some(id));
         }
         assert_eq!(context_action_from_id("not_an_action"), None);
+    }
+
+    #[test]
+    fn default_menu_actions_are_all_known_registry_ids() {
+        // Every default-menu id resolves to a scope + a label (no dead ids), so the config-driven
+        // menu builder never silently drops a default row. (Command registry P4.)
+        for &id in DEFAULT_MENU_ACTIONS {
+            assert!(registry_scope(id).is_some(), "default menu id has no scope: {id}");
+            assert!(registry_label(id).is_some(), "default menu id has no label: {id}");
+        }
+    }
+
+    #[test]
+    fn menu_scope_filters_by_selection_shape() {
+        assert!(MenuScope::Canvas.applies(0) && !MenuScope::Canvas.applies(1));
+        assert!(MenuScope::SingleNode.applies(1) && !MenuScope::SingleNode.applies(2));
+        assert!(MenuScope::Selection.applies(1) && MenuScope::Selection.applies(3));
+        assert!(!MenuScope::Selection.applies(0));
+        assert!(MenuScope::MultiNode.applies(2) && !MenuScope::MultiNode.applies(1));
+        assert!(MenuScope::Always.applies(0));
+        // The scopes that reproduce the hand-written menu's per-shape placement, plus a global
+        // command (Always) and the AssertEdge ("relate") verb the menu's Relate row resolves to.
+        assert_eq!(registry_scope("add_node"), Some(MenuScope::Canvas));
+        assert_eq!(registry_scope("open_splits"), Some(MenuScope::Selection));
+        assert_eq!(registry_scope("resize_node"), Some(MenuScope::SingleNode));
+        assert_eq!(registry_scope("open_stack"), Some(MenuScope::MultiNode));
+        assert_eq!(registry_scope("relate"), Some(MenuScope::MultiNode));
+        assert_eq!(registry_scope("settings"), Some(MenuScope::Always));
+        assert_eq!(registry_scope("not_a_real_id"), None);
     }
 
     #[test]

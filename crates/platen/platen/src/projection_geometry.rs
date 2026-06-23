@@ -180,6 +180,18 @@ pub struct CartographyGeometry {
     /// save time. Serde-defaulted to `false`. (Node-rep — size persistence.)
     #[serde(default)]
     size_by_degree: bool,
+    /// Per-member sprite faces: the imported image as a PNG data-URI, for members the user
+    /// gave a custom face. A member absent here has no sprite (its content-type default /
+    /// favicon applies). Serde-defaulted, so a pre-sprite sidecar still loads. The data-URIs
+    /// add bulk to the sidecar — acceptable for a handful of faces (a future optimization
+    /// could externalize the blobs). (Node-rep — sprite persistence.)
+    #[serde(default)]
+    sprites: Vec<(GraphMemberId, String)>,
+    /// Per-member sprite collider hulls: the opaque region as a face-normalized convex
+    /// polygon ([-0.5, 0.5]), persisted beside the sprite so the traced-to-image collider
+    /// survives a reload without re-decoding the image. Serde-defaulted. (Node-rep — sprite hull.)
+    #[serde(default)]
+    sprite_hulls: Vec<(GraphMemberId, Vec<(f32, f32)>)>,
 }
 
 impl CartographyGeometry {
@@ -203,6 +215,24 @@ impl CartographyGeometry {
         self
     }
 
+    /// Attach per-member sprite faces (chainable). (Node-rep — sprite persistence.)
+    pub fn with_sprites(
+        mut self,
+        sprites: impl IntoIterator<Item = (GraphMemberId, String)>,
+    ) -> Self {
+        self.sprites = sprites.into_iter().collect();
+        self
+    }
+
+    /// Attach per-member sprite collider hulls (chainable). (Node-rep — sprite hull.)
+    pub fn with_sprite_hulls(
+        mut self,
+        hulls: impl IntoIterator<Item = (GraphMemberId, Vec<(f32, f32)>)>,
+    ) -> Self {
+        self.sprite_hulls = hulls.into_iter().collect();
+        self
+    }
+
     /// The `(member, (x, y))` pairs, in insertion order.
     pub fn iter(&self) -> impl Iterator<Item = (GraphMemberId, (f32, f32))> + '_ {
         self.positions.iter().copied()
@@ -216,6 +246,17 @@ impl CartographyGeometry {
     /// Whether size-by-degree was on at save time. (Node-rep — size persistence.)
     pub fn size_by_degree(&self) -> bool {
         self.size_by_degree
+    }
+
+    /// The `(member, data-URI)` sprite faces, in insertion order. (Node-rep — sprite persistence.)
+    pub fn sprite_iter(&self) -> impl Iterator<Item = (GraphMemberId, &str)> + '_ {
+        self.sprites.iter().map(|(m, uri)| (*m, uri.as_str()))
+    }
+
+    /// The `(member, hull)` sprite collider hulls, in insertion order (owned clones, for the
+    /// host to apply via `apply_cartography_sprite_hulls`). (Node-rep — sprite hull.)
+    pub fn sprite_hull_iter(&self) -> impl Iterator<Item = (GraphMemberId, Vec<(f32, f32)>)> + '_ {
+        self.sprite_hulls.iter().map(|(m, h)| (*m, h.clone()))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -239,6 +280,8 @@ impl CartographyGeometry {
         let mut geom: Self = serde_json::from_str(json).ok()?;
         geom.positions.retain(|(member, _)| present.contains(member));
         geom.sizes.retain(|(member, _)| present.contains(member));
+        geom.sprites.retain(|(member, _)| present.contains(member));
+        geom.sprite_hulls.retain(|(member, _)| present.contains(member));
         Some(geom)
     }
 }
@@ -283,6 +326,42 @@ mod tests {
         let sizes: std::collections::HashMap<_, _> = back.size_iter().collect();
         assert_eq!(sizes.get(&m(1)), Some(&72.0), "the kept member's size survives");
         assert_eq!(sizes.get(&m(2)), None, "the absent member's size is pruned");
+    }
+
+    #[test]
+    fn cartography_sprites_round_trip_and_prune() {
+        let geom = CartographyGeometry::from_positions([(m(1), (10.0, 20.0)), (m(2), (30.0, 40.0))])
+            .with_sprites([
+                (m(1), "data:image/png;base64,AAAA".to_string()),
+                (m(2), "data:image/png;base64,BBBB".to_string()),
+            ]);
+        let json = geom.to_persisted_json().unwrap();
+        // Member 2 deleted since the save — its sprite prunes alongside its position.
+        let present: HashSet<GraphMemberId> = [m(1)].into_iter().collect();
+        let back = CartographyGeometry::from_persisted_json(&json, &present).unwrap();
+        let sprites: std::collections::HashMap<_, _> = back.sprite_iter().collect();
+        assert_eq!(
+            sprites.get(&m(1)),
+            Some(&"data:image/png;base64,AAAA"),
+            "the kept member's sprite survives",
+        );
+        assert_eq!(sprites.get(&m(2)), None, "the absent member's sprite is pruned");
+    }
+
+    #[test]
+    fn cartography_sprite_hulls_round_trip_and_prune() {
+        let geom = CartographyGeometry::from_positions([(m(1), (0.0, 0.0)), (m(2), (1.0, 1.0))])
+            .with_sprite_hulls([
+                (m(1), vec![(-0.5, -0.5), (0.5, -0.5), (0.5, 0.5), (-0.5, 0.5)]),
+                (m(2), vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]),
+            ]);
+        let json = geom.to_persisted_json().unwrap();
+        // Member 2 deleted since the save — its hull prunes alongside its position.
+        let present: HashSet<GraphMemberId> = [m(1)].into_iter().collect();
+        let back = CartographyGeometry::from_persisted_json(&json, &present).unwrap();
+        let hulls: std::collections::HashMap<_, _> = back.sprite_hull_iter().collect();
+        assert_eq!(hulls.get(&m(1)).map(|h| h.len()), Some(4), "the kept member's hull survives");
+        assert_eq!(hulls.get(&m(2)), None, "the absent member's hull is pruned");
     }
 
     #[test]

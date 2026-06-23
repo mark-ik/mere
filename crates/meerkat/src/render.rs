@@ -33,7 +33,8 @@ use crate::window_view::{OrreryCard, OrreryRender};
 /// The node's favicon RGBA (straight-alpha RGBA8) encoded as a `data:image/png;base64,`
 /// URI, or `None` if it can't be encoded. The orrery card carries it as a leading
 /// `<img>` that serval decodes. PNG (not BMP) keeps alpha and stays compact. (Phase 2.)
-fn favicon_data_uri(rgba: &[u8], w: u32, h: u32) -> Option<String> {
+/// Also the sprite-import encoder (a downscaled dropped image → the face). (P2 — sprite.)
+pub(crate) fn favicon_data_uri(rgba: &[u8], w: u32, h: u32) -> Option<String> {
     if w == 0 || h == 0 || rgba.len() < (w as usize) * (h as usize) * 4 {
         return None;
     }
@@ -640,7 +641,6 @@ impl WindowCtx<'_> {
                     let face_half = node_size / 2.0;
                     Some(OrreryCard {
                         label,
-                        url: node.url().to_string(),
                         x,
                         y,
                         // State color only; selection shows as a ring + lift on the card face.
@@ -662,6 +662,8 @@ impl WindowCtx<'_> {
                         favicon: node.favicon_rgba.as_ref().and_then(|rgba| {
                             favicon_data_uri(rgba, node.favicon_width, node.favicon_height)
                         }),
+                        // The custom sprite face (a data-URI), for a `Sprite` node. (P2.)
+                        sprite: orrery.node_sprite(key).map(str::to_string),
                         representation: orrery.node_representation(key),
                     })
                 })

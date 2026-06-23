@@ -72,4 +72,10 @@ pub enum Representation {
     /// Bare geometry: the colored, content-typed face alone, no favicon or caption.
     /// Minimal and cheap, for a dense graph or a node with nothing to texture.
     Shape,
+    /// A custom sprite: an imported image textured on the face — the "alive graph" form
+    /// (P2-static, the former `TexturedBody`). The host stores the per-node image (a PNG
+    /// data-URI) and pushes it via [`Orrery::set_node_sprite`], which sets this
+    /// representation; the collider stays the sized ball for now (the sprite-alpha hull
+    /// collider is a later step). (Node representation P2 — sprite.)
+    Sprite,
 }

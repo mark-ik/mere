@@ -30,7 +30,7 @@ use serval_winit_host::WindowSurface;
 use winit::window::CursorIcon;
 use xilem_serval::{
     AnyView, Modifiers, PointerClick, ServalAppRunner, ServalCtx, ServalElement, WheelEvent, el,
-    external_texture, focusable, lens, on_click, on_wheel,
+    external_texture, lens, on_click, on_wheel,
 };
 
 use super::{CachedTile, ContentPane, ResizeDrag};
@@ -295,8 +295,6 @@ pub(crate) struct WindowView {
 #[derive(PartialEq)]
 pub(crate) struct OrreryCard {
     pub(crate) label: String,
-    /// The node's URL, so a card click selects it (the two-hit-test's DOM half). (Phase 2.)
-    pub(crate) url: String,
     pub(crate) x: f32,
     pub(crate) y: f32,
     /// The node's activation-state color (hex), from `Orrery::node_state_color` (no
@@ -319,8 +317,13 @@ pub(crate) struct OrreryCard {
     /// The node's favicon as a `data:` image URI, or `None`. It fills the card face
     /// (painted over the state color, clipped to the silhouette). (P0 favicon-as-face.)
     pub(crate) favicon: Option<String>,
-    /// The node's presentation form, from `Orrery::node_representation`: `Tile` draws
-    /// the favicon + caption chip; `Shape` draws the bare content-typed face. (P1.)
+    /// The node's custom sprite face as a `data:` image URI, when its representation is
+    /// `Sprite` (from `Orrery::node_sprite`). Fills the whole face (the imported image),
+    /// replacing the state color + favicon. (P2 — sprite.)
+    pub(crate) sprite: Option<String>,
+    /// The node's presentation form, from `Orrery::node_representation`: `Tile` draws the
+    /// favicon + caption chip; `Shape` draws the bare content-typed face; `Sprite` draws
+    /// the imported image as the face. (P1 / P2.)
     pub(crate) representation: Representation,
 }
 
@@ -401,9 +404,6 @@ pub(crate) struct ShellState {
     /// lensed `list_pane_view` subtree when its matching rect is `Some`. (Phase 1, step 2.)
     pub(crate) panes: [ListPaneState; 4],
     pub(crate) pane_rects: [Option<[f32; 4]>; 4],
-    /// URLs queued by orrery card clicks (the two-hit-test's DOM half): a card press dispatches
-    /// here through the shell hit-test, and the host drains + selects them. (Phase 2.)
-    pub(crate) orrery_card_selects: Vec<String>,
     /// The most recent orrery wheel delta (device px), queued by the orrery pane element's
     /// `on_wheel` when the host dispatches a wheel there, and drained by the host into gyre's
     /// pan / Ctrl-zoom. Routes the orrery wheel through the document. (cond 5 input bridge.)
@@ -590,21 +590,30 @@ fn node_card_view(c: &OrreryCard) -> ShellView {
     // textures the favicon on the face and sets the caption beside it. Both share the
     // same face, collider, and selection ring above, so only these two children differ.
     let chrome = !matches!(c.representation, Representation::Shape);
-    // The favicon fills the face (absolutely positioned over the state color, shaped to
-    // match); transparency shows the color through. Absent on a `Shape`.
-    let favicon = chrome
-        .then(|| {
-            c.favicon.as_ref().map(|uri| {
-                el::<_, ShellState, ()>("img", ()).attr("src", uri.clone()).attr(
-                    "style",
-                    format!(
-                        "position:absolute;left:0;top:0;width:{size}px;height:{size}px;border-radius:{};display:block",
-                        c.radius
-                    ),
-                )
-            })
-        })
-        .flatten();
+    // The face image fills the face (absolutely positioned over the state color, shaped to
+    // match): a `Sprite` shows its imported image; a `Tile` shows the favicon (transparency
+    // shows the color through); a `Shape` shows neither (the bare face). (P1 favicon / P2 sprite.)
+    let face_image = match c.representation {
+        Representation::Sprite => c.sprite.as_ref(),
+        Representation::Tile => c.favicon.as_ref(),
+        Representation::Shape => None,
+    };
+    let favicon = face_image.map(|uri| {
+        // A sprite is a photo / artwork: cover-fit fills the face without distortion. A
+        // favicon is a small glyph: stretch it to the face as before.
+        let fit = if matches!(c.representation, Representation::Sprite) {
+            "object-fit:cover;"
+        } else {
+            ""
+        };
+        el::<_, ShellState, ()>("img", ()).attr("src", uri.clone()).attr(
+            "style",
+            format!(
+                "position:absolute;left:0;top:0;width:{size}px;height:{size}px;border-radius:{};{fit}display:block",
+                c.radius
+            ),
+        )
+    });
     // The label rides beside the square (absolutely positioned, overflowing it), like the
     // gnode caption at left:42px, so a long name reads in full on the dark canvas. Absent
     // on a `Shape`, which is the caption-less bare face.
@@ -634,13 +643,16 @@ fn node_card_view(c: &OrreryCard) -> ShellView {
             ),
         )
     });
-    let url = c.url.clone();
-    Box::new(focusable(on_click(
+    // The card is a static snapshot content-preview, never the node's hit-target or a focus stop
+    // (the cond-3/4 reversal: presses route to gyre via CLICK_SLOP, the card is inert). So no
+    // `focusable` (it put every on-screen card in the Tab ring ahead of chrome, slice 2) and no
+    // `on_click` select (gyre owns selection, slice 3). Keyboard focus is the orrery container, not
+    // the per-card sprite. (Slices 2 + 3, 2026-06-21.)
+    Box::new(
         el::<_, ShellState, ()>("div", (favicon, label, wash))
             .attr("class", "node-card")
             .attr("style", face_style),
-        move |s: &mut ShellState, _: PointerClick| s.orrery_card_selects.push(url.clone()),
-    )))
+    )
 }
 
 /// The orrery element: a positioned container whose node cards are `position:absolute`
@@ -845,7 +857,6 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             roster_rect: None,
             panes: std::array::from_fn(|_| ListPaneState::default()),
             pane_rects: [None; 4],
-            orrery_card_selects: Vec::new(),
             orrery_wheel: None,
             settings: SettingsPanesState::default(),
             node_card_keys: Vec::new(),
@@ -880,14 +891,6 @@ impl WindowView {
     /// per-frame view re-run). (Orrery-as-element — Phase 2.)
     pub(crate) fn orrery_render(&self) -> &OrreryRender {
         &self.runner.state().orrery
-    }
-
-    /// Drain the URLs the orrery card click handlers queued through the shell runner's
-    /// dispatch (the two-hit-test's DOM half), for the host to select. (Phase 2.)
-    pub(crate) fn take_orrery_card_selects(&mut self) -> Vec<String> {
-        let mut out = Vec::new();
-        self.runner.update(|s| out = std::mem::take(&mut s.orrery_card_selects));
-        out
     }
 
     /// Drain the activation keys the object card's widget controls queued, for the host to

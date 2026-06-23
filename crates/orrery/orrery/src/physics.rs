@@ -26,7 +26,7 @@ use std::time::Duration;
 
 use armillary::{spawn, ActorHandle, Emitter, Wake};
 use euclid::default::Point2D;
-use gyre::{CouplingForce, LayoutSnapshot, LayoutView, Simulation};
+use gyre::{CouplingForce, LayoutSnapshot, LayoutView, NodeCollider, Simulation};
 use kernel::graph::NodeKey;
 
 use super::TICK_DT;
@@ -58,8 +58,8 @@ pub(crate) enum PhysicsCommand {
     SetCouplingForces(Vec<CouplingForce>),
     /// Set the linear damping (the "inertia" physics setting) on new + live bodies.
     SetLinearDamping(f32),
-    /// Resize node colliders to per-node face sizes (see [`Simulation::set_node_radii`]).
-    SetNodeRadii(Vec<(NodeKey, f32)>),
+    /// Reshape node colliders to per-node face shapes (see [`Simulation::set_node_colliders`]).
+    SetNodeColliders(Vec<(NodeKey, NodeCollider)>),
 }
 
 /// One layout the actor produced: the positions plus whether it is still
@@ -177,13 +177,14 @@ impl Physics {
         }
     }
 
-    /// Resize node colliders so each picks/collides at its true face size (the
-    /// host pushes every node's `node_size / 2`). (P0/P5 collider — Decision 5.)
-    pub fn set_node_radii(&mut self, radii: Vec<(NodeKey, f32)>) {
+    /// Reshape node colliders so each picks/collides at its true face shape + size (the
+    /// host maps every node's silhouette / sprite hull to a [`NodeCollider`]). (P0/P5
+    /// collider — Decision 5; node-rep — collider matches shape.)
+    pub fn set_node_colliders(&mut self, colliders: Vec<(NodeKey, NodeCollider)>) {
         match self {
-            Physics::Inline(p) => p.sim.set_node_radii(radii),
+            Physics::Inline(p) => p.sim.set_node_colliders(colliders),
             Physics::Actor(p) => {
-                p.handle.command(PhysicsCommand::SetNodeRadii(radii));
+                p.handle.command(PhysicsCommand::SetNodeColliders(colliders));
             }
         }
     }
@@ -363,7 +364,7 @@ fn apply(
         PhysicsCommand::SetDragging(d) => *dragging = d,
         PhysicsCommand::SetCouplingForces(forces) => sim.set_coupling_forces(forces),
         PhysicsCommand::SetLinearDamping(damping) => sim.set_linear_damping(damping),
-        PhysicsCommand::SetNodeRadii(radii) => sim.set_node_radii(radii),
+        PhysicsCommand::SetNodeColliders(colliders) => sim.set_node_colliders(colliders),
     }
 }
 
