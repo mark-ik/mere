@@ -32,6 +32,7 @@ members = [
     "crates/inker/document-canvas",
     "crates/inker/engines/nematic",
     "crates/inker/engines/scrying-engine",
+    "crates/verso-api",
     "crates/forme/forme",
     "crates/forme/uxtree",
     "crates/platen/domain/apparatus",
@@ -109,6 +110,7 @@ inker = { path = "crates/inker" }
 document-canvas = { path = "crates/inker/document-canvas" }
 nematic = { path = "crates/inker/engines/nematic" }
 scrying-engine = { path = "crates/inker/engines/scrying-engine" }
+verso-api = { path = "crates/verso-api" }
 
 forme = { path = "crates/forme/forme" }
 uxtree = { path = "crates/forme/uxtree" }

@@ -1,7 +1,10 @@
 # Scrying Tile Plan (flip P4 / integration S6)
 
 **Date**: 2026-06-10
-**Status**: Planned. No code written yet.
+**Status**: X1+ shipped 2026-06-15 (meerkat `0adca6e` single-tile, `06b6ac7`
+multi-tile) via the ad-hoc `compat_pins` path; folding it into `inker::routing`
+is the inker-picker plan's Phase 0. *(Status corrected 2026-06-23; the body
+below predates the implementation.)*
 **Scope**: Land external web content in meerkat: a node routed to `scrying.web`
 renders through the system WebView (WebView2 first), its GPU frames imported
 into the host's wgpu device and composited at the tile/card rect via

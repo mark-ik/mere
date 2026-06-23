@@ -1,0 +1,186 @@
+# Serval ↔ Scrying FlipCarrier — first-flip plan
+
+**Date**: 2026-06-23
+**Status**: Design resolved; `verso-api` minted (2026-06-23). Capability verified;
+forward carrier, flip-back, and crate layering decided. P4 (the scry tile) shipped
+2026-06-15 via the ad-hoc `compat_pins` path; the remaining gate before the live
+flip is the **inker picker** (charter step 2: fold `compat_pins` into
+`inker::routing` + the user-facing per-node picker).
+**Extends**: [compatibility-view charter](../technical_architecture/2026-06-10_compatibility_view_charter.md)
+(§3 the charter, §7.3 "mint verso at the first flip").
+
+The first verso flip: a serval-rendered page re-presented through the scrying
+system WebView, place and session carried across, the tile keeping its identity.
+This is the consumer-pull moment that mints the verso crates (charter §7.3). One
+engine pair, both directions.
+
+---
+
+## 1. Findings — capability verification (2026-06-23)
+
+### Scrying (black-box receiver): ready, no new engine work
+
+- **Navigation lifecycle**: `NavigationEvent::{NavigationStarted,
+  NavigationFinished { success }, DownloadStarted/Progress/Finished, TextInput*}`
+  via `poll_navigation_event`, plus blocking navigate variants. `NavigationFinished`
+  is the load-complete hook for post-load inject.
+- **Inject toolkit**: `navigate_to_url`, `navigate_to_string` (raw HTML),
+  `set_cookie` (+ `set_cookie_change_handler`), `execute_script_with_result`.
+- **Session control**: `non_persistent()`, `with_header()`.
+- **Downloads already exist** (`with_download_dir`, the Download* events). Out of
+  scope for the flip; it means the broader scry capability layer is host-side
+  consumption, not new engine work.
+
+### Serval (glass-box donor): state reachable, export API missing
+
+- **URL**: `rt.base_url()` ✓.
+- **Scroll**: `ScriptedDocument.scroll` (owned, private) — needs a public accessor.
+- **DOM serialization**: not on `serval-scripted-dom`. Build a serializer (outerHTML).
+- **Form values**: not present. Build DOM traversal collecting field values.
+
+Net: receiver is done; the donor needs three small, verso-unaware export accessors.
+
+## 2. Crate layering (resolved)
+
+The dependency points one way so the heavy engines never stack on each other:
+
+- **`verso-api`** — traits + `PortableViewState` / `BackState` / `LayerSet`. Tiny,
+  engine-agnostic.
+- **`verso-serval` / `verso-scry` / `verso-weld` / `verso-graft`** — per-engine
+  adapters. Each depends on its engine crate + `verso-api` and does the bridging;
+  the engine crates (`serval-scripted-dom`, `scrying-engine`) stay verso-unaware.
+- **`verso`** — the orchestrator (carrier + flip choreography + registry). Depends
+  on `verso-api` only, never on an engine, so it never drags Servo or CEF in.
+- **host** (meerkat/pelt) — pulls `verso` + whichever `verso-*` adapters its build
+  features enable, and wires them in. `meerkat` = verso-serval + verso-scry;
+  `meerkat-graft` adds verso-graft. The adapter crates are the per-engine feature
+  seam, so a heavy engine only lands in the variant that asked for it.
+
+## 3. Traits (in `verso-api`; illustrative-signature-only)
+
+No-chain (charter §4) is encoded in which traits an engine implements:
+
+```rust
+trait FlipDonor    { fn donates(&self) -> LayerSet; fn capture(&self) -> PortableViewState; } // primaries: serval, nematic
+trait FlipBack     { fn extract(&self) -> BackState; }                                         // secondaries: scry, weld, graft
+trait FlipReceiver { fn receives(&self) -> LayerSet; fn present(&mut self, carry: Carry); }    // all engines
+enum  Carry        { Forward(PortableViewState), Back(BackState) }
+```
+
+Primaries impl `FlipDonor` (full live capture). Secondaries impl `FlipBack` (lean
+extract) and never `FlipDonor`, so there is no type path to forward-donate a
+document to anyone. A primary's `FlipReceiver` consumes a `Back` by re-fetching; a
+secondary's consumes a `Forward` by navigating. The registry only wires
+(primary→secondary) and (secondary→primary). A leaf has two faces.
+
+## 4. Forward flip: serval → scrying
+
+### PortableViewState (layered; each layer degrades, never blocks)
+
+1. navigation: URL, history cursor, scroll
+2. form: field values keyed by a stable selector
+3. session: cookies for the origin (+ storage scope)
+4. DOM snapshot: serialized outerHTML
+5. visual snapshot: donor's last frame as a texture (cross-fade, no flash)
+
+### Layer mapping: capture (serval) → inject (scry) → fidelity
+
+| Layer | Capture from serval | Inject into scry | Fidelity |
+| --- | --- | --- | --- |
+| navigation | `base_url`, history cursor, `ScriptedDocument.scroll` | `navigate_to_url`, then `execute_script("scrollTo")` post-load | URL faithful; scroll best-effort |
+| form | walk scripted-DOM, collect values | `execute_script` to refill post-load | best-effort |
+| session | origin cookies from netfetcher/eidetic | `set_cookie(...)` once, **before** navigation | one-shot |
+| DOM snapshot | serialize outerHTML | `navigate_to_string(html)` — **degrade path** | static, loses live JS |
+| visual snapshot | last serval frame (the snapshot-card texture) | hold as receiver's first frame | cosmetic cross-fade |
+
+### Inject choreography (order matters)
+
+1. Freeze the visual snapshot (the snapshot-card texture already is this).
+2. Boot the scrying receiver actor (the P4 constellation actor).
+3. `set_cookie` for each exported cookie — **before** navigating.
+4. `navigate_to_url(url)` — faithful path (WebView re-fetches, runs real JS).
+   `navigate_to_string(dom)` only when there is no refetchable URL.
+5. On `NavigationFinished { success: true }`: `execute_script` to restore scroll
+   and refill forms.
+6. Swap the tile's backing texture serval→scrying when the first **post-nav**
+   captured frame arrives (cross-fade out of the held card frame).
+7. Park or retire serval. Record the flip as a node-lineage event (provenance).
+
+## 5. Flip-back: scrying → serval (re-root, not reverse capture)
+
+A black-box WebView can only surface a *dead* snapshot (post-JS outerHTML, no live
+document, no JS heap). So flip-back re-roots at the lossless source rather than
+transferring a DOM:
+
+1. scry extracts the cheap locator (`BackState`): current URL, scroll, form?,
+   cookies — via the WebView API + `execute_script`.
+2. serval re-fetches the URL from the lossless root (netfetcher live, or eidetic if
+   cached) and renders it *live* with its own engine. Fresh JS run, real document.
+3. Apply the carried nav state: scroll, best-effort form refill.
+4. Cookies flow back into the netfetcher/eidetic cookie world (one-shot reverse, so
+   a login made *inside* scry comes home).
+5. Swap the tile texture scry→serval, cross-fade, retire the scry actor.
+
+Result: same page, same place, same session — never the same running program (the
+JS heap cannot cross). That is the charter ceiling, stated honestly.
+
+### `BackState` — the lean locator a black-box can give (illustrative)
+
+```rust
+struct BackState {
+    url: String,              // current; may differ from flip-out if the user navigated in scry
+    scroll: (f32, f32),       // via execute_script
+    form: Option<FormValues>, // via execute_script, best-effort
+    cookies: Vec<Cookie>,     // via the WebView cookie API
+}
+```
+
+### Primary re-fetch receiver path
+
+serval's `FlipReceiver`, on `Carry::Back(b)`: fetch `b.url` (netfetcher/eidetic) →
+build a fresh `ScriptedDocument` → on its first frame apply `b.scroll` and refill
+`b.form` → push `b.cookies` into the netfetcher/eidetic jar. No DOM injection;
+serval re-renders from source.
+
+### Why this is the no-chain mechanism
+
+Re-rooting requires rendering source bytes live, which is a *primary's* capability
+(engines are byte-consuming and never own networking, so source is always
+reachable). Secondary→secondary has no clean re-root: a dead-snapshot shuttle that
+compounds loss with ambiguous session authority. So the only sane hops are
+primary→secondary (compat view) and secondary→primary (flip-back). One hop.
+
+## 6. Build phases
+
+1. **Serval export accessors** — `url()`/`scroll()` public on `ScriptedDocument`;
+   a DOM serializer + form-value extraction on `serval-scripted-dom`. Verso-unaware.
+2. **`verso-api`** — the traits + `PortableViewState`/`BackState`/`LayerSet`.
+3. **`verso-serval` + `verso-scry`** — the `FlipDonor`/`FlipBack`/`FlipReceiver`
+   impls over the plain engine APIs.
+4. **`verso`** — the `ServalToScrying` carrier + flip choreography + registry. Lean,
+   well under the 600-LOC ceiling (the engines do the heavy lifting).
+5. **Host wiring** — meerkat/pelt build the carrier from the variant's adapters; the
+   tile texture cross-fade. P4 (the scry tile) shipped 2026-06-15; this wires the
+   flip *trigger* over it (currently the ad-hoc `compat_pins` path; the inker picker
+   folds it into routing).
+6. **Flip-back** lands alongside forward (same carrier, the `Back` direction).
+
+## 7. Inherited invariants (charter)
+
+One hop (no secondary→secondary). Asymmetric fidelity is the engines' nature, not
+policy. Session is one-shot at flip time (continuous mirror is a tarpit). Ceiling:
+same page, same session, same place — never the same running program.
+
+## 8. Progress
+
+- **2026-06-23**: verified scry receiver (ready) and serval donor (three export
+  gaps). Resolved all four open questions — serval export as plain verso-unaware
+  methods on `serval-scripted-dom`; traits standalone in `verso-api`; crate layering
+  as `verso-api` + per-engine `verso-*` adapters + a `verso` orchestrator
+  (host-wired, feature-gated); texture swap rides the capture cadence after
+  `NavigationFinished`. Designed the flip-back re-root path + `BackState`.
+- **2026-06-23 (impl)**: corrected the P4 status (X1+ shipped 2026-06-15; the gate
+  before the live flip is now the inker picker, not P4). Minted `crates/verso-api`
+  — `PortableViewState`/`BackState`/`LayerSet` + `FlipDonor`/`FlipBack`/`FlipReceiver`,
+  engine-agnostic with zero deps; `cargo test -p verso-api` green. Next: serval
+  export accessors (phase 1), then the `verso-serval`/`verso-scry` adapters (phase 3).

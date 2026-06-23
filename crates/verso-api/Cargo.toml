@@ -1,0 +1,16 @@
+[package]
+name = "verso-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The engine-flip seam for the Mere browser: portable view-state + donor/back/receiver traits (the compatibility-view charter). Engine-agnostic; per-engine adapters (verso-serval, verso-scry, ...) bridge concrete engines."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+# None on purpose: this crate is the engine-agnostic contract. It must not pull an
+# engine or a GPU layer, so a black-box secondary can implement it without faking a
+# donate side and `verso` can depend on it without dragging Servo or CEF in.
