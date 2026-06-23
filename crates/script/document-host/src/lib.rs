@@ -278,3 +278,93 @@ pub async fn run_guarded(
         Err(e) => Guarded::Trapped(format!("{e}")),
     })
 }
+
+/// A capability's resolved permission. Mirrors `kernel::permissions::Permission`
+/// (`Allow < Prompt < Deny`); the kernel five-scope → `Grant` mapping is a thin
+/// P2.5 adapter in the caller (the content actor), so `document-host` needs no
+/// graph-kernel dependency (§11.4: the policy lives here, the resolution is input).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CapPermission {
+    Allow,
+    Prompt,
+    Deny,
+}
+
+/// Which `mere:script` application capabilities a script is granted. The WASI
+/// runtime floor is always linked (a std guest needs it); these gate the
+/// application imports. A `Deny` (or, for P2, a `Prompt`) omits the import, so a
+/// component that *requires* it fails to instantiate — the secure default the probe
+/// proved (§10.4): unimported means unreachable.
+#[derive(Clone, Debug)]
+pub struct Grant {
+    pub log: CapPermission,
+    pub document: CapPermission,
+}
+
+impl Grant {
+    /// Everything the document-core world offers.
+    pub fn allow_all() -> Self {
+        Self { log: CapPermission::Allow, document: CapPermission::Allow }
+    }
+
+    /// `log` only — the inspect/apply document capability denied.
+    pub fn deny_document() -> Self {
+        Self { log: CapPermission::Allow, document: CapPermission::Deny }
+    }
+
+    /// The granted application-capability interface names (the seam a future
+    /// `caps.granted()` discovery import returns).
+    pub fn granted_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        if self.log == CapPermission::Allow {
+            names.push("mere:script/log".to_string());
+        }
+        if self.document == CapPermission::Allow {
+            names.push("mere:script/document-host".to_string());
+        }
+        names
+    }
+}
+
+/// Link the WASI floor (always) plus exactly the granted `mere:script` imports.
+/// Only `Allow` links; `Deny`/`Prompt` omit. (A `Prompt` must be resolved to
+/// Allow/Deny before instantiation by the caller; P2 omits it conservatively.)
+fn link_with_grant(linker: &mut Linker<ScriptHost>, grant: &Grant) -> wasmtime::Result<()> {
+    wasmtime_wasi::p2::add_to_linker_async(linker)?;
+    if grant.log == CapPermission::Allow {
+        crate::mere::script::log::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(linker, |s| s)?;
+    }
+    if grant.document == CapPermission::Allow {
+        crate::mere::script::document_host::add_to_linker::<ScriptHost, HasSelf<ScriptHost>>(
+            linker,
+            |s| s,
+        )?;
+    }
+    Ok(())
+}
+
+/// Try to instantiate (and `activate`) the component under `grant`. Succeeds only
+/// if every import the component *requires* is granted; a denied required
+/// capability makes instantiation fail — the capability boundary, enforced by the
+/// runtime, not by host convention. The seed DOM + granted names are wired so the
+/// guest (and a future `caps.granted()`) see exactly what was allowed.
+pub async fn instantiate_with_grant(component_path: &Path, grant: &Grant) -> wasmtime::Result<()> {
+    let engine = Engine::default();
+    let component = Component::from_file(&engine, component_path)?;
+    let mut linker = Linker::new(&engine);
+    link_with_grant(&mut linker, grant)?;
+    let mut store = Store::new(
+        &engine,
+        ScriptHost {
+            dom: seed_dom(),
+            revision: 0,
+            logs: Vec::new(),
+            wasi: WasiCtxBuilder::new().build(),
+            table: ResourceTable::new(),
+            limits: StoreLimits::default(),
+        },
+    );
+    let bindings = DocumentCore::instantiate_async(&mut store, &component, &linker).await?;
+    bindings.call_activate(&mut store).await?;
+    Ok(())
+}

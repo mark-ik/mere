@@ -834,6 +834,17 @@ same `call_async` without suspending, and `fetch` slots in when wired.
   `kernel::permissions` + `register-mod-loader` as siblings. Note: `document-host` is a default
   member, so a bare `cargo build` / rust-analyzer over the workspace now also compiles wasmtime —
   a `default-members` list can keep the bare build lean if that friction bites.
+- **2026-06-22 (P2.3 — capability / linker policy, green).** Added the grant→link/omit policy:
+  `CapPermission` (Allow/Prompt/Deny, mirroring `kernel::permissions::Permission`), a `Grant` over
+  the `mere:script` application capabilities, `link_with_grant` (WASI floor always + only `Allow`
+  imports), and `instantiate_with_grant`. Tests prove the capability boundary: `allow_all`
+  instantiates the document-core guest; `deny_document` (omitting `document-host`) **fails
+  instantiation** because the guest requires it — enforced by the runtime, not host convention;
+  `granted_names` reflects the grant. document-host stays **graph-kernel-free**: the five-scope
+  `resolve_permission` → `Grant` mapping is a thin P2.5 adapter in the content actor (the policy
+  lives here, the resolution is input — §11.4). Remaining for §11.4: a `caps.granted()` discovery
+  import (`granted_names` is its seam) — a small additive WIT step. (cargo notes a benign
+  `[paths]`-override warning for the redirected serval crates.)
 
 ## Key grounding files
 
