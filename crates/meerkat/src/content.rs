@@ -37,7 +37,7 @@ use crate::fetch::ContentState;
 use crate::resources::{ResourceLoader, ResourceStore};
 use crate::serval_render::scene_from_content_band;
 
-mod script;
+pub(crate) mod script;
 use std::path::{Path, PathBuf};
 
 use document_host::{Grant, Quota};

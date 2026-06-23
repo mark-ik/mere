@@ -22,10 +22,12 @@
 //! so the node simply returns to dormant.
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, TryRecvError};
 
 use armillary::{ActorHandle, Generations, Pool, Wake};
 use forme::GraphMemberId;
+use kernel::permissions::ResolvedPermission;
 use frame::GraphId;
 use document_canvas::{DocumentRenderPacket, DocumentStyleSheet, FontTable};
 use linked_data::GraphContribution;
@@ -476,6 +478,54 @@ impl Constellation {
         }
         activation.handle.command(ContentCommand::Find {
             query: query.to_string(),
+            viewport_gen: activation.gens.viewport,
+        });
+    }
+
+    /// Attach a DocumentScript at `component_path` to `member`'s page, under the
+    /// host-resolved `log` / `document` capability permissions (P2.5). The actor
+    /// mirrors the page into a mutable `ScriptedDom` the script edits and re-renders
+    /// from it; a denied required capability fails instantiation (reported via
+    /// `ScriptOutcome`). No-op for a node that is not active.
+    pub fn attach_script(
+        &self,
+        member: GraphMemberId,
+        component_path: PathBuf,
+        log: ResolvedPermission,
+        document: ResolvedPermission,
+    ) {
+        let Some(activation) = self.active.get(&member) else {
+            return;
+        };
+        activation.handle.command(ContentCommand::AttachScript {
+            component_path,
+            log,
+            document,
+            viewport_gen: activation.gens.viewport,
+        });
+    }
+
+    /// Deliver one event to `member`'s attached DocumentScript; the script's batch is
+    /// applied to the live DOM and the tile re-renders. No-op if no script is
+    /// attached or the node is not active. (P2.5.)
+    pub fn deliver_script_event(&self, member: GraphMemberId, kind: String, payload: String) {
+        let Some(activation) = self.active.get(&member) else {
+            return;
+        };
+        activation.handle.command(ContentCommand::DeliverEvent {
+            kind,
+            payload,
+            viewport_gen: activation.gens.viewport,
+        });
+    }
+
+    /// Detach `member`'s DocumentScript (runs its `deactivate`) and revert to the
+    /// static page. No-op for a node that is not active. (P2.5.)
+    pub fn detach_script(&self, member: GraphMemberId) {
+        let Some(activation) = self.active.get(&member) else {
+            return;
+        };
+        activation.handle.command(ContentCommand::DetachScript {
             viewport_gen: activation.gens.viewport,
         });
     }

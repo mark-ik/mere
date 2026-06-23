@@ -92,6 +92,15 @@ pub struct ShellOutcome {
     /// `sparql(…)` call was made. Recorded, not run here: the shell snapshot has
     /// only node URLs, not the full RDF graph.
     pub sparql_query: Option<String>,
+    /// A wasm component path passed to `attach_script("path")` — the host attaches a
+    /// DocumentScript at that path to the focused tile (P2.5). `None` when not called.
+    pub attach_script: Option<String>,
+    /// True when `detach_script()` was called — the host detaches the focused tile's
+    /// script. (P2.5.)
+    pub detach_script: bool,
+    /// A `(kind, payload)` passed to `script_event("kind", "payload")` — the host
+    /// delivers it to the focused tile's attached script. `None` when not called. (P2.5.)
+    pub script_event: Option<(String, String)>,
     /// A compile / runtime error message, if the script failed. Commands called
     /// before a mid-script failure are still present in `commands`.
     pub error: Option<String>,
@@ -117,6 +126,9 @@ impl CommandShell {
         let commands: Rc<RefCell<Vec<Command>>> = Rc::new(RefCell::new(Vec::new()));
         let relation_kind: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let sparql_query: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let attach_script: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let detach_script: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
+        let script_event: Rc<RefCell<Option<(String, String)>>> = Rc::new(RefCell::new(None));
         let snapshot = Rc::new(ctx.clone());
         let mut engine = script_rhai::base_engine();
 
@@ -176,17 +188,41 @@ impl CommandShell {
             *sq.borrow_mut() = Some(query.to_string());
         });
 
+        // DocumentScript triggers (P2.5): `attach_script("path.wasm")` attaches a
+        // wasm component to the focused tile, `script_event("kind", "payload")`
+        // delivers one event to it, `detach_script()` removes it. Like `sparql` /
+        // `relate`, these record into the outcome; the host applies them on the
+        // focused tile (resolving the script's capability permissions there).
+        let asp = attach_script.clone();
+        engine.register_fn("attach_script", move |path: &str| {
+            *asp.borrow_mut() = Some(path.to_string());
+        });
+        let dsp = detach_script.clone();
+        engine.register_fn("detach_script", move || {
+            *dsp.borrow_mut() = true;
+        });
+        let sev = script_event.clone();
+        engine.register_fn("script_event", move |kind: &str, payload: &str| {
+            *sev.borrow_mut() = Some((kind.to_string(), payload.to_string()));
+        });
+
         engine.set_max_operations(OP_BUDGET);
         let result = engine.eval::<Dynamic>(&desugar(source));
         let commands = commands.borrow().clone();
         let relation_kind = relation_kind.borrow().clone();
         let sparql_query = sparql_query.borrow().clone();
+        let attach_script = attach_script.borrow().clone();
+        let detach_script = *detach_script.borrow();
+        let script_event = script_event.borrow().clone();
         match result {
             Ok(value) => ShellOutcome {
                 text: stringify(value),
                 commands,
                 relation_kind,
                 sparql_query,
+                attach_script,
+                detach_script,
+                script_event,
                 error: None,
             },
             Err(err) => ShellOutcome {
@@ -194,6 +230,9 @@ impl CommandShell {
                 commands,
                 relation_kind,
                 sparql_query,
+                attach_script,
+                detach_script,
+                script_event,
                 error: Some(err.to_string()),
             },
         }
@@ -220,7 +259,7 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
         .iter()
         .map(|c| c.verb())
         .chain(QUERIES.iter().copied())
-        .chain(std::iter::once("sparql"))
+        .chain(["sparql", "attach_script", "detach_script", "script_event"])
         .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
 }
 
@@ -383,6 +422,27 @@ mod tests {
         let bare = CommandShell::new().eval("inspect", &ctx());
         assert!(bare.error.is_none());
         assert!(!bare.text.is_empty(), "the map renders");
+    }
+
+    #[test]
+    fn script_triggers_record_into_the_outcome() {
+        // attach_script("path") records the component path; no command, no error.
+        let out = CommandShell::new().eval(r#"attach_script("mods/hi.wasm")"#, &ctx());
+        assert_eq!(out.attach_script.as_deref(), Some("mods/hi.wasm"));
+        assert!(out.commands.is_empty() && out.error.is_none());
+
+        // detach_script() flips the flag.
+        let out = CommandShell::new().eval("detach_script()", &ctx());
+        assert!(out.detach_script);
+        assert!(out.error.is_none());
+
+        // script_event("kind", "payload") records the pair.
+        let out = CommandShell::new().eval(r#"script_event("click", "btn-1")"#, &ctx());
+        assert_eq!(out.script_event, Some(("click".to_string(), "btn-1".to_string())));
+        assert!(out.error.is_none());
+
+        // The verbs ghost-complete so a user discovers them.
+        assert_eq!(complete("attach"), Some("attach_script"));
     }
 
     #[test]

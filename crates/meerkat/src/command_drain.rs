@@ -223,6 +223,40 @@ impl WindowCtx<'_> {
         if let Some(query) = &outcome.sparql_query {
             note = Some(self.run_sparql_query(query));
         }
+        // DocumentScript triggers (P2.5): attach / deliver-event / detach on the
+        // focused tile. `attach` resolves the script's capability permissions (App
+        // default for now; the Session-scope override store is the follow-on); the
+        // actor maps them to the link grant and a denied capability fails the attach.
+        // The re-render rides the actor's `Scene`; `ScriptOutcome` carries the result.
+        if let Some(path) = &outcome.attach_script {
+            match self.focused_member() {
+                Some(member) => {
+                    let (log, document) =
+                        crate::content::script::resolve_attach_permissions(Default::default());
+                    self.shared.content.constellation.attach_script(
+                        member,
+                        std::path::PathBuf::from(path),
+                        log,
+                        document,
+                    );
+                }
+                None => note = Some("Focus a tile to attach a script to".to_string()),
+            }
+        }
+        if let Some((kind, payload)) = &outcome.script_event {
+            if let Some(member) = self.focused_member() {
+                self.shared.content.constellation.deliver_script_event(
+                    member,
+                    kind.clone(),
+                    payload.clone(),
+                );
+            }
+        }
+        if outcome.detach_script {
+            if let Some(member) = self.focused_member() {
+                self.shared.content.constellation.detach_script(member);
+            }
+        }
         let (severity, echo) = match &outcome.error {
             Some(err) => (Severity::Warn, format!("error: {err}")),
             None => (Severity::Info, outcome.text.clone()),

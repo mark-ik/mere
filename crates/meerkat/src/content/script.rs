@@ -18,7 +18,9 @@
 use std::path::Path;
 
 use document_host::{CapPermission, DocumentScript, Grant, Quota, TurnOutcome};
-use kernel::permissions::{Permission, ResolvedPermission};
+use kernel::permissions::{
+    resolve_permission, Permission, ResolvedPermission, ScopedPermission, SettingScope,
+};
 use layout_dom_api::{LayoutDom, LayoutDomMut, NodeKind};
 use serval_layout::{
     inline_stylesheets, lay_out_content, linked_stylesheets_with_loader, ContentLayout, ImageLoader,
@@ -38,6 +40,43 @@ fn cap_permission(resolved: ResolvedPermission) -> CapPermission {
         Permission::Prompt => CapPermission::Prompt,
         Permission::Deny | Permission::Inherit => CapPermission::Deny,
     }
+}
+
+/// The App-scope default for a script's capabilities: `Allow`. A user-typed
+/// `>attach-script` is permitted by default (narrower scopes may deny); `document`
+/// in particular must default to Allow, or the document-core guest — which requires
+/// it — could never instantiate.
+const APP_DEFAULT: Permission = Permission::Allow;
+
+/// A per-capability **Session-scope** override for script capabilities (a future
+/// `settings.json` entry, §11.4). `None` on a capability = no opinion at this scope
+/// (`Inherit`), so the App default stands. Today the host passes the default (no
+/// override store yet); the narrowing path is exercised by tests.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ScriptCapPolicy {
+    pub log: Option<Permission>,
+    pub document: Option<Permission>,
+}
+
+/// Resolve a script's per-capability permissions through the scope chain (App
+/// default + optional Session override) per the kernel narrowing rule, returning
+/// the effective `(log, document)` to carry in `AttachScript`. The host calls this;
+/// [`grant_from_resolved`] then maps the result to the link grant. This is the
+/// host-side half of the §11.4 permissions seam (document-host stays kernel-free).
+pub(crate) fn resolve_attach_permissions(
+    session: ScriptCapPolicy,
+) -> (ResolvedPermission, ResolvedPermission) {
+    (resolve_cap(session.log), resolve_cap(session.document))
+}
+
+/// Resolve one capability: an App-default opinion, narrowed by an optional
+/// Session-scope opinion (more scopes — Graph / Surface — join as their stores land).
+fn resolve_cap(session: Option<Permission>) -> ResolvedPermission {
+    let mut chain = vec![ScopedPermission::new(SettingScope::App, APP_DEFAULT)];
+    if let Some(p) = session {
+        chain.push(ScopedPermission::new(SettingScope::Session, p));
+    }
+    resolve_permission(&chain, APP_DEFAULT)
 }
 
 /// Build a document-host [`Grant`] from the host-resolved permissions for the two
@@ -229,5 +268,22 @@ mod tests {
         assert_eq!(grant_from_resolved(allow, deny).document, CapPermission::Deny);
         // Prompt is preserved (P2 omits it conservatively, like Deny, at link time).
         assert_eq!(grant_from_resolved(allow, prompt).document, CapPermission::Prompt);
+    }
+
+    #[test]
+    fn attach_permissions_resolve_with_narrowing() {
+        // No Session override: the App default (Allow) stands for both caps.
+        let (log, document) = resolve_attach_permissions(ScriptCapPolicy::default());
+        assert_eq!(log.effective, Permission::Allow);
+        assert_eq!(document.effective, Permission::Allow);
+
+        // A Session-scope Deny on `document` narrows past the App Allow (the narrowing
+        // rule); the resulting grant omits the document import, so the guest fails to
+        // instantiate — a session-wide "no script may touch the page" switch.
+        let policy = ScriptCapPolicy { log: None, document: Some(Permission::Deny) };
+        let (_log, document) = resolve_attach_permissions(policy);
+        assert_eq!(document.effective, Permission::Deny);
+        assert_eq!(document.decided_by, Some(SettingScope::Session));
+        assert_eq!(grant_from_resolved(_log, document).document, CapPermission::Deny);
     }
 }

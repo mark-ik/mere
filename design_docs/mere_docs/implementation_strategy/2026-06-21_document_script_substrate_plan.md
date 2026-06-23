@@ -1001,6 +1001,23 @@ DOM model is the decision.
   attach guarded script -> script mutates the live DOM -> tile re-renders. Remaining P2: the host-side
   permission *resolution* wiring (an actual per-scope policy store + a script-attach trigger feeding
   `AttachScript`), the deferred render refinements, P2.6 AOT, and the fiber-async `fetch` capability.
+- **2026-06-23 (host-side permission resolution + omnibar script-attach trigger, green).** Mark
+  chose the **omnibar command verb** trigger. Wired end to end across clean files (no touch to his
+  hot bin or settings_store): (1) `shell_eval.rs` (the privileged `>` rhai lane) gains
+  `attach_script("path")` / `script_event("kind","payload")` / `detach_script()` bindings that record
+  into new `ShellOutcome` fields (the `sparql("…")` pattern), plus ghost-completion; (2)
+  `content::script` (now `pub(crate)`) gains the **host-side resolver** `resolve_attach_permissions` +
+  `ScriptCapPolicy`: an App-default-Allow opinion narrowed by an optional Session-scope override,
+  through the kernel `resolve_permission` narrowing rule (`document` must default Allow or the guest
+  can't instantiate); (3) `constellation` gains `attach_script` / `deliver_script_event` /
+  `detach_script` send methods (mirroring `request_find`); (4) `command_drain.rs` drains the new
+  outcome fields → resolves permissions → sends to the focused tile's actor. So a user types
+  `>attach_script("mod.wasm")` and a guarded DocumentScript attaches to the focused page; a
+  session-scope `document: Deny` would fail the attach at instantiation. 3 new tests (73 lib + 109
+  bin): the omnibar triggers record; the permission resolution narrows (App Allow + Session Deny →
+  Deny). **Remaining**: a persistent Session-override store (the live call passes the App default for
+  now — `settings.json` entry is the follow-on), auto-attach (mod/origin binding), the deferred render
+  refinements, P2.6 AOT, and fiber-async `fetch`.
 
 ## Key grounding files
 
