@@ -16,7 +16,9 @@
 //! seam into the shell document's settings panes each frame.
 
 use forme::GraphMemberId;
+use kernel::permissions::Permission;
 use register_theme::chrome::ChromeTheme;
+use session_runtime::settings_store;
 
 use crate::WindowCtx;
 use crate::apparatus::{engine_section_items, physics_section_items, theme_section_items};
@@ -49,6 +51,7 @@ pub(crate) fn settings_index(namespace: &str) -> Vec<SettingsPageRef> {
             SettingsPageRef { id: "physics", title: "Physics" },
             SettingsPageRef { id: "orrery", title: "Orrery" },
             SettingsPageRef { id: "scene", title: "Scene" },
+            SettingsPageRef { id: "scripts", title: "Scripts" },
             SettingsPageRef { id: "menu", title: "Menu" },
         ],
         // The `node:<id>` facets provider lists its own pages. (Settings lane P3.)
@@ -89,6 +92,7 @@ impl WindowCtx<'_> {
             "physics" => ("Physics", physics_section_items(self.physics_damping())),
             "orrery" => ("Orrery", self.orrery_settings_items()),
             "scene" => ("Scene", scene_section_items()),
+            "scripts" => ("Scripts", self.script_settings_items()),
             "menu" => ("Menu", self.menu_settings_items()),
             _ => return None,
         };
@@ -336,6 +340,92 @@ impl WindowCtx<'_> {
         let mirror = self.view.mirror_tiles;
         items.push(toggle(check("Mirror open tiles", mirror), mirror, "orrery:mirror".to_string()));
         items
+    }
+
+    /// The `pelt/scripts` page: DocumentScript capability permissions (§11.4). Each of
+    /// `log` / `document` / `net` is a button that cycles default → Allow → Prompt →
+    /// Deny (draining `script:cap:<cap>`), plus a read-only list of the installed
+    /// auto-attach bindings so the user sees what runs. `net` (network egress) defaults
+    /// **Deny** and is same-origin scoped — this page is where a user grants it for a
+    /// trusted script. Reads the on-disk opinion (the host caches none), so the labels
+    /// reflect exactly what an attach will resolve.
+    fn script_settings_items(&self) -> Vec<PaneItem> {
+        let prefs = settings_store::load_settings(&self.shared.session.mere_root)
+            .ok()
+            .flatten()
+            .unwrap_or_default()
+            .script_permissions;
+        let label = |opt: Option<Permission>| match opt {
+            None => "default",
+            Some(Permission::Allow) => "Allow",
+            Some(Permission::Prompt) => "Prompt",
+            Some(Permission::Deny) => "Deny",
+            Some(Permission::Inherit) => "inherit",
+        };
+        let mut items = vec![PaneItem::text("app-title", "Capabilities")];
+        for (name, cur) in [("log", prefs.log), ("document", prefs.document), ("net", prefs.net)] {
+            items.push(PaneItem::button(
+                "app-btn",
+                format!("{name}: {}", label(cur)),
+                format!("script:cap:{name}"),
+            ));
+        }
+        items.push(PaneItem::text(
+            "app-row-muted",
+            "net = network egress (default Deny, same-origin only)",
+        ));
+
+        // Read-only: the installed auto-attach bindings (user file + installed mods).
+        let bindings = {
+            let root = &self.shared.session.mere_root;
+            let mut b = crate::content::script::load_resolved_bindings(root, &prefs);
+            b.extend(crate::content::script::load_mod_bindings(root, &prefs));
+            b
+        };
+        items.push(PaneItem::text("app-title", "Installed bindings"));
+        if bindings.is_empty() {
+            items.push(PaneItem::text("app-row-muted", "none"));
+        } else {
+            for b in &bindings {
+                let net = if b.net.effective == Permission::Allow { " [net]" } else { "" };
+                items.push(PaneItem::text(
+                    "app-row",
+                    format!("{}  →  {}{net}", b.origin, b.component_path.display()),
+                ));
+            }
+        }
+        items
+    }
+
+    /// Cycle the `script:cap:<cap>` permission opinion (default → Allow → Prompt →
+    /// Deny → default) for the named capability, persist it, and re-derive the
+    /// auto-attach bindings so the change takes effect on the next attach. (Tail 3.)
+    pub(super) fn set_script_cap(&mut self, cap: &str) {
+        let root = self.shared.session.mere_root.clone();
+        let mut settings = settings_store::load_settings(&root).ok().flatten().unwrap_or_default();
+        let next = |cur: Option<Permission>| match cur {
+            None => Some(Permission::Allow),
+            Some(Permission::Allow) => Some(Permission::Prompt),
+            Some(Permission::Prompt) => Some(Permission::Deny),
+            _ => None,
+        };
+        match cap {
+            "log" => settings.script_permissions.log = next(settings.script_permissions.log),
+            "document" => {
+                settings.script_permissions.document = next(settings.script_permissions.document)
+            }
+            "net" => settings.script_permissions.net = next(settings.script_permissions.net),
+            _ => return,
+        }
+        if let Err(err) = settings_store::save_settings(&root, &settings) {
+            tracing::warn!(%err, "failed to persist script permission");
+            return;
+        }
+        // Re-push the bindings so a later auto-attach resolves under the new opinion.
+        let prefs = settings.script_permissions;
+        let mut bindings = crate::content::script::load_resolved_bindings(&root, &prefs);
+        bindings.extend(crate::content::script::load_mod_bindings(&root, &prefs));
+        self.shared.content.constellation.set_script_bindings(bindings);
     }
 
     /// Snapshot the open settings tiles into the shell document each frame: resolve each

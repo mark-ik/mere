@@ -1291,6 +1291,11 @@ impl WindowCtx<'_> {
             k if k.starts_with("engine:toggle:") => {
                 self.toggle_engine(&k["engine:toggle:".len()..]);
             }
+            // DocumentScript capability cyclers (the `pelt/scripts` page): cycle
+            // log/document/net through default → Allow → Prompt → Deny. (Tail 3.)
+            k if k.starts_with("script:cap:") => {
+                self.set_script_cap(&k["script:cap:".len()..]);
+            }
             // Theme editor (T5): fork / remove / mode-toggle / per-seed HSL nudge.
             // These must precede the theme-id fallback so they aren't read as ids.
             "theme:fork" => self.fork_active_theme(),

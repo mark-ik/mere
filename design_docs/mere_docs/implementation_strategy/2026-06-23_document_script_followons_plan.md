@@ -383,3 +383,13 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   cross-origin exfil) — is deferred to the hardening plan's origin-scoped-`net` redesign; **`net`
   stays prototype-only until then.** Tail 3 (settings-lane permission/binding UI) remains, in Mark's
   hot settings zone.
+- **2026-06-24 (UX tail 3/3 — settings-lane Scripts page, green).** A `pelt/scripts` settings page
+  (settings_lane.rs): `log` / `document` / `net` each a button cycling default → Allow → Prompt →
+  Deny (draining `script:cap:<cap>` → `set_script_cap`, which loads settings.json, mutates the opinion,
+  saves, and re-derives + re-pushes the auto-attach bindings so it takes effect), plus a read-only
+  list of installed bindings (user file + mods, with a `[net]` marker). This is where a user grants
+  `net` for a trusted script. Reads the on-disk opinion (the host caches none). The dispatch arm sits
+  in input.rs `apply_pelt_activation` (patch-staged around Mark's concurrent hunks). The bindings
+  **editor** (add/remove an origin→component binding) is deferred — it needs a text-input control the
+  button/toggle lane doesn't have. With this + E1, **`net` is now safely user-enablable**, so it can
+  come off prototype-only. meerkat 78 lib / 136 bin green. **All three UX tails done.**
