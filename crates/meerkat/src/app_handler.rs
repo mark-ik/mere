@@ -624,9 +624,12 @@ impl ApplicationHandler for Shell {
             }
             WindowEvent::ModifiersChanged(mods) => {
                 wc.view.modifiers = modifiers_from_winit(mods.state());
-                let (ctrl, shift) = (wc.view.modifiers.ctrl, wc.view.modifiers.shift);
+                let (ctrl, shift, alt) =
+                    (wc.view.modifiers.ctrl, wc.view.modifiers.shift, wc.view.modifiers.alt);
                 wc.orrery_mut().set_ctrl(ctrl);
                 wc.orrery_mut().set_shift(shift);
+                // Alt gates the camera orbit drag (Alt+left-drag over the orrery). (Iso orbit.)
+                wc.orrery_mut().set_alt(alt);
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 // A wheel over the compatibility-view tile scrolls the WebView (Win32

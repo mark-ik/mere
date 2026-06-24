@@ -928,3 +928,30 @@ fn node_size_drives_the_pick_radius() {
     orrery.clear_node_size(id);
     assert!(orrery.view.hit_test(probe).is_none(), "cleared footprint reverts to the default");
 }
+
+#[test]
+fn alt_left_drag_orbits_the_camera() {
+    // The deferred iso-camera orbit gesture: with Alt held, a left-drag yaws + reclines the camera
+    // instead of picking / marqueeing. (Isometric camera — orbit gesture.)
+    let mut orrery = Orrery::new();
+    let (yaw0, tilt0) = (orrery.yaw(), orrery.tilt());
+
+    orrery.set_alt(true);
+    orrery.pointer_down(PointerButton::Left, 400.0, 300.0);
+    orrery.cursor_moved(500.0, 360.0); // drag right (yaw) + down (recline tilt)
+    assert!(orrery.yaw() != yaw0, "horizontal Alt+drag yawed the camera");
+    assert!(orrery.tilt() < tilt0, "downward Alt+drag reclined the tilt");
+
+    // Releasing ends the orbit: a later move (Alt still held, no press) must not keep orbiting.
+    orrery.pointer_up(PointerButton::Left, 500.0, 360.0);
+    let (yaw1, tilt1) = (orrery.yaw(), orrery.tilt());
+    orrery.cursor_moved(600.0, 420.0);
+    assert_eq!((orrery.yaw(), orrery.tilt()), (yaw1, tilt1), "no orbit after the drag ends");
+
+    // And a plain (no-Alt) left drag does not orbit — it stays the pick / marquee gesture.
+    orrery.set_alt(false);
+    let yaw2 = orrery.yaw();
+    orrery.pointer_down(PointerButton::Left, 100.0, 100.0);
+    orrery.cursor_moved(220.0, 160.0);
+    assert_eq!(orrery.yaw(), yaw2, "a non-Alt left drag does not orbit");
+}

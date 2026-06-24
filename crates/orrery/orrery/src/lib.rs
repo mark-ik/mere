@@ -91,6 +91,11 @@ const MIN_ZOOM: f32 = 0.1;
 const MAX_ZOOM: f32 = 8.0;
 /// Screen-px the pointer may move before a press counts as a drag, not a click.
 const CLICK_SLOP: f32 = 4.0;
+/// Orbit-drag sensitivity: yaw radians per screen-px of horizontal Alt+drag (a ~30px drag ≈ the
+/// `q`/`e` keystep). (Isometric camera — orbit gesture.)
+const ORBIT_YAW_PER_PX: f32 = 0.005;
+/// Orbit-drag sensitivity: tilt change per screen-px of vertical Alt+drag (`set_tilt` clamps).
+const ORBIT_TILT_PER_PX: f32 = 0.004;
 /// Screen-px pick radius around an edge segment for `edge_hit_test`.
 const EDGE_PICK_TOL: f32 = 6.0;
 /// Node box half-extent (px) — matches the underlay's default node rect, so each
@@ -155,6 +160,9 @@ pub struct Orrery {
     pan_velocity: (f32, f32),
     /// `Some(last_cursor)` while a middle-button pan drag is in progress.
     middle_drag: Option<(f32, f32)>,
+    /// `Some(last_cursor)` while an Alt+left-button **orbit** drag is in progress (horizontal =
+    /// yaw, vertical = tilt). Sibling to `middle_drag`'s pan. (Isometric camera — orbit gesture.)
+    orbit_drag: Option<(f32, f32)>,
     /// An in-progress left-button node click/drag, if any.
     drag: Option<Drag>,
     /// An in-progress field move / resize drag, if any. (Field regions.)
@@ -256,6 +264,9 @@ pub struct Orrery {
     /// Whether Shift is held (a node click adds to / toggles the selection rather
     /// than replacing it — multi-select).
     shift: bool,
+    /// Whether Alt is held (a left-drag orbits the camera instead of picking / marqueeing).
+    /// (Isometric camera — orbit gesture.)
+    alt: bool,
     /// The current viewport (px), updated by [`frame`](Orrery::frame) /
     /// [`resize`](Orrery::resize); used by `world_viewport` (cull) + `recenter`.
     view_w: u32,
@@ -397,6 +408,7 @@ impl Orrery {
             cursor: (0.0, 0.0),
             pan_velocity: (0.0, 0.0),
             middle_drag: None,
+            orbit_drag: None,
             drag: None,
             field_drag: None,
             selected: HashSet::new(),
@@ -423,6 +435,7 @@ impl Orrery {
             marquee: None,
             ctrl: false,
             shift: false,
+            alt: false,
             view_w: 1024,
             view_h: 600,
             active_strategy: None,

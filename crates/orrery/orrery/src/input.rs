@@ -14,7 +14,10 @@ use kernel::graph::{
 };
 
 use super::build::{hyperlink, seed_cluster};
-use super::{Drag, Orrery, PointerButton, CLICK_SLOP, EDGE_PICK_TOL, SETTLE_TICKS, WHEEL_PAN_SCALE, ZOOM_STEP};
+use super::{
+    Drag, Orrery, PointerButton, CLICK_SLOP, EDGE_PICK_TOL, ORBIT_TILT_PER_PX, ORBIT_YAW_PER_PX,
+    SETTLE_TICKS, WHEEL_PAN_SCALE, ZOOM_STEP,
+};
 
 /// World-space radius of a freshly placed field region — its `Disk` definition
 /// radius and its enclosing square `Region` half-extent. A sensible default the
@@ -41,6 +44,12 @@ impl Orrery {
         self.shift = shift;
     }
 
+    /// Update whether Alt is held. A left-drag with Alt down orbits the camera (yaw + tilt)
+    /// instead of picking / marqueeing. (Isometric camera — orbit gesture.)
+    pub fn set_alt(&mut self, alt: bool) {
+        self.alt = alt;
+    }
+
     /// The pointer moved to screen px `(x, y)`: pans on a middle-drag, pins the
     /// grabbed node on a left-drag past the slop, grows an active marquee.
     pub fn cursor_moved(&mut self, x: f32, y: f32) -> bool {
@@ -53,6 +62,16 @@ impl Orrery {
             self.pan_velocity = d;
             self.middle_drag = Some(new);
             redraw = true;
+        }
+        if let Some(prev) = self.orbit_drag {
+            // Alt+left orbit: horizontal drag yaws the view, vertical drag reclines the tilt
+            // (toward the iso foreshorten). `set_tilt` clamps, so the camera never flips. (P2.)
+            let (dx, dy) = (new.0 - prev.0, new.1 - prev.1);
+            self.orbit_by(dx * ORBIT_YAW_PER_PX);
+            self.set_tilt(self.camera.tilt - dy * ORBIT_TILT_PER_PX);
+            self.orbit_drag = Some(new);
+            self.cursor = new;
+            return true;
         }
         if let Some(mut d) = self.drag {
             let was_moved = d.moved;
@@ -142,7 +161,11 @@ impl Orrery {
                 self.pan_velocity = (0.0, 0.0);
             },
             PointerButton::Left => {
-                if let Some(node) = self.pick_at(self.cursor) {
+                if self.alt {
+                    // Alt+left begins an orbit drag (yaw + tilt the camera); it owns the gesture,
+                    // so no node pick / field grab / marquee starts. (Isometric camera — orbit.)
+                    self.orbit_drag = Some(self.cursor);
+                } else if let Some(node) = self.pick_at(self.cursor) {
                     self.drag = Some(Drag { node, press: self.cursor, moved: false });
                 } else if self.begin_field_drag(self.screen_to_world(self.cursor)) {
                     // Grabbed a field's box edge (move) or corner (resize) — the deep
@@ -168,6 +191,10 @@ impl Orrery {
                 false
             },
             PointerButton::Left => {
+                // End an orbit drag: the camera already moved live, nothing to settle. (P2.)
+                if self.orbit_drag.take().is_some() {
+                    return true;
+                }
                 // End a field move / resize drag: re-aim already happened live; just
                 // settle the layout into the new well and persist. (Field regions.)
                 if self.end_field_drag() {

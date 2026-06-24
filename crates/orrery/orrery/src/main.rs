@@ -172,6 +172,8 @@ impl ApplicationHandler for App {
             },
             WindowEvent::ModifiersChanged(mods) => {
                 self.orrery.set_ctrl(mods.state().control_key());
+                // Alt gates the orbit drag (Alt+left-drag yaws/tilts the camera). (Iso orbit.)
+                self.orrery.set_alt(mods.state().alt_key());
             },
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor = (position.x as f32, position.y as f32);
