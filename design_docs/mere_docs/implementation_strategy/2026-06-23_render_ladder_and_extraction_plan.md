@@ -224,11 +224,19 @@ Reconnoitred the slot-in; the build is now mechanical, in slices:
 
 ### Slices
 
-- **2a — inline scripts render.** On `Show`, for a `serval.scripted` node, build
-  `ScriptedDocument::parse(body)` (the host already fetched the body; `parse` runs
-  *inline* `<script>`s) and drive `frame()` / `pump()`. Page JS runs and its DOM
-  mutations render. Additive — the static path is untouched. The "page JS renders"
-  milestone. *(No external scripts, no providers yet.)*
+- **2a — inline scripts render.** *(built 2026-06-23, `0213ee7`)* On `Show`, a
+  `serval.scripted` node builds `ScriptedDocument::parse(body)` (inline `<script>`s
+  run); `render()` frames the live document. A fourth content-actor lane, additive (the
+  static / WIT-script / nematic lanes are untouched). Behind the meerkat `scripted`
+  cargo feature so the base build links no JS engine (the witness discipline; the
+  `boa_engine` patch mirrors serval's and only satisfies resolution — `script-engine-boa`
+  is optional, so boa stays out of the default compile graph). The host threads the
+  routed engine through `constellation.drive` → `Show`; `serval.scripted` is present +
+  pickable (context menu / settings / apparatus), gated on the feature. Both
+  `cargo check -p meerkat` and `--features scripted` green; the scripted variant **links**
+  (no image-size-limit hit); 73 meerkat lib tests pass. **Not yet runtime-verified** —
+  pin a node to `serval.scripted`, load an inline-JS page, watch the mutation render
+  (needs a headed pass). *(No external scripts, no providers yet — 2b / 2c.)*
 - **2b — external scripts.** Bridge the fetch-model gap: meerkat hands the actor a body
   (`Show`) and demand-fetches subresources async (`ContentCommand::Resource` round-trip),
   whereas `ScriptedDocument::load` wants a *sync* `ResourceFetcher`. Options: pre-fetch
@@ -273,5 +281,12 @@ parsed (and optionally scripted) DOM.
   static rung's id (pins persist). The registry-gated fallback is tested: a pin to an
   unregistered higher rung (e.g. `serval.scripted` before it ships) routes to static, so
   the ladder can be referenced before its rungs are implemented. 27 routing tests green.
-  Next: phase 2 (the scripted rung integration), which also surfaces the rung in the
-  picker (1b).
+- **2026-06-23 (phase 2a)**: the scripted render rung is built (`0213ee7`). A
+  `serval.scripted` node runs its page's inline JS (`ScriptedDocument::parse` on Boa) and
+  renders the mutated DOM — a fourth, additive content-actor lane behind the meerkat
+  `scripted` feature (base build stays JS-free; boa is an optional dep + a resolution-only
+  patch). Picker surfacing (1b) landed with it. Compiles both configs, the scripted
+  variant links (the image-size limit is not hit), 73 lib tests green. Runtime
+  verification pending (a running meerkat instance held the exe; needs a headed pass to
+  pin + load an inline-JS page). Next: 2b (external scripts) and 2c (cookie/storage
+  providers, which light up the native-session-store seams).
