@@ -698,6 +698,10 @@ fn attach_script(
     if let Some(prev) = content.script.take() {
         let _ = prev.detach();
     }
+    // Same-origin `net` egress (§E1): a script may fetch only its own page's origin,
+    // so a granted `net` cannot read or exfiltrate to a third-party host. A broader
+    // cross-origin allowlist (a mod declaring extra net origins) is a later refinement.
+    let net_origins = vec![script::host_of(&url)];
     let wanted = RefCell::new(Vec::new());
     let outcome = {
         let loader = ResourceLoader::new(store, &url, &wanted);
@@ -710,6 +714,7 @@ fn attach_script(
             grant,
             Quota::default(),
             fetcher,
+            net_origins,
         ) {
             Ok(inst) => {
                 content.script = Some(inst);

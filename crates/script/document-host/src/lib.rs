@@ -100,6 +100,35 @@ pub trait NetFetcher: Send + Sync {
     fn fetch(&self, url: &str) -> Result<NetResponse, String>;
 }
 
+/// The normalized host of a URL for the `net` allowlist check: the authority between
+/// `://` and the next `/?#`, with userinfo (`user@`) and `:port` stripped, IPv6
+/// brackets removed, lowercased. Mirrors the embedder's `host_of`; kept local so
+/// document-host stays embedder-agnostic (a shared crate is the longer-term home).
+fn net_host_of(url: &str) -> String {
+    let after = url.split_once("://").map(|(_, r)| r).unwrap_or(url);
+    let authority = after.split(['/', '?', '#']).next().unwrap_or("");
+    let host_port = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
+    let host = if let Some(rest) = host_port.strip_prefix('[') {
+        rest.split_once(']').map(|(inner, _)| inner).unwrap_or(host_port)
+    } else {
+        host_port.split(':').next().unwrap_or(host_port)
+    };
+    host.to_ascii_lowercase()
+}
+
+/// Whether `url`'s host is in the granted `net` origin allowlist (§E1): an exact host
+/// or a `*.suffix` glob. An empty allowlist denies everything (fail-closed).
+fn host_in_origins(url: &str, origins: &[String]) -> bool {
+    let host = net_host_of(url);
+    origins.iter().any(|pattern| {
+        let pattern = pattern.to_ascii_lowercase();
+        match pattern.strip_prefix("*.") {
+            Some(suffix) => host == suffix || host.ends_with(&format!(".{suffix}")),
+            None => host == pattern,
+        }
+    })
+}
+
 /// The per-instance store data: the live DOM + its host-side revision, the WASI
 /// floor the std guest needs, and a sink capturing the guest's `log` output.
 pub struct ScriptHost {
@@ -109,6 +138,12 @@ pub struct ScriptHost {
     /// The injected network backend for `net.fetch` (§11.7-7). `None` = no backend
     /// (a `net.fetch` call returns an error); set by [`DocumentScript::attach`].
     fetcher: Option<std::sync::Arc<dyn NetFetcher>>,
+    /// The origin allowlist this instance's `net.fetch` may reach (§E1 origin-scoped
+    /// net): exact hosts or `*.suffix` globs. Empty = reach nothing (a net-granted
+    /// script with no declared origins is denied every fetch). The host enforces this
+    /// at the `net.fetch` boundary *before* the backend runs, so `net` means "may
+    /// reach these origins", not "open internet". Set by [`DocumentScript::attach`].
+    net_origins: Vec<String>,
     /// The granted application-capability interface names this instance can see via
     /// the always-linked `caps.granted()` import (§11.4). Authoritative copy is the
     /// `Grant`; this is what the script is told it has.
@@ -136,14 +171,22 @@ impl crate::mere::script::caps::Host for ScriptHost {
 
 /// `net.fetch(request)` (§11.7-7): the fiber-async network capability. Sync-signature
 /// to the guest, `async fn` here — a real turn suspends the fiber during I/O while the
-/// host thread stays live. This is the substrate stub (a canned echo response); the
-/// real backend (netfetcher for http(s), errand for smolweb) is supplied by the
-/// content actor when it wires `net`. Linked only under the `net` grant.
+/// host thread stays live. The real backend (netfetcher for http(s), errand for
+/// smolweb) is supplied by the content actor when it wires `net`. Linked only under
+/// the `net` grant, and gated here to the instance's origin allowlist (§E1): `net`
+/// means "may reach these origins", so a cross-origin URL is refused before the
+/// backend runs (closes the credentialed-SSRF / cross-origin-exfil channel).
 impl crate::mere::script::net::Host for ScriptHost {
     async fn fetch(
         &mut self,
         req: crate::mere::script::net::Request,
     ) -> Result<crate::mere::script::net::Response, String> {
+        // Origin gate first: the script may only reach its granted origins (default
+        // same-origin), so a granted `net` cannot exfiltrate to or read an arbitrary
+        // third-party host. Enforced before the backend is even consulted.
+        if !host_in_origins(&req.url, &self.net_origins) {
+            return Err(format!("net.fetch: {} is outside this script's net origins", req.url));
+        }
         // Call the injected backend (netfetcher/errand, supplied by the content actor).
         // Blocking on the turn's fiber: the host thread parks for the I/O, then the
         // fiber resumes with the result. No backend configured = an error to the guest.
@@ -218,6 +261,7 @@ fn new_host(dom: ScriptedDom, granted: Vec<String>, limits: StoreLimits) -> Scri
         logs: Vec::new(),
         granted,
         fetcher: None,
+        net_origins: Vec::new(),
         wasi: WasiCtxBuilder::new().build(),
         table: ResourceTable::new(),
         limits,
@@ -594,13 +638,16 @@ impl DocumentScript {
         grant: &Grant,
         quota: Quota,
         fetcher: Option<std::sync::Arc<dyn NetFetcher>>,
+        net_origins: Vec<String>,
     ) -> wasmtime::Result<Self> {
         let engine = guarded_engine()?;
         let limits = StoreLimitsBuilder::new().memory_size(quota.mem_bytes).build();
         let (mut store, bindings) =
             pollster::block_on(build_instance(&engine, component_path, dom, grant, limits))?;
-        // The network backend for `net.fetch` (None = unconfigured -> fetch errors).
+        // The network backend for `net.fetch` (None = unconfigured -> fetch errors)
+        // plus the origin allowlist gating which URLs it may reach (§E1).
         store.data_mut().fetcher = fetcher;
+        store.data_mut().net_origins = net_origins;
         store.set_epoch_deadline(quota.epoch_deadline_ticks);
         let engine = store.engine().clone();
         let activate = bindings.call_activate(&mut store);

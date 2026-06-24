@@ -144,6 +144,21 @@ mitigations below bound the blast radius.
 
 ## Execution log
 
+- **2026-06-24 (E1 origin-scoped net — the critical channel closed, green).** `net` is no longer
+  "open internet": a script may now fetch **only its own page's origin** (same-origin egress),
+  enforced host-side in document-host before the backend runs. `ScriptHost` gains a `net_origins`
+  allowlist; `net::Host::fetch` rejects any URL whose host is outside it (`host_in_origins`, exact or
+  `*.suffix`, fail-closed on empty); `DocumentScript::attach` takes the allowlist. meerkat derives it
+  **same-origin** from the page URL (`attach_script` -> `vec![host_of(content.url)]`), so a granted
+  `net` cannot read or exfiltrate to a third-party host. document-host tests: same-origin fetch
+  applies, a cross-origin fetch is `Refused` with the DOM untouched (document-host 20, meerkat 78/122
+  green). **This closes the A1 cross-origin exfil + cross-site-read channel** (the residual — a
+  same-origin fetch still carries that origin's own cookies — is the script's legitimate scope).
+  **Still open** (smaller, deferrable): the **uncredentialed** refinement (drop even same-origin
+  ambient cookies — Mark's session-store domain, A1 step 1), and **cross-origin net declarations** (a
+  mod manifest declaring extra `net` origins beyond its page, with broad-glob guards) — both tracked
+  under E1. The host-side `host_of`/`origin_matches` is duplicated in document-host (kept local for
+  embedder-independence; a shared crate is the longer-term home).
 - **2026-06-23 (review + plan).** Review workflow `w5fbv5nkc` run; this plan written
   capturing all 21 confirmed findings triaged A–E. Next: land the "this pass" fixes
   (A2/A3/A4 in ContentNetFetcher, B2/B3/B5/B6 mod-trust, C1/C2/C3 lifecycle, D1),
