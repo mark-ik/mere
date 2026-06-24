@@ -132,6 +132,18 @@ pub struct SceneJointSpec {
     pub joint: SceneJoint,
 }
 
+/// A continuous force-field a scene applies to its dynamic bodies — the "environment has character
+/// beyond ballistic gravity" tier (a whirlpool, a gravity well). Set on the
+/// [`Simulation`](crate::Simulation) via `set_scene_field`; it keeps the physics actor ticking
+/// while active. (Physics scenes P4 — force-field tier.)
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SceneField {
+    /// A whirlpool centred at `center`: each dynamic scene body feels a tangential force of
+    /// magnitude `strength` (the swirl, counter-clockwise) plus an inward pull `inward` toward the
+    /// centre, so loose props orbit and slowly spiral in.
+    Vortex { center: (f32, f32), strength: f32, inward: f32 },
+}
+
 /// A declarative physics scene the orrery's world can load: a set of bodies, the world gravity,
 /// whether the graph collides with it by default, whether it is a perpetual (never-settling)
 /// backdrop, and the joints binding its bodies. Loading one

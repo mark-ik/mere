@@ -38,7 +38,7 @@ use gyre::{LayoutSnapshot, LayoutView};
 /// a scene by name without depending on `gyre` directly. (Physics scenes P4a.)
 pub use gyre::{
     NODE_BODY_DENSITY, NodeMaterial, SceneSpec, chain_scene, domino_scene, drift_scene,
-    drop_bowl_scene, funnel_scene, galton_scene, pyramid_scene,
+    drop_bowl_scene, funnel_scene, galton_scene, pyramid_scene, whirlpool_scene,
 };
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
@@ -1338,6 +1338,19 @@ impl Orrery {
     /// Remove the liquid pool. (Physics scenes P4c.)
     pub fn clear_fluid(&mut self) {
         self.physics.clear_fluid();
+    }
+
+    /// Load the demo whirlpool: a ring of loose balls plus a centred vortex force-field that swirls
+    /// them into an orbiting gyre. The field keeps the actor ticking; `clear_scene` (key `0`) drops
+    /// both. (Physics scenes P4 — force-field tier.)
+    pub fn load_whirlpool(&mut self) {
+        self.physics.load_scene(whirlpool_scene());
+        self.physics.set_scene_field(Some(gyre::SceneField::Vortex {
+            center: (0.0, 0.0),
+            strength: 90.0,
+            inward: 30.0,
+        }));
+        self.settle_physics(SETTLE_TICKS);
     }
 
     /// The size-tier index (0..[`SIZE_TIERS`]`.len()`) nearest a node's current resolved

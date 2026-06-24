@@ -74,7 +74,7 @@ pub use fluid::{Basin, Fluid, FluidContact, FluidParams};
 pub mod scenes;
 pub use scenes::{
     chain_scene, domino_scene, drift_scene, drop_bowl_scene, funnel_scene, galton_scene,
-    pyramid_scene,
+    pyramid_scene, whirlpool_scene,
 };
 
 /// The declarative scene **format**: the data types a [`SceneSpec`] is built from (bodies,
@@ -82,7 +82,8 @@ pub use scenes::{
 /// simulation core. (Physics scenes P4b.)
 mod scene_spec;
 pub use scene_spec::{
-    JointMotorSpec, SceneBodyId, SceneBodySpec, SceneBodyType, SceneJoint, SceneJointSpec, SceneSpec,
+    JointMotorSpec, SceneBodyId, SceneBodySpec, SceneBodyType, SceneField, SceneJoint, SceneJointSpec,
+    SceneSpec,
 };
 
 /// Scene-geometry queries for the orrery canvas: edge geometry, edge picking,
@@ -307,6 +308,9 @@ pub struct Simulation {
     /// Scene-wide tangibility lever state (mirrors [`Self::set_nodes_tangible`]): when `true`, node
     /// bodies couple to the fluid (the graph stirs the pool); when `false` they pass through. (P4c.)
     nodes_tangible: bool,
+    /// A continuous force-field over the scene's dynamic bodies (a whirlpool / well), if any. Keeps
+    /// the actor ticking while set; cleared by [`Self::clear_scene`]. (Physics scenes P4 fields.)
+    scene_field: Option<SceneField>,
 }
 
 impl Default for Simulation {
@@ -347,6 +351,7 @@ impl Simulation {
             scene_perpetual: false,
             fluid: None,
             nodes_tangible: false,
+            scene_field: None,
         }
     }
 
@@ -722,6 +727,7 @@ impl Simulation {
         }
         self.scene_bodies.clear();
         self.scene_perpetual = false;
+        self.scene_field = None;
     }
 
     /// Iterate every scene body as a paintable [`SceneBodyView`] (id, position, rotation, shape)
@@ -781,6 +787,18 @@ impl Simulation {
         self.fluid.is_some()
     }
 
+    /// Set (or clear) the scene-wide force-field — a whirlpool / well over the dynamic scene bodies.
+    /// (Physics scenes P4 — force-field tier.)
+    pub fn set_scene_field(&mut self, field: Option<SceneField>) {
+        self.scene_field = field;
+    }
+
+    /// Whether the world has live, self-driving motion the physics actor must keep ticking for even
+    /// at rest: a perpetual backdrop, a fluid pool, or a force-field. (Physics scenes P4.)
+    pub fn wants_continuous_tick(&self) -> bool {
+        self.scene_perpetual || self.fluid.is_some() || self.scene_field.is_some()
+    }
+
     /// Iterate the live fluid particle positions (empty when no pool is loaded) — the render read.
     /// (Physics scenes P4c.)
     pub fn fluid_particles(&self) -> impl Iterator<Item = Point2D<f32>> + '_ {
@@ -826,6 +844,30 @@ impl Simulation {
                 if body.is_dynamic() {
                     body.apply_impulse(Vector::new(reaction.x, reaction.y) * FLUID_REACTION, true);
                 }
+            }
+        }
+    }
+
+    /// Apply the scene force-field (if any) to every dynamic scene body — a whirlpool's tangential
+    /// swirl + inward pull. A no-op without a field. (Physics scenes P4 — force-field tier.)
+    fn apply_scene_field(&mut self) {
+        let Some(SceneField::Vortex { center, strength, inward }) = self.scene_field else {
+            return;
+        };
+        let c = Vector::new(center.0, center.1);
+        let handles: Vec<RigidBodyHandle> = self.scene_bodies.values().map(|(h, _)| *h).collect();
+        for handle in handles {
+            if let Some(body) = self.bodies.get_mut(handle) {
+                if !body.is_dynamic() {
+                    continue;
+                }
+                let r = body.translation() - c;
+                let d = r.length().max(8.0);
+                let rhat = r / d;
+                // Counter-clockwise tangential swirl plus an inward pull toward the centre.
+                let tangential = Vector::new(-rhat.y, rhat.x);
+                let force = tangential * strength - rhat * inward;
+                body.add_force(force, true);
             }
         }
     }
@@ -983,7 +1025,7 @@ impl Simulation {
         // steps until reset), so clear last tick's force forces before this
         // tick's forces set fresh ones. Without this, per-tick forces compound
         // and the layout goes unstable.
-        if !self.forces.is_empty() || !self.coupling_forces.is_empty() {
+        if !self.forces.is_empty() || !self.coupling_forces.is_empty() || self.scene_field.is_some() {
             for (_, body) in self.bodies.iter_mut() {
                 body.reset_forces(false);
             }
@@ -1002,6 +1044,10 @@ impl Simulation {
                 force.apply(&mut ctx, dt);
             }
         }
+
+        // The scene force-field (a whirlpool / well) drives the dynamic scene bodies — applied after
+        // the force loops (so the body borrow is free), still before the step. (Physics scenes P4.)
+        self.apply_scene_field();
 
         let physics_hooks = ();
         let event_handler = ();
@@ -1231,5 +1277,30 @@ mod scene_tests {
             nearest_tangible >= NODE_BODY_RADIUS - 2.0,
             "nearest particle pushed out to ~the node radius (was {nearest_tangible})"
         );
+    }
+
+    #[test]
+    fn vortex_field_swirls_scene_bodies() {
+        use crate::SceneField;
+        // A loose scene ball on the +x axis; a counter-clockwise vortex at the origin.
+        let mut sim = Simulation::new();
+        sim.add_scene_body(NodeCollider::Ball { radius: 14.0 }, Point2D::new(100.0, 0.0), (0.0, 0.0));
+        sim.set_scene_field(Some(SceneField::Vortex {
+            center: (0.0, 0.0),
+            strength: 90.0,
+            inward: 30.0,
+        }));
+        assert!(sim.wants_continuous_tick(), "a scene field keeps the actor ticking");
+
+        for _ in 0..60 {
+            sim.tick(1.0 / 60.0);
+        }
+        // A CCW vortex pushes a body on the +x axis toward +y.
+        let p = sim.scene_bodies().next().map(|b| b.position).expect("the scene body");
+        assert!(p.y > 5.0, "CCW vortex swirled the body toward +y (was at +x): {p:?}");
+
+        // Clearing the scene drops the field too.
+        sim.clear_scene();
+        assert!(!sim.wants_continuous_tick(), "clearing the scene clears the field");
     }
 }

@@ -253,9 +253,9 @@ impl ApplicationHandler for App {
                             self.request_redraw();
                         },
                         // `1`-`7` load the declarative scene catalog (drop bowl, pyramid,
-                        // dominoes, Galton board, funnel, drift, rope chain); `8` loads the liquid
-                        // pool; `0` clears back to bare space. Press `t` to make the graph tangible
-                        // and knock the scenes around. (Physics scenes P3/P4a/P4b/P4c.)
+                        // dominoes, Galton board, funnel, drift, rope chain); `8` the liquid pool;
+                        // `9` the whirlpool force-field; `0` clears back to bare space. Press `t` to
+                        // make the graph tangible and stir the scenes. (Physics scenes P3/P4a/b/c + fields.)
                         WinitKey::Character(s) if s.as_str() == "1" => {
                             self.orrery.load_demo_scene();
                             self.request_redraw();
@@ -287,6 +287,11 @@ impl ApplicationHandler for App {
                         // `8` loads the demo liquid pool (PBF fluid). (Physics scenes P4c.)
                         WinitKey::Character(s) if s.as_str() == "8" => {
                             self.orrery.load_demo_fluid();
+                            self.request_redraw();
+                        },
+                        // `9` loads the whirlpool: a vortex force-field swirling loose balls. (Fields.)
+                        WinitKey::Character(s) if s.as_str() == "9" => {
+                            self.orrery.load_whirlpool();
                             self.request_redraw();
                         },
                         WinitKey::Character(s) if s.as_str() == "0" => {

@@ -208,6 +208,28 @@ pub fn chain_scene() -> SceneSpec {
     SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false, perpetual: false, joints }
 }
 
+/// A whirlpool: two rings of loose gravity-free balls that a [`SceneField::Vortex`] swirls into an
+/// orbiting, slowly-inspiralling gyre. The host pairs this scene (the bodies) with `set_scene_field`
+/// (the environment); the field keeps the actor ticking. (Physics scenes P4 — force-field tier.)
+///
+/// [`SceneField::Vortex`]: crate::SceneField::Vortex
+pub fn whirlpool_scene() -> SceneSpec {
+    use std::f32::consts::TAU;
+    let mut bodies = Vec::new();
+    for i in 0..20 {
+        let (ring, twist) = if i < 10 { (110.0, 0.0) } else { (190.0, 0.31) };
+        let a = (i % 10) as f32 * TAU / 10.0 + twist;
+        bodies.push(
+            SceneBodySpec::dynamic(
+                NodeCollider::Ball { radius: 14.0 + (i % 3) as f32 * 6.0 },
+                (ring * a.cos(), ring * a.sin()),
+            )
+            .restitution(0.6),
+        );
+    }
+    SceneSpec { bodies, gravity: (0.0, 0.0), default_tangible: false, perpetual: false, joints: Vec::new() }
+}
+
 #[cfg(test)]
 mod tests {
     use euclid::default::Point2D;
