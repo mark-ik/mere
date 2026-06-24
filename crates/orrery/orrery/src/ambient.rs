@@ -231,14 +231,17 @@ pub struct NBody {
 
 /// The n-body virtual coordinate span (square; stretched to the viewport at paint).
 const NBODY_SPAN: f32 = 1000.0;
-/// Central-well stiffness (a harmonic spring toward the centre). The orbital angular speed is its
-/// square root, so all bodies share a slow rigid rotation that the mutual gravity then breaks up.
-const NBODY_K: f32 = 0.5;
-/// Mutual-gravity strength (softened inverse-square). Weak relative to the well, so it perturbs the
-/// disk into clumps rather than collapsing it.
-const NBODY_G: f32 = 15_000.0;
-/// Softening added to squared distance, so a close pair never produces an unbounded force.
-const NBODY_SOFTEN: f32 = 600.0;
+/// Central mass x gravitational constant - a Keplerian well (inverse-square pull to the centre), so
+/// inner bodies orbit faster than outer (differential rotation, which winds clumps into spiral arms
+/// rather than a rigidly-rotating disk). Softened so a body near the centre never feels an unbounded
+/// pull.
+const NBODY_GM: f32 = 8_500_000.0;
+/// Softening for the central well (added to squared distance).
+const NBODY_CSOFT: f32 = 900.0;
+/// Mutual-gravity strength (softened inverse-square), for clumping into arms.
+const NBODY_G: f32 = 18_000.0;
+/// Softening added to a pair's squared distance, so a close pair never produces an unbounded force.
+const NBODY_SOFTEN: f32 = 700.0;
 
 impl NBody {
     /// A `count`-body disk around the centre, each on a near-circular orbit (tangential velocity
@@ -246,15 +249,16 @@ impl NBody {
     pub fn seeded(count: usize, seed: u32) -> Self {
         let mut rng = seed | 1;
         let c = NBODY_SPAN / 2.0;
-        let omega = NBODY_K.sqrt();
         let mut pos = Vec::with_capacity(count);
         let mut vel = Vec::with_capacity(count);
         for _ in 0..count {
             let ang = unit(&mut rng) * std::f32::consts::TAU;
-            let rad = 60.0 + unit(&mut rng) * 320.0;
+            let rad = 40.0 + unit(&mut rng) * 260.0;
             pos.push((c + rad * ang.cos(), c + rad * ang.sin()));
-            // Counter-clockwise tangential velocity for a circular harmonic orbit.
-            let speed = omega * rad;
+            // Keplerian circular-orbit speed v = sqrt(GM r^2 / (r^2 + soft)^1.5), tangential CCW, so
+            // inner bodies orbit faster than outer (differential rotation).
+            let r2 = rad * rad;
+            let speed = (NBODY_GM * r2 / (r2 + NBODY_CSOFT).powf(1.5)).sqrt();
             vel.push((-ang.sin() * speed, ang.cos() * speed));
         }
         Self { pos, vel }
@@ -284,10 +288,15 @@ impl AmbientSim for NBody {
                 acc[j].1 -= dy * inv;
             }
         }
-        // Central harmonic well, then integrate (semi-implicit Euler).
+        // Central Keplerian well (softened inverse-square pull to the centre), then integrate
+        // (semi-implicit Euler).
         for i in 0..n {
-            acc[i].0 -= NBODY_K * (self.pos[i].0 - c);
-            acc[i].1 -= NBODY_K * (self.pos[i].1 - c);
+            let rx = self.pos[i].0 - c;
+            let ry = self.pos[i].1 - c;
+            let r2 = rx * rx + ry * ry + NBODY_CSOFT;
+            let inv = NBODY_GM / (r2 * r2.sqrt());
+            acc[i].0 -= rx * inv;
+            acc[i].1 -= ry * inv;
             self.vel[i].0 += acc[i].0 * dt;
             self.vel[i].1 += acc[i].1 * dt;
             self.pos[i].0 += self.vel[i].0 * dt;
@@ -342,7 +351,7 @@ const PL_RADIUS: f32 = 130.0;
 /// Fraction of the radius that is the hard repulsion zone (keeps particles from overlapping).
 const PL_BETA: f32 = 0.30;
 /// Force scale, tuned with the heavy friction for flowing, stable structure.
-const PL_FORCE: f32 = 110.0;
+const PL_FORCE: f32 = 135.0;
 /// Per-step velocity retention - heavy friction, so the system is overdamped and self-organises.
 const PL_FRICTION: f32 = 0.86;
 
@@ -351,8 +360,20 @@ impl ParticleLife {
     /// attraction matrix - all seeded deterministically from `seed`.
     pub fn seeded(count: usize, seed: u32) -> Self {
         let mut rng = seed | 1;
+        // Bias each species to attract its own kind (the diagonal strongly positive) so clear
+        // per-species blobs always form; the off-diagonal stays random for chase / flee between them.
         let attract = (0..PL_SPECIES)
-            .map(|_| (0..PL_SPECIES).map(|_| unit(&mut rng) * 2.0 - 1.0).collect())
+            .map(|i| {
+                (0..PL_SPECIES)
+                    .map(|j| {
+                        if i == j {
+                            0.6 + unit(&mut rng) * 0.4
+                        } else {
+                            unit(&mut rng) * 2.0 - 1.0
+                        }
+                    })
+                    .collect()
+            })
             .collect();
         let mut pos = Vec::with_capacity(count);
         let mut vel = Vec::with_capacity(count);
