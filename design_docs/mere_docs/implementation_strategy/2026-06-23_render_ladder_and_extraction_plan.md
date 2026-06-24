@@ -209,10 +209,18 @@ Reconnoitred the slot-in; the build is now mechanical, in slices:
   `scene_from_content_band`); the scripted rung is a third: hold an
   `Option<ScriptedDocument>`, build it on `Show` when the routed engine is
   `serval.scripted`, and emit `frame()`'s `Scene` (and `pump()` per drive for timers).
-- **Engine registration flips the gate.** The actor builds an `EngineRegistry` of
-  non-disabled engines; registering `serval.scripted` makes `is_available` true, so a
-  pin resolves (phase 1a's fallback was the pre-registration behavior) and the picker
-  surfaces it (1b — the picker enumerates registered engines).
+- **Three lanes, not one registry.** The actor's `EngineRegistry` holds the *nematic*
+  document engines; `serval.web` (static HTML, the `StaticDocument` → `scene_from_content_band`
+  path) and `scrying.web` (the surface/ScryingHost path) are **special-cased lanes**, not
+  registry engines. So `serval.scripted` is a *fourth lane*, special-cased like the static
+  one. The one host↔actor touch-point: the host owns the pin (`engine_pins`), so it must
+  signal the actor to take the scripted lane — either thread the routed engine id into the
+  `Show` command, or a dedicated rung field. (The actor's own policy is only for
+  content-type re-routing; the pin is host-side.)
+- **Availability + picker (1b).** Making `serval.scripted` `is_available` (so the pin
+  resolves past phase 1a's fallback, and the picker surfaces it) is a host-side routing
+  concession, not a registry `register()` — the scripted lane is special-cased, not an
+  `EngineDocument` impl.
 
 ### Slices
 
