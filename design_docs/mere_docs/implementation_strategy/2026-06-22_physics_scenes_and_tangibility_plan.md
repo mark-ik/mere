@@ -401,3 +401,21 @@ within budget.
   is now under the 600 ceiling; 43 gyre + 45 orrery green, zero new warnings. **The physics-scenes
   feature arc is complete** bar the meerkat command-palette / scene-settings binding, which waits on
   the command-registry pass.
+- 2026-06-23: **Scene settings page in the host (committed `06eae2b`) — the "scene settings" half of
+  the binding.** The orrery's physics-backdrop scenes are now loadable from meerkat's pelt settings
+  lane: a new `pelt/scene` page (`scene_settings.rs`) lists the `SceneSpec` catalog (drop bowl,
+  pyramid, dominoes, Galton, funnel, drift, chain), the whirlpool / fountain effects, a liquid-pool
+  load / clear, the graph-tangibility lever, and clear-scene. Each control drains a `scene:<...>` key
+  through the existing pelt-activation path (`apply_pelt_activation` → `apply_scene_key`) to the
+  matching `Orrery` method (which forwards to the physics actor), the same shared-builder + host-drain
+  split the theme / engine / physics / orrery pages use. Kept self-contained in one new file so the
+  already-over-ceiling `input.rs` / `settings_lane.rs` don't grow (they gain only a page ref + resolve
+  arm + one delegating arm). Tangibility is two explicit buttons rather than one reflecting toggle —
+  the physics is off-thread, so its live state isn't synchronously readable here; a reflecting toggle
+  waits on a getter. Unit-tested (the page is listed in the pelt index and every control carries the
+  expected `scene:`-prefixed key); meerkat compiles + links, scene tests green; the scene methods
+  were each headed-verified earlier via the orrery bin. **Remaining**: the command-palette half — a
+  `>scene <name>` omnibar verb (the parameterized-command pattern, a side-channel on the shell outcome
+  like `relate("cites")`). That centrally edits the already-over-ceiling `command.rs`, so it likely
+  wants a `command.rs` split first (a Mark-coordinated refactor of his registry). A headed pass through
+  the lane UI also waits on a settings-navigation drive harness (none exists yet).
