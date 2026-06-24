@@ -16,7 +16,7 @@ use paint_list_api::{
     AlphaType, ColorF, CommonPlacement, DeviceIntSize, ExtendMode, GradientStop, IdNamespace,
     ImageItem, ImageKey, ImageRendering, ImageResource, LayoutPoint, LayoutRect, LayoutSize,
     PaintCmd, PaintList, PathCommand, PathData, PathItem, RadialGradientItem, RadialGradientPayload,
-    RectItem,
+    RectItem, StrokeCap, StrokeJoin, StrokeStyle,
 };
 use paint_list_render::{composite_paint_layers, CompositeLayer};
 use platen::orrery::{identity_arrangement, orrery_paint_list_demoted_from_arrangement};
@@ -390,8 +390,17 @@ impl Orrery {
                             LayoutPoint::new(max_x, max_y),
                         )),
                         path: PathData { commands },
-                        fill: Some(ColorF::new(0.42, 0.55, 0.85, 0.5)),
-                        stroke: None,
+                        // A softened fill (so the big floor slabs no longer read as solid walls) plus
+                        // a lighter lit edge, so a block / plank / domino has definition and a touch
+                        // of dimension instead of blurring into the backdrop. (Scene polish.)
+                        fill: Some(ColorF::new(0.42, 0.55, 0.85, 0.40)),
+                        stroke: Some(StrokeStyle {
+                            color: ColorF::new(0.64, 0.75, 0.98, 0.7),
+                            width: 1.5,
+                            cap: StrokeCap::Round,
+                            join: StrokeJoin::Round,
+                            dash: None,
+                        }),
                     }));
                 }
                 None => {
@@ -412,8 +421,11 @@ impl Orrery {
                             center: LayoutPoint::new(cx, cy),
                             radius: LayoutSize::new(r, r),
                             extend_mode: ExtendMode::Clamp,
+                            // A brighter core fading through a mid-stop to transparent, so a ball reads
+                            // as a rounder, more present orb than a flat low-alpha disc. (Scene polish.)
                             stops: vec![
-                                GradientStop { offset: 0.0, color: ColorF::new(0.42, 0.55, 0.85, 0.22) },
+                                GradientStop { offset: 0.0, color: ColorF::new(0.54, 0.66, 0.94, 0.32) },
+                                GradientStop { offset: 0.55, color: ColorF::new(0.44, 0.57, 0.87, 0.18) },
                                 GradientStop { offset: 1.0, color: ColorF::new(0.42, 0.55, 0.85, 0.0) },
                             ],
                         },
