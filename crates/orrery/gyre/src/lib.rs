@@ -66,7 +66,7 @@ pub use coupling_force::CouplingForce;
 /// so we roll our own). Standalone solver for now (a settling pool); wiring it into the live
 /// [`Simulation`] + render is the next phase. (Physics scenes P4c.)
 pub mod fluid;
-pub use fluid::{Basin, Fluid, FluidParams};
+pub use fluid::{Basin, Fluid, FluidContact, FluidParams};
 
 /// The declarative scene library: ready-made [`SceneSpec`]s the orrery loads behind the
 /// graph (drop-bowl, pyramid, dominoes, Galton board, funnel, drift). Data, not engine
@@ -203,6 +203,11 @@ const SCENE_DAMPING: f32 = 0.3;
 /// heavier [`SCENE_DAMPING`] that lets a settling scene come to rest. (Physics scenes P4a.)
 const PERPETUAL_SCENE_DAMPING: f32 = 0.01;
 
+/// Scale from a fluid contact's net push-out (world units) to the impulse applied back on a dynamic
+/// body — the two-way fluid coupling strength. Gentle, so a tangible node is nudged / bobs on the
+/// pool rather than launched. (Physics scenes P4c.)
+const FLUID_REACTION: f32 = 0.25;
+
 /// Upper bound on bodies a single [`SceneSpec`] loads, so a runaway scene can't swamp
 /// the physics actor's per-tick budget. (Physics scenes P3.)
 const SCENE_BODY_CAP: usize = 200;
@@ -299,6 +304,9 @@ pub struct Simulation {
     /// The liquid pool sharing this world, if any ([`fluid`] PBF). `None` until one is loaded;
     /// stepped each [`Self::tick`] and emitted in the snapshot for rendering. (Physics scenes P4c.)
     fluid: Option<Fluid>,
+    /// Scene-wide tangibility lever state (mirrors [`Self::set_nodes_tangible`]): when `true`, node
+    /// bodies couple to the fluid (the graph stirs the pool); when `false` they pass through. (P4c.)
+    nodes_tangible: bool,
 }
 
 impl Default for Simulation {
@@ -338,6 +346,7 @@ impl Simulation {
             next_scene_id: 0,
             scene_perpetual: false,
             fluid: None,
+            nodes_tangible: false,
         }
     }
 
@@ -778,6 +787,49 @@ impl Simulation {
         self.fluid.iter().flat_map(|f| f.positions())
     }
 
+    /// Couple the fluid to the rapier bodies: push particles out of every scene body (the bowl
+    /// bounds the pool, dynamic props float) and out of node bodies when the graph is tangible,
+    /// then shove the dynamic bodies back with a gentle impulse. A no-op without a fluid. Circle-
+    /// approximated (true collider-shape coupling is a refinement). (Physics scenes P4c.)
+    fn couple_fluid_to_bodies(&mut self) {
+        if self.fluid.is_none() {
+            return;
+        }
+        let mut handles: Vec<RigidBodyHandle> = Vec::new();
+        let mut contacts: Vec<FluidContact> = Vec::new();
+        for (handle, collider) in self.scene_bodies.values() {
+            if let Some(body) = self.bodies.get(*handle) {
+                let t = body.translation();
+                let radius = match collider {
+                    NodeCollider::Ball { radius } => *radius,
+                    NodeCollider::Square { half } => *half,
+                    NodeCollider::RoundedSquare { half, .. } => *half,
+                    NodeCollider::Hull { fallback, .. } => *fallback,
+                };
+                handles.push(*handle);
+                contacts.push(FluidContact { center: Point2D::new(t.x, t.y), radius });
+            }
+        }
+        if self.nodes_tangible {
+            for handle in self.bodies_by_node.values() {
+                if let Some(body) = self.bodies.get(*handle) {
+                    let t = body.translation();
+                    handles.push(*handle);
+                    contacts
+                        .push(FluidContact { center: Point2D::new(t.x, t.y), radius: NODE_BODY_RADIUS });
+                }
+            }
+        }
+        let reactions = self.fluid.as_mut().unwrap().resolve_contacts(&contacts);
+        for (handle, reaction) in handles.iter().zip(reactions) {
+            if let Some(body) = self.bodies.get_mut(*handle) {
+                if body.is_dynamic() {
+                    body.apply_impulse(Vector::new(reaction.x, reaction.y) * FLUID_REACTION, true);
+                }
+            }
+        }
+    }
+
     /// Make a single node tangible (it collides with scene bodies) or intangible (it
     /// passes through), by re-masking its collider's filter. Node-node collision is
     /// unaffected. A no-op for an unknown node. (Physics scenes P2 — tangibility lever.)
@@ -792,6 +844,7 @@ impl Simulation {
     /// collide with scene bodies, `false` (the default) passes through. Node-node collision
     /// is unaffected either way. (Physics scenes P2.)
     pub fn set_nodes_tangible(&mut self, tangible: bool) {
+        self.nodes_tangible = tangible;
         let handles: Vec<RigidBodyHandle> = self.bodies_by_node.values().copied().collect();
         for handle in handles {
             self.remask_node(handle, tangible);
@@ -972,6 +1025,9 @@ impl Simulation {
         if let Some(fluid) = &mut self.fluid {
             fluid.step(dt);
         }
+        // Two-way coupling: the pool bounces off the scene bodies + (when the graph is tangible) the
+        // node bodies, and shoves the dynamic ones back. (Physics scenes P4c.)
+        self.couple_fluid_to_bodies();
     }
 
     /// Copy each body's current translation onto its corresponding
@@ -1138,5 +1194,42 @@ mod scene_tests {
         // The node carries gravity_scale(0), so scene gravity never drags the graph down.
         let np = sim.position_of(node).expect("node has a position");
         assert!(np.y.abs() < 5.0, "nodes float under scene gravity (was {np:?})");
+    }
+
+    #[test]
+    fn tangible_node_displaces_the_fluid_pool() {
+        use crate::{Basin, FluidParams};
+        use euclid::default::Vector2D;
+        // A node at the origin with a fluid block sitting on it (gravity off, so it stays put).
+        let mut sim = Simulation::new();
+        let node = NodeKey::new(0);
+        sim.sync_nodes([(node, Point2D::new(0.0, 0.0))]);
+        let params = FluidParams { gravity: Vector2D::zero(), ..FluidParams::default() };
+        let basin = Basin { min_x: -200.0, max_x: 200.0, floor_y: 300.0 };
+        sim.load_fluid(params, basin, Point2D::new(-30.0, -30.0), 5, 5, 14.0);
+
+        // Intangible (default): the node does not push the fluid — a particle can sit near the origin.
+        for _ in 0..8 {
+            sim.tick(1.0 / 60.0);
+        }
+        let nearest_intangible =
+            sim.fluid_particles().map(|p| p.to_vector().length()).fold(f32::INFINITY, f32::min);
+
+        // Tangible: the node now displaces the pool — the nearest particle is pushed out to ~its radius.
+        sim.set_nodes_tangible(true);
+        for _ in 0..8 {
+            sim.tick(1.0 / 60.0);
+        }
+        let nearest_tangible =
+            sim.fluid_particles().map(|p| p.to_vector().length()).fold(f32::INFINITY, f32::min);
+
+        assert!(
+            nearest_tangible > nearest_intangible,
+            "tangible node pushed the fluid out ({nearest_intangible} -> {nearest_tangible})"
+        );
+        assert!(
+            nearest_tangible >= NODE_BODY_RADIUS - 2.0,
+            "nearest particle pushed out to ~the node radius (was {nearest_tangible})"
+        );
     }
 }

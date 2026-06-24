@@ -87,6 +87,16 @@ impl Basin {
     }
 }
 
+/// A solid the fluid couples to: a circle (centre + radius) in world space. The host builds these
+/// from the rapier bodies the fluid should bounce off (the fixed basin walls are the analytic
+/// [`Basin`]; these are the node / scene bodies, gated by tangibility). Circle-approximated for now
+/// — true collider-shape coupling via parry is a refinement. (Physics scenes P4c.)
+#[derive(Clone, Copy, Debug)]
+pub struct FluidContact {
+    pub center: Point2D<f32>,
+    pub radius: f32,
+}
+
 /// The PBF fluid: a particle pool plus its parameters and basin. Spawn particles, then [`step`] it
 /// each tick. [`positions`] / [`velocities`] are the reads for rendering + tests.
 ///
@@ -247,6 +257,42 @@ impl Fluid {
             }
         }
     }
+
+    /// Two-way coupling: push every particle out of the given solid circles (a tangible node / a
+    /// scene body), zeroing the inward velocity, and return the net reaction the fluid exerts back
+    /// on each contact (the sum of the displacements it absorbed). The caller turns each reaction
+    /// into an impulse on the body. Call after [`step`]. (Physics scenes P4c.)
+    ///
+    /// [`step`]: Fluid::step
+    pub fn resolve_contacts(&mut self, contacts: &[FluidContact]) -> Vec<Vector2D<f32>> {
+        let mut reactions = vec![Vector2D::zero(); contacts.len()];
+        if contacts.is_empty() {
+            return reactions;
+        }
+        let pr = self.params.particle_radius;
+        for i in 0..self.pos.len() {
+            for (c, contact) in contacts.iter().enumerate() {
+                let rmin = contact.radius + pr;
+                let delta = self.pos[i] - contact.center;
+                let d = delta.length();
+                if d >= rmin {
+                    continue;
+                }
+                // Outward normal (straight up if a particle sits dead-centre).
+                let n = if d > 1.0e-4 { delta / d } else { Vector2D::new(0.0, -1.0) };
+                let push = n * (rmin - d);
+                self.pos[i] += push;
+                // The particle can't move into the solid: kill its inward velocity component.
+                let vn = self.vel[i].dot(n);
+                if vn < 0.0 {
+                    self.vel[i] -= n * vn;
+                }
+                // The fluid shoves the solid back by the opposite of the displacement it absorbed.
+                reactions[c] -= push;
+            }
+        }
+        reactions
+    }
 }
 
 /// Poly6 smoothing kernel (2D), evaluated from the squared distance `r2`. Density falls smoothly to
@@ -332,5 +378,26 @@ mod tests {
         let mut fluid = Fluid::new(FluidParams::default(), basin);
         fluid.step(1.0 / 60.0);
         assert_eq!(fluid.particle_count(), 0);
+    }
+
+    #[test]
+    fn contacts_push_particles_out_and_report_reaction() {
+        let basin = Basin { min_x: -200.0, max_x: 200.0, floor_y: 200.0 };
+        let mut fluid = Fluid::new(FluidParams::default(), basin);
+        fluid.spawn_block(Point2D::new(-30.0, -30.0), 5, 5, 14.0); // a block straddling the origin
+        let pr = fluid.params().particle_radius;
+        let contact = FluidContact { center: Point2D::new(0.0, 0.0), radius: 30.0 };
+
+        let reactions = fluid.resolve_contacts(&[contact]);
+
+        // Every particle now sits at or beyond the contact surface (radius + particle radius).
+        for p in fluid.positions() {
+            let d = (p - contact.center).length();
+            assert!(d >= contact.radius + pr - 0.5, "particle pushed out of the contact (d {d})");
+        }
+        // The fluid reported a non-zero reaction back on the overlapped solid.
+        assert!(reactions[0].length() > 0.0, "non-zero reaction on the overlapped contact");
+        // An empty contact list is a no-op.
+        assert!(fluid.resolve_contacts(&[]).is_empty());
     }
 }
