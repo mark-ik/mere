@@ -877,4 +877,71 @@ mod tests {
         });
         assert!(harvested, "embedded JSON-LD harvested into a Contribution");
     }
+
+    /// A `<body>` whose only text is injected by an inline `<script>`. Proves the
+    /// scripted render rung runs page JS end to end through the content actor: the
+    /// mutated DOM renders glyph runs the markup alone would not. (Render ladder 2a.)
+    #[cfg(feature = "scripted")]
+    const INLINE_SCRIPT_PAGE: &str = "<body><script>\
+        var p = document.createElement('p');\
+        p.appendChild(document.createTextNode('injected by JS'));\
+        document.body.appendChild(p);\
+        </script></body>";
+
+    #[cfg(feature = "scripted")]
+    fn scripted_show(url: &str, body: &str) -> ContentCommand {
+        ContentCommand::Show {
+            url: url.to_string(),
+            state: Some(ContentState::Ready(Fetched {
+                content_type: Some("text/html".to_string()),
+                body: body.to_string(),
+            })),
+            engine: inker::routing::ENGINE_SERVAL_SCRIPTED.to_string(),
+            viewport: (420, 360),
+            nav: NavGeneration::default(),
+            viewport_gen: ViewportGeneration::default(),
+            sheet: DocumentStyleSheet::default(),
+        }
+    }
+
+    #[cfg(feature = "scripted")]
+    fn first_scene(updates: std::sync::mpsc::Receiver<ContentUpdate>) -> Scene {
+        updates
+            .iter()
+            .find_map(|u| match u {
+                ContentUpdate::Scene { scene, .. } => Some(scene),
+                _ => None,
+            })
+            .expect("a scene update")
+    }
+
+    #[cfg(feature = "scripted")]
+    #[test]
+    fn scripted_rung_runs_inline_script_and_renders() {
+        let (handle, updates) =
+            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), false);
+        handle.command(scripted_show("https://example.com/app", INLINE_SCRIPT_PAGE));
+        handle.join();
+        assert!(
+            glyph_runs(&first_scene(updates)) >= 1,
+            "the scripted lane ran the inline script and rendered the injected text",
+        );
+    }
+
+    /// Control: the same page on the static serval lane (its default engine) never
+    /// runs the script, so the otherwise-empty body paints no text — proving the
+    /// glyphs above came from the JS, not the markup.
+    #[cfg(feature = "scripted")]
+    #[test]
+    fn static_lane_leaves_the_inline_script_unrun() {
+        let (handle, updates) =
+            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), false);
+        handle.command(show("https://example.com/app", "text/html", INLINE_SCRIPT_PAGE));
+        handle.join();
+        assert_eq!(
+            glyph_runs(&first_scene(updates)),
+            0,
+            "the static lane ignores <script>; the empty body paints no text",
+        );
+    }
 }
