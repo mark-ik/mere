@@ -189,3 +189,30 @@ fn emitter_spawns_then_reaps_to_a_bounded_count() {
     assert_eq!(sim.scene_body_count(), 0, "clearing emitters removes its bodies");
     assert_eq!(sim.emitter_count(), 0);
 }
+
+#[test]
+fn scene_prop_carries_its_sprite_handle_through_to_the_view() {
+    use crate::{SceneBodySpec, SceneSpec};
+    // One prop wears a sprite, the other does not; the handle must ride through to the paint view.
+    let spec = SceneSpec {
+        bodies: vec![
+            SceneBodySpec::dynamic(NodeCollider::Square { half: 20.0 }, (0.0, 0.0)).sprite("crate"),
+            SceneBodySpec::dynamic(NodeCollider::Ball { radius: 14.0 }, (60.0, 0.0)),
+        ],
+        gravity: (0.0, 0.0),
+        default_tangible: false,
+        perpetual: false,
+        joints: Vec::new(),
+    };
+    let mut sim = Simulation::new();
+    sim.load_scene(&spec);
+    let sprites: Vec<Option<String>> = sim.scene_bodies().map(|b| b.sprite).collect();
+    // Order is unspecified (a HashMap), so check the multiset: exactly one "crate", one bare.
+    assert_eq!(sprites.iter().filter(|s| s.as_deref() == Some("crate")).count(), 1, "one prop wears the sprite");
+    assert_eq!(sprites.iter().filter(|s| s.is_none()).count(), 1, "the other carries none");
+
+    // Clearing drops the sprite mapping (no leak into the next scene).
+    sim.clear_scene();
+    assert_eq!(sim.scene_bodies().count(), 0);
+    assert!(sim.scene_bodies().all(|b| b.sprite.is_none()), "no stale sprites after clear");
+}

@@ -64,6 +64,7 @@ impl Simulation {
     /// Remove a scene body. A no-op for an unknown id. (Physics scenes P1.)
     pub fn remove_scene_body(&mut self, id: SceneBodyId) {
         if let Some((handle, _)) = self.scene_bodies.remove(&id) {
+            self.scene_sprites.remove(&id);
             self.bodies.remove(
                 handle,
                 &mut self.islands,
@@ -89,6 +90,7 @@ impl Simulation {
             );
         }
         self.scene_bodies.clear();
+        self.scene_sprites.clear();
         self.scene_perpetual = false;
         self.scene_field = None;
         self.emitters.clear();
@@ -106,6 +108,7 @@ impl Simulation {
                     position: Point2D::new(t.x, t.y),
                     rotation: b.rotation().angle(),
                     collider: collider.clone(),
+                    sprite: self.scene_sprites.get(&id).cloned(),
                 }
             })
         })
@@ -167,6 +170,9 @@ impl Simulation {
             let id = SceneBodyId(self.next_scene_id);
             self.next_scene_id += 1;
             self.scene_bodies.insert(id, (handle, b.collider.clone()));
+            if let Some(sprite) = &b.sprite {
+                self.scene_sprites.insert(id, sprite.clone());
+            }
             handles.push(handle);
         }
         // Bind joints between the spawned bodies (by spec index). Out-of-range or capped-out

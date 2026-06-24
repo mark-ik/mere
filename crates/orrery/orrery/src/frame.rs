@@ -304,7 +304,42 @@ impl Orrery {
         // (under the edges), projected through the camera so they recline with the iso
         // ground. (Physics scenes P1.)
         let mut scene_cmds: Vec<PaintCmd> = Vec::new();
+        // Textured scene props (an opt-in sprite handle that resolves in the registry) billboard a
+        // quad in their own layer above the abstract scene; the orb / polygon paints the rest.
+        // (Scene-prop sprites.)
+        let mut scene_sprite_cmds: Vec<PaintCmd> = Vec::new();
+        let mut scene_sprite_images: Vec<ImageResource> = Vec::new();
         for body in self.view.scene_bodies() {
+            // A prop wearing a registered sprite paints as an upright textured billboard over its
+            // footprint (centered on its projected anchor, sized to its collider half-extent), and
+            // skips the abstract paint. An unregistered handle falls through. (Scene-prop sprites.)
+            if let Some(handle) = &body.sprite {
+                if let Some((rgba, iw, ih)) = self.scene_sprite_textures.get(handle) {
+                    if !rgba.is_empty() && *iw > 0 && *ih > 0 {
+                        let (cx, cy) =
+                            self.camera.to_screen(PortablePoint::new(body.position.x, body.position.y));
+                        let r = (scene_body_half(&body.collider) * self.camera.zoom).max(1.0);
+                        let img_key = ImageKey::new(IdNamespace(2), scene_sprite_images.len() as u32);
+                        scene_sprite_images.push(ImageResource {
+                            key: img_key,
+                            width: *iw,
+                            height: *ih,
+                            data: rgba.clone(),
+                        });
+                        scene_sprite_cmds.push(PaintCmd::DrawImage(ImageItem {
+                            placement: CommonPlacement::new(LayoutRect::new(
+                                LayoutPoint::new(cx - r, cy - r),
+                                LayoutPoint::new(cx + r, cy + r),
+                            )),
+                            image_key: img_key,
+                            image_rendering: ImageRendering::Auto,
+                            alpha_type: AlphaType::Alpha,
+                            color: ColorF { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
+                        }));
+                        continue;
+                    }
+                }
+            }
             // A ball (or a degenerate hull) paints as a soft radial-gradient orb — the calm
             // backdrop look. A square / rounded-square / hull paints as a filled polygon of its
             // (rotated) corners, projected per-corner through the camera so the shape reclines
@@ -406,6 +441,13 @@ impl Orrery {
         if !scene_cmds.is_empty() {
             layers.push(CompositeLayer::commands_only(&scene_cmds));
         }
+        if !scene_sprite_cmds.is_empty() {
+            layers.push(CompositeLayer {
+                commands: &scene_sprite_cmds,
+                fonts: &[],
+                images: &scene_sprite_images,
+            });
+        }
         if !fluid_cmds.is_empty() {
             layers.push(CompositeLayer::commands_only(&fluid_cmds));
         }
@@ -438,6 +480,19 @@ impl Orrery {
 
         let needs_redraw = settling || gliding || dragging;
         (scene, needs_redraw)
+    }
+}
+
+/// The half-extent (world units) of a scene prop's collider, for sizing a sprite billboard over its
+/// footprint. A hull takes the largest corner offset (bounding its outline). (Scene-prop sprites.)
+fn scene_body_half(collider: &NodeCollider) -> f32 {
+    match collider {
+        NodeCollider::Ball { radius } => *radius,
+        NodeCollider::Square { half } | NodeCollider::RoundedSquare { half, .. } => *half,
+        NodeCollider::Hull { points, fallback } => points
+            .iter()
+            .map(|&(x, y)| x.abs().max(y.abs()))
+            .fold(*fallback, f32::max),
     }
 }
 
@@ -477,5 +532,48 @@ mod tests {
         let mut orrery = Orrery::with_graph(graph);
         let (scene, _) = orrery.frame(800, 600);
         assert_eq!(image_op_count(&scene), 0, "no favicon -> no image op");
+    }
+
+    /// A scene prop carrying a *registered* sprite handle paints as a textured billboard, so the
+    /// frame emits an image op over the prop. (Scene-prop sprites.)
+    #[test]
+    fn registered_sprite_scene_prop_emits_an_image_op() {
+        let (graph, _key) = graph_with_one_node("https://ex.test/");
+        let mut orrery = Orrery::with_graph(graph);
+        orrery.register_scene_sprite("crate", vec![255u8; 4 * 4 * 4], 4, 4);
+        let spec = gyre::SceneSpec {
+            bodies: vec![
+                gyre::SceneBodySpec::dynamic(gyre::NodeCollider::Square { half: 30.0 }, (0.0, 0.0))
+                    .sprite("crate"),
+            ],
+            gravity: (0.0, 0.0),
+            default_tangible: false,
+            perpetual: false,
+            joints: Vec::new(),
+        };
+        orrery.load_scene(spec);
+        let (scene, _) = orrery.frame(800, 600);
+        assert!(image_op_count(&scene) >= 1, "a registered sprite prop emits an image op");
+    }
+
+    /// A scene prop whose sprite handle is *not* registered falls back to the abstract polygon, so
+    /// no image op is emitted. (Scene-prop sprites.)
+    #[test]
+    fn unregistered_sprite_scene_prop_emits_no_image_op() {
+        let (graph, _key) = graph_with_one_node("https://ex.test/");
+        let mut orrery = Orrery::with_graph(graph);
+        let spec = gyre::SceneSpec {
+            bodies: vec![
+                gyre::SceneBodySpec::dynamic(gyre::NodeCollider::Square { half: 30.0 }, (0.0, 0.0))
+                    .sprite("missing"),
+            ],
+            gravity: (0.0, 0.0),
+            default_tangible: false,
+            perpetual: false,
+            joints: Vec::new(),
+        };
+        orrery.load_scene(spec);
+        let (scene, _) = orrery.frame(800, 600);
+        assert_eq!(image_op_count(&scene), 0, "an unregistered handle falls back, no image op");
     }
 }

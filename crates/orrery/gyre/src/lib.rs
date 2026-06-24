@@ -246,6 +246,11 @@ pub struct Simulation {
     /// They tick and collide like any body but carry no [`NodeKey`], so the layout forces
     /// (which key off `bodies_by_node`) ignore them. (Physics scenes P1.)
     scene_bodies: HashMap<SceneBodyId, (RigidBodyHandle, NodeCollider)>,
+    /// Sparse sprite handles for scene bodies that wear one (a textured crate / barrel), keyed by
+    /// [`SceneBodyId`]. An opaque host key gyre never interprets — it rides through to the body's
+    /// [`SceneBodyView`] for the paint, like the collider shape. Most props have none. (Scene-prop
+    /// sprites.)
+    scene_sprites: HashMap<SceneBodyId, String>,
     /// Monotonic id source for [`scene_bodies`](Self::scene_bodies).
     next_scene_id: u64,
     /// Whether the loaded scene wants to keep moving forever (a perpetual backdrop) rather
@@ -300,6 +305,7 @@ impl Simulation {
             coupling_forces: Vec::new(),
             linear_damping: DEFAULT_LINEAR_DAMPING,
             scene_bodies: HashMap::new(),
+            scene_sprites: HashMap::new(),
             next_scene_id: 0,
             scene_perpetual: false,
             fluid: None,

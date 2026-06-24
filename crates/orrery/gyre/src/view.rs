@@ -48,6 +48,10 @@ pub struct SceneBodyView {
     /// Orientation in radians (the body's live rotation).
     pub rotation: f32,
     pub collider: NodeCollider,
+    /// The prop's optional sprite handle (an opaque texture key the host resolves), carried through
+    /// from its [`SceneBodySpec`](crate::SceneBodySpec). `None` paints the abstract orb / polygon.
+    /// (Physics scenes — scene-prop sprites.)
+    pub sprite: Option<String>,
 }
 
 /// The `Send` payload a physics actor emits each tick: every node's current

@@ -320,6 +320,14 @@ impl ApplicationHandler for App {
                             self.orrery.load_scene(orrery::mixer_scene());
                             self.request_redraw();
                         },
+                        // `x` demos textured scene props: register a procedural crate texture, then
+                        // drop a stack of crates wearing it. (Scene-prop sprites.)
+                        WinitKey::Character(s) if s.as_str() == "x" => {
+                            let (rgba, cw, ch) = crate_texture();
+                            self.orrery.register_scene_sprite("crate", rgba, cw, ch);
+                            self.orrery.load_scene(crate_drop_scene());
+                            self.request_redraw();
+                        },
                         WinitKey::Character(s) if s.as_str() == "0" => {
                             self.orrery.clear_scene();
                             self.orrery.clear_fluid();
@@ -333,6 +341,47 @@ impl ApplicationHandler for App {
             _ => {},
         }
     }
+}
+
+/// A small procedural crate texture (32x32 RGBA8): wood-brown fill with a darker border and an X of
+/// slats, so a textured scene prop reads as a crate. The scene-prop sprite demo (`x` key). (Scene-
+/// prop sprites.)
+fn crate_texture() -> (Vec<u8>, u32, u32) {
+    const N: u32 = 32;
+    let wood = [165u8, 115, 60, 255];
+    let dark = [95u8, 62, 30, 255];
+    let mut rgba = vec![0u8; (N * N * 4) as usize];
+    for y in 0..N {
+        for x in 0..N {
+            let border = x < 2 || y < 2 || x >= N - 2 || y >= N - 2;
+            let on_diag =
+                (x as i32 - y as i32).abs() < 2 || ((x + y) as i32 - (N as i32 - 1)).abs() < 2;
+            let px = if border || on_diag { dark } else { wood };
+            let i = ((y * N + x) * 4) as usize;
+            rgba[i..i + 4].copy_from_slice(&px);
+        }
+    }
+    (rgba, N, N)
+}
+
+/// A demo scene of textured crates: a fixed floor with three rows of square crate props (each
+/// wearing the registered `crate` sprite) dropped onto it. (Scene-prop sprites.)
+fn crate_drop_scene() -> gyre::SceneSpec {
+    use gyre::{NodeCollider, SceneBodySpec, SceneSpec};
+    let mut bodies =
+        vec![SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 360.0)).restitution(0.0)];
+    for row in 0..3 {
+        for col in 0..5 {
+            let x = (col as f32 - 2.0) * 70.0;
+            let y = -120.0 - row as f32 * 70.0;
+            bodies.push(
+                SceneBodySpec::dynamic(NodeCollider::Square { half: 30.0 }, (x, y))
+                    .restitution(0.1)
+                    .sprite("crate"),
+            );
+        }
+    }
+    SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false, perpetual: false, joints: Vec::new() }
 }
 
 fn main() {

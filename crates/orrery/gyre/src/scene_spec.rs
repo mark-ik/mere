@@ -45,6 +45,12 @@ pub struct SceneBodySpec {
     /// Initial orientation in radians (default `0.0`). Places a leaning card / angled ramp / tilted
     /// prop without needing a rotated-cuboid collider. (Physics scenes P4b.)
     pub rotation: f32,
+    /// An optional **sprite handle**: an opaque key the host resolves to a texture to paint over
+    /// this prop (a crate, a barrel) instead of the flat orb / polygon. `None` (the default) keeps
+    /// the abstract paint. gyre never interprets it — it rides through to the
+    /// [`SceneBodyView`](crate::SceneBodyView) for the host, exactly as the collider shape does (the
+    /// gyre layer stays rendering-agnostic). (Physics scenes — scene-prop sprites.)
+    pub sprite: Option<String>,
 }
 
 impl SceneBodySpec {
@@ -59,6 +65,7 @@ impl SceneBodySpec {
             restitution: 0.3,
             gravity_scale: 1.0,
             rotation: 0.0,
+            sprite: None,
         }
     }
 
@@ -88,6 +95,13 @@ impl SceneBodySpec {
     /// Set the initial rotation (radians).
     pub fn rotation(mut self, rotation: f32) -> Self {
         self.rotation = rotation;
+        self
+    }
+
+    /// Set the sprite handle the host paints over this prop (an opaque texture key; `None` keeps
+    /// the abstract orb / polygon). (Physics scenes — scene-prop sprites.)
+    pub fn sprite(mut self, handle: impl Into<String>) -> Self {
+        self.sprite = Some(handle.into());
         self
     }
 }

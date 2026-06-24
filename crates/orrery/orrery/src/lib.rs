@@ -194,6 +194,13 @@ pub struct Orrery {
     /// with one collides at its hull rather than its silhouette, regardless of its face.
     /// Persisted in the cartography sidecar. (Node body & face — the Body axis.)
     node_sprite_hulls: HashMap<NodeKey, Vec<(f32, f32)>>,
+    /// Scene-prop sprite textures, keyed by the opaque handle a [`gyre::SceneBodySpec`] carries:
+    /// raw RGBA8 (straight alpha) plus dimensions, the [`PaintCmd::DrawImage`] shape (as favicons
+    /// use). A scene prop whose `sprite` handle resolves here paints as a textured billboard instead
+    /// of the abstract orb / polygon; unset handles fall back. A registry (persists across scenes,
+    /// not cleared on `clear_scene`), populated via [`register_scene_sprite`](Self::register_scene_sprite).
+    /// (Physics scenes — scene-prop sprites.)
+    scene_sprite_textures: HashMap<String, (Vec<u8>, u32, u32)>,
     /// Per-node physical **material** overrides (restitution / friction / density) on the Body
     /// axis. A node absent here takes the default [`gyre::NodeMaterial`] (the spawn values), so
     /// this holds only deliberate overrides. Pushed to physics and persisted in the cartography
@@ -367,6 +374,7 @@ impl Orrery {
             node_sizes: HashMap::new(),
             node_sprites: HashMap::new(),
             node_sprite_hulls: HashMap::new(),
+            scene_sprite_textures: HashMap::new(),
             node_materials: HashMap::new(),
             size_by_degree: false,
             height_by_degree: false,
@@ -1298,6 +1306,22 @@ impl Orrery {
     /// tangibility lever; applies to the current nodes. (Physics scenes P2.)
     pub fn set_nodes_tangible(&mut self, tangible: bool) {
         self.physics.set_nodes_tangible(tangible);
+    }
+
+    /// Register a scene-prop sprite texture under an opaque `handle`: raw RGBA8 (straight alpha) plus
+    /// its pixel dimensions. A scene prop whose [`SceneBodySpec::sprite`](gyre::SceneBodySpec) carries
+    /// the same handle then paints as a textured billboard over its footprint (otherwise it falls back
+    /// to the abstract orb / polygon). The registry persists across scene loads, so a host registers
+    /// its props' textures once at startup. A re-register under the same handle replaces it. (Physics
+    /// scenes — scene-prop sprites.)
+    pub fn register_scene_sprite(
+        &mut self,
+        handle: impl Into<String>,
+        rgba: Vec<u8>,
+        width: u32,
+        height: u32,
+    ) {
+        self.scene_sprite_textures.insert(handle.into(), (rgba, width, height));
     }
 
     /// Load a declarative [`SceneSpec`] into the world (clearing any prior scene), then kick
