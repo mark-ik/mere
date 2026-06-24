@@ -76,6 +76,7 @@ mod doc_style;
 mod comms_host;
 mod constellation;
 mod content;
+mod crawl;
 mod fetch;
 mod resources;
 mod sync;
