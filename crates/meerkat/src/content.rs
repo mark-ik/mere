@@ -389,10 +389,22 @@ pub fn spawn_content(
                     // host passes the flag; default false. (Linked-data ingest.)
                     if auto_ingest {
                         if let Some(ContentState::Ready(fetched)) = &state {
-                            let contributions = meerkat::ingest::harvest_contributions(
+                            let mut contributions = meerkat::ingest::harvest_contributions(
                                 fetched.content_type.as_deref(),
                                 &fetched.body,
                             );
+                            // Render-free static-parse extraction (the extraction lane):
+                            // enrich the page node with its own declared metadata
+                            // (title / description / canonical / OpenGraph), through the
+                            // same Contribution pipe. Fills the gap for the majority of
+                            // pages with no JSON-LD. (Render ladder phase 4.)
+                            if let Some(extract) = meerkat::ingest::page_extract_contribution(
+                                &url,
+                                fetched.content_type.as_deref(),
+                                &fetched.body,
+                            ) {
+                                contributions.push(extract);
+                            }
                             if !contributions.is_empty() {
                                 out.emit(ContentUpdate::Contribution { contributions });
                             }

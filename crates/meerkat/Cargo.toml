@@ -39,6 +39,10 @@ serval-scripted-dom = { git = "https://github.com/mark-ik/serval.git", branch = 
 # so head <style> / <link> are seen) and renders them through the shared serval
 # content core; StaticDocument is serval's script-free document DOM.
 serval-static-dom = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+# The render-free extraction lane: walks a parsed document into structured content
+# (title / metadata / outline / links / text) with no cascade/layout/paint, for the
+# eidetic corpus. Depends only on serval's layout-dom-api, so no render stack rides in.
+serval-extract = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 
 # Reused, host-neutral chrome view-models — toolbar / omnibar / command palette /
 # frame model / routing. meerkat is the next "host widget" that renders these as
