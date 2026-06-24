@@ -19,7 +19,7 @@ use uuid::Uuid;
 use super::identity::{Point2DAsTuple, UuidAsBytes, Vector2DAsTuple};
 use crate::address::{Address, AddressClaim, address_from_url, cached_host_from_url};
 use crate::types::{
-    FrameLayoutHint, NodeClassification, NodeImportProvenance, NodeProperty,
+    FrameLayoutHint, NodeClassification, NodeDerivation, NodeImportProvenance, NodeProperty,
     NodeTagPresentationState,
 };
 
@@ -63,6 +63,12 @@ pub struct Node {
     /// Spec: `graph_enrichment_plan.md §Core Data Model` — carries scheme, value,
     /// label, confidence, provenance, and status for each classification.
     pub classifications: Vec<NodeClassification>,
+
+    /// Cross-graph derivation provenance: records that this node was copied /
+    /// forked from a node in another graph (tear-out brief §7.5). Empty for a
+    /// natively-minted node. The node-anchored analog of a `Provenance` edge,
+    /// for derivations whose source lives in a different graph.
+    pub derivations: Vec<NodeDerivation>,
 
     /// Open literal properties: non-curated `(predicate IRI, value)` pairs an
     /// ingest preserves (`title` / `tags` are the curated fast-paths).
@@ -200,6 +206,7 @@ impl Node {
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: Vec::new(),
             classifications: Vec::new(),
+            derivations: Vec::new(),
             properties: Vec::new(),
             is_pinned: false,
             last_visited: std::time::SystemTime::now(),

@@ -221,14 +221,38 @@ Done when: a tile dragged from a pane on graph A into a pane on graph B produces
 node in B with provenance + lineage back to A, source left intact (copy) or releasing
 its binding (move).
 
-Substrate (audited 2026-06-19): the **Provenance edge family exists**
-(`EdgeFamily::Provenance` + `ProvenanceSubKind`, edge_taxonomy.rs:185, persisted), but its
-sub-kinds are all content-transformation (`ClippedFrom` / `ExcerptedFrom` /
-`SummarizedFrom` / …) with **no plain copied-from**, and there is **no cross-graph
-copy/rekey primitive** in the kernel (no copy / import / rekey / graft fn). So C4's core is
-two kernel pieces, both buildable now: add a `CopiedFrom` (or `DuplicatedFrom`)
-`ProvenanceSubKind`, and build the cross-graph copy that mints a node in B from A's content
-+ records that provenance + node-lineage.
+**C4 core — DONE (2026-06-23, kernel).** Both kernel pieces landed and are green
+(kernel 251 tests pass incl. two new cross-graph tests; meerkat / orrery / session-runtime
+build):
+
+- **`ProvenanceSubKind::CopiedFrom`** appended (edge_taxonomy.rs, ordinal-safe at the end),
+  mirrored by `PersistedProvenanceSubKind::CopiedFrom` (persistence_edge.rs) with both
+  snapshot match arms wired (to.rs / from.rs) and the meerkat relation-label arm.
+- **`NodeDerivation { sub_kind, source_node, source_graph }`** (types.rs) — a typed
+  node-level record beside `import_provenance` / `classifications`. A cross-graph
+  derivation's object node lives in *another* graph, so it can't be a petgraph
+  `Provenance` edge; it is recorded on the derived node (`Node.derivations`,
+  node.rs), persisted (`PersistedNode.derivations`, `#[serde(default)]`). It is the
+  node-anchored analog of a `Provenance` edge and projects to a `wasDerivedFrom`
+  statement under the RDF projection.
+- **`Graph::copy_node_from` / `copy_node_from_with_id`** (new graph/cross_graph.rs):
+  mints a fresh node cloning the donor's **content** (title, tags, classifications,
+  properties, address, visuals, viewer prefs) while resetting **identity / runtime /
+  session / arrangement** (fresh id, `Cold`, unpinned, no session scroll/draft, no
+  frame hints), and records the `CopiedFrom` derivation `(source.id, source_graph)`.
+  The donor's `import_provenance` is intentionally not carried (it's the donor's
+  external-import story, not the copy's). Wasm-gating mirrors `add_node` /
+  `add_node_with_id`.
+
+The derivation record *is* the lineage (source node id + source graph); cross-graph
+nav-tree grafting is deliberately not attempted (murky across graphs, not needed by the
+core). **What remains for full C4** is *surface*, not kernel, and lands with C5's gesture
+model: the pane→pane drag that calls `copy_node_from` with the source pane's real
+constellation `GraphId`, the move variant (re-point the binding instead of copy), and the
+OQ-B move-vs-copy default.
+
+Prior substrate audit (2026-06-19), now superseded by the above: the `Provenance` edge
+family existed but had no copied-from sub-kind and there was no cross-graph copy primitive.
 
 ## C5 — The tear-out gesture model (leaf / branch / fork + toast)
 
@@ -336,3 +360,16 @@ orrery-as-element (the camera becomes the element's transform) / the N-orrery-el
   section + reframed the camera section. Re-ranked: (1) C4 core; (2) **camera-to-the-view**
   (makes the co-window real); (3) C3 torn-tile content + step-5 fan-out; (4) C5 gestures;
   (5) the N-orrery seam (subsumes #2 if orrery-as-element is the chosen path).
+- **2026-06-23** — **C4 core built (kernel), green.** Re-verified the plan at HEAD `7ae9539`
+  first (35 commits past the prior audit were all adjacent lanes — DocumentScript/net.fetch,
+  session-store cookies, orrery physics-scenes, verso-api flip seam, node-rep P1 + shape
+  editor — none touched C3/C4/C5 or moved the camera), then implemented the #1 slice:
+  `ProvenanceSubKind::CopiedFrom` (+ persisted mirror + both snapshot arms + meerkat label),
+  the `NodeDerivation` typed node-record + `Node.derivations` field + persistence, and
+  `Graph::copy_node_from` in new graph/cross_graph.rs. Two new kernel tests + the snapshot
+  round-trip pass (kernel 251 green); meerkat / orrery / session-runtime build. The kernel
+  primitive is done; the pane→pane drag + move-variant + `GraphId` wiring is C4 *surface*,
+  folded into C5. **Re-ranked (C4 core off the top):** (1) **camera-to-the-view** (makes the
+  same-graph co-window a real independent viewport); (2) C3 torn-tile content + MW3 step-5
+  fan-out; (3) C5 gesture model (carries C4 surface: pane→pane drag + move-vs-copy / OQ-B);
+  (4) the N-orrery-elements seam (subsumes #1 if orrery-as-element is the path).

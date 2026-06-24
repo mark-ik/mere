@@ -13,7 +13,7 @@
 use forme::GraphMemberId;
 use kernel::graph::SemanticSubKind;
 use meerkat::{Chrome, ContextAction, ContextItem};
-use orrery::Representation;
+use orrery::Face;
 use session_runtime::ShellbarEdge;
 
 use super::WindowCtx;
@@ -593,17 +593,18 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
-        // Set the per-node representation (the form picker): override each context node's
-        // presentation form. Applies to the context set like the engine pins; the next
-        // frame's snapshot reads the override through `node_representation`. The override
-        // is held on the orrery (not yet persisted — a follow-up). (Node representation P1.)
-        if let ContextAction::SetRepresentation(id) = action {
-            let rep = match id {
-                "shape" => Representation::Shape,
-                _ => Representation::Tile,
+        // Set the per-node face (the texture picker): override each context node's face. Applies
+        // to the context set like the engine pins; the next frame's snapshot reads it through
+        // `node_face`. Sets only the face — the body (collider) is untouched. The override is
+        // held on the orrery (not yet persisted — a follow-up). (Node body & face — Face axis.)
+        if let ContextAction::SetFace(id) = action {
+            let face = match id {
+                "sprite" => Face::Sprite,
+                "bare" => Face::Bare,
+                _ => Face::Favicon,
             };
             for member in std::mem::take(&mut self.view.context_set) {
-                self.orrery_mut().set_node_representation(member, rep);
+                self.orrery_mut().set_node_face(member, face);
             }
             self.view.request_redraw();
             return;
@@ -651,7 +652,7 @@ impl WindowCtx<'_> {
             | ContextAction::CloseGraphPane
             | ContextAction::PinEngine(_)
             | ContextAction::AutoEngine
-            | ContextAction::SetRepresentation(_)
+            | ContextAction::SetFace(_)
             | ContextAction::AddTag
             | ContextAction::OpenLinkNewTab
             | ContextAction::CopyLink

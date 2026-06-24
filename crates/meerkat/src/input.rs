@@ -65,6 +65,35 @@ fn slider_cell_fraction(s: &str) -> Option<f64> {
     (count > 0.0).then_some(i / count)
 }
 
+/// The index `i` of the hull edge (`hull[i]` → `hull[i+1]`, wrapping the last to the first)
+/// nearest to point `(px, py)`, if its distance is within `tol`. Used to insert a new corner
+/// where the user clicks a hull edge. (Swatch — add vertex, B3.)
+fn nearest_hull_edge(hull: &[(f32, f32)], px: f32, py: f32, tol: f32) -> Option<usize> {
+    let n = hull.len();
+    (0..n)
+        .map(|i| {
+            let (ax, ay) = hull[i];
+            let (bx, by) = hull[(i + 1) % n];
+            (i, point_segment_dist(px, py, ax, ay, bx, by))
+        })
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .filter(|&(_, d)| d <= tol)
+        .map(|(i, _)| i)
+}
+
+/// Distance from point `(px, py)` to the segment `(ax, ay)`–`(bx, by)`. (Swatch — add vertex.)
+fn point_segment_dist(px: f32, py: f32, ax: f32, ay: f32, bx: f32, by: f32) -> f32 {
+    let (dx, dy) = (bx - ax, by - ay);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 <= f32::EPSILON {
+        0.0
+    } else {
+        (((px - ax) * dx + (py - ay) * dy) / len2).clamp(0.0, 1.0)
+    };
+    let (cx, cy) = (ax + t * dx, ay + t * dy);
+    ((px - cx).powi(2) + (py - cy).powi(2)).sqrt()
+}
+
 impl WindowCtx<'_> {
     /// Route a mouse button press/release by region. A left press in the chrome
     /// band (toolbar + any open dropdown) hit-tests + dispatches the chrome; any
@@ -235,7 +264,17 @@ impl WindowCtx<'_> {
                             if self.try_begin_swatch_drag(x, y) {
                                 return;
                             }
+                            // A press on a reorderable row's drag grip begins a drag-reorder
+                            // (the configurable menu list); otherwise it's a normal pane click.
+                            // (Command registry B2.)
+                            if self.try_begin_row_reorder(x, y) {
+                                return;
+                            }
                             self.chrome_click(x, y);
+                        } else if button == MouseButton::Right {
+                            // A right press on a swatch hull vertex removes it (the shape editor's
+                            // delete gesture); elsewhere in a pane it does nothing. (Swatch — B3.)
+                            self.try_remove_swatch_vertex(x, y);
                         }
                         return;
                     }
@@ -393,6 +432,25 @@ impl WindowCtx<'_> {
                 // ends it (the drag is left-initiated and has no multi-button meaning).
                 // (Swatch — node shape editor, Stage B.)
                 if self.view.swatch_drag.take().is_some() {
+                    // The hull is graph-truth geometry: persist the edit on release (the
+                    // cartography sidecar), so a hitbox edit survives a reload even on a
+                    // non-graceful exit. (Node body & face — the Body axis persists.)
+                    self.save_session();
+                    self.view.request_redraw();
+                    return;
+                }
+                // End an in-progress row-reorder drag (the configurable menu list): drop the
+                // grabbed row onto the row under the cursor (reposition + persist). Like the
+                // swatch drag it clears first and consumes the release; a sub-threshold release
+                // (a grip click that never moved) just clears. (Command registry B2.)
+                if let Some(drag) = self.view.row_reorder_drag.take() {
+                    if drag.moved {
+                        if let Some(target) = drag.target {
+                            if target != drag.id {
+                                self.reorder_menu_action_to(&drag.id, &target);
+                            }
+                        }
+                    }
                     self.view.request_redraw();
                     return;
                 }
@@ -775,12 +833,12 @@ impl WindowCtx<'_> {
                         "size:down" => {
                             self.orrery_mut().step_node_size_tier(member, -1);
                         }
-                        "rep:tile" => self
-                            .orrery_mut()
-                            .set_node_representation(member, orrery::Representation::Tile),
-                        "rep:shape" => self
-                            .orrery_mut()
-                            .set_node_representation(member, orrery::Representation::Shape),
+                        "face:favicon" => {
+                            self.orrery_mut().set_node_face(member, orrery::Face::Favicon)
+                        }
+                        "face:bare" => {
+                            self.orrery_mut().set_node_face(member, orrery::Face::Bare)
+                        }
                         _ => {}
                     }
                 }
@@ -808,28 +866,93 @@ impl WindowCtx<'_> {
         }
     }
 
-    /// Try to begin a swatch hull-vertex drag from a left press at `(x, y)`: if the press
-    /// landed inside a node swatch near one of its hull vertices, arm the drag and return
-    /// `true` (the caller consumes the press); otherwise `false` (it falls through to the
-    /// normal pane click). The swatch is DOM in the chrome document, so this reuses the
-    /// object-card press-gate pattern — hit-test the chrome session, walk up to the
-    /// `node-swatch` container — as the first binding of the general "handle press → drag →
-    /// mutate the scoped element" mechanism. (Swatch — node shape editor, Stage B.)
+    /// Try to begin a swatch edit from a left press at `(x, y)`: grab the nearest hull vertex if
+    /// the press is on one, else **insert** a new vertex where it lands on a hull edge and grab
+    /// that — so the swatch is a full body designer (drag to move, click an edge to add a
+    /// corner). Returns `true` if a drag started (the caller consumes the press), else `false`
+    /// (it falls through to the normal pane click). The swatch is DOM in the chrome document, so
+    /// this reuses the object-card press-gate pattern (hit-test the chrome session, walk up to
+    /// the `node-swatch` container). (Swatch — node shape editor, Stage B / B3.)
     fn try_begin_swatch_drag(&mut self, x: f32, y: f32) -> bool {
-        let Some((subject, vertex, origin, edge)) = self.swatch_handle_at(x, y) else {
+        let Some((subject, hull, origin, edge, nx, ny)) = self.swatch_geometry_at(x, y) else {
             return false;
         };
-        self.view.swatch_drag =
-            Some(crate::window_view::SwatchDrag { subject, vertex, origin, edge });
+        let grab = 16.0 / edge;
+        let (vi, vdist2) = hull
+            .iter()
+            .enumerate()
+            .map(|(i, &(vx, vy))| (i, (vx - nx).powi(2) + (vy - ny).powi(2)))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .expect("hull has >= 3 vertices");
+        // On a vertex: drag it.
+        if vdist2 <= grab * grab {
+            self.view.swatch_drag =
+                Some(crate::window_view::SwatchDrag { subject, vertex: vi, origin, edge });
+            self.view.request_redraw();
+            return true;
+        }
+        // Not on a vertex but inside the swatch near an edge: insert a corner there and drag it.
+        if nx.abs() <= 0.5 && ny.abs() <= 0.5 {
+            if let Some(after) = nearest_hull_edge(&hull, nx, ny, 14.0 / edge) {
+                let insert_at = after + 1;
+                let mut new_hull = hull;
+                new_hull.insert(insert_at, (nx.clamp(-0.5, 0.5), ny.clamp(-0.5, 0.5)));
+                self.orrery_mut().set_node_sprite_hull(subject, new_hull);
+                self.view.swatch_drag = Some(crate::window_view::SwatchDrag {
+                    subject,
+                    vertex: insert_at,
+                    origin,
+                    edge,
+                });
+                self.view.request_redraw();
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Remove the hull vertex under a right press at `(x, y)`, if the press lands on one and the
+    /// hull stays a polygon (>= 3 vertices). Returns whether a vertex was removed. (Swatch — B3.)
+    fn try_remove_swatch_vertex(&mut self, x: f32, y: f32) -> bool {
+        // Never reshape the hull from a right-click while a left-drag owns it: removing a vertex
+        // would shift the dragged vertex's index out from under the in-flight gesture. (Swatch.)
+        if self.view.swatch_drag.is_some() {
+            return false;
+        }
+        let Some((subject, hull, _origin, edge, nx, ny)) = self.swatch_geometry_at(x, y) else {
+            return false;
+        };
+        if hull.len() <= 3 {
+            return false;
+        }
+        let grab = 16.0 / edge;
+        let (vi, vdist2) = hull
+            .iter()
+            .enumerate()
+            .map(|(i, &(vx, vy))| (i, (vx - nx).powi(2) + (vy - ny).powi(2)))
+            .min_by(|a, b| a.1.total_cmp(&b.1))
+            .expect("hull has >= 3 vertices");
+        if vdist2 > grab * grab {
+            return false;
+        }
+        let mut new_hull = hull;
+        new_hull.remove(vi);
+        self.orrery_mut().set_node_sprite_hull(subject, new_hull);
+        // Persist the hull edit (graph-truth geometry) immediately. (Node body & face.)
+        self.save_session();
         self.view.request_redraw();
         true
     }
 
-    /// Resolve a press at `(x, y)` to the node swatch hull vertex it grabs, if any: the subject
-    /// node, the vertex index, the swatch container's painted top-left (window px), and its
-    /// edge length. `None` when the press is outside a swatch or not within grab range of a
-    /// vertex. (Swatch — Stage B.)
-    fn swatch_handle_at(&self, x: f32, y: f32) -> Option<(uuid::Uuid, usize, (f32, f32), f32)> {
+    /// Resolve a press at `(x, y)` to a node swatch and the press in its normalized face space:
+    /// the subject node, its current hull (cloned), the container's painted top-left (window px),
+    /// the edge length, and the normalized press point `(nx, ny)` in `[-0.5, 0.5]`. `None` when
+    /// the press is not over an editable swatch. (Swatch — Stage B / B3.)
+    fn swatch_geometry_at(
+        &self,
+        x: f32,
+        y: f32,
+    ) -> Option<(uuid::Uuid, Vec<(f32, f32)>, (f32, f32), f32, f32, f32)> {
         let session = self.view.chrome_session.as_ref()?;
         let dom = self.view.dom.borrow();
         // Mirror the render / chrome_click scroll offsets so the hit-test lands on the visible
@@ -862,7 +985,7 @@ impl WindowCtx<'_> {
             .find(|a| a.name.local.as_ref() == "data-subject")
             .and_then(|a| a.value.parse().ok())?;
         let key = self.orrery().graph().get_node_by_id(subject).map(|(k, _)| k)?;
-        let hull = self.orrery().node_sprite_hull(key)?;
+        let hull = self.orrery().node_sprite_hull(key)?.to_vec();
         if hull.len() < 3 {
             return None;
         }
@@ -884,25 +1007,11 @@ impl WindowCtx<'_> {
         let edge = crate::swatch::swatch_edge_px();
         // `settings_scroll` is a single shared value (one active settings pane), matching the
         // host's existing model — `chrome_click` keys the same scroll onto the first
-        // settings-pane-body. With two appearance panes open and the second scrolled, the
-        // second swatch's origin would be off by that scroll; a per-pane scroll is a later
-        // refinement, not a Stage-B concern.
+        // settings-pane-body. A per-pane scroll is a later refinement.
         let origin = (abs.0, abs.1 - self.view.settings_scroll);
-        // The press in the swatch's normalized face space, and the nearest hull vertex to it.
         let nx = (x - origin.0) / edge - 0.5;
         let ny = (y - origin.1) / edge - 0.5;
-        let (vertex, dist2) = hull
-            .iter()
-            .enumerate()
-            .map(|(i, &(vx, vy))| (i, (vx - nx).powi(2) + (vy - ny).powi(2)))
-            .min_by(|a, b| a.1.total_cmp(&b.1))?;
-        // Only grab when the press is genuinely near a vertex (~16px at the 220px edge); a press
-        // elsewhere in the swatch falls through to the pane. (Normalized grab radius.)
-        let grab = 16.0 / edge;
-        if dist2 > grab * grab {
-            return None;
-        }
-        Some((subject, vertex, origin, edge))
+        Some((subject, hull, origin, edge, nx, ny))
     }
 
     /// Advance an in-progress swatch vertex drag: map the cursor into the swatch's normalized
@@ -912,17 +1021,128 @@ impl WindowCtx<'_> {
         let Some(drag) = self.view.swatch_drag else { return };
         let nx = ((x - drag.origin.0) / drag.edge - 0.5).clamp(-0.5, 0.5);
         let ny = ((y - drag.origin.1) / drag.edge - 0.5).clamp(-0.5, 0.5);
-        let Some(key) = self.orrery().graph().get_node_by_id(drag.subject).map(|(k, _)| k) else {
+        // Resolve the drag's target, requiring the vertex index to still be in range. If the
+        // node or hull vanished, or a hull edit shortened it under the gesture, cancel the drag
+        // rather than leave it armed in a zombie state. (Swatch — drag self-heal.)
+        let target = self
+            .orrery()
+            .graph()
+            .get_node_by_id(drag.subject)
+            .map(|(k, _)| k)
+            .and_then(|key| self.orrery().node_sprite_hull(key).map(<[(f32, f32)]>::to_vec))
+            .filter(|hull| drag.vertex < hull.len());
+        let Some(mut hull) = target else {
+            self.view.swatch_drag = None;
             return;
         };
-        let Some(mut hull) = self.orrery().node_sprite_hull(key).map(<[(f32, f32)]>::to_vec) else {
-            return;
-        };
-        if drag.vertex >= hull.len() {
-            return;
-        }
         hull[drag.vertex] = (nx, ny);
         self.orrery_mut().set_node_sprite_hull(drag.subject, hull);
+        self.view.request_redraw();
+    }
+
+    /// The shell document's vertical scroll offsets, keyed by each scrolling pane container, so a
+    /// hit-test lands on the visible row of a scrolled pane. Mirrors the offsets
+    /// [`chrome_click`](Self::chrome_click) builds for its dispatch. (Row reorder B2 helper.)
+    fn shell_scroll_offsets(
+        &self,
+        dom: &serval_scripted_dom::ScriptedDom,
+    ) -> ScrollOffsets<NodeId> {
+        let mut offsets = ScrollOffsets::<NodeId>::default();
+        let root = dom.document();
+        for (class, scroll) in [
+            ("roster", self.view.roster_scroll),
+            ("apparatus", self.view.apparatus_scroll),
+            ("steward", self.view.steward_scroll),
+            ("inspector", self.view.inspector_scroll),
+            ("trail", self.view.trail_scroll),
+            ("settings-pane-body", self.view.settings_scroll),
+        ] {
+            if let Some(node) = crate::first_with_class(dom, root, class) {
+                offsets.insert(node, (0.0, scroll));
+            }
+        }
+        offsets
+    }
+
+    /// Try to begin a row-reorder drag from a left press at `(x, y)`: if the press landed on a
+    /// reorderable row's **drag grip** (`app-reorder-grip`), arm the drag with that row's
+    /// `data-reorder-id` and return `true` (the caller consumes the press); otherwise `false`
+    /// (it falls through to the normal pane click, so the label / ▲ / ▼ controls still work).
+    /// Serval has no native DOM pointer-drag, so the host drives it from the cursor — the swatch
+    /// editor's "handle press → drag → mutate" pattern, generalized to a list row. (Command
+    /// registry B2 — drag reorder.)
+    fn try_begin_row_reorder(&mut self, x: f32, y: f32) -> bool {
+        let Some(id) = self.row_reorder_grip_at(x, y) else {
+            return false;
+        };
+        self.view.row_reorder_drag = Some(crate::window_view::RowReorderDrag {
+            id: id.clone(),
+            origin: (x, y),
+            moved: false,
+            target: Some(id),
+        });
+        self.view.request_redraw();
+        true
+    }
+
+    /// The `data-reorder-id` of the reorderable row whose **drag grip** is under `(x, y)`, if any.
+    /// Walks up the chrome hit chain: a grip (`app-reorder-grip`) must be in the chain, and the
+    /// row above it carries the id. `None` when the press is not on a grip. (Row reorder B2.)
+    fn row_reorder_grip_at(&self, x: f32, y: f32) -> Option<String> {
+        let session = self.view.chrome_session.as_ref()?;
+        let dom = self.view.dom.borrow();
+        let offsets = self.shell_scroll_offsets(&dom);
+        let mut node = session.hit_test(&dom, x, y, &offsets)?;
+        let mut on_grip = false;
+        loop {
+            if crate::has_class(&dom, node, "app-reorder-grip") {
+                on_grip = true;
+            }
+            if on_grip {
+                if let Some(id) = dom
+                    .attributes(node)
+                    .find(|a| a.name.local.as_ref() == "data-reorder-id")
+                    .map(|a| a.value.to_string())
+                {
+                    return Some(id);
+                }
+            }
+            node = dom.parent(node)?;
+        }
+    }
+
+    /// The `data-reorder-id` of the reorderable row under `(x, y)`, if any — the drop target
+    /// while a row-reorder drag is in flight. Walks up to the first element carrying the id.
+    /// (Row reorder B2.)
+    fn row_reorder_id_at(&self, x: f32, y: f32) -> Option<String> {
+        let session = self.view.chrome_session.as_ref()?;
+        let dom = self.view.dom.borrow();
+        let offsets = self.shell_scroll_offsets(&dom);
+        let mut node = session.hit_test(&dom, x, y, &offsets)?;
+        loop {
+            if let Some(id) = dom
+                .attributes(node)
+                .find(|a| a.name.local.as_ref() == "data-reorder-id")
+                .map(|a| a.value.to_string())
+            {
+                return Some(id);
+            }
+            node = dom.parent(node)?;
+        }
+    }
+
+    /// Advance an in-progress row-reorder drag: update the drop target to the row under the
+    /// cursor and arm the movement flag once the pointer leaves the press point. The view dims
+    /// the dragged row and marks the drop target on the next frame. (Command registry B2.)
+    pub(super) fn drag_row_reorder(&mut self, x: f32, y: f32) {
+        let target = self.row_reorder_id_at(x, y);
+        let Some(drag) = self.view.row_reorder_drag.as_mut() else {
+            return;
+        };
+        if !drag.moved && (x - drag.origin.0).hypot(y - drag.origin.1) > 4.0 {
+            drag.moved = true;
+        }
+        drag.target = target;
         self.view.request_redraw();
     }
 
@@ -2079,5 +2299,34 @@ impl WindowCtx<'_> {
         let dom = self.view.dom.borrow();
         let container = first_with_class(&dom, dom.document(), class)?;
         first_tag(&dom, container, "input")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{nearest_hull_edge, point_segment_dist};
+
+    #[test]
+    fn point_segment_dist_handles_interior_and_endpoints() {
+        // A point above the middle of a horizontal segment: distance is the vertical gap.
+        assert!((point_segment_dist(0.5, 0.3, 0.0, 0.0, 1.0, 0.0) - 0.3).abs() < 1e-5);
+        // Past the segment's end: distance is to the nearer endpoint, not the infinite line.
+        assert!((point_segment_dist(2.0, 0.0, 0.0, 0.0, 1.0, 0.0) - 1.0).abs() < 1e-5);
+        // A degenerate (zero-length) segment is just the distance to the point.
+        assert!((point_segment_dist(0.0, 1.0, 0.0, 0.0, 0.0, 0.0) - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn nearest_hull_edge_picks_the_clicked_edge_within_tolerance() {
+        // A unit square hull (CCW): edges bottom(0), right(1), top(2), left(3, wraps 3->0).
+        let hull = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
+        // A click just outside the bottom edge picks edge 0.
+        assert_eq!(nearest_hull_edge(&hull, 0.5, -0.05, 0.1), Some(0));
+        // A click near the right edge picks edge 1.
+        assert_eq!(nearest_hull_edge(&hull, 1.05, 0.5, 0.1), Some(1));
+        // The wrapping left edge (last vertex -> first) is index 3.
+        assert_eq!(nearest_hull_edge(&hull, -0.05, 0.5, 0.1), Some(3));
+        // A click far from every edge (well inside) is beyond tolerance: no edge.
+        assert_eq!(nearest_hull_edge(&hull, 0.5, 0.5, 0.1), None);
     }
 }

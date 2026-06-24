@@ -536,6 +536,8 @@ impl super::Shell {
             ctx.orrery_mut().apply_cartography_sprites(geom.sprite_iter());
             // ...and their collider hulls, so the traced-to-image collider survives too. (Node-rep.)
             ctx.orrery_mut().apply_cartography_sprite_hulls(geom.sprite_hull_iter());
+            // ...and the per-node physical materials, so a tuned node re-opens tuned. (Body & face.)
+            ctx.orrery_mut().apply_cartography_materials(geom.material_iter());
         }
         ctx.view.maximized_pane = None;
         ctx.view.active_content = super::ContentPane::Orrery;

@@ -217,6 +217,20 @@ impl WindowCtx<'_> {
         }
     }
 
+    /// Move context-menu command `id` to where `target` sits in the order — the drag-reorder
+    /// drop (command registry B2). Removes `id`, then inserts it at `target`'s slot ("drop before
+    /// the target"), and persists. Where the ▲ / ▼ buttons swap neighbors one step at a time,
+    /// this lands a command anywhere in a single drag. A no-op if either id isn't in the menu or
+    /// they're already adjacent in place.
+    pub(super) fn reorder_menu_action_to(&mut self, id: &str, target: &str) {
+        let before = self.shared.presentation.menu_actions.clone();
+        crate::list_pane::reorder_before(&mut self.shared.presentation.menu_actions, id, target);
+        if self.shared.presentation.menu_actions != before {
+            self.persist_menu_actions();
+            self.view.request_redraw();
+        }
+    }
+
     /// Restore the context menu to the registry default order (command registry P4) and persist.
     pub(super) fn reset_menu_actions(&mut self) {
         self.shared.presentation.menu_actions =

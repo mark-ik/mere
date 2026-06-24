@@ -77,6 +77,11 @@ pub fn apparatus_sheet(c: &ChromeTheme) -> Vec<String> {
         ),
         ".app-slider-track { display: flex; height: 18px; gap: 1px; }".to_string(),
         ".app-seg { height: 18px; }".to_string(),
+        // Drag-reorder (the configurable menu list, B2): a dimmed grip glyph; the dragged row
+        // fades; the drop target draws an accent line at its top edge ("drop before here").
+        format!(".app-reorder-grip {{ font-size: 15px; color: {}; }}", rgb(c.muted_text)),
+        ".reorder-dragging { opacity: 0.45; }".to_string(),
+        format!(".reorder-drop {{ border-top: 2px solid {}; }}", rgb(c.active_bg)),
     ]
 }
 

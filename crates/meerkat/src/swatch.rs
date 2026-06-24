@@ -8,13 +8,15 @@
 //! node facet pane, a menu, a djot script block, an orrery card).
 //!
 //! First embedding: a **single node** scoped swatch — the node's sprite face plus its editable
-//! collider hull — in the `node:<id>/appearance` facet pane (the shape editor). Stage A is the
-//! read-only render (sprite + hull polygon + a dot per vertex); Stage B makes the vertex dots
-//! draggable — the host hit-tests the swatch through the chrome session (the object-card
-//! press-gate pattern), walks up to the `node-swatch` container, reads its `data-subject`, and
-//! drives the drag from the cursor (serval has no native DOM pointer-drag). The view is concrete
-//! over `SettingsPanesView` for this first embedder; generalizing over the host state is the
-//! reuse step when the menu / djot embeddings land. (Node-rep — sprite shape editor.)
+//! collider hull (the Body axis) — in the `node:<id>/appearance` facet pane (the shape editor).
+//! It renders the sprite (optional, a tracing underlay) + the hull polygon + a dot per vertex,
+//! and is a full **body designer**: the host hit-tests the swatch through the chrome session
+//! (the object-card press-gate pattern), walks up to the `node-swatch` container, reads its
+//! `data-subject`, and drives editing from the cursor (serval has no native DOM pointer-drag):
+//! drag a vertex to move it, click a hull edge to add a corner, right-click a vertex to remove
+//! it. A node with no sprite can seed a default hull and shape it from scratch. The view is
+//! concrete over `SettingsPanesView` for this first embedder; generalizing over the host state
+//! is the reuse step when the menu / djot embeddings land. (Node body & face — the shape editor.)
 
 use xilem_serval::el;
 
@@ -84,7 +86,8 @@ pub(crate) fn swatch_view(spec: &SwatchSpec) -> SettingsPanesView {
                 pts.join(", ")
             ),
         )));
-        // A dot per vertex — the drag handles Stage B activates.
+        // A dot per vertex — the editor's handles: drag to move, right-click to remove; click a
+        // bare edge to add a new one. (Node body & face — the shape editor.)
         let half = HANDLE / 2.0;
         for &(nx, ny) in &spec.hull {
             let cx = norm_to_swatch_px(nx);

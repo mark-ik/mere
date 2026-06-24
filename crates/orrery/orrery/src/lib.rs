@@ -37,8 +37,8 @@ use gyre::{LayoutSnapshot, LayoutView};
 /// The declarative scene catalog, re-exported so hosts (and the standalone bin) can load
 /// a scene by name without depending on `gyre` directly. (Physics scenes P4a.)
 pub use gyre::{
-    SceneSpec, chain_scene, domino_scene, drift_scene, drop_bowl_scene, funnel_scene, galton_scene,
-    pyramid_scene,
+    NODE_BODY_DENSITY, NodeMaterial, SceneSpec, chain_scene, domino_scene, drift_scene,
+    drop_bowl_scene, funnel_scene, galton_scene, pyramid_scene,
 };
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
@@ -51,7 +51,7 @@ use build::{build_pool_dom, build_simulation, dark_scene_style, dedup_edges, sam
 use paint_list_api::ColorF;
 
 mod types;
-pub use types::{CameraView, NodeShape, NodeState, PointerButton, Representation};
+pub use types::{CameraView, Face, NodeShape, NodeState, PointerButton};
 
 mod input;
 mod frame;
@@ -176,22 +176,28 @@ pub struct Orrery {
     /// Per-node content silhouette the host pushes for node shaping. Resolved to
     /// `NodeKey` on set; a node absent here draws as `Square` (the default).
     node_shapes: HashMap<NodeKey, NodeShape>,
-    /// Per-node presentation overrides (the user's per-node form choice). A node
-    /// absent here takes the content-type default, so this holds only explicit
-    /// overrides, never the whole graph. (Node representation P1.)
-    node_representations: HashMap<NodeKey, Representation>,
+    /// Per-node **face** overrides (the user's per-node texture choice on the Face axis). A
+    /// node absent here defaults to [`Face::Favicon`], so this holds only explicit overrides,
+    /// never the whole graph. Independent of the body (the collider hull). (Node body & face.)
+    node_faces: HashMap<NodeKey, Face>,
     /// Per-node face footprint overrides (px). A node absent here takes size-by-degree
     /// (when on) or the uniform default, so this holds only explicit resizes. (P0 resize.)
     node_sizes: HashMap<NodeKey, f32>,
     /// Per-node custom sprite faces: the imported image as a PNG data-URI. A node here
-    /// renders with [`Representation::Sprite`] (set together via [`set_node_sprite`]);
-    /// absent means no sprite. Persisted in the cartography sidecar. (Node rep P2 — sprite.)
+    /// renders with [`Face::Sprite`] (set together via [`set_node_sprite`]); absent means no
+    /// sprite. Persisted in the cartography sidecar. (Node body & face — sprite face.)
     node_sprites: HashMap<NodeKey, String>,
     /// Per-node sprite collider hulls: the sprite's opaque region as a convex polygon, in
     /// face-normalized coords ([-0.5, 0.5], scaled to `node_size` at collider time). The host
-    /// traces it from the image at import; a sprite node with one collides at its hull rather
-    /// than its silhouette. Persisted beside the sprite. (Node rep P2 — sprite hull.)
+    /// traces it from the image at import, or the user authors it in the shape editor; a node
+    /// with one collides at its hull rather than its silhouette, regardless of its face.
+    /// Persisted in the cartography sidecar. (Node body & face — the Body axis.)
     node_sprite_hulls: HashMap<NodeKey, Vec<(f32, f32)>>,
+    /// Per-node physical **material** overrides (restitution / friction / density) on the Body
+    /// axis. A node absent here takes the default [`gyre::NodeMaterial`] (the spawn values), so
+    /// this holds only deliberate overrides. Pushed to physics and persisted in the cartography
+    /// sidecar. (Node body & face — material.)
+    node_materials: HashMap<NodeKey, gyre::NodeMaterial>,
     /// Scene toggle: when on, a node's face grows with its undirected degree (capped),
     /// so the spatial map reads connection weight at a glance. Default off (uniform).
     /// (P0 resize — size-by-degree.)
@@ -294,10 +300,11 @@ impl Orrery {
         self.hidden_fields.clear();
         self.node_states.clear();
         self.node_shapes.clear();
-        self.node_representations.clear();
+        self.node_faces.clear();
         self.node_sizes.clear();
         self.node_sprites.clear();
         self.node_sprite_hulls.clear();
+        self.node_materials.clear();
         self.drag = None;
         self.field_drag = None;
         self.marquee = None;
@@ -355,10 +362,11 @@ impl Orrery {
             hidden_fields: HashSet::new(),
             node_states: HashMap::new(),
             node_shapes: HashMap::new(),
-            node_representations: HashMap::new(),
+            node_faces: HashMap::new(),
             node_sizes: HashMap::new(),
             node_sprites: HashMap::new(),
             node_sprite_hulls: HashMap::new(),
+            node_materials: HashMap::new(),
             size_by_degree: false,
             height_by_degree: false,
             marquee: None,
@@ -472,20 +480,21 @@ impl Orrery {
         self.physics.set_node_colliders(colliders);
     }
 
-    /// The collider shape for a node: a sprite node with a traced hull collides at that hull
-    /// (the opaque region, scaled from face-normalized coords to the current
-    /// [`node_size`](Self::node_size)); otherwise its content silhouette
-    /// ([`node_shape`](Self::node_shape)) at its footprint. So physics tracks the *picture*,
-    /// not just a bounding box. (Node-rep — collider matches shape / sprite hull.)
+    /// The collider shape for a node: the node's **body**. A node with a custom hull (the
+    /// Body axis: traced from a sprite or hand-authored in the shape editor) collides at that
+    /// hull, scaled from face-normalized coords to the current [`node_size`](Self::node_size);
+    /// otherwise its content silhouette ([`node_shape`](Self::node_shape)) at its footprint.
+    /// The hull applies **regardless of the face** ([`node_face`](Self::node_face)), so a node
+    /// can wear a favicon over a custom-shaped body. So physics tracks the body, not just a
+    /// bounding box. (Node body & face — the Body axis.)
     fn node_collider(&self, key: NodeKey) -> gyre::NodeCollider {
         let size = self.node_size(key);
         let half = size / 2.0;
-        // A sprite with a hull: scale the normalized polygon to the face and collide at it.
-        if matches!(self.node_representation(key), Representation::Sprite) {
-            if let Some(hull) = self.node_sprite_hulls.get(&key).filter(|h| h.len() >= 3) {
-                let points = hull.iter().map(|&(nx, ny)| (nx * size, ny * size)).collect();
-                return gyre::NodeCollider::Hull { points, fallback: half };
-            }
+        // A custom hull (sprite-traced or hand-authored) collides at that hull, scaled to the
+        // face. Independent of the face texture — the body is its own axis.
+        if let Some(hull) = self.node_sprite_hulls.get(&key).filter(|h| h.len() >= 3) {
+            let points = hull.iter().map(|&(nx, ny)| (nx * size, ny * size)).collect();
+            return gyre::NodeCollider::Hull { points, fallback: half };
         }
         match self.node_shape(key) {
             NodeShape::Circle => gyre::NodeCollider::Ball { radius: half },
@@ -887,6 +896,13 @@ impl Orrery {
         .with_sprite_hulls(self.node_sprite_hulls.iter().filter_map(|(&key, hull)| {
             self.graph.get_node(key).map(|node| (node.id, hull.clone()))
         }))
+        // Persist the per-node physical material overrides (restitution / friction / density),
+        // so a node tuned heavier / bouncier re-opens that way. (Node body & face — material.)
+        .with_materials(self.node_materials.iter().filter_map(|(&key, mat)| {
+            self.graph
+                .get_node(key)
+                .map(|node| (node.id, (mat.restitution, mat.friction, mat.density)))
+        }))
     }
 
     /// One node's current world position (the live gyre position), so the host can
@@ -935,20 +951,13 @@ impl Orrery {
         self.node_shapes.get(&key).copied().unwrap_or_default()
     }
 
-    /// A node's presentation form: a per-node override if the user set one (via
-    /// [`set_node_representation`](Self::set_node_representation)), otherwise the
-    /// content-type default. Keyed off the silhouette ([`node_shape`](Self::node_shape),
-    /// the content-type proxy), the default is uniform [`Tile`](Representation::Tile)
-    /// today, so the visible default is unchanged from before P1; the `match` below is
-    /// the single seam the scene pane (Decision 6) diversifies (content-type to form).
-    /// (Node representation P1.)
-    pub fn node_representation(&self, key: NodeKey) -> Representation {
-        if let Some(&rep) = self.node_representations.get(&key) {
-            return rep;
-        }
-        match self.node_shape(key) {
-            NodeShape::Square | NodeShape::Rounded | NodeShape::Circle => Representation::Tile,
-        }
+    /// A node's **face** (the texture on its body): a per-node override if the user set one
+    /// (via [`set_node_face`](Self::set_node_face) or [`set_node_sprite`](Self::set_node_sprite)),
+    /// otherwise the default [`Favicon`](Face::Favicon). Independent of the body (the collider
+    /// hull). A future scene pane (Decision 6) can diversify the default by content type.
+    /// (Node body & face — the Face axis.)
+    pub fn node_face(&self, key: NodeKey) -> Face {
+        self.node_faces.get(&key).copied().unwrap_or_default()
     }
 
     /// Render the on-screen nodes as host DOM cards instead of in-scene gnodes: the
@@ -1002,7 +1011,7 @@ impl Orrery {
 
     /// Restore the per-node sprite faces from a persisted cartography sidecar (the sprite
     /// counterpart of [`apply_cartography_sizing`]). Each `(member, data-URI)` is applied via
-    /// [`set_node_sprite`], so the node re-opens textured and back at `Representation::Sprite`.
+    /// [`set_node_sprite`], so the node re-opens textured and back at [`Face::Sprite`].
     /// An unknown member id is skipped; does not settle. (Node-rep — sprite persistence.)
     pub fn apply_cartography_sprites<'a>(
         &mut self,
@@ -1028,6 +1037,19 @@ impl Orrery {
         self.push_node_geometry();
     }
 
+    /// Restore the per-node physical materials from a persisted cartography sidecar. Each
+    /// `(member, (restitution, friction, density))` is applied via [`set_node_material`], so a
+    /// node re-opens with its tuned weight / bounce / grip. An unknown member id is skipped.
+    /// (Node body & face — material persistence.)
+    pub fn apply_cartography_materials(
+        &mut self,
+        materials: impl IntoIterator<Item = (uuid::Uuid, (f32, f32, f32))>,
+    ) {
+        for (id, (restitution, friction, density)) in materials {
+            self.set_node_material(id, gyre::NodeMaterial { restitution, friction, density });
+        }
+    }
+
     /// Theme the orrery's surfaces: the content-surface `backdrop` and the `edge`
     /// stroke color, as straight `[r, g, b, a]` (0..1). The host pushes these from
     /// the active theme so the graph re-themes with the chrome. Node *state* colors
@@ -1051,49 +1073,67 @@ impl Orrery {
         self.push_node_geometry();
     }
 
-    /// Override a single node's presentation form (the user's per-node choice, e.g.
-    /// from the node context menu), keyed by node UUID and resolved to its `NodeKey`.
-    /// Wins over the content-type default until [`clear_node_representation`] reverts
-    /// it; a no-op for an unknown id. The override is held on the orrery (rebuilt with
-    /// it); persisting it across a reload is a follow-up (it joins the cartography
-    /// sidecar / the scene-pane defaults). (Node representation P1.)
-    pub fn set_node_representation(&mut self, id: uuid::Uuid, representation: Representation) {
+    /// Override a single node's **face** (the texture on its body), keyed by node UUID. Wins
+    /// over the default [`Favicon`](Face::Favicon) until [`clear_node_face`](Self::clear_node_face).
+    /// Sets only the face: the body (the collider hull) and any stored sprite image are left
+    /// intact, so a face switch never reshapes the node or discards an imported sprite. The
+    /// override is held on the orrery; persisting it is a follow-up (it joins the cartography
+    /// sidecar). A no-op for an unknown id. (Node body & face — the Face axis.)
+    pub fn set_node_face(&mut self, id: uuid::Uuid, face: Face) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
-            self.node_representations.insert(key, representation);
-            // Picking Tile / Shape drops any sprite face (the picker reverts a sprite node);
-            // `set_node_sprite` is the only way back to `Sprite`. (Node-rep P2.)
-            if representation != Representation::Sprite {
-                self.node_sprites.remove(&key);
-                self.node_sprite_hulls.remove(&key);
+            self.node_faces.insert(key, face);
+        }
+    }
+
+    /// Clear a node's per-node face override, reverting it to the default
+    /// [`Favicon`](Face::Favicon). Leaves the body and any sprite image intact. Keyed by node
+    /// UUID; a no-op for an unknown id. (Node body & face — the Face axis.)
+    pub fn clear_node_face(&mut self, id: uuid::Uuid) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            self.node_faces.remove(&key);
+        }
+    }
+
+    /// Reset a node's **body** to its content-type silhouette: drop any custom hull (sprite-traced
+    /// or hand-authored), so the collider falls back to the silhouette primitive. Leaves the face
+    /// untouched. Pushes the new geometry to physics. Keyed by node UUID; a no-op for an unknown
+    /// id. (Node body & face — the Body axis.)
+    pub fn clear_node_body(&mut self, id: uuid::Uuid) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            if self.node_sprite_hulls.remove(&key).is_some() {
+                self.push_node_geometry();
             }
         }
     }
 
-    /// Clear a node's per-node presentation override, reverting it to the content-type
-    /// default. Keyed by node UUID; a no-op for an unknown id. (Node representation P1.)
-    pub fn clear_node_representation(&mut self, id: uuid::Uuid) {
-        if let Some((key, _)) = self.graph.get_node_by_id(id) {
-            self.node_representations.remove(&key);
-            self.node_sprites.remove(&key);
-            self.node_sprite_hulls.remove(&key);
-        }
-    }
-
-    /// Give a node a custom sprite face: store the imported image (a PNG data-URI) and set
-    /// its representation to [`Sprite`](Representation::Sprite) in one step. Keyed by node
-    /// UUID; a no-op for an unknown id. Held on the orrery and persisted in the cartography
-    /// sidecar. The host follows with [`set_node_sprite_hull`] for the collider; this backs
-    /// the drag-and-drop image import. (Node representation P2 — sprite.)
+    /// Give a node a custom sprite face: store the imported image (a PNG data-URI) and set its
+    /// face to [`Sprite`](Face::Sprite) in one step. Keyed by node UUID; a no-op for an unknown
+    /// id. Held on the orrery and persisted in the cartography sidecar. The host follows with
+    /// [`set_node_sprite_hull`] to trace the body hull; this backs the drag-and-drop image
+    /// import. (Node body & face — sprite face.)
     pub fn set_node_sprite(&mut self, id: uuid::Uuid, data_uri: String) {
         if let Some((key, _)) = self.graph.get_node_by_id(id) {
             self.node_sprites.insert(key, data_uri);
-            self.node_representations.insert(key, Representation::Sprite);
+            self.node_faces.insert(key, Face::Sprite);
+        }
+    }
+
+    /// Remove a node's stored sprite image; if its face was [`Sprite`](Face::Sprite), revert the
+    /// face to [`Favicon`](Face::Favicon). Leaves the body (the collider hull) intact, since the
+    /// hull is the node's own shape once traced. Keyed by node UUID; a no-op for an unknown id.
+    /// (Node body & face — sprite face.)
+    pub fn clear_node_sprite(&mut self, id: uuid::Uuid) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            self.node_sprites.remove(&key);
+            if self.node_faces.get(&key) == Some(&Face::Sprite) {
+                self.node_faces.insert(key, Face::Favicon);
+            }
         }
     }
 
     /// A node's custom sprite face (a PNG data-URI), if it has one. The card uses this as
-    /// the face image when [`node_representation`](Self::node_representation) is
-    /// [`Sprite`](Representation::Sprite). (Node representation P2 — sprite.)
+    /// the face image when [`node_face`](Self::node_face) is [`Sprite`](Face::Sprite).
+    /// (Node body & face — sprite face.)
     pub fn node_sprite(&self, key: NodeKey) -> Option<&str> {
         self.node_sprites.get(&key).map(String::as_str)
     }
@@ -1118,6 +1158,51 @@ impl Orrery {
     /// (Node representation P2 — sprite hull.)
     pub fn node_sprite_hull(&self, key: NodeKey) -> Option<&[(f32, f32)]> {
         self.node_sprite_hulls.get(&key).map(Vec::as_slice)
+    }
+
+    /// Seed a node with a default editable body hull — a square covering most of the face — so a
+    /// node with no sprite can be given a custom shape from scratch in the editor (authoring a
+    /// body beyond tracing a sprite). A no-op if it already has a hull. Pushes geometry to
+    /// physics. Keyed by node UUID; a no-op for an unknown id. (Node body & face — the Body axis.)
+    pub fn seed_node_body(&mut self, id: uuid::Uuid) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            if self.node_sprite_hulls.contains_key(&key) {
+                return;
+            }
+        }
+        self.set_node_sprite_hull(
+            id,
+            vec![(-0.35, -0.35), (0.35, -0.35), (0.35, 0.35), (-0.35, 0.35)],
+        );
+    }
+
+    /// A node's physical material (the Body axis): its per-node override if set, else the
+    /// default [`gyre::NodeMaterial`] (the spawn restitution / friction / density).
+    /// (Node body & face — material.)
+    pub fn node_material(&self, key: NodeKey) -> gyre::NodeMaterial {
+        self.node_materials.get(&key).copied().unwrap_or_default()
+    }
+
+    /// Set a node's physical material (restitution / friction / density) and push it to the
+    /// live body, so the node feels heavier / bouncier / grippier at once. A material equal to
+    /// the default is stored too (an explicit override), so the facet shows it as set. Keyed by
+    /// node UUID; a no-op for an unknown id. Persisted in the cartography sidecar. (Node body
+    /// & face — material.)
+    pub fn set_node_material(&mut self, id: uuid::Uuid, material: gyre::NodeMaterial) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            self.node_materials.insert(key, material);
+            self.physics.set_node_materials(vec![(key, material)]);
+        }
+    }
+
+    /// Reset a node's physical material to the default (drop its override) and push the default
+    /// back to the live body. Keyed by node UUID; a no-op for an unknown id. (Node body & face.)
+    pub fn clear_node_material(&mut self, id: uuid::Uuid) {
+        if let Some((key, _)) = self.graph.get_node_by_id(id) {
+            if self.node_materials.remove(&key).is_some() {
+                self.physics.set_node_materials(vec![(key, gyre::NodeMaterial::default())]);
+            }
+        }
     }
 
     /// A node's face footprint (px): a per-node override if set, else size-by-degree

@@ -61,6 +61,7 @@ impl Graph {
                 node.import_provenance = pnode.import_provenance.clone();
                 node.classifications = pnode.classifications.clone();
                 node.properties = pnode.properties.clone();
+                node.derivations = pnode.derivations.clone();
                 node.is_pinned = pnode.is_pinned;
                 node.thumbnail_png = pnode.thumbnail_png.clone();
                 node.thumbnail_width = pnode.thumbnail_width;
@@ -266,6 +267,11 @@ impl Graph {
                             PersistedProvenanceSubKind::ImportedFromSource => {
                                 EdgeAssertion::Provenance {
                                     sub_kind: ProvenanceSubKind::ImportedFromSource,
+                                }
+                            }
+                            PersistedProvenanceSubKind::CopiedFrom => {
+                                EdgeAssertion::Provenance {
+                                    sub_kind: ProvenanceSubKind::CopiedFrom,
                                 }
                             }
                         };

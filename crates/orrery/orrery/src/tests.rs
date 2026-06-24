@@ -394,7 +394,7 @@ fn layout_strategy_overrides_node_positions_until_reverted() {
 }
 
 #[test]
-fn node_representation_defaults_to_tile_and_takes_a_per_node_override() {
+fn node_face_defaults_to_favicon_and_takes_a_per_node_override() {
     let mut graph = Graph::new();
     graph.add_node("https://one.example".to_string(), PortablePoint::new(0.0, 0.0));
     let mut orrery = Orrery::with_graph(graph);
@@ -403,30 +403,22 @@ fn node_representation_defaults_to_tile_and_takes_a_per_node_override() {
         (key, node.id)
     };
     assert_eq!(
-        orrery.node_representation(key),
-        Representation::Tile,
-        "the content-type default is Tile, so the look is unchanged from before P1",
+        orrery.node_face(key),
+        Face::Favicon,
+        "the default face is Favicon, so the look is unchanged",
     );
 
-    // A per-node override is the user's form choice; it wins over the default.
-    orrery.set_node_representation(id, Representation::Shape);
-    assert_eq!(
-        orrery.node_representation(key),
-        Representation::Shape,
-        "the per-node override wins over the content-type default",
-    );
+    // A per-node override is the user's face choice; it wins over the default.
+    orrery.set_node_face(id, Face::Bare);
+    assert_eq!(orrery.node_face(key), Face::Bare, "the per-node override wins over the default");
 
-    // Clearing the override reverts the node to the content-type default.
-    orrery.clear_node_representation(id);
-    assert_eq!(
-        orrery.node_representation(key),
-        Representation::Tile,
-        "clearing the override reverts to the default",
-    );
+    // Clearing the override reverts the node to the default face.
+    orrery.clear_node_face(id);
+    assert_eq!(orrery.node_face(key), Face::Favicon, "clearing the override reverts to Favicon");
 }
 
 #[test]
-fn set_node_sprite_textures_the_face_and_sets_the_representation() {
+fn face_and_body_are_independent_axes() {
     let mut graph = Graph::new();
     graph.add_node("https://one.example".to_string(), PortablePoint::new(0.0, 0.0));
     let mut orrery = Orrery::with_graph(graph);
@@ -435,19 +427,65 @@ fn set_node_sprite_textures_the_face_and_sets_the_representation() {
         (key, node.id)
     };
 
-    // Dropping an image gives the node a sprite face and sets its representation to Sprite.
+    // Dropping an image gives the node a sprite face and a traced body hull (the import path
+    // sets the two together).
     orrery.set_node_sprite(id, "data:image/png;base64,AAAA".to_string());
+    orrery.set_node_sprite_hull(id, vec![(-0.4, -0.4), (0.4, -0.4), (0.0, 0.4)]);
     assert_eq!(orrery.node_sprite(key), Some("data:image/png;base64,AAAA"));
+    assert_eq!(orrery.node_face(key), Face::Sprite, "a sprite node wears the Sprite face");
+    assert!(orrery.node_sprite_hull(key).is_some(), "and carries the traced body hull");
+
+    // DECOUPLE: switching the face back to Favicon keeps the body hull AND the sprite image —
+    // face and body are independent axes (a custom-bodied node can wear a favicon).
+    orrery.set_node_face(id, Face::Favicon);
+    assert_eq!(orrery.node_face(key), Face::Favicon);
+    assert!(orrery.node_sprite_hull(key).is_some(), "a face switch never reshapes the body");
     assert_eq!(
-        orrery.node_representation(key),
-        Representation::Sprite,
-        "a sprite node renders with the Sprite representation",
+        orrery.node_sprite(key),
+        Some("data:image/png;base64,AAAA"),
+        "a face switch never discards the imported sprite",
     );
 
-    // Picking Tile / Shape drops the sprite (the picker reverts a sprite node).
-    orrery.set_node_representation(id, Representation::Tile);
-    assert_eq!(orrery.node_sprite(key), None, "picking Tile clears the sprite face");
-    assert_eq!(orrery.node_representation(key), Representation::Tile);
+    // Resetting the body drops the hull (back to the silhouette) but leaves the face alone.
+    orrery.clear_node_body(id);
+    assert!(orrery.node_sprite_hull(key).is_none(), "reset body drops the hull");
+    assert_eq!(orrery.node_face(key), Face::Favicon, "reset body leaves the face untouched");
+
+    // Removing the sprite drops the image and reverts a still-Sprite face to Favicon.
+    orrery.set_node_face(id, Face::Sprite);
+    orrery.clear_node_sprite(id);
+    assert_eq!(orrery.node_sprite(key), None, "remove sprite drops the image");
+    assert_eq!(orrery.node_face(key), Face::Favicon, "and reverts a Sprite face to Favicon");
+}
+
+#[test]
+fn node_material_overrides_default_and_round_trips_through_cartography() {
+    let mut graph = Graph::new();
+    graph.add_node("https://one.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut orrery = Orrery::with_graph(graph);
+    let (key, id) = {
+        let (key, node) = orrery.graph().get_node_by_url("https://one.example").unwrap();
+        (key, node.id)
+    };
+
+    // A node takes the default material until overridden.
+    assert_eq!(orrery.node_material(key), NodeMaterial::default());
+
+    // An override sets the body's physics (restitution / friction / density).
+    orrery.set_node_material(id, NodeMaterial { restitution: 0.6, friction: 0.3, density: 0.002 });
+    assert_eq!(orrery.node_material(key).restitution, 0.6);
+    assert_eq!(orrery.node_material(key).density, 0.002);
+
+    // The override travels to the cartography sidecar as a (restitution, friction, density) tuple.
+    let geom = orrery.cartography_geometry();
+    let exported: std::collections::HashMap<_, _> = geom.material_iter().collect();
+    assert_eq!(exported.get(&id), Some(&(0.6, 0.3, 0.002)), "the material is exported");
+
+    // Clearing reverts to default; re-applying from the sidecar restores it.
+    orrery.clear_node_material(id);
+    assert_eq!(orrery.node_material(key), NodeMaterial::default(), "cleared reverts to default");
+    orrery.apply_cartography_materials(geom.material_iter());
+    assert_eq!(orrery.node_material(key).restitution, 0.6, "the sidecar round-trips the material");
 }
 
 #[test]

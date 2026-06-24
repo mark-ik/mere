@@ -345,5 +345,6 @@ fn relation_kind_label(kind: RelationKind) -> &'static str {
         RelationKind::Provenance(GeneratedFrom) => "Generated",
         RelationKind::Provenance(ExtractedFrom) => "Extracted",
         RelationKind::Provenance(ImportedFromSource) => "Imported",
+        RelationKind::Provenance(CopiedFrom) => "Copied",
     }
 }

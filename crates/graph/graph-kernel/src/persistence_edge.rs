@@ -157,6 +157,9 @@ pub enum PersistedProvenanceSubKind {
     GeneratedFrom,
     ExtractedFrom,
     ImportedFromSource,
+    /// Verbatim duplicate (cross-graph copy / tear-out fork). Appended last to
+    /// keep existing ordinals stable. Mirrors `ProvenanceSubKind::CopiedFrom`.
+    CopiedFrom,
 }
 
 #[derive(

@@ -62,6 +62,12 @@ pub use barnes_hut::{BarnesHutConfig, BarnesHutRepulsion, repulsion_forces};
 pub mod coupling_force;
 pub use coupling_force::CouplingForce;
 
+/// Position-Based Fluids (PBF): our own small SPH liquid for the orrery (salva lags rapier badly,
+/// so we roll our own). Standalone solver for now (a settling pool); wiring it into the live
+/// [`Simulation`] + render is the next phase. (Physics scenes P4c.)
+pub mod fluid;
+pub use fluid::{Basin, Fluid, FluidParams};
+
 /// The declarative scene library: ready-made [`SceneSpec`]s the orrery loads behind the
 /// graph (drop-bowl, pyramid, dominoes, Galton board, funnel, drift). Data, not engine
 /// code; the growing catalog lives here to keep `lib.rs` under the size ceiling.
@@ -146,6 +152,27 @@ impl NodeCollider {
                 }
             }
         }
+    }
+}
+
+/// A node's physical **material** on the Body axis: how its rapier body responds to contact
+/// and weight. The defaults match the spawn constants, so an unconfigured node is unchanged;
+/// the orrery pushes per-node overrides via [`Simulation::set_node_materials`] (the same
+/// re-apply-to-live-bodies shape as [`Simulation::set_linear_damping`]). Independent of the
+/// node's shape (the collider geometry) and its face (the texture). (Node body & face — material.)
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NodeMaterial {
+    /// Bounciness on contact: 0 (dead) to 1 (perfectly elastic).
+    pub restitution: f32,
+    /// Surface grip: 0 (frictionless) upward.
+    pub friction: f32,
+    /// Mass density (mass = density * area); higher is heavier and harder to push.
+    pub density: f32,
+}
+
+impl Default for NodeMaterial {
+    fn default() -> Self {
+        Self { restitution: 0.0, friction: 0.0, density: NODE_BODY_DENSITY }
     }
 }
 
@@ -350,6 +377,38 @@ impl Simulation {
                 if let Some(c) = self.colliders.get_mut(handle) {
                     c.set_shape(shape.clone());
                 }
+            }
+        }
+    }
+
+    /// Apply each listed node's physical **material** (restitution / friction / density) to its
+    /// live body's colliders, re-applying immediately like [`set_linear_damping`](Self::set_linear_damping).
+    /// A density change re-derives the body's mass from its colliders, so a heavier node resists
+    /// pushing. The defaults match the spawn values, so an unconfigured node is a no-op. Nodes
+    /// without a body are skipped. (Node body & face — material.)
+    pub fn set_node_materials(&mut self, materials: impl IntoIterator<Item = (NodeKey, NodeMaterial)>) {
+        for (node, material) in materials {
+            let Some(&body_handle) = self.bodies_by_node.get(&node) else {
+                continue;
+            };
+            // Split the borrows (immutable body read for the handles, then mutable collider
+            // writes) the way `set_node_colliders` does.
+            let collider_handles: Vec<ColliderHandle> = self
+                .bodies
+                .get(body_handle)
+                .map(|body| body.colliders().to_vec())
+                .unwrap_or_default();
+            for handle in collider_handles {
+                if let Some(c) = self.colliders.get_mut(handle) {
+                    c.set_restitution(material.restitution);
+                    c.set_friction(material.friction);
+                    c.set_density(material.density);
+                }
+            }
+            // Density feeds mass, which rapier caches on the body — recompute it so the new
+            // weight takes effect (distinct fields: `bodies` mut, `colliders` read).
+            if let Some(body) = self.bodies.get_mut(body_handle) {
+                body.recompute_mass_properties_from_colliders(&self.colliders);
             }
         }
     }

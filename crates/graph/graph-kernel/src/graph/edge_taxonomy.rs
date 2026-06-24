@@ -191,6 +191,12 @@ pub enum ProvenanceSubKind {
     GeneratedFrom,
     ExtractedFrom,
     ImportedFromSource,
+    /// A verbatim duplicate of the source — the cross-graph copy/tear-out
+    /// "fork" relation (tear-out brief §7.5). Unlike the content-transformation
+    /// sub-kinds above, the copy carries the source's content unchanged; only
+    /// its identity and host graph differ. Appended last so existing ordinals
+    /// (and the positional `tag` encoding) stay stable.
+    CopiedFrom,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, Serialize, Deserialize)]

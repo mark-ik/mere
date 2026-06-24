@@ -48,6 +48,9 @@ use crate::types::{
 };
 
 pub mod apply;
+/// Cross-graph node copy (tear-out fork): mints a node in this graph from a
+/// donor node in another graph, recording cross-graph derivation provenance.
+pub mod cross_graph;
 pub mod edge_data;
 pub mod edge_payload;
 pub mod edge_taxonomy;
@@ -324,6 +327,7 @@ impl Graph {
             tag_presentation: NodeTagPresentationState::default(),
             import_provenance: Vec::new(),
             classifications: Vec::new(),
+            derivations: Vec::new(),
             properties: Vec::new(),
             is_pinned: false,
             last_visited: now,

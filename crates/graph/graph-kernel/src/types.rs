@@ -11,6 +11,8 @@ use std::collections::HashMap;
 
 use rkyv::{Archive, Deserialize, Serialize};
 
+use crate::graph::ProvenanceSubKind;
+
 // ---------------------------------------------------------------------------
 // Frame layout types
 // ---------------------------------------------------------------------------
@@ -114,6 +116,39 @@ pub enum FrameLayoutHint {
 pub struct NodeImportProvenance {
     pub source_id: String,
     pub source_label: String,
+}
+
+/// Cross-graph derivation provenance: a record that this node was derived from
+/// a node in another graph (the tear-out "fork" / cross-graph copy).
+///
+/// This is the node-anchored analog of an in-graph `Provenance` edge. A
+/// node→node derivation *within* one graph rides a petgraph `Provenance` edge,
+/// but a cross-graph derivation has its object node in a *different* graph, so
+/// it cannot be a petgraph edge — it is recorded here on the derived node
+/// instead, beside [`NodeImportProvenance`] and `NodeClassification`. It
+/// projects to a `<this> {provenance predicate} <source>` statement when the
+/// RDF projection lands (per the petgraph-rdf projection profile).
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Archive,
+    Serialize,
+    Deserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct NodeDerivation {
+    /// Which provenance relation this is (e.g. [`ProvenanceSubKind::CopiedFrom`]).
+    pub sub_kind: ProvenanceSubKind,
+    /// The source node's stable id, as a string (matches the kernel's
+    /// node-id-as-string convention in persisted records). The object of the
+    /// derivation statement.
+    pub source_node: String,
+    /// The source graph's id (the constellation `GraphId` rendered as a string),
+    /// or `None` when same-graph or unknown — the named-graph scope of the source.
+    pub source_graph: Option<String>,
 }
 
 #[derive(

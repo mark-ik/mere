@@ -265,9 +265,8 @@ impl WindowCtx<'_> {
                 .map(|k| {
                     vec![
                         CardWidget::SizeTier { tier: self.orrery().node_size_tier(k) },
-                        CardWidget::Representation {
-                            is_tile: self.orrery().node_representation(k)
-                                == orrery::Representation::Tile,
+                        CardWidget::Face {
+                            is_favicon: self.orrery().node_face(k) == orrery::Face::Favicon,
                         },
                     ]
                 })
@@ -700,9 +699,14 @@ impl WindowCtx<'_> {
                         favicon: node.favicon_rgba.as_ref().and_then(|rgba| {
                             favicon_data_uri(rgba, node.favicon_width, node.favicon_height)
                         }),
-                        // The custom sprite face (a data-URI), for a `Sprite` node. (P2.)
+                        // The custom sprite image (a data-URI), for a `Sprite` face. (P2.)
                         sprite: orrery.node_sprite(key).map(str::to_string),
-                        representation: orrery.node_representation(key),
+                        face: orrery.node_face(key),
+                        // The body hull, so the card face is clipped to the collider shape. (B&F.)
+                        hull: orrery
+                            .node_sprite_hull(key)
+                            .map(<[(f32, f32)]>::to_vec)
+                            .unwrap_or_default(),
                     })
                 })
                 .collect();

@@ -26,7 +26,9 @@ use std::time::Duration;
 
 use armillary::{spawn, ActorHandle, Emitter, Wake};
 use euclid::default::Point2D;
-use gyre::{CouplingForce, LayoutSnapshot, LayoutView, NodeCollider, SceneSpec, Simulation};
+use gyre::{
+    CouplingForce, LayoutSnapshot, LayoutView, NodeCollider, NodeMaterial, SceneSpec, Simulation,
+};
 use kernel::graph::NodeKey;
 
 use super::TICK_DT;
@@ -60,6 +62,9 @@ pub(crate) enum PhysicsCommand {
     SetLinearDamping(f32),
     /// Reshape node colliders to per-node face shapes (see [`Simulation::set_node_colliders`]).
     SetNodeColliders(Vec<(NodeKey, NodeCollider)>),
+    /// Set per-node physical materials (restitution / friction / density; see
+    /// [`Simulation::set_node_materials`]). (Node body & face — material.)
+    SetNodeMaterials(Vec<(NodeKey, NodeMaterial)>),
     /// Add a non-graph scene-decoration body (shape, world position, drift velocity).
     /// (Physics scenes P1.)
     AddSceneBody(NodeCollider, Point2D<f32>, (f32, f32)),
@@ -195,6 +200,17 @@ impl Physics {
             Physics::Inline(p) => p.sim.set_node_colliders(colliders),
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetNodeColliders(colliders));
+            }
+        }
+    }
+
+    /// Apply per-node physical materials (restitution / friction / density) to the live bodies
+    /// (the host maps each node's [`NodeMaterial`] override). (Node body & face — material.)
+    pub fn set_node_materials(&mut self, materials: Vec<(NodeKey, NodeMaterial)>) {
+        match self {
+            Physics::Inline(p) => p.sim.set_node_materials(materials),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::SetNodeMaterials(materials));
             }
         }
     }
@@ -426,6 +442,7 @@ fn apply(
         PhysicsCommand::SetCouplingForces(forces) => sim.set_coupling_forces(forces),
         PhysicsCommand::SetLinearDamping(damping) => sim.set_linear_damping(damping),
         PhysicsCommand::SetNodeColliders(colliders) => sim.set_node_colliders(colliders),
+        PhysicsCommand::SetNodeMaterials(materials) => sim.set_node_materials(materials),
         PhysicsCommand::AddSceneBody(collider, position, velocity) => {
             sim.add_scene_body(collider, position, velocity);
         }

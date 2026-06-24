@@ -29,8 +29,8 @@ pub use crate::persistence_edge::{
 
 use crate::graph::SharedNavigationMemory;
 use crate::types::{
-    FrameLayoutHint, ImportRecord, NodeClassification, NodeImportProvenance, NodeProperty,
-    NodeTagPresentationState,
+    FrameLayoutHint, ImportRecord, NodeClassification, NodeDerivation, NodeImportProvenance,
+    NodeProperty, NodeTagPresentationState,
 };
 
 // ---------------------------------------------------------------------------
@@ -176,6 +176,9 @@ pub struct PersistedNode {
     /// Open literal properties (non-curated literals preserved on ingest).
     #[serde(default)]
     pub properties: Vec<NodeProperty>,
+    /// Cross-graph derivation provenance (copied/forked from another graph).
+    #[serde(default)]
+    pub derivations: Vec<NodeDerivation>,
 }
 
 /// Full graph snapshot for periodic saves.

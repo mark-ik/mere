@@ -362,11 +362,11 @@ pub enum ContextAction {
     /// undirected degree). A scene-level presentation choice; drains like `SetLayoutStrategy`
     /// without touching `context_set`. (Node representation P0 — resize.)
     ToggleSizeByDegree,
-    /// Override the context node(s)' presentation form — the per-node representation
-    /// picker ("Show as tile / shape"). The id is a representation key (`&'static str`,
-    /// so `ContextAction` stays `Copy`): `"tile"` or `"shape"`. Applies to the context
-    /// set like the engine pins. (Node representation P1.)
-    SetRepresentation(&'static str),
+    /// Override the context node(s)' **face** (the texture axis) — the per-node face picker.
+    /// The id is a face key (`&'static str`, so `ContextAction` stays `Copy`): `"favicon"`,
+    /// `"sprite"`, or `"bare"`. Applies to the context set like the engine pins. The body
+    /// (collider shape) is a separate axis. (Node body & face — the Face axis.)
+    SetFace(&'static str),
     /// Summon the object card for the single selected node — a light per-object action
     /// card (P0: the size-tier stepper) in the focus slot, in place of the snapshot preview.
     /// Drains by setting `view.object_card`; no member set consumed. (Object card — P0.)

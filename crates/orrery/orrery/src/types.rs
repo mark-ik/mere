@@ -55,27 +55,27 @@ pub enum NodeShape {
     Circle,
 }
 
-/// A node's presentation form: the *sprite* the orrery draws for it, independent of the
-/// node's truth (content, identity, edges stay authoritative in the kernel). The host
-/// resolves a default per content type and pushes per-node overrides via
-/// [`Orrery::set_node_representation`]; a node without an override takes the content-type
-/// default ([`Orrery::node_representation`]). The card preview is a *separate* layer over
-/// the node, not a representation form, so it is absent here. This is the initial set;
-/// `TexturedBody` (P2-static) and `Scripted` (the field-regions hook) join as their
-/// texture / script paths land. (Node representation P1.)
+/// What is painted on a node's **face**: one of the two presentation axes (the other is the
+/// **body** shape, the node's collider geometry). The face is independent of the body, so a
+/// node with a custom hull body can still show its favicon, and a sprite face can sit on the
+/// default silhouette body. Independent of the node's truth (content, identity, edges stay
+/// authoritative in the kernel). The host pushes per-node overrides via
+/// [`Orrery::set_node_face`]; a node without an override defaults to [`Favicon`](Face::Favicon).
+/// The card preview is a *separate* layer over the node, not a face, so it is absent here.
+/// (Node body & face model — the Face axis.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum Representation {
-    /// The gnode "physical chip": a content-typed colored face carrying the favicon,
-    /// with the caption beside it. The default, and what every node showed before P1.
+pub enum Face {
+    /// The fetched favicon textured on the face, with the caption beside it (the bare state
+    /// color shows through until a favicon arrives). The default: a standard "tile" node wears
+    /// this face over the content-type silhouette body.
     #[default]
-    Tile,
-    /// Bare geometry: the colored, content-typed face alone, no favicon or caption.
-    /// Minimal and cheap, for a dense graph or a node with nothing to texture.
-    Shape,
-    /// A custom sprite: an imported image textured on the face — the "alive graph" form
-    /// (P2-static, the former `TexturedBody`). The host stores the per-node image (a PNG
-    /// data-URI) and pushes it via [`Orrery::set_node_sprite`], which sets this
-    /// representation; the collider stays the sized ball for now (the sprite-alpha hull
-    /// collider is a later step). (Node representation P2 — sprite.)
+    Favicon,
+    /// A custom imported sprite image, cover-fit over the whole face — the "alive graph" form.
+    /// The host stores the per-node image (a PNG data-URI) via [`Orrery::set_node_sprite`],
+    /// which sets this face. The body (silhouette or a sprite-traced hull) is a separate axis.
+    /// (Node body & face — sprite face.)
     Sprite,
+    /// No texture: the bare content-typed state color alone, no favicon or caption. Minimal and
+    /// cheap, for a dense graph or a node with nothing to texture. (Formerly `Shape`.)
+    Bare,
 }

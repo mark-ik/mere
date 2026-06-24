@@ -1,7 +1,16 @@
 # Node Representation and Arrangement Plan — pluggable node forms, live arrangements
 
 **Date**: 2026-06-18
-**Status**: Planning (with Mark). The orrery-as-element work (Phase 2 of the
+**Status**: **Superseded 2026-06-23 (kept in place, not relocated, as active siblings cite it).**
+Substantially complete (P0 cues, P1 per-node form, P2-static sprite faces + the sprite-alpha hull
+collider, P3 + P4 done). The **representation axis** is re-based and continued by the
+[node_body_face_model_plan](2026-06-23_node_body_face_model_plan.md) (Body × Face, tile/shape as
+body presets, decoupled hull, per-node material, the generalized shape editor, and the corrected
+interactive/scripted-form feasibility). The **arrangement axis** is owned by
+[graph_signals_layer_plan](2026-06-22_graph_signals_layer_plan.md) (Decision 7). Kept as the
+record of P0-P4; new representation work lands in the successor.
+
+*Original status: Planning (with Mark).* The orrery-as-element work (Phase 2 of the
 [unified document host plan](2026-06-17_unified_document_host_plan.md)) put the focused
 orrery's nodes into **host-positioned DOM** (cond 1, the custom-layout `<orrery>` element,
 is deferred; these are not a full element yet). That was right for the *semantic* half — but
@@ -778,3 +787,18 @@ it is the default of a setting, not a baked constant.
   either refinements (sprite hull collider, in-scene sprites, label-density / styling-lens of Decisions
   3-4) or blocked / cross-plan (P2-interactive on the input bridge, the scripted form on the field-regions
   substrate, the semantic arrangements on the graph-signals-layer plan).
+- 2026-06-23: **Sprite-alpha hull collider + the node shape editor (swatch) landed; plan superseded.**
+  Two of the "refinement" frontier items closed: (1) the **sprite-alpha hull collider** — the collider
+  now matches the sprite outline (a convex hull of the opaque pixels, normalized + persisted, lowered
+  through `gyre::NodeCollider::Hull`); (2) the **node shape editor** — a DOM "swatch" in the
+  `node:<id>/appearance` facet pane renders the sprite + its hull with a dot per vertex (Stage A) and
+  makes the vertices **draggable** to reshape the collider live (Stage B: a host-side drag through the
+  chrome session, since serval has no native DOM pointer-drag; the collider rebuilds on each move).
+  Adversarially reviewed; the engine-side serval-layout scroll fix (absolute-in-scroll layers) shipped
+  alongside. **Plan superseded the same day**: Mark's Body × Face reframe re-bases the representation
+  axis into the [node_body_face_model_plan](2026-06-23_node_body_face_model_plan.md), which decouples
+  the hull from the sprite (so a tailored body is not sprite-only), adds per-node material properties,
+  generalizes this swatch into a full body designer, and corrects the P2-interactive / scripted
+  "blocked" framing to "built-and-unwired" (scry path) / "DOM-substrate-available". The open refinements
+  (in-scene sprites, styling lens, label density) carry there with named owners; the arrangement half
+  stays with graph-signals-layer.

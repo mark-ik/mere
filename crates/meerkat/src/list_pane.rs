@@ -40,12 +40,21 @@ pub struct SliderSpec {
 }
 
 /// A reorder control: a row's ▲ / ▼ buttons, each queuing a key that moves the row up or
-/// down in its list. Rendered inline beside the row label (the label itself keeps its own
-/// `key`, e.g. remove-from-menu). Settings panes render the buttons; other list panes ignore
-/// them and show the label as a plain row. (Command registry P4 — menu reorder.)
+/// down in its list, plus a drag grip for direct drag-reorder. Rendered inline beside the
+/// row label (the label itself keeps its own `key`, e.g. remove-from-menu). Settings panes
+/// render the buttons + grip; other list panes ignore them and show the label as a plain row.
+/// (Command registry P4 — menu reorder; B2 — drag reorder.)
 pub struct ReorderSpec {
     pub up_key: String,
     pub down_key: String,
+    /// The row's stable id (a command id), emitted as the row's `data-reorder-id` so the
+    /// host's pointer-driven drag-reorder gesture can grab it and resolve a drop. (B2.)
+    pub id: String,
+    /// Set while this is the row being dragged, so the view dims it. (B2.)
+    pub dragging: bool,
+    /// Set while a drag in flight would drop onto this row (it is under the cursor), so the
+    /// view draws a drop marker above it. (B2.)
+    pub drop_target: bool,
 }
 
 /// One row of a list pane: a div with `class` and `text`. When `key` is `Some`,
@@ -73,12 +82,14 @@ impl PaneItem {
         Self { class: class.into(), text: text.into(), key: Some(key.into()), slider: None, reorder: None }
     }
 
-    /// A reorderable button row: the label click queues `key` (e.g. remove), and inline ▲ / ▼
-    /// buttons queue `up_key` / `down_key` to move the row within its list. (Menu reorder.)
+    /// A reorderable button row: the label click queues `key` (e.g. remove), inline ▲ / ▼
+    /// buttons queue `up_key` / `down_key` to move the row within its list, and `id` tags the
+    /// row for the host's drag-reorder gesture. (Menu reorder; B2 — drag reorder.)
     pub fn reorder_row(
         class: impl Into<String>,
         text: impl Into<String>,
         key: impl Into<String>,
+        id: impl Into<String>,
         up_key: impl Into<String>,
         down_key: impl Into<String>,
     ) -> Self {
@@ -87,7 +98,13 @@ impl PaneItem {
             text: text.into(),
             key: Some(key.into()),
             slider: None,
-            reorder: Some(ReorderSpec { up_key: up_key.into(), down_key: down_key.into() }),
+            reorder: Some(ReorderSpec {
+                up_key: up_key.into(),
+                down_key: down_key.into(),
+                id: id.into(),
+                dragging: false,
+                drop_target: false,
+            }),
         }
     }
 
@@ -114,6 +131,28 @@ impl PaneItem {
             reorder: None,
         }
     }
+}
+
+/// Reposition `id` to where `target` sits in `order` — "drop before the target": remove `id`,
+/// then insert it at `target`'s (post-removal) slot. A no-op if either id is absent or they're
+/// the same. The pure core of the drag-reorder drop, shared by any reorderable list (the
+/// configurable context menu is its first consumer). (Command registry B2.)
+pub fn reorder_before(order: &mut Vec<String>, id: &str, target: &str) {
+    let Some(from) = order.iter().position(|a| a == id) else {
+        return;
+    };
+    let Some(mut to) = order.iter().position(|a| a == target) else {
+        return;
+    };
+    if from == to {
+        return;
+    }
+    let moved = order.remove(from);
+    // Removing an earlier element shifts a later target index left by one.
+    if from < to {
+        to -= 1;
+    }
+    order.insert(to, moved);
 }
 
 /// The view state: the pane's root container class, its items, and the activation
@@ -257,6 +296,39 @@ mod tests {
     use xilem_serval::PointerClick;
 
     use super::*;
+
+    fn ids(order: &[&str]) -> Vec<String> {
+        order.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// Dragging a row onto a later one drops it *before* that target (the row slides down to
+    /// make room), and the indices account for the removed element. (Drag-reorder drop, B2.)
+    #[test]
+    fn reorder_before_moves_down_to_targets_slot() {
+        let mut order = ids(&["a", "b", "c", "d"]);
+        reorder_before(&mut order, "a", "c");
+        assert_eq!(order, ids(&["b", "a", "c", "d"]));
+    }
+
+    /// Dragging a row onto an earlier one drops it directly before that target. (B2.)
+    #[test]
+    fn reorder_before_moves_up_before_target() {
+        let mut order = ids(&["a", "b", "c", "d"]);
+        reorder_before(&mut order, "d", "b");
+        assert_eq!(order, ids(&["a", "d", "b", "c"]));
+    }
+
+    /// A drop onto self, or onto / from an absent id, leaves the order untouched. (B2.)
+    #[test]
+    fn reorder_before_is_a_noop_on_self_or_unknown() {
+        let mut order = ids(&["a", "b", "c"]);
+        reorder_before(&mut order, "b", "b");
+        assert_eq!(order, ids(&["a", "b", "c"]));
+        reorder_before(&mut order, "z", "a");
+        assert_eq!(order, ids(&["a", "b", "c"]));
+        reorder_before(&mut order, "a", "z");
+        assert_eq!(order, ids(&["a", "b", "c"]));
+    }
 
     /// The input-spine proof for the generic list pane: a click on a button item
     /// routes through the runner's DOM dispatch (hit-test → dispatch → the button's

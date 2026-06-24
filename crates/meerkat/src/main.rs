@@ -1174,6 +1174,8 @@ impl Shell {
             orrery.apply_cartography_sprites(geom.sprite_iter());
             // ...and their collider hulls, so the traced-to-image collider survives too. (Node-rep.)
             orrery.apply_cartography_sprite_hulls(geom.sprite_hull_iter());
+            // ...and the per-node physical materials, so a tuned node re-opens tuned. (Body & face.)
+            orrery.apply_cartography_materials(geom.material_iter());
         }
         // Pool every graph a restored pane resolves to, not just the active one, so a
         // second graph-pane (persisted from a prior run) loads instead of leaving a

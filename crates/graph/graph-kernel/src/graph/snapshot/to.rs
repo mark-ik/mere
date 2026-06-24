@@ -65,6 +65,7 @@ impl Graph {
                 frame_layout_hints: node.frame_layout_hints.clone(),
                 frame_split_offer_suppressed: node.frame_split_offer_suppressed,
                 properties: node.properties.clone(),
+                derivations: node.derivations.clone(),
             })
             .collect();
 
@@ -334,6 +335,9 @@ impl Graph {
                                     }
                                     ProvenanceSubKind::ImportedFromSource => {
                                         PersistedProvenanceSubKind::ImportedFromSource
+                                    }
+                                    ProvenanceSubKind::CopiedFrom => {
+                                        PersistedProvenanceSubKind::CopiedFrom
                                     }
                                 })
                                 .collect(),

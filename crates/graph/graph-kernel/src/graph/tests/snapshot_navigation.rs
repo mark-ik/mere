@@ -46,6 +46,7 @@ fn persisted_node(node_id: Uuid, url: &str) -> crate::persistence::PersistedNode
         frame_layout_hints: Vec::new(),
         frame_split_offer_suppressed: false,
         properties: Vec::new(),
+        derivations: Vec::new(),
     }
 }
 

@@ -23,7 +23,7 @@ use std::time::Instant;
 use forme::GraphMemberId;
 use frame::{FrameLayout, GraphId, PaneId, SessionId, SplitAxis, SplitChoice};
 use meerkat::{Chrome, ChromeView, chrome_view};
-use orrery::Representation;
+use orrery::Face;
 use platen::Workbench;
 use serval_scripted_dom::ScriptedDom;
 use serval_winit_host::WindowSurface;
@@ -78,6 +78,23 @@ pub(crate) struct SwatchDrag {
     pub(crate) origin: (f32, f32),
     /// The swatch's edge length in px, so the local point normalizes to face coords.
     pub(crate) edge: f32,
+}
+
+/// An in-progress drag-reorder of a settings-pane list row — the generic row-reorder gesture
+/// (a `data-reorder-id` grip drag), whose first consumer is the persona-configurable context
+/// menu. `Some` from a press on a row's drag grip until release: the move tracks the drop
+/// target, the release repositions + persists. Serval has no native DOM pointer-drag, so the
+/// host drives it from the cursor (the swatch editor's pattern). (Command registry B2.)
+pub(crate) struct RowReorderDrag {
+    /// The grabbed row's `data-reorder-id` (a command id, for the menu list).
+    pub(crate) id: String,
+    /// The press origin in window px, for the movement threshold.
+    pub(crate) origin: (f32, f32),
+    /// Whether the pointer has moved past the threshold — a real drag, not a stray grip click.
+    pub(crate) moved: bool,
+    /// The `data-reorder-id` of the row the cursor is currently over (the drop target), or
+    /// `None` when off any reorderable row.
+    pub(crate) target: Option<String>,
 }
 
 /// State owned by a single window's view. Methods on `Shell` reach it through
@@ -210,6 +227,10 @@ pub(crate) struct WindowView {
     /// press that landed on a hull vertex is being dragged; the move reshapes the
     /// collider, the release clears it. (Swatch — Stage B.)
     pub(crate) swatch_drag: Option<SwatchDrag>,
+    /// An in-progress drag-reorder of a settings-pane list row (the configurable context menu).
+    /// `Some` while a grip press is being dragged; the move tracks the drop target, the release
+    /// repositions + persists. (Command registry B2 — drag reorder.)
+    pub(crate) row_reorder_drag: Option<RowReorderDrag>,
     /// The cursor icon currently set on the window (tracked to set only on change).
     pub(crate) cursor_icon: CursorIcon,
     /// Set by the custom close control; the event handler exits the loop after the
@@ -345,14 +366,19 @@ pub(crate) struct OrreryCard {
     /// The node's favicon as a `data:` image URI, or `None`. It fills the card face
     /// (painted over the state color, clipped to the silhouette). (P0 favicon-as-face.)
     pub(crate) favicon: Option<String>,
-    /// The node's custom sprite face as a `data:` image URI, when its representation is
-    /// `Sprite` (from `Orrery::node_sprite`). Fills the whole face (the imported image),
-    /// replacing the state color + favicon. (P2 — sprite.)
+    /// The node's custom sprite image as a `data:` image URI, when its face is `Sprite`
+    /// (from `Orrery::node_sprite`). Fills the whole face (the imported image), replacing
+    /// the state color + favicon. (Node body & face — sprite face.)
     pub(crate) sprite: Option<String>,
-    /// The node's presentation form, from `Orrery::node_representation`: `Tile` draws the
-    /// favicon + caption chip; `Shape` draws the bare content-typed face; `Sprite` draws
-    /// the imported image as the face. (P1 / P2.)
-    pub(crate) representation: Representation,
+    /// The node's **face** (the texture axis), from `Orrery::node_face`: `Favicon` draws the
+    /// favicon + caption chip; `Bare` draws the bare content-typed face; `Sprite` draws the
+    /// imported image. Independent of the body (the collider shape). (Node body & face.)
+    pub(crate) face: Face,
+    /// The node's collider hull (face-normalized `[-0.5, 0.5]` polygon), when it has a custom
+    /// body. The face is **clipped to it**, so the rendered node matches its collider — a sprite's
+    /// transparent background stops reading as a square, and the picture is the body. Empty for a
+    /// silhouette-bodied node. (Node body & face — the face is the collider.)
+    pub(crate) hull: Vec<(f32, f32)>,
 }
 
 /// The focused orrery's render snapshot: the pane rect the element sits at and the
@@ -408,9 +434,10 @@ pub(crate) enum CardWidget {
     /// Size-tier stepper rendered as five notch dots filled to `tier`, with − / + buttons
     /// (`size:down` / `size:up`). (Object card — P1.)
     SizeTier { tier: usize },
-    /// Representation toggle: a Tile | Shape segmented control, `is_tile` marking the active
-    /// one (`rep:tile` / `rep:shape`). (Object card — P1.)
-    Representation { is_tile: bool },
+    /// Face toggle: a Favicon | Plain segmented control, `is_favicon` marking the active one
+    /// (`face:favicon` / `face:bare`) — the Face axis. The body (custom hull) is authored in the
+    /// shape editor, not this compact toggle. (Object card — P1; node body & face.)
+    Face { is_favicon: bool },
 }
 
 /// The window shell's composed view-state: the chrome plus the orrery-as-element's
@@ -441,7 +468,7 @@ pub(crate) struct ShellState {
     /// `settings://` node. Empty keeps the subtree out of the document. (Settings lane P1.)
     pub(crate) settings: SettingsPanesState,
     /// Activation keys queued by the object card's widget controls (`size:up` / `size:down`,
-    /// `rep:tile` / `rep:shape`, …); the host drains + dispatches them for the card's member.
+    /// `face:favicon` / `face:bare`, …); the host drains + dispatches them for the card's member.
     /// (Object card — P1.)
     pub(crate) node_card_keys: Vec<String>,
 }
@@ -608,28 +635,43 @@ fn node_card_view(c: &OrreryCard) -> ShellView {
     // collider-vs-visual gap — the press hit the bare collider beside the visual). This IS the
     // node object the collider is pinned to and the drag grabs; the label and (later) the
     // content-preview card anchor to it. Shaped square / rounded / circle by content type.
+    // The body shape: a node with a custom hull is **clipped to it**, so the rendered node IS its
+    // collider — a sprite's transparent background no longer reads as a square, and the picture
+    // matches the physics. (The selection lift still marks selection; a box-shadow ring would be
+    // erased by the clip, so it is dropped for a hulled node — a shaped ring is a later refinement.)
+    // A silhouette-bodied node keeps the content-type border-radius + the box-shadow ring.
+    let shape_style = if c.hull.len() >= 3 {
+        let pts: Vec<String> = c
+            .hull
+            .iter()
+            .map(|&(nx, ny)| format!("{:.2}% {:.2}%", (nx + 0.5) * 100.0, (ny + 0.5) * 100.0))
+            .collect();
+        format!("clip-path:polygon({});", pts.join(", "))
+    } else {
+        format!("border-radius:{};{ring}", c.radius)
+    };
     let face_style = format!(
         "position:absolute;left:0;top:0;transform:translate({cx}px,{cy}px);width:{size}px;\
-         height:{size}px;box-sizing:border-box;background-color:{};border-radius:{};{ring}",
-        c.color, c.radius
+         height:{size}px;box-sizing:border-box;background-color:{};{shape_style}",
+        c.color
     );
-    // Representation (P1): `Shape` is the bare content-typed face (no favicon, no
-    // caption), for dense graphs or a node with nothing to texture; `Tile` (the default)
-    // textures the favicon on the face and sets the caption beside it. Both share the
-    // same face, collider, and selection ring above, so only these two children differ.
-    let chrome = !matches!(c.representation, Representation::Shape);
+    // Face axis: `Bare` is the bare content-typed face (no favicon, no caption), for dense
+    // graphs or a node with nothing to texture; `Favicon` (the default) textures the favicon
+    // on the face and sets the caption beside it; `Sprite` shows the imported image. The body
+    // (collider shape) is a separate axis, so only the face children below differ.
+    let chrome = !matches!(c.face, Face::Bare);
     // The face image fills the face (absolutely positioned over the state color, shaped to
-    // match): a `Sprite` shows its imported image; a `Tile` shows the favicon (transparency
-    // shows the color through); a `Shape` shows neither (the bare face). (P1 favicon / P2 sprite.)
-    let face_image = match c.representation {
-        Representation::Sprite => c.sprite.as_ref(),
-        Representation::Tile => c.favicon.as_ref(),
-        Representation::Shape => None,
+    // match): a `Sprite` shows its imported image; a `Favicon` shows the favicon (transparency
+    // shows the color through); `Bare` shows neither. (Node body & face — the Face axis.)
+    let face_image = match c.face {
+        Face::Sprite => c.sprite.as_ref(),
+        Face::Favicon => c.favicon.as_ref(),
+        Face::Bare => None,
     };
     let favicon = face_image.map(|uri| {
         // A sprite is a photo / artwork: cover-fit fills the face without distortion. A
         // favicon is a small glyph: stretch it to the face as before.
-        let fit = if matches!(c.representation, Representation::Sprite) {
+        let fit = if matches!(c.face, Face::Sprite) {
             "object-fit:cover;"
         } else {
             ""
@@ -841,9 +883,9 @@ fn object_card_widget_row(widget: &CardWidget) -> (ShellView, ShellView) {
             );
             (title, row)
         }
-        CardWidget::Representation { is_tile } => {
+        CardWidget::Face { is_favicon } => {
             let title: ShellView = Box::new(
-                el::<_, ShellState, ()>("div", "Form".to_string())
+                el::<_, ShellState, ()>("div", "Face".to_string())
                     .attr("style", "color:#8b94a6;font-size:11px;margin-bottom:5px"),
             );
             let seg = |active: bool| -> String {
@@ -853,18 +895,22 @@ fn object_card_widget_row(widget: &CardWidget) -> (ShellView, ShellView) {
                      background:{bg};color:{fg};font-size:13px;cursor:pointer;user-select:none"
                 )
             };
-            let tile_btn: ShellView = Box::new(on_click(
-                el::<_, ShellState, ()>("div", "Tile".to_string())
-                    .attr("style", format!("{};border-radius:6px 0 0 6px", seg(*is_tile))),
-                move |s: &mut ShellState, _: PointerClick| s.node_card_keys.push("rep:tile".to_string()),
+            let favicon_btn: ShellView = Box::new(on_click(
+                el::<_, ShellState, ()>("div", "Favicon".to_string())
+                    .attr("style", format!("{};border-radius:6px 0 0 6px", seg(*is_favicon))),
+                move |s: &mut ShellState, _: PointerClick| {
+                    s.node_card_keys.push("face:favicon".to_string())
+                },
             ));
             let shape_btn: ShellView = Box::new(on_click(
-                el::<_, ShellState, ()>("div", "Shape".to_string())
-                    .attr("style", format!("{};border-radius:0 6px 6px 0", seg(!*is_tile))),
-                move |s: &mut ShellState, _: PointerClick| s.node_card_keys.push("rep:shape".to_string()),
+                el::<_, ShellState, ()>("div", "Plain".to_string())
+                    .attr("style", format!("{};border-radius:0 6px 6px 0", seg(!*is_favicon))),
+                move |s: &mut ShellState, _: PointerClick| {
+                    s.node_card_keys.push("face:bare".to_string())
+                },
             ));
             let row: ShellView = Box::new(
-                el::<_, ShellState, ()>("div", vec![tile_btn, shape_btn])
+                el::<_, ShellState, ()>("div", vec![favicon_btn, shape_btn])
                     .attr("style", "display:flex;gap:2px"),
             );
             (title, row)
@@ -1086,6 +1132,7 @@ impl WindowView {
             resize_drag: Default::default(),
             titlebar_press: Default::default(),
             swatch_drag: Default::default(),
+            row_reorder_drag: Default::default(),
             cursor_icon: Default::default(),
             pending_exit: Default::default(),
             context_set: Default::default(),

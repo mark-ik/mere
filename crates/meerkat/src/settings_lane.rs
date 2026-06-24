@@ -111,17 +111,26 @@ impl WindowCtx<'_> {
                     .to_string(),
             ),
         ];
-        // In the menu, in order — the label click removes; the ▲ / ▼ buttons reorder.
+        // In the menu, in order — the grip drags to reorder; the label click removes; the ▲ / ▼
+        // buttons step one place. A drag in flight dims its row and marks the drop target.
         items.push(PaneItem::text("app-title", "In the menu"));
+        let drag = self.view.row_reorder_drag.as_ref();
         for id in in_menu {
             let label = meerkat::command::registry_label(id).unwrap_or(id.as_str());
-            items.push(PaneItem::reorder_row(
+            let mut row = PaneItem::reorder_row(
                 "app-btn-active",
                 format!("{label}  \u{2713}"),
                 format!("menu:toggle:{id}"),
+                id.clone(),
                 format!("menu:move:{id}:up"),
                 format!("menu:move:{id}:down"),
-            ));
+            );
+            if let Some(spec) = row.reorder.as_mut() {
+                spec.dragging = drag.is_some_and(|d| d.id == *id);
+                spec.drop_target = drag
+                    .is_some_and(|d| d.moved && d.id != *id && d.target.as_deref() == Some(id.as_str()));
+            }
+            items.push(row);
         }
         // Every other registry command — click to add.
         items.push(PaneItem::text("app-title", "Add a command"));
@@ -375,20 +384,27 @@ impl WindowCtx<'_> {
     }
 
     /// Build the node shape-editor swatch for a `node:<id>/appearance` page: the subject node's
-    /// sprite face + its collider hull, for the swatch to render (and Stage B to edit). `None`
-    /// for any other page, an unknown id, or a node with no sprite (the editor is for sprite
-    /// faces). (Swatch — node shape editor.)
+    /// sprite image (optional, the tracing underlay) + its collider hull (the body), for the
+    /// swatch to render and Stage B to edit. Shows for any node with a sprite **or** a custom
+    /// body, so a node whose hull was traced then switched to a favicon face still edits its
+    /// body. `None` for any other page, an unknown id, or a node with neither (nothing to edit
+    /// yet). (Node body & face — the shape editor.)
     fn node_appearance_swatch(&self, namespace: &str, page: &str) -> Option<SwatchSpec> {
         if page != "appearance" {
             return None;
         }
         let subject: GraphMemberId = namespace.strip_prefix("node:")?.parse().ok()?;
         let key = self.orrery().graph().get_node_by_id(subject).map(|(k, _)| k)?;
-        let sprite = self.orrery().node_sprite(key).map(str::to_string)?;
+        let sprite = self.orrery().node_sprite(key).map(str::to_string);
         let hull =
             self.orrery().node_sprite_hull(key).map(<[(f32, f32)]>::to_vec).unwrap_or_default();
+        // Nothing to edit yet if the node has neither a sprite nor a body hull (authoring a hull
+        // from scratch is a later editor step).
+        if sprite.is_none() && hull.len() < 3 {
+            return None;
+        }
         // Carry the subject so the swatch's vertex drag knows whose hull to edit. (Stage B.)
-        Some(SwatchSpec { sprite: Some(sprite), hull, subject: Some(subject) })
+        Some(SwatchSpec { sprite, hull, subject: Some(subject) })
     }
 
     /// Open a settings page as a workbench tile: mint (or reuse) its ephemeral `settings://`

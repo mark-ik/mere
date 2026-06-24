@@ -478,6 +478,12 @@ impl ApplicationHandler for Shell {
                     wc.drag_swatch_vertex(wc.view.cursor.0, wc.view.cursor.1);
                     return;
                 }
+                // A row-reorder drag in progress (the configurable menu list) tracks the drop
+                // target from the move and routes nowhere else. (Command registry B2.)
+                if wc.view.row_reorder_drag.is_some() {
+                    wc.drag_row_reorder(wc.view.cursor.0, wc.view.cursor.1);
+                    return;
+                }
                 // Hint the resize edges: the borderless window has no OS frame, so
                 // the host sets the resize arrows on hover. (Custom titlebar.)
                 wc.update_hover_cursor();

@@ -192,6 +192,12 @@ pub struct CartographyGeometry {
     /// survives a reload without re-decoding the image. Serde-defaulted. (Node-rep — sprite hull.)
     #[serde(default)]
     sprite_hulls: Vec<(GraphMemberId, Vec<(f32, f32)>)>,
+    /// Per-member physical material overrides `(restitution, friction, density)` on the Body
+    /// axis, so a node tuned heavier / bouncier / grippier re-opens that way. Stored as a plain
+    /// tuple to keep this crate gyre-free; the orrery maps it to/from `gyre::NodeMaterial`.
+    /// Serde-defaulted. (Node body & face — material.)
+    #[serde(default)]
+    materials: Vec<(GraphMemberId, (f32, f32, f32))>,
 }
 
 impl CartographyGeometry {
@@ -233,6 +239,16 @@ impl CartographyGeometry {
         self
     }
 
+    /// Attach per-member physical material overrides `(restitution, friction, density)`
+    /// (chainable). (Node body & face — material.)
+    pub fn with_materials(
+        mut self,
+        materials: impl IntoIterator<Item = (GraphMemberId, (f32, f32, f32))>,
+    ) -> Self {
+        self.materials = materials.into_iter().collect();
+        self
+    }
+
     /// The `(member, (x, y))` pairs, in insertion order.
     pub fn iter(&self) -> impl Iterator<Item = (GraphMemberId, (f32, f32))> + '_ {
         self.positions.iter().copied()
@@ -259,6 +275,12 @@ impl CartographyGeometry {
         self.sprite_hulls.iter().map(|(m, h)| (*m, h.clone()))
     }
 
+    /// The `(member, (restitution, friction, density))` material overrides, in insertion order
+    /// (for the host to apply via `apply_cartography_materials`). (Node body & face — material.)
+    pub fn material_iter(&self) -> impl Iterator<Item = (GraphMemberId, (f32, f32, f32))> + '_ {
+        self.materials.iter().map(|(m, mat)| (*m, *mat))
+    }
+
     pub fn is_empty(&self) -> bool {
         self.positions.is_empty()
     }
@@ -282,6 +304,7 @@ impl CartographyGeometry {
         geom.sizes.retain(|(member, _)| present.contains(member));
         geom.sprites.retain(|(member, _)| present.contains(member));
         geom.sprite_hulls.retain(|(member, _)| present.contains(member));
+        geom.materials.retain(|(member, _)| present.contains(member));
         Some(geom)
     }
 }
@@ -362,6 +385,19 @@ mod tests {
         let hulls: std::collections::HashMap<_, _> = back.sprite_hull_iter().collect();
         assert_eq!(hulls.get(&m(1)).map(|h| h.len()), Some(4), "the kept member's hull survives");
         assert_eq!(hulls.get(&m(2)), None, "the absent member's hull is pruned");
+    }
+
+    #[test]
+    fn cartography_materials_round_trip_and_prune() {
+        let geom = CartographyGeometry::from_positions([(m(1), (0.0, 0.0)), (m(2), (1.0, 1.0))])
+            .with_materials([(m(1), (0.6, 0.3, 0.002)), (m(2), (0.0, 0.0, 0.001))]);
+        let json = geom.to_persisted_json().unwrap();
+        // Member 2 deleted since the save — its material prunes alongside its position.
+        let present: HashSet<GraphMemberId> = [m(1)].into_iter().collect();
+        let back = CartographyGeometry::from_persisted_json(&json, &present).unwrap();
+        let mats: std::collections::HashMap<_, _> = back.material_iter().collect();
+        assert_eq!(mats.get(&m(1)), Some(&(0.6, 0.3, 0.002)), "the kept member's material survives");
+        assert_eq!(mats.get(&m(2)), None, "the absent member's material is pruned");
     }
 
     #[test]

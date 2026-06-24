@@ -168,9 +168,12 @@ fn item_view(member: GraphMemberId, item: &PaneItem) -> SettingsPanesView {
     }
 }
 
-/// A reorderable row: the label (its own click queues `key`, e.g. remove-from-menu) flanked by
-/// inline ▲ / ▼ buttons that queue the move keys. A flex row so the label takes the width and the
-/// move buttons sit at the end. (Command registry P4 — menu reorder.)
+/// A reorderable row: a drag grip, the label (its own click queues `key`, e.g.
+/// remove-from-menu), and inline ▲ / ▼ buttons that queue the move keys. A flex row so the
+/// label takes the width and the controls sit at the ends. The row carries `data-reorder-id`
+/// so the host's pointer-driven drag-reorder can grab it (a press on the grip) and resolve a
+/// drop (the row under the cursor); `dragging` / `drop_target` paint the in-flight feedback.
+/// (Command registry P4 — menu reorder; B2 — drag reorder.)
 fn reorder_view(
     member: GraphMemberId,
     class: &str,
@@ -178,6 +181,12 @@ fn reorder_view(
     key: Option<&str>,
     spec: &ReorderSpec,
 ) -> SettingsPanesView {
+    // The drag grip: a press here starts the host-driven reorder (serval has no native DOM
+    // pointer-drag, so the host hit-tests the chrome session and drives it — the swatch
+    // editor's pattern). It carries no click handler; the row's `data-reorder-id` does the work.
+    let grip = el::<_, SettingsPanesState, ()>("div", "\u{2261}".to_string())
+        .attr("class", "app-reorder-grip")
+        .attr("style", "flex-shrink:0;padding:8px 6px;cursor:grab;");
     let label_div = el::<_, SettingsPanesState, ()>("div", label.to_string())
         .attr("class", class.to_string())
         .attr("style", "flex:1;min-width:0;");
@@ -200,9 +209,17 @@ fn reorder_view(
     };
     let up = mk("\u{25B2}", spec.up_key.clone());
     let down = mk("\u{25BC}", spec.down_key.clone());
+    let mut row_class = "app-reorder-row".to_string();
+    if spec.dragging {
+        row_class.push_str(" reorder-dragging");
+    }
+    if spec.drop_target {
+        row_class.push_str(" reorder-drop");
+    }
     Box::new(
-        el::<_, SettingsPanesState, ()>("div", vec![label_el, up, down])
-            .attr("class", "app-reorder-row")
+        el::<_, SettingsPanesState, ()>("div", vec![Box::new(grip) as SettingsPanesView, label_el, up, down])
+            .attr("class", row_class)
+            .attr("data-reorder-id", spec.id.clone())
             .attr("style", "display:flex;gap:4px;align-items:stretch;"),
     )
 }
@@ -351,6 +368,49 @@ mod tests {
         let mut keys = Vec::new();
         pane.update(|s| keys = std::mem::take(&mut s.pending_keys));
         assert_eq!(keys, vec![(member, "theme.dark".to_string())]);
+    }
+
+    /// A reorderable row emits a drag grip and tags itself with `data-reorder-id` — the two
+    /// affordances the host's pointer-driven drag-reorder grabs (a press on the grip) and
+    /// resolves against (the row's id). (Command registry B2 — drag reorder.)
+    #[test]
+    fn reorder_row_renders_a_grip_and_data_id() {
+        let member = GraphMemberId::nil();
+        let mut pane = pane_over(SettingsPanesState {
+            panes: vec![SettingsPane {
+                member,
+                rect: [0.0, 0.0, 420.0, 300.0],
+                namespace: "pelt".into(),
+                page_title: "Menu".into(),
+                spine: Vec::new(),
+                items: vec![PaneItem::reorder_row(
+                    "app-btn-active",
+                    "Add node  \u{2713}",
+                    "menu:toggle:add_node",
+                    "add_node",
+                    "menu:move:add_node:up",
+                    "menu:move:add_node:down",
+                )],
+                swatch: None,
+            }],
+            panel_bg: "rgb(20, 20, 20)".into(),
+            pending_keys: Vec::new(),
+            pending_nav: Vec::new(),
+        });
+        let scroll = ScrollOffsets::<NodeId>::default();
+        let _ = pane.frame(420, 300, &scroll);
+        let dom = pane.dom();
+        let dom = dom.borrow();
+        let doc = dom.document();
+        // The grip is present (the host hit-tests it to begin a drag).
+        assert!(crate::first_with_class(&dom, doc, "app-reorder-grip").is_some());
+        // The row carries `data-reorder-id` so the drag knows which command it grabbed.
+        let row = crate::first_with_class(&dom, doc, "app-reorder-row").expect("a reorder row");
+        let id = dom
+            .attributes(row)
+            .find(|a| a.name.local.as_ref() == "data-reorder-id")
+            .map(|a| a.value.to_string());
+        assert_eq!(id.as_deref(), Some("add_node"));
     }
 
     /// A `settings://` url reads as a friendly page title; a non-settings url is left alone.

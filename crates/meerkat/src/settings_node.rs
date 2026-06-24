@@ -16,7 +16,7 @@
 //! See `2026-06-21_settings_lane_consolidation_plan` (P3).
 
 use forme::GraphMemberId;
-use orrery::Representation;
+use orrery::Face;
 
 use crate::WindowCtx;
 use crate::list_pane::PaneItem;
@@ -69,36 +69,60 @@ impl WindowCtx<'_> {
         }
         items.push(PaneItem::text("app-row", format!("URL: {}", node.url())));
         items.push(PaneItem::text("app-title", "Presentation"));
-        items.push(PaneItem::text(
-            "app-row",
-            format!("Representation: {:?}", orrery.node_representation(key)),
-        ));
+        items.push(PaneItem::text("app-row", format!("Face: {:?}", orrery.node_face(key))));
+        let body = if orrery.node_sprite_hull(key).is_some() { "custom shape" } else { "standard" };
+        items.push(PaneItem::text("app-row", format!("Body: {body}")));
         items.push(PaneItem::text("app-row", format!("Size: {:.0} px", orrery.node_size(key))));
         items
     }
 
-    /// The `node:<id>/appearance` page: the per-node representation picker (Show as tile /
-    /// shape), migrated from the context menu. Controls drain `nodefacet:<id>:rep:<form>`,
-    /// applied by [`apply_node_facet_key`](Self::apply_node_facet_key) to this node. The
-    /// scene-wide default stays content-typed; this is a per-node override. (Settings lane P3.)
+    /// The `node:<id>/appearance` page: the per-node **face** picker (Favicon / Sprite / Plain)
+    /// plus a **reset shape** that drops a custom body hull, beside the swatch shape editor.
+    /// Controls drain `nodefacet:<id>:face:<kind>` / `shape:reset`, applied by
+    /// [`apply_node_facet_key`](Self::apply_node_facet_key) to this node. Face and body are
+    /// independent axes; this is a per-node override. (Node body & face — Face axis.)
     fn node_appearance_items(&self, member: GraphMemberId) -> Vec<PaneItem> {
         let orrery = self.orrery();
         let Some((key, _)) = orrery.graph().get_node_by_id(member) else {
             return Vec::new();
         };
-        let rep = orrery.node_representation(key);
+        let face = orrery.node_face(key);
+        let has_sprite = orrery.node_sprite(key).is_some();
+        let has_body = orrery.node_sprite_hull(key).is_some();
         let cls = |on: bool| if on { "app-btn-active" } else { "app-btn" };
-        let mut items = vec![PaneItem::text("app-title", "Representation")];
+        let mut items = vec![PaneItem::text("app-title", "Face")];
         items.push(PaneItem::button(
-            cls(rep == Representation::Tile),
-            "Show as tile".to_string(),
-            format!("nodefacet:{member}:rep:tile"),
+            cls(face == Face::Favicon),
+            "Favicon".to_string(),
+            format!("nodefacet:{member}:face:favicon"),
         ));
         items.push(PaneItem::button(
-            cls(rep == Representation::Shape),
-            "Show as shape".to_string(),
-            format!("nodefacet:{member}:rep:shape"),
+            cls(face == Face::Sprite),
+            if has_sprite { "Sprite".to_string() } else { "Sprite (none)".to_string() },
+            format!("nodefacet:{member}:face:sprite"),
         ));
+        items.push(PaneItem::button(
+            cls(face == Face::Bare),
+            "Plain".to_string(),
+            format!("nodefacet:{member}:face:bare"),
+        ));
+        // The body axis: author a custom hull from scratch, or reset to the content silhouette.
+        // The swatch below edits its vertices (drag to move, click an edge to add, right-click to
+        // remove). (Node body & face — the Body axis.)
+        items.push(PaneItem::text("app-title", "Body"));
+        if has_body {
+            items.push(PaneItem::button(
+                "app-btn",
+                "Reset shape".to_string(),
+                format!("nodefacet:{member}:shape:reset"),
+            ));
+        } else {
+            items.push(PaneItem::button(
+                "app-btn",
+                "Add shape".to_string(),
+                format!("nodefacet:{member}:shape:seed"),
+            ));
+        }
 
         // Size: the per-node size tier (the object card's size stepper, as a facets control).
         items.push(PaneItem::text("app-title", "Size"));
@@ -115,6 +139,33 @@ impl WindowCtx<'_> {
             "app-btn",
             "+ larger".to_string(),
             format!("nodefacet:{member}:size:up"),
+        ));
+
+        // Material (the Body axis's physics): bounce / grip / weight, as steppers. A node can be
+        // made heavier, bouncier, or grippier; the value persists in the sidecar. (Body & face.)
+        let mat = orrery.node_material(key);
+        let weight = mat.density / orrery::NODE_BODY_DENSITY;
+        items.push(PaneItem::text("app-title", "Material"));
+        items.push(PaneItem::text(
+            "app-row",
+            format!("Bounce {:.1} · Grip {:.1} · Weight {weight:.1}\u{00d7}", mat.restitution, mat.friction),
+        ));
+        for (label, knob) in [("Bounce", "bounce"), ("Grip", "grip"), ("Weight", "mass")] {
+            items.push(PaneItem::button(
+                "app-btn",
+                format!("\u{2212} {label}"),
+                format!("nodefacet:{member}:material:{knob}:down"),
+            ));
+            items.push(PaneItem::button(
+                "app-btn",
+                format!("+ {label}"),
+                format!("nodefacet:{member}:material:{knob}:up"),
+            ));
+        }
+        items.push(PaneItem::button(
+            "app-btn",
+            "Reset material".to_string(),
+            format!("nodefacet:{member}:material:reset"),
         ));
         items
     }
@@ -164,8 +215,9 @@ impl WindowCtx<'_> {
 
     /// Apply a `nodefacet:<id>:<action>` control key (the per-node facets pages' drain): parse
     /// the subject node id, then apply the action directly to it — engine pin / auto via
-    /// `engine_pins`, representation via `set_node_representation` — the same underlying writes
-    /// the context-menu pickers use, but targeting the facets tile's node. (Settings lane P3.)
+    /// `engine_pins`, face via `set_node_face`, body reset via `clear_node_body` — the same
+    /// underlying writes the context-menu pickers use, but targeting the facets tile's node.
+    /// (Settings lane P3; node body & face.)
     pub(crate) fn apply_node_facet_key(&mut self, key: &str) {
         let Some((id_str, action)) = key.split_once(':') else { return };
         let Ok(member) = id_str.parse::<GraphMemberId>() else { return };
@@ -177,16 +229,46 @@ impl WindowCtx<'_> {
                 let engine = &a["engine:pin:".len()..];
                 self.shared.content.engine_pins.insert(member, engine.to_string());
             }
-            "rep:tile" => self.orrery_mut().set_node_representation(member, Representation::Tile),
-            "rep:shape" => self.orrery_mut().set_node_representation(member, Representation::Shape),
+            "face:favicon" => self.orrery_mut().set_node_face(member, Face::Favicon),
+            "face:sprite" => self.orrery_mut().set_node_face(member, Face::Sprite),
+            "face:bare" => self.orrery_mut().set_node_face(member, Face::Bare),
+            "shape:reset" => self.orrery_mut().clear_node_body(member),
+            "shape:seed" => self.orrery_mut().seed_node_body(member),
             "size:up" => {
                 self.orrery_mut().step_node_size_tier(member, 1);
             }
             "size:down" => {
                 self.orrery_mut().step_node_size_tier(member, -1);
             }
+            "material:reset" => self.orrery_mut().clear_node_material(member),
+            a if a.starts_with("material:") => self.step_node_material(member, &a["material:".len()..]),
             _ => return,
         }
+        // Body-axis edits (hull shape, material) are graph-truth geometry: persist them now so an
+        // edit survives a reload even on a non-graceful exit, like the swatch drag does. (Body &
+        // face — the Body axis persists via the cartography sidecar.)
+        if action.starts_with("shape:") || action.starts_with("material:") {
+            self.save_session();
+        }
         self.view.request_redraw();
+    }
+
+    /// Step one knob of a node's physical material (the facets `material:<knob>:<dir>` controls):
+    /// bounce / grip by ±0.1 (clamped), weight by ×/÷1.5 (clamped to 0.25..8× the default
+    /// density). Reads the current material, adjusts, and pushes it live. (Node body & face.)
+    fn step_node_material(&mut self, member: GraphMemberId, knob: &str) {
+        let Some((key, _)) = self.orrery().graph().get_node_by_id(member) else { return };
+        let mut mat = self.orrery().node_material(key);
+        let round1 = |x: f32| (x * 10.0).round() / 10.0;
+        match knob {
+            "bounce:up" => mat.restitution = round1((mat.restitution + 0.1).min(1.0)),
+            "bounce:down" => mat.restitution = round1((mat.restitution - 0.1).max(0.0)),
+            "grip:up" => mat.friction = round1((mat.friction + 0.1).min(2.0)),
+            "grip:down" => mat.friction = round1((mat.friction - 0.1).max(0.0)),
+            "mass:up" => mat.density = (mat.density * 1.5).min(orrery::NODE_BODY_DENSITY * 8.0),
+            "mass:down" => mat.density = (mat.density / 1.5).max(orrery::NODE_BODY_DENSITY * 0.25),
+            _ => return,
+        }
+        self.orrery_mut().set_node_material(member, mat);
     }
 }
