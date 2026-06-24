@@ -556,6 +556,24 @@ impl Constellation {
         });
     }
 
+    /// Forward a pointer click at card-local scene point `(x, y)` (device px) to
+    /// `member`'s scripted render rung: the live document hit-tests the point and
+    /// dispatches a `click`, so the page's listeners run, then the tile re-renders.
+    /// No-op if the node is not active or not on the scripted rung. The host calls
+    /// this when a click lands on a `serval.scripted` tile. (Render ladder phase 3 —
+    /// the input → event bridge.)
+    #[cfg(feature = "scripted")]
+    pub fn click_scripted(&self, member: GraphMemberId, x: f32, y: f32) {
+        let Some(activation) = self.active.get(&member) else {
+            return;
+        };
+        activation.handle.command(ContentCommand::ScriptedClick {
+            x,
+            y,
+            viewport_gen: activation.gens.viewport,
+        });
+    }
+
     /// Detach `member`'s DocumentScript (runs its `deactivate`) and revert to the
     /// static page. No-op for a node that is not active. (P2.5.)
     pub fn detach_script(&self, member: GraphMemberId) {

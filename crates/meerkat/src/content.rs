@@ -137,6 +137,17 @@ pub enum ContentCommand {
     DetachScript {
         viewport_gen: ViewportGeneration,
     },
+    /// Forward a pointer click at card-local scene point `(x, y)` (device px) to the
+    /// scripted render rung: the live `ScriptedDocument` hit-tests the point and
+    /// dispatches a `click` (so the page's listeners run and may mutate the DOM),
+    /// then re-renders. No-op for a node not on the scripted rung. The input → event
+    /// bridge that makes the scripted rung interactive. (Render ladder phase 3.)
+    #[cfg(feature = "scripted")]
+    ScriptedClick {
+        x: f32,
+        y: f32,
+        viewport_gen: ViewportGeneration,
+    },
 }
 
 /// An update from a content actor to the kernel. All variants are `Send`.
@@ -572,6 +583,19 @@ pub fn spawn_content(
                         render(content, &store, &registry, &policy, &out);
                     }
                 }
+                #[cfg(feature = "scripted")]
+                ContentCommand::ScriptedClick { x, y, viewport_gen } => {
+                    if let Some(content) = current.as_mut() {
+                        // Dispatch the click into the live document (listeners run, the
+                        // DOM may mutate), then re-render off the mutated tree. Only the
+                        // scripted rung holds a `scripted_doc`; other lanes no-op.
+                        if let Some(doc) = content.scripted_doc.as_mut() {
+                            doc.click_at(x, y);
+                            content.viewport_gen = viewport_gen;
+                            render(content, &store, &registry, &policy, &out);
+                        }
+                    }
+                }
             }
         }
     })
@@ -1001,6 +1025,46 @@ mod tests {
         assert!(
             glyph_runs(&first_scene(updates)) >= 1,
             "the scripted lane ran the inline script and rendered the injected text",
+        );
+    }
+
+    /// A click forwarded to a scripted tile dispatches to the page's listener: a page
+    /// whose click handler injects text emits no glyphs on load, then — after a
+    /// `ScriptedClick` over the clickable element — re-renders with the injected text.
+    /// Proves the input → event bridge runs end to end through the content actor.
+    /// (Render ladder phase 3.)
+    #[cfg(feature = "scripted")]
+    #[test]
+    fn scripted_rung_click_dispatches_to_script() {
+        const PAGE: &str = "<body>\
+            <div id='hit' style='width:300px;height:200px'></div>\
+            <script>document.getElementById('hit').addEventListener('click', function(){\
+                var p = document.createElement('p');\
+                p.appendChild(document.createTextNode('clicked'));\
+                document.body.appendChild(p);\
+            });</script></body>";
+        let (handle, updates) =
+            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), false);
+        handle.command(scripted_show("https://example.com/app", PAGE));
+        handle.command(ContentCommand::ScriptedClick {
+            x: 50.0,
+            y: 50.0, // inside the 300×200 div
+            viewport_gen: ViewportGeneration::default(),
+        });
+        handle.join();
+
+        let scenes: Vec<Scene> = updates
+            .iter()
+            .filter_map(|u| match u {
+                ContentUpdate::Scene { scene, .. } => Some(scene),
+                _ => None,
+            })
+            .collect();
+        assert!(scenes.len() >= 2, "Show then ScriptedClick each emit a scene (got {})", scenes.len());
+        assert_eq!(glyph_runs(&scenes[0]), 0, "the empty body paints no text before the click");
+        assert!(
+            glyph_runs(scenes.last().unwrap()) >= 1,
+            "the click ran the listener, injecting text that renders",
         );
     }
 
