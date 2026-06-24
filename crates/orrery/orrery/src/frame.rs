@@ -27,7 +27,7 @@ use super::build::{
     background_cmds, field_overlay, marquee_rect_cmds, selected_edge_overlay, set_class, set_style,
     NODE_SHEET,
 };
-use super::{AmbientSim, NodeShape, NodeState, Orrery, NODE_HALF, PAN_DECAY};
+use super::{NodeShape, NodeState, Orrery, NODE_HALF, PAN_DECAY};
 
 impl Orrery {
     /// Advance one frame at viewport `(w, h)` and return the composited content
