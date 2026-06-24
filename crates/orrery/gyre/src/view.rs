@@ -63,6 +63,10 @@ pub struct LayoutSnapshot {
     /// [`SceneBodyView`] (id, position, rotation, shape), riding the same snapshot so it
     /// renders + animates off-thread. (Physics scenes P1 / P4b.)
     pub scene: Vec<SceneBodyView>,
+    /// Fluid particle positions (the liquid pool), riding the snapshot so the pool renders + flows
+    /// off-thread; `fluid_radius` is the uniform paint radius. Empty when no fluid is loaded. (P4c.)
+    pub fluid: Vec<Point2D<f32>>,
+    pub fluid_radius: f32,
     /// The generation this layout was produced at (monotonic on the actor).
     pub generation: u64,
 }
@@ -92,6 +96,9 @@ pub struct LayoutView {
     /// Scene-decoration bodies as paintable [`SceneBodyView`]s, refreshed from each snapshot —
     /// the living backdrop the host paints behind the graph. (Physics scenes P1 / P4b.)
     scene: Vec<SceneBodyView>,
+    /// Fluid particle positions + uniform paint radius, refreshed from each snapshot. (P4c.)
+    fluid: Vec<Point2D<f32>>,
+    fluid_radius: f32,
 }
 
 impl Default for LayoutView {
@@ -109,6 +116,8 @@ impl LayoutView {
             radius: NODE_BODY_RADIUS,
             radii: HashMap::new(),
             scene: Vec::new(),
+            fluid: Vec::new(),
+            fluid_radius: 0.0,
         }
     }
 
@@ -126,6 +135,8 @@ impl LayoutView {
             radius,
             radii: HashMap::new(),
             scene: Vec::new(),
+            fluid: Vec::new(),
+            fluid_radius: 0.0,
         }
     }
 
@@ -151,6 +162,9 @@ impl LayoutView {
         self.positions.extend(snapshot.positions.iter().copied());
         self.scene.clear();
         self.scene.extend(snapshot.scene.iter().cloned());
+        self.fluid.clear();
+        self.fluid.extend(snapshot.fluid.iter().copied());
+        self.fluid_radius = snapshot.fluid_radius;
     }
 
     /// Replace the edge topology (after a structural graph change).
@@ -189,6 +203,17 @@ impl LayoutView {
     /// for painting the living backdrop / loaded scene. (Physics scenes P1 / P4b.)
     pub fn scene_bodies(&self) -> impl Iterator<Item = SceneBodyView> + '_ {
         self.scene.iter().cloned()
+    }
+
+    /// Iterate every fluid particle's position — the host's read for painting the liquid pool as
+    /// metaballs. (Physics scenes P4c.)
+    pub fn fluid_particles(&self) -> impl Iterator<Item = Point2D<f32>> + '_ {
+        self.fluid.iter().copied()
+    }
+
+    /// The uniform paint radius for fluid particles (0 when no fluid is loaded). (Physics scenes P4c.)
+    pub fn fluid_radius(&self) -> f32 {
+        self.fluid_radius
     }
 
     /// Hit-test a world-space point: the node whose circle (center, [`radius`])

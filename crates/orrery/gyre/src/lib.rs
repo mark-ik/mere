@@ -296,6 +296,9 @@ pub struct Simulation {
     /// than settle — the physics actor reads this via [`Self::scene_perpetual`] to keep
     /// ticking instead of parking at rest. Reset by [`Self::clear_scene`]. (Physics scenes P4a.)
     scene_perpetual: bool,
+    /// The liquid pool sharing this world, if any ([`fluid`] PBF). `None` until one is loaded;
+    /// stepped each [`Self::tick`] and emitted in the snapshot for rendering. (Physics scenes P4c.)
+    fluid: Option<Fluid>,
 }
 
 impl Default for Simulation {
@@ -334,6 +337,7 @@ impl Simulation {
             scene_bodies: HashMap::new(),
             next_scene_id: 0,
             scene_perpetual: false,
+            fluid: None,
         }
     }
 
@@ -524,6 +528,8 @@ impl Simulation {
         LayoutSnapshot {
             positions: self.positions().collect(),
             scene: self.scene_bodies().collect(),
+            fluid: self.fluid.as_ref().map(|f| f.positions().collect()).unwrap_or_default(),
+            fluid_radius: self.fluid.as_ref().map(|f| f.params().particle_radius).unwrap_or(0.0),
             generation,
         }
     }
@@ -738,6 +744,40 @@ impl Simulation {
         self.scene_perpetual
     }
 
+    /// Load a liquid pool into the world: a `cols × rows` block of PBF particles dropped into an
+    /// analytic [`Basin`], replacing any prior fluid. The pool settles under its own gravity and
+    /// rides the snapshot for rendering. (Physics scenes P4c.)
+    pub fn load_fluid(
+        &mut self,
+        params: FluidParams,
+        basin: Basin,
+        spawn_origin: Point2D<f32>,
+        cols: usize,
+        rows: usize,
+        spacing: f32,
+    ) {
+        let mut fluid = Fluid::new(params, basin);
+        fluid.spawn_block(spawn_origin, cols, rows, spacing);
+        self.fluid = Some(fluid);
+    }
+
+    /// Remove the liquid pool. (Physics scenes P4c.)
+    pub fn clear_fluid(&mut self) {
+        self.fluid = None;
+    }
+
+    /// Whether a liquid pool is loaded. The physics actor keeps ticking while one is, so the pool
+    /// keeps flowing / settling. (Physics scenes P4c.)
+    pub fn has_fluid(&self) -> bool {
+        self.fluid.is_some()
+    }
+
+    /// Iterate the live fluid particle positions (empty when no pool is loaded) — the render read.
+    /// (Physics scenes P4c.)
+    pub fn fluid_particles(&self) -> impl Iterator<Item = Point2D<f32>> + '_ {
+        self.fluid.iter().flat_map(|f| f.positions())
+    }
+
     /// Make a single node tangible (it collides with scene bodies) or intangible (it
     /// passes through), by re-masking its collider's filter. Node-node collision is
     /// unaffected. A no-op for an unknown node. (Physics scenes P2 — tangibility lever.)
@@ -926,6 +966,12 @@ impl Simulation {
             &physics_hooks,
             &event_handler,
         );
+
+        // Step the liquid pool (if any) after the rigid world; it reads the same dt and folds into
+        // the same snapshot. (Physics scenes P4c.)
+        if let Some(fluid) = &mut self.fluid {
+            fluid.step(dt);
+        }
     }
 
     /// Copy each body's current translation onto its corresponding

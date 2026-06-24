@@ -27,7 +27,8 @@ use std::time::Duration;
 use armillary::{spawn, ActorHandle, Emitter, Wake};
 use euclid::default::Point2D;
 use gyre::{
-    CouplingForce, LayoutSnapshot, LayoutView, NodeCollider, NodeMaterial, SceneSpec, Simulation,
+    Basin, CouplingForce, FluidParams, LayoutSnapshot, LayoutView, NodeCollider, NodeMaterial,
+    SceneSpec, Simulation,
 };
 use kernel::graph::NodeKey;
 
@@ -75,6 +76,18 @@ pub(crate) enum PhysicsCommand {
     LoadScene(SceneSpec),
     /// Remove every scene body. (Physics scenes P3.)
     ClearScene,
+    /// Load a liquid pool: PBF params, basin, and a `cols × rows` spawn block at `spacing` from
+    /// `origin`. (Physics scenes P4c.)
+    LoadFluid {
+        params: FluidParams,
+        basin: Basin,
+        origin: Point2D<f32>,
+        cols: usize,
+        rows: usize,
+        spacing: f32,
+    },
+    /// Remove the liquid pool. (Physics scenes P4c.)
+    ClearFluid,
 }
 
 /// One layout the actor produced: the positions plus whether it is still
@@ -264,6 +277,34 @@ impl Physics {
         }
     }
 
+    /// Load a liquid pool (replacing any prior fluid). (Physics scenes P4c.)
+    pub fn load_fluid(
+        &mut self,
+        params: FluidParams,
+        basin: Basin,
+        origin: Point2D<f32>,
+        cols: usize,
+        rows: usize,
+        spacing: f32,
+    ) {
+        match self {
+            Physics::Inline(p) => p.sim.load_fluid(params, basin, origin, cols, rows, spacing),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::LoadFluid { params, basin, origin, cols, rows, spacing });
+            }
+        }
+    }
+
+    /// Remove the liquid pool. (Physics scenes P4c.)
+    pub fn clear_fluid(&mut self) {
+        match self {
+            Physics::Inline(p) => p.sim.clear_fluid(),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::ClearFluid);
+            }
+        }
+    }
+
     /// Pin a node to a world position (a drag in progress).
     pub fn pin(&mut self, node: NodeKey, position: Point2D<f32>) {
         match self {
@@ -320,7 +361,9 @@ impl Physics {
     /// Whether the layout is still moving (settle in progress or a node dragged).
     pub fn is_settling(&self) -> bool {
         match self {
-            Physics::Inline(p) => p.ticks_remaining > 0 || p.dragging || p.sim.scene_perpetual(),
+            Physics::Inline(p) => {
+                p.ticks_remaining > 0 || p.dragging || p.sim.scene_perpetual() || p.sim.has_fluid()
+            },
             Physics::Actor(p) => p.settling,
         }
     }
@@ -334,7 +377,7 @@ impl Physics {
     pub fn advance_frame(&mut self, view: &mut LayoutView) -> bool {
         match self {
             Physics::Inline(p) => {
-                if p.ticks_remaining > 0 || p.dragging || p.sim.scene_perpetual() {
+                if p.ticks_remaining > 0 || p.dragging || p.sim.scene_perpetual() || p.sim.has_fluid() {
                     p.sim.tick(TICK_DT);
                     if p.ticks_remaining > 0 {
                         p.ticks_remaining -= 1;
@@ -342,7 +385,7 @@ impl Physics {
                 }
                 p.generation = p.generation.wrapping_add(1);
                 view.apply_snapshot(&p.sim.snapshot(p.generation));
-                p.ticks_remaining > 0 || p.dragging || p.sim.scene_perpetual()
+                p.ticks_remaining > 0 || p.dragging || p.sim.scene_perpetual() || p.sim.has_fluid()
             },
             Physics::Actor(p) => {
                 let mut latest = None;
@@ -383,7 +426,7 @@ fn run(
         // Idle: block for the next command so the thread parks. A closed channel
         // (the host dropped the handle) ends the actor. A perpetual scene (a drifting
         // backdrop) is never idle, so the actor keeps ticking instead of parking.
-        if ticks_remaining == 0 && !dragging && !sim.scene_perpetual() {
+        if ticks_remaining == 0 && !dragging && !sim.scene_perpetual() && !sim.has_fluid() {
             match commands.recv() {
                 Ok(cmd) => apply(&mut sim, cmd, &mut ticks_remaining, &mut dragging),
                 Err(_) => return,
@@ -406,13 +449,13 @@ fn run(
         }
         // Step while there is work (a settle, a drag, or a perpetual scene); emit the new
         // layout and pace the next step.
-        if ticks_remaining > 0 || dragging || sim.scene_perpetual() {
+        if ticks_remaining > 0 || dragging || sim.scene_perpetual() || sim.has_fluid() {
             sim.tick(TICK_DT);
             if ticks_remaining > 0 {
                 ticks_remaining -= 1;
             }
             generation = generation.wrapping_add(1);
-            let settling = ticks_remaining > 0 || dragging || sim.scene_perpetual();
+            let settling = ticks_remaining > 0 || dragging || sim.scene_perpetual() || sim.has_fluid();
             out.emit(PhysicsUpdate { snapshot: sim.snapshot(generation), settling });
             std::thread::sleep(pacing);
         }
@@ -449,6 +492,10 @@ fn apply(
         PhysicsCommand::SetNodesTangible(tangible) => sim.set_nodes_tangible(tangible),
         PhysicsCommand::LoadScene(spec) => sim.load_scene(&spec),
         PhysicsCommand::ClearScene => sim.clear_scene(),
+        PhysicsCommand::LoadFluid { params, basin, origin, cols, rows, spacing } => {
+            sim.load_fluid(params, basin, origin, cols, rows, spacing)
+        }
+        PhysicsCommand::ClearFluid => sim.clear_fluid(),
     }
 }
 

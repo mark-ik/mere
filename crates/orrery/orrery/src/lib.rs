@@ -531,11 +531,13 @@ impl Orrery {
                 (key, pos)
             })
             .collect();
-        // A node-position-only refresh (no scene bodies here); the actor's per-tick
-        // snapshots carry the live scene. (Physics scenes P1.)
+        // A node-position-only refresh (no scene bodies / fluid here); the actor's per-tick
+        // snapshots carry the live scene + fluid. (Physics scenes P1 / P4c.)
         self.view.apply_snapshot(&LayoutSnapshot {
             positions,
             scene: Vec::new(),
+            fluid: Vec::new(),
+            fluid_radius: 0.0,
             generation: self.generation,
         });
         self.view.set_edges(dedup_edges(&self.graph));
@@ -1316,6 +1318,26 @@ impl Orrery {
     /// Remove every scene body (the living backdrop / loaded scene). (Physics scenes P3.)
     pub fn clear_scene(&mut self) {
         self.physics.clear_scene();
+    }
+
+    /// Load a demo liquid pool: a block of PBF particles dropped into a basin behind the graph; the
+    /// physics actor keeps ticking while it flows. Clear with [`clear_fluid`]. (Physics scenes P4c.)
+    pub fn load_demo_fluid(&mut self) {
+        let basin = gyre::Basin { min_x: -250.0, max_x: 250.0, floor_y: 250.0 };
+        self.physics.load_fluid(
+            gyre::FluidParams::default(),
+            basin,
+            Point2D::new(-150.0, -170.0),
+            16,
+            10,
+            18.0,
+        );
+        self.settle_physics(SETTLE_TICKS);
+    }
+
+    /// Remove the liquid pool. (Physics scenes P4c.)
+    pub fn clear_fluid(&mut self) {
+        self.physics.clear_fluid();
     }
 
     /// The size-tier index (0..[`SIZE_TIERS`]`.len()`) nearest a node's current resolved

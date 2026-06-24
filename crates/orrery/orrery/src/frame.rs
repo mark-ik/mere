@@ -374,9 +374,40 @@ impl Orrery {
                 }
             }
         }
+
+        // Liquid pool: each PBF particle a soft watery orb; overlapping soft-alpha gradients read as
+        // a connected blob (a true iso-surface threshold is later polish). Painted above the backdrop
+        // scene, below the graph, and projected through the camera so it reclines with the iso ground.
+        // (Physics scenes P4c.)
+        let mut fluid_cmds: Vec<PaintCmd> = Vec::new();
+        let fr = self.view.fluid_radius();
+        for p in self.view.fluid_particles() {
+            let (cx, cy) = self.camera.to_screen(PortablePoint::new(p.x, p.y));
+            let r = (fr * 2.2 * self.camera.zoom).max(1.5);
+            let rect =
+                LayoutRect::new(LayoutPoint::new(cx - r, cy - r), LayoutPoint::new(cx + r, cy + r));
+            fluid_cmds.push(PaintCmd::DrawRadialGradient(RadialGradientItem {
+                placement: CommonPlacement::new(rect),
+                gradient: RadialGradientPayload {
+                    center: LayoutPoint::new(cx, cy),
+                    radius: LayoutSize::new(r, r),
+                    extend_mode: ExtendMode::Clamp,
+                    stops: vec![
+                        GradientStop { offset: 0.0, color: ColorF::new(0.30, 0.62, 0.95, 0.5) },
+                        GradientStop { offset: 1.0, color: ColorF::new(0.30, 0.62, 0.95, 0.0) },
+                    ],
+                },
+                tile_size: LayoutSize::new(2.0 * r, 2.0 * r),
+                tile_spacing: LayoutSize::zero(),
+            }));
+        }
+
         let mut layers = vec![CompositeLayer::commands_only(&bg_cmds)];
         if !scene_cmds.is_empty() {
             layers.push(CompositeLayer::commands_only(&scene_cmds));
+        }
+        if !fluid_cmds.is_empty() {
+            layers.push(CompositeLayer::commands_only(&fluid_cmds));
         }
         layers.push(CompositeLayer::commands_only(underlay.commands()));
         // The on-screen gnode + favicon layers, unless the host renders these nodes as
