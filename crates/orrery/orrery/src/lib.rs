@@ -61,7 +61,7 @@ mod fields;
 /// Ambient-sim backdrops (non-rapier liveliness painted behind the graph): Conway's
 /// [`GameOfLife`] is the first. (Physics scenes P5.)
 mod ambient;
-pub use ambient::{AmbientSim, GameOfLife, Tincture};
+pub use ambient::{AmbientSim, GameOfLife, NBody, Tincture};
 
 mod physics;
 use physics::Physics;
@@ -1344,6 +1344,14 @@ impl Orrery {
     /// Clear with [`clear_ambient`](Self::clear_ambient). (Physics scenes P5.)
     pub fn load_game_of_life(&mut self) {
         let sim = GameOfLife::seeded(100, 64, 0x5EED_1234);
+        self.ambient_tincture = sim.default_tincture();
+        self.ambient = Some(Box::new(sim));
+    }
+
+    /// Load the n-body drift as the ambient backdrop: a cloud of bodies orbiting a central well and
+    /// tugging on one another, a slow galaxy-like swirl behind the graph. (Physics scenes P5.)
+    pub fn load_nbody(&mut self) {
+        let sim = NBody::seeded(200, 0x0B17_2024);
         self.ambient_tincture = sim.default_tincture();
         self.ambient = Some(Box::new(sim));
     }

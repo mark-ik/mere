@@ -59,6 +59,7 @@ pub(crate) fn scene_section_items() -> Vec<PaneItem> {
     // above), so they get their own section. (Physics scenes P5.)
     items.push(PaneItem::text("app-title", "Ambient backdrop"));
     items.push(PaneItem::button("app-btn", "Game of Life", "scene:gol"));
+    items.push(PaneItem::button("app-btn", "N-body drift", "scene:nbody"));
     items.push(PaneItem::button("app-btn", "Clear ambient", "scene:ambientclear"));
 
     items.push(PaneItem::text("app-title", "Clear"));
@@ -139,6 +140,10 @@ impl WindowCtx<'_> {
                 self.orrery_mut().load_game_of_life();
                 true
             }
+            "nbody" | "galaxy" => {
+                self.orrery_mut().load_nbody();
+                true
+            }
             "ambientclear" | "noambient" => {
                 self.orrery_mut().clear_ambient();
                 true
@@ -194,6 +199,7 @@ mod tests {
             "scene:tangible",
             "scene:intangible",
             "scene:gol",
+            "scene:nbody",
             "scene:ambientclear",
             "scene:clear",
         ] {

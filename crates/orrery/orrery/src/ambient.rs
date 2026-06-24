@@ -219,6 +219,112 @@ impl AmbientSim for GameOfLife {
     }
 }
 
+/// An n-body orbital drift: a cloud of bodies orbiting a central well and tugging on one another,
+/// for a slow galaxy-like swirl behind the graph. A harmonic central well keeps the cloud bound and
+/// orbiting (stable, no fly-away / collapse), weak softened mutual gravity adds clumping and
+/// structure. Continuous (integrated each frame). (Physics scenes P5.)
+pub struct NBody {
+    /// Positions in a virtual `[0, SPAN] x [0, SPAN]` space, stretched to the viewport at paint.
+    pos: Vec<(f32, f32)>,
+    vel: Vec<(f32, f32)>,
+}
+
+/// The n-body virtual coordinate span (square; stretched to the viewport at paint).
+const NBODY_SPAN: f32 = 1000.0;
+/// Central-well stiffness (a harmonic spring toward the centre). The orbital angular speed is its
+/// square root, so all bodies share a slow rigid rotation that the mutual gravity then breaks up.
+const NBODY_K: f32 = 0.5;
+/// Mutual-gravity strength (softened inverse-square). Weak relative to the well, so it perturbs the
+/// disk into clumps rather than collapsing it.
+const NBODY_G: f32 = 15_000.0;
+/// Softening added to squared distance, so a close pair never produces an unbounded force.
+const NBODY_SOFTEN: f32 = 600.0;
+
+impl NBody {
+    /// A `count`-body disk around the centre, each on a near-circular orbit (tangential velocity
+    /// `sqrt(K) * radius`), seeded deterministically from `seed`.
+    pub fn seeded(count: usize, seed: u32) -> Self {
+        let mut rng = seed | 1;
+        let c = NBODY_SPAN / 2.0;
+        let omega = NBODY_K.sqrt();
+        let mut pos = Vec::with_capacity(count);
+        let mut vel = Vec::with_capacity(count);
+        for _ in 0..count {
+            let ang = unit(&mut rng) * std::f32::consts::TAU;
+            let rad = 60.0 + unit(&mut rng) * 320.0;
+            pos.push((c + rad * ang.cos(), c + rad * ang.sin()));
+            // Counter-clockwise tangential velocity for a circular harmonic orbit.
+            let speed = omega * rad;
+            vel.push((-ang.sin() * speed, ang.cos() * speed));
+        }
+        Self { pos, vel }
+    }
+
+    pub fn body_count(&self) -> usize {
+        self.pos.len()
+    }
+}
+
+impl AmbientSim for NBody {
+    fn advance(&mut self, dt: f32) {
+        let n = self.pos.len();
+        let c = NBODY_SPAN / 2.0;
+        let mut acc = vec![(0.0f32, 0.0f32); n];
+        // Mutual gravity (softened inverse-square attraction), symmetric per pair.
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let dx = self.pos[j].0 - self.pos[i].0;
+                let dy = self.pos[j].1 - self.pos[i].1;
+                let d2 = dx * dx + dy * dy + NBODY_SOFTEN;
+                // G * r / |r|^3 — the inverse-square magnitude along the unit direction.
+                let inv = NBODY_G / (d2 * d2.sqrt());
+                acc[i].0 += dx * inv;
+                acc[i].1 += dy * inv;
+                acc[j].0 -= dx * inv;
+                acc[j].1 -= dy * inv;
+            }
+        }
+        // Central harmonic well, then integrate (semi-implicit Euler).
+        for i in 0..n {
+            acc[i].0 -= NBODY_K * (self.pos[i].0 - c);
+            acc[i].1 -= NBODY_K * (self.pos[i].1 - c);
+            self.vel[i].0 += acc[i].0 * dt;
+            self.vel[i].1 += acc[i].1 * dt;
+            self.pos[i].0 += self.vel[i].0 * dt;
+            self.pos[i].1 += self.vel[i].1 * dt;
+        }
+    }
+
+    fn paint(&self, w: f32, h: f32, tincture: Tincture) -> Vec<PaintCmd> {
+        let sx = w / NBODY_SPAN;
+        let sy = h / NBODY_SPAN;
+        let half = 1.6;
+        self.pos
+            .iter()
+            .map(|&(px, py)| {
+                let (cx, cy) = (px * sx, py * sy);
+                PaintCmd::DrawRect(RectItem {
+                    placement: CommonPlacement::new(LayoutRect::new(
+                        LayoutPoint::new(cx - half, cy - half),
+                        LayoutPoint::new(cx + half, cy + half),
+                    )),
+                    color: tincture,
+                })
+            })
+            .collect()
+    }
+
+    fn default_tincture(&self) -> Tincture {
+        // Warm gold starlight — bright points (high alpha; these are small dots, not a wash).
+        ColorF::new(0.95, 0.85, 0.55, 0.85)
+    }
+}
+
+/// A deterministic `[0, 1)` sample from the xorshift PRNG.
+fn unit(state: &mut u32) -> f32 {
+    xorshift(state) as f32 / u32::MAX as f32
+}
+
 /// xorshift32 - a tiny deterministic PRNG for the random soup (no `rand` dep, reproducible).
 fn xorshift(state: &mut u32) -> u32 {
     let mut x = *state;
@@ -303,5 +409,20 @@ mod tests {
         let before = live_set(&blink);
         blink.advance(0.01);
         assert_eq!(live_set(&blink), before, "a sub-interval advance does not step a generation");
+    }
+
+    #[test]
+    fn nbody_stays_bounded_and_finite() {
+        // The central well must keep the cloud bound (no fly-away / NaN blow-up) over a long run.
+        let mut nb = NBody::seeded(80, 0xABCD_1234);
+        for _ in 0..900 {
+            nb.advance(1.0 / 60.0);
+        }
+        assert_eq!(nb.body_count(), 80);
+        for &(x, y) in nb.pos.iter() {
+            assert!(x.is_finite() && y.is_finite(), "positions stay finite ({x}, {y})");
+            assert!(x > -600.0 && x < NBODY_SPAN + 600.0, "x stays near the well (was {x})");
+            assert!(y > -600.0 && y < NBODY_SPAN + 600.0, "y stays near the well (was {y})");
+        }
     }
 }

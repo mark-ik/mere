@@ -334,6 +334,11 @@ impl ApplicationHandler for App {
                             self.orrery.load_game_of_life();
                             self.request_redraw();
                         },
+                        // `n` loads the n-body drift ambient backdrop (an orbiting, clumping cloud). (P5.)
+                        WinitKey::Character(s) if s.as_str() == "n" => {
+                            self.orrery.load_nbody();
+                            self.request_redraw();
+                        },
                         WinitKey::Character(s) if s.as_str() == "0" => {
                             self.orrery.clear_scene();
                             self.orrery.clear_fluid();
