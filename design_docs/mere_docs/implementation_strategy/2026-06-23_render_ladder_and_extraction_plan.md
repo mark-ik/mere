@@ -209,6 +209,21 @@ relational-browse V2 scope.
    so `key` is a thin addition once a `KeyboardEvent` shape lands in the bootstrap.
 4. **Extraction profile** (D) — static-parse extractors → eidetic first; then
    headless-scripted-DOM for SPAs. Wire to relational-browse + eidetic derivation.
+   *(slices 1–3 done 2026-06-24: the `serval-extract` crate.)* The render-free
+   extraction **primitive** now exists in serval — `serval-extract`, depending only on
+   `layout-dom-api` (the dep graph is the witness: no cascade/layout/paint can creep
+   in). It walks any `LayoutDom` (a no-JS `StaticDocument` or a script-mutated DOM
+   alike) into a `PageExtract`: the **rect-free anchor enumerator** (the plan's named
+   primitive — `href` + text + `rel`, unresolved, the crawl frontier's source), the
+   `<title>`, declared **metadata** (`description` / canonical / OpenGraph), the
+   `<h1>`–`<h6>` **outline**, and the full **visible text** (script/style/head
+   excluded). 12 tests. **Still open**: (a) the home/wiring decision — how the extract
+   surfaces to meerkat + eidetic (a `serval.extract` engine? a side-output on every
+   serval render? the existing `Contribution` path that already carries JSON-LD
+   harvest?); (b) headless-scripted-DOM extract (run the scripted rung, extract the
+   *post-JS* DOM — same `extract()` over a `ScriptedDom`); (c) a main-content/readability
+   pass over the visible text; (d) the crawl frontier (depth/fan-out cap, politeness,
+   robots) per relational-browse V2.
 5. **Refinements** — script-added stylesheets, retain-until-dirty layout, origin rung
    policy, and the web-API long tail (Canvas2D / WebSocket / fetch-driven re-render;
    serval already has a WebGL factory seam) as pages demand — standards by standards.
@@ -355,3 +370,19 @@ parsed (and optionally scripted) DOM.
   `scripted_rung_click_dispatches_to_script`). Default JS-free build verified unchanged.
   Next: keyboard-event dispatch (`KeyboardEvent` shape + a `key` path — thin, the entry
   is event-type-generic), interactive-region refinement, and phase 4 (the extraction lane).
+- **2026-06-24 (phase 4 — extraction primitive, slices 1–3)**: the render-free
+  extraction lane's foundation is built — the `serval-extract` crate (serval `04d1927`
+  / `648325b` / `067e9d6`). It walks any `LayoutDom` into a `PageExtract` with no
+  cascade/layout/paint: the rect-free anchor enumerator (the crawl frontier's link
+  source — `href`/text/`rel`, unresolved), the `<title>`, declared metadata
+  (`description` / canonical / OpenGraph), the `<h1>`–`<h6>` outline, and full visible
+  text (script/style/head excluded). Witness-clean: the crate depends only on
+  `layout-dom-api` → `markup5ever`, so no render stack can creep into the extraction
+  axis (verified via `cargo tree`). 12 tests over `StaticDocument`. The keyboard-event
+  follow-on from phase 3 is **not** thin after all — serval has no `KeyboardEvent` /
+  `activeElement` / focus model, so it needs a focus model first (deferred).
+  **Open decision before wiring**: extraction's home/surface — a `serval.extract`
+  engine, a side-output on every serval render, or the existing `Contribution` path
+  (which already carries JSON-LD harvest to the kernel/eidetic). An ecosystem-shape call
+  for Mark. Then: headless-scripted extract (`extract()` over a post-JS `ScriptedDom`),
+  a readability pass, and the crawl frontier.
