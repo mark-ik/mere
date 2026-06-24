@@ -434,3 +434,21 @@ within budget.
   (subtle - small balls behind the graph). Bucket B (the non-rapier ambient-sim backdrop layer: Game
   of Life / N-body / particle-life) is the next rung. The scenes paint as flat soft orbs + grey
   polygons today; textured / sprite scene props is an open question (see the Open questions list).
+- 2026-06-24: **Opt-in sprite textures on scene props (committed `6477436`); headed-verified.** A
+  scene prop can now wear a texture (a crate, a barrel) instead of the abstract orb / polygon - the
+  groundwork for tangible / interactive props that read as real objects, while ambient backdrops stay
+  calm by default (a prop without a sprite is unchanged). gyre stays physics-pure: `SceneBodySpec`
+  gains an opaque `sprite: Option<String>` handle (builder `.sprite(h)`) that rides through to
+  `SceneBodyView` via a sparse parallel map, exactly as the collider shape rides through for paint -
+  gyre never interprets it. The orrery owns the pixels: a `handle -> RGBA` registry
+  (`register_scene_sprite`, persisting across scene loads) and a `frame.rs` paint branch billboarding
+  a `DrawImage` quad over a prop whose handle resolves (favicon-style `ImageResource`, image namespace
+  2 so it never collides with favicons (0) / serval images (1)), sized to the prop's collider
+  half-extent; an unregistered handle falls back to the polygon. A bin demo (a procedural crate
+  texture and a crate-drop scene on key `x`) proves it. Billboards are axis-aligned for now (no
+  rotation as a prop
+  tumbles); rotating textured quads is the iso-billboard refinement (the open question on ground-shear
+  vs upright props). gyre 46 + orrery 47 green (carry-through; registered prop emits an image op,
+  unregistered falls back); headed-verified (scry-shots/p4cr-*): a pile of wood-textured crates behind
+  the graph. Decision recorded: keep ambient backdrops abstract, expose sprites as the opt-in just
+  landed - they earn their keep on foreground / interactive props, not background ambiance.
