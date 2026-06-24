@@ -879,6 +879,7 @@ impl Shell {
                 super::ShellCommand::CycleSession(forward) => self.cycle_session(forward),
                 super::ShellCommand::CloseSession(id) => self.close_session(id),
                 super::ShellCommand::OpenGraphBeside(id) => self.open_graph_beside(id),
+                super::ShellCommand::OpenEngramBeside(id) => self.open_engram_beside(&id),
             }
         }
     }

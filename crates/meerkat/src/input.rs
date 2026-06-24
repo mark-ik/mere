@@ -1250,13 +1250,22 @@ impl WindowCtx<'_> {
     /// + steward panes queue nothing. Replaces the old per-pane branches in
     /// `on_mouse_input`. (Phase 1, step 2.)
     pub(super) fn drain_list_pane_activations(&mut self) {
-        use crate::window_view::ShellListPane::{Apparatus, Trail};
+        use crate::window_view::ShellListPane::{Alembic, Apparatus, Trail};
         for key in self.view.take_list_pane_activations(Apparatus) {
             self.apply_pelt_activation(&key);
         }
         for key in self.view.take_list_pane_activations(Trail) {
             if let Some(id) = key.strip_prefix("recover:") {
                 self.recover_deleted_node(id);
+            }
+        }
+        // Alembic: a clicked engram row thaws that engram into an Orrery pane beside. Pooling a
+        // fresh graph re-keys the orrery pool, which a WindowCtx can't do (it holds one orrery
+        // borrowed out), so queue it as a ShellCommand the Shell drains — like OpenGraphBeside. (B2.)
+        for key in self.view.take_list_pane_activations(Alembic) {
+            if let Some(id) = key.strip_prefix("engram:open:") {
+                self.commands
+                    .push(super::ShellCommand::OpenEngramBeside(id.to_string()));
             }
         }
         // The settings tiles' `pelt/*` pages carry the same control keys as the apparatus, so

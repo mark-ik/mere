@@ -836,6 +836,10 @@ enum ShellCommand {
     /// without switching focus (the per-pane render path shows two graphs at
     /// once). (Window composition P2 — second graph-pane.)
     OpenGraphBeside(SessionId),
+    /// Thaw the graph engram with this manifest-id string into a fresh ephemeral Orrery
+    /// pane beside the current one, read-only. The Alembic Engrams row queues this; `Shell`
+    /// thaws it off the private store after the `WindowCtx` borrow ends. (Alembic B2.)
+    OpenEngramBeside(String),
 }
 
 /// A tile's cached rasterized texture: the scene version + size it was rasterized

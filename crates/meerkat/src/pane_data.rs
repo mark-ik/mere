@@ -286,10 +286,14 @@ impl WindowCtx<'_> {
             ));
         } else {
             for manifest in engrams.iter().take(20) {
+                // A clickable row: the key carries the full manifest id; a click queues
+                // `engram:open:<id>`, which the host thaws into an Orrery pane beside. The
+                // label shows a short id + size. (Alembic — open an engram, B2.)
                 let id_short: String = manifest.id.to_string().chars().take(20).collect();
-                items.push(PaneItem::text(
+                items.push(PaneItem::button(
                     "utility-row",
                     format!("{id_short} · {} B", manifest.byte_size),
+                    format!("engram:open:{}", manifest.id),
                 ));
             }
         }

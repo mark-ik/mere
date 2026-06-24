@@ -663,6 +663,60 @@ impl super::Shell {
             .observability
             .record_frame_layout_changed("second graph pane opened");
     }
+
+    /// Thaw a graph engram (by its manifest id, as the Alembic Engrams row carries it) into a
+    /// fresh, ephemeral Orrery pane beside the current one, read-only: browsing an engram does
+    /// not mutate it, and the thawed graph pools under its own `GraphId` with no session manifest,
+    /// so it is not persisted unless re-saved (editing forks a thaw — the immutable-engram model).
+    /// No-op if the id is unparseable, the store is absent, or no engram is stored under it.
+    /// (Alembic memory pane — open an engram, slice B2.)
+    pub(super) fn open_engram_beside(&mut self, id_str: &str) {
+        let Some(id) = eidetic::Hash::parse(id_str)
+            .ok()
+            .map(eidetic::ManifestId::from_hash)
+        else {
+            return;
+        };
+        // Thaw off the private store; the borrow ends here, before the orrery-pool borrow.
+        let Some(store) = self.shared.content.store.as_mut() else {
+            return;
+        };
+        let Some(graph) =
+            pollster::block_on(session_runtime::graph_engram::open_engram_as_session(store, id))
+                .ok()
+                .flatten()
+        else {
+            return;
+        };
+        // An engram is not a session, so it pools under a fresh, ephemeral graph id.
+        let graph_id = GraphId::new();
+        let empty = graph.nodes().count() == 0;
+        self.pool_orrery(graph_id, graph, empty);
+        self.touch_and_evict(graph_id);
+        // Summon an Orrery leaf bound to the thawed graph, split right of the primary graph pane
+        // (an even split), without switching focus — the same shape as `open_graph_beside`.
+        let view = self.focused_view_mut();
+        let pane_id = frame::PaneId(view.next_pane_id);
+        view.next_pane_id += 1;
+        let leaf = frame::PaneNode::Leaf {
+            pane_id,
+            content: frame::PaneContent::Orrery,
+            graph_id,
+        };
+        let anchor =
+            super::frame_view::pane_path(&view.frame_layout, super::GRAPH_PANE).unwrap_or_default();
+        if view
+            .frame_layout
+            .summon_leaf(&anchor, frame::InsertSide::Right, leaf)
+        {
+            view.frame_layout.set_split_ratio(&anchor, 0.5);
+        }
+        view.maximized_pane = None;
+        view.request_redraw();
+        self.shared
+            .observability
+            .record_frame_layout_changed("engram opened beside");
+    }
 }
 
 /// A short switcher label for a session with no user-set display name: the first
