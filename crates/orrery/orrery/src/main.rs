@@ -339,6 +339,11 @@ impl ApplicationHandler for App {
                             self.orrery.load_nbody();
                             self.request_redraw();
                         },
+                        // `p` loads the particle-life ambient backdrop (species self-organising). (P5.)
+                        WinitKey::Character(s) if s.as_str() == "p" => {
+                            self.orrery.load_particle_life();
+                            self.request_redraw();
+                        },
                         WinitKey::Character(s) if s.as_str() == "0" => {
                             self.orrery.clear_scene();
                             self.orrery.clear_fluid();

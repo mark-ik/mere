@@ -60,6 +60,7 @@ pub(crate) fn scene_section_items() -> Vec<PaneItem> {
     items.push(PaneItem::text("app-title", "Ambient backdrop"));
     items.push(PaneItem::button("app-btn", "Game of Life", "scene:gol"));
     items.push(PaneItem::button("app-btn", "N-body drift", "scene:nbody"));
+    items.push(PaneItem::button("app-btn", "Particle-life", "scene:particles"));
     items.push(PaneItem::button("app-btn", "Clear ambient", "scene:ambientclear"));
 
     items.push(PaneItem::text("app-title", "Clear"));
@@ -144,6 +145,10 @@ impl WindowCtx<'_> {
                 self.orrery_mut().load_nbody();
                 true
             }
+            "particles" | "particlelife" | "plife" => {
+                self.orrery_mut().load_particle_life();
+                true
+            }
             "ambientclear" | "noambient" => {
                 self.orrery_mut().clear_ambient();
                 true
@@ -200,6 +205,7 @@ mod tests {
             "scene:intangible",
             "scene:gol",
             "scene:nbody",
+            "scene:particles",
             "scene:ambientclear",
             "scene:clear",
         ] {
