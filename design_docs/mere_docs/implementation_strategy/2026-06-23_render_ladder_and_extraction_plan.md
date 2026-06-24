@@ -183,7 +183,20 @@ relational-browse V2 scope.
 2. **Scripted rung** — port `ScriptedDocument` into the content actor (B): fetcher +
    cookie/storage providers + the `pump`/`frame` loop + per-document runtime lifecycle.
    Lights up `document.cookie` / `localStorage`. The big integration chunk.
-3. **Input → event bridge** (C) — interactive scripted rung.
+3. **Input → event bridge** (C) — interactive scripted rung. *(started 2026-06-23;
+   building blocks confirmed, one engine snag.)* The DOM **event machinery exists**
+   (serval's `addEventListener` / `dispatchEvent` with capture→target→bubble, the `Event`
+   constructor), and the two host-side pieces exist: `serval-layout`'s
+   `IncrementalLayout::hit_test(dom, x, y, scroll) -> Option<NodeId>` (a click → target
+   node) and `dom::reflect_pinned(cx, raw)` (a raw `NodeId` → a JS reflector). The gap is
+   a **Rust `Runtime::dispatch_event(raw_id, type)`** entry. The snag: the native `__*`
+   sinks (e.g. a `__reflectNode` wrapping `reflect_pinned`) are **not visible to user
+   `eval`s** — only bootstrap-exposed globals (`document`, `Event`) are. So the dispatch
+   entry must be a **bootstrap-defined global helper** (on `globalThis`, like `document`)
+   that reflects the id and dispatches; placing it correctly needs understanding how the
+   DOM bootstrap string is assembled / eval'd (a naive placement near `globalThis.document`
+   landed undefined in user evals). Then pelt's `ScriptedDocument::click_at` calls
+   `hit_test` → `dispatch_event` + re-renders, and meerkat forwards input to the tile.
 4. **Extraction profile** (D) — static-parse extractors → eidetic first; then
    headless-scripted-DOM for SPAs. Wire to relational-browse + eidetic derivation.
 5. **Refinements** — script-added stylesheets, retain-until-dirty layout, origin rung
