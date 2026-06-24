@@ -78,9 +78,20 @@ pub fn page_extract_contribution(
     if media_type(content_type).as_deref() != Some("text/html") {
         return None;
     }
-    let doc = StaticDocument::parse(body);
-    let extract = serval_extract::extract(&doc);
+    let extract = serval_extract::extract(&StaticDocument::parse(body));
+    contribution_from_page_extract(url, extract)
+}
 
+/// Map an already-computed [`PageExtract`](serval_extract::PageExtract) to a page-node
+/// [`GraphContribution`] (title / description / canonical / OpenGraph). The shared
+/// mapping behind both the static path ([`page_extract_contribution`]) and the
+/// **headless-scripted** path (the host runs the scripted rung, then feeds
+/// `ScriptedDocument::extract()`'s post-JS extract here so an SPA's JS-rendered
+/// metadata contributes too). `None` when the page declares nothing extractable.
+pub fn contribution_from_page_extract(
+    url: &str,
+    extract: serval_extract::PageExtract,
+) -> Option<GraphContribution> {
     let mut properties: Vec<(String, String)> = Vec::new();
     if let Some(description) = extract.metadata.description {
         properties.push((SCHEMA_DESCRIPTION.to_string(), description));

@@ -397,13 +397,24 @@ pub fn spawn_content(
                             // enrich the page node with its own declared metadata
                             // (title / description / canonical / OpenGraph), through the
                             // same Contribution pipe. Fills the gap for the majority of
-                            // pages with no JSON-LD. (Render ladder phase 4.)
-                            if let Some(extract) = meerkat::ingest::page_extract_contribution(
-                                &url,
-                                fetched.content_type.as_deref(),
-                                &fetched.body,
-                            ) {
-                                contributions.push(extract);
+                            // pages with no JSON-LD. A scripted-rung node skips this: its
+                            // post-JS extract (below, after the scripts run) supersedes
+                            // the static shell. Only in a scripted build is there a post-JS
+                            // path, so the base build always takes the static extract.
+                            // (Render ladder phase 4.)
+                            #[cfg(feature = "scripted")]
+                            let is_scripted_rung =
+                                engine == inker::routing::ENGINE_SERVAL_SCRIPTED;
+                            #[cfg(not(feature = "scripted"))]
+                            let is_scripted_rung = false;
+                            if !is_scripted_rung {
+                                if let Some(extract) = meerkat::ingest::page_extract_contribution(
+                                    &url,
+                                    fetched.content_type.as_deref(),
+                                    &fetched.body,
+                                ) {
+                                    contributions.push(extract);
+                                }
                             }
                             if !contributions.is_empty() {
                                 out.emit(ContentUpdate::Contribution { contributions });
@@ -427,6 +438,22 @@ pub fn spawn_content(
                     };
                     #[cfg(not(feature = "scripted"))]
                     let _ = &engine;
+                    // Headless-scripted-DOM extract: the scripts have run, so extract the
+                    // post-JS DOM (an SPA's JS-rendered content) and contribute its
+                    // metadata through the same pipe — superseding the static shell the
+                    // harvest block skipped for this rung. (Render ladder phase 4.)
+                    #[cfg(feature = "scripted")]
+                    if auto_ingest {
+                        if let Some(doc) = scripted_doc.as_ref() {
+                            if let Some(extract) =
+                                meerkat::ingest::contribution_from_page_extract(&url, doc.extract())
+                            {
+                                out.emit(ContentUpdate::Contribution {
+                                    contributions: vec![extract],
+                                });
+                            }
+                        }
+                    }
                     // A fresh navigation resets the band to the top, one viewport tall
                     // (the host requests a taller scroll band once it has the content).
                     let mut content = Content {
@@ -1171,6 +1198,43 @@ mod tests {
         assert!(
             cookies.iter().any(|c| c == "rung2c=ok"),
             "the JS-set cookie reached the session jar: {cookies:?}",
+        );
+    }
+
+    /// Headless-scripted extraction through the actor: a served shell with no metadata,
+    /// whose script injects a `<meta name=description>`, contributes that description
+    /// through the Contribution pipe — proving the post-JS DOM is what gets extracted
+    /// for a scripted-rung node (a static parse of the shell would find nothing).
+    /// (Render ladder phase 4.)
+    #[cfg(feature = "scripted")]
+    #[test]
+    fn scripted_rung_post_js_extract_contributes_metadata() {
+        const PAGE: &str = "<head></head><body><script>\
+            var m = document.createElement('meta');\
+            m.setAttribute('name', 'description');\
+            m.setAttribute('content', 'JS-rendered summary');\
+            document.head.appendChild(m);\
+            </script></body>";
+        // auto_ingest = true so the actor runs the extraction/harvest path.
+        let (handle, updates) =
+            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), true);
+        handle.command(scripted_show("https://spa.test/app", PAGE));
+        handle.join();
+
+        let contributed = updates.iter().any(|u| match u {
+            ContentUpdate::Contribution { contributions } => contributions.iter().any(|c| {
+                c.nodes.iter().any(|n| {
+                    n.id == "https://spa.test/app"
+                        && n.properties.iter().any(|(p, v)| {
+                            p == "https://schema.org/description" && v == "JS-rendered summary"
+                        })
+                })
+            }),
+            _ => false,
+        });
+        assert!(
+            contributed,
+            "the post-JS extract contributed the JS-injected meta description",
         );
     }
 }
