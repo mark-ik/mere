@@ -92,11 +92,60 @@ Steward; its knobs in Apparatus config.
 Done when Athanor runs in the background, evicts eligible short-term, emits consolidation proposals,
 and stays inside R0 (no direct graph-truth mutation).
 
-### E — Event log + Timeline (its own scoping)
+### E — Event log + Timeline (scoped for implementation, decision #5)
 
-The append-only `GraphMutation` log + periodic `GraphSnapshot` checkpoints (+ a view-intent stream),
-giving undo/redo (single-step) and the Timeline (scrub to T, replay). Largest + most net-new; spun to
-its own plan when reached. "Timeline → engram" is the handoff to A (distil a past state).
+The substrate undo/redo and the Timeline both ride. One append-only log of graph mutations, two
+projections (eidetic R0): the **Alembic** current fold (slice C's live nodes / facets) and the
+**Timeline** historical replay. This log is local short/long-term memory, not engrams (no
+content-addressing, distillation, or federation); E5 ("Timeline to engram") is the one place a chosen
+past state crosses into slice A.
+
+**Code reality (verified 2026-06-24).** Exists: `GraphSnapshot` to/from (the checkpoint primitive);
+`kernel::persistence::NodeAuditEventKind` (a per-node event taxonomy: TitleChanged / Tagged / Pinned /
+Tombstoned / Restored / ..., serde + rkyv) as a partial mutation vocabulary; the **proven
+event-sourcing substrate** in `tessera` ([`moothold/src/tessera/log_store.rs`](../../../crates/moot/moothold/src/tessera/log_store.rs),
+a `LogStore` trait impl) and `cable` (`murmuring/src/cable/{log_store,persistent_store}.rs`) to mirror;
+the kernel graph mutators (`Graph::add_node` / `add_node_with_id` / `remove_node` + edge / field
+methods) as the capture points; the `ViewIntent` sidecar (`session-runtime/view_intent_store.rs`:
+`CameraSnapshot` + `HiddenRelationRecord`) as the seed for the view-intent stream;
+`SharedNavigationMemory` (`graph/history.rs`), which is per-node **browse** history (where each node
+went) and already snapshot-persisted, distinct from this **structural** log (how the graph changed).
+Net-new: the `GraphMutation` event type, the persisted append-only log, the recording hook, the
+view-intent stream (vs the single current sidecar), undo/redo, and the Timeline replay + scrubber.
+
+**Sub-phases:**
+
+- **E1 (the event type + log store).** A kernel `GraphMutation` enum (NodeSpawned {id, url, pos} /
+  NodeRemoved / NodeMoved / EdgeAsserted {from, to, kind} / EdgeRetracted / FieldChanged, plus a
+  `MetadataChanged(NodeAuditEventKind)` arm reusing the existing taxonomy), serde + rkyv like the rest
+  of `persistence.rs`. A local append-only `GraphMutationLog` mirroring the tessera/cable `log_store`
+  shape (append, iterate-from, truncate-after for redo invalidation), persisted as a per-session
+  sidecar beside `graph.json`. Local memory, never an eidetic engram (R0).
+- **E2 (recording + checkpoints).** Capture each mutation at one chokepoint (wrap the kernel mutators,
+  or record at the host apply point so contributions and user gestures both flow through it; pick the
+  single seam so nothing is missed). Interleave periodic `GraphSnapshot` checkpoints (the existing
+  `session_graph_store::save`): cadence = every N mutations or on idle/close, whichever comes first, so
+  replay is "load nearest checkpoint, replay events to T."
+- **E3 (replay + the Timeline scrubber).** Fold to the nearest checkpoint, replay forward to time T.
+  Surface = an **orrery scrubber / time-axis** (decision #6), not a docked pane; it replays over the
+  live orrery (spawns, moves, projections playing out). Read-only: scrubbing never mutates truth.
+- **E4 (undo/redo).** The same substrate at single-step granularity: undo reverses the last
+  `GraphMutation` (each variant carries its inverse; NodeRemoved keeps the removed node's snapshot for
+  re-spawn), redo re-applies; a new mutation after undo truncates the redo tail. Build the log once
+  (E1/E2), get both undo/redo and the Timeline.
+- **E5 (Timeline to engram).** Scrub to a past incarnation, then `save_graph_engram` that state (slice
+  A) to pin it durably and shareably. The one crossing from the local log into the engram store.
+
+**View-intent stream (decision #5 tail, resolved).** Promote the `ViewIntent` sidecar from a single
+current state to an append stream of projection changes (camera, arrangement, hidden-relation
+toggles), so the Timeline replays *arrangement* too, not only structure. Run it as a **parallel
+stream the Timeline composes** (keyed by shared timestamps), not interleaved into the structural log,
+so a structural undo and a view change stay independent.
+
+**Open sub-decisions:** checkpoint cadence N (tune by measured replay cost in E3); whether field-layer
+and coupling changes are first-class `GraphMutation` arms or a coarse `FieldChanged` (lean coarse
+first); how far back replay stays cheap before a checkpoint is mandatory. Large enough that E may spin
+to its own plan once C and D land; this section is its implementation spec.
 
 ## 3. Open decisions, resolved or deferred
 
@@ -109,7 +158,7 @@ All seven resolved with Mark 2026-06-24 (his calls in **bold ✓**).
 | 1 | **Merge semantics** (compose) | **✓ Mark: agreed — merge-by-identity, layer the context** (`import_provenance` is a `Vec`, so source records coexist); exposed as an Athanor per-compose option. Lands with the compose sub-feature (post-A/D); does not gate save/open. |
 | 3 | Settings placement | **Mark asked "Apparatus or Steward? sync or async?" → answered:** Athanor splits by the §8 axis — its **config knobs go in Apparatus** (the at-rest plane: dedupe policy, eviction thresholds, steady-heat schedule), its **live passes surface in Steward** (the in-flight plane), its faults in Apparatus diagnostics. No new pane. It runs **async** — an armillary actor off the UI thread, never synchronous on render. Primary settings home = **Apparatus**. |
 | 6 | Timeline surface | **✓ Mark: agreed — an orrery scrubber / time-axis**, not a docked pane (slice E). |
-| 5 | Event-log shape | **Mark: scope for implementation here.** Promote from "its own plan" to a scoped slice-E section in this plan (mutation-log granularity, checkpoint cadence, view-intent stream). **Next planning task.** |
+| 5 | Event-log shape | **Scoped for implementation (slice E expanded above, 2026-06-24).** A kernel `GraphMutation` event type building on `NodeAuditEventKind`; an append-only log mirroring the proven tessera/cable `LogStore`; checkpoint-interleaved replay (cadence every N mutations or idle/close); the view-intent promoted to a **parallel composed stream**; undo/redo on the same substrate; Timeline = orrery scrubber (#6). E1 type+store → E2 record+checkpoint → E3 replay+scrubber → E4 undo/redo → E5 Timeline-to-engram. |
 | 4 | The lora lane | **Mark: spin off a local-models + harness design doc.** A dedicated doc for the local-models lane (dataset build, LoRA train/apply, the harness / Distillery-as-trainer), referencing the geist models brief. **Spinoff doc to write.** |
 
 ## 4. Slice A detail (the first build)
@@ -138,6 +187,15 @@ Verification: a unit/integration test that `save → (drop) → open` round-trip
 
 ## Progress
 
+- 2026-06-24: **Slice B done + event-log (#5) scoped for implementation.** Slice B landed in two
+  commits: B1 (`b029d83`) the Alembic pane (Recent / Saved / Engrams, headed-verified listing a real
+  engram), B2 (`7c6e5f4`) a clickable engram row thaws into an Orrery pane beside (headed-verified via
+  a ShellCommand routing to `open_engram_beside`; ephemeral + read-only). Then expanded slice E into an
+  implementation spec (decision #5): code-verified that `GraphMutation` is net-new but `NodeAuditEventKind`
+  is a partial vocab, the **tessera/cable `LogStore`** is the event-sourcing substrate to mirror, the
+  kernel `Graph` mutators are the capture seam, `ViewIntent` is the sidecar to grow into a parallel
+  composed stream, and `SharedNavigationMemory` is browse-history (distinct from the structural log).
+  Sub-phases E1–E5; resolved the #5 tail (view-intent = parallel stream) + the cadence/granularity leans.
 - 2026-06-24: **All 7 open decisions resolved with Mark** (see §3). Agreed: merge-by-identity (#1),
   promote-in-place — tagging retains into long-term (#2), Timeline = orrery scrubber (#6), redact
   private + granular opt-in (#7, already built in A). Answered #3 (settings): Athanor knobs → Apparatus,
