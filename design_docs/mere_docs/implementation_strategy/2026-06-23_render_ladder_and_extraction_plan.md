@@ -224,12 +224,18 @@ relational-browse V2 scope.
    harvest, reaching the kernel + eidetic — filling the gap harvest leaves for the
    majority of pages with no structured data. Links are **not** contributed as edges
    here: the crawl frontier owns the link graph + its politeness caps, so one visit
-   cannot flood it. **Still open**: (a) headless-scripted-DOM extract (run the scripted
-   rung, `extract()` over the *post-JS* `ScriptedDom`); (b) a main-content/readability
-   pass over the visible text; (c) the crawl frontier (depth/fan-out cap, politeness,
-   robots) per relational-browse V2 — the home of links-as-edges; (d) routing the full
-   visible **text** into the eidetic corpus proper (the metadata enriches the graph
-   today; the text body for distillation is the next consumer).
+   cannot flood it. **Headless-scripted extract done** (2026-06-24): a scripted-rung
+   node contributes its *post-JS* metadata — after its scripts run,
+   `ScriptedDocument::extract()` walks the mutated DOM and its title/description/og flow
+   through the same pipe (the static shell extract is skipped for that rung so the
+   post-JS one supersedes it). The SPA scrape: a page whose metadata is JS-injected
+   still contributes it. **Still open**: (a) a main-content/readability pass over the
+   visible text; (b) the crawl frontier (depth/fan-out cap, politeness, robots) per
+   relational-browse V2 — the home of links-as-edges; (c) routing the full visible
+   **text** into the eidetic corpus proper (the metadata enriches the graph today; the
+   text body for distillation is the next consumer); (d) a `pump()` before the
+   scripted extract, so timer/promise-driven content (not just synchronous + deferred)
+   is captured.
 5. **Refinements** — script-added stylesheets, retain-until-dirty layout, origin rung
    policy, and the web-API long tail (Canvas2D / WebSocket / fetch-driven re-render;
    serval already has a WebGL factory seam) as pages demand — standards by standards.
@@ -397,3 +403,13 @@ parsed (and optionally scripted) DOM.
   tests green, JSON-LD harvest unregressed. Next: headless-scripted extract (post-JS
   DOM), a readability pass, the crawl frontier (links-as-edges), and routing the full
   visible text into the eidetic corpus proper.
+- **2026-06-24 (phase 4 — headless-scripted extract)**: SPA scraping closed the
+  static-vs-JS gap. serval gained `ScriptedDocument::extract()` (serval `d40d19e`): a
+  render-free `serval-extract` `PageExtract` over the live *post-JS* `ScriptedDom`, so a
+  page whose content/metadata is JS-injected yields it where a static parse sees an empty
+  shell (tested static-empty vs post-JS-populated, Boa). meerkat (mere `26eb68c`) routes
+  a scripted-rung node's post-JS extract through the Contribution path — skipping the
+  static shell extract for that rung — via `ingest::contribution_from_page_extract` (the
+  shared `PageExtract` → contribution mapping). Tested through the actor (a JS-injected
+  meta description is contributed). Default build verified clean. The same `extract()`
+  serves both lanes; extraction is orthogonal to rendering, drawing from any rung's DOM.
