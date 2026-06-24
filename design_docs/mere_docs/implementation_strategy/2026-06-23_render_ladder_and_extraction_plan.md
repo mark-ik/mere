@@ -239,11 +239,15 @@ Reconnoitred the slot-in; the build is now mechanical, in slices:
   renders glyph runs through the `serval.scripted` lane (JS ran + the mutated DOM
   rendered), while the same page on the static lane paints none (the control proves the
   glyphs came from the JS). *(No external scripts, no providers yet — 2b / 2c.)*
-- **2b — external scripts.** Bridge the fetch-model gap: meerkat hands the actor a body
-  (`Show`) and demand-fetches subresources async (`ContentCommand::Resource` round-trip),
-  whereas `ScriptedDocument::load` wants a *sync* `ResourceFetcher`. Options: pre-fetch
-  the `<script src>` set host-side and feed them in, or give the actor a blocking
-  fetch path. Pick when 2a lands.
+- **2b — external scripts.** *(built 2026-06-23)* Resolved the fetch-model gap with the
+  actor's existing blocking fetch: a `ScriptFetcher` (pelt `ResourceFetcher` over
+  `script::ContentNetFetcher`, which `block_on`s the routing fetch — so scripts ride the
+  session jar + the same SSRF/scheme floors as `net.fetch`). A new serval
+  `ScriptedDocument::from_body(html, fetcher, base_url)` (serval `e20a5ce`) runs the
+  *host-supplied* body and fetches only the external `<script src>` — no document
+  re-fetch (unlike `load`). `build_scripted` uses it; verified by a deterministic test
+  (a mock fetcher supplies the script; the injected text renders). Both scripted tests
+  green under `--features scripted`.
 - **2c — cookie/storage providers.** pelt's `ScriptedDocument` does not set the
   `CookieProvider` / `StorageProvider` seams (they postdate it). Extend it (serval-side,
   benefits pelt too) to accept them, then meerkat wires them to the session jar +

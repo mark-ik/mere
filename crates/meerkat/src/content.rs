@@ -241,19 +241,49 @@ struct Content {
     scripted_doc: Option<ScriptedDocument<BoaEngine>>,
 }
 
-/// Build the scripted-rung document for a `serval.scripted` node: parse the fetched
-/// HTML into a live DOM and run its **inline** `<script>`s (external `<script src>` is
-/// a follow-up — the host-fetch model differs from pelt's sync `ResourceFetcher`).
-/// `None` for any other engine or a non-`Ready` state. (Render ladder phase 2a.)
+/// A pelt `ResourceFetcher` for the scripted rung's external `<script src>`, over the
+/// content actor's blocking [`script::ContentNetFetcher`] (a tokio `block_on` of the
+/// routing fetch — so scripts ride the session jar and the same SSRF / scheme floors as
+/// `net.fetch`). One per scripted document; built on `Show`. (Render ladder 2b.)
 #[cfg(feature = "scripted")]
-fn build_scripted(engine: &str, state: Option<&ContentState>) -> Option<ScriptedDocument<BoaEngine>> {
+struct ScriptFetcher(script::ContentNetFetcher);
+
+#[cfg(feature = "scripted")]
+impl ScriptFetcher {
+    fn new() -> Option<Self> {
+        script::ContentNetFetcher::new().ok().map(Self)
+    }
+}
+
+#[cfg(feature = "scripted")]
+impl pelt_core::ResourceFetcher for ScriptFetcher {
+    fn fetch(&self, url: &str) -> Option<Vec<u8>> {
+        self.0.fetch(url).ok().map(|response| response.body.into_bytes())
+    }
+}
+
+/// Build the scripted-rung document for a `serval.scripted` node: parse the already-
+/// fetched HTML body and run its scripts. With a `fetcher`, external `<script src>` is
+/// fetched through it (`from_body`, no document re-fetch); without one, inline scripts
+/// only (`parse`). `None` for any other engine or a non-`Ready` state. (Render ladder.)
+#[cfg(feature = "scripted")]
+fn build_scripted(
+    engine: &str,
+    url: &str,
+    state: Option<&ContentState>,
+    fetcher: Option<&dyn pelt_core::ResourceFetcher>,
+) -> Option<ScriptedDocument<BoaEngine>> {
     if engine != inker::routing::ENGINE_SERVAL_SCRIPTED {
         return None;
     }
     let Some(ContentState::Ready(fetched)) = state else {
         return None;
     };
-    match ScriptedDocument::<BoaEngine>::parse(&fetched.body) {
+    let result = match fetcher {
+        Some(fetcher) => ScriptedDocument::<BoaEngine>::from_body(&fetched.body, fetcher, url),
+        None => ScriptedDocument::<BoaEngine>::parse(&fetched.body),
+    };
+    match result {
         Ok(doc) => Some(doc),
         Err(err) => {
             tracing::warn!(%err, "scripted rung: document init failed");
@@ -322,10 +352,20 @@ pub fn spawn_content(
                         }
                     }
                     // Build the scripted-rung document from the fetched body before the
-                    // state moves into `Content` (inline scripts run here). No-op for a
-                    // non-scripted engine or in the base build.
+                    // state moves into `Content` (scripts run here). External `<script
+                    // src>` is fetched through a blocking `ScriptFetcher`; if that can't
+                    // be built, fall back to inline-only. No-op for a non-scripted
+                    // engine or in the base build.
                     #[cfg(feature = "scripted")]
-                    let scripted_doc = build_scripted(&engine, state.as_ref());
+                    let scripted_doc = {
+                        let fetcher = ScriptFetcher::new();
+                        build_scripted(
+                            &engine,
+                            &url,
+                            state.as_ref(),
+                            fetcher.as_ref().map(|f| f as &dyn pelt_core::ResourceFetcher),
+                        )
+                    };
                     #[cfg(not(feature = "scripted"))]
                     let _ = &engine;
                     // A fresh navigation resets the band to the top, one viewport tall
@@ -942,6 +982,46 @@ mod tests {
             glyph_runs(&first_scene(updates)),
             0,
             "the static lane ignores <script>; the empty body paints no text",
+        );
+    }
+
+    /// The scripted rung fetches and runs an external `<script src>` against the
+    /// host-supplied body (via `from_body` + a fetcher): the script injects text and
+    /// the mutated DOM renders glyph runs. A mock fetcher keeps it deterministic — no
+    /// network. (Render ladder 2b.)
+    #[cfg(feature = "scripted")]
+    #[test]
+    fn scripted_rung_runs_external_script() {
+        use pelt_core::ResourceFetcher;
+        struct MapFetcher(std::collections::HashMap<String, Vec<u8>>);
+        impl ResourceFetcher for MapFetcher {
+            fn fetch(&self, url: &str) -> Option<Vec<u8>> {
+                self.0.get(url).cloned()
+            }
+        }
+        let mut files = std::collections::HashMap::new();
+        files.insert(
+            "http://x/app.js".to_string(),
+            b"var p=document.createElement('p');\
+              p.appendChild(document.createTextNode('ext'));\
+              document.body.appendChild(p);"
+                .to_vec(),
+        );
+        let fetcher = MapFetcher(files);
+        let state = ContentState::Ready(Fetched {
+            content_type: Some("text/html".to_string()),
+            body: "<body><script src=\"app.js\"></script></body>".to_string(),
+        });
+        let mut doc = build_scripted(
+            inker::routing::ENGINE_SERVAL_SCRIPTED,
+            "http://x/index.html",
+            Some(&state),
+            Some(&fetcher),
+        )
+        .expect("scripted document with an external script");
+        assert!(
+            glyph_runs(&doc.frame(420, 360)) >= 1,
+            "the external script fetched via the host fetcher ran and rendered",
         );
     }
 }
