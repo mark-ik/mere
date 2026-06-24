@@ -15,8 +15,8 @@ use netrender::Scene;
 use paint_list_api::{
     AlphaType, ColorF, CommonPlacement, DeviceIntSize, ExtendMode, GradientStop, IdNamespace,
     ImageItem, ImageKey, ImageRendering, ImageResource, LayoutPoint, LayoutRect, LayoutSize,
-    PaintCmd, PaintList, PathCommand, PathData, PathItem, RadialGradientItem, RadialGradientPayload,
-    RectItem, StrokeCap, StrokeJoin, StrokeStyle,
+    LayoutTransform, PaintCmd, PaintList, PathCommand, PathData, PathItem, RadialGradientItem,
+    RadialGradientPayload, RectItem, StrokeCap, StrokeJoin, StrokeStyle, TransformKind, TransformSpec,
 };
 use paint_list_render::{composite_paint_layers, CompositeLayer};
 use platen::orrery::{identity_arrangement, orrery_paint_list_demoted_from_arrangement};
@@ -324,9 +324,11 @@ impl Orrery {
         let mut scene_sprite_cmds: Vec<PaintCmd> = Vec::new();
         let mut scene_sprite_images: Vec<ImageResource> = Vec::new();
         for body in self.view.scene_bodies() {
-            // A prop wearing a registered sprite paints as an upright textured billboard over its
-            // footprint (centered on its projected anchor, sized to its collider half-extent), and
-            // skips the abstract paint. An unregistered handle falls through. (Scene-prop sprites.)
+            // A prop wearing a registered sprite paints as a textured billboard over its footprint
+            // (sized to its collider half-extent), oriented to the prop's rotation - upright when it
+            // rests, tumbling when it tumbles - via a PushTransform spinning the quad about the prop's
+            // projected anchor (identity at rest, so a resting prop is unrotated). Skips the abstract
+            // paint; an unregistered handle falls through. (Scene-prop sprites - iso billboard.)
             if let Some(handle) = &body.sprite {
                 if let Some((rgba, iw, ih)) = self.scene_sprite_textures.get(handle) {
                     if !rgba.is_empty() && *iw > 0 && *ih > 0 {
@@ -340,16 +342,29 @@ impl Orrery {
                             height: *ih,
                             data: rgba.clone(),
                         });
+                        // Push a frame centred on the prop, rotated by its angle; draw the quad in
+                        // that local frame (centred on the origin) so it spins with the prop.
+                        scene_sprite_cmds.push(PaintCmd::PushTransform(TransformSpec {
+                            origin: LayoutPoint::new(cx, cy),
+                            transform: LayoutTransform::rotation(
+                                0.0,
+                                0.0,
+                                1.0,
+                                euclid::Angle::radians(body.rotation),
+                            ),
+                            kind: TransformKind::Standard,
+                        }));
                         scene_sprite_cmds.push(PaintCmd::DrawImage(ImageItem {
                             placement: CommonPlacement::new(LayoutRect::new(
-                                LayoutPoint::new(cx - r, cy - r),
-                                LayoutPoint::new(cx + r, cy + r),
+                                LayoutPoint::new(-r, -r),
+                                LayoutPoint::new(r, r),
                             )),
                             image_key: img_key,
                             image_rendering: ImageRendering::Auto,
                             alpha_type: AlphaType::Alpha,
                             color: ColorF { r: 1.0, g: 1.0, b: 1.0, a: 1.0 },
                         }));
+                        scene_sprite_cmds.push(PaintCmd::PopTransform);
                         continue;
                     }
                 }

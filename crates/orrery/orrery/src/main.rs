@@ -394,11 +394,15 @@ fn crate_drop_scene() -> gyre::SceneSpec {
         vec![SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 360.0)).restitution(0.0)];
     for row in 0..3 {
         for col in 0..5 {
-            let x = (col as f32 - 2.0) * 70.0;
-            let y = -120.0 - row as f32 * 70.0;
+            // Stagger x + start each crate at a varied tilt so they topple into a messy pile - the
+            // oriented sprite then shows each crate's true rotation. (Iso billboard demo.)
+            let x = (col as f32 - 2.0) * 64.0 + ((row * 5 + col) as f32 * 1.3).sin() * 18.0;
+            let y = -120.0 - row as f32 * 80.0;
+            let tilt = ((row * 5 + col) as f32 * 0.9).sin() * 0.6;
             bodies.push(
                 SceneBodySpec::dynamic(NodeCollider::Square { half: 30.0 }, (x, y))
                     .restitution(0.1)
+                    .rotation(tilt)
                     .sprite("crate"),
             );
         }
