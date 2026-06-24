@@ -183,20 +183,30 @@ relational-browse V2 scope.
 2. **Scripted rung** — port `ScriptedDocument` into the content actor (B): fetcher +
    cookie/storage providers + the `pump`/`frame` loop + per-document runtime lifecycle.
    Lights up `document.cookie` / `localStorage`. The big integration chunk.
-3. **Input → event bridge** (C) — interactive scripted rung. *(started 2026-06-23;
-   building blocks confirmed, one engine snag.)* The DOM **event machinery exists**
-   (serval's `addEventListener` / `dispatchEvent` with capture→target→bubble, the `Event`
-   constructor), and the two host-side pieces exist: `serval-layout`'s
-   `IncrementalLayout::hit_test(dom, x, y, scroll) -> Option<NodeId>` (a click → target
-   node) and `dom::reflect_pinned(cx, raw)` (a raw `NodeId` → a JS reflector). The gap is
-   a **Rust `Runtime::dispatch_event(raw_id, type)`** entry. The snag: the native `__*`
-   sinks (e.g. a `__reflectNode` wrapping `reflect_pinned`) are **not visible to user
-   `eval`s** — only bootstrap-exposed globals (`document`, `Event`) are. So the dispatch
-   entry must be a **bootstrap-defined global helper** (on `globalThis`, like `document`)
-   that reflects the id and dispatches; placing it correctly needs understanding how the
-   DOM bootstrap string is assembled / eval'd (a naive placement near `globalThis.document`
-   landed undefined in user evals). Then pelt's `ScriptedDocument::click_at` calls
-   `hit_test` → `dispatch_event` + re-renders, and meerkat forwards input to the tile.
+3. **Input → event bridge** (C) — interactive scripted rung. *(done 2026-06-24.)* A
+   click now flows pointer → hit-test → dispatch → listeners → re-render, end to end:
+   - **serval `Runtime::dispatch_event(raw_id, type) -> bool`** (`cf44ec4`): dispatches a
+     synthetic DOM event at a host-supplied node with full capture→target→bubble
+     propagation, returning `false` when a listener called `preventDefault`. Wiring: a
+     `__reflectNode` native (raw `NodeId` → canonical pinned reflector) plus a
+     `__dispatchSynthetic` global defined *inside* the DOM bootstrap (where the
+     IIFE-local `wrapNode` is in scope) bridges reflector → `wrapNode` → `dispatchEvent`.
+     The earlier "snag" was a stale build + a missing `wrapNode` call, not an eval-scope
+     limit — `set_function` is `register_global_callable`, so natives are global. Tested
+     on Boa + Nova.
+   - **pelt `ScriptedDocument::click_at`** (`b157af1`): hit-tests the live DOM, dispatches
+     the click (listeners may mutate the tree), then applies the in-page anchor-nav
+     default action only when not `preventDefault`-ed. The hit-test session drops before
+     dispatch (which re-enters the host mutably); the default-action layout rebuilds after.
+   - **meerkat**: `ContentCommand::ScriptedClick` + `Constellation::click_scripted` /
+     `is_scripted` (`f58ab47`), and input.rs routes a left click on a `serval.scripted`
+     card/tile to the page, consuming it like a link click (`f277afc`). All gated behind
+     the `scripted` feature; the default JS-free build is unchanged.
+
+   Region-level refinement (which parts of a scripted tile are interactive vs. a
+   drag-handle for the orrery) and keyboard-event dispatch (`keydown`/`keyup` via a
+   `KeyboardEvent`) are the natural follow-ons; the dispatch entry is event-type-generic,
+   so `key` is a thin addition once a `KeyboardEvent` shape lands in the bootstrap.
 4. **Extraction profile** (D) — static-parse extractors → eidetic first; then
    headless-scripted-DOM for SPAs. Wire to relational-browse + eidetic derivation.
 5. **Refinements** — script-added stylesheets, retain-until-dirty layout, origin rung
@@ -328,3 +338,20 @@ parsed (and optionally scripted) DOM.
   verification pending (a running meerkat instance held the exe; needs a headed pass to
   pin + load an inline-JS page). Next: 2b (external scripts) and 2c (cookie/storage
   providers, which light up the native-session-store seams).
+- **2026-06-24 (phase 3 — input → event bridge, done)**: the scripted rung is now
+  interactive end to end — pointer → hit-test → dispatch → listeners → re-render.
+  serval gained `Runtime::dispatch_event(raw_id, type) -> bool` (`cf44ec4`): a
+  `__reflectNode` native (raw `NodeId` → canonical pinned reflector) + a
+  `__dispatchSynthetic` global defined inside the DOM bootstrap (where the IIFE-local
+  `wrapNode` lives) bridge reflector → `wrapNode` → `dispatchEvent`, returning `false`
+  on `preventDefault`. (The prior "eval-scope" snag was a stale build + a missing
+  `wrapNode` call; `set_function` is `register_global_callable`, so natives are global.)
+  pelt's `ScriptedDocument::click_at` (`b157af1`) hit-tests + dispatches + applies the
+  anchor-nav default only when not prevented. meerkat added `ContentCommand::ScriptedClick`
+  + `Constellation::click_scripted` / `is_scripted` (`f58ab47`) and routes left clicks on
+  a `serval.scripted` card/tile to the page, consumed like a link click (`f277afc`).
+  Tested at every layer (serval Boa+Nova `dispatch_event_fires_a_listener`; pelt
+  `click_dispatches_to_script` + `prevent_default_blocks_anchor_nav`; meerkat
+  `scripted_rung_click_dispatches_to_script`). Default JS-free build verified unchanged.
+  Next: keyboard-event dispatch (`KeyboardEvent` shape + a `key` path — thin, the entry
+  is event-type-generic), interactive-region refinement, and phase 4 (the extraction lane).
