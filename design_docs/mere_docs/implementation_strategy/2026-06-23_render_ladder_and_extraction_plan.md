@@ -246,6 +246,14 @@ Reconnoitred the slot-in; the build is now mechanical, in slices:
   the scripts (no document re-fetch). Deterministic test (mock fetcher → external-script
   text renders). Next: 2c (cookie/storage providers light up `document.cookie` /
   `localStorage`), then phase 3 (input→event bridge for interactivity).
+- **2026-06-23 (phase 2c)**: `document.cookie` over the session jar (`435985d` + serval
+  `a8e7cae`). The scripted rung installs a `JarCookieProvider` (origin-scoped, over the
+  process session jar) on the document before scripts run, so a page's JS shares the
+  exact cookies HTTP uses — the cookie convergence the native-session-store plan named.
+  HttpOnly hidden from script; a JS write persists like `Set-Cookie`. `localStorage`
+  works via serval's in-memory default. Deterministic test green; default build
+  untouched (all gated). The scripted rung now runs real pages with shared sessions.
+  Next: phase 3 (input→event bridge — interactivity) and durable storage (6b host impl).
 - **2b — external scripts.** *(built 2026-06-23)* Resolved the fetch-model gap with the
   actor's existing blocking fetch: a `ScriptFetcher` (pelt `ResourceFetcher` over
   `script::ContentNetFetcher`, which `block_on`s the routing fetch — so scripts ride the
@@ -255,11 +263,15 @@ Reconnoitred the slot-in; the build is now mechanical, in slices:
   re-fetch (unlike `load`). `build_scripted` uses it; verified by a deterministic test
   (a mock fetcher supplies the script; the injected text renders). Both scripted tests
   green under `--features scripted`.
-- **2c — cookie/storage providers.** pelt's `ScriptedDocument` does not set the
-  `CookieProvider` / `StorageProvider` seams (they postdate it). Extend it (serval-side,
-  benefits pelt too) to accept them, then meerkat wires them to the session jar +
-  eidetic. This is what finally lights up `document.cookie` / `localStorage` (native
-  session store 6a/6b).
+- **2c — `document.cookie`.** *(built 2026-06-23)* pelt's `ScriptedDocument::from_body`
+  now takes an optional `CookieProvider`, installed on the runtime *before* scripts run
+  (serval `a8e7cae`). meerkat passes a `JarCookieProvider` scoped to the node's origin
+  over the **process session jar** — so a page's JS reads/writes the *same* cookies HTTP
+  does (the cookie convergence; native session store 6a). HttpOnly is hidden from script
+  (spec); a JS write marks the jar dirty so it persists like an HTTP `Set-Cookie`.
+  Deterministic test (a JS write lands in the jar). `localStorage` already works via
+  serval's in-memory default; **durable eidetic-backed, partitioned storage** (6b's host
+  impl, `StorageProvider` over eidetic) is the follow-up.
 
 The input→event bridge (phase 3) is separate; the extraction lane (phase 4) reuses the
 parsed (and optionally scripted) DOM.
