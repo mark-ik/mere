@@ -532,6 +532,16 @@ impl WindowCtx<'_> {
                         return;
                     }
                 }
+                // A click on a scripted-rung tile/card is interactive page content: it
+                // routes to the live document (script listeners run) and is consumed,
+                // exactly as a link click is — not passed through to the orrery. Other
+                // lanes emit no scripted hit and fall through. (Render ladder phase 3.)
+                #[cfg(feature = "scripted")]
+                if button == MouseButton::Left
+                    && (self.tile_scripted_click(x, y) || self.card_scripted_click(x, y))
+                {
+                    return;
+                }
                 if let Some(b) = orrery_button {
                     let (ox, oy) = self.orrery_point(x, y);
                     // A field move / resize ends here; its geometry is graph truth, so
@@ -643,6 +653,51 @@ impl WindowCtx<'_> {
             }
         }
         None
+    }
+
+    /// If window point `(x, y)` is over a composited content **card** on the scripted
+    /// rung, forward the click to its live document (its listeners run, the DOM may
+    /// mutate, the tile re-renders) and report it consumed. The card's scroll is *not*
+    /// added: the scripted document owns its scroll internally and the dispatch
+    /// re-applies it, so the host passes the viewport-local point. `false` when the
+    /// point is over no scripted card. (Render ladder phase 3.)
+    #[cfg(feature = "scripted")]
+    fn card_scripted_click(&self, x: f32, y: f32) -> bool {
+        for (member, r) in &self.view.content_rects {
+            if x >= r[0]
+                && x <= r[2]
+                && y >= r[1]
+                && y <= r[3]
+                && self.shared.content.constellation.is_scripted(*member)
+            {
+                self.shared.content.constellation.click_scripted(*member, x - r[0], y - r[1]);
+                return true;
+            }
+        }
+        false
+    }
+
+    /// The tile counterpart to [`card_scripted_click`](Self::card_scripted_click): a
+    /// click on a scripted workbench tile focuses that tile and forwards the click to
+    /// its live document. `false` when the point is over no scripted tile. (Phase 3.)
+    #[cfg(feature = "scripted")]
+    fn tile_scripted_click(&mut self, x: f32, y: f32) -> bool {
+        let hit = self.view.tile_rects.iter().find_map(|(member, r)| {
+            (x >= r[0]
+                && x <= r[2]
+                && y >= r[1]
+                && y <= r[3]
+                && self.shared.content.constellation.is_scripted(*member))
+            .then(|| (*member, x - r[0], y - r[1]))
+        });
+        let Some((member, lx, ly)) = hit else {
+            return false;
+        };
+        self.view.workbench.activate(member);
+        self.view.focused_tile = Some(member);
+        self.shared.content.constellation.click_scripted(member, lx, ly);
+        self.view.request_redraw();
+        true
     }
 
     /// A right-click on a link in a tile or card opens the link context menu — open

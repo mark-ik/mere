@@ -62,6 +62,11 @@ struct Activation {
     /// `(url, content-tag, w, h)` the actor was last told to show; a change
     /// drives a `Show` (new document) or `Resize` (same document, new size).
     shown: Option<(String, u8, u32, u32)>,
+    /// The host-routed engine id the actor was last driven with (its pin or the
+    /// policy decision). The host reads this to tell whether a tile is on the
+    /// scripted rung, so a click routes to script dispatch rather than the orrery.
+    /// (Render ladder phase 3.)
+    engine: String,
     /// The latest generation-accepted scene, composited at the node's pane. Set by
     /// the HTML/serval lane; `None` for a document-lane node (which carries `packet`
     /// instead and the host lowers a band of it per scroll).
@@ -299,6 +304,7 @@ impl Constellation {
                         rx,
                         gens: Generations::default(),
                         shown: None,
+                        engine: String::new(),
                         scene: None,
                         packet: None,
                         fonts: FontTable::default(),
@@ -360,6 +366,7 @@ impl Constellation {
             return;
         };
         activation.last_touched = touch; // shown this frame → freshest against eviction
+        activation.engine = engine.to_string(); // current routing, for rung queries
         let key = (url.to_string(), tag, cw, ch);
         if activation.shown.as_ref() == Some(&key) {
             return;
@@ -554,6 +561,17 @@ impl Constellation {
             payload,
             viewport_gen: activation.gens.viewport,
         });
+    }
+
+    /// Whether `member` is active and on the scripted render rung (`serval.scripted`).
+    /// The host checks this to decide a click on the tile routes to script dispatch
+    /// ([`click_scripted`](Self::click_scripted)) rather than the orrery beneath.
+    /// (Render ladder phase 3.)
+    #[cfg(feature = "scripted")]
+    pub fn is_scripted(&self, member: GraphMemberId) -> bool {
+        self.active
+            .get(&member)
+            .is_some_and(|a| a.engine == inker::routing::ENGINE_SERVAL_SCRIPTED)
     }
 
     /// Forward a pointer click at card-local scene point `(x, y)` (device px) to
