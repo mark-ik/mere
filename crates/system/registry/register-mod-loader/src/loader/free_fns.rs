@@ -13,6 +13,11 @@ struct DiskModManifest {
     requires: Vec<String>,
     #[serde(default)]
     capabilities: Vec<String>,
+    /// Origin globs this mod's wasm binds as a DocumentScript (TOML
+    /// `document_script_origins = ["example.com", "*.example.org"]`). Absent /
+    /// empty = an ordinary mod, not a document-script.
+    #[serde(default)]
+    document_script_origins: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -63,7 +68,15 @@ fn validate_wasm_binary(path: &Path) -> Result<(), ModLoadPathError> {
         path: path.to_path_buf(),
         reason: error.to_string(),
     })?;
-    if bytes.len() < 4 || bytes[..4] != [0x00, 0x61, 0x73, 0x6d] {
+    // Require the 8-byte Component-Model preamble (`\0asm` + version 0x0d 0x00 +
+    // layer 0x01 0x00), not just the `\0asm` magic, so a core module
+    // (version 0x01 0x00 0x00 0x00) or a truncated file is rejected at discovery
+    // rather than failing later at instantiation. Document-script mods are
+    // components, never bare modules.
+    if bytes.len() < 8
+        || bytes[..4] != [0x00, 0x61, 0x73, 0x6d]
+        || bytes[4..8] != [0x0d, 0x00, 0x01, 0x00]
+    {
         return Err(ModLoadPathError::InvalidWasmBinary(path.to_path_buf()));
     }
     Ok(())
@@ -99,20 +112,47 @@ pub(super) fn read_wasm_mod_from_path(path: &Path) -> Result<(ModManifest, WasmM
     let mod_id = disk_manifest.mod_id;
     let display_name = disk_manifest.display_name.unwrap_or_else(|| mod_id.clone());
 
+    let mut manifest = ModManifest::new(
+        mod_id,
+        display_name,
+        ModType::Wasm,
+        disk_manifest.provides,
+        disk_manifest.requires,
+        capabilities,
+    );
+    manifest.document_script_origins = disk_manifest.document_script_origins;
+
     Ok((
-        ModManifest::new(
-            mod_id,
-            display_name,
-            ModType::Wasm,
-            disk_manifest.provides,
-            disk_manifest.requires,
-            capabilities,
-        ),
+        manifest,
         WasmModSource {
             module_path: path.to_path_buf(),
             manifest_path,
         },
     ))
+}
+
+/// Discover wasm mods installed in `dir`: every `*.wasm` with a readable sidecar
+/// manifest, parsed via [`read_wasm_mod_from_path`]. Best-effort — a malformed,
+/// manifest-less, or unreadable `.wasm` is skipped so one bad mod never hides the
+/// rest, and an absent / unreadable `dir` yields an empty list (no mods installed).
+/// Order is unspecified (filesystem order). The host pairs each manifest's
+/// [`ModManifest::document_script_origins`] with its [`WasmModSource::module_path`]
+/// to derive auto-attach bindings (the "installed extension" form).
+pub fn discover_wasm_mods_in_dir(dir: &Path) -> Vec<(ModManifest, WasmModSource)> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return Vec::new(),
+    };
+    let mut found = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("wasm") {
+            if let Ok(pair) = read_wasm_mod_from_path(&path) {
+                found.push(pair);
+            }
+        }
+    }
+    found
 }
 
 pub fn resolve_mod_load_order(

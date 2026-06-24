@@ -193,6 +193,10 @@ moothold = { workspace = true }
 # the chrome theme-switches alongside the graph chrome. The registry also seeds
 # the graph-node + edge tokens; meerkat consumes the chrome half for now.
 register-theme = { workspace = true }
+# Mod loader: meerkat reads installed wasm-mod manifests under `<mere_root>/mods/`
+# to derive DocumentScript auto-attach bindings (the "installed extension" form).
+# Path dep (not in workspace.dependencies), matching document-host's use.
+register-mod-loader = { path = "../system/registry/register-mod-loader" }
 # Portable UX event/probe taxonomy. meerkat records pane/theme events into its
 # host-local Apparatus observability cache through this seam.
 ux-events = { workspace = true }
@@ -271,6 +275,8 @@ accesskit_unix = { workspace = true }
 # Workbench-composition tests mint graph-member ids (kernel node UUIDs) and
 # build small session graphs to resolve tiles against.
 uuid = { workspace = true }
+# Mod-binding tests stage a throwaway `<mere_root>/mods/` dir of wasm fixtures.
+tempfile = "3"
 
 [lints]
 workspace = true

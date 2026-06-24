@@ -368,3 +368,18 @@ default it `Prompt`/`Deny` at the App scope (unlike `log`/`document` which defau
   shape; non-2xx is an `Err`), so `status` stays 200 — carrying the real code needs a `Fetched.status`
   field (a tiny `fetch.rs` add, left to coordinate since it's Mark's file). Next UX tails: mod-manifest
   auto-attach (origin bindings from installed mods); settings-lane permission/binding UI.
+- **2026-06-23 (UX tail 2/3 — mod-manifest auto-attach, green).** Installed wasm mods under
+  `<mere_root>/mods/` now auto-bind as DocumentScripts. `register-mod-loader`: `ModManifest` /
+  `DiskModManifest` gain `document_script_origins`; new public `discover_wasm_mods_in_dir`. meerkat:
+  `load_mod_bindings` derives bindings (new `meerkat -> register-mod-loader` dep); `main.rs` merges
+  user (`script-bindings.json`) then mod bindings; the existing `AttachScript` path attaches (not the
+  WasmModRuntime bridge). Then an **adversarial multi-agent review** (27 agents, 21 confirmed
+  findings) of the whole `net.fetch` + mod-manifest surface drove a hardening pass — see
+  [documentscript_net_hardening_plan](2026-06-23_documentscript_net_hardening_plan.md). Landed with
+  the plumbing: `net.fetch` scheme/SSRF/timeout floor, manifest-capability-gated mod `net`,
+  component-preamble validation, deterministic deduped discovery, normalized origin matching, and
+  script lifecycle teardown (deactivate-on-nav, detach-on-reattach, detach-on-trap). The **critical**
+  finding — `net` carries the user's ambient cookies to any URL (credentialed SSRF + readable
+  cross-origin exfil) — is deferred to the hardening plan's origin-scoped-`net` redesign; **`net`
+  stays prototype-only until then.** Tail 3 (settings-lane permission/binding UI) remains, in Mark's
+  hot settings zone.

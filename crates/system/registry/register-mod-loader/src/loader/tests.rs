@@ -44,9 +44,11 @@ fn write_wasm_fixture(
 ) -> PathBuf {
     let module_path = temp_dir.path().join(format!("{module_name}.wasm"));
     let manifest_path = temp_dir.path().join(format!("{module_name}.wasm.toml"));
+    // A valid Component-Model preamble (\0asm + version 0x0d 0x00 + layer 0x01 0x00);
+    // validate_wasm_binary now rejects a bare core-module header.
     fs::write(
         &module_path,
-        [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00],
+        [0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00],
     )
     .expect("fixture module should write");
     fs::write(&manifest_path, manifest_body).expect("fixture manifest should write");
@@ -81,6 +83,54 @@ fn discover_mod_manifests_appends_additional_entries() {
 
     assert!(mods.iter().any(|entry| entry.mod_id == "mod:core-viewer"));
     assert!(mods.iter().any(|entry| entry.mod_id == "mod:test-wasm"));
+}
+
+#[test]
+fn discover_wasm_mods_in_dir_surfaces_document_script_origins() {
+    let temp_dir = tempfile::tempdir().expect("temp dir should create");
+    // A document-script mod: declares origin globs in its sidecar manifest.
+    write_wasm_fixture(
+        &temp_dir,
+        "weather",
+        "mod_id = \"mod:weather\"\ndocument_script_origins = [\"example.com\", \"*.weather.test\"]\n",
+    );
+    // An ordinary mod: no document-script declaration.
+    write_wasm_fixture(&temp_dir, "plain", "mod_id = \"mod:plain\"\n");
+
+    let found = discover_wasm_mods_in_dir(temp_dir.path());
+    assert_eq!(found.len(), 2, "both wasm mods discovered");
+
+    let weather = found
+        .iter()
+        .find(|(m, _)| m.mod_id == "mod:weather")
+        .expect("weather mod discovered");
+    assert_eq!(
+        weather.0.document_script_origins,
+        vec!["example.com".to_string(), "*.weather.test".to_string()],
+        "origin globs parse from the sidecar manifest",
+    );
+    assert!(
+        weather.1.module_path.ends_with("weather.wasm"),
+        "the bound component is the mod's own .wasm",
+    );
+
+    let plain = found
+        .iter()
+        .find(|(m, _)| m.mod_id == "mod:plain")
+        .expect("plain mod discovered");
+    assert!(
+        plain.0.document_script_origins.is_empty(),
+        "no declaration = not a document-script mod",
+    );
+}
+
+#[test]
+fn discover_wasm_mods_in_dir_empty_for_absent_dir() {
+    let missing = std::path::Path::new("definitely/not/a/real/mods/dir/xyz");
+    assert!(
+        discover_wasm_mods_in_dir(missing).is_empty(),
+        "an absent mods dir yields no bindings, not an error",
+    );
 }
 
 #[test]

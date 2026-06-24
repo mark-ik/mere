@@ -294,6 +294,12 @@ pub fn spawn_content(
                         html: None,
                         script: None,
                     };
+                    // Run the outgoing scripted page's `deactivate` before it is
+                    // dropped: navigation is a teardown, and neither ScriptInstance
+                    // nor DocumentScript runs deactivate on a bare drop (lifecycle C1).
+                    if let Some(old) = current.as_mut().and_then(|c| c.script.take()) {
+                        let _ = old.detach();
+                    }
                     render(&mut content, &store, &registry, &policy, &out);
                     current = Some(content);
                 }
@@ -382,9 +388,13 @@ pub fn spawn_content(
                         // Map the host-resolved permissions to the link grant (§11.4).
                         let grant = script::grant_from_resolved(log, document, net);
                         // Build the `net.fetch` backend lazily on first attach (a
-                        // current-thread tokio runtime), reused thereafter. A failure
-                        // leaves `net` unbacked (a `net.fetch` call then errors). (net loop.)
-                        if net_fetcher.is_none() {
+                        // current-thread tokio runtime), reused thereafter, and only
+                        // when this grant actually allows net — a net-denied script
+                        // never pays the runtime build. A build failure leaves `net`
+                        // unbacked (a `net.fetch` call then errors). (net loop.)
+                        if net_fetcher.is_none()
+                            && matches!(grant.net, document_host::CapPermission::Allow)
+                        {
                             net_fetcher = script::ContentNetFetcher::new()
                                 .map(|f| Arc::new(f) as Arc<dyn NetFetcher>)
                                 .map_err(|e| tracing::warn!(%e, "content net fetcher unavailable"))
@@ -467,6 +477,12 @@ fn attach_script(
         // is_serval_html_lane above guarantees a Ready HTML body.
         _ => return "no Ready HTML body".to_string(),
     };
+    // Tear down any script already attached to this tile (run its `deactivate`)
+    // before replacing it, so a re-attach doesn't silently drop a live instance
+    // without lifecycle teardown (C2).
+    if let Some(prev) = content.script.take() {
+        let _ = prev.detach();
+    }
     let wanted = RefCell::new(Vec::new());
     let outcome = {
         let loader = ResourceLoader::new(store, &url, &wanted);
@@ -503,6 +519,7 @@ fn deliver_event(
 ) -> String {
     let url = content.url.clone();
     let wanted = RefCell::new(Vec::new());
+    let mut trapped = false;
     let outcome = {
         let loader = ResourceLoader::new(store, &url, &wanted);
         let Some(inst) = content.script.as_mut() else {
@@ -510,9 +527,22 @@ fn deliver_event(
         };
         match inst.deliver(kind, payload, &loader) {
             Ok(outcome) => format!("{outcome:?}"),
-            Err(e) => format!("turn error: {e}"),
+            // An `Err` here means the guest call *trapped* (epoch-cancelled runaway
+            // or memory bomb), per the DocumentScript contract — the store is
+            // poisoned. Mark it so we detach below rather than re-enter the dead
+            // instance on every later event (C3).
+            Err(e) => {
+                trapped = true;
+                format!("turn trapped, detached: {e}")
+            }
         }
     };
+    if trapped {
+        // Drop the poisoned instance (deactivate on a trapped store is futile) and
+        // revert to the static page so the tile recovers instead of re-trapping.
+        content.script = None;
+        content.html = None;
+    }
     // A script mutation may have re-laid-out (new nodes / images) and wanted new
     // subresources; ship them. (#3.)
     emit_fresh_wanted(content.nav, wanted, store, out);

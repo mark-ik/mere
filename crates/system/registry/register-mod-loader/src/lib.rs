@@ -49,10 +49,10 @@
 pub mod loader;
 
 pub use loader::{
-    discover_mod_manifests, discover_native_mods, resolve_mod_load_order, runtime_has_capability,
-    ModActivationError, ModCapability, ModDependencyError, ModExtensionRecord,
-    ModLoadPathError, ModManifest, ModRegistry, ModStatus, ModType, ModUnloadError,
-    NativeModRegistration, NativeModRuntime, WasmModRuntime, WasmModSource,
+    discover_mod_manifests, discover_native_mods, discover_wasm_mods_in_dir, resolve_mod_load_order,
+    runtime_has_capability, ModActivationError, ModCapability, ModDependencyError,
+    ModExtensionRecord, ModLoadPathError, ModManifest, ModRegistry, ModStatus, ModType,
+    ModUnloadError, NativeModRegistration, NativeModRuntime, WasmModRuntime, WasmModSource,
 };
 
 // `compute_active_capabilities_with_disabled` is test-utils gated in

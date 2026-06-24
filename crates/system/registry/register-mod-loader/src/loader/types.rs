@@ -33,6 +33,12 @@ pub struct ModManifest {
     pub provides: Vec<String>,
     pub requires: Vec<String>,
     pub capabilities: Vec<ModCapability>,
+    /// Origin globs this mod's wasm binds as a DocumentScript (the "installed
+    /// extension" auto-attach form). Empty = not a document-script mod. When
+    /// non-empty, the mod's `module_path` is the component a host attaches over a
+    /// page whose origin matches one of these globs (exact host or `*.suffix`).
+    /// Defaults empty; set by the manifest reader, not [`ModManifest::new`].
+    pub document_script_origins: Vec<String>,
 }
 
 impl ModManifest {
@@ -51,6 +57,7 @@ impl ModManifest {
             provides,
             requires,
             capabilities,
+            document_script_origins: Vec::new(),
         }
     }
 }

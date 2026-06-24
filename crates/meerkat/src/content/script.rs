@@ -32,13 +32,22 @@ use serval_static_dom::StaticDocument;
 
 use crate::card::HTML_SHEET;
 
+/// Overall ceiling on one `net.fetch`, covering connect + headers + body across
+/// both transports. Bounds how long a single fetch can park the content actor
+/// thread (the http path has no inner timeout of its own; smolweb has its own
+/// per-hop one). A slow/black-hole server therefore frees the tile after this.
+const NET_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// The content actor's real `net.fetch` backend (§11.7-7). Holds a current-thread
 /// tokio runtime and `block_on`s the shared [`crate::fetch::fetch_page`] routing
 /// (http/https via netfetcher, smolweb via errand) — a *blocking* fetch on the actor
 /// thread while the wasm fiber is parked. Built lazily per content actor on first
-/// script attach (so unscripted tiles pay nothing). `status` is 200 on success (the
-/// `Fetched` shape carries only the 2xx body; the exact status + content-type are a
-/// richer-response follow-on, and true non-blocking suspension is a later step).
+/// script attach (so unscripted tiles pay nothing). Egress is hardened at this seam:
+/// only real network schemes ([`crate::fetch::is_fetchable`]), never a loopback /
+/// private host ([`is_disallowed_fetch_host`]), and bounded by [`NET_FETCH_TIMEOUT`].
+/// `status` is 200 on success (the `Fetched` shape carries only the 2xx body; exact
+/// status is a follow-on). The credential surface (ambient cookies, origin scoping)
+/// is the larger hardening tracked in the net-hardening plan — net stays prototype.
 pub(crate) struct ContentNetFetcher {
     rt: tokio::runtime::Runtime,
 }
@@ -52,8 +61,61 @@ impl ContentNetFetcher {
 
 impl NetFetcher for ContentNetFetcher {
     fn fetch(&self, url: &str) -> Result<NetResponse, String> {
-        let fetched = self.rt.block_on(crate::fetch::fetch_page(url))?;
+        // Scheme floor: only genuine network egress (http/https + smolweb), never
+        // mere:// / about: / file: — fail fast, matching every other load path.
+        if !crate::fetch::is_fetchable(url) {
+            return Err(format!("net.fetch: non-network scheme: {url}"));
+        }
+        // SSRF floor: a granted script must not reach the user's loopback / intranet.
+        if is_disallowed_fetch_host(url) {
+            return Err(format!("net.fetch: blocked host (loopback/private): {url}"));
+        }
+        // Bounded so one fetch cannot wedge the tile actor forever (covers http,
+        // which has no inner deadline, as well as smolweb).
+        let result = self
+            .rt
+            .block_on(async { tokio::time::timeout(NET_FETCH_TIMEOUT, crate::fetch::fetch_page(url)).await });
+        let fetched = match result {
+            Ok(inner) => inner?,
+            Err(_elapsed) => {
+                return Err(format!("net.fetch: timed out after {}s", NET_FETCH_TIMEOUT.as_secs()))
+            }
+        };
         Ok(NetResponse { status: 200, content_type: fetched.content_type, body: fetched.body })
+    }
+}
+
+/// Whether `url`'s host is one a granted script must not reach: loopback, private
+/// (RFC1918), link-local, CGNAT, the unspecified address, or the literal
+/// `localhost`. An SSRF floor so a net-granted script cannot probe the user's local
+/// services / intranet. Literal-IP only — a hostname that resolves to a private IP
+/// (DNS rebinding) is a follow-on (resolve + pin); a non-IP, non-`localhost` host is
+/// allowed through.
+fn is_disallowed_fetch_host(url: &str) -> bool {
+    let host = host_of(url);
+    if host == "localhost" {
+        return true;
+    }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(v4)) => {
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                // CGNAT 100.64.0.0/10
+                || (v4.octets()[0] == 100 && (v4.octets()[1] & 0xc0) == 0x40)
+        }
+        Ok(std::net::IpAddr::V6(v6)) => {
+            v6.is_loopback()
+                || v6.is_unspecified()
+                // unique-local fc00::/7
+                || (v6.segments()[0] & 0xfe00) == 0xfc00
+                // link-local fe80::/10
+                || (v6.segments()[0] & 0xffc0) == 0xfe80
+        }
+        // Not an IP literal: a DNS name we cannot classify without resolving.
+        Err(_) => false,
     }
 }
 
@@ -149,17 +211,32 @@ pub(crate) struct ResolvedScriptBinding {
     pub net: ResolvedPermission,
 }
 
-/// The host portion of a URL (between `://` and the next `/` `?` `#`), without
-/// scheme / path / query / fragment. Userinfo + port stay attached (a first cut).
-fn host_of(url: &str) -> &str {
+/// The normalized host of a URL: the authority between `://` and the next
+/// `/` `?` `#`, with userinfo (`user[:pass]@`) and `:port` stripped, IPv6 brackets
+/// removed, lowercased. So `https://u@Example.COM:8443/p` -> `example.com`. Used for
+/// both binding matching and the SSRF host check, so a non-default port or a cased
+/// host no longer silently misses a binding (it used to keep userinfo + port).
+fn host_of(url: &str) -> String {
     let after_scheme = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
-    after_scheme.split(['/', '?', '#']).next().unwrap_or("")
+    let authority = after_scheme.split(['/', '?', '#']).next().unwrap_or("");
+    // Drop userinfo: everything up to and including the last '@'.
+    let host_port = authority.rsplit_once('@').map(|(_, h)| h).unwrap_or(authority);
+    // Drop the port. For an IPv6 literal ([..]:port) take the bracketed host; the
+    // ':' inside the address must not be read as a port separator.
+    let host = if let Some(rest) = host_port.strip_prefix('[') {
+        rest.split_once(']').map(|(inner, _)| inner).unwrap_or(host_port)
+    } else {
+        host_port.split(':').next().unwrap_or(host_port)
+    };
+    host.to_ascii_lowercase()
 }
 
 /// Whether `url`'s host matches `pattern` — an exact host (`example.com`) or a
 /// `*.`-prefixed suffix glob (`*.example.com`, matching the apex and any subdomain).
+/// Both sides are compared on the normalized, lowercased host (see [`host_of`]).
 pub(crate) fn origin_matches(url: &str, pattern: &str) -> bool {
     let host = host_of(url);
+    let pattern = pattern.to_ascii_lowercase();
     match pattern.strip_prefix("*.") {
         Some(suffix) => host == suffix || host.ends_with(&format!(".{suffix}")),
         None => host == pattern,
@@ -199,6 +276,65 @@ pub(crate) fn load_resolved_bindings(
             net,
         })
         .collect()
+}
+
+/// Discover "installed extension" DocumentScript mods under `<mere_root>/mods/` and
+/// resolve each into auto-attach bindings (the mod-manifest form of follow-on #2,
+/// alongside the user `script-bindings.json` form above). A wasm mod whose sidecar
+/// manifest declares `document_script_origins` binds its own `.wasm` (the component)
+/// to each listed origin glob. `log` / `document` resolve through the session `prefs`
+/// like user bindings; **`net` is additionally intersected with the manifest**: a mod
+/// only gets network egress if it *declares* `ModCapability::Network` AND the session
+/// prefs allow it (per-mod least-privilege — the manifest is the ceiling). Discovery
+/// is sorted by module path so selection is deterministic across machines, and an
+/// origin already claimed by an earlier mod is dropped with a warning. Absent `mods/`
+/// dir = no mods. The attach reuses the ordinary `AttachScript` path, not the
+/// WasmModRuntime bridge (page scripts mirror the live page DOM, not a seeded one).
+///
+/// Note: dropped-in mods still auto-attach without a per-mod install/approval step —
+/// that gating + signing is tracked in the net-hardening plan (§B1/E3).
+pub(crate) fn load_mod_bindings(
+    mere_root: &Path,
+    prefs: &ScriptPermissionPrefs,
+) -> Vec<ResolvedScriptBinding> {
+    let policy = ScriptCapPolicy { log: prefs.log, document: prefs.document, net: prefs.net };
+    let (log, document, net) = resolve_attach_permissions(policy);
+    let net_deny = ResolvedPermission { effective: Permission::Deny, decided_by: None };
+
+    let mut mods = register_mod_loader::discover_wasm_mods_in_dir(&mere_root.join("mods"));
+    mods.sort_by(|a, b| a.1.module_path.cmp(&b.1.module_path));
+
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut bindings = Vec::new();
+    for (manifest, source) in mods {
+        // net only if the manifest declared it (the ceiling) and the session allows it.
+        let mod_net = if manifest
+            .capabilities
+            .contains(&register_mod_loader::ModCapability::Network)
+        {
+            net
+        } else {
+            net_deny
+        };
+        for origin in manifest.document_script_origins {
+            if !seen.insert(origin.clone()) {
+                tracing::warn!(
+                    %origin,
+                    mod_id = %manifest.mod_id,
+                    "mod-binding origin already claimed by an earlier mod; ignoring the duplicate",
+                );
+                continue;
+            }
+            bindings.push(ResolvedScriptBinding {
+                origin,
+                component_path: source.module_path.clone(),
+                log,
+                document,
+                net: mod_net,
+            });
+        }
+    }
+    bindings
 }
 
 /// Copy `src`'s whole document tree into a fresh mutable [`ScriptedDom`]: elements
@@ -431,6 +567,26 @@ mod tests {
         assert!(!origin_matches("https://notwikipedia.org/", "*.wikipedia.org"));
         // Host extraction drops scheme / path / query / fragment (any scheme).
         assert!(origin_matches("gemini://example.com/cap?q#f", "example.com"));
+        // Userinfo + port + case are normalized away, so a non-default port or a
+        // cased host still matches (and userinfo cannot smuggle a different host).
+        assert!(origin_matches("https://example.com:8443/", "example.com"));
+        assert!(origin_matches("https://EXAMPLE.com/", "example.com"));
+        assert!(origin_matches("https://x.wikipedia.org:8443/", "*.wikipedia.org"));
+        assert!(!origin_matches("https://example.com@evil.com/", "example.com"));
+    }
+
+    #[test]
+    fn ssrf_floor_blocks_loopback_and_private_hosts() {
+        assert!(is_disallowed_fetch_host("http://localhost/"));
+        assert!(is_disallowed_fetch_host("http://127.0.0.1/x"));
+        assert!(is_disallowed_fetch_host("http://10.0.0.5/"));
+        assert!(is_disallowed_fetch_host("http://192.168.1.1/"));
+        assert!(is_disallowed_fetch_host("http://169.254.1.1/"));
+        assert!(is_disallowed_fetch_host("http://[::1]/"));
+        assert!(is_disallowed_fetch_host("http://100.64.0.1/"));
+        // Public hosts (name or IP) are allowed through.
+        assert!(!is_disallowed_fetch_host("https://example.com/"));
+        assert!(!is_disallowed_fetch_host("https://1.1.1.1/"));
     }
 
     #[test]
@@ -457,5 +613,76 @@ mod tests {
             Some(PathBuf::from("w.wasm")),
         );
         assert!(binding_for("https://other.net/", &bindings).is_none());
+    }
+
+    #[test]
+    fn load_mod_bindings_derives_bindings_from_installed_mods() {
+        let mere_root = tempfile::tempdir().expect("temp mere_root");
+        let mods_dir = mere_root.path().join("mods");
+        std::fs::create_dir_all(&mods_dir).expect("mods dir");
+        // A valid component preamble (\0asm + version/layer), required by the
+        // tightened validate_wasm_binary; a bare core-module header is rejected.
+        let wasm = [0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00];
+        // A net-declaring mod (two origins), a document-only mod (no Network), and a
+        // plain mod with no document-script declaration (contributes nothing).
+        std::fs::write(mods_dir.join("weather.wasm"), wasm).unwrap();
+        std::fs::write(
+            mods_dir.join("weather.wasm.toml"),
+            "mod_id = \"mod:weather\"\ncapabilities = [\"network\"]\ndocument_script_origins = [\"example.com\", \"*.weather.test\"]\n",
+        )
+        .unwrap();
+        std::fs::write(mods_dir.join("reader.wasm"), wasm).unwrap();
+        std::fs::write(
+            mods_dir.join("reader.wasm.toml"),
+            "mod_id = \"mod:reader\"\ndocument_script_origins = [\"reader.example\"]\n",
+        )
+        .unwrap();
+        std::fs::write(mods_dir.join("plain.wasm"), wasm).unwrap();
+        std::fs::write(mods_dir.join("plain.wasm.toml"), "mod_id = \"mod:plain\"\n").unwrap();
+
+        // net allowed this session -> only a mod that *declares* Network may fetch.
+        let prefs = ScriptPermissionPrefs { log: None, document: None, net: Some(Permission::Allow) };
+        let bindings = load_mod_bindings(mere_root.path(), &prefs);
+
+        assert_eq!(bindings.len(), 3, "weather's 2 origins + reader's 1; plain adds none");
+        let example = bindings
+            .iter()
+            .find(|b| b.origin == "example.com")
+            .expect("example.com bound");
+        assert!(
+            example.component_path.ends_with("weather.wasm"),
+            "the binding points at the mod's own wasm component",
+        );
+        assert_eq!(
+            example.net.effective,
+            Permission::Allow,
+            "weather declares Network + session allows -> net granted",
+        );
+        // The reader mod never declared Network, so net is denied even though the
+        // session pref is Allow (per-mod least-privilege; the manifest is the ceiling).
+        let reader = bindings
+            .iter()
+            .find(|b| b.origin == "reader.example")
+            .expect("reader.example bound");
+        assert_eq!(
+            reader.net.effective,
+            Permission::Deny,
+            "a mod without a Network capability cannot fetch regardless of session prefs",
+        );
+        // A matching navigation routes to the mod's component via the shared lookup.
+        assert_eq!(
+            binding_for("https://sub.weather.test/x", &bindings).map(|b| b.component_path.clone()),
+            Some(example.component_path.clone()),
+        );
+    }
+
+    #[test]
+    fn load_mod_bindings_empty_without_a_mods_dir() {
+        let mere_root = tempfile::tempdir().expect("temp mere_root");
+        let prefs = ScriptPermissionPrefs::default();
+        assert!(
+            load_mod_bindings(mere_root.path(), &prefs).is_empty(),
+            "no mods/ dir = no mod bindings",
+        );
     }
 }
