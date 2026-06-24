@@ -38,6 +38,11 @@ use crate::card::HTML_SHEET;
 /// per-hop one). A slow/black-hole server therefore frees the tile after this.
 const NET_FETCH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
+/// Body-size cap for a script `net.fetch` (§A5): tighter than a page load since the
+/// response is copied into the guest's mem-quota'd linear memory. Enforced while
+/// streaming, so an oversized response is refused, not buffered.
+const SCRIPT_FETCH_BODY_CAP: usize = 8 * 1024 * 1024;
+
 /// The content actor's real `net.fetch` backend (§11.7-7). Holds a current-thread
 /// tokio runtime and `block_on`s the shared [`crate::fetch::fetch_page`] routing
 /// (http/https via netfetcher, smolweb via errand) — a *blocking* fetch on the actor
@@ -72,9 +77,13 @@ impl NetFetcher for ContentNetFetcher {
         }
         // Bounded so one fetch cannot wedge the tile actor forever (covers http,
         // which has no inner deadline, as well as smolweb).
-        let result = self
-            .rt
-            .block_on(async { tokio::time::timeout(NET_FETCH_TIMEOUT, crate::fetch::fetch_page(url)).await });
+        let result = self.rt.block_on(async {
+            tokio::time::timeout(
+                NET_FETCH_TIMEOUT,
+                crate::fetch::fetch_page_capped(url, SCRIPT_FETCH_BODY_CAP),
+            )
+            .await
+        });
         let fetched = match result {
             Ok(inner) => inner?,
             Err(_elapsed) => {

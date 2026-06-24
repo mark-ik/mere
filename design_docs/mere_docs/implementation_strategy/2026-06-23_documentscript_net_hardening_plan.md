@@ -144,6 +144,16 @@ mitigations below bound the blast radius.
 
 ## Execution log
 
+- **2026-06-24 (A5 body-size cap — green).** A fetched body can no longer OOM the host. netfetcher's
+  `ResponseBody` streams (`next_chunk`), so `fetch::read_capped` drains it with a hard ceiling,
+  aborting the moment the accumulated length crosses the cap (not after `bytes()` buffers it all) —
+  so even a chunked / no-Content-Length flood is bounded. `do_fetch` + `fetch_bytes` use it;
+  `fetch_page` keeps its signature as a `PAGE_BODY_CAP` (64 MiB) wrapper over the new
+  `fetch_page_capped(url, max)` (so the crawl + page-load callers are untouched), and the script path
+  passes `SCRIPT_FETCH_BODY_CAP` (8 MiB, tighter since the body is copied into the guest's mem-quota'd
+  memory). Subresources cap at 32 MiB; smolweb is errand-buffered so it is checked post-hoc (errand
+  bounds its own read). meerkat 78 lib / 136 bin green. (No unit test: netfetcher's `ResponseBody`
+  isn't constructible outside the crate; the cap is enforced + correct by inspection.)
 - **2026-06-24 (A6 per-turn fetch cap — green).** `net.fetch` is now rate-bounded: `Quota` gains
   `max_fetches_per_turn` (default 32), `ScriptHost` counts fetches per turn and `net::Host::fetch`
   refuses past the cap, reset at each `deliver_event` turn start. In document-host so both runtimes

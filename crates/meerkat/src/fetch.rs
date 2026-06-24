@@ -43,6 +43,15 @@ const MAX_REDIRECTS: usize = 5;
 /// chain independently so a chain of N slow hops can take up to N × this value.
 const SMOLWEB_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Host-side cap on a fetched page body (§A5): a hard ceiling enforced *while*
+/// streaming the body, so a malicious or runaway server cannot OOM the host by
+/// sending an unbounded response. Generous for a real page; a script `net.fetch`
+/// passes a tighter cap (the body is copied into the guest's mem-quota'd memory).
+const PAGE_BODY_CAP: usize = 64 * 1024 * 1024;
+
+/// The subresource counterpart (a page's images / CSS): generous but bounded.
+const SUBRESOURCE_BODY_CAP: usize = 32 * 1024 * 1024;
+
 /// Successfully fetched content: the response content-type (if any) and the
 /// decoded body as text.
 #[derive(Clone, Debug)]
@@ -182,15 +191,28 @@ pub fn spawn_fetcher(wake: Wake) -> (ActorHandle<FetchCommand>, Receiver<FetchUp
     })
 }
 
-/// Fetch a page, routing by scheme: smolweb schemes go through [`errand`], every
-/// other (http(s)) address through netfetcher's WHATWG Fetch. `pub(crate)` so the
-/// content actor's `net.fetch` backend ([`crate::content::script::ContentNetFetcher`])
-/// reuses the same routing (blocking on its own runtime) rather than re-implementing it.
+/// Fetch a page at the default page body cap ([`PAGE_BODY_CAP`]). The page-load and
+/// crawl paths use this; the script `net.fetch` path calls [`fetch_page_capped`] with
+/// a tighter ceiling. `pub(crate)` so the content actor reuses the routing.
 pub(crate) async fn fetch_page(url: &str) -> Result<Fetched, String> {
+    fetch_page_capped(url, PAGE_BODY_CAP).await
+}
+
+/// Fetch a page, routing by scheme: smolweb schemes go through [`errand`], every
+/// other (http(s)) address through netfetcher's WHATWG Fetch. `max_bytes` caps the
+/// body (§A5): the http path enforces it *while streaming* (no OOM); smolweb is
+/// already buffered by errand, so it is checked post-hoc (errand bounds its own read).
+pub(crate) async fn fetch_page_capped(url: &str, max_bytes: usize) -> Result<Fetched, String> {
     match scheme_of(url).and_then(errand::Scheme::parse) {
         Some(scheme) => {
             tracing::info!(%url, ?scheme, "smolweb fetch");
-            let result = smolweb_fetch(url).await;
+            let result = smolweb_fetch(url).await.and_then(|fetched| {
+                if fetched.body.len() > max_bytes {
+                    Err(format!("response exceeds the {max_bytes}-byte cap"))
+                } else {
+                    Ok(fetched)
+                }
+            });
             match &result {
                 Ok(fetched) => tracing::info!(
                     %url,
@@ -202,7 +224,7 @@ pub(crate) async fn fetch_page(url: &str) -> Result<Fetched, String> {
             }
             result
         }
-        None => do_fetch(url).await,
+        None => do_fetch(url, max_bytes).await,
     }
 }
 
@@ -536,8 +558,25 @@ fn map_same_site(same_site: SameSite) -> verso_api::SameSite {
     }
 }
 
-/// Run one WHATWG-Fetch GET and collect the decoded body as text.
-async fn do_fetch(url: &str) -> Result<Fetched, String> {
+/// Drain a streaming [`netfetcher::ResponseBody`] into a buffer, aborting with an
+/// error once the accumulated length would exceed `max_bytes` (§A5). Enforced *during*
+/// the stream (not after `bytes()` buffers it all), so an unbounded / chunked body
+/// cannot OOM the host: the read stops the moment the cap is crossed.
+async fn read_capped(mut body: netfetcher::ResponseBody, max_bytes: usize) -> Result<Vec<u8>, String> {
+    let mut buf: Vec<u8> = Vec::new();
+    while let Some(chunk) = body.next_chunk().await {
+        let chunk = chunk.map_err(|e| format!("read error: {e}"))?;
+        if buf.len() + chunk.len() > max_bytes {
+            return Err(format!("response exceeds the {max_bytes}-byte cap"));
+        }
+        buf.extend_from_slice(&chunk);
+    }
+    Ok(buf)
+}
+
+/// Run one WHATWG-Fetch GET and collect the decoded body as text, bounded by
+/// `max_bytes` (§A5: a hard streamed cap so a huge response can't OOM the host).
+async fn do_fetch(url: &str, max_bytes: usize) -> Result<Fetched, String> {
     let parsed = url::Url::parse(url).map_err(|e| format!("bad URL: {e}"))?;
     let cx = session_context();
     let response = netfetcher::fetch(netfetcher::Request::get(parsed), &cx).await;
@@ -553,16 +592,14 @@ async fn do_fetch(url: &str) -> Result<Fetched, String> {
         .iter()
         .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
         .map(|(_, v)| v.clone());
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| format!("read error: {e}"))?;
+    let bytes = read_capped(response.body, max_bytes).await?;
     let body = String::from_utf8_lossy(&bytes).into_owned();
     Ok(Fetched { content_type, body })
 }
 
 /// Run one WHATWG-Fetch GET and collect the raw response bytes, or `None` on any
-/// network / HTTP / read error. The subresource counterpart to [`do_fetch`].
+/// network / HTTP / read / over-cap error. The subresource counterpart to
+/// [`do_fetch`], bounded by [`SUBRESOURCE_BODY_CAP`].
 async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
     let parsed = url::Url::parse(url).ok()?;
     let cx = session_context();
@@ -570,7 +607,7 @@ async fn fetch_bytes(url: &str) -> Option<Vec<u8>> {
     if response.is_network_error() || !(200..300).contains(&response.status) {
         return None;
     }
-    response.bytes().await.ok().map(|b| b.to_vec())
+    read_capped(response.body, SUBRESOURCE_BODY_CAP).await.ok()
 }
 
 #[cfg(test)]
