@@ -344,6 +344,11 @@ impl ApplicationHandler for App {
                             self.orrery.load_particle_life();
                             self.request_redraw();
                         },
+                        // `s` loads the falling-sand ambient backdrop (grains pour + pile + drain). (P5.)
+                        WinitKey::Character(s) if s.as_str() == "s" => {
+                            self.orrery.load_sand();
+                            self.request_redraw();
+                        },
                         WinitKey::Character(s) if s.as_str() == "0" => {
                             self.orrery.clear_scene();
                             self.orrery.clear_fluid();

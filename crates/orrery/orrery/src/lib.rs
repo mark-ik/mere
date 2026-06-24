@@ -61,7 +61,7 @@ mod fields;
 /// Ambient-sim backdrops (non-rapier liveliness painted behind the graph): Conway's
 /// [`GameOfLife`] is the first. (Physics scenes P5.)
 mod ambient;
-pub use ambient::{AmbientSim, GameOfLife, NBody, ParticleLife, Tincture};
+pub use ambient::{AmbientSim, GameOfLife, NBody, ParticleLife, SandFall, Tincture};
 
 mod physics;
 use physics::Physics;
@@ -1361,6 +1361,14 @@ impl Orrery {
     /// tincture. (Physics scenes P5.)
     pub fn load_particle_life(&mut self) {
         let sim = ParticleLife::seeded(320, 0x9A17_2024);
+        self.ambient_tincture = sim.default_tincture();
+        self.ambient = Some(Box::new(sim));
+    }
+
+    /// Load falling-sand as the ambient backdrop: grains pour from the top, pile into drifting dunes,
+    /// and drain at the bottom - a gravity-shaped CA flowing behind the graph. (Physics scenes P5.)
+    pub fn load_sand(&mut self) {
+        let sim = SandFall::new(120, 76, 0x5A11_2024);
         self.ambient_tincture = sim.default_tincture();
         self.ambient = Some(Box::new(sim));
     }
