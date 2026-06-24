@@ -290,3 +290,14 @@ picking / dragging a raised node lands on the right node.
   gesture (involved `input.rs`; the command + the bin's q/e/[/] keys cover driving it). Headed
   palette / reload spot-check is a quick confirm in the app (meerkat is Mark's in-flight, not
   auto-driven).
+- 2026-06-24: **Alt+drag orbit gesture landed (committed `70a486f`); the plan is fully complete.** The
+  last deferred piece, now that the command-registry refactor settled and the tree was clean. Wired as
+  a first-class orrery gesture beside the middle-drag pan: an `alt` flag (`set_alt`, mirroring
+  set_ctrl / set_shift) + an `orbit_drag` state; Alt+left-press starts an orbit (skipping node-pick /
+  field-grab / marquee), `cursor_moved` yaws by the horizontal delta (`orbit_by`) and reclines tilt by
+  the vertical (`set_tilt` clamps, so no flip), `pointer_up` ends it; two sensitivity consts (a ~30px
+  drag ≈ the q/e keystep). Lives in the orrery, so the bin gets it too; both hosts push `set_alt` in
+  ModifiersChanged. orrery 63 tests green incl. a gesture test (Alt+drag yaws + reclines; release ends
+  it; a non-Alt left drag does not orbit). Headed-verified (scry-shots/isoorb-a vs -b): an Alt+left-drag
+  reclines + rotates the field, cards upright. The in-app orbit now matches the q/e/[/] keys + the
+  `>projection` toggle. **Nothing deferred remains.**
