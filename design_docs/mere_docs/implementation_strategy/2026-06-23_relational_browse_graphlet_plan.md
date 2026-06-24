@@ -152,6 +152,16 @@ auto-arranged around the seed, with no target fetch and no layout pass; the
 anchor walker has unit tests over a `StaticDocument` fixture; every file under
 the 600-LOC ceiling.
 
+**Status: built 2026-06-24** (mere `6966e0b`, riding the render-ladder extraction
+lane). The rect-free anchor enumerator landed as `serval-extract::extract_links`
+(serval, render-free; its dep graph is the witness). `meerkat::ingest::harvest_links`
+maps it to a `GraphContribution` (seed `—Semantic:Hyperlink→` each resolved target,
+deduped by URL, non-navigable hrefs skipped), invoked via
+`ContentCommand::MaterializeLinks` + `Constellation::materialize_links` and emitted on
+the existing Contribution pipe. No target fetch, no new actor. The producer + actor
+path are tested; the **host trigger** (a toolbar/menu action that calls
+`materialize_links`) and the canvas placement are the thin remaining wire-up.
+
 **Commits to none of the contested parts**: SERP scraping, the crawl frontier,
 the LoRA, and DocumentScript wiring all stay out of V1.
 
@@ -321,3 +331,16 @@ from scratch.
   federation of personal LoRA adapters that specialize the community's models and
   agents. Earlier "pooled geist" reading replaced throughout; the open question on
   the term is closed.
+- **2026-06-24** — **V1 built** (mere `6966e0b`), on the back of the render-ladder
+  extraction lane. The "one new primitive" (rect-free anchor enumerator) is
+  `serval-extract::extract_links`; `meerkat::ingest::harvest_links` materializes the
+  seed's outbound neighborhood as `Hyperlink`-edged nodes through the Contribution
+  pipe, invoked via `MaterializeLinks` / `Constellation::materialize_links` — no fetch,
+  no new actor, 3 tests. Two adjacent extraction-lane pieces also landed and serve this
+  plan's later slices: the **serval-side text-extraction seam** the eidetic derivation
+  parks (V3's trigger) is now `serval-extract`'s `extract_text` + reader-mode
+  `main_text` (`extract()` over any `LayoutDom`, static or post-JS `ScriptedDom`), and a
+  page's declared metadata already enriches its node via the same pipe. Remaining for
+  V1: the host trigger (toolbar/menu action) + canvas placement. **V2 (the dedicated
+  crawl actor)** and **V3 (relational capture into eidetic)** unchanged. Cross-ref:
+  `2026-06-23_render_ladder_and_extraction_plan.md`.

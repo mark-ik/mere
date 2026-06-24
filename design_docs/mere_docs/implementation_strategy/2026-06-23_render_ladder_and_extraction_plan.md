@@ -431,3 +431,15 @@ parsed (and optionally scripted) DOM.
   depth/fan-out/politeness/robots caps), whose home (a crawl driver crate? meerkat? the
   relational-browse graphlet?) and storage (article `main_text` → eidetic corpus) is the
   next decision.
+- **2026-06-24 (extraction lane — single-hop link materializer, relational-browse V1)**:
+  the link half landed as graph nodes. `meerkat::ingest::harvest_links` (mere `6966e0b`)
+  maps the rect-free anchor enumerator to a `GraphContribution` (seed
+  `—Semantic:Hyperlink→` each resolved target, deduped, non-navigable hrefs skipped),
+  invoked via `ContentCommand::MaterializeLinks` + `Constellation::materialize_links` on
+  the existing Contribution pipe — render-free, no target fetch, **no new actor**
+  (Mark's call: single-hop needs none; the multi-hop crawl is a dedicated actor = V2).
+  This is where links-as-edges live (deferred out of the metadata wiring earlier). 3
+  tests; default build unaffected. Home decision settled per the relational-browse plan:
+  V1 in the content-actor path, V2 a dedicated crawl actor, V3 consolidates into eidetic
+  (articles → graph nodes = short-term memory → selective consolidation = long-term).
+  See `2026-06-23_relational_browse_graphlet_plan.md`.
