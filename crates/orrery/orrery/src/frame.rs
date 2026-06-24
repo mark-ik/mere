@@ -43,6 +43,19 @@ impl Orrery {
         // into the read model, and learn whether the layout is still settling.
         // Everything below reprojects from the view — never the rapier world.
         let settling = self.physics.advance_frame(&mut self.view);
+        // Step the ambient backdrop sim (Game of Life) a few generations a second: every Nth frame,
+        // not every frame, so it evolves at a watchable pace, reseeding a thinning field so the
+        // backdrop stays alive. (Physics scenes P5.)
+        const AMBIENT_FRAMES_PER_GEN: u32 = 7;
+        const AMBIENT_RESEED_GENS: u32 = 600;
+        if self.ambient.is_some() {
+            self.ambient_frame = self.ambient_frame.wrapping_add(1);
+            if self.ambient_frame % AMBIENT_FRAMES_PER_GEN == 0 {
+                if let Some(gol) = self.ambient.as_mut() {
+                    gol.step_living(AMBIENT_RESEED_GENS);
+                }
+            }
+        }
         // A non-gyre layout strategy overrides the physics snapshot: write its buffered
         // positions into the view before anything reads it. (Layout picker.)
         self.apply_strategy_to_view();
@@ -300,6 +313,39 @@ impl Orrery {
         // scene orbs, then the underlay edges + demoted rects, then the on-screen node
         // DOM, then any marquee on top.
         let bg_cmds = background_cmds(w, h, self.backdrop);
+        // Ambient backdrop: the Game of Life grid as the bottom layer (above the bg fill, below the
+        // scene), the resolution-fixed grid stretched across the viewport. Live cells are merged into
+        // per-row runs (one rect per run) to keep the command count low, painted in a muted low-alpha
+        // green so it reads as atmosphere behind the graph, not foreground. (Physics scenes P5.)
+        let mut ambient_cmds: Vec<PaintCmd> = Vec::new();
+        if let Some(gol) = self.ambient.as_ref() {
+            let (gw, gh) = (gol.width(), gol.height());
+            if gw > 0 && gh > 0 {
+                let cw = w as f32 / gw as f32;
+                let ch = h as f32 / gh as f32;
+                let color = ColorF::new(0.32, 0.62, 0.45, 0.16);
+                for row in 0..gh {
+                    let mut col = 0;
+                    while col < gw {
+                        if !gol.cell(col, row) {
+                            col += 1;
+                            continue;
+                        }
+                        let start = col;
+                        while col < gw && gol.cell(col, row) {
+                            col += 1;
+                        }
+                        ambient_cmds.push(PaintCmd::DrawRect(RectItem {
+                            placement: CommonPlacement::new(LayoutRect::new(
+                                LayoutPoint::new(start as f32 * cw, row as f32 * ch),
+                                LayoutPoint::new(col as f32 * cw, (row + 1) as f32 * ch),
+                            )),
+                            color,
+                        }));
+                    }
+                }
+            }
+        }
         // Living backdrop: drifting scene-decoration bodies as soft orbs behind the graph
         // (under the edges), projected through the camera so they recline with the iso
         // ground. (Physics scenes P1.)
@@ -438,6 +484,9 @@ impl Orrery {
         }
 
         let mut layers = vec![CompositeLayer::commands_only(&bg_cmds)];
+        if !ambient_cmds.is_empty() {
+            layers.push(CompositeLayer::commands_only(&ambient_cmds));
+        }
         if !scene_cmds.is_empty() {
             layers.push(CompositeLayer::commands_only(&scene_cmds));
         }
@@ -478,7 +527,7 @@ impl Orrery {
         }
         let scene = composite_paint_layers(viewport, &layers).scene;
 
-        let needs_redraw = settling || gliding || dragging;
+        let needs_redraw = settling || gliding || dragging || self.ambient.is_some();
         (scene, needs_redraw)
     }
 }
@@ -575,5 +624,30 @@ mod tests {
         orrery.load_scene(spec);
         let (scene, _) = orrery.frame(800, 600);
         assert_eq!(image_op_count(&scene), 0, "an unregistered handle falls back, no image op");
+    }
+
+    /// The Game of Life ambient backdrop keeps the orrery redrawing (so it animates) while loaded,
+    /// and parks again once cleared. (Physics scenes P5.)
+    #[test]
+    fn game_of_life_backdrop_keeps_redrawing_until_cleared() {
+        let (graph, _key) = graph_with_one_node("https://ex.test/");
+        let mut orrery = Orrery::with_graph(graph);
+        // Settle the graph so the only thing that could request a redraw is the ambient sim.
+        for _ in 0..400 {
+            let _ = orrery.frame(800, 600);
+        }
+        let (_, settled_redraw) = orrery.frame(800, 600);
+        assert!(!settled_redraw, "a settled graph with no ambient sim parks");
+
+        orrery.load_game_of_life();
+        let (_, with_gol) = orrery.frame(800, 600);
+        assert!(with_gol, "the ambient backdrop keeps the orrery redrawing");
+
+        orrery.clear_ambient();
+        for _ in 0..400 {
+            let _ = orrery.frame(800, 600);
+        }
+        let (_, after_clear) = orrery.frame(800, 600);
+        assert!(!after_clear, "clearing the ambient backdrop lets the orrery park again");
     }
 }

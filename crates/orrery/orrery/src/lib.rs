@@ -58,6 +58,11 @@ mod input;
 mod frame;
 mod fields;
 
+/// Ambient-sim backdrops (non-rapier liveliness painted behind the graph): Conway's
+/// [`GameOfLife`] is the first. (Physics scenes P5.)
+mod ambient;
+pub use ambient::GameOfLife;
+
 mod physics;
 use physics::Physics;
 
@@ -201,6 +206,13 @@ pub struct Orrery {
     /// not cleared on `clear_scene`), populated via [`register_scene_sprite`](Self::register_scene_sprite).
     /// (Physics scenes — scene-prop sprites.)
     scene_sprite_textures: HashMap<String, (Vec<u8>, u32, u32)>,
+    /// An optional ambient-sim backdrop (a non-rapier sim painted behind the graph for atmosphere),
+    /// stepped a few generations a second in [`frame`](Self::frame) and painted as the bottom layer.
+    /// `None` until one is loaded. (Physics scenes P5.)
+    ambient: Option<GameOfLife>,
+    /// Frame counter gating the ambient sim's generation rate (it steps every Nth frame, not every
+    /// frame, so the Game of Life evolves at a watchable pace). (Physics scenes P5.)
+    ambient_frame: u32,
     /// Per-node physical **material** overrides (restitution / friction / density) on the Body
     /// axis. A node absent here takes the default [`gyre::NodeMaterial`] (the spawn values), so
     /// this holds only deliberate overrides. Pushed to physics and persisted in the cartography
@@ -375,6 +387,8 @@ impl Orrery {
             node_sprites: HashMap::new(),
             node_sprite_hulls: HashMap::new(),
             scene_sprite_textures: HashMap::new(),
+            ambient: None,
+            ambient_frame: 0,
             node_materials: HashMap::new(),
             size_by_degree: false,
             height_by_degree: false,
@@ -1322,6 +1336,20 @@ impl Orrery {
         height: u32,
     ) {
         self.scene_sprite_textures.insert(handle.into(), (rgba, width, height));
+    }
+
+    /// Load Conway's Game of Life as the ambient backdrop: a wrapped grid of cells, seeded with a
+    /// random soup, that the frame loop steps a few generations a second and paints behind the graph.
+    /// Replaces any prior ambient sim; the orrery keeps redrawing while one is active so it animates.
+    /// Clear with [`clear_ambient`](Self::clear_ambient). (Physics scenes P5.)
+    pub fn load_game_of_life(&mut self) {
+        self.ambient = Some(GameOfLife::seeded(100, 64, 0x5EED_1234));
+        self.ambient_frame = 0;
+    }
+
+    /// Remove the ambient backdrop sim. (Physics scenes P5.)
+    pub fn clear_ambient(&mut self) {
+        self.ambient = None;
     }
 
     /// Load a declarative [`SceneSpec`] into the world (clearing any prior scene), then kick

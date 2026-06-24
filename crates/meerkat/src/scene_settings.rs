@@ -55,6 +55,12 @@ pub(crate) fn scene_section_items() -> Vec<PaneItem> {
     items.push(PaneItem::button("app-btn", "Collide with the scene", "scene:tangible:on"));
     items.push(PaneItem::button("app-btn", "Pass through (default)", "scene:tangible:off"));
 
+    // Ambient backdrops are non-rapier sims painted behind the graph (independent of the scene
+    // above), so they get their own section. (Physics scenes P5.)
+    items.push(PaneItem::text("app-title", "Ambient backdrop"));
+    items.push(PaneItem::button("app-btn", "Game of Life", "scene:ambient:gol"));
+    items.push(PaneItem::button("app-btn", "Clear ambient", "scene:ambient:clear"));
+
     items.push(PaneItem::text("app-title", "Clear"));
     items.push(PaneItem::button("app-btn", "Clear the scene", "scene:clear"));
     items
@@ -84,6 +90,8 @@ impl WindowCtx<'_> {
             "fluid:clear" => self.orrery_mut().clear_fluid(),
             "tangible:on" => self.orrery_mut().set_nodes_tangible(true),
             "tangible:off" => self.orrery_mut().set_nodes_tangible(false),
+            "ambient:gol" => self.orrery_mut().load_game_of_life(),
+            "ambient:clear" => self.orrery_mut().clear_ambient(),
             "clear" => self.orrery_mut().clear_scene(),
             _ => return,
         }
@@ -118,6 +126,8 @@ mod tests {
             "scene:fluid:clear",
             "scene:tangible:on",
             "scene:tangible:off",
+            "scene:ambient:gol",
+            "scene:ambient:clear",
             "scene:clear",
         ] {
             assert!(keys.contains(&expected), "the page exposes {expected}");

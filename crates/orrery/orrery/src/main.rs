@@ -328,9 +328,16 @@ impl ApplicationHandler for App {
                             self.orrery.load_scene(crate_drop_scene());
                             self.request_redraw();
                         },
+                        // `g` loads the Game of Life ambient backdrop (a non-rapier sim behind the
+                        // graph). (Physics scenes P5.)
+                        WinitKey::Character(s) if s.as_str() == "g" => {
+                            self.orrery.load_game_of_life();
+                            self.request_redraw();
+                        },
                         WinitKey::Character(s) if s.as_str() == "0" => {
                             self.orrery.clear_scene();
                             self.orrery.clear_fluid();
+                            self.orrery.clear_ambient();
                             self.request_redraw();
                         },
                         _ => {},
