@@ -252,10 +252,11 @@ impl ApplicationHandler for App {
                             self.orrery.set_nodes_tangible(self.nodes_tangible);
                             self.request_redraw();
                         },
-                        // `1`-`7` load the declarative scene catalog (drop bowl, pyramid,
-                        // dominoes, Galton board, funnel, drift, rope chain); `8` the liquid pool;
-                        // `9` the whirlpool force-field; `0` clears back to bare space. Press `t` to
-                        // make the graph tangible and stir the scenes. (Physics scenes P3/P4a/b/c + fields.)
+                        // `1`-`7` load the declarative scene catalog (drop bowl, pyramid, dominoes,
+                        // Galton board, funnel, drift, rope chain); `8` the liquid pool; `9` the
+                        // whirlpool force-field; `f` the fountain emitter; `0` clears back to bare
+                        // space. Press `t` to make the graph tangible and stir the scenes. (Physics
+                        // scenes P3/P4a/b/c + fields + emitters.)
                         WinitKey::Character(s) if s.as_str() == "1" => {
                             self.orrery.load_demo_scene();
                             self.request_redraw();
@@ -292,6 +293,11 @@ impl ApplicationHandler for App {
                         // `9` loads the whirlpool: a vortex force-field swirling loose balls. (Fields.)
                         WinitKey::Character(s) if s.as_str() == "9" => {
                             self.orrery.load_whirlpool();
+                            self.request_redraw();
+                        },
+                        // `f` loads the fountain: an emitter spraying droplets up into a basin. (Emitters.)
+                        WinitKey::Character(s) if s.as_str() == "f" => {
+                            self.orrery.load_fountain();
                             self.request_redraw();
                         },
                         WinitKey::Character(s) if s.as_str() == "0" => {

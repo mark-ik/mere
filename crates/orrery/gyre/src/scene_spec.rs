@@ -144,6 +144,27 @@ pub enum SceneField {
     Vortex { center: (f32, f32), strength: f32, inward: f32 },
 }
 
+/// A continuous body spawner: emits dynamic scene bodies over time (a fountain, rain, a sand
+/// stream), reaping each after `lifetime_secs` so the live count stays bounded. The "scene is alive
+/// over time" capability beyond one-shot placement; keeps the actor ticking while present. Added via
+/// `add_emitter`. (Physics scenes — emitters.)
+#[derive(Clone, Debug)]
+pub struct SceneEmitter {
+    pub collider: NodeCollider,
+    pub position: (f32, f32),
+    /// +/- deterministic random spread on the spawn position.
+    pub position_jitter: (f32, f32),
+    pub velocity: (f32, f32),
+    /// +/- deterministic random spread on the spawn velocity.
+    pub velocity_jitter: (f32, f32),
+    /// Bodies emitted per second.
+    pub rate_per_sec: f32,
+    /// Seconds before an emitted body is reaped.
+    pub lifetime_secs: f32,
+    /// Cap on this emitter's live bodies (a per-emitter budget atop the global scene-body cap).
+    pub max_alive: usize,
+}
+
 /// A declarative physics scene the orrery's world can load: a set of bodies, the world gravity,
 /// whether the graph collides with it by default, whether it is a perpetual (never-settling)
 /// backdrop, and the joints binding its bodies. Loading one

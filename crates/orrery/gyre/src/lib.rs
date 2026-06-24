@@ -39,7 +39,7 @@
 
 #![doc(html_root_url = "https://docs.rs/gyre/0.0.1")]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use euclid::default::{Box2D, Point2D};
 use kernel::graph::{Graph, NodeKey};
@@ -73,8 +73,8 @@ pub use fluid::{Basin, Fluid, FluidContact, FluidParams};
 /// code; the growing catalog lives here to keep `lib.rs` under the size ceiling.
 pub mod scenes;
 pub use scenes::{
-    chain_scene, domino_scene, drift_scene, drop_bowl_scene, funnel_scene, galton_scene,
-    pyramid_scene, whirlpool_scene,
+    chain_scene, domino_scene, drift_scene, drop_bowl_scene, fountain_scene, funnel_scene,
+    galton_scene, pyramid_scene, whirlpool_scene,
 };
 
 /// The declarative scene **format**: the data types a [`SceneSpec`] is built from (bodies,
@@ -82,8 +82,8 @@ pub use scenes::{
 /// simulation core. (Physics scenes P4b.)
 mod scene_spec;
 pub use scene_spec::{
-    JointMotorSpec, SceneBodyId, SceneBodySpec, SceneBodyType, SceneField, SceneJoint, SceneJointSpec,
-    SceneSpec,
+    JointMotorSpec, SceneBodyId, SceneBodySpec, SceneBodyType, SceneEmitter, SceneField, SceneJoint,
+    SceneJointSpec, SceneSpec,
 };
 
 /// Scene-geometry queries for the orrery canvas: edge geometry, edge picking,
@@ -261,6 +261,36 @@ pub struct ForceContext<'a> {
     pub edges: &'a [(NodeKey, NodeKey)],
 }
 
+/// A live emitter: its spec plus the per-tick spawn accumulator, a deterministic jitter RNG, and the
+/// ids+ages of the bodies it has spawned (a FIFO so the oldest reap first). (Physics scenes —
+/// emitters.)
+struct LiveEmitter {
+    spec: SceneEmitter,
+    accumulator: f32,
+    rng: u32,
+    spawned: VecDeque<(SceneBodyId, f32)>,
+}
+
+/// xorshift32 step — a tiny deterministic PRNG for emitter jitter (no `rand` dep, reproducible
+/// headless). (Physics scenes — emitters.)
+fn xorshift(state: &mut u32) -> u32 {
+    let mut x = *state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    x
+}
+
+/// A deterministic jitter in `[-amount, amount]`.
+fn jitter(state: &mut u32, amount: f32) -> f32 {
+    if amount == 0.0 {
+        return 0.0;
+    }
+    let unit = xorshift(state) as f32 / u32::MAX as f32; // [0, 1]
+    (unit * 2.0 - 1.0) * amount
+}
+
 /// One rapier world + bookkeeping. The host owns one of these per
 /// graph; gyre stays pure (no global state, no static handles).
 pub struct Simulation {
@@ -311,6 +341,9 @@ pub struct Simulation {
     /// A continuous force-field over the scene's dynamic bodies (a whirlpool / well), if any. Keeps
     /// the actor ticking while set; cleared by [`Self::clear_scene`]. (Physics scenes P4 fields.)
     scene_field: Option<SceneField>,
+    /// Continuous body emitters (fountains / streams). Stepped each tick: spawn by rate, reap by
+    /// age. Keep the actor ticking while present. (Physics scenes — emitters.)
+    emitters: Vec<LiveEmitter>,
 }
 
 impl Default for Simulation {
@@ -352,6 +385,7 @@ impl Simulation {
             fluid: None,
             nodes_tangible: false,
             scene_field: None,
+            emitters: Vec::new(),
         }
     }
 
@@ -728,6 +762,7 @@ impl Simulation {
         self.scene_bodies.clear();
         self.scene_perpetual = false;
         self.scene_field = None;
+        self.emitters.clear();
     }
 
     /// Iterate every scene body as a paintable [`SceneBodyView`] (id, position, rotation, shape)
@@ -796,7 +831,72 @@ impl Simulation {
     /// Whether the world has live, self-driving motion the physics actor must keep ticking for even
     /// at rest: a perpetual backdrop, a fluid pool, or a force-field. (Physics scenes P4.)
     pub fn wants_continuous_tick(&self) -> bool {
-        self.scene_perpetual || self.fluid.is_some() || self.scene_field.is_some()
+        self.scene_perpetual
+            || self.fluid.is_some()
+            || self.scene_field.is_some()
+            || !self.emitters.is_empty()
+    }
+
+    /// Add a continuous body emitter (a fountain / stream). Seeded deterministically. (Emitters.)
+    pub fn add_emitter(&mut self, spec: SceneEmitter) {
+        let seed = 0x9E3779B9u32 ^ (self.emitters.len() as u32 + 1).wrapping_mul(0x85EBCA6B);
+        self.emitters.push(LiveEmitter {
+            spec,
+            accumulator: 0.0,
+            rng: seed | 1,
+            spawned: VecDeque::new(),
+        });
+    }
+
+    /// Remove every emitter and the bodies it spawned. (Emitters.)
+    pub fn clear_emitters(&mut self) {
+        let emitters = std::mem::take(&mut self.emitters);
+        for em in emitters {
+            for (id, _) in em.spawned {
+                self.remove_scene_body(id);
+            }
+        }
+    }
+
+    /// Number of active emitters. (Emitters.)
+    pub fn emitter_count(&self) -> usize {
+        self.emitters.len()
+    }
+
+    /// Step every emitter: age + reap its bodies past `lifetime_secs` (oldest first), then spawn by
+    /// `rate_per_sec`, capped by `max_alive` and the global [`SCENE_BODY_CAP`]. (Emitters.)
+    fn step_emitters(&mut self, dt: f32) {
+        if self.emitters.is_empty() {
+            return;
+        }
+        let mut emitters = std::mem::take(&mut self.emitters);
+        for em in &mut emitters {
+            for entry in em.spawned.iter_mut() {
+                entry.1 += dt;
+            }
+            while let Some(&(id, age)) = em.spawned.front() {
+                if age < em.spec.lifetime_secs {
+                    break;
+                }
+                self.remove_scene_body(id);
+                em.spawned.pop_front();
+            }
+            em.accumulator += em.spec.rate_per_sec * dt;
+            while em.accumulator >= 1.0
+                && em.spawned.len() < em.spec.max_alive
+                && self.scene_body_count() < SCENE_BODY_CAP
+            {
+                em.accumulator -= 1.0;
+                let px = em.spec.position.0 + jitter(&mut em.rng, em.spec.position_jitter.0);
+                let py = em.spec.position.1 + jitter(&mut em.rng, em.spec.position_jitter.1);
+                let vx = em.spec.velocity.0 + jitter(&mut em.rng, em.spec.velocity_jitter.0);
+                let vy = em.spec.velocity.1 + jitter(&mut em.rng, em.spec.velocity_jitter.1);
+                let id =
+                    self.add_scene_body(em.spec.collider.clone(), Point2D::new(px, py), (vx, vy));
+                em.spawned.push_back((id, 0.0));
+            }
+        }
+        self.emitters = emitters;
     }
 
     /// Iterate the live fluid particle positions (empty when no pool is loaded) — the render read.
@@ -1020,6 +1120,10 @@ impl Simulation {
             return;
         }
         self.parameters.dt = dt;
+
+        // Emitters spawn / reap scene bodies before the step, so fresh droplets are simulated this
+        // frame. (Physics scenes — emitters.)
+        self.step_emitters(dt);
 
         // rapier's `add_force` is a *persistent* force (it survives across
         // steps until reset), so clear last tick's force forces before this
@@ -1302,5 +1406,36 @@ mod scene_tests {
         // Clearing the scene drops the field too.
         sim.clear_scene();
         assert!(!sim.wants_continuous_tick(), "clearing the scene clears the field");
+    }
+
+    #[test]
+    fn emitter_spawns_then_reaps_to_a_bounded_count() {
+        use crate::SceneEmitter;
+        let mut sim = Simulation::new();
+        sim.add_emitter(SceneEmitter {
+            collider: NodeCollider::Ball { radius: 6.0 },
+            position: (0.0, 0.0),
+            position_jitter: (4.0, 4.0),
+            velocity: (0.0, -100.0),
+            velocity_jitter: (20.0, 20.0),
+            rate_per_sec: 30.0,
+            lifetime_secs: 0.5,
+            max_alive: 40,
+        });
+        assert_eq!(sim.emitter_count(), 1);
+        assert!(sim.wants_continuous_tick(), "an emitter keeps the actor ticking");
+
+        // After more than one lifetime, spawning (~30/s) and reaping (age > 0.5s) balance near
+        // rate*lifetime (~15) — a bounded steady count, not unbounded growth.
+        for _ in 0..90 {
+            sim.tick(1.0 / 60.0);
+        }
+        let steady = sim.scene_body_count();
+        assert!((6..=40).contains(&steady), "emitter holds a bounded steady count (was {steady})");
+
+        // Clearing the emitters removes the bodies it spawned.
+        sim.clear_emitters();
+        assert_eq!(sim.scene_body_count(), 0, "clearing emitters removes its bodies");
+        assert_eq!(sim.emitter_count(), 0);
     }
 }

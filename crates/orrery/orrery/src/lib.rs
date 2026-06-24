@@ -38,7 +38,7 @@ use gyre::{LayoutSnapshot, LayoutView};
 /// a scene by name without depending on `gyre` directly. (Physics scenes P4a.)
 pub use gyre::{
     NODE_BODY_DENSITY, NodeMaterial, SceneSpec, chain_scene, domino_scene, drift_scene,
-    drop_bowl_scene, funnel_scene, galton_scene, pyramid_scene, whirlpool_scene,
+    drop_bowl_scene, fountain_scene, funnel_scene, galton_scene, pyramid_scene, whirlpool_scene,
 };
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};
@@ -1350,6 +1350,24 @@ impl Orrery {
             strength: 90.0,
             inward: 30.0,
         }));
+        self.settle_physics(SETTLE_TICKS);
+    }
+
+    /// Load the demo fountain: a catch basin plus an upward emitter whose droplets spray up, arc,
+    /// and rain back down (ageing out so the jet is perpetual). The emitter keeps the actor ticking;
+    /// `clear_scene` (key `0`) drops both. (Physics scenes — emitters.)
+    pub fn load_fountain(&mut self) {
+        self.physics.load_scene(fountain_scene());
+        self.physics.add_emitter(gyre::SceneEmitter {
+            collider: gyre::NodeCollider::Ball { radius: 7.0 },
+            position: (0.0, 260.0),
+            position_jitter: (10.0, 0.0),
+            velocity: (0.0, -430.0),
+            velocity_jitter: (70.0, 40.0),
+            rate_per_sec: 45.0,
+            lifetime_secs: 2.2,
+            max_alive: 130,
+        });
         self.settle_physics(SETTLE_TICKS);
     }
 

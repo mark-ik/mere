@@ -230,6 +230,18 @@ pub fn whirlpool_scene() -> SceneSpec {
     SceneSpec { bodies, gravity: (0.0, 0.0), default_tangible: false, perpetual: false, joints: Vec::new() }
 }
 
+/// A fountain catch-basin: a wide fixed floor under gravity. The host pairs this with an upward
+/// `SceneEmitter` (added via `add_emitter`) whose droplets spray up, arc over, and rain back onto the
+/// floor before ageing out — a perpetual jet. The scene carries the basin; the emitter is the jet.
+/// (Physics scenes — emitters.)
+pub fn fountain_scene() -> SceneSpec {
+    let bodies = vec![
+        // Top face at y=300 (the half-300 slab spans [300, 900]); droplets land here and pile.
+        SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 600.0)).restitution(0.1),
+    ];
+    SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false, perpetual: false, joints: Vec::new() }
+}
+
 #[cfg(test)]
 mod tests {
     use euclid::default::Point2D;

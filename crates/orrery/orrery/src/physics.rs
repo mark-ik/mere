@@ -28,7 +28,7 @@ use armillary::{spawn, ActorHandle, Emitter, Wake};
 use euclid::default::Point2D;
 use gyre::{
     Basin, CouplingForce, FluidParams, LayoutSnapshot, LayoutView, NodeCollider, NodeMaterial,
-    SceneField, SceneSpec, Simulation,
+    SceneEmitter, SceneField, SceneSpec, Simulation,
 };
 use kernel::graph::NodeKey;
 
@@ -90,6 +90,10 @@ pub(crate) enum PhysicsCommand {
     ClearFluid,
     /// Set (or clear) the scene force-field (whirlpool / well). (Physics scenes P4 fields.)
     SetSceneField(Option<SceneField>),
+    /// Add a continuous body emitter (fountain / stream). (Physics scenes — emitters.)
+    AddEmitter(SceneEmitter),
+    /// Remove every emitter + its bodies. (Physics scenes — emitters.)
+    ClearEmitters,
 }
 
 /// One layout the actor produced: the positions plus whether it is still
@@ -317,6 +321,26 @@ impl Physics {
         }
     }
 
+    /// Add a continuous body emitter (fountain / stream). (Physics scenes — emitters.)
+    pub fn add_emitter(&mut self, spec: SceneEmitter) {
+        match self {
+            Physics::Inline(p) => p.sim.add_emitter(spec),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::AddEmitter(spec));
+            }
+        }
+    }
+
+    /// Remove every emitter + its bodies. (Physics scenes — emitters.)
+    pub fn clear_emitters(&mut self) {
+        match self {
+            Physics::Inline(p) => p.sim.clear_emitters(),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::ClearEmitters);
+            }
+        }
+    }
+
     /// Pin a node to a world position (a drag in progress).
     pub fn pin(&mut self, node: NodeKey, position: Point2D<f32>) {
         match self {
@@ -509,6 +533,8 @@ fn apply(
         }
         PhysicsCommand::ClearFluid => sim.clear_fluid(),
         PhysicsCommand::SetSceneField(field) => sim.set_scene_field(field),
+        PhysicsCommand::AddEmitter(spec) => sim.add_emitter(spec),
+        PhysicsCommand::ClearEmitters => sim.clear_emitters(),
     }
 }
 
