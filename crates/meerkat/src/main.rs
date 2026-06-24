@@ -595,6 +595,10 @@ struct Content {
     /// per-session overrides). `engine_available` gates routing on this, so a
     /// deactivated engine is never picked and spawns no actors. (engine-picker Phase 1.)
     engine_activation: engine_activation::EngineActivation,
+    /// The crawl actor's owner (relational-browse V2): a `>crawl` on a focused page
+    /// seeds a bounded crawl whose harvested link + metadata contributions drain back
+    /// each frame and apply to the focused graph. One crawl at a time.
+    crawl: crawl::CrawlSession,
 }
 
 /// The `session` subsystem: the session registry plus the active session's
@@ -1020,6 +1024,9 @@ impl Shell {
         let content_wake: armillary::Wake = Arc::new(move || {
             let _ = content_proxy.send_event(());
         });
+        // The crawl actor shares the content wake: its updates schedule the same frame
+        // drain that picks up content-actor updates. (Relational-browse V2.)
+        let crawl = crawl::CrawlSession::new(content_wake.clone());
         let mut constellation = Constellation::new(content_wake);
         constellation.set_cap(saved_settings.tab_cap);
         // Seed the actor pool's deactivated-engine set so a globally-disabled
@@ -1231,6 +1238,7 @@ impl Shell {
                     engine_activation: engine_activation::EngineActivation::new(
                         saved_settings.disabled_engines.clone(),
                     ),
+                    crawl,
                 },
                 session: Session {
                     manifests,

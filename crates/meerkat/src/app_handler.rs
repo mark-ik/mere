@@ -302,6 +302,25 @@ impl ApplicationHandler for Shell {
                 changed
             });
         }
+        // The crawl actor (relational-browse V2) harvests off the render path; drain its
+        // link + metadata contributions on this same wake and apply them to the crawl's
+        // graph, exactly as the content harvests above. (At one focused graph, a crawl
+        // seeded elsewhere awaits the multi-graph flip, like content contributions.)
+        let crawl_pairs = wc.shared.content.crawl.drain();
+        if !crawl_pairs.is_empty() {
+            let focused = wc.view.focused_graph;
+            graph_changed |= wc.orrery_mut().ingest_graph(|g| {
+                let mut changed = false;
+                for (gid, contribution) in &crawl_pairs {
+                    if *gid != focused {
+                        continue;
+                    }
+                    let outcome = linked_data::apply_contribution(g, contribution);
+                    changed |= outcome.nodes_created > 0 || outcome.edges_asserted > 0;
+                }
+                changed
+            });
+        }
         // P2P sync status (S5.0): the same wake also carries lane-status changes.
         // Fold the latest into the chrome chip (the host owns the mutation).
         //

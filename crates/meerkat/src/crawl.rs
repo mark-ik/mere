@@ -26,6 +26,10 @@ use tokio::runtime::Builder;
 use crate::fetch::Fetched;
 
 /// Which hosts a crawl may follow links into.
+// `SameHost` is the wired default (`CrawlPolicy::default`); `SameDomain` / `AnyHost`
+// are selectable scopes a crawl-scope UI / setting will pick (the policy is plumbed
+// for them — see `Frontier::in_scope` + tests).
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HostScope {
     /// Only the seed's exact host (`docs.example.com` stays on `docs.example.com`).
@@ -210,8 +214,8 @@ pub enum CrawlUpdate {
 /// own thread; a `Start` runs a bounded, polite crawl to completion, emitting each
 /// page's contributions and progress. Off the render path — it never blocks
 /// compositing or the per-tile content actors (that separation is the whole reason it
-/// is a distinct actor, not the sync per-tile one).
-#[allow(dead_code)] // host wiring (spawn it + route CrawlUpdate::Contribution to the graph) is the follow-on
+/// is a distinct actor, not the sync per-tile one). Owned by the host through
+/// [`CrawlSession`].
 pub fn spawn_crawl(wake: Wake) -> (ActorHandle<CrawlCommand>, Receiver<CrawlUpdate>) {
     spawn(wake, |commands, out: Emitter<CrawlUpdate>| {
         // The runtime is built on the actor thread (never moved across the boundary),
@@ -350,8 +354,9 @@ pub struct CrawlProgress {
 ///
 /// Host wiring (on the crawl wake): `for (gid, c) in crawl.drain() { orrery.ingest_graph(
 /// |g| apply_contribution(g, &c)) }` — identical to how `Constellation::drain`'s
-/// contributions are applied in `app_handler`.
-#[allow(dead_code)] // until the host Shell owns one + drains it (the final wiring step)
+/// contributions are applied in `app_handler`. The host (`SharedState::content`) owns
+/// one; `>crawl` on a focused page calls [`start`](Self::start), and `app_handler`
+/// drains it each frame.
 pub struct CrawlSession {
     handle: ActorHandle<CrawlCommand>,
     rx: Receiver<CrawlUpdate>,
@@ -360,7 +365,6 @@ pub struct CrawlSession {
     progress: CrawlProgress,
 }
 
-#[allow(dead_code)]
 impl CrawlSession {
     /// Spawn the crawl actor; `wake` notifies the host loop when updates arrive, so it
     /// drains on the next frame — exactly like the content / fetch wakes.
@@ -379,6 +383,7 @@ impl CrawlSession {
 
     /// Ask the crawl to stop. A no-op between crawls; mid-crawl cancellation is a
     /// follow-on, so today the bounded policy stops a running crawl on its own.
+    #[allow(dead_code)] // API for the stop-button follow-on; the bounded policy self-terminates today
     pub fn stop(&self) {
         self.handle.command(CrawlCommand::Stop);
     }
@@ -394,6 +399,7 @@ impl CrawlSession {
     }
 
     /// The latest crawl progress, for a host status surface.
+    #[allow(dead_code)] // API for the progress-chip follow-on (drain already keeps it current)
     pub fn progress(&self) -> &CrawlProgress {
         &self.progress
     }

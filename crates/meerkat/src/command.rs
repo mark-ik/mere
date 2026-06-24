@@ -86,11 +86,16 @@ pub enum Command {
     /// Export the focused graph as JSON-LD to a file (host action). The dormant
     /// inverse of the wired linked-data ingest; `linked_data::to_jsonld_string`.
     ExportGraph,
+    /// Crawl the focused page's link neighborhood into the graph (host action): seed
+    /// the crawl actor from the focused node's URL, bounded by a conservative default
+    /// policy (same-host, shallow). Each fetched page's links + metadata become graph
+    /// nodes. (Relational-browse V2; extraction lane.)
+    CrawlFocused,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 27] = [
+    pub const ALL: [Command; 28] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -118,6 +123,7 @@ impl Command {
         Command::RetractEdge,
         Command::CloseGraphPane,
         Command::ExportGraph,
+        Command::CrawlFocused,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -147,6 +153,7 @@ impl Command {
                 | Command::RetractEdge
                 | Command::CloseGraphPane
                 | Command::ExportGraph
+                | Command::CrawlFocused
         )
     }
 
@@ -167,7 +174,7 @@ impl Command {
             // Per-node gestures on the single focused node: its facets, its content
             // operation, its background-keep flag, its compat-view engine override.
             OpenNodeSettings | BackgroundNode | RetryFocusedContent | StopFocusedOperation
-            | PinFocusedOperation | ToggleCompatView => MenuScope::SingleNode,
+            | PinFocusedOperation | ToggleCompatView | CrawlFocused => MenuScope::SingleNode,
             // Navigation, app-level pane toggles, graph / pane ops, export — available in any
             // context (they target the focused node or the whole graph, not the selection).
             Back | Forward | Home | ConnectPeer | ToggleWorkbench | ToggleRoster | ToggleGloss
@@ -214,6 +221,7 @@ impl Command {
             Command::RetractEdge => "unrelate",
             Command::CloseGraphPane => "close_pane",
             Command::ExportGraph => "export_graph",
+            Command::CrawlFocused => "crawl",
         }
     }
 
@@ -257,6 +265,7 @@ impl Command {
             Command::RetractEdge => "Unrelate selected edge",
             Command::CloseGraphPane => "Close graph view (focused pane)",
             Command::ExportGraph => "Export graph (JSON-LD)",
+            Command::CrawlFocused => "Crawl focused page's links into the graph",
         }
     }
 }

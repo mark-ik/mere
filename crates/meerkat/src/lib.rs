@@ -692,7 +692,8 @@ impl Chrome {
             | Command::AssertEdge
             | Command::RetractEdge
             | Command::CloseGraphPane
-            | Command::ExportGraph => {
+            | Command::ExportGraph
+            | Command::CrawlFocused => {
                 // Host actions over the frame, orrery, workbench, or actor pool:
                 // record the intent; the host drains it and runs the matching
                 // method.

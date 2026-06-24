@@ -88,6 +88,33 @@ impl WindowCtx<'_> {
         self.view.request_redraw();
     }
 
+    /// Crawl the focused page's outbound-link neighborhood into the focused graph
+    /// (relational-browse V2): seed the crawl actor from the focused node's URL under a
+    /// conservative default policy (same-host, shallow). The actor fetches off the
+    /// render path; each page's links + metadata stream back as graph contributions the
+    /// frame drain applies ([`Self::drain_crawl`]). Returns a status note for the
+    /// omnibar echo.
+    pub(super) fn crawl_focused(&mut self) -> Option<String> {
+        let Some(member) = self.focused_member() else {
+            return Some("Select a node to crawl".to_string());
+        };
+        let url = self
+            .orrery()
+            .graph()
+            .get_node_by_id(member)
+            .map(|(_, n)| n.url().to_string())
+            .filter(|u| !u.is_empty());
+        let Some(url) = url else {
+            return Some("The focused node has no URL to crawl".to_string());
+        };
+        let graph = self.view.focused_graph;
+        self.shared
+            .content
+            .crawl
+            .start(&url, crate::crawl::CrawlPolicy::default(), graph);
+        Some(format!("Crawling {url} (same-host, shallow)…"))
+    }
+
     /// Execute a pending host action the palette queued: take it from the chrome
     /// and dispatch to the matching shell method. Returns a one-shot user-facing
     /// note for commands that want to report why they no-opped (the omnibar echoes
@@ -163,6 +190,9 @@ impl WindowCtx<'_> {
             Command::ExportGraph => {
                 note = Some(self.export_graph_jsonld());
             }
+            // Crawl the focused page's link neighborhood into the graph (V2). The crawl
+            // actor fetches off the render path; this only seeds it + reports a note.
+            Command::CrawlFocused => note = self.crawl_focused(),
             // Settings opens the pelt settings lane as a workbench tile (the consolidated
             // config surface), defaulting to the appearance page. (Settings lane P1.)
             Command::OpenSettings => self.open_settings_tile("pelt/appearance"),
