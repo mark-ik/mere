@@ -1,20 +1,32 @@
 # DocumentScript Network + Mod-Trust Hardening Plan
 
-**Status:** planning + executing 2026-06-23. Spun out of an adversarial multi-agent
-review (27 agents, 21 confirmed findings of 23 raised) of the DocumentScript
-`net.fetch` backend + mod-manifest auto-attach work landed this session (commits
-767e1fa net permission chain, 7ae9539 net.fetch backend, 2ad3117 content-type,
-plus the uncommitted mod-manifest plumbing). Sits over the now-complete
+**Status:** **substantially complete 2026-06-24** — the critical + DoS/integrity
+findings are fixed; `net.fetch` is off prototype-only and safely user-enablable.
+Spun out of an adversarial multi-agent review (27 agents, 21 confirmed findings of
+23 raised) of the DocumentScript `net.fetch` backend + mod-manifest auto-attach
+(commits 767e1fa net permission chain, 7ae9539 net.fetch backend, 2ad3117
+content-type, c2e3886 hardening pass 1, 2002cc4 E1, 87bed39 A6, b4a5da4 A5, 3424565
+tail-3 settings UI). Sits over the
 [document_script_substrate_plan](2026-06-21_document_script_substrate_plan.md) +
 [follow-ons](2026-06-23_document_script_followons_plan.md).
 
-**Headline.** The `net` capability as built is **"open internet *with the user's
-ambient cookies*"**: once granted (it defaults Deny), a script may fetch any URL,
-the user's logged-in session cookies are attached, and (because the host issues the
-request with no initiator origin) the cross-origin response is fully readable — a
-credentialed-SSRF + read-then-exfiltrate channel. Live exposure today is ~nil (net
-defaults Deny, no real mods exist), but this is the design gap to close **before
-`net` is ever user-enabled**. Treat `net.fetch` as prototype-only until §A lands.
+**Headline (resolved).** The `net` capability *was* "open internet with the user's
+ambient cookies" — a credentialed-SSRF + cross-origin-exfil channel. **Closed:**
+`net` is now **same-origin scoped** (E1, host-enforced before the backend), plus an
+SSRF/loopback block (A3), scheme allowlist (A4), a 30s timeout (A2), a streamed
+body-size cap (A5), a per-turn rate cap (A6), capability gating (default Deny), and
+per-mod least-privilege (B2 — `net` only if the manifest declares `Network`). A
+settings UI grants it per trusted script (tail 3). **Residual (refinements, tracked
+below):** a same-origin fetch still carries that origin's *own* cookies (the
+**uncredentialed** refinement, A1 step 1 — Mark's session-store domain); cross-origin
+`net` declarations for mods that need them; true non-blocking fiber suspension (E2,
+the actor-freeze — A2's timeout mitigates); mod install/approval + signing (B1/E3).
+
+Two raised findings were **refuted** (and so validate two choices): the origin
+matcher cannot be tricked into *over*-attaching (every divergence fails closed,
+granting nothing), and the `content-type` WIT addition is backward-compatible
+(`option<string>` is an additive record subtype in the Component Model — stale
+guests still instantiate).
 
 Two raised findings were **refuted** (and so validate two choices): the origin
 matcher cannot be tricked into *over*-attaching (every divergence fails closed,
