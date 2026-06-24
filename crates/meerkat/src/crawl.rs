@@ -19,6 +19,7 @@ use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
 use armillary::{ActorHandle, Emitter, Wake, spawn};
+use frame::GraphId;
 use linked_data::GraphContribution;
 use tokio::runtime::Builder;
 
@@ -328,6 +329,103 @@ async fn polite_wait(url: &str, delay: Duration, last: &mut HashMap<String, Inst
     last.insert(host, Instant::now());
 }
 
+// ---- the host's crawl owner ---------------------------------------------------
+
+/// Progress of the active (or last) crawl, for a host status surface (a chip, a log).
+#[derive(Clone, Debug, Default)]
+pub struct CrawlProgress {
+    /// Pages fetched so far.
+    pub fetched: usize,
+    /// The URL last processed, if any.
+    pub last_url: Option<String>,
+    /// Whether a crawl is still running (cleared once `Done` arrives).
+    pub running: bool,
+}
+
+/// The host's owner of the crawl actor — the crawl counterpart to `Constellation`'s
+/// ownership of content actors. It spawns the actor, starts a crawl into a target
+/// graph, drains its updates each frame into `(GraphId, GraphContribution)` pairs the
+/// host applies through the **same** `apply_contribution` path content harvests use,
+/// and tracks progress. One crawl at a time (V2).
+///
+/// Host wiring (on the crawl wake): `for (gid, c) in crawl.drain() { orrery.ingest_graph(
+/// |g| apply_contribution(g, &c)) }` — identical to how `Constellation::drain`'s
+/// contributions are applied in `app_handler`.
+#[allow(dead_code)] // until the host Shell owns one + drains it (the final wiring step)
+pub struct CrawlSession {
+    handle: ActorHandle<CrawlCommand>,
+    rx: Receiver<CrawlUpdate>,
+    /// The graph crawled contributions land in (the seed page's graph).
+    graph_id: Option<GraphId>,
+    progress: CrawlProgress,
+}
+
+#[allow(dead_code)]
+impl CrawlSession {
+    /// Spawn the crawl actor; `wake` notifies the host loop when updates arrive, so it
+    /// drains on the next frame — exactly like the content / fetch wakes.
+    pub fn new(wake: Wake) -> Self {
+        let (handle, rx) = spawn_crawl(wake);
+        Self { handle, rx, graph_id: None, progress: CrawlProgress::default() }
+    }
+
+    /// Start a bounded crawl from `seed` under `policy`; its contributions route to
+    /// `graph_id` (the seed page's graph). Supersedes any previous crawl's target.
+    pub fn start(&mut self, seed: &str, policy: CrawlPolicy, graph_id: GraphId) {
+        self.graph_id = Some(graph_id);
+        self.progress = CrawlProgress { fetched: 0, last_url: None, running: true };
+        self.handle.command(CrawlCommand::Start { seed: seed.to_string(), policy });
+    }
+
+    /// Ask the crawl to stop. A no-op between crawls; mid-crawl cancellation is a
+    /// follow-on, so today the bounded policy stops a running crawl on its own.
+    pub fn stop(&self) {
+        self.handle.command(CrawlCommand::Stop);
+    }
+
+    /// Drain pending crawl updates into the `(graph, contribution)` pairs the host
+    /// applies, folding progress in. Empty when nothing is pending.
+    pub fn drain(&mut self) -> Vec<(GraphId, GraphContribution)> {
+        let mut applied = Vec::new();
+        while let Ok(update) = self.rx.try_recv() {
+            fold_update(update, self.graph_id, &mut self.progress, &mut applied);
+        }
+        applied
+    }
+
+    /// The latest crawl progress, for a host status surface.
+    pub fn progress(&self) -> &CrawlProgress {
+        &self.progress
+    }
+}
+
+/// Fold one [`CrawlUpdate`] into the host's view: route a `Contribution` to the
+/// crawl's graph, track `Progress` / `Done`. A free function so the mapping is
+/// unit-testable without spawning the actor.
+fn fold_update(
+    update: CrawlUpdate,
+    graph_id: Option<GraphId>,
+    progress: &mut CrawlProgress,
+    applied: &mut Vec<(GraphId, GraphContribution)>,
+) {
+    match update {
+        CrawlUpdate::Contribution { contributions } => {
+            if let Some(gid) = graph_id {
+                applied.extend(contributions.into_iter().map(|c| (gid, c)));
+            }
+        },
+        CrawlUpdate::Progress { fetched, last_url } => {
+            progress.fetched = fetched;
+            progress.last_url = Some(last_url);
+            progress.running = true;
+        },
+        CrawlUpdate::Done { fetched } => {
+            progress.fetched = fetched;
+            progress.running = false;
+        },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -533,5 +631,45 @@ mod tests {
             |_| {},
         ));
         assert_eq!(total, 3, "the page cap stops the crawl at 3 fetches");
+    }
+
+    #[test]
+    fn fold_routes_contributions_to_the_graph_and_tracks_progress() {
+        let gid = GraphId::nil();
+        let mut progress = CrawlProgress::default();
+        let mut applied: Vec<(GraphId, GraphContribution)> = Vec::new();
+
+        fold_update(
+            CrawlUpdate::Progress { fetched: 2, last_url: "https://x.test/a".to_string() },
+            Some(gid),
+            &mut progress,
+            &mut applied,
+        );
+        assert_eq!(progress.fetched, 2);
+        assert_eq!(progress.last_url.as_deref(), Some("https://x.test/a"));
+        assert!(progress.running);
+
+        fold_update(
+            CrawlUpdate::Contribution { contributions: vec![GraphContribution::default()] },
+            Some(gid),
+            &mut progress,
+            &mut applied,
+        );
+        assert_eq!(applied.len(), 1, "the contribution routed to the crawl's graph");
+        assert_eq!(applied[0].0, gid);
+
+        fold_update(CrawlUpdate::Done { fetched: 3 }, Some(gid), &mut progress, &mut applied);
+        assert_eq!(progress.fetched, 3);
+        assert!(!progress.running, "Done clears the running flag");
+
+        // With no target graph set, a contribution has nowhere to route and is dropped.
+        let mut orphaned = Vec::new();
+        fold_update(
+            CrawlUpdate::Contribution { contributions: vec![GraphContribution::default()] },
+            None,
+            &mut progress,
+            &mut orphaned,
+        );
+        assert!(orphaned.is_empty());
     }
 }
