@@ -239,6 +239,13 @@ Reconnoitred the slot-in; the build is now mechanical, in slices:
   renders glyph runs through the `serval.scripted` lane (JS ran + the mutated DOM
   rendered), while the same page on the static lane paints none (the control proves the
   glyphs came from the JS). *(No external scripts, no providers yet — 2b / 2c.)*
+- **2026-06-23 (phase 2b)**: external `<script src>` works (`208b014` + serval `e20a5ce`).
+  A `ScriptFetcher` (pelt `ResourceFetcher` over the actor's blocking `ContentNetFetcher`)
+  feeds external scripts through the routing fetch (session jar + SSRF floors); serval's
+  new `ScriptedDocument::from_body` runs the host's already-fetched body and fetches only
+  the scripts (no document re-fetch). Deterministic test (mock fetcher → external-script
+  text renders). Next: 2c (cookie/storage providers light up `document.cookie` /
+  `localStorage`), then phase 3 (input→event bridge for interactivity).
 - **2b — external scripts.** *(built 2026-06-23)* Resolved the fetch-model gap with the
   actor's existing blocking fetch: a `ScriptFetcher` (pelt `ResourceFetcher` over
   `script::ContentNetFetcher`, which `block_on`s the routing fetch — so scripts ride the
