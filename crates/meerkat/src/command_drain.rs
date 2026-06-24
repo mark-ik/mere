@@ -190,6 +190,11 @@ impl WindowCtx<'_> {
             Command::ExportGraph => {
                 note = Some(self.export_graph_jsonld());
             }
+            // Freeze the focused graph into a content-addressed engram in private memory
+            // (the Alembic spine). Reports the engram id + node count.
+            Command::SaveGraphEngram => {
+                note = Some(self.save_graph_engram());
+            }
             // Crawl the focused page's link neighborhood into the graph (V2). The crawl
             // actor fetches off the render path; this only seeds it + reports a note.
             Command::CrawlFocused => note = self.crawl_focused(),

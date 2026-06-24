@@ -29,3 +29,6 @@ euclid = "0.22"
 # async calls to completion (pollster), mirroring eidetic's own tests.
 async-trait = "0.1"
 pollster = "0.4"
+# The real fjall-backed Store, for the graph-engram persistence test that proves
+# an engram survives a store close + reopen (the "survives restart" condition).
+eidetic-fjall.workspace = true

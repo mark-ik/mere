@@ -36,4 +36,38 @@ impl WindowCtx<'_> {
             Err(err) => format!("Export failed: {err}"),
         }
     }
+
+    /// Freeze the focused graph into a content-addressed graph engram in the
+    /// private eidetic store — the Alembic memory spine's "Save as graph engram".
+    /// Redacts private / heavy fields by default (thumbnails, favicons, session
+    /// state); returns a one-line note (engram id + node count, or the error) for
+    /// the omnibar. fjall resolves synchronously, so the `block_on` does not stall
+    /// the UI — the same shape as the deleted-node tombstone path.
+    pub(super) fn save_graph_engram(&mut self) -> String {
+        use session_runtime::graph_engram::{RedactionPolicy, save_graph_snapshot_engram};
+
+        // Snapshot first (ends the borrow of the live graph) so the store borrow
+        // that follows does not conflict.
+        let snapshot = self.orrery().graph().to_snapshot();
+        let node_count = snapshot.nodes.len();
+        let created_at = eidetic::Timestamp(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0),
+        );
+
+        let Some(store) = self.shared.content.store.as_mut() else {
+            return "Save engram failed: no private memory store is open".to_string();
+        };
+        match pollster::block_on(save_graph_snapshot_engram(
+            store,
+            snapshot,
+            RedactionPolicy::default(),
+            created_at,
+        )) {
+            Ok(id) => format!("Saved graph engram {id} ({node_count} node(s))"),
+            Err(err) => format!("Save engram failed: {err}"),
+        }
+    }
 }

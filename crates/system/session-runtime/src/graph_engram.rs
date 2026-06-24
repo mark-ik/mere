@@ -144,12 +144,26 @@ pub async fn save_graph_engram(
     redaction: RedactionPolicy,
     created_at: Timestamp,
 ) -> Result<ManifestId> {
-    let mut snapshot = graph.to_snapshot();
+    save_graph_snapshot_engram(store, graph.to_snapshot(), redaction, created_at).await
+}
+
+/// As [`save_graph_engram`], but from an already-materialized [`GraphSnapshot`].
+///
+/// The primitive a host uses when it has snapshotted the graph already — taking
+/// the snapshot ends the borrow of the live graph, so a `&mut Store` borrowed
+/// from the same owner can follow without a conflict. Also the entry the
+/// Timeline's "distil this past state" reuses (slice E). `snapshot` is redacted
+/// in place per `redaction`.
+pub async fn save_graph_snapshot_engram(
+    store: &mut dyn Store,
+    mut snapshot: GraphSnapshot,
+    redaction: RedactionPolicy,
+    created_at: Timestamp,
+) -> Result<ManifestId> {
     redaction.apply(&mut snapshot);
-    let payload = GraphEngram(snapshot);
     save_typed(
         store,
-        &payload,
+        &GraphEngram(snapshot),
         Vec::<BlobSource>::new(),
         PrivacyClass::LocalOnly,
         graph_engram_provenance(created_at),
@@ -317,6 +331,42 @@ mod tests {
                 "tagged with the graph-snapshot schema",
             );
         });
+    }
+
+    #[test]
+    fn engram_survives_a_store_close_and_reopen() {
+        // The faithful "survives restart" proof: save through a real fjall store,
+        // drop it (shutdown), reopen at the same path, and thaw the same graph.
+        use eidetic_fjall::FjallStore;
+
+        let dir = std::env::temp_dir().join("mere_graph_engram_fjall_reopen");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let id = pollster::block_on(async {
+            let mut store = FjallStore::open(&dir).expect("open store");
+            save_graph_engram(
+                &mut store,
+                &sample_graph(),
+                RedactionPolicy::default(),
+                Timestamp(1_700_000_000_000),
+            )
+            .await
+            .expect("save")
+            // `store` drops here — the keyspace closes, as on shutdown.
+        });
+
+        let opened = pollster::block_on(async {
+            let mut store = FjallStore::open(&dir).expect("reopen store");
+            open_engram_as_session(&mut store, id).await.expect("load ok")
+        })
+        .expect("the engram is present after a store reopen");
+        assert_eq!(
+            opened.nodes().count(),
+            2,
+            "the frozen graph survives a store close + reopen (persisted to disk)",
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

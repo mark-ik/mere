@@ -86,6 +86,10 @@ pub enum Command {
     /// Export the focused graph as JSON-LD to a file (host action). The dormant
     /// inverse of the wired linked-data ingest; `linked_data::to_jsonld_string`.
     ExportGraph,
+    /// Freeze the focused graph into a content-addressed graph engram in the private
+    /// eidetic store (host action) — the Alembic memory spine's "Save as graph engram".
+    /// Redacts private / heavy fields by default; `session_runtime::graph_engram`.
+    SaveGraphEngram,
     /// Crawl the focused page's link neighborhood into the graph (host action): seed
     /// the crawl actor from the focused node's URL, bounded by a conservative default
     /// policy (same-host, shallow). Each fetched page's links + metadata become graph
@@ -95,7 +99,7 @@ pub enum Command {
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 28] = [
+    pub const ALL: [Command; 29] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -123,6 +127,7 @@ impl Command {
         Command::RetractEdge,
         Command::CloseGraphPane,
         Command::ExportGraph,
+        Command::SaveGraphEngram,
         Command::CrawlFocused,
     ];
 
@@ -153,6 +158,7 @@ impl Command {
                 | Command::RetractEdge
                 | Command::CloseGraphPane
                 | Command::ExportGraph
+                | Command::SaveGraphEngram
                 | Command::CrawlFocused
         )
     }
@@ -179,7 +185,8 @@ impl Command {
             // context (they target the focused node or the whole graph, not the selection).
             Back | Forward | Home | ConnectPeer | ToggleWorkbench | ToggleRoster | ToggleGloss
             | ToggleApparatus | ToggleComms | ToggleInspector | ToggleTrail | ToggleSteward
-            | ShowAllEdges | ToggleProjection | OpenSettings | CloseGraphPane | ExportGraph => {
+            | ShowAllEdges | ToggleProjection | OpenSettings | CloseGraphPane | ExportGraph
+            | SaveGraphEngram => {
                 MenuScope::Always
             }
         }
@@ -221,6 +228,7 @@ impl Command {
             Command::RetractEdge => "unrelate",
             Command::CloseGraphPane => "close_pane",
             Command::ExportGraph => "export_graph",
+            Command::SaveGraphEngram => "save_graph_engram",
             Command::CrawlFocused => "crawl",
         }
     }
@@ -265,6 +273,7 @@ impl Command {
             Command::RetractEdge => "Unrelate selected edge",
             Command::CloseGraphPane => "Close graph view (focused pane)",
             Command::ExportGraph => "Export graph (JSON-LD)",
+            Command::SaveGraphEngram => "Save graph as engram",
             Command::CrawlFocused => "Crawl focused page's links into the graph",
         }
     }
