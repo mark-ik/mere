@@ -27,7 +27,7 @@ use super::build::{
     background_cmds, field_overlay, marquee_rect_cmds, selected_edge_overlay, set_class, set_style,
     NODE_SHEET,
 };
-use super::{NodeShape, NodeState, Orrery, NODE_HALF, PAN_DECAY};
+use super::{AmbientSim, NodeShape, NodeState, Orrery, NODE_HALF, PAN_DECAY};
 
 impl Orrery {
     /// Advance one frame at viewport `(w, h)` and return the composited content
@@ -43,18 +43,11 @@ impl Orrery {
         // into the read model, and learn whether the layout is still settling.
         // Everything below reprojects from the view — never the rapier world.
         let settling = self.physics.advance_frame(&mut self.view);
-        // Step the ambient backdrop sim (Game of Life) a few generations a second: every Nth frame,
-        // not every frame, so it evolves at a watchable pace, reseeding a thinning field so the
-        // backdrop stays alive. (Physics scenes P5.)
-        const AMBIENT_FRAMES_PER_GEN: u32 = 7;
-        const AMBIENT_RESEED_GENS: u32 = 600;
-        if self.ambient.is_some() {
-            self.ambient_frame = self.ambient_frame.wrapping_add(1);
-            if self.ambient_frame % AMBIENT_FRAMES_PER_GEN == 0 {
-                if let Some(gol) = self.ambient.as_mut() {
-                    gol.step_living(AMBIENT_RESEED_GENS);
-                }
-            }
+        // Advance the ambient backdrop sim (it paces itself internally - GoL accumulates toward its
+        // generation interval, a continuous sim integrates). A fixed ~frame dt is fine for a
+        // backdrop. (Physics scenes P5.)
+        if let Some(sim) = self.ambient.as_mut() {
+            sim.advance(1.0 / 60.0);
         }
         // A non-gyre layout strategy overrides the physics snapshot: write its buffered
         // positions into the view before anything reads it. (Layout picker.)
@@ -313,39 +306,14 @@ impl Orrery {
         // scene orbs, then the underlay edges + demoted rects, then the on-screen node
         // DOM, then any marquee on top.
         let bg_cmds = background_cmds(w, h, self.backdrop);
-        // Ambient backdrop: the Game of Life grid as the bottom layer (above the bg fill, below the
-        // scene), the resolution-fixed grid stretched across the viewport. Live cells are merged into
-        // per-row runs (one rect per run) to keep the command count low, painted in a muted low-alpha
-        // green so it reads as atmosphere behind the graph, not foreground. (Physics scenes P5.)
-        let mut ambient_cmds: Vec<PaintCmd> = Vec::new();
-        if let Some(gol) = self.ambient.as_ref() {
-            let (gw, gh) = (gol.width(), gol.height());
-            if gw > 0 && gh > 0 {
-                let cw = w as f32 / gw as f32;
-                let ch = h as f32 / gh as f32;
-                let color = ColorF::new(0.32, 0.62, 0.45, 0.16);
-                for row in 0..gh {
-                    let mut col = 0;
-                    while col < gw {
-                        if !gol.cell(col, row) {
-                            col += 1;
-                            continue;
-                        }
-                        let start = col;
-                        while col < gw && gol.cell(col, row) {
-                            col += 1;
-                        }
-                        ambient_cmds.push(PaintCmd::DrawRect(RectItem {
-                            placement: CommonPlacement::new(LayoutRect::new(
-                                LayoutPoint::new(start as f32 * cw, row as f32 * ch),
-                                LayoutPoint::new(col as f32 * cw, (row + 1) as f32 * ch),
-                            )),
-                            color,
-                        }));
-                    }
-                }
-            }
-        }
+        // Ambient backdrop: the sim painted as the bottom layer (above the bg fill, below the scene),
+        // in its tincture, stretched across the viewport. The sim owns its look (GoL = run-merged
+        // cell rects; a continuous sim = dots). (Physics scenes P5.)
+        let ambient_cmds: Vec<PaintCmd> = self
+            .ambient
+            .as_ref()
+            .map(|sim| sim.paint(w as f32, h as f32, self.ambient_tincture))
+            .unwrap_or_default();
         // Living backdrop: drifting scene-decoration bodies as soft orbs behind the graph
         // (under the edges), projected through the camera so they recline with the iso
         // ground. (Physics scenes P1.)
