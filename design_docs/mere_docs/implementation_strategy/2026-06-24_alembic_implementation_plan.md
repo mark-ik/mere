@@ -159,7 +159,7 @@ All seven resolved with Mark 2026-06-24 (his calls in **bold ✓**).
 | 3 | Settings placement | **Mark asked "Apparatus or Steward? sync or async?" → answered:** Athanor splits by the §8 axis — its **config knobs go in Apparatus** (the at-rest plane: dedupe policy, eviction thresholds, steady-heat schedule), its **live passes surface in Steward** (the in-flight plane), its faults in Apparatus diagnostics. No new pane. It runs **async** — an armillary actor off the UI thread, never synchronous on render. Primary settings home = **Apparatus**. |
 | 6 | Timeline surface | **✓ Mark: agreed — an orrery scrubber / time-axis**, not a docked pane (slice E). |
 | 5 | Event-log shape | **Scoped for implementation (slice E expanded above, 2026-06-24).** A kernel `GraphMutation` event type building on `NodeAuditEventKind`; an append-only log mirroring the proven tessera/cable `LogStore`; checkpoint-interleaved replay (cadence every N mutations or idle/close); the view-intent promoted to a **parallel composed stream**; undo/redo on the same substrate; Timeline = orrery scrubber (#6). E1 type+store → E2 record+checkpoint → E3 replay+scrubber → E4 undo/redo → E5 Timeline-to-engram. |
-| 4 | The lora lane | **Mark: spin off a local-models + harness design doc.** A dedicated doc for the local-models lane (dataset build, LoRA train/apply, the harness / Distillery-as-trainer), referencing the geist models brief. **Spinoff doc to write.** |
+| 4 | The lora lane | **Spun off 2026-06-24:** [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md). The runtime + harness layer the geist brief and the tier-1 research defer: binds the LLM/adapter runtime seam (extend `intel/embed`'s `EmbeddingProvider` to `InferenceProvider` + `AdapterLoader`; Burn-wgpu wasm-reachable, native runtimes behind the seam), the armillary actor harness, the wasm/native split, and a no-training first slice. Architecture stays in the geist brief; marketplace + governance owned elsewhere. |
 
 ## 4. Slice A detail (the first build)
 
@@ -187,6 +187,12 @@ Verification: a unit/integration test that `save → (drop) → open` round-trip
 
 ## Progress
 
+- 2026-06-24: **Decision #4 spun off** to [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md)
+  (the local-models runtime + harness lane), DOC_README indexed. Code-grounded: `intel/embed`'s
+  `EmbeddingProvider` is the live seam precedent the deferred LLM/adapter runtime extends; eidetic
+  `ModelManifest` storage + Burn 0.21 (`aether`/`intel`) + the armillary actor framework are the
+  substrate; the gap is the runtime binding + harness + wasm/native split, which the brief scopes
+  without re-deriving the geist architecture or the compute marketplace.
 - 2026-06-24: **Slice B done + event-log (#5) scoped for implementation.** Slice B landed in two
   commits: B1 (`b029d83`) the Alembic pane (Recent / Saved / Engrams, headed-verified listing a real
   engram), B2 (`7c6e5f4`) a clickable engram row thaws into an Orrery pane beside (headed-verified via
