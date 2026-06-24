@@ -197,13 +197,23 @@ owns a current-thread tokio runtime and drives `run_crawl` (pop → per-host
 `POLITE_DELAY` → `fetch_page` → `crawl_page`: V1 `harvest_links` + page metadata,
 enqueue in-scope links → emit `CrawlUpdate::Contribution`/`Progress`/`Done`). The loop
 is generic over the fetcher, so it is tested against a canned site (depth + page caps),
-14 tests, no network. **Remaining for V2**: the **host wiring** (spawn the actor, route
-`CrawlUpdate::Contribution` to the graph apply, surface progress, a seed/scope UI) —
-`spawn_crawl` is `#[allow(dead_code)]` until then. **Deferred** (named, not silently
-dropped): **robots.txt** + descriptive UA, mid-crawl cancellation (a side-channel flag;
-today `max_pages` bounds it), bounded cross-host concurrency, and seed sourcing
-(independent-index API / sitemaps, never a live SERP). The second-hop cross-link
-*relations* fall out of the graph as the frontier revisits shared targets.
+14 tests, no network.
+
+**Host wiring done 2026-06-24** (mere `11a9855`): the crawl is **drivable end to end**.
+A `CrawlSession` (host-owned, in `SharedState::content`, sharing the content wake) wraps
+the actor; the `>crawl` command (`Command::CrawlFocused`) seeds it from the focused
+page's URL under `CrawlPolicy::default()` (same-host, shallow); `app_handler` drains the
+session each frame and applies its `(GraphId, GraphContribution)` pairs through the same
+`apply_contribution` path the content harvest uses. So a `>crawl` on an open page makes
+its same-host neighborhood fill the graph, one polite fetch at a time, off the render
+path. (Default-build clean; 15 crawl tests; standalone-compile verified.) **Deferred**
+(named, not silently dropped): **robots.txt** + descriptive UA, mid-crawl cancellation (a
+side-channel flag; today `max_pages` bounds it, and `CrawlSession::stop` is plumbed),
+bounded cross-host concurrency, a **progress chip** (`CrawlSession::progress` is ready),
+a **scope/depth UI** (the default policy is hardcoded; `SameDomain`/`AnyHost` + depth are
+plumbed for a settings surface), and seed sourcing (independent-index API / sitemaps,
+never a live SERP). The second-hop cross-link *relations* fall out of the graph as the
+frontier revisits shared targets.
 
 ### V3 — relational capture into eidetic (the LoRA-readiness lever)
 
