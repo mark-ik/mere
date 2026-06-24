@@ -524,6 +524,20 @@ impl Constellation {
         });
     }
 
+    /// Materialize `member`'s outbound-link neighborhood as graph nodes +
+    /// `Semantic:Hyperlink` edges (relational-browse V1): the host invokes this to
+    /// place the open page's link neighborhood on the canvas. The actor parses the
+    /// already-fetched body and emits a `Contribution` — render-free, no target fetch,
+    /// no new actor. No-op for a node that is not active. (Extraction lane, single-hop.)
+    pub fn materialize_links(&self, member: GraphMemberId) {
+        let Some(activation) = self.active.get(&member) else {
+            return;
+        };
+        activation.handle.command(ContentCommand::MaterializeLinks {
+            viewport_gen: activation.gens.viewport,
+        });
+    }
+
     /// Attach a DocumentScript at `component_path` to `member`'s page, under the
     /// host-resolved `log` / `document` capability permissions (P2.5). The actor
     /// mirrors the page into a mutable `ScriptedDom` the script edits and re-renders

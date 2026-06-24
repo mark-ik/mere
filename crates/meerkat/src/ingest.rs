@@ -20,8 +20,8 @@
 
 use kernel::graph::Graph;
 use linked_data::{
-    ContextCache, GraphContribution, NodeContribution, apply_contribution, from_html_with_contexts,
-    from_jsonld_with_contexts,
+    ContextCache, EdgeContribution, GraphContribution, NodeContribution, apply_contribution,
+    from_html_with_contexts, from_jsonld_with_contexts,
 };
 use serval_static_dom::StaticDocument;
 
@@ -117,6 +117,86 @@ pub fn contribution_from_page_extract(
         }],
         edges: Vec::new(),
     })
+}
+
+/// Materialize the seed page's **outbound-link neighborhood** as a graph
+/// contribution: every `<a href>` becomes a target node (`id` = resolved URL,
+/// `title` = anchor text), joined to the seed by a `Semantic:Hyperlink` edge. The
+/// single-hop link-graph materializer (relational-browse V1) — a render-free parse
+/// of an already-fetched body, with **no target fetch and no new actor**. `None`
+/// when the page has no outbound links.
+pub fn harvest_links(seed_url: &str, body: &str) -> Option<GraphContribution> {
+    let links = serval_extract::extract_links(&StaticDocument::parse(body));
+    links_contribution(seed_url, links)
+}
+
+/// The shared seed-links → contribution mapping behind both the static path
+/// ([`harvest_links`]) and the post-JS path (feed a `ScriptedDocument::extract()`'s
+/// links here for an SPA's outbound graph). Targets dedup by resolved URL (first
+/// non-empty anchor text wins the title); non-navigable hrefs (empty, `#`-fragment,
+/// `javascript:` / `mailto:` / `tel:` / `data:` / `blob:` / `about:`) are skipped.
+/// The seed node is included so the edges are self-contained. `None` when no outbound
+/// target remains.
+pub fn links_contribution(
+    seed_url: &str,
+    links: Vec<serval_extract::Link>,
+) -> Option<GraphContribution> {
+    let predicate = kernel::graph::predicate_iri(kernel::graph::SemanticSubKind::Hyperlink);
+    // Dedup by resolved URL, keeping the first non-empty anchor text. BTreeMap for a
+    // deterministic node/edge order (tests, and a stable graph apply).
+    let mut targets: std::collections::BTreeMap<String, Option<String>> =
+        std::collections::BTreeMap::new();
+    for link in links {
+        let href = link.href.trim();
+        if href.is_empty() || href.starts_with('#') || is_non_navigable(href) {
+            continue;
+        }
+        let resolved = crate::nav::resolve_href(seed_url, href);
+        if resolved == seed_url {
+            continue; // a self-link is not an outbound edge
+        }
+        let title = {
+            let t = link.text.trim();
+            (!t.is_empty()).then(|| t.to_string())
+        };
+        targets.entry(resolved).or_insert(title);
+    }
+    if targets.is_empty() {
+        return None;
+    }
+    let mut nodes = Vec::with_capacity(targets.len() + 1);
+    let mut edges = Vec::with_capacity(targets.len());
+    // The seed node first, so the edges' subject resolves in a self-contained apply.
+    nodes.push(NodeContribution {
+        id: seed_url.to_string(),
+        types: Vec::new(),
+        title: None,
+        tags: Vec::new(),
+        properties: Vec::new(),
+    });
+    for (url, title) in targets {
+        edges.push(EdgeContribution {
+            subject: seed_url.to_string(),
+            predicate: predicate.to_string(),
+            object: url.clone(),
+        });
+        nodes.push(NodeContribution {
+            id: url,
+            types: Vec::new(),
+            title,
+            tags: Vec::new(),
+            properties: Vec::new(),
+        });
+    }
+    Some(GraphContribution { nodes, edges })
+}
+
+/// URL schemes that are not navigable crawl targets (action / contact / data URIs).
+fn is_non_navigable(href: &str) -> bool {
+    let lower = href.to_ascii_lowercase();
+    ["javascript:", "mailto:", "tel:", "data:", "blob:", "about:"]
+        .iter()
+        .any(|scheme| lower.starts_with(scheme))
 }
 
 /// Harvest any linked data in `body` into `graph` directly, returning whether the
@@ -219,6 +299,45 @@ mod tests {
             .contains(&("https://ogp.me/ns#image".to_string(), "https://x.test/og.png".to_string())));
         // Links are NOT contributed as edges here (the crawl frontier owns the link graph).
         assert!(c.edges.is_empty(), "no link edges from a single visit");
+    }
+
+    #[test]
+    fn harvest_links_materializes_the_outbound_neighborhood() {
+        let body = "<body>\
+            <a href='/one'>First</a>\
+            <a href='https://other.test/two'>Second</a>\
+            <a href='/one'>duplicate of first</a>\
+            <a href='#section'>in-page anchor</a>\
+            <a href='mailto:x@y.z'>email</a>\
+            <a href='javascript:void(0)'>script</a>\
+         </body>";
+        let c = harvest_links("https://seed.test/page", body).expect("outbound links");
+        // Two distinct outbound targets: the dup collapses; fragment / mailto / js skip.
+        assert_eq!(c.edges.len(), 2, "two outbound edges: {:?}", c.edges);
+        assert_eq!(c.nodes.len(), 3, "seed node + two target nodes");
+        assert!(c.nodes.iter().any(|n| n.id == "https://seed.test/page"), "seed node present");
+        assert!(
+            c.nodes.iter().any(|n| n.id == "https://seed.test/one"
+                && n.title.as_deref() == Some("First")),
+            "relative href resolved against seed, first anchor text kept: {:?}",
+            c.nodes,
+        );
+        assert!(c.nodes.iter().any(|n| n.id == "https://other.test/two"));
+        assert!(
+            c.edges.iter().all(|e| e.subject == "https://seed.test/page"
+                && e.predicate == "https://mere.computer/ns/rel#hyperlink"),
+            "every edge is seed —Hyperlink→ target: {:?}",
+            c.edges,
+        );
+        assert!(c.edges.iter().any(|e| e.object == "https://seed.test/one"));
+        assert!(c.edges.iter().any(|e| e.object == "https://other.test/two"));
+    }
+
+    #[test]
+    fn harvest_links_is_none_without_outbound_links() {
+        assert!(harvest_links("https://seed.test/", "<body><p>no links here</p></body>").is_none());
+        // A page whose only links are in-page anchors has no outbound neighborhood.
+        assert!(harvest_links("https://seed.test/", "<body><a href='#top'>top</a></body>").is_none());
     }
 
     #[test]

@@ -137,6 +137,14 @@ pub enum ContentCommand {
     DetachScript {
         viewport_gen: ViewportGeneration,
     },
+    /// Materialize the current page's outbound-link neighborhood as graph nodes +
+    /// `Semantic:Hyperlink` edges (relational-browse V1), emitted as a Contribution.
+    /// A render-free parse of the already-fetched body — no target fetch, no new
+    /// actor. No-op if the node has no fetched HTML body. (Extraction lane / crawl
+    /// frontier, single-hop.)
+    MaterializeLinks {
+        viewport_gen: ViewportGeneration,
+    },
     /// Forward a pointer click at card-local scene point `(x, y)` (device px) to the
     /// scripted render rung: the live `ScriptedDocument` hit-tests the point and
     /// dispatches a `click` (so the page's listeners run and may mutate the DOM),
@@ -622,6 +630,24 @@ pub fn spawn_content(
                         render(content, &store, &registry, &policy, &out);
                     }
                 }
+                ContentCommand::MaterializeLinks { viewport_gen } => {
+                    if let Some(content) = current.as_mut() {
+                        content.viewport_gen = viewport_gen;
+                        // Render-free single-hop materialize: parse the already-fetched
+                        // body for its outbound links and emit them as graph nodes +
+                        // Hyperlink edges. (Scripted post-JS link materialization, off
+                        // the live DOM, is a follow-on.)
+                        if let Some(ContentState::Ready(fetched)) = &content.state {
+                            if let Some(contribution) =
+                                meerkat::ingest::harvest_links(&content.url, &fetched.body)
+                            {
+                                out.emit(ContentUpdate::Contribution {
+                                    contributions: vec![contribution],
+                                });
+                            }
+                        }
+                    }
+                }
                 #[cfg(feature = "scripted")]
                 ContentCommand::ScriptedClick { x, y, viewport_gen } => {
                     if let Some(content) = current.as_mut() {
@@ -993,6 +1019,35 @@ mod tests {
             glyph_runs(&scene) >= 1,
             "the off-thread render lowered text to glyph runs"
         );
+    }
+
+    #[test]
+    fn materialize_links_emits_a_hyperlink_contribution() {
+        // An explicit invoke (not gated by auto-ingest): the open page's outbound
+        // links become graph nodes joined by Semantic:Hyperlink edges. (Relational
+        // browse V1.)
+        let (handle, updates) =
+            spawn_content(&Pool::new(), noop_wake(), std::collections::HashSet::new(), false);
+        handle.command(show(
+            "https://seed.test/page",
+            "text/html",
+            "<a href='/x'>X</a><a href='https://other.test/y'>Y</a>",
+        ));
+        handle.command(ContentCommand::MaterializeLinks {
+            viewport_gen: ViewportGeneration::default(),
+        });
+        handle.join();
+
+        let materialized = updates.iter().any(|u| match u {
+            ContentUpdate::Contribution { contributions } => contributions.iter().any(|c| {
+                c.edges.iter().any(|e| {
+                    e.subject == "https://seed.test/page"
+                        && e.predicate == "https://mere.computer/ns/rel#hyperlink"
+                }) && c.nodes.iter().any(|n| n.id == "https://other.test/y")
+            }),
+            _ => false,
+        });
+        assert!(materialized, "MaterializeLinks emitted the Hyperlink-edged neighborhood");
     }
 
     #[test]
