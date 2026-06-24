@@ -217,13 +217,19 @@ relational-browse V2 scope.
    primitive — `href` + text + `rel`, unresolved, the crawl frontier's source), the
    `<title>`, declared **metadata** (`description` / canonical / OpenGraph), the
    `<h1>`–`<h6>` **outline**, and the full **visible text** (script/style/head
-   excluded). 12 tests. **Still open**: (a) the home/wiring decision — how the extract
-   surfaces to meerkat + eidetic (a `serval.extract` engine? a side-output on every
-   serval render? the existing `Contribution` path that already carries JSON-LD
-   harvest?); (b) headless-scripted-DOM extract (run the scripted rung, extract the
-   *post-JS* DOM — same `extract()` over a `ScriptedDom`); (c) a main-content/readability
-   pass over the visible text; (d) the crawl frontier (depth/fan-out cap, politeness,
-   robots) per relational-browse V2.
+   excluded). 12 tests. **Wiring decided + done** (Mark's call, 2026-06-24): the
+   **Contribution path**. On a fetched HTML page (auto-ingest), a static-parse
+   extraction enriches the *page node* with its declared metadata (title / description /
+   canonical / OpenGraph) as a `GraphContribution`, over the same pipe as the JSON-LD
+   harvest, reaching the kernel + eidetic — filling the gap harvest leaves for the
+   majority of pages with no structured data. Links are **not** contributed as edges
+   here: the crawl frontier owns the link graph + its politeness caps, so one visit
+   cannot flood it. **Still open**: (a) headless-scripted-DOM extract (run the scripted
+   rung, `extract()` over the *post-JS* `ScriptedDom`); (b) a main-content/readability
+   pass over the visible text; (c) the crawl frontier (depth/fan-out cap, politeness,
+   robots) per relational-browse V2 — the home of links-as-edges; (d) routing the full
+   visible **text** into the eidetic corpus proper (the metadata enriches the graph
+   today; the text body for distillation is the next consumer).
 5. **Refinements** — script-added stylesheets, retain-until-dirty layout, origin rung
    policy, and the web-API long tail (Canvas2D / WebSocket / fetch-driven re-render;
    serval already has a WebGL factory seam) as pages demand — standards by standards.
@@ -381,8 +387,13 @@ parsed (and optionally scripted) DOM.
   axis (verified via `cargo tree`). 12 tests over `StaticDocument`. The keyboard-event
   follow-on from phase 3 is **not** thin after all — serval has no `KeyboardEvent` /
   `activeElement` / focus model, so it needs a focus model first (deferred).
-  **Open decision before wiring**: extraction's home/surface — a `serval.extract`
-  engine, a side-output on every serval render, or the existing `Contribution` path
-  (which already carries JSON-LD harvest to the kernel/eidetic). An ecosystem-shape call
-  for Mark. Then: headless-scripted extract (`extract()` over a post-JS `ScriptedDom`),
-  a readability pass, and the crawl frontier.
+- **2026-06-24 (phase 4 — extraction wired to the Contribution path)**: Mark chose the
+  **Contribution path** for extraction's home. meerkat's `ingest::page_extract_contribution`
+  (mere `74e5a2c`) maps a `serval-extract` `PageExtract` to a one-node `GraphContribution`
+  enriching the page node with its title / description / canonical / OpenGraph, emitted
+  on `Show` (auto-ingest) alongside the JSON-LD harvest — so every visited HTML page
+  contributes its self-description, not just the JSON-LD-bearing minority. Links are not
+  edges here (the crawl frontier, with politeness caps, owns the link graph). 7 ingest
+  tests green, JSON-LD harvest unregressed. Next: headless-scripted extract (post-JS
+  DOM), a readability pass, the crawl frontier (links-as-edges), and routing the full
+  visible text into the eidetic corpus proper.
