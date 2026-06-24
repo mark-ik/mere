@@ -468,3 +468,29 @@ within budget.
   drift over gyre's Barnes-Hut, particle-life) slot into the same `ambient` module / paint path next.
   Tuning follow-on: the cells read light-grey (the green tint washes out at 0.16 alpha) and are a
   touch prominent - the colour / alpha is one constant in `frame.rs` to taste.
+- 2026-06-24: **`>scene <name>` omnibar verb (committed `96b1ebc`) - the command-palette half of the
+  scene binding, with no `command.rs` touch.** No registry split was needed after all:
+  `scene("pyramid")` / `>scene pyramid` rides the pure side-channel pattern `sparql` / `attach_script`
+  use (a `ShellOutcome` field + a desugar so the bare two-token form works), not the `Command` enum.
+  The page and the verb are unified on one flat-name vocabulary: a single
+  `WindowCtx::load_named_scene(name) -> bool` (with aliases life->gol, wreck->ballchain, pool->fluid,
+  galaxy->nbody, plife->particles) that both the Scene page buttons (now keyed `scene:<name>`) and the
+  verb route through, so they cannot drift. meerkat lib + bin tests green (14 shell_eval incl. the
+  scene verb).
+- 2026-06-24: **Ambient-sim seam + tincture + two more sims (committed `1be0936` / `57005a0` /
+  `366e4f0`); headed-verified.** Generalised the lone Game of Life into an `AmbientSim` trait
+  (advance + paint + default_tincture) the orrery holds as `Box<dyn AmbientSim>`, and gave each
+  backdrop a **tincture** - its base paint colour, set from the sim's default on load, overridable via
+  `set_ambient_tincture` (the tint pass). Three sims ride the seam, each tinted: **Game of Life**
+  recoloured from a grey wash to a phosphor green (a low alpha washed the hue out; a moderate alpha
+  reads green while staying behind the graph); **n-body drift** (`load_nbody`, key `n`) - a cloud
+  orbiting a central harmonic well (stable: no fly-away / collapse) with weak softened mutual gravity
+  for clumping, painted as warm-gold star-dots, a galaxy-like swirl; **particle-life**
+  (`load_particle_life`, key `p`) - a few species under an asymmetric attraction matrix
+  self-organising into clusters / chains, each species a hue rotated from the tincture (a coherent
+  re-tintable palette). All wired to bin keys + the meerkat Scene settings Ambient section + the
+  `>scene` verb. orrery ambient tests green (Conway blinker / block; n-body bounded over 900 steps;
+  particle-life wrapped + finite; hsv round-trips). Headed-verified (scry-shots/p4gol-*, p4nb-*,
+  p4pl-*). Follow-on tuning (taste knobs, not blockers): a tighter n-body spiral (lower G or a
+  Keplerian well for differential rotation), more dramatic particle-life structure (the attraction
+  matrix / force scale).
