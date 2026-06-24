@@ -172,9 +172,14 @@ relational-browse V2 scope.
 
 ## Phases
 
-1. **Rung taxonomy in the picker** — register `serval.static` (default) /
-   `serval.scripted` (and stubs for `interactive` / `fullweb`) as engine ids the picker
-   pins; keep the static path JS-free. Small; mostly inker + meerkat routing.
+1. **Rung taxonomy** — *(1a done 2026-06-23)* the ladder is now a first-class concept in
+   inker's engine vocabulary: `ServalRung` (`Static` / `Interactive` / `Scripted` /
+   `FullWeb`, `Ord` by capability) + the rung engine ids (`serval.web` stays the static
+   id for pin compatibility; `serval.scripted` / `serval.interactive` / `serval.fullweb`
+   are the higher rungs) + `serval_rung` / `is_serval_rung` classifiers. Higher rungs are
+   registry-gated, so a pin to an unimplemented rung falls back to static (tested). *(1b
+   remaining)* surface the available rungs in the meerkat picker — folds into phase 2,
+   since a rung only becomes pickable once registered.
 2. **Scripted rung** — port `ScriptedDocument` into the content actor (B): fetcher +
    cookie/storage providers + the `pump`/`frame` loop + per-document runtime lifecycle.
    Lights up `document.cookie` / `localStorage`. The big integration chunk.
@@ -211,3 +216,11 @@ relational-browse V2 scope.
   selector; the extraction primitives (`StaticDocument`, the anchor enumerator, JSON-LD
   ingest, the verso donor extractors, the eidetic derivation sink) largely exist. No
   meerkat code yet — this fixes the framing before the integration.
+- **2026-06-23 (phase 1a)**: the rung taxonomy landed in inker — `ServalRung` (ordered
+  by capability) + the higher-rung engine ids + `serval_rung` / `is_serval_rung`
+  classifiers, the tier-1 counterpart to `is_surface_engine`. `serval.web` stays the
+  static rung's id (pins persist). The registry-gated fallback is tested: a pin to an
+  unregistered higher rung (e.g. `serval.scripted` before it ships) routes to static, so
+  the ladder can be referenced before its rungs are implemented. 27 routing tests green.
+  Next: phase 2 (the scripted rung integration), which also surfaces the rung in the
+  picker (1b).

@@ -303,3 +303,40 @@ fn per_host_override_match_is_case_insensitive() {
     let decision = policy.route(&request("https://blog.test/post"));
     assert_eq!(decision.engine_id, ENGINE_NEMATIC_TEXT);
 }
+
+#[test]
+fn serval_rungs_classify_and_round_trip() {
+    // serval.web is the static rung (the legacy id, kept for pin compatibility).
+    assert_eq!(serval_rung(ENGINE_SERVAL_WEB), Some(ServalRung::Static));
+    assert_eq!(serval_rung(ENGINE_SERVAL_SCRIPTED), Some(ServalRung::Scripted));
+    // Each rung's engine id round-trips back to the rung.
+    for rung in ServalRung::ALL {
+        assert_eq!(serval_rung(rung.engine_id()), Some(rung));
+    }
+    // Non-serval engines are not rungs.
+    assert_eq!(serval_rung(ENGINE_SCRYING_WEB), None);
+    assert_eq!(serval_rung(ENGINE_NEMATIC_GEMTEXT), None);
+    assert!(is_serval_rung(ENGINE_SERVAL_WEB) && !is_serval_rung(ENGINE_SCRYING_WEB));
+}
+
+#[test]
+fn serval_rungs_order_by_capability() {
+    assert!(ServalRung::Static < ServalRung::Interactive);
+    assert!(ServalRung::Interactive < ServalRung::Scripted);
+    assert!(ServalRung::Scripted < ServalRung::FullWeb);
+    // Static is the base of the ladder (the default, JS-free rung).
+    assert_eq!(ServalRung::ALL[0], ServalRung::Static);
+}
+
+#[test]
+fn unregistered_higher_rung_pin_falls_back_to_static() {
+    // A node pinned to a rung the host has not registered (e.g. scripted before it
+    // ships) must not route to an unavailable engine: `route_filtered` walks past the
+    // pin to the scheme rule, which for an https page is the static serval rung.
+    let mut req = request("https://example.com/app");
+    req.pinned_engine = Some(ENGINE_SERVAL_SCRIPTED.to_string());
+    // Only the static rung is "registered" on this host.
+    let decision =
+        EngineRoutePolicy::default().route_filtered(&req, |id| id == ENGINE_SERVAL_WEB);
+    assert_eq!(decision.engine_id, ENGINE_SERVAL_WEB);
+}

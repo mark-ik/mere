@@ -24,7 +24,20 @@ impl SurfaceTargetId {
     }
 }
 
+/// The serval HTML engine's **static** rung (the profile ladder's base): parse →
+/// style/layout → paint, with no JS in its dependency graph. The default HTML route
+/// and the id existing per-node pins persist, so it keeps the legacy `serval.web`
+/// value rather than `serval.static`. See [`ServalRung`].
 pub const ENGINE_SERVAL_WEB: &str = "serval.web";
+/// The serval HTML rungs above static (the profile ladder; see [`ServalRung`]). A node
+/// pins one of these to escalate capability. Additive, and gated by host registration:
+/// until a rung is registered in the host's `EngineRegistry`, it is not `is_available`,
+/// so a pin to it falls back to the static route (`route_filtered`). serval scales
+/// internally from the static composition up to a full browser
+/// (serval `docs/2026-05-12_serval_profile_ladder_plan.md`); these ids select the rung.
+pub const ENGINE_SERVAL_INTERACTIVE: &str = "serval.interactive";
+pub const ENGINE_SERVAL_SCRIPTED: &str = "serval.scripted";
+pub const ENGINE_SERVAL_FULLWEB: &str = "serval.fullweb";
 /// Mere-managed system-WebView tile driven by the in-house `scrying`
 /// library. Embedded-frame composition into the host's wgpu surface
 /// (frames captured via `webview2-com` on Windows / `objc2-web-kit` +
@@ -80,6 +93,78 @@ pub fn is_graph_contribution_route(engine_id: &str) -> bool {
 /// the lane.
 pub fn is_surface_engine(engine_id: &str) -> bool {
     matches!(engine_id, ENGINE_SCRYING_WEB)
+}
+
+/// A rung of the serval HTML render ladder. serval is one engine that scales from a
+/// static, JS-free composition up to a full browser; the rung selects *how much of the
+/// web stack* a page is given. Each rung is **additive** over the one below, and each
+/// is a principled composition — the static rung carries no JS in its dependency graph
+/// (attack-surface + bundle-size + DOM-as-library), so a higher rung is a deliberate
+/// escalation, never the default. The default HTML route is [`Static`](Self::Static);
+/// a node pins a higher rung to opt in. Ordered by capability (the derived `Ord`).
+///
+/// Canonical: serval `docs/2026-05-12_serval_profile_ladder_plan.md`; Mere framing:
+/// `design_docs/mere_docs/implementation_strategy/2026-06-23_render_ladder_and_extraction_plan.md`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ServalRung {
+    /// parse → style/layout → paint. No JS. The default, and the safe/fast base.
+    Static,
+    /// + forms / focus / input / accessibility. Still no JS.
+    Interactive,
+    /// + JS engine + DOM bindings + event routing.
+    Scripted,
+    /// + navigation / workers / storage / media / WebGL / devtools.
+    FullWeb,
+}
+
+impl ServalRung {
+    /// Every rung, ascending by capability — the ladder a picker offers.
+    pub const ALL: [ServalRung; 4] = [
+        ServalRung::Static,
+        ServalRung::Interactive,
+        ServalRung::Scripted,
+        ServalRung::FullWeb,
+    ];
+
+    /// The engine id that selects this rung. Static keeps the legacy [`ENGINE_SERVAL_WEB`]
+    /// id so existing pins resolve; the higher rungs have their own ids.
+    pub fn engine_id(self) -> &'static str {
+        match self {
+            ServalRung::Static => ENGINE_SERVAL_WEB,
+            ServalRung::Interactive => ENGINE_SERVAL_INTERACTIVE,
+            ServalRung::Scripted => ENGINE_SERVAL_SCRIPTED,
+            ServalRung::FullWeb => ENGINE_SERVAL_FULLWEB,
+        }
+    }
+
+    /// A short label for the picker UI.
+    pub fn label(self) -> &'static str {
+        match self {
+            ServalRung::Static => "Static",
+            ServalRung::Interactive => "Interactive",
+            ServalRung::Scripted => "Scripted",
+            ServalRung::FullWeb => "Full Web",
+        }
+    }
+}
+
+/// The serval render rung an `engine_id` selects, or `None` when it is not a serval
+/// HTML rung (a nematic, surface, or marker engine).
+pub fn serval_rung(engine_id: &str) -> Option<ServalRung> {
+    match engine_id {
+        ENGINE_SERVAL_WEB => Some(ServalRung::Static),
+        ENGINE_SERVAL_INTERACTIVE => Some(ServalRung::Interactive),
+        ENGINE_SERVAL_SCRIPTED => Some(ServalRung::Scripted),
+        ENGINE_SERVAL_FULLWEB => Some(ServalRung::FullWeb),
+        _ => None,
+    }
+}
+
+/// Whether `engine_id` names any rung of the serval HTML render ladder. The tier-1
+/// counterpart to [`is_surface_engine`]: a serval rung produces a portable
+/// [`crate::EngineDocument`], not a GPU surface frame.
+pub fn is_serval_rung(engine_id: &str) -> bool {
+    serval_rung(engine_id).is_some()
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
