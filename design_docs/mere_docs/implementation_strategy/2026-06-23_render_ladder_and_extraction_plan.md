@@ -229,11 +229,17 @@ relational-browse V2 scope.
    `ScriptedDocument::extract()` walks the mutated DOM and its title/description/og flow
    through the same pipe (the static shell extract is skipped for that rung so the
    post-JS one supersedes it). The SPA scrape: a page whose metadata is JS-injected
-   still contributes it. **Still open**: (a) a main-content/readability pass over the
-   visible text; (b) the crawl frontier (depth/fan-out cap, politeness, robots) per
-   relational-browse V2 — the home of links-as-edges; (c) routing the full visible
-   **text** into the eidetic corpus proper (the metadata enriches the graph today; the
-   text body for distillation is the next consumer); (d) a `pump()` before the
+   still contributes it. **Reader-mode extraction done** (2026-06-24):
+   `serval-extract`'s `extract_main_text` / `PageExtract.main_text` pulls the article
+   body by a compact readability heuristic (a semantic `<main>` wins, else the
+   highest-scoring block by paragraph density + class/id signal), chrome dropped. The
+   per-page payload for a reader-mode crawl, and it rides any rung's DOM — so an SPA's
+   article is read post-JS via `ScriptedDocument::extract()`. **Still open**: (a) the
+   **crawl frontier** (depth/fan-out cap, per-host politeness, robots) per
+   relational-browse V2 — the second half of "crawl a bunch of sites and pull
+   reader-mode articles", and the home of links-as-edges; (b) routing the article
+   `main_text` into the eidetic corpus proper (metadata enriches the graph today; the
+   reader-mode body for distillation is the next consumer); (c) a `pump()` before the
    scripted extract, so timer/promise-driven content (not just synchronous + deferred)
    is captured.
 5. **Refinements** — script-added stylesheets, retain-until-dirty layout, origin rung
@@ -413,3 +419,15 @@ parsed (and optionally scripted) DOM.
   shared `PageExtract` → contribution mapping). Tested through the actor (a JS-injected
   meta description is contributed). Default build verified clean. The same `extract()`
   serves both lanes; extraction is orthogonal to rendering, drawing from any rung's DOM.
+- **2026-06-24 (phase 4 — reader-mode extraction)**: `serval-extract` gained
+  `extract_main_text` / `PageExtract.main_text` (serval `adb8221`): the article body by a
+  compact readability heuristic — a semantic `<main>` wins outright, else the
+  highest-scoring block by paragraph density + class/id signal (technique from
+  readability.js) — emitted with chrome (nav/header/footer/aside) and non-rendered
+  subtrees dropped. `None` for an app shell / link list. Still render-free; 16 tests.
+  This is the per-page payload of the "crawl + reader-mode articles" goal; it rides any
+  rung's DOM, so an SPA's article reads post-JS. The remaining half is the **crawl
+  frontier** (walk a site's links — the rect-free anchor enumerator from slice 1 — under
+  depth/fan-out/politeness/robots caps), whose home (a crawl driver crate? meerkat? the
+  relational-browse graphlet?) and storage (article `main_text` → eidetic corpus) is the
+  next decision.
