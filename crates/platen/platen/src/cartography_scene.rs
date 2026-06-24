@@ -186,7 +186,11 @@ pub fn project_orrery_strategy(
         GridAdapter, KanbanAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter,
         RadialAdapter, TimelineAdapter,
     };
-    let signals = IntelligenceSignals::default();
+    // The real signal snapshot from intel/signals (degree-based importance for now), replacing
+    // the empty `::default()` — the producer -> snapshot -> strategy spine. Strategies that read
+    // `signals.importance` now see it; the rest ignore it (additive contract). The generation +
+    // dirty-bit cache that gates this per-frame recompute is the next slice. (Graph signals — P1.)
+    let signals = signals::produce_cheap_signals(graph);
     let options = CartographySceneOptions::canvas_pixels(width, height);
     let projection = match id {
         "phyllotaxis.default" => {

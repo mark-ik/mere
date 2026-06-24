@@ -19,6 +19,34 @@ pub struct CameraView {
     pub zoom: f32,
 }
 
+/// The full per-pane *view* state over a shared orrery: the complete camera (pan +
+/// zoom + isometric orbit/foreshorten) plus its pan inertia. The orrery
+/// *authority* owns the graph, physics, and node positions; the **view** owns one
+/// `Viewport` per (window, graph) pane. The host installs it before a render/input
+/// pass with [`Orrery::set_viewport`] and reads back the mutated value with
+/// [`Orrery::viewport`].
+///
+/// This is what lets two windows on one graph be independent views rather than a
+/// mirror: they hold distinct `Viewport`s over the *shared* node positions. The
+/// orrery's own camera/`pan_velocity` fields are then per-pass working state the
+/// host drives, not durable per-graph truth. Seed a fresh pane's viewport from the
+/// orrery's current one (`viewport()`) rather than constructing it, so the initial
+/// framing is sensible.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Viewport {
+    /// Screen-px camera translation (`CameraView::offset`).
+    pub offset: (f32, f32),
+    /// Uniform camera scale (`CameraView::zoom`).
+    pub zoom: f32,
+    /// Isometric orbit angle about the vertical, radians (`0.0` is top-down).
+    pub yaw: f32,
+    /// Isometric vertical foreshorten in `(0, 1]` (`1.0` is top-down 2D).
+    pub tilt: f32,
+    /// Inertial pan velocity (px/frame); per-view so one window's fling does not
+    /// drift another window sharing the same orrery.
+    pub pan_velocity: (f32, f32),
+}
+
 /// A node's coarse activation state, for the orrery to color its on-screen
 /// nodes. The host computes these from the actor pool + content cache and pushes
 /// them via [`Orrery::set_node_states`]; a node absent from the map colors as
@@ -78,4 +106,26 @@ pub enum Face {
     /// No texture: the bare content-typed state color alone, no favicon or caption. Minimal and
     /// cheap, for a dense graph or a node with nothing to texture. (Formerly `Shape`.)
     Bare,
+}
+
+impl Face {
+    /// The persisted string code for the cartography sidecar (kept gyre/orrery-free downstream).
+    /// (Node body & face — face persistence.)
+    pub fn as_code(self) -> &'static str {
+        match self {
+            Face::Favicon => "favicon",
+            Face::Sprite => "sprite",
+            Face::Bare => "bare",
+        }
+    }
+
+    /// Parse a persisted code, defaulting to [`Favicon`](Face::Favicon) for an unknown string.
+    /// (Node body & face — face persistence.)
+    pub fn from_code(code: &str) -> Self {
+        match code {
+            "sprite" => Face::Sprite,
+            "bare" => Face::Bare,
+            _ => Face::Favicon,
+        }
+    }
 }

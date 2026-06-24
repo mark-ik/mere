@@ -489,6 +489,136 @@ fn node_material_overrides_default_and_round_trips_through_cartography() {
 }
 
 #[test]
+fn node_face_override_round_trips_through_cartography() {
+    let mut graph = Graph::new();
+    graph.add_node("https://one.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let mut orrery = Orrery::with_graph(graph);
+    let (key, id) = {
+        let (key, node) = orrery.graph().get_node_by_url("https://one.example").unwrap();
+        (key, node.id)
+    };
+
+    // A per-node face override travels to the sidecar as a string code.
+    orrery.set_node_face(id, Face::Bare);
+    let geom = orrery.cartography_geometry();
+    let faces: std::collections::HashMap<_, _> = geom.face_iter().collect();
+    assert_eq!(faces.get(&id), Some(&"bare"), "the face override is exported");
+
+    // Clearing reverts to the default; re-applying from the sidecar restores it.
+    orrery.clear_node_face(id);
+    assert_eq!(orrery.node_face(key), Face::Favicon, "cleared reverts to the default face");
+    orrery.apply_cartography_faces(geom.face_iter());
+    assert_eq!(orrery.node_face(key), Face::Bare, "the sidecar round-trips the face");
+}
+
+#[test]
+fn size_by_importance_sizes_nodes_by_the_degree_signal() {
+    // A hub linked to two leaves: hub degree 2 (importance 1.0), each leaf degree 1 (0.5).
+    let mut graph = Graph::new();
+    let hub = graph.add_node("https://hub.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(1.0, 0.0));
+    let b = graph.add_node("https://b.example".to_string(), PortablePoint::new(2.0, 0.0));
+    graph.assert_semantic_predicate(hub, a, "links".to_string());
+    graph.assert_semantic_predicate(hub, b, "links".to_string());
+    let mut orrery = Orrery::with_graph(graph);
+    let hk = orrery.graph().get_node_by_url("https://hub.example").unwrap().0;
+    let ak = orrery.graph().get_node_by_url("https://a.example").unwrap().0;
+    let aid = orrery.graph().get_node(ak).unwrap().id;
+
+    // Off by default: every node is the uniform footprint.
+    assert_eq!(orrery.node_size(hk), 36.0, "uniform until size-by-importance is on");
+
+    // On: the most-connected node hits the cap (88), a 0.5-importance leaf is 36 + 0.5*52 = 62.
+    orrery.set_size_by_importance(true);
+    assert_eq!(orrery.node_size(hk), 88.0, "the most important node hits the cap");
+    assert!((orrery.node_size(ak) - 62.0).abs() < 0.1, "a leaf scales by its 0.5 importance");
+
+    // Precedence: a manual override still wins over the importance size.
+    orrery.set_node_size(aid, 100.0);
+    assert_eq!(orrery.node_size(ak), 100.0, "a manual override beats the importance size");
+
+    // Turning it off reverts to the uniform footprint (the hub has no manual override).
+    orrery.set_size_by_importance(false);
+    assert_eq!(orrery.node_size(hk), 36.0, "off => uniform again");
+}
+
+#[test]
+fn importance_cache_invalidates_on_topology_change() {
+    // a-b, both degree 1 => importance 1.0 each => both at the cap.
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let b = graph.add_node("https://b.example".to_string(), PortablePoint::new(1.0, 0.0));
+    graph.assert_semantic_predicate(a, b, "links".to_string());
+    let mut orrery = Orrery::with_graph(graph);
+    orrery.set_size_by_importance(true);
+    let bk = orrery.graph().get_node_by_url("https://b.example").unwrap().0;
+    assert_eq!(orrery.node_size(bk), 88.0, "both nodes degree 1 => b is at the cap");
+
+    // Add c linked to a: a becomes degree 2 (importance 1.0), b stays degree 1 (importance 0.5).
+    // The cache must invalidate on the topology change, so b drops from 88 to 62 (36 + 0.5*52);
+    // a stale cache would leave b at 88.
+    orrery.ingest_graph(|g| {
+        let c = g.add_node("https://c.example".to_string(), PortablePoint::new(2.0, 0.0));
+        let a = g.get_node_by_url("https://a.example").unwrap().0;
+        g.assert_semantic_predicate(a, c, "links".to_string());
+        true
+    });
+    let bk = orrery.graph().get_node_by_url("https://b.example").unwrap().0;
+    assert!(
+        (orrery.node_size(bk) - 62.0).abs() < 0.1,
+        "after the edge add, b's importance recomputed (the cache invalidated): {}",
+        orrery.node_size(bk),
+    );
+}
+
+#[test]
+fn size_by_importance_restore_recomputes_on_a_reused_orrery() {
+    // a-b, both degree 1 => importance 1.0 => size 88 when the mode is on.
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let b = graph.add_node("https://b.example".to_string(), PortablePoint::new(1.0, 0.0));
+    graph.assert_semantic_predicate(a, b, "links".to_string());
+    let mut orrery = Orrery::with_graph(graph);
+    let ak = orrery.graph().get_node_by_url("https://a.example").unwrap().0;
+
+    // Cycle the mode so the cache ends clean + empty with the mode OFF — the state a *reused*
+    // orrery is in at a session switch, just before the sidecar restore.
+    orrery.set_size_by_importance(true);
+    orrery.set_size_by_importance(false);
+    assert_eq!(orrery.node_size(ak), 36.0, "off => default size");
+
+    // The restore turns it back on: it must force a recompute, not leave the cache empty (the
+    // bug the review caught). Without the fix, the node would stay at the default 36.
+    orrery.apply_cartography_sizing(Vec::<(uuid::Uuid, f32)>::new(), false, true);
+    assert_eq!(orrery.node_size(ak), 88.0, "restored size-by-importance recomputes, not an empty cache");
+}
+
+#[test]
+fn importance_metric_switches_degree_vs_betweenness() {
+    // Bowtie: triangles {0,1,2} and {2,3,4} share the bridge node 2.
+    let mut graph = Graph::new();
+    let n: Vec<_> = (0..5)
+        .map(|i| graph.add_node(format!("https://{i}.example"), PortablePoint::new(i as f32, 0.0)))
+        .collect();
+    for &(a, b) in &[(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 2)] {
+        graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
+    }
+    let mut orrery = Orrery::with_graph(graph);
+    let k0 = orrery.graph().get_node_by_url("https://0.example").unwrap().0;
+    let k2 = orrery.graph().get_node_by_url("https://2.example").unwrap().0;
+    orrery.set_size_by_importance(true);
+
+    // Degree (default): the bridge (degree 4) is the max; a peripheral (degree 2) is mid (62).
+    assert_eq!(orrery.node_size(k2), 88.0, "the bridge is the max under degree");
+    assert!((orrery.node_size(k0) - 62.0).abs() < 0.1, "a peripheral is mid-sized under degree");
+
+    // Betweenness: the bridge stays max; the peripheral lies on no cross-paths => ~0 => default.
+    orrery.set_importance_metric(ImportanceMetric::Betweenness);
+    assert_eq!(orrery.node_size(k2), 88.0, "the bridge is still the max under betweenness");
+    assert!((orrery.node_size(k0) - 36.0).abs() < 0.5, "a peripheral shrinks to ~default under betweenness");
+}
+
+#[test]
 fn isolate_selection_scopes_the_orrery() {
     let mut graph = Graph::new();
     let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
@@ -556,18 +686,34 @@ fn cartography_sizing_round_trips_through_the_sidecar() {
     let mut orrery = Orrery::with_graph(g);
     orrery.set_node_size(a_id, 80.0);
     orrery.set_size_by_degree(true);
+    orrery.set_size_by_importance(true);
+    orrery.set_importance_metric(ImportanceMetric::Betweenness);
 
     let geom = orrery.cartography_geometry();
-    assert!(geom.size_by_degree(), "the export carries the scene flag");
+    assert!(geom.size_by_degree(), "the export carries the size-by-degree flag");
+    assert!(geom.size_by_importance(), "the export carries the size-by-importance flag");
+    assert_eq!(geom.importance_metric(), "betweenness", "the export carries the metric");
 
-    // Re-apply onto a fresh orrery whose graph carries the same node id (the reload).
+    // Re-apply onto a fresh orrery whose graph carries the same node id (the reload). The metric
+    // restore runs first, so the sizing restore recomputes with it.
     let mut g2 = Graph::new();
     g2.add_node_with_id(a_id, "https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
     let mut reloaded = Orrery::with_graph(g2);
-    reloaded.apply_cartography_sizing(geom.size_iter(), geom.size_by_degree());
+    reloaded.apply_cartography_importance_metric(geom.importance_metric());
+    reloaded.apply_cartography_sizing(
+        geom.size_iter(),
+        geom.size_by_degree(),
+        geom.size_by_importance(),
+    );
     let (key, _) = reloaded.graph().get_node_by_id(a_id).unwrap();
     assert_eq!(reloaded.node_size(key), 80.0, "the per-node override is restored");
     assert!(reloaded.size_by_degree(), "the size-by-degree flag is restored");
+    assert!(reloaded.size_by_importance(), "the size-by-importance flag is restored");
+    assert_eq!(
+        reloaded.importance_metric(),
+        ImportanceMetric::Betweenness,
+        "the importance metric is restored (a betweenness scene re-opens betweenness-sized)",
+    );
 }
 
 #[test]

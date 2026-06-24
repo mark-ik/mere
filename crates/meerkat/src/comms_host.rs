@@ -100,6 +100,7 @@ pub enum CommsCommand {
 }
 
 /// A result the comms actor delivers back to the UI loop.
+#[derive(Clone)]
 pub enum CommsUpdate {
     /// The merged conversation list (+ any backend failures).
     Inbox(Inbox),

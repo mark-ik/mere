@@ -229,6 +229,13 @@ impl WindowCtx<'_> {
                     ToggleSizeByDegree,
                 )
             }
+            ToggleSizeByImportance => {
+                let on = self.orrery().size_by_importance();
+                ContextItem::new(
+                    if on { "Size by importance  \u{2713}" } else { "Size by importance" },
+                    ToggleSizeByImportance,
+                )
+            }
             AddNode => ContextItem::new("Add node", AddNode),
             AddField => ContextItem::new("Add field", AddField),
             AddTile => ContextItem::new("Add tile", AddTile),
@@ -313,6 +320,14 @@ impl WindowCtx<'_> {
     pub(super) fn toggle_orrery_size_by_degree(&mut self) {
         let on = self.orrery().size_by_degree();
         self.orrery_mut().set_size_by_degree(!on);
+        self.view.request_redraw();
+    }
+
+    /// Toggle the focused orrery's size-by-importance mode (the graph-signals importance
+    /// encoding). Shared by the selection menu and the `pelt/orrery` page. (Graph signals.)
+    pub(super) fn toggle_orrery_size_by_importance(&mut self) {
+        let on = self.orrery().size_by_importance();
+        self.orrery_mut().set_size_by_importance(!on);
         self.view.request_redraw();
     }
 
@@ -462,6 +477,10 @@ impl WindowCtx<'_> {
             self.toggle_orrery_size_by_degree();
             return;
         }
+        if let ContextAction::ToggleSizeByImportance = action {
+            self.toggle_orrery_size_by_importance();
+            return;
+        }
         // Summon the object card for the single focused node — it renders in the focus slot
         // in place of the snapshot preview until the focus moves off it. No member set —
         // return before the orrery-tile logic. (Object card — P0.)
@@ -606,6 +625,8 @@ impl WindowCtx<'_> {
             for member in std::mem::take(&mut self.view.context_set) {
                 self.orrery_mut().set_node_face(member, face);
             }
+            // The face override persists in the cartography sidecar; save it now. (Body & face.)
+            self.save_session();
             self.view.request_redraw();
             return;
         }
@@ -658,6 +679,7 @@ impl WindowCtx<'_> {
             | ContextAction::CopyLink
             | ContextAction::SetLayoutStrategy(_)
             | ContextAction::ToggleSizeByDegree
+            | ContextAction::ToggleSizeByImportance
             | ContextAction::ResizeNode
             | ContextAction::IsolateSelection
             | ContextAction::ShowAllNodes

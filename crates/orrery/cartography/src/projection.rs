@@ -80,6 +80,11 @@ pub struct PositionedEdge {
     pub from: NodeKey,
     pub to: NodeKey,
     pub path: Vec<PortablePoint>,
+    /// Relative edge weight, driving the stroke thickness: `1.0` is the normal stroke; a
+    /// heavier edge (e.g. a node pair connected by several statements — the multigraph
+    /// multiplicity) paints thicker. `1.0` for an un-weighted edge, so the default look is
+    /// unchanged. (Graph signals — edge-weight encoding.)
+    pub weight: f32,
 }
 
 #[cfg(test)]

@@ -530,14 +530,22 @@ impl super::Shell {
             ctx.orrery().graph().nodes().map(|(_, node)| node.id).collect();
         if let Some(geom) = load_cartography(&session_dir, &present) {
             ctx.orrery_mut().seed_cartography(geom.iter());
-            // Restore the per-node sizes + size-by-degree alongside the positions. (Node-rep.)
-            ctx.orrery_mut().apply_cartography_sizing(geom.size_iter(), geom.size_by_degree());
+            // Restore the importance metric first, so the sizing restore recomputes with it.
+            ctx.orrery_mut().apply_cartography_importance_metric(geom.importance_metric());
+            // Restore the per-node sizes + the size-by-degree / size-by-importance flags. (Graph signals.)
+            ctx.orrery_mut().apply_cartography_sizing(
+                geom.size_iter(),
+                geom.size_by_degree(),
+                geom.size_by_importance(),
+            );
             // Restore the custom sprite faces, so a textured node re-opens textured. (Node-rep.)
             ctx.orrery_mut().apply_cartography_sprites(geom.sprite_iter());
             // ...and their collider hulls, so the traced-to-image collider survives too. (Node-rep.)
             ctx.orrery_mut().apply_cartography_sprite_hulls(geom.sprite_hull_iter());
             // ...and the per-node physical materials, so a tuned node re-opens tuned. (Body & face.)
             ctx.orrery_mut().apply_cartography_materials(geom.material_iter());
+            // ...and the face overrides LAST (after sprites), so the chosen face wins. (Body & face.)
+            ctx.orrery_mut().apply_cartography_faces(geom.face_iter());
         }
         ctx.view.maximized_pane = None;
         ctx.view.active_content = super::ContentPane::Orrery;

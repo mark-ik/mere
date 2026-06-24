@@ -298,6 +298,15 @@ pub(crate) struct WindowView {
     /// `self.orrery`. At one graph per window it tracks the active session's graph;
     /// session-switch updates it. (Window composition P1.)
     pub(crate) focused_graph: GraphId,
+    /// This window's per-pane camera: one [`orrery::Viewport`] per graph it shows in
+    /// an Orrery pane. The pooled `Orrery` is the *authority* (graph + physics + node
+    /// positions, shared across windows); the **camera/viewport is view state and
+    /// lives here**, so two windows on one graph hold distinct viewports over the
+    /// shared positions instead of mirroring one. The ctx installs the relevant entry
+    /// into its orrery on build and reads it back on drop (see `WindowCtx`); a graph
+    /// absent here is seeded from the orrery's current framing the first time this
+    /// window shows it. (Camera on the view.)
+    pub(crate) viewports: HashMap<GraphId, orrery::Viewport>,
 
     // ── Window + surface + size + input: the OS window itself, its present stack,
     //    its surface dimensions, and the pointer / modifier state of its focus.
@@ -1097,6 +1106,7 @@ impl WindowView {
         Self {
             kind,
             focused_graph,
+            viewports: HashMap::new(),
             dom,
             runner,
             chrome_session: None,

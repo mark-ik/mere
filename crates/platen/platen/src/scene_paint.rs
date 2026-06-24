@@ -257,7 +257,10 @@ pub fn paint_projection_filtered(
             placement: CommonPlacement::new(bounds_of(&polyline)),
             path: PathData { commands: path_cmds },
             color: style.edge_color,
-            width: style.edge_width,
+            // Edge weight (the multigraph multiplicity) thickens the stroke: weight 1 paints the
+            // normal width, heavier pairs scale up, capped so a busy pair stays legible. (Graph
+            // signals — edge-weight encoding.)
+            width: (style.edge_width * edge.weight.max(1.0)).min(style.edge_width * 4.0),
             cap: StrokeCap::Round,
             join: StrokeJoin::Round,
             dash: None,
@@ -350,6 +353,7 @@ mod tests {
                 from: a,
                 to: b,
                 path: Vec::new(),
+                weight: 1.0,
             }],
             ..Projection::empty()
         };
@@ -395,6 +399,7 @@ mod tests {
                 from: a,
                 to: ghost,
                 path: Vec::new(),
+                weight: 1.0,
             }],
             ..Projection::empty()
         };

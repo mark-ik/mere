@@ -193,6 +193,7 @@ pub fn build_positioned_edges(
                 from: view.from,
                 to: view.to,
                 path: vec![from_pos, to_pos],
+                weight: 1.0,
             }
         })
         .collect()

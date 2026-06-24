@@ -40,6 +40,9 @@ forme.workspace = true
 # dispatched by `cartography_scene::project_orrery_strategy` for the orrery's
 # per-pane layout picker.
 arrangements.workspace = true
+# The graph-structural signal producer (intel/signals): degree-based importance now, richer
+# signals later. project_orrery_strategy hands its snapshot to the layout strategies. (Graph signals.)
+signals.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 # Workbench tiling persists as JSON (the bridge's (Arrangement, geometry) pair);
 # the host writes the string beside the session graph.

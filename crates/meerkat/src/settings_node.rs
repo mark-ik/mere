@@ -247,10 +247,13 @@ impl WindowCtx<'_> {
             a if a.starts_with("material:") => self.step_node_material(member, &a["material:".len()..]),
             _ => return,
         }
-        // Body-axis edits (hull shape, material) are graph-truth geometry: persist them now so an
-        // edit survives a reload even on a non-graceful exit, like the swatch drag does. (Body &
-        // face — the Body axis persists via the cartography sidecar.)
-        if action.starts_with("shape:") || action.starts_with("material:") {
+        // Body + face edits (hull shape, material, face) persist in the cartography sidecar:
+        // save now so an edit survives a reload even on a non-graceful exit, like the swatch drag.
+        // (Node body & face.)
+        if action.starts_with("shape:")
+            || action.starts_with("material:")
+            || action.starts_with("face:")
+        {
             self.save_session();
         }
         self.view.request_redraw();

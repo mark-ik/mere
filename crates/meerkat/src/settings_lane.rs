@@ -337,6 +337,27 @@ impl WindowCtx<'_> {
             if on { format!("{label}  \u{2713}") } else { label.to_string() }
         };
         items.push(toggle(check("Size by degree", sbd), sbd, "orrery:sizebydegree".to_string()));
+        let sbi = self.orrery().size_by_importance();
+        items.push(toggle(
+            check("Size by importance", sbi),
+            sbi,
+            "orrery:sizebyimportance".to_string(),
+        ));
+        // When size-by-importance is on, pick the metric it reads: degree (cheap) or betweenness
+        // (structural brokerage — a bridge node stands out beyond its degree). (Graph signals.)
+        if sbi {
+            let by_degree = self.orrery().importance_metric() == orrery::ImportanceMetric::Degree;
+            items.push(toggle(
+                check("  by degree", by_degree),
+                by_degree,
+                "orrery:importance:degree".to_string(),
+            ));
+            items.push(toggle(
+                check("  by betweenness", !by_degree),
+                !by_degree,
+                "orrery:importance:betweenness".to_string(),
+            ));
+        }
         let mirror = self.view.mirror_tiles;
         items.push(toggle(check("Mirror open tiles", mirror), mirror, "orrery:mirror".to_string()));
         items

@@ -679,6 +679,42 @@ mod tests {
     }
 
     #[test]
+    fn a_pane_camera_lives_on_the_view_and_round_trips_through_the_ctx() {
+        // Camera on the view: the pooled Orrery is the authority (graph + physics +
+        // node positions, shared across windows); the per-pane camera is a `Viewport`
+        // on the WindowView. A ctx installs it on build and reads it back on drop, so a
+        // move made through one window's ctx lands on *that* window's stored viewport,
+        // not the shared orrery. That decoupling is what lets a same-graph co-window be
+        // an independent view instead of a mirror. (Camera on the view.)
+        let mut app = test_app();
+        let gid = app.view().focused_graph;
+
+        // No stored viewport yet; building then dropping a ctx seeds it from the
+        // orrery's current framing and reads it back onto the view.
+        assert!(!app.view().viewports.contains_key(&gid));
+        drop(app.ctx());
+        assert!(
+            app.view().viewports.contains_key(&gid),
+            "the ctx seeds + reads back this window's viewport for the shown graph",
+        );
+
+        // A camera move made within a ctx is captured back onto the view on drop,
+        // including the pan inertia (per-view, so one window's fling can't drift another).
+        let moved = orrery::Viewport {
+            offset: (123.0, 45.0),
+            zoom: 2.0,
+            yaw: 0.0,
+            tilt: 1.0,
+            pan_velocity: (7.0, -3.0),
+        };
+        app.ctx().orrery_mut().set_viewport(moved);
+        let stored = app.view().viewports.get(&gid).copied().expect("viewport stored");
+        assert_eq!(stored.offset, (123.0, 45.0), "pan read back onto the view");
+        assert_eq!(stored.zoom, 2.0, "zoom read back onto the view");
+        assert_eq!(stored.pan_velocity, (7.0, -3.0), "inertia is per-view too");
+    }
+
+    #[test]
     fn ctrl_n_without_shift_makes_a_session_not_a_window() {
         // The unshifted Ctrl+N is the older new-session verb; the shift is the only
         // thing that distinguishes it from the new-window verb above. (Multi-window MW3.)

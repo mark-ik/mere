@@ -362,6 +362,10 @@ pub enum ContextAction {
     /// undirected degree). A scene-level presentation choice; drains like `SetLayoutStrategy`
     /// without touching `context_set`. (Node representation P0 — resize.)
     ToggleSizeByDegree,
+    /// Toggle the focused orrery pane's **size-by-importance** mode (node faces grow with their
+    /// graph-signals importance — degree-based now, betweenness later). A scene-level choice;
+    /// drains like `ToggleSizeByDegree`. (Graph signals — importance encoding.)
+    ToggleSizeByImportance,
     /// Override the context node(s)' **face** (the texture axis) — the per-node face picker.
     /// The id is a face key (`&'static str`, so `ContextAction` stays `Copy`): `"favicon"`,
     /// `"sprite"`, or `"bare"`. Applies to the context set like the engine pins. The body

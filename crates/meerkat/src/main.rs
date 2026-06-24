@@ -95,6 +95,7 @@ mod frame_a11y;
 mod frame_a11y_panes;
 mod frame_ops;
 mod frame_view;
+mod viewport;
 mod gloss;
 mod ime;
 mod input;
@@ -1177,14 +1178,24 @@ impl Shell {
         // graph.json). (Position sidecar.)
         if let Some(geom) = session_ops::load_cartography(&session_dir, &present_members) {
             orrery.seed_cartography(geom.iter());
-            // Restore the per-node sizes + size-by-degree alongside the positions. (Node-rep.)
-            orrery.apply_cartography_sizing(geom.size_iter(), geom.size_by_degree());
+            // Restore the importance metric first, so the sizing restore below recomputes with it.
+            orrery.apply_cartography_importance_metric(geom.importance_metric());
+            // Restore the per-node sizes + the size-by-degree / size-by-importance scene flags
+            // alongside the positions. (Node-rep / graph signals.)
+            orrery.apply_cartography_sizing(
+                geom.size_iter(),
+                geom.size_by_degree(),
+                geom.size_by_importance(),
+            );
             // Restore the custom sprite faces, so a textured node re-opens textured. (Node-rep.)
             orrery.apply_cartography_sprites(geom.sprite_iter());
             // ...and their collider hulls, so the traced-to-image collider survives too. (Node-rep.)
             orrery.apply_cartography_sprite_hulls(geom.sprite_hull_iter());
             // ...and the per-node physical materials, so a tuned node re-opens tuned. (Body & face.)
             orrery.apply_cartography_materials(geom.material_iter());
+            // ...and the face overrides LAST, so a node switched off its sprite face re-opens on
+            // the chosen face, not back on Sprite from the sprite restore above. (Body & face.)
+            orrery.apply_cartography_faces(geom.face_iter());
         }
         // Pool every graph a restored pane resolves to, not just the active one, so a
         // second graph-pane (persisted from a prior run) loads instead of leaving a
@@ -1322,7 +1333,7 @@ impl Shell {
         // Pass the whole pool; the ctx resolves the focused (or a per-pane) orrery
         // by `graph_id`. (Window composition P2; was a single bundled orrery, P1.)
         let pool_count = self.orreries.len();
-        WindowCtx {
+        let mut wc = WindowCtx {
             view,
             shared: &mut self.shared,
             orreries: &mut self.orreries,
@@ -1332,7 +1343,11 @@ impl Shell {
             render_core: self.render_core.as_ref(),
             commands: &mut self.commands,
             orrery_pool_count: pool_count,
-        }
+        };
+        // Install this window's per-pane cameras into the shared orreries for the
+        // pass; the ctx's `Drop` reads them back. (Camera on the view.)
+        wc.install_viewports();
+        wc
     }
 
     /// Read-only borrow of the primary window's view (registry entry, else the
@@ -1368,7 +1383,7 @@ impl Shell {
     fn window_ctx(&mut self, id: WindowId) -> Option<WindowCtx<'_>> {
         let view = self.windows.get_mut(&id)?;
         let pool_count = self.orreries.len();
-        Some(WindowCtx {
+        let mut wc = WindowCtx {
             view,
             shared: &mut self.shared,
             orreries: &mut self.orreries,
@@ -1378,7 +1393,11 @@ impl Shell {
             render_core: self.render_core.as_ref(),
             commands: &mut self.commands,
             orrery_pool_count: pool_count,
-        })
+        };
+        // Install this window's per-pane cameras for the pass; `Drop` reads them back.
+        // (Camera on the view.)
+        wc.install_viewports();
+        Some(wc)
     }
 
     /// The focused window's view (primary, or the pending bootstrap view) — the same

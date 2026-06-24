@@ -25,6 +25,9 @@ path = "src/main.rs"
 platen.workspace = true
 kernel.workspace = true
 gyre.workspace = true
+# The graph-structural signal producer (intel/signals): degree-based importance now (the
+# size-by-importance encoding reads it), richer signals later. (Graph signals.)
+signals.workspace = true
 
 # The actor harness behind the always-offload physics backend (P6): the gyre
 # Simulation runs on an armillary actor thread, emitting position snapshots the

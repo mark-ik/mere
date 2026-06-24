@@ -52,7 +52,8 @@ use build::{build_pool_dom, build_simulation, dark_scene_style, dedup_edges, sam
 use paint_list_api::ColorF;
 
 mod types;
-pub use types::{CameraView, Face, NodeShape, NodeState, PointerButton};
+pub use types::{CameraView, Face, NodeShape, NodeState, PointerButton, Viewport};
+pub use signals::ImportanceMetric;
 
 mod input;
 mod frame;
@@ -222,6 +223,27 @@ pub struct Orrery {
     /// so the spatial map reads connection weight at a glance. Default off (uniform).
     /// (P0 resize — size-by-degree.)
     size_by_degree: bool,
+    /// Scene toggle: when on, a node's face grows with its **importance signal** (the
+    /// graph-signals layer — degree-based now, betweenness later), normalized so the most
+    /// important node hits the cap. The signal-driven size channel; wins over size-by-degree,
+    /// loses to a manual override. Default off. (Graph signals — importance encoding.)
+    size_by_importance: bool,
+    /// Which metric [`size_by_importance`](Self::size_by_importance) reads: degree (cheap default)
+    /// or betweenness (structural brokerage). A per-scene choice. (Graph signals — importance metric.)
+    importance_metric: signals::ImportanceMetric,
+    /// The cached per-node importance (normalized `0..=1`), refreshed from `signals` whenever
+    /// geometry is pushed while [`size_by_importance`](Self::size_by_importance) is on (the
+    /// normalization needs all nodes, so it is computed once per change, not per `node_size`
+    /// call). Empty when the mode is off. (Graph signals — importance encoding.)
+    node_importance: HashMap<NodeKey, f32>,
+    /// Whether [`node_importance`](Self::node_importance) is stale and must be recomputed before
+    /// the next read. Set by [`reconcile_derived`](Self::reconcile_derived) (the topology-change
+    /// hook) and on enabling the mode; cleared after a recompute. The cheap-signal cache: degree
+    /// importance recomputes only on a topology change, not on every geometry push (a size-only
+    /// change does not dirty it). The generation + per-signal-dirty-bit + background-lane cache
+    /// the plan describes is the *expensive*-signal substrate (betweenness / communities), built
+    /// when those land. (Graph signals — the cheap-signal cache.)
+    importance_dirty: bool,
     /// Scene toggle: when on, a node floats above the ground by its undirected degree
     /// (hubs highest), with a stem to its ground anchor — the isometric "fake height".
     /// Purely visual (the gyre body does not move). Default off. (Isometric camera P3.)
@@ -325,6 +347,8 @@ impl Orrery {
         self.node_sprites.clear();
         self.node_sprite_hulls.clear();
         self.node_materials.clear();
+        self.node_importance.clear();
+        self.importance_dirty = true;
         self.drag = None;
         self.field_drag = None;
         self.marquee = None;
@@ -391,6 +415,10 @@ impl Orrery {
             ambient_tincture: ColorF::new(0.0, 0.0, 0.0, 0.0),
             node_materials: HashMap::new(),
             size_by_degree: false,
+            size_by_importance: false,
+            importance_metric: signals::ImportanceMetric::Degree,
+            node_importance: HashMap::new(),
+            importance_dirty: true,
             height_by_degree: false,
             marquee: None,
             ctrl: false,
@@ -456,6 +484,9 @@ impl Orrery {
     /// selection, or restart the settle; callers do that as they need. The pool
     /// is structural, so it is rebuilt, not grown incrementally.
     fn reconcile_derived(&mut self) {
+        // The graph topology changed (this is the topology-change hook), so any degree-derived
+        // signal is stale: mark the importance cache for recompute on the next push. (Graph signals.)
+        self.importance_dirty = true;
         let nodes: Vec<(NodeKey, Point2D<f32>)> = self
             .graph
             .nodes()
@@ -489,6 +520,11 @@ impl Orrery {
     /// follow with [`resettle_for_size`](Self::resettle_for_size) so neighbors re-separate.
     /// (P0/P5 collider.)
     fn push_node_geometry(&mut self) {
+        // Refresh the cached importance before sizing, so size-by-importance reads a current
+        // snapshot (the normalization needs all nodes; do it once here, not per `node_size`).
+        if self.size_by_importance {
+            self.recompute_importance();
+        }
         let radii: Vec<(NodeKey, f32)> = self
             .graph
             .nodes()
@@ -911,6 +947,8 @@ impl Orrery {
                 .filter_map(|(&key, &size)| self.graph.get_node(key).map(|node| (node.id, size))),
         )
         .with_size_by_degree(self.size_by_degree)
+        .with_size_by_importance(self.size_by_importance)
+        .with_importance_metric(self.importance_metric.as_code())
         // Persist the custom sprite faces (the imported image as a data-URI) so a node textured
         // with one re-opens textured, not reverted to its default face. (Node-rep — sprite persistence.)
         .with_sprites(self.node_sprites.iter().filter_map(|(&key, uri)| {
@@ -927,6 +965,11 @@ impl Orrery {
             self.graph
                 .get_node(key)
                 .map(|node| (node.id, (mat.restitution, mat.friction, mat.density)))
+        }))
+        // Persist the per-node face overrides (favicon / sprite / bare), so a node's chosen
+        // texture re-opens that way (the body persists separately). (Node body & face — face.)
+        .with_faces(self.node_faces.iter().filter_map(|(&key, &face)| {
+            self.graph.get_node(key).map(|node| (node.id, face.as_code().to_string()))
         }))
     }
 
@@ -1024,8 +1067,17 @@ impl Orrery {
         &mut self,
         sizes: impl IntoIterator<Item = (uuid::Uuid, f32)>,
         size_by_degree: bool,
+        size_by_importance: bool,
     ) {
         self.size_by_degree = size_by_degree;
+        // Restore size-by-importance before `push_node_geometry` below, and force the cache stale
+        // so the push actually recomputes: on a reused orrery (a session switch) `importance_dirty`
+        // may already be clean, which would otherwise leave the restored mode with an empty map and
+        // every node at the default size. (Graph signals — restore the importance encoding.)
+        self.size_by_importance = size_by_importance;
+        if size_by_importance {
+            self.importance_dirty = true;
+        }
         for (id, size) in sizes {
             if let Some((key, _)) = self.graph.get_node_by_id(id) {
                 self.node_sizes.insert(key, size.clamp(16.0, 160.0));
@@ -1072,6 +1124,19 @@ impl Orrery {
     ) {
         for (id, (restitution, friction, density)) in materials {
             self.set_node_material(id, gyre::NodeMaterial { restitution, friction, density });
+        }
+    }
+
+    /// Restore the per-node face overrides from a persisted cartography sidecar (call it AFTER
+    /// [`apply_cartography_sprites`], so a node the user switched off its sprite face re-opens on
+    /// the chosen face rather than back on `Sprite`). Each `(member, code)` is applied via
+    /// [`set_node_face`]. An unknown member id is skipped. (Node body & face — face persistence.)
+    pub fn apply_cartography_faces<'a>(
+        &mut self,
+        faces: impl IntoIterator<Item = (uuid::Uuid, &'a str)>,
+    ) {
+        for (id, code) in faces {
+            self.set_node_face(id, Face::from_code(code));
         }
     }
 
@@ -1236,12 +1301,20 @@ impl Orrery {
     /// same value to center the face on the gyre collider. (P0 resize.)
     pub fn node_size(&self, key: NodeKey) -> f32 {
         const DEFAULT: f32 = 36.0;
+        const MAX: f32 = 88.0;
         if let Some(&s) = self.node_sizes.get(&key) {
             return s;
         }
+        // Size by importance (the signal-driven channel) wins over size-by-degree: normalized
+        // importance (0..=1) maps to DEFAULT..=MAX, so the most important node hits the cap and
+        // the rest scale relative to it. An un-scored node reads 0 -> DEFAULT. (Graph signals.)
+        if self.size_by_importance {
+            let importance = self.node_importance.get(&key).copied().unwrap_or(0.0);
+            return DEFAULT + importance * (MAX - DEFAULT);
+        }
         if self.size_by_degree {
             let degree = self.graph.neighbors_undirected(key).count();
-            return (DEFAULT + 8.0 * degree as f32).min(88.0);
+            return (DEFAULT + 8.0 * degree as f32).min(MAX);
         }
         DEFAULT
     }
@@ -1275,6 +1348,69 @@ impl Orrery {
     /// Whether size-by-degree is on. (P0 resize.)
     pub fn size_by_degree(&self) -> bool {
         self.size_by_degree
+    }
+
+    /// Toggle **size-by-importance**: when on, node faces grow with their graph-signals
+    /// importance (degree-based now, betweenness later), normalized so the most important node
+    /// hits the cap. A scene-level choice (off by default); wins over size-by-degree, loses to a
+    /// manual per-node override. Refreshes the cached importance + re-separates neighbours.
+    /// (Graph signals — importance encoding.)
+    pub fn set_size_by_importance(&mut self, on: bool) {
+        self.size_by_importance = on;
+        if on {
+            self.importance_dirty = true; // force a fresh compute on enable
+            self.recompute_importance();
+        } else {
+            self.node_importance.clear();
+        }
+        self.resettle_for_size();
+    }
+
+    /// Whether size-by-importance is on. (Graph signals — importance encoding.)
+    pub fn size_by_importance(&self) -> bool {
+        self.size_by_importance
+    }
+
+    /// Choose the importance metric (degree or betweenness) size-by-importance reads. Dirties the
+    /// cache + re-separates so the change takes effect immediately when the mode is on; a no-op
+    /// effect when off. (Graph signals — importance metric.)
+    pub fn set_importance_metric(&mut self, metric: ImportanceMetric) {
+        self.importance_metric = metric;
+        self.importance_dirty = true;
+        if self.size_by_importance {
+            self.recompute_importance();
+            self.resettle_for_size();
+        }
+    }
+
+    /// The active importance metric. (Graph signals — importance metric.)
+    pub fn importance_metric(&self) -> ImportanceMetric {
+        self.importance_metric
+    }
+
+    /// Restore the importance metric from a persisted sidecar code. Call this **before**
+    /// [`apply_cartography_sizing`](Self::apply_cartography_sizing), so its size recompute uses the
+    /// restored metric: this only records the choice + dirties the cache, leaving the geometry push
+    /// to the sizing restore. An empty / unknown code restores degree. (Graph signals — metric
+    /// persistence.)
+    pub fn apply_cartography_importance_metric(&mut self, code: &str) {
+        self.importance_metric = ImportanceMetric::from_code(code);
+        self.importance_dirty = true;
+    }
+
+    /// Recompute the cached per-node importance from `signals` (degree-based, normalized
+    /// `0..=1`). Called when geometry is pushed under size-by-importance; the generation +
+    /// dirty-bit cache that gates this is a later graph-signals slice. (Graph signals.)
+    fn recompute_importance(&mut self) {
+        // The cheap-signal cache: only recompute when the graph topology changed since the last
+        // compute (the dirty flag), so a size-only geometry push does not redo the O(N) degree
+        // pass. (Graph signals — the cheap-signal cache.)
+        if !self.importance_dirty {
+            return;
+        }
+        self.node_importance =
+            signals::importance(&self.graph, self.importance_metric).weights.into_iter().collect();
+        self.importance_dirty = false;
     }
 
     /// A node's render height (px above the ground plane) for the isometric float: `0`
@@ -1626,6 +1762,39 @@ impl Orrery {
             1.0
         };
         self.camera.offset = view.offset;
+    }
+
+    /// The full per-pane [`Viewport`] (camera + pan inertia), for the host to stash on
+    /// the owning (window, graph) pane and reinstall before the next render / input
+    /// pass via [`set_viewport`](Self::set_viewport). Carries yaw / tilt too (unlike
+    /// [`camera`](Self::camera)), so an isometric pane round-trips losslessly. This is
+    /// the seam that moves the camera off the shared authority onto the view: the
+    /// orrery's own `camera` / `pan_velocity` become per-pass working state the host
+    /// drives, so two windows on one graph hold distinct viewports, not a mirror.
+    pub fn viewport(&self) -> Viewport {
+        Viewport {
+            offset: self.camera.offset,
+            zoom: self.camera.zoom,
+            yaw: self.camera.yaw,
+            tilt: self.camera.tilt,
+            pan_velocity: self.pan_velocity,
+        }
+    }
+
+    /// Install a per-pane [`Viewport`] before rendering or handling input for the pane
+    /// that owns it. Clamps as [`set_camera`](Self::set_camera) (zoom) and
+    /// [`set_tilt`](Self::set_tilt) (tilt) do, so a host-stashed value is sanitized on
+    /// the way back in.
+    pub fn set_viewport(&mut self, v: Viewport) {
+        self.camera.offset = v.offset;
+        self.camera.zoom = if v.zoom.is_finite() && v.zoom > 0.0 {
+            v.zoom.clamp(MIN_ZOOM, MAX_ZOOM)
+        } else {
+            1.0
+        };
+        self.camera.yaw = v.yaw;
+        self.camera.tilt = v.tilt.clamp(0.05, 1.0);
+        self.pan_velocity = v.pan_velocity;
     }
 
     /// Toggle the isometric (foreshortened-ground) projection. `on` reclines the

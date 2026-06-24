@@ -390,7 +390,9 @@ pub fn context_action_scope(action: crate::ContextAction) -> MenuScope {
     match action {
         AddNode | AddField | AddTile | AddSession | ShowAllNodes | MirrorTiles => MenuScope::Canvas,
         OpenNodeFacets | ResizeNode => MenuScope::SingleNode,
-        OpenSplits | AddTag | IsolateSelection | ToggleSizeByDegree => MenuScope::Selection,
+        OpenSplits | AddTag | IsolateSelection | ToggleSizeByDegree | ToggleSizeByImportance => {
+            MenuScope::Selection
+        }
         Stack | Relate => MenuScope::MultiNode,
         _ => MenuScope::Always,
     }
@@ -437,6 +439,7 @@ pub const PALETTE_CONTEXT_ACTIONS: &[(crate::ContextAction, &str, &str)] = {
         (AddTag, "add_tag", "Add tag to selection"),
         (ResizeNode, "resize_node", "Resize node (object card)"),
         (ToggleSizeByDegree, "size_by_degree", "Toggle size by degree"),
+        (ToggleSizeByImportance, "size_by_importance", "Toggle size by importance"),
         (IsolateSelection, "isolate", "Isolate selection"),
         (ShowAllNodes, "show_all", "Show all nodes"),
         (MirrorTiles, "mirror_tiles", "Mirror open tiles"),
@@ -458,6 +461,7 @@ pub const DEFAULT_MENU_ACTIONS: &[&str] = &[
     "resize_node",      // single — Resize (object card)
     "add_tag",          // selection
     "size_by_degree",   // selection — scene toggle
+    "size_by_importance", // selection — scene toggle (graph-signals importance)
     "isolate",          // selection
     "show_all",         // canvas — when a scope lens is active
     "mirror_tiles",     // canvas — when tiles are open

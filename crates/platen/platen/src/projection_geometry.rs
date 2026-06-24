@@ -180,6 +180,17 @@ pub struct CartographyGeometry {
     /// save time. Serde-defaulted to `false`. (Node-rep — size persistence.)
     #[serde(default)]
     size_by_degree: bool,
+    /// Whether the scene's **size-by-importance** mode (faces grow with the graph-signals
+    /// importance) was on at save time. Serde-defaulted to `false`. (Graph signals.)
+    #[serde(default)]
+    size_by_importance: bool,
+    /// The importance **metric** code (`degree` / `betweenness`) size-by-importance read at save
+    /// time, so a betweenness-sized scene re-opens betweenness-sized. Stored as a string to keep
+    /// this crate signals-free; the orrery maps it to/from `ImportanceMetric`. Serde-defaulted to
+    /// the empty string, which the orrery's `from_code` reads as `degree` (a pre-metric sidecar
+    /// loads as degree). (Graph signals — metric persistence.)
+    #[serde(default)]
+    importance_metric: String,
     /// Per-member sprite faces: the imported image as a PNG data-URI, for members the user
     /// gave a custom face. A member absent here has no sprite (its content-type default /
     /// favicon applies). Serde-defaulted, so a pre-sprite sidecar still loads. The data-URIs
@@ -198,6 +209,12 @@ pub struct CartographyGeometry {
     /// Serde-defaulted. (Node body & face — material.)
     #[serde(default)]
     materials: Vec<(GraphMemberId, (f32, f32, f32))>,
+    /// Per-member **face** overrides on the Face axis, as a string code (`favicon` / `sprite` /
+    /// `bare`), so a node's chosen texture re-opens that way. Stored as a string to keep this
+    /// crate orrery-free; the orrery maps it to/from `orrery::Face`. Serde-defaulted. (Node body
+    /// & face — face persistence.)
+    #[serde(default)]
+    faces: Vec<(GraphMemberId, String)>,
 }
 
 impl CartographyGeometry {
@@ -212,6 +229,19 @@ impl CartographyGeometry {
     /// (Node-rep — size persistence.)
     pub fn with_sizes(mut self, sizes: impl IntoIterator<Item = (GraphMemberId, f32)>) -> Self {
         self.sizes = sizes.into_iter().collect();
+        self
+    }
+
+    /// Set the scene's size-by-importance flag (chainable). (Graph signals.)
+    pub fn with_size_by_importance(mut self, on: bool) -> Self {
+        self.size_by_importance = on;
+        self
+    }
+
+    /// Set the scene's importance-metric code (`degree` / `betweenness`) (chainable).
+    /// (Graph signals — metric persistence.)
+    pub fn with_importance_metric(mut self, code: impl Into<String>) -> Self {
+        self.importance_metric = code.into();
         self
     }
 
@@ -249,6 +279,16 @@ impl CartographyGeometry {
         self
     }
 
+    /// Attach per-member face overrides (string codes `favicon` / `sprite` / `bare`)
+    /// (chainable). (Node body & face — face persistence.)
+    pub fn with_faces(
+        mut self,
+        faces: impl IntoIterator<Item = (GraphMemberId, String)>,
+    ) -> Self {
+        self.faces = faces.into_iter().collect();
+        self
+    }
+
     /// The `(member, (x, y))` pairs, in insertion order.
     pub fn iter(&self) -> impl Iterator<Item = (GraphMemberId, (f32, f32))> + '_ {
         self.positions.iter().copied()
@@ -262,6 +302,17 @@ impl CartographyGeometry {
     /// Whether size-by-degree was on at save time. (Node-rep — size persistence.)
     pub fn size_by_degree(&self) -> bool {
         self.size_by_degree
+    }
+
+    /// Whether size-by-importance was on at save time. (Graph signals.)
+    pub fn size_by_importance(&self) -> bool {
+        self.size_by_importance
+    }
+
+    /// The importance-metric code (`degree` / `betweenness`, or empty for a pre-metric sidecar)
+    /// at save time. (Graph signals — metric persistence.)
+    pub fn importance_metric(&self) -> &str {
+        &self.importance_metric
     }
 
     /// The `(member, data-URI)` sprite faces, in insertion order. (Node-rep — sprite persistence.)
@@ -279,6 +330,12 @@ impl CartographyGeometry {
     /// (for the host to apply via `apply_cartography_materials`). (Node body & face — material.)
     pub fn material_iter(&self) -> impl Iterator<Item = (GraphMemberId, (f32, f32, f32))> + '_ {
         self.materials.iter().map(|(m, mat)| (*m, *mat))
+    }
+
+    /// The `(member, code)` face overrides, in insertion order (for the host to apply via
+    /// `apply_cartography_faces`). (Node body & face — face persistence.)
+    pub fn face_iter(&self) -> impl Iterator<Item = (GraphMemberId, &str)> + '_ {
+        self.faces.iter().map(|(m, code)| (*m, code.as_str()))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -305,6 +362,7 @@ impl CartographyGeometry {
         geom.sprites.retain(|(member, _)| present.contains(member));
         geom.sprite_hulls.retain(|(member, _)| present.contains(member));
         geom.materials.retain(|(member, _)| present.contains(member));
+        geom.faces.retain(|(member, _)| present.contains(member));
         Some(geom)
     }
 }
@@ -398,6 +456,19 @@ mod tests {
         let mats: std::collections::HashMap<_, _> = back.material_iter().collect();
         assert_eq!(mats.get(&m(1)), Some(&(0.6, 0.3, 0.002)), "the kept member's material survives");
         assert_eq!(mats.get(&m(2)), None, "the absent member's material is pruned");
+    }
+
+    #[test]
+    fn cartography_faces_round_trip_and_prune() {
+        let geom = CartographyGeometry::from_positions([(m(1), (0.0, 0.0)), (m(2), (1.0, 1.0))])
+            .with_faces([(m(1), "bare".to_string()), (m(2), "sprite".to_string())]);
+        let json = geom.to_persisted_json().unwrap();
+        // Member 2 deleted since the save — its face prunes alongside its position.
+        let present: HashSet<GraphMemberId> = [m(1)].into_iter().collect();
+        let back = CartographyGeometry::from_persisted_json(&json, &present).unwrap();
+        let faces: std::collections::HashMap<_, _> = back.face_iter().collect();
+        assert_eq!(faces.get(&m(1)), Some(&"bare"), "the kept member's face survives");
+        assert_eq!(faces.get(&m(2)), None, "the absent member's face is pruned");
     }
 
     #[test]

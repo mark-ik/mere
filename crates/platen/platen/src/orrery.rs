@@ -18,7 +18,7 @@
 //! from the same accessor, so the producer is unchanged. The field's *visual*
 //! couplings are resolved here too, via [`crate::coupling_paint`].
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use cartography::Projection;
 use cartography::projection::{PositionedEdge, PositionedNode, ProjectionMetadata};
@@ -189,8 +189,11 @@ fn projected_undirected_edges(
     graph: &Graph,
     edge_visible: &impl Fn(&RelationView) -> bool,
 ) -> Vec<PositionedEdge> {
-    let mut seen = HashSet::new();
-    let mut edges = Vec::new();
+    // One edge per pair, but count how many visible relations land on it: the multigraph
+    // multiplicity (more statements between a pair => a heavier, thicker edge). First time a
+    // pair is seen records its endpoints + index; repeats just bump the weight. (Graph signals.)
+    let mut index_of: HashMap<(NodeKey, NodeKey), usize> = HashMap::new();
+    let mut edges: Vec<PositionedEdge> = Vec::new();
     for rel in graph.relations() {
         let (a, b) = (rel.from, rel.to);
         if a == b {
@@ -200,8 +203,12 @@ fn projected_undirected_edges(
             continue; // the host hid this relation (by node-pair or by family)
         }
         let pair = if a <= b { (a, b) } else { (b, a) };
-        if seen.insert(pair) {
-            edges.push(PositionedEdge { edge: None, from: a, to: b, path: Vec::new() });
+        match index_of.get(&pair) {
+            Some(&i) => edges[i].weight += 1.0,
+            None => {
+                index_of.insert(pair, edges.len());
+                edges.push(PositionedEdge { edge: None, from: a, to: b, path: Vec::new(), weight: 1.0 });
+            }
         }
     }
     edges
@@ -579,6 +586,31 @@ mod tests {
         let keys: HashSet<NodeKey> = p.nodes.iter().map(|n| n.node).collect();
         assert_eq!(p.nodes.len(), 2, "only the curated members project");
         assert!(keys.contains(&a) && keys.contains(&c), "members 1 and 3, not 2");
+    }
+
+    #[test]
+    fn projected_edges_dedup_per_pair_and_weight_by_multiplicity() {
+        // A line a-b-c: each pair has one hyperlink => two edges at unit weight.
+        let mut g = Graph::new();
+        let a = node(&mut g, 1, 0.0, 0.0);
+        let b = node(&mut g, 2, 1.0, 0.0);
+        let c = node(&mut g, 3, 2.0, 0.0);
+        let _ = g.assert_relation(a, b, hyperlink());
+        let _ = g.assert_relation(b, c, hyperlink());
+        let edges = projected_undirected_edges(&g, &|_| true);
+        assert_eq!(edges.len(), 2, "one edge per connected pair");
+        assert!(edges.iter().all(|e| (e.weight - 1.0).abs() < 1e-6), "a single-link pair is unit weight");
+
+        // A reciprocal pair (a->b and b->a) is two relations on the same undirected pair => the
+        // edge weighs 2 (the multigraph multiplicity), so it paints thicker. (Graph signals.)
+        let mut g2 = Graph::new();
+        let x = node(&mut g2, 10, 0.0, 0.0);
+        let y = node(&mut g2, 11, 1.0, 0.0);
+        let _ = g2.assert_relation(x, y, hyperlink());
+        let _ = g2.assert_relation(y, x, hyperlink());
+        let edges = projected_undirected_edges(&g2, &|_| true);
+        assert_eq!(edges.len(), 1, "still one edge for the pair");
+        assert!((edges[0].weight - 2.0).abs() < 1e-6, "two relations on the pair => weight 2");
     }
 
     fn hyperlink() -> EdgeAssertion {

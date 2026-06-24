@@ -73,6 +73,42 @@ fn scrying_vk(event: &winit::event::KeyEvent) -> u32 {
     }
 }
 
+/// Apply one comms actor update to a window's chrome — the per-window half of the
+/// MW3 step-5 fan-out. Mirrors the inline mutations the primary's actor-drain does, so a
+/// chrome-bearing secondary stays in sync with the primary. (MW3 step 5.)
+fn apply_comms_to_chrome(
+    view: &mut super::window_view::WindowView,
+    update: &comms_host::CommsUpdate,
+) {
+    match update {
+        comms_host::CommsUpdate::Inbox(inbox) => {
+            view.chrome_update(|c| c.comms.set_inbox(inbox.clone()));
+        }
+        comms_host::CommsUpdate::Thread(id, messages) => {
+            view.chrome_update(|c| {
+                if c.comms.selected() == Some(id) {
+                    c.comms.set_thread(messages.clone());
+                }
+            });
+        }
+        comms_host::CommsUpdate::Sent(_) => {
+            view.chrome_update(|c| c.clear_comms_draft());
+        }
+        comms_host::CommsUpdate::SendOutcome(line) => {
+            view.chrome_update(|c| c.comms.set_send_status(line.clone()));
+        }
+        comms_host::CommsUpdate::Identity {
+            misfin_address,
+            cabal_ticket,
+        } => {
+            view.chrome_update(|c| {
+                c.comms
+                    .set_identity(misfin_address.clone(), cabal_ticket.clone())
+            });
+        }
+    }
+}
+
 impl ApplicationHandler for Shell {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // winit calls `resumed` on every resume; the primary is created once. After
@@ -343,14 +379,20 @@ impl ApplicationHandler for Shell {
             );
             latest_sync = Some(sync::to_indicator(&update.status, sync::LANE_LABEL));
         }
-        if let Some(indicator) = latest_sync {
+        // Apply to the primary inline; `latest_sync` is replayed onto chrome-bearing
+        // secondaries after the ctx borrow ends (step-5 fan-out below), so borrow it
+        // here rather than moving it out.
+        if let Some(indicator) = &latest_sync {
             wc.view.chrome_update(|c| c.sync = indicator.clone());
             wc.view.request_redraw();
         }
         // Comms (P6c): the comms actor delivers conversation lists + threads here;
-        // fold each into the docked pane (the host owns the chrome mutation).
+        // fold each into the docked pane (the host owns the chrome mutation). Each
+        // update is also collected for the step-5 fan-out onto chrome-bearing secondaries.
         let mut comms_changed = false;
+        let mut comms_updates: Vec<comms_host::CommsUpdate> = Vec::new();
         while let Ok(update) = wc.shared.inbox.comms.try_recv() {
+            comms_updates.push(update.clone());
             match update {
                 comms_host::CommsUpdate::Inbox(inbox) => {
                     wc.shared.observability.record_actor(
@@ -444,6 +486,35 @@ impl ApplicationHandler for Shell {
         // self-sustains through `needs_redraw`).
         wc.drain_portable_diagnostics();
         wc.view.request_redraw();
+        drop(wc);
+        // MW3 step 5 (the deferred d2): the drain above ran through the primary's ctx
+        // (`ctx()` always bundles the primary), so only the primary was woken. Every
+        // secondary window shares the same kernel, caches, and pooled orreries and shows
+        // the same physics-animated graph, so this same wake must repaint them too. Fan
+        // the redraw out now the ctx borrow has ended (the two-phase shape the d2 note
+        // called for).
+        self.redraw_secondary_windows();
+        // MW3 step 5 chrome fan-out: the sync chip + comms updates were applied to the
+        // primary's chrome inline above; replay them onto every *other* chrome-bearing
+        // (non-slim) window now the ctx borrow has ended. A slim leaf carries no sync
+        // chip / comms pane, so it is skipped — today's secondaries are slim, so this is
+        // exercised only once a full-chrome co-window exists, but the path is now wired
+        // and shares the inline mutation logic (`apply_comms_to_chrome`).
+        if latest_sync.is_some() || !comms_updates.is_empty() {
+            let primary = self.primary;
+            for (id, view) in self.windows.iter_mut() {
+                if Some(*id) == primary || view.kind.is_slim() {
+                    continue;
+                }
+                if let Some(indicator) = &latest_sync {
+                    view.chrome_update(|c| c.sync = indicator.clone());
+                }
+                for update in &comms_updates {
+                    apply_comms_to_chrome(view, update);
+                }
+                view.request_redraw();
+            }
+        }
     }
 
     fn window_event(
@@ -692,6 +763,11 @@ impl ApplicationHandler for Shell {
             WindowEvent::RedrawRequested => wc.render(),
             _ => {}
         }
+        // End the ctx pass explicitly: `WindowCtx`'s `Drop` reads this window's viewports
+        // back out of the shared orreries (camera on the view) and releases the `self`
+        // borrow, so the registry op below is reachable. (Without this, the `Drop` impl
+        // holds the borrow to end of scope and the `pending_exit` check below cannot run.)
+        drop(wc);
         // The custom close control set `pending_exit` on this window's view; honor it
         // the same way as `CloseRequested`, forked by role. The ctx borrow has ended,
         // so the registry op is reachable. Queued `SpawnWindow`s drain in
@@ -713,6 +789,18 @@ impl ApplicationHandler for Shell {
 }
 
 impl Shell {
+    /// Wake every non-primary window to repaint. The actor-drain in `user_event` writes
+    /// shared state through the primary's ctx; the secondaries show the same pooled
+    /// orreries, caches, and physics, so they redraw on the same wake. A no-op while only
+    /// the primary exists. (Multi-window MW3 step 5 — the `user_event` redraw fan-out.)
+    fn redraw_secondary_windows(&self) {
+        for (id, view) in self.windows.iter() {
+            if Some(*id) != self.primary {
+                view.request_redraw();
+            }
+        }
+    }
+
     /// Create an OS window for `view`, attach a swapchain surface from the shared
     /// (already-booted) render core, show it, and key it into the registry. Returns
     /// the new window's id + handle, or `None` if window / surface creation failed.
@@ -794,13 +882,15 @@ impl Shell {
     /// Open a second OS window over the shared session (Cmd/Ctrl+Shift+N → a queued
     /// `SpawnWindow`). The render core is already booted (the primary did it on the
     /// first resume), so the new view shares the graph, actors, and caches, differing
-    /// only in its own chrome + surface + frame. v0 is a full-chrome window; MW3 step
-    /// 4 makes it a slim workbench-only leaf.
+    /// only in its own chrome + surface + frame. It is a slim workbench-only leaf
+    /// (`WindowKind::Leaf` + slim chrome — MW3 step 4, set in [`build_window_view`]).
     ///
-    /// The secondary has no AccessKit bridge yet — the bridge is still shell-singular,
-    /// installed against the primary — so per-window a11y is MW3 step 6. It renders on
-    /// its own input + the spawn redraw; live actor-driven updates reach it once the
-    /// `user_event` fan-out lands (MW3 step 5, the deferred d2).
+    /// Live actor-driven updates reach it through the `user_event` fan-out (redraw for
+    /// shared graph/content changes, plus chrome writes once it carries chrome — MW3
+    /// step 5). The secondary still has no AccessKit bridge — the bridge is shell-
+    /// singular, installed against the primary — so per-window a11y is MW3 step 6.
+    ///
+    /// [`build_window_view`]: Shell::build_window_view
     fn spawn_window(&mut self, event_loop: &ActiveEventLoop) {
         // Can't happen via the keyboard verb (it's post-resume), but guard anyway.
         if self.render_core.is_none() {

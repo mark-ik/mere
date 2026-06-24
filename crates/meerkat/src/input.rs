@@ -880,6 +880,7 @@ impl WindowCtx<'_> {
         }
         if let Some(member) = self.view.object_card {
             if !keys.is_empty() {
+                let mut face_changed = false;
                 for key in keys {
                     match key.as_str() {
                         "size:up" => {
@@ -889,13 +890,19 @@ impl WindowCtx<'_> {
                             self.orrery_mut().step_node_size_tier(member, -1);
                         }
                         "face:favicon" => {
-                            self.orrery_mut().set_node_face(member, orrery::Face::Favicon)
+                            self.orrery_mut().set_node_face(member, orrery::Face::Favicon);
+                            face_changed = true;
                         }
                         "face:bare" => {
-                            self.orrery_mut().set_node_face(member, orrery::Face::Bare)
+                            self.orrery_mut().set_node_face(member, orrery::Face::Bare);
+                            face_changed = true;
                         }
                         _ => {}
                     }
+                }
+                // The face override persists in the cartography sidecar; save it now. (Body & face.)
+                if face_changed {
+                    self.save_session();
                 }
                 self.view.request_redraw();
             }
@@ -1284,6 +1291,15 @@ impl WindowCtx<'_> {
             // The `pelt/orrery` scene toggles, driving the same methods the context menu does
             // (so the page and the menu stay one source of truth). (Settings lane P2b.)
             "orrery:sizebydegree" => self.toggle_orrery_size_by_degree(),
+            "orrery:sizebyimportance" => self.toggle_orrery_size_by_importance(),
+            "orrery:importance:degree" => {
+                self.orrery_mut().set_importance_metric(orrery::ImportanceMetric::Degree);
+                self.view.request_redraw();
+            }
+            "orrery:importance:betweenness" => {
+                self.orrery_mut().set_importance_metric(orrery::ImportanceMetric::Betweenness);
+                self.view.request_redraw();
+            }
             "orrery:mirror" => self.toggle_mirror_tiles(),
             k if k.starts_with("orrery:layout:") => {
                 self.set_orrery_layout(&k["orrery:layout:".len()..]);
