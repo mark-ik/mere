@@ -15,7 +15,7 @@
 //! props use an axis-aligned [`NodeCollider::Hull`] rect. Joints (P4b) bind bodies into chains,
 //! cradles, and bridges. (Physics scenes P4a / P4b.)
 
-use crate::{NodeCollider, SceneBodySpec, SceneJoint, SceneJointSpec, SceneSpec};
+use crate::{JointMotorSpec, NodeCollider, SceneBodySpec, SceneJoint, SceneJointSpec, SceneSpec};
 
 /// A transplanted demo scene: a bumpy fixed floor (a row of big fixed balls) with a handful of
 /// dynamic balls falling onto it under gravity and piling up. The original "interactive scene"
@@ -242,6 +242,183 @@ pub fn fountain_scene() -> SceneSpec {
     SceneSpec { bodies, gravity: (0.0, 520.0), default_tangible: false, perpetual: false, joints: Vec::new() }
 }
 
+/// A Newton's cradle: five elastic balls, each hung from its own fixed anchor by a rigid revolute
+/// rod so they swing on arcs and rest just touching in a row. The leftmost is launched outward, so
+/// it swings back and strikes the row, and the momentum carries through the still balls to kick the
+/// far one out: the classic click-clack. `perpetual` (near-zero damping, restitution 0.95) so the
+/// transfer keeps going as a backdrop rather than damping out in a few swings. (rapier `joints2`
+/// family / the canonical demo; reproduced via revolute pendulums.)
+pub fn cradle_scene() -> SceneSpec {
+    let rod = 170.0;
+    let anchor_y = -220.0;
+    let r = 22.0;
+    // Bodies 0..5 are the fixed anchors (a row, 2r apart so the hung balls just touch); bodies 5..10
+    // are the dynamic balls hanging `rod` below each anchor. The leftmost ball gets an outward shove.
+    let mut bodies = Vec::new();
+    for i in 0..5 {
+        let x = (i as f32 - 2.0) * (2.0 * r);
+        bodies.push(SceneBodySpec::fixed(NodeCollider::Ball { radius: 8.0 }, (x, anchor_y)));
+    }
+    for i in 0..5 {
+        let x = (i as f32 - 2.0) * (2.0 * r);
+        let vel = if i == 0 { (-340.0, 0.0) } else { (0.0, 0.0) };
+        bodies.push(
+            SceneBodySpec::dynamic(NodeCollider::Ball { radius: r }, (x, anchor_y + rod))
+                .velocity(vel)
+                .restitution(0.95),
+        );
+    }
+    // A rigid revolute rod from each anchor (i) to its ball (5 + i): the anchors coincide and the
+    // ball's `(0, -rod)` point pins to the anchor, so the ball swings on a fixed-length arc.
+    let joints = (0..5)
+        .map(|i| SceneJointSpec {
+            body_a: i,
+            body_b: 5 + i,
+            joint: SceneJoint::Revolute {
+                anchor_a: (0.0, 0.0),
+                anchor_b: (0.0, -rod),
+                motor: None,
+            },
+        })
+        .collect();
+    SceneSpec { bodies, gravity: (0.0, 600.0), default_tangible: false, perpetual: true, joints }
+}
+
+/// A suspended plank bridge: nine plank bodies hinged end to end by free revolute joints and pinned
+/// at both ends to fixed posts, with a couple of heavy balls dropped on the span so it bows into a
+/// deep catenary sag and rebounds. The hinge chain makes it a true rope bridge (floppy), the posts
+/// hold the ends. (planck.js `Bridge` / rapier examples; reproduced via a revolute-hinge chain.)
+pub fn bridge_scene() -> SceneSpec {
+    let halfw = 33.0;
+    // Body 0 is the left post, bodies 1..=9 the nine planks, body 10 the right post (all in a row at
+    // y=0); bodies 11, 12 are the weights dropped on the deck.
+    let mut bodies = vec![SceneBodySpec::fixed(NodeCollider::Ball { radius: 10.0 }, (-297.0, 0.0))];
+    let plank = NodeCollider::Hull {
+        points: vec![(-halfw, -6.0), (halfw, -6.0), (halfw, 6.0), (-halfw, 6.0)],
+        fallback: 20.0,
+    };
+    for i in 0..9 {
+        bodies.push(SceneBodySpec::dynamic(plank.clone(), (-264.0 + i as f32 * 66.0, 0.0)).restitution(0.05));
+    }
+    bodies.push(SceneBodySpec::fixed(NodeCollider::Ball { radius: 10.0 }, (297.0, 0.0)));
+    bodies.push(SceneBodySpec::dynamic(NodeCollider::Ball { radius: 28.0 }, (0.0, -170.0)).restitution(0.1));
+    bodies.push(SceneBodySpec::dynamic(NodeCollider::Ball { radius: 22.0 }, (90.0, -230.0)).restitution(0.1));
+    // Hinge the chain: left post -> plank0 -> ... -> plank8 -> right post. Interior hinges join a
+    // plank's right edge (+halfw) to the next plank's left edge (-halfw); the post hinges use the
+    // post centre.
+    let mut joints = vec![SceneJointSpec {
+        body_a: 0,
+        body_b: 1,
+        joint: SceneJoint::Revolute { anchor_a: (0.0, 0.0), anchor_b: (-halfw, 0.0), motor: None },
+    }];
+    for i in 1..9 {
+        joints.push(SceneJointSpec {
+            body_a: i,
+            body_b: i + 1,
+            joint: SceneJoint::Revolute { anchor_a: (halfw, 0.0), anchor_b: (-halfw, 0.0), motor: None },
+        });
+    }
+    joints.push(SceneJointSpec {
+        body_a: 9,
+        body_b: 10,
+        joint: SceneJoint::Revolute { anchor_a: (halfw, 0.0), anchor_b: (0.0, 0.0), motor: None },
+    });
+    SceneSpec { bodies, gravity: (0.0, 500.0), default_tangible: false, perpetual: false, joints }
+}
+
+/// A wrecking ball: a heavy ball on a five-link rope chain, anchored up and to the right and laid out
+/// taut to the left, so on release it swings down through the bottom of its arc and ploughs a small
+/// block tower scattering across the floor. The rope joints (slack-tolerant) make the swung-out start
+/// trivially valid; the heavy ball's mass (a bigger radius is more mass at the shared density) carries
+/// the wallop. (A heavy-ended variant of [`chain_scene`] with a target to demolish.)
+pub fn ball_and_chain_scene() -> SceneSpec {
+    let anchor = (140.0, -260.0);
+    let link = 44.0;
+    // Body 0 the fixed anchor; bodies 1..=4 the light links and body 5 the heavy ball, laid out
+    // horizontally to the left of the anchor (taut, so gravity swings the whole thing down-right).
+    let mut bodies = vec![SceneBodySpec::fixed(NodeCollider::Ball { radius: 10.0 }, anchor)];
+    for i in 0..4 {
+        bodies.push(SceneBodySpec::dynamic(
+            NodeCollider::Ball { radius: 12.0 },
+            (anchor.0 - (i as f32 + 1.0) * link, anchor.1),
+        ));
+    }
+    bodies.push(
+        SceneBodySpec::dynamic(NodeCollider::Ball { radius: 34.0 }, (anchor.0 - 5.0 * link, anchor.1))
+            .restitution(0.2),
+    );
+    // The target: a fixed floor (top face y=0) and a five-block tower at the bottom of the ball's
+    // arc (x=140), which the swinging ball smashes through.
+    bodies.push(SceneBodySpec::fixed(NodeCollider::Square { half: 300.0 }, (0.0, 300.0)).restitution(0.1));
+    for k in 0..5 {
+        bodies.push(
+            SceneBodySpec::dynamic(NodeCollider::Square { half: 16.0 }, (140.0, -16.0 - k as f32 * 32.0))
+                .restitution(0.0),
+        );
+    }
+    // Rope links: anchor(0) -> link(1) -> ... -> link(4) -> heavy(5), each capped at `link` apart.
+    let joints = (0..5)
+        .map(|i| SceneJointSpec {
+            body_a: i,
+            body_b: i + 1,
+            joint: SceneJoint::Rope { anchor_a: (0.0, 0.0), anchor_b: (0.0, 0.0), length: link },
+        })
+        .collect();
+    SceneSpec { bodies, gravity: (0.0, 540.0), default_tangible: false, perpetual: false, joints }
+}
+
+/// A powered mixer: a long paddle bar pinned at its centre to a fixed hub by a motorised revolute
+/// joint, spinning steadily inside a circular wall of fixed balls and flinging a scatter of loose
+/// balls around the bowl. Gravity-free and `perpetual` so the motor stirs endlessly as a backdrop.
+/// The one scene that exercises the revolute *motor* (a powered drum / wheel). (rapier `joints2`
+/// motor demo, reproduced.)
+pub fn mixer_scene() -> SceneSpec {
+    use std::f32::consts::TAU;
+    let arm = 150.0;
+    // Body 0 the fixed hub (a small disc at the centre); body 1 the dynamic paddle bar centred on it.
+    let mut bodies = vec![SceneBodySpec::fixed(NodeCollider::Ball { radius: 6.0 }, (0.0, 0.0))];
+    bodies.push(
+        SceneBodySpec::dynamic(
+            NodeCollider::Hull {
+                points: vec![(-arm, -8.0), (arm, -8.0), (arm, 8.0), (-arm, 8.0)],
+                fallback: 20.0,
+            },
+            (0.0, 0.0),
+        )
+        .restitution(0.4),
+    );
+    // The containing wall: a ring of fixed balls the flung loose balls bounce off.
+    for i in 0..18 {
+        let a = i as f32 * TAU / 18.0;
+        bodies.push(
+            SceneBodySpec::fixed(NodeCollider::Ball { radius: 20.0 }, (250.0 * a.cos(), 250.0 * a.sin()))
+                .restitution(0.5),
+        );
+    }
+    // Loose balls in the annulus between the paddle's reach and the wall, for the paddle to stir.
+    for i in 0..10 {
+        let a = i as f32 * TAU / 10.0 + 0.3;
+        bodies.push(
+            SceneBodySpec::dynamic(
+                NodeCollider::Ball { radius: 14.0 + (i % 3) as f32 * 5.0 },
+                (200.0 * a.cos(), 200.0 * a.sin()),
+            )
+            .restitution(0.6),
+        );
+    }
+    // The motor spins the paddle (body 1) about the hub (body 0) at a steady rate.
+    let joints = vec![SceneJointSpec {
+        body_a: 0,
+        body_b: 1,
+        joint: SceneJoint::Revolute {
+            anchor_a: (0.0, 0.0),
+            anchor_b: (0.0, 0.0),
+            motor: Some(JointMotorSpec { target_vel: 2.5, factor: 30.0 }),
+        },
+    }];
+    SceneSpec { bodies, gravity: (0.0, 0.0), default_tangible: false, perpetual: true, joints }
+}
+
 #[cfg(test)]
 mod tests {
     use euclid::default::Point2D;
@@ -254,7 +431,7 @@ mod tests {
     /// the perpetual flag the spec declared.
     #[test]
     fn catalog_scenes_load_and_report_perpetual() {
-        let cases: [(SceneSpec, bool); 7] = [
+        let cases: [(SceneSpec, bool); 11] = [
             (drop_bowl_scene(), false),
             (pyramid_scene(), false),
             (domino_scene(), false),
@@ -262,6 +439,10 @@ mod tests {
             (funnel_scene(), false),
             (drift_scene(), true),
             (chain_scene(), false),
+            (cradle_scene(), true),
+            (bridge_scene(), false),
+            (ball_and_chain_scene(), false),
+            (mixer_scene(), true),
         ];
         for (spec, perpetual) in cases {
             let want = spec.bodies.len();
@@ -326,5 +507,48 @@ mod tests {
         );
         // ...and it hangs below the anchor (it swung down from the horizontal start).
         assert!(max_y > 0.0, "the chain should hang below the anchor (max_y {max_y})");
+    }
+
+    /// The mixer's revolute motor actually turns the paddle: its rotation advances over a run
+    /// (proving the motor drives it, not just gravity / contacts). `scene_bodies` walks a HashMap so
+    /// it is unordered; the paddle is the scene's only Hull body, so pick it by shape.
+    #[test]
+    fn mixer_motor_spins_the_paddle() {
+        let mut sim = Simulation::new();
+        sim.load_scene(&mixer_scene());
+        let paddle_rot = |sim: &Simulation| {
+            sim.scene_bodies()
+                .find(|b| matches!(b.collider, crate::NodeCollider::Hull { .. }))
+                .map(|b| b.rotation)
+                .expect("the mixer has a paddle")
+        };
+        let start = paddle_rot(&sim);
+        for _ in 0..120 {
+            sim.tick(1.0 / 60.0);
+        }
+        let after = paddle_rot(&sim);
+        assert!(
+            (after - start).abs() > 0.5,
+            "the motor should have rotated the paddle (start {start}, after {after})"
+        );
+    }
+
+    /// The bridge bows under load: the planks are the Hull bodies, and the loaded span sags so the
+    /// lowest plank ends up well below the deck line (y=0) it started on, while the end posts keep it
+    /// from dropping away. (A jointless plank row would just fall.)
+    #[test]
+    fn bridge_sags_under_the_dropped_weight() {
+        let mut sim = Simulation::new();
+        sim.load_scene(&bridge_scene());
+        for _ in 0..240 {
+            sim.tick(1.0 / 60.0);
+        }
+        let lowest_plank_y = sim
+            .scene_bodies()
+            .filter(|b| matches!(b.collider, crate::NodeCollider::Hull { .. }))
+            .map(|b| b.position.y)
+            .fold(f32::NEG_INFINITY, f32::max);
+        assert!(lowest_plank_y > 20.0, "the loaded bridge should sag below the deck (was {lowest_plank_y})");
+        assert!(lowest_plank_y < 600.0, "the posts should still hold the span, not drop it (was {lowest_plank_y})");
     }
 }

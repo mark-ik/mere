@@ -300,6 +300,26 @@ impl ApplicationHandler for App {
                             self.orrery.load_fountain();
                             self.request_redraw();
                         },
+                        // `c` loads Newton's cradle: elastic revolute pendulums clicking momentum across. (P4b.)
+                        WinitKey::Character(s) if s.as_str() == "c" => {
+                            self.orrery.load_scene(orrery::cradle_scene());
+                            self.request_redraw();
+                        },
+                        // `b` loads the plank bridge: a revolute-hinge span sagging under dropped weights. (P4b.)
+                        WinitKey::Character(s) if s.as_str() == "b" => {
+                            self.orrery.load_scene(orrery::bridge_scene());
+                            self.request_redraw();
+                        },
+                        // `k` loads the wrecking ball: a heavy rope chain swinging through a block tower. (P4b.)
+                        WinitKey::Character(s) if s.as_str() == "k" => {
+                            self.orrery.load_scene(orrery::ball_and_chain_scene());
+                            self.request_redraw();
+                        },
+                        // `m` loads the mixer: a motorised revolute paddle stirring loose balls. (P4b.)
+                        WinitKey::Character(s) if s.as_str() == "m" => {
+                            self.orrery.load_scene(orrery::mixer_scene());
+                            self.request_redraw();
+                        },
                         WinitKey::Character(s) if s.as_str() == "0" => {
                             self.orrery.clear_scene();
                             self.orrery.clear_fluid();

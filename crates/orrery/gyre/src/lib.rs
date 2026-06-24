@@ -83,8 +83,9 @@ pub use fluid::{Basin, Fluid, FluidContact, FluidParams};
 /// Data, not engine code; the growing catalog lives here to keep `lib.rs` under the size ceiling.
 pub mod scenes;
 pub use scenes::{
-    chain_scene, domino_scene, drift_scene, drop_bowl_scene, fountain_scene, funnel_scene,
-    galton_scene, pyramid_scene, whirlpool_scene,
+    ball_and_chain_scene, bridge_scene, chain_scene, cradle_scene, domino_scene, drift_scene,
+    drop_bowl_scene, fountain_scene, funnel_scene, galton_scene, mixer_scene, pyramid_scene,
+    whirlpool_scene,
 };
 
 /// The declarative scene **format**: the data types a [`SceneSpec`] is built from (bodies,

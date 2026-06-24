@@ -37,8 +37,9 @@ use gyre::{LayoutSnapshot, LayoutView};
 /// The declarative scene catalog, re-exported so hosts (and the standalone bin) can load
 /// a scene by name without depending on `gyre` directly. (Physics scenes P4a.)
 pub use gyre::{
-    NODE_BODY_DENSITY, NodeMaterial, SceneSpec, chain_scene, domino_scene, drift_scene,
-    drop_bowl_scene, fountain_scene, funnel_scene, galton_scene, pyramid_scene, whirlpool_scene,
+    NODE_BODY_DENSITY, NodeMaterial, SceneSpec, ball_and_chain_scene, bridge_scene, chain_scene,
+    cradle_scene, domino_scene, drift_scene, drop_bowl_scene, fountain_scene, funnel_scene,
+    galton_scene, mixer_scene, pyramid_scene, whirlpool_scene,
 };
 use kernel::geometry::PortablePoint;
 use kernel::graph::{EdgeAssertion, FieldId, Graph, NodeKey, RelationSelector, SemanticSubKind};

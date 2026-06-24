@@ -27,6 +27,10 @@ const SCENE_CATALOG: &[(&str, &str)] = &[
     ("funnel", "Funnel"),
     ("drift", "Drift (perpetual)"),
     ("chain", "Chain"),
+    ("cradle", "Newton's cradle"),
+    ("bridge", "Plank bridge"),
+    ("ballchain", "Wrecking ball"),
+    ("mixer", "Mixer (motor)"),
 ];
 
 /// The `pelt/scene` page controls: a backdrop-scene picker, the whirlpool / fountain / liquid
@@ -70,6 +74,10 @@ impl WindowCtx<'_> {
             "load:funnel" => self.orrery_mut().load_scene(orrery::funnel_scene()),
             "load:drift" => self.orrery_mut().load_scene(orrery::drift_scene()),
             "load:chain" => self.orrery_mut().load_scene(orrery::chain_scene()),
+            "load:cradle" => self.orrery_mut().load_scene(orrery::cradle_scene()),
+            "load:bridge" => self.orrery_mut().load_scene(orrery::bridge_scene()),
+            "load:ballchain" => self.orrery_mut().load_scene(orrery::ball_and_chain_scene()),
+            "load:mixer" => self.orrery_mut().load_scene(orrery::mixer_scene()),
             "load:whirlpool" => self.orrery_mut().load_whirlpool(),
             "load:fountain" => self.orrery_mut().load_fountain(),
             "fluid:load" => self.orrery_mut().load_demo_fluid(),
