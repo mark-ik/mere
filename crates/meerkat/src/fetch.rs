@@ -297,6 +297,13 @@ impl CookieStore for SharedJar {
 /// cookies). Process-global, matching the single [`session_jar`].
 static COOKIES_DIRTY: AtomicBool = AtomicBool::new(false);
 
+/// Mark the jar dirty so the next [`persist_cookies`] writes it through. For cookie
+/// writes that bypass `SharedJar` — e.g. a script's `document.cookie` via the scripted
+/// rung's cookie provider, which uses the raw [`session_jar`]. (Render ladder 2c.)
+pub fn mark_cookies_dirty() {
+    COOKIES_DIRTY.store(true, Ordering::Relaxed);
+}
+
 /// One persisted cookie. A serde mirror of netfetcher's `CookieRecord` (whose
 /// `same_site` is the `cookie` crate's enum, not directly serde-friendly), encoded as
 /// JSON in its own per-cookie blob in the durable store.

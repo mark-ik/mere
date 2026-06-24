@@ -262,6 +262,35 @@ impl pelt_core::ResourceFetcher for ScriptFetcher {
     }
 }
 
+/// `document.cookie` over the process session jar, scoped to the node's origin. The
+/// scripted rung installs one so a page's JS reads / writes the same cookies HTTP does
+/// (the native session store). HttpOnly cookies are hidden from script (the spec). A
+/// write marks the jar dirty so it persists like an HTTP `Set-Cookie`. (Render ladder 2c.)
+#[cfg(feature = "scripted")]
+struct JarCookieProvider {
+    url: url::Url,
+}
+
+#[cfg(feature = "scripted")]
+impl pelt_desktop::CookieProvider for JarCookieProvider {
+    fn get_cookies(&self) -> String {
+        use netfetcher::{CookieStore, SameSiteContext};
+        crate::fetch::session_jar()
+            .records_for(&self.url, SameSiteContext::same_site())
+            .into_iter()
+            .filter(|record| !record.http_only)
+            .map(|record| format!("{}={}", record.name, record.value))
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+
+    fn set_cookie(&self, cookie: &str) {
+        use netfetcher::CookieStore;
+        crate::fetch::session_jar().set_cookie(&self.url, cookie);
+        crate::fetch::mark_cookies_dirty();
+    }
+}
+
 /// Build the scripted-rung document for a `serval.scripted` node: parse the already-
 /// fetched HTML body and run its scripts. With a `fetcher`, external `<script src>` is
 /// fetched through it (`from_body`, no document re-fetch); without one, inline scripts
@@ -279,8 +308,15 @@ fn build_scripted(
     let Some(ContentState::Ready(fetched)) = state else {
         return None;
     };
+    // The node's origin cookies, so the page's JS shares the session HTTP uses.
+    let cookies: Option<Box<dyn pelt_desktop::CookieProvider>> = url::Url::parse(url)
+        .ok()
+        .map(|parsed| Box::new(JarCookieProvider { url: parsed }) as Box<dyn pelt_desktop::CookieProvider>);
     let result = match fetcher {
-        Some(fetcher) => ScriptedDocument::<BoaEngine>::from_body(&fetched.body, fetcher, url),
+        Some(fetcher) => {
+            ScriptedDocument::<BoaEngine>::from_body(&fetched.body, fetcher, url, cookies)
+        }
+        // No fetcher (the blocking fetch could not be built): inline-only, no cookies.
         None => ScriptedDocument::<BoaEngine>::parse(&fetched.body),
     };
     match result {
@@ -1022,6 +1058,43 @@ mod tests {
         assert!(
             glyph_runs(&doc.frame(420, 360)) >= 1,
             "the external script fetched via the host fetcher ran and rendered",
+        );
+    }
+
+    /// A page's `document.cookie` write on the scripted rung reaches the process session
+    /// jar (the same jar HTTP uses) — the cookie convergence. A unique origin keeps it
+    /// from clashing with the shared jar's other entries. (Render ladder 2c.)
+    #[cfg(feature = "scripted")]
+    #[test]
+    fn scripted_rung_document_cookie_reaches_the_jar() {
+        use pelt_core::ResourceFetcher;
+        struct NoFetch;
+        impl ResourceFetcher for NoFetch {
+            fn fetch(&self, _url: &str) -> Option<Vec<u8>> {
+                None
+            }
+        }
+        let url = "http://rung-2c-cookie.example/";
+        let state = ContentState::Ready(Fetched {
+            content_type: Some("text/html".to_string()),
+            body: "<body><script>document.cookie = 'rung2c=ok';</script></body>".to_string(),
+        });
+        // A fetcher (even a no-op) is what installs the cookie provider; the script runs
+        // on build and writes through it.
+        let _doc = build_scripted(
+            inker::routing::ENGINE_SERVAL_SCRIPTED,
+            url,
+            Some(&state),
+            Some(&NoFetch),
+        )
+        .expect("scripted document");
+
+        use netfetcher::{CookieStore, SameSiteContext};
+        let parsed = url::Url::parse(url).unwrap();
+        let cookies = crate::fetch::session_jar().cookies_for(&parsed, SameSiteContext::same_site());
+        assert!(
+            cookies.iter().any(|c| c == "rung2c=ok"),
+            "the JS-set cookie reached the session jar: {cookies:?}",
         );
     }
 }
