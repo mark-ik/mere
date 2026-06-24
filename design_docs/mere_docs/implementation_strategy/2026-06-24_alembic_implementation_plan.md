@@ -100,15 +100,17 @@ its own plan when reached. "Timeline → engram" is the handoff to A (distil a p
 
 ## 3. Open decisions, resolved or deferred
 
+All seven resolved with Mark 2026-06-24 (his calls in **bold ✓**).
+
 | # | Decision | Resolution |
 | --- | --- | --- |
-| 7 | Graph-engram **redaction** | **Resolve now (gates A):** `save_graph_engram` strips private / heavy `GraphSnapshot` fields by default (favicon bytes, session scroll, form drafts, thumbnails, raw metadata), keeping structure + addresses + tags + classifications + provenance; an explicit policy arg opts fields back in. |
-| 2 | Promote-in-place vs always-distil | **Defer to C; default lean = promote-in-place** (a retain-flagged pool; tag/bookmark keeps the node long-term, raw retained), matching "tagging promotes." Revisit when facet extraction lands. |
-| 1 | **Merge semantics** (compose) | **Defer to the compose sub-feature (post-A/D); default = merge-by-identity, layer the context** (`import_provenance` is a `Vec`, so multiple source records coexist); exposed as an Athanor per-compose option. Does not gate basic save/open. |
-| 3 | Settings placement | **Resolved:** Athanor knobs live in **Apparatus config** (the §8 lean), not a new pane. |
-| 6 | Timeline surface | **Resolved:** an **orrery scrubber / time-axis**, not a docked pane (slice E). |
-| 5 | Event-log shape | **Defer to E** (granularity + checkpoint cadence + whether view-intent shares the log). |
-| 4 | The lora lane | **Out of scope** here; its own future plan (the geist / Distillery training lane). |
+| 7 | Graph-engram **redaction** | **✓ Mark: redact private info, granularly opt fields back in.** Built in slice A: `RedactionPolicy` strips thumbnails / favicons / session state (scroll + form drafts) by default, per-field opt-in via flags; structure + addresses + tags + classifications + provenance always kept. |
+| 2 | Promote-in-place vs always-distil | **✓ Mark: tagging adds to long-term memory (retained) — promote-in-place.** A tag (or bookmark) keeps the node in long-term, raw retained; not a capture-to-distillate handoff. Lands in slice C. |
+| 1 | **Merge semantics** (compose) | **✓ Mark: agreed — merge-by-identity, layer the context** (`import_provenance` is a `Vec`, so source records coexist); exposed as an Athanor per-compose option. Lands with the compose sub-feature (post-A/D); does not gate save/open. |
+| 3 | Settings placement | **Mark asked "Apparatus or Steward? sync or async?" → answered:** Athanor splits by the §8 axis — its **config knobs go in Apparatus** (the at-rest plane: dedupe policy, eviction thresholds, steady-heat schedule), its **live passes surface in Steward** (the in-flight plane), its faults in Apparatus diagnostics. No new pane. It runs **async** — an armillary actor off the UI thread, never synchronous on render. Primary settings home = **Apparatus**. |
+| 6 | Timeline surface | **✓ Mark: agreed — an orrery scrubber / time-axis**, not a docked pane (slice E). |
+| 5 | Event-log shape | **Mark: scope for implementation here.** Promote from "its own plan" to a scoped slice-E section in this plan (mutation-log granularity, checkpoint cadence, view-intent stream). **Next planning task.** |
+| 4 | The lora lane | **Mark: spin off a local-models + harness design doc.** A dedicated doc for the local-models lane (dataset build, LoRA train/apply, the harness / Distillery-as-trainer), referencing the geist models brief. **Spinoff doc to write.** |
 
 ## 4. Slice A detail (the first build)
 
@@ -136,6 +138,12 @@ Verification: a unit/integration test that `save → (drop) → open` round-trip
 
 ## Progress
 
+- 2026-06-24: **All 7 open decisions resolved with Mark** (see §3). Agreed: merge-by-identity (#1),
+  promote-in-place — tagging retains into long-term (#2), Timeline = orrery scrubber (#6), redact
+  private + granular opt-in (#7, already built in A). Answered #3 (settings): Athanor knobs → Apparatus,
+  live passes → Steward, runs async (armillary actor). Two follow-ups Mark requested: **#5** scope the
+  event-log for implementation (expand slice E in-plan), and **#4** spin off a dedicated local-models +
+  harness design doc (the LoRA / Distillery-trainer lane).
 - 2026-06-24: **Slice A landed** (commits `af89808` spine, `4f51175` host gesture + persistence test).
   The freeze/thaw foundation: `session-runtime/graph_engram` over the eidetic typed-payload layer
   (`save_typed` / `load_typed` / `list_typed`), which turned out to be a richer substrate than the plan
