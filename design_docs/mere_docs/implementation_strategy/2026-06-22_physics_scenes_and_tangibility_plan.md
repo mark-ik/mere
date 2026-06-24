@@ -350,3 +350,54 @@ within budget.
   other). Ball scenes (galton, drift, chain) keep the orb look. **P4b done** bar the deferred
   `Simulation` decomposition (`lib.rs` still over the 600 ceiling, pre-existing). Next rung: P4c
   own-PBF fluid.
+- 2026-06-23: **P4c complete, our own Position-Based Fluids (a settling pool the graph can stir);
+  headed-verified.** Salva stays ruled out (caps at rapier 0.23), so gyre grows its own small SPH
+  liquid in three steps. **P4c-a** (`bf34f14`): a standalone PBF solver in `gyre::fluid`
+  (Macklin/Mueller 2013): predict, density constraint via the poly6 kernel, lambda, spiky-gradient
+  position correction (Jacobi), velocity update, XSPH viscosity, analytic `Basin` boundary; rest
+  density auto-set from spawn spacing. **P4c-b** (`80386e5`, after the in-flight-tree checkpoint
+  `277751d`): wired into the live `Simulation` (`load_fluid` / `clear_fluid` / `has_fluid`, stepped
+  each `tick`, riding the snapshot as fluid particle positions + radius), painted in `frame.rs` as
+  soft cyan metaballs (a layer above the scene, below the graph), routed through
+  `PhysicsCommand::LoadFluid` / `ClearFluid`; bin key `8` drops a pool, `0` clears. The keep-ticking
+  rider generalised to `wants_continuous_tick` (perpetual scene or fluid). **P4c-c** (`971f089`):
+  two-way coupling, the pool pushes out of every scene body and (when the graph is tangible) every
+  node body, then shoves the dynamic ones back with a gentle impulse, so a tangible graph stirs the
+  pool and floating props bob (circle-approximated; true collider-shape coupling is a refinement).
+  Tests prove the pool settles finite in the basin, contacts report a reaction, and a tangible node
+  displaces the pool to ~its radius. Headed-verified (scry-shots/p4c-fluid-*, p4cc-*): a cyan pool
+  settles in the bowl and parts around a tangible node.
+- 2026-06-23: **Force-field tier, a whirlpool vortex over the scene (committed `6945026`);
+  headed-verified.** `SceneField::Vortex { center, strength, inward }` applies a tangential swirl
+  plus inward pull to every dynamic scene body each tick (`apply_scene_field`, after the force loops,
+  before the step); set via `Simulation::set_scene_field` and `PhysicsCommand::SetSceneField`, and it
+  joins `wants_continuous_tick` so the swirl never freezes. `whirlpool_scene` (two rings of loose
+  balls over a centred vortex) is the demo on bin key `9`. A unit test proves a CCW vortex swirls a
+  +x-axis body toward +y and that clearing the scene drops the field. Headed-verified
+  (scry-shots/p4w-*): the rings orbit the centre. **Follow-on**: reuse aether's `CouplingForce` for
+  richer fields (scalar potentials, n-body wells) on scene bodies.
+- 2026-06-23: **Emitters, a fountain that sprays and recirculates (committed `b5fbcf2`);
+  headed-verified.** A `SceneEmitter` (collider, position + velocity with deterministic jitter, rate,
+  lifetime, max-alive) spawns dynamic scene bodies over time and reaps each past its lifetime
+  (oldest-first), so the live count holds a bounded steady state near rate*lifetime. `Simulation`
+  owns a `LiveEmitter` list (`add_emitter` / `clear_emitters` / `emitter_count`; `step_emitters` runs
+  before the step), with a tiny xorshift PRNG for reproducible jitter (no `rand` dep); emitters join
+  `wants_continuous_tick`. Routed through `PhysicsCommand::AddEmitter` / `ClearEmitters`.
+  `fountain_scene` (a catch basin) plus `Orrery::load_fountain` (basin + an upward emitter) ship on
+  bin key `f`. A unit test proves the count rises then holds bounded and that clearing removes the
+  spawned bodies. Headed-verified (scry-shots/p4f-*): a spray of droplets fans across the basin.
+  **Follow-on**: a bounds-drain (reap by region, not only age) and a fluid emitter (spray PBF
+  particles, not rigid droplets).
+- 2026-06-23: **`Simulation` decomposition, the deferred file-size cleanup (committed `9bed860`).**
+  The over-ceiling `gyre/lib.rs` (1441 LOC) split by concern into impl-spanning modules; pure
+  refactor, no behaviour change. `lib.rs` (557 LOC) keeps the struct, `new`, force registration, the
+  rapier-free read model (`view` / `snapshot` / `hit_test` / `cull_aabb`), and the `tick` heartbeat.
+  The tiers moved out: `node_body` (collider shape + material), `sync` (body lifecycle + accessors),
+  `scene_sim` (rigid scene bodies, `load_scene` + joints, gravity, tangibility), `fluid_coupling`
+  (load + two-way coupling; the solver stays in `fluid`), `field` (vortex + `wants_continuous_tick`),
+  `emitter` (PRNG + spawn/reap), and `scene_tests` (the cross-tier integration tests). Cross-module
+  helpers (`to_shared_shape`, `step_emitters`, `apply_scene_field`, `couple_fluid_to_bodies`) took
+  `pub(crate)`; private struct fields stay reachable from the child modules. Every gyre source file
+  is now under the 600 ceiling; 43 gyre + 45 orrery green, zero new warnings. **The physics-scenes
+  feature arc is complete** bar the meerkat command-palette / scene-settings binding, which waits on
+  the command-registry pass.
