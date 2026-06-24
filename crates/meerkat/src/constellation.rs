@@ -349,6 +349,9 @@ impl Constellation {
         cw: u32,
         ch: u32,
         sheet: DocumentStyleSheet,
+        // The host-routed engine id (the node's pin or the policy decision), passed to
+        // the actor so it can take the scripted lane for `serval.scripted`. (Ladder.)
+        engine: &str,
     ) {
         let tag = ContentState::tag(state.as_ref());
         self.touch_clock += 1;
@@ -382,6 +385,7 @@ impl Constellation {
             activation.handle.command(ContentCommand::Show {
                 url: url.to_string(),
                 state,
+                engine: engine.to_string(),
                 viewport: (cw, ch),
                 nav: activation.gens.nav,
                 viewport_gen: activation.gens.viewport,
@@ -918,7 +922,7 @@ mod tests {
     fn respawn_replays_the_tab_and_caps_the_storm() {
         let mut c = Constellation::new(noop_wake());
         c.reconcile(&[(m(1), g())]);
-        c.drive(m(1), "mere://welcome", None, 100, 100, DocumentStyleSheet::default()); // gives it a `shown` state
+        c.drive(m(1), "mere://welcome", None, 100, 100, DocumentStyleSheet::default(), "serval.web"); // gives it a `shown` state
         assert!(c.active.get(&m(1)).unwrap().shown.is_some());
         // A respawn replaces the actor and clears `shown` so the next drive re-Shows.
         assert!(c.respawn(m(1)));

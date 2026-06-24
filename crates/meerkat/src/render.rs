@@ -1029,7 +1029,14 @@ impl WindowCtx<'_> {
                 self.ensure_content(&url);
                 let state = self.shared.content.pages.get(&url).cloned();
                 let sheet = self.shared.presentation.document_sheet_composed();
-                self.shared.content.constellation.drive(member, &url, state, cw, ch, sheet);
+                // The routed engine (the node's pin or the policy decision) tells the
+                // actor which render rung to take — static `serval.web` or the scripted
+                // lane for `serval.scripted`. (Render ladder.)
+                let engine = self.route_engine(member, &url).engine_id;
+                self.shared
+                    .content
+                    .constellation
+                    .drive(member, &url, state, cw, ch, sheet, &engine);
                 cards.push((member, content, (cw, ch)));
             }
             self.view.tile_rects = slot_rects;

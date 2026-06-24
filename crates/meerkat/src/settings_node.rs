@@ -175,10 +175,13 @@ impl WindowCtx<'_> {
     /// / `:engine:pin:<engine_id>`. The web engines render only http/https, so a non-web node
     /// gets just Auto + a note. (Settings lane P3.)
     fn node_engine_items(&self, member: GraphMemberId) -> Vec<PaneItem> {
-        const PICKABLE: &[(&str, &str)] = &[
+        let mut pickable: Vec<(&str, &str)> = vec![
             (inker::routing::ENGINE_SERVAL_WEB, "Serval (web)"),
             (inker::routing::ENGINE_SCRYING_WEB, "System WebView"),
         ];
+        // The scripted serval rung is pickable only in the `scripted` build. (Ladder.)
+        #[cfg(feature = "scripted")]
+        pickable.push((inker::routing::ENGINE_SERVAL_SCRIPTED, "Serval (scripted)"));
         let pin = self.shared.content.engine_pins.get(&member).map(String::as_str);
         let is_web = self
             .orrery()
@@ -195,7 +198,7 @@ impl WindowCtx<'_> {
             format!("nodefacet:{member}:engine:auto"),
         ));
         if is_web {
-            for &(id, name) in PICKABLE {
+            for &(id, name) in &pickable {
                 if self.engine_available(id) {
                     items.push(PaneItem::button(
                         cls(pin == Some(id)),

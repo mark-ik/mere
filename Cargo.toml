@@ -224,3 +224,12 @@ taffy = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
 # the windows 0.61 pin that let gpu-allocator latch onto 0.61.3 while wgpu-hal forced
 # 0.62.2, breaking the dx12 suballocator. With it gone, gpu-allocator unifies on 0.62.
 ipc-channel = { git = "https://github.com/mark-ik/serval.git", branch = "main" }
+
+# Boa JS engine, for the meerkat `scripted` render rung (the `serval.scripted` lane
+# runs page JS through `ScriptedDocument` on Boa). Mirrors serval's own patch
+# (`script-engine-boa` names `boa_engine`/`boa_gc` `=1.0.0-dev`, resolved to the fork).
+# `script-engine-boa` is an *optional* meerkat dep, so the base build's compile graph
+# stays JS-engine-free (the profile ladder's witness discipline); this patch only
+# satisfies resolution. Git deps so a bare clone resolves.
+boa_engine = { git = "https://github.com/mark-ik/boa.git", branch = "serval" }
+boa_gc = { git = "https://github.com/mark-ik/boa.git", branch = "serval" }

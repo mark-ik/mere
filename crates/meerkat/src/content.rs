@@ -30,6 +30,14 @@ use netrender::Scene;
 use serval_layout::{ContentLayout, ScrollOffsets};
 use serval_static_dom::{StaticDocument, StaticNodeId};
 
+// The scripted render rung (render ladder phase 2): a `serval.scripted`-pinned node
+// runs its page JS through pelt's `ScriptedDocument` on Boa. Behind the `scripted`
+// feature so the base build links no JS engine (the ladder's witness discipline).
+#[cfg(feature = "scripted")]
+use pelt_desktop::ScriptedDocument;
+#[cfg(feature = "scripted")]
+use script_engine_boa::BoaEngine;
+
 use crate::card::{
     build_html_layout, is_serval_html_lane, render_content, LinkHit, RenderedContent,
 };
@@ -55,6 +63,11 @@ pub enum ContentCommand {
         /// The focused card's content state (`None` for a synthesized page such as
         /// `mere://welcome`); the actor renders any state, harvesting only `Ready`.
         state: Option<ContentState>,
+        /// The host-routed engine id for this node (its pin or the policy decision).
+        /// The actor renders the static serval lane for `serval.web`; the `scripted`
+        /// feature additionally drives `ScriptedDocument` for `serval.scripted`. Other
+        /// ids fall to the content-type routing the actor runs itself. (Render ladder.)
+        engine: String,
         viewport: (u32, u32),
         nav: NavGeneration,
         viewport_gen: ViewportGeneration,
@@ -220,6 +233,33 @@ struct Content {
     /// script's mutable `ScriptedDom` (it supersedes the static `html` path), so the
     /// script's edits are live; cleared on a fresh `Show` and by `DetachScript`.
     script: Option<ScriptInstance>,
+    /// The scripted render rung: a live `ScriptedDocument` whose page JS ran on load
+    /// and whose mutated DOM renders each frame. `Some` only for a `serval.scripted`
+    /// node (built on `Show`), and only in the `scripted` build. Supersedes every other
+    /// lane in `render`. (Render ladder phase 2a.)
+    #[cfg(feature = "scripted")]
+    scripted_doc: Option<ScriptedDocument<BoaEngine>>,
+}
+
+/// Build the scripted-rung document for a `serval.scripted` node: parse the fetched
+/// HTML into a live DOM and run its **inline** `<script>`s (external `<script src>` is
+/// a follow-up — the host-fetch model differs from pelt's sync `ResourceFetcher`).
+/// `None` for any other engine or a non-`Ready` state. (Render ladder phase 2a.)
+#[cfg(feature = "scripted")]
+fn build_scripted(engine: &str, state: Option<&ContentState>) -> Option<ScriptedDocument<BoaEngine>> {
+    if engine != inker::routing::ENGINE_SERVAL_SCRIPTED {
+        return None;
+    }
+    let Some(ContentState::Ready(fetched)) = state else {
+        return None;
+    };
+    match ScriptedDocument::<BoaEngine>::parse(&fetched.body) {
+        Ok(doc) => Some(doc),
+        Err(err) => {
+            tracing::warn!(%err, "scripted rung: document init failed");
+            None
+        }
+    }
 }
 
 /// Spawn a content actor on its own thread (armillary harness). It builds the
@@ -259,6 +299,7 @@ pub fn spawn_content(
                 ContentCommand::Show {
                     url,
                     state,
+                    engine,
                     viewport,
                     nav,
                     viewport_gen,
@@ -280,6 +321,13 @@ pub fn spawn_content(
                             }
                         }
                     }
+                    // Build the scripted-rung document from the fetched body before the
+                    // state moves into `Content` (inline scripts run here). No-op for a
+                    // non-scripted engine or in the base build.
+                    #[cfg(feature = "scripted")]
+                    let scripted_doc = build_scripted(&engine, state.as_ref());
+                    #[cfg(not(feature = "scripted"))]
+                    let _ = &engine;
                     // A fresh navigation resets the band to the top, one viewport tall
                     // (the host requests a taller scroll band once it has the content).
                     let mut content = Content {
@@ -293,6 +341,8 @@ pub fn spawn_content(
                         sheet,
                         html: None,
                         script: None,
+                        #[cfg(feature = "scripted")]
+                        scripted_doc,
                     };
                     // Run the outgoing scripted page's `deactivate` before it is
                     // dropped: navigation is a teardown, and neither ScriptInstance
@@ -588,6 +638,26 @@ fn render(
     out: &Emitter<ContentUpdate>,
 ) {
     let (w, h) = content.viewport;
+    // Scripted render rung: a `serval.scripted` node renders straight from its live
+    // `ScriptedDocument` (page JS already ran on load). `frame()` re-lays-out the
+    // mutated DOM and paints; emit it as one viewport (banding/scroll of a scripted
+    // tile is a follow-up — the document scrolls internally, not via host bands).
+    // (Render ladder phase 2a.)
+    #[cfg(feature = "scripted")]
+    if let Some(doc) = content.scripted_doc.as_mut() {
+        let scene = doc.frame(w, h);
+        out.emit(ContentUpdate::Scene {
+            nav: content.nav,
+            viewport_gen: content.viewport_gen,
+            scene,
+            content_height: h,
+            masks: Vec::new(),
+            links: Vec::new(),
+            band_y: 0,
+            band_h: h,
+        });
+        return;
+    }
     // Scripted page (P2.5c): render from the script's mutable `ScriptedDom`, which
     // supersedes the static `html` path so the script's edits are live. Emits one band
     // off the script's retained layout, exactly like the static serval lane.
@@ -746,6 +816,7 @@ mod tests {
                 content_type: Some(content_type.to_string()),
                 body: body.to_string(),
             })),
+            engine: inker::routing::ENGINE_SERVAL_WEB.to_string(),
             viewport: (420, 360),
             nav: NavGeneration::default(),
             viewport_gen: ViewportGeneration::default(),

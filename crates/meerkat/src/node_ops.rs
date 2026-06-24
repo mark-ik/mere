@@ -364,6 +364,12 @@ impl WindowCtx<'_> {
         ) {
             return true;
         }
+        // The scripted serval rung is a host-handled lane like the static one, present
+        // only in the `scripted` build (the base build links no JS engine). (Ladder.)
+        #[cfg(feature = "scripted")]
+        if id == inker::routing::ENGINE_SERVAL_SCRIPTED {
+            return true;
+        }
         // The scrying surface engine is the system WebView pool — Windows only today.
         cfg!(target_os = "windows") && id == ENGINE_SCRYING_WEB
     }
@@ -402,6 +408,14 @@ impl WindowCtx<'_> {
         ] {
             if self.engine_present(id) {
                 rows.push(row(id, name.to_string()));
+            }
+        }
+        // The scripted serval rung (only in the `scripted` build). (Render ladder.)
+        #[cfg(feature = "scripted")]
+        {
+            let id = inker::routing::ENGINE_SERVAL_SCRIPTED;
+            if self.engine_present(id) {
+                rows.push(row(id, "Serval (scripted)".to_string()));
             }
         }
         // The nematic document engines (protocol renderers), sorted for a stable order.
