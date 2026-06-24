@@ -419,3 +419,18 @@ within budget.
   like `relate("cites")`). That centrally edits the already-over-ceiling `command.rs`, so it likely
   wants a `command.rs` split first (a Mark-coordinated refactor of his registry). A headed pass through
   the lane UI also waits on a settings-navigation drive harness (none exists yet).
+- 2026-06-24: **Bucket A joint scenes (committed `f0ce2f0`); headed-verified.** Four more catalog
+  scenes exercising the P4b joints, all pure `SceneSpec` (no new engine code): `cradle_scene`
+  (Newton's cradle, five elastic balls on rigid revolute-rod pendulums, the end one launched so the
+  momentum clicks through the row), `bridge_scene` (a nine-plank suspension bridge revolute-hinged end
+  to end and pinned to fixed posts, sagging under two dropped weights), `ball_and_chain_scene` (a
+  wrecking ball on a five-link rope chain swung through a block tower it scatters), and `mixer_scene`
+  (a paddle bar on a motorised revolute joint spinning inside a ring-of-balls bowl, flinging loose
+  balls - the one scene that drives the revolute motor). Wired through the catalog re-exports (gyre +
+  orrery), the orrery bin keys (c / b / k / m), and the meerkat Scene settings page. gyre 45 (+2
+  behaviour tests: the motor spins the paddle, the loaded bridge sags), orrery 45, meerkat green;
+  headed-verified (scry-shots/p4ba-*): the bridge sags into a clean catenary, the mixer paddle spins
+  flinging balls round the bowl, the wrecking ball scatters the tower, the cradle hangs and swings
+  (subtle - small balls behind the graph). Bucket B (the non-rapier ambient-sim backdrop layer: Game
+  of Life / N-body / particle-life) is the next rung. The scenes paint as flat soft orbs + grey
+  polygons today; textured / sprite scene props is an open question (see the Open questions list).
