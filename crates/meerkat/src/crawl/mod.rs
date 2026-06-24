@@ -15,6 +15,8 @@
 //! not a politeness incident caught in production.
 
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant};
 
@@ -206,12 +208,10 @@ const POLITE_DELAY: Duration = Duration::from_secs(1);
 /// A command to the crawl actor.
 pub enum CrawlCommand {
     /// Begin a bounded crawl from `seed` under `policy`. The policy's `max_pages`
-    /// guarantees termination.
+    /// guarantees termination; a [`CrawlSession::stop`] cancels it mid-flight (the
+    /// loop polls a shared flag between pages — the command channel is not used for
+    /// cancellation, since the actor is busy in the crawl while it runs).
     Start { seed: String, policy: CrawlPolicy },
-    /// Stop between crawls. (Mid-crawl cancellation via a side-channel flag is a
-    /// follow-on; today a running crawl is bounded by `max_pages` and runs to
-    /// completion, and a `Stop` queued during it is a no-op handled when it ends.)
-    Stop,
 }
 
 /// An update from the crawl actor to its owner (the kernel applies the contributions
@@ -231,9 +231,15 @@ pub enum CrawlUpdate {
 /// page's contributions and progress. Off the render path — it never blocks
 /// compositing or the per-tile content actors (that separation is the whole reason it
 /// is a distinct actor, not the sync per-tile one). Owned by the host through
-/// [`CrawlSession`].
-pub fn spawn_crawl(wake: Wake) -> (ActorHandle<CrawlCommand>, Receiver<CrawlUpdate>) {
-    spawn(wake, |commands, out: Emitter<CrawlUpdate>| {
+/// [`CrawlSession`]. Returns the actor handle, its update channel, and the shared
+/// **cancel flag** the loop polls between pages — [`CrawlSession::stop`] sets it to
+/// stop a running crawl mid-flight.
+pub fn spawn_crawl(
+    wake: Wake,
+) -> (ActorHandle<CrawlCommand>, Receiver<CrawlUpdate>, Arc<AtomicBool>) {
+    let cancel = Arc::new(AtomicBool::new(false));
+    let actor_cancel = cancel.clone();
+    let (handle, rx) = spawn(wake, move |commands, out: Emitter<CrawlUpdate>| {
         // The runtime is built on the actor thread (never moved across the boundary),
         // current-thread because the crawl awaits one fetch at a time (sequential =
         // inherently polite). Only the `Send` handle and `Send` updates cross.
@@ -244,19 +250,24 @@ pub fn spawn_crawl(wake: Wake) -> (ActorHandle<CrawlCommand>, Receiver<CrawlUpda
         while let Ok(command) = commands.recv() {
             match command {
                 CrawlCommand::Start { seed, policy } => {
+                    // A fresh crawl starts un-cancelled, even if a prior `stop` set the
+                    // flag while nothing was running. (Done here, not in `start`, so a
+                    // stop racing the next start can't un-cancel the *current* crawl.)
+                    actor_cancel.store(false, Ordering::Relaxed);
+                    let cancel = actor_cancel.clone();
                     runtime.block_on(run_crawl(
                         &seed,
                         policy,
                         POLITE_DELAY,
                         |url| fetch_page_owned(url),
-                        || false, // mid-crawl cancellation is a follow-on; max_pages bounds it
+                        || cancel.load(Ordering::Relaxed),
                         |update| out.emit(update),
                     ));
                 },
-                CrawlCommand::Stop => {}, // no crawl in progress between Starts
             }
         }
-    })
+    });
+    (handle, rx, cancel)
 }
 
 /// Own the URL so the returned future is `'static` (the actor's `fetch` thunk takes a
@@ -391,6 +402,9 @@ pub struct CrawlProgress {
 pub struct CrawlSession {
     handle: ActorHandle<CrawlCommand>,
     rx: Receiver<CrawlUpdate>,
+    /// Shared with the actor: set by [`stop`](Self::stop) to cancel a running crawl;
+    /// the actor's loop polls it between pages and clears it at each `start`.
+    cancel: Arc<AtomicBool>,
     /// The graph crawled contributions land in (the seed page's graph).
     graph_id: Option<GraphId>,
     progress: CrawlProgress,
@@ -400,8 +414,8 @@ impl CrawlSession {
     /// Spawn the crawl actor; `wake` notifies the host loop when updates arrive, so it
     /// drains on the next frame — exactly like the content / fetch wakes.
     pub fn new(wake: Wake) -> Self {
-        let (handle, rx) = spawn_crawl(wake);
-        Self { handle, rx, graph_id: None, progress: CrawlProgress::default() }
+        let (handle, rx, cancel) = spawn_crawl(wake);
+        Self { handle, rx, cancel, graph_id: None, progress: CrawlProgress::default() }
     }
 
     /// Start a bounded crawl from `seed` under `policy`; its contributions route to
@@ -412,11 +426,13 @@ impl CrawlSession {
         self.handle.command(CrawlCommand::Start { seed: seed.to_string(), policy });
     }
 
-    /// Ask the crawl to stop. A no-op between crawls; mid-crawl cancellation is a
-    /// follow-on, so today the bounded policy stops a running crawl on its own.
-    #[allow(dead_code)] // API for the stop-button follow-on; the bounded policy self-terminates today
+    /// Cancel a running crawl. Sets the shared flag the actor's loop polls between
+    /// pages, so the crawl stops at the next page boundary and emits `Done`. A no-op
+    /// between crawls (the next `start` clears it). The host trigger (a stop-crawl
+    /// command / button) is the remaining wire-up.
+    #[allow(dead_code)] // functional; awaits a host stop-crawl trigger to call it
     pub fn stop(&self) {
-        self.handle.command(CrawlCommand::Stop);
+        self.cancel.store(true, Ordering::Relaxed);
     }
 
     /// Drain pending crawl updates into the `(graph, contribution)` pairs the host

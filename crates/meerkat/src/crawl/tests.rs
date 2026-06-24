@@ -244,6 +244,50 @@
     }
 
     #[test]
+    fn run_crawl_cancels_mid_crawl() {
+        // A hub linking to ten same-host pages; cancel after the first fetch, so only
+        // the seed is crawled even though the page cap is far higher. This is the
+        // mechanism `CrawlSession::stop` drives (it flips the polled flag to `true`).
+        let mut site: HashMap<String, String> = HashMap::new();
+        let hub: String = (0..10).map(|i| format!("<a href='/p{i}'>{i}</a>")).collect();
+        site.insert("https://s.test/".to_string(), hub);
+        for i in 0..10 {
+            site.insert(format!("https://s.test/p{i}"), "<p>leaf</p>".to_string());
+        }
+        let fetch = move |url: String| {
+            let body = site.get(&url).cloned().unwrap_or_default();
+            async move {
+                Ok::<_, String>(Fetched { content_type: Some("text/html".to_string()), body })
+            }
+        };
+        // Let the first page through, then cancel before the second.
+        let mut allow_one = true;
+        let cancelled = move || {
+            if allow_one {
+                allow_one = false;
+                false
+            } else {
+                true
+            }
+        };
+        let mut fetched_pages = 0;
+        let rt = Builder::new_current_thread().enable_all().build().unwrap();
+        rt.block_on(run_crawl(
+            "https://s.test/",
+            CrawlPolicy { max_depth: 5, max_pages: 50, max_fanout: 20, scope: HostScope::SameHost },
+            Duration::ZERO,
+            fetch,
+            cancelled,
+            |update| {
+                if matches!(update, CrawlUpdate::Progress { .. }) {
+                    fetched_pages += 1;
+                }
+            },
+        ));
+        assert_eq!(fetched_pages, 1, "cancellation stopped the crawl after the first fetched page");
+    }
+
+    #[test]
     fn fold_routes_contributions_to_the_graph_and_tracks_progress() {
         let gid = GraphId::nil();
         let mut progress = CrawlProgress::default();
