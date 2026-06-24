@@ -494,3 +494,20 @@ within budget.
   p4pl-*). Follow-on tuning (taste knobs, not blockers): a tighter n-body spiral (lower G or a
   Keplerian well for differential rotation), more dramatic particle-life structure (the attraction
   matrix / force scale).
+- 2026-06-24: **Polish round - sim tuning, falling sand, scene paint, ambient split (committed
+  `72febe8` / `63418f0` / `d4d04b6` / `49ef3a8`); headed-verified.** The taste-knob follow-ups, a
+  fourth ambient sim, and a scene-look pass:
+  - **n-body** swapped to a softened Keplerian well (differential rotation), so it reads as a centred
+    galaxy rather than a uniform scatter; **particle-life** biased the attraction-matrix diagonal
+    positive so per-species blobs always form (`72febe8`).
+  - **Falling sand** (`load_sand`, key `s`, `>scene sand`): a fourth `AmbientSim` - grains pour from
+    the top, pile into an angle-of-repose dune, and the grid resets when full so it cycles forever
+    (`63418f0`).
+  - **Scene paint polish** (`d4d04b6`): the rapier scene polygons (blocks, planks, floor slabs) gained
+    a lit-edge stroke + a softened fill, and balls a brighter core - a block now reads as a defined,
+    lightly-dimensional object and the big floor slabs stop reading as solid walls.
+  - **ambient.rs split** (`49ef3a8`): the four-sim file had hit 814 LOC, over the ceiling - split into
+    `ambient/` with one file per sim + the shared trait / `Tincture` / helpers in `mod.rs`.
+  orrery 56 tests green throughout; headed-verified (scry-shots/p4nb-*, p4pl-*, p4sd-*, p4po-*). The
+  ambient catalog is now **four** sims (Game of Life, n-body, particle-life, falling sand), the rapier
+  scenes have form, and every orrery source file is under 600.
