@@ -192,6 +192,49 @@ relational-browse V2 scope.
 
 ---
 
+## Phase 2 design (grounded in the content actor, 2026-06-23)
+
+Reconnoitred the slot-in; the build is now mechanical, in slices:
+
+- **Reuse, don't reimplement.** `pelt-desktop` re-exports `ScriptedDocument` /
+  `ScriptedEngine` / `LoadedDocument` / `LocalFetcher`, and `pelt-core` exports
+  `ResourceFetcher`; meerkat already depends on both. The scripted rung holds a
+  `pelt_desktop::ScriptedDocument<E>` (the whole tested script-loading + timers + GC +
+  `frame()` loop), not a hand-rolled one.
+- **Where it lives.** meerkat's content actor (`constellation::Activation`, off-thread on
+  the pool) is an armillary actor that holds `!Send` state on its own thread (like the
+  fetch actor's tokio runtime), so a `ScriptedDocument` (which owns a `!Send` `Runtime`)
+  lives there fine. The actor's `render()` already special-cases two paths (the
+  `mere:script` mutable `ScriptedDom`; the static `StaticDocument` via
+  `scene_from_content_band`); the scripted rung is a third: hold an
+  `Option<ScriptedDocument>`, build it on `Show` when the routed engine is
+  `serval.scripted`, and emit `frame()`'s `Scene` (and `pump()` per drive for timers).
+- **Engine registration flips the gate.** The actor builds an `EngineRegistry` of
+  non-disabled engines; registering `serval.scripted` makes `is_available` true, so a
+  pin resolves (phase 1a's fallback was the pre-registration behavior) and the picker
+  surfaces it (1b — the picker enumerates registered engines).
+
+### Slices
+
+- **2a — inline scripts render.** On `Show`, for a `serval.scripted` node, build
+  `ScriptedDocument::parse(body)` (the host already fetched the body; `parse` runs
+  *inline* `<script>`s) and drive `frame()` / `pump()`. Page JS runs and its DOM
+  mutations render. Additive — the static path is untouched. The "page JS renders"
+  milestone. *(No external scripts, no providers yet.)*
+- **2b — external scripts.** Bridge the fetch-model gap: meerkat hands the actor a body
+  (`Show`) and demand-fetches subresources async (`ContentCommand::Resource` round-trip),
+  whereas `ScriptedDocument::load` wants a *sync* `ResourceFetcher`. Options: pre-fetch
+  the `<script src>` set host-side and feed them in, or give the actor a blocking
+  fetch path. Pick when 2a lands.
+- **2c — cookie/storage providers.** pelt's `ScriptedDocument` does not set the
+  `CookieProvider` / `StorageProvider` seams (they postdate it). Extend it (serval-side,
+  benefits pelt too) to accept them, then meerkat wires them to the session jar +
+  eidetic. This is what finally lights up `document.cookie` / `localStorage` (native
+  session store 6a/6b).
+
+The input→event bridge (phase 3) is separate; the extraction lane (phase 4) reuses the
+parsed (and optionally scripted) DOM.
+
 ## Open questions
 
 - **Per-document runtime lifecycle**: create / destroy a `ScriptedDocument` as nodes
