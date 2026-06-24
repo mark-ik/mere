@@ -65,14 +65,17 @@ impl Simulation {
         for (handle, collider) in self.scene_bodies.values() {
             if let Some(body) = self.bodies.get(*handle) {
                 let t = body.translation();
-                let radius = match collider {
-                    NodeCollider::Ball { radius } => *radius,
-                    NodeCollider::Square { half } => *half,
-                    NodeCollider::RoundedSquare { half, .. } => *half,
-                    NodeCollider::Hull { fallback, .. } => *fallback,
+                let center = Point2D::new(t.x, t.y);
+                // A box body couples at its true face + rotation; a ball / hull at a circle. (P4c.)
+                let contact = match collider {
+                    NodeCollider::Ball { radius } => FluidContact::circle(center, *radius),
+                    NodeCollider::Square { half } | NodeCollider::RoundedSquare { half, .. } => {
+                        FluidContact::obb(center, (*half, *half), body.rotation().angle())
+                    }
+                    NodeCollider::Hull { fallback, .. } => FluidContact::circle(center, *fallback),
                 };
                 handles.push(*handle);
-                contacts.push(FluidContact { center: Point2D::new(t.x, t.y), radius });
+                contacts.push(contact);
             }
         }
         if self.nodes_tangible {
@@ -80,8 +83,7 @@ impl Simulation {
                 if let Some(body) = self.bodies.get(*handle) {
                     let t = body.translation();
                     handles.push(*handle);
-                    contacts
-                        .push(FluidContact { center: Point2D::new(t.x, t.y), radius: NODE_BODY_RADIUS });
+                    contacts.push(FluidContact::circle(Point2D::new(t.x, t.y), NODE_BODY_RADIUS));
                 }
             }
         }

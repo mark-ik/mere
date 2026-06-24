@@ -87,14 +87,36 @@ impl Basin {
     }
 }
 
-/// A solid the fluid couples to: a circle (centre + radius) in world space. The host builds these
+/// A solid the fluid couples to, in world space: a circle or an oriented box. The host builds these
 /// from the rapier bodies the fluid should bounce off (the fixed basin walls are the analytic
-/// [`Basin`]; these are the node / scene bodies, gated by tangibility). Circle-approximated for now
-/// — true collider-shape coupling via parry is a refinement. (Physics scenes P4c.)
+/// [`Basin`]; these are the node / scene bodies, gated by tangibility). A square / rounded-square body
+/// couples at its true [`ContactShape::Obb`] face + rotation; a ball at its circle; a hull falls back
+/// to its bounding circle. (Physics scenes P4c.)
 #[derive(Clone, Copy, Debug)]
 pub struct FluidContact {
     pub center: Point2D<f32>,
-    pub radius: f32,
+    pub shape: ContactShape,
+}
+
+/// The shape of a [`FluidContact`] the fluid pushes particles out of.
+#[derive(Clone, Copy, Debug)]
+pub enum ContactShape {
+    /// A circle of `radius`.
+    Circle { radius: f32 },
+    /// An oriented box: half-extents `(hx, hy)` in the body's local frame, rotated by `angle` (rad).
+    Obb { half: (f32, f32), angle: f32 },
+}
+
+impl FluidContact {
+    /// A circle contact at `center` with `radius`.
+    pub fn circle(center: Point2D<f32>, radius: f32) -> Self {
+        Self { center, shape: ContactShape::Circle { radius } }
+    }
+
+    /// An oriented-box contact at `center` with local half-extents `half`, rotated by `angle` (rad).
+    pub fn obb(center: Point2D<f32>, half: (f32, f32), angle: f32) -> Self {
+        Self { center, shape: ContactShape::Obb { half, angle } }
+    }
 }
 
 /// The PBF fluid: a particle pool plus its parameters and basin. Spawn particles, then [`step`] it
@@ -272,20 +294,52 @@ impl Fluid {
         let pr = self.params.particle_radius;
         for i in 0..self.pos.len() {
             for (c, contact) in contacts.iter().enumerate() {
-                let rmin = contact.radius + pr;
-                let delta = self.pos[i] - contact.center;
-                let d = delta.length();
-                if d >= rmin {
-                    continue;
-                }
-                // Outward normal (straight up if a particle sits dead-centre).
-                let n = if d > 1.0e-4 { delta / d } else { Vector2D::new(0.0, -1.0) };
-                let push = n * (rmin - d);
+                // The displacement that pushes the particle just outside the (particle-inflated)
+                // solid, per shape; `continue` when the particle is already clear.
+                let push = match contact.shape {
+                    ContactShape::Circle { radius } => {
+                        let rmin = radius + pr;
+                        let delta = self.pos[i] - contact.center;
+                        let d = delta.length();
+                        if d >= rmin {
+                            continue;
+                        }
+                        // Outward normal (straight up if a particle sits dead-centre).
+                        let n = if d > 1.0e-4 { delta / d } else { Vector2D::new(0.0, -1.0) };
+                        n * (rmin - d)
+                    }
+                    ContactShape::Obb { half, angle } => {
+                        // The particle in the box's local frame (rotate the offset by -angle).
+                        let rel = self.pos[i] - contact.center;
+                        let (s, co) = angle.sin_cos();
+                        let lx = rel.x * co + rel.y * s;
+                        let ly = -rel.x * s + rel.y * co;
+                        // The box inflated by the particle radius (so the particle's edge is pushed
+                        // to the surface, not its centre).
+                        let (hx, hy) = (half.0 + pr, half.1 + pr);
+                        if lx.abs() >= hx || ly.abs() >= hy {
+                            continue;
+                        }
+                        // Push out the nearer local face, then rotate the push back to world.
+                        let (px, py) = (hx - lx.abs(), hy - ly.abs());
+                        let (plx, ply) = if px < py {
+                            (px * lx.signum(), 0.0)
+                        } else {
+                            (0.0, py * ly.signum())
+                        };
+                        Vector2D::new(plx * co - ply * s, plx * s + ply * co)
+                    }
+                };
                 self.pos[i] += push;
-                // The particle can't move into the solid: kill its inward velocity component.
-                let vn = self.vel[i].dot(n);
-                if vn < 0.0 {
-                    self.vel[i] -= n * vn;
+                // The particle can't move into the solid: kill its inward velocity component along
+                // the push normal.
+                let plen = push.length();
+                if plen > 1.0e-6 {
+                    let n = push / plen;
+                    let vn = self.vel[i].dot(n);
+                    if vn < 0.0 {
+                        self.vel[i] -= n * vn;
+                    }
                 }
                 // The fluid shoves the solid back by the opposite of the displacement it absorbed.
                 reactions[c] -= push;
@@ -386,18 +440,40 @@ mod tests {
         let mut fluid = Fluid::new(FluidParams::default(), basin);
         fluid.spawn_block(Point2D::new(-30.0, -30.0), 5, 5, 14.0); // a block straddling the origin
         let pr = fluid.params().particle_radius;
-        let contact = FluidContact { center: Point2D::new(0.0, 0.0), radius: 30.0 };
+        let radius = 30.0;
+        let center = Point2D::new(0.0, 0.0);
+        let contact = FluidContact::circle(center, radius);
 
         let reactions = fluid.resolve_contacts(&[contact]);
 
         // Every particle now sits at or beyond the contact surface (radius + particle radius).
         for p in fluid.positions() {
-            let d = (p - contact.center).length();
-            assert!(d >= contact.radius + pr - 0.5, "particle pushed out of the contact (d {d})");
+            let d = (p - center).length();
+            assert!(d >= radius + pr - 0.5, "particle pushed out of the contact (d {d})");
         }
         // The fluid reported a non-zero reaction back on the overlapped solid.
         assert!(reactions[0].length() > 0.0, "non-zero reaction on the overlapped contact");
         // An empty contact list is a no-op.
         assert!(fluid.resolve_contacts(&[]).is_empty());
+    }
+
+    #[test]
+    fn obb_contact_pushes_particles_out_of_the_box() {
+        // An axis-aligned box (local == world) clears every particle from its inflated interior - the
+        // true-shape coupling, vs the circle approximation that would over-push at the box's edges.
+        let basin = Basin { min_x: -300.0, max_x: 300.0, floor_y: 300.0 };
+        let mut fluid = Fluid::new(FluidParams::default(), basin);
+        fluid.spawn_block(Point2D::new(-40.0, -40.0), 6, 6, 14.0); // a block over the origin
+        let pr = fluid.params().particle_radius;
+        let half = (50.0, 30.0); // a wide box, so the nearer-face push is exercised
+        let contact = FluidContact::obb(Point2D::new(0.0, 0.0), half, 0.0);
+
+        let reactions = fluid.resolve_contacts(&[contact]);
+
+        for p in fluid.positions() {
+            let inside = p.x.abs() < half.0 + pr - 0.5 && p.y.abs() < half.1 + pr - 0.5;
+            assert!(!inside, "particle pushed out of the box (was at {p:?})");
+        }
+        assert!(reactions[0].length() > 0.0, "non-zero reaction on the overlapped box");
     }
 }

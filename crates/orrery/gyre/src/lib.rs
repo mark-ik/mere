@@ -76,7 +76,7 @@ pub use coupling_force::CouplingForce;
 /// so we roll our own). The solver lives here; its seam onto the rigid world (loading + the two-way
 /// coupling) is [`Simulation`]'s fluid tier in [`fluid_coupling`]. (Physics scenes P4c.)
 pub mod fluid;
-pub use fluid::{Basin, Fluid, FluidContact, FluidParams};
+pub use fluid::{Basin, ContactShape, Fluid, FluidContact, FluidParams};
 
 /// The declarative scene library: ready-made [`SceneSpec`]s the orrery loads behind the
 /// graph (drop-bowl, pyramid, dominoes, Galton board, funnel, drift, chain, whirlpool, fountain).
