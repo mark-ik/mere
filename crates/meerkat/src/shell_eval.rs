@@ -101,6 +101,11 @@ pub struct ShellOutcome {
     /// A `(kind, payload)` passed to `script_event("kind", "payload")` — the host
     /// delivers it to the focused tile's attached script. `None` when not called. (P2.5.)
     pub script_event: Option<(String, String)>,
+    /// A scene name passed to `scene("pyramid")` (or the `>scene pyramid` sugar) — the host loads
+    /// that backdrop scene / effect / ambient sim on the focused graph. `None` when not called.
+    /// Mirrors `sparql` / `relate`: an arg-bearing binding that records into the outcome rather than
+    /// mutating, since the shell can't reach the live orrery. (Scene verb.)
+    pub scene_request: Option<String>,
     /// A compile / runtime error message, if the script failed. Commands called
     /// before a mid-script failure are still present in `commands`.
     pub error: Option<String>,
@@ -129,6 +134,7 @@ impl CommandShell {
         let attach_script: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let detach_script: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
         let script_event: Rc<RefCell<Option<(String, String)>>> = Rc::new(RefCell::new(None));
+        let scene_request: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
         let snapshot = Rc::new(ctx.clone());
         let mut engine = script_rhai::base_engine();
 
@@ -206,6 +212,15 @@ impl CommandShell {
             *sev.borrow_mut() = Some((kind.to_string(), payload.to_string()));
         });
 
+        // `scene("pyramid")` — record the backdrop scene / effect / ambient name for the host to load
+        // on the focused orrery. Like `sparql` / `relate`: an arg-bearing binding that records into
+        // the outcome (the shell can't reach the live orrery). The `>scene pyramid` sugar in
+        // `desugar` rewrites the bare form to this call. (Scene verb.)
+        let sr = scene_request.clone();
+        engine.register_fn("scene", move |name: &str| {
+            *sr.borrow_mut() = Some(name.to_string());
+        });
+
         engine.set_max_operations(OP_BUDGET);
         let result = engine.eval::<Dynamic>(&desugar(source));
         let commands = commands.borrow().clone();
@@ -214,6 +229,7 @@ impl CommandShell {
         let attach_script = attach_script.borrow().clone();
         let detach_script = *detach_script.borrow();
         let script_event = script_event.borrow().clone();
+        let scene_request = scene_request.borrow().clone();
         match result {
             Ok(value) => ShellOutcome {
                 text: stringify(value),
@@ -223,6 +239,7 @@ impl CommandShell {
                 attach_script,
                 detach_script,
                 script_event,
+                scene_request,
                 error: None,
             },
             Err(err) => ShellOutcome {
@@ -233,6 +250,7 @@ impl CommandShell {
                 attach_script,
                 detach_script,
                 script_event,
+                scene_request,
                 error: Some(err.to_string()),
             },
         }
@@ -259,7 +277,7 @@ pub fn complete(prefix: &str) -> Option<&'static str> {
         .iter()
         .map(|c| c.verb())
         .chain(QUERIES.iter().copied())
-        .chain(["sparql", "attach_script", "detach_script", "script_event"])
+        .chain(["sparql", "attach_script", "detach_script", "script_event", "scene"])
         .find(|name| name.len() > prefix.len() && name.starts_with(prefix))
 }
 
@@ -272,10 +290,17 @@ fn desugar(source: &str) -> String {
     let is_bare =
         Command::ALL.iter().any(|c| c.verb() == trimmed) || QUERIES.contains(&trimmed);
     if is_bare {
-        format!("{trimmed}()")
-    } else {
-        source.to_string()
+        return format!("{trimmed}()");
     }
+    // `scene <name>` sugar: a bare scene request with a one-word argument becomes the call
+    // `scene("<name>")`, so `>scene pyramid` works without rhai quoting. (Scene verb.)
+    if let Some(rest) = trimmed.strip_prefix("scene ") {
+        let arg = rest.trim();
+        if !arg.is_empty() && arg.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            return format!("scene(\"{arg}\")");
+        }
+    }
+    source.to_string()
 }
 
 /// A rhai array of strings from a slice of URLs.
@@ -408,6 +433,21 @@ mod tests {
         assert!(out.error.is_none());
         // `complete` ghosts the verb so a user discovers it.
         assert_eq!(complete("spa"), Some("sparql"));
+    }
+
+    #[test]
+    fn scene_records_the_name_and_the_bare_form_is_sugared() {
+        // The arg-bearing call records the scene name for the host to load; no command, no error.
+        let call = CommandShell::new().eval(r#"scene("pyramid")"#, &ctx());
+        assert_eq!(call.scene_request.as_deref(), Some("pyramid"));
+        assert!(call.commands.is_empty());
+        assert!(call.error.is_none());
+        // `scene <name>` sugar: the bare two-token form becomes `scene("<name>")`.
+        let bare = CommandShell::new().eval("scene fountain", &ctx());
+        assert_eq!(bare.scene_request.as_deref(), Some("fountain"), "the bare form is sugared");
+        assert!(bare.error.is_none());
+        // `complete` ghosts the verb so a user discovers it.
+        assert_eq!(complete("sce"), Some("scene"));
     }
 
     #[test]

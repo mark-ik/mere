@@ -1266,8 +1266,10 @@ impl WindowCtx<'_> {
                 self.toggle_menu_action(&k["menu:toggle:".len()..]);
             }
             // The `pelt/scene` page: load / clear a physics backdrop scene, a whirlpool / fountain /
-            // liquid effect, or flip the graph's tangibility. (Physics scenes — scene settings.)
-            k if k.starts_with("scene:") => self.apply_scene_key(&k["scene:".len()..]),
+            // liquid / ambient effect, or flip the graph's tangibility, by flat name. (Scene settings.)
+            k if k.starts_with("scene:") => {
+                self.load_named_scene(&k["scene:".len()..]);
+            }
             _ => self.set_theme(key),
         }
     }

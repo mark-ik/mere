@@ -15,9 +15,9 @@ use crate::list_pane::PaneItem;
 
 use super::WindowCtx;
 
-/// The backdrop scenes shown as load buttons, each id riding `scene:load:<id>`. These map to the
-/// re-exported `SceneSpec` catalog constructors via [`WindowCtx::apply_scene_key`]; the whirlpool
-/// and fountain (which also bind a force-field / emitter) are separate buttons below. (Physics
+/// The backdrop scenes shown as load buttons, each id riding `scene:<id>`. The id is the flat scene
+/// **name** [`WindowCtx::load_named_scene`] maps to a `SceneSpec` catalog constructor — the same
+/// vocabulary the `>scene <name>` omnibar verb uses, so the page and the verb never drift. (Physics
 /// scenes — scene settings.)
 const SCENE_CATALOG: &[(&str, &str)] = &[
     ("dropbowl", "Drop bowl"),
@@ -42,60 +42,127 @@ const SCENE_CATALOG: &[(&str, &str)] = &[
 pub(crate) fn scene_section_items() -> Vec<PaneItem> {
     let mut items = vec![PaneItem::text("app-title", "Scenes")];
     for &(id, label) in SCENE_CATALOG {
-        items.push(PaneItem::button("app-btn", label, format!("scene:load:{id}")));
+        items.push(PaneItem::button("app-btn", label, format!("scene:{id}")));
     }
 
     items.push(PaneItem::text("app-title", "Effects"));
-    items.push(PaneItem::button("app-btn", "Whirlpool (vortex)", "scene:load:whirlpool"));
-    items.push(PaneItem::button("app-btn", "Fountain (emitter)", "scene:load:fountain"));
-    items.push(PaneItem::button("app-btn", "Liquid pool", "scene:fluid:load"));
-    items.push(PaneItem::button("app-btn", "Clear liquid", "scene:fluid:clear"));
+    items.push(PaneItem::button("app-btn", "Whirlpool (vortex)", "scene:whirlpool"));
+    items.push(PaneItem::button("app-btn", "Fountain (emitter)", "scene:fountain"));
+    items.push(PaneItem::button("app-btn", "Liquid pool", "scene:fluid"));
+    items.push(PaneItem::button("app-btn", "Clear liquid", "scene:fluidclear"));
 
     items.push(PaneItem::text("app-title", "Graph tangibility"));
-    items.push(PaneItem::button("app-btn", "Collide with the scene", "scene:tangible:on"));
-    items.push(PaneItem::button("app-btn", "Pass through (default)", "scene:tangible:off"));
+    items.push(PaneItem::button("app-btn", "Collide with the scene", "scene:tangible"));
+    items.push(PaneItem::button("app-btn", "Pass through (default)", "scene:intangible"));
 
     // Ambient backdrops are non-rapier sims painted behind the graph (independent of the scene
     // above), so they get their own section. (Physics scenes P5.)
     items.push(PaneItem::text("app-title", "Ambient backdrop"));
-    items.push(PaneItem::button("app-btn", "Game of Life", "scene:ambient:gol"));
-    items.push(PaneItem::button("app-btn", "Clear ambient", "scene:ambient:clear"));
+    items.push(PaneItem::button("app-btn", "Game of Life", "scene:gol"));
+    items.push(PaneItem::button("app-btn", "Clear ambient", "scene:ambientclear"));
 
     items.push(PaneItem::text("app-title", "Clear"));
-    items.push(PaneItem::button("app-btn", "Clear the scene", "scene:clear"));
+    items.push(PaneItem::button("app-btn", "Clear everything", "scene:clear"));
     items
 }
 
 impl WindowCtx<'_> {
-    /// Drain a `scene:*` settings activation key (the prefix already stripped) from the Scene page:
-    /// load / clear a backdrop scene, a whirlpool / fountain / liquid effect, or set the graph's
-    /// tangibility. Routes to the matching `Orrery` method (which forwards to the physics actor) and
-    /// requests a redraw. An unknown key is a no-op. (Physics scenes — scene settings.)
-    pub(super) fn apply_scene_key(&mut self, key: &str) {
-        match key {
-            "load:dropbowl" => self.orrery_mut().load_demo_scene(),
-            "load:pyramid" => self.orrery_mut().load_scene(orrery::pyramid_scene()),
-            "load:domino" => self.orrery_mut().load_scene(orrery::domino_scene()),
-            "load:galton" => self.orrery_mut().load_scene(orrery::galton_scene()),
-            "load:funnel" => self.orrery_mut().load_scene(orrery::funnel_scene()),
-            "load:drift" => self.orrery_mut().load_scene(orrery::drift_scene()),
-            "load:chain" => self.orrery_mut().load_scene(orrery::chain_scene()),
-            "load:cradle" => self.orrery_mut().load_scene(orrery::cradle_scene()),
-            "load:bridge" => self.orrery_mut().load_scene(orrery::bridge_scene()),
-            "load:ballchain" => self.orrery_mut().load_scene(orrery::ball_and_chain_scene()),
-            "load:mixer" => self.orrery_mut().load_scene(orrery::mixer_scene()),
-            "load:whirlpool" => self.orrery_mut().load_whirlpool(),
-            "load:fountain" => self.orrery_mut().load_fountain(),
-            "fluid:load" => self.orrery_mut().load_demo_fluid(),
-            "fluid:clear" => self.orrery_mut().clear_fluid(),
-            "tangible:on" => self.orrery_mut().set_nodes_tangible(true),
-            "tangible:off" => self.orrery_mut().set_nodes_tangible(false),
-            "ambient:gol" => self.orrery_mut().load_game_of_life(),
-            "ambient:clear" => self.orrery_mut().clear_ambient(),
-            "clear" => self.orrery_mut().clear_scene(),
-            _ => return,
+    /// Load (or clear) a scene / effect / ambient backdrop by its flat **name** — the single
+    /// vocabulary shared by the Scene page buttons (`scene:<name>`, drained in `input.rs`) and the
+    /// `>scene <name>` omnibar verb (drained in `command_drain`). Routes to the matching `Orrery`
+    /// method (which forwards to the physics actor), requests a redraw, and returns whether the name
+    /// was known (so a caller can report an unknown name). A few friendly aliases are accepted.
+    /// (Physics scenes — scene settings.)
+    pub(super) fn load_named_scene(&mut self, name: &str) -> bool {
+        let matched = match name.trim().to_ascii_lowercase().as_str() {
+            "dropbowl" | "bowl" => {
+                self.orrery_mut().load_demo_scene();
+                true
+            }
+            "pyramid" => {
+                self.orrery_mut().load_scene(orrery::pyramid_scene());
+                true
+            }
+            "domino" | "dominoes" => {
+                self.orrery_mut().load_scene(orrery::domino_scene());
+                true
+            }
+            "galton" => {
+                self.orrery_mut().load_scene(orrery::galton_scene());
+                true
+            }
+            "funnel" => {
+                self.orrery_mut().load_scene(orrery::funnel_scene());
+                true
+            }
+            "drift" => {
+                self.orrery_mut().load_scene(orrery::drift_scene());
+                true
+            }
+            "chain" => {
+                self.orrery_mut().load_scene(orrery::chain_scene());
+                true
+            }
+            "cradle" => {
+                self.orrery_mut().load_scene(orrery::cradle_scene());
+                true
+            }
+            "bridge" => {
+                self.orrery_mut().load_scene(orrery::bridge_scene());
+                true
+            }
+            "ballchain" | "wreck" | "wrecking" => {
+                self.orrery_mut().load_scene(orrery::ball_and_chain_scene());
+                true
+            }
+            "mixer" => {
+                self.orrery_mut().load_scene(orrery::mixer_scene());
+                true
+            }
+            "whirlpool" => {
+                self.orrery_mut().load_whirlpool();
+                true
+            }
+            "fountain" => {
+                self.orrery_mut().load_fountain();
+                true
+            }
+            "fluid" | "pool" | "liquid" => {
+                self.orrery_mut().load_demo_fluid();
+                true
+            }
+            "fluidclear" | "nofluid" => {
+                self.orrery_mut().clear_fluid();
+                true
+            }
+            "gol" | "life" | "gameoflife" => {
+                self.orrery_mut().load_game_of_life();
+                true
+            }
+            "ambientclear" | "noambient" => {
+                self.orrery_mut().clear_ambient();
+                true
+            }
+            "tangible" => {
+                self.orrery_mut().set_nodes_tangible(true);
+                true
+            }
+            "intangible" => {
+                self.orrery_mut().set_nodes_tangible(false);
+                true
+            }
+            "clear" | "none" => {
+                self.orrery_mut().clear_scene();
+                self.orrery_mut().clear_fluid();
+                self.orrery_mut().clear_ambient();
+                true
+            }
+            _ => false,
+        };
+        if matched {
+            self.view.request_redraw();
         }
-        self.view.request_redraw();
+        matched
     }
 }
 
@@ -109,25 +176,25 @@ mod tests {
         let pelt = crate::settings_lane::settings_index("pelt");
         assert!(pelt.iter().any(|p| p.id == "scene"), "the pelt index lists the Scene page");
 
-        // Every actionable control is a button keyed under `scene:` (the prefix `input.rs` strips
-        // before handing the suffix to `apply_scene_key`), and the catalog + effects + levers + clear
+        // Every actionable control is a button keyed `scene:<name>` (the prefix `input.rs` strips
+        // before handing the name to `load_named_scene`), and the catalog + effects + levers + clear
         // are all present — a guard against a key typo drifting the page from the drain.
         let items = scene_section_items();
         let keys: Vec<&str> = items.iter().filter_map(|i| i.key.as_deref()).collect();
         assert!(!keys.is_empty(), "the page has actionable buttons");
         assert!(keys.iter().all(|k| k.starts_with("scene:")), "every button key is scene-prefixed");
         for &(id, _) in SCENE_CATALOG {
-            assert!(keys.contains(&format!("scene:load:{id}").as_str()), "catalog button for {id}");
+            assert!(keys.contains(&format!("scene:{id}").as_str()), "catalog button for {id}");
         }
         for expected in [
-            "scene:load:whirlpool",
-            "scene:load:fountain",
-            "scene:fluid:load",
-            "scene:fluid:clear",
-            "scene:tangible:on",
-            "scene:tangible:off",
-            "scene:ambient:gol",
-            "scene:ambient:clear",
+            "scene:whirlpool",
+            "scene:fountain",
+            "scene:fluid",
+            "scene:fluidclear",
+            "scene:tangible",
+            "scene:intangible",
+            "scene:gol",
+            "scene:ambientclear",
             "scene:clear",
         ] {
             assert!(keys.contains(&expected), "the page exposes {expected}");

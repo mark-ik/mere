@@ -221,6 +221,16 @@ impl WindowCtx<'_> {
                 note = Some("Select exactly two nodes to relate".to_string());
             }
         }
+        // A `scene("pyramid")` (or the `>scene pyramid` sugar) loads that backdrop scene / effect /
+        // ambient sim on the focused orrery, through the same `load_named_scene` vocabulary the Scene
+        // settings page drains — so the page and the verb never drift. (Scene verb.)
+        if let Some(name) = &outcome.scene_request {
+            note = Some(if self.load_named_scene(name) {
+                format!("scene: {name}")
+            } else {
+                format!("unknown scene: {name}")
+            });
+        }
         // A `sparql("…")` call runs over the focused graph and echoes the result.
         // Read-only: an ephemeral in-memory store, the kernel stays the authority.
         if let Some(query) = &outcome.sparql_query {
