@@ -206,9 +206,19 @@ tested (`a_spawned_window_is_a_slim_leaf`, agent_harness.rs:670). But the leaf o
 Workbench tile, and the `user_event` actor fan-out (MW3 step 5) is still deferred, so a
 secondary gets only spawn-time state. So C3's remaining work is (a) the tear-out *content*:
 a torn `Workbench` pane showing the dragged node's tile, with no `Orrery` pane (resolving to
-the donor's pooled orrery); and (b) **MW3 step 5** (the `user_event` fan-out, so the leaf
-updates live) plus **step 6** (per-window AccessKit; secondaries have none). The
-window-kind half is done; the torn-tile content + live updates are not.
+the donor's pooled orrery); and (b) **MW3 step 5** + **step 6** (per-window AccessKit).
+
+**MW3 step 5 — redraw fan-out DONE (2026-06-24).** `user_event`'s actor-drain ran through
+the primary's ctx (`ctx()` always bundles the primary), so only the primary was woken;
+`Shell::redraw_secondary_windows` now fans the wake out to every non-primary window after the
+ctx borrow ends (app_handler.rs), so a secondary leaf repaints shared content/graph/physics
+changes live. (Structurally not headless-testable — the harness can't fabricate a winit
+`WindowId` or spawn without an `ActiveEventLoop` — but the loop only *adds* redraw requests, so
+a handle-less window is a harmless no-op; meerkat 78 lib / 136 bin tests still green.) The
+**chrome fan-out** half of step 5 (sync chip / comms replayed onto each window's chrome) stays
+deferred: today's secondaries are slim leaves carrying no such chrome, so there is nothing to
+fan a chrome write out to yet (it lands with a chrome-bearing co-window, to test against). The
+window-kind half is done; the torn-tile content + per-window a11y are not.
 
 ## C4 — Cross-graph composability (re-point / copy a pane, with provenance)
 
@@ -265,17 +275,41 @@ Spawn-on-drop with an in-donor drag ghost.
 Done when: all three operations run from the gesture model with the brief's identity
 semantics, and the toast escalates a leaf in place.
 
-## Camera on the view, not the authority (promoted from deferred 2026-06-23)
+## Camera on the view, not the authority — DONE (2026-06-24, standalone)
 
-Move the camera out of the pooled `Orrery` (authority, orrery lib.rs:132) onto the
-**pane/window** (view), so two views of one graph hold distinct viewports over the *shared*
-gyre node positions. **Promoted from deferred to pressing** by the 2026-06-23 window-model
-decision: it is no longer "not needed by C1-C5" — a same-graph **co-window needs it**
-(without it the co-window is a mirror, see Window model). It is also the authority/view-line
-correction (the camera is experience-derived view state, currently misplaced on the
-authority). Lands either by moving the camera onto the pane now, or for free via
-orrery-as-element (the camera becomes the element's transform) / the N-orrery-elements work
-— pick the path when the co-window is built.
+The camera (viewport) now lives on the **view**, not the pooled `Orrery` authority. Mark gave
+the go-ahead to do it directly rather than wait for orrery-as-element, so this is a standalone
+move, not folded into the element seam. Built and green (orrery builds; meerkat checks clean;
+round-trip test + full suite pass, 78 lib / 138 bin).
+
+**Why install/readback, not a camera-extraction.** The shared `Orrery` carries a *single*
+`node_dom` + `stage_node` that bakes the camera transform (lib.rs). Two windows on one graph
+share that one DOM, so the camera is necessarily applied *per render pass*; per-window
+`node_dom` would be an enormous change. So the durable camera lives on the view and the orrery
+applies it per pass. (The earlier "fold into the element seam / this is a throwaway scratch
+register" call was wrong on the merits: the per-pass apply is architecturally forced by the
+single `node_dom`, and the element transform would just replace the *install* step later, not
+the durable-camera-on-the-view — which is the invariant both paths share.)
+
+What shipped:
+
+- **`orrery::Viewport`** (types.rs) = the full per-pane view state (camera offset / zoom / yaw /
+  tilt + pan inertia), with `Orrery::viewport()` / `set_viewport()` (lib.rs). The orrery's own
+  `camera` / `pan_velocity` are now per-pass working state the host drives.
+- **`WindowView.viewports: HashMap<GraphId, Viewport>`** (window_view.rs) — one viewport per
+  graph the window shows (handles both same-graph co-windows and multi-graph panes in one
+  window).
+- **ctx-lifecycle install/readback** (new meerkat `viewport.rs`): `WindowCtx::install_viewports`
+  runs on ctx build; `readback_viewports` runs on the ctx's `Drop`. Bracketing the ctx
+  *lifecycle* (not call sites) is what makes it correct — every camera read (screen<->world
+  hit-tests) and write (pan, wheel, recenter, frame inertia, isometric) runs inside a ctx, and
+  `Drop` fires on every exit including the early returns in `window_event`. The first time a
+  window shows a graph it has no stored viewport, so it seeds from the orrery's current framing.
+- **Persistence unchanged** (no repoint): because install seeds from the orrery, the existing
+  per-graph `CameraView` save/restore keeps working — a boot-restored camera lands on the orrery
+  and the first ctx adopts it. Known limitation: two windows on one graph share the *persisted*
+  (per-graph) camera and diverge live; true **per-window persistence** is the remaining tail
+  (the only piece the N-orrery / element seam would still improve).
 
 ## Open questions (carried from window-composition)
 
@@ -373,3 +407,36 @@ orrery-as-element (the camera becomes the element's transform) / the N-orrery-el
   same-graph co-window a real independent viewport); (2) C3 torn-tile content + MW3 step-5
   fan-out; (3) C5 gesture model (carries C4 surface: pane→pane drag + move-vs-copy / OQ-B);
   (4) the N-orrery-elements seam (subsumes #1 if orrery-as-element is the path).
+- **2026-06-24** — **Camera path resolved + MW3 step-5 redraw fan-out shipped.** Investigated
+  the #1 (camera-to-the-view) slice and resolved its open path fork: the orrery-as-element work
+  is already in flight (render.rs:624-633 snapshots nodes through the camera into DOM cards) and
+  the camera move is also a persistence-home question (per-graph today, must become per-view), so
+  a standalone camera-extraction now would be largely thrown away. **Decision: fold the camera
+  move into the N-orrery-elements seam** (camera-as-element-transform; the durable per-view camera
+  + its persistence land there), not a separate refactor; recorded the invariant (durable camera
+  belongs to the view) and reframed the camera section. Then shipped the next independent slice —
+  **MW3 step 5 redraw fan-out** (`Shell::redraw_secondary_windows`): `user_event` now wakes every
+  secondary window after the ctx borrow ends, so a leaf repaints shared changes live; the chrome
+  fan-out half stays deferred to a chrome-bearing co-window. meerkat green (78 lib / 136 bin).
+  **Re-ranked:** (1) **N-orrery-elements seam** (now carries the camera move — highest leverage,
+  unblocks the real co-window); (2) C3 torn-tile content (Workbench pane on the donor's orrery) +
+  step-6 per-window a11y; (3) C5 gesture model (carries C4 surface); (4) the chrome fan-out half
+  of step 5 (needs a chrome-bearing secondary to test against).
+- **2026-06-24** — **Camera-on-the-view BUILT (standalone), green.** Mark overrode the
+  fold-into-element deferral above ("do the camera work, you have the authority"), so the camera
+  moved off the pooled `Orrery` onto the view directly. Investigating it corrected the prior
+  call: the orrery's *single* shared `node_dom` (whose `stage_node` bakes the camera transform)
+  makes a per-pass camera apply architecturally forced, so install/readback is the right shape,
+  not a throwaway. Shipped `orrery::Viewport` + `viewport()`/`set_viewport()`,
+  `WindowView.viewports: HashMap<GraphId, Viewport>`, and ctx-lifecycle install/readback (new
+  meerkat `viewport.rs`, readback on `WindowCtx::Drop` so no early-returning input path escapes
+  it). Existing per-graph camera persistence kept working untouched (install seeds from the
+  orrery). orrery builds; meerkat checks clean; new round-trip test
+  `a_pane_camera_lives_on_the_view_and_round_trips_through_the_ctx` + full suite green (78 lib /
+  138 bin). Remaining tail: **per-window** camera *persistence* (two windows on one graph share
+  the persisted per-graph camera, diverge live) — the only piece the N-orrery seam still
+  improves. **Re-ranked:** (1) C3 torn-tile content + step-6 a11y; (2) C5 gesture model (carries
+  C4 surface); (3) N-orrery-elements seam (now just per-window-persistence + the shell-hit-test
+  generalization, since the live camera move is done); (4) chrome fan-out half of step 5.
+  Done this session under heavy concurrent churn (rapid commits + a half-scaffolded `signals`
+  crate transiently broke the workspace build); the camera code is clean underneath.
