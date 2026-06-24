@@ -234,9 +234,11 @@ Reconnoitred the slot-in; the build is now mechanical, in slices:
   routed engine through `constellation.drive` → `Show`; `serval.scripted` is present +
   pickable (context menu / settings / apparatus), gated on the feature. Both
   `cargo check -p meerkat` and `--features scripted` green; the scripted variant **links**
-  (no image-size-limit hit); 73 meerkat lib tests pass. **Not yet runtime-verified** —
-  pin a node to `serval.scripted`, load an inline-JS page, watch the mutation render
-  (needs a headed pass). *(No external scripts, no providers yet — 2b / 2c.)*
+  (no image-size-limit hit). **Verified** by two feature-gated tests driving the real
+  off-thread content actor: a page whose only text is injected by an inline `<script>`
+  renders glyph runs through the `serval.scripted` lane (JS ran + the mutated DOM
+  rendered), while the same page on the static lane paints none (the control proves the
+  glyphs came from the JS). *(No external scripts, no providers yet — 2b / 2c.)*
 - **2b — external scripts.** Bridge the fetch-model gap: meerkat hands the actor a body
   (`Show`) and demand-fetches subresources async (`ContentCommand::Resource` round-trip),
   whereas `ScriptedDocument::load` wants a *sync* `ResourceFetcher`. Options: pre-fetch
