@@ -171,3 +171,35 @@ fn a_cross_origin_fetch_is_refused_by_the_origin_gate() {
         "the live DOM is untouched: no third-party response landed",
     );
 }
+
+#[test]
+fn the_per_turn_fetch_cap_refuses_a_flood_and_resets_each_turn() {
+    // §A6: a turn may issue at most `max_fetches_per_turn` fetches. The guest's
+    // `fetch-twice` does two in one turn, so a cap of 1 refuses the turn; a cap of 2
+    // lets it through; and the budget resets, so a fresh turn fetches again.
+    let url = "https://example.com/x";
+    let origins = vec!["example.com".to_string()];
+
+    // Cap of 1: the second fetch in the turn is refused.
+    let (dom, _b, _t) = page();
+    let fetcher: Arc<dyn NetFetcher> = Arc::new(EchoFetcher);
+    let quota = Quota { max_fetches_per_turn: 1, ..Quota::default() };
+    let mut tight =
+        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), quota, Some(fetcher), origins.clone())
+            .expect("attach");
+    let out = tight.deliver_event("fetch-twice", url).expect("turn completes");
+    assert!(matches!(out, TurnOutcome::Refused(_)), "cap=1 refuses two fetches (got {out:?})");
+
+    // Cap of 2: both fetches in the turn succeed, and a later turn fetches again
+    // (the per-turn budget reset).
+    let (dom, _b, t1) = page();
+    let fetcher: Arc<dyn NetFetcher> = Arc::new(EchoFetcher);
+    let quota = Quota { max_fetches_per_turn: 2, ..Quota::default() };
+    let mut roomy =
+        DocumentScript::attach(&doc_wasm(), dom, &Grant::allow_all(), quota, Some(fetcher), origins)
+            .expect("attach");
+    assert_eq!(roomy.deliver_event("fetch-twice", url).expect("turn 1"), TurnOutcome::Applied(1));
+    // A second turn: the budget reset, so it fetches again rather than staying spent.
+    assert_eq!(roomy.deliver_event("fetch-twice", url).expect("turn 2"), TurnOutcome::Applied(2));
+    assert_eq!(text_of(roomy.dom(), t1).as_deref(), Some("fetched:https://example.com/x"));
+}

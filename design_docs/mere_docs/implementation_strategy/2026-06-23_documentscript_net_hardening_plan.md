@@ -144,6 +144,13 @@ mitigations below bound the blast radius.
 
 ## Execution log
 
+- **2026-06-24 (A6 per-turn fetch cap — green).** `net.fetch` is now rate-bounded: `Quota` gains
+  `max_fetches_per_turn` (default 32), `ScriptHost` counts fetches per turn and `net::Host::fetch`
+  refuses past the cap, reset at each `deliver_event` turn start. In document-host so both runtimes
+  inherit it. The guest gained a `fetch-twice` event to exercise it; test asserts cap=1 refuses two
+  fetches in a turn while cap=2 passes and the budget resets across turns. A cross-turn token-bucket
+  (time-based) is a later refinement; per-turn × host-paced turn rate is the bound for now.
+  document-host 21 green; meerkat builds (uses `Quota::default()`).
 - **2026-06-24 (E1 origin-scoped net — the critical channel closed, green).** `net` is no longer
   "open internet": a script may now fetch **only its own page's origin** (same-origin egress),
   enforced host-side in document-host before the backend runs. `ScriptHost` gains a `net_origins`

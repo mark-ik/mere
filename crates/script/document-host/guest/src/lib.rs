@@ -75,6 +75,17 @@ impl Guest for Component {
                     .map_err(|e| TurnError::Refused(format!("fetch failed: {e}")))?;
                 vec![Mutation::SetText(SetTextArgs { node: t.id, text: resp.body })]
             }
+            // Fetch `payload` twice in one turn, to exercise the per-turn fetch cap
+            // (§A6): under a cap below 2 the second call errors and the turn is refused.
+            "fetch-twice" => {
+                let t = first(&view, "#text")
+                    .ok_or_else(|| TurnError::Refused("no text node".to_string()))?;
+                let _ = fetch(&Request { url: payload.clone() })
+                    .map_err(|e| TurnError::Refused(format!("fetch 1 failed: {e}")))?;
+                let resp = fetch(&Request { url: payload })
+                    .map_err(|e| TurnError::Refused(format!("fetch 2 failed: {e}")))?;
+                vec![Mutation::SetText(SetTextArgs { node: t.id, text: resp.body })]
+            }
             // Insert a new <p> before the first <p> (id-relative anchor).
             "insert" => {
                 let p = first(&view, "p")

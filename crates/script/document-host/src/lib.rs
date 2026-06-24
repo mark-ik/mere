@@ -144,6 +144,11 @@ pub struct ScriptHost {
     /// at the `net.fetch` boundary *before* the backend runs, so `net` means "may
     /// reach these origins", not "open internet". Set by [`DocumentScript::attach`].
     net_origins: Vec<String>,
+    /// `net.fetch` calls made in the current turn (§A6), reset to 0 at each turn start.
+    fetches_this_turn: u32,
+    /// The per-turn `net.fetch` cap; a call past it is refused. Set from `Quota` at
+    /// [`DocumentScript::attach`]; [`new_host`] seeds the default for the turn drivers.
+    max_fetches_per_turn: u32,
     /// The granted application-capability interface names this instance can see via
     /// the always-linked `caps.granted()` import (§11.4). Authoritative copy is the
     /// `Grant`; this is what the script is told it has.
@@ -181,7 +186,16 @@ impl crate::mere::script::net::Host for ScriptHost {
         &mut self,
         req: crate::mere::script::net::Request,
     ) -> Result<crate::mere::script::net::Response, String> {
-        // Origin gate first: the script may only reach its granted origins (default
+        // Per-turn rate cap first (§A6): bound how many fetches one turn can issue, so
+        // a granted script cannot flood egress in a loop. Reset each turn.
+        if self.fetches_this_turn >= self.max_fetches_per_turn {
+            return Err(format!(
+                "net.fetch: per-turn request limit reached ({})",
+                self.max_fetches_per_turn
+            ));
+        }
+        self.fetches_this_turn += 1;
+        // Origin gate: the script may only reach its granted origins (default
         // same-origin), so a granted `net` cannot exfiltrate to or read an arbitrary
         // third-party host. Enforced before the backend is even consulted.
         if !host_in_origins(&req.url, &self.net_origins) {
@@ -262,6 +276,8 @@ fn new_host(dom: ScriptedDom, granted: Vec<String>, limits: StoreLimits) -> Scri
         granted,
         fetcher: None,
         net_origins: Vec::new(),
+        fetches_this_turn: 0,
+        max_fetches_per_turn: DEFAULT_MAX_FETCHES_PER_TURN,
         wasi: WasiCtxBuilder::new().build(),
         table: ResourceTable::new(),
         limits,
@@ -560,19 +576,30 @@ pub async fn instantiate_with_grant(component_path: &Path, grant: &Grant) -> was
     Ok(())
 }
 
+/// Default per-turn `net.fetch` budget (§A6). Generous for a real turn (a handful of
+/// API calls), a hard ceiling on a fetch flood. Per *turn*, reset each `handle-event`,
+/// so total egress is bounded by this times the host-paced turn rate.
+const DEFAULT_MAX_FETCHES_PER_TURN: u32 = 32;
+
 /// Per-turn resource quota for a [`DocumentScript`] (§11.7-6: fixed constants for
 /// P2). `mem_bytes` caps the instance's linear memory; `epoch_deadline_ticks` is
-/// how many 5ms watchdog ticks a single guest call may run before it is trapped.
+/// how many 5ms watchdog ticks a single guest call may run before it is trapped;
+/// `max_fetches_per_turn` caps `net.fetch` calls within one turn (§A6).
 #[derive(Clone, Copy, Debug)]
 pub struct Quota {
     pub mem_bytes: usize,
     pub epoch_deadline_ticks: u64,
+    pub max_fetches_per_turn: u32,
 }
 
 impl Default for Quota {
     fn default() -> Self {
         // ~64 MiB and ~1s wall (200 * 5ms): generous for a turn, fatal to a runaway.
-        Self { mem_bytes: 64 * 1024 * 1024, epoch_deadline_ticks: 200 }
+        Self {
+            mem_bytes: 64 * 1024 * 1024,
+            epoch_deadline_ticks: 200,
+            max_fetches_per_turn: DEFAULT_MAX_FETCHES_PER_TURN,
+        }
     }
 }
 
@@ -645,9 +672,11 @@ impl DocumentScript {
         let (mut store, bindings) =
             pollster::block_on(build_instance(&engine, component_path, dom, grant, limits))?;
         // The network backend for `net.fetch` (None = unconfigured -> fetch errors)
-        // plus the origin allowlist gating which URLs it may reach (§E1).
+        // plus the origin allowlist gating which URLs it may reach (§E1) and the
+        // per-turn fetch cap (§A6).
         store.data_mut().fetcher = fetcher;
         store.data_mut().net_origins = net_origins;
+        store.data_mut().max_fetches_per_turn = quota.max_fetches_per_turn;
         store.set_epoch_deadline(quota.epoch_deadline_ticks);
         let engine = store.engine().clone();
         let activate = bindings.call_activate(&mut store);
@@ -662,6 +691,7 @@ impl DocumentScript {
     pub fn deliver_event(&mut self, kind: &str, payload: &str) -> wasmtime::Result<TurnOutcome> {
         let ev = Event { kind: kind.to_string(), payload: payload.to_string() };
         self.store.set_epoch_deadline(self.epoch_deadline_ticks);
+        self.store.data_mut().fetches_this_turn = 0; // fresh per-turn fetch budget (§A6)
         let engine = self.store.engine().clone();
         let turn = self.bindings.call_handle_event(&mut self.store, &ev);
         let result = guarded_block_on(engine, turn)?;
