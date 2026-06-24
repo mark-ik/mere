@@ -50,7 +50,16 @@ host gesture: "Save graph as engram" (a registry command) and "Open engram" (tha
 window, reusing the orrery at engram scope). Browsing is read-only; editing forks a thaw.
 
 Done when a user freezes the focused graph to an engram, the engram persists (survives restart,
-content-hashed, `verify_integrity` passes), and re-opening it thaws the same graph into the orrery.
+content-hashed, `verify_integrity` passes), and re-opening it thaws the same graph back.
+
+**Landed 2026-06-24** (commits `af89808`, `4f51175`): `session-runtime/graph_engram` —
+`save_graph_engram` / `save_graph_snapshot_engram` / `open_engram_as_session` / `list_graph_engrams`
+over the eidetic typed-payload substrate (a `GraphEngram` newtype, orphan rule), `RedactionPolicy`
+(conservative default strips thumbnails / favicons / session state). Host: `Command::SaveGraphEngram`
+(palette + context menu + `>save_graph_engram`) freezes the focused graph to the private fjall store.
+Verified: 6 tests incl. a real fjall save → close → reopen → thaw (survives restart). The thaw lib
+primitive (`open_engram_as_session`) is built + tested; surfacing it as a **browse + click-to-open**
+gesture lands in slice B (its UI home), so A is the freeze half + the open API, B is the open UX.
 
 ### B — The Alembic pane
 
@@ -127,6 +136,17 @@ Verification: a unit/integration test that `save → (drop) → open` round-trip
 
 ## Progress
 
+- 2026-06-24: **Slice A landed** (commits `af89808` spine, `4f51175` host gesture + persistence test).
+  The freeze/thaw foundation: `session-runtime/graph_engram` over the eidetic typed-payload layer
+  (`save_typed` / `load_typed` / `list_typed`), which turned out to be a richer substrate than the plan
+  assumed (content-hashed, schema-tagged, integrity-verified, multi-schema — already tested), so the
+  binding is a `GraphEngram` newtype + a `RedactionPolicy`, not hand-rolled blob plumbing. Host:
+  `Command::SaveGraphEngram` (registry-native — palette, context menu, `>save_graph_engram`). 6 tests,
+  incl. a real fjall close+reopen proving "survives restart." Refinement: A delivers the freeze gesture
+  together with the `open_engram_as_session` lib primitive; the **thaw-into-the-running-orrery UX**
+  (browse, click-to-open) moves to slice B where it has a pane to live in. Chose serde_json over the doc's rkyv (consistent with
+  the live `graph.json`, sidesteps the rkyv-from-store alignment gotcha); rkyv compaction stays a noted
+  later optimization.
 - 2026-06-24: **Plan written; code-verified.** Confirmed the spine is live: `GraphSnapshot` to/from,
   the full `Engram` envelope, and the `eidetic::Store` / `FjallStore` **already opened in meerkat**
   (used for tombstones + the content store), so slice A is a graph-snapshot schema + save/open helpers
