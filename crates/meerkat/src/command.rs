@@ -63,6 +63,9 @@ pub enum Command {
     ToggleTrail,
     /// Toggle the live-operations steward pane (host action).
     ToggleSteward,
+    /// Toggle the Alembic memory pane: Recent (short-term) + Saved (long-term) + Engrams
+    /// (distilled graph snapshots) (host action).
+    ToggleAlembic,
     /// Retry the focused node's page fetch / render operation (host action).
     RetryFocusedContent,
     /// Stop the focused node's live operation by reaping its actor (host action).
@@ -99,7 +102,7 @@ pub enum Command {
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 29] = [
+    pub const ALL: [Command; 30] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -119,6 +122,7 @@ impl Command {
         Command::ToggleInspector,
         Command::ToggleTrail,
         Command::ToggleSteward,
+        Command::ToggleAlembic,
         Command::RetryFocusedContent,
         Command::StopFocusedOperation,
         Command::PinFocusedOperation,
@@ -150,6 +154,7 @@ impl Command {
                 | Command::ToggleInspector
                 | Command::ToggleTrail
                 | Command::ToggleSteward
+                | Command::ToggleAlembic
                 | Command::RetryFocusedContent
                 | Command::StopFocusedOperation
                 | Command::PinFocusedOperation
@@ -185,8 +190,8 @@ impl Command {
             // context (they target the focused node or the whole graph, not the selection).
             Back | Forward | Home | ConnectPeer | ToggleWorkbench | ToggleRoster | ToggleGloss
             | ToggleApparatus | ToggleComms | ToggleInspector | ToggleTrail | ToggleSteward
-            | ShowAllEdges | ToggleProjection | OpenSettings | CloseGraphPane | ExportGraph
-            | SaveGraphEngram => {
+            | ToggleAlembic | ShowAllEdges | ToggleProjection | OpenSettings | CloseGraphPane
+            | ExportGraph | SaveGraphEngram => {
                 MenuScope::Always
             }
         }
@@ -212,6 +217,7 @@ impl Command {
             Command::ToggleInspector => "inspector",
             Command::ToggleTrail => "trail",
             Command::ToggleSteward => "steward",
+            Command::ToggleAlembic => "alembic",
             Command::ToggleComms => "comms",
             Command::OpenSettings => "settings",
             Command::OpenNodeSettings => "node_settings",
@@ -265,6 +271,7 @@ impl Command {
             Command::ToggleInspector => "Inspector (selected object)",
             Command::ToggleTrail => "Trail (history + recent + removed)",
             Command::ToggleSteward => "Steward (live operations)",
+            Command::ToggleAlembic => "Alembic (memory: recent, saved, engrams)",
             Command::RetryFocusedContent => "Retry focused content",
             Command::StopFocusedOperation => "Stop focused operation",
             Command::PinFocusedOperation => "Pin focused operation",

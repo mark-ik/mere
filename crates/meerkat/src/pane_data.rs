@@ -215,6 +215,87 @@ impl WindowCtx<'_> {
         items
     }
 
+    /// The Alembic memory pane's item list: **Recent** (short-term working set),
+    /// **Saved** (long-term — pinned or tagged nodes; tagging retains into long-term
+    /// per the promotion model), and **Engrams** (the content-addressed graph engrams
+    /// in private memory). Three titled sections of rows. Recent / Saved are a grounded
+    /// subset until slice C (explicit promote / evict); B1 lists engrams, B2 makes a row
+    /// clickable to thaw into the orrery. (Alembic memory pane.)
+    pub(super) fn alembic_items(&mut self) -> Vec<crate::list_pane::PaneItem> {
+        use crate::list_pane::PaneItem;
+        let clip = |s: &str| -> String { s.chars().take(56).collect() };
+        let strip = |url: &str| -> String {
+            url.strip_prefix("https://")
+                .or_else(|| url.strip_prefix("http://"))
+                .unwrap_or(url)
+                .chars()
+                .take(56)
+                .collect()
+        };
+
+        // Recent (short-term): the working set, grounded until slice C's eviction policy.
+        let mut items = vec![PaneItem::text("utility-title", "Recent")];
+        let recent = self.orrery().graph().recent_visited(8);
+        if recent.is_empty() {
+            items.push(PaneItem::text("utility-row-muted", "nothing visited yet"));
+        } else {
+            for rv in &recent {
+                items.push(PaneItem::text("utility-row", strip(&rv.url)));
+            }
+        }
+
+        // Saved (long-term): pinned or tagged nodes — a scoped block so the graph borrow
+        // ends before the store borrow below.
+        let saved: Vec<String> = {
+            let graph = self.orrery().graph();
+            let mut s: Vec<String> = graph
+                .nodes()
+                .filter(|(_, node)| node.is_pinned || !node.tags.is_empty())
+                .map(|(key, _)| graph.node_display_label(key))
+                .collect();
+            s.sort();
+            s
+        };
+        items.push(PaneItem::text("utility-title", "Saved"));
+        if saved.is_empty() {
+            items.push(PaneItem::text("utility-row-muted", "pin or tag a node to keep it"));
+        } else {
+            for label in saved.iter().take(12) {
+                items.push(PaneItem::text("utility-row", clip(label)));
+            }
+        }
+
+        // Engrams (distillation): the content-addressed graph engrams in private memory.
+        // fjall resolves synchronously, so `block_on` does not stall the UI (the Trail /
+        // deleted-log pattern). B2 makes these rows clickable to thaw into the orrery.
+        items.push(PaneItem::text("utility-title", "Engrams"));
+        let engrams = self
+            .shared
+            .content
+            .store
+            .as_mut()
+            .map(|store| {
+                pollster::block_on(session_runtime::graph_engram::list_graph_engrams(store))
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        if engrams.is_empty() {
+            items.push(PaneItem::text(
+                "utility-row-muted",
+                "save a graph as an engram (>save_graph_engram)",
+            ));
+        } else {
+            for manifest in engrams.iter().take(20) {
+                let id_short: String = manifest.id.to_string().chars().take(20).collect();
+                items.push(PaneItem::text(
+                    "utility-row",
+                    format!("{id_short} · {} B", manifest.byte_size),
+                ));
+            }
+        }
+        items
+    }
+
     pub(super) fn steward_rows(&self) -> Vec<(String, String)> {
         let operations = self.shared.content.constellation.active_operations();
         let mut rows = vec![

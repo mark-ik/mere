@@ -689,6 +689,7 @@ impl Chrome {
             | Command::ToggleInspector
             | Command::ToggleTrail
             | Command::ToggleSteward
+            | Command::ToggleAlembic
             | Command::RetryFocusedContent
             | Command::StopFocusedOperation
             | Command::PinFocusedOperation

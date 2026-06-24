@@ -197,8 +197,8 @@ impl WindowCtx<'_> {
     /// each inner root takes a unique-id class (`apparatus`, `utility-pane steward`, …) so
     /// the shared `.utility-pane` styling still applies while `has_class` finds each pane
     /// distinctly for scroll + hit-test. (Phase 1, step 2.)
-    fn snapshot_list_panes(&mut self, rects: [Option<[f32; 4]>; 4]) {
-        use crate::window_view::ShellListPane::{Apparatus, Inspector, Steward, Trail};
+    fn snapshot_list_panes(&mut self, rects: [Option<[f32; 4]>; 5]) {
+        use crate::window_view::ShellListPane::{Alembic, Apparatus, Inspector, Steward, Trail};
         // Apparatus: theme + engine + physics buttons over the host observability rows.
         if let Some(rect) = rects[0] {
             // The apparatus is read-only diagnostics now; its settings sections moved to the
@@ -231,6 +231,13 @@ impl WindowCtx<'_> {
             self.view.set_list_pane(Trail, "utility-pane trail", items, Some(rect));
         } else if self.view.list_pane_open(Trail) {
             self.view.set_list_pane(Trail, "utility-pane trail", Vec::new(), None);
+        }
+        // Alembic: memory — Recent / Saved / Engrams sections (the Engrams list reads eidetic).
+        if let Some(rect) = rects[4] {
+            let items = self.alembic_items();
+            self.view.set_list_pane(Alembic, "utility-pane alembic", items, Some(rect));
+        } else if self.view.list_pane_open(Alembic) {
+            self.view.set_list_pane(Alembic, "utility-pane alembic", Vec::new(), None);
         }
     }
 
@@ -388,13 +395,14 @@ impl WindowCtx<'_> {
             .iter()
             .find(|l| matches!(l.content, PaneContent::Comms))
             .map(|l| l.rect);
-        // The four folded list panes' rects, in `ShellListPane` order (apparatus, steward,
-        // inspector, trail), for the per-frame snapshot into the shell document. (Phase 1.)
-        let list_pane_rects: [Option<[f32; 4]>; 4] = [
+        // The five folded list panes' rects, in `ShellListPane` order (apparatus, steward,
+        // inspector, trail, alembic), for the per-frame snapshot into the shell document. (Phase 1.)
+        let list_pane_rects: [Option<[f32; 4]>; 5] = [
             leaves.iter().find(|l| matches!(l.content, PaneContent::Apparatus)).map(|l| l.rect),
             leaves.iter().find(|l| matches!(l.content, PaneContent::Steward)).map(|l| l.rect),
             leaves.iter().find(|l| matches!(l.content, PaneContent::Inspector)).map(|l| l.rect),
             leaves.iter().find(|l| matches!(l.content, PaneContent::Trail)).map(|l| l.rect),
+            leaves.iter().find(|l| matches!(l.content, PaneContent::Alembic)).map(|l| l.rect),
         ];
         let dividers = frame_view::divider_rects(&self.view.frame_layout, band, self.view.maximized_pane);
         let orrery_w = (orrery_rect[2] - orrery_rect[0]).round().max(1.0) as u32;

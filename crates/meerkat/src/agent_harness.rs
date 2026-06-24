@@ -434,7 +434,11 @@ impl AgentPane {
             PaneContent::Gloss => Self::Gloss,
             PaneContent::Comms => Self::Comms,
             PaneContent::Apparatus | PaneContent::System => Self::Apparatus,
-            PaneContent::Trail | PaneContent::Tile(_) | PaneContent::Custom(_) => Self::Workbench,
+            // Alembic has no dedicated AgentPane yet; fold into the generic mapping. (Alembic B1.)
+            PaneContent::Trail
+            | PaneContent::Alembic
+            | PaneContent::Tile(_)
+            | PaneContent::Custom(_) => Self::Workbench,
         }
     }
 }

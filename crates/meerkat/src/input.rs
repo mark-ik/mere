@@ -777,6 +777,7 @@ impl WindowCtx<'_> {
                     | PaneContent::Steward
                     | PaneContent::Inspector
                     | PaneContent::Trail
+                    | PaneContent::Alembic
                     | PaneContent::Comms
             ) && x >= leaf.rect[0]
                 && x < leaf.rect[2]

@@ -66,6 +66,14 @@ impl WindowCtx<'_> {
                 pane_id,
                 action_routes,
             ),
+            PaneContent::Alembic => self.list_pane_a11y_tree(
+                ShellListPane::Alembic,
+                "alembic",
+                self.view.alembic_scroll,
+                "Alembic",
+                pane_id,
+                action_routes,
+            ),
             // System is not folded into the shell document, so it keeps the skeleton.
             PaneContent::System | PaneContent::Tile(_) | PaneContent::Custom(_) => {
                 generic_pane_content_tree(&self.view.frame_layout, pane_id, content)

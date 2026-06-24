@@ -693,6 +693,7 @@ impl ApplicationHandler for Shell {
                         frame::PaneContent::Steward => Some(&mut wc.view.steward_scroll),
                         frame::PaneContent::Apparatus => Some(&mut wc.view.apparatus_scroll),
                         frame::PaneContent::Trail => Some(&mut wc.view.trail_scroll),
+                        frame::PaneContent::Alembic => Some(&mut wc.view.alembic_scroll),
                         _ => None,
                     };
                     if let Some(s) = scroll {

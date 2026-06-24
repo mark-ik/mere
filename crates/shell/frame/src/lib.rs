@@ -162,6 +162,10 @@ pub enum PaneContent {
     Steward,
     /// Misfin / murm messaging (the `comms` domain).
     Comms,
+    /// Memory: short-term (Recent), long-term (Saved), and distilled graph
+    /// engrams. The Alembic pane (memory + engrams architecture); window-chrome
+    /// (its default scope is all memory, not the active graph).
+    Alembic,
     Apparatus,
     System,
     /// **Pinned tile** — a single specific tile rendered without a
@@ -187,6 +191,7 @@ impl PaneContent {
             PaneContent::Trail => "trail",
             PaneContent::Steward => "steward",
             PaneContent::Comms => "comms",
+            PaneContent::Alembic => "alembic",
             PaneContent::Apparatus => "apparatus",
             PaneContent::System => "system",
             PaneContent::Tile(_) => "tile",
@@ -215,6 +220,7 @@ impl PaneContent {
             | PaneContent::Tile(_) => true,
             PaneContent::Steward
             | PaneContent::Comms
+            | PaneContent::Alembic
             | PaneContent::Apparatus
             | PaneContent::System
             | PaneContent::Custom(_) => false,

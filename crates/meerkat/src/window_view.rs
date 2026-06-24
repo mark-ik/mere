@@ -205,6 +205,7 @@ pub(crate) struct WindowView {
     pub(crate) steward_scroll: f32,
     pub(crate) apparatus_scroll: f32,
     pub(crate) trail_scroll: f32,
+    pub(crate) alembic_scroll: f32,
     /// Open settings tile(s) body scroll offset (device px), applied to the
     /// `.settings-pane-body` scroll container so serval clips + scrolls + draws
     /// the thumb. Clamped to content extent by the render. (Menu/pane scroll.)
@@ -466,8 +467,8 @@ pub(crate) struct ShellState {
     /// The four generic list panes (apparatus, steward, inspector, trail), folded into the
     /// shell document like the roster: indexed by [`ShellListPane`], each rendered as a
     /// lensed `list_pane_view` subtree when its matching rect is `Some`. (Phase 1, step 2.)
-    pub(crate) panes: [ListPaneState; 4],
-    pub(crate) pane_rects: [Option<[f32; 4]>; 4],
+    pub(crate) panes: [ListPaneState; 5],
+    pub(crate) pane_rects: [Option<[f32; 4]>; 5],
     /// The most recent orrery wheel delta (device px), queued by the orrery pane element's
     /// `on_wheel` when the host dispatches a wheel there, and drained by the host into gyre's
     /// pan / Ctrl-zoom. Routes the orrery wheel through the document. (cond 5 input bridge.)
@@ -490,6 +491,7 @@ pub(crate) enum ShellListPane {
     Steward,
     Inspector,
     Trail,
+    Alembic,
 }
 
 impl ShellListPane {
@@ -500,16 +502,17 @@ impl ShellListPane {
 
 /// The positioned-wrapper CSS class for each [`ShellListPane`], by array index — the
 /// outer `position:absolute` div that holds the lensed `list_pane_view`. (Phase 1.)
-const PANE_WRAPPER_CLASS: [&str; 4] =
-    ["apparatus-pane", "steward-pane", "inspector-pane", "trail-pane"];
+const PANE_WRAPPER_CLASS: [&str; 5] =
+    ["apparatus-pane", "steward-pane", "inspector-pane", "trail-pane", "alembic-pane"];
 
 /// Constant-index field accessors into [`ShellState::panes`], one per list pane, so each
 /// lensed subtree targets its own slot. Non-capturing, so they coerce to `fn`. (Phase 1.)
-const PANE_TO: [fn(&mut ShellState) -> &mut ListPaneState; 4] = [
+const PANE_TO: [fn(&mut ShellState) -> &mut ListPaneState; 5] = [
     |s| &mut s.panes[0],
     |s| &mut s.panes[1],
     |s| &mut s.panes[2],
     |s| &mut s.panes[3],
+    |s| &mut s.panes[4],
 ];
 
 /// The erased shell root view, like [`ChromeView`] but over [`ShellState`].
@@ -570,7 +573,7 @@ fn shell_view(s: &ShellState) -> ShellView {
             ) as ShellView
         })
     };
-    let list_panes = (list_pane(0), list_pane(1), list_pane(2), list_pane(3));
+    let list_panes = (list_pane(0), list_pane(1), list_pane(2), list_pane(3), list_pane(4));
     // The settings tiles (variable count), folded in as one lensed subtree that emits one
     // absolutely positioned two-column pane (index spine + page body) per open `settings://`
     // tile. Absent when none are open, so the document is identical before any settings tile.
@@ -940,7 +943,7 @@ pub(crate) fn shell_runner(dom: Rc<RefCell<ScriptedDom>>, chrome: Chrome) -> She
             roster: RosterState::default(),
             roster_rect: None,
             panes: std::array::from_fn(|_| ListPaneState::default()),
-            pane_rects: [None; 4],
+            pane_rects: [None; 5],
             orrery_wheel: None,
             settings: SettingsPanesState::default(),
             node_card_keys: Vec::new(),
@@ -1135,6 +1138,7 @@ impl WindowView {
             steward_scroll: Default::default(),
             apparatus_scroll: Default::default(),
             trail_scroll: Default::default(),
+            alembic_scroll: Default::default(),
             settings_scroll: Default::default(),
             last_left_release: Default::default(),
             workbench_gesture: false,
