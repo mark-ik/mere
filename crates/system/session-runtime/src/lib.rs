@@ -43,6 +43,10 @@
 // not re-fetch.
 pub mod content_store;
 pub mod engine_profile_store;
+// Freeze/thaw a live graph into an immutable, content-addressed graph engram over
+// an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
+// filesystem). Save redacts private fields by default; open thaws read-only.
+pub mod graph_engram;
 // Filesystem persistence of the content frame's pane layout (frame.json);
 // native-only so the crate stays wasm-clean.
 #[cfg(not(target_arch = "wasm32"))]
