@@ -452,3 +452,19 @@ within budget.
   unregistered falls back); headed-verified (scry-shots/p4cr-*): a pile of wood-textured crates behind
   the graph. Decision recorded: keep ambient backdrops abstract, expose sprites as the opt-in just
   landed - they earn their keep on foreground / interactive props, not background ambiance.
+- 2026-06-24: **P5 opened - Game of Life ambient backdrop (Bucket B, committed `8f77fdb`);
+  headed-verified.** The first non-rapier ambient sim: a sim painted behind the graph for liveliness
+  the rapier solver should not carry. `ambient.rs` (new, orrery-side since it is not rapier physics,
+  so not in gyre) holds a `GameOfLife` CA: `step()` is pure Conway (B3/S23) on a toroidal grid so it
+  tests cleanly, `step_living()` the host wrapper that reseeds a dead / thinning field so the backdrop
+  never freezes (deterministic random soup, no `rand` dep). The orrery holds `ambient:
+  Option<GameOfLife>` + `load_game_of_life` / `clear_ambient`; `frame()` steps it every 7th frame (a
+  watchable ~8 gen/s), paints the live cells as the bottom backdrop layer (above the bg fill, below
+  the scene) with per-row run-merged rects in a muted low-alpha green, and keeps redrawing while
+  loaded so it animates. Bin key `g` (and `0` clears it); meerkat Scene settings gains an Ambient
+  section. orrery 52 tests (a blinker oscillates period-2, a block is a still life, the backdrop keeps
+  the orrery redrawing until cleared) + meerkat green; headed-verified (scry-shots/p4gol-*): the CA
+  grid evolves behind the graph between frames. **The ambient seam is now proven**; siblings (n-body
+  drift over gyre's Barnes-Hut, particle-life) slot into the same `ambient` module / paint path next.
+  Tuning follow-on: the cells read light-grey (the green tint washes out at 0.16 alpha) and are a
+  touch prominent - the colour / alpha is one constant in `frame.rs` to taste.
