@@ -1,0 +1,14 @@
+[package]
+name = "signals"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Graph-structural signal producer for Mere's intelligence tier (the graph-signals-layer plan's intel/signals). Computes per-node / per-pair signals from the kernel graph and hands them to cartography's IntelligenceSignals contract — degree-based importance now; centrality, communities, affinity, and the generation/dirty-bit cache for expensive signals land in later slices."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+kernel.workspace = true
+cartography.workspace = true

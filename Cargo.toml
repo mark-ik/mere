@@ -49,6 +49,7 @@ members = [
     "crates/eidetic/eidetic-search",
     "crates/import",
     "crates/intel/embed",
+    "crates/intel/signals",
     "crates/murm/misfin",
     "crates/murm/murm",
     "crates/murm/murmuring",
@@ -139,6 +140,7 @@ eidetic-search = { path = "crates/eidetic/eidetic-search" }
 import = { path = "crates/import" }
 
 embed = { path = "crates/intel/embed" }
+signals = { path = "crates/intel/signals" }
 
 misfin = { path = "crates/murm/misfin" }
 murm = { path = "crates/murm/murm" }
