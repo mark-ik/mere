@@ -109,6 +109,7 @@ mod pane_session;
 mod render;
 mod roster;
 mod roster_view;
+mod scene_settings;
 mod settings_lane;
 mod settings_node;
 mod settings_pane_view;

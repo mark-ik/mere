@@ -20,6 +20,7 @@ use register_theme::chrome::ChromeTheme;
 
 use crate::WindowCtx;
 use crate::apparatus::{engine_section_items, physics_section_items, theme_section_items};
+use crate::scene_settings::scene_section_items;
 use crate::list_pane::PaneItem;
 use crate::settings_pane_view::{SettingsPane, SettingsSpineEntry};
 use crate::swatch::SwatchSpec;
@@ -47,6 +48,7 @@ pub(crate) fn settings_index(namespace: &str) -> Vec<SettingsPageRef> {
             SettingsPageRef { id: "engines", title: "Engines" },
             SettingsPageRef { id: "physics", title: "Physics" },
             SettingsPageRef { id: "orrery", title: "Orrery" },
+            SettingsPageRef { id: "scene", title: "Scene" },
             SettingsPageRef { id: "menu", title: "Menu" },
         ],
         // The `node:<id>` facets provider lists its own pages. (Settings lane P3.)
@@ -86,6 +88,7 @@ impl WindowCtx<'_> {
             "engines" => ("Engines", engine_section_items(&self.engine_rows())),
             "physics" => ("Physics", physics_section_items(self.physics_damping())),
             "orrery" => ("Orrery", self.orrery_settings_items()),
+            "scene" => ("Scene", scene_section_items()),
             "menu" => ("Menu", self.menu_settings_items()),
             _ => return None,
         };
