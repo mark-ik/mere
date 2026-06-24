@@ -511,3 +511,19 @@ within budget.
   orrery 56 tests green throughout; headed-verified (scry-shots/p4nb-*, p4pl-*, p4sd-*, p4po-*). The
   ambient catalog is now **four** sims (Game of Life, n-body, particle-life, falling sand), the rapier
   scenes have form, and every orrery source file is under 600.
+- 2026-06-24: **Capstone - multi-material sand, true-shape fluid coupling, oriented sprites (committed
+  `7d05b85` / `23c6293` / `f1f05dc`); headed-verified.** The three deferred refinements:
+  - **Multi-material falling sand**: water joins sand - water falls + spreads sideways to find its
+    level while sand piles steep, and sand sinks through water (the denser). A `moved` buffer prevents
+    same-step cascades; paint merges per-material runs (sand tincture, water blue). (`7d05b85`)
+  - **True collider-shape fluid coupling**: `FluidContact` carries a `ContactShape` (circle | OBB); a
+    square / rounded-square body couples at its true oriented-box face + rotation (the pool sits flat
+    on a block and fills its corners) instead of an inscribed circle; ball / hull stay circles.
+    (`23c6293`)
+  - **Oriented sprite billboards**: a textured prop's sprite now rotates with the prop (a
+    `PushTransform` spin about its projected anchor, identity at rest), so a tumbling crate's texture
+    tumbles - the iso-billboard path for the open billboard question. (`f1f05dc`)
+  gyre 47 + orrery 57 tests green (a blocked-water-spreads test, an OBB push-out test); headed-verified
+  (scry-shots/p4sd-*, p4bf-*, p4cr-*): sand + water settle side by side, a pool drapes over the
+  pyramid's blocks, crates settle at varied angles with their texture tilting to match. The
+  physics-scenes arc is feature-complete.
