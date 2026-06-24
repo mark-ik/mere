@@ -206,9 +206,17 @@ page's URL under `CrawlPolicy::default()` (same-host, shallow); `app_handler` dr
 session each frame and applies its `(GraphId, GraphContribution)` pairs through the same
 `apply_contribution` path the content harvest uses. So a `>crawl` on an open page makes
 its same-host neighborhood fill the graph, one polite fetch at a time, off the render
-path. (Default-build clean; 15 crawl tests; standalone-compile verified.) **Deferred**
-(named, not silently dropped): **robots.txt** + descriptive UA, mid-crawl cancellation (a
-side-channel flag; today `max_pages` bounds it, and `CrawlSession::stop` is plumbed),
+path. (Default-build clean; 15 crawl tests; standalone-compile verified.)
+
+**robots.txt honored 2026-06-24** (mere `520d2de`): `crawl/robots.rs` is a
+dependency-free robots.txt subset (`User-agent` groups, `Allow`/`Disallow` path-prefix
+rules, longest-match with `Allow` breaking ties, our-UA over `*`); `run_crawl` fetches +
+caches each host's robots.txt once and skips a disallowed path (a missing / failed
+robots.txt allows all, per spec). 23 crawl tests. (crawl.rs was also split into a
+`crawl/` module dir to hold the new code under the 600-LOC ceiling.) **Deferred** (named,
+not silently dropped): wildcard (`*`/`$`) robots rules and sending the **descriptive UA**
+on fetches (netfetcher side); mid-crawl cancellation (a side-channel flag; today
+`max_pages` bounds it, and `CrawlSession::stop` is plumbed);
 bounded cross-host concurrency, a **progress chip** (`CrawlSession::progress` is ready),
 a **scope/depth UI** (the default policy is hardcoded; `SameDomain`/`AnyHost` + depth are
 plumbed for a settings surface), and seed sourcing (independent-index API / sitemaps,
