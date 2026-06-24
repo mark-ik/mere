@@ -190,6 +190,21 @@ slice.
 materializes the second-hop neighborhood with cross-links visible, on a crawl
 actor that never blocks compositing or input.
 
+**Status: actor + frontier built 2026-06-24** (mere `c5e36c6`, `crates/meerkat/src/crawl.rs`).
+The scheduling now exists: a pure `Frontier` (BFS queue, visited-dedup, depth /
+fan-out caps, host scope SameHost/SameDomain/AnyHost) and a `spawn_crawl` actor that
+owns a current-thread tokio runtime and drives `run_crawl` (pop → per-host
+`POLITE_DELAY` → `fetch_page` → `crawl_page`: V1 `harvest_links` + page metadata,
+enqueue in-scope links → emit `CrawlUpdate::Contribution`/`Progress`/`Done`). The loop
+is generic over the fetcher, so it is tested against a canned site (depth + page caps),
+14 tests, no network. **Remaining for V2**: the **host wiring** (spawn the actor, route
+`CrawlUpdate::Contribution` to the graph apply, surface progress, a seed/scope UI) —
+`spawn_crawl` is `#[allow(dead_code)]` until then. **Deferred** (named, not silently
+dropped): **robots.txt** + descriptive UA, mid-crawl cancellation (a side-channel flag;
+today `max_pages` bounds it), bounded cross-host concurrency, and seed sourcing
+(independent-index API / sitemaps, never a live SERP). The second-hop cross-link
+*relations* fall out of the graph as the frontier revisits shared targets.
+
 ### V3 — relational capture into eidetic (the LoRA-readiness lever)
 
 Whether a future personal adapter is rich or RAG-replaceable is decided here, by
@@ -344,3 +359,14 @@ from scratch.
   V1: the host trigger (toolbar/menu action) + canvas placement. **V2 (the dedicated
   crawl actor)** and **V3 (relational capture into eidetic)** unchanged. Cross-ref:
   `2026-06-23_render_ladder_and_extraction_plan.md`.
+- **2026-06-24** — **V2 actor + frontier built** (mere `c5e36c6`,
+  `crates/meerkat/src/crawl.rs`). Mark confirmed the actor split (V1 actor-free on the
+  content-actor path; V2 a dedicated crawl actor off the render path). The `Frontier`
+  (pure BFS policy: dedup, depth/fan-out caps, host scope) + `spawn_crawl` (own tokio
+  runtime, polite per-host pacing) + `run_crawl` (fetch → `crawl_page` → enqueue → emit
+  contributions) are in, with the loop generic over the fetcher for network-free tests
+  (14). Remaining: the host wiring (route `CrawlUpdate::Contribution` to the graph + a
+  seed/scope UI). robots.txt, mid-crawl cancel, concurrency, and seed sourcing are
+  named deferrals. The memory model from the design chat holds: crawled pages → graph
+  nodes (short-term), V3 consolidates the article text into eidetic (long-term) for
+  distillation.
