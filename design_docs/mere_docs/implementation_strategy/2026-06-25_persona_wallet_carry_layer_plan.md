@@ -184,17 +184,25 @@ private lane), both evaluated in the substrate spike.
    handle, persona roster, root CIDs, capability slots, transport bindings).
 2. **Pairing ceremony**, remote-auth default (meadowcap cert) + copy as explicit choice,
    revocation over the `DeviceRoster`.
-3. **The privacy dial wired through replication:** honor `PrivacyClass` at the
-   `p2panda-auth` gate (who syncs cleartext) before adding encryption.
-4. **Per-persona encryption-at-rest** for the private lane (`p2panda-encryption` envelope).
+3. **Per-persona encryption-at-rest** for the private lane (`p2panda-encryption` envelope):
+   `LocalOnly` / `TrustedPeersOnly` engrams sealed on disk under the persona vault key.
+   Decided posture (2026-06-25), so first-class, not deferred.
+4. **The public lane wired through replication:** honor `PrivacyClass` at the
+   `p2panda-auth` gate (who syncs cleartext) for promoted `MootScoped` / `PublicPortable`
+   engrams; promotion is the decrypt-and-recommit step.
 5. **Capabilities** as meadowcap caps, graduating to Biscuit with the constitution.
 
 ## Open questions
 
 - Where does the seed live by default: which devices are copy (full) vs remote-auth
   (delegated), and is the master under FROST custody (quorum to rotate / enroll)?
-- Encryption-at-rest scope: are `LocalOnly` engrams sealed on disk, or only promoted ones
-  on the wire?
+- **Decided (2026-06-25): encrypt at rest.** `LocalOnly` / `TrustedPeersOnly` engrams are
+  sealed on disk under the persona vault key (private by default; the wallet leans keyring),
+  and promotion to `MootScoped` / `PublicPortable` re-encodes into the cleartext-gated lane
+  so the moot can dedup / pin / verify. `PrivacyClass` is therefore the storage regime, and
+  "publish to a moot" is a decrypt-and-recommit step. (Open underneath: convergent vs salted
+  for the private lane; whether `TrustedPeersOnly` is encrypted-with-handed-key or
+  cleartext-gated-to-those-peers.)
 - Convergent encryption only for high-entropy private payloads (dedup) vs salted (privacy
   against confirmation), decided per schema.
 - The wallet-sync bootstrap: the wallet is itself data that syncs over the personal mesh,
