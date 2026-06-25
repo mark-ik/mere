@@ -27,8 +27,8 @@ use std::time::Duration;
 use armillary::{spawn, ActorHandle, Emitter, Wake};
 use euclid::default::Point2D;
 use gyre::{
-    Basin, CouplingForce, FluidParams, LayoutSnapshot, LayoutView, NodeCollider, NodeMaterial,
-    SceneEmitter, SceneField, SceneSpec, Simulation,
+    AffinitySpring, Basin, CouplingForce, FluidParams, LayoutSnapshot, LayoutView, NodeCollider,
+    NodeMaterial, SceneEmitter, SceneField, SceneSpec, Simulation,
 };
 use kernel::graph::NodeKey;
 
@@ -59,6 +59,9 @@ pub(crate) enum PhysicsCommand {
     /// move / resize / new node triggers), without a position-losing sim rebuild.
     /// (Field regions — rebuild-on-mutation.)
     SetCouplingForces(Vec<CouplingForce>),
+    /// Install (or clear) the pairwise affinity force — the rebuild a fresh affinity signal
+    /// triggers ("cluster by affinity"). Position-preserving. (Graph signals — P4.)
+    SetAffinityForce(Option<AffinitySpring>),
     /// Set the linear damping (the "inertia" physics setting) on new + live bodies.
     SetLinearDamping(f32),
     /// Reshape node colliders to per-node face shapes (see [`Simulation::set_node_colliders`]).
@@ -197,6 +200,28 @@ impl Physics {
             Physics::Actor(p) => {
                 p.handle.command(PhysicsCommand::SetCouplingForces(forces));
             },
+        }
+    }
+
+    /// Install (or clear, with `None`) the pairwise affinity force wholesale — the rebuild a fresh
+    /// affinity signal triggers ("cluster by affinity"). Position-preserving (forces never touch
+    /// body state). (Graph signals — P4.)
+    pub fn set_affinity_force(&mut self, force: Option<AffinitySpring>) {
+        match self {
+            Physics::Inline(p) => p.sim.set_affinity_force(force),
+            Physics::Actor(p) => {
+                p.handle.command(PhysicsCommand::SetAffinityForce(force));
+            }
+        }
+    }
+
+    /// The number of affinity pairs in the installed affinity force (inline backend only — the
+    /// actor owns its sim on another thread). Test introspection for the P4 wiring. (Graph signals.)
+    #[cfg(test)]
+    pub(crate) fn affinity_pair_count(&self) -> usize {
+        match self {
+            Physics::Inline(p) => p.sim.affinity_pair_count(),
+            Physics::Actor(_) => 0,
         }
     }
 
@@ -519,6 +544,7 @@ fn apply(
         PhysicsCommand::Halt => *ticks_remaining = 0,
         PhysicsCommand::SetDragging(d) => *dragging = d,
         PhysicsCommand::SetCouplingForces(forces) => sim.set_coupling_forces(forces),
+        PhysicsCommand::SetAffinityForce(force) => sim.set_affinity_force(force),
         PhysicsCommand::SetLinearDamping(damping) => sim.set_linear_damping(damping),
         PhysicsCommand::SetNodeColliders(colliders) => sim.set_node_colliders(colliders),
         PhysicsCommand::SetNodeMaterials(materials) => sim.set_node_materials(materials),

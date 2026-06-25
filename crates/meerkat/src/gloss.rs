@@ -38,8 +38,9 @@ fn rgba(c: Color32, alpha: f32) -> [f32; 4] {
 /// selected node. Returns the scene plus each node's **pane-local** rect for the
 /// host's hit-test (offset by the pane origin to focus a node on click).
 pub fn minimap_scene(
-    nodes: &[(GraphMemberId, (f32, f32), bool)],
-    edges: &[((f32, f32), (f32, f32))],
+    nodes: &[(GraphMemberId, (f32, f32), bool, f32)],
+    edges: &[((f32, f32), (f32, f32), f32)],
+    rings: &[((f32, f32), f32, [f32; 4])],
     w: u32,
     h: u32,
     theme: &ChromeTheme,
@@ -52,7 +53,7 @@ pub fn minimap_scene(
 
     // World bounding box of the node positions.
     let (mut min_x, mut min_y, mut max_x, mut max_y) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
-    for (_, (x, y), _) in nodes {
+    for (_, (x, y), _, _) in nodes {
         min_x = min_x.min(*x);
         min_y = min_y.min(*y);
         max_x = max_x.max(*x);
@@ -69,20 +70,48 @@ pub fn minimap_scene(
     let map = |(x, y): (f32, f32)| ((x - min_x) * scale + off_x, (y - min_y) * scale + off_y);
 
     let edge_color = rgba(theme.muted_text, 0.7);
-    for (a, b) in edges {
+    for (a, b, weight) in edges {
         let (ax, ay) = map(*a);
         let (bx, by) = map(*b);
         let mut path = netrender::ScenePath::new();
         path.move_to(ax, ay).line_to(bx, by);
-        scene.push_shape_stroked(path, edge_color, 1.0);
+        // Stroke width grows with the edge's multiplicity weight (relations between the pair),
+        // capped so a very dense pair stays legible in the swatch. (Graph signals — edge thickness.)
+        let width = (1.0 + 0.6 * (*weight - 1.0)).clamp(1.0, 3.0);
+        scene.push_shape_stroked(path, edge_color, width);
+    }
+
+    // Signal rings (community halos + bridge emphasis from the lens's overlays), under the nodes so
+    // each node square sits on its halo. The radius is a multiple of the node size in swatch space
+    // (fixed, like the nodes — not scaled by the fit), centred on the mapped lens position. Colours
+    // arrive straight-alpha, so premultiply for the scene. (Graph signals — P6b, gloss overlays.)
+    const RING_SEGMENTS: usize = 20;
+    for (center, factor, color) in rings {
+        let (cx, cy) = map(*center);
+        let r = NODE * *factor;
+        let [cr, cg, cb, ca] = *color;
+        let premul = [cr * ca, cg * ca, cb * ca, ca];
+        let mut path = netrender::ScenePath::new();
+        for i in 0..=RING_SEGMENTS {
+            let t = (i as f32 / RING_SEGMENTS as f32) * std::f32::consts::TAU;
+            let (x, y) = (cx + r * t.cos(), cy + r * t.sin());
+            if i == 0 {
+                path.move_to(x, y);
+            } else {
+                path.line_to(x, y);
+            }
+        }
+        scene.push_shape_stroked(path, premul, 1.5);
     }
 
     let node_color = rgba(theme.body_text, 1.0);
     let selected_color = rgba(theme.strong_text, 1.0);
-    for (id, pos, selected) in nodes {
+    for (id, pos, selected, size_factor) in nodes {
         let (cx, cy) = map(*pos);
-        // The focused node draws a touch larger + brighter so it stands out.
-        let size = if *selected { NODE + 3.0 } else { NODE };
+        // The focused node draws a touch larger + brighter so it stands out; the size factor (1.0
+        // unless the gloss sizes by importance) scales it further. (Graph signals — P6c.)
+        let base = if *selected { NODE + 3.0 } else { NODE };
+        let size = base * *size_factor;
         let half = size * 0.5;
         let color = if *selected {
             selected_color

@@ -417,7 +417,7 @@ chosen one).
 
 ### MW5 — branch + fork + the escalation toast
 
-- **Branch** (Shift+drag): mint a `GraphletRef` (`GraphletBinding::Forked`) in the
+- **Branch** (Shift+drag): mint a `GraphletRef` (`GraphletBinding::Branched`) in the
   donor's forme; the leaf window carries donor `GraphId` + the new `GraphletId`.
 - **Fork** (Ctrl/Cmd+Shift+drag): mint a new `SessionId` + `GraphId` via
   `ManifestStore` + a cross-graph rekey of the reachable connected component; weak

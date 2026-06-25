@@ -496,6 +496,23 @@ impl WindowCtx<'_> {
                 }
             }
         }
+        // Position the tear-out drag ghost at the live cursor (offset so it sits beside the
+        // pointer, not under it). The pill exists in the DOM only while a tear-out drag is
+        // active; the stylesheet `.tear-ghost` rule carries its look, this sets left/top.
+        // (Tear-out gestures, GA-5.)
+        if self.view.chrome().tear_ghost.is_some() {
+            let (gx, gy) = (self.view.cursor.0 + 12.0, self.view.cursor.1 + 12.0);
+            let mut dom = self.view.dom.borrow_mut();
+            let root = dom.document();
+            if let Some(node) = first_with_class(&dom, root, "tear-ghost") {
+                let attr = QualName::new(None, Namespace::from(""), LocalName::from("style"));
+                dom.set_attribute(
+                    node,
+                    attr,
+                    &format!("position: absolute; left: {gx}px; top: {gy}px;"),
+                );
+            }
+        }
         // The context menu follows its keyboard selection like the palette: bound the panel to the
         // window so a tall menu (the layout submenu) can't spill past the bottom edge, and scroll
         // the highlighted row into view. (Context-menu keyboard nav.)
@@ -1807,13 +1824,64 @@ impl WindowCtx<'_> {
             let minimap_rect = [grect[0], grect[1], grect[2], grect[1] + minimap_h];
             let recent_rect = [grect[0], grect[1] + minimap_h, grect[2], grect[3]];
 
-            // Minimap swatch.
-            let (nodes, edges) = self.orrery().minimap_geometry();
+            // Minimap swatch. With a gloss lens set, the gloss shows its OWN arrangement (recomputed
+            // only when its inputs change, since it may be an expensive layout); otherwise it mirrors
+            // the main view. (Graph signals — P6, the independent gloss projection.)
             let mw = (minimap_rect[2] - minimap_rect[0]).round().max(1.0) as u32;
             let mh = (minimap_rect[3] - minimap_rect[1]).round().max(1.0) as u32;
+            let (nodes, edges, rings) =
+                if let Some(id) = self.orrery().gloss_strategy().map(str::to_string) {
+                    if self.orrery().gloss_needs_recompute(mw, mh) {
+                        let pane = self.orrery();
+                        // Gate the lens's overlays on the same ring toggles as the main view: the
+                        // gloss shows community / bridge rings exactly when those toggles are on. The
+                        // overlays ride the projection (the overlay pipe), placed at the lens's own
+                        // positions by `gloss_geometry`. (Graph signals — P6b.)
+                        let clusters = pane.show_community_rings().then(|| pane.community()).flatten();
+                        let bridges = pane.show_bridge_rings().then(|| pane.bridges()).flatten();
+                        // Positions come from the whole graph or, when the gloss is scoped to the
+                        // selection, the *induced subgraph* of those nodes — so the lens reflects the
+                        // selection's own structure, not a crop of the whole-graph layout. The
+                        // overlays are layout-independent (the same signal builder either way).
+                        // (Graph signals — P6c, the gloss subgraph re-layout.)
+                        let (positions, overlays): (Vec<_>, _) = match pane.gloss_scope_keys() {
+                            Some(scope) => (
+                                platen::project_orrery_subgraph(
+                                    pane.graph(),
+                                    &scope,
+                                    &id,
+                                    pane.focused_key(),
+                                    mw,
+                                    mh,
+                                ),
+                                platen::signal_overlays(clusters, bridges),
+                            ),
+                            None => {
+                                let projection = platen::project_orrery_lens(
+                                    &id,
+                                    pane.graph(),
+                                    pane.focused_key(),
+                                    mw,
+                                    mh,
+                                    clusters,
+                                    bridges,
+                                );
+                                let pos =
+                                    projection.nodes.iter().map(|n| (n.node, n.position)).collect();
+                                (pos, projection.overlays)
+                            }
+                        };
+                        self.orrery_mut().set_gloss_positions(positions, overlays, mw, mh);
+                    }
+                    self.orrery().gloss_geometry_cached()
+                } else {
+                    let (n, e) = self.orrery().minimap_geometry();
+                    (n, e, Vec::new())
+                };
             let (scene, local) = super::gloss::minimap_scene(
                 &nodes,
                 &edges,
+                &rings,
                 mw,
                 mh,
                 &self.shared.presentation.chrome_theme,

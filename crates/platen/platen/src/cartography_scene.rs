@@ -6,8 +6,7 @@
 //!
 //! Translates platen's reducer-owned graph state into a
 //! [`cartography::ProjectionRequest`] and dispatches it through a
-//! chosen [`cartography::LayoutStrategy`] or
-//! [`cartography::StreamingLayoutStrategy`].
+//! chosen [`cartography::LayoutStrategy`].
 //!
 //! Sibling of [`crate::canvas_scene`]: where `canvas_scene` builds a
 //! `CanvasSceneInput` for graph-canvas to render directly,
@@ -19,11 +18,11 @@
 //!
 //! ## Two paths, same input shape
 //!
-//! For new code, prefer [`project_with`] (analytic strategies) and
-//! [`step_with`] (streaming strategies) over building a
-//! `ProjectionRequest` by hand. They source the right `ViewIntent` /
-//! `IntelligenceSignals` shape from [`CartographySceneOptions`] and
-//! dispatch through the strategy in one call.
+//! For new code, prefer [`project_with`] (analytic strategies) over
+//! building a `ProjectionRequest` by hand. It sources the right
+//! `ViewIntent` / `IntelligenceSignals` shape from
+//! [`CartographySceneOptions`] and dispatches through the strategy in
+//! one call.
 //!
 //! `canvas_scene::build_canvas_scene_input` still works for the
 //! existing graph-canvas-only render path; the two modules will
@@ -31,22 +30,22 @@
 //! single dispatch surface, but until graph-canvas's existing direct-
 //! render path is fully retired they coexist.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cartography::{
     AxisValue, FormFactor, IntelligenceSignals, LayoutStrategy, ProjectionDimension,
-    ProjectionRequest, StreamingLayoutStrategy, TargetSize, ViewIntent,
+    ProjectionRequest, TargetSize, ViewIntent,
 };
 use kernel::geometry::PortablePoint;
-use kernel::graph::{Graph, NodeKey};
+use kernel::graph::{EdgeAssertion, Graph, NodeKey, SemanticSubKind};
 
 /// Inputs the host supplies for a cartography projection.
 ///
 /// Signals default to empty (`IntelligenceSignals::default()`), so
 /// callers that don't have intelligence plumbed yet pass none and the
-/// projection still works — strategies that need signals (e.g.
-/// `SemanticEdgeWeightAdapter`) just behave as if no signals were
-/// available.
+/// projection still works — strategies that read signals (e.g.
+/// `KanbanAdapter`'s community columns, or the importance-driven size
+/// encoding) just behave as if no signals were available.
 #[derive(Clone, Debug)]
 pub struct CartographySceneOptions {
     pub form_factor: FormFactor,
@@ -128,20 +127,6 @@ pub fn project_with<S: LayoutStrategy>(
     strategy.project(&request)
 }
 
-/// Dispatch a streaming strategy. Threads the host-owned state through
-/// the call so iteration progresses across frames.
-pub fn step_with<S: StreamingLayoutStrategy>(
-    graph: &Graph,
-    signals: &IntelligenceSignals,
-    options: &CartographySceneOptions,
-    strategy: &S,
-    state: &mut S::State,
-    dt: f32,
-) -> cartography::Projection {
-    let request = build_projection_request(graph, signals, options);
-    strategy.step(&request, state, dt)
-}
-
 /// The graph-wide layout strategies the orrery's empty-canvas picker offers:
 /// `(projection_id, label)`. The force-directed default (gyre physics) is the host's
 /// `None`, not listed here. These analytic adapters lay out from the node set alone,
@@ -171,21 +156,19 @@ fn url_host(url: &str) -> String {
     after_scheme.split(['/', '?', '#']).next().unwrap_or(after_scheme).to_string()
 }
 
-/// Compute an orrery layout strategy's node positions: dispatch `id` to its
-/// cartography adapter and project against `graph` at viewport `(width, height)`,
-/// returning the `(NodeKey, position)` pairs the orrery applies through
-/// [`Orrery::apply_strategy_positions`](../../orrery). Empty for an unknown or
-/// not-yet-wired id (the host then leaves the layout unchanged). Only the graph-only
-/// analytic strategies in [`ORRERY_LAYOUT_STRATEGIES`] are dispatched here; focus /
-/// axis / signal-driven strategies join once their inputs are plumbed.
-pub fn project_orrery_strategy(
+/// Dispatch `id` to its cartography adapter and project against `graph` at viewport
+/// `(width, height)`, returning the full [`cartography::Projection`] (positions + edges; overlays
+/// are added by [`project_orrery_lens`]). [`Projection::empty`](cartography::Projection::empty) for
+/// an unknown or not-yet-wired id, or radial without a focus. Only the graph-only analytic
+/// strategies in [`ORRERY_LAYOUT_STRATEGIES`] are dispatched here.
+fn project_orrery_dispatch(
     id: &str,
     graph: &Graph,
     focus: Option<NodeKey>,
     width: u32,
     height: u32,
     clusters: Option<&cartography::ClusterSet>,
-) -> Vec<(NodeKey, PortablePoint)> {
+) -> cartography::Projection {
     use arrangements::adapters::{
         GridAdapter, KanbanAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter,
         RadialAdapter, SpectralAdapter, TimelineAdapter,
@@ -264,22 +247,159 @@ pub fn project_orrery_strategy(
         // Without a focus there is no layout to compute, so leave the orrery as-is.
         "radial.default" => {
             if focus.is_none() {
-                return Vec::new();
+                return cartography::Projection::empty();
             }
             let focused = CartographySceneOptions { focus, ..options.clone() };
             project_with(graph, &signals, &focused, &RadialAdapter::default())
         }
-        _ => return Vec::new(),
+        _ => return cartography::Projection::empty(),
     };
-    projection.nodes.iter().map(|n| (n.node, n.position)).collect()
+    projection
+}
+
+/// The signal-driven **overlays** for a lens, in the cartography [`Overlay`](cartography::Overlay)
+/// vocabulary: a `ClusterHalo` per community (in cluster order, so a consumer's colour index matches
+/// the main view) and a `BridgeEmphasis` per structural broker. **Position-independent** — overlays
+/// carry only node references, so a consumer paints them at whatever positions it renders (the gloss
+/// at its lens positions, the main view at its live positions). The overlays are the same regardless
+/// of the layout strategy, which is why this is a pure function of the signals, not the projection.
+/// (Graph signals — P6b, the overlay pipe.)
+pub fn signal_overlays(
+    clusters: Option<&cartography::ClusterSet>,
+    bridges: Option<&cartography::BridgeNodes>,
+) -> Vec<cartography::Overlay> {
+    use cartography::Overlay;
+    let mut overlays = Vec::new();
+    if let Some(set) = clusters {
+        for cluster in &set.clusters {
+            overlays.push(Overlay::ClusterHalo {
+                cluster_id: cluster.id.clone(),
+                members: cluster.members.clone(),
+                label: cluster.label.clone(),
+                confidence: cluster.confidence,
+            });
+        }
+    }
+    if let Some(b) = bridges {
+        for &node in &b.bridges {
+            overlays.push(Overlay::BridgeEmphasis { node, weight: 1.0 });
+        }
+    }
+    overlays
+}
+
+/// Compute an orrery layout strategy's full [`cartography::Projection`] — positions **plus**
+/// signal-driven [`overlays`](cartography::Projection::overlays) (community halos + bridge emphasis,
+/// from [`signal_overlays`]). The gloss is the first consumer of the overlay channel: it paints the
+/// overlays at its own lens positions, so a second lens can show the clusters/brokers under a
+/// different layout than the main view. Positions-only callers use [`project_orrery_strategy`].
+/// (Graph signals — P6b, the overlay pipe.)
+pub fn project_orrery_lens(
+    id: &str,
+    graph: &Graph,
+    focus: Option<NodeKey>,
+    width: u32,
+    height: u32,
+    clusters: Option<&cartography::ClusterSet>,
+    bridges: Option<&cartography::BridgeNodes>,
+) -> cartography::Projection {
+    let mut projection = project_orrery_dispatch(id, graph, focus, width, height, clusters);
+    projection.overlays = signal_overlays(clusters, bridges);
+    projection
+}
+
+/// Project a layout strategy over the **induced subgraph** of `scope` (the scoped nodes plus the
+/// relations whose endpoints are both in scope), returning positions keyed by the **original**
+/// graph's `NodeKey`s. Lets the gloss lens lay a selection out by *its own* structure (e.g. a
+/// spectral of just the selection) rather than cropping the whole-graph layout. Nodes are re-added
+/// by their stable id, so each result position remaps back to the live graph; the induced edges are
+/// added once per pair (topology — multiplicity is a later fidelity step). (Graph signals — P6c, the
+/// gloss subgraph re-layout.)
+pub fn project_orrery_subgraph(
+    graph: &Graph,
+    scope: &[NodeKey],
+    id: &str,
+    focus: Option<NodeKey>,
+    width: u32,
+    height: u32,
+) -> Vec<(NodeKey, PortablePoint)> {
+    let scope_set: HashSet<NodeKey> = scope.iter().copied().collect();
+    let mut sub = Graph::new();
+    // Re-add each scoped node by its stable id (so positions remap back), seeded at its live
+    // position. A missing node is simply skipped.
+    for &key in scope {
+        if let Some(node) = graph.get_node(key) {
+            let p = node.projected_position();
+            sub.add_node_with_id(node.id, node.url().to_string(), PortablePoint::new(p.x, p.y));
+        }
+    }
+    // Induced edges: one per scoped pair (no self-loops), as a plain hyperlink so `relations()` (the
+    // spring topology the layouts read) sees it.
+    let mut seen: HashSet<(NodeKey, NodeKey)> = HashSet::new();
+    for r in graph.relations() {
+        if r.from == r.to || !scope_set.contains(&r.from) || !scope_set.contains(&r.to) {
+            continue;
+        }
+        let pair = if r.from <= r.to { (r.from, r.to) } else { (r.to, r.from) };
+        if !seen.insert(pair) {
+            continue;
+        }
+        let (Some(fa), Some(fb)) = (graph.get_node(r.from), graph.get_node(r.to)) else {
+            continue;
+        };
+        let (Some(sa), Some(sb)) =
+            (sub.get_node_key_by_id(fa.id), sub.get_node_key_by_id(fb.id))
+        else {
+            continue;
+        };
+        sub.assert_relation(
+            sa,
+            sb,
+            EdgeAssertion::Semantic {
+                sub_kind: SemanticSubKind::Hyperlink,
+                label: None,
+                decay_progress: None,
+            },
+        );
+    }
+    // Map the focus into the subgraph (only if it is in scope).
+    let sub_focus = focus
+        .and_then(|f| graph.get_node(f))
+        .and_then(|n| sub.get_node_key_by_id(n.id));
+    // Project the subgraph, then remap each position back to the original graph via the node id.
+    project_orrery_strategy(id, &sub, sub_focus, width, height, None)
+        .into_iter()
+        .filter_map(|(sub_key, pos)| {
+            let nid = sub.get_node(sub_key)?.id;
+            let main_key = graph.get_node_key_by_id(nid)?;
+            Some((main_key, pos))
+        })
+        .collect()
+}
+
+/// Compute an orrery layout strategy's node positions: the `(NodeKey, position)` pairs the orrery
+/// applies through [`Orrery::apply_strategy_positions`](../../orrery). Empty for an unknown or
+/// not-yet-wired id (the host then leaves the layout unchanged). The positions-only path the main
+/// view uses; the gloss uses [`project_orrery_lens`] when it also needs the overlay channel.
+pub fn project_orrery_strategy(
+    id: &str,
+    graph: &Graph,
+    focus: Option<NodeKey>,
+    width: u32,
+    height: u32,
+    clusters: Option<&cartography::ClusterSet>,
+) -> Vec<(NodeKey, PortablePoint)> {
+    project_orrery_dispatch(id, graph, focus, width, height, clusters)
+        .nodes
+        .iter()
+        .map(|n| (n.node, n.position))
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use arrangements::adapters::{
-        PhyllotaxisAdapter, SemanticEdgeWeightAdapter, SemanticEdgeWeightAdapterState,
-    };
+    use arrangements::adapters::PhyllotaxisAdapter;
     use kernel::geometry::PortablePoint;
     use uuid::Uuid;
 
@@ -354,23 +474,88 @@ mod tests {
     }
 
     #[test]
-    fn step_with_streaming_strategy_advances_state_across_calls() {
-        let (graph, _) = triangle_graph();
-        let signals = IntelligenceSignals::default();
-        let options = CartographySceneOptions::canvas_pixels(800, 600);
-        let adapter = SemanticEdgeWeightAdapter::default();
-        let mut state = SemanticEdgeWeightAdapterState::default();
+    fn signal_overlays_builds_halos_in_cluster_order_then_bridge_emphasis() {
+        use cartography::{BridgeNodes, Cluster, ClusterSet, Overlay};
+        let (a, b, c) = (NodeKey::new(0), NodeKey::new(1), NodeKey::new(2));
+        let clusters = ClusterSet {
+            clusters: vec![
+                Cluster { id: "c0".into(), label: Some("A".into()), members: vec![a, b], confidence: 1.0 },
+                Cluster { id: "c1".into(), label: None, members: vec![c], confidence: 1.0 },
+            ],
+        };
+        let bridges = BridgeNodes { bridges: vec![b] };
+        let overlays = signal_overlays(Some(&clusters), Some(&bridges));
+        assert_eq!(overlays.len(), 3, "two halos + one bridge emphasis");
+        assert!(
+            matches!(&overlays[0], Overlay::ClusterHalo { members, .. } if *members == vec![a, b]),
+            "the first halo is the first cluster (order preserved for colour matching)"
+        );
+        assert!(matches!(&overlays[1], Overlay::ClusterHalo { cluster_id, .. } if cluster_id == "c1"));
+        assert!(matches!(&overlays[2], Overlay::BridgeEmphasis { node, .. } if *node == b));
+    }
 
-        let p1 = step_with(&graph, &signals, &options, &adapter, &mut state, 1.0 / 60.0);
-        assert_eq!(p1.nodes.len(), 3);
-        // The streaming adapter seeds its persistent position store from
-        // graph truth on the first step.
-        assert!(state.initialized);
-        assert_eq!(state.positions.len(), 3);
+    #[test]
+    fn signal_overlays_empty_without_signals() {
+        assert!(signal_overlays(None, None).is_empty(), "no signals => no overlays");
+    }
 
-        // Second call keeps iterating the same persistent state.
-        let p2 = step_with(&graph, &signals, &options, &adapter, &mut state, 1.0 / 60.0);
-        assert_eq!(p2.nodes.len(), 3);
+    #[test]
+    fn project_orrery_lens_carries_the_community_halos() {
+        // Two triangles + a bridge: the lens projection carries the two community halos on the
+        // overlay channel, so the gloss can paint the clusters at its own (spectral) positions.
+        let mut graph = Graph::new();
+        let n: Vec<NodeKey> = (0..6)
+            .map(|i| graph.add_node(format!("test://{i}"), PortablePoint::new(i as f32, 0.0)))
+            .collect();
+        for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
+            graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
+        }
+        let clusters = signals::community_louvain(&graph);
+        let lens =
+            project_orrery_lens("spectral.default", &graph, None, 800, 600, Some(&clusters), None);
+        assert_eq!(lens.nodes.len(), 6, "spectral lays out every node");
+        let halos = lens
+            .overlays
+            .iter()
+            .filter(|o| matches!(o, cartography::Overlay::ClusterHalo { .. }))
+            .count();
+        assert_eq!(halos, 2, "two communities => two halos ride the projection");
+        // The positions-only path is unchanged (it drops the overlays).
+        let positions = project_orrery_strategy("spectral.default", &graph, None, 800, 600, Some(&clusters));
+        assert_eq!(positions.len(), 6, "the positions wrapper still returns every node");
+    }
+
+    #[test]
+    fn project_orrery_subgraph_lays_out_only_the_scope() {
+        // Path a-b-c-d; scope to {a, b}. The subgraph projection returns positions only for the
+        // scoped nodes, keyed by the ORIGINAL graph's keys (remapped via stable id). (P6c.)
+        let mut graph = Graph::new();
+        let n: Vec<NodeKey> = (0..4)
+            .map(|i| graph.add_node(format!("test://{i}"), PortablePoint::new(i as f32, 0.0)))
+            .collect();
+        for &(a, b) in &[(0, 1), (1, 2), (2, 3)] {
+            graph.assert_relation(
+                n[a],
+                n[b],
+                EdgeAssertion::Semantic {
+                    sub_kind: SemanticSubKind::Hyperlink,
+                    label: None,
+                    decay_progress: None,
+                },
+            );
+        }
+        let scope = vec![n[0], n[1]];
+        let positions = project_orrery_subgraph(&graph, &scope, "spectral.default", None, 800, 600);
+        assert_eq!(positions.len(), 2, "only the scoped nodes are laid out");
+        let keys: HashSet<NodeKey> = positions.iter().map(|(k, _)| *k).collect();
+        assert!(
+            keys.contains(&n[0]) && keys.contains(&n[1]),
+            "positions are keyed by the original graph keys"
+        );
+        assert!(
+            !keys.contains(&n[2]) && !keys.contains(&n[3]),
+            "out-of-scope nodes are absent from the lens"
+        );
     }
 
     #[test]

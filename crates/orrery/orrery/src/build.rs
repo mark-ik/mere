@@ -15,7 +15,9 @@ use std::collections::{HashMap, HashSet};
 use euclid::default::Point2D;
 use gyre::{Boundary, CouplingForce, EdgeSpring, LayoutView, NodeExclusion, Simulation};
 use kernel::geometry::PortablePoint;
-use kernel::graph::{EdgeAssertion, FieldExtent, FieldId, Graph, NodeKey, SemanticSubKind};
+use kernel::graph::{
+    EdgeAssertion, FieldExtent, FieldId, Graph, NodeKey, RelationKind, SemanticSubKind,
+};
 use layout_dom_api::{LayoutDom, LayoutDomMut, LocalName, Namespace, QualName};
 use paint_list_api::{
     ColorF, CommonPlacement, DashPattern, ExtendMode, GradientStop, LayoutPoint, LayoutRect,
@@ -109,6 +111,40 @@ pub(crate) fn dedup_edges(graph: &Graph) -> Vec<(NodeKey, NodeKey)> {
             seen.insert(pair).then_some((r.from, r.to))
         })
         .collect()
+}
+
+/// Like [`dedup_edges`], but each collapsed pair carries its **statement multiplicity**: the number
+/// of *statement* relations connecting it (more statements between two nodes => a heavier edge — the
+/// multigraph truth made legible). **Traversal events are excluded**: a navigation re-visit is not a
+/// statement, and the kernel deliberately does not bump the revision on a re-visit append (it must
+/// not churn the structural caches), so counting traversals would let the revision-gated
+/// weighted-edge memo disagree with a direct recompute. A pair connected only by traversals still
+/// draws (weight floor 1). First-seen order, so it stays deterministic. (Graph signals — edge weight.)
+pub(crate) fn dedup_edges_weighted(graph: &Graph) -> Vec<(NodeKey, NodeKey, u32)> {
+    let mut index: HashMap<(NodeKey, NodeKey), usize> = HashMap::new();
+    let mut edges: Vec<(NodeKey, NodeKey, u32)> = Vec::new();
+    for r in graph.relations() {
+        let pair = if r.from <= r.to { (r.from, r.to) } else { (r.to, r.from) };
+        let is_statement = !matches!(r.kind, RelationKind::Traversal);
+        match index.get(&pair) {
+            Some(&i) => {
+                if is_statement {
+                    edges[i].2 += 1;
+                }
+            }
+            None => {
+                index.insert(pair, edges.len());
+                edges.push((r.from, r.to, u32::from(is_statement)));
+            }
+        }
+    }
+    // A pair connected only by traversal events still draws an edge (weight floor 1).
+    for e in &mut edges {
+        if e.2 == 0 {
+            e.2 = 1;
+        }
+    }
+    edges
 }
 
 /// Build the force-directed simulation from `graph`: a body per node, the

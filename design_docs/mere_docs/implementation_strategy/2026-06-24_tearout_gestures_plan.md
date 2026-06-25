@@ -10,7 +10,7 @@ gestures and the cross-graph drag, plus the carried open questions. It implement
 [tear-out operations brief](../research/2026-05-11_tearout_operations_brief.md) on top of the
 banked substrate.
 **Code**: `crates/meerkat/` (input, chrome, window registry), `crates/graph/graph-kernel/`
-(subgraph copy), `crates/graph/forme/` (graphlets), `crates/shell/frame/`.
+(subgraph copy), `crates/forme/forme/` (graphlets), `crates/shell/frame/`.
 
 Cross-refs:
 
@@ -63,18 +63,42 @@ Ordered by dependency. Each is independently landable.
 
 ### G1 — Tear-out gesture plumbing (the drag + modifiers + toast)
 
-The drag does not exist yet (no `tearout` / drag-ghost anywhere in meerkat; spawn is a keyboard
-verb). Build:
+**Slice 1 — the drag→spawn pipeline — DONE (2026-06-25), driven headed.** Shift-dragging an
+orrery node out spawns a leaf window carrying the node:
 
-- A drag that starts on a tile/node and crosses out of its pane's rect (distinct from the
-  orrery's in-canvas node-drag, which pins). An in-donor drag ghost follows the cursor.
-- Modifier read at drop selects leaf / branch / fork (Cmd==Ctrl on macOS, per convention).
-- Spawn-on-drop: reuse the `SpawnWindow` path, parameterized by the chosen operation + the
-  dragged node.
-- The toast: a new chrome element (transient, like the context menu), three buttons routed
-  through the command/action path, mutating the just-made leaf in place.
+- `TearOutDrag { node, origin }` on `WindowView`; the GA-1 press-gate in input.rs arms it on a
+  Shift-held left-press *on a node* (`orrery::node_at_screen` hit-test), so it never steals the
+  orrery's node-pin pick; an empty Shift-press falls through to the marquee.
+- The release dispatches: a drag past the slop queues `ShellCommand::TearOut { node }`; a
+  non-moved Shift-click clears (a no-op for now). `spawn_torn_window` records the torn node and
+  spawns the leaf.
+- Verified by driving: a Shift-drag of the "info" node opened a second leaf window (its own
+  toolbar, "+11 standing" chip). meerkat 81 lib / 153 bin green.
 
-Done when: a no-modifier tile drag-out opens a leaf + shows the toast; Shift / Ctrl+Shift
+**Slice 2a — drag-ghost — DONE (2026-06-25), driven.** A `Chrome::tear_ghost: Option<String>`
+(the dragged node's label) rendered as a `.tear-ghost` pill, positioned at the live cursor each
+frame by `render` (no chrome re-render per move). Set on arm, cleared on release. Drove headed:
+the pill follows the cursor during the drag and clears on drop.
+
+**Slice 2b — `hit_test_drop` dispatcher + G5 cross-graph copy — DONE (2026-06-25).** The release
+hit-tests the drop with `orrery_pane_at` and applies the drop-target grammar (OQ-1): a drop on a
+**different-graph** orrery pane queues `CopyNodeAcross` (G5: `copy_node_across` →
+`Graph::copy_node_from_xy`, with `CopiedFrom` provenance); anything else (the source pane,
+chrome, off-window) tears into a leaf. `TearOutDrag` now carries `source_graph`. The leaf path is
+driven (a same-graph drop spawns a leaf); the copy path is built + kernel-tested (drive needs a
+side-by-side second graph pane).
+
+**Slice 3 — operation split — DONE (2026-06-25).** `TearOutDrag` carries a `TearOp` fixed at
+press by the modifier (Ctrl+Shift = `Fork`, plain Shift = `Branch`). The release dispatches the
+tear axis on it: `Fork` → `ForkNode` (G4, wired + driven); `Branch` → a leaf for now (its real
+forme graphlet op is G3 / OQ-7). Cross-graph-pane drops still short-circuit to the G5 copy before
+the op split.
+
+**Slice 2+ — remaining:** **branch**'s real operation (a forme graphlet, not the leaf stub — G3 /
+OQ-7); the **toast** on the ambiguous drop (new chrome element, escalating the leaf in place); the
+**tile-tab origin** (the no-modifier leaf path from a workbench tab).
+
+Done when: a no-modifier tile-tab drag-out opens a leaf + shows the toast; Shift / Ctrl+Shift
 select branch / fork directly; the toast escalates a leaf to branch or fork in place.
 
 ### G2 — Leaf content (the C3 remainder)
@@ -87,44 +111,87 @@ windows resolve the same pooled orrery; closing the leaf does not delete the nod
 Done when: a torn leaf window shows the dragged node's live tile, navigates on its own,
 propagates node edits to the donor, and instantiates no orrery of its own.
 
-### G3 — Branch (Shift+drag)
+### G3 — Branch (Shift+drag) — DEFERRED (2026-06-25): graphlet layer is unwired
 
-Mint a forme `GraphletRef` with `GraphletBinding::Forked { parent_spec, reason:
-"tearout-branch" }` in the donor's graph (brief §4.2); the torn window's leaf carries the
-donor `GraphId` + the new `GraphletId`. Branch + donor share kernel nodes, diverge in the
-graphlet's lineage facet.
+Mint a forme graphlet with `GraphletBinding::Branched { parent_spec, reason: "tearout-branch" }`
+in the donor's graph (brief §4.2); the torn window's leaf carries the donor `GraphId` + the new
+`GraphletId`. Branch + donor share kernel nodes, diverge in the graphlet's lineage facet.
 
-**Substrate check first:** the brief assumes forme's `GraphletRef` / `GraphletBinding::Forked`
-are first-class, but a grep of `crates/graph/forme/src` found neither (the API may have moved or
-not be wired into meerkat). Verify / wire the forme graphlet API before G3; if absent, that is
-its own prerequisite.
+**Substrate scouted (2026-06-25).** The prior "grep found neither" note was a wrong path — forme
+lives at `crates/forme/forme`, not `crates/graph/forme`. At the right path the API is **first-class
+and unit-tested**: `GraphletId`, `GraphletRef<N>`, `GraphletBinding::{UnlinkedSession, Linked,
+Branched}` (graphlet.rs), 9 `GraphletKind`s, `GraphletSpec`, projection specs, and full
+reconciliation types, with `GraphTree::add_graphlet` + fork transitions in reconciliation.rs.
+
+**But the layer is built and UNWIRED.** A workspace grep finds zero live construction of a
+`GraphTree` or `GraphletRef` outside forme's own tests. meerkat consumes forme's *member /
+tile-tree* layer heavily (`forme::GraphMemberId` is in ~20 files) but holds no live
+`GraphTree`-with-graphlets. So branch's real prerequisite is not "mint a `GraphletRef`" — it is
+wiring a whole subsystem: a per-session `GraphTree`, projected into the workbench, persisted, that
+a branch graphlet can group tiles + accumulate lineage in. Without that a branch graphlet is an
+orphan and branch collapses to leaf.
+
+**Decision (Mark, 2026-06-25): defer branch.** Shift+drag stays the leaf-stub it is now. Wiring
+the forme graphlet layer is its own plan — [graphlet wiring](2026-06-25_graphlet_wiring_plan.md)
+(stub landed at `crates/meerkat/src/graphlets.rs`), with broader payoff (document groups,
+reconciliation, the relational-browse front-end all want it); branch is its first consumer. When
+that plan's Phase 1 lands, G3 here calls `SessionGraphlets::record_branch` on the Shift path. The
+cheaper tear-out wins (the toast, the tile-tab leaf origin, G5 move) come first.
+
+**Done in passing (2026-06-25):** renamed forme's `GraphletBinding::Forked` → `Branched` (forme
+green, 114 tests) so it no longer collides with the host's real `ForkNode` / `fork_session_from`
+(the *opposite* operation a layer up). Follow-on: the producing functions `apply_fork` /
+`detect_fork_on_manual_override` and the `ReconciliationChoice::SaveAsNewFork` choice still carry
+the old "fork" word — rename when the layer is wired.
 
 Done when: Shift+drag mints a branch graphlet in the donor; the branch window populates its own
 lineage while node edits still reach the donor.
 
-### G4 — Fork (Ctrl+Shift+drag) — the subgraph copy
+### G4 — Fork (Ctrl+Shift+drag) — the subgraph copy — DONE (2026-06-25), driven
 
-The big kernel piece. Fork (brief §4.3) mints a new `SessionId` + `GraphId`, snapshots the
-**reachable connected component** of the dragged node into it, and records a **weak**
-`parent_session` ref on the new manifest. Donor unchanged; the two are independent.
+Fork (brief §4.3) mints a new `SessionId` + `GraphId`, snapshots the **reachable connected
+component** of the dragged node into it, and records a **weak** `parent_session` ref on the new
+manifest. Donor unchanged; the two are independent.
 
-- **Subgraph copy** is the gap: `copy_node_from` is single-node. Build `copy_component_from`
-  (or similar) on the existing building blocks: `weakly_connected_components()` (query.rs:468)
-  to scope the component, copy each node via `copy_node_from_with_id`, then re-point the
-  component's internal edges onto the new node keys, and record per-node `CopiedFrom`
-  provenance (kernel; buildable now).
-- Session/graph minting reuses the existing `CreateSession` + pool path.
+- **Subgraph copy (kernel), unit-tested.** `Graph::copy_component_from(source, seed, source_graph)`
+  (cross_graph.rs): finds the seed's `weakly_connected_components` component, copies each node via
+  `copy_node_from` (keeping its layout position, recording per-node `CopiedFrom` provenance), and
+  re-points the component's internal edges by cloning each `EdgePayload` onto the new keys (edges
+  leaving the component are dropped). Test
+  `copy_component_clones_the_connected_subgraph_with_edges_and_provenance` (2 of 3 nodes copied,
+  the edge re-pointed, provenance on each).
+- **Fork gesture wiring.** `ShellCommand::ForkNode { node, from }` → `Shell::fork_session_from`
+  (session_ops.rs): clones the donor graph, `copy_component_from` into a fresh `Graph`, mints the
+  fork `SessionId` + `GraphId` + manifest with `parent_session = donor`, persists the fork graph,
+  and pools its orrery via `Orrery::with_graph` — **without** switching the active session. The
+  command handler then opens a window onto the fork graph via the new
+  `build_window_view_for(graph_id)` + the extracted `spawn_window_with_view`. The donor window is
+  untouched.
+- **Layout commit.** The graph's own node positions are only the spawn seed (physics owns the live
+  layout in the orrery's `view`), so a naive clone opened the fork with every node piled at the
+  seed. `Orrery::commit_positions_to_graph` writes the donor's live positions back into its graph
+  before the clone, so the fork opens with the donor's layout. (Found + fixed by driving.)
 
-Done when: Ctrl+Shift+drag mints an independent session whose graph holds a copy of the
-dragged node's connected component, with provenance + a weak parent ref, donor intact.
+Driven (2026-06-25): Ctrl+Shift+drag a node → a new window opens showing the full connected
+component as distinct, laid-out node-cards; the donor window is intact.
+
+**Refinements:** a borrow-split instead of the whole-donor clone (fine at demo scale); restoring
+the fork session on restart (the manifest + graph persist, but it is not yet wired into the
+switcher's restore list); the exact camera framing of the fork window.
 
 ### G5 — Cross-graph single-node drag (C4 surface): copy or move
 
 A node dragged from a pane on graph A into a pane on graph B (different pooled orreries). Copy
 mints a node in B via `copy_node_from` (with `CopiedFrom` provenance); move re-points the
 binding and releases A's. This is a **different axis** from leaf/branch/fork (which tear into a
-new *window* of the *same* graph); G5 is graph→graph within the existing panes. See OQ-1 on how
-the two gesture axes coexist.
+new *window* of the *same* graph); G5 is graph→graph within the existing panes.
+
+**Copy — DONE (2026-06-25)** as slice 2b's copy path: a drop on a different-graph orrery pane
+queues `CopyNodeAcross { node, from, to }`, handled by `Shell::copy_node_across` (clone the source
+node out of the donor, `copy_node_from_xy` into the destination with provenance, repaint). Placed
+at the origin for v0 (a drop-point placement + multi-graph persistence of the copy are
+refinements). **Remaining:** the **move** variant (re-point the binding, release the source; OQ-2
+defaults to copy, move on a modifier), and a drive against a side-by-side second graph pane.
 
 Done when: a tile dragged from a graph-A pane into a graph-B pane produces a provenance-tracked
 node in B, source intact (copy) or released (move).
@@ -168,8 +235,11 @@ orthogonal to the gestures; sequence when the unified element work is picked up.
   (orrery/lib.rs:1721) routes through `navigate_node`, which reuses the node and records a visit;
   it does **not** mint a node. So within-tile navigation in a leaf adds lineage, not kernel
   nodes, exactly as the brief §6.1 assumes. No prerequisite work.
-- **OQ-7 (new) — branch forme API.** Confirm `GraphletRef` / `GraphletBinding::Forked` exist
-  and are reachable from meerkat (G3 substrate check); wire if absent.
+- **OQ-7 (new) — branch forme API. RESOLVED (2026-06-25).** `GraphletRef` /
+  `GraphletBinding::Branched` (renamed from `Forked`) exist and are first-class + unit-tested at
+  `crates/forme/forme`, but the graphlet layer is **unwired** — no live `GraphTree` outside forme's
+  tests. So the substrate is the *whole layer*, not the variant. Decision: **defer branch**, wire
+  the graphlet layer as its own plan (see G3). Branch stays the leaf-stub meanwhile.
 
 ## Gesture-design decisions (2026-06-24 probe)
 
@@ -237,3 +307,28 @@ v0 (palette parent link suffices); auto-consolidation policy disabled by default
   Group A defaults (GA-1..7 + OQ-8 = no-op + node-only v0 + empty-donor-persists), and the Group B
   directions are decided. The plan's design space is now settled; G1 (the drag + toast plumbing)
   is the clean build entry, with the Shell-level `hit_test_drop` dispatcher seam as its spine.
+- **2026-06-25** — **G1 slice 1 built + driven: the drag→spawn pipeline works.** `TearOutDrag`
+  state + the GA-1 Shift-on-node press-gate (input.rs) + release-dispatch +
+  `ShellCommand::TearOut { node }` + `spawn_torn_window`. Drove headed: a Shift-drag of an orrery
+  node spawns a leaf window. meerkat 81 lib / 153 bin green. Remaining G1: the drag-ghost, the
+  operation split (Shift=branch / Ctrl+Shift=fork), `hit_test_drop`, the toast, and the tile-tab
+  no-modifier-leaf origin. Next natural slice: the drag-ghost (visual feedback) or the
+  `hit_test_drop` dispatcher (the operation/axis split).
+- **2026-06-25** — **Slices 2a + 2b + G4 kernel built + verified.** (2a) the **drag-ghost**
+  (`Chrome::tear_ghost` pill positioned at the cursor each frame) — drove headed, the pill follows
+  the drag and clears on drop. (2b) the **`hit_test_drop` dispatcher** (`orrery_pane_at` + the OQ-1
+  drop-target grammar) + the **G5 cross-graph copy** (`CopyNodeAcross` → `copy_node_from_xy`); the
+  leaf path is driven, the copy path built + kernel-tested. (G4) **`copy_component_from`** (the
+  fork subgraph copy: connected-component nodes + re-pointed edge payloads + provenance), unit-
+  tested. meerkat 81 lib / 153 bin + kernel green. Remaining for the operations: the modifier op
+  split (branch/fork) + the toast + branch's forme wiring (OQ-7) + the fork/move gesture wiring.
+- **2026-06-25** — **Op split + fork (G4) wired + driven.** `TearOutDrag` carries a `TearOp` fixed
+  at press by the modifier (Ctrl+Shift = fork, Shift = branch); the release dispatches on it.
+  **Fork** is end-to-end: `ForkNode` → `fork_session_from` mints an independent session + graph
+  (weak `parent_session` ref), `copy_component_from` snapshots the connected component in, pools
+  the orrery, and opens a new window via `build_window_view_for` + `spawn_window_with_view` —
+  donor untouched, no active-session switch. Drove headed: Ctrl+Shift+drag → a new window with the
+  full component laid out. Driving caught a pile-at-seed bug (kernel node positions are the spawn
+  seed, not the live layout); fixed with `Orrery::commit_positions_to_graph` (bake live positions
+  before the clone). meerkat 81 lib / 153 bin + kernel green. Branch is a leaf stub pending its
+  forme graphlet op (G3 / OQ-7); the toast + tile-tab leaf origin + G5 move variant remain.

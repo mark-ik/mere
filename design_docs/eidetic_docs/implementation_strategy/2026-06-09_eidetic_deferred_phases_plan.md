@@ -38,6 +38,42 @@ quota-exceeded returns a clean error; persistence survives reload after
 
 **Dependencies**: Phases 1-2 shipped (the OPFS impl is at Layer 1).
 
+**Trigger now emerging (2026-06-24).** Serval's Nova-on-Memory64 browser engine
+lane landed (`serval/docs/2026-06-24_nova_memory64_browser_lane_plan.md`): an
+in-browser script engine running in a dedicated Web Worker. That is the browser
+runtime a browser-side eidetic consumer needs, and its profile fits Phase 7 hand in
+glove — the engine lane is **single-worker with no SharedArrayBuffer/Atomics/COOP/
+COEP**, which is exactly what OPFS sync access handles want (worker-only, no
+cross-origin isolation, one writer so the default per-file exclusive lock is fine).
+The old way to get synchronous storage into wasm needed SAB+Atomics+COOP/COEP; OPFS
+removes that. Memory64 sizes the *heap*; OPFS sizes the *disk* — complementary.
+
+**The real gate is the wasm build, not the design** (mirroring Phase 9's
+tantivy-on-wasm framing — OPFS only settles where bytes live): (a) **VERIFIED
+2026-06-24 — `eidetic-core` compiles clean for `wasm32-unknown-unknown`**, needing
+only one target-gated `getrandom = { features = ["wasm_js"] }` (a transitive pull via
+jsonschema) plus `--cfg getrandom_backend="wasm_js"`, the same flag the engine lane
+sets; the abstract `Store` + Layer 1/2/3 logic is browser-ready today. The `Store`
+trait is async + blob-KV, so `eidetic-opfs` wraps synchronous sync-handle I/O in async
+fns (no executor inside). (b) `web-sys` reaches `FileSystemSyncAccessHandle`
+(historically behind `--cfg web_sys_unstable_apis` — pin the binding surface like the
+engine lane pins `wasm-bindgen` 0.2.125). (c) a throughput measurement vs
+`eidetic-fjall` native for the blob round-trip, in a worker, Chrome + Firefox. So the
+remaining gates are (b) the web-sys binding and (c) the bench; (a) is cleared.
+
+**Layout choice the measurement decides.** One-file-per-blob (the v0 scope above) is
+simplest but pays per-file OPFS overhead at corpus scale; a *packed* container (a
+couple of OPFS files as a log+index, or redb / sqlite-wasm as the blob store, both of
+which already run on a sync handle) amortizes it. Start file-per-blob, measure, pack
+if the per-file overhead bites.
+
+**Second consumer.** Serval's web-platform storage for scripted pages
+(`localStorage` / `sessionStorage` / IndexedDB / Cache) can ride this same eidetic
+`OpfsStore` in the worker rather than stand up a parallel store — one OPFS-backed
+durable layer, two faces. (DocumentScript's deferred `persistent-storage` profile
+world is the third: one host-agnostic WIT contract, `OpfsStore` browser /
+`FjallStore` native.)
+
 ### Phase 8 — `eidetic::browsing` (Layer-4 browsing memory)
 
 **ACTIVATED 2026-06-12** → built under the
@@ -179,3 +215,18 @@ checkout at `Code/.tantivy-probe` — and the design pass §7.5):**
   (Mark pulled the user-value arc directly: derive useful information from
   your own browsing). This plan remains the umbrella for Phase 7, the wasm
   probe, and Phase 9's consume/federation half.
+- 2026-06-24 — **Phase 7 trigger emerging; measure first.** Serval's
+  Nova-on-Memory64 browser engine lane landed (a script engine in a dedicated
+  worker), supplying the browser runtime Phase 7's `eidetic-opfs` consumer needs;
+  its single-worker, no-SAB/Atomics/COOP/COEP profile is exactly the profile OPFS
+  sync access handles want. Folded into Phase 7: the engine-lane trigger + that
+  isolation-free fit, the wasm build as the real gate (eidetic-core+opfs on
+  wasm32/64, `web-sys` `FileSystemSyncAccessHandle` behind the unstable-apis flag),
+  the file-per-blob-then-pack layout call, and serval web-platform storage as a
+  second consumer of the same `OpfsStore`. Mark is in; next step is the measurement
+  probe (OpfsStore vs FjallStore blob round-trip in a worker). A serval-side draft of
+  this was discarded as mis-homed (durable store is eidetic, not serval).
+  **Feasibility floor cleared (measured):** `eidetic-core` compiles clean for
+  `wasm32-unknown-unknown` (one target-gated `getrandom` `wasm_js` feature + the cfg
+  flag; verified then reverted — no code landed). Remaining gates: the `web-sys`
+  `FileSystemSyncAccessHandle` binding and the throughput bench.

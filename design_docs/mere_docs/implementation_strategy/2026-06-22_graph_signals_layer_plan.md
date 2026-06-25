@@ -519,3 +519,133 @@ first *new* visual is then the edge channel (multiplicity -> thickness).
   threshold 0.5; a clique has none; the toggle drives the computation on `frame()`. signals 11 /
   orrery 68 / meerkat 80 green. Remaining: **P6** (gloss projection + the overlay pipe), **P4**
   (affinity force).
+- 2026-06-25: **P6a — the independent gloss projection (the "different lens" core).** The gloss
+  swatch was a minimap (it mirrored the main view's live positions via `minimap_geometry`); now it
+  can show its **own arrangement**, independent of the main view. The orrery gained `gloss_geometry`
+  (assemble the swatch's node/edge geometry from *arbitrary* positions), a `gloss_strategy`
+  (`None` = mirror, `Some(id)` = an independent lens), and a gloss arrangement cache
+  (`gloss_needs_recompute` / `set_gloss_positions` / `gloss_geometry_cached`) keyed on
+  `(strategy, graph revision, viewport)` so an expensive lens like spectral is not recomputed per
+  frame. The host (render.rs) computes the gloss lens through `project_orrery_strategy` only when the
+  cache says to, then draws it; with no lens set it mirrors as before. A `Gloss: independent lens`
+  toggle on the pelt/orrery page flips it to a **spectral** gloss (a clearly different lens than the
+  force-directed main view). Test: the gloss nodes sit at the *lens* positions (not the live layout),
+  and the cache re-triggers on a viewport / topology change. orrery 69 / meerkat 81 green. P6's
+  done-condition (the gloss shows a different lens than the main view) is **met**.
+  **Deferred (P6b/c):** the **overlay pipe** (gloss showing community/bridge rings + other overlays
+  via `Projection::overlays` — its first real consumer, the reason that pipe waits for the gloss) and
+  richer gloss **scope / encoding / lens-picker** controls (the toggle is on/off spectral for now).
+  Remaining on the plan: **P4** (the affinity force) + those P6b/c refinements. The rest of the
+  graph-signals plan — P1, P2, P3, P5, the A/B cache generalization, community + bridge rings, the
+  off-thread lane — is complete and reviewed.
+- 2026-06-25: **P4 — the affinity force.** The second semantic adapter, done as a *force* (not a
+  streaming projection): a new gyre `AffinitySpring`, a weighted attract-only pairwise spring that
+  pulls structurally-similar nodes together on top of force-directed, so communities draw into tight
+  clusters ("cluster by affinity"). The signal is `signals::structural_affinity(graph, min)`: the
+  Jaccard similarity of node neighbourhoods (shared-neighbour count over neighbourhood union),
+  computed by common-neighbour accumulation so the cost tracks the graph's clustering not n², sorted
+  for determinism, thresholded (0.1) to stay sparse. It is the cheap dependency-free structural
+  stand-in for the later content-embedding cosine; both ride the same `AffinityScores` channel. The
+  force is **attract-only** (pulls a stretched pair in, never pushes a close pair apart: that is
+  `NodeExclusion`'s job) and composes on top of `EdgeSpring` rather than replacing it. It installs as
+  a wholesale-replaceable slot on the sim (`set_affinity_force(Option<AffinitySpring>)`, mirroring the
+  field couplings, position-preserving, `Send` across the physics actor via a new
+  `SetAffinityForce` command). The orrery caches the signal revision-gated (inline, like betweenness)
+  and `sync_affinity_force` (re)installs or clears the force once per real change with a settle, never
+  per frame. A `Cluster by affinity` toggle on the pelt/orrery page. Tests: the force pulls a
+  high-affinity pair in and leaves a zero / close pair alone, a stronger pair beats a weaker one
+  against exclusion, clearing is position-preserving (gyre, 5); the producer gives 1/3 on a triangle,
+  1/2 on a clique, clusters within bridged triangles not across, and prunes by threshold (signals,
+  5); the toggle installs the clustered pairs and clears them, and a topology change refreshes the
+  live force (orrery, 2). gyre 52 / signals 16 / orrery 71 / meerkat 81 green. Done-condition
+  (affinity clusters at gyre's cost) **met**. Two honest caveats: the force is only *visible* under
+  force-directed (an analytic strategy overwrites the physics snapshot), and the streaming
+  `SemanticEdgeWeightAdapter` is now redundant for clustering but **left in place** (a registered
+  strategy) pending Mark's go-ahead to retire it. Remaining: the **P6b/c** refinements (overlay pipe +
+  richer gloss controls).
+- 2026-06-25: **P6b — the overlay pipe (the gloss's first consumer).** `project_orrery_strategy` used
+  to discard the whole `Projection` except `.nodes`; now the gloss consumes the **overlay channel**.
+  The dispatch is factored into a private `project_orrery_dispatch` (returns the full `Projection`),
+  a `signal_overlays(clusters, bridges)` pure builder (a `ClusterHalo` per community in cluster order
+  plus a `BridgeEmphasis` per broker, in the existing cartography `Overlay` vocabulary —
+  **position-independent**, just node references, so the same overlays serve any layout), and `project_orrery_lens`
+  (= dispatch + overlays). `project_orrery_strategy` stays a thin positions wrapper, so its three
+  render.rs callers + tests are untouched. The orrery stores the lens overlays beside its positions
+  (`set_gloss_positions(positions, overlays, w, h)`) and `gloss_geometry` resolves them into **rings
+  at the lens's own positions** (cluster halos coloured per cluster matching the main view, bridge
+  emphasis in bold near-white); `minimap_scene` paints the rings under the nodes in swatch space. The
+  gloss cache key gained the two ring-toggle booleans (flipping a ring toggle re-fetches the lens, so
+  its overlays track the toggles; rare, so paying a spectral recompute then is fine), and the host
+  gates the lens's clusters/bridges on the same `show_community_rings` / `show_bridge_rings` toggles
+  as the main view. So "Show community rings" now halos the clusters in **both** the main view and the
+  gloss, the gloss at its own (e.g. spectral) layout. Tests: `signal_overlays` builds halos in cluster
+  order then bridge emphasis, and is empty without signals; `project_orrery_lens` carries the two
+  community halos while the positions wrapper still returns every node (platen, +3); the gloss resolves
+  stored overlays into rings at the lens positions (orrery, +1). The `Projection::overlays` channel is
+  now a live, consumed seam (its first real consumer), so future encodings (importance scale, edge
+  weight, activity heat) have an established path.
+- 2026-06-25: **P6c (down-payment) — the gloss lens-picker.** The gloss control was an on/off spectral
+  toggle; it is now a **picker** mirroring the main layout one: "Mirror main view" (a minimap) plus a
+  row per `ORRERY_LAYOUT_STRATEGIES` entry (spectral, grid, phyllotaxis, penrose, l-system, kanban,
+  timeline, radial), the active lens checked, each draining `orrery:gloss:<id>` (empty id = mirror) to
+  `set_gloss_strategy`. So the second lens can now be *any* arrangement, not just spectral. platen 88 /
+  orrery 72 / signals 16 / gyre 52 / meerkat 81 green. **Remaining P6c:** the deeper gloss controls —
+  an independent **scope** (the gloss previewing a sub-graph) and independent **encoding** (its own
+  size-by-importance / edge-thickness, decoupled from the main view). With P6b done, those are
+  additive on the same lens projection, not new plumbing. The graph-signals plan is now complete
+  through P6b + the lens-picker; P4's `SemanticEdgeWeightAdapter` retirement and the P6c scope/encoding
+  controls are the only open threads.
+- 2026-06-25: **Retired the streaming `SemanticEdgeWeightAdapter`.** The affinity force (P4) reached
+  parity, so the cartography-side streaming adapter is gone: deleted
+  `arrangements/adapters/semantic_edge_weight.rs`, its module decl + re-export, and the one platen test
+  that exercised it (it was never in the live `ORRERY_LAYOUT_STRATEGIES` / `project_orrery_strategy`
+  dispatch — only that test used it). Affinity now clusters at gyre's cost, not as an iterative
+  projection. arrangements 98 / platen 87 green. **Left in place (separate layer, flagged):** the
+  underlying `SemanticEdgeWeight` *primitive* (a registered `arrangements` `Layout<N>` builtin, with
+  Grid/Radial/etc., exercised by the registry's own tests, not host-wired) and the generic
+  `step_with` / `StreamingLayoutStrategy` streaming harness (now consumer-less but reserved for a
+  future content-embedding streaming lane). Removing either is an `arrangements`-registry decision,
+  not "the streaming adapter," so it waits for an explicit call.
+- 2026-06-25: **P6c (rest) — the independent gloss scope + encoding.** The gloss is now a fully
+  configurable second lens (arrangement + scope + encoding). **Scope:** `gloss_scope_selection` crops
+  the lens to the current selection (+ induced edges + halos over selected members); `minimap_scene`
+  auto-refits, so the swatch zooms to the selection. It is a pure render-time filter in
+  `gloss_geometry` (no position-cache impact), so changing the selection re-crops live; an empty
+  selection falls back to the whole graph. **Encoding:** `gloss_size_by_importance` sizes each gloss
+  node by the importance signal (the same `node_importance` the main view reads, mapped to a
+  0.7..=1.9 factor), independent of the main view's own sizing; the gloss node tuple gained a per-node
+  size factor the swatch multiplies in, and `frame` ensures the (dirty-gated) importance cache fresh
+  when the encoding is on. Two toggles on the pelt/orrery "Gloss lens" section ("Gloss: selection
+  only", "Gloss: size by importance"). Tests: scope crops to one selected node with no out-of-scope
+  edges and restores on toggle-off; the encoding leaves sizes uniform when off and scales a hub above
+  a leaf when on (orrery, +2). gyre 52 / signals 16 / arrangements 98 / platen 87 / orrery 74 /
+  meerkat 81 green. **The graph-signals plan is complete** (P1–P6 + the A/B cache generalization +
+  community/bridge rings + the off-thread lane + the affinity force + the overlay pipe + the full
+  gloss lens). Only-if-wanted follow-ups: subgraph *re-layout* for the gloss scope (today it crops the
+  whole-graph layout), gloss *edge-thickness* encoding, multi-level Louvain, articulation points,
+  kernel-query memos, and pruning the orphaned `SemanticEdgeWeight` primitive / streaming harness.
+- 2026-06-25: **Polish pass — all six follow-ups done.** (1) **Articulation points:** a new
+  `signals::articulation_points` (iterative Hopcroft–Tarjan low-link DFS, distinct undirected
+  adjacency, disconnected-graph-safe) plus a `BridgeMetric { Betweenness, Articulation }` choice on the
+  bridge ring — so the ring highlights either betweenness brokers (high traffic) or cut vertices
+  (single points of failure). A `by betweenness / by cut-vertex` sub-toggle on the pelt page;
+  `set_bridge_metric` invalidates the bridge cache. (2) **Multi-level Louvain:** the single-level
+  local-moving is now the inner loop of a true hierarchical Louvain (`louvain_local_moving` +
+  `louvain_aggregate` with self-loop folding that preserves total degree / modularity across levels);
+  the `ClusterSet` contract is unchanged, the partition is at least as good. (3) **Gloss
+  edge-thickness:** gloss edges carry their multiplicity weight (`dedup_edges_weighted`) and the swatch
+  draws denser pairs thicker — the same free channel as the main view, always-on. (4) **Gloss subgraph
+  re-layout:** `project_orrery_subgraph` lays out the *induced subgraph* of the selection (nodes
+  re-added by stable id, positions remapped back), so a scoped gloss reflects the selection's own
+  structure rather than a crop; the scope joined the gloss cache key so a selection change re-projects.
+  (5) **Kernel-query memo (cache C):** the per-frame gloss `dedup_edges_weighted` is now revision-gated
+  (`weighted_edges_cache`, refreshed in `frame`, read with a fallback) so a static frame reuses the
+  collapsed edge topology instead of re-deduping. (6) **Pruned the orphaned streaming stack:** deleted
+  the `SemanticEdgeWeight` primitive (arrangements `Layout<N>` + config/state + tests + registry
+  registration), the `step_with` / `run_one_step` runners, and the `StreamingLayoutStrategy` cartography
+  trait + its tests + re-exports, with the doc sweep. `SemanticEmbedding` / `EmbeddingFallback` /
+  `LayoutStrategy` stay. Tests: articulation (path/clique/cycle/bowtie + metric dispatch), multi-level
+  Louvain (3-triangle line + determinism), gloss edge multiplicity, subgraph-only projection, scope
+  cache key, the memo's static-frame reuse. Final: signals 23 / gyre 52 / cartography 11 /
+  arrangements 94 / platen 88 / orrery 78 / meerkat 81 green. **Nothing left on the graph-signals
+  plan.**

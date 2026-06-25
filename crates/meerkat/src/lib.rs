@@ -132,6 +132,11 @@ pub struct Chrome {
     /// The open right-click context menu (host-populated from the selection), or
     /// `None` when no menu is showing.
     pub context_menu: Option<ContextMenu>,
+    /// The tear-out drag ghost's label (the dragged node's title) while a tear-out drag
+    /// is in flight, else `None`. The host renders a small pill carrying it and positions
+    /// it at the live cursor each frame (so it follows without a chrome re-render per
+    /// move). (Tear-out gestures, GA-5.)
+    pub tear_ghost: Option<String>,
     /// A context-menu action a row captured, for the host to run over the menu's
     /// member set.
     pub pending_context: Option<ContextAction>,
@@ -449,6 +454,7 @@ impl Chrome {
             pending_command: None,
             settings: Settings::default(),
             context_menu: None,
+            tear_ghost: None,
             pending_context: None,
             pending_palette_action: None,
             comms: CommsPane::new(),

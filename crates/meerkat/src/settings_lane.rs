@@ -368,13 +368,63 @@ impl WindowCtx<'_> {
             rings,
             "orrery:communityrings".to_string(),
         ));
-        // Bridge rings: bold the structural brokers (high-betweenness nodes), in any layout.
-        // (Graph signals — bridges.)
+        // Bridge rings: bold the graph's critical connectors, in any layout. The metric chooses
+        // which notion: betweenness brokers (high traffic) or articulation points (cut vertices /
+        // single points of failure). (Graph signals — bridges / articulation points.)
         let bridges = self.orrery().show_bridge_rings();
         items.push(toggle(
             check("Show bridge rings", bridges),
             bridges,
             "orrery:bridgerings".to_string(),
+        ));
+        if bridges {
+            let by_between = self.orrery().bridge_metric() == orrery::BridgeMetric::Betweenness;
+            items.push(toggle(
+                check("  by betweenness", by_between),
+                by_between,
+                "orrery:bridge:betweenness".to_string(),
+            ));
+            items.push(toggle(
+                check("  by cut-vertex", !by_between),
+                !by_between,
+                "orrery:bridge:articulation".to_string(),
+            ));
+        }
+        // Gloss lens: the gloss swatch can mirror the main view (a minimap) or show its OWN
+        // arrangement (an independent lens, e.g. spectral while the main view is force-directed),
+        // carrying the same community / bridge rings at its own positions. A picker like the main
+        // layout one. (Graph signals — P6 / P6b, the independent gloss projection.)
+        items.push(PaneItem::text("app-title", "Gloss lens"));
+        let gloss = self.orrery().gloss_strategy();
+        items.push(toggle(
+            "Mirror main view".to_string(),
+            gloss.is_none(),
+            "orrery:gloss:".to_string(),
+        ));
+        for &(id, label) in platen::ORRERY_LAYOUT_STRATEGIES {
+            items.push(toggle(label.to_string(), gloss == Some(id), format!("orrery:gloss:{id}")));
+        }
+        // The lens's own scope + encoding (independent of the main view): crop to the selection,
+        // and size nodes by the importance signal. (Graph signals — P6c.)
+        let gloss_scope = self.orrery().gloss_scope_selection();
+        items.push(toggle(
+            check("Gloss: selection only", gloss_scope),
+            gloss_scope,
+            "orrery:glossscope".to_string(),
+        ));
+        let gloss_size = self.orrery().gloss_size_by_importance();
+        items.push(toggle(
+            check("Gloss: size by importance", gloss_size),
+            gloss_size,
+            "orrery:glosssize".to_string(),
+        ));
+        // Cluster by affinity: an extra force-directed pull between structurally-similar nodes
+        // (shared-neighbourhood Jaccard), drawing communities into tight clusters. (Graph signals — P4.)
+        let affinity = self.orrery().cluster_by_affinity();
+        items.push(toggle(
+            check("Cluster by affinity", affinity),
+            affinity,
+            "orrery:affinity".to_string(),
         ));
         let mirror = self.view.mirror_tiles;
         items.push(toggle(check("Mirror open tiles", mirror), mirror, "orrery:mirror".to_string()));

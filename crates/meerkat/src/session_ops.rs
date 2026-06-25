@@ -361,6 +361,70 @@ impl super::Shell {
         session_id
     }
 
+    /// Mint an independent **fork** for a tear-out (G4): a new session + graph holding a
+    /// copy of `node`'s connected component (cloned out of graph `from` via
+    /// [`Graph::copy_component_from`], each copy carrying `CopiedFrom` provenance), with
+    /// a weak `parent_session` ref back to the donor. The fork graph is persisted and its
+    /// orrery pooled under the new id, so the caller can open a window onto it. Unlike
+    /// [`create_session`](Self::create_session) this does **not** switch the active
+    /// session — the donor window is untouched; the fork is a new window. Returns the new
+    /// graph id, or `None` if the donor graph or seed is already gone.
+    pub(super) fn fork_session_from(
+        &mut self,
+        node: uuid::Uuid,
+        from: GraphId,
+    ) -> Option<GraphId> {
+        // Commit the donor's live physics layout into its graph first, so the fork
+        // preserves it (the graph's own node positions are only the spawn seed; the live
+        // layout lives in the orrery's physics view — without this the fork opens with
+        // every node piled at the seed).
+        self.orreries.get_mut(&from)?.commit_positions_to_graph();
+        // Clone the donor as the copy source (a pool borrow-split is a refinement; demo
+        // graphs are small), then snapshot the seed's connected component into a fresh
+        // graph. An empty result means the seed is no longer in the donor — nothing to
+        // fork.
+        let source = self.orreries.get(&from).map(|o| o.graph().clone())?;
+        let mut fork_graph = Graph::new();
+        if fork_graph
+            .copy_component_from(&source, node, Some(from.as_uuid().to_string()))
+            .is_empty()
+        {
+            return None;
+        }
+        // Mint the fork session + graph, with a weak parent ref to the current (donor)
+        // session — the lineage edge a later "back to parent" affordance reads.
+        let parent = self.shared.session.active_session_id;
+        let session_id = SessionId::new();
+        let graph_id = GraphId::new();
+        let session_dir = self
+            .shared
+            .session
+            .mere_root
+            .join("sessions")
+            .join(session_id.as_uuid().to_string());
+        let _ = std::fs::create_dir_all(&session_dir);
+        let mut manifest = GraphSessionManifest::new(session_id, graph_id);
+        manifest.parent_session = Some(parent);
+        manifest.storage_path = Some(session_dir.clone());
+        self.shared.session.manifests.insert(manifest);
+        let _ = self.shared.session.manifests.flush_dirty();
+        // Persist the fork graph beside its manifest, then pool its orrery so a window
+        // bound to `graph_id` renders it. No `load_active_session` — the active session
+        // stays the donor (a fork is a new window, not a switch).
+        let _ = session_graph_store::save(
+            &session_dir.join(session_graph_store::GRAPH_FILE),
+            &fork_graph,
+        );
+        self.orreries
+            .insert(graph_id, orrery::Orrery::with_graph(fork_graph));
+        self.shared.observability.record_probe(
+            "tear_out",
+            "fork",
+            format!("node={node} graph={}", graph_id.as_uuid()),
+        );
+        Some(graph_id)
+    }
+
     /// Switch the active session to `target`: persist the current one, then load the
     /// target's graph + camera + frame. No-op if already active or unknown. (MG2.)
     pub(super) fn switch_session(&mut self, target: SessionId) {

@@ -562,6 +562,13 @@ impl ApplicationHandler for Shell {
             WindowEvent::DroppedFile(path) => wc.import_sprite_from_file(&path),
             WindowEvent::CursorMoved { position, .. } => {
                 wc.view.cursor = (position.x as f32, position.y as f32);
+                // A tear-out drag in progress: just reposition the ghost at the new cursor
+                // (the render repositions the `.tear-ghost` pill) and route nowhere else.
+                // (Tear-out gestures, GA-5.)
+                if wc.view.tear_out_drag.is_some() {
+                    wc.view.request_redraw();
+                    return;
+                }
                 // A manual window resize in progress: drive it from the move and
                 // route nowhere else. (Custom titlebar.)
                 if wc.view.resize_drag.is_some() {
@@ -890,6 +897,21 @@ impl Shell {
         for command in std::mem::take(&mut self.commands) {
             match command {
                 super::ShellCommand::SpawnWindow => self.spawn_window(event_loop),
+                super::ShellCommand::TearOut { node } => self.spawn_torn_window(event_loop, node),
+                super::ShellCommand::CopyNodeAcross { node, from, to } => {
+                    self.copy_node_across(node, from, to)
+                }
+                super::ShellCommand::ForkNode { node, from } => {
+                    // Mint the fork session + pooled graph (Shell), then open a window
+                    // bound to it (needs the event loop). The render core is booted by
+                    // the time any gesture fires, but guard like `spawn_window`.
+                    if self.render_core.is_some() {
+                        if let Some(graph_id) = self.fork_session_from(node, from) {
+                            let view = self.build_window_view_for(graph_id);
+                            self.spawn_window_with_view(event_loop, view);
+                        }
+                    }
+                }
                 super::ShellCommand::CloseWindow(id) => self.close_window(id),
                 super::ShellCommand::CreateSession => {
                     self.create_session();
@@ -900,6 +922,54 @@ impl Shell {
                 super::ShellCommand::OpenGraphBeside(id) => self.open_graph_beside(id),
                 super::ShellCommand::OpenEngramBeside(id) => self.open_engram_beside(&id),
             }
+        }
+    }
+
+    /// Tear a node out into a new leaf window (the tear-out drag, G1 v0). For now this
+    /// spawns a leaf over the shared graph, exactly like [`spawn_window`](Self::spawn_window),
+    /// and records the torn node; the leaf's *content* (resolving the node to its tile,
+    /// focused) is G2, and the operation split (leaf / branch / fork) is the next slice.
+    /// (Tear-out gestures.)
+    fn spawn_torn_window(&mut self, event_loop: &ActiveEventLoop, node: uuid::Uuid) {
+        self.shared
+            .observability
+            .record_probe("tear_out", "leaf", format!("node={node}"));
+        self.spawn_window(event_loop);
+    }
+
+    /// Cross-graph copy (G5): mint a copy of `node` (from graph `from`) in graph `to`,
+    /// with `CopiedFrom` provenance back to the source. The source is cloned out of the
+    /// donor before the destination is mutated (two pool entries; the clone breaks the
+    /// aliasing). Placed at the origin for v0 (physics settles it; a drop-point placement
+    /// is a refinement). (Tear-out gestures G5.)
+    fn copy_node_across(
+        &mut self,
+        node: uuid::Uuid,
+        from: super::GraphId,
+        to: super::GraphId,
+    ) {
+        let source = self
+            .orreries
+            .get(&from)
+            .and_then(|o| o.graph().get_node_by_id(node).map(|(_, n)| n.clone()));
+        let Some(source) = source else { return };
+        let copied = if let Some(dest) = self.orreries.get_mut(&to) {
+            dest.ingest_graph(|g| {
+                g.copy_node_from_xy(&source, Some(from.as_uuid().to_string()), 0.0, 0.0);
+                true
+            })
+        } else {
+            false
+        };
+        if copied {
+            self.shared.observability.record_probe(
+                "tear_out",
+                "copy",
+                format!("node={node} to={}", to.as_uuid()),
+            );
+            // The destination graph changed; repaint every window showing it.
+            self.ctx().view.request_redraw();
+            self.redraw_secondary_windows();
         }
     }
 
@@ -921,6 +991,20 @@ impl Shell {
             return;
         }
         let view = self.build_window_view();
+        self.spawn_window_with_view(event_loop, view);
+    }
+
+    /// Create the OS window + surface around an already-built `view`, install its
+    /// per-window AccessKit bridge (before first show), and reveal it. Shared by the
+    /// plain spawn ([`spawn_window`](Self::spawn_window)) and a **fork**, which passes a
+    /// fork-graph-bound view from
+    /// [`build_window_view_for`](Shell::build_window_view_for). (Multi-window MW3;
+    /// tear-out gestures G4.)
+    fn spawn_window_with_view(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        view: crate::window_view::WindowView,
+    ) {
         if let Some((id, window)) = self.create_window(event_loop, view) {
             // Install this secondary's own AccessKit bridge *before* showing it (the
             // "adapter before first show" rule, same order the primary uses in

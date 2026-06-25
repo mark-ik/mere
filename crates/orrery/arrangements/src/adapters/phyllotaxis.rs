@@ -9,8 +9,7 @@
 //! formula `angle_n = n × 137.508°`, `radius_n = scale × √n` produces
 //! the same target positions in one call. No iteration, no state.
 //!
-//! That maps cleanly onto cartography's [`LayoutStrategy`] (one-shot)
-//! rather than [`crate::StreamingLayoutStrategy`] (iterative): the
+//! That maps cleanly onto cartography's one-shot [`LayoutStrategy`]: the
 //! adapter just computes target positions from node ordinals and
 //! emits them as a [`Projection`] with absolute positions.
 //!

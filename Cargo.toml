@@ -30,6 +30,7 @@ members = [
     "crates/system/ux-events",
     "crates/inker",
     "crates/inker/document-canvas",
+    "crates/inker/knot-editor",
     "crates/inker/engines/nematic",
     "crates/inker/engines/scrying-engine",
     "crates/verso-api",

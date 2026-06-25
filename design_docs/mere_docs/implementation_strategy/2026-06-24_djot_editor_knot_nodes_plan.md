@@ -233,6 +233,12 @@ of `InjectionLexer` keyed by label, in three tiers:
   tokenizer (as rhai's). The hand-lexers, the pack, and the mods are all the same
   trait at runtime, with no rebuild. A label with no registered lexer renders plain.
 
+Reuse-lexers are optional precision over the always-present logos floor: a language
+whose precise tokenizer is feature-gated or swappable (JS under Nova or Boa, rhai,
+rune) still highlights from its C-family floor in the pack, and a host overrides with
+the precise lexer only when that engine's tokenizer is actually compiled in.
+Highlighting never depends on an execution-engine build flag.
+
 This keeps the whole editor pure Rust and wasm-safe with no build apparatus: jotdown
 plus logos compile for wasm32-unknown-unknown like the rest of the app, with no
 c2rust, no git-fetched grammars, and no fork. The honest cost is curation: you author
@@ -718,3 +724,80 @@ Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
   committed: serval `main` carries Mark's in-flight script-engine work, so the change
   is isolated to serval-layout and left uncommitted. Next: the meerkat call site
   (pointer-down → `caret_byte_at_point` → `TextInput::set_caret_byte`).
+- **2026-06-25, Phase 1 slice 1b (meerkat).** Added `PaneSession::caret_byte_at_point`
+  and `caret_byte_vertical` wrappers (`crates/meerkat/src/pane_session.rs`, a file
+  untouched by the in-flight work), delegating to the new session methods and
+  mirroring the existing `caret_rect` wrapper. `cargo check -p meerkat` green (52s,
+  run from inside mere on the pinned 1.93.0 toolchain; only the expected
+  unused-method warning until a call site lands). The mere tree compiles with the
+  concurrent work in place, so it is at a buildable checkpoint. The input-primitive
+  bridge is now complete end to end: serval session method → meerkat wrapper →
+  (next) call site → `TextInput::set_caret_byte`. The remaining Phase 1 pieces (the
+  pointer-down call site and the two-pane editor shell) land in the in-flight pane
+  files (`input.rs` / `render.rs` / `pane_data.rs` / `views.rs`), so they wait on the
+  concurrent pane-system work or move to an isolated worktree.
+- **2026-06-25, Phase 2/3 portable core (`knot-editor` crate).** Created
+  `crates/inker/knot-editor` (registered in the workspace; collision-free, since no
+  `inker` files or the root `Cargo.toml` are in the in-flight set), the portable
+  editor pipe, dep `jotdown` only. `highlight.rs`: `highlight_djot(src) -> Vec<Span>`
+  walks jotdown's `into_offset_iter` byte spans into `(range, SyntaxKind)`, one span
+  per construct (verified ranges: `# A heading` → 0..11; `` `code` `` → Verbatim
+  33..39; fenced block → one CodeBlock region; link/image/blockquote/div whole).
+  `injection.rs`: the `InjectionLexer` trait + `InjectionRegistry` (case-insensitive
+  label dispatch, `lex_at` offsets inner spans into the document, mods override
+  built-ins) — the one seam the three tiers share. `SyntaxKind` carries both the
+  djot-structural classes and the generic code-token classes inner lexers emit.
+  `cargo test -p knot-editor` green: 11 tests, 0 warnings. Next portable pieces: a
+  first `logos` inner lexer (proving the pack tier) and the highlighter→registry
+  dispatch for code/raw blocks. The host-side Phase 1 shell still waits on the
+  in-flight pane work.
+- **2026-06-25, logos pack tier + dispatch.** Added `logos` 0.16 and the curated
+  pack (`src/pack.rs`): a `JsonLexer` (logos DFA → string / number / keyword /
+  punctuation) as the first pack language, and `default_pack()` returning a registry
+  pre-loaded with it. Wired the highlighter→registry dispatch: `highlight(src,
+  &registry)` captures each code/raw block's inner range and language from jotdown's
+  events and calls `registry.lex_at`, merging the inner-language spans on top of the
+  block region; an unregistered language stays a plain region. `cargo test -p
+  knot-editor` green: 15 tests, 0 warnings. The full pure-Rust editor pipe is now
+  proven end to end in isolation: source text → djot structure spans + injected
+  inner-language spans, no C, no wasm question. Growing the pack is a token enum plus
+  one `register` line. The host shell still waits on the in-flight pane work.
+- **2026-06-25, pack languages batch + format map.** Surveyed the workspace deps for
+  reuse tokenizers (free, no new dep, registered host-side): `boa_parser` (JS),
+  `cssparser` (CSS), `html5ever` (HTML), `pulldown-cmark` (Markdown), `oxttl`+`oxrdf`
+  (Turtle/RDF), `toml_edit`, plus `quick-xml` (XML/SVG/RSS) and rhai. Found engrams
+  are JSON: `Engram` (`eidetic-core/src/engram.rs:48`) = `schema` + `payload: Vec<u8>`
+  where the payload format is mere-native / json-schema / json-ld, all JSON, so the
+  JSON lexer already renders engram schema + data. Added to the logos pack
+  (`src/pack.rs`): a keyword-parameterized `ClikeLexer` (one DFA, block-comment
+  callback; Rust keyword set, with Rune / JS-fallback sharing it) and a `TomlLexer`;
+  `default_pack()` registers json / json-ld / jsonld / toml / rust / rs. `cargo test
+  -p knot-editor` green: 18 tests, 0 warnings. **Architecture recorded**: the portable
+  `knot-editor` stays lean (jotdown + the logos pack); the free reuse-lexers
+  (Boa / cssparser / html5ever / oxttl / pulldown-cmark / rhai / quick-xml) live
+  host-side as `InjectionLexer` impls over the same registry, since those deps are
+  already in meerkat/serval and wasm-available. This refines Open question 1: the
+  pack is logos for languages without a tree tokenizer; everything else reuses the
+  host's existing tokenizer.
+- **2026-06-25, engine-independent floors (Nova/Boa robustness).** Corrected the
+  reuse-lexer framing: highlighting must not depend on which execution engine is
+  compiled in (JS under Nova vs Boa, or a rhai/rune-feature-gated build). The rule:
+  the portable logos pack is an always-present **floor**; reuse-lexers (Boa, Nova,
+  oxc, rhai's tokenizer) are **optional precision overrides** a host registers for
+  whatever the build ships. Added C-family floors for `js` / `javascript` / `mjs`,
+  `rhai`, `rune` (backtick template-literal strings added to the Clike lexer for JS).
+  `cargo test -p knot-editor` green: 19 tests, 0 warnings. mere's current tree
+  resolves Boa (not Nova or oxc), so today's override target would be Boa, but the
+  floor makes JS highlight regardless.
+- **2026-06-25, Lua floor + refined pack scope.** Added a Lua floor lexer
+  (`src/pack/lua.rs`, a submodule so pack.rs stays under the 600-LOC ceiling): `--`
+  line and `--[[ ]]` block comments plus `[[ ]]` long strings via callbacks, with
+  single-char punctuation so the `--` / `[[` tokens win on length. Two bugs caught and
+  fixed by the tests (a line-comment regex out-matching the block-comment token; a
+  greedy punctuation run swallowing `--[[`). `cargo test -p knot-editor` green: 21
+  tests, 0 warnings. Refined the pack-vs-reuse split: the logos pack floors languages
+  with no reliably-present tokenizer (Rust, JS, rhai, rune, Lua, JSON / JSON-LD,
+  TOML); CSS / HTML / Markdown / Turtle keep a tokenizer whenever serval is loaded
+  (cssparser / html5ever / pulldown-cmark / oxttl), so those are host-side reuse, not
+  logos floors. Pack labels now: json, json-ld, jsonld, toml, rust, rs, js,
+  javascript, mjs, rhai, rune, lua.

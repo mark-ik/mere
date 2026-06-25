@@ -14,7 +14,7 @@
 - [`2026-05-11_memory_tiers_brief.md`](2026-05-11_memory_tiers_brief.md) — short-term vs. long-term memory partitioning. Diff/branch state lives in short-term by default; consolidation into engrams is an affirmative gesture. This brief depends on the memory-tiers framing for its diff substrate.
 - [`../implementation_strategy/2026-05-11_graph_session_manifest_plan.md`](../implementation_strategy/2026-05-11_graph_session_manifest_plan.md) — `parent_session` reference fields used by **fork**.
 - Phase 2 Part 1 tear-out: [`crates/mere-host/src/tearout.rs`](../../../crates/mere-host/src/tearout.rs). The current sticky-note implementation is the **leaf** operation in this brief's vocabulary, made explicit.
-- Graphlet primitives: [`crates/graph/forme/src/graphlet.rs`](../../../crates/graph/forme/src/graphlet.rs) — `GraphletId`, `GraphletRef`, `GraphletBinding::{UnlinkedSession, Linked, Forked}`. Already first-class; **branch** uses these.
+- Graphlet primitives: [`crates/forme/forme/src/graphlet.rs`](../../../crates/forme/forme/src/graphlet.rs) — `GraphletId`, `GraphletRef`, `GraphletBinding::{UnlinkedSession, Linked, Branched}`. Already first-class (the types + reconciliation are unit-tested); **branch** uses these. Note (2026-06-25): the layer is built but **not yet wired into the live shell** — no live `GraphTree` exists outside forme's tests, so branch needs that wiring first (its own plan).
 - Eidetic engrams: [`crates/eidetic/src/engram.rs`](../../../crates/eidetic/src/engram.rs) — content-addressed immutable snapshots; the long-term substrate for consolidated branches and forks.
 
 ---
@@ -121,7 +121,7 @@ What happens on Shift+drag:
       id: <next graphlet_id>,
       anchors: vec![<the leaf tile's node>],
       primary_anchor: Some(<the leaf tile's node>),
-      binding: GraphletBinding::Forked {
+      binding: GraphletBinding::Branched {
           parent_spec: <donor graphlet's spec, if any>,
           reason: "tearout-branch".to_string(),
       },
@@ -131,7 +131,7 @@ What happens on Shift+drag:
 - The new window's leaf carries the donor's `GraphId` plus the new `GraphletId`.
 - The user's subsequent in-window actions (navigation, node selection, tile additions) populate the branch graphlet's lineage. The branch and donor diverge in their lineage facet while sharing mere-kernel nodes.
 
-Vocabulary note: forme's existing `GraphletBinding::Forked` variant means what we're calling "branch" at the multiplexer level. This brief uses the user-facing word **branch**; the forme-internal word stays `Forked` for now. If renaming the variant becomes useful (e.g., `Branched`) we can do it in forme without affecting this brief.
+Vocabulary note: forme's graphlet-binding variant for this is `GraphletBinding::Branched` (renamed from `Forked` on 2026-06-25, once the host gained a real `fork` operation a layer up — the old name collided). It means what this brief calls **branch** at the multiplexer level, and matches the user-facing word.
 
 Live behaviour:
 
@@ -209,7 +209,7 @@ Concrete deliverables:
 1. **Toast UI** on no-modifier tear-out drag. Three buttons + auto-dismiss. Routes through the action bus (per the [typed action bus plan](../implementation_strategy/2026-05-11_typed_action_bus_plan.md)).
 2. **Leaf operation** — already implemented as today's `TearOutTileAsStickyNote`. Renamed action: `TearOutTileAsLeaf`. Behaviour unchanged. (Or keep the old action name as an alias if external configs reference it.)
 3. **Branch operation** — new action `TearOutTileAsBranch`:
-   - Creates `GraphletRef` in donor's forme with `GraphletBinding::Forked`.
+   - Creates `GraphletRef` in donor's forme with `GraphletBinding::Branched`.
    - Opens new window with workbench-only layout; leaf carries donor `GraphId` + new `GraphletId`.
    - Emits `session.branched { session_id, parent_graphlet, child_graphlet }`.
 4. **Fork operation** — new action `TearOutTileAsFork`:
@@ -231,7 +231,7 @@ Default to **connected component** (graph-theoretic). Configurable later (whole 
 
 For **fork**: `parent_session` is **weak** — informational only; the parent is allowed to be killed without breaking the child. Reference surfaces in the session switcher as lineage breadcrumbs.
 
-For **branch**: parent is the donor graphlet via `GraphletBinding::Forked { parent_spec, ... }` — this is forme's existing mechanism; nothing new to decide.
+For **branch**: parent is the donor graphlet via `GraphletBinding::Branched { parent_spec, ... }` — this is forme's existing mechanism; nothing new to decide.
 
 ### 8.3 Cascade behaviour on donor delete
 

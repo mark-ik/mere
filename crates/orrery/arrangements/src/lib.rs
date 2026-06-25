@@ -26,9 +26,8 @@
 //! no `std::time`, no egui, no petgraph.
 //!
 //! Cartography adapters wrapping each `Layout<N>` impl with the
-//! [`cartography::LayoutStrategy`] / [`cartography::StreamingLayoutStrategy`]
-//! contracts live in [`adapters`]; consumers depend on `arrangements`
-//! directly to opt in.
+//! [`cartography::LayoutStrategy`] contract live in [`adapters`];
+//! consumers depend on `arrangements` directly to opt in.
 
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -54,8 +53,7 @@ pub use static_layouts::{
 
 pub mod semantic_embedding;
 pub use semantic_embedding::{
-    EmbeddingFallback, SemanticEdgeWeight, SemanticEdgeWeightConfig, SemanticEdgeWeightState,
-    SemanticEmbedding, SemanticEmbeddingConfig,
+    EmbeddingFallback, SemanticEmbedding, SemanticEmbeddingConfig,
 };
 
 pub mod l_system;
@@ -119,7 +117,8 @@ where
     /// Precomputed pairwise semantic similarity in `[0.0, 1.0]`. Keys are
     /// unordered pairs — store both `(a, b)` and `(b, a)` if callers want
     /// asymmetric lookups, or keep one order and have the reader normalize.
-    /// Used by `SemanticEdgeWeight`.
+    /// A generic similarity input (the retired `SemanticEdgeWeight` layout
+    /// read it; pairwise affinity now drives gyre's affinity force instead).
     pub semantic_similarity: HashMap<(N, N), f32>,
 
     /// Host-provided 2D coordinates per node (from UMAP / t-SNE / PCA /

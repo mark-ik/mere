@@ -16,8 +16,6 @@
 //!   positions, for `Projection.content_bounds`.
 //! - [`build_positioned_edges`] — translate graph edges to
 //!   [`crate::PositionedEdge`]s given a position map.
-//! - [`run_one_step`] — one-shot convenience over the streaming
-//!   contract.
 
 use std::collections::HashMap;
 
@@ -29,7 +27,6 @@ use kernel::graph::{NodeKey, RelationKind};
 
 use cartography::projection::{PositionedEdge, Projection};
 use cartography::request::ProjectionRequest;
-use cartography::strategy::StreamingLayoutStrategy;
 
 /// Build a [`CanvasSceneInput`] from the request's graph and the
 /// caller's working positions. Positions come from the supplied
@@ -197,18 +194,6 @@ pub fn build_positioned_edges(
             }
         })
         .collect()
-}
-
-/// Run a [`StreamingLayoutStrategy`] for a single step and return the
-/// resulting [`Projection`]. Convenience for canvases / hosts that
-/// don't want to manage iteration state themselves and accept a less-
-/// converged result.
-pub fn run_one_step<S>(strategy: &S, request: &ProjectionRequest<'_>) -> Projection
-where
-    S: StreamingLayoutStrategy,
-{
-    let (projection, _) = strategy.project_initial(request);
-    projection
 }
 
 /// Extract absolute target positions from a static (analytic) layout

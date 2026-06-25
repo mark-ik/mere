@@ -28,9 +28,10 @@ fn default_registry_includes_grid() {
 #[test]
 fn default_registry_surfaces_all_builtins() {
     let registry = LayoutRegistry::<Id>::default();
-    // 9 built-ins: 8 positional + 1 projection. Force physics is gyre's
-    // domain, not an arrangement.
-    assert_eq!(registry.len(), 9);
+    // 8 built-ins, all positional. Force physics is gyre's domain, not an arrangement; the
+    // similarity-driven projection (SemanticEdgeWeight) was retired once the gyre affinity force
+    // reached parity.
+    assert_eq!(registry.len(), 8);
 }
 
 #[test]
@@ -38,10 +39,10 @@ fn filter_by_category_partitions_cleanly() {
     let registry = LayoutRegistry::<Id>::default();
     let positional = registry.filter_by_category(LayoutCategory::Positional);
     let projection = registry.filter_by_category(LayoutCategory::Projection);
-    // 8 Positional (grid, radial, phyllotaxis, timeline, kanban, penrose,
-    // l-system, semantic-embedding), 1 Projection (semantic-edge-weight).
+    // 8 Positional (grid, radial, phyllotaxis, timeline, kanban, penrose, l-system,
+    // semantic-embedding); the Projection category is empty since SemanticEdgeWeight was retired.
     assert_eq!(positional.len(), 8);
-    assert_eq!(projection.len(), 1);
+    assert_eq!(projection.len(), 0);
     assert!(registry.filter_by_category(LayoutCategory::Force).is_empty());
 }
 

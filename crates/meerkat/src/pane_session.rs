@@ -155,6 +155,35 @@ impl PaneSession {
             .map(|r| (r.x, r.y, r.width, r.height))
     }
 
+    /// The caret byte nearest scene point `(x, y)` within `node`'s retained text
+    /// layout — the click-to-place / drag-select primitive, the inverse of
+    /// [`caret_rect`](Self::caret_rect). `(x, y)` are in the chrome's (window) space,
+    /// the same `caret_rect` returns. `None` before the session is built or when the
+    /// node carries no laid-out text. The host maps a pointer event to a byte here,
+    /// then drives [`TextInput::set_caret_byte`](xilem_serval::TextInput::set_caret_byte).
+    pub(crate) fn caret_byte_at_point(
+        &self,
+        dom: &ScriptedDom,
+        node: NodeId,
+        x: f32,
+        y: f32,
+    ) -> Option<usize> {
+        self.layout.caret_byte_at_point(dom, node, x, y)
+    }
+
+    /// The caret byte one visual line up (`delta < 0`) or down (`delta > 0`) from
+    /// `byte` within `node`'s retained text layout, honouring soft-wrap rows — for
+    /// ArrowUp / ArrowDown in a multi-line (textarea) field. `None` when the node
+    /// carries no laid-out text.
+    pub(crate) fn caret_byte_vertical(
+        &self,
+        node: NodeId,
+        byte: usize,
+        delta: isize,
+    ) -> Option<usize> {
+        self.layout.caret_byte_vertical::<ScriptedDom>(node, byte, delta)
+    }
+
     /// The accumulated CSS `translate` of `node` (its own plus its ancestors'), which the
     /// fragment plane omits. Added to a fragment origin, it lands a transform-positioned
     /// element (an orrery node-card) where it actually paints — the same offset the focus

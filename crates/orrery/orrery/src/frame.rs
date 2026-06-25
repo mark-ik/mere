@@ -64,6 +64,18 @@ impl Orrery {
         if self.show_bridge_rings {
             self.ensure_bridges_fresh();
         }
+        // Keep the affinity-clustering force in step with the toggle + the current affinity signal
+        // (installs / rebuilds / clears once per real change, with a settle so it takes; a no-op when
+        // the toggle is off and no force is installed). (Graph signals — P4.)
+        self.sync_affinity_force();
+        // The gloss size-by-importance encoding reads the importance cache; keep it fresh (the
+        // recompute is dirty-gated, so this is cheap when nothing changed). (Graph signals — P6c.)
+        if self.gloss_size_by_importance {
+            self.recompute_importance();
+        }
+        // Refresh the revision-gated weighted-edge memo (cache generalization C), so a per-frame
+        // gloss redraw reads the collapsed edge list instead of re-deduping every frame. (Query memos.)
+        self.refresh_weighted_edges();
         // A dragged node tracks the cursor with zero round-trip: re-pin it locally
         // over whatever the backend just reported (the actor lags a frame behind,
         // and the in-thread snapshot already agrees, so this is a no-op there).

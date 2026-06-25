@@ -51,8 +51,12 @@ pub enum GraphletBinding {
     UnlinkedSession,
     /// Linked to a canonical graphlet spec. Roster updates from graph.
     Linked { spec: GraphletSpec },
-    /// Was linked, but user override created a divergence.
-    Forked {
+    /// Was linked, but a user override created a local divergence — the tear-out
+    /// **branch** operation (a new grouping inside the donor's own graph). Named
+    /// `Branched`, not `Forked`, to stay distinct from the host's **fork** (a new
+    /// session + graph), which is the opposite operation a layer up. (See the tear-out
+    /// operations brief §4.2.)
+    Branched {
         parent_spec: GraphletSpec,
         reason: String,
     },

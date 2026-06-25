@@ -33,7 +33,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use euclid::default::{Box2D, Point2D};
-use gyre::{LayoutSnapshot, LayoutView};
+use gyre::{AffinitySpring, LayoutSnapshot, LayoutView};
 /// The declarative scene catalog, re-exported so hosts (and the standalone bin) can load
 /// a scene by name without depending on `gyre` directly. (Physics scenes P4a.)
 pub use gyre::{
@@ -48,12 +48,22 @@ use serval_layout::IncrementalLayout;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
 
 mod build;
-use build::{build_pool_dom, build_simulation, dark_scene_style, dedup_edges, sample_graph, surface_bg};
+use build::{
+    build_pool_dom, build_simulation, cluster_color, dark_scene_style, dedup_edges,
+    dedup_edges_weighted, sample_graph, surface_bg,
+};
 use paint_list_api::ColorF;
+
+/// Build the gyre [`AffinitySpring`] from a cartography [`AffinityScores`](signals::AffinityScores)
+/// signal: flatten the `((a, b), weight)` pairs into the force's `(a, b, weight)` triples at the
+/// default stiffness / rest length. (Graph signals — P4.)
+fn build_affinity_spring(scores: &signals::AffinityScores) -> AffinitySpring {
+    AffinitySpring::new(scores.pairs.iter().map(|&((a, b), w)| (a, b, w)))
+}
 
 mod types;
 pub use types::{CameraView, Face, NodeShape, NodeState, PointerButton, Viewport};
-pub use signals::ImportanceMetric;
+pub use signals::{BridgeMetric, ImportanceMetric};
 
 mod input;
 mod frame;
@@ -80,6 +90,18 @@ const SIZE_RESETTLE_TICKS: u32 = 90;
 pub const SIZE_TIERS: [f32; 5] = [24.0, 36.0, 56.0, 84.0, 120.0];
 /// Per-tick timestep handed to the gyre simulation.
 const TICK_DT: f32 = 1.0 / 60.0;
+/// Minimum structural-Jaccard similarity for a pair to enter the affinity force. Prunes the
+/// long tail of weakly-similar pairs so the force list stays lean and only meaningful clusters
+/// pull. (Graph signals — P4.)
+const AFFINITY_MIN_SIMILARITY: f32 = 0.1;
+/// Gloss ring radii as multiples of the gloss swatch's node size, and the cluster-halo alpha. The
+/// bridge ring is larger so it reads outside a cluster halo when a broker sits in a community.
+/// (Graph signals — P6b, gloss overlays.)
+const GLOSS_CLUSTER_RING_FACTOR: f32 = 1.7;
+const GLOSS_BRIDGE_RING_FACTOR: f32 = 2.5;
+const GLOSS_CLUSTER_RING_ALPHA: f32 = 0.9;
+/// The bold near-white the gloss bridge ring wears (matches the main-view bridge ring's intent).
+const GLOSS_BRIDGE_RING_RGBA: [f32; 4] = [0.95, 0.96, 1.0, 0.92];
 /// Pixels per wheel line-notch (the host scales `LineDelta` by this before
 /// calling [`Orrery::wheel`]; `wheel` divides back out to recover notches for zoom).
 pub const WHEEL_PAN_SCALE: f32 = 40.0;
@@ -292,6 +314,68 @@ pub struct Orrery {
     /// gated on the revision so it is not redone per frame. (Graph signals — bridges.)
     bridge_cache: Option<signals::BridgeNodes>,
     bridge_cache_revision: u64,
+    /// Which notion of "critical connector" the bridge ring highlights: betweenness brokers (default)
+    /// or articulation points (cut vertices). Changing it invalidates [`bridge_cache`](Self::bridge_cache)
+    /// so the next [`ensure_bridges_fresh`](Self::ensure_bridges_fresh) recomputes under the new
+    /// metric. (Graph signals — bridges / articulation points.)
+    bridge_metric: signals::BridgeMetric,
+    /// Scene toggle: when on, a pairwise **affinity force** (a weighted, attract-only gyre spring
+    /// over structural-Jaccard similarity) runs on top of the force-directed layout, drawing
+    /// structurally-similar nodes into tight clusters ("cluster by affinity"). Default off; only
+    /// visible under force-directed (an analytic strategy overrides the physics snapshot).
+    /// (Graph signals — P4, the affinity force.)
+    cluster_by_affinity: bool,
+    /// The cached affinity signal + the [`Graph::revision`](kernel::graph::Graph::revision) it was
+    /// computed at. Jaccard is cheap (like betweenness at current scale), so it is computed inline,
+    /// revision-gated so it is not redone per frame. (Graph signals — P4.)
+    affinity_cache: Option<signals::AffinityScores>,
+    affinity_cache_revision: u64,
+    /// The graph revision the affinity force currently installed in the sim was built from, or
+    /// `None` when no force is installed. Lets [`sync_affinity_force`](Self::sync_affinity_force)
+    /// rebuild the force only when the signal actually changed (or the toggle flips), not per frame.
+    /// (Graph signals — P4.)
+    installed_affinity_revision: Option<u64>,
+    /// The gloss swatch's own layout strategy id, or `None` to mirror the main view (a minimap).
+    /// `Some` makes the gloss an independent lens (e.g. spectral while the main view is force-
+    /// directed). (Graph signals — P6, the independent gloss projection.)
+    gloss_strategy: Option<String>,
+    /// The gloss lens's cached positions + the `(strategy, graph revision, width, height, community
+    /// rings, bridge rings)` they were computed for, so the host recomputes the gloss arrangement
+    /// only on a real change, not per frame (the gloss may use an expensive layout like spectral).
+    /// The two ring-toggle booleans are part of the key because the gloss's overlays
+    /// ([`gloss_overlays`](Self::gloss_overlays)) ride the same cached projection (P6b): flipping a
+    /// ring toggle changes which overlays the lens carries, so it must re-fetch (rare, so paying a
+    /// spectral recompute on a ring toggle is fine). (Graph signals — P6.)
+    gloss_positions: Option<HashMap<NodeKey, PortablePoint>>,
+    gloss_cache_inputs:
+        Option<(String, u64, u32, u32, bool, bool, Option<Vec<NodeKey>>, Option<NodeKey>)>,
+    /// The gloss lens's signal overlays (community halos + bridge emphasis), captured from the same
+    /// `project_orrery_lens` projection as [`gloss_positions`](Self::gloss_positions) — the overlay
+    /// pipe's first consumer. [`gloss_geometry`](Self::gloss_geometry) resolves them into rings at
+    /// the lens's own positions, so a second lens shows the clusters/brokers under its own layout.
+    /// (Graph signals — P6b, the overlay pipe.)
+    gloss_overlays: Vec<signals::Overlay>,
+    /// Gloss scope: when on, the gloss lens shows only the current **selection** (+ its induced
+    /// edges + the halos over selected members), cropped + auto-refit so the swatch zooms to it. A
+    /// render-time filter on the whole-graph lens — it costs nothing extra and needs no recompute, so
+    /// changing the selection re-crops live. Empty selection falls back to the whole graph. (Graph
+    /// signals — P6c, the independent gloss scope.)
+    gloss_scope_selection: bool,
+    /// Gloss encoding: when on, the gloss lens sizes each node by the **importance** signal (the same
+    /// `node_importance` the main view's size-by-importance reads), independent of the main view's own
+    /// sizing. A render-time factor; the importance cache is ensured fresh in `frame`. (Graph signals
+    /// — P6c, the independent gloss encoding.)
+    gloss_size_by_importance: bool,
+    /// Revision-gated memo of the collapsed, multiplicity-weighted edge topology (the kernel-query
+    /// memo, cache generalization **C**): `dedup_edges_weighted` walks every `relations()` row, and
+    /// the gloss redraws every frame, so without this it re-dedups the whole graph each frame. `frame`
+    /// refreshes it once per structural change; [`gloss_geometry`](Self::gloss_geometry) reads it,
+    /// falling back to a fresh compute when stale (a direct call before the first frame). (Graph
+    /// signals — query memos, C.)
+    weighted_edges_cache: Option<(u64, Vec<(NodeKey, NodeKey, u32)>)>,
+    /// How many times [`refresh_weighted_edges`](Self::refresh_weighted_edges) actually recomputed
+    /// (test introspection for the memo: a static frame must not bump it).
+    weighted_edges_rebuilds: u64,
     /// Scene toggle: when on, a node floats above the ground by its undirected degree
     /// (hubs highest), with a stem to its ground anchor — the isometric "fake height".
     /// Purely visual (the gyre body does not move). Default off. (Isometric camera P3.)
@@ -481,6 +565,19 @@ impl Orrery {
             show_bridge_rings: false,
             bridge_cache: None,
             bridge_cache_revision: 0,
+            bridge_metric: signals::BridgeMetric::default(),
+            cluster_by_affinity: false,
+            affinity_cache: None,
+            affinity_cache_revision: 0,
+            installed_affinity_revision: None,
+            gloss_strategy: None,
+            gloss_positions: None,
+            gloss_cache_inputs: None,
+            gloss_overlays: Vec::new(),
+            gloss_scope_selection: false,
+            gloss_size_by_importance: false,
+            weighted_edges_cache: None,
+            weighted_edges_rebuilds: 0,
             height_by_degree: false,
             marquee: None,
             ctrl: false,
@@ -975,14 +1072,17 @@ impl Orrery {
     #[allow(clippy::type_complexity)]
     pub fn minimap_geometry(
         &self,
-    ) -> (Vec<(uuid::Uuid, (f32, f32), bool)>, Vec<((f32, f32), (f32, f32))>) {
+    ) -> (Vec<(uuid::Uuid, (f32, f32), bool, f32)>, Vec<((f32, f32), (f32, f32), f32)>) {
+        // The mirror minimap draws uniform-size nodes (size factor 1.0) and uniform edges (weight
+        // 1.0); the gloss lens ([`gloss_geometry`](Self::gloss_geometry)) is the path that varies
+        // size by importance and edge thickness by multiplicity.
         let nodes = self
             .view
             .positions()
             .filter_map(|(key, p)| {
                 self.graph
                     .get_node(key)
-                    .map(|node| (node.id, (p.x, p.y), self.selected.contains(&key)))
+                    .map(|node| (node.id, (p.x, p.y), self.selected.contains(&key), 1.0))
             })
             .collect();
         let edges = self
@@ -990,10 +1090,250 @@ impl Orrery {
             .edge_segments()
             .filter_map(|(a, b, pa, pb)| {
                 let pair = if a <= b { (a, b) } else { (b, a) };
-                (!self.hidden_edges.contains(&pair)).then_some(((pa.x, pa.y), (pb.x, pb.y)))
+                (!self.hidden_edges.contains(&pair)).then_some(((pa.x, pa.y), (pb.x, pb.y), 1.0))
             })
             .collect();
         (nodes, edges)
+    }
+
+    /// The gloss swatch geometry built from **arbitrary** node positions (its own lens), rather than
+    /// the live main-view positions [`minimap_geometry`](Self::minimap_geometry) mirrors. Returns the
+    /// nodes (id, position, selected), the edges (de-duplicated, non-hidden relations between
+    /// positioned pairs), and the **rings**: the signal overlays
+    /// ([`gloss_overlays`](Self::gloss_overlays)) resolved to `(center, radius-factor, rgba)` at the
+    /// lens positions (community halos coloured per cluster, bridge emphasis in bold near-white). The
+    /// radius factor is a multiple of the swatch node size the renderer applies. Lets the gloss show
+    /// a different arrangement *and* the cluster/broker structure than the main view. (Graph signals —
+    /// P6 / P6b, the independent gloss projection + the overlay pipe.)
+    #[allow(clippy::type_complexity)]
+    pub fn gloss_geometry(
+        &self,
+        positions: &HashMap<NodeKey, PortablePoint>,
+    ) -> (
+        Vec<(uuid::Uuid, (f32, f32), bool, f32)>,
+        Vec<((f32, f32), (f32, f32), f32)>,
+        Vec<((f32, f32), f32, [f32; 4])>,
+    ) {
+        // Scope (P6c): when on with a non-empty selection, show only the selected nodes (+ induced
+        // edges + halos over selected members), cropped — the swatch auto-refits, zooming to the
+        // selection. A pure render-time filter, so it tracks the selection live. Empty selection or
+        // the toggle off shows the whole lens.
+        let scoped: Option<&HashSet<NodeKey>> =
+            (self.gloss_scope_selection && !self.selected.is_empty()).then_some(&self.selected);
+        let in_scope = |key: &NodeKey| scoped.is_none_or(|s| s.contains(key));
+        // Encoding (P6c): when size-by-importance is on, scale each node by the importance signal
+        // (0..=1) into a 0.7..=1.9 factor, independent of the main view's sizing. The renderer
+        // multiplies the swatch node size by this. Off => uniform 1.0.
+        let size_factor = |key: &NodeKey| -> f32 {
+            if self.gloss_size_by_importance {
+                0.7 + self.node_importance.get(key).copied().unwrap_or(0.0) * 1.2
+            } else {
+                1.0
+            }
+        };
+        let nodes = positions
+            .iter()
+            .filter(|(key, _)| in_scope(key))
+            .filter_map(|(&key, p)| {
+                self.graph.get_node(key).map(|node| {
+                    (node.id, (p.x, p.y), self.selected.contains(&key), size_factor(&key))
+                })
+            })
+            .collect();
+        // Edges carry their multiplicity weight (the number of relations between the pair), so the
+        // gloss draws thicker edges for denser pairs — the same free channel as the main view. The
+        // weighted edge list comes from the revision-gated memo (cache C) when fresh, else a direct
+        // recompute (a call before the first frame). (Graph signals — gloss edge-thickness + memos.)
+        let fresh_edges = self
+            .weighted_edges_cache
+            .as_ref()
+            .filter(|(rev, _)| *rev == self.graph.revision());
+        let fallback_edges;
+        let weighted: &[(NodeKey, NodeKey, u32)] = match fresh_edges {
+            Some((_, edges)) => edges,
+            None => {
+                fallback_edges = dedup_edges_weighted(&self.graph);
+                &fallback_edges
+            }
+        };
+        let edges = weighted
+            .iter()
+            .filter_map(|&(a, b, weight)| {
+                if !in_scope(&a) || !in_scope(&b) {
+                    return None;
+                }
+                let pair = if a <= b { (a, b) } else { (b, a) };
+                if self.hidden_edges.contains(&pair) {
+                    return None;
+                }
+                let pa = positions.get(&a)?;
+                let pb = positions.get(&b)?;
+                Some(((pa.x, pa.y), (pb.x, pb.y), weight as f32))
+            })
+            .collect();
+        // Resolve the stored overlays to rings at the lens positions. Cluster halos enumerate in
+        // cluster order (so the colour index matches the main view); bridge emphasis is the bold
+        // near-white. A node the lens did not place, or one out of scope, is skipped. (Graph
+        // signals — P6b / P6c.)
+        let mut rings: Vec<((f32, f32), f32, [f32; 4])> = Vec::new();
+        let mut cluster_index = 0usize;
+        for overlay in &self.gloss_overlays {
+            match overlay {
+                signals::Overlay::ClusterHalo { members, .. } => {
+                    let c = cluster_color(cluster_index);
+                    cluster_index += 1;
+                    let color = [c.r, c.g, c.b, GLOSS_CLUSTER_RING_ALPHA];
+                    for member in members {
+                        if in_scope(member) {
+                            if let Some(p) = positions.get(member) {
+                                rings.push(((p.x, p.y), GLOSS_CLUSTER_RING_FACTOR, color));
+                            }
+                        }
+                    }
+                }
+                signals::Overlay::BridgeEmphasis { node, .. } => {
+                    if in_scope(node) {
+                        if let Some(p) = positions.get(node) {
+                            rings.push((
+                                (p.x, p.y),
+                                GLOSS_BRIDGE_RING_FACTOR,
+                                GLOSS_BRIDGE_RING_RGBA,
+                            ));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        (nodes, edges, rings)
+    }
+
+    /// The gloss lens's layout strategy, or `None` to mirror the main view. (Graph signals — P6.)
+    pub fn gloss_strategy(&self) -> Option<&str> {
+        self.gloss_strategy.as_deref()
+    }
+
+    /// Set the gloss lens (`Some(strategy_id)` for an independent arrangement, `None` to mirror the
+    /// main view) and invalidate its cache so the next frame recomputes. (Graph signals — P6.)
+    pub fn set_gloss_strategy(&mut self, id: Option<String>) {
+        self.gloss_strategy = id;
+        self.gloss_cache_inputs = None;
+        self.gloss_positions = None;
+        self.gloss_overlays.clear();
+    }
+
+    /// Whether the host must recompute the gloss lens: `true` when a gloss strategy is set and its
+    /// inputs (strategy, graph revision, viewport, **and the ring-toggle states** — they choose which
+    /// overlays the lens carries) differ from the cached ones. `false` when the gloss mirrors the
+    /// main view (no own arrangement). (Graph signals — P6 / P6b.)
+    pub fn gloss_needs_recompute(&self, w: u32, h: u32) -> bool {
+        let Some(id) = &self.gloss_strategy else {
+            return false;
+        };
+        // The by-site kanban groups by URL host — node *content* the structural revision does not
+        // track (a url edit is content, not structure) — so its lens is recomputed every frame
+        // (cheap), the same guard the main-view cache uses. (Graph signals — the layout cache.)
+        if id == "kanban.default" {
+            return true;
+        }
+        // Focus only matters for a focus-driven lens (radial); for every other strategy a selection
+        // change must not invalidate the cached lens. Mirrors the main-view cache.
+        let focus = Self::strategy_uses_focus(id).then(|| self.focused_key()).flatten();
+        match &self.gloss_cache_inputs {
+            Some((sid, rev, sw, sh, rings, bridges, scope, sfocus)) => {
+                sid != id
+                    || *rev != self.graph.revision()
+                    || *sw != w
+                    || *sh != h
+                    || *rings != self.show_community_rings
+                    || *bridges != self.show_bridge_rings
+                    || *scope != self.gloss_scope_keys()
+                    || *sfocus != focus
+            }
+            None => true,
+        }
+    }
+
+    /// The gloss lens's scope: the sorted selection keys when [`gloss_scope_selection`]
+    /// (Self::gloss_scope_selection) is on and the selection is non-empty, else `None` (whole graph).
+    /// The host projects the **induced subgraph** of these keys for the lens, and it is part of the
+    /// gloss cache key, so changing the selection re-lays-out the subgraph. (Graph signals — P6c.)
+    pub fn gloss_scope_keys(&self) -> Option<Vec<NodeKey>> {
+        if self.gloss_scope_selection && !self.selected.is_empty() {
+            let mut keys: Vec<NodeKey> = self.selected.iter().copied().collect();
+            keys.sort();
+            Some(keys)
+        } else {
+            None
+        }
+    }
+
+    /// Store the host-computed gloss lens positions + overlays + record the inputs they were computed
+    /// for, so [`gloss_needs_recompute`](Self::gloss_needs_recompute) returns `false` until one
+    /// changes. The overlays ride the same `project_orrery_lens` projection as the positions (the
+    /// overlay pipe); [`gloss_geometry`](Self::gloss_geometry) resolves them to rings. (Graph signals
+    /// — P6 / P6b.)
+    pub fn set_gloss_positions(
+        &mut self,
+        positions: Vec<(NodeKey, PortablePoint)>,
+        overlays: Vec<signals::Overlay>,
+        w: u32,
+        h: u32,
+    ) {
+        self.gloss_positions = Some(positions.into_iter().collect());
+        self.gloss_overlays = overlays;
+        if let Some(id) = self.gloss_strategy.clone() {
+            let focus = Self::strategy_uses_focus(&id).then(|| self.focused_key()).flatten();
+            self.gloss_cache_inputs = Some((
+                id,
+                self.graph.revision(),
+                w,
+                h,
+                self.show_community_rings,
+                self.show_bridge_rings,
+                self.gloss_scope_keys(),
+                focus,
+            ));
+        }
+    }
+
+    /// The gloss swatch geometry (nodes, edges, rings) from the cached lens positions + overlays
+    /// (all empty until first computed). The host draws this when a gloss strategy is set; otherwise
+    /// it uses [`minimap_geometry`](Self::minimap_geometry). (Graph signals — P6 / P6b.)
+    #[allow(clippy::type_complexity)]
+    pub fn gloss_geometry_cached(
+        &self,
+    ) -> (
+        Vec<(uuid::Uuid, (f32, f32), bool, f32)>,
+        Vec<((f32, f32), (f32, f32), f32)>,
+        Vec<((f32, f32), f32, [f32; 4])>,
+    ) {
+        match &self.gloss_positions {
+            Some(positions) => self.gloss_geometry(positions),
+            None => (Vec::new(), Vec::new(), Vec::new()),
+        }
+    }
+
+    /// Toggle the gloss **scope**: when on, the gloss lens crops to the current selection (+ induced
+    /// edges), zooming the swatch to it; empty selection shows the whole graph. (Graph signals — P6c.)
+    pub fn set_gloss_scope_selection(&mut self, on: bool) {
+        self.gloss_scope_selection = on;
+    }
+
+    /// Whether the gloss lens is scoped to the selection. (Graph signals — P6c.)
+    pub fn gloss_scope_selection(&self) -> bool {
+        self.gloss_scope_selection
+    }
+
+    /// Toggle the gloss **encoding**: when on, the gloss lens sizes nodes by the importance signal,
+    /// independent of the main view's sizing. (Graph signals — P6c.)
+    pub fn set_gloss_size_by_importance(&mut self, on: bool) {
+        self.gloss_size_by_importance = on;
+    }
+
+    /// Whether the gloss lens sizes nodes by importance. (Graph signals — P6c.)
+    pub fn gloss_size_by_importance(&self) -> bool {
+        self.gloss_size_by_importance
     }
 
     /// The Cartography projection geometry: each member's current world position,
@@ -1047,6 +1387,23 @@ impl Orrery {
     /// graph. `None` for a node the view has not placed. (Position gut.)
     pub fn node_position(&self, key: NodeKey) -> Option<PortablePoint> {
         self.view.position_of(key).map(|p| PortablePoint::new(p.x, p.y))
+    }
+
+    /// Write the live physics positions back into the graph's node records (their
+    /// projected position), so a clone or snapshot of the graph reflects the current
+    /// on-screen layout rather than the spawn seed. The graph's own node positions are
+    /// only the initial seed; physics owns the live layout in `view`. A tear-out
+    /// **fork** calls this on the donor before cloning, so the fork opens with the
+    /// donor's layout instead of every node piled at the seed. (Tear-out gestures G4.)
+    pub fn commit_positions_to_graph(&mut self) {
+        let positions: Vec<(NodeKey, Point2D<f32>)> = self
+            .graph
+            .nodes()
+            .filter_map(|(key, _)| self.view.position_of(key).map(|p| (key, p)))
+            .collect();
+        for (key, pos) in positions {
+            self.graph.set_node_projected_position(key, pos);
+        }
     }
 
     /// A node's render color, matching the on-screen tile's class palette: orange when
@@ -1430,7 +1787,11 @@ impl Orrery {
             self.importance_dirty = true; // force a fresh compute on enable
             self.recompute_importance();
         } else {
+            // Clear the cache, but mark it dirty (not clean-empty): the **gloss** size-by-importance
+            // encoding may still read it, and `recompute_importance` only repopulates a dirty cache —
+            // a clean-empty map would silently render every gloss node at the uniform floor factor.
             self.node_importance.clear();
+            self.importance_dirty = true;
         }
         self.resettle_for_size();
     }
@@ -2072,21 +2433,117 @@ impl Orrery {
         self.show_bridge_rings
     }
 
-    /// Recompute the bridge set if stale for the current graph revision. Betweenness is cheap, so
-    /// this stays inline (no off-thread lane); the revision gate avoids the per-frame redo. A node
-    /// with at least half the top broker's betweenness counts as a bridge. (Graph signals — bridges.)
+    /// The bridge metric (betweenness brokers vs articulation / cut vertices). (Graph signals.)
+    pub fn bridge_metric(&self) -> signals::BridgeMetric {
+        self.bridge_metric
+    }
+
+    /// Choose the bridge metric. Invalidates the bridge cache so the next
+    /// [`ensure_bridges_fresh`](Self::ensure_bridges_fresh) recomputes under the new metric (the
+    /// graph revision may not have moved). (Graph signals — bridges / articulation points.)
+    pub fn set_bridge_metric(&mut self, metric: signals::BridgeMetric) {
+        if self.bridge_metric != metric {
+            self.bridge_metric = metric;
+            self.bridge_cache = None;
+        }
+    }
+
+    /// Recompute the bridge set if stale for the current graph revision, under the chosen metric
+    /// (betweenness brokers, thresholded; or articulation points). Both are cheap (O(V·E) /
+    /// O(V+E)), so this stays inline (no off-thread lane); the revision gate avoids the per-frame
+    /// redo, and [`set_bridge_metric`](Self::set_bridge_metric) clears the cache on a metric change.
+    /// (Graph signals — bridges.)
     pub(crate) fn ensure_bridges_fresh(&mut self) {
         let revision = self.graph.revision();
         if self.bridge_cache.is_some() && self.bridge_cache_revision == revision {
             return;
         }
-        self.bridge_cache = Some(signals::bridge_nodes(&self.graph, 0.5));
+        self.bridge_cache = Some(signals::bridges(&self.graph, self.bridge_metric, 0.5));
         self.bridge_cache_revision = revision;
     }
 
     /// The cached bridge set, if computed. (Graph signals — bridges.)
     pub fn bridges(&self) -> Option<&signals::BridgeNodes> {
         self.bridge_cache.as_ref()
+    }
+
+    /// Refresh the revision-gated weighted-edge memo (cache generalization C): recompute the
+    /// collapsed multiplicity-weighted edge list only when the graph structure changed since it was
+    /// last built, so the per-frame gloss redraw reads it instead of re-deduping `relations()` every
+    /// frame. Called from [`frame`](Self::frame). (Graph signals — query memos.)
+    fn refresh_weighted_edges(&mut self) {
+        let revision = self.graph.revision();
+        if self.weighted_edges_cache.as_ref().is_none_or(|(r, _)| *r != revision) {
+            self.weighted_edges_cache = Some((revision, dedup_edges_weighted(&self.graph)));
+            self.weighted_edges_rebuilds += 1;
+        }
+    }
+
+    /// How many times the weighted-edge memo recomputed (test introspection: a static frame must not
+    /// bump it). (Graph signals — query memos, C.)
+    #[cfg(test)]
+    pub(crate) fn weighted_edges_rebuilds(&self) -> u64 {
+        self.weighted_edges_rebuilds
+    }
+
+    /// Toggle the **affinity force**: a weighted, attract-only gyre spring over structural-Jaccard
+    /// similarity, drawing structurally-similar nodes into clusters on top of the force-directed
+    /// layout ("cluster by affinity"). The force is (un)installed on the next [`frame`](Self::frame)
+    /// via [`sync_affinity_force`](Self::sync_affinity_force), with a settle so the change takes.
+    /// (Graph signals — P4.)
+    pub fn set_cluster_by_affinity(&mut self, on: bool) {
+        self.cluster_by_affinity = on;
+    }
+
+    /// Whether the affinity-clustering force is on. (Graph signals — P4.)
+    pub fn cluster_by_affinity(&self) -> bool {
+        self.cluster_by_affinity
+    }
+
+    /// The number of affinity pairs in the live affinity force (`0` when off). Test introspection
+    /// for the P4 wiring (inline backend). (Graph signals — P4.)
+    #[cfg(test)]
+    pub(crate) fn affinity_pair_count(&self) -> usize {
+        self.physics.affinity_pair_count()
+    }
+
+    /// Recompute the affinity signal if stale for the current graph revision. Jaccard is cheap (like
+    /// betweenness at current scale), so this stays inline; the revision gate avoids the per-frame
+    /// redo. (Graph signals — P4.)
+    pub(crate) fn ensure_affinity_fresh(&mut self) {
+        let revision = self.graph.revision();
+        if self.affinity_cache.is_some() && self.affinity_cache_revision == revision {
+            return;
+        }
+        self.affinity_cache =
+            Some(signals::structural_affinity(&self.graph, AFFINITY_MIN_SIMILARITY));
+        self.affinity_cache_revision = revision;
+    }
+
+    /// Install / refresh / clear the affinity force to match the toggle + the current signal, once
+    /// per real change (not per frame). Called from [`frame`](Self::frame). When on, recompute the
+    /// signal if stale and (re)install the force only when the graph revision moved since the live
+    /// force was built; when off, clear it once. Each install/clear is followed by a settle so the
+    /// new equilibrium takes. (Graph signals — P4.)
+    fn sync_affinity_force(&mut self) {
+        if self.cluster_by_affinity {
+            self.ensure_affinity_fresh();
+            let revision = self.graph.revision();
+            if self.installed_affinity_revision != Some(revision) {
+                let force = self
+                    .affinity_cache
+                    .as_ref()
+                    .map(build_affinity_spring)
+                    .filter(|f| !f.is_empty());
+                self.physics.set_affinity_force(force);
+                self.physics.settle(SETTLE_TICKS / 2);
+                self.installed_affinity_revision = Some(revision);
+            }
+        } else if self.installed_affinity_revision.is_some() {
+            self.physics.set_affinity_force(None);
+            self.physics.settle(SETTLE_TICKS / 2);
+            self.installed_affinity_revision = None;
+        }
     }
 
     /// Overlay the buffered strategy positions onto `view` — called by

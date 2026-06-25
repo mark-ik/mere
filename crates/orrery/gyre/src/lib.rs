@@ -72,6 +72,14 @@ pub use barnes_hut::{BarnesHutConfig, BarnesHutRepulsion, repulsion_forces};
 pub mod coupling_force;
 pub use coupling_force::CouplingForce;
 
+/// The pairwise **affinity** force: a weighted, attract-only spring over a
+/// `(a, b, weight)` signal that clusters structurally-similar nodes ("cluster by
+/// affinity" on force-directed). (Graph signals — P4.)
+pub mod affinity_force;
+pub use affinity_force::{
+    AffinitySpring, DEFAULT_AFFINITY_REST_LENGTH, DEFAULT_AFFINITY_STIFFNESS,
+};
+
 /// Position-Based Fluids (PBF): our own small SPH liquid for the orrery (salva lags rapier badly,
 /// so we roll our own). The solver lives here; its seam onto the rigid world (loading + the two-way
 /// coupling) is [`Simulation`]'s fluid tier in [`fluid_coupling`]. (Physics scenes P4c.)
@@ -235,6 +243,12 @@ pub struct Simulation {
     /// [`set_coupling_forces`](Self::set_coupling_forces). (Field regions —
     /// rebuild-on-mutation.)
     coupling_forces: Vec<CouplingForce>,
+    /// The pairwise **affinity** force, if installed: a weighted attract-only spring that clusters
+    /// structurally-similar nodes ("cluster by affinity"). Like the couplings it is a snapshot —
+    /// the host rebuilds it wholesale via [`set_affinity_force`](Self::set_affinity_force) when the
+    /// affinity signal recomputes — and it applies in the same reset window as the built-ins.
+    /// `None` = off (the default). (Graph signals — P4.)
+    affinity_force: Option<AffinitySpring>,
     /// Linear damping applied to every node body — runtime-tunable (the "inertia"
     /// the physics settings expose): lower keeps more drift after a settle, higher
     /// brings nodes to rest sooner. New bodies take this; [`set_linear_damping`]
@@ -303,6 +317,7 @@ impl Simulation {
             edges: Vec::new(),
             forces: Vec::new(),
             coupling_forces: Vec::new(),
+            affinity_force: None,
             linear_damping: DEFAULT_LINEAR_DAMPING,
             scene_bodies: HashMap::new(),
             scene_sprites: HashMap::new(),
@@ -352,6 +367,19 @@ impl Simulation {
     /// Number of field-coupling forces currently applied.
     pub fn coupling_force_count(&self) -> usize {
         self.coupling_forces.len()
+    }
+
+    /// Install (or clear, with `None`) the pairwise **affinity** force wholesale — the rebuild a
+    /// fresh affinity signal triggers. Position-preserving (forces never touch body state), so
+    /// swapping it leaves the layout exactly where it is; the host follows with a `settle` to let
+    /// the new equilibrium take. (Graph signals — P4.)
+    pub fn set_affinity_force(&mut self, force: Option<AffinitySpring>) {
+        self.affinity_force = force;
+    }
+
+    /// Number of affinity pairs the installed affinity force pulls along (`0` when none is set).
+    pub fn affinity_pair_count(&self) -> usize {
+        self.affinity_force.as_ref().map_or(0, AffinitySpring::pair_count)
     }
 
     /// A rapier-free [`LayoutView`] over the current layout: the live positions,
@@ -434,7 +462,11 @@ impl Simulation {
         // steps until reset), so clear last tick's force forces before this
         // tick's forces set fresh ones. Without this, per-tick forces compound
         // and the layout goes unstable.
-        if !self.forces.is_empty() || !self.coupling_forces.is_empty() || self.scene_field.is_some() {
+        if !self.forces.is_empty()
+            || !self.coupling_forces.is_empty()
+            || self.affinity_force.is_some()
+            || self.scene_field.is_some()
+        {
             for (_, body) in self.bodies.iter_mut() {
                 body.reset_forces(false);
             }
@@ -450,6 +482,11 @@ impl Simulation {
             }
             // Field couplings apply after the built-ins, in the same reset window.
             for force in &self.coupling_forces {
+                force.apply(&mut ctx, dt);
+            }
+            // The affinity force (if installed) applies last, over the same context — a weighted
+            // clustering pull on top of the topology springs. (Graph signals — P4.)
+            if let Some(force) = &self.affinity_force {
                 force.apply(&mut ctx, dt);
             }
         }

@@ -416,7 +416,45 @@ impl WindowCtx<'_> {
                             self.chrome_click(x, y);
                         } else if let Some(b) = orrery_button {
                             let (ox, oy) = self.orrery_point(x, y);
-                            if !self.point_over_card(x, y) && self.orrery_mut().pointer_down(b, ox, oy) {
+                            // GA-1 (tear-out G1): a Shift-held left-press on a node arms a
+                            // tear-out drag instead of the orrery's node-pin pick, so the
+                            // modifier-drag never steals the pin. (Shift = branch, Ctrl+Shift
+                            // = fork at release — slice 2; v0 spawns a leaf carrying the node.)
+                            // Requires a node under the cursor; an empty Shift-press falls
+                            // through to the orrery (marquee). (Tear-out gestures.)
+                            let tear_node = (button == MouseButton::Left
+                                && self.view.modifiers.shift
+                                && !self.point_over_card(x, y))
+                            .then(|| self.orrery().node_at_screen(ox, oy))
+                            .flatten();
+                            if let Some(node) = tear_node {
+                                // Resolve the node's display label for the drag ghost (GA-5).
+                                let label = {
+                                    let graph = self.orrery().graph();
+                                    graph
+                                        .get_node_by_id(node)
+                                        .map(|(key, _)| graph.node_display_label(key))
+                                        .unwrap_or_default()
+                                };
+                                // The modifier fixes the operation at press (GA-1):
+                                // Ctrl+Shift = fork, plain Shift = branch.
+                                let op = if self.view.modifiers.ctrl {
+                                    crate::window_view::TearOp::Fork
+                                } else {
+                                    crate::window_view::TearOp::Branch
+                                };
+                                self.view.tear_out_drag =
+                                    Some(crate::window_view::TearOutDrag {
+                                        node,
+                                        source_graph: self.view.focused_graph,
+                                        op,
+                                        origin: (x, y),
+                                    });
+                                self.view.chrome_update(|c| c.tear_ghost = Some(label));
+                                self.view.request_redraw();
+                            } else if !self.point_over_card(x, y)
+                                && self.orrery_mut().pointer_down(b, ox, oy)
+                            {
                                 self.view.request_redraw();
                             }
                         }
@@ -424,6 +462,51 @@ impl WindowCtx<'_> {
                 }
             }
             ElementState::Released => {
+                // A tear-out drag (G1): a Shift-drag of a node past the slop tears it out
+                // into a new leaf window (queued; the registry op runs after the ctx borrow
+                // ends). A non-moved press (a Shift-click that never dragged) just clears.
+                // Handled first, like the other drags below. (Tear-out gestures.)
+                if let Some(drag) = self.view.tear_out_drag.take() {
+                    const TEAR_SLOP: f32 = 6.0;
+                    let moved = (self.view.cursor.0 - drag.origin.0)
+                        .hypot(self.view.cursor.1 - drag.origin.1)
+                        > TEAR_SLOP;
+                    if moved {
+                        // Drop-target grammar (OQ-1): a drop on an orrery pane of a
+                        // DIFFERENT graph is a cross-graph copy (G5); anything else (the
+                        // source pane, chrome, off-window) tears into a new leaf window.
+                        let dest = self
+                            .orrery_pane_at(self.view.cursor.0, self.view.cursor.1)
+                            .map(|(gid, _)| gid)
+                            .filter(|&gid| gid != drag.source_graph);
+                        let cmd = match dest {
+                            // Cross-graph copy (G5): dropped on a different graph's pane.
+                            Some(to) => super::ShellCommand::CopyNodeAcross {
+                                node: drag.node,
+                                from: drag.source_graph,
+                                to,
+                            },
+                            // Tear axis: the operation was fixed at press by the modifier.
+                            // Fork mints an independent session + graph snapshot; branch is
+                            // a leaf for now (its forme graphlet wiring is OQ-7 / G3).
+                            None => match drag.op {
+                                crate::window_view::TearOp::Fork => {
+                                    super::ShellCommand::ForkNode {
+                                        node: drag.node,
+                                        from: drag.source_graph,
+                                    }
+                                }
+                                crate::window_view::TearOp::Branch => {
+                                    super::ShellCommand::TearOut { node: drag.node }
+                                }
+                            },
+                        };
+                        self.commands.push(cmd);
+                    }
+                    self.view.chrome_update(|c| c.tear_ghost = None);
+                    self.view.request_redraw();
+                    return;
+                }
                 // End an in-progress swatch vertex drag before any other release routing. The
                 // collider was reshaped live on each move, so the release only clears the
                 // gesture — but it must clear FIRST: a release that lands on a scrying tile (or
@@ -1328,6 +1411,40 @@ impl WindowCtx<'_> {
             "orrery:bridgerings" => {
                 let on = !self.orrery().show_bridge_rings();
                 self.orrery_mut().set_show_bridge_rings(on);
+                self.view.request_redraw();
+            }
+            "orrery:bridge:betweenness" => {
+                self.orrery_mut().set_bridge_metric(orrery::BridgeMetric::Betweenness);
+                self.view.request_redraw();
+            }
+            "orrery:bridge:articulation" => {
+                self.orrery_mut().set_bridge_metric(orrery::BridgeMetric::Articulation);
+                self.view.request_redraw();
+            }
+            "orrery:glossscope" => {
+                // Crop the gloss lens to the current selection (P6c, gloss scope).
+                let on = !self.orrery().gloss_scope_selection();
+                self.orrery_mut().set_gloss_scope_selection(on);
+                self.view.request_redraw();
+            }
+            "orrery:glosssize" => {
+                // Size the gloss lens's nodes by the importance signal (P6c, gloss encoding).
+                let on = !self.orrery().gloss_size_by_importance();
+                self.orrery_mut().set_gloss_size_by_importance(on);
+                self.view.request_redraw();
+            }
+            k if k.starts_with("orrery:gloss:") => {
+                // The gloss lens-picker: an empty id mirrors the main view (a minimap); a strategy id
+                // makes the gloss an independent lens. (Graph signals — P6 / P6b.)
+                let id = &k["orrery:gloss:".len()..];
+                let next = (!id.is_empty()).then(|| id.to_string());
+                self.orrery_mut().set_gloss_strategy(next);
+                self.view.request_redraw();
+            }
+            "orrery:affinity" => {
+                // Toggle the affinity-clustering force (cluster structurally-similar nodes).
+                let on = !self.orrery().cluster_by_affinity();
+                self.orrery_mut().set_cluster_by_affinity(on);
                 self.view.request_redraw();
             }
             "orrery:mirror" => self.toggle_mirror_tiles(),

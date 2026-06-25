@@ -19,7 +19,7 @@ use std::collections::{HashMap, VecDeque};
 use cartography::{ImportanceWeights, IntelligenceSignals};
 use kernel::graph::{Graph, NodeKey};
 
-pub use cartography::{BridgeNodes, Cluster, ClusterSet};
+pub use cartography::{AffinityScores, BridgeNodes, Cluster, ClusterSet, Overlay};
 
 /// Which graph-structural metric drives a node's **importance** weight. `Degree` is the cheap,
 /// synchronous default (connection count); `Betweenness` is the structural broker metric (how
@@ -179,6 +179,132 @@ pub fn bridge_nodes(graph: &Graph, threshold: f32) -> BridgeNodes {
     BridgeNodes { bridges }
 }
 
+/// Which notion of "critical connector" the bridge ring highlights. `Betweenness` is the *broker*
+/// (a node on many shortest paths — high traffic); `Articulation` is the *cut vertex* (a node whose
+/// removal disconnects part of the graph — single point of failure). They overlap but differ: a hub
+/// inside a dense cluster can have high betweenness yet not be a cut vertex, and a low-degree node
+/// joining two blobs is a cut vertex with modest betweenness. (Graph signals — bridges.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum BridgeMetric {
+    /// Betweenness brokers (thresholded normalized betweenness). The default.
+    #[default]
+    Betweenness,
+    /// Articulation points (cut vertices), via Tarjan / Hopcroft–Tarjan low-link DFS.
+    Articulation,
+}
+
+impl BridgeMetric {
+    /// The persisted string code for the cartography sidecar. (Graph signals — bridge persistence.)
+    pub fn as_code(self) -> &'static str {
+        match self {
+            BridgeMetric::Betweenness => "betweenness",
+            BridgeMetric::Articulation => "articulation",
+        }
+    }
+
+    /// Parse a persisted code, defaulting to [`Betweenness`](BridgeMetric::Betweenness).
+    pub fn from_code(code: &str) -> Self {
+        match code {
+            "articulation" => BridgeMetric::Articulation,
+            _ => BridgeMetric::Betweenness,
+        }
+    }
+}
+
+/// The graph's bridge nodes under the chosen `metric`: betweenness brokers (thresholded) or
+/// articulation points. The single entry the host reads; the metric is a per-scene choice (the
+/// `threshold` only applies to betweenness — articulation is binary). (Graph signals — bridges.)
+pub fn bridges(graph: &Graph, metric: BridgeMetric, threshold: f32) -> BridgeNodes {
+    match metric {
+        BridgeMetric::Betweenness => bridge_nodes(graph, threshold),
+        BridgeMetric::Articulation => articulation_points(graph),
+    }
+}
+
+/// The graph's **articulation points** (cut vertices): the nodes whose removal increases the number
+/// of connected components — each is a single point of failure joining parts of the graph that would
+/// otherwise fall apart. Computed by the standard low-link DFS (Hopcroft–Tarjan), run **iteratively**
+/// so a deep graph cannot overflow the stack, over the distinct undirected adjacency (parallel edges
+/// collapsed, self-loops dropped). A 2-connected graph (a clique, a cycle) has none; a tree's
+/// internal nodes are all articulation points. Returned in the `BridgeNodes` node-list contract, in
+/// ascending key order. (Graph signals — bridges / articulation points.)
+pub fn articulation_points(graph: &Graph) -> BridgeNodes {
+    let nodes: Vec<NodeKey> = graph.nodes().map(|(k, _)| k).collect();
+    let index: HashMap<NodeKey, usize> =
+        nodes.iter().enumerate().map(|(i, &k)| (k, i)).collect();
+    let n = nodes.len();
+    // Distinct undirected adjacency as indices (dedup parallel edges, drop self-loops).
+    let adj: Vec<Vec<usize>> = nodes
+        .iter()
+        .map(|&v| {
+            let mut ns: Vec<usize> = graph
+                .neighbors_undirected(v)
+                .filter(|&w| w != v)
+                .filter_map(|w| index.get(&w).copied())
+                .collect();
+            ns.sort_unstable();
+            ns.dedup();
+            ns
+        })
+        .collect();
+
+    const UNVISITED: usize = usize::MAX;
+    let mut disc = vec![UNVISITED; n]; // discovery time
+    let mut low = vec![0usize; n]; // lowest discovery reachable
+    let mut is_ap = vec![false; n];
+    let mut timer = 0usize;
+
+    for s in 0..n {
+        if disc[s] != UNVISITED {
+            continue;
+        }
+        // Iterative DFS: each stack frame is `(node, parent-or-NONE, next-neighbour-index)`.
+        let mut root_children = 0usize;
+        disc[s] = timer;
+        low[s] = timer;
+        timer += 1;
+        let mut stack: Vec<(usize, usize, usize)> = vec![(s, UNVISITED, 0)];
+        while let Some(&(u, parent, i)) = stack.last() {
+            if i < adj[u].len() {
+                stack.last_mut().expect("stack non-empty in this branch").2 += 1;
+                let v = adj[u][i];
+                if v == parent {
+                    continue; // skip the single tree edge back to the parent
+                }
+                if disc[v] == UNVISITED {
+                    disc[v] = timer;
+                    low[v] = timer;
+                    timer += 1;
+                    if u == s {
+                        root_children += 1;
+                    }
+                    stack.push((v, u, 0));
+                } else {
+                    // Back edge u -> v: u can reach v's discovery time.
+                    low[u] = low[u].min(disc[v]);
+                }
+            } else {
+                // Finished u: fold its low into its parent and test the parent (non-root) for the
+                // articulation condition `low[child] >= disc[parent]`.
+                stack.pop();
+                if parent != UNVISITED {
+                    low[parent] = low[parent].min(low[u]);
+                    if parent != s && low[u] >= disc[parent] {
+                        is_ap[parent] = true;
+                    }
+                }
+            }
+        }
+        // The DFS root is an articulation point iff it has more than one DFS-tree child.
+        if root_children > 1 {
+            is_ap[s] = true;
+        }
+    }
+
+    let bridges = (0..n).filter(|&i| is_ap[i]).map(|i| nodes[i]).collect();
+    BridgeNodes { bridges }
+}
+
 /// A `Send` snapshot of the graph structure community detection needs — the node set and the
 /// parallel-edge-collapsed weighted undirected adjacency (index-based), self-loops dropped. Built
 /// on the owner's thread by [`from_graph`](CommunitySnapshot::from_graph); the heavy Louvain
@@ -225,43 +351,22 @@ impl CommunitySnapshot {
     }
 }
 
-/// Single-level **Louvain** modularity optimization on a [`CommunitySnapshot`]: each node starts in
-/// its own community and repeatedly moves to the neighbouring community that most increases
-/// modularity, until no move improves it. Returns a `ClusterSet` partition (every node lands in
-/// exactly one cluster; an isolated node is its own singleton). The compute half — independent of
-/// the `Graph`, so it runs inline or on a background worker.
-///
-/// This is the genuinely *expensive*-class structural signal — the one the background cache exists
-/// to carry — though it is still fast at current graph scale. True multi-level (hierarchical)
-/// Louvain with community aggregation is a later refinement; single-level already yields a real
-/// partition on clustered graphs and shares this contract, so the upgrade is internal. (Graph
-/// signals — community detection, P3.)
-pub fn community_louvain_on_snapshot(snapshot: &CommunitySnapshot) -> ClusterSet {
-    let nodes = &snapshot.nodes;
-    let adj = &snapshot.adjacency;
-    let n = nodes.len();
-    if n == 0 {
-        return ClusterSet::default();
-    }
-    let k: Vec<f64> = adj.iter().map(|row| row.iter().map(|&(_, w)| w).sum()).collect();
-    let two_m: f64 = k.iter().sum(); // = 2m (each undirected edge counted from both ends)
+/// One pass of Louvain **local moving** on a weighted graph with self-loops: each node starts in its
+/// own community and repeatedly moves to the neighbouring community of greatest modularity gain until
+/// no move improves it. `adj[i]` is the inter-node adjacency (no self-loops); `self_loops[i]` is i's
+/// self-loop weight (intra-community weight folded in at a coarser level). Returns `comm[i]` = i's
+/// community. Candidates are visited in sorted order so a modularity tie breaks deterministically.
+fn louvain_local_moving(adj: &[Vec<(usize, f64)>], self_loops: &[f64]) -> Vec<usize> {
+    let n = adj.len();
+    // Degree k[i] = incident inter-node weight + 2× the self-loop (an undirected self-loop touches
+    // the node at both ends), so the modularity is preserved across aggregation levels.
+    let k: Vec<f64> = (0..n)
+        .map(|i| adj[i].iter().map(|&(_, w)| w).sum::<f64>() + 2.0 * self_loops[i])
+        .collect();
+    let two_m: f64 = k.iter().sum();
     if two_m == 0.0 {
-        // No edges: every node is its own singleton community.
-        return ClusterSet {
-            clusters: nodes
-                .iter()
-                .enumerate()
-                .map(|(i, &key)| Cluster {
-                    id: format!("c{i}"),
-                    label: None,
-                    members: vec![key],
-                    confidence: 1.0,
-                })
-                .collect(),
-        };
+        return (0..n).collect(); // no edges: every node its own community
     }
-
-    // Local moving: comm[i] is i's community; sigma_tot[c] is the summed degree of community c.
     let mut comm: Vec<usize> = (0..n).collect();
     let mut sigma_tot: Vec<f64> = k.clone();
     loop {
@@ -269,18 +374,15 @@ pub fn community_louvain_on_snapshot(snapshot: &CommunitySnapshot) -> ClusterSet
         for i in 0..n {
             let ci = comm[i];
             let ki = k[i];
-            // Tentatively pull i out of its community.
-            sigma_tot[ci] -= ki;
-            // Weight from i into each neighbouring community.
+            sigma_tot[ci] -= ki; // tentatively pull i out of its community
+            // Weight from i into each neighbouring community (the self-loop is not an inter-node
+            // edge, so it never contributes to a move-target weight).
             let mut neigh_w: HashMap<usize, f64> = HashMap::new();
             for &(j, w) in &adj[i] {
-                *neigh_w.entry(comm[j]).or_insert(0.0) += w;
+                if j != i {
+                    *neigh_w.entry(comm[j]).or_insert(0.0) += w;
+                }
             }
-            // Pick the community maximizing the modularity gain `w_ic - sigma_tot[c]*k_i/2m`;
-            // the baseline is returning to `ci`, so i only moves on a strict improvement. Iterate
-            // the candidates in sorted order (not HashMap order) so a modularity tie breaks
-            // deterministically — the partition (and the community-ring colours) is then
-            // reproducible across runs, not hash-seed-dependent.
             let mut candidates: Vec<usize> = neigh_w.keys().copied().collect();
             candidates.sort_unstable();
             let mut best_c = ci;
@@ -302,16 +404,122 @@ pub fn community_louvain_on_snapshot(snapshot: &CommunitySnapshot) -> ClusterSet
             break;
         }
     }
+    comm
+}
 
-    // Compact the surviving community ids (first-seen order) into a `ClusterSet`.
+/// Compact `comm` (arbitrary community ids) to a dense `0..num` in first-seen order, returning the
+/// remapped vector and the community count. (Deterministic: first-seen over the node order.)
+fn compact_communities(comm: &[usize]) -> (Vec<usize>, usize) {
     let mut remap: HashMap<usize, usize> = HashMap::new();
-    let mut members: Vec<Vec<NodeKey>> = Vec::new();
-    for i in 0..n {
-        let idx = *remap.entry(comm[i]).or_insert_with(|| {
-            members.push(Vec::new());
-            members.len() - 1
-        });
-        members[idx].push(nodes[i]);
+    let compact: Vec<usize> = comm
+        .iter()
+        .map(|&c| {
+            let next = remap.len();
+            *remap.entry(c).or_insert(next)
+        })
+        .collect();
+    (compact, remap.len())
+}
+
+/// **Aggregate** a graph by community: each community `c` (dense id in `0..num_comms`) becomes one
+/// super-node. Inter-community edges sum into the new adjacency; intra-community edges and the prior
+/// self-loops fold into the new self-loop. This preserves total degree (and hence modularity), so
+/// re-running local moving on the result is the next Louvain level. Returns `(new_adj, new_self)`.
+fn louvain_aggregate(
+    adj: &[Vec<(usize, f64)>],
+    self_loops: &[f64],
+    comm: &[usize],
+    num_comms: usize,
+) -> (Vec<Vec<(usize, f64)>>, Vec<f64>) {
+    let mut new_adj: Vec<HashMap<usize, f64>> = vec![HashMap::new(); num_comms];
+    let mut new_self = vec![0.0_f64; num_comms];
+    // Prior self-loops stay intra at the coarser level.
+    for (i, &w) in self_loops.iter().enumerate() {
+        new_self[comm[i]] += w;
+    }
+    for (i, row) in adj.iter().enumerate() {
+        let ci = comm[i];
+        for &(j, w) in row {
+            let cj = comm[j];
+            if ci == cj {
+                // Intra-community edge -> self-loop. Each undirected edge appears twice in the
+                // adjacency (i->j and j->i), so add w/2 each time to total the edge weight once.
+                new_self[ci] += w / 2.0;
+            } else {
+                *new_adj[ci].entry(cj).or_insert(0.0) += w;
+            }
+        }
+    }
+    let new_adj = new_adj
+        .into_iter()
+        .map(|row| {
+            let mut row: Vec<(usize, f64)> = row.into_iter().collect();
+            row.sort_unstable_by_key(|&(j, _)| j);
+            row
+        })
+        .collect();
+    (new_adj, new_self)
+}
+
+/// **Multi-level (hierarchical) Louvain** modularity optimization on a [`CommunitySnapshot`]: run
+/// local moving, then *aggregate* each community into a super-node and repeat, until a pass no longer
+/// coarsens the graph. Each level escapes the resolution where single-level local moving stalls, so
+/// the partition is at least as good (and usually better) than one pass. Returns a flat `ClusterSet`
+/// over the original nodes (every node in exactly one cluster; an isolated node is its own
+/// singleton). Deterministic (sorted tie-breaks + first-seen compaction) and `Graph`-independent, so
+/// it runs inline or on the background worker. (Graph signals — community detection, P3 + multi-level.)
+pub fn community_louvain_on_snapshot(snapshot: &CommunitySnapshot) -> ClusterSet {
+    let nodes = &snapshot.nodes;
+    let n = nodes.len();
+    if n == 0 {
+        return ClusterSet::default();
+    }
+    // No edges at all: every node is its own singleton community (no level can merge them).
+    let total_weight: f64 =
+        snapshot.adjacency.iter().map(|row| row.iter().map(|&(_, w)| w).sum::<f64>()).sum();
+    if total_weight == 0.0 {
+        return ClusterSet {
+            clusters: nodes
+                .iter()
+                .enumerate()
+                .map(|(i, &key)| Cluster {
+                    id: format!("c{i}"),
+                    label: None,
+                    members: vec![key],
+                    confidence: 1.0,
+                })
+                .collect(),
+        };
+    }
+
+    // The working graph for the current level; level 0 is the original nodes with no self-loops.
+    let mut adj: Vec<Vec<(usize, f64)>> = snapshot.adjacency.clone();
+    let mut self_loops: Vec<f64> = vec![0.0; n];
+    // `super_of[orig]` = the current-level super-node each original node belongs to.
+    let mut super_of: Vec<usize> = (0..n).collect();
+
+    loop {
+        let comm = louvain_local_moving(&adj, &self_loops);
+        let (compact, num_comms) = compact_communities(&comm);
+        // Carry every original node through this level's merge.
+        for s in super_of.iter_mut() {
+            *s = compact[*s];
+        }
+        // A pass that did not coarsen the graph (each super-node its own community) has converged;
+        // a single surviving community cannot coarsen further either.
+        if num_comms == adj.len() || num_comms == 1 {
+            break;
+        }
+        let (new_adj, new_self) = louvain_aggregate(&adj, &self_loops, &compact, num_comms);
+        adj = new_adj;
+        self_loops = new_self;
+    }
+
+    // Group the original nodes by their final super-node (dense `0..final_num`, in node order).
+    let final_num = super_of.iter().copied().max().map_or(0, |m| m + 1);
+    let mut members: Vec<Vec<NodeKey>> = vec![Vec::new(); final_num];
+    for (orig, &sup) in super_of.iter().enumerate() {
+        members[sup].push(nodes[orig]);
     }
     ClusterSet {
         clusters: members
@@ -332,6 +540,70 @@ pub fn community_louvain_on_snapshot(snapshot: &CommunitySnapshot) -> ClusterSet
 /// [`community_louvain_on_snapshot`] across a thread. (Graph signals — community detection, P3.)
 pub fn community_louvain(graph: &Graph) -> ClusterSet {
     community_louvain_on_snapshot(&CommunitySnapshot::from_graph(graph))
+}
+
+/// Pairwise **structural affinity** — the [Jaccard similarity] of node neighbourhoods,
+/// `J(a, b) = |N(a) ∩ N(b)| / |N(a) ∪ N(b)|` over the distinct undirected neighbours of each node.
+/// Two nodes score high when they share many neighbours, so structurally-equivalent nodes are
+/// "similar" **even when they share no direct edge** — the signal that lets the affinity force draw
+/// a community into a tight cluster (where gyre's `EdgeSpring` force only binds adjacent
+/// pairs). This is the cheap, dependency-free structural stand-in for the later content-embedding
+/// cosine affinity; both ride the same [`AffinityScores`] channel.
+///
+/// Only pairs whose affinity is `>= min_affinity` are emitted (and only pairs sharing at least one
+/// neighbour can be non-zero), so the list stays sparse — its length tracks the graph's clustering,
+/// not `n²`. Output is sorted by node-key pair, so the signal is reproducible run to run.
+///
+/// Note the star case: every leaf of a hub shares exactly that hub, so all leaf pairs score `1.0`
+/// (they are structurally identical). That is the metric's honest answer — leaves of one hub *are*
+/// a cluster — and the attract-only force settles them at its rest length rather than collapsing
+/// them. (Graph signals — P4, the affinity signal.)
+///
+/// [Jaccard similarity]: https://en.wikipedia.org/wiki/Jaccard_index
+pub fn structural_affinity(graph: &Graph, min_affinity: f32) -> AffinityScores {
+    let nodes: Vec<NodeKey> = graph.nodes().map(|(k, _)| k).collect();
+    // Distinct undirected adjacency (dedup the multigraph's parallel edges, drop self-loops) — the
+    // same basis betweenness uses: structural similarity is over distinct neighbours, not edge
+    // multiplicity. Each row is sorted, so a neighbour pair is emitted in canonical `(a < b)` order.
+    let adj: HashMap<NodeKey, Vec<NodeKey>> = nodes
+        .iter()
+        .map(|&v| {
+            let mut ns: Vec<NodeKey> = graph.neighbors_undirected(v).filter(|&w| w != v).collect();
+            ns.sort();
+            ns.dedup();
+            (v, ns)
+        })
+        .collect();
+
+    // Accumulate the shared-neighbour count only for pairs that share at least one neighbour: for
+    // each node `v`, every unordered pair of `v`'s distinct neighbours gains one common neighbour
+    // (`v` itself). This visits exactly the non-zero-Jaccard pairs, so the cost follows the graph's
+    // clustering rather than scanning all `n²` pairs.
+    let mut shared: HashMap<(NodeKey, NodeKey), u32> = HashMap::new();
+    for v in &nodes {
+        let ns = &adj[v];
+        for i in 0..ns.len() {
+            for j in (i + 1)..ns.len() {
+                *shared.entry((ns[i], ns[j])).or_insert(0) += 1; // ns sorted => ns[i] < ns[j]
+            }
+        }
+    }
+
+    // J(a,b) = |N(a) ∩ N(b)| / |N(a) ∪ N(b)|, with the union from inclusion–exclusion
+    // |A ∪ B| = |A| + |B| − |A ∩ B|. Threshold to keep the list lean, then sort for reproducibility.
+    let mut pairs: Vec<((NodeKey, NodeKey), f32)> = shared
+        .into_iter()
+        .filter_map(|((a, b), inter)| {
+            let union = (adj[&a].len() + adj[&b].len()).saturating_sub(inter as usize);
+            if union == 0 {
+                return None;
+            }
+            let jaccard = inter as f32 / union as f32;
+            (jaccard >= min_affinity).then_some(((a, b), jaccard))
+        })
+        .collect();
+    pairs.sort_by(|(p1, _), (p2, _)| p1.cmp(p2));
+    AffinityScores { pairs }
 }
 
 #[cfg(test)]
@@ -473,6 +745,44 @@ mod tests {
     }
 
     #[test]
+    fn community_three_triangles_in_a_line_are_three_communities() {
+        // T1{0,1,2}-T2{3,4,5}-T3{6,7,8} joined by single bridges 2-3 and 5-6: the multi-level loop
+        // keeps the three dense triangles apart (each bridge is too weak to merge across).
+        let (graph, k) = graph_from_edges(
+            9,
+            &[
+                (0, 1), (1, 2), (2, 0), // T1
+                (3, 4), (4, 5), (5, 3), // T2
+                (6, 7), (7, 8), (8, 6), // T3
+                (2, 3), (5, 6), // bridges
+            ],
+        );
+        let set = community_louvain(&graph);
+        assert_eq!(set.clusters.len(), 3, "three triangles => three communities");
+        assert_eq!(community_of(&set, k[0]), community_of(&set, k[1]), "T1 coheres");
+        assert_eq!(community_of(&set, k[0]), community_of(&set, k[2]));
+        assert_eq!(community_of(&set, k[3]), community_of(&set, k[5]), "T2 coheres");
+        assert_eq!(community_of(&set, k[6]), community_of(&set, k[8]), "T3 coheres");
+        assert_ne!(community_of(&set, k[0]), community_of(&set, k[3]), "T1 != T2");
+        assert_ne!(community_of(&set, k[3]), community_of(&set, k[6]), "T2 != T3");
+        // Every node lands in exactly one cluster.
+        let total: usize = set.clusters.iter().map(|c| c.members.len()).sum();
+        assert_eq!(total, 9, "the partition covers every node once");
+    }
+
+    #[test]
+    fn community_detection_is_deterministic() {
+        // The same snapshot must yield the identical partition run to run (sorted tie-breaks +
+        // first-seen compaction): the community-ring colours depend on it.
+        let (graph, _) =
+            graph_from_edges(6, &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)]);
+        let snapshot = CommunitySnapshot::from_graph(&graph);
+        let a = community_louvain_on_snapshot(&snapshot);
+        let b = community_louvain_on_snapshot(&snapshot);
+        assert_eq!(a, b, "multi-level Louvain is deterministic");
+    }
+
+    #[test]
     fn bridge_nodes_picks_the_high_betweenness_broker() {
         // Bowtie: triangles {0,1,2} and {2,3,4} share node 2 (betweenness 1.0); the rest are ~0.
         // At threshold 0.5 only the broker qualifies as a bridge.
@@ -485,5 +795,124 @@ mod tests {
         // A triangle: every node's betweenness is 0, so there are no bridges.
         let (graph, _) = graph_from_edges(3, &[(0, 1), (1, 2), (2, 0)]);
         assert!(bridge_nodes(&graph, 0.5).bridges.is_empty(), "a clique has no bridges");
+    }
+
+    /// The articulation-point set as a sorted Vec, for order-independent comparison.
+    fn aps(graph: &Graph) -> Vec<NodeKey> {
+        let mut v = articulation_points(graph).bridges;
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn articulation_points_finds_a_paths_interior() {
+        // Path 0-1-2-3: removing an interior node (1 or 2) splits the path; the endpoints do not.
+        let (graph, k) = graph_from_edges(4, &[(0, 1), (1, 2), (2, 3)]);
+        let mut expected = vec![k[1], k[2]];
+        expected.sort();
+        assert_eq!(aps(&graph), expected, "the path interior nodes are cut vertices");
+    }
+
+    #[test]
+    fn articulation_points_empty_for_a_clique() {
+        // A triangle is 2-connected: removing any node leaves the other two connected.
+        let (graph, _) = graph_from_edges(3, &[(0, 1), (1, 2), (2, 0)]);
+        assert!(articulation_points(&graph).bridges.is_empty(), "a clique has no cut vertex");
+    }
+
+    #[test]
+    fn articulation_points_empty_for_a_cycle() {
+        // A 4-cycle is 2-connected: removing one node leaves a path, still connected.
+        let (graph, _) = graph_from_edges(4, &[(0, 1), (1, 2), (2, 3), (3, 0)]);
+        assert!(articulation_points(&graph).bridges.is_empty(), "a cycle has no cut vertex");
+    }
+
+    #[test]
+    fn articulation_points_finds_the_bowtie_hinge() {
+        // Two triangles {0,1,2} and {2,3,4} sharing node 2: only 2 is a cut vertex (its removal
+        // splits {0,1} from {3,4}).
+        let (graph, k) = graph_from_edges(5, &[(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 2)]);
+        assert_eq!(aps(&graph), vec![k[2]], "the shared hinge is the only cut vertex");
+    }
+
+    #[test]
+    fn bridges_dispatch_picks_the_metric() {
+        // Bowtie: node 2 is both the betweenness broker and the cut vertex (here they agree). The
+        // dispatcher routes to each producer by metric.
+        let (graph, k) = graph_from_edges(5, &[(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 2)]);
+        assert_eq!(bridges(&graph, BridgeMetric::Betweenness, 0.5).bridges, vec![k[2]]);
+        assert_eq!(bridges(&graph, BridgeMetric::Articulation, 0.5).bridges, vec![k[2]]);
+        // The codes round-trip for persistence.
+        assert_eq!(BridgeMetric::from_code(BridgeMetric::Articulation.as_code()), BridgeMetric::Articulation);
+        assert_eq!(BridgeMetric::from_code("nonsense"), BridgeMetric::Betweenness);
+    }
+
+    /// The affinity recorded for an unordered pair, or `None` if it was not emitted.
+    fn affinity_of(scores: &AffinityScores, a: NodeKey, b: NodeKey) -> Option<f32> {
+        scores.lookup(a, b)
+    }
+
+    #[test]
+    fn affinity_empty_for_an_edgeless_graph() {
+        let (graph, _) = graph_from_edges(3, &[]);
+        assert!(
+            structural_affinity(&graph, 0.0).pairs.is_empty(),
+            "no edges => no shared neighbours => no affinity"
+        );
+    }
+
+    #[test]
+    fn triangle_members_all_share_affinity() {
+        // Every pair in a triangle shares the third node: J = 1/(2 + 2 − 1) = 1/3 for all three.
+        let (graph, k) = graph_from_edges(3, &[(0, 1), (1, 2), (2, 0)]);
+        let scores = structural_affinity(&graph, 0.0);
+        assert_eq!(scores.pairs.len(), 3, "all three triangle pairs are similar");
+        for &(a, b) in &[(0, 1), (1, 2), (2, 0)] {
+            let j = affinity_of(&scores, k[a], k[b]).expect("pair present");
+            assert!((j - 1.0 / 3.0).abs() < 1e-5, "triangle Jaccard is 1/3, got {j}");
+        }
+    }
+
+    #[test]
+    fn affinity_clusters_within_triangles_not_across() {
+        // Two triangles {0,1,2},{3,4,5} joined by the bridge 2-3. Same-triangle nodes share a
+        // neighbour (affinity ~1/3); the far cross pairs share none (absent) — affinity reads as
+        // the clusters, the property the affinity force exploits.
+        let (graph, k) =
+            graph_from_edges(6, &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)]);
+        let scores = structural_affinity(&graph, 0.0);
+        let within_a = affinity_of(&scores, k[0], k[1]).expect("within triangle A");
+        let within_b = affinity_of(&scores, k[4], k[5]).expect("within triangle B");
+        assert!((within_a - 1.0 / 3.0).abs() < 1e-5, "a clean within-A pair is 1/3");
+        assert!((within_b - 1.0 / 3.0).abs() < 1e-5, "a clean within-B pair is 1/3");
+        assert_eq!(affinity_of(&scores, k[1], k[4]), None, "a far cross pair shares no neighbour");
+        assert_eq!(affinity_of(&scores, k[0], k[5]), None, "another far cross pair is absent");
+    }
+
+    #[test]
+    fn clique_pairs_share_equal_affinity() {
+        // A 4-clique: every pair shares the other two nodes, J = 2/(3 + 3 − 2) = 1/2, uniform.
+        let (graph, k) = graph_from_edges(4, &[(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]);
+        let scores = structural_affinity(&graph, 0.0);
+        assert_eq!(scores.pairs.len(), 6, "all six clique pairs are similar");
+        for &(a, b) in &[(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)] {
+            let j = affinity_of(&scores, k[a], k[b]).expect("pair present");
+            assert!((j - 0.5).abs() < 1e-5, "clique Jaccard is 1/2, got {j}");
+        }
+    }
+
+    #[test]
+    fn affinity_threshold_prunes_weak_pairs() {
+        // Triangle pairs sit at 1/3 ≈ 0.333: a 0.5 floor drops them all; a 0.1 floor keeps all three.
+        let (graph, _) = graph_from_edges(3, &[(0, 1), (1, 2), (2, 0)]);
+        assert!(
+            structural_affinity(&graph, 0.5).pairs.is_empty(),
+            "a 0.5 floor prunes the 1/3 pairs"
+        );
+        assert_eq!(
+            structural_affinity(&graph, 0.1).pairs.len(),
+            3,
+            "a 0.1 floor keeps the triangle pairs"
+        );
     }
 }

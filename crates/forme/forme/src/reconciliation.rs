@@ -147,7 +147,7 @@ pub fn apply_reconciliation<N: MemberId>(
         }
 
         ReconciliationChoice::SaveAsNewFork { ref reason } => {
-            // Fork: preserve current roster, change binding to Forked.
+            // Branch: preserve current roster, change binding to Branched.
             if let Some(graphlet) = tree.graphlets_mut().iter_mut().find(|g| g.id == gid) {
                 let parent_spec = match &graphlet.binding {
                     GraphletBinding::Linked { spec } => spec.clone(),
@@ -161,7 +161,7 @@ pub fn apply_reconciliation<N: MemberId>(
                         selectors: Vec::new(),
                     },
                 };
-                graphlet.binding = GraphletBinding::Forked {
+                graphlet.binding = GraphletBinding::Branched {
                     parent_spec,
                     reason: reason.clone(),
                 };
@@ -202,7 +202,7 @@ pub fn detect_fork_on_manual_override<N: MemberId>(
     None
 }
 
-/// Transition a linked graphlet to Forked state.
+/// Transition a linked graphlet to Branched state.
 ///
 /// Called when `detect_fork_on_manual_override` fires and the host
 /// decides (or auto-policy decides) that the override should fork.
@@ -216,7 +216,7 @@ pub fn apply_fork<N: MemberId>(tree: &mut GraphTree<N>, graphlet_id: GraphletId,
             GraphletBinding::Linked { spec } => spec.clone(),
             _ => return, // Not linked — nothing to fork.
         };
-        graphlet.binding = GraphletBinding::Forked {
+        graphlet.binding = GraphletBinding::Branched {
             parent_spec,
             reason,
         };
@@ -425,14 +425,14 @@ mod tests {
 
         let binding = &tree.graphlets()[0].binding;
         match binding {
-            GraphletBinding::Forked {
+            GraphletBinding::Branched {
                 parent_spec,
                 reason,
             } => {
                 assert_eq!(parent_spec.kind, GraphletKind::Session);
                 assert_eq!(reason, "user override");
             }
-            _ => panic!("expected Forked binding"),
+            _ => panic!("expected Branched binding"),
         }
     }
 
@@ -475,7 +475,7 @@ mod tests {
         apply_fork(&mut tree, 0, "manual override".to_string());
         assert!(matches!(
             tree.graphlets()[0].binding,
-            GraphletBinding::Forked { .. }
+            GraphletBinding::Branched { .. }
         ));
     }
 

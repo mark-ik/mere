@@ -16,7 +16,8 @@
 //! (a history URL, or the typed text resolved to a URL) and
 //! [`OmnibarMatch::SearchQuery`] (a web search for the raw text).
 
-use std::collections::HashSet;
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 
 use chrome::omnibar::{HistoricalNodeMatch, OmnibarMatch, SearchProviderKind};
 
@@ -33,9 +34,16 @@ const SEARCH_PROVIDER: SearchProviderKind = SearchProviderKind::DuckDuckGo;
 /// Build the suggestion list for `query` against `history`.
 ///
 /// Ordering: a direct-navigation row first when the text looks like a URL, then
-/// history URLs containing the text (most-recent first, deduped, capped), then
-/// always a web-search row for the raw text. Empty/blank text yields no
-/// suggestions (the dropdown stays closed).
+/// history URLs that contain the text, ranked best-first — host matches (prefix
+/// or substring, a leading `www.` ignored) outrank incidental path/query
+/// matches, and within a tier the most *frecent* URL leads (visit frequency in
+/// the back/forward path, with recency breaking ties). A web-search row for the
+/// raw text is always last. Empty/blank text yields no suggestions (the dropdown
+/// stays closed).
+///
+/// Title- and favicon-aware ranking await [`History`] carrying that per-visit
+/// metadata — it is a linear back/forward URL stack today, so `display_label`
+/// on the emitted matches is left unset and ranking sees only URLs.
 pub fn suggestions(query: &str, history: &History) -> Vec<OmnibarMatch> {
     let q = query.trim();
     if q.is_empty() {
@@ -51,7 +59,8 @@ pub fn suggestions(query: &str, history: &History) -> Vec<OmnibarMatch> {
     let mut out: Vec<OmnibarMatch> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
 
-    // Direct navigation, when the text resolves to a URL (not a search).
+    // Direct navigation, pinned first when the text resolves to a URL — the
+    // literal thing the user typed is the strongest intent signal.
     if let NavTarget::Url(url) = nav::classify(q) {
         if seen.insert(url.clone()) {
             out.push(OmnibarMatch::NodeUrl(HistoricalNodeMatch::without_label(
@@ -59,14 +68,14 @@ pub fn suggestions(query: &str, history: &History) -> Vec<OmnibarMatch> {
             )));
         }
     }
-    // History matches, most-recent first.
-    for url in history.entries().iter().rev() {
+    // History matches, frecency-ranked within match-quality tiers.
+    for url in ranked_history(&needle, history) {
         if out.len() >= MAX_HISTORY_SUGGESTIONS {
             break;
         }
-        if url.to_lowercase().contains(&needle) && seen.insert(url.clone()) {
+        if seen.insert(url.clone()) {
             out.push(OmnibarMatch::NodeUrl(HistoricalNodeMatch::without_label(
-                url.clone(),
+                url,
             )));
         }
     }
@@ -76,6 +85,82 @@ pub fn suggestions(query: &str, history: &History) -> Vec<OmnibarMatch> {
         provider: SEARCH_PROVIDER,
     });
     out
+}
+
+/// A history URL scored for the suggestion ordering.
+struct Ranked {
+    url: String,
+    /// Match-quality tier — where the needle hits, higher is better. Host
+    /// matches (4 exact, 3 prefix, 2 substring) outrank a path/query-only match
+    /// (1). The primary sort key, so a host match never loses to an incidental
+    /// path hit, however frecent the latter.
+    tier: u32,
+    /// Visit frequency (occurrences in the back/forward path) with recency
+    /// folded in as a sub-unit tie-breaker, so equal-frequency URLs order
+    /// newest-first. The secondary sort key, within a tier.
+    frecency: f64,
+}
+
+/// History URLs containing `needle` (already lowercased), ordered best-first by
+/// `(tier, frecency)`. Returns unique URLs: the back/forward path can list the
+/// same URL more than once, but here it appears once with its visits tallied.
+fn ranked_history(needle: &str, history: &History) -> Vec<String> {
+    let entries = history.entries();
+    // Recency is the entry's index normalized to `0..=1` (1 = newest). Nothing
+    // to rank with a single entry; guard the divisor against zero regardless.
+    let denom = entries.len().saturating_sub(1).max(1) as f64;
+
+    // One pass: per unique URL, tally frequency and keep its newest index.
+    let mut by_url: HashMap<&str, (u32, usize)> = HashMap::new();
+    for (i, url) in entries.iter().enumerate() {
+        let slot = by_url.entry(url.as_str()).or_insert((0, i));
+        slot.0 += 1;
+        slot.1 = i; // entries run oldest-first, so the last write is the newest
+    }
+
+    let mut ranked: Vec<Ranked> = by_url
+        .into_iter()
+        .filter(|(url, _)| url.to_lowercase().contains(needle))
+        .map(|(url, (freq, newest))| Ranked {
+            url: url.to_string(),
+            tier: match_tier(url, needle),
+            frecency: freq as f64 + (newest as f64 / denom) * 0.5,
+        })
+        .collect();
+
+    // Tier first, then frecency, then the URL itself for a deterministic order.
+    ranked.sort_by(|a, b| {
+        b.tier
+            .cmp(&a.tier)
+            .then_with(|| b.frecency.partial_cmp(&a.frecency).unwrap_or(Ordering::Equal))
+            .then_with(|| a.url.cmp(&b.url))
+    });
+    ranked.into_iter().map(|r| r.url).collect()
+}
+
+/// The match-quality tier for `url` against `needle` (already lowercased): how
+/// directly the needle hits the host. A leading `www.` is ignored, so
+/// `www.servo.org` ranks like `servo.org`. Tier 1 means the match is only in the
+/// path/query (the caller passes URLs already known to contain `needle`).
+fn match_tier(url: &str, needle: &str) -> u32 {
+    let host = host_of(url).unwrap_or_default().to_lowercase();
+    let host = host.strip_prefix("www.").unwrap_or(host.as_str());
+    if host == needle {
+        4
+    } else if host.starts_with(needle) {
+        3
+    } else if host.contains(needle) {
+        2
+    } else {
+        1
+    }
+}
+
+/// The host of `url`, if it parses and carries one. Non-standard schemes with an
+/// authority resolve (`mere://welcome` → `welcome`); authority-less ones
+/// (`about:blank`) yield `None`.
+fn host_of(url: &str) -> Option<String> {
+    url::Url::parse(url).ok()?.host_str().map(str::to_owned)
 }
 
 /// The user-facing label for a suggestion row.
@@ -166,5 +251,61 @@ mod tests {
             provider: SEARCH_PROVIDER,
         };
         assert_eq!(match_label(&m), "Search the web for \u{201c}servo\u{201d}");
+    }
+
+    #[test]
+    fn frequency_outranks_a_single_visit_within_a_tier() {
+        let mut h = History::new("mere://welcome");
+        h.visit("https://a.example".into());
+        h.visit("https://b.example".into());
+        h.visit("https://a.example".into()); // a.example visited twice
+        let found = urls(&suggestions("example", &h));
+        let ia = found.iter().position(|u| u == "https://a.example").unwrap();
+        let ib = found.iter().position(|u| u == "https://b.example").unwrap();
+        assert!(ia < ib, "more-frequent URL ranks first: {found:?}");
+    }
+
+    #[test]
+    fn host_match_outranks_a_more_recent_path_match() {
+        let mut h = History::new("mere://welcome");
+        h.visit("https://example.com".into()); // host-prefix match (older)
+        h.visit("https://news.test/about-example".into()); // path-only match (newer)
+        let found = urls(&suggestions("example", &h));
+        let host = found.iter().position(|u| u == "https://example.com").unwrap();
+        let path = found
+            .iter()
+            .position(|u| u == "https://news.test/about-example")
+            .unwrap();
+        assert!(host < path, "a host match leads despite being older: {found:?}");
+    }
+
+    #[test]
+    fn www_prefix_is_ignored_for_host_ranking() {
+        let mut h = History::new("mere://welcome");
+        h.visit("https://www.servo.org".into()); // host match via www-strip (older)
+        h.visit("https://docs.test/intro-to-servo".into()); // path-only match (newer)
+        let found = urls(&suggestions("servo", &h));
+        let host = found
+            .iter()
+            .position(|u| u == "https://www.servo.org")
+            .unwrap();
+        let path = found
+            .iter()
+            .position(|u| u == "https://docs.test/intro-to-servo")
+            .unwrap();
+        assert!(host < path, "www.servo.org ranks as a host match: {found:?}");
+    }
+
+    #[test]
+    fn recency_breaks_ties_within_a_tier() {
+        let mut h = History::new("mere://welcome");
+        h.visit("https://old.example".into());
+        h.visit("https://new.example".into()); // same tier + frequency, newer
+        let found = urls(&suggestions("example", &h));
+        // Of two equal-tier, equal-frequency matches, the newer visit leads.
+        assert_eq!(
+            found.first().map(String::as_str),
+            Some("https://new.example")
+        );
     }
 }

@@ -40,7 +40,8 @@ pub type LayoutId = String;
 pub enum LayoutCategory {
     /// Force-based iterative physics. Examples: FR and Barnes-Hut.
     Force,
-    /// Iterative similarity-driven projection. Example: SemanticEdgeWeight.
+    /// Iterative similarity-driven projection (no built-in members since the
+    /// `SemanticEdgeWeight` projection was retired; kept for external mods).
     Projection,
     /// Stateless positional / structural layouts. Examples: Grid,
     /// Radial, Phyllotaxis, Penrose, L-system, Timeline, Kanban,
@@ -221,11 +222,6 @@ pub fn register_builtins<N>(registry: &mut LayoutRegistry<N>)
 where
     N: Clone + Eq + Hash + Send + Ord + 'static,
 {
-    // Projection (similarity-driven iterative).
-    let _ = registry.register(Arc::new(
-        BuiltinProvider::<super::SemanticEdgeWeight, N>::new(semantic_edge_weight_capability),
-    ));
-
     // Positional layouts (stateless / delta-to-target).
     let _ = registry.register(Arc::new(BuiltinProvider::<super::Grid, N>::new(
         grid_capability,
@@ -255,24 +251,6 @@ where
 
 fn tags(slice: &[&str]) -> Vec<String> {
     slice.iter().map(|s| s.to_string()).collect()
-}
-
-fn semantic_edge_weight_capability() -> LayoutCapability {
-    LayoutCapability {
-        id: "graph_layout:semantic_edge_weight".into(),
-        display_name: "Semantic Edge Weight".into(),
-        description: Some(
-            "Iterative projection driven by pairwise semantic similarity. Below real UMAP/t-SNE quality; no ML pipeline required."
-                .into(),
-        ),
-        category: LayoutCategory::Projection,
-        is_deterministic: true,
-        is_topology_sensitive: false,
-        supports_3d: false,
-        recommended_max_node_count: Some(400),
-        provenance: LayoutProvenance::Builtin,
-        capability_tags: tags(&["semantic", "iterative", "projection"]),
-    }
 }
 
 fn grid_capability() -> LayoutCapability {

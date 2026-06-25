@@ -186,6 +186,14 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     if let Some(menu) = &c.context_menu {
         children.push(context_menu_view(menu));
     }
+    // The tear-out drag ghost: a small pill carrying the dragged node's title, floated at
+    // the live cursor (the host repositions it each frame in `render`). Pointer-events are
+    // off so it never intercepts the drag. (Tear-out gestures, GA-5.)
+    if let Some(label) = &c.tear_ghost {
+        children.push(Box::new(
+            el::<_, Chrome, ()>("div", label.clone()).attr("class", "tear-ghost"),
+        ) as ChromeView);
+    }
     Box::new(el::<_, Chrome, ()>("div", children).attr("class", "chrome"))
 }
 

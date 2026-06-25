@@ -96,8 +96,8 @@ pub mod tree_projection;
 pub mod projection_geometry;
 
 pub use cartography_scene::{
-    CartographySceneOptions, ORRERY_LAYOUT_STRATEGIES, build_projection_request, project_orrery_strategy,
-    project_with, step_with,
+    CartographySceneOptions, ORRERY_LAYOUT_STRATEGIES, build_projection_request, project_orrery_lens,
+    project_orrery_strategy, project_orrery_subgraph, project_with, signal_overlays,
 };
 pub use document_scene::build_document_scene;
 pub use projection_geometry::{Axis, CartographyGeometry, TreeBranch, TreeGeometry};

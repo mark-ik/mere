@@ -111,6 +111,69 @@ impl Graph {
         self.bump_revision();
         key
     }
+
+    /// [`copy_node_from`](Self::copy_node_from) taking plain `x` / `y` screen-graph
+    /// coords, so a host can place the copy without depending on `euclid`. (Tear-out
+    /// gestures G5.)
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn copy_node_from_xy(
+        &mut self,
+        source: &Node,
+        source_graph: Option<String>,
+        x: f32,
+        y: f32,
+    ) -> NodeKey {
+        self.copy_node_from(source, source_graph, Point2D::new(x, y))
+    }
+
+    /// Copy the connected component containing `seed` (a node in `source`) into this
+    /// graph: the kernel half of a tear-out **fork** (the reachable-subgraph snapshot,
+    /// tear-out brief §4.3). Each node is minted fresh (with a `CopiedFrom`
+    /// [`NodeDerivation`] back to its source) keeping its source layout position; the
+    /// component's internal edges are re-pointed onto the new nodes by cloning each
+    /// edge's payload verbatim. Edges leaving the component are dropped (the snapshot is
+    /// closed under the component). Returns the new node keys. (Tear-out gestures G4.)
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn copy_component_from(
+        &mut self,
+        source: &Graph,
+        seed: Uuid,
+        source_graph: Option<String>,
+    ) -> Vec<NodeKey> {
+        use petgraph::visit::{EdgeRef, IntoEdgeReferences};
+        let Some(seed_key) = source.get_node_key_by_id(seed) else {
+            return Vec::new();
+        };
+        // The weakly-connected component containing the seed (every node is in exactly
+        // one; fall back to the lone seed if the partition somehow omits it).
+        let component = source
+            .weakly_connected_components()
+            .into_iter()
+            .find(|c| c.contains(&seed_key))
+            .unwrap_or_else(|| vec![seed_key]);
+        // Copy each node, mapping its old key to the fresh one for edge re-pointing.
+        let mut remap: std::collections::HashMap<NodeKey, NodeKey> =
+            std::collections::HashMap::with_capacity(component.len());
+        let mut new_keys = Vec::with_capacity(component.len());
+        for old_key in component {
+            if let Some(node) = source.inner.node_weight(old_key) {
+                let new_key = self.copy_node_from(node, source_graph.clone(), node.position);
+                remap.insert(old_key, new_key);
+                new_keys.push(new_key);
+            }
+        }
+        // Re-point the component's internal edges (both endpoints copied): clone each
+        // edge's payload verbatim onto the new node pair.
+        for edge in source.inner.edge_references() {
+            if let (Some(&from), Some(&to)) =
+                (remap.get(&edge.source()), remap.get(&edge.target()))
+            {
+                self.inner.add_edge(from, to, edge.weight().clone());
+            }
+        }
+        self.bump_revision();
+        new_keys
+    }
 }
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -185,5 +248,39 @@ mod tests {
             "donor import provenance is the donor's, not the copy's"
         );
         assert_eq!(copy.derivations[0].source_graph, None, "same-graph / unknown source graph");
+    }
+
+    #[test]
+    fn copy_component_clones_the_connected_subgraph_with_edges_and_provenance() {
+        use crate::graph::{EdgeAssertion, SemanticSubKind};
+        let mut a = Graph::new();
+        let k1 = a.add_node("https://a.com/1".to_string(), Point2D::new(0.0, 0.0));
+        let k2 = a.add_node("https://a.com/2".to_string(), Point2D::new(1.0, 0.0));
+        let _k3 = a.add_node("https://a.com/3".to_string(), Point2D::new(9.0, 9.0)); // disconnected
+        a.assert_relation(
+            k1,
+            k2,
+            EdgeAssertion::Semantic {
+                sub_kind: SemanticSubKind::Hyperlink,
+                label: None,
+                decay_progress: None,
+            },
+        );
+        let seed = a.get_node(k1).unwrap().id;
+
+        let mut b = Graph::new();
+        let new = b.copy_component_from(&a, seed, Some("graph-A".to_string()));
+
+        // The connected component is {k1, k2}; the disconnected k3 is not pulled in.
+        assert_eq!(new.len(), 2, "copied the 2-node component, not the lone disconnected node");
+        assert_eq!(b.nodes().count(), 2);
+        // The component's internal edge is re-pointed onto the copies.
+        assert_eq!(b.relations().count(), 1, "the internal edge is re-pointed");
+        // Each copy records `CopiedFrom` provenance back to the source graph.
+        for (_, n) in b.nodes() {
+            assert_eq!(n.derivations.len(), 1);
+            assert_eq!(n.derivations[0].sub_kind, ProvenanceSubKind::CopiedFrom);
+            assert_eq!(n.derivations[0].source_graph.as_deref(), Some("graph-A"));
+        }
     }
 }

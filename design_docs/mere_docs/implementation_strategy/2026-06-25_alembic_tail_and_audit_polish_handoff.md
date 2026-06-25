@@ -46,9 +46,14 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
    mapping already exists in `command_drain.rs::relation_kind_from_str`. "Makes a graph browser worth
    using" per the audit.
 
-4. **Omnibar suggestions.** Live `>`-verb command shell already works; the weak spot is suggestions
-   (`suggest.rs`): substring-only, no frecency / favicon / page-title ranking. A ranking pass over the
-   existing `OmnibarMatch` generation. Self-contained.
+4. **Omnibar suggestions.** ✅ **DONE 2026-06-25.** `suggest.rs` now ranks history rows by a
+   `(match-quality tier, frecency)` order instead of raw substring/most-recent: host matches
+   (exact/prefix/substring, leading `www.` ignored) outrank incidental path/query matches, and within a
+   tier visit-frequency-with-recency-tiebreak leads. Self-contained, no data-model change, 4 new tests
+   pin the contracts. **Deferred (data-blocked):** favicon + page-title ranking need `History` to carry
+   per-visit metadata (it is a back/forward URL stack today, no titles/favicons/timestamps); threading
+   that in touches the hot `visit()` call sites (`lib.rs` / `input.rs`), so it is its own item, not part
+   of this pass.
 
 **Out of scope (knowing, not doing):**
 

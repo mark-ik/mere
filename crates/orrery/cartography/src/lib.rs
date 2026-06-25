@@ -9,28 +9,24 @@
 //!
 //! Cartography sits between **graph truth** + **intelligence signals**
 //! on the input side, and **canvas swatches** on the output side. It
-//! owns the *contracts* — the [`LayoutStrategy`] /
-//! [`StreamingLayoutStrategy`] traits, the [`Projection`] /
-//! [`Overlay`] / [`MinimapDescriptor`] vocabulary, and the
-//! [`IntelligenceSignals`] narrow shape that firewalls cartography
+//! owns the *contracts* — the [`LayoutStrategy`] trait, the
+//! [`Projection`] / [`Overlay`] / [`MinimapDescriptor`] vocabulary, and
+//! the [`IntelligenceSignals`] narrow shape that firewalls cartography
 //! from `embed`' internals. The strategies
 //! themselves live in sibling crates (graph-layout, document-layout,
 //! …).
 //!
-//! ## Dual strategy contract
+//! ## The strategy contract
 //!
-//! Cartography exposes **two** strategy traits because two kinds of
-//! layout exist:
+//! Cartography exposes the [`LayoutStrategy`] trait: one-shot, stateless
+//! analytic projection. Picks: Phyllotaxis, Penrose, Radial, Grid,
+//! Timeline, Kanban, L-system, Spectral, SemanticEmbedding. `project()`
+//! produces a final projection in one call. Live force physics
+//! (force-directed, the affinity force) is gyre's domain; the old
+//! streaming-strategy contract was retired with the `SemanticEdgeWeight`
+//! projection once the gyre affinity force reached parity.
 //!
-//! - **Analytic** ([`LayoutStrategy`]) — one-shot, stateless. Picks:
-//!   Phyllotaxis, Penrose, Radial, Grid, Timeline, Kanban, L-system,
-//!   ClusterCollapsed (astroid). `project()` produces a final
-//!   projection in one call.
-//! - **Streaming** ([`StreamingLayoutStrategy`]) — iterative, state-
-//!   carrying. Picks: ForceDirected, BarnesHut, SemanticEmbedding,
-//!   any algorithm that converges over multiple frames.
-//!
-//! Strategies pick which trait fits. Both emit the same [`Projection`]
+//! Strategies emit a [`Projection`]
 //! output type so canvases consume one shape uniformly. See the
 //! [cartography layer brief](https://github.com/mark-ik/mere/blob/main/design_docs/mere_docs/research/2026-05-10_cartography_layer_brief.md)
 //! for the full design.
@@ -86,7 +82,7 @@ pub use signals::{
     AffinityScores, BridgeNodes, Cluster, ClusterSet, ImportanceWeights, IntelligenceSignals,
     NodeEmbeddings,
 };
-pub use strategy::{LayoutStrategy, StreamingLayoutStrategy};
+pub use strategy::LayoutStrategy;
 
 /// Crate version.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

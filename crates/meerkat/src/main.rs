@@ -97,6 +97,7 @@ mod frame_ops;
 mod frame_view;
 mod viewport;
 mod gloss;
+mod graphlets;
 mod ime;
 mod input;
 mod menus;
@@ -264,6 +265,15 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // Right-click context menu: a small panel of action rows floated at the cursor.
         format!(
             ".context-menu {{ background-color: {}; padding: 4px; }}",
+            rgb(c.menu_bg)
+        ),
+        // The tear-out drag ghost: a small pill carrying the dragged node's title, floated
+        // at the cursor (positioned each frame by `render`). Pointer-events off so it never
+        // intercepts the drag. (Tear-out gestures, GA-5.)
+        format!(
+            ".tear-ghost {{ position: absolute; font-size: 13px; color: {}; background-color: {}; \
+             padding: 4px 10px; border-radius: 12px; }}",
+            rgb(c.body_text),
             rgb(c.menu_bg)
         ),
         format!(
@@ -837,6 +847,25 @@ enum ShellCommand {
     /// Open a new OS window over the shared session — a second [`WindowView`].
     /// (Cmd/Ctrl+Shift+N; MW3 step 3. Step 4 differentiates its kind + chrome.)
     SpawnWindow,
+    /// Tear a node out into a new leaf window (the tear-out drag, G1). Carries the
+    /// torn node's stable id so the leaf can resolve it (G2 will show its tile). Runs
+    /// on `Shell` after the ctx borrow ends, like `SpawnWindow`. (Tear-out gestures G1.)
+    TearOut { node: uuid::Uuid },
+    /// Cross-graph copy (G5): a node dragged from graph `from`'s pane onto graph `to`'s
+    /// pane mints a copy in `to` (via `Graph::copy_node_from`, with `CopiedFrom`
+    /// provenance back to the source). A two-orrery pool op, so it runs on `Shell` after
+    /// the ctx borrow ends. (Tear-out gestures G5.)
+    CopyNodeAcross {
+        node: uuid::Uuid,
+        from: GraphId,
+        to: GraphId,
+    },
+    /// Fork (Ctrl+Shift tear, G4): mint an independent session + graph holding a copy of
+    /// the dragged node's connected component (with a weak parent ref to the donor), then
+    /// open a new window onto it. Needs both `&mut Shell` (mint + pool) and the event
+    /// loop (the window), so it defers here. The donor session is untouched. (Tear-out
+    /// gestures G4.)
+    ForkNode { node: uuid::Uuid, from: GraphId },
     /// Close window `id` and drop its view. The primary is exempt — its close saves
     /// the session and exits the app; a secondary just releases its surface. (MW3.)
     #[allow(dead_code)] // queued by the close fork once leaf windows can self-close (MW4)
@@ -1489,6 +1518,21 @@ impl Shell {
     /// shared graph the way the primary first did. The caller (`SpawnWindow`) creates
     /// the OS window + surface around it. (Multi-window MW3.)
     fn build_window_view(&self) -> window_view::WindowView {
+        let active_graph = self
+            .shared
+            .session
+            .manifests
+            .get(self.shared.session.active_session_id)
+            .map(|m| m.root_graph_id)
+            .unwrap_or_default();
+        self.build_window_view_for(active_graph)
+    }
+
+    /// As [`build_window_view`](Self::build_window_view), but binds the new view to
+    /// `bind_graph` rather than the active session's root graph — a **fork** opens its
+    /// window onto a freshly pooled graph while the active session stays on the donor.
+    /// (Tear-out gestures G4.)
+    fn build_window_view_for(&self, bind_graph: GraphId) -> window_view::WindowView {
         let dom: Rc<RefCell<ScriptedDom>> = Rc::new(RefCell::new(ScriptedDom::new()));
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = self.shared.presentation.saved_tab_cap;
@@ -1502,22 +1546,15 @@ impl Shell {
         chrome.crawl = self.focused_view().chrome().crawl.clone();
         let runner = window_view::shell_runner(dom.clone(), chrome);
         let content_location = runner.state().chrome.content_location().to_string();
-        let active_graph = self
-            .shared
-            .session
-            .manifests
-            .get(self.shared.session.active_session_id)
-            .map(|m| m.root_graph_id)
-            .unwrap_or_default();
         let mut view = window_view::WindowView::new(
             window_view::WindowKind::Leaf,
-            active_graph,
+            bind_graph,
             dom,
             runner,
             Workbench::new(),
         );
         view.content_location = content_location;
-        view.frame_layout = default_content_frame(active_graph);
+        view.frame_layout = default_content_frame(bind_graph);
         view.next_pane_id = 1;
         view
     }

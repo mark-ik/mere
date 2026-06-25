@@ -133,7 +133,7 @@ impl SimilarityCurve {
 /// How force magnitude falls off with distance in an unbounded, physics-
 /// style interaction (as opposed to the bounded [`ProximityFalloff`]).
 ///
-/// Used by force-directed layouts (FR, Barnes-Hut, SemanticEdgeWeight)
+/// Used by force-directed layouts (FR, Barnes-Hut)
 /// to shape the repulsion and gravity curves without hardcoding
 /// inverse-power laws.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

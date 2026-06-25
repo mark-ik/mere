@@ -97,6 +97,35 @@ pub(crate) struct RowReorderDrag {
     pub(crate) target: Option<String>,
 }
 
+/// Which tear-out operation a drag carries, fixed at press by the modifier (GA-1):
+/// Shift = **branch** (a new graphlet in the donor's forme), Ctrl+Shift = **fork** (an
+/// independent session + graph snapshot). Leaf (UI-only new window) is the no-modifier
+/// tile-tab origin, not an orrery-node tear, so it is not in this enum.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum TearOp {
+    Branch,
+    Fork,
+}
+
+/// An in-progress tear-out drag — pulling a node out of its pane toward a new window
+/// (the tear-out gesture, G1). Armed on a modified left-press on an orrery node (GA-1:
+/// the modifier is what diverts the press from the orrery's node-pin gesture), carried
+/// until release. The release decides the operation by where it drops (the drop-target
+/// grammar, OQ-1) and how far it moved (slop). v0 tears a single node (GA-4).
+#[derive(Clone, Copy)]
+pub(crate) struct TearOutDrag {
+    /// The torn node's stable id (from the orrery's `node_at_screen` hit-test).
+    pub(crate) node: uuid::Uuid,
+    /// The graph the torn node lives in (the source pane's graph at press), so the drop
+    /// can tell a same-graph tear from a cross-graph copy. (Drop-target grammar, OQ-1.)
+    pub(crate) source_graph: GraphId,
+    /// The operation fixed at press by the modifier (Shift = branch, Ctrl+Shift = fork).
+    pub(crate) op: TearOp,
+    /// The press origin in window px, for the slop threshold (a modified click that
+    /// never moves is not a tear).
+    pub(crate) origin: (f32, f32),
+}
+
 /// State owned by a single window's view. Methods on `Shell` reach it through
 /// `self.view`; when the window registry lands (MW2) the render / input paths
 /// take `&mut WindowView` for the target window explicitly.
@@ -232,6 +261,9 @@ pub(crate) struct WindowView {
     /// `Some` while a grip press is being dragged; the move tracks the drop target, the release
     /// repositions + persists. (Command registry B2 — drag reorder.)
     pub(crate) row_reorder_drag: Option<RowReorderDrag>,
+    /// An in-progress tear-out drag (G1): `Some` from a modified left-press on an orrery
+    /// node until release, which spawns a leaf carrying the node. (Tear-out gestures.)
+    pub(crate) tear_out_drag: Option<TearOutDrag>,
     /// The cursor icon currently set on the window (tracked to set only on change).
     pub(crate) cursor_icon: CursorIcon,
     /// Set by the custom close control; the event handler exits the loop after the
@@ -1147,6 +1179,7 @@ impl WindowView {
             titlebar_press: Default::default(),
             swatch_drag: Default::default(),
             row_reorder_drag: Default::default(),
+            tear_out_drag: Default::default(),
             cursor_icon: Default::default(),
             pending_exit: Default::default(),
             context_set: Default::default(),
