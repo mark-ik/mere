@@ -39,6 +39,51 @@ impl WindowCtx<'_> {
         }
     }
 
+    /// Run Athanor's forgetting pass over the focused graph: drop the cached content of
+    /// short-term (untagged) nodes the eviction policy considers stale, leaving the nodes
+    /// themselves (structure) in place. Records the count as a Steward-visible diagnostic
+    /// (Athanor's live passes surface in Steward) and redraws. The Alembic Recent section's
+    /// "forget" affordance drives this. (Alembic slice C eviction / slice D forgetting.)
+    pub(super) fn run_forgetting_pass(&mut self) {
+        use session_runtime::{athanor, memory_levels::EvictionPolicy};
+
+        // Snapshot + per-node last-visit timing from the nav history. Both are owned, so the
+        // immutable graph borrows end before the mutable store borrow below.
+        let snapshot = self.orrery().graph().to_snapshot();
+        let timing: HashMap<String, u64> = self
+            .orrery()
+            .graph()
+            .recent_visited(100_000)
+            .into_iter()
+            .map(|rv| (rv.node.to_string(), rv.last_visit_at_ms))
+            .collect();
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let proposal =
+            athanor::propose_forgetting(&snapshot, &timing, EvictionPolicy::default(), now_ms);
+
+        if proposal.is_empty() {
+            self.shared.observability.record_diagnostic(
+                "alembic.forget",
+                super::observability::Severity::Info,
+                "Forgetting: nothing stale in short-term memory".to_string(),
+            );
+            return;
+        }
+        let Some(store) = self.shared.content.store.as_mut() else {
+            return;
+        };
+        let dropped = pollster::block_on(athanor::apply_forgetting(store, &proposal)).unwrap_or(0);
+        self.shared.observability.record_diagnostic(
+            "alembic.forget",
+            super::observability::Severity::Info,
+            format!("Forgetting: dropped {dropped} stale short-term page(s)"),
+        );
+        self.view.request_redraw();
+    }
+
     /// The focused node as an eidetic tombstone (url + title + tags), for the
     /// deleted-nodes log. `None` when zero or many nodes are focused.
     fn focused_tombstone(&self) -> Option<eidetic::DeletedNode> {

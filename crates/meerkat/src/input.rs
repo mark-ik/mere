@@ -1266,6 +1266,10 @@ impl WindowCtx<'_> {
             if let Some(id) = key.strip_prefix("engram:open:") {
                 self.commands
                     .push(super::ShellCommand::OpenEngramBeside(id.to_string()));
+            } else if key == "alembic:forget" {
+                // Runs in place (drops cached content only, no pool re-keying), so the
+                // WindowCtx method is called directly. (Slice C/D forgetting.)
+                self.run_forgetting_pass();
             }
         }
         // The settings tiles' `pelt/*` pages carry the same control keys as the apparatus, so

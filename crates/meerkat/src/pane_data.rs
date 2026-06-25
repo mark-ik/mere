@@ -243,6 +243,13 @@ impl WindowCtx<'_> {
             "utility-row-muted",
             EvictionPolicy::default().describe(),
         ));
+        // A real "forget now" affordance: runs Athanor's forgetting pass, dropping stale
+        // short-term cached content (the count surfaces in Steward). No placebo. (Slice C/D.)
+        items.push(PaneItem::button(
+            "utility-row-muted",
+            "\u{232b} forget stale recent now",
+            "alembic:forget",
+        ));
         let recent: Vec<String> = {
             let graph = self.orrery().graph();
             graph
