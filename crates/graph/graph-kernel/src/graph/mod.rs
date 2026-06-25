@@ -244,8 +244,11 @@ pub struct ContainmentEdgeView {
 /// Main graph structure backed by petgraph::StableGraph
 #[derive(Clone)]
 pub struct Graph {
-    /// The underlying petgraph stable graph
-    pub inner: StableGraph<Node, EdgePayload, Directed>,
+    /// The underlying petgraph stable graph. `pub(crate)` to enforce the single-write-path boundary
+    /// at the type level: every topology mutation must go through a `Graph` method so it advances
+    /// [`revision`](Self::revision); direct `inner` mutation from outside the kernel would bypass the
+    /// bump and stale the structural caches. No external code accesses it (verified). (Graph signals.)
+    pub(crate) inner: StableGraph<Node, EdgePayload, Directed>,
 
     /// URL to node mapping for lookup (supports duplicate URLs).
     pub(crate) url_to_nodes: HashMap<String, Vec<NodeKey>>,
@@ -267,6 +270,15 @@ pub struct Graph {
     /// per node (the (b) anchor design). In-place navigation extends a node's own
     /// path; a branch node is spawned anchored under its origin's current visit.
     pub(crate) nav: SharedNavigationMemory,
+
+    /// A monotonic **structural revision**, bumped by [`bump_revision`](Self::bump_revision)
+    /// whenever the node/edge structure or a pair's relation set changes (add/remove node, add/
+    /// remove edge, assert/retract a relation). It does NOT bump on a re-visit's traversal append
+    /// or on pure content edits (title/url/tags), since those leave the structure a derived signal
+    /// reads unchanged. The single source of truth any consumer gates a cache on — community,
+    /// arrangements, importance — so a recompute happens once per real change, not per frame.
+    /// (Graph signals — the universal cache key.)
+    revision: u64,
 }
 
 impl Graph {
@@ -280,7 +292,20 @@ impl Graph {
             fields: HashMap::new(),
             couplings: HashMap::new(),
             nav: SharedNavigationMemory::empty(),
+            revision: 0,
         }
+    }
+
+    /// The current structural revision (see [`revision`](Self::revision)). A consumer captures it
+    /// alongside a derived result and recomputes only when it has advanced. (Graph signals.)
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    /// Advance the structural revision. Called by the topology/relation mutators on a real change.
+    /// (Graph signals — the universal cache key.)
+    fn bump_revision(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
     }
 
     // Single-write-path boundary (Phase 6.5): graph topology mutators are
@@ -350,6 +375,7 @@ impl Graph {
 
         self.url_to_nodes.entry(url).or_default().push(key);
         self.id_to_node.insert(id, key);
+        self.bump_revision();
         key
     }
 
@@ -376,6 +402,7 @@ impl Graph {
             }
             self.import_records
                 .retain(|record| !record.memberships.is_empty());
+            self.bump_revision();
             true
         } else {
             false

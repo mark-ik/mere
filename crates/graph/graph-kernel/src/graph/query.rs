@@ -231,6 +231,10 @@ impl Graph {
     pub fn rebuild_derived_containment_relations(&mut self) {
         let edge_ids: Vec<EdgeKey> = self.inner.edge_indices().collect();
         let mut empty_edges = Vec::new();
+        // This rebuild retracts containment relations and removes empty edges directly on `inner`
+        // (bypassing the bumping API), so track the structural change and bump once. The
+        // `assert_relation` calls below bump on their own when they re-derive the edges.
+        let mut changed = false;
         for edge_id in edge_ids {
             if let Some(payload) = self.inner.edge_weight_mut(edge_id) {
                 let mut removed_any = false;
@@ -238,6 +242,9 @@ impl Graph {
                     .retract_relation(RelationSelector::Containment(ContainmentSubKind::UrlPath));
                 removed_any |= payload
                     .retract_relation(RelationSelector::Containment(ContainmentSubKind::Domain));
+                if removed_any {
+                    changed = true;
+                }
                 if removed_any && payload.is_empty() {
                     empty_edges.push(edge_id);
                 }
@@ -245,6 +252,9 @@ impl Graph {
         }
         for edge_id in empty_edges {
             let _ = self.inner.remove_edge(edge_id);
+        }
+        if changed {
+            self.bump_revision();
         }
 
         let mut domain_anchor: HashMap<String, (NodeKey, usize, Uuid)> = HashMap::new();

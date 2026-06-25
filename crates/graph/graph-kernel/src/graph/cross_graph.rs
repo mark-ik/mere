@@ -108,6 +108,7 @@ impl Graph {
 
         self.url_to_nodes.entry(url).or_default().push(key);
         self.id_to_node.insert(id, key);
+        self.bump_revision();
         key
     }
 }
@@ -138,7 +139,9 @@ mod tests {
         let source_id = source.id;
 
         let mut b = Graph::new();
+        let rev_before = b.revision();
         let copy_key = b.copy_node_from(&source, Some("graph-A".to_string()), Point2D::new(9.0, 9.0));
+        assert!(b.revision() > rev_before, "copying a node in is structural and advances the revision");
         let copy = b.get_node(copy_key).unwrap();
 
         // Fresh identity, content cloned.

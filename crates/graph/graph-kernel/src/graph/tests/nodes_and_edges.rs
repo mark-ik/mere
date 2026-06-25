@@ -30,6 +30,34 @@ fn test_graph_new() {
 }
 
 #[test]
+fn revision_advances_on_structural_change_only() {
+    let mut graph = Graph::new();
+    assert_eq!(graph.revision(), 0, "a fresh graph starts at revision 0");
+
+    let a = graph.add_node("https://a.example".to_string(), Point2D::new(0.0, 0.0));
+    let after_a = graph.revision();
+    assert!(after_a > 0, "adding a node advances the revision");
+
+    let b = graph.add_node("https://b.example".to_string(), Point2D::new(1.0, 0.0));
+    assert!(graph.revision() > after_a, "a second node advances it again");
+
+    // A new edge (relation) is structural.
+    let before_edge = graph.revision();
+    graph.assert_relation(a, b, hyperlink());
+    let after_edge = graph.revision();
+    assert!(after_edge > before_edge, "a new edge advances the revision");
+
+    // A content edit (the node url) is not structural: the revision holds, so a structural cache
+    // is not needlessly invalidated by navigation/renames.
+    graph.update_node_url(a, "https://a2.example".to_string());
+    assert_eq!(graph.revision(), after_edge, "a url edit is content, not structure");
+
+    // Removing a node is structural.
+    graph.remove_node(b);
+    assert!(graph.revision() > after_edge, "removing a node advances the revision");
+}
+
+#[test]
 fn test_add_node() {
     let mut graph = Graph::new();
     let pos = Point2D::new(100.0, 200.0);

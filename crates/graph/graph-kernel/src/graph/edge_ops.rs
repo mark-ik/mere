@@ -34,14 +34,25 @@ impl Graph {
             return None;
         }
         if let Some(edge_key) = self.find_edge_key(from, to) {
-            let payload = self.inner.edge_weight_mut(edge_key)?;
-            return payload.assert_relation(assertion).then_some(edge_key);
+            // Existing edge: assert onto its payload. A real change (a new relation on the pair —
+            // a multiplicity bump a weighted signal reads) advances the revision.
+            let changed = {
+                let payload = self.inner.edge_weight_mut(edge_key)?;
+                payload.assert_relation(assertion)
+            };
+            if changed {
+                self.bump_revision();
+                return Some(edge_key);
+            }
+            return None;
         }
         let mut payload = EdgePayload::new();
         if !payload.assert_relation(assertion) {
             return None;
         }
-        Some(self.inner.add_edge(from, to, payload))
+        let edge_key = self.inner.add_edge(from, to, payload);
+        self.bump_revision();
+        Some(edge_key)
     }
 
     /// Assert an **open predicate** semantic relation from `from` to `to`,
@@ -63,8 +74,11 @@ impl Graph {
         let edge_key = self
             .find_edge_key(from, to)
             .unwrap_or_else(|| self.inner.add_edge(from, to, EdgePayload::new()));
-        let payload = self.inner.edge_weight_mut(edge_key)?;
-        payload.set_semantic_predicate(Some(predicate));
+        {
+            let payload = self.inner.edge_weight_mut(edge_key)?;
+            payload.set_semantic_predicate(Some(predicate));
+        }
+        self.bump_revision();
         Some(edge_key)
     }
 
@@ -201,6 +215,9 @@ impl Graph {
         for edge_id in edges_to_delete {
             let _ = self.inner.remove_edge(edge_id);
         }
+        if removed > 0 {
+            self.bump_revision();
+        }
         removed
     }
 
@@ -227,12 +244,15 @@ impl Graph {
         if let Some(edge_key) = self.find_edge_key(from, to)
             && let Some(payload) = self.inner.edge_weight_mut(edge_key)
         {
+            // Existing edge: a re-visit appends a traversal but does not change the structure, so
+            // the revision holds (navigation re-visits must not churn the structural caches).
             payload.push_traversal(traversal);
             return true;
         }
         let mut payload = EdgePayload::new();
         payload.push_traversal(traversal);
         let _ = self.inner.add_edge(from, to, payload);
+        self.bump_revision();
         true
     }
 
