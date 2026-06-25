@@ -152,12 +152,15 @@ pub fn step_with<S: StreamingLayoutStrategy>(
 pub const ORRERY_LAYOUT_STRATEGIES: &[(&str, &str)] = &[
     ("phyllotaxis.default", "Phyllotaxis"),
     ("grid.default", "Grid"),
+    ("spectral.default", "Spectral"),
     ("penrose.default", "Penrose"),
     ("lsystem.default", "L-system"),
-    // Axis-driven, now dispatched: the host axes are graph-derived first-pass — kanban groups
-    // by URL host, timeline orders by node-creation order. The signals layer will enrich these
-    // (content-type / community columns, real timestamps). (Arrangements — kanban/timeline.)
+    // Axis-driven, now dispatched: the host axes are graph-derived. Kanban groups by URL host
+    // (`by site`) or by graph-structural **community** (`by cluster`, the Louvain partition from
+    // intel/signals); timeline orders by node-creation order. (Arrangements — kanban/timeline;
+    // graph signals — community to columns.)
     ("kanban.default", "Kanban (by site)"),
+    ("kanban.community", "Kanban (by cluster)"),
     ("timeline.default", "Timeline (by order)"),
 ];
 
@@ -181,10 +184,11 @@ pub fn project_orrery_strategy(
     focus: Option<NodeKey>,
     width: u32,
     height: u32,
+    clusters: Option<&cartography::ClusterSet>,
 ) -> Vec<(NodeKey, PortablePoint)> {
     use arrangements::adapters::{
         GridAdapter, KanbanAdapter, LSystemAdapter, PenroseAdapter, PhyllotaxisAdapter,
-        RadialAdapter, TimelineAdapter,
+        RadialAdapter, SpectralAdapter, TimelineAdapter,
     };
     // The real signal snapshot from intel/signals (degree-based importance for now), replacing
     // the empty `::default()` — the producer -> snapshot -> strategy spine. Strategies that read
@@ -197,6 +201,10 @@ pub fn project_orrery_strategy(
             project_with(graph, &signals, &options, &PhyllotaxisAdapter::default())
         }
         "grid.default" => project_with(graph, &signals, &options, &GridAdapter::default()),
+        // Spectral: positions from the graph Laplacian's smallest eigenvectors, so the layout
+        // reflects connectivity (clusters separate, paths unroll). The expensive analytic layout the
+        // arrangement cache covers. (Graph signals — P5.)
+        "spectral.default" => project_with(graph, &signals, &options, &SpectralAdapter::default()),
         "penrose.default" => project_with(graph, &signals, &options, &PenroseAdapter::default()),
         "lsystem.default" => project_with(graph, &signals, &options, &LSystemAdapter::default()),
         // Axis-driven: the host derives the per-node axis (graph-only first pass) and threads it on
@@ -207,6 +215,33 @@ pub fn project_orrery_strategy(
                 .nodes()
                 .map(|(key, node)| (key, AxisValue::Categorical(url_host(node.url()))))
                 .collect::<HashMap<_, _>>();
+            let mut intent = options.to_view_intent();
+            intent.axis_values = Some(axis);
+            KanbanAdapter::default()
+                .project(&ProjectionRequest { graph, signals: &signals, intent })
+        }
+        // Same kanban adapter, but the column key is the graph-structural **community** (the
+        // Louvain partition) instead of the URL host — so the board groups by how the graph
+        // actually clusters, not by site. Community is the expensive signal, so it is computed
+        // here only when this strategy is active. (Graph signals — community to columns, P3.)
+        "kanban.community" => {
+            // Prefer the host's generation-gated community cache; fall back to an inline compute
+            // (tests, or the first frame before the cache fills) so the board is never empty.
+            let computed;
+            let clusters = match clusters {
+                Some(cached) => cached,
+                None => {
+                    computed = signals::community_louvain(graph);
+                    &computed
+                }
+            };
+            let mut axis: HashMap<NodeKey, AxisValue> = HashMap::new();
+            for (i, cluster) in clusters.clusters.iter().enumerate() {
+                let label = cluster.label.clone().unwrap_or_else(|| format!("Cluster {}", i + 1));
+                for &member in &cluster.members {
+                    axis.insert(member, AxisValue::Categorical(label.clone()));
+                }
+            }
             let mut intent = options.to_view_intent();
             intent.axis_values = Some(axis);
             KanbanAdapter::default()
@@ -283,10 +318,30 @@ mod tests {
     }
 
     #[test]
+    fn kanban_community_groups_each_cluster_into_its_own_column() {
+        // Two triangles {0,1,2} and {3,4,5} joined by one bridge edge => two Louvain communities,
+        // so the cluster-kanban board lays them out as two columns.
+        let mut graph = Graph::new();
+        let n: Vec<NodeKey> = (0..6)
+            .map(|i| graph.add_node(format!("test://{i}"), PortablePoint::new(i as f32, 0.0)))
+            .collect();
+        for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
+            graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
+        }
+        let positions = project_orrery_strategy("kanban.community", &graph, None, 800, 600, None);
+        assert_eq!(positions.len(), 6, "every node is placed");
+        let x_of = |key: NodeKey| positions.iter().find(|(k, _)| *k == key).unwrap().1.x;
+        assert!((x_of(n[0]) - x_of(n[1])).abs() < 0.001, "triangle A shares one column");
+        assert!((x_of(n[0]) - x_of(n[2])).abs() < 0.001);
+        assert!((x_of(n[3]) - x_of(n[4])).abs() < 0.001, "triangle B shares one column");
+        assert!((x_of(n[0]) - x_of(n[3])).abs() > 0.001, "the two communities are distinct columns");
+    }
+
+    #[test]
     fn project_orrery_strategy_radial_centers_on_focus_and_no_ops_without_one() {
         let (graph, [a, _, _]) = triangle_graph();
         // With a focus, radial lays out the whole graph (focus at center).
-        let with_focus = project_orrery_strategy("radial.default", &graph, Some(a), 800, 600);
+        let with_focus = project_orrery_strategy("radial.default", &graph, Some(a), 800, 600, None);
         assert_eq!(with_focus.len(), 3, "radial projects every node around the focus");
         let focus_pos = with_focus.iter().find(|(k, _)| *k == a).unwrap().1;
         assert!(
@@ -294,7 +349,7 @@ mod tests {
             "the focus sits at the radial center"
         );
         // Without a focus there is nothing to center on, so it leaves the layout alone.
-        let no_focus = project_orrery_strategy("radial.default", &graph, None, 800, 600);
+        let no_focus = project_orrery_strategy("radial.default", &graph, None, 800, 600, None);
         assert!(no_focus.is_empty(), "radial without a selection no-ops");
     }
 

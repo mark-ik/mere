@@ -24,8 +24,8 @@ use serval_layout::{Applied, IncrementalLayout, ScrollOffsets};
 use serval_scripted_dom::NodeId as DomNodeId;
 
 use super::build::{
-    background_cmds, field_overlay, marquee_rect_cmds, selected_edge_overlay, set_class, set_style,
-    NODE_SHEET,
+    background_cmds, bridge_ring_overlay, community_ring_overlay, field_overlay, marquee_rect_cmds,
+    selected_edge_overlay, set_class, set_style, NODE_SHEET,
 };
 use super::{NodeShape, NodeState, Orrery, NODE_HALF, PAN_DECAY};
 
@@ -52,6 +52,18 @@ impl Orrery {
         // A non-gyre layout strategy overrides the physics snapshot: write its buffered
         // positions into the view before anything reads it. (Layout picker.)
         self.apply_strategy_to_view();
+        // Pick up any finished off-thread community partition (a no-op when computing inline), so a
+        // result dispatched on an earlier frame lands before the rings paint. (Graph signals — P3.)
+        self.drain_community();
+        // The community-ring overlay needs a fresh partition; recompute it only when the toggle is
+        // on and the graph changed (generation-gated). (Graph signals — community to a ring.)
+        if self.show_community_rings {
+            self.ensure_community_fresh();
+        }
+        // The bridge-ring overlay needs the broker set, likewise revision-gated. (Graph signals.)
+        if self.show_bridge_rings {
+            self.ensure_bridges_fresh();
+        }
         // A dragged node tracks the cursor with zero round-trip: re-pin it locally
         // over whatever the backend just reported (the actor lags a frame behind,
         // and the in-thread snapshot already agrees, so this is a no-op there).
@@ -137,6 +149,23 @@ impl Orrery {
         // underlay's camera transform (world space — no transform replication).
         if !self.selected_edges.is_empty() {
             underlay.splice_world_overlays(selected_edge_overlay(&self.view, &self.selected_edges));
+        }
+        // Community rings: a halo per node in its community's colour, spliced into the same
+        // world-space transform. (Graph signals — community to a ring.)
+        if self.show_community_rings
+            && let Some(community) = self.community_cache.as_ref()
+        {
+            let rings =
+                community_ring_overlay(&self.view, community, |k| self.node_size(k) / 2.0);
+            underlay.splice_world_overlays(rings);
+        }
+        // Bridge rings: a bold ring on the high-betweenness brokers, over the community rings so the
+        // connectors stand out. (Graph signals — bridges.)
+        if self.show_bridge_rings
+            && let Some(bridges) = self.bridge_cache.as_ref()
+        {
+            let rings = bridge_ring_overlay(&self.view, bridges, |k| self.node_size(k) / 2.0);
+            underlay.splice_world_overlays(rings);
         }
 
         // The node-children layer — the pre-materialized pool. Ensure the

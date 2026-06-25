@@ -353,6 +353,17 @@ impl WindowCtx<'_> {
             ),
             ("Sync".to_string(), self.sync_summary()),
             (
+                // The dialable ticket, readable + shareable here instead of only in the
+                // logs. (Tessera ticket surface.)
+                "Tessera ticket".to_string(),
+                self.view
+                    .chrome()
+                    .sync
+                    .ticket()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| "\u{2014}".to_string()),
+            ),
+            (
                 "Actions".to_string(),
                 "retry.focused / stop.focused / pin.focused".to_string(),
             ),
@@ -395,14 +406,19 @@ impl WindowCtx<'_> {
 
     fn sync_summary(&self) -> String {
         let indicator = &self.view.chrome().sync;
-        if indicator.active {
-            format!(
-                "{} syncing={} ops={}",
-                indicator.label, indicator.syncing, indicator.ops
-            )
-        } else {
-            "off".to_string()
+        if !indicator.active {
+            return "off".to_string();
         }
+        // The earned standing is the headline; ops is the raw catch-up plumbing behind
+        // it. (Tessera ledger fold.)
+        let standing = indicator
+            .standing
+            .map(|s| format!(" standing={s:+}"))
+            .unwrap_or_default();
+        format!(
+            "{} syncing={} ops={}{}",
+            indicator.label, indicator.syncing, indicator.ops, standing
+        )
     }
 }
 

@@ -1314,6 +1314,16 @@ impl WindowCtx<'_> {
                 self.orrery_mut().set_importance_metric(orrery::ImportanceMetric::Betweenness);
                 self.view.request_redraw();
             }
+            "orrery:communityrings" => {
+                let on = !self.orrery().show_community_rings();
+                self.orrery_mut().set_show_community_rings(on);
+                self.view.request_redraw();
+            }
+            "orrery:bridgerings" => {
+                let on = !self.orrery().show_bridge_rings();
+                self.orrery_mut().set_show_bridge_rings(on);
+                self.view.request_redraw();
+            }
             "orrery:mirror" => self.toggle_mirror_tiles(),
             k if k.starts_with("orrery:layout:") => {
                 self.set_orrery_layout(&k["orrery:layout:".len()..]);

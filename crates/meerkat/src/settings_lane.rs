@@ -358,6 +358,22 @@ impl WindowCtx<'_> {
                 "orrery:importance:betweenness".to_string(),
             ));
         }
+        // Community rings: halo each node in its Louvain community's colour, in any layout, so the
+        // graph's clusters read spatially. (Graph signals — community to a ring.)
+        let rings = self.orrery().show_community_rings();
+        items.push(toggle(
+            check("Show community rings", rings),
+            rings,
+            "orrery:communityrings".to_string(),
+        ));
+        // Bridge rings: bold the structural brokers (high-betweenness nodes), in any layout.
+        // (Graph signals — bridges.)
+        let bridges = self.orrery().show_bridge_rings();
+        items.push(toggle(
+            check("Show bridge rings", bridges),
+            bridges,
+            "orrery:bridgerings".to_string(),
+        ));
         let mirror = self.view.mirror_tiles;
         items.push(toggle(check("Mirror open tiles", mirror), mirror, "orrery:mirror".to_string()));
         items

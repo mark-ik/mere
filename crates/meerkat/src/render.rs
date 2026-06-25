@@ -332,12 +332,15 @@ impl WindowCtx<'_> {
             comms: self.pane_of_content(&PaneContent::Comms).is_some(),
         };
         let sb_edge = self.shared.presentation.shellbar_edge;
+        let sb_hidden = self.shared.presentation.shellbar_hidden;
         if self.view.chrome().shellbar_panes != sb_panes
             || self.view.chrome().shellbar_edge != sb_edge
+            || self.view.chrome().shellbar_hidden != sb_hidden
         {
             self.view.chrome_update(move |c| {
                 c.shellbar_panes = sb_panes;
                 c.shellbar_edge = sb_edge;
+                c.shellbar_hidden = sb_hidden;
             });
         }
 
@@ -355,9 +358,10 @@ impl WindowCtx<'_> {
 
         // Frame tree: the content band (below the toolbar) split into pane rects.
         // The shellbar strip is carved out of the band first; the frame tree fills
-        // the remainder. A slim (leaf) window has no shellbar, so the band is the
-        // whole area below the toolbar. (Shellbar F2.1; MW3 step 4.)
-        let band = if self.view.kind.is_slim() {
+        // the remainder. A slim (leaf) window has no shellbar, and a hidden shellbar
+        // carves nothing either, so the band is the whole area below the toolbar.
+        // (Shellbar F2.1; MW3 step 4; hide-shellbar.)
+        let band = if self.view.kind.is_slim() || self.shared.presentation.shellbar_hidden {
             [0.0, toolbar_h as f32, w as f32, h as f32]
         } else {
             shellbar::band_after_shellbar(
@@ -622,10 +626,25 @@ impl WindowCtx<'_> {
             // Focus-driven strategies (radial) center on the pane's single selection;
             // passing it each frame lets radial re-center live as the selection moves.
             // The graph-only strategies ignore it. (Layout picker.)
-            let pane = self.pane_orrery(orrery_gid);
-            let positions =
-                platen::project_orrery_strategy(&id, pane.graph(), pane.focused_key(), orrery_w, orrery_h);
-            self.pane_orrery_mut(orrery_gid).apply_strategy_positions(&positions);
+            // Skip the whole analytic recompute unless an input changed (strategy, graph revision,
+            // viewport, or focus) — analytic layouts were recomputed every frame before. When we do
+            // recompute, refresh the community cache first (the revision moved), then project against
+            // it so Louvain is not re-run per frame either. (Arrangements cache + graph signals.)
+            let focus = self.pane_orrery(orrery_gid).focused_key();
+            if self.pane_orrery(orrery_gid).needs_strategy_recompute(&id, orrery_w, orrery_h, focus) {
+                self.pane_orrery_mut(orrery_gid).refresh_community_cache(&id);
+                let pane = self.pane_orrery(orrery_gid);
+                let positions = platen::project_orrery_strategy(
+                    &id,
+                    pane.graph(),
+                    pane.focused_key(),
+                    orrery_w,
+                    orrery_h,
+                    pane.community(),
+                );
+                self.pane_orrery_mut(orrery_gid).apply_strategy_positions(&positions);
+                self.pane_orrery_mut(orrery_gid).note_strategy_computed(&id, orrery_w, orrery_h, focus);
+            }
         }
         let (orrery_scene, orrery_redraw) = self.pane_orrery_mut(orrery_gid).frame(orrery_w, orrery_h);
 
@@ -807,9 +826,20 @@ impl WindowCtx<'_> {
                     orrery.recenter();
                 }
                 if let Some(id) = orrery.layout_strategy().map(str::to_string) {
-                    let positions =
-                        platen::project_orrery_strategy(&id, orrery.graph(), orrery.focused_key(), sw, sh);
-                    orrery.apply_strategy_positions(&positions);
+                    let focus = orrery.focused_key();
+                    if orrery.needs_strategy_recompute(&id, sw, sh, focus) {
+                        orrery.refresh_community_cache(&id);
+                        let positions = platen::project_orrery_strategy(
+                            &id,
+                            orrery.graph(),
+                            orrery.focused_key(),
+                            sw,
+                            sh,
+                            orrery.community(),
+                        );
+                        orrery.apply_strategy_positions(&positions);
+                        orrery.note_strategy_computed(&id, sw, sh, focus);
+                    }
                 }
                 let (scene, _) = orrery.frame(sw, sh);
                 (scene, l.rect, sw, sh)
@@ -1895,6 +1925,7 @@ impl WindowCtx<'_> {
         self.view.session_close_rects.clear();
         self.view.session_add_rect = None;
         if !self.view.kind.is_slim()
+            && !self.shared.presentation.shellbar_hidden
             && matches!(
                 self.shared.presentation.shellbar_edge,
                 session_runtime::ShellbarEdge::Left | session_runtime::ShellbarEdge::Right

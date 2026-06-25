@@ -161,6 +161,7 @@ impl WindowCtx<'_> {
             Command::ToggleTrail => self.toggle_pane(PaneContent::Trail),
             Command::ToggleSteward => self.toggle_pane(PaneContent::Steward),
             Command::ToggleAlembic => self.toggle_pane(PaneContent::Alembic),
+            Command::ToggleShellbar => self.toggle_shellbar_visibility(),
             Command::RetryFocusedContent => self.retry_focused_content(),
             Command::StopFocusedOperation => self.stop_focused_operation(),
             Command::PinFocusedOperation => self.pin_focused_operation(),

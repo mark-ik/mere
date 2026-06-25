@@ -98,11 +98,15 @@ pub enum Command {
     /// policy (same-host, shallow). Each fetched page's links + metadata become graph
     /// nodes. (Relational-browse V2; extraction lane.)
     CrawlFocused,
+    /// Toggle the shellbar's visibility (the user's hide toggle, distinct from a leaf
+    /// window's slim chrome). Reveals it again from the palette / `>shellbar` when it is
+    /// hidden (host action: flips the setting and persists). (Hide-shellbar.)
+    ToggleShellbar,
 }
 
 impl Command {
     /// Every command, in display order.
-    pub const ALL: [Command; 30] = [
+    pub const ALL: [Command; 31] = [
         Command::Back,
         Command::Forward,
         Command::Home,
@@ -133,6 +137,7 @@ impl Command {
         Command::ExportGraph,
         Command::SaveGraphEngram,
         Command::CrawlFocused,
+        Command::ToggleShellbar,
     ];
 
     /// Whether this command is a *host* action (run by the shell over the graph /
@@ -165,6 +170,7 @@ impl Command {
                 | Command::ExportGraph
                 | Command::SaveGraphEngram
                 | Command::CrawlFocused
+                | Command::ToggleShellbar
         )
     }
 
@@ -191,7 +197,7 @@ impl Command {
             Back | Forward | Home | ConnectPeer | ToggleWorkbench | ToggleRoster | ToggleGloss
             | ToggleApparatus | ToggleComms | ToggleInspector | ToggleTrail | ToggleSteward
             | ToggleAlembic | ShowAllEdges | ToggleProjection | OpenSettings | CloseGraphPane
-            | ExportGraph | SaveGraphEngram => {
+            | ExportGraph | SaveGraphEngram | ToggleShellbar => {
                 MenuScope::Always
             }
         }
@@ -236,6 +242,7 @@ impl Command {
             Command::ExportGraph => "export_graph",
             Command::SaveGraphEngram => "save_graph_engram",
             Command::CrawlFocused => "crawl",
+            Command::ToggleShellbar => "shellbar",
         }
     }
 
@@ -282,6 +289,7 @@ impl Command {
             Command::ExportGraph => "Export graph (JSON-LD)",
             Command::SaveGraphEngram => "Save graph as engram",
             Command::CrawlFocused => "Crawl focused page's links into the graph",
+            Command::ToggleShellbar => "Shellbar (toggle visibility)",
         }
     }
 }

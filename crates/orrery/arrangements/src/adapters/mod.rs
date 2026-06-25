@@ -40,6 +40,7 @@ pub mod radial;
 pub mod semantic_edge_weight;
 pub mod semantic_embedding;
 pub mod shared;
+pub mod spectral;
 pub mod timeline;
 
 pub use grid::GridAdapter;
@@ -51,4 +52,5 @@ pub use radial::RadialAdapter;
 pub use semantic_edge_weight::{SemanticEdgeWeightAdapter, SemanticEdgeWeightAdapterState};
 pub use semantic_embedding::SemanticEmbeddingAdapter;
 pub use shared::run_one_step;
+pub use spectral::SpectralAdapter;
 pub use timeline::TimelineAdapter;

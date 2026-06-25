@@ -138,6 +138,7 @@ impl WindowCtx<'_> {
             tab_cap: self.shared.presentation.saved_tab_cap,
             theme_id: Some(self.shared.presentation.active_theme_id.clone()),
             shellbar_edge: self.shared.presentation.shellbar_edge,
+            shellbar_hidden: self.shared.presentation.shellbar_hidden,
             physics_damping: self.shared.presentation.physics_damping,
             disabled_engines: self.shared.content.engine_activation.global_disabled_vec(),
             // The document typography as embedded JSON; `None` keeps the file
@@ -151,6 +152,17 @@ impl WindowCtx<'_> {
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");
         }
+    }
+
+    /// Toggle the shellbar's visibility on this window and persist the new state. The
+    /// content band grows (hidden) or shrinks (shown), so the orrery recenters once,
+    /// mirroring a shellbar move. When hidden, the strip can be right-clicked no more, so
+    /// it is revealed again from the command palette / `>shellbar`. (Hide-shellbar.)
+    pub(super) fn toggle_shellbar_visibility(&mut self) {
+        self.shared.presentation.shellbar_hidden = !self.shared.presentation.shellbar_hidden;
+        self.view.centered = false; // the content band changed size; recenter the orrery once
+        self.persist_settings();
+        self.view.request_redraw();
     }
 
     /// Persist the persona's curated context menu (command registry P4) to the persona settings

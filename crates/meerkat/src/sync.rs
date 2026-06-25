@@ -33,8 +33,8 @@ use std::time::Duration;
 use armillary::{ActorHandle, Emitter, Wake, spawn};
 use identity::{IdentityProvider, InMemoryProvider};
 use moothold::tessera::{
-    ChainRoot, CommitmentId, Scope, SyncStatus, SyncedMoot, TesseraEvent, TesseraStore,
-    to_operation,
+    ChainRoot, CommitmentId, Scope, SyncStatus, SyncedMoot, TesseraConfig, TesseraEvent,
+    TesseraStore, to_operation,
 };
 use transport::{P2pandaTransport, sync_overlay_topic};
 
@@ -45,21 +45,39 @@ pub const DEMO_MOOT: [u8; 32] = [0x7e; 32];
 /// The chip label for the tessera lane.
 pub const LANE_LABEL: &str = "tessera";
 
-/// A change in a synced lane's status, delivered to the UI loop.
+/// A change in a synced lane's status, delivered to the UI loop. Carries the raw
+/// reconciliation `status` plus the two things the chip actually wants to show: this
+/// persona's folded ledger `standing` (the point of tessera) and the dialable `ticket`
+/// to share with a peer. (Tessera ledger fold + ticket surface.)
 pub struct SyncUpdate {
     pub status: SyncStatus,
+    /// This persona's earned tessera standing (the folded ledger score), or `None`
+    /// before a ledger has folded.
+    pub standing: Option<i64>,
+    /// This install's dialable ticket, or `None` if the transport produced none.
+    pub ticket: Option<String>,
 }
 
-/// Project the real `SyncStatus` into the chrome's [`SyncIndicator`] view-model.
-/// `active` is always `true` here: an update only exists once a lane is joined.
-pub fn to_indicator(status: &SyncStatus, label: &str) -> SyncIndicator {
+/// Project a [`SyncUpdate`] into the chrome's [`SyncIndicator`] view-model. `active`
+/// is always `true` here: an update only exists once a lane is joined.
+pub fn to_indicator(update: &SyncUpdate, label: &str) -> SyncIndicator {
     SyncIndicator {
         label: label.to_string(),
         active: true,
-        syncing: status.syncing,
-        ops: status.ops_received,
-        last_activity_ms: status.last_activity_ms,
+        syncing: update.status.syncing,
+        ops: update.status.ops_received,
+        last_activity_ms: update.status.last_activity_ms,
+        standing: update.standing,
+        ticket: update.ticket.clone(),
     }
+}
+
+/// Unix-epoch milliseconds, for the ledger fold's decay clock. (Tessera ledger fold.)
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 /// The sync actor's outbound commands. Today just "connect to a peer by ticket"
@@ -96,7 +114,7 @@ pub fn spawn_sync(
         // persistent seed-file identity (created on first launch, reused after)
         // makes this install a stable, distinct peer across restarts (S5.2).
         let dir = data_dir();
-        let setup: Result<(P2pandaTransport, SyncedMoot), String> = runtime.block_on(async {
+        let setup: Result<(P2pandaTransport, SyncedMoot, Option<ChainRoot>), String> = runtime.block_on(async {
             let provider =
                 InMemoryProvider::from_seed(load_or_create_seed(&dir.join("node_identity.seed")));
             let keypair = provider.master_keypair().clone();
@@ -120,16 +138,28 @@ pub fn spawn_sync(
             if store.is_empty().unwrap_or(true) {
                 author_starter_log(&provider, moot_id, &store);
             }
+            // This host's own persona chain root (the `tessera-host-author` keypair), so
+            // the poll loop can read its standing out of the folded ledger. (Tessera fold.)
+            let host_root = provider
+                .derive_keypair(b"tessera-host-author")
+                .ok()
+                .map(|kp| ChainRoot(kp.public_key().to_bytes()));
             let moot = SyncedMoot::join(endpoint, gossip, store, moot_id)
                 .await
                 .map_err(|e| format!("join moot: {e}"))?;
-            Ok((transport, moot))
+            Ok((transport, moot, host_root))
         });
 
         let transport = match setup {
-            Ok((transport, moot)) => {
-                // Log this node's dialable ticket so it can be shared with a peer.
-                if let Ok(ticket) = runtime.block_on(transport.ticket()) {
+            Ok((transport, moot, host_root)) => {
+                // The dialable ticket: captured so the poll loop can surface it to the
+                // chip (not only log it), so a peer can be invited without reading logs.
+                // (Tessera ticket surface.)
+                let ticket = runtime
+                    .block_on(transport.ticket())
+                    .ok()
+                    .map(|ticket| ticket.to_string());
+                if let Some(ticket) = &ticket {
                     tracing::info!(%ticket, "p2p sync up: joined tessera demo moot — share this ticket with a peer");
                 }
                 // The status poll task emits each change through the actor's Emitter
@@ -143,8 +173,19 @@ pub fn spawn_sync(
                     loop {
                         let status = moot.sync_status();
                         if last.as_ref() != Some(&status) {
+                            // Fold the ledger and read this persona's standing — the
+                            // point of tessera, surfaced on the chip rather than left
+                            // invisible. Re-folds on each status change (the log is
+                            // small); a cache is a later refinement. (Tessera ledger fold.)
+                            let standing = host_root.as_ref().and_then(|root| {
+                                moot.ledger(TesseraConfig::default())
+                                    .ok()
+                                    .map(|ledger| ledger.score(root, now_ms()))
+                            });
                             poll_out.emit(SyncUpdate {
                                 status: status.clone(),
+                                standing,
+                                ticket: ticket.clone(),
                             });
                             last = Some(status);
                         }
@@ -284,19 +325,35 @@ mod tests {
             ops_received: 3,
             last_activity_ms: Some(1_000),
         };
-        let indicator = to_indicator(&status, "tessera");
+        let update = SyncUpdate {
+            status,
+            standing: Some(4),
+            ticket: Some("dial:xyz".into()),
+        };
+        let indicator = to_indicator(&update, "tessera");
         assert_eq!(indicator.label, "tessera");
         assert!(indicator.active, "an update means the lane is joined");
         assert!(indicator.syncing);
         assert_eq!(indicator.ops, 3);
         assert_eq!(indicator.last_activity_ms, Some(1_000));
+        assert_eq!(indicator.standing, Some(4), "the folded standing projects through");
+        assert_eq!(indicator.ticket(), Some("dial:xyz"), "the ticket projects through");
+        // A round in progress still wins the headline over standing.
         assert_eq!(indicator.summary(), "tessera: syncing");
     }
 
     #[test]
     fn a_freshly_joined_lane_reads_idle() {
         assert_eq!(
-            to_indicator(&SyncStatus::default(), "tessera").summary(),
+            to_indicator(
+                &SyncUpdate {
+                    status: SyncStatus::default(),
+                    standing: None,
+                    ticket: None,
+                },
+                "tessera"
+            )
+            .summary(),
             "tessera: idle"
         );
     }

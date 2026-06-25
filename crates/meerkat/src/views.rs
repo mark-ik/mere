@@ -162,8 +162,9 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     }
     // Shellbar: a pane-toggle strip docked to one window edge (F2.1). Its geometry is
     // set inline each frame by the host via `set_attribute` on the `.shellbar` class
-    // node, following the comms-pane pattern. A slim (leaf) window omits it. (MW3 step 4.)
-    if !c.slim {
+    // node, following the comms-pane pattern. A slim (leaf) window omits it, and the
+    // user's hide toggle omits it on a full-chrome window. (MW3 step 4; hide-shellbar.)
+    if !c.slim && !c.shellbar_hidden {
         // The shellbar depends only on the pane-open states, so memoize on them:
         // an omnibar keystroke (panes unchanged) skips rebuilding the whole strip.
         children.push(Box::new(memoize(c.shellbar_panes, |panes: &ShellbarPaneStates| {

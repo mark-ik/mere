@@ -76,6 +76,12 @@ pub struct PersistedSettings {
     /// Which window edge the shellbar is docked to. Defaults to Left.
     #[serde(default)]
     pub shellbar_edge: ShellbarEdge,
+    /// Whether the shellbar is hidden on this (primary) window. Defaults to shown.
+    /// Distinct from a leaf window's slim chrome (which always omits the shellbar);
+    /// this is the user's explicit hide toggle, restored across restart and revealed
+    /// again from the command palette / `>shellbar`. (Hide-shellbar.)
+    #[serde(default)]
+    pub shellbar_hidden: bool,
     /// Linear damping for orrery node bodies — the "inertia" physics setting: lower
     /// keeps more drift after a settle, higher rests sooner. Defaults to the layout
     /// engine's tuned value.
@@ -111,6 +117,7 @@ impl Default for PersistedSettings {
             tab_cap: default_tab_cap(),
             theme_id: None,
             shellbar_edge: ShellbarEdge::default(),
+            shellbar_hidden: false,
             physics_damping: default_physics_damping(),
             disabled_engines: Vec::new(),
             document_typography: None,
@@ -178,7 +185,7 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let dir = temp_session_dir("round-trip");
-        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()], document_typography: None, script_permissions: ScriptPermissionPrefs { log: None, document: Some(Permission::Deny), net: Some(Permission::Allow) } };
+        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()], document_typography: None, script_permissions: ScriptPermissionPrefs { log: None, document: Some(Permission::Deny), net: Some(Permission::Allow) } };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir).unwrap().expect("settings file should be present");
         assert_eq!(restored, original);
@@ -206,8 +213,8 @@ mod tests {
     #[test]
     fn save_overwrites_atomically_with_no_tmp_left() {
         let dir = temp_session_dir("overwrite");
-        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default() }).unwrap();
-        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default() }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default() }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default() }).unwrap();
         let restored = load_settings(&dir).unwrap().unwrap();
         assert_eq!(restored.tab_cap, 24);
         let tmp = settings_path(&dir).with_extension("json.tmp");

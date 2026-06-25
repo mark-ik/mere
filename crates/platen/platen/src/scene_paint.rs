@@ -389,6 +389,53 @@ mod tests {
     }
 
     #[test]
+    fn edge_weight_scales_the_stroke_width() {
+        // a-b at unit weight, c-d at the multigraph multiplicity of 2: the heavier pair paints a
+        // proportionally thicker stroke. This is the paint half of the multiplicity encoding; since
+        // the orrery's universal underlay path (project_keys -> paint_projection_filtered) feeds
+        // weighted edges in EVERY layout mode, edge thickness shows under analytic layouts too, not
+        // only force-directed. (Graph signals — edge-weight encoding.)
+        let (a, b, c, d) = (NodeKey::new(0), NodeKey::new(1), NodeKey::new(2), NodeKey::new(3));
+        let projection = Projection {
+            nodes: vec![
+                node(a, 0.0, 0.0, 0.0),
+                node(b, 100.0, 0.0, 0.0),
+                node(c, 0.0, 100.0, 0.0),
+                node(d, 100.0, 100.0, 0.0),
+            ],
+            edges: vec![
+                PositionedEdge { edge: None, from: a, to: b, path: Vec::new(), weight: 1.0 },
+                PositionedEdge { edge: None, from: c, to: d, path: Vec::new(), weight: 2.0 },
+            ],
+            ..Projection::empty()
+        };
+        let style = ScenePaintStyle::default();
+        let list = paint_projection(
+            &projection,
+            DeviceIntSize::new(800, 600),
+            Camera::default(),
+            &style,
+            0,
+        );
+        let mut widths: Vec<f32> = list
+            .commands()
+            .iter()
+            .filter_map(|c| match c {
+                PaintCmd::DrawStroke(s) => Some(s.width),
+                _ => None,
+            })
+            .collect();
+        widths.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        assert_eq!(widths.len(), 2, "one stroke per edge");
+        assert!((widths[0] - style.edge_width).abs() < 1e-4, "the unit pair paints the default width");
+        assert!(
+            (widths[1] - style.edge_width * 2.0).abs() < 1e-4,
+            "the weight-2 pair paints twice as thick: {}",
+            widths[1]
+        );
+    }
+
+    #[test]
     fn edge_with_missing_endpoint_is_skipped() {
         let a = NodeKey::new(0);
         let ghost = NodeKey::new(99);

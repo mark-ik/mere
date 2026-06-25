@@ -373,7 +373,7 @@ impl WindowCtx<'_> {
     /// with the current edge marked. (Shellbar F2.2.)
     pub(super) fn open_shellbar_menu_at(&mut self, x: f32, y: f32) {
         let current = self.shared.presentation.shellbar_edge;
-        let items: Vec<ContextItem> = [
+        let mut items: Vec<ContextItem> = [
             (ShellbarEdge::Left, "Move shellbar to left"),
             (ShellbarEdge::Right, "Move shellbar to right"),
             (ShellbarEdge::Top, "Move shellbar to top"),
@@ -389,6 +389,12 @@ impl WindowCtx<'_> {
             ContextItem::new(label, ContextAction::ShellbarMove(edge))
         })
         .collect();
+        // Hide the shellbar (reveal it again from the palette / `>shellbar`). A hidden
+        // strip can't be right-clicked, so this row only ever hides. (Hide-shellbar.)
+        items.push(ContextItem::new(
+            "Hide shellbar".to_string(),
+            ContextAction::ShellbarToggleVisibility,
+        ));
         self.view.chrome_update(move |c| c.open_context_menu(x, y, items));
         self.view.request_redraw();
     }
@@ -461,6 +467,11 @@ impl WindowCtx<'_> {
             self.view.toolbar_h = 0;   // re-measure (band height may change if Top/Bottom)
             self.persist_settings();
             self.view.request_redraw();
+            return;
+        }
+        // Shellbar hide: the right-click row hides the strip; reveal from `>shellbar`.
+        if let ContextAction::ShellbarToggleVisibility = action {
+            self.toggle_shellbar_visibility();
             return;
         }
         // Set the focused orrery pane's layout strategy (the layout picker). An empty
@@ -664,6 +675,7 @@ impl WindowCtx<'_> {
                 self.view.workbench.open_stack(&set);
             }
             ContextAction::ShellbarMove(_)
+            | ContextAction::ShellbarToggleVisibility
             | ContextAction::Relate
             | ContextAction::AddNode
             | ContextAction::AddTile

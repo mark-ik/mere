@@ -651,6 +651,10 @@ struct Presentation {
     saved_tab_cap: usize,
     /// Which window edge the shellbar is docked to. Persisted in settings.json.
     shellbar_edge: session_runtime::ShellbarEdge,
+    /// Whether the shellbar is hidden (the user's explicit hide toggle, distinct from a
+    /// leaf window's slim chrome). Persisted in settings.json; revealed from the palette /
+    /// `>shellbar`. (Hide-shellbar.)
+    shellbar_hidden: bool,
     /// Linear damping for orrery node bodies — the "inertia" physics setting,
     /// adjusted in the apparatus pane and persisted. The host owns the value and
     /// pushes it to each orrery via `set_physics_damping`. (Physics settings.)
@@ -743,11 +747,20 @@ struct Shell {
     /// platform clipboard could not be opened (the shortcuts then no-op). System-
     /// global, so it stays on `Shell`, not in `SharedState`.
     clipboard: Option<arboard::Clipboard>,
-    /// Platform AccessKit bridge fed by the same host-local uxtree snapshot as
-    /// Apparatus. Unsupported platforms keep this as an explicit degraded bridge.
-    /// Per-window by construction (installs against one window); stays on `Shell`
-    /// pending the per-window move MW3 forces.
+    /// The **primary** window's platform AccessKit bridge, fed by the same host-local
+    /// uxtree snapshot as Apparatus. Unsupported platforms keep this as an explicit
+    /// degraded bridge. Secondary (leaf) windows get their own in
+    /// [`secondary_a11y_bridges`](Self::secondary_a11y_bridges); `ctx()` (always the
+    /// primary) uses this one, `window_ctx` forks by id. (Per-window a11y, MW3 step 6.)
     a11y_bridge: a11y_bridge::AccessKitBridge,
+    /// Per-secondary-window AccessKit bridges (MW3 step 6). The primary's bridge is
+    /// `a11y_bridge` above; each spawned leaf gets its own here, keyed by its
+    /// `WindowId` and installed against its own window. `window_ctx` resolves the right
+    /// one (primary field vs this map); `close_window` drops it.
+    secondary_a11y_bridges: HashMap<WindowId, a11y_bridge::AccessKitBridge>,
+    /// The event-loop proxy that wakes the kernel from any window's AccessKit adapter,
+    /// kept so a spawned window can mint its own bridge with the same wake. (MW3 step 6.)
+    a11y_proxy: winit::event_loop::EventLoopProxy<()>,
     /// Host-owned routes for actionable AccessKit nodes in the current snapshot.
     /// The bridge only queues raw AccessKit requests; the kernel thread resolves
     /// ids through this table and applies semantic host actions.
@@ -1272,6 +1285,7 @@ impl Shell {
                     active_theme_id,
                     saved_tab_cap: saved_settings.tab_cap,
                     shellbar_edge: saved_settings.shellbar_edge,
+                    shellbar_hidden: saved_settings.shellbar_hidden,
                     physics_damping: saved_settings.physics_damping,
                     document_palette,
                     document_sheet,
@@ -1296,9 +1310,14 @@ impl Shell {
             pending_view: Some(view),
             render_core: None,
             clipboard: arboard::Clipboard::new().ok(),
-            a11y_bridge: a11y_bridge::AccessKitBridge::new(move || {
-                let _ = a11y_proxy.send_event(());
+            a11y_bridge: a11y_bridge::AccessKitBridge::new({
+                let proxy = a11y_proxy.clone();
+                move || {
+                    let _ = proxy.send_event(());
+                }
             }),
+            secondary_a11y_bridges: HashMap::new(),
+            a11y_proxy,
             a11y_action_routes: HashMap::new(),
             commands: Vec::new(),
             physics_wake,
@@ -1387,12 +1406,28 @@ impl Shell {
     fn window_ctx(&mut self, id: WindowId) -> Option<WindowCtx<'_>> {
         let view = self.windows.get_mut(&id)?;
         let pool_count = self.orreries.len();
+        // Resolve this window's AccessKit bridge: the primary keeps the long-standing
+        // `a11y_bridge` field (so its path and the harness are unchanged); a secondary
+        // (leaf) gets its own, minted on first access with the shared wake proxy. (MW3
+        // step 6 — per-window a11y.)
+        let a11y_bridge = if Some(id) == self.primary {
+            &mut self.a11y_bridge
+        } else {
+            let proxy = self.a11y_proxy.clone();
+            self.secondary_a11y_bridges
+                .entry(id)
+                .or_insert_with(move || {
+                    a11y_bridge::AccessKitBridge::new(move || {
+                        let _ = proxy.send_event(());
+                    })
+                })
+        };
         let mut wc = WindowCtx {
             view,
             shared: &mut self.shared,
             orreries: &mut self.orreries,
             clipboard: &mut self.clipboard,
-            a11y_bridge: &mut self.a11y_bridge,
+            a11y_bridge,
             a11y_action_routes: &mut self.a11y_action_routes,
             render_core: self.render_core.as_ref(),
             commands: &mut self.commands,
@@ -1436,6 +1471,10 @@ impl Shell {
         let mut chrome = Chrome::new("mere://welcome");
         chrome.settings.tab_cap = self.shared.presentation.saved_tab_cap;
         chrome.slim = true; // a spawned window is a leaf: slim chrome (no shellbar / switcher)
+        // Seed the leaf's sync chip from the primary's current state so it shows real
+        // standing immediately, not a stale "p2p off" until the next status change. The
+        // fan-out keeps it current after. (MW3 step 5; real-sync-feedback.)
+        chrome.sync = self.focused_view().chrome().sync.clone();
         let runner = window_view::shell_runner(dom.clone(), chrome);
         let content_location = runner.state().chrome.content_location().to_string();
         let active_graph = self

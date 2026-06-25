@@ -377,7 +377,7 @@ impl ApplicationHandler for Shell {
                     update.status.syncing, update.status.ops_received
                 )),
             );
-            latest_sync = Some(sync::to_indicator(&update.status, sync::LANE_LABEL));
+            latest_sync = Some(sync::to_indicator(&update, sync::LANE_LABEL));
         }
         // Apply to the primary inline; `latest_sync` is replayed onto chrome-bearing
         // secondaries after the ctx borrow ends (step-5 fan-out below), so borrow it
@@ -495,15 +495,15 @@ impl ApplicationHandler for Shell {
         // called for).
         self.redraw_secondary_windows();
         // MW3 step 5 chrome fan-out: the sync chip + comms updates were applied to the
-        // primary's chrome inline above; replay them onto every *other* chrome-bearing
-        // (non-slim) window now the ctx borrow has ended. A slim leaf carries no sync
-        // chip / comms pane, so it is skipped — today's secondaries are slim, so this is
-        // exercised only once a full-chrome co-window exists, but the path is now wired
-        // and shares the inline mutation logic (`apply_comms_to_chrome`).
+        // primary's chrome inline above; replay them onto every *other* window now the
+        // ctx borrow has ended. Note a slim leaf is NOT skipped: "slim" omits the
+        // *shellbar*, but the leaf keeps the toolbar (where the sync chip lives) and can
+        // open the comms pane, so it must see these updates too — driving caught a leaf
+        // showing a stale "p2p off" while the primary showed real standing. (MW3 step 5.)
         if latest_sync.is_some() || !comms_updates.is_empty() {
             let primary = self.primary;
             for (id, view) in self.windows.iter_mut() {
-                if Some(*id) == primary || view.kind.is_slim() {
+                if Some(*id) == primary {
                     continue;
                 }
                 if let Some(indicator) = &latest_sync {
@@ -902,9 +902,27 @@ impl Shell {
             return;
         }
         let view = self.build_window_view();
-        if let Some((_id, window)) = self.create_window(event_loop, view) {
-            // No a11y bridge on a secondary yet (step 6), so showing it immediately is
-            // safe — the AccessKit "adapter before first show" rule doesn't apply.
+        if let Some((id, window)) = self.create_window(event_loop, view) {
+            // Install this secondary's own AccessKit bridge *before* showing it (the
+            // "adapter before first show" rule, same order the primary uses in
+            // `resumed`): build its a11y projection through its ctx, then install the
+            // adapter against its window. `window_ctx` mints the per-window bridge on
+            // first access. (MW3 step 6 — per-window a11y.)
+            if let Some(mut wc) = self.window_ctx(id) {
+                let projection = wc.build_a11y_projection().tree_update();
+                match wc.a11y_bridge.install(&window, projection) {
+                    Ok(()) => wc.shared.observability.record_probe(
+                        "a11y_bridge",
+                        "installed",
+                        "secondary-window AccessKit bridge installed",
+                    ),
+                    Err(err) => wc.shared.observability.record_probe(
+                        "a11y_bridge",
+                        "degraded",
+                        format!("secondary AccessKit bridge unavailable: {err}"),
+                    ),
+                }
+            }
             window.set_visible(true);
             window.request_redraw();
             self.shared.observability.record_probe(
@@ -923,6 +941,10 @@ impl Shell {
             return;
         }
         if self.windows.remove(&id).is_some() {
+            // Drop this secondary's AccessKit bridge with its window (MW3 step 6) — its
+            // adapter is subclassed onto the now-gone OS window. The primary's bridge is
+            // the separate `a11y_bridge` field and is untouched.
+            self.secondary_a11y_bridges.remove(&id);
             self.shared.observability.record_probe(
                 "multi_window",
                 "closed",

@@ -24,6 +24,7 @@ use paint_list_api::{
 };
 use platen::scene_paint::ScenePaintStyle;
 use serval_scripted_dom::{NodeId as DomNodeId, ScriptedDom};
+use signals::{BridgeNodes, ClusterSet};
 
 /// Author CSS for the node-children document. `.stage` is the camera-transformed
 /// container (also `position: relative`, so it is the containing block for the
@@ -269,6 +270,106 @@ pub(crate) fn selected_edge_overlay(
             placement: CommonPlacement::new(bounds),
             path: PathData { commands: vec![PathCommand::MoveTo(p0), PathCommand::LineTo(p1)] },
             color: ColorF::new(0.91, 0.59, 0.16, 1.0),
+            width: 3.5,
+            cap: StrokeCap::Round,
+            join: StrokeJoin::Round,
+            dash: None,
+        }));
+    }
+    cmds
+}
+
+/// A categorical palette for community rings: distinct hues legible on the dark backdrop, cycled
+/// by cluster index (clusters past the palette wrap — adjacent ones rarely sit together). (Graph
+/// signals — community to a ring.)
+pub(crate) fn cluster_color(index: usize) -> ColorF {
+    const PALETTE: [(f32, f32, f32); 8] = [
+        (0.36, 0.72, 0.96), // sky
+        (0.96, 0.55, 0.36), // coral
+        (0.56, 0.86, 0.46), // green
+        (0.86, 0.50, 0.90), // violet
+        (0.96, 0.80, 0.34), // amber
+        (0.45, 0.84, 0.80), // teal
+        (0.92, 0.46, 0.60), // rose
+        (0.66, 0.66, 0.96), // periwinkle
+    ];
+    let (r, g, b) = PALETTE[index % PALETTE.len()];
+    ColorF::new(r, g, b, 0.85)
+}
+
+/// A stroked-circle path of `segments` chords approximating a ring at `center`. (Community rings.)
+fn circle_path(center: LayoutPoint, radius: f32, segments: usize) -> PathData {
+    let mut commands = Vec::with_capacity(segments + 1);
+    for i in 0..=segments {
+        let theta = (i as f32 / segments as f32) * std::f32::consts::TAU;
+        let pt =
+            LayoutPoint::new(center.x + radius * theta.cos(), center.y + radius * theta.sin());
+        commands.push(if i == 0 { PathCommand::MoveTo(pt) } else { PathCommand::LineTo(pt) });
+    }
+    PathData { commands }
+}
+
+/// World-space **community ring** overlay: a halo around each node in the colour of its Louvain
+/// community, so the partition reads as spatial clusters under any layout. Spliced inside the
+/// underlay's camera transform (world space), like the selected-edge overlay. (Graph signals —
+/// community to a ring.)
+pub(crate) fn community_ring_overlay(
+    view: &LayoutView,
+    community: &ClusterSet,
+    radius_of: impl Fn(NodeKey) -> f32,
+) -> Vec<PaintCmd> {
+    let mut cmds = Vec::new();
+    for (i, cluster) in community.clusters.iter().enumerate() {
+        let color = cluster_color(i);
+        for &key in &cluster.members {
+            let Some(p) = view.position_of(key) else {
+                continue;
+            };
+            let r = radius_of(key) + 6.0;
+            let center = LayoutPoint::new(p.x, p.y);
+            let bounds = LayoutRect::new(
+                LayoutPoint::new(center.x - r, center.y - r),
+                LayoutPoint::new(center.x + r, center.y + r),
+            );
+            cmds.push(PaintCmd::DrawStroke(StrokeItem {
+                placement: CommonPlacement::new(bounds),
+                path: circle_path(center, r, 24),
+                color,
+                width: 2.5,
+                cap: StrokeCap::Round,
+                join: StrokeJoin::Round,
+                dash: None,
+            }));
+        }
+    }
+    cmds
+}
+
+/// World-space **bridge ring** overlay: a bold ring around each structural broker (a high-betweenness
+/// node), in one distinct colour and a larger radius than the community rings, so the connectors read
+/// clearly even when both overlays are on at once. (Graph signals — bridges.)
+pub(crate) fn bridge_ring_overlay(
+    view: &LayoutView,
+    bridges: &BridgeNodes,
+    radius_of: impl Fn(NodeKey) -> f32,
+) -> Vec<PaintCmd> {
+    let mut cmds = Vec::new();
+    // A bold near-white ring — distinct from the cluster palette and the orange selection.
+    let color = ColorF::new(1.0, 1.0, 1.0, 0.92);
+    for &key in &bridges.bridges {
+        let Some(p) = view.position_of(key) else {
+            continue;
+        };
+        let r = radius_of(key) + 9.0;
+        let center = LayoutPoint::new(p.x, p.y);
+        let bounds = LayoutRect::new(
+            LayoutPoint::new(center.x - r, center.y - r),
+            LayoutPoint::new(center.x + r, center.y + r),
+        );
+        cmds.push(PaintCmd::DrawStroke(StrokeItem {
+            placement: CommonPlacement::new(bounds),
+            path: circle_path(center, r, 24),
+            color,
             width: 3.5,
             cap: StrokeCap::Round,
             join: StrokeJoin::Round,

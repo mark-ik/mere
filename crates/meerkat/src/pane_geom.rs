@@ -42,9 +42,10 @@ impl WindowCtx<'_> {
     /// width). (Shellbar F2.1.)
     pub(super) fn content_band(&self) -> [f32; 4] {
         let th = self.view.toolbar_h.max(FALLBACK_TOOLBAR_H) as f32;
-        // A slim (leaf) window carves no shellbar, so the band is the whole area below
-        // the toolbar; the carve must match render's band exactly. (MW3 step 4.)
-        if self.view.kind.is_slim() {
+        // A slim (leaf) window, or a hidden shellbar, carves nothing, so the band is the
+        // whole area below the toolbar; the carve must match render's band exactly.
+        // (MW3 step 4; hide-shellbar.)
+        if self.view.kind.is_slim() || self.shared.presentation.shellbar_hidden {
             return [0.0, th, self.view.width as f32, self.view.height as f32];
         }
         super::shellbar::band_after_shellbar(

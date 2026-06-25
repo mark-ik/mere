@@ -62,6 +62,7 @@ mod fields;
 /// Ambient-sim backdrops (non-rapier liveliness painted behind the graph): Conway's
 /// [`GameOfLife`] is the first. (Physics scenes P5.)
 mod ambient;
+mod community_lane;
 pub use ambient::{AmbientSim, GameOfLife, NBody, ParticleLife, SandFall, Tincture};
 
 mod physics;
@@ -252,6 +253,45 @@ pub struct Orrery {
     /// the plan describes is the *expensive*-signal substrate (betweenness / communities), built
     /// when those land. (Graph signals — the cheap-signal cache.)
     importance_dirty: bool,
+    /// The cached **community partition** (Louvain) — the genuinely expensive structural signal.
+    /// `None` until first computed; refreshed by [`refresh_community_cache`](Self::refresh_community_cache)
+    /// only when the active strategy needs it and the kernel's [`Graph::revision`](kernel::graph::Graph::revision)
+    /// has advanced past [`community_cache_revision`](Self::community_cache_revision). Gating on the
+    /// kernel revision (bumped at the mutation source) rather than a host hook means a non-structural
+    /// event (a selection change) cannot invalidate it. The off-thread armillary lane is a drop-in
+    /// behind this same accessor (native-only, like physics offload). (Graph signals — P3.)
+    community_cache: Option<signals::ClusterSet>,
+    /// The [`Graph::revision`](kernel::graph::Graph::revision) [`community_cache`](Self::community_cache)
+    /// was computed at, so a stale partition is recomputed and a fresh one reused. (Graph signals.)
+    community_cache_revision: u64,
+    /// The inputs the active analytic layout was last computed for: `(strategy_id, graph revision,
+    /// width, height, focus)`. The host gates its per-frame `project_orrery_strategy` call on these
+    /// via [`needs_strategy_recompute`](Self::needs_strategy_recompute), so an unchanged analytic
+    /// layout (grid, kanban, penrose, radial, ...) is computed once per real change, not every frame.
+    /// `focus` is only recorded for focus-driven strategies (radial), so a selection change does not
+    /// invalidate the others. Reset when the strategy changes. (Arrangements — the layout cache.)
+    last_strategy_inputs: Option<(String, u64, u32, u32, Option<NodeKey>)>,
+    /// Scene toggle: when on, each node wears a halo in the colour of its Louvain community, so the
+    /// partition reads as spatial clusters under any layout. Drives the same generation-gated
+    /// [`community_cache`](Self::community_cache) the cluster-kanban strategy uses. Default off.
+    /// (Graph signals — community to a ring.)
+    show_community_rings: bool,
+    /// The host's off-thread wake (it pokes the on-demand render loop when a worker result lands),
+    /// captured from [`offload_physics`](Self::offload_physics). `Some` means we are native +
+    /// offloaded, which is exactly when the community lane runs off-thread; `None` (wasm / tests /
+    /// physics not offloaded) means community computes inline. (Graph signals — the background lane.)
+    offthread_wake: Option<armillary::Wake>,
+    /// The off-thread community worker, spawned lazily the first time community is needed while
+    /// [`offthread_wake`](Self::offthread_wake) is set. `None` = computing inline. (Graph signals.)
+    community_actor: Option<community_lane::CommunityActor>,
+    /// Scene toggle: when on, the structural **bridge** nodes (high-betweenness brokers) wear a bold
+    /// ring, so the graph's key connectors stand out. Default off. (Graph signals — bridges.)
+    show_bridge_rings: bool,
+    /// The cached bridge set + the [`Graph::revision`](kernel::graph::Graph::revision) it was computed
+    /// at. Betweenness is cheap (O(V·E), like degree at current scale), so this is computed inline,
+    /// gated on the revision so it is not redone per frame. (Graph signals — bridges.)
+    bridge_cache: Option<signals::BridgeNodes>,
+    bridge_cache_revision: u64,
     /// Scene toggle: when on, a node floats above the ground by its undirected degree
     /// (hubs highest), with a stem to its ground anchor — the isometric "fake height".
     /// Purely visual (the gyre body does not move). Default off. (Isometric camera P3.)
@@ -360,6 +400,7 @@ impl Orrery {
         self.node_materials.clear();
         self.node_importance.clear();
         self.importance_dirty = true;
+        self.community_cache = None;
         self.drag = None;
         self.field_drag = None;
         self.marquee = None;
@@ -431,6 +472,15 @@ impl Orrery {
             importance_metric: signals::ImportanceMetric::Degree,
             node_importance: HashMap::new(),
             importance_dirty: true,
+            community_cache: None,
+            community_cache_revision: 0,
+            last_strategy_inputs: None,
+            show_community_rings: false,
+            offthread_wake: None,
+            community_actor: None,
+            show_bridge_rings: false,
+            bridge_cache: None,
+            bridge_cache_revision: 0,
             height_by_degree: false,
             marquee: None,
             ctrl: false,
@@ -499,6 +549,8 @@ impl Orrery {
     fn reconcile_derived(&mut self) {
         // The graph topology changed (this is the topology-change hook), so any degree-derived
         // signal is stale: mark the importance cache for recompute on the next push. (Graph signals.)
+        // The expensive caches (community) gate on `Graph::revision` instead — bumped at the kernel
+        // mutation source, so a spurious reconcile (e.g. a selection change) cannot invalidate them.
         self.importance_dirty = true;
         let nodes: Vec<(NodeKey, Point2D<f32>)> = self
             .graph
@@ -628,6 +680,10 @@ impl Orrery {
     ///
     /// [`Wake`]: armillary::Wake
     pub fn offload_physics(&mut self, wake: armillary::Wake) {
+        // Capture the host's wake as the orrery's off-thread wake: the community lane reuses it to
+        // poke the same loop when its worker result lands, so it needs no separate host wiring.
+        // `Some` here is also the "native + offloaded" signal that gates community off-thread.
+        self.offthread_wake = Some(wake.clone());
         self.physics.offload(wake);
     }
 
@@ -1868,12 +1924,57 @@ impl Orrery {
     pub fn set_layout_strategy(&mut self, id: Option<String>) {
         let reverting = id.is_none() && self.active_strategy.is_some();
         self.active_strategy = id;
+        // Any strategy (de)activation forces a fresh layout: the buffered positions are recomputed
+        // (or dropped on revert), so the inputs cache must not skip the first recompute of the new
+        // strategy. (Arrangements — the layout cache.)
+        self.last_strategy_inputs = None;
         if self.active_strategy.is_some() {
             self.physics.halt();
         } else if reverting {
             self.strategy_positions = None;
             self.settle_physics(SETTLE_TICKS);
         }
+    }
+
+    /// Whether a strategy's layout depends on the **focus** (the single selection). Only radial
+    /// centers on it; for every other strategy a selection change must not invalidate the cached
+    /// layout. (Arrangements — the layout cache.)
+    fn strategy_uses_focus(id: &str) -> bool {
+        id == "radial.default"
+    }
+
+    /// Whether the active analytic layout must be recomputed: `true` when its inputs — the strategy,
+    /// the kernel's structural [`Graph::revision`](kernel::graph::Graph::revision), the viewport, and
+    /// the focus (only for focus-driven strategies) — differ from the last computed layout. The host
+    /// gates its per-frame `project_orrery_strategy` call on this, so an unchanged analytic layout is
+    /// computed once per real change, not every frame. (Arrangements — the layout cache.)
+    pub fn needs_strategy_recompute(&self, id: &str, w: u32, h: u32, focus: Option<NodeKey>) -> bool {
+        // The by-site kanban groups by URL host — node *content* the structural revision does not
+        // track (a url edit is content, not structure). Its layout is cheap (host extraction +
+        // grouping), so recompute it every frame rather than risk a stale column. The structural
+        // strategies (grid, penrose, radial, timeline, community-kanban, ...) cache on the revision.
+        if id == "kanban.default" {
+            return true;
+        }
+        let focus = if Self::strategy_uses_focus(id) { focus } else { None };
+        match &self.last_strategy_inputs {
+            Some((sid, rev, sw, sh, sfocus)) => {
+                sid.as_str() != id
+                    || *rev != self.graph.revision()
+                    || *sw != w
+                    || *sh != h
+                    || *sfocus != focus
+            }
+            None => true,
+        }
+    }
+
+    /// Record the inputs the active layout was just computed for, so
+    /// [`needs_strategy_recompute`](Self::needs_strategy_recompute) returns `false` until one
+    /// changes. The host calls this right after it projects + applies. (Arrangements — the cache.)
+    pub fn note_strategy_computed(&mut self, id: &str, w: u32, h: u32, focus: Option<NodeKey>) {
+        let focus = if Self::strategy_uses_focus(id) { focus } else { None };
+        self.last_strategy_inputs = Some((id.to_string(), self.graph.revision(), w, h, focus));
     }
 
     /// Buffer the active strategy's node positions (host-computed through platen's
@@ -1884,6 +1985,108 @@ impl Orrery {
         if self.active_strategy.is_some() {
             self.strategy_positions = Some(positions.to_vec());
         }
+    }
+
+    /// Refresh the cached community partition if the active strategy needs it (cluster-kanban) and
+    /// the topology generation has advanced since it was last computed. The generation-gated cache:
+    /// Louvain runs once per structural change, not once per frame (the host calls this before
+    /// projecting, then reads [`community`](Self::community)). Computed inline here; the off-thread
+    /// armillary lane is a drop-in behind this method, exactly as physics offloads. (Graph signals — P3.)
+    pub fn refresh_community_cache(&mut self, strategy_id: &str) {
+        // Community is needed by the cluster-kanban layout and by the community-ring overlay.
+        if strategy_id == "kanban.community" || self.show_community_rings {
+            self.ensure_community_fresh();
+        }
+    }
+
+    /// Recompute the community partition if it is stale for the current graph revision — off-thread
+    /// when the host has offloaded (native), inline otherwise (wasm / tests). The caller decides
+    /// *whether* community is needed (cluster-kanban or the rings toggle); this only refreshes.
+    /// (Graph signals — P3.)
+    pub(crate) fn ensure_community_fresh(&mut self) {
+        let revision = self.graph.revision();
+        // Already fresh for this revision (cache or an in-flight request) — nothing to do.
+        if self.community_cache.is_some() && self.community_cache_revision == revision {
+            return;
+        }
+        let Some(wake) = self.offthread_wake.clone() else {
+            // Inline path (wasm / tests / physics not offloaded): compute synchronously.
+            self.community_cache = Some(signals::community_louvain(&self.graph));
+            self.community_cache_revision = revision;
+            return;
+        };
+        // Off-thread path: spin up the worker lazily on first need, then dispatch this revision.
+        // The result lands via `drain_community` on a later frame; until then the last-good
+        // partition (or the inline fallback in the kanban projection) holds. (Graph signals.)
+        if self.community_actor.is_none() {
+            self.community_actor = Some(community_lane::CommunityActor::spawn(wake));
+        }
+        let snapshot = signals::CommunitySnapshot::from_graph(&self.graph);
+        if let Some(actor) = self.community_actor.as_mut() {
+            actor.request(snapshot, revision);
+        }
+    }
+
+    /// Drain the off-thread community worker and accept its freshest result **only if it still
+    /// matches the live graph revision** (stale-rejection — a partition computed against a
+    /// since-mutated graph is dropped, and the next [`refresh_community_cache`] re-dispatches). A
+    /// no-op when computing inline (no worker). Called once per frame. (Graph signals — P3.)
+    fn drain_community(&mut self) {
+        let update = match self.community_actor.as_mut() {
+            Some(actor) => actor.drain(),
+            None => return,
+        };
+        let Some(update) = update else { return };
+        if update.revision == self.graph.revision() {
+            self.community_cache = Some(update.clusters);
+            self.community_cache_revision = update.revision;
+        }
+    }
+
+    /// The cached community partition, or `None` if none has been computed (no cluster strategy has
+    /// run this session, or the orrery was cleared). The host threads it into the cluster-kanban
+    /// projection so Louvain is not re-run per frame. (Graph signals — P3.)
+    pub fn community(&self) -> Option<&signals::ClusterSet> {
+        self.community_cache.as_ref()
+    }
+
+    /// Toggle the community-ring overlay: a halo per node in its community's colour, in any layout.
+    /// (Graph signals — community to a ring.)
+    pub fn set_show_community_rings(&mut self, on: bool) {
+        self.show_community_rings = on;
+    }
+
+    /// Whether the community-ring overlay is on. (Graph signals — community to a ring.)
+    pub fn show_community_rings(&self) -> bool {
+        self.show_community_rings
+    }
+
+    /// Toggle the bridge-ring overlay: a bold ring on the structural broker nodes, in any layout.
+    /// (Graph signals — bridges.)
+    pub fn set_show_bridge_rings(&mut self, on: bool) {
+        self.show_bridge_rings = on;
+    }
+
+    /// Whether the bridge-ring overlay is on. (Graph signals — bridges.)
+    pub fn show_bridge_rings(&self) -> bool {
+        self.show_bridge_rings
+    }
+
+    /// Recompute the bridge set if stale for the current graph revision. Betweenness is cheap, so
+    /// this stays inline (no off-thread lane); the revision gate avoids the per-frame redo. A node
+    /// with at least half the top broker's betweenness counts as a bridge. (Graph signals — bridges.)
+    pub(crate) fn ensure_bridges_fresh(&mut self) {
+        let revision = self.graph.revision();
+        if self.bridge_cache.is_some() && self.bridge_cache_revision == revision {
+            return;
+        }
+        self.bridge_cache = Some(signals::bridge_nodes(&self.graph, 0.5));
+        self.bridge_cache_revision = revision;
+    }
+
+    /// The cached bridge set, if computed. (Graph signals — bridges.)
+    pub fn bridges(&self) -> Option<&signals::BridgeNodes> {
+        self.bridge_cache.as_ref()
     }
 
     /// Overlay the buffered strategy positions onto `view` — called by

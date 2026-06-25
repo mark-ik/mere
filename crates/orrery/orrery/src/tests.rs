@@ -619,6 +619,126 @@ fn importance_metric_switches_degree_vs_betweenness() {
 }
 
 #[test]
+fn community_cache_fills_and_invalidates_on_topology_change() {
+    // Two triangles {0,1,2} and {3,4,5} joined by a bridge => two Louvain communities.
+    let mut graph = Graph::new();
+    let n: Vec<NodeKey> = (0..6)
+        .map(|i| graph.add_node(format!("https://{i}.example"), PortablePoint::new(i as f32, 0.0)))
+        .collect();
+    for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
+        graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
+    }
+    let mut orrery = Orrery::with_graph(graph);
+
+    // No partition until a cluster strategy refreshes it; a non-cluster strategy is a no-op.
+    assert!(orrery.community().is_none(), "no partition computed yet");
+    orrery.refresh_community_cache("phyllotaxis.default");
+    assert!(orrery.community().is_none(), "a non-cluster strategy does not compute community");
+
+    // Cluster-kanban fills the generation-gated cache: two communities.
+    orrery.refresh_community_cache("kanban.community");
+    assert_eq!(orrery.community().unwrap().clusters.len(), 2, "two triangles => two communities");
+
+    // A topology change bumps the generation; the next refresh recomputes against the new graph,
+    // so the added node appears in the partition (the cache invalidated, not stale).
+    orrery.ingest_graph(|g| {
+        let extra = g.add_node("https://6.example".to_string(), PortablePoint::new(6.0, 0.0));
+        let a = g.get_node_by_url("https://0.example").unwrap().0;
+        g.assert_semantic_predicate(a, extra, "links".to_string());
+        true
+    });
+    orrery.refresh_community_cache("kanban.community");
+    let total_members: usize =
+        orrery.community().unwrap().clusters.iter().map(|c| c.members.len()).sum();
+    assert_eq!(total_members, 7, "the new node joined the recomputed partition");
+}
+
+#[test]
+fn arrangement_recompute_is_gated_on_its_inputs() {
+    let mut graph = Graph::new();
+    let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));
+    let b = graph.add_node("https://b.example".to_string(), PortablePoint::new(1.0, 0.0));
+    graph.assert_semantic_predicate(a, b, "links".to_string());
+    let mut orrery = Orrery::with_graph(graph);
+    let ak = orrery.graph().get_node_by_url("https://a.example").unwrap().0;
+    let bk = orrery.graph().get_node_by_url("https://b.example").unwrap().0;
+
+    // First time there is no recorded layout, so a recompute is needed; after noting it, the same
+    // inputs skip (an analytic layout is computed once, not per frame).
+    assert!(orrery.needs_strategy_recompute("grid.default", 800, 600, None), "first compute");
+    orrery.note_strategy_computed("grid.default", 800, 600, None);
+    assert!(!orrery.needs_strategy_recompute("grid.default", 800, 600, None), "unchanged => skip");
+
+    // A viewport change re-triggers.
+    assert!(orrery.needs_strategy_recompute("grid.default", 1024, 600, None), "viewport change");
+
+    // A structural change (the kernel revision moves) re-triggers.
+    orrery.ingest_graph(|g| {
+        g.add_node("https://c.example".to_string(), PortablePoint::new(2.0, 0.0));
+        true
+    });
+    assert!(orrery.needs_strategy_recompute("grid.default", 800, 600, None), "revision moved");
+
+    // A non-focus strategy ignores the focus, so a selection change does not invalidate it.
+    orrery.note_strategy_computed("grid.default", 800, 600, None);
+    assert!(
+        !orrery.needs_strategy_recompute("grid.default", 800, 600, Some(ak)),
+        "grid ignores focus, so a selection change does not force a recompute"
+    );
+
+    // Radial is focus-driven, so a focus change DOES re-trigger it.
+    orrery.note_strategy_computed("radial.default", 800, 600, Some(ak));
+    assert!(
+        orrery.needs_strategy_recompute("radial.default", 800, 600, Some(bk)),
+        "radial re-centers on a focus change"
+    );
+}
+
+#[test]
+fn community_rings_toggle_computes_the_partition_on_frame() {
+    // Two triangles {0,1,2} and {3,4,5} joined by a bridge => two communities.
+    let mut graph = Graph::new();
+    let n: Vec<NodeKey> = (0..6)
+        .map(|i| graph.add_node(format!("https://{i}.example"), PortablePoint::new(i as f32, 0.0)))
+        .collect();
+    for &(a, b) in &[(0, 1), (1, 2), (2, 0), (3, 4), (4, 5), (5, 3), (2, 3)] {
+        graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
+    }
+    let mut orrery = Orrery::with_graph(graph);
+    assert!(orrery.community().is_none(), "no partition until a consumer asks for it");
+
+    // Turning the rings on makes the frame compute the partition and run the ring paint path.
+    orrery.set_show_community_rings(true);
+    let _ = orrery.frame(800, 600);
+    assert!(orrery.show_community_rings(), "the toggle is on");
+    assert_eq!(
+        orrery.community().map(|c| c.clusters.len()),
+        Some(2),
+        "the ring frame computed the two-community partition"
+    );
+}
+
+#[test]
+fn bridge_rings_toggle_computes_the_broker_on_frame() {
+    // Bowtie: triangles {0,1,2} and {2,3,4} share the broker node 2.
+    let mut graph = Graph::new();
+    let n: Vec<NodeKey> = (0..5)
+        .map(|i| graph.add_node(format!("https://{i}.example"), PortablePoint::new(i as f32, 0.0)))
+        .collect();
+    for &(a, b) in &[(0, 1), (1, 2), (2, 0), (2, 3), (3, 4), (4, 2)] {
+        graph.assert_semantic_predicate(n[a], n[b], "links".to_string());
+    }
+    let mut orrery = Orrery::with_graph(graph);
+    let k2 = orrery.graph().get_node_by_url("https://2.example").unwrap().0;
+    assert!(orrery.bridges().is_none(), "no bridges until the toggle asks for them");
+
+    orrery.set_show_bridge_rings(true);
+    let _ = orrery.frame(800, 600);
+    assert!(orrery.show_bridge_rings(), "the toggle is on");
+    assert_eq!(orrery.bridges().unwrap().bridges, vec![k2], "the broker is the only bridge");
+}
+
+#[test]
 fn isolate_selection_scopes_the_orrery() {
     let mut graph = Graph::new();
     let a = graph.add_node("https://a.example".to_string(), PortablePoint::new(0.0, 0.0));

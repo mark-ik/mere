@@ -181,6 +181,10 @@ pub struct Chrome {
     /// Which window edge the shellbar is docked to — mirrored from Shell so the
     /// view builds the right flex direction.
     pub shellbar_edge: ShellbarEdge,
+    /// Whether the shellbar is hidden by the user's toggle — mirrored from Shell so the
+    /// chrome view omits the strip. Distinct from `slim` (a leaf's chrome): this hides
+    /// the shellbar on a full-chrome window. (Hide-shellbar.)
+    pub shellbar_hidden: bool,
     /// Slim chrome: a leaf (torn-out) window omits the shellbar (and the host omits
     /// the switcher), leaving just the toolbar over workbench-only content. Set once
     /// from the window's `WindowKind`. (Multi-window MW3 step 4.)
@@ -308,6 +312,9 @@ pub enum ContextAction {
     Stack,
     /// Redock the shellbar to `edge`. Drains without touching `context_set`.
     ShellbarMove(ShellbarEdge),
+    /// Hide the shellbar (its right-click menu offers this; revealed again from the
+    /// palette / `>shellbar`). Drains like `ShellbarMove`, no member set. (Hide-shellbar.)
+    ShellbarToggleVisibility,
     /// Relate the two selected nodes (a user-grouped relation). Offered only for a
     /// two-node selection; drains like `ShellbarMove` without opening tiles.
     Relate,
@@ -445,6 +452,7 @@ impl Chrome {
             comms_new_body: TextInput::new(""),
             shellbar_panes: ShellbarPaneStates::default(),
             shellbar_edge: ShellbarEdge::default(),
+            shellbar_hidden: false,
             slim: false,
         }
     }
@@ -699,7 +707,8 @@ impl Chrome {
             | Command::CloseGraphPane
             | Command::ExportGraph
             | Command::SaveGraphEngram
-            | Command::CrawlFocused => {
+            | Command::CrawlFocused
+            | Command::ToggleShellbar => {
                 // Host actions over the frame, orrery, workbench, or actor pool:
                 // record the intent; the host drains it and runs the matching
                 // method.

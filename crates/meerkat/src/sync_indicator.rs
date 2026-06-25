@@ -30,12 +30,23 @@ pub struct SyncIndicator {
     /// Unix-epoch milliseconds of the last sync activity, if any (reserved for a
     /// future "N ago" readout).
     pub last_activity_ms: Option<u64>,
+    /// This persona's earned tessera standing — the folded ledger score. Replaces the
+    /// raw op-count as the chip headline: the op-count is plumbing, the standing is the
+    /// point (the whole reason tessera exists). `None` until the lane folds a ledger.
+    /// (Tessera ledger fold.)
+    pub standing: Option<i64>,
+    /// This install's dialable ticket — share it with a peer to connect. Surfaced from
+    /// the sync actor (it was previously only `tracing`-logged, so a user had to read
+    /// logs to share it). (Tessera ticket surface.)
+    pub ticket: Option<String>,
 }
 
 impl SyncIndicator {
-    /// The chip text: an honest one-line state. `p2p off` before a lane joins,
-    /// then `<label>: idle` (joined, nothing caught up), `<label>: syncing`
-    /// (round in progress), or `<label>: N ops` (a peer's log reconciled).
+    /// The chip text: an honest one-line state. `p2p off` before a lane joins, then
+    /// `<label>: idle` (joined, nothing caught up), `<label>: syncing` (round in
+    /// progress), then `<label>: +N standing` once a ledger folds (the earned standing,
+    /// the point of tessera), falling back to `<label>: N ops` when only raw catch-up
+    /// is known.
     pub fn summary(&self) -> String {
         if !self.active {
             return "p2p off".to_string();
@@ -43,10 +54,21 @@ impl SyncIndicator {
         if self.syncing {
             return format!("{}: syncing", self.label);
         }
+        // Earned standing is the headline once the ledger has folded; the raw op-count
+        // is the fallback for "caught up but no ledger yet". (Tessera ledger fold.)
+        if let Some(standing) = self.standing {
+            return format!("{}: {:+} standing", self.label, standing);
+        }
         if self.ops > 0 {
             return format!("{}: {} ops", self.label, self.ops);
         }
         format!("{}: idle", self.label)
+    }
+
+    /// The dialable ticket to share with a peer, if the lane produced one (the actor
+    /// surfaces it here instead of only logging it). (Tessera ticket surface.)
+    pub fn ticket(&self) -> Option<&str> {
+        self.ticket.as_deref()
     }
 }
 
@@ -91,5 +113,37 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(i.summary(), "tessera: 3 ops");
+    }
+
+    #[test]
+    fn standing_is_the_headline_once_the_ledger_folds() {
+        // The earned standing replaces the raw op-count as the chip headline — the
+        // whole point of tessera, made visible. (Tessera ledger fold.)
+        let i = SyncIndicator {
+            label: "tessera".into(),
+            active: true,
+            ops: 5, // op-count still known, but standing takes the headline
+            standing: Some(3),
+            ..Default::default()
+        };
+        assert_eq!(i.summary(), "tessera: +3 standing");
+
+        // Debt reads honestly (negative standing).
+        let owing = SyncIndicator {
+            standing: Some(-2),
+            ..i.clone()
+        };
+        assert_eq!(owing.summary(), "tessera: -2 standing");
+    }
+
+    #[test]
+    fn ticket_is_surfaced_for_sharing() {
+        let i = SyncIndicator {
+            label: "tessera".into(),
+            active: true,
+            ticket: Some("dial:abc123".into()),
+            ..Default::default()
+        };
+        assert_eq!(i.ticket(), Some("dial:abc123"));
     }
 }
