@@ -81,6 +81,19 @@ set) sections become real over this model.
 Done when bookmarking/tagging promotes a node to Saved durably, the eviction policy is visible +
 editable, and Recent evicts per policy.
 
+**Spine landed 2026-06-24** (commit `9cacd41`): `session-runtime/memory_levels` is the pure read-model
+(built spine-first, before the pane/settings wiring, because the chrome files are mid-churn under Mark's
+shellbar work). `MemoryLevel` + `level_of`/`is_promoted` (a tag or pin promotes to long-term, per
+decision #2); `EvictionPolicy` (KeepForever | KeepDays(n), default 30, with a visible `describe()`);
+`evictable_short_term` (the ids a policy drops now, given host-supplied last-visit timing, only
+short-term + dated-and-stale, promoted exempt, undated never dropped); `census` for real counts. 5
+tests. Remaining (the **wiring**, deferred until the chrome churn settles): render Recent/Saved over
+this model in `pane_data::alembic_items` (replacing B1's grounded proxies), surface + edit the policy
+(persona settings, not the shellbar-dirty `settings_store`), a promote (keep) action from Recent rows
+and demote from Saved, and the eviction pass itself (drop short-term content via `content_store`, the
+forgetting Athanor/slice D will later run continuously). The **by-sessions** policy is deferred behind
+a per-node last-session stamp the snapshot does not yet carry.
+
 ### D — Athanor, the distillation daemon
 
 An armillary actor (steady-heat: throttled at idle, yields to foreground): forgetting (evict expired
@@ -187,6 +200,12 @@ Verification: a unit/integration test that `save → (drop) → open` round-trip
 
 ## Progress
 
+- 2026-06-24: **Slice C spine landed** (commit `9cacd41`): `session-runtime/memory_levels`, the pure
+  read-model (level classification + eviction policy + evictable computation + census), 5 tests, built
+  spine-first because the chrome/pane files (`pane_data`, `render`, `settings_store`, `menus`) are all
+  dirty under Mark's concurrent shellbar work. The wiring (Recent/Saved over the model, the policy
+  setting in persona settings, a promote/demote action, the eviction pass over `content_store`) is
+  deferred until that churn settles. By-sessions policy deferred behind per-node session stamps.
 - 2026-06-24: **Decision #4 spun off** to [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md)
   (the local-models runtime + harness lane), DOC_README indexed. Code-grounded: `intel/embed`'s
   `EmbeddingProvider` is the live seam precedent the deferred LLM/adapter runtime extends; eidetic
