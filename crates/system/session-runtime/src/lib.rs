@@ -47,6 +47,10 @@ pub mod engine_profile_store;
 // an eidetic Store (the Alembic memory spine; wasm-clean — store-agnostic, not
 // filesystem). Save redacts private fields by default; open thaws read-only.
 pub mod graph_engram;
+// The three memory levels' read-model (Alembic slice C): classify a node as
+// short-term vs long-term (a tag/pin promotes), and compute which short-term nodes
+// an eviction policy would drop. Pure logic; the pane/settings wiring layers on top.
+pub mod memory_levels;
 // Filesystem persistence of the content frame's pane layout (frame.json);
 // native-only so the crate stays wasm-clean.
 #[cfg(not(target_arch = "wasm32"))]
