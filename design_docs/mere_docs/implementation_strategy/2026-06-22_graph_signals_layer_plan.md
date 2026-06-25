@@ -649,3 +649,21 @@ first *new* visual is then the edge channel (multiplicity -> thickness).
   cache key, the memo's static-frame reuse. Final: signals 23 / gyre 52 / cartography 11 /
   arrangements 94 / platen 88 / orrery 78 / meerkat 81 green. **Nothing left on the graph-signals
   plan.**
+- 2026-06-25: **Adversarial review of the polish diff + fixes.** A read-only six-lens review (the two
+  algorithms came back clean; five issues confirmed, one refuted) found, and this fixes: (1) the gloss
+  cache key lacked the main view's `kanban.default` always-recompute guard, so a "Kanban (by site)"
+  gloss lens went stale after a URL-host edit (content the structural revision does not track) —
+  added the guard. (2) The gloss cache key omitted **focus**, so a focus-driven lens (radial) would
+  not re-center on a selection change — threaded focus in, gated by `strategy_uses_focus`, mirroring
+  the main view (latent: radial is not an offered gloss lens yet). (3) The weighted-edge memo could
+  serve a stale weight because `dedup_edges_weighted` counted **traversal** rows, which the kernel
+  deliberately does not bump the revision for — it now counts only *statements* (semantic / structural
+  relations), which both restores memo/revision coherence and corrects the encoding (thickness =
+  statements, not navigations); a traversal-only pair still draws at weight 1. (4) Two broken
+  intra-doc links to `gyre::AffinitySpring` / `gyre::EdgeSpring` from crates that do not depend on
+  gyre — dropped to plain code spans. (5) Disabling main-view size-by-importance left the importance
+  cache clean-empty, so a later gloss-only size encoding rendered every node at the floor — the
+  disable now re-dirties the cache. Regression tests added for the kanban-gloss recompute and the
+  size-survives-disable path. The refuted finding (the now-unread `LayoutExtras::semantic_similarity`
+  field) is intentional — a generic similarity input, harmless to populate. All suites green after the
+  fixes (signals 23 / arrangements 94 / orrery 80 / meerkat compiles).
