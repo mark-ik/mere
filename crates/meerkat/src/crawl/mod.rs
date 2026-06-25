@@ -28,6 +28,7 @@ use tokio::runtime::Builder;
 use crate::fetch::Fetched;
 
 mod robots;
+mod sitemap;
 use robots::RobotsRules;
 
 /// Which hosts a crawl may follow links into.
@@ -60,13 +61,24 @@ pub struct CrawlPolicy {
     pub max_fanout: usize,
     /// Which hosts links may lead into.
     pub scope: HostScope,
+    /// Seed the crawl from the site's `sitemap.xml` (its canonical page list), not
+    /// only the seed page's links — for crawling a site comprehensively. Off by
+    /// default (a focused crawl stays the seed's neighborhood); a "crawl whole site"
+    /// mode turns it on. Still bounded by `max_pages`.
+    pub seed_sitemap: bool,
 }
 
 impl Default for CrawlPolicy {
-    /// Conservative: shallow, bounded, same-host. Deliberately small so an accidental
-    /// crawl is cheap and polite by default.
+    /// Conservative: shallow, bounded, same-host, no sitemap. Deliberately small so an
+    /// accidental crawl is cheap and polite by default.
     fn default() -> Self {
-        Self { max_depth: 2, max_pages: 50, max_fanout: 20, scope: HostScope::SameHost }
+        Self {
+            max_depth: 2,
+            max_pages: 50,
+            max_fanout: 20,
+            scope: HostScope::SameHost,
+            seed_sitemap: false,
+        }
     }
 }
 
@@ -133,6 +145,24 @@ impl Frontier {
         added
     }
 
+    /// Enqueue bulk seed URLs (e.g. a site's `sitemap.xml`), at depth 1, with host
+    /// scope + visited-dedup but **without** the per-page fan-out cap — a sitemap is a
+    /// legitimate bulk source, not one page's links, so it is not flooding; `max_pages`
+    /// still bounds the total fetched. Returns how many were newly enqueued.
+    pub fn enqueue_seeds(&mut self, urls: &[String]) -> usize {
+        let mut added = 0;
+        for link in urls {
+            let url = normalize(link);
+            if !is_http(&url) || !self.in_scope(&url) || self.seen.contains(&url) {
+                continue;
+            }
+            self.seen.insert(url.clone());
+            self.queue.push_back((url, 1));
+            added += 1;
+        }
+        added
+    }
+
     /// Pages handed out by [`next`](Self::next) so far (against `max_pages`).
     pub fn fetched(&self) -> usize {
         self.fetched
@@ -158,6 +188,11 @@ fn host_of(url: &str) -> Option<String> {
 /// The `/robots.txt` URL for `page_url`'s origin, or `None` if it does not parse.
 fn robots_url(page_url: &str) -> Option<String> {
     url::Url::parse(page_url).ok()?.join("/robots.txt").ok().map(|u| u.to_string())
+}
+
+/// The `/sitemap.xml` URL for `page_url`'s origin, or `None` if it does not parse.
+fn sitemap_url(page_url: &str) -> Option<String> {
+    url::Url::parse(page_url).ok()?.join("/sitemap.xml").ok().map(|u| u.to_string())
 }
 
 /// `page_url`'s path (e.g. `/foo/bar`), for matching against robots rules; `/` if it
@@ -295,6 +330,17 @@ where
     Fut: std::future::Future<Output = Result<Fetched, String>>,
 {
     let mut frontier = Frontier::new(seed, policy);
+    // Seed from the site's sitemap.xml when asked, for a comprehensive site crawl
+    // (its declared pages, not only what the seed links). Best-effort: a missing /
+    // failed sitemap just leaves the link-following crawl. `max_pages` still bounds it.
+    if policy.seed_sitemap {
+        if let Some(sitemap) = sitemap_url(seed) {
+            if let Ok(fetched) = fetch(sitemap).await {
+                let added = frontier.enqueue_seeds(&sitemap::parse_sitemap(&fetched.body));
+                tracing::info!(seed, added, "sitemap-seeded the crawl");
+            }
+        }
+    }
     let mut last_host_fetch: HashMap<String, Instant> = HashMap::new();
     let mut robots: HashMap<String, RobotsRules> = HashMap::new();
     while let Some((url, depth)) = frontier.next() {

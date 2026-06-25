@@ -1,7 +1,7 @@
     use super::*;
 
     fn policy(max_depth: u32, max_pages: usize, max_fanout: usize, scope: HostScope) -> CrawlPolicy {
-        CrawlPolicy { max_depth, max_pages, max_fanout, scope }
+        CrawlPolicy { max_depth, max_pages, max_fanout, scope, seed_sitemap: false }
     }
 
     #[test]
@@ -25,6 +25,20 @@
         let mut f = Frontier::new("https://x.test/", policy(3, 100, 2, HostScope::SameHost));
         let links: Vec<String> = (0..5).map(|i| format!("https://x.test/p{i}")).collect();
         assert_eq!(f.enqueue(&links, 0), 2, "fan-out capped at 2");
+    }
+
+    #[test]
+    fn enqueue_seeds_ignores_the_fanout_cap() {
+        // Bulk seeds (a sitemap) are not one page's links; the fan-out cap does not apply.
+        let mut f = Frontier::new("https://x.test/", policy(3, 100, 2, HostScope::SameHost));
+        let urls: Vec<String> = (0..5).map(|i| format!("https://x.test/s{i}")).collect();
+        assert_eq!(f.enqueue_seeds(&urls), 5, "all 5 seeds enqueued despite a fan-out cap of 2");
+        // Host scope + dedup still apply to seeds.
+        assert_eq!(
+            f.enqueue_seeds(&["https://other.test/x".into(), "https://x.test/s0".into()]),
+            0,
+            "off-host rejected, already-seen rejected",
+        );
     }
 
     #[test]
@@ -157,7 +171,7 @@
         let rt = Builder::new_current_thread().enable_all().build().unwrap();
         let total = rt.block_on(run_crawl(
             "https://s.test/",
-            CrawlPolicy { max_depth: 1, max_pages: 50, max_fanout: 20, scope: HostScope::SameHost },
+            CrawlPolicy { max_depth: 1, max_pages: 50, max_fanout: 20, scope: HostScope::SameHost, seed_sitemap: false },
             Duration::ZERO,
             fetch,
             || false,
@@ -194,7 +208,7 @@
         let rt = Builder::new_current_thread().enable_all().build().unwrap();
         let total = rt.block_on(run_crawl(
             "https://s.test/",
-            CrawlPolicy { max_depth: 5, max_pages: 3, max_fanout: 20, scope: HostScope::SameHost },
+            CrawlPolicy { max_depth: 5, max_pages: 3, max_fanout: 20, scope: HostScope::SameHost, seed_sitemap: false },
             Duration::ZERO,
             fetch,
             || false,
@@ -225,7 +239,7 @@
         let rt = Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(run_crawl(
             "https://s.test/",
-            CrawlPolicy { max_depth: 2, max_pages: 50, max_fanout: 20, scope: HostScope::SameHost },
+            CrawlPolicy { max_depth: 2, max_pages: 50, max_fanout: 20, scope: HostScope::SameHost, seed_sitemap: false },
             Duration::ZERO,
             fetch,
             || false,
@@ -274,7 +288,7 @@
         let rt = Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(run_crawl(
             "https://s.test/",
-            CrawlPolicy { max_depth: 5, max_pages: 50, max_fanout: 20, scope: HostScope::SameHost },
+            CrawlPolicy { max_depth: 5, max_pages: 50, max_fanout: 20, scope: HostScope::SameHost, seed_sitemap: false },
             Duration::ZERO,
             fetch,
             cancelled,
@@ -285,6 +299,52 @@
             },
         ));
         assert_eq!(fetched_pages, 1, "cancellation stopped the crawl after the first fetched page");
+    }
+
+    #[test]
+    fn run_crawl_seeds_from_the_sitemap() {
+        // The seed page links nothing, but the sitemap lists two pages; with
+        // seed_sitemap on, the crawl discovers and fetches them anyway.
+        let site: HashMap<String, &str> = [
+            (
+                "https://s.test/sitemap.xml".to_string(),
+                "<urlset><url><loc>https://s.test/a</loc></url>\
+                 <url><loc>https://s.test/b</loc></url></urlset>",
+            ),
+            ("https://s.test/".to_string(), "<p>no links here</p>"),
+            ("https://s.test/a".to_string(), "<p>page a</p>"),
+            ("https://s.test/b".to_string(), "<p>page b</p>"),
+        ]
+        .into_iter()
+        .collect();
+        let fetch = move |url: String| {
+            let body = site.get(&url).copied().unwrap_or("").to_string();
+            async move {
+                Ok::<_, String>(Fetched { content_type: Some("text/html".to_string()), body })
+            }
+        };
+        let mut visited: Vec<String> = Vec::new();
+        let rt = Builder::new_current_thread().enable_all().build().unwrap();
+        rt.block_on(run_crawl(
+            "https://s.test/",
+            CrawlPolicy {
+                max_depth: 2,
+                max_pages: 50,
+                max_fanout: 20,
+                scope: HostScope::SameHost,
+                seed_sitemap: true,
+            },
+            Duration::ZERO,
+            fetch,
+            || false,
+            |update| {
+                if let CrawlUpdate::Progress { last_url, .. } = update {
+                    visited.push(last_url);
+                }
+            },
+        ));
+        assert!(visited.contains(&"https://s.test/a".to_string()), "sitemap page a crawled: {visited:?}");
+        assert!(visited.contains(&"https://s.test/b".to_string()), "sitemap page b crawled: {visited:?}");
     }
 
     #[test]
