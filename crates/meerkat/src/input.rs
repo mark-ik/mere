@@ -861,6 +861,12 @@ impl WindowCtx<'_> {
         self.drain_comms_intent();
         self.drain_palette_context_action();
         self.drain_pending_context();
+        // A context-menu row can carry a `RunCommand`, which queues a pending command
+        // *inside* `drain_pending_context` above — after the first `drain_pending_command`
+        // already ran this cycle. Flush once more so a clicked menu command (e.g. crawl /
+        // crawl_stop) fires this interaction rather than lagging to the next. No-op when
+        // nothing was queued. (The keyboard menu path already orders context before command.)
+        self.drain_pending_command();
         self.drain_history_step();
         self.drain_physics_toggle();
         self.drain_roster_intents();
