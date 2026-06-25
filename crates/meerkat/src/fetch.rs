@@ -228,6 +228,17 @@ pub(crate) async fn fetch_page_capped(url: &str, max_bytes: usize) -> Result<Fet
     }
 }
 
+/// Fetch a page as the **crawler**, identifying with [`CRAWLER_USER_AGENT`]. http(s)
+/// sends the descriptive bot UA; smolweb routes through errand as usual (errand owns
+/// its UA). The crawl actor fetches every page (and robots.txt) through this, so a
+/// site sees an honest, contactable bot rather than a masquerading browser.
+pub(crate) async fn fetch_page_crawler(url: &str) -> Result<Fetched, String> {
+    match scheme_of(url).and_then(errand::Scheme::parse) {
+        Some(_) => fetch_page_capped(url, PAGE_BODY_CAP).await,
+        None => do_fetch_ua(url, PAGE_BODY_CAP, Some(CRAWLER_USER_AGENT)).await,
+    }
+}
+
 /// Fetch a smolweb URL through [`errand`], following redirects up to
 /// [`MAX_REDIRECTS`], and fold the response into a [`Fetched`] the nematic engines
 /// render. Non-success statuses (input wanted, cert required, failure) surface as
@@ -577,9 +588,31 @@ async fn read_capped(mut body: netfetcher::ResponseBody, max_bytes: usize) -> Re
 /// Run one WHATWG-Fetch GET and collect the decoded body as text, bounded by
 /// `max_bytes` (§A5: a hard streamed cap so a huge response can't OOM the host).
 async fn do_fetch(url: &str, max_bytes: usize) -> Result<Fetched, String> {
+    do_fetch_ua(url, max_bytes, None).await
+}
+
+/// The crawl actor's descriptive User-Agent: a site can allow / block / reach the bot
+/// from it (politeness, alongside robots.txt). The `merebot` token matches the
+/// `User-agent:` groups `crawl::robots` honors; the `Mozilla/5.0 (compatible; …)`
+/// shape is the conventional crawler form (cf. Googlebot).
+pub(crate) const CRAWLER_USER_AGENT: &str =
+    "Mozilla/5.0 (compatible; merebot/0.1; +https://mere.computer/bot)";
+
+/// Like [`do_fetch`], but with an explicit `user_agent` request header when `Some`
+/// (the crawler identifies itself); `None` lets netfetcher add its default browser UA.
+async fn do_fetch_ua(
+    url: &str,
+    max_bytes: usize,
+    user_agent: Option<&str>,
+) -> Result<Fetched, String> {
     let parsed = url::Url::parse(url).map_err(|e| format!("bad URL: {e}"))?;
     let cx = session_context();
-    let response = netfetcher::fetch(netfetcher::Request::get(parsed), &cx).await;
+    let mut request = netfetcher::Request::get(parsed);
+    if let Some(ua) = user_agent {
+        // netfetcher only injects its default UA when none is set, so this wins.
+        request.headers.push(("user-agent".to_owned(), ua.to_owned()));
+    }
+    let response = netfetcher::fetch(request, &cx).await;
     if response.is_network_error() {
         return Err("network error".to_string());
     }

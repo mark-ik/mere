@@ -271,9 +271,9 @@ pub fn spawn_crawl(
 }
 
 /// Own the URL so the returned future is `'static` (the actor's `fetch` thunk takes a
-/// `String`); routes by scheme exactly as the fetch actor does.
+/// `String`); fetches as the crawler (descriptive bot User-Agent), routing by scheme.
 async fn fetch_page_owned(url: String) -> Result<Fetched, String> {
-    crate::fetch::fetch_page(&url).await
+    crate::fetch::fetch_page_crawler(&url).await
 }
 
 /// Drive a bounded crawl from `seed` under `policy`: pop the next URL from the
