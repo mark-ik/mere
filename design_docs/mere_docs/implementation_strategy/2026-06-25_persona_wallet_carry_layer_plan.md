@@ -194,8 +194,14 @@ private lane), both evaluated in the substrate spike.
 
 ## Open questions
 
-- Where does the seed live by default: which devices are copy (full) vs remote-auth
-  (delegated), and is the master under FROST custody (quorum to rotate / enroll)?
+- **Leaning (2026-06-25): the master root under FROST custody.** A `t`-of-`N` quorum of
+  your own devices to do anything irreversible (rotate the root, enroll a new device), so
+  no single device is a single point of failure (the companion to encrypt-at-rest: sealed
+  on disk *and* not wholesale-present on any one device). Everyday persona signing stays on
+  fast local keys; the quorum guards only the rare high-stakes root ops. Recovery is
+  re-sharing (a fresh split excluding a lost share, same public key, so external identity
+  survives). Open underneath: the threshold and device set (e.g. 2-of-3 of home server /
+  laptop / phone), and which everyday devices are copy (full) vs remote-auth (delegated).
 - **Decided (2026-06-25): encrypt at rest.** `LocalOnly` / `TrustedPeersOnly` engrams are
   sealed on disk under the persona vault key (private by default; the wallet leans keyring),
   and promotion to `MootScoped` / `PublicPortable` re-encodes into the cleartext-gated lane
