@@ -103,6 +103,14 @@ pub struct PersistedSettings {
     /// any attached script from mutating the page this session.
     #[serde(default)]
     pub script_permissions: ScriptPermissionPrefs,
+    /// The crawl scope a `>crawl` roams under, as a stable key (`same_host` /
+    /// `same_domain` / `any_host`). `None` = the same-host default. (Crawl controls.)
+    #[serde(default)]
+    pub crawl_scope: Option<String>,
+    /// The crawl depth (link-hops from the seed) a `>crawl` reaches. `None` = the
+    /// shallow default. (Crawl controls.)
+    #[serde(default)]
+    pub crawl_depth: Option<u32>,
 }
 
 /// The layout engine's tuned default linear damping (mirrors gyre's
@@ -122,6 +130,8 @@ impl Default for PersistedSettings {
             disabled_engines: Vec::new(),
             document_typography: None,
             script_permissions: ScriptPermissionPrefs::default(),
+            crawl_scope: None,
+            crawl_depth: None,
         }
     }
 }
@@ -185,7 +195,7 @@ mod tests {
     #[test]
     fn save_then_load_round_trips() {
         let dir = temp_session_dir("round-trip");
-        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()], document_typography: None, script_permissions: ScriptPermissionPrefs { log: None, document: Some(Permission::Deny), net: Some(Permission::Allow) } };
+        let original = PersistedSettings { tab_cap: 7, theme_id: None, shellbar_edge: ShellbarEdge::Left, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: vec!["scrying.web".into()], document_typography: None, script_permissions: ScriptPermissionPrefs { log: None, document: Some(Permission::Deny), net: Some(Permission::Allow) }, crawl_scope: None, crawl_depth: None };
         save_settings(&dir, &original).unwrap();
         let restored = load_settings(&dir).unwrap().expect("settings file should be present");
         assert_eq!(restored, original);
@@ -213,8 +223,8 @@ mod tests {
     #[test]
     fn save_overwrites_atomically_with_no_tmp_left() {
         let dir = temp_session_dir("overwrite");
-        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default() }).unwrap();
-        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default() }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 3, theme_id: None, shellbar_edge: ShellbarEdge::Left, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default(), crawl_scope: None, crawl_depth: None }).unwrap();
+        save_settings(&dir, &PersistedSettings { tab_cap: 24, theme_id: None, shellbar_edge: ShellbarEdge::Right, shellbar_hidden: false, physics_damping: 2.5, disabled_engines: Vec::new(), document_typography: None, script_permissions: ScriptPermissionPrefs::default(), crawl_scope: None, crawl_depth: None }).unwrap();
         let restored = load_settings(&dir).unwrap().unwrap();
         assert_eq!(restored.tab_cap, 24);
         let tmp = settings_path(&dir).with_extension("json.tmp");

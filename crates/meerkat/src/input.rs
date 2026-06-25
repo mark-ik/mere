@@ -1331,6 +1331,22 @@ impl WindowCtx<'_> {
             k if k.starts_with("engine:toggle:") => {
                 self.toggle_engine(&k["engine:toggle:".len()..]);
             }
+            // Crawl scope / depth picker (the settings lane): set the policy a `>crawl`
+            // starts under, persist it, and redraw so the picker re-checks. (Crawl controls.)
+            k if k.starts_with("crawl:scope:") => {
+                if let Some(scope) = crate::crawl::HostScope::from_key(&k["crawl:scope:".len()..]) {
+                    self.shared.content.crawl.set_scope(scope);
+                    self.persist_settings();
+                    self.view.request_redraw();
+                }
+            }
+            k if k.starts_with("crawl:depth:") => {
+                if let Ok(depth) = k["crawl:depth:".len()..].parse::<u32>() {
+                    self.shared.content.crawl.set_max_depth(depth);
+                    self.persist_settings();
+                    self.view.request_redraw();
+                }
+            }
             // DocumentScript capability cyclers (the `pelt/scripts` page): cycle
             // log/document/net through default → Allow → Prompt → Deny. (Tail 3.)
             k if k.starts_with("script:cap:") => {

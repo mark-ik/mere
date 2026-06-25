@@ -5,6 +5,15 @@
     }
 
     #[test]
+    fn host_scope_key_round_trips() {
+        // The settings picker + on-disk pref round-trip scopes through their string keys.
+        for scope in [HostScope::SameHost, HostScope::SameDomain, HostScope::AnyHost] {
+            assert_eq!(HostScope::from_key(scope.as_key()), Some(scope), "{scope:?}");
+        }
+        assert_eq!(HostScope::from_key("nonsense"), None);
+    }
+
+    #[test]
     fn seeds_then_drains() {
         let mut f = Frontier::new("https://x.test/", CrawlPolicy::default());
         assert_eq!(f.next(), Some(("https://x.test/".to_string(), 0)));

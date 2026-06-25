@@ -31,11 +31,9 @@ mod robots;
 mod sitemap;
 use robots::RobotsRules;
 
-/// Which hosts a crawl may follow links into.
-// `SameHost` is the wired default (`CrawlPolicy::default`); `SameDomain` / `AnyHost`
-// are selectable scopes a crawl-scope UI / setting will pick (the policy is plumbed
-// for them — see `Frontier::in_scope` + tests).
-#[allow(dead_code)]
+/// Which hosts a crawl may follow links into. `SameHost` is the default
+/// ([`CrawlPolicy::default`]); the settings lane's scope picker selects between all
+/// three (see [`Frontier::in_scope`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HostScope {
     /// Only the seed's exact host (`docs.example.com` stays on `docs.example.com`).
@@ -46,6 +44,36 @@ pub enum HostScope {
     SameDomain,
     /// Any host. The open web; only sane with a tight depth/page cap and politeness.
     AnyHost,
+}
+
+impl HostScope {
+    /// The stable key for this scope, used in settings-action ids and on disk.
+    pub fn as_key(self) -> &'static str {
+        match self {
+            HostScope::SameHost => "same_host",
+            HostScope::SameDomain => "same_domain",
+            HostScope::AnyHost => "any_host",
+        }
+    }
+
+    /// Parse a [`as_key`](Self::as_key) string back into a scope; `None` if unknown.
+    pub fn from_key(key: &str) -> Option<HostScope> {
+        match key {
+            "same_host" => Some(HostScope::SameHost),
+            "same_domain" => Some(HostScope::SameDomain),
+            "any_host" => Some(HostScope::AnyHost),
+            _ => None,
+        }
+    }
+
+    /// A short human label for the settings picker.
+    pub fn label(self) -> &'static str {
+        match self {
+            HostScope::SameHost => "Same host",
+            HostScope::SameDomain => "Same domain",
+            HostScope::AnyHost => "Any host",
+        }
+    }
 }
 
 /// How far and wide a crawl may roam — the bound the [`Frontier`] enforces.
@@ -454,6 +482,9 @@ pub struct CrawlSession {
     /// The graph crawled contributions land in (the seed page's graph).
     graph_id: Option<GraphId>,
     progress: CrawlProgress,
+    /// The policy a `>crawl` starts under, configured by the settings lane's scope /
+    /// depth picker (and restored from disk). `start` can still override it per call.
+    default_policy: CrawlPolicy,
 }
 
 impl CrawlSession {
@@ -461,7 +492,41 @@ impl CrawlSession {
     /// drains on the next frame — exactly like the content / fetch wakes.
     pub fn new(wake: Wake) -> Self {
         let (handle, rx, cancel) = spawn_crawl(wake);
-        Self { handle, rx, cancel, graph_id: None, progress: CrawlProgress::default() }
+        Self {
+            handle,
+            rx,
+            cancel,
+            graph_id: None,
+            progress: CrawlProgress::default(),
+            default_policy: CrawlPolicy::default(),
+        }
+    }
+
+    /// The policy a `>crawl` starts under (scope / depth from the settings lane).
+    pub fn policy(&self) -> CrawlPolicy {
+        self.default_policy
+    }
+
+    /// The configured crawl scope (for the settings picker's current selection).
+    pub fn scope(&self) -> HostScope {
+        self.default_policy.scope
+    }
+
+    /// The configured crawl depth (for the settings picker's current selection).
+    pub fn max_depth(&self) -> u32 {
+        self.default_policy.max_depth
+    }
+
+    /// Set the scope a `>crawl` roams under (settings lane). Does not affect a crawl
+    /// already running.
+    pub fn set_scope(&mut self, scope: HostScope) {
+        self.default_policy.scope = scope;
+    }
+
+    /// Set the depth a `>crawl` reaches (settings lane). Does not affect a crawl
+    /// already running.
+    pub fn set_max_depth(&mut self, depth: u32) {
+        self.default_policy.max_depth = depth;
     }
 
     /// Start a bounded crawl from `seed` under `policy`; its contributions route to

@@ -51,6 +51,7 @@ pub(crate) fn settings_index(namespace: &str) -> Vec<SettingsPageRef> {
             SettingsPageRef { id: "physics", title: "Physics" },
             SettingsPageRef { id: "orrery", title: "Orrery" },
             SettingsPageRef { id: "scene", title: "Scene" },
+            SettingsPageRef { id: "crawl", title: "Crawl" },
             SettingsPageRef { id: "scripts", title: "Scripts" },
             SettingsPageRef { id: "menu", title: "Menu" },
         ],
@@ -92,6 +93,7 @@ impl WindowCtx<'_> {
             "physics" => ("Physics", physics_section_items(self.physics_damping())),
             "orrery" => ("Orrery", self.orrery_settings_items()),
             "scene" => ("Scene", scene_section_items()),
+            "crawl" => ("Crawl", self.crawl_settings_items()),
             "scripts" => ("Scripts", self.script_settings_items()),
             "menu" => ("Menu", self.menu_settings_items()),
             _ => return None,
@@ -376,6 +378,35 @@ impl WindowCtx<'_> {
         ));
         let mirror = self.view.mirror_tiles;
         items.push(toggle(check("Mirror open tiles", mirror), mirror, "orrery:mirror".to_string()));
+        items
+    }
+
+    /// The `pelt/crawl` page: the scope / depth a `>crawl` roams under (relational-browse
+    /// V2 controls). Scope picks which hosts links may lead into (same host → domain →
+    /// any), depth how many link-hops from the seed. Each row drains `crawl:scope:<key>` /
+    /// `crawl:depth:<n>` to the crawl session and persists. The same-host, shallow default
+    /// keeps an accidental crawl cheap and polite.
+    fn crawl_settings_items(&self) -> Vec<PaneItem> {
+        use crate::crawl::HostScope;
+        let toggle = |label: String, on: bool, key: String| {
+            PaneItem::button(if on { "app-btn-active" } else { "app-btn" }, label, key)
+        };
+        let check =
+            |label: &str, on: bool| if on { format!("{label}  \u{2713}") } else { label.to_string() };
+
+        let current_scope = self.shared.content.crawl.scope();
+        let mut items = vec![PaneItem::text("app-title", "Scope")];
+        for scope in [HostScope::SameHost, HostScope::SameDomain, HostScope::AnyHost] {
+            let on = scope == current_scope;
+            items.push(toggle(check(scope.label(), on), on, format!("crawl:scope:{}", scope.as_key())));
+        }
+
+        items.push(PaneItem::text("app-title", "Depth"));
+        let current_depth = self.shared.content.crawl.max_depth();
+        for (depth, label) in [(1u32, "Shallow (1 hop)"), (2, "Default (2 hops)"), (4, "Deep (4 hops)")] {
+            let on = depth == current_depth;
+            items.push(toggle(check(label, on), on, format!("crawl:depth:{depth}")));
+        }
         items
     }
 

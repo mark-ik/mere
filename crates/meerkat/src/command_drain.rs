@@ -108,11 +108,11 @@ impl WindowCtx<'_> {
             return Some("The focused node has no URL to crawl".to_string());
         };
         let graph = self.view.focused_graph;
-        self.shared
-            .content
-            .crawl
-            .start(&url, crate::crawl::CrawlPolicy::default(), graph);
-        Some(format!("Crawling {url} (same-host, shallow)…"))
+        let policy = self.shared.content.crawl.policy();
+        let scope = policy.scope.label().to_lowercase();
+        let depth = policy.max_depth;
+        self.shared.content.crawl.start(&url, policy, graph);
+        Some(format!("Crawling {url} ({scope}, depth {depth})…"))
     }
 
     /// Stop the running crawl (relational-browse V2): flip the crawl actor's cancel

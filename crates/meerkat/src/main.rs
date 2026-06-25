@@ -1051,7 +1051,16 @@ impl Shell {
         });
         // The crawl actor shares the content wake: its updates schedule the same frame
         // drain that picks up content-actor updates. (Relational-browse V2.)
-        let crawl = crawl::CrawlSession::new(content_wake.clone());
+        let mut crawl = crawl::CrawlSession::new(content_wake.clone());
+        // Restore the crawl scope / depth the settings lane last persisted.
+        if let Some(scope) =
+            saved_settings.crawl_scope.as_deref().and_then(crawl::HostScope::from_key)
+        {
+            crawl.set_scope(scope);
+        }
+        if let Some(depth) = saved_settings.crawl_depth {
+            crawl.set_max_depth(depth);
+        }
         let mut constellation = Constellation::new(content_wake);
         constellation.set_cap(saved_settings.tab_cap);
         // Seed the actor pool's deactivated-engine set so a globally-disabled

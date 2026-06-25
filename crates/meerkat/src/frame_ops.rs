@@ -148,6 +148,8 @@ impl WindowCtx<'_> {
             .then(|| serde_json::to_value(&self.shared.presentation.document_sheet).ok())
             .flatten(),
             script_permissions,
+            crawl_scope: Some(self.shared.content.crawl.scope().as_key().to_string()),
+            crawl_depth: Some(self.shared.content.crawl.max_depth()),
         };
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");
