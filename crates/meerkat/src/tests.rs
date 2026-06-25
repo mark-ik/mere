@@ -24,7 +24,7 @@ fn toolbar_renders_from_reused_state() {
     let dom = runner.dom();
     let dom = dom.borrow();
     let root = runner.root();
-    assert_eq!(count_tag(&dom, root, "button"), 11, "back + forward + pause + add-pill toolbar buttons + 7 shellbar buttons");
+    assert_eq!(count_tag(&dom, root, "button"), 13, "back + forward + pause + add-pill toolbar buttons + 9 shellbar buttons");
     assert_eq!(count_tag(&dom, root, "input"), 1, "the omnibar input");
     // chrome container + toolbar row + sync chip + crawl chip + (empty) suggestions + shellbar.
     assert_eq!(count_tag(&dom, root, "div"), 6, "chrome + toolbar + sync-chip + crawl-chip + suggestions + shellbar");

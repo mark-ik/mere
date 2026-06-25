@@ -23,12 +23,12 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
 **recover-deleted-node is wired** (`pane_data.rs:~211` Trail-Removed `recover:` buttons →
 `input.rs:~1258` drain → `node_ops.rs:~67` `recover_deleted_node`) — no work needed.
 
-1. **Shellbar buttons for Alembic + Trail.** **[chrome-hot]** The toolbar/shellbar (`views.rs:~556-562`,
-   `btn(glyph, panes.<x>, Command::Toggle<X>)`) covers 7 panes (Workbench/Roster/Gloss/Apparatus/
-   Inspector/Steward/Comms) but not Trail or the new **Alembic** pane (B1 left it palette/`>alembic`-only).
-   Add a `btn(...)` for each + the matching `panes.alembic` / `panes.trail` bool (the per-pane flags are
-   built in `render.rs:~324` as `panes.steward: self.pane_of_content(&PaneContent::Steward).is_some()`).
-   The `ToggleAlembic` / `ToggleTrail` commands already exist. Small + high-value discoverability.
+1. **Shellbar buttons for Alembic + Trail.** ✅ **DONE 2026-06-25.** Added a Trail (`⇝`, `U+21DD`) and an
+   Alembic (`⚗`, `U+2697`) button to the shellbar strip (`views.rs::shellbar_view`), grouped after Gloss
+   as the content/memory cluster; wired the matching `trail` / `alembic` bools into `ShellbarPaneStates`
+   (`lib.rs`) and its per-frame construction (`render.rs`). The `ToggleAlembic` / `ToggleTrail` commands
+   already existed. The exact-count toolbar test (`tests.rs`) was bumped 11→13 (now 9 shellbar buttons);
+   the `>= 7` shellbar harness assertion still holds. Shellbar now covers all 9 toggle-able panes.
 
 2. **Steward rows clickable.** Steward's retry/stop/pin are verbs that exist in `node_ops.rs`
    (`retry_focused` / `stop` / `pin_focused_operation`) but are only reachable by typing

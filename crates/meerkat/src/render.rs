@@ -326,6 +326,8 @@ impl WindowCtx<'_> {
             workbench: self.pane_of_content(&PaneContent::Workbench).is_some(),
             roster: self.pane_of_content(&PaneContent::Roster).is_some(),
             gloss: self.pane_of_content(&PaneContent::Gloss).is_some(),
+            trail: self.pane_of_content(&PaneContent::Trail).is_some(),
+            alembic: self.pane_of_content(&PaneContent::Alembic).is_some(),
             apparatus: self.pane_of_content(&PaneContent::Apparatus).is_some(),
             inspector: self.pane_of_content(&PaneContent::Inspector).is_some(),
             steward: self.pane_of_content(&PaneContent::Steward).is_some(),

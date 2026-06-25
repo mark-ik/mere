@@ -208,6 +208,8 @@ pub struct ShellbarPaneStates {
     pub workbench: bool,
     pub roster: bool,
     pub gloss: bool,
+    pub trail: bool,
+    pub alembic: bool,
     pub apparatus: bool,
     pub inspector: bool,
     pub steward: bool,

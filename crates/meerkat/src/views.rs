@@ -575,6 +575,8 @@ fn shellbar_view(panes: &ShellbarPaneStates) -> ChromeView {
         btn("\u{229e}", panes.workbench, Command::ToggleWorkbench), // ⊞
         btn("\u{2261}", panes.roster, Command::ToggleRoster),       // ≡
         btn("\u{25ce}", panes.gloss, Command::ToggleGloss),         // ◎
+        btn("\u{21dd}", panes.trail, Command::ToggleTrail),         // ⇝
+        btn("\u{2697}", panes.alembic, Command::ToggleAlembic),     // ⚗
         btn("\u{2699}", panes.apparatus, Command::ToggleApparatus), // ⚙
         btn("\u{25c9}", panes.inspector, Command::ToggleInspector), // ◉
         btn("\u{2692}", panes.steward, Command::ToggleSteward),     // ⚒
