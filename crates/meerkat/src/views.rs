@@ -112,8 +112,13 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // there). The host folds the real `SyncStatus` into `c.sync`.
     let sync_chip = el::<_, Chrome, ()>("div", c.sync.summary()).attr("class", "sync-chip");
     // The crawl-progress chip (relational-browse V2): "crawling/crawled: N pages" while
-    // a crawl runs and after; empty (hidden via CSS) when none has run.
-    let crawl_chip = el::<_, Chrome, ()>("div", c.crawl.summary()).attr("class", "crawl-chip");
+    // a crawl runs and after; hidden when none has run. We toggle a `crawl-chip-hidden`
+    // class rather than rely on `:empty` — an empty-string text view still leaves an
+    // empty text node child, so `:empty` never matches and the chip would paint as a
+    // bare pill while idle.
+    let crawl_summary = c.crawl.summary();
+    let crawl_class = if crawl_summary.is_empty() { "crawl-chip crawl-chip-hidden" } else { "crawl-chip" };
+    let crawl_chip = el::<_, Chrome, ()>("div", crawl_summary).attr("class", crawl_class);
     // The add pill next to the omnibar: a "+" that opens a small menu — Add node /
     // Add tile / Add session — the unified create affordance (the toolbar's old
     // workbench toggle was redundant with the shellbar's, so the pill takes its

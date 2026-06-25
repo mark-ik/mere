@@ -198,7 +198,7 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
         // The crawl-progress chip (relational-browse V2), matching the sync chip's pill;
         // hidden when empty (no crawl has run) via `:empty`.
         format!(
-            ".crawl-chip {{ font-size: 14px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px; border-radius: 14px; }} .crawl-chip:empty {{ display: none; }}",
+            ".crawl-chip {{ font-size: 14px; color: {}; background-color: {}; padding: 8px 12px; margin: 4px; border-radius: 14px; }} .crawl-chip-hidden {{ display: none; }}",
             rgb(c.muted_text),
             rgb(c.menu_bg)
         ),
