@@ -136,6 +136,15 @@ pub(super) struct RegistrySnapshot {
     pub invariant_violations: Vec<String>,
 }
 
+/// The most recent forgetting pass (Athanor), surfaced live in Steward. The
+/// dropped count plus when it ran make the pass a real tracked op, not only a
+/// line in the Apparatus diagnostics log. (Alembic B2.)
+#[derive(Clone, Debug)]
+pub(super) struct ForgettingPass {
+    pub dropped: usize,
+    pub at: Instant,
+}
+
 pub(super) struct HostObservability {
     started: Instant,
     capacity: usize,
@@ -147,6 +156,8 @@ pub(super) struct HostObservability {
     traces: VecDeque<TraceRecord>,
     invariant_violations: VecDeque<String>,
     a11y: A11ySnapshot,
+    /// The last forgetting pass, for Steward's live-ops view. (Alembic B2.)
+    last_forgetting: Option<ForgettingPass>,
 }
 
 impl HostObservability {
@@ -162,6 +173,7 @@ impl HostObservability {
             traces: VecDeque::with_capacity(DEFAULT_CAPACITY),
             invariant_violations: VecDeque::with_capacity(DEFAULT_CAPACITY),
             a11y: A11ySnapshot::default(),
+            last_forgetting: None,
         }
     }
 
@@ -200,6 +212,21 @@ impl HostObservability {
                 at: Instant::now(),
             },
         );
+    }
+
+    /// Record a forgetting pass for Steward's live-ops view: the dropped count and
+    /// when it ran. Complements the `alembic.forget` diagnostic (which lands in the
+    /// Apparatus log) with a structured "last pass" Steward reads directly. (B2.)
+    pub(super) fn record_forgetting_pass(&mut self, dropped: usize) {
+        self.last_forgetting = Some(ForgettingPass {
+            dropped,
+            at: Instant::now(),
+        });
+    }
+
+    /// The most recent forgetting pass, if one has run this session. (B2.)
+    pub(super) fn last_forgetting(&self) -> Option<&ForgettingPass> {
+        self.last_forgetting.as_ref()
     }
 
     pub(super) fn record_ux_event(&mut self, event: UxEvent) {

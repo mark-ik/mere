@@ -77,10 +77,13 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
    (consolidation is light: graph engrams already dedup by content-addressing; the value is relating
    version chains). Stays inside R0 (proposes; host applies).
 
-2. **Surface the forget result in Steward.** `run_forgetting_pass` records the count via
-   `record_diagnostic`, which lands in the **Apparatus** diagnostics buffer; the doc (§8) wants live
-   passes in **Steward**'s live-ops view. Add a Steward row (a "last forgetting pass" line, or a tracked
-   op). **[chrome-hot]** (Steward rows are `pane_data::steward_rows`; pairs with item A2).
+2. **Surface the forget result in Steward.** ✅ **DONE 2026-06-25.** `HostObservability` now keeps a
+   structured `ForgettingPass { dropped, at }` (the last pass), set by `record_forgetting_pass` which
+   `run_forgetting_pass` calls in both branches (dropped 0 when nothing was stale, so a no-op pass still
+   shows it ran). `steward_rows` gained a live "Last forgetting" row — `dropped N page(s) · Ns ago`
+   (reusing `observability::age`) or `not run yet`. Complements the existing `alembic.forget` diagnostic
+   in the Apparatus log rather than replacing it. New test `steward_surfaces_a_recorded_forgetting_pass`
+   pins both the not-run and the recorded-count states. (Built on the A2 Steward work.)
 
 3. **In-pane one-click promote/demote (slice C).** Promotion works today via the existing Add-tag
    gesture (tags persist → Saved is durable). A one-click "keep" from a Recent row / "release" from a

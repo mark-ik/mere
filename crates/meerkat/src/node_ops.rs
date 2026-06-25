@@ -70,6 +70,8 @@ impl WindowCtx<'_> {
                 super::observability::Severity::Info,
                 "Forgetting: nothing stale in short-term memory".to_string(),
             );
+            // Record the pass (dropped 0) so Steward shows it really ran. (B2.)
+            self.shared.observability.record_forgetting_pass(0);
             return;
         }
         let Some(store) = self.shared.content.store.as_mut() else {
@@ -81,6 +83,7 @@ impl WindowCtx<'_> {
             super::observability::Severity::Info,
             format!("Forgetting: dropped {dropped} stale short-term page(s)"),
         );
+        self.shared.observability.record_forgetting_pass(dropped);
         self.view.request_redraw();
     }
 

@@ -353,6 +353,19 @@ impl WindowCtx<'_> {
             ),
             ("Sync".to_string(), self.sync_summary()),
             (
+                // Athanor's last forgetting pass, surfaced live here (not only in the
+                // Apparatus diagnostics log). A real tracked op, no placebo. (Alembic B2.)
+                "Last forgetting".to_string(),
+                match self.shared.observability.last_forgetting() {
+                    Some(p) => format!(
+                        "dropped {} page(s) \u{b7} {}",
+                        p.dropped,
+                        crate::observability::age(p.at)
+                    ),
+                    None => "not run yet".to_string(),
+                },
+            ),
+            (
                 // The dialable ticket, readable + shareable here instead of only in the
                 // logs. (Tessera ticket surface.)
                 "Tessera ticket".to_string(),

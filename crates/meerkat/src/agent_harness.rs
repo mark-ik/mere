@@ -627,6 +627,35 @@ mod tests {
     }
 
     #[test]
+    fn steward_surfaces_a_recorded_forgetting_pass() {
+        let mut app = test_app();
+        app.create_session();
+        let mut wc = app.ctx();
+        // Before any pass, Steward shows the row as not-yet-run.
+        let rows = wc.steward_rows();
+        assert_eq!(
+            rows.iter()
+                .find(|(k, _)| k == "Last forgetting")
+                .map(|r| r.1.as_str()),
+            Some("not run yet"),
+            "Steward carries a Last forgetting row, not-run before any pass",
+        );
+        // Record a pass directly (deterministic — independent of the store / proposal)
+        // and confirm Steward surfaces the real dropped count. (No placebo.)
+        wc.shared.observability.record_forgetting_pass(2);
+        let rows = wc.steward_rows();
+        let row = rows
+            .iter()
+            .find(|(k, _)| k == "Last forgetting")
+            .expect("Steward shows a Last forgetting row");
+        assert!(
+            row.1.contains("dropped 2 page(s)"),
+            "the row reports the real pass result: {}",
+            row.1
+        );
+    }
+
+    #[test]
     fn ctrl_shift_n_queues_a_spawn_window_command() {
         // The new-window verb can't create a window from a per-window handler (no
         // event loop, no registry access), so it queues a `SpawnWindow` the shell
