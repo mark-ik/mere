@@ -131,10 +131,60 @@ persona, or accept that those faces are co-located behind home.
    the WireGuard layer, which it probably does not for v1.
 
 The shared missing seam for all three is persona-owned transport config:
-`PersonaManifest.home_device: Option<PeerID>`, a `PersonaStore`, session-startup
-resolution, and a `connect`-site check. The research scoped this at roughly 60% feasible
-in four weeks on today's stack, the bulk of it being the persona-to-transport plumbing
-rather than anything in iroh.
+`PersonaManifest.egress`, a synced `DeviceRoster`, session-startup resolution, and a
+`connect`-site check. The research scoped this at roughly 60% feasible in four weeks on
+today's stack, the bulk of it being the persona-to-transport plumbing rather than
+anything in iroh.
+
+## The device fabric: per-persona egress, per-device exposure
+
+You author your devices once as a fabric and bind each persona to an egress. This is the
+resolution of the per-persona-egress question: giving each persona a *different* exposed
+egress means your faces no longer share one IP, so they stay unlinkable to each other.
+
+**Per-device role.** Each device carries an exposure flag:
+
+- **Hidden client (default):** no public listener, dials outbound only, reaches the
+  network through an egress device. Laptops and phones live here.
+- **Exposed relay/egress (explicit opt-in):** always-on and reachable (a home server or a
+  VPS; reachable via iroh holepunch/relay even behind residential NAT), can serve as the
+  egress and availability anchor for your hidden devices and personas.
+
+Hidden-by-default is security-positive: it minimizes internet-facing surface (only
+hardened always-on nodes ever accept inbound), and the same posture is the privacy
+mechanism (clients hide behind exposed nodes). "Relay or client" maps onto "accepts
+inbound (exposed) or outbound-only (hidden)." Exposure is a per-device opt-in, never a
+default.
+
+**Per-persona egress.** Each persona binds an egress:
+`Direct` (this device, which must be exposed), `ViaDevice(home-server | vps)`,
+`ViaFriend(peer)`, `External(Tor/relay)`, or `DefaultIroh` (Mode-1 direct + public
+relays). The egress is also the persona's **availability anchor**: a persona that egresses
+through your always-on home node stays reachable whenever that node is up, even while your
+laptop sleeps. The persona effectively lives on its egress device.
+
+**The tunnel.** A hidden client reaches its egress over the personal mesh (your devices
+already sync via mesh M1) plus a WireGuard tunnel for the actual egress. Two shapes:
+
+- **Egress-only (v1):** the client runs its own iroh endpoint and WireGuard-tunnels its
+  egress through the home node, so peers see the home IP. The persona's iroh identity is
+  the client's derived key; only the IP is masked. Simplest.
+- **Home-hosted (richer):** the iroh endpoint runs on the home node, the persona lives
+  there, and the client is a thin remote driver over a control channel. Better
+  availability (the persona is reachable when the client is off), at the cost of that
+  control channel and the persona's keys/state living on the home node.
+
+**Prerequisite, stated honestly.** The own-cluster model assumes you own at least one
+always-on exposed node. With zero exposed devices (just a laptop and a phone), per-persona
+own-cluster egress is unavailable and you fall back to Mode 1 (your real IP + public
+relays) or an external egress (a friend's node, Tor). The model shines when you own an
+always-on node and degrades gracefully when you do not.
+
+**Not a new subsystem.** The device roster (your devices + their exposure/role) is a small
+synced structure over the personal mesh you already have, and it maps onto the
+resource-coordination trust rings (your own devices are the innermost ring). The two new
+pieces are `PersonaManifest.egress` and a synced `DeviceRoster`; the transport already
+supports binding an endpoint to a chosen key and reaching your own devices.
 
 ## Scale-up: friend / social relay routing
 
@@ -185,9 +235,10 @@ first rung of becoming infrastructure.
 ## Sequencing
 
 1. **Now:** Mode 1 + the relay-diversity half-measure. Cheap, defeats casual correlation.
-2. **Next:** own-cluster v1 via WireGuard (path 1) — the pragmatic Mode 2. Add
-   `PersonaManifest.home_device`, a `PersonaStore`, and the `connect`-site resolution.
-   Hides current location, zero third-party trust.
+2. **Next:** own-cluster v1 via WireGuard (path 1) — the pragmatic Mode 2. Add the device
+   fabric: a synced `DeviceRoster` (per-device exposure flag, hidden-by-default),
+   `PersonaManifest.egress`, and the `connect`-site resolution. Hides current location,
+   zero third-party trust, per-persona egress so faces do not share an IP.
 3. **Later:** mesh-job relay (path 2) once mesh M2 lands; friend/social relay as the
    social scale-up of own-cluster.
 4. **Research:** Nym as an optional high-sensitivity egress (the global-timing tier);
@@ -204,8 +255,15 @@ peers see the home IP, not the current network; zero third-party trust; the
 home-ISP/household linkability boundary stated plainly in the UI so no one mistakes
 location-privacy for anonymity.
 
+**Decided (2026-06-25):** the device fabric is the direction: per-device exposure flag
+(hidden by default), per-persona egress binding, authored over the personal mesh. Resolves
+the per-persona-egress concentration question.
+
 **Open:**
-- Per-persona egress device, so personas do not all share one home IP.
+
+- Egress-only tunnel (mask the IP, client runs iroh) vs home-hosted endpoint (the persona
+  lives on its egress device, better availability, needs a control channel) as the v1 shape.
+- Graceful fallback when you own no always-on exposed node (Mode 1 vs an external egress).
 - Relay-only-forced vs direct-preferred (always-hide-IP vs fast-when-direct).
 - Friend-relay coordination and availability; anonymity-set sizing.
 - Whether the global-timing tier (Nym) is ever in scope, or "unlinkable to the directory,
