@@ -31,9 +31,12 @@ pub enum MemoryLevel {
 }
 
 /// Whether a node has been promoted to long-term. Promotion is an affirmative act:
-/// a pin or at least one tag (decision #2 — "tagging adds to long-term, retained").
+/// at least one tag (decision #2 — "tagging adds to long-term, retained"). `is_pinned`
+/// is deliberately *not* a promotion signal: it pins a node's physics position, an
+/// orthogonal spatial choice, not a memory-keep. (A dedicated bookmark flag, if one is
+/// added later, would join `tags` here.)
 pub fn is_promoted(node: &PersistedNode) -> bool {
-    node.is_pinned || !node.tags.is_empty()
+    !node.tags.is_empty()
 }
 
 /// The memory level of a node.
@@ -179,16 +182,21 @@ mod tests {
     }
 
     #[test]
-    fn a_tag_or_pin_promotes_to_long_term() {
+    fn a_tag_promotes_to_long_term_but_a_position_pin_does_not() {
         assert_eq!(level_of(&node("plain")), MemoryLevel::ShortTerm);
 
         let mut tagged = node("tagged");
         tagged.tags.push("keep".to_string());
         assert_eq!(level_of(&tagged), MemoryLevel::LongTerm, "a tag promotes");
 
+        // is_pinned is a physics position-pin, not a memory-keep: it must not promote.
         let mut pinned = node("pinned");
         pinned.is_pinned = true;
-        assert_eq!(level_of(&pinned), MemoryLevel::LongTerm, "a pin promotes");
+        assert_eq!(
+            level_of(&pinned),
+            MemoryLevel::ShortTerm,
+            "a position-pin is orthogonal to memory level",
+        );
     }
 
     #[test]
@@ -204,7 +212,7 @@ mod tests {
     fn keep_days_evicts_only_stale_undated_safe_and_promoted_exempt() {
         let now = 100 * DAY_MS;
         let mut nodes = vec![node("stale"), node("fresh"), node("undated"), node("promoted")];
-        nodes[3].is_pinned = true; // promoted: exempt even if stale
+        nodes[3].tags.push("keep".to_string()); // promoted by a tag: exempt even if stale
 
         let mut times = HashMap::new();
         times.insert("stale".to_string(), now - 40 * DAY_MS); // older than 30d -> evict

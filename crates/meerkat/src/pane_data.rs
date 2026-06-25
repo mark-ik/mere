@@ -233,32 +233,56 @@ impl WindowCtx<'_> {
                 .collect()
         };
 
-        // Recent (short-term): the working set, grounded until slice C's eviction policy.
+        // Recent (short-term): the working set — recently-visited *untagged* nodes, with the
+        // eviction policy shown (the visible, never-silent policy). The untagged = short-term
+        // rule mirrors `memory_levels::level_of`, the canonical model (decision #2: a tag is
+        // the promotion act; `is_pinned` is a physics position-pin, not a memory-keep). Slice C.
+        use session_runtime::memory_levels::EvictionPolicy;
         let mut items = vec![PaneItem::text("utility-title", "Recent")];
-        let recent = self.orrery().graph().recent_visited(8);
+        items.push(PaneItem::text(
+            "utility-row-muted",
+            EvictionPolicy::default().describe(),
+        ));
+        let recent: Vec<String> = {
+            let graph = self.orrery().graph();
+            graph
+                .recent_visited(8)
+                .into_iter()
+                // A tagged (long-term) node lives under Saved, not here.
+                .filter(|rv| {
+                    graph
+                        .get_node_by_url(&rv.url)
+                        .is_none_or(|(_, n)| n.tags.is_empty())
+                })
+                .map(|rv| strip(&rv.url))
+                .collect()
+        };
         if recent.is_empty() {
-            items.push(PaneItem::text("utility-row-muted", "nothing visited yet"));
+            items.push(PaneItem::text("utility-row-muted", "nothing in recent working memory"));
         } else {
-            for rv in &recent {
-                items.push(PaneItem::text("utility-row", strip(&rv.url)));
+            for row in &recent {
+                items.push(PaneItem::text("utility-row", row.clone()));
             }
         }
 
-        // Saved (long-term): pinned or tagged nodes — a scoped block so the graph borrow
-        // ends before the store borrow below.
+        // Saved (long-term): tagged nodes — tagging is the promotion act (decision #2). A scoped
+        // block so the graph borrow ends before the store borrow below.
         let saved: Vec<String> = {
             let graph = self.orrery().graph();
             let mut s: Vec<String> = graph
                 .nodes()
-                .filter(|(_, node)| node.is_pinned || !node.tags.is_empty())
+                .filter(|(_, node)| !node.tags.is_empty())
                 .map(|(key, _)| graph.node_display_label(key))
                 .collect();
             s.sort();
             s
         };
-        items.push(PaneItem::text("utility-title", "Saved"));
+        items.push(PaneItem::text(
+            "utility-title",
+            format!("Saved ({})", saved.len()),
+        ));
         if saved.is_empty() {
-            items.push(PaneItem::text("utility-row-muted", "pin or tag a node to keep it"));
+            items.push(PaneItem::text("utility-row-muted", "tag a node to keep it long-term"));
         } else {
             for label in saved.iter().take(12) {
                 items.push(PaneItem::text("utility-row", clip(label)));
