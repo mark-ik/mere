@@ -1494,6 +1494,9 @@ impl Shell {
         // standing immediately, not a stale "p2p off" until the next status change. The
         // fan-out keeps it current after. (MW3 step 5; real-sync-feedback.)
         chrome.sync = self.focused_view().chrome().sync.clone();
+        // Likewise seed the crawl chip: one crawl is shared kernel state, so a new leaf
+        // should show the same "crawling: N pages" immediately. (Crawl controls; MW3.)
+        chrome.crawl = self.focused_view().chrome().crawl.clone();
         let runner = window_view::shell_runner(dom.clone(), chrome);
         let content_location = runner.state().chrome.content_location().to_string();
         let active_graph = self

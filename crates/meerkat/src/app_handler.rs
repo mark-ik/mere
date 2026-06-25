@@ -359,14 +359,18 @@ impl ApplicationHandler for Shell {
         }
         // Fold the crawl's progress into its toolbar chip, but only when it changed (the
         // drain runs on every wake; the chip update should not churn the chrome). The
-        // chip reads "crawling/crawled: N pages", or hides when no crawl has run.
+        // chip reads "crawling/crawled: N pages", or hides when no crawl has run. Captured
+        // for the MW3 chrome fan-out below, since one crawl is shared kernel state and
+        // every window's toolbar should show the same chip.
+        let mut latest_crawl = None;
         {
             let progress = wc.shared.content.crawl.progress();
             let (running, fetched) = (progress.running, progress.fetched);
             let current = wc.view.chrome().crawl.clone();
             if current.running != running || current.fetched != fetched {
-                wc.view
-                    .chrome_update(|c| c.crawl = meerkat::CrawlIndicator { running, fetched });
+                let indicator = meerkat::CrawlIndicator { running, fetched };
+                wc.view.chrome_update(|c| c.crawl = indicator.clone());
+                latest_crawl = Some(indicator);
             }
         }
         // P2P sync status (S5.0): the same wake also carries lane-status changes.
@@ -512,7 +516,7 @@ impl ApplicationHandler for Shell {
         // *shellbar*, but the leaf keeps the toolbar (where the sync chip lives) and can
         // open the comms pane, so it must see these updates too — driving caught a leaf
         // showing a stale "p2p off" while the primary showed real standing. (MW3 step 5.)
-        if latest_sync.is_some() || !comms_updates.is_empty() {
+        if latest_sync.is_some() || latest_crawl.is_some() || !comms_updates.is_empty() {
             let primary = self.primary;
             for (id, view) in self.windows.iter_mut() {
                 if Some(*id) == primary {
@@ -520,6 +524,9 @@ impl ApplicationHandler for Shell {
                 }
                 if let Some(indicator) = &latest_sync {
                     view.chrome_update(|c| c.sync = indicator.clone());
+                }
+                if let Some(indicator) = &latest_crawl {
+                    view.chrome_update(|c| c.crawl = indicator.clone());
                 }
                 for update in &comms_updates {
                     apply_comms_to_chrome(view, update);
