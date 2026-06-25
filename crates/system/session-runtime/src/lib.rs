@@ -51,6 +51,10 @@ pub mod graph_engram;
 // short-term vs long-term (a tag/pin promotes), and compute which short-term nodes
 // an eviction policy would drop. Pure logic; the pane/settings wiring layers on top.
 pub mod memory_levels;
+// Athanor's forgetting pass (Alembic slice D): propose which short-term cached
+// content to evict (pure, R0) and apply it by dropping content blobs (never graph
+// truth or engrams). The pass logic; the armillary actor that schedules it layers on top.
+pub mod athanor;
 // Filesystem persistence of the content frame's pane layout (frame.json);
 // native-only so the crate stays wasm-clean.
 #[cfg(not(target_arch = "wasm32"))]

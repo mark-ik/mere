@@ -62,6 +62,17 @@ pub async fn save_content(store: &mut dyn Store, url: &str, content: &StoredCont
     Ok(())
 }
 
+/// Drop the cached content for `url` (its body + content-type blobs), returning
+/// whether a body was actually removed. The forgetting half of the memory model:
+/// short-term cached content is evicted while the graph node (structure) stays.
+/// The body is the presence marker, so its removal is the reported outcome; the
+/// content-type is dropped best-effort alongside. (Alembic slice C eviction /
+/// Athanor forgetting.)
+pub async fn evict_content(store: &mut dyn Store, url: &str) -> Result<bool> {
+    let _ = store.delete_blob(&ct_key(url)).await?;
+    store.delete_blob(&body_key(url)).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -84,6 +95,30 @@ mod tests {
             self.blobs.insert(key.to_string(), value.to_vec());
             Ok(())
         }
+        async fn delete_blob(&mut self, key: &str) -> Result<bool> {
+            Ok(self.blobs.remove(key).is_some())
+        }
+    }
+
+    #[test]
+    fn evict_drops_cached_content() {
+        pollster::block_on(async {
+            let mut store = MemStore::default();
+            let content = StoredContent {
+                content_type: Some("text/html".into()),
+                body: b"<h1>bye</h1>".to_vec(),
+            };
+            save_content(&mut store, "https://gone.example/", &content).await.unwrap();
+
+            let dropped = evict_content(&mut store, "https://gone.example/").await.unwrap();
+            assert!(dropped, "the body was present, so eviction reports it removed");
+            assert!(
+                load_content(&mut store, "https://gone.example/").await.unwrap().is_none(),
+                "content is gone after eviction",
+            );
+            // Evicting again is a no-op (nothing left to drop).
+            assert!(!evict_content(&mut store, "https://gone.example/").await.unwrap());
+        });
     }
 
     #[test]
