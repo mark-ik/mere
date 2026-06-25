@@ -213,15 +213,27 @@ dependency-free robots.txt subset (`User-agent` groups, `Allow`/`Disallow` path-
 rules, longest-match with `Allow` breaking ties, our-UA over `*`); `run_crawl` fetches +
 caches each host's robots.txt once and skips a disallowed path (a missing / failed
 robots.txt allows all, per spec). 23 crawl tests. (crawl.rs was also split into a
-`crawl/` module dir to hold the new code under the 600-LOC ceiling.) **Deferred** (named,
-not silently dropped): wildcard (`*`/`$`) robots rules and sending the **descriptive UA**
-on fetches (netfetcher side); mid-crawl cancellation (a side-channel flag; today
-`max_pages` bounds it, and `CrawlSession::stop` is plumbed);
-bounded cross-host concurrency, a **progress chip** (`CrawlSession::progress` is ready),
-a **scope/depth UI** (the default policy is hardcoded; `SameDomain`/`AnyHost` + depth are
-plumbed for a settings surface), and seed sourcing (independent-index API / sitemaps,
-never a live SERP). The second-hop cross-link *relations* fall out of the graph as the
-frontier revisits shared targets.
+`crawl/` module dir to hold the new code under the 600-LOC ceiling.)
+
+**Crawl controls shipped 2026-06-25** (mere `a71878b`..`55c9ac2`): the deferred controls
+landed and were headed-verified (driven in `target/debug/meerkat.exe`; shots in
+`Code/scry-shots/crawl-*.png`). A **descriptive UA** rides crawl fetches
+(`fetch::CRAWLER_USER_AGENT`, the `merebot` token shared with robots matching);
+**mid-crawl cancellation** is wired to `>crawl_stop` (`Command::StopCrawl` flips the
+actor's cancel flag); a **progress chip** in the toolbar reads `crawling/crawled: N
+pages` (hidden when idle, via a class toggle since serval `:empty` does not match an
+empty-string text view) and mirrors to leaf windows (MW3 fan-out); a **`pelt/crawl`
+settings page** picks scope (same host / domain / any), depth, the **page cap**, and the
+**whole-site (sitemap)** mode, each draining `crawl:<key>`, persisted to
+`PersistedSettings` and restored at boot; and **sitemap seed sourcing**
+(`crawl/sitemap.rs`, a dependency-free `<loc>` scan) seeds the frontier from
+`sitemap.xml`. A mouse-clicked context-menu command now fires same-cycle (a
+`drain_chrome_intents` ordering fix). 30 crawl tests. **Deferred** (named, not silently
+dropped): wildcard (`*`/`$`) robots rules, a Public Suffix List for `SameDomain`
+(suffix-approximated today), `sitemapindex` recursion into child sitemaps, bounded
+cross-host concurrency / per-host rate limiting (sequential today), and seed sourcing
+from an independent-index API (sitemaps only so far, never a live SERP). The second-hop
+cross-link *relations* fall out of the graph as the frontier revisits shared targets.
 
 ### V3 — relational capture into eidetic (the LoRA-readiness lever)
 
