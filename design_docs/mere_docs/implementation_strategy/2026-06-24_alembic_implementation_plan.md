@@ -200,6 +200,14 @@ Verification: a unit/integration test that `save → (drop) → open` round-trip
 
 ## Progress
 
+- 2026-06-24: **Slice C pane wiring landed** (commit `44a0dc8`, on top of Mark's stable-uncommitted
+  tree, hunk-staged). The Alembic Recent/Saved now render the real model (Recent = recently-visited
+  *untagged* short-term, Saved = *tagged* long-term with a count) and the eviction policy is visible
+  ("evicting recent memory after 30 day(s)"). Correctness fix carried into the spine: `is_promoted` is
+  tags-only — `is_pinned` is a physics position-pin, not a memory-keep (B1 conflated them). Headed-
+  verified. Promotion works today via the existing Add-tag gesture (tags persist, so Saved is durable
+  across sessions). Tail: in-pane one-click promote/demote, the eviction pass (forget stale short-term
+  via `content_store`), and an editable (not just visible) policy in persona settings.
 - 2026-06-24: **Slice C spine landed** (commit `9cacd41`): `session-runtime/memory_levels`, the pure
   read-model (level classification + eviction policy + evictable computation + census), 5 tests, built
   spine-first because the chrome/pane files (`pane_data`, `render`, `settings_store`, `menus`) are all
