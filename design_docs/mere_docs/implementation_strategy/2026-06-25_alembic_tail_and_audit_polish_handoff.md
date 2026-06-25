@@ -39,12 +39,15 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
    `pin_focused_operation` verbs. The stale inert "Actions" hint row was dropped (buttons replace it).
    New test `steward_exposes_clickable_action_verbs` pins the keys; the live-graph-count test stays green.
 
-3. **Relation-kind picker (the audit's top pick).** **[chrome-hot]** The 17-variant edge vocabulary
-   (`pane_data.rs::relation_kind_label`, the `RelationKind` map) is only reachable by typing
-   `relate("cites")`; every click-drawn edge is undifferentiated `UserGrouped`. Add a submenu over the
-   existing map in the context menu (`menus.rs`) so `AssertEdge` can pick a kind. The kind→`SemanticSubKind`
-   mapping already exists in `command_drain.rs::relation_kind_from_str`. "Makes a graph browser worth
-   using" per the audit.
+3. **Relation-kind picker (the audit's top pick).** ✅ **DONE 2026-06-25.** A two-node selection's
+   context menu now lists a "Relate as <kind>" row per curated semantic relation (Cites / Quotes /
+   Summarizes / Elaborates / Example of / Supports / Contradicts / Questions / Same entity as / Duplicate
+   of / Hyperlink) — `menus.rs::relate_picker_items`, extended into `build_curated_menu_items` when
+   `len == 2`. Each row carries a new `ContextAction::RelateAs(SemanticSubKind)` (Copy-preserving) that
+   the menu drain routes to `assert_selected_relation(kind)`, mirroring the plain `Relate` (still
+   `UserGrouped`). **Presentation note:** `ContextItem` has no nested-submenu support (the "layout
+   submenu" is flat appended rows), so the picker is a flat row group like `layout_picker_items` — a
+   true nested submenu would be a disproportionate new UI subsystem. New test pins the rows + actions.
 
 4. **Omnibar suggestions.** ✅ **DONE 2026-06-25.** `suggest.rs` now ranks history rows by a
    `(match-quality tier, frecency)` order instead of raw substring/most-recent: host matches

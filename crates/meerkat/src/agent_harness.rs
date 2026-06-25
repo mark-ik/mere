@@ -627,6 +627,38 @@ mod tests {
     }
 
     #[test]
+    fn relate_picker_offers_the_semantic_kinds_as_actions() {
+        // The two-node relate picker turns the edge vocabulary into clickable rows: each is a
+        // "Relate as <kind>" label carrying a RelateAs(kind) action. Previously the kinds were
+        // reachable only by typing relate("cites"); every drawn edge was an undifferentiated
+        // UserGrouped. (Audit A3 — the top pick.)
+        let mut app = test_app();
+        app.create_session();
+        let items = app.ctx().relate_picker_items();
+        assert!(
+            items.len() >= 10,
+            "the curated semantic vocabulary is offered: {}",
+            items.len()
+        );
+        assert!(
+            items
+                .iter()
+                .all(|i| matches!(i.action, meerkat::ContextAction::RelateAs(_))),
+            "every picker row is a RelateAs action",
+        );
+        let cites = items
+            .iter()
+            .find(|i| {
+                matches!(
+                    i.action,
+                    meerkat::ContextAction::RelateAs(kernel::graph::SemanticSubKind::Cites)
+                )
+            })
+            .expect("Cites is offered as a relation kind");
+        assert_eq!(cites.label, "Relate as Cites");
+    }
+
+    #[test]
     fn steward_surfaces_a_recorded_forgetting_pass() {
         let mut app = test_app();
         app.create_session();

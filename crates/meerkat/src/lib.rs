@@ -330,6 +330,12 @@ pub enum ContextAction {
     /// Relate the two selected nodes (a user-grouped relation). Offered only for a
     /// two-node selection; drains like `ShellbarMove` without opening tiles.
     Relate,
+    /// Relate the two selected nodes as a specific semantic kind — the relation-kind
+    /// picker offered for a two-node selection. Like [`Relate`](Self::Relate) but carries
+    /// the chosen kind instead of defaulting to `UserGrouped`; drains the same way (no
+    /// tiles, no member-set mutation). The kind is `Copy`, so `ContextAction` stays `Copy`.
+    /// (Audit A3 — relation-kind picker.)
+    RelateAs(kernel::graph::SemanticSubKind),
     /// Mint a fresh node at the saved cursor point (the no-selection right-click).
     /// The anchor in `context_origin` is leaf-local screen px; the camera inversion
     /// to world happens inside `Orrery::add_node_at`. Drains like `ShellbarMove` /

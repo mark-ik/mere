@@ -83,6 +83,11 @@ impl WindowCtx<'_> {
                 },
             ));
         }
+        // A two-node selection: offer the relation-kind picker so a drawn edge can carry a
+        // semantic kind (cites / supports / …), not just the default UserGrouped. (Audit A3.)
+        if len == 2 {
+            items.extend(self.relate_picker_items());
+        }
         if self.has_multiple_graph_panes() {
             items.push(ContextItem::new("Close graph view", ContextAction::CloseGraphPane));
         }
@@ -294,6 +299,37 @@ impl WindowCtx<'_> {
             ));
         }
         items
+    }
+
+    /// The hand-reachable semantic relation kinds the two-node relate picker offers, each
+    /// paired with its menu label. Mirrors the curated set `relation_kind_from_str` accepts by
+    /// word (the `relate("cites")` vocabulary); the menu asserts the kind directly. (Audit A3.)
+    const RELATE_PICKER_KINDS: &'static [(SemanticSubKind, &'static str)] = &[
+        (SemanticSubKind::Cites, "Cites"),
+        (SemanticSubKind::Quotes, "Quotes"),
+        (SemanticSubKind::Summarizes, "Summarizes"),
+        (SemanticSubKind::Elaborates, "Elaborates"),
+        (SemanticSubKind::ExampleOf, "Example of"),
+        (SemanticSubKind::Supports, "Supports"),
+        (SemanticSubKind::Contradicts, "Contradicts"),
+        (SemanticSubKind::Questions, "Questions"),
+        (SemanticSubKind::SameEntityAs, "Same entity as"),
+        (SemanticSubKind::DuplicateOf, "Duplicate of"),
+        (SemanticSubKind::Hyperlink, "Hyperlink"),
+    ];
+
+    /// The relation-kind rows for a two-node selection: one "Relate as <kind>" row per curated
+    /// semantic relation, each asserting that kind on the pair. Gives the edge vocabulary a click
+    /// path — previously only `relate("cites")` by typing reached it, so every drawn edge was an
+    /// undifferentiated `UserGrouped`. The plain pinned "Relate" row still asserts `UserGrouped`.
+    /// (Audit A3 — the relation-kind picker; the audit's top pick.)
+    pub(super) fn relate_picker_items(&self) -> Vec<ContextItem> {
+        Self::RELATE_PICKER_KINDS
+            .iter()
+            .map(|&(kind, label)| {
+                ContextItem::new(format!("Relate as {label}"), ContextAction::RelateAs(kind))
+            })
+            .collect()
     }
 
     /// Dismiss the context menu (an outside click / Escape), dropping its set and
@@ -542,6 +578,15 @@ impl WindowCtx<'_> {
             self.view.request_redraw();
             return;
         }
+        // Relate the two selected nodes as the picked semantic kind — like `Relate`, but
+        // carries the chosen kind instead of the UserGrouped default. (Audit A3.)
+        if let ContextAction::RelateAs(kind) = action {
+            if self.orrery_mut().assert_selected_relation(kind) {
+                self.save_session();
+            }
+            self.view.request_redraw();
+            return;
+        }
         // Begin tagging the selected node(s): open the host tag prompt. The
         // selection is the target; commit inserts the typed tag on each. (Add-tag.)
         if let ContextAction::AddTag = action {
@@ -677,6 +722,7 @@ impl WindowCtx<'_> {
             ContextAction::ShellbarMove(_)
             | ContextAction::ShellbarToggleVisibility
             | ContextAction::Relate
+            | ContextAction::RelateAs(_)
             | ContextAction::AddNode
             | ContextAction::AddTile
             | ContextAction::AddSession

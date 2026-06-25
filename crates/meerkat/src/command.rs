@@ -424,7 +424,7 @@ pub fn context_action_scope(action: crate::ContextAction) -> MenuScope {
         OpenSplits | AddTag | IsolateSelection | ToggleSizeByDegree | ToggleSizeByImportance => {
             MenuScope::Selection
         }
-        Stack | Relate => MenuScope::MultiNode,
+        Stack | Relate | RelateAs(_) => MenuScope::MultiNode,
         _ => MenuScope::Always,
     }
 }
