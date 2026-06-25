@@ -357,6 +357,18 @@ impl ApplicationHandler for Shell {
                 changed
             });
         }
+        // Fold the crawl's progress into its toolbar chip, but only when it changed (the
+        // drain runs on every wake; the chip update should not churn the chrome). The
+        // chip reads "crawling/crawled: N pages", or hides when no crawl has run.
+        {
+            let progress = wc.shared.content.crawl.progress();
+            let (running, fetched) = (progress.running, progress.fetched);
+            let current = wc.view.chrome().crawl.clone();
+            if current.running != running || current.fetched != fetched {
+                wc.view
+                    .chrome_update(|c| c.crawl = meerkat::CrawlIndicator { running, fetched });
+            }
+        }
         // P2P sync status (S5.0): the same wake also carries lane-status changes.
         // Fold the latest into the chrome chip (the host owns the mutation).
         //

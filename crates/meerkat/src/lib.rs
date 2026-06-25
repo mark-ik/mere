@@ -49,6 +49,7 @@ pub use session_runtime::ShellbarEdge;
 use xilem_serval::TextInput;
 
 pub mod command;
+pub mod crawl_indicator;
 pub mod ingest;
 pub mod nav;
 pub mod shell_eval;
@@ -57,6 +58,7 @@ pub mod sync_indicator;
 
 use command::{Command, PaletteItem};
 use nav::History;
+pub use crawl_indicator::CrawlIndicator;
 pub use sync_indicator::SyncIndicator;
 
 /// Meerkat's chrome app state.
@@ -111,6 +113,9 @@ pub struct Chrome {
     /// The p2p sync-status chip's view-model (S5.0). The host folds the joined
     /// lane's real `SyncStatus` in here; default reads "p2p off".
     pub sync: SyncIndicator,
+    /// The crawl-progress chip's view-model (relational-browse V2). The host folds the
+    /// crawl actor's progress in each frame it drains; empty (hidden) when none ran.
+    pub crawl: CrawlIndicator,
     /// A pending "connect to peer" request the host must execute (S5.1): the
     /// ticket string captured from the address bar when the verb ran. The chrome
     /// records the intent; the host drains it, drives the sync actor, and clears
@@ -439,6 +444,7 @@ impl Chrome {
             find_active: 0,
             find_count: 0,
             sync: SyncIndicator::default(),
+            crawl: CrawlIndicator::default(),
             pending_connect: None,
             pending_command: None,
             settings: Settings::default(),

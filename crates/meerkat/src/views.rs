@@ -111,6 +111,9 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
     // lane, sitting at the toolbar's right (the omnibar's flex-grow pushes it
     // there). The host folds the real `SyncStatus` into `c.sync`.
     let sync_chip = el::<_, Chrome, ()>("div", c.sync.summary()).attr("class", "sync-chip");
+    // The crawl-progress chip (relational-browse V2): "crawling/crawled: N pages" while
+    // a crawl runs and after; empty (hidden via CSS) when none has run.
+    let crawl_chip = el::<_, Chrome, ()>("div", c.crawl.summary()).attr("class", "crawl-chip");
     // The add pill next to the omnibar: a "+" that opens a small menu — Add node /
     // Add tile / Add session — the unified create affordance (the toolbar's old
     // workbench toggle was redundant with the shellbar's, so the pill takes its
@@ -123,8 +126,11 @@ pub fn chrome_view(c: &Chrome) -> ChromeView {
                 as fn(&mut Chrome, PointerClick),
         )
     });
-    let toolbar = el::<_, Chrome, ()>("div", (back, forward, pause, omnibar, add_pill, sync_chip))
-        .attr("class", "toolbar");
+    let toolbar = el::<_, Chrome, ()>(
+        "div",
+        (back, forward, pause, omnibar, add_pill, sync_chip, crawl_chip),
+    )
+    .attr("class", "toolbar");
 
     // The suggestions dropdown: one row per reused `OmnibarMatch`, the highlight
     // carrying a distinct class. Empty ⇒ a zero-height `div` (closed). The outer
