@@ -12,8 +12,9 @@
 //! everything, per spec. Technique borrowed from Google's robots.txt spec; kept
 //! dependency-free to hold the crawler's dep graph minimal.
 
-/// The crawler's user-agent token, matched against `User-agent:` groups (and the
-/// descriptive UA to send on fetches — that wiring is a netfetcher-side follow-on).
+/// The crawler's user-agent token, matched against `User-agent:` groups. The same
+/// `merebot` token rides the descriptive UA sent on crawl fetches
+/// ([`fetch::CRAWLER_USER_AGENT`](crate::fetch)).
 pub const CRAWLER_UA: &str = "merebot";
 
 /// Parsed robots.txt rules for one host: the `Allow` / `Disallow` path rules from the

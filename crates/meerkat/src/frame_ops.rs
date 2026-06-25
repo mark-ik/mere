@@ -148,9 +148,17 @@ impl WindowCtx<'_> {
             .then(|| serde_json::to_value(&self.shared.presentation.document_sheet).ok())
             .flatten(),
             script_permissions,
-            crawl_scope: Some(self.shared.content.crawl.scope().as_key().to_string()),
-            crawl_depth: Some(self.shared.content.crawl.max_depth()),
-            crawl_sitemap: Some(self.shared.content.crawl.seed_sitemap()),
+            // Persist only non-default crawl settings (None = default), matching the
+            // document_typography pattern so a pristine settings.json stays clean.
+            crawl_scope: {
+                let scope = self.shared.content.crawl.scope();
+                (scope != crate::crawl::HostScope::SameHost).then(|| scope.as_key().to_string())
+            },
+            crawl_depth: {
+                let depth = self.shared.content.crawl.max_depth();
+                (depth != crate::crawl::CrawlPolicy::default().max_depth).then_some(depth)
+            },
+            crawl_sitemap: self.shared.content.crawl.seed_sitemap().then_some(true),
         };
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");

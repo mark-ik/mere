@@ -108,7 +108,7 @@ pub struct PersistedSettings {
     #[serde(default)]
     pub crawl_scope: Option<String>,
     /// The crawl depth (link-hops from the seed) a `>crawl` reaches. `None` = the
-    /// shallow default. (Crawl controls.)
+    /// default 2-hop depth. (Crawl controls.)
     #[serde(default)]
     pub crawl_depth: Option<u32>,
     /// "Crawl whole site" mode: seed from the site's `sitemap.xml` rather than only the
