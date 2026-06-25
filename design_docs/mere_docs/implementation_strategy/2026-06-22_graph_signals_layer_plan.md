@@ -304,9 +304,14 @@ first *new* visual is then the edge channel (multiplicity -> thickness).
   `width = edge_width * weight` (capped 4x). Default-preserving: a single-relation pair stays at the
   1.5px default, so only multi-statement / reciprocal pairs thicken. A platen test locks it (unit
   weight per single-link pair; weight 2 for a reciprocal pair). orrery 59 / platen 83 / cartography 14
-  / arrangements 99 green; meerkat builds. **Scope note:** weighting is on the underlay (force-directed)
-  path; arrangement-strategy edges stay uniform (weight 1) for now. The computed *affinity* weight is
-  the later, richer signal on this same channel. Next: the generation/dirty cache.
+  / arrangements 99 green; meerkat builds. **Scope note (corrected 2026-06-24, slice 4):** this note
+  originally claimed arrangement-strategy edges stay uniform — that was WRONG. The orrery renders ALL
+  modes through one underlay path (`orrery_paint_list_demoted_from_arrangement` -> `project_keys` ->
+  `projected_undirected_edges` -> `paint_projection_filtered`); a layout strategy only changes node
+  positions, never the edge derivation. So multiplicity thickness already shows in analytic layouts
+  too. The uniform-weight edges are the discarded arrangement *adapter* outputs, not what renders. The
+  computed *affinity* weight is the later, richer signal on this same channel. Next: the generation/
+  dirty cache.
 - 2026-06-24: **The cheap-signal cache landed (the cheap half of P1's cache).** The orrery's degree-
   importance now recomputes **only on a topology change**, not on every geometry push: an
   `importance_dirty` flag set in `reconcile_derived` (the universal orrery topology hook) + on
@@ -353,3 +358,164 @@ first *new* visual is then the edge channel (multiplicity -> thickness).
   the background lane is the scale-trigger work (when betweenness on a large graph exceeds a frame
   budget), its real validation point. Next: community detection (-> the ring encoding, gated on a ring
   renderer), or wire betweenness into the `bridges` overlay contract.
+- 2026-06-24: **"Go all in" — community detection (P3) + the generation-gated cache, slices 1-3 of
+  4** (Mark chose the full scope: P2 plumbing + the real cache + community + community->kanban). A
+  seam-mapping workflow grounded all four targets first.
+  - **Slice 1 — community detection.** `signals::community_louvain` (single-level Louvain modularity
+    local-moving on the multiplicity-weighted graph; self-loops dropped; every node lands in one
+    cluster). 4 tests: two triangles + a bridge stay two communities; a clique collapses to one;
+    disconnected components separate; an edgeless graph is all singletons. The genuinely expensive
+    structural signal the cache exists for. signals 9 green.
+  - **Slice 2 — community -> kanban columns.** A sibling strategy `kanban.community` ("Kanban (by
+    cluster)") joins `kanban.default` ("by site") in the picker (configurable, not a replacement),
+    reusing `KanbanAdapter` with a Louvain-derived column axis. Test: two triangles lay out as two
+    columns. Community computes only when this strategy is active. platen 84 green.
+  - **Slice 3 — the generation-gated cache (the real P1 cache, minus the thread move).** A
+    `topology_generation` counter bumped in `reconcile_derived` (the universal topology hook the
+    importance cache already trusts); an orrery `community_cache` recomputed by
+    `refresh_community_cache` only when the active strategy needs it AND the generation advanced.
+    The host (both render.rs sites) refreshes before projecting and threads `community()` into
+    `project_orrery_strategy` (inline fallback when absent), so **Louvain no longer runs per frame** —
+    it ran every frame before, since the projection dispatch is per-frame. Test: the cache fills on a
+    cluster strategy, no-ops on a non-cluster one, and invalidates on a topology change (the added
+    node joins the recomputed partition). orrery 64 / platen 84 / signals 9 / meerkat 80 green.
+  - **Remaining (slice 3b + 4):** (3b) the **off-thread armillary lane** — `armillary::spawn` is
+    native-thread-based, so the compute stays inline on wasm/tests and offloads on native, exactly
+    like physics's Inline/Actor split; it is structured as a drop-in behind `refresh_community_cache`.
+    Native-only and a no-op for UX at current scale (Louvain is sub-ms), so it is sequenced as its own
+    careful pass, not skipped. (4) **P2 overlay plumbing** — stop `project_orrery_strategy` discarding
+    `Projection::overlays`; emit `EdgeWeight` from arrangement adapters so edge thickness shows in
+    arrangement modes (not just the force-directed underlay); wire an overlay consumer.
+- 2026-06-24: **Generalized the cache (A + B) — the redundant-recompute fix Mark asked for.** A
+  review of slice 3 caught a real bug (clear_selection bumped the orrery's hand-rolled generation via
+  reconcile_derived, spuriously invalidating the community cache), which proved reconcile_derived is
+  not a clean topology hook. The fix generalizes:
+  - **B — a kernel structural revision.** `Graph::revision()` (crates/graph/graph-kernel) bumped at
+    the mutation **source** (`bump_revision` in add_node_with_id / remove_node / assert_relation /
+    assert_semantic_predicate / retract_relations / push_traversal-when-it-creates-an-edge), NOT on
+    content edits (a url/title change) or a re-visit's traversal append. The replay/dissolve variants
+    delegate, so they inherit it. A kernel test locks coverage (structure advances it; a url edit does
+    not; remove advances it). The orrery's community cache now gates on `graph.revision()` instead of
+    the reconcile-bumped counter, so a selection change can no longer invalidate it — the bug is fixed
+    at the root, and any consumer holding the graph can gate on the same truth.
+  - **A — an arrangement-result cache.** Analytic layouts (grid, phyllotaxis, penrose, lsystem,
+    timeline, radial, kanban.community) were recomputed **every frame**; now the orrery's
+    `needs_strategy_recompute(id, w, h, focus)` gates the host's per-frame `project_orrery_strategy`
+    on `(strategy, revision, viewport, focus)`, recomputing once per real change. Focus is in the key
+    only for radial (`strategy_uses_focus`), so a selection change does not invalidate the others;
+    `kanban.default` (by site, URL-content-dependent + cheap) stays uncached and always recomputes;
+    `set_layout_strategy` resets the key so a re-activation recomputes. The community refresh is now
+    nested inside this gate, so Louvain runs only when the layout actually recomputes. A test covers
+    first-compute / unchanged-skip / viewport-change / revision-change / focus-ignored-for-grid /
+    focus-matters-for-radial. kernel 252 / orrery 65 / platen 84 / signals 9 / meerkat 80 green.
+  - **C (kernel-query memos)** stays gated on profiling evidence, not built. Mark endorsed the
+    future-proofing direction.
+  - **Adversarial review (2 lenses) — caught 2 real missed-bump bugs, both fixed.** The
+    arrangement-cache lens came back clean (every input-completeness point sound: kanban.default
+    uncached, timeline structural, community gated, focus scoped to radial, revert reset, viewport,
+    both host sites). The bump-coverage lens found two structural mutators that wrote `inner`
+    directly and skipped the bump — `copy_node_from_with_id` (cross_graph.rs) and
+    `rebuild_derived_containment_relations` (query.rs); a revision-keyed cache would have gone stale
+    on either. Fixed (bump on copy; bump-once-if-changed on the rebuild) + a copy-bumps-revision
+    test. The "pub inner" footgun the review flagged is now closed too: `inner` is `pub(crate)`
+    (verified no external access), so every topology mutation must go through a bumping method.
+    kernel 252 green.
+- 2026-06-24: **Slice 4 (P2 overlay plumbing) — investigated; the visible half is already done, the
+  rest is genuinely premature.** Tracing the render path settled the P2 question the audit raised:
+  - **Edge-thickness in arrangement modes already works.** The audit said it was invisible there, but
+    that was wrong (and so was this plan's own scope note, now corrected): the orrery renders every
+    mode through one underlay path that re-derives edges with multiplicity, so analytic layouts get
+    thickness too. A layout strategy only changes positions. A new paint-level test
+    (`edge_weight_scales_the_stroke_width`) proves the last untested link (a weight-2 edge paints 2x),
+    closing the chain `projected_undirected_edges` (multiplicity, tested) -> `project_keys` ->
+    `paint_projection_filtered` (scaling, now tested). platen 85 green.
+  - **The overlay-consumer plumbing is deferred, deliberately.** Stopping `project_orrery_strategy`
+    from discarding `Projection::overlays` only pays off when something *produces and consumes* an
+    overlay. The `EdgeWeight` overlay is redundant (weight already flows on the `PositionedEdge.weight`
+    field the paint path reads); `ClusterHalo` / `BridgeEmphasis` / `ImportanceScale` are the real
+    future consumers, and every one is gated on the **ring renderer + the selection-to-ring
+    conversion** that P2 itself defers. Building the overlay pipe now, with no producer or consumer,
+    is the YAGNI trap the cache work just avoided. So the overlay plumbing rides with the community
+    ring (its first real consumer), not ahead of it.
+  - **Net:** P2's user-facing goal (edge-weight encoding visible everywhere) is met; the structural
+    overlay pipe waits for a consumer. "Go all in" is substantively complete (community + cache +
+    revision + arrangement cache + edge-weight everywhere). Remaining: **slice 3b** (the off-thread
+    armillary lane) as the architectural future-proofing.
+- 2026-06-24: **Community -> ring (the headline encoding) landed.** Mark asked to just build it.
+  **Ordering decision** (his question — pipe-first vs ring-first): the ring renderer is the
+  load-bearing primitive with an *immediate* consumer (the orrery already holds the partition in its
+  cache, so it draws rings directly); the overlay pipe is data-transport the main view does not need
+  (it has the cache). So ring-renderer-first lights up immediately and reveals the overlay pipe was
+  never on the critical path for the visible feature. Built the ring path, not the pipe:
+  - **Ring renderer:** `cluster_color` (an 8-hue categorical palette), `circle_path` (a stroked-circle
+    polyline), and `community_ring_overlay(view, community, radius_of)` — a world-space halo per node
+    in its community's colour, spliced into the orrery underlay exactly like the selected-edge overlay
+    (so it tracks the camera + shows under EVERY layout, force-directed and analytic).
+  - **Toggle:** orrery `show_community_rings` + setter/accessor; `refresh_community_cache` now also
+    computes when the rings are on (sharing the same generation-gated `community_cache`); `frame()`
+    refreshes + splices the rings when on. A `Show community rings` toggle on the pelt/orrery page +
+    the `orrery:communityrings` input handler.
+  - A test proves the toggle drives the partition + runs the ring paint path in `frame()`. orrery 66
+    green; meerkat builds. The **overlay pipe** (stop discarding `Projection::overlays`) stays
+    deferred to its first real off-orrery consumer (a standalone projection view / the gloss lens),
+    not built speculatively. Remaining: **slice 3b** (the off-thread armillary lane).
+- 2026-06-24: **Slice 3b — the off-thread community lane (the background substrate the plan named).**
+  The last of the "go all in" scope; the *correct architecture* (Mark's words) for the expensive
+  signal.
+  - **The Send boundary (signals):** `community_louvain` split into `CommunitySnapshot::from_graph`
+    (extract the parallel-edge-collapsed weighted adjacency, sorted rows — `Send` + deterministic) +
+    `community_louvain_on_snapshot` (the algorithm, `Graph`-free) + `community_louvain` (delegates).
+    The `Graph` (not `Send`, borrowed) never crosses a thread; the snapshot does. Behavior-preserving
+    (the existing community tests pass unchanged).
+  - **The actor (orrery `community_lane.rs`):** an armillary actor mirroring the physics one — loops
+    `recv` -> Louvain-on-snapshot -> `emit(CommunityUpdate { clusters, revision })`. `request` skips a
+    duplicate in-flight revision; `drain` takes the freshest result. A real-thread round-trip test
+    proves spawn -> request -> compute -> drain with the right revision + partition.
+  - **Wiring (no new host call):** `offload_physics` now captures the host's wake as the orrery's
+    off-thread wake; the community lane reuses it (the render loop is on-demand, so a result needs a
+    wake to be drained promptly). `refresh_community_cache` dispatches off-thread when the wake is set
+    (native + offloaded), inline otherwise (wasm / tests). `frame()` calls `drain_community` each
+    frame, which accepts a result **only if its revision still matches the live graph**
+    (stale-rejection — a partition computed against a since-mutated graph is dropped and re-dispatched,
+    so a stale NodeKey never reaches the cache). The worker spins up lazily on first need (no idle
+    thread for orreries that never use community).
+  - **Honest scope note:** this is native-only and changes nothing observable at current graph scale
+    (Louvain is sub-millisecond); its value is the validated async round-trip + future-proofing for
+    large graphs, the architecture the cache plan called for. kernel 252 / signals 9 / orrery 67 /
+    platen 85 / meerkat 80 green. **"Go all in" is complete** — community detection, community->kanban,
+    community->rings, the generation-gated cache, the kernel revision (B), the arrangement cache (A),
+    edge-weight everywhere, and now the off-thread lane.
+  - **Review (2 lenses, both sound).** Integration/refactor: behavior-preserving, `CommunitySnapshot`
+    is `Send`, gating correct, fallbacks robust, per-pane isolated (one readability nit fixed: frame()
+    now calls `ensure_community_fresh()` instead of `refresh_community_cache("")`). Async: liveness
+    (in-flight always clears), stale-rejection (a partition for an old revision is dropped + re-
+    dispatched, never reaching the cache), freshest-wins drain, one-worker-per-orrery lifecycle with
+    safe drop, correct wake/drain timing — all verified. The only noted weakness is theoretical (a
+    worker panic would serve stale data, but the compute is bounds-safe + division-guarded, and it
+    degrades without deadlock).
+- 2026-06-24: **P5 — spectral arrangement.** A new `SpectralAdapter` ("Spectral" in the layout
+  picker): node positions are the two non-trivial smallest eigenvectors of the (multiplicity-weighted)
+  graph Laplacian, so the layout reflects connectivity — clusters separate, a path unrolls into a
+  line. Dependency-free + deterministic: power iteration with deflation on `B = cI - L` (whose largest
+  eigenvectors are L's smallest), `c = 2·max_degree` (the tight Gershgorin bound, so B is PSD),
+  cosine starts, auto-fit into the viewport, and a circle fallback for an edgeless / degenerate graph
+  so nodes never pile up. It is the expensive analytic layout the **arrangement cache (A)** exists for
+  (recomputed only on a structural change), and it has real **synergy with P3**: spectral separates
+  the clusters spatially, the community rings colour them. Tests: a path is monotonic along the
+  Fiedler axis; two triangles + a bridge separate (inter-cluster gap > intra-cluster spread);
+  deterministic; empty. arrangements 104 / platen 85 / orrery 67 / meerkat 80 green. The
+  `semantic_embedding` content-coords lane stays reserved for the intel/embed model (not built).
+  Remaining: **P6** (independent gloss projection, carrying the overlay pipe), **P4** (affinity force),
+  and the small extensions (**bridges->ring** is now an unblocked warm-up).
+- 2026-06-25: **Extension — bridges -> ring (the warm-up).** Betweenness was already computed and the
+  ring renderer already existed, so highlighting the structural brokers was a small reuse, not a
+  phase. `signals::bridge_nodes(graph, threshold)` thresholds normalized betweenness into the
+  cartography `BridgeNodes` contract (the "detected by graph-structural betweenness" notion the
+  contract names); a clique / structureless graph yields none. The orrery gained a `show_bridge_rings`
+  toggle drawing a **bold near-white ring** on the brokers (distinct from the per-cluster community
+  rings and the orange selection, larger radius so both overlays read together), over a revision-gated
+  **inline** cache (betweenness is cheap, so no off-thread lane — `ensure_bridges_fresh`). A `Show
+  bridge rings` toggle on the pelt/orrery page. Tests: the bowtie broker is the only bridge at
+  threshold 0.5; a clique has none; the toggle drives the computation on `frame()`. signals 11 /
+  orrery 68 / meerkat 80 green. Remaining: **P6** (gloss projection + the overlay pipe), **P4**
+  (affinity force).

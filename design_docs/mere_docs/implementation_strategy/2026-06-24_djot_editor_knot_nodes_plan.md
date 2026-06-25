@@ -1,8 +1,10 @@
 # Djot Editor + Knot Nodes + Web Clips Plan
 
-**Status: planning (with Mark), 2026-06-24.** Scoped via a multi-agent code sweep
-of the live workspace. Adds the *write* side to a knot/djot stack that is already
-read-complete, plus an element-pick clip path into the graph.
+**Status: planning (with Mark), 2026-06-24.** Scoped and enriched via multi-agent
+code sweeps of the live workspace. Adds the *write* side to a knot/djot stack that
+is already read-complete, plus an element-pick clip path into the graph, with a
+modern editor surface that stays pure Rust (jotdown for the outer djot, a `logos`
+lexer pack for inner-language injection; tree-sitter an optional breadth hatch).
 
 This plan owns the **editor surface** (a djot writing pane), the **editable knot
 node** (a node whose body is a knot you author in place), and the **web-clip
@@ -18,10 +20,10 @@ the outline lens, or the extraction lane, all of which already have owners. See
 Mere parses `.knot` files (frontmatter for meaning, djot body for content) into
 the portable `EngineDocument` block model and serializes back out. That pipe is
 read-only today: text in, blocks out, blocks back to text. This plan gives it a
-writing surface. Build a djot editor that produces knot nodes you can edit and
-render, keep knot the default note format while `sniff` keeps markdown, txt, and
-other plain formats opening, and reuse the scrape and capture stack to pick an
-element off a live page and land it as a web-clip knot node carrying a
+writing surface. Build an ergonomic djot editor that produces knot nodes you can
+edit and render, keep knot the default note format while `sniff` keeps markdown,
+txt, and other plain formats opening, and reuse the scrape and capture stack to
+pick an element off a live page and land it as a web-clip knot node carrying a
 `ClippedFrom` edge back to the source.
 
 ---
@@ -37,8 +39,7 @@ reusable.
   registered in `nematic::engines()` (lib.rs:97-98). `routing.rs:424-431` sends
   `text/x-knot` to the djot engine as the default grammar. `DjotKnotEngine`
   parses the body into `Vec<DocumentBlock>`; `blocks_to_djot()` writes it back.
-  Files: `crates/inker/engines/nematic/src/knot/djot.rs`, `knot.rs`
-  (`split_frontmatter` / `apply_frontmatter`).
+  Files: `crates/inker/engines/nematic/src/knot/djot.rs`, `knot.rs`.
 - **Portable block model.** `EngineDocument` / `DocumentBlock` / `InlineSpan`
   (with `Link.predicate` carrying open rel IRIs), serde plus a11y mapped.
   File: `crates/inker/src/document.rs`.
@@ -75,16 +76,32 @@ reusable.
 - **Live-page scripting plus capture.** `execute_script_with_result` against the
   JS-rendered page (scrying_host.rs:260); `acquire_frame() -> SurfaceFrame` (GPU
   texture) and `capture_snapshot_png()` (producer.rs:62,147). Whole-surface only.
-- **Existing text-edit substrate in the host.** `xilem_serval::TextInput` holds a
-  committed buffer plus an inline IME preedit; `PaneSession::caret_rect` gives the
-  caret screen rect; meerkat already wires IME, focus, and a painted caret across
-  several chrome fields (omnibar, palette, comms).
-  Files: `crates/meerkat/src/ime.rs` (focus map, `set_ime_cursor_area`),
-  `input.rs`. The host runs the parley / vello / wgpu / winit stack already. So
-  the editor extends a working text widget; it does not stand one up from zero.
-- **Swatch pattern.** A graph element rendered as portable serval-laid-out DOM;
-  its docstring anticipates future embeddings (facet pane, menu, djot script
-  block, orrery card). Today it is the node face and shape surface.
+- **A real multi-line edit widget.** `xilem_serval::TextInput`
+  (`repos/serval/components/xilem-serval/src/controls.rs`) is a String buffer with
+  a char-index caret plus anchor selection, IME preedit, ghost text, select-all,
+  and a `textarea` handler with column-preserving `move_up` / `move_down`,
+  `home_line` / `end_line`, and `set_caret_byte`. It lays out through serval-layout
+  on parley; the caret paints via `serval_layout::caret_rect`; meerkat already
+  wires IME and focus across chrome fields. So the note editor extends a working
+  multi-line widget. Two gaps: it lays the buffer out as plain runs (it styles
+  only the preedit and ghost spans, so a per-range highlight channel is net-new),
+  and `controls.rs` is already **696 LOC, over the 600 ceiling**, so editor work
+  lands in new files.
+- **The click-to-place primitive, half-wired.** `caret_byte_at_point` exists as a
+  free function in serval-layout (point to byte via parley `Cursor::from_point`)
+  but is not threaded through the `IncrementalLayout` session to `set_caret_byte`.
+  Wiring that passthrough plus a meerkat call site is the one missing input piece.
+- **A styled preview render path.** inker `document-canvas` renders styled
+  `EngineDocument` blocks by flattening the inline-span tree into one parley string
+  with per-byte-range `StyleProperty` pushes. It disowns caret, selection, and IME
+  (the host's job), so it is a preview surface, not an edit surface.
+  Files: `crates/inker/document-canvas/src/` (text.rs, style.rs, layout.rs).
+- **A pure-Rust XML lexer already in nematic.** `quick-xml` is a nematic
+  dependency. It is the inner lexer for `=svg` and other XML payloads, no new
+  dependency. File: `crates/inker/engines/nematic/Cargo.toml`.
+- **Swatch pattern.** A graph element rendered as portable serval-laid-out DOM,
+  with inline-block and replaced-box layout. Today it is the node face and shape
+  surface; it is the natural carrier for an inline web-clip block.
   File: `crates/meerkat/src/swatch.rs`.
 - **Node model is content-agnostic.** `Node` = `id: Uuid` plus
   `addresses: Vec<AddressClaim>` plus title and metadata. There is no body field.
@@ -99,14 +116,15 @@ reusable.
 ## What is net-new
 
 - **The edit-in side.** Every mutator today is a host pass that rebuilds the block
-  `Vec`. There is no caret-driven block-edit API and no incremental reparse keyed
-  to the editor. The editor pane is net-new, though it extends an existing widget.
+  `Vec`. The editor pane is net-new, though it extends `TextInput`. The concrete
+  net-new pieces are a per-range style channel on the field, the click-to-place
+  wiring, and the highlight/ergonomics/structural layers below.
 - **A reachable new-note entry.** Both engines are registered, but no user action
   creates a knot or opens one for editing. The in-the-wings audit names this one
   wire as the biggest gap.
 - **Editable-note persistence.** Eidetic engrams are immutable (an edit makes a
-  new hash) and the graph snapshot has no body slot. The mutable note body needs
-  a home. **Decided: an inline body on `Node`** (see Decisions).
+  new hash) and the graph snapshot has no body slot. **Decided: an inline body on
+  `Node`** (see Decisions).
 - **Element picker.** No hover-to-select UI exists. Today the path is whole-page
   fetch plus tag and role extraction.
 - **Selector to fragment clip.** Nothing captures a chosen element's HTML subtree
@@ -115,33 +133,168 @@ reusable.
   whole-surface; nothing crops to a selected element's box.
 - **Web-clip to node spawn plus provenance writer.** `build_clip_knot` produces
   knot text, not a node; nothing spawns a node from it or asserts `ClippedFrom`.
+- **The editor pipe.** Highlight, folds, outline, structural motion, and injection,
+  all pure Rust from jotdown plus curated inner lexers. Phase 3 (see Editor
+  architecture).
 - **Richer djot span fidelity.** The current parse flattens emphasis and strong to
   plain text and does not nest links. Owned by the knot-evaluation plan.
 
 ---
 
-## Architecture
+## Editor architecture: one djot parser, curated inner lexers
 
-### A. Djot editor surface (text to knot model to render)
+One source text, one djot parser, and a thin per-language lexer dispatch for the
+inner content of polyglot blocks. Everything stays pure Rust, so native and the
+browser build the same way. The editor decorates and navigates; the engine decides
+meaning.
 
-The source of truth is the **djot source text**, never a re-serialized AST.
-jotdown 0.10 is a streaming pull parser with no writer and no mutable AST, so any
-"save the rendered blocks back to text" shortcut would silently drop djot the
-engine does not recognize. The editor holds the text; the engine owns meaning.
+- **jotdown is the parse for both meaning and editor structure.** It is a pure-Rust
+  djot parser. `Parser::into_offset_iter()` turns source text into `DocumentBlock`s
+  (the meaning pipe: render, export, statements, graph) and into
+  `(Event, Range<usize>)` byte spans (the highlight list). Its nested
+  `Start(Container)` / `End(Container)` events also build a small container tree,
+  which gives folds, the heading outline, and expand-to-enclosing-container
+  selection. Source text is the single source of truth; blocks are derived, never
+  written back (jotdown is read-only, so a "save the rendered blocks" shortcut would
+  silently drop any djot the block model does not cover).
+- **Injection is a per-language lexer dispatch.** The one thing jotdown cannot do is
+  highlight the inner language of a polyglot block, since it only parses djot. So the
+  editor reads the fence or `lang` label, runs that language's own pure-Rust lexer
+  over the block's byte range, and merges the styles back. A fence in a language with
+  no wired lexer renders plain.
 
-Build the editing core on the host's existing parley-backed text widget
-(`xilem_serval::TextInput`), generalized to a multi-line note pane, reusing the
-caret, IME preedit, and focus seams meerkat already wires. On each edit, reparse
-with `jotdown::Parser::into_offset_iter()` and use the `(Event, Range<usize>)`
-byte spans to drive syntax decoration and to locate tagged blocks. jotdown
-reparses fast enough per keystroke at note sizes. To save or render, the existing
-pipe runs unchanged: text to `Engine::render(text/x-knot)` to `DocumentBlock`s to
-the rendered output (and `blocks_to_djot` back out). v1 needs no block-edit API.
-Wire `accesskit` through the widget for the control-UX a11y rule. The editor lands
-in new files so neither `knot.rs` (289 LOC) nor `djot.rs` (571 LOC, near the 600
-ceiling) grows.
+Both feed one `(range, style)` channel into the edit surface. tree-sitter is an
+optional later branch, taken only if arbitrary-language injection or tree-sitter's
+error-tolerance is wanted (see Crate decision). For a curated note vocabulary it is
+not needed, and skipping it keeps the whole editor browser-clean with no C or wasm
+toolchain.
 
-### B. Knot as default note, polyglot blocks, other formats
+### Render split: edit on one surface, preview on the other
+
+Two render paths already exist and both already do per-range styled text. The
+editor picks one for each job, and keeps each surface to its strength.
+
+- **Edit surface: extend `xilem_serval::TextInput`.** It is the only thing in the
+  stack with the geometry an editor needs (char-index caret, anchor selection, IME
+  preedit, ghost text, multi-line motion, `caret_rect`, `set_caret_byte`). What it
+  lacks is a per-range style channel: today it lays the buffer out as plain runs,
+  styling only the preedit and ghost spans. Highlighting means emitting the body
+  as styled inline spans per highlight range, reusing the exact mechanism preedit
+  and ghost already prove. Serval is an HTML engine, so this is additive.
+- **Preview surface: inker `document-canvas`.** It renders styled `EngineDocument`
+  blocks today and disowns caret, selection, and IME, so it stays a preview beside
+  the source.
+
+The one missing input primitive gates click-to-place and drag-select:
+`caret_byte_at_point` exists in serval-layout but is not wired through the
+`IncrementalLayout` session to `set_caret_byte`. Wiring that passthrough plus a
+meerkat call site lands in Phase 1.
+
+### Highlight: jotdown spans, then the container tree and injection
+
+The edit surface ships and highlights with jotdown alone, then grows structure.
+
+**Phase 2 highlights from jotdown spans.** `into_offset_iter()` already yields
+`(Event, Range<usize>)` for every djot construct, which is the `(range, style)`
+list a highlighter needs, and Mere already computes it for the meaning pipe. So
+v1 highlighting is: walk the offset iterator, map each event to a style id, hand
+the field a `Vec<(Range, StyleId)>`, paint it. Zero new crate, no C, browser-clean
+by construction.
+
+**Phase 3 adds the container tree and injection.** Fold the same nested event
+stream into a container tree for section folding, the heading outline, and
+structural selection. Add the injection dispatch for inner-language highlight. All
+pure Rust, all on the same `(range, style)` channel.
+
+### The headline: injection as a pluggable lexer registry
+
+Mere's signature note move is the polyglot block: a knot carrying rhai, html, or
+svg inside it. The editor highlights the inner language by reading the block's
+fence or `lang` label and running a lexer registered for that language over the
+block's byte range, merging the styled spans back. The dispatch is a small registry
+of `InjectionLexer` keyed by label, in three tiers:
+
+- **Precise built-in lexers** for the core polyglot vocabulary: `quick-xml` (already
+  a nematic dependency) for svg and other xml, `html5ever` for html, rhai's own
+  tokenizer for the script languages. Exact and fast. Because the dispatch is ours,
+  the `{.mere-script lang=rhai}` div reads its language straight from the attribute,
+  with no parser-grammar limitation on how the block is written.
+- **A curated logos pack** for broad coverage, so a common ` ```python ` or
+  ` ```toml ` block just works. [`logos`](https://github.com/maciejhirsz/logos)
+  compiles a language's tokens into one DFA with jump tables and no backtracking,
+  faster than a hand-written lexer and well clear of any regex engine. Pure Rust,
+  wasm-safe by construction, tiny. Injection only needs token coloring, not a parse
+  tree, so a lexer is the right tool and the fastest one. The cost is authoring one
+  small lexer per language, since there is no pre-built logos library; bounded for a
+  note tool's roughly fifteen common script and format languages, with the mod path
+  for the long tail. (`lexgen` is the comparable alternative generator.)
+- **Mod lexers.** Anyone registers an `InjectionLexer` for their own language through
+  the mod loader, the easy path being another `logos` lexer or the language's own
+  tokenizer (as rhai's). The hand-lexers, the pack, and the mods are all the same
+  trait at runtime, with no rebuild. A label with no registered lexer renders plain.
+
+This keeps the whole editor pure Rust and wasm-safe with no build apparatus: jotdown
+plus logos compile for wasm32-unknown-unknown like the rest of the app, with no
+c2rust, no git-fetched grammars, and no fork. The honest cost is curation: you author
+and maintain a small lexer set rather than consume a grammar library, and a coarse
+lexer cannot match tree-sitter's tree-aware precision (telling a call from a
+variable), which rarely matters for a note's code block. logos is fast enough to run
+inline at note size, so the off-thread worry that dogged the regex engines does not
+arise.
+
+If breadth beyond a curated set is ever wanted, tree-sitter is the optional hatch:
+`syntastica` with `runtime-c2rust` reuses the tree-sitter grammar library through the
+same `InjectionLexer` trait, wasm-safe via c2rust, at the cost of its build friction
+(git-fetched grammars, slow compiles, or a vendored `mere-grammars` fork of
+pre-transpiled committed grammars). The regex-grade libraries `synoptic` (lightweight,
+incremental, pure Rust) or `syntect` (broad Sublime grammars, pure Rust on
+`default-fancy`) are the other ready-made option if you would rather not author
+lexers, slower and less precise than logos.
+
+### Build path: pure Rust, no wasm question
+
+The whole editor (jotdown, the container tree, the precise lexers `quick-xml`,
+`html5ever`, rhai's tokenizer, and the logos pack and mods) builds for
+wasm32-unknown-unknown with no C and no build question, the same target wgpu and
+wasm-bindgen already use. Native and the PWA build identically. The only piece that
+would carry build cost is the optional tree-sitter breadth hatch (`syntastica`
+c2rust), and it is optional, so the default editor never pays it, and never a runtime
+JIT.
+
+The only place a wasm or C question arises is the optional tree-sitter branch
+(below). It is optional, so the default editor never pays it.
+
+### gpui/Zed cues worth lifting
+
+Four Zed ideas map onto Mere concepts and serve note-taking directly.
+
+- **Anchors (stable offsets).** Positions that survive edits. Mere needs this for
+  clip provenance (a `ClippedFrom` range that stays pinned as you edit around it)
+  and later for multi-cursor. Implement as a small anchor layer over the buffer,
+  not a rope dependency at note size.
+- **Block decorations (inline embeds).** Mere's inline web-clip is a swatch and
+  block sibling in the layout, not styled text. serval already lays out
+  inline-block and replaced boxes, so the clip-in-note rides the existing swatch
+  layout. Highlighting is a text-run concern; the clip is a block decoration. Keep
+  them separate.
+- **Action and keymap tied to the command registry.** Every editor action
+  (new-note, fold, outline-jump, expand-selection, pick-and-clip) registers as a
+  command id, so both the radial (gamepad) and context (mouse and keyboard) menus
+  reach it and both input modes operate it, per the control-UX rule.
+- **Undo transactions.** Group auto-generated edits (auto-pair, list continuation)
+  with the keystroke that triggered them, so one undo feels like one action. A
+  plain snapshot stack, no rope at note size.
+
+Every layer lands in its own small file (the span-to-style mapper, the container
+tree, the injection dispatch, the anchor layer, the undo stack, the slash and link
+menus), because `controls.rs` (696), `djot.rs` (571), and `knot.rs` (289) cannot
+absorb editor work without blowing the ceiling.
+
+---
+
+## Knot, clips, storage
+
+### Knot as default note, polyglot blocks, other formats
 
 Knot stays the native note format and djot stays the default grammar. The inline
 alt-format blocks are two spec-blessed shapes the editor surfaces and routes by
@@ -153,12 +306,12 @@ jotdown attributes:
 - **`=FORMAT` raw block** (` ```=html `, ` ```=svg `) when the body is an opaque
   alt-format payload handed verbatim to another engine.
 
-Both hand the editor a format or attribute key plus an exact source span for
-decoration, with no custom lexing. The editor makes those regions visible and
-editable, and holds the trust rule: a SelfAsserted note you own runs its fences
-per setting, received content renders inert source. The descriptor stays a
-`CodeBlock` with the fence info string (the shipped decision in the polyglot
-plans); the editor adds no new `DocumentBlock` variant.
+Both hand the editor a format or attribute key plus an exact source span, which is
+also the key the injection dispatch reads to pick the inner lexer. The editor makes
+those regions visible and editable, and holds the trust rule: a SelfAsserted note
+you own runs its fences per setting, received content renders inert source. The
+descriptor stays a `CodeBlock` with the fence info string (the shipped decision in
+the polyglot plans); the editor adds no new `DocumentBlock` variant.
 
 Other formats ride `sniff`. `sniff_content_type` splits knot from markdown today.
 Markdown opens through the CommonMark engine; `.txt` opens as a plain body. The
@@ -166,33 +319,34 @@ editor edits raw text regardless of format; the format picks which engine render
 the preview and which exporter saves. A markdown or txt note saves back in its own
 format (`to_markdown` / `to_text`); converting to knot is an explicit user action.
 
-### C. Web-clip extraction to knot node
+### Web-clip extraction to knot node
 
 Four moves, most primitives present.
 
 1. **Pick.** A hover-to-select picker on the live scrying tile. Run
-   `execute_script_with_result` with a `document.elementFromPoint` probe to
-   resolve the element under the pointer and read its tag, id, class, and bounding
-   rect. The serval selector engine is the matcher for selector-driven picks.
+   `execute_script_with_result` with a `document.elementFromPoint` probe to resolve
+   the element under the pointer and read its tag, id, class, and bounding rect.
+   The serval selector engine is the matcher for selector-driven picks.
 2. **Capture.** For the chosen element, pull its HTML subtree (plus
    `serval-extract` scoped to that subtree) for the **semantic tier**, and read
    its bounding rect to crop a region from `capture_snapshot_png()` for the
    **rendered tier**.
 3. **Store.** Feed the captured blocks plus provenance to `build_clip_knot` to
-   assemble a `.knot`. The structured side can also ride
-   `ingest.rs` to `apply_contribution` to `Orrery::ingest_graph`.
+   assemble a `.knot`. The structured side can also ride `ingest.rs` to
+   `apply_contribution` to `Orrery::ingest_graph`.
 4. **Render and node.** A clip becomes a **node**, not a card. Spawn a node whose
    body is the clip knot, render it as a new swatch kind, and assert a
-   `ProvenanceSubKind::ClippedFrom` edge to the source node (the first live writer
-   for that edge family). The rendered-texture tier carries the on-site look; the
-   semantic tier carries editable, statements-bearing content. Register the
-   pick-and-clip action as a command id per the command-registry plan, with a
-   consent gate. The faithful HTML fragment tier (sanitized html5ever with site
-   context) is the later fidelity rung, owned by the knot-evaluation plan; v1
+   `ProvenanceSubKind::ClippedFrom` edge to the source node. Inline in a note, the
+   clip renders as a block decoration (swatch sibling, not styled text), pinned by
+   a stable anchor so it survives edits around it. The rendered-texture tier
+   carries the on-site look; the semantic tier carries editable,
+   statements-bearing content. Register the pick-and-clip action as a command id
+   with a consent gate. The faithful HTML fragment tier (sanitized html5ever with
+   site context) is the later fidelity rung, owned by the knot-evaluation plan; v1
    clips are semantic-tier plus an optional cropped texture. HTML render depth
    stays Serval's job, not nematic's.
 
-### D. Storage and identity
+### Storage and identity
 
 A knot node needs no new node type. **Decided: an inline mutable body on `Node`.**
 Add a `body` field plus a `PersistedNode` variant carrying it, so the live note
@@ -207,35 +361,73 @@ its own round-trip test.
 
 ---
 
+## Editor ergonomics (feature set, scoped to note-taking)
+
+| Feature | Why it serves notes | Phase | Cost |
+| --- | --- | --- | --- |
+| Click-to-place, drag-select | Mouse caret placement and selection. Table stakes the field cannot do yet. | 1 | Cheap, load-bearing. Wire `caret_byte_at_point` through to `set_caret_byte`. |
+| Syntax highlight | Emphasis, headings, links, fence boundaries colored as you type. | 2 | Cheap. The `(range, style)` list is already computed by jotdown; net-new is the style channel. |
+| Soft-wrap goal column | Up/Down across wrapped lines holds the target column. Lifts the field from Tier 1. | 2 | Cheap. Store goal column on vertical move, clear on horizontal. |
+| Undo/redo transactions | Reliable undo, grouping auto-pair and list inserts with their keystroke. | 2 | Cheap at note size. Snapshot stack, no rope. |
+| Smart list continuation | Enter continues the list marker and indent; double-Enter ends it. Biggest ergonomics win. | 3 | Cheap. Detect list context from the line plus span. |
+| Auto-pairs | One delimiter inserts its close; wrap a selection to bracket it. | 3 | Cheap. Pure buffer logic, grouped into one undo step. |
+| `[[` node-link completion | Typing `[[` offers a live menu of graph nodes to link. Core to knot-as-notebook. | 3 | Medium. Graph-query to completion plus the popup. Wikilink rewrite already exists. |
+| Slash `/` command menu | `/` at line start inserts blocks (heading, list, fence, `=html`, `mere-script`, clip). | 3 | Medium. Reuses the `[[` popup with a static template list. |
+| Injection highlight | Inner rhai/html/svg in a polyglot block highlights in its own language. The headline. | 3 | Medium. `InjectionLexer` registry, one engine: hand-lexers (quick-xml, html5ever, rhai) + a curated `logos` pack (DFA, fastest, pure-Rust, wasm-safe) + logos mods. tree-sitter optional for breadth. |
+| Structural selection | Alt-Up grows the selection to the enclosing span, item, section; Alt-Down shrinks. | 3 | Cheap. From the jotdown container tree (Start/End nesting), no extra parser. |
+| Fold sections | Collapse a heading's section to skim a long note. | 3 | Medium. Section tree from jotdown; net-new is the fold UI and line-hiding. |
+| Outline | Jump-to-heading list for long notes; ties into the gloss outline lens. | 2 (headings) / 3 (nested) | Cheap from jotdown headings; the gloss plan owns the surface. |
+| Inline web-clip block | A clipped element rendered inline mid-note with its on-site look. | 4 (semantic), 5 (rendered) | Medium. Rides the swatch layout; producer and edge already modeled. |
+| Multi-cursor | Edit several spots at once. Power-user polish, lower value for prose. | 6 (deferred) | Medium-high. Needs the anchor layer plus a cursor set. |
+
+Cut as IDE gold-plating, not note-taking: language-server completion (the only
+completion sources here are the graph and a template list), runnables and
+debugger and test gutters (eval fences already cover note-side execution), git
+gutter and blame, and a minimap (notes are short and have an outline).
+
+---
+
 ## Phasing (done-conditions)
 
-**Phase 1: editable knot, round-trips in memory.**
-Done: an editor pane opens a `.knot` source string, edits it with caret,
-selection, and IME (reusing the existing text widget seams), and on save calls
-`Engine::render(text/x-knot)` to show the rendered blocks beside the source. No
-highlighting, no persistence yet. The buffer round-trips text to blocks to
-rendered output.
+**Phase 1: editable knot, round-trips in memory, mouse-placeable.**
+Done: an editor pane opens a `.knot` source string and edits it with caret,
+selection, and IME on the extended `TextInput` (multi-line `textarea` handler).
+Click-to-place and drag-select work: `caret_byte_at_point` is wired through the
+`IncrementalLayout` session to `set_caret_byte` with a meerkat call site. On save,
+`Engine::render(text/x-knot)` shows the rendered blocks in the document-canvas
+preview pane beside the source. No highlighting, no persistence yet.
 
-**Phase 2: highlighting, new-note entry, persistence, other formats.**
-Done: jotdown `into_offset_iter` spans drive basic syntax highlighting; a
-new-note command id creates a knot node; the editor saves its body to the inline
-`Node` body store and reopen restores it; opening a `.md` or `.txt` file routes
-through `sniff` to the right engine for preview while editing raw text; markdown
-and txt save back in their own format. Carries the `Node` body plus
-`PersistedNode` schema change and its snapshot round-trip test.
+**Phase 2: highlight, ergonomics, new-note entry, persistence, other formats.**
+Done: jotdown `into_offset_iter` spans drive syntax highlight on the edit surface
+via a new per-range style channel (zero new dependency, browser-clean). Sticky
+soft-wrap goal column. Undo/redo as grouped transactions. A new-note command id
+creates a knot node; the editor saves its body to the inline `Node` body store and
+reopen restores it. Opening `.md` or `.txt` routes through `sniff` to the right
+engine for preview while editing raw text; each saves back in its own format.
+Carries the `Node` body plus `PersistedNode` schema change and its snapshot
+round-trip test (highest blast radius, isolated here).
 
-**Phase 3: polyglot inline blocks visible and routed.**
-Done: the editor decorates attribute-tagged divs and `=FORMAT` raw blocks from
-jotdown spans; protocol fences expand and ` <lang> eval ` fences evaluate under
-host policy for your own notes (and render inert for received notes); wikilinks
-and hashtags type live. Eval depends on a host evaluator being registered.
+**Phase 3: editor pipe, injection, live authoring affordances.**
+Done: a container tree built from jotdown's nested events drives fold sections, the
+heading outline (ties into the gloss outline lens plan), and expand/shrink
+structural selection. Injection highlights the inner language of a polyglot block:
+a per-language lexer dispatch reads the fence or `lang` label and runs that
+language's own pure-Rust lexer (`quick-xml` for svg and xml, `html5ever` for html,
+rhai's tokenizer for the script languages), merging styles back; a fence with no
+wired lexer renders plain. Protocol fences expand and ` <lang> eval ` fences
+evaluate under host policy for your own notes (received notes render inert);
+wikilinks and hashtags type live. Authoring affordances: smart list continuation,
+auto-pairs, `/` slash menu, `[[` node-link completion, all registered as command
+ids. All pure Rust, native and PWA identical, no wasm or C toolchain. Eval depends
+on a host evaluator being registered.
 
-**Phase 4: semantic web clip to node.**
-Done: a picker selects an element on a live scrying tile, captures its HTML
-subtree plus extracted text and links via `execute_script_with_result`, builds a
-clip knot with `build_clip_knot`, spawns a knot node, and asserts a `ClippedFrom`
-edge to the source. Consent UI present, command-registered. First live writer of
-`ClippedFrom`, so it gets its own assert plus snapshot test.
+**Phase 4: semantic web clip to node (inline block decoration).**
+Done: a picker selects an element on a live scrying tile, captures its HTML subtree
+plus extracted text and links via `execute_script_with_result`, builds a clip knot
+with `build_clip_knot`, spawns a knot node, and asserts a `ClippedFrom` edge to the
+source. The clip renders as a block decoration pinned by a stable anchor. Consent
+UI present, command-registered. First live writer of `ClippedFrom`, so it gets its
+own assert plus snapshot test.
 
 **Phase 5: on-site rendered tier.**
 Done: the clip carries a cropped texture of the element's rect (from
@@ -244,32 +436,59 @@ element as it appeared on the page alongside its editable semantic body. Validat
 the device-pixel-ratio and scroll-offset mapping between `getBoundingClientRect`
 and the captured surface at runtime.
 
-**Phase 6 (deferred): fidelity and federation.**
+**Phase 6 (deferred): fidelity, federation, power-editing.**
 Done: clips can render a sanitized HTML fragment with site context (the
 knot-evaluation HTML tier); shared notes publish to a `knot://` addressable or
 engram path (the `AddressKind` variant added here); emphasis, strong, and nested
-links survive the parse round-trip.
+links survive the parse round-trip. Multi-cursor lands here over the anchor layer
+if note-taking demand proves it. If large imported docs strain the flat-String full
+reparse, swap the buffer for a rope and the reparse for an incremental one. If a
+note ever needs arbitrary-language injection beyond the curated set, this is where
+the optional tree-sitter branch (Crate decision) would land.
 
 ---
 
 ## Crate decision
 
-**jotdown source-text editing on the host's existing parley text widget.**
+**jotdown for the outer djot, a pluggable injection registry for inner languages,
+on the host's parley text widget.**
 
-- jotdown 0.10 is a read-only streaming pull parser. No mutable AST, no writer.
-  Treat the djot source text as the single source of truth and use
-  `Parser::into_offset_iter()` spans to decorate it. Reparse on edit.
-- The editing core is the existing parley-backed `xilem_serval::TextInput`
-  (buffer, caret, IME preedit, focus), generalized to a multi-line note pane.
-  Render through the host's vello / wgpu path. `ropey` is optional if large notes
-  need it; `accesskit` for a11y. Confirm whether `TextInput` generalizes to
-  multi-line or whether a multi-line sibling on the same parley layer is the
-  cleaner net-new piece (Open question 1).
-- No turnkey djot editor crate exists in Rust. [`jotdown`](https://crates.io/crates/jotdown)
-  is parse-only. `egui_commonmark`, iced's markdown widget, and cosmic-text plus
-  glyphon each couple the editor to a foreign toolkit, against the portable
-  mere-domain and vello-host line. The host's own parley widget is the
-  toolkit-agnostic fit.
+- jotdown 0.10 is the one parse: source text to `DocumentBlock`s (meaning) and to
+  highlight spans plus a container tree (editor structure). Source text is the
+  single source of truth. [`jotdown`](https://crates.io/crates/jotdown) is
+  parse-only, so the editor never re-serializes an AST. Pure Rust, builds for
+  wasm32-unknown-unknown like the rest of the app.
+- The edit surface is the existing `xilem_serval::TextInput` (multi-line, caret,
+  selection, IME), extended with a per-range style channel. Preview renders through
+  inker `document-canvas`. Both are already in the stack.
+- Injection (inner-language highlight) is an `InjectionLexer` registry dispatched by
+  the fence or `lang` label, three tiers and one engine: precise hand-lexers
+  ([`quick-xml`](https://crates.io/crates/quick-xml) for svg/xml, already a nematic
+  dependency; [`html5ever`](https://crates.io/crates/html5ever) for html; rhai's
+  tokenizer for scripts); a curated [`logos`](https://crates.io/crates/logos) pack for
+  broad coverage (a DFA lexer, faster than tree-sitter or any regex engine for the
+  coloring job, pure Rust, wasm-safe, tiny; you author one small lexer per language,
+  since no logos language library exists; `lexgen` is the comparable generator); and
+  mod lexers, again `logos` or a language's own tokenizer, registered at runtime with
+  no rebuild. A label with no registered lexer renders plain. Injection needs only
+  token coloring, not a parse tree, so the lexer is both right and fastest, and
+  jotdown plus logos is the whole pure-Rust, wasm-safe, build-apparatus-free stack.
+  The optional hatch for breadth beyond the curated set is tree-sitter via
+  [`syntastica`](https://crates.io/crates/syntastica) (`runtime-c2rust`, wasm-safe via
+  c2rust, at its git-build friction or a vendored `mere-grammars` fork); the
+  regex-grade libraries [`synoptic`](https://crates.io/crates/synoptic) or
+  [`syntect`](https://crates.io/crates/syntect) (pure Rust on `default-fancy`) are the
+  other ready-made-library option, slower and less precise than logos.
+- No turnkey djot editor crate exists in Rust. `egui_commonmark`, iced's markdown
+  widget, and cosmic-text plus glyphon each couple the editor to a foreign toolkit,
+  against the portable mere-domain and vello-host line.
+- **Optional: tree-sitter for the outer djot too.** jotdown carries the outer-djot
+  highlight and the container tree. If djot's editor-side parse ever wants
+  tree-sitter's error-tolerance, `tree-sitter-djot` v2.0.0 (MIT, Jonas Hietala, the
+  grammar Helix uses; track Codeberg, the GitHub repo froze 2026-04-27) is the swap,
+  on the same c2rust wasm path the injection pack already uses, feeding the same
+  `(range, style)` channel. The runtime-grammar `wasm` feature (wasmtime JIT) stays
+  banned and will not build for wasm32 anyway. Recorded as a door, not a commitment.
 
 ---
 
@@ -278,50 +497,82 @@ links survive the parse round-trip.
 Resolved with Mark 2026-06-24:
 
 1. **Body storage: inline body on `Node`**, deferring `knot://` and the eidetic
-   publish path to the federation phase. The `knot://` `AddressKind` variant is
-   added only when its resolver is wired.
+   publish path to the federation phase.
+2. **Editor widget reach: extend `xilem_serval::TextInput`.** It already does
+   multi-line, selection, and IME; the editor adds a style channel, not a new
+   widget.
+3. **Render split: edit on the serval field, preview on document-canvas.** Both
+   already do per-range styled text; neither surface tries to do both jobs.
+4. **Outer-djot pipe: pure-Rust jotdown.** Highlight spans plus a container tree
+   (folds, outline, structural selection) from one jotdown parse. No C, no wasm
+   question for the editor floor. Inner-language injection is a separate registry
+   (Decision 7), engine `logos`, with tree-sitter only as an optional breadth hatch.
+5. **Buffer: stay on flat String plus char-index.** Snapshot undo and full reparse
+   are fast at note size. A rope waits for large imported docs (Phase 6).
+6. **Multi-cursor: out of v1, deferred to Phase 6.** Cheap to add once anchors
+   exist; not core to prose.
+7. **Injection is a pluggable `InjectionLexer` registry; the engine is `logos`.**
+   Precise hand-lexers (quick-xml svg/xml, html5ever html, rhai scripts) for the core
+   vocabulary; a curated `logos` pack (a DFA lexer, the fastest pure-Rust option,
+   wasm-safe, no build apparatus) for broad coverage; `logos` again for runtime mods.
+   One trait and one engine, and injection needs only coloring (jotdown owns the outer
+   structure). The cost is authoring and maintaining a small lexer set rather than
+   consuming a grammar library. tree-sitter (`syntastica` c2rust) is the optional
+   hatch for breadth beyond the curated set; `synoptic` or `syntect` are the
+   regex-grade ready-made alternatives.
 
 Open:
 
-1. **Editor widget reach.** Does `xilem_serval::TextInput` generalize to a
-   multi-line decorated note pane, or is a multi-line sibling on the same parley
-   layer the cleaner build? Resolve by reading the widget before Phase 1.
-2. **Editor crate placement.** A portable editing core (text buffer plus jotdown
-   span decoration) split from host-side render glue, versus a single host module.
-   Lean: keep the toolkit-agnostic core off the host dependency where the parley
+1. **The logos pack's language list.** Which languages get a hand-authored `logos`
+   lexer in the v1 pack (lean: rhai, lua, js, html, svg, css, json, toml, yaml,
+   markdown, plus a few code languages), and whether to harvest any existing community
+   logos lexers. The off-thread question largely dissolves, since logos is fast enough
+   to color a block inline.
+2. **Editor crate placement.** A portable editing core (style channel, span mapper,
+   container tree, injection dispatch, anchor and undo layers) split from host
+   render glue, versus a single host module. Lean portable where the parley
    coupling allows.
 3. **Picker mechanism and surface.** `elementFromPoint` hit-test versus
-   selector-driven pick versus both; live scrying tile only, or also
-   serval-laid-out static pages. Lean: `elementFromPoint` on the live tile first,
-   selector and static-page picks as a follow-on.
-4. **Clip default tier.** Semantic-only by default (Phase 4) with the cropped
-   texture opt-in until Phase 5 proves the crop path, versus always capturing
-   both.
+   selector-driven pick versus both; live scrying tile only, or also serval-laid-out
+   static pages. Lean: `elementFromPoint` on the live tile first.
+4. **Clip default tier.** Semantic-only by default with the cropped texture opt-in
+   until Phase 5 proves the crop path, versus always capturing both.
 
 ---
 
 ## Risks
 
 - jotdown has no writer and no mutable AST, so a byte-faithful round-trip of
-  arbitrary djot is impossible through the engine. The editor must hold the source
-  text as truth; `blocks_to_djot` covers only the recognized block vocabulary.
-- `djot.rs` is at 571 LOC against the 600 ceiling and `knot.rs` at 289. Editor and
-  fidelity work land in new files, not appended here.
-- The inline `Node` body is net-new kernel schema touching `Node`,
-  `PersistedNode`, and the snapshot round-trip. It is the highest-blast-radius
-  change and stays isolated to Phase 2.
+  arbitrary djot is impossible through the engine. The editor holds the source text
+  as truth; `blocks_to_djot` covers only the recognized block vocabulary.
+- `controls.rs` is already 696 LOC (over the ceiling), `djot.rs` 571, `knot.rs`
+  289. Every editor layer lands in a new small file; none of these three grows.
+- The inline `Node` body is net-new kernel schema touching `Node`, `PersistedNode`,
+  and the snapshot round-trip. Highest blast radius, isolated to Phase 2.
+- The logos pack has no bundled language library, so the work moves from consuming
+  grammars to authoring and maintaining one small lexer per language. Bounded for a
+  note tool's curated set, and the mod path covers the long tail, but it is owned
+  code, and a coarse lexer is less precise than a tree-sitter tree (telling a call
+  from a variable), which rarely matters for a note's code block. A language with no
+  lexer renders plain. If breadth ever outgrows curation, the optional tree-sitter
+  hatch (`syntastica` c2rust) reuses the grammar library at its build-friction cost.
+- The container-tree builder, the injection registry, and the curated `logos` lexer
+  set are net-new code Mere owns. logos keeps each lexer small, but the set is owned
+  and maintained rather than free-ridden from a grammar community. Bounded for a note
+  vocabulary; weigh again only if breadth grows, when the tree-sitter hatch amortizes
+  better.
 - `ClippedFrom` is modeled and persists but has zero live writers. Phase 4 is its
   first writer, so the assert path and its snapshot round-trip need their own test.
-- The element-rect crop assumes the JS bounding rect maps cleanly onto the
-  captured surface's pixel space. Device-pixel-ratio and scroll-offset mismatches
-  between `getBoundingClientRect` and `capture_snapshot_png` are a runtime failure
-  mode to validate, not reason about statically.
+- The element-rect crop assumes the JS bounding rect maps cleanly onto the captured
+  surface's pixel space. Device-pixel-ratio and scroll-offset mismatches between
+  `getBoundingClientRect` and `capture_snapshot_png` are a runtime failure mode to
+  validate, not reason about statically.
 - The trust rule must hold for clips: a clipped element from a received page is
-  received content and must render inert, never evaluate. Easy to regress if the
-  clip pipe reuses the own-note render path.
-- The host has no prior parley-on-vello *multi-line edit* surface wired (the
-  existing fields are chrome single-liners). The Phase 1 risk is the caret,
-  selection, and IME geometry in the note pane, not the parse loop.
+  received content and renders inert, never evaluates. Easy to regress if the clip
+  pipe reuses the own-note render path.
+- The host has no prior parley-on-vello multi-line *edit* surface wired (the
+  existing fields are chrome single-liners on the same widget). The Phase 1 risk is
+  caret, selection, and IME geometry in the note pane, not the parse loop.
 
 ---
 
@@ -336,13 +587,13 @@ This plan extends, and does not re-scope, the following owners:
   the eval and include passes, the HTML fragment fidelity tier (K4), and richer
   span fidelity. Phase 6 fidelity work belongs there.
 - [2026-06-23 gloss outline lens plan](2026-06-23_gloss_outline_lens_plan.md):
-  owns the graph-outline-as-editable-knot payoff at its P4. The editor here is the
-  shared writing surface that P4 also uses.
+  owns the graph-outline-as-editable-knot payoff at its P4 and the outline surface.
+  The editor here is the shared writing surface that P4 also uses.
 - [2026-06-23 node body face model plan](2026-06-23_node_body_face_model_plan.md):
   owns the node's Body and Face presentation. The clip swatch kind composes with
   it.
 - [2026-06-21 command registry configurable menus plan](2026-06-21_command_registry_configurable_menus_plan.md):
-  the new-note and clip actions register as command ids here.
+  every editor action and the clip gesture register as command ids here.
 - [2026-06-10 scrying tile plan](2026-06-10_scrying_tile_plan.md) and
   [2026-06-23 render ladder and extraction plan](2026-06-23_render_ladder_and_extraction_plan.md):
   own the live tile and the parse-and-extract axis the clip path draws on.
@@ -357,33 +608,113 @@ This plan extends, and does not re-scope, the following owners:
 
 ## Findings
 
-Code-verified anchors from the 2026-06-24 scope sweep, kept for the next session:
+Code-verified anchors from the 2026-06-24 sweeps, kept for the next session:
 
 - Both knot engines registered: `nematic/src/lib.rs:97-98`; djot is the routed
   default for `text/x-knot`: `inker/src/routing.rs:424-431`.
-- jotdown 0.10 is a streaming `Parser` yielding `Event` with
-  `into_offset_iter()` byte spans; attributes ride `Start(Container, Attributes)`;
-  raw blocks carry a `=FORMAT` tag. No AST, no writer.
-- Clip producer signature: `build_clip_knot(blocks, source, trust, note_kind)`
-  plus `build_clip_knot_with_block_provenance` at `expand/build.rs:12,43`.
-- `Node` carries no body; identity is `id: Uuid` plus `addresses`. `AddressKind`
-  variants today: Http, File, Data, Clip, Directory, Custom (`address.rs`).
+- jotdown 0.10 is a streaming, read-only `Parser`; `into_offset_iter()` yields
+  `(Event, Range<usize>)`; nested `Start(Container, Attributes)` / `End(Container)`
+  events fold into a container tree (folds, outline, structural selection); raw
+  blocks carry a `=FORMAT` tag. No AST, no writer. Pure Rust, wasm32 clean.
+- `xilem_serval::TextInput` (`repos/serval/components/xilem-serval/src/controls.rs`,
+  696 LOC): String buffer, char-index caret, anchor selection, IME preedit, ghost,
+  `select_all`, and a `textarea` handler with `move_up` / `move_down` / `home_line`
+  / `end_line` / `set_caret_byte`. Plain-run render; styles only preedit and ghost.
+- `caret_byte_at_point` is a free function in serval-layout (parley
+  `Cursor::from_point`), not wired through `IncrementalLayout` to `set_caret_byte`.
+- inker `document-canvas` renders styled `EngineDocument` via per-byte-range
+  `StyleProperty` pushes; disowns caret, selection, IME.
+- Injection is an `InjectionLexer` registry keyed by language label, one engine.
+  Tier 1, precise hand-lexers (all pure Rust, wasm32 clean): `quick-xml` (already a
+  nematic dependency) for svg/xml, `html5ever` for html, rhai's tokenizer for scripts.
+  Tier 2, a curated `logos` pack for broad coverage: `logos` compiles a language's
+  tokens into one DFA (jump tables, no backtracking, built to beat hand-written
+  lexers; a hand-tuned lexer can still edge it ~20-30%), pure Rust, wasm-safe, tiny.
+  No pre-built logos language library exists, so each language is a small authored
+  lexer; `lexgen` is the comparable alternative generator. Tier 3, mod lexers: more
+  `logos`, registered at runtime. Injection needs only token coloring, not a tree, so
+  the lexer is both right and fastest.
+- Breadth hatch and ready-made-library alternatives, used only if curation is
+  unwelcome: tree-sitter via `syntastica` (`runtime-c2rust` + `parsers-git` + a
+  `some`/`most`/`all` group; wasm-safe via c2rust, no Oniguruma or wasmtime JIT;
+  git-fetched grammars + slow compiles, or a vendored `mere-grammars` fork of
+  pre-transpiled committed grammars; `Union` + custom-language path to add more;
+  initial parse ~2-3x a hand-written parser, incremental edits under 1 ms).
+  Regex-grade: `synoptic` (lightweight, ~3 deps, incremental, pure Rust) and `syntect`
+  (Sublime grammars; pure Rust only via `default-features = false, features =
+  ["default-fancy"]`, since the default `regex-onig` links Oniguruma; `fancy-regex`
+  ~half the speed; trim the `SyntaxSet`, ~2 MB full).
+- Optional outer-djot branch: `tree-sitter-djot` v2.0.0, MIT, Jonas Hietala, used by
+  Helix; ships `injections.scm` / `folds.scm` / `indents.scm` / `textobjects.scm`;
+  GitHub froze 2026-04-27, track Codeberg. Plain `parser.c` plus `scanner.c` (C, not
+  C++), so `tree-sitter-wasm-build-tool` (which excludes only C++ scanners) plus
+  `tree-sitter-c2rust` is the wasm32-unknown-unknown path, the same c2rust mechanism
+  the syntastica injection pack uses. The runtime-grammar `wasm` feature is a banned
+  wasmtime JIT and will not build for wasm32 anyway.
+- Clip producer: `build_clip_knot(blocks, source, trust, note_kind)` plus
+  `build_clip_knot_with_block_provenance` at `expand/build.rs:12,43`.
+- `Node` carries no body; identity is `id: Uuid` plus `addresses`. `AddressKind`:
+  Http, File, Data, Clip, Directory, Custom (`address.rs`).
 - `ProvenanceSubKind::ClippedFrom` at `edge_taxonomy.rs:186`, round-trips through
   `snapshot/from.rs` and `to.rs`, zero live writers.
-- Host text-edit substrate: `xilem_serval::TextInput` (buffer + IME preedit),
-  `PaneSession::caret_rect`, meerkat focus map in `meerkat/src/ime.rs`. Stack is
-  parley / vello / wgpu / winit. No multi-line edit surface wired yet.
 - inker ships no `BlockEvaluator`; the registry is host-supplied and empty.
 
 ---
 
 ## Progress
 
-- **2026-06-24.** Scoped via a multi-agent code sweep (five mappers plus crate
-  research, synthesis, adversarial verify). Verify pass corrected an early mapper
-  claim that the djot engine was unregistered or experimental (it is registered
-  and routed as default). Editor-infra mapper failed its structured-output cap;
-  the `xilem_serval::TextInput` finding was filled in by hand and flips the Phase 1
-  framing from cold-start to extend-existing-widget. Decisions taken with Mark:
-  inline `Node` body for the live note path, defer `knot://`; write this plan.
-  No code yet.
+- **2026-06-24, scope sweep.** Scoped via a multi-agent code sweep (five mappers
+  plus crate research, synthesis, adversarial verify). Corrected an early claim that
+  the djot engine was unregistered (it is registered and routed as default).
+  Decisions: inline `Node` body, defer `knot://`; write this plan.
+- **2026-06-24, editor enrichment.** Second workflow (tree-sitter and Zed/gpui
+  research plus a render-path code probe) confirmed `TextInput` is already a
+  multi-line edit widget, found the two existing per-range styled render paths and
+  the half-wired `caret_byte_at_point` primitive, added the ergonomics feature set,
+  and resolved the editor-widget, render-split, buffer, and multi-cursor decisions.
+- **2026-06-24, pure-Rust re-aim.** Verified the pure-Rust path (jotdown for
+  highlight plus a container tree for folds/outline/structural, and per-language
+  pure-Rust lexers for injection: `quick-xml` already a dep, `html5ever`, rhai's
+  tokenizer, optional `syntect`+`fancy-regex`). Reframed the editor pipe as pure
+  Rust by decision, demoted tree-sitter to an optional branch for
+  arbitrary-language injection, and dissolved the PWA/wasm build question (the
+  pure-Rust stack builds for wasm32-unknown-unknown like the rest of the app).
+  Updated the architecture, feature table, phasing, crate decision, decisions,
+  risks, and findings. No code yet.
+- **2026-06-24, syntect default pack.** Verified syntect + `fancy-regex` tradeoffs:
+  pure Rust only on `default-fancy` (the default links the Oniguruma C lib), about
+  half onig's speed and best run off the main thread, trim the syntax set (the full
+  default adds ~2 MB to a wasm binary), debug builds slow. No big compromise. Recast
+  injection as a pluggable `InjectionLexer` registry (precise hand-lexers plus a
+  syntect default pack plus mod lexers, one trait) so the broad default pack and the
+  mod-parser story share a seam. No code yet.
+- **2026-06-24, tree-sitter structural pack.** Mark wanted pure-Rust, wasm-safe
+  tree-sitter with a low-cost language set and mod extensibility. Verified that
+  `syntastica` (`runtime-c2rust` + `parsers-git` + `some`) delivers exactly that:
+  tree-sitter for wasm32-unknown-unknown with no Oniguruma or wasmtime JIT and a
+  feature-selected language subset. Made it the structural default pack (replacing
+  syntect, which moves to a regex-grade fallback beside `synoptic`), kept `logos` as
+  the easy runtime mod path, and recorded the vendored `mere-grammars` fork
+  (pre-transpiled committed grammars) as the build-friction-free end-state, with
+  consume-then-fork sequencing. Updated the injection section, build-path section,
+  feature table, crate decision, decisions 4 and 7, the open question, risks, and
+  findings. No code yet.
+- **2026-06-24, logos re-aim.** Beyond tree-sitter on the same restrictions, a DFA
+  lexer (`logos`) is the more performant fit, because injection needs token coloring,
+  not tree-sitter's tree (which builds a full incremental parse). Made `logos` the
+  engine across all three injection tiers (precise hand-lexers, the curated pack, and
+  mods), so jotdown-plus-logos is the whole pure-Rust, wasm-safe, build-apparatus-free
+  stack, and demoted tree-sitter (`syntastica`) to the optional breadth hatch. The
+  trade is authoring and maintaining a small lexer set versus consuming a grammar
+  library. Updated the injection and build-path sections, feature table, crate
+  decision, decision 7 and the open question, risks, and findings. No code yet.
+- **2026-06-24, Phase 1 slice 1a (serval).** Exposed
+  `IncrementalLayout::caret_byte_at_point` and `caret_byte_vertical` on the session
+  (`repos/serval/components/serval-layout/incremental.rs`), mirroring the existing
+  `caret_rect` method and delegating to the `crate::caret::*` free functions over the
+  session's retained `built` / `text_ctx` / `fragments`. This is the one missing input
+  primitive for click-to-place and soft-wrap vertical motion. `cargo check -p
+  serval-layout` green (1m03s; only pre-existing warnings, none from the change). Not
+  committed: serval `main` carries Mark's in-flight script-engine work, so the change
+  is isolated to serval-layout and left uncommitted. Next: the meerkat call site
+  (pointer-down → `caret_byte_at_point` → `TextInput::set_caret_byte`).

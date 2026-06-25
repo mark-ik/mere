@@ -256,6 +256,20 @@ in `card.rs`); Nova is a later phase, and `!Send` from the day it lands.
    last-delivered scene (stale-but-live) and keeps rendering. A slow actor
    degrades its own tile, not the frame. This discipline *is* the "offload only
    when a frame can't hold the work" rule.
+5. **An atomic spec task is one message, never decomposed into several.** The
+   HTML "update the rendering" task is a single task with ordered sub-steps; a
+   message-passing kernel is *especially* tempted to run those sub-steps as
+   separate scheduler messages, which reorders them against other tasks and
+   microtask checkpoints. Keep an atomic task atomic: the sub-steps run inside one
+   delivered message, not as a fan-out. (Borrowed from formal-web; this is the
+   exact bug Terzian fixed twice in Servo's event loop. See
+   `repos/serval/docs/2026-06-24_formal_web_lessons.md`.)
+6. **Coalesced cross-owner work is scoped per owner, never one global flag.** When
+   a shared scheduler batches work across independently-lifetimed owners
+   (documents, tiles, scenes, agents), a single global batching flag strands the
+   siblings when one owner is torn down. Scope the coalescing state per owner. (The
+   second Servo event-loop bug; serval's multi-scene-per-loop constellation is a
+   textbook setting.)
 
 The typed boundary makes invariants 1-2 compile-enforced rather than guarded; the
 drift failure mode it prevents is the dominant risk (see **Risks**), and the
@@ -885,3 +899,18 @@ what is most likely to break, the mitigation, and a pointer.
   contributions are graph-stamped under the window-composition orrery pool. The
   constellation's actor scenes remain the texture lane of pelt V6's mixed-content
   tiles — this plan's outputs plug into the pane contract unchanged.
+- **2026-06-24. Harvested gterzian/formal-web** (`repos/serval/docs/2026-06-24_formal_web_lessons.md`).
+  Two load-bearing **invariants** added (5: an atomic spec task is one message, not
+  decomposed into several; 6: coalesced cross-owner work is scoped per owner, never
+  one global flag) — both are event-loop bugs Terzian fixed in Servo that this
+  message-passing constellation is structurally prone to. **Task-source design to
+  adopt when P3's script protocol floor implements HTML task sources over armillary
+  channels:** channel-sender-per-source, per-source priority sorting, a priority
+  watermark, self-converting messages, and a wake-up sentinel (Programming Servo:
+  the makings of a task queue) — the data structures port near-verbatim to our
+  channels. **Agent-cluster** is the right SharedArrayBuffer/Atomics boundary (it is
+  spec-level data, decoupled from the process): bind `EventLoopId` to an armillary
+  actor (native) or a Web Worker (wasm), and carry the `can_block` flag (workers may
+  block, windows may not). Trace validation of the event loop (NDJSON tap on the
+  task boundaries, replayed against a TLA+ spec) is the deferred rigor capability,
+  spun out to serval's `2026-06-24_event_loop_rigor_plan.md`.

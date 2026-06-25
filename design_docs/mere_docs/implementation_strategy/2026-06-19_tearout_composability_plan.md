@@ -1,7 +1,18 @@
 # Tear-out + cross-graph composability plan (window-composition continuation)
 
 **Date**: 2026-06-19
-**Status**: Planned. The live continuation of the now-completed, archived
+**Status**: **CLOSED 2026-06-24 — foundation complete + live-verified; the tear-out gestures
+spun out** to the [tearout_gestures_plan](2026-06-24_tearout_gestures_plan.md). Kept in place
+(not archived) as the foundational record active siblings cite, like the unified-document-host
+plan.
+Banked: C1 (per-pane focus), C2 (gated, no work), C4 **core** (kernel cross-graph copy +
+`CopiedFrom` provenance), camera-on-the-view (standalone), and **MW3 multi-window 5/6** (redraw
++ chrome fan-out, per-window a11y) — the last three driven headed and confirmed. **Remaining
+(the named purpose — the actual tear-out):** C3's torn-tile *content* (a `Workbench` pane on the
+donor's orrery), C4 *surface* (pane→pane drag + move-vs-copy), C5 the gesture model
+(leaf/branch/fork + toast), OQ-B/OQ-C, and the N-orrery-elements seam. These are the live
+forward scope; spin them into a dedicated tear-out-gestures plan when picked up. The live
+continuation of the now-completed, archived
 [window_composition_plan](../../archive_docs/2026-06-19_completed_plans/2026-06-11_window_composition_plan.md).
 That plan's enabling move (P1, the pooled orrery authorities) is **banked and
 load-bearing**, and **C1 (the per-pane focus / active-session decoupling) shipped
@@ -208,17 +219,32 @@ secondary gets only spawn-time state. So C3's remaining work is (a) the tear-out
 a torn `Workbench` pane showing the dragged node's tile, with no `Orrery` pane (resolving to
 the donor's pooled orrery); and (b) **MW3 step 5** + **step 6** (per-window AccessKit).
 
-**MW3 step 5 — redraw fan-out DONE (2026-06-24).** `user_event`'s actor-drain ran through
-the primary's ctx (`ctx()` always bundles the primary), so only the primary was woken;
-`Shell::redraw_secondary_windows` now fans the wake out to every non-primary window after the
-ctx borrow ends (app_handler.rs), so a secondary leaf repaints shared content/graph/physics
-changes live. (Structurally not headless-testable — the harness can't fabricate a winit
-`WindowId` or spawn without an `ActiveEventLoop` — but the loop only *adds* redraw requests, so
-a handle-less window is a harmless no-op; meerkat 78 lib / 136 bin tests still green.) The
-**chrome fan-out** half of step 5 (sync chip / comms replayed onto each window's chrome) stays
-deferred: today's secondaries are slim leaves carrying no such chrome, so there is nothing to
-fan a chrome write out to yet (it lands with a chrome-bearing co-window, to test against). The
-window-kind half is done; the torn-tile content + per-window a11y are not.
+**MW3 step 5 — DONE (2026-06-24), live-verified.** Both halves:
+
+- **Redraw fan-out**: `Shell::redraw_secondary_windows` fans the `user_event` wake out to every
+  non-primary window after the ctx borrow ends, so a secondary leaf repaints shared
+  content/graph/physics changes live.
+- **Chrome fan-out**: the sync-chip + comms updates collected during the actor-drain are
+  replayed onto every secondary window (`apply_comms_to_chrome`). The earlier "slim leaves
+  carry no such chrome" assumption was wrong and **driving caught it**: a slim leaf omits the
+  *shellbar* but keeps the *toolbar* (sync chip) and can open comms, so the fan-out targets all
+  secondaries, not just non-slim. A spawned window also **seeds** its sync chip from the primary
+  (`build_window_view`) so it shows real standing immediately, not a stale `p2p off`.
+
+**MW3 step 6 — per-window a11y DONE (2026-06-24).** `secondary_a11y_bridges:
+HashMap<WindowId, AccessKitBridge>` on `Shell` (the primary keeps its `a11y_bridge` field, so
+`ctx()` and the harness are unchanged); `window_ctx` forks the bridge by id; `spawn_window`
+installs the secondary's adapter before showing it; `close_window` drops it. The bootstrap edge
+was a non-issue (resumed creates the window + sets `primary` before the first `ctx()`).
+
+**Live drive (2026-06-24, headed meerkat):** spawned a second window with Ctrl+Shift+N — a slim
+leaf with its own toolbar + a11y bridge (no panic); both windows' chips show `tessera: +11
+standing`; hide-shellbar (`>shellbar`) hides/restores the strip with the orrery reclaiming the
+band. So step 5/6 are verified, not just compiled.
+
+**C3 remaining = the torn-tile content only**: the leaf still opens a single-orrery content
+frame on the shared graph (main.rs), not a torn `Workbench` pane on the donor's orrery. That
+content + the tear-out gesture that produces it is the live forward work (with C5).
 
 ## C4 — Cross-graph composability (re-point / copy a pane, with provenance)
 
@@ -440,3 +466,18 @@ What shipped:
   generalization, since the live camera move is done); (4) chrome fan-out half of step 5.
   Done this session under heavy concurrent churn (rapid commits + a half-scaffolded `signals`
   crate transiently broke the workspace build); the camera code is clean underneath.
+- **2026-06-24** — **MW3 multi-window 5/6 finished + the whole foundation driven headed.**
+  Step 5 chrome fan-out (sync chip / comms replayed to every secondary via `apply_comms_to_chrome`)
+  and step 6 per-window a11y (`secondary_a11y_bridges` map; `window_ctx` forks the bridge;
+  `spawn_window` installs before show; `close_window` drops it) both landed; the leaf-chrome
+  (step 4) was already done (corrected a stale doc). Then **drove headed meerkat** to verify the
+  session's work live: clean boot (no panic); the **tessera fold** shows `tessera: +11 standing`
+  on the chip (folded ledger score on a real joined moot, not the raw op-count); **hide-shellbar**
+  (`>shellbar`) hides the strip with the orrery reclaiming the band and restores it on toggle;
+  **Ctrl+Shift+N** spawns a second OS window (slim leaf, own toolbar + a11y bridge). Driving
+  **caught a real bug**: the leaf's sync chip read a stale `p2p off` because the chrome fan-out
+  gated on `!is_slim` — but a slim leaf keeps its toolbar (sync chip); dropped the gate and seeded
+  a spawned window's chip from the primary, re-drove, both chips now show `+11 standing`. meerkat
+  80 lib / 147 bin green throughout. **Foundation complete + verified; the tear-out gestures (C3
+  content, C4 surface, C5, OQ-B/OQ-C, N-orrery) are the remaining named scope** — spin into a
+  dedicated tear-out-gestures plan when picked up.
