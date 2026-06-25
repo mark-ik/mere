@@ -115,6 +115,17 @@ impl WindowCtx<'_> {
         Some(format!("Crawling {url} (same-host, shallow)…"))
     }
 
+    /// Stop the running crawl (relational-browse V2): flip the crawl actor's cancel
+    /// flag so it halts at the next page. A no-op when nothing is running.
+    pub(super) fn stop_crawl(&self) -> Option<String> {
+        if self.shared.content.crawl.progress().running {
+            self.shared.content.crawl.stop();
+            Some("Stopping crawl…".to_string())
+        } else {
+            Some("No crawl is running".to_string())
+        }
+    }
+
     /// Execute a pending host action the palette queued: take it from the chrome
     /// and dispatch to the matching shell method. Returns a one-shot user-facing
     /// note for commands that want to report why they no-opped (the omnibar echoes
@@ -200,6 +211,7 @@ impl WindowCtx<'_> {
             // Crawl the focused page's link neighborhood into the graph (V2). The crawl
             // actor fetches off the render path; this only seeds it + reports a note.
             Command::CrawlFocused => note = self.crawl_focused(),
+            Command::StopCrawl => note = self.stop_crawl(),
             // Settings opens the pelt settings lane as a workbench tile (the consolidated
             // config surface), defaulting to the appearance page. (Settings lane P1.)
             Command::OpenSettings => self.open_settings_tile("pelt/appearance"),

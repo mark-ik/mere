@@ -708,6 +708,7 @@ impl Chrome {
             | Command::ExportGraph
             | Command::SaveGraphEngram
             | Command::CrawlFocused
+            | Command::StopCrawl
             | Command::ToggleShellbar => {
                 // Host actions over the frame, orrery, workbench, or actor pool:
                 // record the intent; the host drains it and runs the matching

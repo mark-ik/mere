@@ -475,8 +475,7 @@ impl CrawlSession {
     /// Cancel a running crawl. Sets the shared flag the actor's loop polls between
     /// pages, so the crawl stops at the next page boundary and emits `Done`. A no-op
     /// between crawls (the next `start` clears it). The host trigger (a stop-crawl
-    /// command / button) is the remaining wire-up.
-    #[allow(dead_code)] // functional; awaits a host stop-crawl trigger to call it
+    /// command / button) drives it (`>crawl_stop`).
     pub fn stop(&self) {
         self.cancel.store(true, Ordering::Relaxed);
     }
@@ -492,7 +491,6 @@ impl CrawlSession {
     }
 
     /// The latest crawl progress, for a host status surface.
-    #[allow(dead_code)] // API for the progress-chip follow-on (drain already keeps it current)
     pub fn progress(&self) -> &CrawlProgress {
         &self.progress
     }
