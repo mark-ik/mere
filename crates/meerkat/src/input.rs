@@ -1354,6 +1354,13 @@ impl WindowCtx<'_> {
                 self.persist_settings();
                 self.view.request_redraw();
             }
+            k if k.starts_with("crawl:pages:") => {
+                if let Ok(pages) = k["crawl:pages:".len()..].parse::<usize>() {
+                    self.shared.content.crawl.set_max_pages(pages);
+                    self.persist_settings();
+                    self.view.request_redraw();
+                }
+            }
             // DocumentScript capability cyclers (the `pelt/scripts` page): cycle
             // log/document/net through default → Allow → Prompt → Deny. (Tail 3.)
             k if k.starts_with("script:cap:") => {

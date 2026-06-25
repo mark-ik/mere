@@ -541,6 +541,18 @@ impl CrawlSession {
         self.default_policy.seed_sitemap = on;
     }
 
+    /// The hard page cap a `>crawl` stops at — the runaway backstop (settings lane).
+    pub fn max_pages(&self) -> usize {
+        self.default_policy.max_pages
+    }
+
+    /// Set the page cap a `>crawl` stops at (settings lane). The bound that actually
+    /// limits a wide crawl (`AnyHost` / whole-site), so it pairs with those. Does not
+    /// affect a crawl already running.
+    pub fn set_max_pages(&mut self, pages: usize) {
+        self.default_policy.max_pages = pages;
+    }
+
     /// Start a bounded crawl from `seed` under `policy`; its contributions route to
     /// `graph_id` (the seed page's graph). Supersedes any previous crawl's target.
     pub fn start(&mut self, seed: &str, policy: CrawlPolicy, graph_id: GraphId) {

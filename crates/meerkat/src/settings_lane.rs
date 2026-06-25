@@ -401,10 +401,22 @@ impl WindowCtx<'_> {
             items.push(toggle(check(scope.label(), on), on, format!("crawl:scope:{}", scope.as_key())));
         }
 
+        // Depth presets, plus the active value as a "Custom" row when it is not one of
+        // them (e.g. hand-edited in settings.json), so the current depth is always shown
+        // and re-selectable rather than leaving every row unchecked. (Crawl controls.)
         items.push(PaneItem::text("app-title", "Depth"));
         let current_depth = self.shared.content.crawl.max_depth();
-        for (depth, label) in [(1u32, "Shallow (1 hop)"), (2, "Default (2 hops)"), (4, "Deep (4 hops)")] {
-            let on = depth == current_depth;
+        let mut depths: Vec<(u32, String)> = vec![
+            (1, "Shallow (1 hop)".to_string()),
+            (2, "Default (2 hops)".to_string()),
+            (4, "Deep (4 hops)".to_string()),
+        ];
+        if !depths.iter().any(|(d, _)| *d == current_depth) {
+            depths.push((current_depth, format!("Custom ({current_depth} hops)")));
+            depths.sort_by_key(|(d, _)| *d);
+        }
+        for (depth, label) in &depths {
+            let on = *depth == current_depth;
             items.push(toggle(check(label, on), on, format!("crawl:depth:{depth}")));
         }
 
@@ -418,6 +430,26 @@ impl WindowCtx<'_> {
             whole_site,
             "crawl:sitemap".to_string(),
         ));
+
+        // Page cap: the hard stop on pages fetched (the runaway backstop). It is the bound
+        // that actually limits a wide crawl — same-domain / any-host / whole-site all lean
+        // on it — so it is the knob to raise for a comprehensive crawl. Off-preset values
+        // show as "Custom". (Crawl controls.)
+        items.push(PaneItem::text("app-title", "Page cap"));
+        let current_pages = self.shared.content.crawl.max_pages();
+        let mut caps: Vec<(usize, String)> = vec![
+            (50, "50 pages (default)".to_string()),
+            (200, "200 pages".to_string()),
+            (1000, "1000 pages".to_string()),
+        ];
+        if !caps.iter().any(|(p, _)| *p == current_pages) {
+            caps.push((current_pages, format!("Custom ({current_pages} pages)")));
+            caps.sort_by_key(|(p, _)| *p);
+        }
+        for (pages, label) in &caps {
+            let on = *pages == current_pages;
+            items.push(toggle(check(label, on), on, format!("crawl:pages:{pages}")));
+        }
         items
     }
 

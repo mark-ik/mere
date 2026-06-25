@@ -159,6 +159,10 @@ impl WindowCtx<'_> {
                 (depth != crate::crawl::CrawlPolicy::default().max_depth).then_some(depth)
             },
             crawl_sitemap: self.shared.content.crawl.seed_sitemap().then_some(true),
+            crawl_max_pages: {
+                let pages = self.shared.content.crawl.max_pages();
+                (pages != crate::crawl::CrawlPolicy::default().max_pages).then_some(pages)
+            },
         };
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");
