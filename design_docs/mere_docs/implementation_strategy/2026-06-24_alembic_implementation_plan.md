@@ -105,6 +105,17 @@ Steward; its knobs in Apparatus config.
 Done when Athanor runs in the background, evicts eligible short-term, emits consolidation proposals,
 and stays inside R0 (no direct graph-truth mutation).
 
+**Forgetting landed 2026-06-24** (commits `d3893dd` spine, `95f3a20` host wiring): the forgetting pass
+in the R0 propose/apply shape. `session-runtime/athanor` is pure pass logic (`propose_forgetting` reads
+a snapshot + timing, returns stale short-term urls; `apply_forgetting` drops their cached content via
+`content_store::evict_content` → `FjallStore::delete_blob`); `node_ops::run_forgetting_pass` runs it
+from the Alembic Recent section's "forget stale recent now" affordance and records the count. Drops
+cached content only, never graph truth or engrams. This also closes **slice C's eviction tail** (Recent
+evicts per policy). Remaining D: the **steady-heat armillary actor** that schedules this in the
+background (vs the manual trigger), the **consolidation / facet** passes (consolidation is light —
+graph engrams already dedup by content-addressing), and surfacing the live pass in **Steward** (today
+the count lands in the Apparatus diagnostics buffer, not Steward's live-ops view).
+
 ### E — Event log + Timeline (scoped for implementation, decision #5)
 
 The substrate undo/redo and the Timeline both ride. One append-only log of graph mutations, two
@@ -200,6 +211,13 @@ Verification: a unit/integration test that `save → (drop) → open` round-trip
 
 ## Progress
 
+- 2026-06-24: **Athanor forgetting + slice C eviction landed** (commits `d3893dd` spine, `95f3a20`
+  host wiring). The R0 propose/apply forgetting pass (`athanor` module + `content_store::evict_content`
+  over `FjallStore::delete_blob`), run from the Alembic Recent section's "forget stale recent now"
+  affordance via `node_ops::run_forgetting_pass`; drops stale short-term cached content only, records
+  the count. 3 spine tests + headed-verified (renders, runs, no crash). Closes slice C's eviction tail.
+  Remaining D: the steady-heat armillary actor (background scheduling), consolidation/facet passes,
+  and Steward live-op surfacing (the count currently lands in Apparatus diagnostics).
 - 2026-06-24: **Slice C pane wiring landed** (commit `44a0dc8`, on top of Mark's stable-uncommitted
   tree, hunk-staged). The Alembic Recent/Saved now render the real model (Recent = recently-visited
   *untagged* short-term, Saved = *tagged* long-term with a count) and the eviction policy is visible
