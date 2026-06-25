@@ -30,14 +30,14 @@ From the 2026-06-24 audit, verified against the code. One audit item was already
    already existed. The exact-count toolbar test (`tests.rs`) was bumped 11→13 (now 9 shellbar buttons);
    the `>= 7` shellbar harness assertion still holds. Shellbar now covers all 9 toggle-able panes.
 
-2. **Steward rows clickable.** Steward's retry/stop/pin are verbs that exist in `node_ops.rs`
-   (`retry_focused` / `stop` / `pin_focused_operation`) but are only reachable by typing
-   `retry.focused` etc. Today `pane_data.rs::steward_rows` returns display-only `(label, value)` pairs
-   rendered via `utility_panes::utility_pane_items` (inert text). Make the action rows clickable
-   `PaneItem::button(class, text, key)` and route the keys in the list-pane activation drain
-   (`input.rs::drain_list_pane_activations`, the `ShellListPane::Steward` arm — currently Steward queues
-   nothing) to the existing verbs. This is the exact pattern the Alembic engram-open + forget rows use.
-   The no-placebo / real-feedback rule applies. **[chrome-hot]** (touches `pane_data` + the render path).
+2. **Steward rows clickable.** ✅ **DONE 2026-06-25.** Added a bespoke `pane_data::steward_items() ->
+   Vec<PaneItem>` (mirroring `alembic_items`): the live-ops status rows as text, then three real action
+   buttons — `↻ retry focused` / `⏹ stop focused` / `⚓ pin focused (background)` — keyed `steward:retry`
+   / `steward:stop` / `steward:pin`. `render.rs` now builds Steward from `steward_items()` instead of the
+   inert `utility_pane_items` path, and `input.rs::drain_list_pane_activations` gained a `Steward` arm
+   routing those keys to the existing `retry_focused_content` / `stop_focused_operation` /
+   `pin_focused_operation` verbs. The stale inert "Actions" hint row was dropped (buttons replace it).
+   New test `steward_exposes_clickable_action_verbs` pins the keys; the live-graph-count test stays green.
 
 3. **Relation-kind picker (the audit's top pick).** **[chrome-hot]** The 17-variant edge vocabulary
    (`pane_data.rs::relation_kind_label`, the `RelationKind` map) is only reachable by typing

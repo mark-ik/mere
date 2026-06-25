@@ -212,8 +212,9 @@ impl WindowCtx<'_> {
         }
         // Steward + Inspector: display-only `label: value` rows under a unique utility root.
         if let Some(rect) = rects[1] {
-            let rows = self.utility_pane_rows(&PaneContent::Steward);
-            let items = crate::utility_panes::utility_pane_items(&PaneContent::Steward, &rows);
+            // Steward builds its own items (status rows + clickable action buttons),
+            // mirroring Alembic, so the focused-op verbs are reachable by click. (A2.)
+            let items = self.steward_items();
             self.view.set_list_pane(Steward, "utility-pane steward", items, Some(rect));
         } else if self.view.list_pane_open(Steward) {
             self.view.set_list_pane(Steward, "utility-pane steward", Vec::new(), None);

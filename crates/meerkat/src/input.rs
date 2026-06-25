@@ -1339,7 +1339,7 @@ impl WindowCtx<'_> {
     /// + steward panes queue nothing. Replaces the old per-pane branches in
     /// `on_mouse_input`. (Phase 1, step 2.)
     pub(super) fn drain_list_pane_activations(&mut self) {
-        use crate::window_view::ShellListPane::{Alembic, Apparatus, Trail};
+        use crate::window_view::ShellListPane::{Alembic, Apparatus, Steward, Trail};
         for key in self.view.take_list_pane_activations(Apparatus) {
             self.apply_pelt_activation(&key);
         }
@@ -1359,6 +1359,17 @@ impl WindowCtx<'_> {
                 // Runs in place (drops cached content only, no pool re-keying), so the
                 // WindowCtx method is called directly. (Slice C/D forgetting.)
                 self.run_forgetting_pass();
+            }
+        }
+        // Steward: the focused-operation action buttons (retry / stop / background-pin)
+        // queue `steward:*` keys; route each to its node-ops verb so the row is a real
+        // action, not a typed-verb hint. (Audit A2 — Steward rows clickable.)
+        for key in self.view.take_list_pane_activations(Steward) {
+            match key.as_str() {
+                "steward:retry" => self.retry_focused_content(),
+                "steward:stop" => self.stop_focused_operation(),
+                "steward:pin" => self.pin_focused_operation(),
+                _ => {}
             }
         }
         // The settings tiles' `pelt/*` pages carry the same control keys as the apparatus, so

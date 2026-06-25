@@ -363,10 +363,6 @@ impl WindowCtx<'_> {
                     .map(str::to_string)
                     .unwrap_or_else(|| "\u{2014}".to_string()),
             ),
-            (
-                "Actions".to_string(),
-                "retry.focused / stop.focused / pin.focused".to_string(),
-            ),
         ];
         let focused = self.focused_member();
         rows.push((
@@ -395,6 +391,38 @@ impl WindowCtx<'_> {
             ));
         }
         rows
+    }
+
+    /// The Steward pane as a clickable item list: the live-ops status rows (from
+    /// [`steward_rows`](Self::steward_rows)) followed by real action buttons for
+    /// the focused operation — retry / stop / background-pin. Each button queues a
+    /// `steward:*` key that `drain_list_pane_activations` routes to the existing
+    /// node-ops verb, so the actions are reachable by click, not only by typing
+    /// `>retry.focused`. Mirrors the Alembic pane's bespoke item builder rather
+    /// than the inert `utility_pane_items` path. (Audit A2.)
+    pub(super) fn steward_items(&self) -> Vec<crate::list_pane::PaneItem> {
+        use crate::list_pane::PaneItem;
+        let mut items = vec![PaneItem::text(
+            "utility-title",
+            crate::utility_panes::pane_title(&PaneContent::Steward),
+        )];
+        for (label, value) in self.steward_rows() {
+            items.push(PaneItem::text("utility-row", format!("{label}: {value}")));
+        }
+        // Real verbs on the focused operation (no placebo): the drain maps each key
+        // to its node-ops method.
+        items.push(PaneItem::button("utility-row", "\u{21bb} retry focused", "steward:retry"));
+        items.push(PaneItem::button("utility-row", "\u{23f9} stop focused", "steward:stop"));
+        items.push(PaneItem::button(
+            "utility-row",
+            "\u{2693} pin focused (background)",
+            "steward:pin",
+        ));
+        items.push(PaneItem::text(
+            "utility-row-muted",
+            crate::utility_panes::pane_status(&PaneContent::Steward),
+        ));
+        items
     }
 
     fn fetch_state_count(&self, tag: u8) -> usize {

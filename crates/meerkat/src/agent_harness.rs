@@ -614,6 +614,19 @@ mod tests {
     }
 
     #[test]
+    fn steward_exposes_clickable_action_verbs() {
+        // retry / stop / pin are real buttons, not just a typed-verb hint: each row
+        // carries the `steward:*` activation key the drain routes to a node-ops verb.
+        let mut app = test_app();
+        app.create_session();
+        let items = app.ctx().steward_items();
+        let keys: Vec<&str> = items.iter().filter_map(|i| i.key.as_deref()).collect();
+        assert!(keys.contains(&"steward:retry"), "retry is a clickable row: {keys:?}");
+        assert!(keys.contains(&"steward:stop"), "stop is a clickable row: {keys:?}");
+        assert!(keys.contains(&"steward:pin"), "pin is a clickable row: {keys:?}");
+    }
+
+    #[test]
     fn ctrl_shift_n_queues_a_spawn_window_command() {
         // The new-window verb can't create a window from a per-window handler (no
         // event loop, no registry access), so it queues a `SpawnWindow` the shell
