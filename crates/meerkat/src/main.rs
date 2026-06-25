@@ -1061,6 +1061,9 @@ impl Shell {
         if let Some(depth) = saved_settings.crawl_depth {
             crawl.set_max_depth(depth);
         }
+        if let Some(whole_site) = saved_settings.crawl_sitemap {
+            crawl.set_seed_sitemap(whole_site);
+        }
         let mut constellation = Constellation::new(content_wake);
         constellation.set_cap(saved_settings.tab_cap);
         // Seed the actor pool's deactivated-engine set so a globally-disabled

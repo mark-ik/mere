@@ -111,8 +111,9 @@ impl WindowCtx<'_> {
         let policy = self.shared.content.crawl.policy();
         let scope = policy.scope.label().to_lowercase();
         let depth = policy.max_depth;
+        let mode = if policy.seed_sitemap { "whole site, " } else { "" };
         self.shared.content.crawl.start(&url, policy, graph);
-        Some(format!("Crawling {url} ({scope}, depth {depth})…"))
+        Some(format!("Crawling {url} ({mode}{scope}, depth {depth})…"))
     }
 
     /// Stop the running crawl (relational-browse V2): flip the crawl actor's cancel

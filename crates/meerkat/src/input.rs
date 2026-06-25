@@ -1347,6 +1347,13 @@ impl WindowCtx<'_> {
                     self.view.request_redraw();
                 }
             }
+            // "Crawl whole site" mode: flip the sitemap-seed flag, persist, redraw.
+            "crawl:sitemap" => {
+                let on = !self.shared.content.crawl.seed_sitemap();
+                self.shared.content.crawl.set_seed_sitemap(on);
+                self.persist_settings();
+                self.view.request_redraw();
+            }
             // DocumentScript capability cyclers (the `pelt/scripts` page): cycle
             // log/document/net through default → Allow → Prompt → Deny. (Tail 3.)
             k if k.starts_with("script:cap:") => {

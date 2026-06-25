@@ -529,6 +529,18 @@ impl CrawlSession {
         self.default_policy.max_depth = depth;
     }
 
+    /// Whether a `>crawl` seeds from the site's `sitemap.xml` — its "crawl whole site"
+    /// mode (vs. the focused neighborhood of the seed page's own links).
+    pub fn seed_sitemap(&self) -> bool {
+        self.default_policy.seed_sitemap
+    }
+
+    /// Set the "crawl whole site" mode (settings lane). Does not affect a crawl already
+    /// running. Still bounded by `max_pages`.
+    pub fn set_seed_sitemap(&mut self, on: bool) {
+        self.default_policy.seed_sitemap = on;
+    }
+
     /// Start a bounded crawl from `seed` under `policy`; its contributions route to
     /// `graph_id` (the seed page's graph). Supersedes any previous crawl's target.
     pub fn start(&mut self, seed: &str, policy: CrawlPolicy, graph_id: GraphId) {

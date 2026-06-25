@@ -150,6 +150,7 @@ impl WindowCtx<'_> {
             script_permissions,
             crawl_scope: Some(self.shared.content.crawl.scope().as_key().to_string()),
             crawl_depth: Some(self.shared.content.crawl.max_depth()),
+            crawl_sitemap: Some(self.shared.content.crawl.seed_sitemap()),
         };
         if let Err(err) = settings_store::save_settings(&self.shared.session.mere_root, &settings) {
             tracing::warn!(%err, "failed to persist settings");

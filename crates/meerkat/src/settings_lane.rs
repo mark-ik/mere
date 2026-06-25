@@ -407,6 +407,17 @@ impl WindowCtx<'_> {
             let on = depth == current_depth;
             items.push(toggle(check(label, on), on, format!("crawl:depth:{depth}")));
         }
+
+        // "Crawl whole site": seed from the site's sitemap.xml (its canonical page list)
+        // rather than only the seed page's links — comprehensive, still bounded by the
+        // page cap. Off keeps a crawl to the focused neighborhood. (Crawl controls.)
+        items.push(PaneItem::text("app-title", "Mode"));
+        let whole_site = self.shared.content.crawl.seed_sitemap();
+        items.push(toggle(
+            check("Crawl whole site (sitemap)", whole_site),
+            whole_site,
+            "crawl:sitemap".to_string(),
+        ));
         items
     }
 
