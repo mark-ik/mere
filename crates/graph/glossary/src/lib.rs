@@ -77,6 +77,19 @@ pub fn graph_metrics(graph: &Graph) -> GraphMetrics {
 
 // ───────────────────────────── outline ─────────────────────────────
 
+/// One row of the structured outline — the form a host renders as DOM (one bullet /
+/// list-row per entry). `url` is `Some` for a real graph node (a clickable row the host
+/// routes to `SelectNodeByUrl`) and `None` for a structural path segment (plain text).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutlineRow {
+    /// Nesting depth (0 = host / top level).
+    pub depth: usize,
+    /// The node title (or URL slug), or the path segment for a structural row.
+    pub label: String,
+    /// The node's URL, when this row is a real graph node.
+    pub url: Option<String>,
+}
+
 /// One node of the URL-structure outline trie: the graph node (if any) whose
 /// address is exactly this path, plus child path segments (a `BTreeMap` so the
 /// emitted order is deterministic).
@@ -87,20 +100,13 @@ struct OutlineTrie {
     children: BTreeMap<String, OutlineTrie>,
 }
 
-/// Project a graph into a hierarchical djot outline, nested by the URL structure of
-/// each node's address: the host is the top level and each path segment a nested
-/// level (`example.com` -> `docs` -> `guide`). A node lands at its full-path leaf; a
-/// path segment with no node of its own renders as a plain structural bullet.
-/// Addresses that do not parse as `scheme://host[/path]` are listed flat at the end.
-///
-/// Nested by URL structure rather than containment edges by design: `UrlPath`
-/// containment is not auto-populated on the live path, so reading it would be flat;
-/// the projection derives the host/path tree from the addresses themselves. Pure,
-/// deterministic, no engine dependency (djot is plain text). (gloss-outline plan P0.)
-pub fn outline_djot(graph: &Graph) -> String {
+/// Build the URL-structure trie + the flat list of non-URL ("loose") nodes. Nested by
+/// URL structure rather than containment edges by design: `UrlPath` containment is not
+/// auto-populated on the live path, so reading it would be flat; the projection derives
+/// the host/path tree from the addresses themselves.
+fn build_trie(graph: &Graph) -> (OutlineTrie, Vec<(String, String)>) {
     let mut root = OutlineTrie::default();
     let mut loose: Vec<(String, String)> = Vec::new();
-
     for (_key, node) in graph.nodes() {
         let url = node.url();
         let label = node_label(&node.title, url);
@@ -115,37 +121,60 @@ pub fn outline_djot(graph: &Graph) -> String {
             None => loose.push((label, url.to_string())),
         }
     }
-
-    let mut out = String::new();
-    for (host, child) in &root.children {
-        emit_trie(&mut out, host, child, 0);
-    }
     loose.sort();
-    for (label, url) in &loose {
-        push_bullet(&mut out, 0, &format!("[{}]({url})", escape(label)));
-    }
-    out
+    (root, loose)
 }
 
-/// Emit one trie node (a real node as a `[label](url)` link, a structural segment
-/// as plain text) then recurse its children.
-fn emit_trie(out: &mut String, segment: &str, node: &OutlineTrie, depth: usize) {
+/// Project a graph into its URL-structure outline as a flat, depth-tagged
+/// [`OutlineRow`] list — the structured form a host renders as DOM. The host is the
+/// top level and each path segment a nested level (`example.com` -> `docs` -> `guide`);
+/// a node lands at its full-path leaf, a path segment with no node renders as a
+/// structural row, and non-URL addresses are listed flat at the end. Deterministic.
+/// (gloss-outline plan P0/P1.)
+pub fn outline_rows(graph: &Graph) -> Vec<OutlineRow> {
+    let (root, loose) = build_trie(graph);
+    let mut rows = Vec::new();
+    for (host, child) in &root.children {
+        walk_rows(host, child, 0, &mut rows);
+    }
+    for (label, url) in loose {
+        rows.push(OutlineRow { depth: 0, label, url: Some(url) });
+    }
+    rows
+}
+
+fn walk_rows(segment: &str, node: &OutlineTrie, depth: usize, rows: &mut Vec<OutlineRow>) {
     match &node.here {
-        Some((label, url)) => push_bullet(out, depth, &format!("[{}]({url})", escape(label))),
-        None => push_bullet(out, depth, segment),
+        Some((label, url)) => rows.push(OutlineRow {
+            depth,
+            label: label.clone(),
+            url: Some(url.clone()),
+        }),
+        None => rows.push(OutlineRow { depth, label: segment.to_string(), url: None }),
     }
     for (seg, child) in &node.children {
-        emit_trie(out, seg, child, depth + 1);
+        walk_rows(seg, child, depth + 1, rows);
     }
 }
 
-fn push_bullet(out: &mut String, depth: usize, body: &str) {
-    for _ in 0..depth {
-        out.push_str("  ");
+/// Project a graph into a hierarchical **djot** outline (the same nesting as
+/// [`outline_rows`], formatted as nested bullets: a real node a `[label](url)` link, a
+/// structural segment plain text). The textual form for export / opening as a knot.
+/// Pure, deterministic, no engine dependency (djot is plain text). (gloss-outline P0.)
+pub fn outline_djot(graph: &Graph) -> String {
+    let mut out = String::new();
+    for row in outline_rows(graph) {
+        for _ in 0..row.depth {
+            out.push_str("  ");
+        }
+        out.push_str("- ");
+        match &row.url {
+            Some(url) => out.push_str(&format!("[{}]({url})", escape(&row.label))),
+            None => out.push_str(&row.label),
+        }
+        out.push('\n');
     }
-    out.push_str("- ");
-    out.push_str(body);
-    out.push('\n');
+    out
 }
 
 /// A node's outline label: its title, or the URL's last path segment (the readable
@@ -255,6 +284,25 @@ mod tests {
     #[test]
     fn outline_empty_graph_is_empty() {
         assert_eq!(outline_djot(&Graph::new()), "");
+    }
+
+    #[test]
+    fn outline_rows_are_depth_tagged() {
+        let mut g = Graph::new();
+        let a = g.add_node("https://site.test/docs/guide".into(), p());
+        g.set_node_title(a, "Guide".into());
+        assert_eq!(
+            outline_rows(&g),
+            vec![
+                OutlineRow { depth: 0, label: "site.test".into(), url: None },
+                OutlineRow { depth: 1, label: "docs".into(), url: None },
+                OutlineRow {
+                    depth: 2,
+                    label: "Guide".into(),
+                    url: Some("https://site.test/docs/guide".into()),
+                },
+            ]
+        );
     }
 
     #[test]
