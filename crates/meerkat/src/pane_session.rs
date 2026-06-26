@@ -92,7 +92,16 @@ impl PaneSession {
             // only on a structural / resize / theme frame. The box-tree side-table
             // is fresh, so `emit_paint_list` is valid and the Spliced path is never
             // taken.
-            let layout = IncrementalLayout::new(&*dom_ref, sheet, w as f32, h as f32);
+            let mut layout = IncrementalLayout::new(&*dom_ref, sheet, w as f32, h as f32);
+            // Carry the panes' nested wheel scroll (`scroll_at` writes the retained
+            // `element_scroll`) across the rebuild. A pane whose content changes every frame
+            // (live timestamps) drives a rebuild each frame; without this the fresh layout's
+            // empty `element_scroll` would reset the scroll every frame, so a wheel never
+            // visibly moves. Offsets key by node, so a surviving container keeps its scroll.
+            // (Host-scroll P2.)
+            if let Some(prev) = slot.as_ref() {
+                layout.set_element_scroll(prev.layout.element_scroll().clone());
+            }
             *slot = Some(PaneSession {
                 layout,
                 dims,
