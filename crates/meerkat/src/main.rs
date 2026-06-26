@@ -184,6 +184,15 @@ fn chrome_sheet(c: &ChromeTheme) -> Vec<String> {
             rgb(c.control_text),
             rgb(c.control_bg)
         ),
+        // The knot editor's header lays out as a row — title on the left, close × on the right —
+        // instead of the default stacked blocks, and the × shrinks to a small button rather than
+        // the full-width bar `button { display: block }` would otherwise make it. (Flex, like the
+        // toolbar, rather than absolute `right:` which the rest of the chrome doesn't rely on.)
+        ".knot-editor-title { display: flex; justify-content: space-between; align-items: center; }"
+            .to_string(),
+        ".knot-editor-btn { padding: 1px 9px; margin: 0; font-size: 18px; line-height: 1.3; \
+         border-radius: 4px; }"
+            .to_string(),
         format!(
             ".disabled {{ color: {}; background-color: {}; }}",
             rgb(c.disabled_text),
