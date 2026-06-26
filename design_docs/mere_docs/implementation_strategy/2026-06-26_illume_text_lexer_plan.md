@@ -194,3 +194,16 @@ illume's first non-editor consumer.
   constructor); and this is compile-verified, not yet headed-verified (running the app to
   see the colours is the next confirmation). Remaining: **5d** (omnibar entities live as
   you type), then point 6 (the deriver) and point 7 (extraction + publish).
+- **2026-06-26, point 5d done (omnibar highlighting) — point 5 complete.** Added serval
+  `styled_text_field` (the single-line styled sibling of `styled_textarea`; `edit` made
+  `pub(crate)`), reachable to meerkat via the `.cargo/config.toml` `paths` override on
+  `repos/serval/components` (so serval, unlike the git-dep tincture, needs no push or lock
+  bump; that override is why earlier serval changes "just worked"). meerkat's
+  `omnibar_styles` runs only illume's entity pass (no djot pass, the omnibar is not a
+  note), and the omnibar field is now `styled_text_field(t, &omnibar_styles(...))`, so
+  urls / mentions / tags colour as you type. serval `ea5fdf33`, mere `8e32f38`; meerkat
+  compiles, Mark's concurrent files untouched. **Point 5 complete**: the editor and the
+  omnibar both highlight through illume → tinct → the serval styled field, so the
+  omnibar-as-legibility-layer vision is realized (the lexer's first non-editor consumer).
+  Still compile-verified, not headed-verified. Remaining: point 6 (the `KnotEditor`
+  stateless deriver) and point 7 (extraction + publish).
