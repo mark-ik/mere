@@ -109,11 +109,9 @@ pub fn omnibar_styles(text: &str) -> Vec<StyleRange> {
         .collect()
 }
 
-/// The seeds the syntax palette derives from until the live theme's seeds are
-/// plumbed through (a brand-coherent dark triad, matching the default chrome). This
-/// is the first cut; the follow-up reads the active theme's seeds so the syntax
-/// colours track a theme switch.
-fn default_seeds() -> Seeds {
+/// The seeds the syntax palette falls back to when the active theme's seeds are
+/// unavailable (a brand-coherent dark triad, matching the default chrome).
+pub fn fallback_seeds() -> Seeds {
     Seeds {
         primary: Srgb::rgb(0x33, 0x66, 0xC8),
         secondary: Srgb::rgb(0x2E, 0x9D, 0xA6),
@@ -128,11 +126,11 @@ fn default_seeds() -> Seeds {
 }
 
 /// CSS rules colouring the `syntax-*` classes from tinct's derived syntax palette,
-/// one rule per role, for the chrome stylesheet. The colours are *derived*
-/// (perceptual, contrast-gated against the surface), not hardcoded; the styled
-/// field's spans carry the classes these rules theme.
-pub fn syntax_css() -> Vec<String> {
-    let palette = derive_syntax_palette(&default_seeds());
+/// one rule per role, for the chrome stylesheet. Derived from the active theme's
+/// `seeds` (perceptual, contrast-gated against the surface), so the syntax colours
+/// track a theme switch; the styled field's spans carry the classes these rules theme.
+pub fn syntax_css(seeds: &Seeds) -> Vec<String> {
+    let palette = derive_syntax_palette(seeds);
     SyntaxRole::ALL
         .iter()
         .map(|&role| {

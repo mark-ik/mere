@@ -1236,8 +1236,13 @@ impl Shell {
         let chrome_theme = resolution.tokens.chrome;
         let mut chrome_sheet = chrome_sheet(&chrome_theme);
         // The knot editor's syntax highlighting: colour the `syntax-*` classes the
-        // styled field emits, derived perceptually from the theme by tinct.
-        chrome_sheet.extend(meerkat::knot_highlight::syntax_css());
+        // styled field emits, derived perceptually from the active theme's seeds by
+        // tinct (so they track a theme switch), falling back to a dark triad.
+        let syntax_seeds = theme
+            .theme_def(&active_theme_id)
+            .map(|d| d.seeds)
+            .unwrap_or_else(meerkat::knot_highlight::fallback_seeds);
+        chrome_sheet.extend(meerkat::knot_highlight::syntax_css(&syntax_seeds));
         // Theme the orrery's backdrop + edges from the same resolved theme. (A2.)
         let (orrery_backdrop, orrery_edge) = orrery_palette(&resolution.tokens);
         orrery.set_palette(orrery_backdrop, orrery_edge);
