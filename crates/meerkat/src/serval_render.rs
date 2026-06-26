@@ -39,10 +39,6 @@ const CARET_COLOR: ColorF = ColorF { r: 0.88, g: 0.90, b: 0.96, a: 1.0 };
 /// Selection highlight colour (translucent blue; the text shows through). Alpha
 /// raised so the highlight actually reads against the chrome background.
 const SELECTION_COLOR: ColorF = ColorF { r: 0.42, g: 0.62, b: 0.98, a: 0.55 };
-/// Scrollbar thumb colour (translucent dark grey, on the container's right edge).
-const SCROLLBAR_COLOR: ColorF = ColorF { r: 0.30, g: 0.30, b: 0.36, a: 0.65 };
-/// Scrollbar thumb width, device px.
-const SCROLLBAR_WIDTH: f32 = 8.0;
 /// Focus-ring colour (the accent blue, drawn as a thin outline on the focused element).
 const FOCUS_RING_COLOR: ColorF = ColorF { r: 0.42, g: 0.62, b: 0.98, a: 0.95 };
 /// Focus-ring outline thickness, device px.
@@ -128,7 +124,7 @@ fn paint_list_from_session(
     for (k, v) in scroll {
         merged.insert(*k, *v);
     }
-    push_scrollbars(&mut plist, dom, session.fragments(), &merged);
+    serval_layout::push_scrollbars(&mut plist, dom, session.fragments(), &merged);
     push_focus_ring(&mut plist, session, dom, &merged, focus_node);
     plist
 }
@@ -247,43 +243,6 @@ pub(crate) fn accumulate_origins(
         .into_iter()
         .map(|(id, p)| (id, (p.x, p.y)))
         .collect()
-}
-
-/// Append a scrollbar thumb onto `plist` for each scrolled container: a bar on the
-/// box's right edge, height ∝ visible/content, position ∝ offset/scrollable.
-///
-/// The thumb is placed at the container's **absolute** origin. Taffy locations are
-/// parent-relative, so a single `rect_of` is only ≈ absolute for a top-level
-/// container; a scroll container nested in a positioned ancestor (the roster pane,
-/// the command palette) would otherwise land at `container_width` from the
-/// document's left edge (left-aligned). We accumulate origins down the tree once,
-/// the same parent + location sum the a11y tree does. (Nested scroll containers
-/// are not offset by an ancestor's scroll here; the host's panes are single-level.)
-fn push_scrollbars(
-    plist: &mut ServalPaintList,
-    dom: &ScriptedDom,
-    fragments: &FragmentPlane<NodeId>,
-    scroll_offsets: &ScrollOffsets<NodeId>,
-) {
-    if scroll_offsets.is_empty() {
-        return;
-    }
-    let origins = accumulate_origins(dom, fragments);
-    for (&node, &(_ox, oy)) in scroll_offsets {
-        let Some(r) = fragments.rect_of(node) else { continue };
-        let inner_h =
-            r.size.height - r.padding.top - r.padding.bottom - r.border.top - r.border.bottom;
-        let content_h = r.content_size.height;
-        let scrollable = content_h - inner_h;
-        if scrollable <= 0.5 {
-            continue;
-        }
-        let Some(&(abs_x, abs_y)) = origins.get(&node) else { continue };
-        let thumb_h = (r.size.height * (inner_h / content_h)).max(24.0);
-        let thumb_y = abs_y + (oy / scrollable) * (r.size.height - thumb_h);
-        let thumb_x = abs_x + r.size.width - SCROLLBAR_WIDTH;
-        plist.push_fill(thumb_x, thumb_y, SCROLLBAR_WIDTH, thumb_h, SCROLLBAR_COLOR);
-    }
 }
 
 /// Draw a focus ring (a thin outline) on the focused node at its painted bounds. The host
