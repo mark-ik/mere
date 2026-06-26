@@ -57,29 +57,93 @@ pub struct ReorderSpec {
     pub drop_target: bool,
 }
 
+/// The ARIA semantics a selectable / toggleable [`PaneItem`] carries, so the
+/// accessibility tree announces it as a control with a checked state (the row is
+/// otherwise a styled `div` a screen reader reads as a neutral container). The
+/// `bool` is the checked / selected state. The render paths emit `role` +
+/// `aria-checked`, which serval-render's a11y bridge maps to the accesskit role +
+/// toggled state.
+#[derive(Clone, Copy)]
+pub enum PaneAria {
+    /// A member of a single-selection group (`role="radio"`); `true` = selected.
+    Radio(bool),
+    /// An independent on / off switch (`role="switch"`); `true` = on.
+    Switch(bool),
+}
+
+impl PaneAria {
+    /// The `(role, aria-checked)` attribute pair this control stamps.
+    pub fn role_and_checked(self) -> (&'static str, &'static str) {
+        let checked = |on: bool| if on { "true" } else { "false" };
+        match self {
+            PaneAria::Radio(on) => ("radio", checked(on)),
+            PaneAria::Switch(on) => ("switch", checked(on)),
+        }
+    }
+}
+
 /// One row of a list pane: a div with `class` and `text`. When `key` is `Some`,
 /// the div is clickable and a click queues that key as an activation (a theme id,
 /// a row id, …) for the shell to act on; `None` is a plain display row / title.
 /// When `slider` is `Some`, the row is a [`SliderSpec`] segmented track (the
 /// `text` becomes its label); settings panes render it, other list panes show
 /// the label. When `reorder` is `Some`, the row gains inline ▲ / ▼ move buttons.
+/// When `aria` is `Some`, the row carries radio / switch a11y semantics.
 pub struct PaneItem {
     pub class: String,
     pub text: String,
     pub key: Option<String>,
     pub slider: Option<SliderSpec>,
     pub reorder: Option<ReorderSpec>,
+    pub aria: Option<PaneAria>,
 }
 
 impl PaneItem {
     /// A non-interactive classed text row (a title or a display row).
     pub fn text(class: impl Into<String>, text: impl Into<String>) -> Self {
-        Self { class: class.into(), text: text.into(), key: None, slider: None, reorder: None }
+        Self { class: class.into(), text: text.into(), key: None, slider: None, reorder: None, aria: None }
     }
 
     /// A clickable button row whose click queues `key`.
     pub fn button(class: impl Into<String>, text: impl Into<String>, key: impl Into<String>) -> Self {
-        Self { class: class.into(), text: text.into(), key: Some(key.into()), slider: None, reorder: None }
+        Self {
+            class: class.into(),
+            text: text.into(),
+            key: Some(key.into()),
+            slider: None,
+            reorder: None,
+            aria: None,
+        }
+    }
+
+    /// A single-selection (radio-group) option row: a [`button`](Self::button)
+    /// carrying `role="radio"` + `aria-checked` for the a11y tree, with the
+    /// active / inactive `app-btn` class, both driven by `selected`. The host
+    /// drains `key` on click, exactly as for a plain button.
+    pub fn radio(selected: bool, text: impl Into<String>, key: impl Into<String>) -> Self {
+        let class = if selected { "app-btn-active" } else { "app-btn" };
+        Self {
+            class: class.to_string(),
+            text: text.into(),
+            key: Some(key.into()),
+            slider: None,
+            reorder: None,
+            aria: Some(PaneAria::Radio(selected)),
+        }
+    }
+
+    /// An independent on / off switch row: like [`radio`](Self::radio) but
+    /// `role="switch"`, for a boolean toggle (not a single-selection group).
+    pub fn switch(on: bool, text: impl Into<String>, key: impl Into<String>) -> Self {
+        let class = if on { "app-btn-active" } else { "app-btn" };
+        Self {
+            class: class.to_string(),
+            text: text.into(),
+            key: Some(key.into()),
+            slider: None,
+            reorder: None,
+            aria: Some(PaneAria::Switch(on)),
+        }
     }
 
     /// A reorderable button row: the label click queues `key` (e.g. remove), inline ▲ / ▼
@@ -105,6 +169,7 @@ impl PaneItem {
                 dragging: false,
                 drop_target: false,
             }),
+            aria: None,
         }
     }
 
@@ -129,6 +194,7 @@ impl PaneItem {
                 hue_track,
             }),
             reorder: None,
+            aria: None,
         }
     }
 }
@@ -178,7 +244,11 @@ pub fn list_pane_view(state: &ListPaneState) -> ListView {
         .items
         .iter()
         .map(|item| {
-            let div = el::<_, ListPaneState, ()>("div", item.text.clone()).attr("class", item.class.clone());
+            let mut div = el::<_, ListPaneState, ()>("div", item.text.clone()).attr("class", item.class.clone());
+            if let Some(aria) = item.aria {
+                let (role, checked) = aria.role_and_checked();
+                div = div.attr("role", role).attr("aria-checked", checked);
+            }
             match &item.key {
                 Some(key) => {
                     let key = key.clone();

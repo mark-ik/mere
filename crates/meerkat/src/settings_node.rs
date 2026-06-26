@@ -89,20 +89,20 @@ impl WindowCtx<'_> {
         let face = orrery.node_face(key);
         let has_sprite = orrery.node_sprite(key).is_some();
         let has_body = orrery.node_sprite_hull(key).is_some();
-        let cls = |on: bool| if on { "app-btn-active" } else { "app-btn" };
+        // The Face axis is a single-selection picker (one active face).
         let mut items = vec![PaneItem::text("app-title", "Face")];
-        items.push(PaneItem::button(
-            cls(face == Face::Favicon),
+        items.push(PaneItem::radio(
+            face == Face::Favicon,
             "Favicon".to_string(),
             format!("nodefacet:{member}:face:favicon"),
         ));
-        items.push(PaneItem::button(
-            cls(face == Face::Sprite),
+        items.push(PaneItem::radio(
+            face == Face::Sprite,
             if has_sprite { "Sprite".to_string() } else { "Sprite (none)".to_string() },
             format!("nodefacet:{member}:face:sprite"),
         ));
-        items.push(PaneItem::button(
-            cls(face == Face::Bare),
+        items.push(PaneItem::radio(
+            face == Face::Bare,
             "Plain".to_string(),
             format!("nodefacet:{member}:face:bare"),
         ));
@@ -190,18 +190,18 @@ impl WindowCtx<'_> {
             .and_then(|(_, n)| inker::routing::address_scheme(n.url()).map(str::to_string))
             .as_deref()
             .is_some_and(|s| s.eq_ignore_ascii_case("http") || s.eq_ignore_ascii_case("https"));
-        let cls = |on: bool| if on { "app-btn-active" } else { "app-btn" };
+        // The engine pin is a single-selection picker (Auto, or one pinned engine).
         let mut items = vec![PaneItem::text("app-title", "Engine")];
-        items.push(PaneItem::button(
-            cls(pin.is_none()),
+        items.push(PaneItem::radio(
+            pin.is_none(),
             "Auto (default routing)".to_string(),
             format!("nodefacet:{member}:engine:auto"),
         ));
         if is_web {
             for &(id, name) in &pickable {
                 if self.engine_available(id) {
-                    items.push(PaneItem::button(
-                        cls(pin == Some(id)),
+                    items.push(PaneItem::radio(
+                        pin == Some(id),
                         format!("Open in {name}"),
                         format!("nodefacet:{member}:engine:pin:{id}"),
                     ));

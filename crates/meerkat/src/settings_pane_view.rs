@@ -156,7 +156,11 @@ fn item_view(member: GraphMemberId, item: &PaneItem) -> SettingsPanesView {
     if let Some(spec) = &item.reorder {
         return reorder_view(member, &item.class, &item.text, item.key.as_deref(), spec);
     }
-    let div = el::<_, SettingsPanesState, ()>("div", item.text.clone()).attr("class", item.class.clone());
+    let mut div = el::<_, SettingsPanesState, ()>("div", item.text.clone()).attr("class", item.class.clone());
+    if let Some(aria) = item.aria {
+        let (role, checked) = aria.role_and_checked();
+        div = div.attr("role", role).attr("aria-checked", checked);
+    }
     match &item.key {
         Some(key) => {
             let key = key.clone();
@@ -411,6 +415,50 @@ mod tests {
             .find(|a| a.name.local.as_ref() == "data-reorder-id")
             .map(|a| a.value.to_string());
         assert_eq!(id.as_deref(), Some("add_node"));
+    }
+
+    /// A `radio` / `switch` `PaneItem` stamps `role` + `aria-checked` on its row, so the
+    /// a11y bridge announces the selection (a plain `div` would read as a neutral container).
+    /// (Control-set adoption P2.)
+    #[test]
+    fn radio_and_switch_items_stamp_aria() {
+        let attr = |dom: &serval_scripted_dom::ScriptedDom, node, name: &str| {
+            dom.attributes(node)
+                .find(|a| a.name.local.as_ref() == name)
+                .map(|a| a.value.to_string())
+        };
+        let mut pane = pane_over(SettingsPanesState {
+            panes: vec![SettingsPane {
+                member: GraphMemberId::nil(),
+                rect: [0.0, 0.0, 420.0, 300.0],
+                namespace: "pelt".into(),
+                page_title: "Appearance".into(),
+                spine: Vec::new(),
+                // A selected radio option (active class) and an off switch (inactive class),
+                // so each is findable by its distinct class.
+                items: vec![
+                    PaneItem::radio(true, "Dark", "theme.dark"),
+                    PaneItem::switch(false, "Arrows", "doc:arrows"),
+                ],
+                swatch: None,
+            }],
+            panel_bg: "rgb(20, 20, 20)".into(),
+            pending_keys: Vec::new(),
+            pending_nav: Vec::new(),
+        });
+        let scroll = ScrollOffsets::<NodeId>::default();
+        let _ = pane.frame(420, 300, &scroll);
+        let dom = pane.dom();
+        let dom = dom.borrow();
+        let doc = dom.document();
+
+        let radio = crate::first_with_class(&dom, doc, "app-btn-active").expect("the radio row");
+        assert_eq!(attr(&dom, radio, "role").as_deref(), Some("radio"));
+        assert_eq!(attr(&dom, radio, "aria-checked").as_deref(), Some("true"));
+
+        let switch = crate::first_with_class(&dom, doc, "app-btn").expect("the switch row");
+        assert_eq!(attr(&dom, switch, "role").as_deref(), Some("switch"));
+        assert_eq!(attr(&dom, switch, "aria-checked").as_deref(), Some("false"));
     }
 
     /// A `settings://` url reads as a friendly page title; a non-settings url is left alone.

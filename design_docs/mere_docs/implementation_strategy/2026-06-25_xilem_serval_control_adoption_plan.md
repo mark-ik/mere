@@ -1,9 +1,10 @@
 # xilem-serval control-set adoption
 
 **Date**: 2026-06-25
-**Status**: Planned. From the [serval capability-misuse sweep](2026-06-25_overlay_primitive_adoption_plan.md)
-(2026-06-25).
-**Owner**: meerkat (consumes xilem-serval `controls`).
+**Status**: P1 + P2 done 2026-06-25 (serval + meerkat). P3 gated/open. From the
+[serval capability-misuse sweep](2026-06-25_overlay_primitive_adoption_plan.md) (2026-06-25).
+**Owner**: meerkat (consumes xilem-serval `controls`); P1/P2 also touch serval (xilem-serval +
+serval-render).
 
 ## Problem
 
@@ -65,3 +66,34 @@ stateless, a near drop-in).
 ## Progress
 
 - 2026-06-25: Drafted from the capability sweep. Not started.
+- 2026-06-25: **P1 done.** `.attr` was `El`-only (not on `OnClick`/`ElementView`), so the
+  `button(..).attr("class", ..)` route did not compile as drafted. Resolved by extending serval:
+  added a fluent `OnClick::attr` that forwards to the wrapped `El` (xilem-serval `event.rs`), so
+  `xilem_serval::button(label, h).attr("class", x)` (and any attribute) now works, with a unit test
+  (`button_attr_stamps_class_and_keeps_handler`). meerkat `views.rs` gained one `button(label, class,
+  handler)` helper over `xilem_serval::button`; all 16 chrome button sites (the plan's 15 plus the
+  newer knot-editor close) now route through it. No bare `el("button")` left. The `<button>` tag
+  stamps `role="button"` for the a11y tree. `cargo check -p meerkat` clean; 87 meerkat lib tests +
+  the xilem-serval button tests green (the 13-`<button>` toolbar count assertion still holds).
+- 2026-06-25: **P2 serval-render half done (the prerequisite).** `serval-render/a11y.rs` now reads
+  ARIA: `role_for` honors an explicit `role` attr (`button`/`checkbox`/`radio`/`radiogroup`/`switch`),
+  overriding the tag, and `build` maps `aria-checked` (`true`/`false`/`mixed`) to accesskit `Toggled`.
+  This is grand_audit direction 2 — previously the reader mapped roles by tag only and dropped the
+  ARIA the controls already stamp, so any meerkat stamping would have been inert. Test
+  `aria_role_and_checked_reach_the_tree` added; 3 a11y tests green. **Remaining P2 = the meerkat
+  stamping half** (settings pickers/toggles).
+- 2026-06-25: **P2 meerkat stamping half done.** `PaneItem` gained a `PaneAria` field +
+  `PaneItem::radio(selected, ..)` / `switch(on, ..)` constructors (`list_pane.rs`); both render paths
+  (`list_pane_view`, settings `item_view`) emit `role` + `aria-checked` from it. Every single-select
+  picker is now a radio group and every boolean a switch, classified by actual selection semantics:
+  **radio** — node Face + Engine-pin (`settings_node.rs`), theme picker (`apparatus.rs`), Harmony +
+  body/code font + orrery Layout + importance-metric + bridge-metric + Gloss-lens + crawl
+  Scope/Depth/Page-cap (`settings_lane.rs`); **switch** — engine on/off (`apparatus.rs`), the
+  link-arrows / orrery size-by / rings / gloss-scope / gloss-size / affinity / mirror booleans, and
+  crawl sitemap (`settings_lane.rs`). Stateless action rows (shape/size/material steppers, scenes, scripts, physics,
+  tab-cap, theme fork/mode/remove) stay plain buttons. Test `radio_and_switch_items_stamp_aria` added;
+  `cargo check -p meerkat` clean, 87 lib + 160 bin tests green. **Deferred:** the `role="radiogroup"`
+  container — the flat `Vec<PaneItem>` model has no group boundaries, so wrapping each picker would need
+  group structure in the item stream; the radio rows announce + read their checked state without it
+  (the P2 Done condition), so this is a later refinement. The menu-editor inclusion list (reorder rows
+  with ✓) and the script-cap cycle buttons are left as-is (neither is a radio/switch).

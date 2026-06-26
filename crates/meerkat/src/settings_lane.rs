@@ -220,8 +220,8 @@ impl WindowCtx<'_> {
             ("complementary", "Complementary"),
             ("mono", "Monochrome"),
         ] {
-            let cls = if active(key) { "app-btn-active" } else { "app-btn" };
-            items.push(PaneItem::button(cls, lbl.to_string(), format!("theme:harmony:{key}")));
+            // Harmony is a single-selection picker (one active relation).
+            items.push(PaneItem::radio(active(key), lbl.to_string(), format!("theme:harmony:{key}")));
         }
 
         // The hex label shows the *effective* (harmony-applied) colour so it
@@ -288,26 +288,26 @@ impl WindowCtx<'_> {
         items.push(PaneItem::slider("Spacing", "doc:linespacing".to_string(), spacing_frac, 10, false));
 
         let arrows_on = matches!(s.link_adornment, document_canvas::LinkAdornment::SchemeArrow);
-        items.push(PaneItem::button(
-            if arrows_on { "app-btn-active" } else { "app-btn" },
+        // Link arrows is an independent on / off switch.
+        items.push(PaneItem::switch(
+            arrows_on,
             format!("Link arrows: {}", if arrows_on { "on" } else { "off" }),
             "doc:arrows".to_string(),
         ));
 
+        // The body / code font choices are each a single-selection picker.
         items.push(PaneItem::text("app-title", "Body font".to_string()));
         for name in crate::doc_style::BODY_FONTS {
-            let active = s.body_font_family == *name;
-            items.push(PaneItem::button(
-                if active { "app-btn-active" } else { "app-btn" },
+            items.push(PaneItem::radio(
+                s.body_font_family == *name,
                 name.to_string(),
                 format!("doc:bodyfont:{name}"),
             ));
         }
         items.push(PaneItem::text("app-title", "Code font".to_string()));
         for name in crate::doc_style::MONO_FONTS {
-            let active = s.mono_font_family == *name;
-            items.push(PaneItem::button(
-                if active { "app-btn-active" } else { "app-btn" },
+            items.push(PaneItem::radio(
+                s.mono_font_family == *name,
                 name.to_string(),
                 format!("doc:monofont:{name}"),
             ));
@@ -323,14 +323,16 @@ impl WindowCtx<'_> {
     /// `orrery:layout:<id>` / `orrery:sizebydegree` / `orrery:mirror` to the shared scene-toggle
     /// methods (the same ones the context menu drives). (Settings lane P2b.)
     fn orrery_settings_items(&self) -> Vec<PaneItem> {
-        let toggle = |label: String, on: bool, key: String| {
-            PaneItem::button(if on { "app-btn-active" } else { "app-btn" }, label, key)
-        };
+        // `pick`: a member of a single-selection group (role=radio — the layout,
+        // gloss-lens, and metric pickers). `flip`: an independent on / off switch
+        // (role=switch — the size-by / rings / mirror toggles).
+        let pick = |label: String, on: bool, key: String| PaneItem::radio(on, label, key);
+        let flip = |label: String, on: bool, key: String| PaneItem::switch(on, label, key);
         let mut items = vec![PaneItem::text("app-title", "Layout")];
         let active = self.orrery().layout_strategy();
-        items.push(toggle("Force-directed".to_string(), active.is_none(), "orrery:layout:".to_string()));
+        items.push(pick("Force-directed".to_string(), active.is_none(), "orrery:layout:".to_string()));
         for &(id, label) in platen::ORRERY_LAYOUT_STRATEGIES {
-            items.push(toggle(label.to_string(), active == Some(id), format!("orrery:layout:{id}")));
+            items.push(pick(label.to_string(), active == Some(id), format!("orrery:layout:{id}")));
         }
 
         items.push(PaneItem::text("app-title", "Map"));
@@ -338,9 +340,9 @@ impl WindowCtx<'_> {
         let check = |label: &str, on: bool| {
             if on { format!("{label}  \u{2713}") } else { label.to_string() }
         };
-        items.push(toggle(check("Size by degree", sbd), sbd, "orrery:sizebydegree".to_string()));
+        items.push(flip(check("Size by degree", sbd), sbd, "orrery:sizebydegree".to_string()));
         let sbi = self.orrery().size_by_importance();
-        items.push(toggle(
+        items.push(flip(
             check("Size by importance", sbi),
             sbi,
             "orrery:sizebyimportance".to_string(),
@@ -349,12 +351,12 @@ impl WindowCtx<'_> {
         // (structural brokerage — a bridge node stands out beyond its degree). (Graph signals.)
         if sbi {
             let by_degree = self.orrery().importance_metric() == orrery::ImportanceMetric::Degree;
-            items.push(toggle(
+            items.push(pick(
                 check("  by degree", by_degree),
                 by_degree,
                 "orrery:importance:degree".to_string(),
             ));
-            items.push(toggle(
+            items.push(pick(
                 check("  by betweenness", !by_degree),
                 !by_degree,
                 "orrery:importance:betweenness".to_string(),
@@ -363,7 +365,7 @@ impl WindowCtx<'_> {
         // Community rings: halo each node in its Louvain community's colour, in any layout, so the
         // graph's clusters read spatially. (Graph signals — community to a ring.)
         let rings = self.orrery().show_community_rings();
-        items.push(toggle(
+        items.push(flip(
             check("Show community rings", rings),
             rings,
             "orrery:communityrings".to_string(),
@@ -372,19 +374,19 @@ impl WindowCtx<'_> {
         // which notion: betweenness brokers (high traffic) or articulation points (cut vertices /
         // single points of failure). (Graph signals — bridges / articulation points.)
         let bridges = self.orrery().show_bridge_rings();
-        items.push(toggle(
+        items.push(flip(
             check("Show bridge rings", bridges),
             bridges,
             "orrery:bridgerings".to_string(),
         ));
         if bridges {
             let by_between = self.orrery().bridge_metric() == orrery::BridgeMetric::Betweenness;
-            items.push(toggle(
+            items.push(pick(
                 check("  by betweenness", by_between),
                 by_between,
                 "orrery:bridge:betweenness".to_string(),
             ));
-            items.push(toggle(
+            items.push(pick(
                 check("  by cut-vertex", !by_between),
                 !by_between,
                 "orrery:bridge:articulation".to_string(),
@@ -396,24 +398,24 @@ impl WindowCtx<'_> {
         // layout one. (Graph signals — P6 / P6b, the independent gloss projection.)
         items.push(PaneItem::text("app-title", "Gloss lens"));
         let gloss = self.orrery().gloss_strategy();
-        items.push(toggle(
+        items.push(pick(
             "Mirror main view".to_string(),
             gloss.is_none(),
             "orrery:gloss:".to_string(),
         ));
         for &(id, label) in platen::ORRERY_LAYOUT_STRATEGIES {
-            items.push(toggle(label.to_string(), gloss == Some(id), format!("orrery:gloss:{id}")));
+            items.push(pick(label.to_string(), gloss == Some(id), format!("orrery:gloss:{id}")));
         }
         // The lens's own scope + encoding (independent of the main view): crop to the selection,
         // and size nodes by the importance signal. (Graph signals — P6c.)
         let gloss_scope = self.orrery().gloss_scope_selection();
-        items.push(toggle(
+        items.push(flip(
             check("Gloss: selection only", gloss_scope),
             gloss_scope,
             "orrery:glossscope".to_string(),
         ));
         let gloss_size = self.orrery().gloss_size_by_importance();
-        items.push(toggle(
+        items.push(flip(
             check("Gloss: size by importance", gloss_size),
             gloss_size,
             "orrery:glosssize".to_string(),
@@ -421,13 +423,13 @@ impl WindowCtx<'_> {
         // Cluster by affinity: an extra force-directed pull between structurally-similar nodes
         // (shared-neighbourhood Jaccard), drawing communities into tight clusters. (Graph signals — P4.)
         let affinity = self.orrery().cluster_by_affinity();
-        items.push(toggle(
+        items.push(flip(
             check("Cluster by affinity", affinity),
             affinity,
             "orrery:affinity".to_string(),
         ));
         let mirror = self.view.mirror_tiles;
-        items.push(toggle(check("Mirror open tiles", mirror), mirror, "orrery:mirror".to_string()));
+        items.push(flip(check("Mirror open tiles", mirror), mirror, "orrery:mirror".to_string()));
         items
     }
 
@@ -438,9 +440,10 @@ impl WindowCtx<'_> {
     /// keeps an accidental crawl cheap and polite.
     fn crawl_settings_items(&self) -> Vec<PaneItem> {
         use crate::crawl::HostScope;
-        let toggle = |label: String, on: bool, key: String| {
-            PaneItem::button(if on { "app-btn-active" } else { "app-btn" }, label, key)
-        };
+        // `pick`: a member of a single-selection group (role=radio — Scope / Depth /
+        // Page cap). `flip`: an independent on / off switch (role=switch — sitemap).
+        let pick = |label: String, on: bool, key: String| PaneItem::radio(on, label, key);
+        let flip = |label: String, on: bool, key: String| PaneItem::switch(on, label, key);
         let check =
             |label: &str, on: bool| if on { format!("{label}  \u{2713}") } else { label.to_string() };
 
@@ -448,7 +451,7 @@ impl WindowCtx<'_> {
         let mut items = vec![PaneItem::text("app-title", "Scope")];
         for scope in [HostScope::SameHost, HostScope::SameDomain, HostScope::AnyHost] {
             let on = scope == current_scope;
-            items.push(toggle(check(scope.label(), on), on, format!("crawl:scope:{}", scope.as_key())));
+            items.push(pick(check(scope.label(), on), on, format!("crawl:scope:{}", scope.as_key())));
         }
 
         // Depth presets, plus the active value as a "Custom" row when it is not one of
@@ -467,7 +470,7 @@ impl WindowCtx<'_> {
         }
         for (depth, label) in &depths {
             let on = *depth == current_depth;
-            items.push(toggle(check(label, on), on, format!("crawl:depth:{depth}")));
+            items.push(pick(check(label, on), on, format!("crawl:depth:{depth}")));
         }
 
         // "Crawl whole site": seed from the site's sitemap.xml (its canonical page list)
@@ -475,7 +478,7 @@ impl WindowCtx<'_> {
         // page cap. Off keeps a crawl to the focused neighborhood. (Crawl controls.)
         items.push(PaneItem::text("app-title", "Mode"));
         let whole_site = self.shared.content.crawl.seed_sitemap();
-        items.push(toggle(
+        items.push(flip(
             check("Crawl whole site (sitemap)", whole_site),
             whole_site,
             "crawl:sitemap".to_string(),
@@ -498,7 +501,7 @@ impl WindowCtx<'_> {
         }
         for (pages, label) in &caps {
             let on = *pages == current_pages;
-            items.push(toggle(check(label, on), on, format!("crawl:pages:{pages}")));
+            items.push(pick(check(label, on), on, format!("crawl:pages:{pages}")));
         }
         items
     }

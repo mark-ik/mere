@@ -92,8 +92,8 @@ pub fn theme_section_items(themes: &[ThemeOption]) -> Vec<PaneItem> {
     themes
         .iter()
         .map(|theme| {
-            let class = if theme.active { "app-btn-active" } else { "app-btn" };
-            PaneItem::button(class, theme.name.clone(), theme.id.clone())
+            // The theme picker is a single-selection group (one active theme).
+            PaneItem::radio(theme.active, theme.name.clone(), theme.id.clone())
         })
         .collect()
 }
@@ -105,9 +105,9 @@ pub fn engine_section_items(engines: &[EngineRow]) -> Vec<PaneItem> {
     engines
         .iter()
         .map(|engine| {
-            let class = if engine.active { "app-btn-active" } else { "app-btn" };
+            // Each engine is an independent on / off toggle, not a single-selection group.
             let label = format!("{}  —  {}", engine.name, if engine.active { "active" } else { "off" });
-            PaneItem::button(class, label, format!("engine:toggle:{}", engine.id))
+            PaneItem::switch(engine.active, label, format!("engine:toggle:{}", engine.id))
         })
         .collect()
 }
