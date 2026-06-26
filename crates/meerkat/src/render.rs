@@ -601,20 +601,18 @@ impl WindowCtx<'_> {
                         let (sub_w, sub_h) = frags
                             .rect_of(sub)
                             .map_or((0.0, 0.0), |r| (r.size.width, r.size.height));
-                        // Trigger is the root panel's right edge at the parent row's top.
-                        let place = if panel_x + panel_w + sub_w > w as f32 && sub_w > 0.0 {
-                            xilem_serval::Placement::LeftOf
-                        } else {
-                            xilem_serval::Placement::RightOf
-                        };
-                        let (sx, sy) = xilem_serval::anchor_point(
+                        // Place the submenu beside its parent row: right of the root panel by
+                        // default, flipping left when it would overflow the window's right edge,
+                        // and clamped on-screen — one `anchor_point_clamped`. The y stays at the
+                        // parent row's top (the panel scrolls via the max-height set below), so
+                        // only the x is taken. (Nested submenus / upstreaming P5.)
+                        let (sx, _) = xilem_serval::anchor_point_clamped(
                             (panel_x, row_y, panel_w, row_h),
                             (sub_w, sub_h),
-                            place,
+                            xilem_serval::Placement::RightOf,
+                            (0.0, 0.0, w as f32, h as f32),
                         );
-                        // Clamp to the left edge so a left-flip near the window's left edge can't
-                        // run the panel off-screen. (Nested submenus.)
-                        Some((sub, sx.max(0.0), sy))
+                        Some((sub, sx, row_y))
                     }
                     _ => None,
                 }
